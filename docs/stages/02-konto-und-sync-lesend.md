@@ -8,7 +8,7 @@ aktuell und überstehen Netzabbrüche. Es wird nichts auf dem Server verändert.
 ## Aufgaben
 
 - [ ] **Modell.** In `mail-model`: Konto, Identität, Postfach mit Rolle, Nachrichten-Kopfdaten, Flags und Schlagwörter, `Capabilities`, Fehlertypen, Trait `MailBackend`. Der Trait deckt ab, was IMAP braucht; nichts auf Verdacht für andere Anbieter.
-- [ ] **Speicher.** Migration für `account`, `identity`, `mailbox`, `message`, `message_location`. Indizes nach Spike B. Abfrage der Liste mit Keyset-Paginierung.
+- [ ] **Speicher.** Migration für `account`, `identity`, `mailbox`, `message`, `message_location`. Schema, Indizes und Regeln nach Spike B (`docs/decisions/0003-sqlite-schema-und-suche.md`, Abschnitt „Schema und Abfragen“ in der Architektur): `message.id` als Sortierdatum mit Vergabe im Schreib-Thread (Test mit vielen Mails gleichen Datums), Zusammenführen per Message-ID nur, wenn die Mail im Zielpostfach noch nicht liegt, Mails ohne Message-ID bekommen eine eigene Zeile. Abfrage der Liste mit Keyset-Paginierung, Abfrageplan per Test geprüft.
 - [ ] **Adapter.** Neues Crate `mail-imap`:
   - Verbindung über TLS (993) oder STARTTLS (143), Zertifikatsprüfung über den System-Speicher, Login
   - Capabilities erkennen
@@ -16,7 +16,8 @@ aktuell und überstehen Netzabbrüche. Es wird nichts auf dem Server verändert.
   - erster Abgleich von neu nach alt in Fenstern: Envelope, Flags, Größe, Bodystructure, Kopfzeilen Message-ID, References, In-Reply-To, List-Id, List-Unsubscribe, Auto-Submitted, Precedence
   - laufender Abgleich: neue UIDs, Flag-Änderungen (CONDSTORE oder fensterweise), Löschungen über UID-Vergleich
   - UIDVALIDITY-Wechsel: Zuordnung neu aufbauen
-  - IDLE auf dem Posteingang, spätestens alle 25 Minuten erneuert
+  - IDLE auf dem Posteingang, spätestens alle 25 Minuten erneuert; nach Spike A besser in kürzeren Abschnitten (etwa 5 Minuten) oder mit TCP-Keepalive, damit eine stille Verbindung früh auffällt
+  - nach Spike A (`docs/decisions/0002-imap-bibliothek.md`, „Folgen für Stufe 2“): nach dem Login `ENABLE CONDSTORE`/`QRESYNC`, Ordner per LIST-STATUS in einem Rundlauf, Fenster von 500 je Transaktion, Fortschritt als niedrigste gespeicherte UID, Lesefrist 30 s, eigene Befehlsschicht für geprüftes FETCH; für Tests gegen den Testserver die Test-CA über `new_with_extra_roots`
 - [ ] **Nur-Lese-Schutz.** `writes_enabled` ist bei neuen Konten aus. Der Adapter öffnet dann mit EXAMINE und lehnt jeden schreibenden Befehl mit einem typisierten Fehler ab.
 - [ ] **Engine.** Kontenverwaltung, ein Abgleich-Task je Konto, exponentieller Backoff mit Streuung, Abbruch, Wiederverbinden nach Ruhezustand und Netzwechsel. Ereignisse: Fortschritt, Postfach geändert, neue Mail, Fehler, online/offline.
 - [ ] **Zugangsdaten.** Passwort in den System-Schlüsselbund (`keyring`), in der Datenbank nur der Verweis. Konto entfernen löscht Schlüsselbund-Eintrag und alle lokalen Daten des Kontos.

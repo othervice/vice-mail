@@ -12,6 +12,8 @@ dort den vollständigen Mail-Ablauf. Plattformunterschiede sind gefunden und beh
 - [ ] **macOS-Build.** `.app` und `.dmg`, ohne Entwickler-Signatur. `docs/INSTALL.md` (Englisch) beschreibt die Installation ehrlich, einschließlich der Gatekeeper- und SmartScreen-Warnungen bei unsignierten Builds.
 - [ ] **Beides in einem.** `scripts/release-local.sh` baut beide und legt sie mit Versionsnummer unter `dist/` ab. Version und Build-Stand stehen in „Über“.
 - [ ] **Plattformpunkte unter Windows prüfen und beheben:**
+  - Link-Abfang im Mail-Frame: wry abonniert unter WebView2 nur `NavigationStarting`, nicht `FrameNavigationStarting`; vermutlich ist ein eigener Handler für Unter-Frames nötig (Spike D, 0005)
+  - Krypto-Provider: prüfen, ob `aws-lc-rs` mit cargo-xwin ohne Mehraufwand baut; wenn ja, `ring` ersetzen (0002)
   - Schlüsselbund über die Windows-Anmeldeinformationen
   - Datenverzeichnis, lange Pfade, bereinigte Dateinamen auf NTFS
   - Titelleiste, Fenster andocken, Skalierung bei hoher Auflösung

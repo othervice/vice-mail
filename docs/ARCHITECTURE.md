@@ -1,7 +1,7 @@
 # Architektur
 
-Stand 22.11.2026. Die Versionen sind die an diesem Tag aktuellen stabilen. Stufe 0 bestätigt oder
-korrigiert sie mit Wegwerf-Code, bevor Produktcode entsteht.
+Stand 22.11.2026. Die Versionen sind die an diesem Tag aktuellen stabilen. Stufe 0 hat die riskanten
+Annahmen mit Wegwerf-Code geprüft; Messwerte und Begründungen stehen in `docs/decisions/0001` bis `0005`.
 
 ## Überblick
 
@@ -24,30 +24,30 @@ wenn er groß genug ist.
 
 | Bereich | Wahl | Version | Warum |
 |---|---|---|---|
-| Desktop-Shell | Tauri | 2.12 | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern |
-| Kern | Rust stable, Edition 2024, Tokio | mind. 1.88 | Geschwindigkeit, Speichersicherheit; 1.88 verlangt async-imap |
+| Desktop-Shell | Tauri | 2.12 (Crate 2.12.7, CLI 2.12.6) | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern; Spike-App: `.dmg` 2,2 MB, Windows-Installer 1,9 MB (0004) |
+| Kern | Rust stable, Edition 2024, Tokio | mind. 1.88, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.88 verlangt async-imap |
 | Oberfläche | React, TypeScript strict | 19.3 / 7.0 | größtes Ökosystem für die nötigen Bausteine |
-| Build | Vite, pnpm | 8.3 | schnell, Standard bei Tauri |
+| Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
 | Bausteine | Radix UI, Lucide-Icons, cmdk | 1.8 / – / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen |
 | Liste | TanStack Virtual | 3.14 | Virtualisierung für sehr lange Listen |
 | Daten im Frontend | TanStack Query, Zustand | 5.108 / 5.1 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
 | Sprachen | i18next, react-i18next | 27 / 18 | Standard, Englisch und Deutsch |
-| Datenbank | SQLite über rusqlite (bundled, FTS5) | 0.43 | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx |
+| Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.43 (SQLite 3.54.1) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
 | Migrationen | rusqlite_migration | 2.7 | klein, nutzt `user_version` |
-| IMAP | async-imap (Tokio, rustls) | 0.12 | im Dauereinsatz bei Delta Chat; kann IDLE, CONDSTORE, MOVE, UID EXPUNGE; kein QRESYNC |
+| IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
 | SMTP | lettre (Tokio, rustls) | 0.11 | Standard in Rust |
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
 | HTML-Bereinigung | ammonia | 4.2 | Allowlist-Sanitizer |
-| TLS | rustls, Zertifikatsprüfung über den System-Speicher | – | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut |
+| TLS | rustls mit Provider `ring`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7 | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver. `ring` hat eine begründete Ausnahme von der 12-Monats-Regel (0002) |
 | Schlüsselbund | keyring | 4.2 | macOS-Schlüsselbund und Windows-Anmeldeinformationen |
-| Typen über IPC | ts-rs (stabil) oder tauri-specta (2.0 noch RC) | 12.0 / 2.0-rc | Stufe 0 entscheidet; TypeScript-Typen werden aus Rust erzeugt, nie von Hand gepflegt |
+| Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age | 0.12 | geprüftes Format, keine eigene Kryptografie |
 | Logging | tracing | – | strukturierte Logs mit Schwärzung |
-| Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` | – / 5.1 / – | der Service bringt einen eingebetteten WebDriver mit und läuft damit auch auf macOS |
-| Testserver | Stalwart (ein Binary, IMAP+SMTP, auch für Windows) oder Dovecot über Homebrew | 1.1 / 2.4 | Stufe 0 entscheidet; Docker ist auf dem Mac mini nicht vorhanden |
-| Windows-Build | cargo-xwin, LLVM, NSIS | 0.24 | Installer vom Mac aus, laut Tauri-Doku mit Einschränkungen möglich |
+| Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
+| Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
+| Windows-Build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | Installer vom Mac aus, in Spike C gebaut (kalt 74 s); `makensis` nur mit UTF-8-Locale (`LANG=en_US.UTF-8`), siehe `docs/SETUP.md` |
 
 Verworfen: SQLx (asynchron ohne Nutzen bei einem Schreiber, SQLCipher nur über Umwege), SQLCipher
 (siehe Entscheidungen), Electron (Speicherbedarf), eingebettetes llama.cpp (Build-Aufwand pro Plattform),
@@ -85,6 +85,16 @@ vice-mail/
   Strom typisierter Ereignisse. Alles Verhalten ist über `AppCore` ohne WebView testbar.
 - `app/src-tauri`: reicht Commands an `AppCore` durch und Ereignisse an die Oberfläche weiter.
 - Oberfläche: fragt Daten seitenweise ab und lädt neu, wenn ein Ereignis die Ansicht betrifft. Sie pollt nie.
+  Die von tauri-specta erzeugten Bindings (`app/src/generated/`) und `@tauri-apps/api` werden nur in
+  `app/src/services/ipc.ts` importiert (ESLint `no-restricted-imports`); `invoke` steht nur in der
+  erzeugten Datei.
+
+**Regeln für die Brücke (0004)**
+- Jedes `u64`/`i64`-Feld legt fest, wie es in TypeScript ankommt: als Zahl, wenn es sicher unter
+  2^53 bleibt (Größen, UIDs, Zeitstempel in Millisekunden), sonst als dezimaler String (MODSEQ).
+- Fehler des Frameworks (unbekannter Command, falsches Argument, ACL) kommen als String an, nicht als
+  `IpcError`. `ipc.ts` erkennt das und bildet es auf `code: "internal"` ab.
+- Ereignisse empfängt die Oberfläche über die Capability `core:event:default`; weitere Capabilities nur mit Begründung.
 
 `MailBackend` meldet über eine `Capabilities`-Struktur, was der Server kann (IDLE, CONDSTORE, MOVE,
 UIDPLUS, SPECIAL-USE, eigene Schlagwörter). Die Engine und die Oberfläche fragen danach. Was ein
@@ -123,6 +133,27 @@ Migrationen sind nur vorwärts. Vor jeder Migration wird die Datenbankdatei kopi
 Kopien bleiben erhalten. Eine neuere Datenbank als die App kennt wird nicht geöffnet, sondern mit
 einer klaren Meldung abgelehnt.
 
+**Schema und Abfragen (gemessen in Spike B, `docs/decisions/0003-sqlite-schema-und-suche.md`)**
+- `message.id` ist das Sortierdatum in Sekunden; ist die Zahl belegt, die nächste freie. Vergeben
+  wird sie im Schreib-Thread. Sie ist zugleich die rowid des FTS-Index: Suchtreffer kommen ohne
+  Sortieren neueste zuerst, ein Datumsfilter ist ein rowid-Bereich.
+- Sortierdatum: die `Date`-Kopfzeile, wenn sie höchstens 24 Stunden nach INTERNALDATE liegt, sonst INTERNALDATE.
+- `message_location` ist `WITHOUT ROWID` mit Schlüssel `(mailbox_id, message_id)`, Flags als eigene
+  Spalten. Indizes: eindeutig auf UID je Postfach, auf `message_id`, Teilindex auf ungelesene
+  (`WHERE seen = 0`); dazu `message` nach Message-ID und Thread, `attachment` nach Nachricht.
+- `message_fts` ist contentless mit `contentless_delete=1`, Spalten `subject, from, to, cc, body,
+  attachments`, Tokenizer `unicode61 remove_diacritics 2`. Bodies werden nachträglich per
+  `INSERT OR REPLACE` indexiert. Teilwortsuche („auszug“ findet „Kontoauszug“) gibt es in Version 1 nicht.
+- Listen nur per Keyset, nie per `OFFSET`. Ansichten über mehrere Postfächer (vereinter Posteingang)
+  per `UNION ALL` je Postfach, nie per `IN (…)` (gemessen 0,14 ms gegen 393 ms). Feste
+  Join-Reihenfolge per `CROSS JOIN`. Für jede Listen- und Suchabfrage prüft ein Test den Abfrageplan.
+- Erste Suchtreffer nach `rowid DESC`; `bm25` höchstens als Option.
+- FTS-Zeilen werden je Transaktion nach rowid aufsteigend eingefügt, auch wenn der Abgleich von neu
+  nach alt läuft (absteigend kostet ein Drittel der Einfügerate).
+- Schreib-Verbindung: WAL, `synchronous=NORMAL`, `foreign_keys=ON`, 64 MB Cache, `mmap_size` 256 MB,
+  `journal_size_limit` 64 MB, `temp_store=MEMORY`. Lese-Verbindungen (2 bis 4): `query_only`,
+  8 MB Cache, `mmap`. Abgleich in Fenstern von 500 Mails mit `BEGIN IMMEDIATE`.
+
 ## Regeln der Mail-Engine
 
 **Synchronisierung je Postfach**
@@ -150,6 +181,13 @@ einer klaren Meldung abgelehnt.
   automatisch neu gesendet. Die App sucht die Message-ID im Gesendet-Ordner; bleibt es unklar, fragt sie den Nutzer.
 - Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst.
 
+**Verbindungen (0002)**
+- Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
+- Nach dem Login `ENABLE CONDSTORE`, bei QRESYNC-fähigen Servern `ENABLE QRESYNC`.
+- Ein abgebrochener Befehl schließt die Verbindung; sie wird nie mit halb gelesenen Antworten weiterbenutzt.
+- Unaufgeforderte Antworten werden nach jedem Befehl abgeholt (die Bibliothek puffert nur 100).
+- Zertifikatsfehler werden typisiert: nicht vertraut, falscher Name, abgelaufen.
+
 **Nur-Lese-Modus**
 - Konten mit `writes_enabled = false` öffnen Postfächer mit EXAMINE. Der Adapter lehnt jeden
   schreibenden Befehl mit einem typisierten Fehler ab. Ein Test beweist das.
@@ -171,17 +209,32 @@ einer klaren Meldung abgelehnt.
    `meta refresh`, kein `base`, keine eingebetteten Objekte oder Frames.
 2. Externe Adressen in Bildern, `srcset`, Hintergründen und CSS durch Platzhalter ersetzen, solange
    der Nutzer sie nicht freigegeben hat. Inline-Bilder (`cid:`) kommen aus dem lokalen Speicher.
-3. Anzeige in einem `iframe` mit `sandbox` ohne `allow-scripts` und mit eigener Content-Security-Policy.
-   Dort läuft kein JavaScript, also ist auch die Tauri-Schnittstelle nicht erreichbar.
+3. Anzeige in einem `srcdoc`-`iframe` mit `sandbox="allow-same-origin"` und sonst nichts, nie
+   `allow-scripts` (mit beidem zusammen erreichte ein Script in Spike D `parent.__TAURI_INTERNALS__`).
+   Jedes `srcdoc` beginnt mit einer Pflicht-Meta-CSP (`default-src 'none'; img-src data: …;
+   style-src 'unsafe-inline'`). Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
+   `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
+   Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005).
 4. Freigegebene externe Bilder lädt der Rust-Kern: ohne Cookies, ohne Referrer, mit neutraler
    Kennung, mit Größen- und Typgrenzen.
 5. Links öffnen sich nie direkt. Ein Klick zeigt das echte Ziel und warnt bei Abweichung vom
    Linktext oder bei verdächtigen Domains. Geöffnet wird im System-Browser, nur `http`, `https`, `mailto`.
+   Einziger Abfangpunkt ist der Navigations-Hook in Rust (`on_navigation`): WebKit ruft in einem Frame
+   ohne `allow-scripts` keine Event-Listener auf, auch keine vom Elternfenster. Der Bereiniger schreibt
+   deshalb jedes `href` auf einen http(s)-Platzhalter mit Index um (das echte Ziel kennt nur der Kern)
+   und entfernt `<link>`, `target`, `ping` und `download`: `<link rel=preconnect>` und Klicks auf
+   `target=_blank` öffnen sonst TCP-Verbindungen, die weder Sandbox noch CSP verhindern (0005).
+6. Die CSP der App erlaubt für die Mail-Anzeige `style-src 'self' 'unsafe-inline'` (sonst greift kein
+   Mail-CSS) und `frame-src 'self' http: https:` (sonst verwirft WebKit Link-Navigationen, bevor der
+   Hook sie sieht); Scripts bleiben auf `'self'` beschränkt. Unter WebView2 ist offen, ob der Hook
+   Navigationen im Unter-Frame sieht (wry abonniert dort nur `NavigationStarting`); Stufe 6 prüft das.
 
 **Shell**
 - Tauri-Capabilities minimal: keine Dateisystem-, Shell- oder HTTP-Plugins für das Frontend.
 - Strenge Content-Security-Policy für die App selbst, keine entfernten Quellen.
-- Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten.
+- Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
+  (Cargo-Feature `e2e`; ein Test prüft, dass das Release-Binary ihn nicht enthält, 0005).
+- Tauri-Init-Scripts werden nie für alle Frames eingespritzt.
 
 **Geheimnisse**
 - Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
@@ -199,6 +252,8 @@ einer klaren Meldung abgelehnt.
 - KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat
 - Abmelde-Adressen (List-Unsubscribe) nach Klick
 - Update-Prüfung ab Stufe 15, abschaltbar
+- Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
+  (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.
 
 Sonst nichts. Keine Telemetrie, keine Absturzberichte, keine Abfrage fremder Verzeichnisse ohne Klick.
 
@@ -254,6 +309,8 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
   (während des Abgleichs, nach der Übertragung beim Senden).
 - **Oberfläche:** Vitest für Komponenten; WebdriverIO gegen die echte App für wenige durchgehende Abläufe.
 - **Sicherheit:** Korpus feindlicher HTML-Mails und Dateinamen; Zähler für ausgehende Verbindungen.
+  Der Zähler zählt TCP-Verbindungen, nicht nur HTTP-Anfragen (Preconnect öffnet nur eine Verbindung).
+  Jeder Nachweis „null Zugriffe“ hat eine Positivkontrolle, die zeigt, dass der Zähler zählt.
 - **Leistung:** erzeugte Postfächer mit 100.000 und 500.000 Mails, Ergebnisse in `docs/testing/performance.md`.
 
 ## Entscheidungen
@@ -267,4 +324,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
 | Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |
-| Lizenz GPL-3.0-or-later (Empfehlung, noch zu bestätigen) | Abwandlungen bleiben offen; alle gewählten Bibliotheken sind kompatibel | vor der Veröffentlichung änderbar |
+| Lizenz GPL-3.0-or-later (vom Menschen bestätigt am 22.11.2026) | Abwandlungen bleiben offen; alle gewählten Bibliotheken sind kompatibel | vor der Veröffentlichung änderbar |
+| tauri-specta statt ts-rs (0004) | typisierte Commands und Events, erzwungene Entscheidung bei 64-Bit-Zahlen | ts-rs erzeugt dieselben Typen; nur `ipc.ts` müsste neu geschrieben werden |
+| Stalwart als Testserver (0001) | ein Binary, alle nötigen Fähigkeiten, kein Docker | Dovecot über Homebrew mit eigenem MTA |
+| FTS5 mit `unicode61` statt `trigram` (0003) | trigram ist 5,2-mal so groß und halb so schnell beim Einfügen | Tokenizer per Migration wechselbar, Index ist Cache |

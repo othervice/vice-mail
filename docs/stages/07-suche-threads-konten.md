@@ -7,7 +7,7 @@ Posteingang über mehrere Konten. Die Leistungsziele aus `docs/SPEC.md` sind gem
 
 ## Aufgaben
 
-- [ ] **Index.** FTS5 über Betreff, Absender, Empfänger, Text und Anhangnamen. Aktualisierung bei jedem Einfügen, Ändern und Löschen. Text wird indiziert, sobald der Body lokal vorliegt; Kopfdaten immer. Neuaufbau im Hintergrund mit Austausch am Ende, ohne die Suche zu unterbrechen.
+- [ ] **Index.** FTS5 über Betreff, Absender, Empfänger, Text und Anhangnamen, nach Spike B (`docs/decisions/0003-sqlite-schema-und-suche.md`): contentless, Spalten `subject, from, to, cc, body, attachments` (damit `from:` `to:` `cc:` `filename:` direkt aus FTS5 kommen), `unicode61 remove_diacritics 2`, Datumsfilter als rowid-Bereich, erste Treffer nach `rowid DESC`, `bm25` höchstens als Option, kein `optimize`. Teilwortsuche ist nicht Teil von Version 1. Aktualisierung bei jedem Einfügen, Ändern und Löschen. Text wird indiziert, sobald der Body lokal vorliegt; Kopfdaten immer. Neuaufbau im Hintergrund mit Austausch am Ende, ohne die Suche zu unterbrechen.
 - [ ] **Suchsprache.** Parser für freien Text und die Filter aus `docs/SPEC.md`, Phrasen, Ausschluss mit `-`, Datumsangaben in deutscher und englischer Schreibweise. Fehler werden an der Stelle angezeigt.
 - [ ] **Suche in der Oberfläche.** Treffer beim Tippen, Filter als Chips, hervorgehobene Fundstellen, letzte Suchen. Suchen speichern: sie erscheinen als Ansicht in der Leiste.
 - [ ] **Auf dem Server weitersuchen.** Schaltfläche für Mails, deren Inhalt nicht lokal vorliegt (IMAP SEARCH).

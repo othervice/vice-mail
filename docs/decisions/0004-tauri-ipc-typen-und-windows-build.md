@@ -222,3 +222,10 @@ In `tauri.conf.json` steht `"bundle": { "targets": "all", … }`. Die Auswahl l�
   Build hängt also nicht am Generator.
 - **Windows-Cross-Build:** Bauen auf echtem Windows oder auf gehosteten Runnern (Stufe 15). Für MSI (WiX)
   wäre das ohnehin nötig, der Cross-Build kann nur NSIS.
+
+## Nachtrag (Spike D)
+
+Die CSP der Spike-App wurde in Spike D für die Mail-Anzeige erweitert (`style-src 'unsafe-inline'`,
+`img-src data:`, `frame-src http: https:`). Gültig für das Produkt ist die Beschreibung in
+`docs/decisions/0005-html-sandbox-und-desktop-tests.md` und in `docs/ARCHITECTURE.md`, Sicherheitsgrenzen.
+Stufe 1 übernimmt zunächst die strenge CSP aus diesem Dokument; Stufe 3 lockert sie gezielt für die Mail-Anzeige.

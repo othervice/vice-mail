@@ -36,8 +36,9 @@ ausgeführt und geprüft wurde. Was nicht geprüft werden konnte, steht dort aus
 
 ## Architekturgrenzen
 
-- Die Oberfläche spricht nur über typisierte Commands und Events mit dem Kern. `invoke` wird nur in
-  `app/src/services/ipc.ts` aufgerufen. Das Frontend greift nie auf Datenbank, Dateisystem oder Netz zu.
+- Die Oberfläche spricht nur über typisierte Commands und Events mit dem Kern. Die erzeugten Bindings
+  (`app/src/generated/`, darin `invoke`) und `@tauri-apps/api` werden nur in `app/src/services/ipc.ts`
+  importiert. Das Frontend greift nie auf Datenbank, Dateisystem oder Netz zu.
 - `app/src-tauri` bleibt dünn: Fenster, Commands, Verdrahtung. Logik gehört in die Crates, damit sie
   ohne WebView testbar ist.
 - `mail-model` enthält nur Typen und Traits, kein IO. Adapter (`mail-imap`) kennen weder Oberfläche

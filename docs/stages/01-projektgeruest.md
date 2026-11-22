@@ -18,6 +18,7 @@ Empfehlungen aus `docs/SPEC.md` arbeiten und es unter „Wartet auf“ vermerken
 - [ ] **Logging.** `tracing` in eine rotierende Datei, im Entwicklungsmodus zusätzlich auf die Konsole. Typ `Secret<T>`, dessen Ausgabe geschwärzt ist.
 - [ ] **Sicherheits-Grundlage.** Capabilities minimal, strenge Content-Security-Policy, `withGlobalTauri` aus.
 - [ ] **Prüfbefehl.** `scripts/check.sh`: `cargo fmt --check`, clippy, `cargo test`, Typecheck, ESLint, Vitest, Vite-Build, `cargo deny check` (Lizenzen und Sicherheitsmeldungen), `pnpm audit --prod`.
+- [ ] **Desktop-Test-Grundlage** (nach Spike D, `docs/decisions/0005-html-sandbox-und-desktop-tests.md`). Cargo-Feature `e2e` mit eingebettetem WebDriver (`tauri-plugin-wdio-webdriver`), `wdio.conf`, `pnpm --dir app test:e2e` mit einem Rauchtest (App startet, Rahmen sichtbar, Bildschirmfoto hell und dunkel). Prüfung, dass ein Release-Build den WebDriver nicht enthält. Läuft nicht in `scripts/check.sh`, weil er eine GUI-Sitzung braucht.
 - [ ] **Dateien für das Repo.** `README.md` (Englisch: was es ist, Stand „pre-alpha“, wie man baut), `LICENSE`.
 
 ## Abnahme

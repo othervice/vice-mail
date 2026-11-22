@@ -16,8 +16,8 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 
 | Nr. | Stufe | Status | Danach |
 |---|---|---|---|
-| 00 | [Umgebung und Risiko-Spikes](stages/00-umgebung-und-spikes.md) | offen | Werkzeuge stehen, die vier riskanten Annahmen sind geprüft |
-| 01 | [Projektgerüst und Design-Grundlage](stages/01-projektgeruest.md) | offen | App startet mit leerer Oberfläche im Zieldesign |
+| 00 | [Umgebung und Risiko-Spikes](stages/00-umgebung-und-spikes.md) | fertig | Werkzeuge stehen, die vier riskanten Annahmen sind geprüft |
+| 01 | [Projektgerüst und Design-Grundlage](stages/01-projektgeruest.md) | in Arbeit | App startet mit leerer Oberfläche im Zieldesign |
 | 02 | [Konto und Synchronisierung, nur lesend](stages/02-konto-und-sync-lesend.md) | offen | echte Postfächer erscheinen als Liste |
 | 03 | [Nachricht lesen](stages/03-nachricht-lesen.md) | offen | Mails und Anhänge sicher lesbar, auch offline |
 | 04 | [Aktionen und Outbox](stages/04-aktionen-und-outbox.md) | offen | archivieren, löschen, verschieben, markieren |
