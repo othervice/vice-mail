@@ -33,6 +33,27 @@ pub enum StoreError {
 
     #[error("database job panicked: {0}")]
     JobPanicked(String),
+
+    /// An account with this email address exists (unique, case-insensitive).
+    #[error("an account for {0} exists already")]
+    AccountExists(String),
+
+    /// The account, mailbox or message does not exist (any more).
+    #[error("not found: {0}")]
+    NotFound(String),
+
+    /// A caller passed a value the store refuses (for example a list limit of 0).
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
+
+    /// A sync write named another UIDVALIDITY than the stored one: the mailbox was reset in
+    /// between, and the caller's UIDs are void. Nothing was written.
+    #[error("mailbox {mailbox}: UIDVALIDITY is {stored:?}, the write was for {given}")]
+    UidValidityMismatch {
+        mailbox: i64,
+        stored: Option<u32>,
+        given: u32,
+    },
 }
 
 impl StoreError {
@@ -67,9 +88,12 @@ impl From<StoreError> for CoreError {
             StoreError::TooNew { found, supported } => {
                 CoreError::DatabaseTooNew { found, supported }
             }
-            StoreError::JobPanicked(_) | StoreError::WorkerGone(_) => {
-                CoreError::Internal(err.to_string())
-            }
+            StoreError::JobPanicked(_)
+            | StoreError::WorkerGone(_)
+            | StoreError::UidValidityMismatch { .. } => CoreError::Internal(err.to_string()),
+            StoreError::AccountExists(email) => CoreError::AccountExists(email),
+            StoreError::NotFound(what) => CoreError::NotFound(what),
+            StoreError::InvalidArgument(what) => CoreError::InvalidArgument(what),
             other => CoreError::Database(other.to_string()),
         }
     }

@@ -26,6 +26,40 @@ export const events = {
 export const CORE_EVENT_NAME = "core-event" as const;
 
 /* Types */
+/**
+ *  Stable account id (UUID v4, lowercase hyphenated on the wire). It is the same on every
+ *  device, so synced records refer to accounts by it, never by a local row id.
+ */
+export type AccountId = string;
+
+/**  Coarse sync state of an account, for the status indicator. */
+export type AccountState = 
+/**  First connection attempt after start or after the user asked to retry. */
+"connecting" | 
+/**  A sync pass is running; `progress` is set during the first sync of a mailbox. */
+"syncing" | 
+/**  Connected and up to date; waiting for changes (IDLE or poll interval). */
+"idle" | 
+/**  Not connected; retrying with backoff. `error` says why, `retryAt` when. */
+"offline" | 
+/**  Stopped until the user acts (wrong password, untrusted certificate, unsupported server). */
+"error";
+
+/**
+ *  Sync status of one account. Invariants by `state`:
+ *  `syncing` may carry `progress`; `offline` carries `error` (null only before the first
+ *  failure) and `retryAt` (null while a reconnect is running); `error` always carries `error`.
+ */
+export type AccountStatus = {
+	state: AccountState,
+	progress: SyncProgress | null,
+	error: IpcError | null,
+	/**  Unix milliseconds of the next reconnect attempt. */
+	retryAt: number | null,
+	/**  Unix milliseconds when the last complete sync pass finished, in any state. */
+	lastSyncAt: number | null,
+};
+
 /**  Version information shown under Settings, About. */
 export type AppInfo = {
 	version: string,
@@ -39,11 +73,30 @@ export type AppInfo = {
 /**
  *  The one event stream from the core to the UI. Internally tagged by `type`.
  * 
+ *  The UI never polls: it re-queries what an event says has changed. The engine coalesces
+ *  bursts (for example one `messagesChanged` per stored sync window, not per message).
+ * 
  *  - `preferencesChanged`: preferences were stored; carries the stored values.
+ *  - `accountsChanged`: an account was added or removed; re-query `listAccounts`.
+ *  - `accountStatusChanged`: sync state of one account changed; carries the new status.
+ *  - `mailboxesChanged`: folder list, roles or counters of an account changed; re-query
+ *    `listMailboxes`.
+ *  - `messagesChanged`: messages of a mailbox were added, changed or removed; re-query the
+ *    visible pages of `listMessages` (counters come with `mailboxesChanged`).
+ *  - `newMail`: `count` new unread messages arrived in a mailbox during an incremental sync
+ *    (never during the first sync of a mailbox). For notifications; lists react to
+ *    `messagesChanged`.
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number };
 
-/**  Stable, machine-readable error kinds. The UI picks its (translated) text by this code. */
+/**
+ *  Stable, machine-readable error kinds. The UI picks its (translated) text by this code.
+ * 
+ *  The variants marked `#[specta(skip)]` are part of the stage 2 contract but not yet in the
+ *  TypeScript bindings: the frontend requires a text for every exported code
+ *  (`ERROR_CODES` in `app/src/services/ipc.ts`). Whoever adds their i18n texts removes the
+ *  `skip` and regenerates the bindings. No registered command produces them before that.
+ */
 export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "database" | "database_too_new";
 
 /**  The error as it crosses the IPC bridge: `{ code, message, detail }`. */
@@ -57,6 +110,9 @@ export type IpcError = {
 
 export type LanguagePreference = "system" | "en" | "de";
 
+/**  Local row id of a mailbox (`mailbox.id`). Not stable across devices. */
+export type MailboxId = number;
+
 /**  Operating system the app runs on. */
 export type Platform = "macos" | "windows" | "linux";
 
@@ -64,6 +120,15 @@ export type Platform = "macos" | "windows" | "linux";
 export type Preferences = {
 	theme: ThemePreference,
 	language: LanguagePreference,
+};
+
+/**  Progress of the first sync of one mailbox. */
+export type SyncProgress = {
+	mailboxId: MailboxId,
+	/**  Messages of this mailbox stored locally so far. */
+	done: number,
+	/**  Messages in this mailbox on the server (EXISTS when the pass started). */
+	total: number,
 };
 
 export type ThemePreference = "system" | "light" | "dark";

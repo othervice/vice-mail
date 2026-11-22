@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::{AccountId, AccountStatus, MailboxId};
+
 /// Operating system the app runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
@@ -62,7 +64,19 @@ pub struct Preferences {
 
 /// The one event stream from the core to the UI. Internally tagged by `type`.
 ///
+/// The UI never polls: it re-queries what an event says has changed. The engine coalesces
+/// bursts (for example one `messagesChanged` per stored sync window, not per message).
+///
 /// - `preferencesChanged`: preferences were stored; carries the stored values.
+/// - `accountsChanged`: an account was added or removed; re-query `listAccounts`.
+/// - `accountStatusChanged`: sync state of one account changed; carries the new status.
+/// - `mailboxesChanged`: folder list, roles or counters of an account changed; re-query
+///   `listMailboxes`.
+/// - `messagesChanged`: messages of a mailbox were added, changed or removed; re-query the
+///   visible pages of `listMessages` (counters come with `mailboxesChanged`).
+/// - `newMail`: `count` new unread messages arrived in a mailbox during an incremental sync
+///   (never during the first sync of a mailbox). For notifications; lists react to
+///   `messagesChanged`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -70,7 +84,26 @@ pub struct Preferences {
     rename_all_fields = "camelCase"
 )]
 pub enum CoreEvent {
-    PreferencesChanged { preferences: Preferences },
+    PreferencesChanged {
+        preferences: Preferences,
+    },
+    AccountsChanged,
+    AccountStatusChanged {
+        account_id: AccountId,
+        status: AccountStatus,
+    },
+    MailboxesChanged {
+        account_id: AccountId,
+    },
+    MessagesChanged {
+        account_id: AccountId,
+        mailbox_id: MailboxId,
+    },
+    NewMail {
+        account_id: AccountId,
+        mailbox_id: MailboxId,
+        count: u32,
+    },
 }
 
 #[cfg(test)]
@@ -110,6 +143,57 @@ mod tests {
             serde_json::from_value::<Preferences>(json!({ "theme": "blue", "language": "en" }))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn stage_2_events_wire_format() {
+        let account: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+        let cases = [
+            (
+                CoreEvent::AccountsChanged,
+                json!({ "type": "accountsChanged" }),
+            ),
+            (
+                CoreEvent::AccountStatusChanged {
+                    account_id: account,
+                    status: AccountStatus::connecting(),
+                },
+                json!({ "type": "accountStatusChanged",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                        "status": { "state": "connecting", "progress": null, "error": null,
+                                    "retryAt": null, "lastSyncAt": null } }),
+            ),
+            (
+                CoreEvent::MailboxesChanged {
+                    account_id: account,
+                },
+                json!({ "type": "mailboxesChanged",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff" }),
+            ),
+            (
+                CoreEvent::MessagesChanged {
+                    account_id: account,
+                    mailbox_id: MailboxId(3),
+                },
+                json!({ "type": "messagesChanged",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff", "mailboxId": 3 }),
+            ),
+            (
+                CoreEvent::NewMail {
+                    account_id: account,
+                    mailbox_id: MailboxId(3),
+                    count: 2,
+                },
+                json!({ "type": "newMail",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                        "mailboxId": 3, "count": 2 }),
+            ),
+        ];
+        for (event, wire) in cases {
+            assert_eq!(serde_json::to_value(&event).expect("serialize"), wire);
+            let back: CoreEvent = serde_json::from_value(wire).expect("deserialize");
+            assert_eq!(back, event);
+        }
     }
 
     #[test]

@@ -8,12 +8,17 @@
 
 pub mod backup;
 mod error;
+mod mail_api;
 mod migrations;
 mod settings;
 mod store;
 mod workers;
 
 pub use error::StoreError;
+pub use mail_api::{
+    MAX_PAGE_SIZE, MailboxBaseline, MailboxListReport, MailboxSyncState, NewAccount, StoreReport,
+    StoredAccount,
+};
 pub use migrations::SCHEMA_VERSION;
 pub use settings::{GLOBAL_SCOPE, Setting};
 pub use store::{OpenReport, Store, StoreOptions};

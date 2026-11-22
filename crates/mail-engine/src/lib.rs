@@ -3,6 +3,7 @@
 
 mod core;
 pub mod logging;
+pub mod sync_state;
 
 pub use crate::core::{AppCore, BuildInfo, CoreConfig, DATABASE_FILE};
 

@@ -10,7 +10,10 @@ publish.workspace = true
 [dependencies]
 serde.workspace = true
 specta.workspace = true
+# Type-level only: `specta_typescript::Number` marks 64-bit fields that are safe as JS numbers.
+specta-typescript.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
