@@ -1,0 +1,16 @@
+[package]
+name = "spike-sqlite"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "GPL-3.0-or-later"
+description = "Throwaway spike: SQLite schema, FTS5 tokenizers and query latency for 500k messages"
+
+# Standalone, not part of any workspace.
+[workspace]
+
+[dependencies]
+rusqlite = { version = "0.43", features = ["bundled"] }
+
+[profile.release]
+debug = false
