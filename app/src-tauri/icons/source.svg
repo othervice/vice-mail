@@ -1,5 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="#2f4858"/>
-  <path d="M232 340h560v344H232z" fill="none" stroke="#f2f2f2" stroke-width="48" stroke-linejoin="round"/>
-  <path d="M232 340l280 210 280-210" fill="none" stroke="#f2f2f2" stroke-width="48" stroke-linejoin="round"/>
+  <!-- App icon source: an envelope whose flap is a V, on the accent colour of
+       app/src/styles/tokens.css (ui-accent, #0b746c). Every icon file next to this one is
+       generated from it by generate.sh; edit this file, then run that script. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f8c82"/>
+      <stop offset="1" stop-color="#0b746c"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <rect x="200" y="296" width="624" height="432" rx="64" fill="#ffffff"/>
+  <path d="M252 356 L512 556 L772 356" fill="none" stroke="#0b746c" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

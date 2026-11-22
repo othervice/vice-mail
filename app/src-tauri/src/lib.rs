@@ -5,6 +5,12 @@ pub mod commands;
 #[cfg(feature = "e2e")]
 mod e2e;
 mod events;
+#[cfg(any(test, all(windows, feature = "webview2-frame-guard")))]
+mod navigation;
+// Windows only, off by default: needs `unsafe` (decision 0011, draft).
+#[cfg(all(windows, feature = "webview2-frame-guard"))]
+mod webview2_frames;
+mod window_theme;
 
 use std::sync::Mutex;
 
@@ -12,7 +18,8 @@ use mail_engine::credentials::{Credentials, SystemKeychain};
 use mail_engine::logging::{self, LogConfig, LogGuard};
 use mail_engine::{AppCore, BuildInfo, CoreConfig, CoreServices};
 use specta_typescript::Typescript;
-use tauri::{AppHandle, Manager, RunEvent, Runtime};
+use tauri::webview::NewWindowResponse;
+use tauri::{AppHandle, Manager, RunEvent, Runtime, Theme, WebviewWindow};
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 pub use events::{CORE_EVENT_NAME, CoreEventMessage};
@@ -88,8 +95,11 @@ pub fn run() {
                 },
                 services,
             ));
+            let theme = initial_theme(&core);
+            let theme_events = core.subscribe();
             attach_core(app.handle(), &specta, core);
-            open_main_window(app.handle())?;
+            let window = open_main_window(app.handle(), theme)?;
+            window_theme::follow(window, theme_events);
             Ok(())
         })
         .build(context());
@@ -156,10 +166,13 @@ fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, mail_model::
     Ok(services)
 }
 
-/// The app's data directory (database and backups).
+/// The app's data directory (database, backups, message bodies): the local, non-roaming one.
+/// Windows: `%LOCALAPPDATA%\<identifier>`, next to the logs and WebView2's data; the roaming
+/// `%APPDATA%` would copy a mail cache of gigabytes with every roaming-profile logon. macOS:
+/// `~/Library/Application Support/<identifier>`, the same as the roaming variant there.
 #[cfg(not(feature = "e2e"))]
 fn data_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<std::path::PathBuf> {
-    app.path().app_data_dir()
+    app.path().app_local_data_dir()
 }
 
 /// The app's log directory.
@@ -180,9 +193,23 @@ fn attach_core<R: Runtime>(app: &AppHandle<R>, specta: &Builder<R>, core: AppCor
     app.manage(core);
 }
 
+/// The window frame's theme at start, from the stored preferences (see [`window_theme`]).
+fn initial_theme(core: &AppCore) -> Option<Theme> {
+    match tauri::async_runtime::block_on(core.get_preferences()) {
+        Ok(preferences) => window_theme::window_theme(preferences.theme),
+        Err(err) => {
+            tracing::warn!(%err, "preferences unreadable, the window frame follows the system");
+            None
+        }
+    }
+}
+
 /// The window is declared in `tauri.conf.json` with `"create": false` and built here, after the
 /// core is managed.
-fn open_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+fn open_main_window<R: Runtime>(
+    app: &AppHandle<R>,
+    theme: Option<Theme>,
+) -> tauri::Result<WebviewWindow<R>> {
     let config = app
         .config()
         .app
@@ -191,8 +218,36 @@ fn open_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .find(|w| w.label == MAIN_WINDOW)
         .cloned()
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
-    tauri::WebviewWindowBuilder::from_config(app, &config)?.build()?;
-    Ok(())
+    let window = tauri::WebviewWindowBuilder::from_config(app, &config)?
+        .theme(theme)
+        // Nothing in the page opens windows; `window.open` and `target=_blank`, also from the
+        // mail frame, are refused (WebView2 marks the request handled, decision 0011).
+        .on_new_window(|url, _features| {
+            tracing::warn!(
+                scheme = url.scheme(),
+                host = url.host_str(),
+                "refused to open a new window"
+            );
+            NewWindowResponse::Deny
+        })
+        .build()?;
+    #[cfg(all(windows, feature = "webview2-frame-guard"))]
+    install_frame_guard(&window)?;
+    Ok(window)
+}
+
+/// Windows: checks every navigation inside the mail frame (decision 0011, draft).
+#[cfg(all(windows, feature = "webview2-frame-guard"))]
+fn install_frame_guard<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+    webview2_frames::install(
+        window,
+        std::sync::Arc::new(|url: &str| {
+            navigation::decide_frame_navigation(url, &|_token, index| {
+                // Stage 3 hands the click to the core (link check, then the system browser).
+                tracing::info!(index, "link clicked in the mail frame");
+            })
+        }),
+    )
 }
 
 #[cfg(test)]
