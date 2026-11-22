@@ -1,0 +1,12 @@
+Date: Tue, 04 Aug 2026 09:00:00 +0000
+From: Mail Delivery System <MAILER-DAEMON@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Undelivered Mail Returned to Sender
+Message-ID: <auto.delivery-status@seed.vicemail.test>
+Auto-Submitted: auto-replied
+X-Vicemail-Seed: auto/delivery-status
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+This is the mail system. Your message could not be delivered.

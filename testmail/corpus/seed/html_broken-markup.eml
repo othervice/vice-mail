@@ -1,0 +1,67 @@
+Date: Sun, 02 Aug 2026 07:30:00 +0000
+From: CI Example <notifications@ci.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Broken HTML markup
+Message-ID: <html.broken-markup@seed.vicemail.test>
+X-Vicemail-Seed: html/broken-markup
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><table><tr><td><p>Unclosed <b>bold <i>italic</table></div></spa=
+n><p>After broken table<img src=3D"http://127.0.0.1:18999/img/html/broken-m=
+arkup/unclosed.png" x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x =
+x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x=
+ x x x x x x x x x x x x x x x x x x x x x x
+<a href=3D'https://example.com/a?x=3D1&y=3D2'>link</a>

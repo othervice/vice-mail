@@ -1,0 +1,17 @@
+Date: Tue, 01 Sep 2026 18:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: No closing boundary
+Message-ID: <broken.missing-final-boundary@seed.vicemail.test>
+X-Vicemail-Seed: broken/missing-final-boundary
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain
+
+First part.
+--b1
+Content-Type: text/plain
+
+Second part, never closed.

@@ -1,0 +1,49 @@
+Date: Wed, 03 Jun 2026 10:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Fwd: Original message with attachment
+Message-ID: <mime.forward-rfc822@seed.vicemail.test>
+X-Vicemail-Seed: mime/forward-rfc822
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000011_434711bb8053"
+
+This is a multi-part message in MIME format.
+
+--=_vm000011_434711bb8053
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+See the forwarded message.
+
+--=_vm000011_434711bb8053
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="forwarded.eml"
+
+Date: Sat, 02 May 2026 10:00:00 +0200
+From: Dave Dawson <dave@example.net>
+To: Carol Clark <carol@example.org>
+Subject: Original message with attachment
+Message-ID: <mime.forwarded-inner@seed.vicemail.test>
+X-Vicemail-Seed: mime/forwarded-inner
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000010_31d6f1ff88c9"
+
+This is a multi-part message in MIME format.
+
+--=_vm000010_31d6f1ff88c9
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Original text.
+
+--=_vm000010_31d6f1ff88c9
+Content-Type: image/png; name="tiny.png"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="tiny.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAGElEQVR4nGPo/XELK2KgokQRuypW
+REUJAFRYX6GMvoUjAAAAAElFTkSuQmCC
+
+--=_vm000010_31d6f1ff88c9--
+
+--=_vm000011_434711bb8053--

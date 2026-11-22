@@ -1,0 +1,179 @@
+Date: Sun, 22 Nov 2026 12:19:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Attachments with dangerous names
+Message-ID: <hostile.attachment-names@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: path-traversal windows-paths drive-letter reserved-names null-byte bidi-override zero-width control-characters trailing-dots hidden-files forbidden-characters long-name empty-name encoded-word nfd
+X-Corpus-Expect: Every file name is harmless: no separators, no '..', no drive letters, no reserved device names, no control or bidi characters, no trailing dots or spaces, at most 200 bytes, NFC.
+X-Corpus-Check: attachments=27; text=SAFE-CONTENT-VISIBLE
+Content-Type: multipart/mixed; boundary="names-boundary-01"
+
+--names-boundary-01
+Content-Type: text/plain; charset=utf-8
+
+SAFE-CONTENT-VISIBLE
+Every attachment name below must be made harmless.
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="../../x"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAwCg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="..\\..\\windows.ini"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxCg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="../../../evil.sh"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyCg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="C:\\Windows\\System32\\evil.bat"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAzCg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="C:evil.bat"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA0Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="/etc/passwd"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA1Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="CON"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA2Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="aux.txt"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA3Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="NUL .txt"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA4Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="COM1"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCA5Cg==
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="lpt9.log"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxMAo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''evil.txt%00.exe
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxMQo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''%00
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxMgo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''invoice%E2%80%AEfdp.exe
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxMwo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''report%E2%81%A7fdp.exe%E2%81%A9.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxNAo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''zero%E2%80%8Bwidth%EF%BB%BF.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxNQo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''tab%09and%07bell.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxNgo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="trailing dots and spaces. . ."
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxNwo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="evil.exe."
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxOAo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="...hidden"
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAxOQo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''a%3Cb%3Ec%3Ad%7Ce%3Ff%2Ag.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyMAo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyMQo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename=".."
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyMgo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename=""
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyMwo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyNAo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="=?utf-8?q?..=2F..=2Fencoded.txt?="
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyNQo=
+--names-boundary-01
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename*=utf-8''A%CC%88rger.txt
+Content-Transfer-Encoding: base64
+
+YXR0YWNobWVudCAyNgo=
+--names-boundary-01--

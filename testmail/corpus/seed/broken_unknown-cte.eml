@@ -1,0 +1,11 @@
+Date: Sat, 05 Sep 2026 03:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Unknown Content-Transfer-Encoding
+Message-ID: <broken.unknown-cte@seed.vicemail.test>
+X-Vicemail-Seed: broken/unknown-cte
+MIME-Version: 1.0
+Content-Type: text/plain
+Content-Transfer-Encoding: x-gzip64
+
+H4sIAAAAAAAAA8tIzcnJBwCGphA2BQAAAA==

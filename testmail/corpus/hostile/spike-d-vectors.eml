@@ -1,0 +1,208 @@
+Date: Sun, 22 Nov 2026 12:18:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Spike D vectors (decision 0005) in one document
+Message-ID: <hostile.spike-d-vectors@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: all 53 vectors of spikes/tauri-app/src/sandbox/corpus.ts
+X-Corpus-Expect: Nothing outside the allowlist; links rewritten; external images
+ listed; the two known leaks of 0005 (link-preconnect,
+ link-target-blank) are gone.
+X-Corpus-Check: links=8; remote=7; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body onload=3D"try{parent.postMessage({vmRan:'body-onlo=
+ad'},'*')}catch(e){}try{window.__vmRan=3D'body-onload'}catch(e){}try{top.do=
+cument.title=3D'PWNED body-onload'}catch(e){}try{window.__TAURI_INTERNALS__=
+.invoke('sandbox_breach',{vector:'body-onload'})}catch(e){}try{parent.__TAU=
+RI_INTERNALS__.invoke('sandbox_breach',{vector:'body-onload'})}catch(e){}tr=
+y{fetch('http://127.0.0.1:18999/v/body-onload/js-fetch')}catch(e){}new Imag=
+e().src=3D'http://127.0.0.1:18999/v/body-onload/js-img.png'">
+<p>SAFE-CONTENT-VISIBLE</p>
+<div class=3D"vector"><script>try{parent.postMessage({vmRan:'script-inline'=
+},'*')}catch(e){}try{window.__vmRan=3D'script-inline'}catch(e){}try{top.doc=
+ument.title=3D'PWNED script-inline'}catch(e){}try{window.__TAURI_INTERNALS_=
+_.invoke('sandbox_breach',{vector:'script-inline'})}catch(e){}try{parent.__=
+TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'script-inline'})}catch(e=
+){}try{fetch('http://127.0.0.1:18999/v/script-inline/js-fetch')}catch(e){}n=
+ew Image().src=3D'http://127.0.0.1:18999/v/script-inline/js-img.png'</scrip=
+t></div>
+<div class=3D"vector"><script src=3D"/sandbox-probe.js?v=3Dscript-src-self"=
+></script></div>
+<div class=3D"vector"><script src=3D"http://127.0.0.1:18999/v/script-src-re=
+mote/x.js"></script></div>
+<div class=3D"vector"><img src=3D"data:," onerror=3D"try{parent.postMessage=
+({vmRan:'img-onerror'},'*')}catch(e){}try{window.__vmRan=3D'img-onerror'}ca=
+tch(e){}try{top.document.title=3D'PWNED img-onerror'}catch(e){}try{window._=
+_TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'img-onerror'})}catch(e)=
+{}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'img-onerr=
+or'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/img-onerror/js-fetch')}=
+catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/img-onerror/js-img.pn=
+g'"></div>
+<div class=3D"vector"><img src=3D"data:image/gif;base64,R0lGODlhAQABAAAAACw=
+=3D" onload=3D"try{parent.postMessage({vmRan:'img-onload'},'*')}catch(e){}t=
+ry{window.__vmRan=3D'img-onload'}catch(e){}try{top.document.title=3D'PWNED =
+img-onload'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach=
+',{vector:'img-onload'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('s=
+andbox_breach',{vector:'img-onload'})}catch(e){}try{fetch('http://127.0.0.1=
+:18999/v/img-onload/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.=
+1:18999/v/img-onload/js-img.png'"></div>
+<div class=3D"vector"><details open ontoggle=3D"try{parent.postMessage({vmR=
+an:'details-ontoggle'},'*')}catch(e){}try{window.__vmRan=3D'details-ontoggl=
+e'}catch(e){}try{top.document.title=3D'PWNED details-ontoggle'}catch(e){}tr=
+y{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'details-ontog=
+gle'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{ve=
+ctor:'details-ontoggle'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/det=
+ails-ontoggle/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:1899=
+9/v/details-ontoggle/js-img.png'"><summary>d</summary>x</details></div>
+<div class=3D"vector"><input autofocus onfocus=3D"try{parent.postMessage({v=
+mRan:'input-autofocus'},'*')}catch(e){}try{window.__vmRan=3D'input-autofocu=
+s'}catch(e){}try{top.document.title=3D'PWNED input-autofocus'}catch(e){}try=
+{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'input-autofocu=
+s'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vect=
+or:'input-autofocus'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/input-=
+autofocus/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/=
+input-autofocus/js-img.png'"></div>
+<div class=3D"vector"><div onmouseover=3D"try{parent.postMessage({vmRan:'on=
+mouseover'},'*')}catch(e){}try{window.__vmRan=3D'onmouseover'}catch(e){}try=
+{top.document.title=3D'PWNED onmouseover'}catch(e){}try{window.__TAURI_INTE=
+RNALS__.invoke('sandbox_breach',{vector:'onmouseover'})}catch(e){}try{paren=
+t.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'onmouseover'})}catch=
+(e){}try{fetch('http://127.0.0.1:18999/v/onmouseover/js-fetch')}catch(e){}n=
+ew Image().src=3D'http://127.0.0.1:18999/v/onmouseover/js-img.png'">HOVER H=
+OVER HOVER HOVER</div></div>
+<div class=3D"vector"><a href=3D"javascript:try{parent.postMessage({vmRan:'=
+javascript-link'},'*')}catch(e){}try{window.__vmRan=3D'javascript-link'}cat=
+ch(e){}try{top.document.title=3D'PWNED javascript-link'}catch(e){}try{windo=
+w.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-link'})}c=
+atch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'ja=
+vascript-link'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/javascript-l=
+ink/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/javasc=
+ript-link/js-img.png'">js link</a></div>
+<div class=3D"vector"><iframe src=3D"javascript:try{parent.postMessage({vmR=
+an:'javascript-iframe'},'*')}catch(e){}try{window.__vmRan=3D'javascript-ifr=
+ame'}catch(e){}try{top.document.title=3D'PWNED javascript-iframe'}catch(e){=
+}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript=
+-iframe'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach'=
+,{vector:'javascript-iframe'})}catch(e){}try{fetch('http://127.0.0.1:18999/=
+v/javascript-iframe/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.=
+1:18999/v/javascript-iframe/js-img.png'"></iframe></div>
+<div class=3D"vector"><svg><script>try{parent.postMessage({vmRan:'svg-scrip=
+t'},'*')}catch(e){}try{window.__vmRan=3D'svg-script'}catch(e){}try{top.docu=
+ment.title=3D'PWNED svg-script'}catch(e){}try{window.__TAURI_INTERNALS__.in=
+voke('sandbox_breach',{vector:'svg-script'})}catch(e){}try{parent.__TAURI_I=
+NTERNALS__.invoke('sandbox_breach',{vector:'svg-script'})}catch(e){}try{fet=
+ch('http://127.0.0.1:18999/v/svg-script/js-fetch')}catch(e){}new Image().sr=
+c=3D'http://127.0.0.1:18999/v/svg-script/js-img.png'</script></svg></div>
+<div class=3D"vector"><svg onload=3D"try{parent.postMessage({vmRan:'svg-onl=
+oad'},'*')}catch(e){}try{window.__vmRan=3D'svg-onload'}catch(e){}try{top.do=
+cument.title=3D'PWNED svg-onload'}catch(e){}try{window.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'svg-onload'})}catch(e){}try{parent.__TAURI=
+_INTERNALS__.invoke('sandbox_breach',{vector:'svg-onload'})}catch(e){}try{f=
+etch('http://127.0.0.1:18999/v/svg-onload/js-fetch')}catch(e){}new Image().=
+src=3D'http://127.0.0.1:18999/v/svg-onload/js-img.png'"><rect width=3D"5" h=
+eight=3D"5"/></svg></div>
+<div class=3D"vector"><svg width=3D"200" height=3D"30"><a><animate attribut=
+eName=3D"href" values=3D"javascript:try{parent.postMessage({vmRan:'svg-anim=
+ate-href'},'*')}catch(e){}try{window.__vmRan=3D'svg-animate-href'}catch(e){=
+}try{top.document.title=3D'PWNED svg-animate-href'}catch(e){}try{window.__T=
+AURI_INTERNALS__.invoke('sandbox_breach',{vector:'svg-animate-href'})}catch=
+(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'svg-an=
+imate-href'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/svg-animate-hre=
+f/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/svg-anim=
+ate-href/js-img.png'"/><text x=3D"0" y=3D"15">svg anim</text></a></svg></di=
+v>
+<div class=3D"vector"><meta http-equiv=3D"refresh" content=3D"0;url=3Djavas=
+cript:try{parent.postMessage({vmRan:'meta-refresh-js'},'*')}catch(e){}try{w=
+indow.__vmRan=3D'meta-refresh-js'}catch(e){}try{top.document.title=3D'PWNED=
+ meta-refresh-js'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_=
+breach',{vector:'meta-refresh-js'})}catch(e){}try{parent.__TAURI_INTERNALS_=
+_.invoke('sandbox_breach',{vector:'meta-refresh-js'})}catch(e){}try{fetch('=
+http://127.0.0.1:18999/v/meta-refresh-js/js-fetch')}catch(e){}new Image().s=
+rc=3D'http://127.0.0.1:18999/v/meta-refresh-js/js-img.png'"></div>
+<div class=3D"vector"><iframe srcdoc=3D"&lt;script&gt;try{parent.postMessag=
+e({vmRan:'iframe-srcdoc-nested'},'*')}catch(e){}try{window.__vmRan=3D'ifram=
+e-srcdoc-nested'}catch(e){}try{top.document.title=3D'PWNED iframe-srcdoc-ne=
+sted'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vec=
+tor:'iframe-srcdoc-nested'})}catch(e){}try{parent.__TAURI_INTERNALS__.invok=
+e('sandbox_breach',{vector:'iframe-srcdoc-nested'})}catch(e){}try{fetch('ht=
+tp://127.0.0.1:18999/v/iframe-srcdoc-nested/js-fetch')}catch(e){}new Image(=
+).src=3D'http://127.0.0.1:18999/v/iframe-srcdoc-nested/js-img.png'&lt;/scri=
+pt&gt;"></iframe></div>
+<div class=3D"vector"><iframe src=3D"/index.html"></iframe></div>
+<div class=3D"vector"><img src=3D"http://127.0.0.1:18999/v/img-src/a.png"><=
+/div>
+<div class=3D"vector"><img srcset=3D"http://127.0.0.1:18999/v/img-srcset/a.=
+png 1x, http://127.0.0.1:18999/v/img-srcset/b.png 2x"></div>
+<div class=3D"vector"><picture><source srcset=3D"http://127.0.0.1:18999/v/p=
+icture-source/a.png"><img alt=3D"p"></picture></div>
+<div class=3D"vector"><video poster=3D"http://127.0.0.1:18999/v/video-poste=
+r/a.png"></video></div>
+<div class=3D"vector"><video src=3D"http://127.0.0.1:18999/v/video-src/a.mp=
+4" preload=3D"auto"></video></div>
+<div class=3D"vector"><audio src=3D"http://127.0.0.1:18999/v/audio-src/a.mp=
+3" preload=3D"auto" controls></audio></div>
+<div class=3D"vector"><input type=3D"image" src=3D"http://127.0.0.1:18999/v=
+/input-image/a.png" alt=3D"i"></div>
+<div class=3D"vector"><svg width=3D"10" height=3D"10"><image href=3D"http:/=
+/127.0.0.1:18999/v/svg-image/a.png" width=3D"10" height=3D"10"/></svg></div>
+<div class=3D"vector"><svg width=3D"10" height=3D"10"><use href=3D"http://1=
+27.0.0.1:18999/v/svg-use/a.svg#x"/></svg></div>
+<div class=3D"vector"><div style=3D"background-image:url(http://127.0.0.1:1=
+8999/v/css-style-attr/a.png)">bg</div></div>
+<div class=3D"vector"><style>.b{background:url(http://127.0.0.1:18999/v/css=
+-style-block/a.png)}</style><div class=3D"b">bg</div></div>
+<div class=3D"vector"><style>@import url(http://127.0.0.1:18999/v/css-impor=
+t/a.css);</style>imp</div>
+<div class=3D"vector"><style>@font-face{font-family:vmx;src:url(http://127.=
+0.0.1:18999/v/css-font-face/a.woff)}body{font-family:vmx}</style>font</div>
+<div class=3D"vector"><link rel=3D"stylesheet" href=3D"http://127.0.0.1:189=
+99/v/link-stylesheet/a.css">ls</div>
+<div class=3D"vector"><link rel=3D"prefetch" href=3D"http://127.0.0.1:18999=
+/v/link-prefetch/a">pf</div>
+<div class=3D"vector"><link rel=3D"preload" as=3D"image" href=3D"http://127=
+.0.0.1:18999/v/link-preload/a.png">pl</div>
+<div class=3D"vector"><link rel=3D"preconnect" href=3D"http://127.0.0.1:189=
+97"><link rel=3D"dns-prefetch" href=3D"//dns-prefetch.vector.invalid">pc</d=
+iv>
+<div class=3D"vector"><table background=3D"http://127.0.0.1:18999/v/table-b=
+ackground/a.png"><tr><td>tb</td></tr></table></div>
+<div class=3D"vector"><object data=3D"http://127.0.0.1:18999/v/object-data/=
+a.html"></object></div>
+<div class=3D"vector"><embed src=3D"http://127.0.0.1:18999/v/embed-src/a.sw=
+f"></div>
+<div class=3D"vector"><iframe src=3D"http://127.0.0.1:18999/v/iframe-src/a.=
+html"></iframe></div>
+<div class=3D"vector"><base href=3D"http://127.0.0.1:18999/v/base-href/"><i=
+mg src=3D"relative.png"></div>
+<div class=3D"vector"><meta http-equiv=3D"refresh" content=3D"0;url=3Dhttp:=
+//127.0.0.1:18999/v/meta-refresh/a"></div>
+<div class=3D"vector"><form action=3D"http://127.0.0.1:18999/v/form-action/=
+submit" method=3D"post"><button type=3D"submit">send form</button><input na=
+me=3D"a" value=3D"b"></form></div>
+<div class=3D"vector"><a href=3D"http://127.0.0.1:18999/v/link-plain/a">pla=
+in link</a></div>
+<div class=3D"vector"><a href=3D"http://127.0.0.1:18999/v/link-target-top/a=
+" target=3D"_top">top link</a></div>
+<div class=3D"vector"><a href=3D"http://127.0.0.1:18999/v/link-target-blank=
+/a" target=3D"_blank">blank link</a></div>
+<div class=3D"vector"><a href=3D"http://127.0.0.1:18999/v/link-ping/a" ping=
+=3D"http://127.0.0.1:18999/v/link-ping/ping">ping link</a></div>
+<div class=3D"vector"><a href=3D"http://127.0.0.1:18999/v/link-download/a" =
+download>download link</a></div>
+<div class=3D"vector"><svg width=3D"200" height=3D"30"><a href=3D"http://12=
+7.0.0.1:18999/v/svg-link/a"><text x=3D"0" y=3D"15">svg link</text></a></svg=
+></div>
+<div class=3D"vector"><a href=3D"mailto:someone@example.test?subject=3Dspik=
+e">mailto link</a></div>
+<div class=3D"vector"><a href=3D"vmlink:42">custom scheme link</a></div>
+<div class=3D"vector"><a href=3D"https://link.invalid/42">rewritten link</a=
+></div>
+<div class=3D"vector"><style>#probe{color:rgb(1,2,3)}</style><p id=3D"probe=
+">style block</p></div>
+<div class=3D"vector"><p id=3D"probe2" style=3D"color:rgb(4,5,6)">style att=
+ribute</p></div>
+</body></html>
+

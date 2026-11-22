@@ -1,0 +1,30 @@
+Date: Sun, 22 Nov 2026 12:11:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: link elements: stylesheet, prefetch, preload, preconnect, dns-prefetch
+Message-ID: <hostile.link-elements@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: link-stylesheet link-prefetch link-preload link-preconnect
+ link-dns-prefetch link-icon link-modulepreload
+X-Corpus-Expect: No link element survives (preconnect opens a TCP connection that
+ neither sandbox nor CSP stop, decision 0005).
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><link rel=3D"icon" href=3D"http://127.0.0.1:18999/v/link-icon/f=
+avicon.ico"><link rel=3D"preconnect" href=3D"http://127.0.0.1:18997"></head=
+><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<link rel=3D"stylesheet" href=3D"http://127.0.0.1:18999/v/link-stylesheet/a=
+.css">ls
+<link rel=3D"prefetch" href=3D"http://127.0.0.1:18999/v/link-prefetch/a">pf
+<link rel=3D"preload" as=3D"image" href=3D"http://127.0.0.1:18999/v/link-pr=
+eload/a.png">pl
+<link rel=3D"preconnect" href=3D"http://127.0.0.1:18997"><link rel=3D"dns-p=
+refetch" href=3D"//dns-prefetch.vector.invalid">pc
+<link rel=3D"modulepreload" href=3D"http://127.0.0.1:18999/v/link-modulepre=
+load/m.js">
+</body></html>
+

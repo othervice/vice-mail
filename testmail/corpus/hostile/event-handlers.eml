@@ -1,0 +1,89 @@
+Date: Sun, 22 Nov 2026 12:02:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Event handler attributes
+Message-ID: <hostile.event-handlers@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: img-onerror img-onload body-onload details-ontoggle input-autofocus
+ onmouseover onclick marquee
+X-Corpus-Expect: No on* attribute survives; elements without handlers stay.
+X-Corpus-Check: links=1; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><body onload=3D"try{parent.postMessage({vmRan:'body-on=
+load'},'*')}catch(e){}try{window.__vmRan=3D'body-onload'}catch(e){}try{top.=
+document.title=3D'PWNED body-onload'}catch(e){}try{window.__TAURI_INTERNALS=
+__.invoke('sandbox_breach',{vector:'body-onload'})}catch(e){}try{parent.__T=
+AURI_INTERNALS__.invoke('sandbox_breach',{vector:'body-onload'})}catch(e){}=
+try{fetch('http://127.0.0.1:18999/v/body-onload/js-fetch')}catch(e){}new Im=
+age().src=3D'http://127.0.0.1:18999/v/body-onload/js-img.png'">
+<p>SAFE-CONTENT-VISIBLE</p>
+<img src=3D"data:," onerror=3D"try{parent.postMessage({vmRan:'img-onerror'}=
+,'*')}catch(e){}try{window.__vmRan=3D'img-onerror'}catch(e){}try{top.docume=
+nt.title=3D'PWNED img-onerror'}catch(e){}try{window.__TAURI_INTERNALS__.inv=
+oke('sandbox_breach',{vector:'img-onerror'})}catch(e){}try{parent.__TAURI_I=
+NTERNALS__.invoke('sandbox_breach',{vector:'img-onerror'})}catch(e){}try{fe=
+tch('http://127.0.0.1:18999/v/img-onerror/js-fetch')}catch(e){}new Image().=
+src=3D'http://127.0.0.1:18999/v/img-onerror/js-img.png'">
+<img src=3D"data:image/gif;base64,R0lGODlhAQABAAAAACw=3D" onload=3D"try{par=
+ent.postMessage({vmRan:'img-onload'},'*')}catch(e){}try{window.__vmRan=3D'i=
+mg-onload'}catch(e){}try{top.document.title=3D'PWNED img-onload'}catch(e){}=
+try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'img-onload'=
+})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector=
+:'img-onload'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/img-onload/js=
+-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/img-onload/j=
+s-img.png'">
+<details open ontoggle=3D"try{parent.postMessage({vmRan:'details-ontoggle'}=
+,'*')}catch(e){}try{window.__vmRan=3D'details-ontoggle'}catch(e){}try{top.d=
+ocument.title=3D'PWNED details-ontoggle'}catch(e){}try{window.__TAURI_INTER=
+NALS__.invoke('sandbox_breach',{vector:'details-ontoggle'})}catch(e){}try{p=
+arent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'details-ontoggle=
+'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/details-ontoggle/js-fetch=
+')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/details-ontoggle/j=
+s-img.png'"><summary>d</summary>x</details>
+<input autofocus onfocus=3D"try{parent.postMessage({vmRan:'input-autofocus'=
+},'*')}catch(e){}try{window.__vmRan=3D'input-autofocus'}catch(e){}try{top.d=
+ocument.title=3D'PWNED input-autofocus'}catch(e){}try{window.__TAURI_INTERN=
+ALS__.invoke('sandbox_breach',{vector:'input-autofocus'})}catch(e){}try{par=
+ent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'input-autofocus'})=
+}catch(e){}try{fetch('http://127.0.0.1:18999/v/input-autofocus/js-fetch')}c=
+atch(e){}new Image().src=3D'http://127.0.0.1:18999/v/input-autofocus/js-img=
+.png'">
+<div onmouseover=3D"try{parent.postMessage({vmRan:'onmouseover'},'*')}catch=
+(e){}try{window.__vmRan=3D'onmouseover'}catch(e){}try{top.document.title=3D=
+'PWNED onmouseover'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbo=
+x_breach',{vector:'onmouseover'})}catch(e){}try{parent.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'onmouseover'})}catch(e){}try{fetch('http:/=
+/127.0.0.1:18999/v/onmouseover/js-fetch')}catch(e){}new Image().src=3D'http=
+://127.0.0.1:18999/v/onmouseover/js-img.png'">HOVER HOVER HOVER</div>
+<a href=3D"#" oNcLiCk=3D"try{parent.postMessage({vmRan:'onclick'},'*')}catc=
+h(e){}try{window.__vmRan=3D'onclick'}catch(e){}try{top.document.title=3D'PW=
+NED onclick'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breac=
+h',{vector:'onclick'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('san=
+dbox_breach',{vector:'onclick'})}catch(e){}try{fetch('http://127.0.0.1:1899=
+9/v/onclick/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/=
+v/onclick/js-img.png'">onclick</a>
+<p onclick=3Dtry{parent.postMessage({vmRan:'unquoted'},'*')}catch(e){}try{w=
+indow.__vmRan=3D'unquoted'}catch(e){}try{top.document.title=3D'PWNEDunquote=
+d'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector=
+:'unquoted'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_brea=
+ch',{vector:'unquoted'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/unqu=
+oted/js-fetch')}catch(e){}newImage().src=3D'http://127.0.0.1:18999/v/unquot=
+ed/js-img.png'>unquoted handler</p>
+<marquee onstart=3D"try{parent.postMessage({vmRan:'marquee'},'*')}catch(e){=
+}try{window.__vmRan=3D'marquee'}catch(e){}try{top.document.title=3D'PWNED m=
+arquee'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{v=
+ector:'marquee'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_=
+breach',{vector:'marquee'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/m=
+arquee/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/mar=
+quee/js-img.png'">marquee</marquee>
+<div style=3D"animation-name:x" onanimationstart=3D"try{parent.postMessage(=
+{vmRan:'animation'},'*')}catch(e){}try{window.__vmRan=3D'animation'}catch(e=
+){}try{top.document.title=3D'PWNED animation'}catch(e){}try{window.__TAURI_=
+INTERNALS__.invoke('sandbox_breach',{vector:'animation'})}catch(e){}try{par=
+ent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'animation'})}catch=
+(e){}try{fetch('http://127.0.0.1:18999/v/animation/js-fetch')}catch(e){}new=
+ Image().src=3D'http://127.0.0.1:18999/v/animation/js-img.png'">anim</div>
+</body></html>
+

@@ -1,0 +1,28 @@
+Date: Sun, 22 Nov 2026 12:07:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Forms and form fields
+Message-ID: <hostile.forms@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: form-action input-image button-formaction textarea select password
+ isindex keygen
+X-Corpus-Expect: No form, input, button, select or textarea; button text stays as text.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<form action=3D"http://127.0.0.1:18999/v/form-action/submit" method=3D"post=
+"><input name=3D"a" value=3D"b"><input type=3D"password" name=3D"pw"><butto=
+n type=3D"submit">send form</button></form>
+<input type=3D"image" src=3D"http://127.0.0.1:18999/v/input-image/a.png" al=
+t=3D"i">
+<form><button formaction=3D"http://127.0.0.1:18999/v/button-formaction/f">f=
+ormaction</button></form>
+<textarea>&lt;img src=3Dx onerror=3Dalert(1)&gt;</textarea>
+<select><option>one</option></select>
+<isindex action=3D"http://127.0.0.1:18999/v/isindex/i"><keygen name=3D"k">
+</body></html>
+

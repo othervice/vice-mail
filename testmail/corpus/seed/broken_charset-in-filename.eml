@@ -1,0 +1,20 @@
+Date: Mon, 07 Sep 2026 03:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Attachment name in raw UTF-8
+Message-ID: <broken.charset-in-filename@seed.vicemail.test>
+X-Vicemail-Seed: broken/charset-in-filename
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b4"
+
+--b4
+Content-Type: text/plain
+
+Raw name.
+--b4
+Content-Type: application/octet-stream; name="Größe ✓.bin"
+Content-Disposition: attachment; filename="Größe ✓.bin"
+Content-Transfer-Encoding: base64
+
+AAEC
+--b4--

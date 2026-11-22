@@ -1,0 +1,12 @@
+Date: Fri, 05 Jun 2026 04:00:00 +0200
+From: Alice Archer <alice@vicemail.test>
+To: Carol Clark <carol@example.org>
+Subject: Sent mail with Bcc header
+Message-ID: <mime.bcc-sent@seed.vicemail.test>
+Bcc: Dave Dawson <dave@example.net>
+X-Vicemail-Seed: mime/bcc-sent
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Copy for the boss in Bcc.

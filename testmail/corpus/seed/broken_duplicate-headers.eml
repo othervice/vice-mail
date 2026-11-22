@@ -1,0 +1,13 @@
+Date: Sat, 05 Sep 2026 18:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: First subject
+Subject: Second subject
+From: second-from@example.com
+Date: Wed, 02 Sep 2026 10:00:00 +0000
+Message-ID: <broken.duplicate-headers@seed.vicemail.test>
+X-Vicemail-Seed: broken/duplicate-headers
+MIME-Version: 1.0
+Content-Type: text/plain
+
+Two Subject, From and Date headers.

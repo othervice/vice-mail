@@ -1,0 +1,16 @@
+Date: Wed, 05 Aug 2026 03:00:00 +0000
+From: Vereinsinfo <info@verein.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Einladung zur Mitgliederversammlung
+Message-ID: <list.verein@seed.vicemail.test>
+List-Id: Mitglieder <mitglieder.verein.example>
+List-Unsubscribe: <https://verein.example/abmelden>
+Precedence: bulk
+X-Vicemail-Seed: list/verein
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Liebe Mitglieder,
+
+hiermit laden wir ein.

@@ -1,0 +1,31 @@
+Date: Sun, 22 Nov 2026 12:06:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: meta refresh and other meta tags
+Message-ID: <hostile.meta-refresh@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: meta-refresh meta-refresh-js meta-csp-override meta-set-cookie
+X-Corpus-Expect: No meta element from the mail survives; only the two metas of the
+ pipeline are in the head.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><meta http-equiv=3D"refresh" content=3D"0;url=3Dhttp://127.0.0.=
+1:18999/v/meta-refresh/a"><meta http-equiv=3D"refresh" content=3D"0;url=3Dj=
+avascript:try{parent.postMessage({vmRan:'meta-refresh-js'},'*')}catch(e){}t=
+ry{window.__vmRan=3D'meta-refresh-js'}catch(e){}try{top.document.title=3D'P=
+WNED meta-refresh-js'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sand=
+box_breach',{vector:'meta-refresh-js'})}catch(e){}try{parent.__TAURI_INTERN=
+ALS__.invoke('sandbox_breach',{vector:'meta-refresh-js'})}catch(e){}try{fet=
+ch('http://127.0.0.1:18999/v/meta-refresh-js/js-fetch')}catch(e){}new Image=
+().src=3D'http://127.0.0.1:18999/v/meta-refresh-js/js-img.png'"><meta http-=
+equiv=3D"Content-Security-Policy" content=3D"default-src *; script-src * 'u=
+nsafe-inline'"><meta http-equiv=3D"Set-Cookie" content=3D"a=3Db"></head><bo=
+dy>
+<p>SAFE-CONTENT-VISIBLE</p>
+<meta http-equiv=3D"refresh" content=3D"0;url=3Dhttp://127.0.0.1:18999/v/me=
+ta-refresh-body/a">
+</body></html>
+

@@ -1,0 +1,55 @@
+Date: Thu, 04 Jun 2026 10:00:00 +0200
+From: Rust Users <rust-users@lists.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Mailing list digest (multipart/digest)
+Message-ID: <mime.digest@seed.vicemail.test>
+List-Id: Rust users discussion <rust-users.lists.example>
+X-Vicemail-Seed: mime/digest
+MIME-Version: 1.0
+Content-Type: multipart/digest; boundary="=_vm000015_6ce3f2cb11de"
+
+This is a multi-part message in MIME format.
+
+--=_vm000015_6ce3f2cb11de
+
+Date: Mon, 01 Jun 2026 10:00:00 +0200
+From: Peter O'Brien <peter.obrien@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Digest item 1
+Message-ID: <mime.digest-0@seed.vicemail.test>
+X-Vicemail-Seed: mime/digest-0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Digest item 1.
+
+--=_vm000015_6ce3f2cb11de
+
+Date: Mon, 01 Jun 2026 10:00:00 +0200
+From: Peter O'Brien <peter.obrien@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Digest item 2
+Message-ID: <mime.digest-1@seed.vicemail.test>
+X-Vicemail-Seed: mime/digest-1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Digest item 2.
+
+--=_vm000015_6ce3f2cb11de
+
+Date: Mon, 01 Jun 2026 10:00:00 +0200
+From: Peter O'Brien <peter.obrien@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Digest item 3
+Message-ID: <mime.digest-2@seed.vicemail.test>
+X-Vicemail-Seed: mime/digest-2
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Digest item 3.
+
+--=_vm000015_6ce3f2cb11de--

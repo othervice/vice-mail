@@ -1,0 +1,14 @@
+Date: Sun, 22 Nov 2026 12:14:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: HTML in UTF-7: markup hidden from naive filters
+Message-ID: <hostile.charset-utf7@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: charset-utf7 qp-split
+X-Corpus-Expect: The decoded UTF-7 markup is sanitised like any other HTML.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-7
+Content-Transfer-Encoding: quoted-printable
+
+<p>SAFE-CONTENT-VISIBLE</p>+ADw-script+AD4-alert(1)+ADw-/script+AD4-+ADw-im=
+g src=3Dx onerror=3Dalert(2)+AD4-

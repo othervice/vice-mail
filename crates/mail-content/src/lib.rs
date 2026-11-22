@@ -1,0 +1,43 @@
+//! Message content, without IO: what a mail contains and how it may be shown.
+//!
+//! - [`parse`]: raw RFC 5322 bytes to a [`ParsedMessage`] (mail-parser underneath): headers,
+//!   text and HTML bodies, attachments, inline images, preview, damage report. Never panics.
+//! - [`render_html`]: mail HTML to a sanitised `srcdoc` for the sandboxed frame (security
+//!   boundaries 1–3 and 5 of `docs/ARCHITECTURE.md`, decision 0005): ammonia with an allowlist,
+//!   CSS re-serialised token by token, every `href` a placeholder carrying the render token,
+//!   images only as `data:` URIs, the mandatory [`MAIL_CSP`] first.
+//! - [`render_text`]: plain text as lines and link spans, never as HTML.
+//! - [`check_link`]: what to warn about before a link opens; only `http`, `https`, `mailto`.
+//! - [`sanitize_filename`], [`is_executable_type`]: attachment names and open warnings.
+//! - [`preview_from_text`], [`preview_from_html`]: the list preview.
+//!
+//! The crate owns no randomness and no network: render tokens come from the engine
+//! (`mail_model::RenderToken`), external images are fetched by the engine and passed in as
+//! bytes ([`RemotePolicy::Allow`]).
+
+mod css;
+mod dom;
+mod filename;
+mod guard;
+mod html;
+mod image;
+mod links;
+mod parse;
+mod preview;
+mod text;
+
+pub use filename::{
+    FALLBACK_NAME, MAX_NAME_BYTES, attachment_file_name, is_executable_type, sanitize_filename,
+};
+pub use html::{
+    Fallback, InlineImages, LinkTarget, MAIL_CSP, MAX_HTML_BYTES, RemotePolicy, RemoteRef,
+    RenderOptions, RenderedHtml, render_html,
+};
+pub use image::{ImageBytes, ImageType, sniff_image};
+pub use links::{LinkCheck, LinkWarning, check_link};
+pub use parse::{
+    AttachmentPart, InlinePart, ListHeaders, MAX_HTML_BODY_BYTES, MAX_INLINE_IMAGE_BYTES,
+    MAX_TEXT_BODY_BYTES, MessageHeaders, ParseProblem, ParsedMessage, attachment_bytes, parse,
+};
+pub use preview::{PREVIEW_CHARS, preview_from_html, preview_from_text};
+pub use text::{MAX_TEXT_BYTES, RenderedText, TextLine, TextSpan, html_to_text, render_text};

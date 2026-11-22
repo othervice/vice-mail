@@ -1,0 +1,84 @@
+Date: Sun, 22 Nov 2026 12:15:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: cid: and data: images
+Message-ID: <hostile.related-cid-data@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: cid-png cid-html cid-svg cid-missing data-svg data-html data-png css-cid
+X-Corpus-Expect: Only real raster images become data: URIs (logo twice, PNG data once); the HTML and SVG parts and data:text/html, data:image/svg+xml never appear.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE; data-images=3
+Content-Type: multipart/related; boundary="rel-boundary-01"; type="text/html"
+
+--rel-boundary-01
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<img src=3D"cid:logo@corpus" alt=3D"logo">
+<img src=3D"cid:page@corpus" alt=3D"html part as image">
+<img src=3D"cid:vector@corpus" alt=3D"svg part">
+<img src=3D"cid:missing@corpus" alt=3D"missing">
+<img src=3D"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vc=
+mcvMjAwMC9zdmciIG9ubG9hZD0idHJ5e3BhcmVudC5wb3N0TWVzc2FnZSh7dm1SYW46J2NpZC1z=
+dmcnfSwnKicpfWNhdGNoKGUpe310cnl7d2luZG93Ll9fdm1SYW49J2NpZC1zdmcnfWNhdGNoKGU=
+pe310cnl7dG9wLmRvY3VtZW50LnRpdGxlPSdQV05FRCBjaWQtc3ZnJ31jYXRjaChlKXt9dHJ5e3=
+dpbmRvdy5fX1RBVVJJX0lOVEVSTkFMU19fLmludm9rZSgnc2FuZGJveF9icmVhY2gnLHt2ZWN0b=
+3I6J2NpZC1zdmcnfSl9Y2F0Y2goZSl7fXRyeXtwYXJlbnQuX19UQVVSSV9JTlRFUk5BTFNfXy5p=
+bnZva2UoJ3NhbmRib3hfYnJlYWNoJyx7dmVjdG9yOidjaWQtc3ZnJ30pfWNhdGNoKGUpe310cnl=
+7ZmV0Y2goJ2h0dHA6Ly8xMjcuMC4wLjE6MTg5OTkvdi9jaWQtc3ZnL2pzLWZldGNoJyl9Y2F0Y2=
+goZSl7fW5ldyBJbWFnZSgpLnNyYz0naHR0cDovLzEyNy4wLjAuMToxODk5OS92L2NpZC1zdmcva=
+nMtaW1nLnBuZyciPjxpbWFnZSBocmVmPSJodHRwOi8vMTI3LjAuMC4xOjE4OTk5L3YvY2lkLXN2=
+Zy94LnBuZyIvPjwvc3ZnPg=3D=3D" alt=3D"svg data">
+<img src=3D"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=3D=3D"=
+ alt=3D"html data">
+<img src=3D"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfF=
+cSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=3D=3D" alt=3D"png dat=
+a">
+<div style=3D"background:url(cid:logo@corpus)">css cid</div>
+</body></html>
+
+--rel-boundary-01
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <logo@corpus>
+Content-Disposition: inline
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM
+IQAAAABJRU5ErkJggg==
+
+--rel-boundary-01
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: base64
+Content-ID: <page@corpus>
+Content-Disposition: inline
+
+PHNjcmlwdD50cnl7cGFyZW50LnBvc3RNZXNzYWdlKHt2bVJhbjonY2lkLWh0bWwnfSwnKicpfWNh
+dGNoKGUpe310cnl7d2luZG93Ll9fdm1SYW49J2NpZC1odG1sJ31jYXRjaChlKXt9dHJ5e3RvcC5k
+b2N1bWVudC50aXRsZT0nUFdORUQgY2lkLWh0bWwnfWNhdGNoKGUpe310cnl7d2luZG93Ll9fVEFV
+UklfSU5URVJOQUxTX18uaW52b2tlKCdzYW5kYm94X2JyZWFjaCcse3ZlY3RvcjonY2lkLWh0bWwn
+fSl9Y2F0Y2goZSl7fXRyeXtwYXJlbnQuX19UQVVSSV9JTlRFUk5BTFNfXy5pbnZva2UoJ3NhbmRi
+b3hfYnJlYWNoJyx7dmVjdG9yOidjaWQtaHRtbCd9KX1jYXRjaChlKXt9dHJ5e2ZldGNoKCdodHRw
+Oi8vMTI3LjAuMC4xOjE4OTk5L3YvY2lkLWh0bWwvanMtZmV0Y2gnKX1jYXRjaChlKXt9bmV3IElt
+YWdlKCkuc3JjPSdodHRwOi8vMTI3LjAuMC4xOjE4OTk5L3YvY2lkLWh0bWwvanMtaW1nLnBuZyc8
+L3NjcmlwdD4=
+
+--rel-boundary-01
+Content-Type: image/svg+xml
+Content-Transfer-Encoding: base64
+Content-ID: <vector@corpus>
+Content-Disposition: inline
+
+PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIG9ubG9hZD0idHJ5e3BhcmVu
+dC5wb3N0TWVzc2FnZSh7dm1SYW46J2NpZC1zdmcnfSwnKicpfWNhdGNoKGUpe310cnl7d2luZG93
+Ll9fdm1SYW49J2NpZC1zdmcnfWNhdGNoKGUpe310cnl7dG9wLmRvY3VtZW50LnRpdGxlPSdQV05F
+RCBjaWQtc3ZnJ31jYXRjaChlKXt9dHJ5e3dpbmRvdy5fX1RBVVJJX0lOVEVSTkFMU19fLmludm9r
+ZSgnc2FuZGJveF9icmVhY2gnLHt2ZWN0b3I6J2NpZC1zdmcnfSl9Y2F0Y2goZSl7fXRyeXtwYXJl
+bnQuX19UQVVSSV9JTlRFUk5BTFNfXy5pbnZva2UoJ3NhbmRib3hfYnJlYWNoJyx7dmVjdG9yOidj
+aWQtc3ZnJ30pfWNhdGNoKGUpe310cnl7ZmV0Y2goJ2h0dHA6Ly8xMjcuMC4wLjE6MTg5OTkvdi9j
+aWQtc3ZnL2pzLWZldGNoJyl9Y2F0Y2goZSl7fW5ldyBJbWFnZSgpLnNyYz0naHR0cDovLzEyNy4w
+LjAuMToxODk5OS92L2NpZC1zdmcvanMtaW1nLnBuZyciPjxpbWFnZSBocmVmPSJodHRwOi8vMTI3
+LjAuMC4xOjE4OTk5L3YvY2lkLXN2Zy94LnBuZyIvPjwvc3ZnPg==
+
+--rel-boundary-01--

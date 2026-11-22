@@ -1,0 +1,9 @@
+Date: Tue, 01 Sep 2026 15:00:00 +0200
+From: Jürgen Groß <juergen.gross@firma.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Unencoded Latin-1 in header: Ärger mit der Straße
+Message-ID: <broken.8bit-headers@seed.vicemail.test>
+X-Vicemail-Seed: broken/8bit-headers
+Content-Type: text/plain; charset=iso-8859-1
+
+Body in Latin-1: äöü

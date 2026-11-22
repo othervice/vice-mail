@@ -2560,6 +2560,7 @@ dependencies = [
  "icu_properties",
  "mail-model",
  "mail-parser",
+ "markup5ever_rcdom",
  "url",
 ]
 
@@ -2671,6 +2672,18 @@ dependencies = [
  "log",
  "tendril",
  "web_atoms 0.3.0",
+]
+
+[[package]]
+name = "markup5ever_rcdom"
+version = "0.40.1+unofficial"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64206f12eb431c03d9b6f293846f8b0517578905b6c0cac266aa52f09c11ad7c"
+dependencies = [
+ "html5ever 0.40.1",
+ "markup5ever 0.40.0",
+ "tendril",
+ "xml5ever",
 ]
 
 [[package]]
@@ -4471,6 +4484,7 @@ dependencies = [
  "parking_lot",
  "phf_shared 0.14.0",
  "precomputed-hash",
+ "serde",
 ]
 
 [[package]]
@@ -6210,6 +6224,16 @@ dependencies = [
  "rusticata-macros",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "xml5ever"
+version = "0.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73290529dc9bc6c6155bf77fdd70ce0061f98ad387586aa3104cddab29206961"
+dependencies = [
+ "log",
+ "markup5ever 0.40.0",
 ]
 
 [[package]]

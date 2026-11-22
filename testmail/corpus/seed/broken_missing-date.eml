@@ -1,0 +1,9 @@
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: No Date header
+Message-ID: <broken.missing-date@seed.vicemail.test>
+X-Vicemail-Seed: broken/missing-date
+MIME-Version: 1.0
+Content-Type: text/plain
+
+There is no Date header.

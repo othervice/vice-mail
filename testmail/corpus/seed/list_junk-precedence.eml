@@ -1,0 +1,12 @@
+Date: Wed, 05 Aug 2026 12:00:00 +0000
+From: Deals <deals@shop.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: 50% off everything!!!
+Message-ID: <list.junk-precedence@seed.vicemail.test>
+Precedence: junk
+X-Vicemail-Seed: list/junk-precedence
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Buy now.

@@ -1,0 +1,13 @@
+Date: Thu, 04 Jun 2026 22:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Reply-To and Sender differ from From
+Message-ID: <mime.reply-to@seed.vicemail.test>
+Reply-To: Team <team@example.org>
+Sender: Assistant <assistant@example.org>
+X-Vicemail-Seed: mime/reply-to
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Replies should go to the team address.

@@ -1,0 +1,12 @@
+Date: Tue, 04 Aug 2026 00:00:00 +0000
+From: Shop Example <orders@shop.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Your order #20260803 has shipped
+Message-ID: <auto.order-shipped@seed.vicemail.test>
+Auto-Submitted: auto-generated
+X-Vicemail-Seed: auto/order-shipped
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Your parcel is on its way.

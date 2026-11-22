@@ -1,0 +1,17 @@
+Date: Sun, 22 Nov 2026 12:17:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Plain text that looks like HTML
+Message-ID: <hostile.text-plain-markup@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: text-markup text-js-url
+X-Corpus-Expect: Shown as text; only the https URL and the address become links.
+X-Corpus-Check: text-links=2; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+SAFE-CONTENT-VISIBLE
+<script>alert(1)</script>
+<a href="javascript:alert(1)">x</a>
+javascript:alert(1) data:text/html,<b>x</b> vbscript:x file:///etc/passwd
+Real link: https://example.com/ok and mail me at bob@example.com

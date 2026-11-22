@@ -1,0 +1,11 @@
+Date: Wed, 02 Sep 2026 12:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Unknown charset x-made-up
+Message-ID: <broken.unknown-charset@seed.vicemail.test>
+X-Vicemail-Seed: broken/unknown-charset
+MIME-Version: 1.0
+Content-Type: text/plain; charset=x-made-up-charset
+Content-Transfer-Encoding: 8bit
+
+Unknown charset with bytes: Grüße ¤ ÿ

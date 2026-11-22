@@ -1,0 +1,18 @@
+Date: Mon, 01 Jun 2026 16:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: HTML only, no text part
+Message-ID: <mime.html-only@seed.vicemail.test>
+X-Vicemail-Seed: mime/html-only
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><meta charset=3D"utf-8"><title>HTML only</title></head>
+<body style=3D"font-family: sans-serif">
+<p>Hi Alice,</p>
+<p>I think we should keep the scope small for the first release.</p>
+<p>Best regards&lt;br&gt;
+Carol</p>
+</body></html>

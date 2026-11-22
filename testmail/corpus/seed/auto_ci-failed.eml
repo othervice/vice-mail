@@ -1,0 +1,15 @@
+Date: Mon, 03 Aug 2026 15:00:00 +0000
+From: CI Example <notifications@ci.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: [ci] Build #4711 failed on main
+Message-ID: <auto.ci-failed@seed.vicemail.test>
+Auto-Submitted: auto-generated
+Precedence: bulk
+X-Mailer: ci.example
+X-Vicemail-Seed: auto/ci-failed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Build #4711 failed.
+https://ci.example/builds/4711

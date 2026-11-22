@@ -1,0 +1,52 @@
+Date: Sun, 22 Nov 2026 12:04:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: SVG with script, handlers and external references
+Message-ID: <hostile.svg@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: svg-script svg-onload svg-animate-href svg-image svg-use
+ svg-foreignobject svg-link svg-style
+X-Corpus-Expect: SVG is removed with its content; nothing inside it loads or runs.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<svg><script>try{parent.postMessage({vmRan:'svg-script'},'*')}catch(e){}try=
+{window.__vmRan=3D'svg-script'}catch(e){}try{top.document.title=3D'PWNED sv=
+g-script'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',=
+{vector:'svg-script'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('san=
+dbox_breach',{vector:'svg-script'})}catch(e){}try{fetch('http://127.0.0.1:1=
+8999/v/svg-script/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:=
+18999/v/svg-script/js-img.png'</script></svg>
+<svg onload=3D"try{parent.postMessage({vmRan:'svg-onload'},'*')}catch(e){}t=
+ry{window.__vmRan=3D'svg-onload'}catch(e){}try{top.document.title=3D'PWNED =
+svg-onload'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach=
+',{vector:'svg-onload'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('s=
+andbox_breach',{vector:'svg-onload'})}catch(e){}try{fetch('http://127.0.0.1=
+:18999/v/svg-onload/js-fetch')}catch(e){}new Image().src=3D'http://127.0.0.=
+1:18999/v/svg-onload/js-img.png'"><rect width=3D"5" height=3D"5"/></svg>
+<svg width=3D"200" height=3D"30"><a><animate attributeName=3D"href" values=
+=3D"javascript:try{parent.postMessage({vmRan:'svg-animate-href'},'*')}catch=
+(e){}try{window.__vmRan=3D'svg-animate-href'}catch(e){}try{top.document.tit=
+le=3D'PWNED svg-animate-href'}catch(e){}try{window.__TAURI_INTERNALS__.invo=
+ke('sandbox_breach',{vector:'svg-animate-href'})}catch(e){}try{parent.__TAU=
+RI_INTERNALS__.invoke('sandbox_breach',{vector:'svg-animate-href'})}catch(e=
+){}try{fetch('http://127.0.0.1:18999/v/svg-animate-href/js-fetch')}catch(e)=
+{}new Image().src=3D'http://127.0.0.1:18999/v/svg-animate-href/js-img.png'"=
+/><text x=3D"0" y=3D"15">svg anim</text></a></svg>
+<svg width=3D"10" height=3D"10"><image href=3D"http://127.0.0.1:18999/v/svg=
+-image/a.png" width=3D"10" height=3D"10"/></svg>
+<svg width=3D"10" height=3D"10"><use href=3D"http://127.0.0.1:18999/v/svg-u=
+se/a.svg#x"/></svg>
+<svg><foreignObject><iframe src=3D"http://127.0.0.1:18999/v/svg-foreignobje=
+ct/f.html"></iframe></foreignObject></svg>
+<svg width=3D"200" height=3D"30"><a href=3D"http://127.0.0.1:18999/v/svg-li=
+nk/a"><text x=3D"0" y=3D"15">svg link</text></a></svg>
+<svg><style>rect{fill:url(http://127.0.0.1:18999/v/svg-style/f.svg#p)}</sty=
+le><rect width=3D"5" height=3D"5"/></svg>
+<svg><set attributeName=3D"onmouseover" to=3D"alert(1)"/></svg>
+</body></html>
+

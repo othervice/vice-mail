@@ -1,0 +1,36 @@
+Date: Mon, 01 Jun 2026 10:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: multipart/alternative: text and HTML
+Message-ID: <mime.alternative@seed.vicemail.test>
+X-Vicemail-Seed: mime/alternative
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_vm000002_cb851d2335e0"
+
+This is a multi-part message in MIME format.
+
+--=_vm000002_cb851d2335e0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hi Alice,
+
+I think we should keep the scope small for the first release.
+
+Best regards
+Carol
+
+--=_vm000002_cb851d2335e0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title></title></head>
+<body style="font-family: sans-serif">
+<p>Hi Alice,</p>
+<p>I think we should keep the scope small for the first release.</p>
+<p>Best regards&lt;br&gt;
+Carol</p>
+</body></html>
+
+--=_vm000002_cb851d2335e0--

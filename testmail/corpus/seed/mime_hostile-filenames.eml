@@ -1,0 +1,83 @@
+Date: Tue, 02 Jun 2026 16:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Attachment names that must be sanitised
+Message-ID: <mime.hostile-filenames@seed.vicemail.test>
+X-Vicemail-Seed: mime/hostile-filenames
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000005_e19fe47c148d"
+
+This is a multi-part message in MIME format.
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+These file names must never be used unchanged on disk.
+
+--=_vm000005_e19fe47c148d
+Content-Type: application/octet-stream; name="../../../evil.sh"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="../../../evil.sh"
+
+IyEvYmluL3NoCmVjaG8gb3duZWQK
+
+--=_vm000005_e19fe47c148d
+Content-Type: application/octet-stream; name="C:\Windows\System32\evil.bat"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="C:\Windows\System32\evil.bat"
+
+QGVjaG8gb2ZmCg==
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; name="CON"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="CON"
+
+Y29uCg==
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; name="aux.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="aux.txt"
+
+YXV4Cg==
+
+--=_vm000005_e19fe47c148d
+Content-Type: application/octet-stream; name*=UTF-8''invoice%E2%80%AEfdp.exe
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*=UTF-8''invoice%E2%80%AEfdp.exe
+
+TVogZmFrZSBleGUK
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; name*=UTF-8''tab%09and%07bell.txt
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*=UTF-8''tab%09and%07bell.txt
+
+Y3RsCg==
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; name="trailing dots and spaces. . ."
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="trailing dots and spaces. . ."
+
+ZG90cwo=
+
+--=_vm000005_e19fe47c148d
+Content-Type: text/plain; name="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"
+
+bG9uZwo=
+
+--=_vm000005_e19fe47c148d
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment
+
+bm9uZQo=
+
+--=_vm000005_e19fe47c148d--

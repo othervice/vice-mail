@@ -1,0 +1,9 @@
+Date: Wed, 02 Sep 2026 11:00:00 +0000
+From: Alice <alice@>
+To: ;;;, <@>, "unterminated <x@example.com>, undisclosed-recipients:;
+Cc: @@@, plainword
+Subject: Broken address lists
+Message-ID: no-angle-brackets@seed
+X-Vicemail-Seed: broken/bad-addresses
+
+Address syntax is wrong everywhere.

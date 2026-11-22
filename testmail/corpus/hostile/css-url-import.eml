@@ -1,0 +1,52 @@
+Date: Sun, 22 Nov 2026 12:05:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: CSS with url(), @import, @font-face and script-like constructs
+Message-ID: <hostile.css-url-import@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: css-style-attr css-style-block css-import css-font-face css-expression
+ css-behavior css-binding css-image-set css-escape css-comment-split
+ css-breakout css-var
+X-Corpus-Expect: No url() except data: images, no @import/@font-face, no
+ expression/behavior/-moz-binding/image-set/var; the style block cannot
+ be closed from inside; plain styles stay.
+X-Corpus-Check: links=0; remote=6; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><style>@import url(http://127.0.0.1:18999/v/css-import/a.css); =
+@import 'http://127.0.0.1:18999/v/css-import/b.css';
+@font-face{font-family:vmx;src:url(http://127.0.0.1:18999/v/css-font-face/a=
+.woff)}body{font-family:vmx}
+.b{background:url(http://127.0.0.1:18999/v/css-style-block/a.png)}
+.c{list-style-image:url('http://127.0.0.1:18999/v/css-list/l.png')}
+p::after{content:"</style><script>try{parent.postMessage({vmRan:'css-breako=
+ut'},'*')}catch(e){}try{window.__vmRan=3D'css-breakout'}catch(e){}try{top.d=
+ocument.title=3D'PWNED css-breakout'}catch(e){}try{window.__TAURI_INTERNALS=
+__.invoke('sandbox_breach',{vector:'css-breakout'})}catch(e){}try{parent.__=
+TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'css-breakout'})}catch(e)=
+{}try{fetch('http://127.0.0.1:18999/v/css-breakout/js-fetch')}catch(e){}new=
+ Image().src=3D'http://127.0.0.1:18999/v/css-breakout/js-img.png'</script>"}
+u/**/rl(http://127.0.0.1:18999/v/css-comment-split/a.png){color:red}
+#probe{color:rgb(1,2,3)}</style></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<div style=3D"background-image:url(http://127.0.0.1:18999/v/css-style-attr/=
+a.png);color:rgb(4,5,6)">bg attr</div>
+<div class=3D"b">bg block</div><div class=3D"c">list</div>
+<div style=3D"width: expression(alert('css-expression'))">IE expression</di=
+v>
+<div style=3D"behavior: url(http://127.0.0.1:18999/v/css-behavior/x.htc)">b=
+ehavior</div>
+<div style=3D"-moz-binding: url(http://127.0.0.1:18999/v/css-binding/x.xml#=
+xss)">binding</div>
+<div style=3D"background-image: image-set('http://127.0.0.1:18999/v/css-ima=
+ge-set/a.png' 1x)">image-set</div>
+<div style=3D"background:\75 rl(http://127.0.0.1:18999/v/css-escape/a.png)"=
+>escaped url</div>
+<div style=3D"cursor:url(http://127.0.0.1:18999/v/css-cursor/c.cur),auto;bo=
+rder-image:url(http://127.0.0.1:18999/v/css-border/b.png) 30">cursor</div>
+<div style=3D"--u:url(http://127.0.0.1:18999/v/css-var/v.png);background:va=
+r(--u)">var</div>
+</body></html>
+

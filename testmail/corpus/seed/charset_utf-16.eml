@@ -1,0 +1,27 @@
+Date: Thu, 07 May 2026 08:00:00 +0000
+From: =?utf-8?B?Wm/DqyDDhW5nc3Ryw7Zt?= <zoe@uni.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: UTF-16 encoded parts
+Message-ID: <charset.utf-16@seed.vicemail.test>
+X-Vicemail-Seed: charset/utf-16
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000001_4a85b3c0c076"
+
+This is a multi-part message in MIME format.
+
+--=_vm000001_4a85b3c0c076
+Content-Type: text/plain; charset=utf-16
+Content-Transfer-Encoding: base64
+
+//5VAFQARgAtADEANgAgAHQAZQB4AHQAIAB3AGkAdABoACAAQgBPAE0AOgAgAEcAcgD8AN8AZQAs
+ACAAYE99WSwAIAA82InfCgA=
+
+--=_vm000001_4a85b3c0c076
+Content-Type: text/plain; charset=utf-16le; name="utf16le.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="utf16le.txt"
+
+VQBUAEYALQAxADYAIAB0AGUAeAB0ACAAdwBpAHQAaAAgAEIATwBNADoAIABHAHIA/ADfAGUALAAg
+AGBPfVksACAAPNiJ3woA
+
+--=_vm000001_4a85b3c0c076--

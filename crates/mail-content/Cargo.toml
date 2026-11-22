@@ -1,0 +1,24 @@
+[package]
+name = "mail-content"
+description = "Message content without IO: MIME parsing, HTML sanitising, link checks, attachment file names."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mail-model.workspace = true
+mail-parser.workspace = true
+ammonia.workspace = true
+html5ever.workspace = true
+cssparser.workspace = true
+url.workspace = true
+icu_normalizer.workspace = true
+icu_properties.workspace = true
+
+[dev-dependencies]
+markup5ever_rcdom.workspace = true
+
+[lints]
+workspace = true

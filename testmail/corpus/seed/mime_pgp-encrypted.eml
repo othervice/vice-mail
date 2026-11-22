@@ -1,0 +1,25 @@
+Date: Wed, 03 Jun 2026 22:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: PGP/MIME encrypted (dummy payload)
+Message-ID: <mime.pgp-encrypted@seed.vicemail.test>
+X-Vicemail-Seed: mime/pgp-encrypted
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; boundary="=_vm000013_0823fc50780c"; protocol="application/pgp-encrypted"
+
+This is a multi-part message in MIME format.
+
+--=_vm000013_0823fc50780c
+Content-Type: application/pgp-encrypted
+
+Version: 1
+
+--=_vm000013_0823fc50780c
+Content-Type: application/octet-stream; name="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+
+FaCZXL2OYUNuyDMQIeSmDKFhOppkxgiAuZi9+Ybv9O1lFCW1gx6LJGxJ+OQiToBa4Sj5HyAv44aglvXbSWzVH2QFUZ5d5kFT09IwkL+4EK6gKLDaCPogXc2iFrxngSWKJTre5h2QsQ53acLhxcfBilaZc4BQ2Co0iw6rCZg6k5NA4EolYcMVAVML5+mO4DVioGrEdQievZ7p8BHXjyMaSnZm9aZlNTLKSyy/WqMfkkrhGRSmSj8T2cif++oUXzsksntZtQA2tXSl2l552wcSpuedNGTlS58a2JI88NlNGFsXsgyBqcyKE0wcZ1tyxWuqn5x63PKT/BzQ+9BhDFPH/GyuvW+qIgTcNDV8tR0RQJE2zSorKBKo2vlfxyDp0JPzEbzZdnVG13XbYApA
+-----END PGP MESSAGE-----
+
+--=_vm000013_0823fc50780c--

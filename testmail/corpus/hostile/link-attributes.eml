@@ -1,0 +1,39 @@
+Date: Sun, 22 Nov 2026 12:12:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Link targets, ping, download, mailto and custom schemes
+Message-ID: <hostile.link-attributes@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: link-plain link-target-top link-target-blank link-ping link-download
+ link-mailto link-custom-scheme link-rewritten-https link-rel area-href
+X-Corpus-Expect: Every href is https://link.invalid/<token>/n; target, ping, download
+ and rel are gone; mailto: links are kept as targets so they work
+ through the navigation hook; unknown schemes become text.
+X-Corpus-Check: links=10; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<a href=3D"http://127.0.0.1:18999/v/link-plain/a">plain link</a>
+<a href=3D"http://127.0.0.1:18999/v/link-target-top/a" target=3D"_top">top =
+link</a>
+<a href=3D"http://127.0.0.1:18999/v/link-target-blank/a" target=3D"_blank">=
+blank link</a>
+<a href=3D"http://127.0.0.1:18999/v/link-ping/a" ping=3D"http://127.0.0.1:1=
+8999/v/link-ping/ping">ping link</a>
+<a href=3D"http://127.0.0.1:18999/v/link-download/a" download>download link=
+</a>
+<a href=3D"mailto:someone@example.test?subject=3Dspike">mailto link</a>
+<a href=3D"vmlink:42">custom scheme link</a>
+<a href=3D"https://link.invalid/42">rewritten link</a>
+<a href=3D"http://127.0.0.1:18999/v/link-rel/a" rel=3D"noopener" referrerpo=
+licy=3D"unsafe-url" hreflang=3D"en">rel link</a>
+<img src=3D"data:image/gif;base64,R0lGODlhAQABAAAAACw=3D" usemap=3D"#m" alt=
+=3D"map"><map name=3D"m"><area href=3D"http://127.0.0.1:18999/v/area-href/a=
+" alt=3D"area" shape=3D"rect" coords=3D"0,0,1,1"></map>
+<a href=3D"http://127.0.0.1:18999/v/link-nested/a"><img src=3D"data:image/g=
+if;base64,R0lGODlhAQABAAAAACw=3D" alt=3D"image link"></a>
+</body></html>
+

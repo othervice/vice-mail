@@ -1,0 +1,11 @@
+Date: Wed, 02 Sep 2026 18:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Declared UTF-8, actually Latin-1
+Message-ID: <broken.mislabeled-charset@seed.vicemail.test>
+X-Vicemail-Seed: broken/mislabeled-charset
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Grüße aus Köln, schöne Straße.

@@ -1,0 +1,10 @@
+Date: Fri, 04 Sep 2026 03:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: =?utf-8?Q?unterminated =?unknown-cs?B?Zm9v?= =?utf-8?B?not*base64?= =?utf-8?b?8J+R?= =?utf-8?b?u+KAiw==?= (split emoji)
+Message-ID: <broken.bad-encoded-words@seed.vicemail.test>
+X-Vicemail-Seed: broken/bad-encoded-words
+MIME-Version: 1.0
+Content-Type: text/plain
+
+Broken RFC 2047 words in Subject.

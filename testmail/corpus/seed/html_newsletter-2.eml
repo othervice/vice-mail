@@ -1,0 +1,53 @@
+Date: Wed, 15 Jul 2026 07:30:00 +0000
+From: Example News <news@news.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Example News: issue #3
+Message-ID: <html.newsletter-2@seed.vicemail.test>
+List-Id: Example News <weekly.news.example>
+List-Unsubscribe: <mailto:unsubscribe@news.example?subject=unsubscribe>,
+ <https://news.example/unsubscribe?u=alice&i=2>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+X-Vicemail-Seed: html/newsletter-2
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_vm000019_b8f95434a5fd"
+
+This is a multi-part message in MIME format.
+
+--=_vm000019_b8f95434a5fd
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Newsletter #3
+
+View online: https://news.example/2
+Unsubscribe: https://news.example/u
+
+--=_vm000019_b8f95434a5fd
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><meta charset=3D"utf-8"><title>Newsletter #3</title></head>
+<body style=3D"margin:0;background:#f4f4f4">
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff">
+<tr><td><img src=3D"http://127.0.0.1:18999/img/html-newsletter-2/header.png=
+" width=3D"600" height=3D"120" alt=3D"Header"></td></tr>
+<tr><td style=3D"padding:20px;font-family:Arial,sans-serif">
+<h1>Newsletter #3</h1>
+<p>Here is what happened this week. <a href=3D"https://news.example/article=
+s/html-newsletter-2">Read more</a></p>
+<img src=3D"http://127.0.0.1:18999/img/html-newsletter-2/article.jpg" srcse=
+t=3D"http://127.0.0.1:18999/img/html-newsletter-2/article@2x.jpg 2x" width=
+=3D"560" alt=3D"Article">
+<p style=3D"font-size:11px;color:#888">You receive this mail because you su=
+bscribed.
+<a href=3D"https://news.example/unsubscribe?id=3Dhtml-newsletter-2">Unsubsc=
+ribe</a></p>
+</td></tr></table>
+<img src=3D"http://127.0.0.1:18999/t/html-newsletter-2.gif" width=3D"1" hei=
+ght=3D"1" alt=3D"" style=3D"display:none">
+</body></html>
+
+--=_vm000019_b8f95434a5fd--

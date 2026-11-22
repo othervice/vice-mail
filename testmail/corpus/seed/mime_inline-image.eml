@@ -1,0 +1,33 @@
+Date: Wed, 03 Jun 2026 04:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Inline image without Content-ID
+Message-ID: <mime.inline-image@seed.vicemail.test>
+X-Vicemail-Seed: mime/inline-image
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000009_c4a418d8b16c"
+
+This is a multi-part message in MIME format.
+
+--=_vm000009_c4a418d8b16c
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Photo below.
+
+--=_vm000009_c4a418d8b16c
+Content-Type: image/png; name="photo.png"
+Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename="photo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAIAAADRv8uKAAAAQElEQVR4nGN4y688IIhh1GK6WSz0
+4c6AoFGL6WfxyEvVI8/ikZeqR57FIy9VjzyLR16qHnkWj7xUPfIsHnGpGgCzCeN7aaLp1AAAAABJ
+RU5ErkJggg==
+
+--=_vm000009_c4a418d8b16c
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Text after the photo.
+
+--=_vm000009_c4a418d8b16c--

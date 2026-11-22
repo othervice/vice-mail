@@ -1,0 +1,37 @@
+Date: Sun, 22 Nov 2026 12:09:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Embedded objects and frames
+Message-ID: <hostile.embedded-objects-frames@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: object-data embed-src applet iframe-src iframe-srcdoc-nested
+ iframe-app-self frameset portal object-javascript
+X-Corpus-Expect: No object, embed, applet, iframe, frame or portal, and none of their
+ content.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<object data=3D"http://127.0.0.1:18999/v/object-data/a.html">object fallbac=
+k</object>
+<embed src=3D"http://127.0.0.1:18999/v/embed-src/a.swf">
+<applet code=3D"x.class" codebase=3D"http://127.0.0.1:18999/v/applet/"></ap=
+plet>
+<iframe src=3D"http://127.0.0.1:18999/v/iframe-src/a.html"></iframe>
+<iframe srcdoc=3D"&lt;script&gt;try{parent.postMessage({vmRan:'iframe-srcdo=
+c-nested'},'*')}catch(e){}try{window.__vmRan=3D'iframe-srcdoc-nested'}catch=
+(e){}try{top.document.title=3D'PWNED iframe-srcdoc-nested'}catch(e){}try{wi=
+ndow.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'iframe-srcdoc-nes=
+ted'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{ve=
+ctor:'iframe-srcdoc-nested'})}catch(e){}try{fetch('http://127.0.0.1:18999/v=
+/iframe-srcdoc-nested/js-fetch')}catch(e){}new Image().src=3D'http://127.0.=
+0.1:18999/v/iframe-srcdoc-nested/js-img.png'&lt;/script&gt;"></iframe>
+<iframe src=3D"/index.html"></iframe>
+<frameset><frame src=3D"http://127.0.0.1:18999/v/frame/f.html"></frameset>
+<portal src=3D"http://127.0.0.1:18999/v/portal/p.html"></portal>
+<object data=3D"javascript:alert('object')"></object>
+</body></html>
+

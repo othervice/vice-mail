@@ -1,0 +1,12 @@
+Date: Sat, 05 Sep 2026 09:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Invalid quoted-printable
+Message-ID: <broken.invalid-qp@seed.vicemail.test>
+X-Vicemail-Seed: broken/invalid-qp
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Bad escapes =ZZ =4 =C3=
+soft break at the very end=

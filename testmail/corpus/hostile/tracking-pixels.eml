@@ -1,0 +1,41 @@
+Date: Sun, 22 Nov 2026 12:10:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Tracking pixels and every external image position
+Message-ID: <hostile.tracking-pixels@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: img-src img-srcset picture-source video-poster video-src audio-src
+ body-background table-background td-background protocol-relative
+ lowsrc bgsound hidden-pixel
+X-Corpus-Expect: External images in img, srcset, picture and background are replaced by
+ the placeholder pixel or dropped and listed once each; video, audio,
+ bgsound and old IE attributes are removed without anything to list.
+X-Corpus-Check: links=0; remote=8; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><body background=3D"http://127.0.0.1:18999/v/body-back=
+ground/a.png">
+<p>SAFE-CONTENT-VISIBLE</p>
+<img src=3D"http://127.0.0.1:18999/v/img-src/pixel.gif" width=3D"1" height=
+=3D"1" alt=3D"">
+<img src=3D"http://127.0.0.1:18999/v/img-src/pixel.gif" style=3D"display:no=
+ne">
+<img srcset=3D"http://127.0.0.1:18999/v/img-srcset/a.png 1x, http://127.0.0=
+.1:18999/v/img-srcset/b.png 2x">
+<picture><source srcset=3D"http://127.0.0.1:18999/v/picture-source/a.png"><=
+img alt=3D"p"></picture>
+<video poster=3D"http://127.0.0.1:18999/v/video-poster/a.png"></video>
+<video src=3D"http://127.0.0.1:18999/v/video-src/a.mp4" preload=3D"auto"></=
+video>
+<audio src=3D"http://127.0.0.1:18999/v/audio-src/a.mp3" preload=3D"auto" co=
+ntrols></audio>
+<table background=3D"http://127.0.0.1:18999/v/table-background/a.png"><tr><=
+td background=3D"http://127.0.0.1:18999/v/td-background/a.png">tb</td></tr>=
+</table>
+<img src=3D"//127.0.0.1:18999/v/protocol-relative/p.gif">
+<img lowsrc=3D"http://127.0.0.1:18999/v/lowsrc/l.gif" dynsrc=3D"http://127.=
+0.0.1:18999/v/dynsrc/d.avi" alt=3D"old IE">
+<bgsound src=3D"http://127.0.0.1:18999/v/bgsound/s.wav">
+</body></html>
+

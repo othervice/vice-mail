@@ -1,0 +1,11 @@
+Date: Fri, 05 Jun 2026 22:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Message with many keywords
+Message-ID: <mime.keywords@seed.vicemail.test>
+X-Vicemail-Seed: mime/keywords
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Keyword test.

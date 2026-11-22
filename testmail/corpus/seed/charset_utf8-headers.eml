@@ -1,0 +1,11 @@
+Date: Thu, 07 May 2026 10:00:00 +0000
+From: Jürgen Groß <jürgen@firma.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Raw UTF-8 header (RFC 6532): Größenänderung ✓
+Message-ID: <charset.utf8-headers@seed.vicemail.test>
+X-Vicemail-Seed: charset/utf8-headers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Internationalised headers.

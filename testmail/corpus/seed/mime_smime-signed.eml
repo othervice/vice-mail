@@ -1,0 +1,35 @@
+Date: Wed, 03 Jun 2026 16:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: S/MIME signed (dummy signature)
+Message-ID: <mime.smime-signed@seed.vicemail.test>
+X-Vicemail-Seed: mime/smime-signed
+MIME-Version: 1.0
+Content-Type: multipart/signed; boundary="=_vm000012_6c6cfce450df"; protocol="application/pkcs7-signature"; micalg=sha-256
+
+This is a multi-part message in MIME format.
+
+--=_vm000012_6c6cfce450df
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+This message is signed (dummy signature).
+
+--=_vm000012_6c6cfce450df
+Content-Type: application/pkcs7-signature; name="smime.p7s"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="smime.p7s"
+
+LbcwGVkU9GWUynwZM5L+zCkamzbSxdToHatOUT/vjLH56Q20Ey2v7idspeT/8OQLPpr8Kcz6N4uQ
+GElbBIqh0NtkVWilZDWZpCSwBkOnNkFH0R6WhvIEWJA08/blCnZKycSwHBe/Flu84FS/tbtISrPI
+gVPfmzSoMs83rRvqrjQ5vX3t+LKf3cKWFhV28Ap7gUbbOqdUWGfUo4yK7J+RMqgp6xgHn1BL7+Xp
+ZcUIo+xHWmjqWWF19qPsBtdM2kdy6yzvTGpGAFxXgmUVuHznp5l9v8FbBY5NLLP7AoI3rf4plu4R
+LeNYeuQT+Ov37X9TcmCulgBN54Rd0bC5Zrm6ASbmnfcBjq0tCFzrARsLxjAWrR3AOwpJ+pWosQOJ
+/BVWEua/KswUzowhYyitBr3cMjjfkasWHsW8/qJoT2DcBKdaaotqSK6ihQlWU5ne7exPm+0PvIgd
+zqXx25W9pVejTlMyDUOOtLbeyeJ5B+QLntpbcg4kP9Bsv9jcDBKbg/2loUyBsGxrSCHlyJtRhPBF
++VQ5z19/GoBWwpBlRtSDUE3MtQeOP24EAOJQ3ZCp/xbpptoUanwp8pSDG4+d6yB0l6jmoDhteM0n
+38bNsKjchOaKpKCwEORpldlNqPQ4sUpmj65CWcv8a480PKb20nzNBOClE8IwpEB1DsdkvJaP8lmr
+Jl+bc9zNYxpEWJuugt6ZBn8YyR8KjGmxtvHLEXmPf5I5uaDjjIPZdRMLiMWNteEdcrlXVTV0wt/L
+pAESe/bKRdzI3k05qpBvLOsAbaEi9hoyRcR8ebvL
+
+--=_vm000012_6c6cfce450df--

@@ -1,0 +1,13 @@
+Date: Wed, 02 Sep 2026 06:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Invalid characters in base64
+Message-ID: <broken.invalid-base64@seed.vicemail.test>
+X-Vicemail-Seed: broken/invalid-base64
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+SGVsbG8g!!! V29y bGQ=
+====
+@@@

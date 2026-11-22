@@ -1,0 +1,12 @@
+Date: Sun, 06 Sep 2026 21:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Re: References itself
+Message-ID: <broken.reference-loop@seed.vicemail.test>
+In-Reply-To: <broken.reference-loop@seed.vicemail.test>
+References: <missing-parent@nowhere.example> <broken.reference-loop@seed.vicemail.test>
+X-Vicemail-Seed: broken/reference-loop
+MIME-Version: 1.0
+Content-Type: text/plain
+
+References point to itself.

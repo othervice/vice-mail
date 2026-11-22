@@ -1,0 +1,61 @@
+Date: Fri, 31 Jul 2026 07:30:00 +0000
+From: Shop Example <orders@shop.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Every kind of external reference
+Message-ID: <html.external-everything@seed.vicemail.test>
+X-Vicemail-Seed: html/external-everything
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head>
+<link rel=3D"stylesheet" href=3D"http://127.0.0.1:18999/css/html-external-e=
+verything/link.css">
+<style>
+@import url("http://127.0.0.1:18999/css/html-external-everything/import.css=
+");
+.hero { background-image: url('http://127.0.0.1:18999/bg/html-external-ever=
+ything/css-background.png'); }
+@font-face { font-family: X; src: url(http://127.0.0.1:18999/font/html-exte=
+rnal-everything/x.woff2); }
+</style></head>
+<body background=3D"http://127.0.0.1:18999/bg/html-external-everything/body=
+-attribute.png">
+<p class=3D"hero">Every way an HTML mail can load something from the networ=
+k.</p>
+<img src=3D"http://127.0.0.1:18999/img/html-external-everything/plain.png" =
+alt=3D"plain">
+<img src=3D"//127.0.0.1:18999/img/html-external-everything/protocol-relativ=
+e.png" alt=3D"protocol-relative">
+<img srcset=3D"http://127.0.0.1:18999/img/html-external-everything/srcset-1=
+x.png 1x, http://127.0.0.1:18999/img/html-external-everything/srcset-2x.png=
+ 2x" alt=3D"srcset">
+<picture><source srcset=3D"http://127.0.0.1:18999/img/html-external-everyth=
+ing/picture-source.webp" type=3D"image/webp">
+<img src=3D"http://127.0.0.1:18999/img/html-external-everything/picture-fal=
+lback.png" alt=3D"picture"></picture>
+<table background=3D"http://127.0.0.1:18999/bg/html-external-everything/tab=
+le-attribute.png"><tr>
+<td style=3D"background:url(http://127.0.0.1:18999/bg/html-external-everyth=
+ing/inline-style.png)">cell</td></tr></table>
+<div style=3D"background-image:url(&quot;http://127.0.0.1:18999/bg/html-ext=
+ernal-everything/entity-quoted.png&quot;)">entity</div>
+<video poster=3D"http://127.0.0.1:18999/img/html-external-everything/video-=
+poster.png" src=3D"http://127.0.0.1:18999/media/html-external-everything/vi=
+deo.mp4"></video>
+<audio src=3D"http://127.0.0.1:18999/media/html-external-everything/audio.m=
+p3"></audio>
+<input type=3D"image" src=3D"http://127.0.0.1:18999/img/html-external-every=
+thing/input-image.png">
+<svg width=3D"10" height=3D"10"><image href=3D"http://127.0.0.1:18999/img/h=
+tml-external-everything/svg-image.png" width=3D"10" height=3D"10"/></svg>
+<object data=3D"http://127.0.0.1:18999/obj/html-external-everything/object.=
+swf"></object>
+<embed src=3D"http://127.0.0.1:18999/obj/html-external-everything/embed.swf=
+">
+<iframe src=3D"http://127.0.0.1:18999/frame/html-external-everything/iframe=
+.html"></iframe>
+<img src=3D"http://127.0.0.1:18999/t/html-external-everything/pixel.gif" wi=
+dth=3D"1" height=3D"1">
+</body></html>

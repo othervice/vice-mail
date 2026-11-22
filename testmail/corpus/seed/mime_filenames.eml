@@ -1,0 +1,75 @@
+Date: Tue, 02 Jun 2026 10:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Attachment names: RFC 2231 continuation, RFC 2047, emoji, Japanese
+Message-ID: <mime.filenames@seed.vicemail.test>
+X-Vicemail-Seed: mime/filenames
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000004_d7eaf7b3f47e"
+
+This is a multi-part message in MIME format.
+
+--=_vm000004_d7eaf7b3f47e
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Several attachments with non-ASCII file names.
+
+--=_vm000004_d7eaf7b3f47e
+Content-Type: application/pdf; name="Sehr langer Dateiname mit Umlauten ??? und Sonderzeichen ? Protokoll der Mitgliederversammlung vom 12. M?rz 2026 (endg?ltige Fassung).pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*0*=UTF-8''Sehr%20langer%20Dateiname%20mit%20Umlaut;
+ filename*1*=en%20%C3%A4%C3%B6%C3%BC%20und%20Sonderze;
+ filename*2*=ichen%20%E2%80%93%20Protokoll%20der%20Mi;
+ filename*3*=tgliederversammlung%20vom%2012.%20M%C3%A;
+ filename*4*=4rz%202026%20%28endg%C3%BCltige%20Fassun;
+ filename*5*=g%29.pdf
+
+JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4K
+ZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4K
+ZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAg
+MCA2MTIgNzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAw
+IFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAzNSA+PgpzdHJlYW0KQlQgL0Yx
+IDE4IFRmIDcyIDcyMCBUZCAoTGFuZykgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8
+IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRv
+YmoKJSBwYWRkaW5nIFArNUdhMndKZmhLbTcvRWdCcEtQSWV4Q0VQU25kV1B3Y0JMendKYng1MW40
+Y2s0ZC9seEFsRXpKOGU0NWFPU1VtV2h3L2t1SzRoTnplbFJoRHRCd1V6bHE3ZWtTQU1DNWZ2Wnh4
+Y2tKNXZFWWdMbmFvRzV0bkdia3ljREg5RzM5aWpFQzdZYjRPNDhEY3l4T2RCZ3NGNFBseFh3RStR
+Q1NibDVISEt5WU5EeUN5TWtFRWhTUDVKc3RKRXRFYUFoT0ZaUTQ2OXZFT1BFM2JwcnZCa3J4bktD
+dGp6MEk1djVabHRSa0xxS2F4YnJveFplQVRQdFlDMHgrMHhWUzFMS3FvZHROTEtkWUYxbTFuRmtP
+cUxmNXZQczhRZmpuU05Sa1VrRHlPcnBxL1pDL0VRNDJCemtmcXVXWXNOR0RwaHdGN0NocHJlQm9x
+TGpMT1BGZjFYdytaZnEveklTaWY5UStrbkd1Wk9PRTJpYkJzSXZKZFlrYkFkdUFGMU1VbW80V2lZ
+Nno0K0p6NmJkMHpBS0kzZVFwSEZkN0l2TkRSUm56Q2hmQnQwY3VpZFRBdVU0elJwbW00RXRJZi9n
+ZzlLd0dudE5QTFVLL2lUR3ZPSGQ0LzlLTURVbFcrZXN1VmcxL2h4aEZJYmVzMU02ZzNyQlhRUE9Y
+NmRkQlhMajZvQ1dpQnNoSDZ5Y0V2bkFiRGlhRFI4NDVQSEpyUytYa3FIb25NVm5DRHRIWEhlK3F1
+ZG9ZVUs3S0Y4bW4vNzNsb2RCMGNQTXBLT1ZEcFJzUjdlRXBGNWNuM0pZNy9CNk5hMlFzcFJNUWtp
+b1dEYWJnL3lhQUlGc3MwVWZXNFFKQk5OQStEU050emJTRlVPTFlTOCtVTVZtV1hRNjN6c2s9Cnhy
+ZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0
+IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKMDAwMDAwMDI0NyAwMDAwMCBuIAowMDAwMDAw
+MzMyIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYK
+MTA4MQolJUVPRgo=
+
+--=_vm000004_d7eaf7b3f47e
+Content-Type: text/plain; name*=UTF-8''%F0%9F%93%8E%20Notizen.txt
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*=UTF-8''%F0%9F%93%8E%20Notizen.txt
+
+bm90ZXMK
+
+--=_vm000004_d7eaf7b3f47e
+Content-Type: text/plain; name="=?utf-8?B?6K2w5LqL6YyyLnR4dA==?="
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="=?utf-8?B?6K2w5LqL6YyyLnR4dA==?="
+
+amFwYW4K
+
+--=_vm000004_d7eaf7b3f47e
+Content-Type: text/plain; name="plain-ascii.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="plain-ascii.txt"
+
+cGxhaW4K
+
+--=_vm000004_d7eaf7b3f47e--

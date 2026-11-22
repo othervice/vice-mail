@@ -1,0 +1,102 @@
+Date: Thu, 04 Jun 2026 16:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: 12 attachments
+Message-ID: <mime.many-attachments@seed.vicemail.test>
+X-Vicemail-Seed: mime/many-attachments
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_vm000016_438f8818e2a4"
+
+This is a multi-part message in MIME format.
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Twelve small attachments.
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-00.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-00.txt"
+
+ZmlsZSAwCg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-01.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-01.txt"
+
+ZmlsZSAxCg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-02.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-02.txt"
+
+ZmlsZSAyCg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-03.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-03.txt"
+
+ZmlsZSAzCg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-04.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-04.txt"
+
+ZmlsZSA0Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-05.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-05.txt"
+
+ZmlsZSA1Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-06.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-06.txt"
+
+ZmlsZSA2Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-07.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-07.txt"
+
+ZmlsZSA3Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-08.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-08.txt"
+
+ZmlsZSA4Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-09.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-09.txt"
+
+ZmlsZSA5Cg==
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-10.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-10.txt"
+
+ZmlsZSAxMAo=
+
+--=_vm000016_438f8818e2a4
+Content-Type: text/plain; name="file-11.txt"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="file-11.txt"
+
+ZmlsZSAxMQo=
+
+--=_vm000016_438f8818e2a4--

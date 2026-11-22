@@ -1,0 +1,10 @@
+Date: Mon, 32 Foo 2026 25:61:99 +9999
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Impossible date
+Message-ID: <broken.bad-date@seed.vicemail.test>
+X-Vicemail-Seed: broken/bad-date
+MIME-Version: 1.0
+Content-Type: text/plain
+
+The Date header is garbage.

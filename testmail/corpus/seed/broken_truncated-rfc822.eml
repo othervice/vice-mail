@@ -1,0 +1,24 @@
+Date: Sun, 06 Sep 2026 06:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Truncated message/rfc822 part
+Message-ID: <broken.truncated-rfc822@seed.vicemail.test>
+X-Vicemail-Seed: broken/truncated-rfc822
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b3"
+
+--b3
+Content-Type: text/plain
+
+Forwarded:
+--b3
+Content-Type: message/rfc822
+
+From: inner@example.com
+Subject: inner
+Content-Type: multipart/alternative; boundary="inner"
+
+--inner
+Content-Type: text/plain
+
+cut here

@@ -1,0 +1,24 @@
+Date: Sun, 22 Nov 2026 12:16:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Links whose text names another target
+Message-ID: <hostile.deceptive-links@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: text-other-domain punycode userinfo ip-host mixed-script confusable
+X-Corpus-Expect: Links are rewritten; check_link warns for each of the six.
+X-Corpus-Check: links=6; remote=0; text=SAFE-CONTENT-VISIBLE; warned-links=6
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<a href=3D"https://evil.example/login">https://bank.example/login</a>
+<a href=3D"https://xn--bnk-sna.example/">https://b=C3=A4nk.example/</a>
+<a href=3D"https://bank.example@evil.example/">https://bank.example/account=
+</a>
+<a href=3D"http://192.0.2.7/login">Log in</a>
+<a href=3D"https://p=D0=B0ypal.example/">PayPal</a>
+<a href=3D"https://xn--80ak6aa92e.com/">Apple</a>
+</body></html>
+

@@ -1,0 +1,13 @@
+Date: Thu, 07 May 2026 12:00:00 +0000
+From: =?iso-8859-1?q?Fran=E7ois_Lef=E8vre?= <f.lefevre@example.com>
+To: Alice Archer <alice@vicemail.test>, =?utf-8?b?0JDQvdC90LA=?=
+ <anna.ivanova@example.org>
+Subject: =?utf-8?q?Caf=C3=A9?= =?iso-8859-1?q?_und_M=FCsli?= plain text
+ =?UTF-8?B?8J+Ruw==?= =?utf-8?q?=E2=82=AC?=
+Message-ID: <charset.rfc2047-mix@seed.vicemail.test>
+X-Vicemail-Seed: charset/rfc2047-mix
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Adjacent encoded words must be joined.

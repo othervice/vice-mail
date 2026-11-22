@@ -1,0 +1,53 @@
+Date: Wed, 08 Jul 2026 07:30:00 +0000
+From: Rust Users <rust-users@lists.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Rust Users: issue #2
+Message-ID: <html.newsletter-1@seed.vicemail.test>
+List-Id: Rust users discussion <rust-users.lists.example>
+List-Unsubscribe: <mailto:unsubscribe@lists.example?subject=unsubscribe>,
+ <https://lists.example/unsubscribe?u=alice&i=1>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+X-Vicemail-Seed: html/newsletter-1
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_vm000018_fd06e66f8c45"
+
+This is a multi-part message in MIME format.
+
+--=_vm000018_fd06e66f8c45
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Newsletter #2
+
+View online: https://news.example/1
+Unsubscribe: https://news.example/u
+
+--=_vm000018_fd06e66f8c45
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><meta charset=3D"utf-8"><title>Newsletter #2</title></head>
+<body style=3D"margin:0;background:#f4f4f4">
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff">
+<tr><td><img src=3D"http://127.0.0.1:18999/img/html-newsletter-1/header.png=
+" width=3D"600" height=3D"120" alt=3D"Header"></td></tr>
+<tr><td style=3D"padding:20px;font-family:Arial,sans-serif">
+<h1>Newsletter #2</h1>
+<p>Here is what happened this week. <a href=3D"https://news.example/article=
+s/html-newsletter-1">Read more</a></p>
+<img src=3D"http://127.0.0.1:18999/img/html-newsletter-1/article.jpg" srcse=
+t=3D"http://127.0.0.1:18999/img/html-newsletter-1/article@2x.jpg 2x" width=
+=3D"560" alt=3D"Article">
+<p style=3D"font-size:11px;color:#888">You receive this mail because you su=
+bscribed.
+<a href=3D"https://news.example/unsubscribe?id=3Dhtml-newsletter-1">Unsubsc=
+ribe</a></p>
+</td></tr></table>
+<img src=3D"http://127.0.0.1:18999/t/html-newsletter-1.gif" width=3D"1" hei=
+ght=3D"1" alt=3D"" style=3D"display:none">
+</body></html>
+
+--=_vm000018_fd06e66f8c45--

@@ -1,0 +1,3 @@
+X-Vicemail-Seed: broken/missing-headers
+
+No From, To, Subject, Date, Message-ID or MIME headers.

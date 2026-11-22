@@ -1,0 +1,10 @@
+Date: Sun, 06 Sep 2026 15:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Same Message-ID as thread message 3
+Message-ID: <thread.offsite-03@seed.vicemail.test>
+X-Vicemail-Seed: broken/duplicate-message-id
+MIME-Version: 1.0
+Content-Type: text/plain
+
+Duplicate Message-ID in another folder.

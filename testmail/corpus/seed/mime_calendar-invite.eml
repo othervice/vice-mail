@@ -1,0 +1,37 @@
+Date: Thu, 04 Jun 2026 04:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>
+Subject: Invitation: Kick-off @ Wed 10 Jun 2026 09:00
+Message-ID: <mime.calendar-invite@seed.vicemail.test>
+X-Vicemail-Seed: mime/calendar-invite
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_vm000014_d68b80074aa9"
+
+This is a multi-part message in MIME format.
+
+--=_vm000014_d68b80074aa9
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+You are invited to the kick-off.
+
+--=_vm000014_d68b80074aa9
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+PRODID:-//Vice Mail//seed//EN
+BEGIN:VEVENT
+UID:seed-event-1@vicemail.test
+DTSTAMP:20260601T100000Z
+DTSTART:20260610T090000Z
+DTEND:20260610T100000Z
+SUMMARY:Kick-off
+ORGANIZER;CN=Carol:mailto:carol@example.org
+ATTENDEE;RSVP=TRUE:mailto:alice@vicemail.test
+END:VEVENT
+END:VCALENDAR
+
+--=_vm000014_d68b80074aa9--

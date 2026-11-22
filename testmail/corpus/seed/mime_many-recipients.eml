@@ -1,0 +1,30 @@
+Date: Fri, 05 Jun 2026 10:00:00 +0200
+From: Carol Clark <carol@example.org>
+To: Alice Archer <alice@vicemail.test>, Person 0 <person0@example.com>, Person
+ 1 <person1@example.com>, Person 2 <person2@example.com>, Person 3
+ <person3@example.com>, Person 4 <person4@example.com>, Person 5
+ <person5@example.com>, Person 6 <person6@example.com>, Person 7
+ <person7@example.com>, Person 8 <person8@example.com>, Person 9
+ <person9@example.com>, Person 10 <person10@example.com>, Person 11
+ <person11@example.com>, Person 12 <person12@example.com>, Person 13
+ <person13@example.com>, Person 14 <person14@example.com>, Person 15
+ <person15@example.com>, Person 16 <person16@example.com>, Person 17
+ <person17@example.com>, Person 18 <person18@example.com>, Person 19
+ <person19@example.com>, Person 20 <person20@example.com>, Person 21
+ <person21@example.com>, Person 22 <person22@example.com>, Person 23
+ <person23@example.com>, Person 24 <person24@example.com>, Person 25
+ <person25@example.com>, Person 26 <person26@example.com>, Person 27
+ <person27@example.com>, Person 28 <person28@example.com>, Person 29
+ <person29@example.com>, Person 30 <person30@example.com>, Person 31
+ <person31@example.com>, Person 32 <person32@example.com>, Person 33
+ <person33@example.com>, Person 34 <person34@example.com>, Person 35
+ <person35@example.com>, Person 36 <person36@example.com>, Person 37
+ <person37@example.com>, Person 38 <person38@example.com>
+Subject: Message to 40 recipients
+Message-ID: <mime.many-recipients@seed.vicemail.test>
+X-Vicemail-Seed: mime/many-recipients
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Large recipient list.

@@ -1,0 +1,19 @@
+Date: Sun, 22 Nov 2026 12:08:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: base href with relative image and link
+Message-ID: <hostile.base@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: base-href base-relative-link
+X-Corpus-Expect: No base element; the relative image is dropped (nothing to load), the
+ relative link is rewritten.
+X-Corpus-Check: links=1; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><base href=3D"http://127.0.0.1:18999/v/base-href/"></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<img src=3D"relative.png"><a href=3D"relative-link">relative link</a>
+</body></html>
+

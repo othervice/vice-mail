@@ -1,0 +1,43 @@
+Date: Sun, 22 Nov 2026 12:13:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Parser differentials and namespace confusion (mXSS)
+Message-ID: <hostile.mutation-xss@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: mxss-mglyph mxss-svg-iframe mxss-noscript mxss-form-math
+ mxss-svg-p-style mxss-comment mxss-title mxss-template mxss-cdata
+ mxss-noembed
+X-Corpus-Expect: Re-parsing the output yields no element or attribute outside the
+ allowlist.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<math><mtext><table><mglyph><style><img src=3Dx onerror=3D"try{parent.postM=
+essage({vmRan:'mxss-mglyph'},'*')}catch(e){}try{window.__vmRan=3D'mxss-mgly=
+ph'}catch(e){}try{top.document.title=3D'PWNED mxss-mglyph'}catch(e){}try{wi=
+ndow.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'mxss-mglyph'})}ca=
+tch(e){}try{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'mxs=
+s-mglyph'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/mxss-mglyph/js-fe=
+tch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/mxss-mglyph/js-=
+img.png'"></style></mglyph></table></mtext></math>
+<svg><iframe><a title=3D"</iframe><img src onerror=3Dalert(1)>">t</a></ifra=
+me></svg>
+<noscript><p title=3D"</noscript><img src=3Dx onerror=3Dalert(1)>"></noscri=
+pt>
+<form><math><mtext></form><form><mglyph><style></math><img src onerror=3Dal=
+ert(1)>
+<svg></p><style><a id=3D"</style><img src=3D1 onerror=3Dalert(1)>">
+<!--><img src=3Dx onerror=3Dalert(1)>-->
+<title><img src=3Dx onerror=3Dalert(1)></title>
+<template><img src=3Dx onerror=3Dalert(1)></template>
+<![CDATA[<img src=3Dx onerror=3Dalert(1)>]]>
+<noembed><img title=3D"</noembed><img src=3Dx onerror=3Dalert(1)>"></noembe=
+d>
+<xmp><img src=3Dx onerror=3Dalert(1)></xmp>
+<p>SAFE-TAIL</p>
+</body></html>
+

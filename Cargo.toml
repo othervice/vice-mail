@@ -86,6 +86,9 @@ roxmltree = "0.21.2"
 tempfile = "3.27.0"
 # Test certificates generated at test time (no key material in the repository).
 rcgen = "0.14.10"
+# mail-content tests: the DOM html5ever's own conformance tests use, to re-parse sanitised
+# output independently of the crate's DOM (test-only, as its "+unofficial" version says).
+markup5ever_rcdom = "0.40.1"
 
 # Desktop tests (decision 0005): only in test builds of mail-app (`--features e2e`), never shipped.
 tauri-plugin-wdio-webdriver = "=1.5.1"

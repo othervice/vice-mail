@@ -1,0 +1,11 @@
+Date: Sun, 06 Sep 2026 00:01:00 +0000
+From: Dave Dawson <dave@example.net>
+To: Alice Archer <alice@vicemail.test>
+Subject: Bare LF line endings
+Message-ID: <broken.bare-lf@seed.vicemail.test>
+X-Vicemail-Seed: broken/bare-lf
+MIME-Version: 1.0
+Content-Type: text/plain
+
+Line one
+Line two

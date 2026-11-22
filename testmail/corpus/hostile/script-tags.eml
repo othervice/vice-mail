@@ -1,0 +1,57 @@
+Date: Sun, 22 Nov 2026 12:01:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: Script tags
+Message-ID: <hostile.script-tags@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: script-inline script-src-self script-src-remote script-head
+ script-module
+X-Corpus-Expect: No script element survives; the text around them stays.
+X-Corpus-Check: links=0; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><script>try{parent.postMessage({vmRan:'script-head'},'*')}catch=
+(e){}try{window.__vmRan=3D'script-head'}catch(e){}try{top.document.title=3D=
+'PWNED script-head'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbo=
+x_breach',{vector:'script-head'})}catch(e){}try{parent.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'script-head'})}catch(e){}try{fetch('http:/=
+/127.0.0.1:18999/v/script-head/js-fetch')}catch(e){}new Image().src=3D'http=
+://127.0.0.1:18999/v/script-head/js-img.png'</script></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<script>try{parent.postMessage({vmRan:'script-inline'},'*')}catch(e){}try{w=
+indow.__vmRan=3D'script-inline'}catch(e){}try{top.document.title=3D'PWNED s=
+cript-inline'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_brea=
+ch',{vector:'script-inline'})}catch(e){}try{parent.__TAURI_INTERNALS__.invo=
+ke('sandbox_breach',{vector:'script-inline'})}catch(e){}try{fetch('http://1=
+27.0.0.1:18999/v/script-inline/js-fetch')}catch(e){}new Image().src=3D'http=
+://127.0.0.1:18999/v/script-inline/js-img.png'</script>
+<script src=3D"/sandbox-probe.js?v=3Dscript-src-self"></script>
+<script src=3D"http://127.0.0.1:18999/v/script-src-remote/x.js"></script>
+<SCRIPT type=3D"module">try{parent.postMessage({vmRan:'script-module'},'*')=
+}catch(e){}try{window.__vmRan=3D'script-module'}catch(e){}try{top.document.=
+title=3D'PWNED script-module'}catch(e){}try{window.__TAURI_INTERNALS__.invo=
+ke('sandbox_breach',{vector:'script-module'})}catch(e){}try{parent.__TAURI_=
+INTERNALS__.invoke('sandbox_breach',{vector:'script-module'})}catch(e){}try=
+{fetch('http://127.0.0.1:18999/v/script-module/js-fetch')}catch(e){}new Ima=
+ge().src=3D'http://127.0.0.1:18999/v/script-module/js-img.png'</SCRIPT>
+<script><!--
+try{parent.postMessage({vmRan:'script-comment'},'*')}catch(e){}try{window._=
+_vmRan=3D'script-comment'}catch(e){}try{top.document.title=3D'PWNED script-=
+comment'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox_breach',{=
+vector:'script-comment'})}catch(e){}try{parent.__TAURI_INTERNALS__.invoke('=
+sandbox_breach',{vector:'script-comment'})}catch(e){}try{fetch('http://127.=
+0.0.1:18999/v/script-comment/js-fetch')}catch(e){}new Image().src=3D'http:/=
+/127.0.0.1:18999/v/script-comment/js-img.png'
+//--></script>
+<scr<script>ipt>try{parent.postMessage({vmRan:'script-split'},'*')}catch(e)=
+{}try{window.__vmRan=3D'script-split'}catch(e){}try{top.document.title=3D'P=
+WNED script-split'}catch(e){}try{window.__TAURI_INTERNALS__.invoke('sandbox=
+_breach',{vector:'script-split'})}catch(e){}try{parent.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'script-split'})}catch(e){}try{fetch('http:=
+//127.0.0.1:18999/v/script-split/js-fetch')}catch(e){}new Image().src=3D'ht=
+tp://127.0.0.1:18999/v/script-split/js-img.png'</scr</script>ipt>
+<p>after scripts</p>
+</body></html>
+

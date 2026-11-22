@@ -1,0 +1,65 @@
+Date: Sun, 22 Nov 2026 12:03:00 +0000
+From: Hostile Corpus <corpus@hostile.example>
+To: Alice Archer <alice@vicemail.test>
+Subject: javascript: and other script URLs
+Message-ID: <hostile.javascript-links@corpus.vicemail.test>
+MIME-Version: 1.0
+X-Corpus-Vector: javascript-link javascript-entities javascript-control vbscript
+ data-html javascript-iframe
+X-Corpus-Expect: Every href becomes https://link.invalid/<token>/n; script URLs are
+ recorded only as blocked targets or dropped, never kept in an
+ attribute.
+X-Corpus-Check: links=7; remote=0; text=SAFE-CONTENT-VISIBLE
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head></head><body>
+<p>SAFE-CONTENT-VISIBLE</p>
+<a href=3D"javascript:try{parent.postMessage({vmRan:'javascript-link'},'*')=
+}catch(e){}try{window.__vmRan=3D'javascript-link'}catch(e){}try{top.documen=
+t.title=3D'PWNED javascript-link'}catch(e){}try{window.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'javascript-link'})}catch(e){}try{parent.__=
+TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-link'})}catch=
+(e){}try{fetch('http://127.0.0.1:18999/v/javascript-link/js-fetch')}catch(e=
+){}new Image().src=3D'http://127.0.0.1:18999/v/javascript-link/js-img.png'"=
+>js link</a>
+<a href=3D"JaVaScRiPt:try{parent.postMessage({vmRan:'javascript-case'},'*')=
+}catch(e){}try{window.__vmRan=3D'javascript-case'}catch(e){}try{top.documen=
+t.title=3D'PWNED javascript-case'}catch(e){}try{window.__TAURI_INTERNALS__.=
+invoke('sandbox_breach',{vector:'javascript-case'})}catch(e){}try{parent.__=
+TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-case'})}catch=
+(e){}try{fetch('http://127.0.0.1:18999/v/javascript-case/js-fetch')}catch(e=
+){}new Image().src=3D'http://127.0.0.1:18999/v/javascript-case/js-img.png'"=
+>case</a>
+<a href=3D"jav&#x09;ascript:try{parent.postMessage({vmRan:'javascript-tab'}=
+,'*')}catch(e){}try{window.__vmRan=3D'javascript-tab'}catch(e){}try{top.doc=
+ument.title=3D'PWNED javascript-tab'}catch(e){}try{window.__TAURI_INTERNALS=
+__.invoke('sandbox_breach',{vector:'javascript-tab'})}catch(e){}try{parent.=
+__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-tab'})}catc=
+h(e){}try{fetch('http://127.0.0.1:18999/v/javascript-tab/js-fetch')}catch(e=
+){}new Image().src=3D'http://127.0.0.1:18999/v/javascript-tab/js-img.png'">=
+tab entity</a>
+<a href=3D"&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;al=
+ert(1)">entities</a>
+<a href=3D" &#x01; javascript:alert(1)">control prefix</a>
+<a href=3D"vbscript:msgbox(1)">vbscript</a>
+<a href=3D"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=3D=3D">=
+data html</a>
+<iframe src=3D"javascript:try{parent.postMessage({vmRan:'javascript-iframe'=
+},'*')}catch(e){}try{window.__vmRan=3D'javascript-iframe'}catch(e){}try{top=
+.document.title=3D'PWNED javascript-iframe'}catch(e){}try{window.__TAURI_IN=
+TERNALS__.invoke('sandbox_breach',{vector:'javascript-iframe'})}catch(e){}t=
+ry{parent.__TAURI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-i=
+frame'})}catch(e){}try{fetch('http://127.0.0.1:18999/v/javascript-iframe/js=
+-fetch')}catch(e){}new Image().src=3D'http://127.0.0.1:18999/v/javascript-i=
+frame/js-img.png'"></iframe>
+<img src=3D"javascript:try{parent.postMessage({vmRan:'javascript-img'},'*')=
+}catch(e){}try{window.__vmRan=3D'javascript-img'}catch(e){}try{top.document=
+.title=3D'PWNED javascript-img'}catch(e){}try{window.__TAURI_INTERNALS__.in=
+voke('sandbox_breach',{vector:'javascript-img'})}catch(e){}try{parent.__TAU=
+RI_INTERNALS__.invoke('sandbox_breach',{vector:'javascript-img'})}catch(e){=
+}try{fetch('http://127.0.0.1:18999/v/javascript-img/js-fetch')}catch(e){}ne=
+w Image().src=3D'http://127.0.0.1:18999/v/javascript-img/js-img.png'">
+</body></html>
+
