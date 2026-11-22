@@ -30,7 +30,7 @@ wenn er groß genug ist.
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
 | Bausteine | Radix UI (`radix-ui`), Lucide-Icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen. Achtung CSP: Radix Dialog, Popover, Select und ScrollArea fügen `<style>`-Elemente ein; vor ihrer Verwendung im Release-Build prüfen |
-| Liste | TanStack Virtual | 3.14 | Virtualisierung für sehr lange Listen |
+| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2; mit Schnellaktionen in Stufe 4 neu entscheiden) |
 | Daten im Frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
 | Sprachen | i18next, react-i18next | 27.2 / 18.0 | Standard, Englisch und Deutsch; Textliterale in Komponenten verbietet `eslint-plugin-i18next` (`no-literal-string`) |
@@ -176,6 +176,24 @@ einer klaren Meldung abgelehnt.
   Netzwechsel neu verbinden, mit exponentiellem Backoff und Abbruchmöglichkeit.
 - Es werden nie alle Daten neu geholt, wenn ein gezielter Abgleich reicht.
 
+**Abgleich-Tasks (Stufe 2, 0008)**
+- Je Konto ein Aufseher-Task mit dem Zustandsautomaten (`sync_state.rs`). Verbunden: Arbeiter
+  (Hauptverbindung, Durchläufe), IDLE-Wächter (eigene Verbindung, Abschnitte von 5 Minuten),
+  Abfrager (voller Durchlauf alle 3 Minuten, ohne IDLE der Posteingang jede Minute). Eine
+  ausgefallene Verbindung beendet die Sitzung; der Automat entscheidet über Backoff oder Stopp.
+- Ein Durchlauf je Postfach: EXAMINE, bei neuer UIDVALIDITY `reset_mailbox`; unverändert (UIDNEXT,
+  HIGHESTMODSEQ, Anzahl gleich) wird übersprungen; sonst UID-Abgleich für Löschungen, Flags per
+  `CHANGEDSINCE` oder fensterweise, neue UIDs bis zum UIDNEXT des EXAMINE, dann der Rest des
+  Erstabgleichs. Verwaiste Nachrichten werden nur nach einem vollen Durchlauf ohne Erstabgleich und
+  ohne übersprungenes Postfach gelöscht.
+- Ein Panic in einer Sitzung wird zum Kontofehler `protocol` mit Backoff, nie zum App-Ende.
+- Ruhezustand: Sprung zwischen Wanduhr und monotoner Uhr (über 20 s) lässt alle Konten neu
+  verbinden; dazu `AppCore::resume()`/`network_changed()` für die Shell. Ein OS-Signal gibt es
+  nicht (bräuchte `unsafe`).
+- Ereignisse: `accountStatusChanged` trägt immer den vollständigen Status; je gespeichertem
+  Fenster ein `messagesChanged` und ein `mailboxesChanged`; `newMail` nur außerhalb des
+  Erstabgleichs, mit der Zahl neuer ungelesener Mails.
+
 **Outbox**
 - Jede schreibende Aktion ändert zuerst den lokalen Zustand, wird als `operation` vermerkt und
   dann ausgeführt. Zustände: `queued`, `in_flight`, `confirmed`, `failed`, `conflict`.
@@ -193,6 +211,8 @@ einer klaren Meldung abgelehnt.
 
 **Verbindungen (0002)**
 - Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
+- Anmeldung per LOGIN; enthalten Benutzername oder Passwort Nicht-ASCII-Zeichen, per
+  `AUTHENTICATE PLAIN` (UTF-8, mit SASL-IR, wenn angeboten), siehe 0008.
 - Nach dem Login `ENABLE CONDSTORE`, bei QRESYNC-fähigen Servern `ENABLE QRESYNC`.
 - Ein abgebrochener Befehl schließt die Verbindung; sie wird nie mit halb gelesenen Antworten weiterbenutzt.
 - Unaufgeforderte Antworten werden nach jedem Befehl abgeholt (die Bibliothek puffert nur 100).
