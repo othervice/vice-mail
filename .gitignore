@@ -22,3 +22,6 @@ dist/
 
 # Lokale Claude-Einstellungen
 .claude/settings.local.json
+
+# Vitest cache
+.vitest/
