@@ -12,14 +12,31 @@ mail-model.workspace = true
 mail-store.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["sync", "rt"] }
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
+# Keychain (credentials.rs)
+keyring-core.workspace = true
+# Server discovery (discovery/)
+hickory-resolver.workspace = true
+reqwest.workspace = true
+roxmltree.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+# Local HTTPS and DNS servers in the discovery tests.
+rcgen.workspace = true
+tokio-rustls.workspace = true
 
 [lints]
 workspace = true

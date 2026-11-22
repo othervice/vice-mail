@@ -2,6 +2,8 @@
 //! stream through [`AppCore::subscribe`]. Everything here runs and is tested without a WebView.
 
 mod core;
+pub mod credentials;
+pub mod discovery;
 pub mod logging;
 pub mod sync_state;
 

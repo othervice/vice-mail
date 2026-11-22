@@ -240,7 +240,8 @@ pub enum DiscoverySource {
     None,
 }
 
-/// Provider-specific advice for the setup form.
+/// Provider-specific advice for the setup form. The UI shows one note per hint; the server
+/// settings are filled in either way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderHint {
@@ -248,6 +249,23 @@ pub enum ProviderHint {
     Gmail,
     /// Needs an app-specific password (Apple ID).
     Icloud,
+    /// Needs an app password (Yahoo account security settings).
+    Yahoo,
+    /// Needs an app password (Fastmail settings, Privacy & Security).
+    Fastmail,
+    /// Outlook.com, Hotmail, Live: Microsoft only accepts OAuth sign-in, which the app supports
+    /// from stage 14. A password login is expected to fail.
+    Outlook,
+    /// Proton Mail works only through Proton Mail Bridge on this computer (paid plan): use the
+    /// user name and password that Bridge shows, and trust Bridge's certificate in the system.
+    Proton,
+    /// GMX: IMAP access must be turned on first (web mail settings, POP3/IMAP).
+    Gmx,
+    /// WEB.DE: IMAP access must be turned on first (web mail settings, POP3/IMAP).
+    Webde,
+    /// Telekom (t-online.de, magenta.de): needs the separate email password from the Telekom
+    /// customer center, not the Telekom login password.
+    Tonline,
 }
 
 /// Result of server discovery for an email address. Either server may be unknown.
