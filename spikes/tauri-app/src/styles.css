@@ -1,0 +1,15 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+body { margin: 0; }
+.app { display: flex; min-height: 100vh; }
+.nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-right: 1px solid #8884; }
+.nav button[aria-current="page"] { font-weight: 600; }
+.main { flex: 1; padding: 16px; overflow: auto; }
+.checks { list-style: none; padding: 0; }
+.checks li { padding: 2px 0; }
+.pass::before { content: "PASS "; color: #2a8f4a; font-weight: 600; }
+.fail::before { content: "FAIL "; color: #c0392b; font-weight: 600; }
+pre { background: #8881; padding: 8px; border-radius: 6px; overflow: auto; }
