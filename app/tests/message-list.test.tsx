@@ -9,7 +9,7 @@ import {
 } from "../src/features/messages/rows";
 import { MESSAGE_PAGE_SIZE } from "../src/features/messages/queries";
 import { IDLE, makeAccount, makeMailbox, makeMessage, makeMessages, mockCore, standardMailboxes } from "./support/core";
-import { emitCore } from "./support/events";
+import { emitCore, emitCoreBurst } from "./support/events";
 import { renderApp } from "./support/render";
 
 const ACCOUNT = makeAccount();
@@ -53,8 +53,10 @@ describe("message list", () => {
 
   it("loads the next page with the cursor of the last one when scrolling near the end", async () => {
     withViewport();
-    const core = mockCore(bigInbox(10_000));
-    const messages = makeMessages(10_000);
+    const inbox = bigInbox(10_000);
+    const core = mockCore(inbox);
+    // The served messages themselves: a second `makeMessages` could have other (clock) ids.
+    const messages = inbox.messages[1];
     renderApp();
     const list = await screen.findByRole("listbox");
 
@@ -98,9 +100,11 @@ describe("message list", () => {
     await screen.findByText("Message 1");
     const before = core.callsOf("list_messages").length;
 
-    await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 });
-    await emitCore({ type: "mailboxesChanged", accountId: ACCOUNT.id });
-    await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 });
+    await emitCoreBurst([
+      { type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 },
+      { type: "mailboxesChanged", accountId: ACCOUNT.id },
+      { type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 },
+    ]);
 
     await waitFor(() => {
       expect(core.callsOf("list_messages").length).toBeGreaterThan(before);
@@ -124,13 +128,18 @@ describe("message list", () => {
 
   it("keeps the visible rows in place when new mail arrives above them", async () => {
     withViewport();
-    const core = mockCore(bigInbox(100));
+    const inbox = bigInbox(100);
+    const core = mockCore(inbox);
     renderApp();
     const list = await screen.findByRole("listbox");
     // 8 px padding, 32 px "Today", then 44 px rows: 440 is 4 px into message 10.
     await scrollTo(list, 440);
 
-    core.setMessages(1, [makeMessage({ subject: "New A" }), makeMessage({ subject: "New B" }), ...makeMessages(100)]);
+    // The same messages again, under two new ones. Not a second `makeMessages(100)`: its ids
+    // come from the clock (sort date in seconds), so whenever a second boundary passed between
+    // the two calls (more often the slower the machine) every message got a new id, the rows
+    // new keys, and the row to keep in place was gone.
+    core.setMessages(1, [makeMessage({ subject: "New A" }), makeMessage({ subject: "New B" }), ...inbox.messages[1]]);
     await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 });
 
     await waitFor(() => {

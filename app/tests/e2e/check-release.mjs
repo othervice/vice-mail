@@ -5,7 +5,7 @@
 // 2. The release build (`CI=true pnpm tauri build --bundles app`) contains none of them.
 // 3. `cargo tree` lists tauri-plugin-wdio-webdriver only with `--features e2e`.
 // 4. The release app starts, writes to its normal data directory (under a temporary HOME, so the
-//    user's real one stays untouched), ignores MAIL_APP_E2E_DATA_DIR and opens no WebDriver port.
+//    user's real one stays untouched), ignores the MAIL_APP_E2E_* variables and opens no WebDriver port.
 //
 // Usage: node tests/e2e/check-release.mjs [release-binary] [e2e-binary]
 import { execFileSync, spawn } from "node:child_process";
@@ -24,6 +24,8 @@ const e2e = process.argv[3] ?? path.join(root, "target/debug/mail-app");
 const IDENTIFIER = "org.vicemail.desktop";
 // Extra root CA for the desktop test's mail account (app/src-tauri/src/e2e.rs); ignored by release builds.
 const EXTRA_CA_ENV = "MAIL_APP_E2E_EXTRA_CA";
+// External images from loopback addresses (the counter server); only e2e builds know the switch.
+const LOOPBACK_IMAGES_ENV = "MAIL_APP_E2E_LOOPBACK_IMAGES";
 const PROBE_PORT = 4499;
 
 // Strings that only exist when the plugin or the e2e module are compiled in.
@@ -33,9 +35,13 @@ const MARKERS = [
   "WDIO WebDriver plugin initialized",
   "wdioEvalResult",
   "e2e_window_controls",
+  "e2e_native_mouse",
+  "e2e_opened",
+  "e2e_invoked",
   "__e2eCspViolations",
   DATA_DIR_ENV,
   EXTRA_CA_ENV,
+  LOOPBACK_IMAGES_ENV,
 ];
 
 let ok = true;
@@ -109,7 +115,7 @@ try {
 
   const child = spawn(release, [], {
     // HOME: Tauri's data and log directories. CFFIXED_USER_HOME: the same for Foundation/WebKit.
-    env: { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TAURI_WEBDRIVER_PORT: String(PROBE_PORT), [DATA_DIR_ENV]: ignoredDir, [EXTRA_CA_ENV]: path.join(home, "missing-ca.pem") },
+    env: { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TAURI_WEBDRIVER_PORT: String(PROBE_PORT), [DATA_DIR_ENV]: ignoredDir, [EXTRA_CA_ENV]: path.join(home, "missing-ca.pem"), [LOOPBACK_IMAGES_ENV]: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";

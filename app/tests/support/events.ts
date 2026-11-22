@@ -8,3 +8,15 @@ export async function emitCore(event: CoreEvent): Promise<void> {
     await emit("core-event", event);
   });
 }
+
+/**
+ * Several core events back to back, the way the engine sends a burst (`messagesChanged` and
+ * `mailboxesChanged` together): no await and no React flush between them, so they reach the
+ * listeners within one task however busy the machine is. Awaiting `emitCore` once per event
+ * instead lets the wall clock run between them, past the UI's burst window on a loaded machine.
+ */
+export async function emitCoreBurst(events: readonly CoreEvent[]): Promise<void> {
+  await act(async () => {
+    await Promise.all(events.map((event) => emit("core-event", event)));
+  });
+}

@@ -58,20 +58,26 @@ describe("app frame (stage 1)", () => {
   });
 
   it("detects a CSP violation when there is one (positive control)", async () => {
-    // An inline style attribute is exactly what the app's `style-src 'self'` forbids.
-    const applied = await browser.execute(() => {
-      const probe = document.createElement("div");
-      probe.setAttribute("style", "color: rgb(1, 2, 3)");
-      return probe.style.color;
+    // An inline script is what the app's `script-src 'self'` forbids. (Inline styles no longer
+    // are: the mail frame inherits the app's CSP and needs `style-src 'unsafe-inline'`, 0005.)
+    const ran = await browser.execute(async () => {
+      window.__e2eInlineScriptRan = false;
+      const probe = document.createElement("script");
+      probe.textContent = "window.__e2eInlineScriptRan = true;";
+      document.body.append(probe);
+      probe.remove();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return window.__e2eInlineScriptRan;
     });
-    assert.equal(applied, "", "the CSP must block inline style attributes");
+    assert.equal(ran, false, "the CSP must block inline scripts");
     await browser.waitUntil(async () => (await cspViolations()).length > 0, {
-      timeoutMsg: "the recorder saw no violation for the blocked style attribute",
+      timeoutMsg: "the recorder saw no violation for the blocked inline script",
     });
     const violations = await cspViolations();
     report.cspControl = violations;
     assert.equal(violations.length, 1, JSON.stringify(violations));
-    assert.match(violations[0].directive, /^style-src/);
+    assert.match(violations[0].directive, /^script-src/);
+    assert.equal(violations[0].blocked, "inline");
   });
 
   it("starts in English after choosing it (the system language may be German)", async () => {

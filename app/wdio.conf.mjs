@@ -5,25 +5,37 @@
 // The run owns the local test server (scripts/testmail.sh): it resets it, starts it and seeds
 // 10,000 messages before the first app starts, and stops it at the end. `reset` creates a new
 // test CA, and the app reads the CA once at start, so this has to happen here and not in a spec.
+// Other sessions share that server: the run takes the shared lock first (`testmail.sh lock`, name
+// from TESTMAIL_LOCK_NAME, default `desktop-e2e`) and releases it at the end, unless the caller
+// already held it under that name, then the caller keeps it.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA_DIR_ENV, WEBDRIVER_PORT, quitApp } from "./tests/e2e/support/lifecycle.mjs";
 import { SevereServiceError } from "webdriverio";
-import { CA_FILE, EXTRA_CA_ENV, prepareTestServer, testmailSync } from "./tests/e2e/support/testmail.mjs";
+import { CA_FILE, EXTRA_CA_ENV, LOOPBACK_IMAGES_ENV, prepareTestServer, testmailSync } from "./tests/e2e/support/testmail.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Built by `pnpm build:e2e`: debug profile, embedded assets, the production CSP.
 const APP = process.env.E2E_APP ?? path.join(here, "../target/debug/mail-app");
+const LOCK_NAME = process.env.TESTMAIL_LOCK_NAME || "desktop-e2e";
+/** Whether this run took the lock (and so releases it); false if the caller held it already. */
+let ownLock = false;
 
 export const config = {
   runner: "local",
   // In this order, one after the other. Every spec file gets a freshly started app on the same
   // data directory: `afterSession` quits the app, and before the next spec the service finds the
   // WebDriver port closed and starts the app again (it logs "unreachable — restarting").
-  // account-sync.e2e.mjs needs the empty data directory the first two leave behind.
-  specs: ["./tests/e2e/frame.e2e.mjs", "./tests/e2e/restart.e2e.mjs", "./tests/e2e/account-sync.e2e.mjs"],
+  // account-sync.e2e.mjs needs the empty data directory the first two leave behind, and the
+  // server exactly as seeded; reading.e2e.mjs adds folders to it and comes last.
+  specs: [
+    "./tests/e2e/frame.e2e.mjs",
+    "./tests/e2e/restart.e2e.mjs",
+    "./tests/e2e/account-sync.e2e.mjs",
+    "./tests/e2e/reading.e2e.mjs",
+  ],
   maxInstances: 1,
   capabilities: [
     {
@@ -77,14 +89,26 @@ export const config = {
     // SevereServiceError stops the run here; any other error would be logged and the specs
     // would start against no server.
     try {
+      // Waits up to 30 minutes for another session's tests; prints "already held" if ours.
+      ownLock = !testmailSync("lock", LOCK_NAME, "30").includes("already held");
+      console.log(`test server lock: ${LOCK_NAME}${ownLock ? "" : " (held by the caller)"}`);
       const ms = prepareTestServer();
       console.log(`test server ready with 10,000 messages after ${ms} ms`);
     } catch (e) {
+      // onComplete does not run after a failed onPrepare: give the lock back here.
+      if (ownLock) testmailSync("unlock", LOCK_NAME);
+      ownLock = false;
       throw new SevereServiceError(`the test server could not be prepared: ${String(e.stderr ?? e.message).trim()}`);
     }
     process.env[EXTRA_CA_ENV] = CA_FILE;
+    // External images from the counter server on 127.0.0.1 (reading.e2e.mjs); e2e builds only.
+    process.env[LOOPBACK_IMAGES_ENV] = "1";
   },
   onComplete: () => {
-    testmailSync("stop");
+    try {
+      testmailSync("stop");
+    } finally {
+      if (ownLock) testmailSync("unlock", LOCK_NAME);
+    }
   },
 };

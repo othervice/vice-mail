@@ -96,15 +96,12 @@ async function shootBothThemes(name) {
 }
 
 /**
- * WebKit (macOS 27.2) reports one `style-src-attr` violation for every native `<select>` the page
- * creates, also for `document.createElement("select")` without any attribute: its own rendering
- * of the control, not app code (the control test below proves it). The account page has a
- * select per special folder. Every other violation fails the run.
+ * Until stage 3 WebKit (macOS 27.2) reported one `style-src-attr` violation for every native
+ * `<select>` (its own rendering of the control) under the app's `style-src 'self'`. The app's
+ * CSP now allows inline styles, because the mail frame inherits it (decision 0005), so there is
+ * no exception any more: every violation fails the run. The control test below shows that a
+ * select causes none and that a violation the CSP still forbids is recorded on that page.
  */
-function isSelectViolation(v) {
-  return v.directive === "style-src-attr" && v.blocked === "inline";
-}
-
 let cspSeen = 0;
 /** CSP violations since the last call. */
 async function newCspViolations() {
@@ -140,6 +137,37 @@ async function waitForMainText(text, timeout = 10000) {
 }
 
 const syncText = () => browser.execute(() => document.querySelector('[data-testid="sync-status"]')?.textContent.trim() ?? null);
+
+/** What the reading pane shows: subject, a rendered body, the "not on this computer" notice, an error. */
+const paneState = () =>
+  browser.execute(() => {
+    const pane = document.querySelector('[data-testid="reading-pane"]');
+    if (!pane) return null;
+    return {
+      subject: pane.querySelector("article h2")?.textContent ?? null,
+      body: pane.querySelector('[data-testid="text-body"], [data-testid="mail-frame"]') !== null,
+      unavailable: pane.querySelector('[data-testid="reading-unavailable"]')?.textContent ?? null,
+      // Not `error`: webdriverio would take the returned object for a WebDriver error.
+      failed: pane.querySelector('[data-testid="reading-error"], [data-testid="reading-fetch-failed"]') !== null,
+    };
+  });
+
+/** Waits until the pane shows the message of the row labelled `rowLabel` with a body or a notice. */
+async function waitForPane(rowLabel) {
+  let last = null;
+  try {
+    await browser.waitUntil(
+      async () => {
+        last = await paneState();
+        return last !== null && last.subject !== null && rowLabel.includes(last.subject) && (last.body || last.unavailable || last.failed);
+      },
+      { timeout: 10000, interval: 50 },
+    );
+  } catch {
+    throw new Error(`the reading pane does not show the message "${rowLabel}": ${JSON.stringify(last)}`);
+  }
+  return last;
+}
 
 /**
  * Records, from now on, every change of what the frame shows (folder buttons, list rows, sync
@@ -308,7 +336,7 @@ async function fillSetupForm(password) {
 
 /**
  * Settings → Accounts → the account → "Remove account…" → "Remove". Checks the CSP violations
- * of the way there: none before the account page, on it exactly one per native select.
+ * of the way there: none, also on the account page with its native selects.
  */
 async function removeAccountThroughUi(account, { shoot = null } = {}) {
   assert.deepEqual(await newCspViolations(), [], "CSP violations before the account page");
@@ -336,9 +364,8 @@ async function removeAccountThroughUi(account, { shoot = null } = {}) {
   await waitForMainText("No accounts yet");
   const fresh = await newCspViolations();
   assert.equal(selects, 7, "one select per assignable role");
-  assert.ok(fresh.every(isSelectViolation), `CSP violations on the account page: ${JSON.stringify(fresh)}`);
-  assert.equal(fresh.length, selects, `one violation per native select: ${JSON.stringify(fresh)}`);
-  return { ms, selects, selectViolations: fresh.length };
+  assert.deepEqual(fresh, [], "CSP violations on the account page");
+  return { ms, selects };
 }
 
 // --- the spec ----------------------------------------------------------------------------------
@@ -511,25 +538,33 @@ describe("account and read-only sync (stage 2)", function () {
     assert.equal(keychainHasEntry(), false, "the keychain entry is gone");
   });
 
-  it("knows why WebKit reports CSP violations on the account page (control)", async () => {
-    // A bare select without any attribute, added and removed again by the test: WebKit still
-    // reports one violation.
-    // When a WebKit update stops doing so, this fails, and isSelectViolation can go.
+  it("records CSP violations on the account page, and none for a native select (control)", async () => {
     await newCspViolations();
+    // A bare select, added and removed again by the test: no violation since the app's CSP
+    // allows inline styles (WebKit reported one per select before).
     await browser.execute(() => {
       const select = document.createElement("select");
       document.body.append(select);
       select.getBoundingClientRect();
       select.remove();
     });
+    await browser.pause(300);
+    assert.deepEqual(await newCspViolations(), [], "a native select causes a violation again");
+    // What the CSP still forbids is recorded here as well: an image from outside the app
+    // (`img-src 'self' data:`; a closed local port, and the CSP stops it before any request).
+    await browser.execute(() => {
+      const image = new Image();
+      image.src = "http://127.0.0.1:9/e2e-csp-control.png";
+    });
     await browser.waitUntil(async () => (await cspViolations()).length > cspSeen, {
       timeout: 2000,
-      timeoutMsg: "WebKit no longer reports a violation for a native select; remove the exception",
+      timeoutMsg: "the recorder saw no violation for the blocked image",
     });
     const fresh = await newCspViolations();
-    report.selectControl = fresh;
-    assert.equal(fresh.length, 1);
-    assert.ok(isSelectViolation(fresh[0]), JSON.stringify(fresh));
+    report.cspControl = fresh;
+    assert.equal(fresh.length, 1, JSON.stringify(fresh));
+    assert.match(fresh[0].directive, /^img-src/);
+    assert.equal(fresh[0].blocked, "http://127.0.0.1:9/e2e-csp-control.png");
   });
 
   it("scrolls the list smoothly while the first sync is running", async () => {
@@ -659,14 +694,34 @@ describe("account and read-only sync (stage 2)", function () {
     await browser.waitUntil(async () => (await renderedRows()).find((r) => r.id === target.id)?.selected === true, {
       timeoutMsg: "the clicked row is not selected",
     });
+    // Since stage 3 the click opens the message in the reading pane. Message 300 is older than
+    // the prefetch period (30 days) and was never opened: offline the pane says so, naming the
+    // account, and shows no error.
+    const clicked = await waitForPane(target.label);
     await browser.keys(["ArrowDown"]);
     await browser.waitUntil(
       async () => (await renderedRows()).find((r) => r.selected)?.posinset === target.posinset + 1,
       { timeoutMsg: "ArrowDown did not move the selection" },
     );
     const active = await testId("message-list").getAttribute("aria-activedescendant");
-    assert.equal(active, (await renderedRows()).find((r) => r.selected).id);
+    const next = (await renderedRows()).find((r) => r.selected);
+    assert.equal(active, next.id);
+    // The pane follows the selection.
+    const following = await waitForPane(next.label);
     report.offline.listUsable = { clicked: target.posinset, afterArrowDown: target.posinset + 1 };
+    report.offline.readingPane = { clicked, following };
+    for (const pane of [clicked, following]) {
+      assert.equal(pane.failed, false, `the reading pane shows an error offline: ${JSON.stringify(pane)}`);
+      assert.ok(pane.body || pane.unavailable, `the reading pane is empty offline: ${JSON.stringify(pane)}`);
+      if (pane.unavailable) {
+        assert.match(pane.unavailable, /^This message is not on this computer yet/);
+        assert.match(pane.unavailable, new RegExp(`as soon as ${ALICE.email} is online again`));
+      }
+    }
+    await shootBothThemes("offline-reading-pane");
+    await testId("message-list").click();
+    await browser.keys(["Escape"]);
+    await browser.waitUntil(async () => (await paneState()) === null, { timeoutMsg: "Escape did not close the reading pane" });
     await scrollListTo(0);
     await shootBothThemes("offline");
     // The folded rail: the account button names the state.

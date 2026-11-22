@@ -32,16 +32,26 @@ tracing.workspace = true
 tauri-plugin-wdio-webdriver = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Test builds only (feature `e2e`): reads the native window buttons for the desktop test.
+# Test builds only (feature `e2e`): reads the native window buttons for the desktop test and
+# sends it real mouse clicks (NSEvent).
 objc2 = { workspace = true, optional = true }
 objc2-app-kit = { workspace = true, optional = true, features = [
     "std",
     "NSApplication",
     "NSButton",
     "NSControl",
+    "NSEvent",
+    "NSGraphicsContext",
     "NSResponder",
     "NSView",
     "NSWindow",
+] }
+objc2-foundation = { workspace = true, optional = true, features = [
+    "std",
+    "objc2-core-foundation",
+    "NSDate",
+    "NSGeometry",
+    "NSProcessInfo",
 ] }
 
 [target.'cfg(windows)'.dependencies]
@@ -57,7 +67,12 @@ rfd.workspace = true
 default = ["webview2-frame-guard"]
 # Desktop-test build (`pnpm --dir app build:e2e`): embedded WebDriver, a data directory of the
 # test's own and the `e2e_*` test commands. Never part of a shipped build (`test:release-clean`).
-e2e = ["dep:tauri-plugin-wdio-webdriver", "dep:objc2", "dep:objc2-app-kit"]
+e2e = [
+    "dep:tauri-plugin-wdio-webdriver",
+    "dep:objc2",
+    "dep:objc2-app-kit",
+    "dep:objc2-foundation",
+]
 # Windows: checks navigations inside the mail frame through WebView2's FrameNavigationStarting
 # (crate webview2-guard, decision 0011). On by default; without it links in HTML mail do nothing
 # under Windows (the frame only knows placeholders, so no real target leaks either way).

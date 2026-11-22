@@ -123,6 +123,7 @@ markup5ever_rcdom = "0.40.1"
 tauri-plugin-wdio-webdriver = "=1.5.1"
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false }
+objc2-foundation = { version = "0.3.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

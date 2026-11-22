@@ -18,8 +18,9 @@ export function addressName(address: Address): string | null {
 const UNITS = ["byte", "kilobyte", "megabyte", "gigabyte"] as const;
 
 /**
- * A size in bytes for people: "512 byte", "1.2 kB", "5 MB" in the UI language (Intl), on a
- * 1024 base like the size limit in the settings.
+ * A size in bytes for people: "512 bytes", "1.2 kB", "5 MB" in the UI language (Intl), on a
+ * 1024 base like the size limit in the settings. Plain bytes are written out: the short English
+ * form is "512 byte" without a plural (German "512 Byte" is the same either way).
  */
 export function formatSize(bytes: number, language: string): string {
   let value = Math.max(0, bytes);
@@ -31,7 +32,7 @@ export function formatSize(bytes: number, language: string): string {
   return new Intl.NumberFormat(language, {
     style: "unit",
     unit: UNITS[unit] ?? "byte",
-    unitDisplay: "short",
+    unitDisplay: unit === 0 ? "long" : "short",
     maximumFractionDigits: unit === 0 || value >= 10 ? 0 : 1,
   }).format(value);
 }

@@ -39,14 +39,18 @@ export async function attach() {
   await $('[data-testid="rail-settings"]').waitForExist({ timeout: 20000 });
 }
 
-/** Calls a core command the way the UI does, without the generated bindings. */
+/**
+ * Calls a core command the way the UI does, without the generated bindings: `{ ok }` or
+ * `{ failure }`. Not `{ error }`: webdriverio reads a returned object with an `error` key as a
+ * WebDriver error response and throws its own error with the message instead.
+ */
 export function invoke(command, args = {}) {
   return browser.execute(
     async (name, payload) => {
       try {
         return { ok: await window.__TAURI_INTERNALS__.invoke(name, payload) };
       } catch (e) {
-        return { error: typeof e === "string" ? e : JSON.stringify(e) };
+        return { failure: typeof e === "string" ? e : JSON.stringify(e) };
       }
     },
     command,
@@ -56,7 +60,7 @@ export function invoke(command, args = {}) {
 
 export async function coreCall(command, args) {
   const result = await invoke(command, args);
-  if ("error" in result) throw new Error(`${command} failed: ${result.error}`);
+  if ("failure" in result) throw new Error(`${command} failed: ${result.failure}`);
   return result.ok;
 }
 

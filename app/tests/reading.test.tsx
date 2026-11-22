@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { formatSize } from "../src/features/reading/format";
 import { MAIL_FRAME_SANDBOX } from "../src/features/reading/MessageBodyView";
 import { formatFullDate } from "../src/features/messages/rows";
 import type { BodyFormat, LinkInfo, MessageListItem, MessageView } from "../src/services/ipc";
@@ -831,3 +832,13 @@ function installManualResizeObserver() {
     },
   };
 }
+
+describe("formatSize", () => {
+  it("writes plain bytes out (English has a plural there) and larger sizes short", () => {
+    expect(formatSize(1, "en")).toBe("1 byte");
+    expect(formatSize(143, "en")).toBe("143 bytes");
+    expect(formatSize(143, "de")).toBe("143 Byte");
+    expect(formatSize(1536, "en")).toBe("1.5 kB");
+    expect(formatSize(5 * 1024 * 1024, "de")).toBe("5 MB");
+  });
+});

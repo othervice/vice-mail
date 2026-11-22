@@ -6,16 +6,23 @@
 //! - A data directory of the test's own: [`DATA_DIR_ENV`] is required, so a test build never
 //!   reads or writes the user's real data or logs, not even by accident.
 //! - Test commands (`e2e_*`) for facts WebDriver cannot see, such as the native window buttons
-//!   that macOS draws over the web view.
+//!   that macOS draws over the web view, and for real (trusted) mouse clicks.
 //! - A recorder for Content-Security-Policy violations from the first byte of the page on.
+//! - A recorder of every command that reaches the invoke handler (a script in a mail frame
+//!   that got hold of the IPC would show up there).
+//! - A recording opener in place of the system's: "Open in browser" and opening an attachment
+//!   start no other program; the test reads what would have been opened.
 //! - An optional extra root CA ([`EXTRA_CA_ENV`]), so the desktop test can set up the account
 //!   of the local test server, whose certificate the system does not trust.
 
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
 use mail_engine::CoreServices;
+use mail_engine::RecordingOpener;
 use mail_model::{CoreError, ExtraRootCa};
 use serde::Serialize;
 use tauri::ipc::Invoke;
@@ -35,6 +42,13 @@ pub const LOOPBACK_IMAGES_ENV: &str = "MAIL_APP_E2E_LOOPBACK_IMAGES";
 
 /// Commands with this prefix go to the test handler; the app's own handler never sees them.
 const COMMAND_PREFIX: &str = "e2e_";
+
+/// Stands in for the system opener of the core: records URLs and file paths, opens nothing.
+static OPENER: LazyLock<Arc<RecordingOpener>> =
+    LazyLock::new(|| Arc::new(RecordingOpener::default()));
+
+/// How often each command name reached the invoke handler since the app started.
+static INVOKED: Mutex<BTreeMap<String, u64>> = Mutex::new(BTreeMap::new());
 
 /// Runs at document start, before the app's own scripts, in the main frame only (like Tauri's
 /// own scripts, decision 0005). The tests read `window.__e2eCspViolations`; WebDriver attaches
@@ -59,7 +73,12 @@ pub fn install(
     app_commands: impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static,
 ) -> Builder<Wry> {
     let test_commands: Box<dyn Fn(Invoke<Wry>) -> bool + Send + Sync> =
-        Box::new(tauri::generate_handler![e2e_window_controls]);
+        Box::new(tauri::generate_handler![
+            e2e_window_controls,
+            e2e_native_mouse,
+            e2e_opened,
+            e2e_invoked
+        ]);
     builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
         .plugin(tauri_plugin_wdio_webdriver::init())
@@ -69,6 +88,7 @@ pub fn install(
                 .build(),
         )
         .invoke_handler(move |invoke| {
+            record_invoke(invoke.message.command());
             if invoke.message.command().starts_with(COMMAND_PREFIX) {
                 test_commands(invoke)
             } else {
@@ -77,9 +97,19 @@ pub fn install(
         })
 }
 
-/// Adds the root CA named by [`EXTRA_CA_ENV`], if set, to the sync settings, and the loopback
-/// switch for external images ([`LOOPBACK_IMAGES_ENV`]).
+fn record_invoke(command: &str) {
+    *INVOKED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .entry(command.to_owned())
+        .or_default() += 1;
+}
+
+/// Adds the root CA named by [`EXTRA_CA_ENV`], if set, to the sync settings, the loopback
+/// switch for external images ([`LOOPBACK_IMAGES_ENV`]), and the recording opener: a test
+/// build never hands a link or a file to the system.
 pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreError> {
+    services.reading.opener = OPENER.clone();
     services.sync.extra_root_ca = test_ca(std::env::var_os(EXTRA_CA_ENV))?;
     services.reading.remote.allow_loopback = loopback_images(std::env::var_os(LOOPBACK_IMAGES_ENV));
     if services.reading.remote.allow_loopback {
@@ -179,16 +209,81 @@ pub async fn e2e_window_controls(window: WebviewWindow) -> Result<WindowControls
     }
 }
 
+/// A real left click at `x`/`y` (CSS pixels in the main frame's viewport, as
+/// `getBoundingClientRect()` gives them; `viewport_height` is `innerHeight`, for the offset of a
+/// title bar above the viewport). WebDriver's own clicks are synthetic (`el.click()`): untrusted
+/// and without user activation, and they cannot reach into a mail frame. These are `NSEvent`s
+/// handed to the WKWebView like the mouse's own (decision 0005).
+#[tauri::command]
+pub async fn e2e_native_mouse(
+    window: WebviewWindow,
+    x: f64,
+    y: f64,
+    viewport_height: Option<f64>,
+) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::click(&window, x, y, viewport_height).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, x, y, viewport_height);
+        Err("native mouse events are only implemented for macOS".into())
+    }
+}
+
+/// Everything the core handed to the (recording) system opener so far: URLs as given, files as
+/// their path.
+#[tauri::command]
+pub fn e2e_opened() -> Vec<String> {
+    OPENER.opened()
+}
+
+/// Every command name that reached the invoke handler since the app started, with its count.
+#[tauri::command]
+pub fn e2e_invoked() -> BTreeMap<String, u64> {
+    INVOKED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
-    use objc2::MainThreadMarker;
+    use std::sync::atomic::{AtomicIsize, Ordering};
+
     use objc2::rc::Retained;
-    use objc2_app_kit::{NSApplication, NSWindowButton};
+    use objc2::runtime::{AnyClass, NSObjectProtocol};
+    use objc2::{MainThreadMarker, Message};
+    use objc2_app_kit::{
+        NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSView, NSWindow, NSWindowButton,
+    };
+    use objc2_foundation::{NSPoint, NSProcessInfo};
     use tauri::WebviewWindow;
 
     use super::{ControlRect, WindowControls};
 
+    /// Event numbers of the synthesized mouse events; any increasing value will do.
+    static EVENT_NUMBER: AtomicIsize = AtomicIsize::new(1000);
+
     pub async fn window_controls(window: &WebviewWindow) -> Result<WindowControls, String> {
+        on_main_window(window, measure).await
+    }
+
+    pub async fn click(
+        window: &WebviewWindow,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        on_main_window(window, move |w| send_click(w, x, y, viewport_height)).await
+    }
+
+    /// Runs `f` on the main thread with the `NSWindow` of `window`.
+    async fn on_main_window<T: Send + 'static>(
+        window: &WebviewWindow,
+        f: impl FnOnce(&NSWindow) -> Result<T, String> + Send + 'static,
+    ) -> Result<T, String> {
         // Only compared with the app's windows, never dereferenced, so it may cross threads
         // as a plain address.
         let target = window.ns_window().map_err(|err| err.to_string())? as usize;
@@ -196,21 +291,86 @@ mod macos {
         window
             .run_on_main_thread(move || {
                 // The receiver only goes away when the command itself was dropped.
-                let _ = tx.send(measure(target));
+                let _ = tx.send(find_window(target).and_then(|w| f(&w)));
             })
             .map_err(|err| err.to_string())?;
         rx.await
-            .map_err(|_| "the main thread dropped the measurement".to_owned())?
+            .map_err(|_| "the main thread dropped the request".to_owned())?
     }
 
-    fn measure(target: usize) -> Result<WindowControls, String> {
+    fn find_window(target: usize) -> Result<Retained<NSWindow>, String> {
         let mtm = MainThreadMarker::new().ok_or("not on the main thread")?;
-        let window = NSApplication::sharedApplication(mtm)
+        NSApplication::sharedApplication(mtm)
             .windows()
             .to_vec()
             .into_iter()
             .find(|w| Retained::as_ptr(w) as usize == target)
-            .ok_or("the main window is not among the app's windows")?;
+            .ok_or_else(|| "the main window is not among the app's windows".to_owned())
+    }
+
+    /// The first view under `view` (itself included) that is a `class`.
+    fn find_view(view: &NSView, class: &AnyClass) -> Option<Retained<NSView>> {
+        if view.isKindOfClass(class) {
+            return Some(view.retain());
+        }
+        view.subviews()
+            .to_vec()
+            .iter()
+            .find_map(|sub| find_view(sub, class))
+    }
+
+    /// Left button down and up at one point of the web view, delivered to the WKWebView
+    /// directly (`NSWindow.sendEvent` did not reach WebKit in Spike D).
+    fn send_click(
+        window: &NSWindow,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        let class = AnyClass::get(c"WKWebView").ok_or("WebKit is not loaded")?;
+        let content = window
+            .contentView()
+            .ok_or("the window has no content view")?;
+        let view = find_view(&content, class).ok_or("the window has no WKWebView")?;
+        let bounds = view.bounds();
+        // With an overlay title bar the viewport fills the web view; otherwise it starts below.
+        let top_inset = viewport_height.map_or(0.0, |h| (bounds.size.height - h).max(0.0));
+        let y = y + top_inset;
+        let local_y = if view.isFlipped() {
+            y
+        } else {
+            bounds.size.height - y
+        };
+        let location = view.convertPoint_toView(NSPoint::new(x, local_y), None);
+        let make = |kind: NSEventType| {
+            NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                kind,
+                location,
+                NSEventModifierFlags::empty(),
+                NSProcessInfo::processInfo().systemUptime(),
+                window.windowNumber(),
+                None,
+                EVENT_NUMBER.fetch_add(1, Ordering::Relaxed),
+                1,
+                1.0,
+            )
+            .ok_or_else(|| format!("could not create a {kind:?} event"))
+        };
+        let down = make(NSEventType::LeftMouseDown)?;
+        let up = make(NSEventType::LeftMouseUp)?;
+        view.mouseDown(&down);
+        view.mouseUp(&up);
+        Ok(format!(
+            "clicked at ({:.1}, {:.1}) in a {:.0}x{:.0} web view, key window: {}",
+            location.x,
+            location.y,
+            bounds.size.width,
+            bounds.size.height,
+            window.isKeyWindow()
+        ))
+    }
+
+    fn measure(window: &NSWindow) -> Result<WindowControls, String> {
         let content = window
             .contentView()
             .ok_or("the window has no content view")?;
@@ -265,6 +425,30 @@ mod tests {
 
         let dir = std::env::temp_dir().join("mail-app-e2e");
         assert_eq!(test_root(Some(dir.clone().into())).expect("absolute"), dir);
+    }
+
+    #[test]
+    fn every_command_that_reaches_the_handler_is_counted() {
+        record_invoke("e2e_test_probe");
+        record_invoke("e2e_test_probe");
+        record_invoke("sandbox_breach_probe");
+        let seen = e2e_invoked();
+        assert_eq!(seen.get("e2e_test_probe"), Some(&2));
+        assert_eq!(seen.get("sandbox_breach_probe"), Some(&1));
+    }
+
+    #[test]
+    fn the_test_build_never_hands_anything_to_the_system() {
+        let services = CoreServices::new(mail_engine::credentials::Credentials::new(
+            mail_engine::credentials::MemorySecretStore::new(),
+        ));
+        let services = with_test_ca(services).expect("services");
+        services
+            .reading
+            .opener
+            .open_url("https://example.com/e2e")
+            .expect("recorded");
+        assert!(e2e_opened().contains(&"https://example.com/e2e".to_owned()));
     }
 
     #[test]

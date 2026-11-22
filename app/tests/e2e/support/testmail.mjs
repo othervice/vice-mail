@@ -15,6 +15,8 @@ const PID_FILE = path.join(REPO, "testmail", ".data", "stalwart.pid");
 /** Test CA of the server certificate; the e2e build trusts it through this variable (src-tauri/src/e2e.rs). */
 export const EXTRA_CA_ENV = "MAIL_APP_E2E_EXTRA_CA";
 export const CA_FILE = path.join(REPO, "testmail", ".data", "tls", "ca.pem");
+/** `1` lets the e2e build load approved external images from loopback (the counter server). */
+export const LOOPBACK_IMAGES_ENV = "MAIL_APP_E2E_LOOPBACK_IMAGES";
 
 /** The test account, from testmail/accounts.env (test values of the local server, not secrets). */
 export const ALICE = { email: "alice@vicemail.test", password: "alice-test-pw" };
@@ -67,6 +69,15 @@ export const serverFolders = () => helper("status");
 
 /** Delivers one message from bob to alice over SMTP submission (STARTTLS, port 1587). */
 export const deliverMail = (subject) => helper("send", subject);
+
+/** Creates `folder` in alice's account and appends the .eml files unchanged (IMAP APPEND). */
+export const appendMessages = (folder, files) => helper("append", folder, ...files);
+
+/** SHA-256 and size of every attachment of an .eml file, decoded by Python's email package. */
+export const attachmentDigests = (file) => helper("attachments", file);
+
+/** Copies every seed message whose X-Vicemail-Seed starts with `prefix` into a new `folder`. */
+export const copySeedMessages = (prefix, folder) => helper("copy-seed", prefix, folder);
 
 /** True if the login keychain holds an item of the e2e build's service. */
 export function keychainHasEntry() {
