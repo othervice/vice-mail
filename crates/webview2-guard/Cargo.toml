@@ -1,0 +1,30 @@
+[package]
+name = "webview2-guard"
+description = "Windows only: cancels navigations inside the mail frame through WebView2's FrameNavigationStarting. The one crate with `unsafe` (decision 0011)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# COM bindings and event handlers for WebView2, the exact version wry uses (no new crate in the
+# build). Only the safe helpers (`NavigationStartingEventHandler::create`, `take_pwstr`) and four
+# `unsafe fn` COM methods are used.
+webview2-com = "=0.39.1"
+tracing.workspace = true
+
+# Not `[lints] workspace = true`: a workspace lint table cannot be overridden per crate, and this
+# crate needs `unsafe_code = "deny"` (every other crate keeps `forbid`). The rest is the
+# workspace's table, plus `undocumented_unsafe_blocks`. Keep both tables in step.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_used = "warn"
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
