@@ -363,13 +363,18 @@ async fn no_network_for_literals_single_labels_and_invalid_addresses() {
     assert!(discovery.fetcher.asked().is_empty());
 }
 
-/// Real network, by hand only: `cargo test -p mail-engine discovery::tests::real_network --
-/// --ignored --nocapture`. Uses the system's DNS and contacts the providers' own autoconfig
-/// hosts. Prints, for every provider of the built-in table, what the provider publishes
-/// itself next to the table's values (to maintain the table).
+/// Real network, by hand only: `VICEMAIL_REAL_NETWORK=1 cargo test -p mail-engine
+/// discovery::tests::real_network -- --ignored --nocapture` (a no-op without the variable, so
+/// `--include-ignored` for the test server never goes out). Uses the system's DNS and contacts
+/// the providers' own autoconfig hosts. Prints, for every provider of the built-in table, what
+/// the provider publishes itself next to the table's values (to maintain the table).
 #[tokio::test]
 #[ignore = "contacts real DNS and web servers"]
 async fn real_network_smoke() {
+    if std::env::var("VICEMAIL_REAL_NETWORK").as_deref() != Ok("1") {
+        println!("skipped: set VICEMAIL_REAL_NETWORK=1 to contact real DNS and web servers");
+        return;
+    }
     let short = |s: &Option<ServerSettings>| {
         s.as_ref().map_or("-".to_owned(), |s| {
             format!("{}:{} {:?} {}", s.host, s.port, s.security, s.username)

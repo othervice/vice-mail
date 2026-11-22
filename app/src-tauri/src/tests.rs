@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use mail_engine::{AppCore, BuildInfo, CoreConfig, DATABASE_FILE};
+use mail_engine::credentials::{Credentials, MemorySecretStore};
+use mail_engine::{AppCore, BuildInfo, CoreConfig, CoreServices, DATABASE_FILE};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{
@@ -59,6 +60,11 @@ struct Harness {
     window: WebviewWindow<MockRuntime>,
 }
 
+/// Product services with an in-memory keychain: no test touches the real keychain.
+fn services() -> CoreServices {
+    CoreServices::new(Credentials::new(MemorySecretStore::new()))
+}
+
 fn build_info() -> BuildInfo {
     BuildInfo {
         version: "9.8.7".into(),
@@ -80,10 +86,13 @@ fn harness(prepare: impl FnOnce(&std::path::Path)) -> Harness {
         .invoke_handler(specta.invoke_handler())
         .build(mock_context(noop_assets()))
         .expect("mock app");
-    let core = tauri::async_runtime::block_on(AppCore::start(CoreConfig {
-        data_dir,
-        build: build_info(),
-    }));
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir,
+            build: build_info(),
+        },
+        services(),
+    ));
     attach_core(app.handle(), &specta, core);
     let window = WebviewWindowBuilder::new(&app, MAIN_WINDOW, Default::default())
         .build()
@@ -143,17 +152,20 @@ fn command_error_is_typed() {
     assert!(err["message"].as_str().is_some_and(|m| !m.is_empty()));
     assert_eq!(
         err["detail"],
-        "database schema version 999, this app supports up to 1"
+        "database schema version 999, this app supports up to 2"
     );
 }
 
 /// Leaves a database in `data_dir` as a newer app version would: a current database whose
 /// header claims schema version 999 (bytes 60..64 of an SQLite file hold `user_version`).
 fn write_newer_database(data_dir: &std::path::Path) {
-    let core = tauri::async_runtime::block_on(AppCore::start(CoreConfig {
-        data_dir: data_dir.to_owned(),
-        build: build_info(),
-    }));
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: data_dir.to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
     assert!(core.startup_error().is_none());
     drop(core); // closes the store, which checkpoints and removes the WAL
     let path = data_dir.join(DATABASE_FILE);
@@ -247,10 +259,13 @@ fn shipped_config_window_and_capabilities() {
         "the window must not exist before the core is managed"
     );
 
-    let core = tauri::async_runtime::block_on(AppCore::start(CoreConfig {
-        data_dir: dir.path().to_owned(),
-        build: build_info(),
-    }));
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
     attach_core(app.handle(), &specta, core);
     open_main_window(app.handle()).expect("open main window");
     let window = app.get_webview_window(MAIN_WINDOW).expect("main window");
@@ -275,4 +290,85 @@ fn shipped_config_window_and_capabilities() {
         .and_then(Value::as_str)
         .is_some_and(|m| m.contains("not allowed"));
     assert!(denied, "the ACL must refuse emit from the UI: {emit:?}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 2 commands (behaviour is tested in mail-engine; here: wiring, arguments, error codes)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn account_and_mail_commands_are_wired_with_typed_errors() {
+    let h = harness(|_| {});
+    let unknown = "6f9619ff-8b86-4d11-b42d-00c04fc964ff";
+
+    assert_eq!(
+        invoke(&h, "list_accounts", json!({})).expect("list"),
+        json!([])
+    );
+    let known = invoke(
+        &h,
+        "discover_known_provider",
+        json!({ "email": "someone@gmail.com" }),
+    )
+    .expect("known provider");
+    assert_eq!(known["source"], "knownProvider");
+    assert_eq!(known["providerHint"], "gmail");
+    assert_eq!(known["imap"]["security"], "tls");
+
+    for (cmd, args) in [
+        ("list_mailboxes", json!({ "accountId": unknown })),
+        ("retry_account", json!({ "accountId": unknown })),
+        ("remove_account", json!({ "accountId": unknown })),
+        (
+            "list_messages",
+            json!({ "mailboxId": 1, "cursor": null, "limit": 50 }),
+        ),
+        (
+            "set_mailbox_role",
+            json!({ "mailboxId": 1, "role": "archive" }),
+        ),
+    ] {
+        let err = invoke(&h, cmd, args).expect_err(cmd);
+        assert_eq!(err["code"], "not_found", "{cmd}: {err}");
+    }
+    let err = invoke(
+        &h,
+        "list_messages",
+        json!({ "mailboxId": 1, "cursor": null, "limit": 0 }),
+    )
+    .expect_err("limit 0");
+    assert_eq!(err["code"], "invalid_argument");
+
+    // Nothing listens on the port: the login check fails with its own code, nothing is
+    // stored, and the password never comes back.
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = closed.local_addr().expect("addr").port();
+    drop(closed);
+    let server = json!({ "host": "127.0.0.1", "port": port, "security": "tls", "username": "a" });
+    let settings =
+        json!({ "email": "a@example.org", "displayName": "", "imap": server, "smtp": server });
+    for cmd in ["test_connection", "add_account"] {
+        let err = invoke(
+            &h,
+            cmd,
+            json!({ "settings": settings, "password": "pw-never-echoed" }),
+        )
+        .expect_err(cmd);
+        assert_eq!(err["code"], "connection_refused", "{cmd}: {err}");
+        assert!(!err.to_string().contains("pw-never-echoed"));
+    }
+    assert_eq!(
+        invoke(&h, "list_accounts", json!({})).expect("list"),
+        json!([])
+    );
+
+    let mut bad = settings.clone();
+    bad["email"] = json!("not-an-address");
+    let err = invoke(
+        &h,
+        "add_account",
+        json!({ "settings": bad, "password": "x" }),
+    )
+    .expect_err("invalid");
+    assert_eq!(err["code"], "invalid_argument");
 }

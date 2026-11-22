@@ -38,14 +38,23 @@ impl WireTap {
         self.lock().is_empty()
     }
 
-    /// The written lines (split at CRLF), with the arguments of LOGIN replaced by `[redacted]`
-    /// so they can be printed in test output.
+    /// The written lines (split at CRLF), with the credentials of LOGIN and AUTHENTICATE
+    /// (initial response or the line answering the server's challenge) replaced by
+    /// `[redacted]`, so they can be printed in test output.
     pub fn lines(&self) -> Vec<String> {
         let bytes = self.bytes();
+        let mut challenge_answer = false;
         String::from_utf8_lossy(&bytes)
             .split("\r\n")
             .filter(|line| !line.is_empty())
-            .map(redact_login)
+            .map(|line| {
+                if std::mem::take(&mut challenge_answer) {
+                    return "[redacted]".to_owned();
+                }
+                let (redacted, awaits_answer) = redact_credentials(line);
+                challenge_answer = awaits_answer;
+                redacted
+            })
             .collect()
     }
 
@@ -56,13 +65,20 @@ impl WireTap {
     }
 }
 
-fn redact_login(line: &str) -> String {
-    let mut words = line.splitn(3, ' ');
-    match (words.next(), words.next()) {
-        (Some(tag), Some(verb)) if verb.eq_ignore_ascii_case("LOGIN") => {
-            format!("{tag} LOGIN [redacted]")
+/// The line with credentials removed, and whether the next line answers a SASL challenge.
+fn redact_credentials(line: &str) -> (String, bool) {
+    let words: Vec<&str> = line.split(' ').collect();
+    match words.as_slice() {
+        [tag, verb, ..] if verb.eq_ignore_ascii_case("LOGIN") => {
+            (format!("{tag} LOGIN [redacted]"), false)
         }
-        _ => line.to_owned(),
+        [tag, verb, mechanism] if verb.eq_ignore_ascii_case("AUTHENTICATE") => {
+            (format!("{tag} AUTHENTICATE {mechanism}"), true)
+        }
+        [tag, verb, mechanism, ..] if verb.eq_ignore_ascii_case("AUTHENTICATE") => {
+            (format!("{tag} AUTHENTICATE {mechanism} [redacted]"), false)
+        }
+        _ => (line.to_owned(), false),
     }
 }
 
@@ -93,10 +109,33 @@ mod tests {
         let tap = WireTap::new();
         tap.record(b"A0001 LOGIN \"alice@x\" \"secret\"\r\nA0002 UID FETCH 1:2 (FLAGS)\r\n");
         tap.record(b"A0003 IDLE\r\nDONE\r\n");
+        tap.record(b"A0004 AUTHENTICATE PLAIN\r\nAGFsaWNlAHNlY3JldA==\r\n");
+        tap.record(b"A0005 AUTHENTICATE PLAIN AGFsaWNlAHNlY3JldA==\r\nA0006 NOOP\r\n");
         let lines = tap.lines();
         assert_eq!(lines[0], "A0001 LOGIN [redacted]");
         assert!(lines.iter().all(|l| !l.contains("secret")));
-        assert_eq!(tap.verbs(), ["LOGIN", "UID FETCH", "IDLE", "DONE"]);
+        assert_eq!(
+            lines[4..7],
+            [
+                "A0004 AUTHENTICATE PLAIN",
+                "[redacted]",
+                "A0005 AUTHENTICATE PLAIN [redacted]"
+            ]
+        );
+        assert!(lines.iter().all(|l| !l.contains("AGFsaWNl")), "{lines:?}");
+        assert_eq!(
+            tap.verbs(),
+            [
+                "LOGIN",
+                "UID FETCH",
+                "IDLE",
+                "DONE",
+                "AUTHENTICATE",
+                "[REDACTED]",
+                "AUTHENTICATE",
+                "NOOP"
+            ]
+        );
         assert_eq!(tap.len(), tap.bytes().len());
     }
 }

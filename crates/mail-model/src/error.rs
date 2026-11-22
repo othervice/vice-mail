@@ -2,10 +2,9 @@ use serde::{Deserialize, Serialize};
 
 /// Stable, machine-readable error kinds. The UI picks its (translated) text by this code.
 ///
-/// The variants marked `#[specta(skip)]` are part of the stage 2 contract but not yet in the
-/// TypeScript bindings: the frontend requires a text for every exported code
-/// (`ERROR_CODES` in `app/src/services/ipc.ts`). Whoever adds their i18n texts removes the
-/// `skip` and regenerates the bindings. No registered command produces them before that.
+/// Every code is exported to TypeScript, and the frontend requires an English and a German
+/// text for each one (`ERROR_CODES` in `app/src/services/ipc.ts` fails to compile otherwise):
+/// a new code needs its texts in `app/src/i18n/` in the same change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
@@ -15,52 +14,36 @@ pub enum ErrorCode {
     Database,
     DatabaseTooNew,
     /// Server rejected user name or password.
-    #[specta(skip)]
     AuthFailed,
     /// Certificate chain not trusted by the system (self-signed, unknown CA).
-    #[specta(skip)]
     CertUntrusted,
     /// Certificate is valid, but for another host name.
-    #[specta(skip)]
     CertNameMismatch,
     /// Certificate expired or not yet valid (check the computer's clock).
-    #[specta(skip)]
     CertExpired,
     /// TLS handshake failed for another reason (protocol version, cipher, broken connection).
-    #[specta(skip)]
     TlsFailed,
     /// The server does not offer STARTTLS on this port; it is never used unencrypted.
-    #[specta(skip)]
     StarttlsUnavailable,
     /// Nothing listens on host and port.
-    #[specta(skip)]
     ConnectionRefused,
     /// Connecting took too long, or the server stopped answering.
-    #[specta(skip)]
     ConnectionTimeout,
     /// The connection broke (network change, server restart).
-    #[specta(skip)]
     ConnectionLost,
     /// Host name could not be resolved (typo, or offline).
-    #[specta(skip)]
     DnsFailed,
     /// The server sent something the app does not understand.
-    #[specta(skip)]
     Protocol,
     /// The server refused a command (IMAP NO/BAD).
-    #[specta(skip)]
     ServerRejected,
     /// Writing is turned off for this account.
-    #[specta(skip)]
     ReadOnly,
     /// The server lacks something the app requires (IMAP4rev1).
-    #[specta(skip)]
     UnsupportedServer,
     /// The system keychain refused to store, read or delete the password.
-    #[specta(skip)]
     Keychain,
     /// An account with this email address is already set up.
-    #[specta(skip)]
     AccountExists,
 }
 

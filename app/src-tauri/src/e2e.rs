@@ -8,17 +8,25 @@
 //! - Test commands (`e2e_*`) for facts WebDriver cannot see, such as the native window buttons
 //!   that macOS draws over the web view.
 //! - A recorder for Content-Security-Policy violations from the first byte of the page on.
+//! - An optional extra root CA ([`EXTRA_CA_ENV`]), so the desktop test can set up the account
+//!   of the local test server, whose certificate the system does not trust.
 
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 
+use mail_engine::CoreServices;
+use mail_model::{CoreError, ExtraRootCa};
 use serde::Serialize;
 use tauri::ipc::Invoke;
 use tauri::{AppHandle, Builder, Runtime, WebviewWindow, Wry};
 
 /// Absolute directory for the database and logs of one test run. Required in e2e builds.
 pub const DATA_DIR_ENV: &str = "MAIL_APP_E2E_DATA_DIR";
+
+/// Path of a PEM file with an additional trusted root CA (`testmail/.data/tls/ca.pem`). Optional;
+/// certificates are still checked, against the system store plus this root.
+pub const EXTRA_CA_ENV: &str = "MAIL_APP_E2E_EXTRA_CA";
 
 /// Commands with this prefix go to the test handler; the app's own handler never sees them.
 const COMMAND_PREFIX: &str = "e2e_";
@@ -62,6 +70,24 @@ pub fn install(
                 app_commands(invoke)
             }
         })
+}
+
+/// Adds the root CA named by [`EXTRA_CA_ENV`], if set, to the sync settings.
+pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreError> {
+    services.sync.extra_root_ca = test_ca(std::env::var_os(EXTRA_CA_ENV))?;
+    Ok(services)
+}
+
+/// Reads the PEM file named by the value of [`EXTRA_CA_ENV`]; unset or empty is `None`.
+fn test_ca(value: Option<OsString>) -> Result<Option<ExtraRootCa>, CoreError> {
+    let Some(path) = value.filter(|v| !v.is_empty()).map(PathBuf::from) else {
+        return Ok(None);
+    };
+    let pem = std::fs::read(&path).map_err(|err| {
+        CoreError::InvalidArgument(format!("{EXTRA_CA_ENV}={}: {err}", path.display()))
+    })?;
+    tracing::info!(path = %path.display(), "desktop-test build: trusting an extra root CA");
+    Ok(Some(ExtraRootCa::from_pem(pem)))
 }
 
 /// The test run's data directory, in place of the app's data directory.
@@ -219,5 +245,19 @@ mod tests {
 
         let dir = std::env::temp_dir().join("mail-app-e2e");
         assert_eq!(test_root(Some(dir.clone().into())).expect("absolute"), dir);
+    }
+
+    #[test]
+    fn test_ca_is_optional_and_read_from_the_named_file() {
+        assert_eq!(test_ca(None).expect("unset"), None);
+        assert_eq!(test_ca(Some(OsString::new())).expect("empty"), None);
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let file = dir.path().join("ca.pem");
+        std::fs::write(&file, b"-----BEGIN CERTIFICATE-----").expect("write");
+        let ca = test_ca(Some(file.into())).expect("read").expect("set");
+        assert_eq!(ca.pem(), b"-----BEGIN CERTIFICATE-----");
+        let err = test_ca(Some(dir.path().join("missing.pem").into())).expect_err("missing");
+        assert_eq!(err.code(), mail_model::ErrorCode::InvalidArgument);
+        assert!(err.to_string().contains(EXTRA_CA_ENV));
     }
 }

@@ -113,7 +113,9 @@ async fn connect(access: Access, read_limit: Duration, script: Vec<Step>) -> Fak
     let timeouts = TimeoutHandle::new(read_limit, Duration::from_secs(2));
     let mut client = Client::new(IoTimeout::new(client, timeouts.clone()));
     let backend = match read_greeting(&mut client).await {
-        Ok(_) => ImapBackend::establish(client, timeouts, &config(access)).await,
+        Ok(caps) => {
+            ImapBackend::establish(client, timeouts, &config(access), caps.as_deref()).await
+        }
         Err(err) => Err(err),
     };
     (backend, handle)
@@ -678,4 +680,107 @@ async fn changedsince_without_modseq_is_unsupported() {
     ));
     let lines = finish(backend, handle).await;
     assert_eq!(lines.len(), 2, "{lines:?}");
+}
+
+fn umlaut_config() -> ConnectConfig {
+    let mut config = config(Access::ReadOnly);
+    config.password = Secret::new("pässwört".into());
+    config
+}
+
+async fn connect_with(config: ConnectConfig, script: Vec<Step>) -> Fake {
+    let (client, server) = tokio::io::duplex(1 << 16);
+    let handle = tokio::spawn(fake_server(server, script));
+    let timeouts = TimeoutHandle::new(Duration::from_secs(2), Duration::from_secs(2));
+    let mut client = Client::new(IoTimeout::new(client, timeouts.clone()));
+    let backend = match read_greeting(&mut client).await {
+        Ok(caps) => ImapBackend::establish(client, timeouts, &config, caps.as_deref()).await,
+        Err(err) => Err(err),
+    };
+    (backend, handle)
+}
+
+/// `\0alice\0pässwört`, base64.
+const PLAIN_UMLAUT: &str = "AGFsaWNlAHDDpHNzd8O2cnQ=";
+
+#[tokio::test]
+async fn non_ascii_password_uses_authenticate_plain() {
+    // AUTH=PLAIN without SASL-IR: the credentials follow the server's continuation.
+    let (backend, handle) = connect_with(
+        umlaut_config(),
+        vec![
+            GREETING,
+            Expect("AUTHENTICATE PLAIN"),
+            Send("+ \r\n"),
+            Expect(PLAIN_UMLAUT),
+            Send("{tag} OK authenticated\r\n"),
+            Expect("CAPABILITY"),
+            Send("* CAPABILITY IMAP4rev1 IDLE\r\n{tag} OK done\r\n"),
+        ],
+    )
+    .await;
+    let backend = backend.expect("authenticated");
+    assert!(backend.capabilities().idle);
+    let lines = finish(backend, handle).await;
+    assert_eq!(
+        lines[0].split_once(' ').map(|(_, l)| l),
+        Some("AUTHENTICATE PLAIN")
+    );
+    assert!(lines.iter().all(|l| !l.contains("pässwört")), "{lines:?}");
+
+    // With SASL-IR the initial response goes on the command line: one round trip.
+    let (backend, handle) = connect_with(
+        umlaut_config(),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=PLAIN] ready\r\n"),
+            Expect("AUTHENTICATE PLAIN AGFsaWNlAHDDpHNzd8O2cnQ="),
+            Send("{tag} OK [CAPABILITY IMAP4rev1] authenticated\r\n"),
+            Expect("CAPABILITY"),
+            Send("* CAPABILITY IMAP4rev1\r\n{tag} OK done\r\n"),
+        ],
+    )
+    .await;
+    let backend = backend.expect("authenticated with SASL-IR");
+    drop(finish(backend, handle).await);
+
+    // A wrong password is AuthFailed, as with LOGIN.
+    let (backend, handle) = connect_with(
+        umlaut_config(),
+        vec![
+            GREETING,
+            Expect("AUTHENTICATE PLAIN"),
+            Send("+ \r\n"),
+            Expect(PLAIN_UMLAUT),
+            Send("{tag} NO [AUTHENTICATIONFAILED] Authentication failed.\r\n"),
+        ],
+    )
+    .await;
+    let err = backend.expect_err("wrong password");
+    assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+    assert!(!format!("{err} {err:?}").contains("pässwört"));
+    handle.await.expect("fake server");
+
+    // A server known to lack AUTH=PLAIN gets LOGIN with a quoted UTF-8 string.
+    let (backend, handle) = connect_with(
+        umlaut_config(),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 AUTH=CRAM-MD5] ready\r\n"),
+            Expect("LOGIN \"alice\" \"pässwört\""),
+            Send("{tag} OK [CAPABILITY IMAP4rev1] logged in\r\n"),
+        ],
+    )
+    .await;
+    drop(finish(backend.expect("login"), handle).await);
+
+    // ASCII credentials keep using LOGIN even when AUTH=PLAIN is offered.
+    let (backend, handle) = connect_with(
+        config(Access::ReadOnly),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=PLAIN] ready\r\n"),
+            LOGIN,
+            Send("{tag} OK [CAPABILITY IMAP4rev1] logged in\r\n"),
+        ],
+    )
+    .await;
+    drop(finish(backend.expect("login"), handle).await);
 }

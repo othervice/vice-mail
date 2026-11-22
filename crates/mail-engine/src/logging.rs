@@ -22,7 +22,13 @@ pub const LOG_FILE_SUFFIX: &str = "log";
 pub const LOG_FILES_KEPT: usize = 14;
 
 /// Our crates; everything else only logs warnings and errors.
-const OWN_TARGETS: &[&str] = &["mail_app", "mail_engine", "mail_store", "mail_model"];
+const OWN_TARGETS: &[&str] = &[
+    "mail_app",
+    "mail_engine",
+    "mail_store",
+    "mail_imap",
+    "mail_model",
+];
 
 #[derive(Debug, Clone)]
 pub struct LogConfig {

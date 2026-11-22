@@ -83,14 +83,14 @@ impl MailConnector for ImapConnector {
             .await
             .map_err(|_| BackendError::ConnectTimeout)??;
 
-        let client = match config.security {
+        let (client, known_caps) = match config.security {
             Security::Tls => {
                 let tls = timeout_at(deadline, handshake(tls, server_name, tcp))
                     .await
                     .map_err(|_| BackendError::ConnectTimeout)??;
                 let mut client = Client::new(self.stream(tls, &timeouts));
-                read_greeting(&mut client).await?;
-                client
+                let caps = read_greeting(&mut client).await?;
+                (client, caps)
             }
             Security::Starttls => {
                 // Plaintext phase: greeting and STARTTLS, nothing else.
@@ -117,10 +117,11 @@ impl MailConnector for ImapConnector {
                 let tls = timeout_at(deadline, handshake(tls, server_name, tcp))
                     .await
                     .map_err(|_| BackendError::ConnectTimeout)??;
-                Client::new(self.stream(tls, &timeouts))
+                // The plaintext greeting's capabilities are void after STARTTLS.
+                (Client::new(self.stream(tls, &timeouts)), None)
             }
         };
-        ImapBackend::establish(client, timeouts, config).await
+        ImapBackend::establish(client, timeouts, config, known_caps.as_deref()).await
     }
 }
 

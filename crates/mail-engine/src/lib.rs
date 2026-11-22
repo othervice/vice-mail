@@ -1,13 +1,17 @@
 //! Core of the mail client. The shell talks to [`AppCore`] only; it receives the typed event
 //! stream through [`AppCore::subscribe`]. Everything here runs and is tested without a WebView.
 
+pub mod clock;
 mod core;
 pub mod credentials;
 pub mod discovery;
 pub mod logging;
+pub mod sync;
 pub mod sync_state;
 
-pub use crate::core::{AppCore, BuildInfo, CoreConfig, DATABASE_FILE};
+pub use crate::clock::{Clock, SystemClock};
+pub use crate::core::{AppCore, BuildInfo, CoreConfig, CoreServices, DATABASE_FILE};
+pub use crate::sync::SyncConfig;
 
 #[cfg(test)]
 mod tests;

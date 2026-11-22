@@ -22,6 +22,8 @@ const release =
   process.argv[2] ?? path.join(root, "target/release/bundle/macos/Vice Mail.app/Contents/MacOS/mail-app");
 const e2e = process.argv[3] ?? path.join(root, "target/debug/mail-app");
 const IDENTIFIER = "org.vicemail.desktop";
+// Extra root CA for the desktop test's mail account (app/src-tauri/src/e2e.rs); ignored by release builds.
+const EXTRA_CA_ENV = "MAIL_APP_E2E_EXTRA_CA";
 const PROBE_PORT = 4499;
 
 // Strings that only exist when the plugin or the e2e module are compiled in.
@@ -33,6 +35,7 @@ const MARKERS = [
   "e2e_window_controls",
   "__e2eCspViolations",
   DATA_DIR_ENV,
+  EXTRA_CA_ENV,
 ];
 
 let ok = true;
@@ -106,7 +109,7 @@ try {
 
   const child = spawn(release, [], {
     // HOME: Tauri's data and log directories. CFFIXED_USER_HOME: the same for Foundation/WebKit.
-    env: { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TAURI_WEBDRIVER_PORT: String(PROBE_PORT), [DATA_DIR_ENV]: ignoredDir },
+    env: { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TAURI_WEBDRIVER_PORT: String(PROBE_PORT), [DATA_DIR_ENV]: ignoredDir, [EXTRA_CA_ENV]: path.join(home, "missing-ca.pem") },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";

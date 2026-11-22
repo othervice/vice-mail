@@ -9,6 +9,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
 use super::{TestAccount, TestEnv};
+use crate::sasl::base64;
 
 /// Sends a plain-text message from `from` to `to` through the submission port (STARTTLS and
 /// AUTH required). Returns once the server accepted the message for delivery.
@@ -118,45 +119,6 @@ async fn expect<S: AsyncRead + Unpin>(s: &mut BufReader<S>, code: &str) -> Resul
         // `250-...` continues, `250 ...` ends the reply.
         if line.as_bytes().get(3) != Some(&b'-') {
             return Ok(());
-        }
-    }
-}
-
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk.first().copied().unwrap_or(0),
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for (i, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
-            if i <= chunk.len() {
-                out.push(char::from(ALPHABET[((n >> shift) & 63) as usize]));
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn base64_matches_rfc_4648() {
-        for (input, output) in [
-            ("", ""),
-            ("f", "Zg=="),
-            ("fo", "Zm8="),
-            ("foo", "Zm9v"),
-            ("foob", "Zm9vYg=="),
-            ("fooba", "Zm9vYmE="),
-            ("foobar", "Zm9vYmFy"),
-        ] {
-            assert_eq!(super::base64(input.as_bytes()), output);
         }
     }
 }

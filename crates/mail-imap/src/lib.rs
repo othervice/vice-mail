@@ -21,6 +21,7 @@ mod connector;
 mod convert;
 mod error;
 pub mod mutf7;
+mod sasl;
 mod timeout_io;
 mod tls;
 

@@ -8,8 +8,9 @@ mod events;
 
 use std::sync::Mutex;
 
+use mail_engine::credentials::{Credentials, SystemKeychain};
 use mail_engine::logging::{self, LogConfig, LogGuard};
-use mail_engine::{AppCore, BuildInfo, CoreConfig};
+use mail_engine::{AppCore, BuildInfo, CoreConfig, CoreServices};
 use specta_typescript::Typescript;
 use tauri::{AppHandle, Manager, RunEvent, Runtime};
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
@@ -26,6 +27,17 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::app::get_app_info,
             commands::preferences::get_preferences,
             commands::preferences::set_preferences,
+            commands::accounts::list_accounts,
+            commands::accounts::discover_known_provider,
+            commands::accounts::discover_online,
+            commands::accounts::test_connection,
+            commands::accounts::add_account,
+            commands::accounts::remove_account,
+            commands::accounts::retry_account,
+            commands::accounts::update_password,
+            commands::mail::list_mailboxes,
+            commands::mail::set_mailbox_role,
+            commands::mail::list_messages,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -64,14 +76,18 @@ pub fn run() {
             let data_dir = data_dir(app.handle())?;
             let package = app.package_info();
             tracing::info!(version = %package.version, platform = std::env::consts::OS, "starting");
-            let core = tauri::async_runtime::block_on(AppCore::start(CoreConfig {
-                data_dir,
-                build: BuildInfo {
-                    version: package.version.to_string(),
-                    commit: option_env!("MAIL_APP_COMMIT").map(str::to_owned),
-                    build_date: option_env!("MAIL_APP_BUILD_DATE").map(str::to_owned),
+            let services = services(app.handle())?;
+            let core = tauri::async_runtime::block_on(AppCore::start(
+                CoreConfig {
+                    data_dir,
+                    build: BuildInfo {
+                        version: package.version.to_string(),
+                        commit: option_env!("MAIL_APP_COMMIT").map(str::to_owned),
+                        build_date: option_env!("MAIL_APP_BUILD_DATE").map(str::to_owned),
+                    },
                 },
-            }));
+                services,
+            ));
             attach_core(app.handle(), &specta, core);
             open_main_window(app.handle())?;
             Ok(())
@@ -89,6 +105,10 @@ pub fn run() {
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
             tracing::info!("exiting");
+            // Ends the sync tasks; connections get a moment to log out.
+            if let Some(core) = handle.try_state::<AppCore>() {
+                tauri::async_runtime::block_on(core.shutdown());
+            }
             if let Some(state) = handle.try_state::<LogGuardState>() {
                 drop(
                     state
@@ -123,6 +143,17 @@ fn init_logging<R: Runtime>(app: &AppHandle<R>) {
         }
         Err(err) => eprintln!("file logging disabled: {err}"),
     }
+}
+
+/// What the core gets: the system keychain under the app's identifier (the bundle id), the IMAP
+/// adapter, the system clock and the product sync settings.
+fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, mail_model::CoreError> {
+    let keychain = SystemKeychain::new(&app.config().identifier)?;
+    let services = CoreServices::new(Credentials::new(keychain));
+    // Desktop-test build: may trust the local test server's CA (decision 0007).
+    #[cfg(feature = "e2e")]
+    let services = e2e::with_test_ca(services)?;
+    Ok(services)
 }
 
 /// The app's data directory (database and backups).

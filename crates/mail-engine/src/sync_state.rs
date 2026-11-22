@@ -12,6 +12,8 @@
 //!                             └── RetryNow (any error) / Wake (all but auth_failed) ──▶ Connecting
 //! ```
 //!
+//! `CredentialsChanged` (a new password was stored) reconnects from every running state.
+//!
 //! Consecutive failures count up until a sync pass completes; the backoff grows with them.
 //! `Wake` (resume from sleep, network change) reconnects at once and resets the count.
 
@@ -145,8 +147,10 @@ pub enum SyncEvent {
     RetryDue,
     /// Resume from sleep or a network change: existing connections are suspect.
     Wake,
-    /// The user asked to retry (button, or a new password was stored).
+    /// The user asked to retry (button).
     RetryNow,
+    /// The user stored a new password: reconnect with it, whatever the state.
+    CredentialsChanged,
     /// The account is being removed or the app quits.
     Stop,
 }
@@ -277,6 +281,10 @@ impl SyncMachine {
                 }
             }
 
+            (_, E::CredentialsChanged) => {
+                self.failures = 0;
+                self.connect(0)
+            }
             (S::Backoff { .. }, E::RetryDue) => self.connect(self.failures),
             (S::Backoff { .. } | S::Idle | S::Syncing { .. }, E::Wake) => {
                 self.failures = 0;
@@ -600,6 +608,42 @@ mod tests {
             j,
         );
         assert_eq!(cert.handle(SyncEvent::Wake, NOW, j), SyncAction::Connect);
+    }
+
+    #[test]
+    fn new_credentials_reconnect_from_every_running_state() {
+        let j = &mut fixed(0.0);
+        // Stopped by a rejected login: the new password is tried at once.
+        let mut failed = SyncMachine::new(policy());
+        failed.handle(SyncEvent::Start, NOW, j);
+        failed.handle(SyncEvent::Failed(auth()), NOW, j);
+        assert_eq!(
+            failed.handle(SyncEvent::CredentialsChanged, NOW, j),
+            SyncAction::Connect
+        );
+        assert_eq!(failed.state(), &SyncState::Connecting { attempt: 0 });
+        // Connected and idle: reconnect, so the stored password is the one in use.
+        let mut idle = running();
+        assert_eq!(
+            idle.handle(SyncEvent::CredentialsChanged, NOW, j),
+            SyncAction::Connect
+        );
+        // Backing off: the count starts over.
+        let mut backoff = running();
+        backoff.handle(SyncEvent::Failed(lost()), NOW, j);
+        backoff.handle(SyncEvent::RetryDue, NOW, j);
+        backoff.handle(SyncEvent::Failed(lost()), NOW, j);
+        assert_eq!(
+            backoff.handle(SyncEvent::CredentialsChanged, NOW, j),
+            SyncAction::Connect
+        );
+        assert_eq!(backoff.failures(), 0);
+        // Not running: nothing.
+        let mut stopped = SyncMachine::new(policy());
+        assert_eq!(
+            stopped.handle(SyncEvent::CredentialsChanged, NOW, j),
+            SyncAction::None
+        );
     }
 
     #[test]

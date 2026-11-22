@@ -10,7 +10,8 @@ use mail_store::{GLOBAL_SCOPE, Store, StoreOptions};
 use tempfile::TempDir;
 use tracing_subscriber::fmt::MakeWriter;
 
-use crate::{AppCore, BuildInfo, CoreConfig, DATABASE_FILE, logging};
+use crate::credentials::{Credentials, MemorySecretStore};
+use crate::{AppCore, BuildInfo, CoreConfig, CoreServices, DATABASE_FILE, logging};
 
 fn config(dir: &TempDir) -> CoreConfig {
     CoreConfig {
@@ -23,6 +24,11 @@ fn config(dir: &TempDir) -> CoreConfig {
     }
 }
 
+/// Product services with an in-memory keychain (tests never touch the real one).
+fn services() -> CoreServices {
+    CoreServices::new(Credentials::new(MemorySecretStore::new()))
+}
+
 const DARK_DE: Preferences = Preferences {
     theme: ThemePreference::Dark,
     language: LanguagePreference::De,
@@ -31,7 +37,7 @@ const DARK_DE: Preferences = Preferences {
 #[tokio::test]
 async fn set_preferences_stores_and_emits_an_event() {
     let dir = TempDir::new().expect("temp dir");
-    let core = AppCore::start(config(&dir)).await;
+    let core = AppCore::start(config(&dir), services()).await;
     assert!(core.startup_error().is_none());
     let mut events = core.subscribe();
 
@@ -56,14 +62,14 @@ async fn set_preferences_stores_and_emits_an_event() {
     drop(core);
 
     // Survives a restart.
-    let core = AppCore::start(config(&dir)).await;
+    let core = AppCore::start(config(&dir), services()).await;
     assert_eq!(core.get_preferences().await.expect("read"), DARK_DE);
 }
 
 #[tokio::test]
 async fn every_subscriber_receives_events() {
     let dir = TempDir::new().expect("temp dir");
-    let core = AppCore::start(config(&dir)).await;
+    let core = AppCore::start(config(&dir), services()).await;
     let mut first = core.subscribe();
     let mut second = core.subscribe();
     core.set_preferences(DARK_DE).await.expect("write");
@@ -78,7 +84,7 @@ async fn every_subscriber_receives_events() {
 #[tokio::test]
 async fn app_info_comes_from_the_build() {
     let dir = TempDir::new().expect("temp dir");
-    let info = AppCore::start(config(&dir)).await.app_info();
+    let info = AppCore::start(config(&dir), services()).await.app_info();
     assert_eq!(info.version, "1.2.3");
     assert_eq!(info.commit.as_deref(), Some("abc1234"));
     assert_eq!(info.build_date.as_deref(), Some("2026-11-22T18:00:00Z"));
@@ -93,7 +99,7 @@ async fn too_new_database_is_reported_by_every_storage_call() {
     let db = cfg.data_dir.join(DATABASE_FILE);
     write_newer_database(&db);
 
-    let core = AppCore::start(cfg).await;
+    let core = AppCore::start(cfg, services()).await;
     assert!(
         matches!(core.startup_error(), Some(CoreError::DatabaseTooNew { .. })),
         "{:?}",
@@ -138,7 +144,7 @@ async fn unknown_stored_value_falls_back_to_the_default() {
             .await
             .expect("write");
     }
-    let core = AppCore::start(cfg).await;
+    let core = AppCore::start(cfg, services()).await;
     let prefs = core.get_preferences().await.expect("read");
     assert_eq!(prefs.theme, ThemePreference::System);
     assert_eq!(prefs.language, LanguagePreference::De);

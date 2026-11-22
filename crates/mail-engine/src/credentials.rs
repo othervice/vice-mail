@@ -604,13 +604,18 @@ mod tests {
         assert!(!log.contains(PLAIN), "secret leaked into the log: {log}");
     }
 
-    /// Real keychain round trip (macOS keychain or Windows Credential Manager). Ignored: the
-    /// system may show a dialog. Run by hand:
-    /// `cargo test -p mail-engine credentials::tests::real_keychain -- --ignored`.
+    /// Real keychain round trip (macOS keychain or Windows Credential Manager). Ignored, and a
+    /// no-op without `VICEMAIL_REAL_KEYCHAIN=1` (so `--include-ignored` for the test server never
+    /// touches it): the system may show a dialog. Run by hand:
+    /// `VICEMAIL_REAL_KEYCHAIN=1 cargo test -p mail-engine credentials::tests::real_keychain -- --ignored`.
     /// Uses its own service name and removes the entry again, also when an assertion fails.
     #[test]
     #[ignore = "touches the real system keychain"]
     fn real_keychain_round_trip() {
+        if std::env::var("VICEMAIL_REAL_KEYCHAIN").as_deref() != Ok("1") {
+            println!("skipped: set VICEMAIL_REAL_KEYCHAIN=1 to use the real keychain");
+            return;
+        }
         struct Cleanup<'a>(&'a SystemKeychain, &'a CredentialRef);
         impl Drop for Cleanup<'_> {
             fn drop(&mut self) {

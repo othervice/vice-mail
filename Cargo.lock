@@ -2531,6 +2531,7 @@ dependencies = [
  "apple-native-keyring-store",
  "hickory-resolver",
  "keyring-core",
+ "mail-imap",
  "mail-model",
  "mail-store",
  "rcgen",
@@ -2546,6 +2547,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "windows-native-keyring-store",
 ]
 

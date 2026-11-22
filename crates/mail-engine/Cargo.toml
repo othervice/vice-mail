@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 mail-model.workspace = true
 mail-store.workspace = true
+mail-imap.workspace = true
+# Account ids (UUID v4).
+uuid = { workspace = true, features = ["v4"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
@@ -32,6 +35,8 @@ apple-native-keyring-store.workspace = true
 windows-native-keyring-store.workspace = true
 
 [dev-dependencies]
+# Test server helpers (TestEnv, Proxy, WireTap, send_mail) for the server tests.
+mail-imap = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
 # Local HTTPS and DNS servers in the discovery tests.

@@ -8,7 +8,8 @@ use async_imap::Client;
 use async_imap::imap_proto::{MailboxDatum, ResponseCode, StatusAttribute};
 use mail_model::{
     Access, BackendError, Capabilities, ConnectConfig, FlagUpdate, IdleOutcome, MailBackend,
-    MailboxStatus, MessageHeader, ModSeq, RemoteMailbox, SelectedMailbox, Uid, UidSet, UidValidity,
+    MailboxStatus, MessageHeader, ModSeq, RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet,
+    UidValidity,
 };
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
@@ -63,17 +64,22 @@ impl<S: Transport> std::fmt::Debug for ImapBackend<S> {
 }
 
 impl<S: Transport> ImapBackend<S> {
-    /// LOGIN, CAPABILITY and ENABLE on a connection whose greeting was read.
+    /// Login, CAPABILITY and ENABLE on a connection whose greeting was read. `known_caps` are
+    /// the capabilities the server announced on the encrypted connection before login (the
+    /// greeting on an implicit-TLS port), `None` if unknown (STARTTLS: the plaintext greeting's
+    /// list must be discarded, RFC 3501 section 6.2.1).
+    ///
+    /// ASCII user name and password: `LOGIN`. Otherwise `AUTHENTICATE PLAIN` (UTF-8 by
+    /// definition, RFC 4616), with the initial response on the command line when the server
+    /// announced SASL-IR (RFC 4959). Only a server known to lack `AUTH=PLAIN` gets the non-ASCII
+    /// credentials as a quoted LOGIN string, which many servers read as UTF-8.
     pub(crate) async fn establish(
         client: Client<IoTimeout<S>>,
         timeouts: TimeoutHandle,
         config: &ConnectConfig,
+        known_caps: Option<&[String]>,
     ) -> Result<Self, BackendError> {
-        permit(config.access, "LOGIN")?;
-        let (session, login_caps) = client
-            .login_with_capabilities(&config.username, config.password.expose_secret())
-            .await
-            .map_err(|(err, _client)| login_error(err))?;
+        let (session, login_caps) = login(client, config, known_caps).await?;
         let mut conn = Conn::new(session, timeouts, config.access);
 
         let names = match login_caps {
@@ -229,6 +235,81 @@ impl<S: Transport> ImapBackend<S> {
             ok: tagged.status == TaggedStatus::Ok,
             text: tagged.text,
         })
+    }
+}
+
+/// How [`login`] authenticates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoginMethod {
+    Login,
+    /// `AUTHENTICATE PLAIN`, then the credentials after the server's continuation.
+    Plain,
+    /// `AUTHENTICATE PLAIN <initial response>` in one line (SASL-IR).
+    PlainInitialResponse,
+}
+
+fn login_method(config: &ConnectConfig, known_caps: Option<&[String]>) -> LoginMethod {
+    if config.username.is_ascii() && config.password.expose_secret().is_ascii() {
+        return LoginMethod::Login;
+    }
+    let has = |name: &str| {
+        known_caps.is_some_and(|caps| caps.iter().any(|c| c.trim().eq_ignore_ascii_case(name)))
+    };
+    match known_caps {
+        // Unknown capabilities: every IMAP4rev1 server must implement AUTH=PLAIN.
+        None => LoginMethod::Plain,
+        Some(_) if has("AUTH=PLAIN") && has("SASL-IR") => LoginMethod::PlainInitialResponse,
+        Some(_) if has("AUTH=PLAIN") => LoginMethod::Plain,
+        Some(_) => {
+            tracing::debug!(
+                "server announced no AUTH=PLAIN; sending non-ASCII credentials with LOGIN"
+            );
+            LoginMethod::Login
+        }
+    }
+}
+
+type LoggedIn<S> = (
+    async_imap::Session<IoTimeout<S>>,
+    Option<async_imap::types::Capabilities>,
+);
+
+/// Authenticates with the method [`login_method`] picks. The password only ever goes into the
+/// command line or the SASL response; error texts are the server's.
+async fn login<S: Transport>(
+    client: Client<IoTimeout<S>>,
+    config: &ConnectConfig,
+    known_caps: Option<&[String]>,
+) -> Result<LoggedIn<S>, BackendError> {
+    match login_method(config, known_caps) {
+        LoginMethod::Login => {
+            permit(config.access, "LOGIN")?;
+            client
+                .login_with_capabilities(&config.username, config.password.expose_secret())
+                .await
+                .map_err(|(err, _client)| login_error(err))
+        }
+        LoginMethod::Plain => {
+            permit(config.access, "AUTHENTICATE PLAIN")?;
+            let auth = crate::sasl::PlainAuthenticator::new(&config.username, &config.password);
+            let session = client
+                .authenticate("PLAIN", auth)
+                .await
+                .map_err(|(err, _client)| login_error(err))?;
+            Ok((session, None))
+        }
+        LoginMethod::PlainInitialResponse => {
+            permit(config.access, "AUTHENTICATE PLAIN")?;
+            let response = crate::sasl::plain_response(&config.username, &config.password);
+            // A server that still sends a continuation gets the same message again.
+            let auth = crate::sasl::PlainAuthenticator::new(&config.username, &config.password);
+            let line = Secret::new(format!("PLAIN {}", response.expose_secret()));
+            let session = client
+                .authenticate(line.expose_secret(), auth)
+                .await
+                .map_err(|(err, _client)| login_error(err))?;
+            Ok((session, None))
+        }
     }
 }
 
