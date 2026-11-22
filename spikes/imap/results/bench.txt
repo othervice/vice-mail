@@ -1,0 +1,53 @@
+load average before: { 2.29 2.31 2.64 }
+RSS at start: 7.0 MB
+connect + TLS + LOGIN + EXAMINE: 15 ms; INBOX exists 9959
+
+path      window  run  mails   seconds  mails/s  RSS MB
+stream       100    1   9959     0.069   144708    17.0
+stream       100    2   9959     0.062   160052    17.1
+stream       100    3   9959     0.061   161939    17.1
+stream       100    4   9959     0.062   161024    17.1
+stream       100    5   9959     0.083   120594    17.1
+checked      100    1   9959     0.060   166456    19.0
+checked      100    2   9959     0.060   166964    19.0
+checked      100    3   9959     0.059   167860    19.0
+checked      100    4   9959     0.060   166261    19.0
+checked      100    5   9959     0.059   169924    19.0
+stream       500    1   9959     0.044   226623    19.1
+stream       500    2   9959     0.043   228974    19.1
+stream       500    3   9959     0.044   228542    19.1
+stream       500    4   9959     0.044   228163    19.1
+stream       500    5   9959     0.043   231992    19.1
+checked      500    1   9959     0.041   240624    19.1
+checked      500    2   9959     0.041   243618    19.1
+checked      500    3   9959     0.040   249542    19.1
+checked      500    4   9959     0.040   248116    19.1
+checked      500    5   9959     0.041   244160    19.1
+stream      2000    1   9959     0.040   249997    19.1
+stream      2000    2   9959     0.039   254130    19.1
+stream      2000    3   9959     0.040   250627    19.1
+stream      2000    4   9959     0.041   243892    19.1
+stream      2000    5   9959     0.041   241588    19.1
+checked     2000    1   9959     0.039   258657    19.1
+checked     2000    2   9959     0.038   263139    19.1
+checked     2000    3   9959     0.038   265451    19.1
+checked     2000    4   9959     0.037   265746    19.1
+checked     2000    5   9959     0.038   263149    19.1
+
+9959 records held in memory: RSS 19.1 → 19.1 MB (header fields 0.7 MB)
+
+flags only (UID FLAGS) for the sync without CONDSTORE:
+  1:* in one command   9959 messages with flags: min 5 ms, median 5 ms, max 6 ms
+  windows of 2000      9959 messages with flags: min 6 ms, median 6 ms, max 6 ms
+
+wire (TLS records, server→client) for 9959 headers: 8.6 MB (866 bytes/message)
+
+summary (min / median / max seconds over 5 runs):
+  stream   window   100: 0.061 / 0.062 / 0.083 s
+  checked  window   100: 0.059 / 0.060 / 0.060 s
+  stream   window   500: 0.043 / 0.044 / 0.044 s
+  checked  window   500: 0.040 / 0.041 / 0.041 s
+  stream   window  2000: 0.039 / 0.040 / 0.041 s
+  checked  window  2000: 0.037 / 0.038 / 0.039 s
+peak RSS of the process: 19.2 MB
+load average after: { 2.29 2.31 2.64 }

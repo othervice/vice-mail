@@ -1,0 +1,119 @@
+
+== tls
+PASS tls.imaps_platform_plus_test_ca    "TLSv1_3" "TLS13_AES_256_GCM_SHA384", LOGIN ok, 43 capabilities
+PASS tls.imaps_webpki_test_ca_only      LOGIN ok
+PASS tls.untrusted_without_test_ca      CertUntrusted: server certificate is not trusted (UnknownIssuer)
+PASS tls.untrusted_webpki_empty_store   CertUntrusted: server certificate is not trusted (UnknownIssuer)
+PASS tls.name_mismatch                  CertNameMismatch: server certificate does not match the host name
+PASS tls.wrong_password_typed           AuthFailed: login rejected; password in message: false
+PASS tls.port_closed_typed              Refused: connection refused
+
+== starttls
+PASS starttls.greeting_caps             plain-text greeting: Atom("IMAP4rev2") Imap4rev1 Atom("ENABLE") Atom("SASL-IR") Atom("LITERAL+") Atom("ID") Atom("UTF8=ACCEPT") Atom("LOGINDISABLED") Atom("STARTTLS")
+PASS starttls.upgrade_login             "TLSv1_3" "TLS13_AES_256_GCM_SHA384", LOGIN ok, IDLE=true, LOGINDISABLED gone
+PASS starttls.untrusted_without_test_ca CertUntrusted
+
+== caps
+INFO caps.list                          Atom("ACL") Atom("BINARY") Atom("CHILDREN") Atom("CONDSTORE") Atom("CREATE-SPECIAL-USE") Atom("ENABLE") Atom("ESEARCH") Atom("ESORT") Atom("ID") Atom("IDLE") Atom("IMAP4rev2") Atom("JMAPACCESS") Atom("LIST-EXTENDED") Atom("LIST-METADATA") Atom("LIST-STATUS") Atom("LITERAL+") Atom("MESSAGELIMIT=1000000") Atom("METADATA") Atom("MOVE") Atom("MULTIAPPEND") Atom("NAMESPACE") Atom("OBJECTID+") Atom("PREVIEW") Atom("QRESYNC") Atom("QUOTA") Atom("QUOTA=RES-STORAGE") Atom("RIGHTS=texkn") Atom("SASL-IR") Atom("SAVELIMIT=1000000") Atom("SEARCHRES") Atom("SORT") Atom("SORT=DISPLAY") Atom("SPECIAL-USE") Atom("STATUS=SIZE") Atom("THREAD=REFERENCES") Atom("UIDBATCHES") Atom("UIDONLY") Atom("UIDPLUS") Atom("UNAUTHENTICATE") Atom("UNSELECT") Atom("UTF8=ACCEPT") Atom("WITHIN") Imap4rev1
+PASS caps.required_present              checked IDLE,CONDSTORE,MOVE,UIDPLUS,SPECIAL-USE,ENABLE,QRESYNC,ID,LITERAL+,UTF8=ACCEPT; missing []
+INFO caps.has_str_case                  has_str("idle") = false (issue #140: case-sensitive for atoms)
+PASS caps.id_command                    server ID: Some({"support-url": "https://stalw.art", "name": "Stalwart", "version": "1.0.0", "vendor": "Stalwart Labs LLC"})
+PASS caps.enable_condstore_raw          tagged OK , * ENABLED parsed as Capabilities: true
+
+== folders
+PASS folders.list_all                   10 folders, delimiter {"/"}, missing []
+PASS folders.special_use_return         LIST "" "*" RETURN (SPECIAL-USE): {"Archive": "Archive", "Drafts": "Drafts", "Junk": "Junk", "Sent": "Sent", "Trash": "Trash"}
+INFO folders.special_use_plain_list     plain LIST carries \Sent too: true
+PASS folders.list_selection_special_use LIST (SPECIAL-USE) via raw command: 5 folders
+PASS folders.list_status_one_round_trip 10 LIST + 10 STATUS (with HIGHESTMODSEQ) parsed from one command
+PASS folders.mutf7_decode               Projects/&ANw-berpr&APw-fung -> Projects/Überprüfung -> Projects/&ANw-berpr&APw-fung
+PASS folders.examine_non_ascii          EXAMINE by encoded name: 1 message(s)
+PASS folders.status                     Sent: exists 26 uidnext Some(27) uidvalidity Some(3485359337) unseen Some(0) highestmodseq Some(10011)
+PASS folders.utf8_accept_list           after ENABLE UTF8=ACCEPT: ["Projects/2026", "Projects/Empty", "Projects/Überprüfung"]
+
+== select
+PASS select.condstore_values            exists 9959 uidvalidity Some(4005008380) uidnext Some(9960) highestmodseq Some(10011) permanentflags [Deleted, Seen, Answered, Flagged, Draft, MayCreate]
+PASS select.examine_values              EXAMINE: uidvalidity Some(4005008380) exists 9959 highestmodseq None (Mailbox has no read-only field)
+PASS select.examine_read_only_code      raw EXAMINE INBOX (CONDSTORE): tagged code Some("ReadOnly"), Some("HighestModSeq(10011)")
+INFO select.examine_store_async_imap    uid_store after EXAMINE returned Ok(0) (tagged NO is swallowed, issue #151)
+PASS select.examine_store_rejected      server answered NO Some("Not permitted in EXAMINE state."); flags unchanged ["$hasnoattachment"]
+PASS select.enable_condstore_then_examine ENABLE CONDSTORE + EXAMINE: highestmodseq Some(10011)
+PASS select.readonly_guard_typed        ReadOnly: writes are disabled for this account
+
+== fetch
+PASS fetch.no_panic_stream_path         10000 messages in 10 folders, windows of 500 newest→oldest
+PASS fetch.all_parts_parsed             0 incomplete: []
+PASS fetch.broken_messages_parsed       26 broken/* messages, all parts present, deepest bodystructure 40 levels
+INFO fetch.broken                       INBOX/9393 broken/wrong-boundary parts=1 depth=0 subject=Some("Declared boundary does not match") from=Some("dave@example.net") date=Some("Tue, 1 Sep 2026 12:01:00 +0000")
+INFO fetch.broken                       INBOX/9395 broken/missing-final-boundary parts=2 depth=1 subject=Some("No closing boundary") from=Some("dave@example.net") date=Some("Tue, 1 Sep 2026 18:01:00 +0000")
+INFO fetch.broken                       INBOX/9400 broken/truncated-base64 parts=2 depth=1 subject=Some("Attachment base64 cut off") from=Some("dave@example.net") date=Some("Wed, 2 Sep 2026 00:01:00 +0000")
+INFO fetch.broken                       INBOX/9401 broken/invalid-base64 parts=1 depth=0 subject=Some("Invalid characters in base64") from=Some("dave@example.net") date=Some("Wed, 2 Sep 2026 06:01:00 +0000")
+INFO fetch.broken                       INBOX/9403 broken/unknown-charset parts=1 depth=0 subject=Some("Unknown charset x-made-up") from=Some("dave@example.net") date=Some("Wed, 2 Sep 2026 12:01:00 +0000")
+INFO fetch.broken                       INBOX/9405 broken/mislabeled-charset parts=1 depth=0 subject=Some("Declared UTF-8, actually Latin-1") from=Some("dave@example.net") date=Some("Wed, 2 Sep 2026 18:01:00 +0000")
+INFO fetch.broken                       INBOX/9406 broken/8bit-headers parts=1 depth=0 subject=Some("=?utf-8?B?VW5lbmNvZGVkIExhdGluLTEgaW4gaG") from=Some("juergen.gross@firma.example") date=Some("Tue, 1 Sep 2026 15:00:00 +0200")
+INFO fetch.broken                       INBOX/9409 broken/bad-date parts=1 depth=0 subject=Some("Impossible date") from=Some("dave@example.net") date=Some("Thu, 32 Nov 2026 25:61:99 +0339")
+INFO fetch.broken                       INBOX/9411 broken/missing-date parts=1 depth=0 subject=Some("No Date header") from=Some("dave@example.net") date=None
+INFO fetch.broken                       INBOX/9413 broken/two-digit-year parts=1 depth=0 subject=Some("Obsolete date format") from=Some("dave@example.net") date=Some("1 Sep 26 12:00 EST")
+INFO fetch.broken                       INBOX/9414 broken/missing-headers parts=1 depth=0 subject=None from=Some("unknown@localhost") date=None
+INFO fetch.broken                       INBOX/9415 broken/headers-only parts=1 depth=0 subject=Some("Headers only, no body") from=Some("nobody@example.com") date=None
+INFO fetch.broken                       INBOX/9419 broken/bad-encoded-words parts=1 depth=0 subject=Some("=?utf-8?B?PT91dGYtOD9RP3VudGVybWluYXRlZC") from=Some("dave@example.net") date=Some("Fri, 4 Sep 2026 03:01:00 +0000")
+INFO fetch.broken                       INBOX/9422 broken/long-lines parts=1 depth=0 subject=Some("Very long header and body lines") from=Some("dave@example.net") date=Some("Fri, 4 Sep 2026 09:01:00 +0000")
+INFO fetch.broken                       INBOX/9426 broken/no-boundary-param parts=1 depth=0 subject=Some("multipart without boundary") from=Some("dave@example.net") date=Some("Fri, 4 Sep 2026 15:01:00 +0000")
+INFO fetch.broken                       INBOX/9429 broken/deep-nesting parts=1 depth=40 subject=Some("40 levels of nested multipart") from=Some("dave@example.net") date=Some("Fri, 4 Sep 2026 21:01:00 +0000")
+INFO fetch.broken                       INBOX/9431 broken/unknown-cte parts=1 depth=0 subject=Some("Unknown Content-Transfer-Encoding") from=Some("dave@example.net") date=Some("Sat, 5 Sep 2026 03:01:00 +0000")
+INFO fetch.broken                       INBOX/9434 broken/invalid-qp parts=1 depth=0 subject=Some("Invalid quoted-printable") from=Some("dave@example.net") date=Some("Sat, 5 Sep 2026 09:01:00 +0000")
+INFO fetch.broken                       INBOX/9436 broken/binary-garbage parts=1 depth=0 subject=Some("Binary garbage without Content-Type") from=Some("garbage@example.com") date=None
+INFO fetch.broken                       INBOX/9439 broken/duplicate-headers parts=1 depth=0 subject=Some("Second subject") from=Some("dave@example.net") date=Some("Wed, 2 Sep 2026 10:00:00 +0000")
+INFO fetch.broken                       INBOX/9442 broken/bare-lf parts=1 depth=0 subject=Some("Bare LF line endings") from=Some("dave@example.net") date=Some("Sun, 6 Sep 2026 00:01:00 +0000")
+INFO fetch.broken                       INBOX/9445 broken/truncated-rfc822 parts=3 depth=3 subject=Some("Truncated message/rfc822 part") from=Some("dave@example.net") date=Some("Sun, 6 Sep 2026 06:01:00 +0000")
+INFO fetch.broken                       INBOX/9447 broken/bad-addresses parts=1 depth=0 subject=Some("Broken address lists") from=Some("alice@") date=Some("Wed, 2 Sep 2026 11:00:00 +0000")
+INFO fetch.broken                       INBOX/9453 broken/reference-loop parts=1 depth=0 subject=Some("Re: References itself") from=Some("dave@example.net") date=Some("Sun, 6 Sep 2026 21:01:00 +0000")
+INFO fetch.broken                       INBOX/9456 broken/charset-in-filename parts=2 depth=1 subject=Some("Attachment name in raw UTF-8") from=Some("dave@example.net") date=Some("Mon, 7 Sep 2026 03:01:00 +0000")
+INFO fetch.broken                       Projects/2026/1 broken/duplicate-message-id parts=1 depth=0 subject=Some("Same Message-ID as thread message 3") from=Some("dave@example.net") date=Some("Sun, 6 Sep 2026 15:01:00 +0000")
+INFO fetch.keywords_seen                projekt-x on 2, $label1 on 287 messages
+PASS fetch.header_fields_extracted      List-Id on 988, References on 569 messages
+PASS fetch.raw_path_same_result         stream 10000 vs checked raw 10000
+PASS fetch.full_bodies_broken_and_large 28 bodies fetched, largest 6.8 MB, size mismatches []
+PASS fetch.dropped_stream_recovers      NOOP after drop: Ok(()) in 5 ms (reads the rest of the old FETCH); 100 responses parked in the unsolicited channel (cap 100, rest dropped)
+
+== condstore
+PASS condstore.changedsince             UID FETCH 1:* (UID FLAGS) (CHANGEDSINCE 10011) via uid_fetch: 1 result(s), uid Some(9950), MODSEQ 10012 parsed
+INFO condstore.unchangedsince_async_imap uid_store with UNCHANGEDSINCE 10011 returned Ok(0); the [MODIFIED] code is not visible
+PASS condstore.unchangedsince_modified  raw: tagged OK code None text Some("[MODIFIED 9950] UID STORE completed") -> MODIFIED Some("9950")
+PASS condstore.unchangedsince_success   UNCHANGEDSINCE 10012: OK with FETCH (MODSEQ) true
+PASS condstore.qresync_raw              ENABLE QRESYNC OK; SELECT (QRESYNC (710814425 10019)): VANISHED [(true, "2:2")], 1 FETCH
+
+== idle
+PASS idle.timeout                       wait_with_timeout(2 s) -> Timeout after 2003 ms
+PASS idle.interrupt_from_outside        StopSource dropped by another task after 300 ms -> ManualInterrupt after 301 ms
+PASS idle.exists_from_smtp              SMTP bob→alice (1587 STARTTLS, lettre, 14 ms to send) -> * Some(9960) EXISTS 15 ms after the send started; IDLE data in order: ["MailboxData(Status { mailbox: \"INBOX\", status: [Messages(9960), Unseen(1294), Ui", "MailboxData(Exists(9960))"]
+PASS idle.session_usable_after_done     DONE ok, NOOP ok, newest subject Some("idle-1795373382332716"), 1 unsolicited parked
+
+== move
+PASS move.uid_move                      UID MOVE 1 -> Spike/Dst: gone from source, 1 in target; COPYUID from unsolicited channel Some((1990826406, "1", "1"))
+PASS move.copy_store_uid_expunge        COPYUID Some((1990826406, "2", "2")); UID EXPUNGE 2 returned seq [1]; foreign \Deleted uid 3 still there: true; target has 2
+
+== append
+PASS append.async_imap                  Session::append -> Ok(()) (returns (), no APPENDUID)
+PASS append.flags_date_appenduid        APPENDUID uidvalidity 407352813 uid 2; flags ["$hasnoattachment", "\\Flagged", "\\Seen", "$label2"]; INTERNALDATE Some("01-Feb-2026 09:00:00 +0000") = Some(1769936400)
+PASS append.big_literal                 5.1 MB in 6 ms
+
+== keywords
+PASS keywords.permanentflags_star       [Deleted, Seen, Answered, Flagged, Draft, MayCreate]
+PASS keywords.set_and_read              STORE echo ["$hasnoattachment", "spike_kw", "$spiketwo", "projekt-y"]; new connection reads ["$hasnoattachment", "spike_kw", "$spiketwo", "projekt-y"] (compare case-insensitively)
+PASS keywords.remove                    after -FLAGS (other case): ["$hasnoattachment", "projekt-y"]
+PASS keywords.invalid_atom_rejected     server: BAD Some("Unsupported flag."); client-side atom check needed because uid_store would swallow it
+
+== reconnect
+PASS reconnect.close_mid_fetch_checked  9960 of 9960 stored, 96 records of the cut window discarded and fetched again, total 176 ms; attempt 1: ConnectionLost (connection lost (peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof)); detected 0 ms after the fault; stored 4500 so far, resume below uid Some(5461); backoff 100 ms | attempt 2: complete
+PASS reconnect.close_mid_fetch_stream   9960 of 9960 stored, 96 records of the cut window discarded and fetched again, total 176 ms; attempt 1: ConnectionLost (connection lost (peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof)); detected 0 ms after the fault; stored 4500 so far, resume below uid Some(5461); backoff 100 ms | attempt 2: complete
+PASS reconnect.stall_mid_fetch_timeout  9960 of 9960 stored, 96 records of the cut window discarded and fetched again, total 3200 ms; attempt 1: Timeout (no data from the server within the time limit (no data received for 3000 ms)); detected 3002 ms after the fault; stored 4500 so far, resume below uid Some(5461); backoff 100 ms | attempt 2: complete
+PASS reconnect.refused_then_backoff     9960 of 9960 stored, 0 records of the cut window discarded and fetched again, total 396 ms; attempt 1: ConnectionLost (connection lost (tls handshake eof)); no fault fired; stored 0 so far, resume below uid None; backoff 100 ms | attempt 2: ConnectionLost (connection lost (tls handshake eof)); no fault fired; stored 0 so far, resume below uid None; backoff 200 ms | attempt 3: complete
+PASS reconnect.idle_connection_closed   wait returned Err("io: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof") after 1489 ms (fault 0 ms ago); DONE -> Some("ConnectionLost")
+PASS reconnect.idle_connection_silent   silent link: wait -> Ok(Timeout), then DONE -> Some("Timeout"); detected after 6003 ms (IDLE slice 4 s + read limit 2 s)
+
+== smtp
+PASS smtp.lettre_starttls_test_ca       bob → alice over 1587 STARTTLS: Ok(())
+PASS smtp.lettre_untrusted_without_ca   without the CA: Err("Connection error: Connection error: invalid peer certificate: UnknownIssuer"); lettre is_tls() = false; from source chain: Some("CertUntrusted")
+
+59 checks, 59 passed, 0 failed

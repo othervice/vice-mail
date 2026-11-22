@@ -1,0 +1,9 @@
+
+== shutdown
+INFO shutdown.server_stop               scripts/testmail.sh stop: exit Some(0) in 1247 ms
+INFO shutdown.idle                      wait -> Ok(NewData(ResponseData { raw: 4096, response: Data { status: Bye, outcome: Outcome { code: None, information: Some("Server shutting down.") } } })) after 832 ms; DONE -> Some("ConnectionLost")
+PASS shutdown.stream_path               async-imap uid_fetch stream: ConnectionLost after 1966 messages: connection lost (peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof)
+PASS shutdown.checked_path_detects      checked raw fetch: ConnectionLost after 1966 messages: connection lost (peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof)
+PASS shutdown.server_restarted          testmail: IMAP 127.0.0.1:1143 (STARTTLS) / 1993 (TLS), SMTP submission 1587 (STARTTLS) / 1465 (TLS), local SMTP 1025, HTTP 18080
+
+3 checks, 3 passed, 0 failed
