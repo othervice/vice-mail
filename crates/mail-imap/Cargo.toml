@@ -1,0 +1,31 @@
+[package]
+name = "mail-imap"
+description = "IMAP adapter: implements MailConnector and MailBackend over async-imap, rustls and an own command layer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Helpers for integration tests against the local test server (fault-injecting TCP proxy,
+# wire tap, raw commands, test SMTP sender). Never enabled in the product.
+test-support = ["tokio/rt", "tokio/sync"]
+
+[dependencies]
+mail-model.workspace = true
+async-imap.workspace = true
+mail-parser.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+tokio = { workspace = true, features = ["net", "time", "io-util", "macros"] }
+tokio-rustls.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# Turns on `test-support` for this crate's own tests.
+mail-imap = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+
+[lints]
+workspace = true

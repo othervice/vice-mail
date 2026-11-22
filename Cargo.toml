@@ -7,9 +7,8 @@ exclude = ["spikes"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-# Tauri 2.12 and tauri-build 2.7 declare rust-version 1.90 (rusqlite 0.41 and
-# rusqlite_migration 2.7 need 1.89), so 1.90 is the real minimum for the workspace.
-rust-version = "1.90"
+# mail-parser 1.0 declares rust-version 1.98 (Tauri 2.12 needs 1.90). See decision 0006.
+rust-version = "1.98"
 license = "GPL-3.0-or-later"
 publish = false
 
@@ -18,6 +17,7 @@ publish = false
 mail-model = { path = "crates/mail-model" }
 mail-store = { path = "crates/mail-store" }
 mail-engine = { path = "crates/mail-engine" }
+mail-imap = { path = "crates/mail-imap" }
 
 # Core
 serde = { version = "1.0.229", features = ["derive"] }
@@ -45,8 +45,32 @@ tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
 tauri = { version = "2.12.7", features = [] }
 tauri-build = { version = "2.7.6", features = [] }
 
+# TLS (decision 0002): rustls with the `ring` provider, certificates checked by the system.
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-platform-verifier = "0.7.1"
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+
+# IMAP (decision 0002): async-imap on Tokio; mail-parser decodes RFC 2047 words, charsets and
+# dates of header data (stage 2) and whole messages (stage 3). mail-parser 1.0 needs Rust 1.98.
+async-imap = { version = "0.12.0", default-features = false, features = ["runtime-tokio"] }
+mail-parser = { version = "1.0.1", features = ["full_encoding"] }
+
+# Keychain (stage 2): keyring-core with the two native stores, chosen explicitly (no global
+# default store, no Linux D-Bus stack). The `keyring` crate's own README recommends this for apps.
+keyring-core = "1.1.0"
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
+windows-native-keyring-store = { version = "1.1.0", default-features = false }
+
+# Server discovery (stage 2): DNS SRV with the system's DNS servers, HTTPS for autoconfig.
+hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
+# HTTP/1.1 only, no cookies, no proxy, no compression; TLS config comes from our rustls setup.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+roxmltree = "0.21.2"
+
 # Tests
 tempfile = "3.27.0"
+# Test certificates generated at test time (no key material in the repository).
+rcgen = "0.14.10"
 
 # Desktop tests (decision 0005): only in test builds of mail-app (`--features e2e`), never shipped.
 tauri-plugin-wdio-webdriver = "=1.5.1"

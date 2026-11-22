@@ -1,0 +1,681 @@
+//! Protocol tests of the backend against a scripted fake server over an in-memory pipe. The fake
+//! server records every line the adapter wrote, so these tests also prove what did not leave it.
+
+use std::time::Duration;
+
+use async_imap::Client;
+use mail_model::{
+    Access, BackendError, ConnectConfig, IdleOutcome, MailBackend, ModSeq, Secret, Security,
+    SelectedMailbox, ServerSettings, UidSet, UidValidity,
+};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
+use tokio::task::JoinHandle;
+
+use crate::backend::ImapBackend;
+use crate::command::looks_like_tag;
+use crate::connector::read_greeting;
+use crate::timeout_io::{IoTimeout, TimeoutHandle};
+
+enum Step {
+    /// Write this text; `{tag}` becomes the tag of the last tagged command received.
+    Send(&'static str),
+    /// Read one line and check that it (without tag) starts with this text.
+    Expect(&'static str),
+    Pause(Duration),
+    /// Close the connection.
+    Close,
+}
+
+use Step::{Close, Expect, Pause, Send};
+
+const GREETING: Step = Send("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN] fake ready\r\n");
+const LOGIN: Step = Expect("LOGIN \"alice\" \"pw\"");
+const LOGIN_OK: Step = Send(
+    "{tag} OK [CAPABILITY IMAP4rev1 IDLE CONDSTORE ENABLE SPECIAL-USE LIST-STATUS LIST-EXTENDED] logged in\r\n",
+);
+const ENABLE: Step = Expect("ENABLE CONDSTORE");
+const ENABLE_OK: Step = Send("* ENABLED CONDSTORE\r\n{tag} OK enabled\r\n");
+const EXAMINE: Step = Expect("EXAMINE \"INBOX\" (CONDSTORE)");
+const EXAMINE_OK: Step = Send(
+    "* 3 EXISTS\r\n* 0 RECENT\r\n* FLAGS (\\Seen \\Flagged)\r\n* OK [PERMANENTFLAGS ()] none\r\n\
+* OK [UIDVALIDITY 77] ok\r\n* OK [UIDNEXT 40] ok\r\n* OK [HIGHESTMODSEQ 900] ok\r\n\
+{tag} OK [READ-ONLY] EXAMINE completed\r\n",
+);
+
+async fn next_line<R: AsyncBufRead + Unpin>(lines: &mut R) -> Option<String> {
+    let mut line = String::new();
+    match lines.read_line(&mut line).await {
+        Ok(0) | Err(_) => None,
+        Ok(_) => Some(line.trim_end().to_owned()),
+    }
+}
+
+/// Runs `script` as the server; returns every line the client wrote, also after the script
+/// ended, until the client closes.
+async fn fake_server(stream: DuplexStream, script: Vec<Step>) -> Vec<String> {
+    let (read, mut write) = tokio::io::split(stream);
+    let mut lines = BufReader::new(read);
+    let mut received = Vec::new();
+    let mut tag = String::new();
+    for step in script {
+        match step {
+            Send(text) => {
+                if write
+                    .write_all(text.replace("{tag}", &tag).as_bytes())
+                    .await
+                    .is_err()
+                {
+                    return received;
+                }
+            }
+            Expect(want) => {
+                let Some(line) = next_line(&mut lines).await else {
+                    panic!("client closed, expected {want:?}; received {received:?}");
+                };
+                let rest = match line.split_once(' ') {
+                    Some((first, rest)) if looks_like_tag(first) => {
+                        tag = first.to_owned();
+                        rest.to_owned()
+                    }
+                    _ => line.clone(),
+                };
+                assert!(rest.starts_with(want), "expected {want:?}, got {line:?}");
+                received.push(line);
+            }
+            Pause(d) => tokio::time::sleep(d).await,
+            Close => return received,
+        }
+    }
+    while let Some(line) = next_line(&mut lines).await {
+        received.push(line);
+    }
+    received
+}
+
+fn config(access: Access) -> ConnectConfig {
+    let server = ServerSettings {
+        host: "fake.test".into(),
+        port: 993,
+        security: Security::Tls,
+        username: "alice".into(),
+    };
+    ConnectConfig::new(&server, Secret::new("pw".into()), access)
+}
+
+type Fake = (
+    Result<ImapBackend<DuplexStream>, BackendError>,
+    JoinHandle<Vec<String>>,
+);
+
+async fn connect(access: Access, read_limit: Duration, script: Vec<Step>) -> Fake {
+    let (client, server) = tokio::io::duplex(1 << 16);
+    let handle = tokio::spawn(fake_server(server, script));
+    let timeouts = TimeoutHandle::new(read_limit, Duration::from_secs(2));
+    let mut client = Client::new(IoTimeout::new(client, timeouts.clone()));
+    let backend = match read_greeting(&mut client).await {
+        Ok(_) => ImapBackend::establish(client, timeouts, &config(access)).await,
+        Err(err) => Err(err),
+    };
+    (backend, handle)
+}
+
+/// Login, ENABLE and EXAMINE INBOX, then `rest`.
+async fn opened(
+    access: Access,
+    rest: Vec<Step>,
+) -> (
+    ImapBackend<DuplexStream>,
+    SelectedMailbox,
+    JoinHandle<Vec<String>>,
+) {
+    let mut script = vec![
+        GREETING, LOGIN, LOGIN_OK, ENABLE, ENABLE_OK, EXAMINE, EXAMINE_OK,
+    ];
+    script.extend(rest);
+    let (backend, handle) = connect(access, Duration::from_secs(2), script).await;
+    let mut backend = backend.expect("login");
+    let inbox = backend.open_mailbox("INBOX").await.expect("examine");
+    (backend, inbox, handle)
+}
+
+async fn finish(
+    backend: ImapBackend<DuplexStream>,
+    handle: JoinHandle<Vec<String>>,
+) -> Vec<String> {
+    drop(backend);
+    handle.await.expect("fake server")
+}
+
+#[tokio::test]
+async fn login_capabilities_enable_and_examine() {
+    let (backend, inbox, handle) = opened(Access::ReadOnly, vec![]).await;
+    let caps = backend.capabilities();
+    assert!(caps.imap4rev1 && caps.idle && caps.condstore && caps.list_status);
+    assert!(!caps.qresync && !caps.move_);
+    assert_eq!(backend.enabled(), ["CONDSTORE"]);
+    assert_eq!(backend.access(), Access::ReadOnly);
+    assert_eq!(
+        inbox,
+        SelectedMailbox {
+            name: "INBOX".into(),
+            uid_validity: UidValidity(77),
+            uid_next: 40,
+            exists: 3,
+            highest_modseq: Some(ModSeq(900)),
+            read_only: true,
+            keywords_allowed: false,
+        }
+    );
+    let lines = finish(backend, handle).await;
+    assert_eq!(lines.len(), 3, "{lines:?}");
+}
+
+#[tokio::test]
+async fn read_only_refuses_writes_before_sending_anything() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![Expect("NOOP"), Send("{tag} OK noop\r\n")],
+    )
+    .await;
+    let writes = [
+        "SELECT \"INBOX\"",
+        "UID STORE 1 +FLAGS (\\Seen)",
+        "STORE 1 +FLAGS (\\Deleted)",
+        "APPEND \"INBOX\" {3+}\r\nabc",
+        "UID COPY 1 \"Trash\"",
+        "UID MOVE 1 \"Trash\"",
+        "EXPUNGE",
+        "UID EXPUNGE 1",
+        "CREATE \"x\"",
+        "DELETE \"x\"",
+        "RENAME \"a\" \"b\"",
+        "SUBSCRIBE \"x\"",
+        "CLOSE",
+        "UID FETCH 1 BODY[]",
+    ];
+    for line in writes {
+        let result = backend.conn_mut().run(line, |_| false).await;
+        assert!(
+            matches!(result, Err(BackendError::ReadOnly(_))),
+            "{line}: {result:?}"
+        );
+    }
+    // The connection is still fine, and the positive control shows the recorder records.
+    backend.noop().await.expect("noop after refusals");
+    assert_eq!(backend.access(), Access::ReadOnly);
+    drop(inbox);
+    let lines = finish(backend, handle).await;
+    let verbs: Vec<&str> = lines
+        .iter()
+        .map(|l| l.split(' ').nth(1).unwrap_or_default())
+        .collect();
+    assert_eq!(
+        verbs[..4],
+        ["LOGIN", "ENABLE", "EXAMINE", "NOOP"],
+        "{lines:?}"
+    );
+    assert_eq!(lines.len(), 4, "nothing else reached the server: {lines:?}");
+    assert!(lines.iter().all(|l| !l.contains("BODY[")));
+}
+
+#[tokio::test]
+async fn read_write_opens_with_select() {
+    let script = vec![
+        GREETING,
+        LOGIN,
+        LOGIN_OK,
+        ENABLE,
+        ENABLE_OK,
+        Expect("SELECT \"Sent\" (CONDSTORE)"),
+        Send(
+            "* 0 EXISTS\r\n* OK [UIDVALIDITY 5] x\r\n* OK [PERMANENTFLAGS (\\Seen \\*)] x\r\n* OK [NOMODSEQ] no modseq here\r\n{tag} OK [READ-WRITE] done\r\n",
+        ),
+    ];
+    let (backend, handle) = connect(Access::ReadWrite, Duration::from_secs(2), script).await;
+    let mut backend = backend.expect("login");
+    let sent = backend.open_mailbox("Sent").await.expect("select");
+    // UIDNEXT missing and the mailbox is empty: 1. NOMODSEQ: no HIGHESTMODSEQ.
+    assert_eq!(
+        (sent.uid_next, sent.exists, sent.highest_modseq),
+        (1, 0, None)
+    );
+    assert!(!sent.read_only && sent.keywords_allowed);
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn missing_uidnext_is_derived_from_the_highest_uid() {
+    let script = vec![
+        GREETING,
+        LOGIN,
+        LOGIN_OK,
+        ENABLE,
+        ENABLE_OK,
+        Expect("EXAMINE \"Archive\""),
+        Send("* 2 EXISTS\r\n* OK [UIDVALIDITY 9] x\r\n{tag} OK done\r\n"),
+        Expect("FETCH * (UID)"),
+        Send("* 2 FETCH (UID 41)\r\n{tag} OK done\r\n"),
+    ];
+    let (backend, handle) = connect(Access::ReadOnly, Duration::from_secs(2), script).await;
+    let mut backend = backend.expect("login");
+    let archive = backend.open_mailbox("Archive").await.expect("examine");
+    assert_eq!(archive.uid_next, 42);
+    assert!(archive.read_only);
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn refusals_are_typed_and_keep_the_connection() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("UID FETCH 1:3 (UID FLAGS MODSEQ)"),
+            Send("{tag} NO [SERVERBUG] fetch failed\r\n"),
+            Expect("EXAMINE \"Gone\""),
+            Send("{tag} NO [NONEXISTENT] no such mailbox\r\n"),
+            Expect("EXAMINE \"Locked\""),
+            Send("{tag} NO [NOPERM] not for you\r\n"),
+            Expect("NOOP"),
+            Send("{tag} OK fine\r\n"),
+        ],
+    )
+    .await;
+    // async-imap's own stream would report an empty Ok here (issue #151).
+    let err = backend
+        .fetch_flags(&inbox, &UidSet::range(1, 3), None)
+        .await
+        .expect_err("NO");
+    assert!(
+        matches!(&err, BackendError::Rejected(text) if text.contains("SERVERBUG")),
+        "{err}"
+    );
+    assert_eq!(
+        backend.open_mailbox("Gone").await,
+        Err(BackendError::MailboxNotFound("Gone".into()))
+    );
+    assert!(matches!(
+        backend.open_mailbox("Locked").await,
+        Err(BackendError::Rejected(_))
+    ));
+    // No mailbox is open any more: mailbox-scoped calls refuse without sending.
+    assert!(matches!(
+        backend.search_uids(&inbox).await,
+        Err(BackendError::InvalidState(_))
+    ));
+    backend.noop().await.expect("still usable");
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn mailbox_scoped_calls_check_name_and_uidvalidity() {
+    let (mut backend, inbox, handle) = opened(Access::ReadOnly, vec![]).await;
+    let stale = SelectedMailbox {
+        uid_validity: UidValidity(76),
+        ..inbox.clone()
+    };
+    let other = SelectedMailbox {
+        name: "Sent".into(),
+        ..inbox.clone()
+    };
+    for mailbox in [&stale, &other] {
+        assert!(matches!(
+            backend.fetch_headers(mailbox, &UidSet::range(1, 2)).await,
+            Err(BackendError::InvalidState(_))
+        ));
+    }
+    // Empty sets are not sent at all.
+    assert_eq!(
+        backend.fetch_headers(&inbox, &UidSet::new()).await,
+        Ok(vec![])
+    );
+    assert_eq!(
+        backend.fetch_flags(&inbox, &UidSet::new(), None).await,
+        Ok(vec![])
+    );
+    let lines = finish(backend, handle).await;
+    assert_eq!(lines.len(), 3, "nothing after EXAMINE: {lines:?}");
+}
+
+#[tokio::test]
+async fn fetch_flags_with_changedsince_and_unsolicited_changes() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("UID FETCH 1:* (UID FLAGS MODSEQ) (CHANGEDSINCE 900)"),
+            Send(
+                "* 2 FETCH (UID 12 FLAGS (\\Seen) MODSEQ (901))\r\n* 4 EXISTS\r\n{tag} OK done\r\n",
+            ),
+        ],
+    )
+    .await;
+    let updates = backend
+        .fetch_flags(&inbox, &UidSet::all(), inbox.highest_modseq)
+        .await
+        .expect("flags");
+    assert_eq!(updates.len(), 1);
+    assert_eq!((updates[0].uid, updates[0].modseq), (12, Some(ModSeq(901))));
+    // The EXISTS arrived on the side: the next IDLE returns at once, without a command.
+    assert_eq!(
+        backend
+            .idle(&inbox, Duration::from_secs(60), std::future::pending())
+            .await,
+        Ok(IdleOutcome::Changed)
+    );
+    let lines = finish(backend, handle).await;
+    assert!(lines.iter().all(|l| !l.contains("IDLE")), "{lines:?}");
+}
+
+#[tokio::test]
+async fn idle_reports_changes_timeouts_and_stop() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            // 1: new mail while idling.
+            Expect("IDLE"),
+            Send("+ idling\r\n"),
+            Pause(Duration::from_millis(100)),
+            Send("* STATUS \"INBOX\" (MESSAGES 4)\r\n"),
+            Send("* 4 EXISTS\r\n"),
+            Expect("DONE"),
+            Send("{tag} OK IDLE done\r\n"),
+            // 2: time limit.
+            Expect("IDLE"),
+            Send("+ idling\r\n"),
+            Expect("DONE"),
+            Send("{tag} OK IDLE done\r\n"),
+            // 3: stop signal; an EXPUNGE arrives while ending IDLE and stays pending.
+            Expect("IDLE"),
+            Send("+ idling\r\n"),
+            Expect("DONE"),
+            Send("* 1 EXPUNGE\r\n{tag} OK IDLE done\r\n"),
+        ],
+    )
+    .await;
+    let start = std::time::Instant::now();
+    let outcome = backend
+        .idle(&inbox, Duration::from_secs(30), std::future::pending())
+        .await;
+    assert_eq!(outcome, Ok(IdleOutcome::Changed));
+    assert!(start.elapsed() < Duration::from_secs(5));
+
+    let start = std::time::Instant::now();
+    let outcome = backend
+        .idle(&inbox, Duration::from_millis(300), std::future::pending())
+        .await;
+    assert_eq!(outcome, Ok(IdleOutcome::TimedOut));
+    assert!(start.elapsed() >= Duration::from_millis(290));
+
+    let outcome = backend
+        .idle(
+            &inbox,
+            Duration::from_secs(30),
+            tokio::time::sleep(Duration::from_millis(100)),
+        )
+        .await;
+    assert_eq!(outcome, Ok(IdleOutcome::Stopped));
+    // The EXPUNGE is reported by the next call without IDLE.
+    assert_eq!(
+        backend
+            .idle(&inbox, Duration::from_secs(30), std::future::pending())
+            .await,
+        Ok(IdleOutcome::Changed)
+    );
+    let lines = finish(backend, handle).await;
+    assert_eq!(
+        lines.iter().filter(|l| l.ends_with("IDLE")).count(),
+        3,
+        "{lines:?}"
+    );
+}
+
+#[tokio::test]
+async fn connection_closed_mid_fetch_is_lost_and_poisons() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("UID FETCH 1:3"),
+            Send("* 1 FETCH (UID 1 FLAGS (\\Seen) RFC822.SIZE 10"),
+            Close,
+        ],
+    )
+    .await;
+    let err = backend
+        .fetch_headers(&inbox, &UidSet::range(1, 3))
+        .await
+        .expect_err("closed");
+    assert!(matches!(err, BackendError::ConnectionLost(_)), "{err}");
+    let again = backend.noop().await.expect_err("poisoned");
+    assert!(
+        matches!(&again, BackendError::ConnectionLost(text) if text.contains("earlier failure"))
+    );
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn bye_then_close_names_the_reason() {
+    let (mut backend, _inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("NOOP"),
+            Send("* BYE server shutting down\r\n"),
+            Close,
+        ],
+    )
+    .await;
+    let err = backend.noop().await.expect_err("bye");
+    assert!(
+        matches!(&err, BackendError::ConnectionLost(text) if text.contains("shutting down")),
+        "{err}"
+    );
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn silent_server_times_out_and_dropped_futures_poison() {
+    let mut script = vec![
+        GREETING, LOGIN, LOGIN_OK, ENABLE, ENABLE_OK, EXAMINE, EXAMINE_OK,
+    ];
+    script.extend([Expect("NOOP"), Pause(Duration::from_secs(5))]);
+    let (backend, handle) = connect(Access::ReadOnly, Duration::from_millis(300), script).await;
+    let mut backend = backend.expect("login");
+    let inbox = backend.open_mailbox("INBOX").await.expect("examine");
+    let start = std::time::Instant::now();
+    let err = backend.noop().await.expect_err("silent");
+    assert!(matches!(err, BackendError::Timeout(_)), "{err}");
+    assert!(start.elapsed() < Duration::from_secs(2));
+    assert!(matches!(
+        backend.search_uids(&inbox).await,
+        Err(BackendError::ConnectionLost(_))
+    ));
+    drop(backend);
+    handle.abort();
+
+    // A future dropped half-way (here by a caller's timeout) leaves the connection unusable.
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![Expect("UID SEARCH ALL"), Pause(Duration::from_secs(5))],
+    )
+    .await;
+    let cut = tokio::time::timeout(Duration::from_millis(100), backend.search_uids(&inbox)).await;
+    assert!(cut.is_err());
+    assert!(matches!(
+        backend.noop().await,
+        Err(BackendError::ConnectionLost(_))
+    ));
+    drop(backend);
+    handle.abort();
+}
+
+#[tokio::test]
+async fn list_with_list_status_and_modified_utf7() {
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![
+            GREETING,
+            LOGIN,
+            LOGIN_OK,
+            ENABLE,
+            ENABLE_OK,
+            Expect(
+                "LIST \"\" \"*\" RETURN (SPECIAL-USE STATUS (MESSAGES UNSEEN UIDNEXT UIDVALIDITY HIGHESTMODSEQ))",
+            ),
+            Send(
+                "* LIST (\\HasNoChildren) \"/\" \"inbox\"\r\n\
+* STATUS \"INBOX\" (MESSAGES 3 UNSEEN 1 UIDNEXT 40 UIDVALIDITY 77 HIGHESTMODSEQ 900)\r\n\
+* LIST (\\HasNoChildren \\Sent) \"/\" \"Gesendet\"\r\n\
+* STATUS \"Gesendet\" (MESSAGES 0 UNSEEN 0 UIDNEXT 1 UIDVALIDITY 78 HIGHESTMODSEQ 1)\r\n\
+* LIST (\\Noselect \\HasChildren) \"/\" \"Projects\"\r\n\
+* LIST (\\HasNoChildren) \"/\" \"Projects/&ANw-berpr&APw-fung\"\r\n\
+* STATUS \"Projects/&ANw-berpr&APw-fung\" (MESSAGES 1 UNSEEN 0 UIDNEXT 2 UIDVALIDITY 79)\r\n\
+{tag} OK LIST done\r\n",
+            ),
+        ],
+    )
+    .await;
+    let mut backend = backend.expect("login");
+    let list = backend.list_mailboxes().await.expect("list");
+    let paths: Vec<&str> = list.iter().map(|m| m.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        ["INBOX", "Gesendet", "Projects", "Projects/Überprüfung"]
+    );
+    assert_eq!(list[0].name, "INBOX");
+    assert_eq!(list[3].name, "Projects/&ANw-berpr&APw-fung");
+    assert_eq!(list[3].delimiter, Some('/'));
+    assert!(list[1].has_attribute("\\Sent"));
+    assert!(!list[2].is_selectable() && list[2].status.is_none());
+    let inbox = list[0].status.expect("status");
+    assert_eq!(
+        (inbox.messages, inbox.unseen, inbox.uid_next),
+        (3, Some(1), Some(40))
+    );
+    assert_eq!(inbox.highest_modseq, Some(ModSeq(900)));
+    assert_eq!(
+        list[3].status.map(|s| s.uid_validity),
+        Some(Some(UidValidity(79)))
+    );
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn list_without_list_status_asks_status_per_mailbox() {
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![
+            Send("* OK hello\r\n"),
+            LOGIN,
+            Send("{tag} OK logged in\r\n"),
+            Expect("CAPABILITY"),
+            Send("* CAPABILITY IMAP4rev1 IDLE\r\n{tag} OK done\r\n"),
+            Expect("LIST \"\" \"*\""),
+            Send("* LIST () \".\" INBOX\r\n* LIST () \".\" \"Papierkorb\"\r\n{tag} OK done\r\n"),
+            Expect("STATUS \"INBOX\" (MESSAGES UNSEEN UIDNEXT UIDVALIDITY)"),
+            Send("* STATUS INBOX (MESSAGES 2 UIDNEXT 3 UIDVALIDITY 1)\r\n{tag} OK done\r\n"),
+            Expect("STATUS \"Papierkorb\""),
+            Send("{tag} NO cannot\r\n"),
+        ],
+    )
+    .await;
+    let mut backend = backend.expect("login");
+    assert!(!backend.capabilities().condstore && backend.enabled().is_empty());
+    let list = backend.list_mailboxes().await.expect("list");
+    assert_eq!(list[0].status.map(|s| s.messages), Some(2));
+    assert_eq!(list[1].status, None);
+    assert_eq!(list[1].delimiter, Some('.'));
+    finish(backend, handle).await;
+}
+
+#[tokio::test]
+async fn wrong_password_is_auth_failed_and_old_servers_are_refused() {
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![
+            GREETING,
+            LOGIN,
+            Send("{tag} NO [AUTHENTICATIONFAILED] Authentication failed.\r\n"),
+        ],
+    )
+    .await;
+    let err = backend.expect_err("wrong password");
+    assert_eq!(
+        err,
+        BackendError::AuthFailed("[AUTHENTICATIONFAILED] Authentication failed.".into())
+    );
+    assert!(!err.to_string().contains("\"pw\""));
+    handle.await.expect("fake server");
+
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![
+            GREETING,
+            LOGIN,
+            Send("{tag} NO [UNAVAILABLE] try later\r\n"),
+        ],
+    )
+    .await;
+    assert!(matches!(backend, Err(BackendError::Rejected(_))));
+    handle.await.expect("fake server");
+
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![
+            Send("* OK hello\r\n"),
+            LOGIN,
+            // imap-proto refuses a capability list without IMAP4rev1 as a response code ...
+            Send("{tag} OK [CAPABILITY IMAP2] ok\r\n"),
+            Expect("CAPABILITY"),
+            // ... and as a response.
+            Send("* CAPABILITY IMAP2 IDLE\r\n{tag} OK done\r\n"),
+        ],
+    )
+    .await;
+    assert!(
+        matches!(&backend, Err(BackendError::Unsupported(text)) if text.starts_with("IMAP4rev1")),
+        "{:?}",
+        backend.err()
+    );
+    handle.await.expect("fake server");
+
+    let (backend, handle) = connect(
+        Access::ReadOnly,
+        Duration::from_secs(2),
+        vec![Send("* BYE too many connections\r\n")],
+    )
+    .await;
+    assert!(matches!(backend, Err(BackendError::Rejected(text)) if text.contains("too many")));
+    handle.await.expect("fake server");
+}
+
+#[tokio::test]
+async fn changedsince_without_modseq_is_unsupported() {
+    let script = vec![
+        Send("* OK hi\r\n"),
+        LOGIN,
+        Send("{tag} OK [CAPABILITY IMAP4rev1] ok\r\n"),
+        Expect("EXAMINE \"INBOX\""),
+        Send("* 1 EXISTS\r\n* OK [UIDVALIDITY 1] x\r\n* OK [UIDNEXT 2] x\r\n{tag} OK done\r\n"),
+    ];
+    let (backend, handle) = connect(Access::ReadOnly, Duration::from_secs(2), script).await;
+    let mut backend = backend.expect("login");
+    let inbox = backend.open_mailbox("INBOX").await.expect("examine");
+    assert_eq!(inbox.highest_modseq, None);
+    assert!(matches!(
+        backend
+            .fetch_flags(&inbox, &UidSet::all(), Some(ModSeq(1)))
+            .await,
+        Err(BackendError::Unsupported(_))
+    ));
+    assert!(matches!(
+        backend
+            .idle(&inbox, Duration::from_secs(1), std::future::pending())
+            .await,
+        Err(BackendError::Unsupported(_))
+    ));
+    let lines = finish(backend, handle).await;
+    assert_eq!(lines.len(), 2, "{lines:?}");
+}
