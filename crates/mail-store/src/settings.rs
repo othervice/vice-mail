@@ -71,7 +71,8 @@ impl Store {
     }
 }
 
-fn now_millis() -> i64 {
+/// Current time in Unix milliseconds (0 if the clock is before 1970).
+pub(crate) fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))

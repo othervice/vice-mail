@@ -3,7 +3,12 @@
 
 use rusqlite_migration::{M, Migrations};
 
-const MIGRATIONS: &[M<'static>] = &[M::up(include_str!("../migrations/0001_setting.sql"))];
+pub(crate) const MIGRATIONS: &[M<'static>] = &[
+    // Stage 1: key-value settings.
+    M::up(include_str!("../migrations/0001_setting.sql")),
+    // Stage 2: accounts, identities, mailboxes, message headers and locations.
+    M::up(include_str!("../migrations/0002_mail.sql")),
+];
 
 /// All migrations this build knows.
 pub(crate) fn migrations() -> Migrations<'static> {

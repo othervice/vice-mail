@@ -1,8 +1,8 @@
-//! DRAFT — public API of the store for stage 2 (accounts, mailboxes, message headers).
+//! Public API of the store for stage 2: accounts, mailboxes, message headers and lists.
 //!
-//! The signatures and their documented behaviour are the contract between the store task and
-//! the engine. Bodies are `todo!()` until the store task implements them together with the
-//! migration `migrations/0002_mail.sql` (also a draft, not yet registered).
+//! The signatures and their documented behaviour are the contract with the engine. The SQL
+//! lives in `accounts`, `mailboxes` and `messages`; every method here only moves its arguments
+//! to the writer thread or a reader and awaits the result, so no call blocks a Tokio worker.
 //!
 //! **Inherent methods, no trait.** The real store on a temporary directory is fast (the whole
 //! schema in memory pages, milliseconds per test) and exact; a fake would have to re-implement
@@ -15,7 +15,6 @@
 //! connection is harmless. Sync writes carry the UIDVALIDITY they were computed for and fail
 //! with [`StoreError::UidValidityMismatch`] (nothing written) if the mailbox was reset since.
 //! Unknown ids fail with [`StoreError::NotFound`].
-#![allow(clippy::todo, unused_variables)]
 
 use mail_model::{
     Account, AccountColor, AccountId, AccountStatus, FlagUpdate, Identity, ListCursor, Mailbox,
@@ -23,7 +22,7 @@ use mail_model::{
     UidSet, UidValidity,
 };
 
-use crate::{Store, StoreError};
+use crate::{Store, StoreError, accounts, mailboxes, messages};
 
 /// Largest page [`Store::list_messages`] returns.
 pub const MAX_PAGE_SIZE: u32 = 500;
@@ -136,27 +135,36 @@ impl Store {
     /// ([`AccountColor::next_free`]) and one default identity (email and display name).
     /// [`StoreError::AccountExists`] if the email is taken (case-insensitive).
     pub async fn insert_account(&self, account: NewAccount) -> Result<StoredAccount, StoreError> {
-        todo!()
+        let result = self.write(move |tx| accounts::insert(tx, &account)).await;
+        if let Ok(stored) = &result {
+            tracing::info!(account = %stored.id, "account stored");
+        }
+        result
     }
 
     /// All accounts, oldest first.
     pub async fn accounts(&self) -> Result<Vec<StoredAccount>, StoreError> {
-        todo!()
+        self.read(accounts::all).await
     }
 
     pub async fn account(&self, id: AccountId) -> Result<Option<StoredAccount>, StoreError> {
-        todo!()
+        self.read(move |conn| accounts::one(conn, id)).await
     }
 
     /// Deletes the account with all its identities, mailboxes, messages and locations.
     /// Returns `false` if it did not exist. The keychain entry is the engine's job.
     pub async fn delete_account(&self, id: AccountId) -> Result<bool, StoreError> {
-        todo!()
+        let deleted = self.write(move |tx| accounts::delete(tx, id)).await?;
+        if deleted {
+            tracing::info!(account = %id, "account and its local data deleted");
+        }
+        Ok(deleted)
     }
 
     /// Identities of the account, default first.
     pub async fn identities(&self, account: AccountId) -> Result<Vec<Identity>, StoreError> {
-        todo!()
+        self.read(move |conn| accounts::identities(conn, account))
+            .await
     }
 
     // ---------------------------------------------------------------------------------------
@@ -175,13 +183,15 @@ impl Store {
         account: AccountId,
         remote: Vec<RemoteMailbox>,
     ) -> Result<MailboxListReport, StoreError> {
-        todo!()
+        self.write(move |tx| mailboxes::sync(tx, account, &remote))
+            .await
     }
 
     /// Mailboxes of the account for the UI, with local unread and total counts, ordered by
     /// path. Unread via `loc_unseen`, total via `loc_uid` (both covering index searches).
     pub async fn mailboxes(&self, account: AccountId) -> Result<Vec<Mailbox>, StoreError> {
-        todo!()
+        self.read(move |conn| mailboxes::list_for(conn, account))
+            .await
     }
 
     /// Sync bookkeeping of every mailbox of the account, ordered by path.
@@ -189,7 +199,8 @@ impl Store {
         &self,
         account: AccountId,
     ) -> Result<Vec<MailboxSyncState>, StoreError> {
-        todo!()
+        self.read(move |conn| mailboxes::sync_states(conn, account))
+            .await
     }
 
     /// The user sets a role (`custom` included) with source `user`. Another mailbox of the
@@ -202,7 +213,8 @@ impl Store {
         mailbox: MailboxId,
         role: MailboxRole,
     ) -> Result<Vec<Mailbox>, StoreError> {
-        todo!()
+        self.write(move |tx| mailboxes::set_role(tx, mailbox, role))
+            .await
     }
 
     /// Starts the mailbox over for a new UIDVALIDITY (or its very first sync): deletes all its
@@ -215,7 +227,8 @@ impl Store {
         mailbox: MailboxId,
         baseline: MailboxBaseline,
     ) -> Result<usize, StoreError> {
-        todo!()
+        self.write(move |tx| mailboxes::reset(tx, mailbox, baseline))
+            .await
     }
 
     /// Stores one window of headers (up to 500) and, if given, the new first-sync progress
@@ -233,7 +246,10 @@ impl Store {
         headers: Vec<MessageHeader>,
         sync_low_uid: Option<Uid>,
     ) -> Result<StoreReport, StoreError> {
-        todo!()
+        self.write(move |tx| {
+            messages::store_headers(tx, mailbox, uid_validity, headers, sync_low_uid)
+        })
+        .await
     }
 
     /// Writes new flags of existing locations; UIDs not stored are ignored. Returns the number
@@ -244,7 +260,8 @@ impl Store {
         uid_validity: UidValidity,
         updates: Vec<FlagUpdate>,
     ) -> Result<usize, StoreError> {
-        todo!()
+        self.write(move |tx| messages::update_flags(tx, mailbox, uid_validity, &updates))
+            .await
     }
 
     /// Deletes the locations of these UIDs (deleted or moved away on the server). Messages
@@ -256,13 +273,15 @@ impl Store {
         uid_validity: UidValidity,
         uids: UidSet,
     ) -> Result<usize, StoreError> {
-        todo!()
+        self.write(move |tx| messages::remove_uids(tx, mailbox, uid_validity, &uids))
+            .await
     }
 
     /// Every stored UID of the mailbox (`loc_uid`, covering index). Compare with
     /// `MailBackend::search_uids` to find deletions: `known.difference(&server)`.
     pub async fn known_uids(&self, mailbox: MailboxId) -> Result<UidSet, StoreError> {
-        todo!()
+        self.read(move |conn| messages::known_uids(conn, mailbox))
+            .await
     }
 
     /// Records that every message below `uid_next` has been fetched (end of a new-mail pass).
@@ -272,7 +291,8 @@ impl Store {
         uid_validity: UidValidity,
         uid_next: Uid,
     ) -> Result<(), StoreError> {
-        todo!()
+        self.write(move |tx| mailboxes::set_uid_next(tx, mailbox, uid_validity, uid_next))
+            .await
     }
 
     /// Records the HIGHESTMODSEQ a completed flag pass started from (`None`: the mailbox has
@@ -283,14 +303,18 @@ impl Store {
         uid_validity: UidValidity,
         highest_modseq: Option<ModSeq>,
     ) -> Result<(), StoreError> {
-        todo!()
+        self.write(move |tx| {
+            mailboxes::set_highest_modseq(tx, mailbox, uid_validity, highest_modseq)
+        })
+        .await
     }
 
     /// Deletes messages of the account that lie in no mailbox. The engine calls it after a
     /// full pass in which no mailbox of the account was in its first sync (otherwise a
     /// message on its way between two mailboxes would lose its local data). Returns the count.
     pub async fn delete_orphan_messages(&self, account: AccountId) -> Result<usize, StoreError> {
-        todo!()
+        self.write(move |tx| messages::delete_orphans(tx, account))
+            .await
     }
 
     // ---------------------------------------------------------------------------------------
@@ -307,7 +331,8 @@ impl Store {
         cursor: Option<ListCursor>,
         limit: u32,
     ) -> Result<MessagePage, StoreError> {
-        todo!()
+        self.read(move |conn| messages::list(conn, mailbox, cursor, limit))
+            .await
     }
 
     /// Unread count per mailbox of the account (`loc_unseen`), mailboxes without unread
@@ -316,6 +341,7 @@ impl Store {
         &self,
         account: AccountId,
     ) -> Result<Vec<(MailboxId, u32)>, StoreError> {
-        todo!()
+        self.read(move |conn| mailboxes::unread_counts(conn, account))
+            .await
     }
 }

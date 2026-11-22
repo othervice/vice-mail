@@ -1,0 +1,471 @@
+//! Message headers and their locations: storing sync windows, flags, removals and the list.
+
+use std::collections::BTreeMap;
+
+use mail_model::{
+    AccountId, Address, FlagUpdate, Flags, ListCursor, MailboxId, MessageHeader, MessageId,
+    MessageListItem, MessagePage, ModSeq, Uid, UidSet, UidValidity,
+};
+use rusqlite::types::Type;
+use rusqlite::{Connection, OptionalExtension, params};
+
+use crate::StoreError;
+use crate::accounts::{self, conversion_error};
+use crate::mail_api::{MAX_PAGE_SIZE, StoreReport};
+use crate::mailboxes::{self, modseq_param};
+
+/// One page of a mailbox, newest first. `CROSS JOIN` fixes the join order (decision 0003): the
+/// page is a contiguous range of the location key, each message a rowid lookup.
+pub(crate) const LIST_PAGE: &str = "
+    SELECT l.message_id, l.seen, l.flagged, l.answered, l.draft, l.keywords,
+           m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments
+    FROM message_location l CROSS JOIN message m ON m.id = l.message_id
+    WHERE l.mailbox_id = ?1 AND l.message_id < ?2
+    ORDER BY l.message_id DESC LIMIT ?3";
+
+/// Account of a mailbox, for the list items. A scalar subquery, not a join: with statistics of
+/// a single account the planner scanned `account` for the join.
+pub(crate) const MAILBOX_ACCOUNT: &str = "
+    SELECT (SELECT a.uuid FROM account a WHERE a.id = b.account_id) FROM mailbox b WHERE b.id = ?1";
+
+pub(crate) const LOCATION_BY_UID: &str = "
+    SELECT seen, flagged, answered, draft, deleted, keywords, modseq
+    FROM message_location WHERE mailbox_id = ?1 AND uid = ?2";
+
+pub(crate) const UPDATE_LOCATION: &str = "
+    UPDATE message_location
+    SET seen = ?3, flagged = ?4, answered = ?5, draft = ?6, deleted = ?7, keywords = ?8,
+        modseq = ?9
+    WHERE mailbox_id = ?1 AND uid = ?2";
+
+/// A message of the account with this Message-ID that does not lie in the mailbox yet
+/// (merge rule of decision 0003). The oldest such row, so duplicates pair up stably.
+pub(crate) const MERGE_CANDIDATE: &str = "
+    SELECT m.id FROM message m
+    WHERE m.account_id = ?1 AND m.message_id_hdr = ?2
+      AND NOT EXISTS (SELECT 1 FROM message_location l
+                      WHERE l.mailbox_id = ?3 AND l.message_id = m.id)
+    ORDER BY m.id LIMIT 1";
+
+/// Taken ids from a candidate upwards, to find the first gap.
+pub(crate) const IDS_FROM: &str = "SELECT id FROM message WHERE id >= ?1 ORDER BY id";
+
+pub(crate) const INSERT_MESSAGE: &str = "
+    INSERT INTO message (id, account_id, message_id_hdr, date, subject, from_name, from_addr,
+                         to_addrs, cc_addrs, in_reply_to, references_hdr, list_id,
+                         list_unsubscribe, auto_submitted, precedence, size, has_attachments)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)";
+
+pub(crate) const INSERT_LOCATION: &str = "
+    INSERT INTO message_location (mailbox_id, message_id, uid, seen, flagged, answered, draft,
+                                  deleted, keywords, modseq)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
+
+pub(crate) const REMOVE_UID_RANGE: &str =
+    "DELETE FROM message_location WHERE mailbox_id = ?1 AND uid BETWEEN ?2 AND ?3";
+
+pub(crate) const KNOWN_UIDS: &str =
+    "SELECT uid FROM message_location WHERE mailbox_id = ?1 ORDER BY uid";
+
+pub(crate) const DELETE_ORPHANS: &str = "
+    DELETE FROM message
+    WHERE account_id = ?1
+      AND NOT EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = message.id)";
+
+/// See [`crate::Store::store_headers`].
+pub(crate) fn store_headers(
+    conn: &Connection,
+    mailbox: MailboxId,
+    uid_validity: UidValidity,
+    mut headers: Vec<MessageHeader>,
+    sync_low_uid: Option<Uid>,
+) -> Result<StoreReport, StoreError> {
+    let account_row = mailboxes::check_uid_validity(conn, mailbox, uid_validity)?;
+
+    // Ascending sort date, then UID: new rows get ascending ids (B-tree appends, and the FTS
+    // rows of stage 7 are cheapest in rowid order), and of two mails with the same date the
+    // later arrival gets the larger id, so it is listed first.
+    headers.sort_by_key(|h| (h.sort_date(), h.uid));
+
+    let mut report = StoreReport::default();
+    let mut ids = IdAllocator::default();
+    for header in &headers {
+        let flags = clean_flags(mailbox, header.uid, &header.flags);
+        if apply_flags(conn, mailbox, header.uid, &flags, header.modseq)?.is_some() {
+            report.updated += 1;
+            continue;
+        }
+
+        let message_id = header.message_id.as_deref().filter(|m| !m.is_empty());
+        if let Some(message_id) = message_id {
+            let existing: Option<i64> = conn
+                .prepare_cached(MERGE_CANDIDATE)?
+                .query_row(params![account_row, message_id, mailbox.0], |r| r.get(0))
+                .optional()?;
+            if let Some(existing) = existing {
+                insert_location(conn, mailbox, existing, header.uid, &flags, header.modseq)?;
+                report.merged += 1;
+                continue;
+            }
+        }
+
+        let id = ids.allocate(conn, header.sort_date())?;
+        insert_message(conn, id, account_row, message_id, header)?;
+        insert_location(conn, mailbox, id, header.uid, &flags, header.modseq)?;
+        report.inserted += 1;
+    }
+
+    if let Some(low) = sync_low_uid {
+        mailboxes::set_sync_low_uid(conn, mailbox, low)?;
+    }
+    tracing::debug!(
+        mailbox = mailbox.0,
+        inserted = report.inserted,
+        merged = report.merged,
+        updated = report.updated,
+        "stored headers"
+    );
+    Ok(report)
+}
+
+/// See [`crate::Store::update_flags`].
+pub(crate) fn update_flags(
+    conn: &Connection,
+    mailbox: MailboxId,
+    uid_validity: UidValidity,
+    updates: &[FlagUpdate],
+) -> Result<usize, StoreError> {
+    mailboxes::check_uid_validity(conn, mailbox, uid_validity)?;
+    let mut changed = 0;
+    for update in updates {
+        let flags = clean_flags(mailbox, update.uid, &update.flags);
+        if apply_flags(conn, mailbox, update.uid, &flags, update.modseq)? == Some(true) {
+            changed += 1;
+        }
+    }
+    Ok(changed)
+}
+
+/// See [`crate::Store::remove_uids`].
+pub(crate) fn remove_uids(
+    conn: &Connection,
+    mailbox: MailboxId,
+    uid_validity: UidValidity,
+    uids: &UidSet,
+) -> Result<usize, StoreError> {
+    mailboxes::check_uid_validity(conn, mailbox, uid_validity)?;
+    let mut stmt = conn.prepare_cached(REMOVE_UID_RANGE)?;
+    let mut removed = 0;
+    for &(first, last) in uids.ranges() {
+        removed += stmt
+            .execute(params![mailbox.0, first, last])
+            .map_err(StoreError::sqlite("remove locations"))?;
+    }
+    Ok(removed)
+}
+
+pub(crate) fn known_uids(conn: &Connection, mailbox: MailboxId) -> Result<UidSet, StoreError> {
+    mailboxes::ensure_exists(conn, mailbox)?;
+    let uids = conn
+        .prepare_cached(KNOWN_UIDS)?
+        .query_map([mailbox.0], |r| r.get::<_, Uid>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(UidSet::from_uids(uids))
+}
+
+pub(crate) fn delete_orphans(conn: &Connection, account: AccountId) -> Result<usize, StoreError> {
+    let account_row = accounts::row_id(conn, account)?;
+    let deleted = conn
+        .prepare_cached(DELETE_ORPHANS)?
+        .execute([account_row])
+        .map_err(StoreError::sqlite("delete orphan messages"))?;
+    Ok(deleted)
+}
+
+/// See [`crate::Store::list_messages`].
+pub(crate) fn list(
+    conn: &Connection,
+    mailbox: MailboxId,
+    cursor: Option<ListCursor>,
+    limit: u32,
+) -> Result<MessagePage, StoreError> {
+    if limit == 0 || limit > MAX_PAGE_SIZE {
+        return Err(StoreError::InvalidArgument(format!(
+            "list limit {limit} is outside 1..={MAX_PAGE_SIZE}"
+        )));
+    }
+    let account: AccountId = conn
+        .prepare_cached(MAILBOX_ACCOUNT)?
+        .query_row([mailbox.0], |r| accounts::account_id_at(r, 0))
+        .optional()?
+        .ok_or_else(|| StoreError::NotFound(format!("mailbox {mailbox}")))?;
+
+    let before = cursor.map_or(i64::MAX, |c| c.before().0);
+    // One row more than asked tells whether another page follows.
+    let mut items = conn
+        .prepare_cached(LIST_PAGE)?
+        .query_map(params![mailbox.0, before, i64::from(limit) + 1], |r| {
+            let from_name: Option<String> = r.get(7)?;
+            let from_addr: Option<String> = r.get(8)?;
+            let from = from_addr.map(|email| Address {
+                name: from_name,
+                email,
+            });
+            let date: i64 = r.get(10)?;
+            Ok(MessageListItem {
+                id: MessageId(r.get(0)?),
+                account_id: account,
+                mailbox_id: mailbox,
+                from,
+                to: addresses_at(r, 9)?,
+                subject: r.get(6)?,
+                date: date.saturating_mul(1000),
+                unread: !r.get::<_, bool>(1)?,
+                flagged: r.get(2)?,
+                answered: r.get(3)?,
+                draft: r.get(4)?,
+                has_attachments: r.get(11)?,
+                keywords: keywords_from(r.get::<_, Option<String>>(5)?.as_deref()),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let next_cursor = if items.len() > limit {
+        items.truncate(limit);
+        items.last().map(|item| ListCursor::after(item.id))
+    } else {
+        None
+    };
+    Ok(MessagePage { items, next_cursor })
+}
+
+/// Allocates `message.id` values: the sort date, or the next free number above it.
+///
+/// Remembers the runs of taken ids it has seen during one window, so a window of many mails
+/// with the same date costs one scan of the run, not one per mail. Only valid inside the
+/// transaction that inserts the allocated ids.
+#[derive(Default)]
+struct IdAllocator {
+    /// Start → end (inclusive) of runs of ids known to be taken.
+    taken: BTreeMap<i64, i64>,
+}
+
+impl IdAllocator {
+    fn allocate(&mut self, conn: &Connection, candidate: i64) -> Result<i64, StoreError> {
+        let (run_start, probe) = match self.taken.range(..=candidate).next_back() {
+            Some((&start, &end)) if end >= candidate => (start, end + 1),
+            _ => (candidate, candidate),
+        };
+
+        let mut free = probe;
+        let mut stmt = conn.prepare_cached(IDS_FROM)?;
+        let mut rows = stmt.query([probe])?;
+        while let Some(row) = rows.next()? {
+            if row.get::<_, i64>(0)? != free {
+                break;
+            }
+            free += 1;
+        }
+
+        // [run_start, free] is taken now. Absorb known runs that start inside or right after.
+        let mut end = free;
+        let absorbed: Vec<i64> = self
+            .taken
+            .range(run_start..=free.saturating_add(1))
+            .map(|(&start, _)| start)
+            .collect();
+        for start in absorbed {
+            if let Some(e) = self.taken.remove(&start) {
+                end = end.max(e);
+            }
+        }
+        self.taken.insert(run_start, end);
+        Ok(free)
+    }
+}
+
+/// Flags as stored: keywords normalised, and anything that is not an IMAP atom dropped (it
+/// would break the space-separated column; a server cannot send one).
+fn clean_flags(mailbox: MailboxId, uid: Uid, flags: &Flags) -> Flags {
+    let mut flags = flags.clone();
+    let before = flags.keywords.len();
+    flags
+        .keywords
+        .retain(|k| !k.is_empty() && !k.chars().any(|c| c.is_whitespace() || c.is_control()));
+    if flags.keywords.len() != before {
+        tracing::warn!(
+            mailbox = mailbox.0,
+            uid,
+            dropped = before - flags.keywords.len(),
+            "dropped keywords that are not IMAP atoms"
+        );
+    }
+    flags.normalize_keywords();
+    flags
+}
+
+struct StoredFlags {
+    seen: bool,
+    flagged: bool,
+    answered: bool,
+    draft: bool,
+    deleted: bool,
+    keywords: Option<String>,
+    modseq: Option<i64>,
+}
+
+/// Writes `flags` and `modseq` to the location with this UID. `None` if there is none,
+/// otherwise whether flags or keywords changed. Keywords that only differ in ASCII case keep
+/// their stored spelling.
+fn apply_flags(
+    conn: &Connection,
+    mailbox: MailboxId,
+    uid: Uid,
+    flags: &Flags,
+    modseq: Option<ModSeq>,
+) -> Result<Option<bool>, StoreError> {
+    let stored = conn
+        .prepare_cached(LOCATION_BY_UID)?
+        .query_row(params![mailbox.0, uid], |r| {
+            Ok(StoredFlags {
+                seen: r.get(0)?,
+                flagged: r.get(1)?,
+                answered: r.get(2)?,
+                draft: r.get(3)?,
+                deleted: r.get(4)?,
+                keywords: r.get(5)?,
+                modseq: r.get(6)?,
+            })
+        })
+        .optional()?;
+    let Some(stored) = stored else {
+        return Ok(None);
+    };
+    let modseq = modseq_param(modseq)?;
+    let same_keywords = keywords_equal(stored.keywords.as_deref(), &flags.keywords);
+    let same_flags = stored.seen == flags.seen
+        && stored.flagged == flags.flagged
+        && stored.answered == flags.answered
+        && stored.draft == flags.draft
+        && stored.deleted == flags.deleted
+        && same_keywords;
+    if same_flags && stored.modseq == modseq {
+        return Ok(Some(false));
+    }
+    let keywords = if same_keywords {
+        stored.keywords
+    } else {
+        keywords_text(&flags.keywords)
+    };
+    conn.prepare_cached(UPDATE_LOCATION)?
+        .execute(params![
+            mailbox.0,
+            uid,
+            flags.seen,
+            flags.flagged,
+            flags.answered,
+            flags.draft,
+            flags.deleted,
+            keywords,
+            modseq,
+        ])
+        .map_err(StoreError::sqlite("update flags"))?;
+    Ok(Some(!same_flags))
+}
+
+fn insert_location(
+    conn: &Connection,
+    mailbox: MailboxId,
+    message: i64,
+    uid: Uid,
+    flags: &Flags,
+    modseq: Option<ModSeq>,
+) -> Result<(), StoreError> {
+    conn.prepare_cached(INSERT_LOCATION)?
+        .execute(params![
+            mailbox.0,
+            message,
+            uid,
+            flags.seen,
+            flags.flagged,
+            flags.answered,
+            flags.draft,
+            flags.deleted,
+            keywords_text(&flags.keywords),
+            modseq_param(modseq)?,
+        ])
+        .map_err(StoreError::sqlite("insert location"))?;
+    Ok(())
+}
+
+fn insert_message(
+    conn: &Connection,
+    id: i64,
+    account_row: i64,
+    message_id: Option<&str>,
+    h: &MessageHeader,
+) -> Result<(), StoreError> {
+    let from = h.from.first();
+    let references = (!h.references.is_empty()).then(|| h.references.join(" "));
+    conn.prepare_cached(INSERT_MESSAGE)?
+        .execute(params![
+            id,
+            account_row,
+            message_id,
+            h.sort_date(),
+            h.subject,
+            from.and_then(|a| a.name.as_deref()),
+            from.map(|a| a.email.as_str()),
+            addresses_json(&h.to)?,
+            addresses_json(&h.cc)?,
+            h.in_reply_to,
+            references,
+            h.list_id,
+            h.list_unsubscribe,
+            h.auto_submitted,
+            h.precedence,
+            h.size,
+            h.has_attachments,
+        ])
+        .map_err(StoreError::sqlite("insert message"))?;
+    Ok(())
+}
+
+fn keywords_text(keywords: &[String]) -> Option<String> {
+    (!keywords.is_empty()).then(|| keywords.join(" "))
+}
+
+fn keywords_from(text: Option<&str>) -> Vec<String> {
+    text.map(|t| t.split_whitespace().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+/// Both lists are normalised (sorted ignoring ASCII case), so they compare element by element.
+fn keywords_equal(stored: Option<&str>, new: &[String]) -> bool {
+    let mut stored = stored.unwrap_or_default().split_whitespace();
+    let mut new = new.iter();
+    loop {
+        match (stored.next(), new.next()) {
+            (None, None) => return true,
+            (Some(a), Some(b)) if a.eq_ignore_ascii_case(b) => {}
+            _ => return false,
+        }
+    }
+}
+
+fn addresses_json(addresses: &[Address]) -> Result<Option<String>, StoreError> {
+    if addresses.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(addresses)
+        .map(Some)
+        .map_err(|err| StoreError::InvalidArgument(format!("addresses: {err}")))
+}
+
+fn addresses_at(r: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<Vec<Address>> {
+    let Some(json) = r.get::<_, Option<String>>(idx)? else {
+        return Ok(Vec::new());
+    };
+    serde_json::from_str(&json).map_err(|err| conversion_error(idx, Type::Text, err.to_string()))
+}

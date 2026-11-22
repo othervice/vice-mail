@@ -11,6 +11,10 @@ use crate::{StoreError, backup, migrations};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Prepared statements kept per connection. The sync path alone uses about ten; rusqlite's
+/// default of 16 would evict statements between windows.
+const STATEMENT_CACHE: usize = 64;
+
 /// Pragmas of the single write connection (decision 0003). `page_size` only takes effect before
 /// the first table exists; `journal_mode` is set separately because its result must be checked.
 const WRITER_PRAGMAS: &str = "
@@ -214,6 +218,7 @@ fn is_empty(conn: &Connection) -> Result<bool, StoreError> {
 fn configure_writer(conn: &Connection) -> Result<(), StoreError> {
     conn.busy_timeout(BUSY_TIMEOUT)
         .map_err(StoreError::sqlite("set busy timeout"))?;
+    conn.set_prepared_statement_cache_capacity(STATEMENT_CACHE);
     conn.execute_batch("PRAGMA page_size = 4096;")
         .map_err(StoreError::sqlite("set page size"))?;
     let mode: String = conn
@@ -236,6 +241,7 @@ fn open_reader(path: &Path) -> Result<Connection, StoreError> {
     .map_err(StoreError::sqlite("open read connection"))?;
     conn.busy_timeout(BUSY_TIMEOUT)
         .map_err(StoreError::sqlite("set busy timeout"))?;
+    conn.set_prepared_statement_cache_capacity(STATEMENT_CACHE);
     conn.execute_batch(READER_PRAGMAS)
         .map_err(StoreError::sqlite("configure read connection"))?;
     Ok(conn)

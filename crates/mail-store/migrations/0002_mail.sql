@@ -1,6 +1,7 @@
--- DRAFT for stage 2 (not registered in src/migrations.rs yet; the store task registers it).
--- Accounts, identities, mailboxes and message headers, after decision 0003 ("Schemaentwurf").
--- No FTS, threads or attachments yet (stages 3 and 7). Booleans are 0/1 INTEGERs.
+-- Stage 2: accounts, identities, mailboxes and message headers, after decision 0003
+-- ("Schemaentwurf"). No FTS, threads or attachments yet (stages 3 and 7). `message.id` is the
+-- rowid, so the contentless FTS table of stage 7 takes it as its rowid unchanged.
+-- Booleans are 0/1 INTEGERs.
 -- Deviations from 0003, with reasons:
 --   account     server settings and the keychain reference are columns (stage 2 needs them);
 --               the email is unique (error account_exists).
@@ -8,8 +9,11 @@
 --               `attributes`, `selectable`, `role_source` and `sync_low_uid` are new;
 --               `parent_id` is ON DELETE SET NULL, not CASCADE: a vanished parent must not
 --               take children with it that still exist (the list refresh recomputes parents).
+--               `mailbox_role` enforces one mailbox per role and account; `mailbox_path`
+--               gives the sidebar order without a sort.
 --   message     header columns for later stages (threads, categories, unsubscribe), so they
 --               never have to be fetched again.
+--   message_location  CHECKs on UID and flags (no storage cost).
 
 CREATE TABLE account (
   id              INTEGER PRIMARY KEY,
@@ -63,6 +67,8 @@ CREATE TABLE mailbox (
   UNIQUE (account_id, name)
 ) STRICT;
 CREATE INDEX mailbox_parent ON mailbox(parent_id);
+CREATE INDEX mailbox_path ON mailbox(account_id, path);
+CREATE UNIQUE INDEX mailbox_role ON mailbox(account_id, role) WHERE role IS NOT NULL;
 
 -- One row per mail, even if it lies in several mailboxes.
 -- id = sort date in Unix seconds; if taken, the next free number above (assigned on the writer
@@ -74,10 +80,10 @@ CREATE TABLE message (
   thread_id         INTEGER,                        -- stage 7
   date              INTEGER NOT NULL,               -- sort date (Unix seconds), for display
   subject           TEXT    NOT NULL,               -- '' if none
-  from_name         TEXT,
+  from_name         TEXT,                           -- first From address; both NULL if none
   from_addr         TEXT,
-  to_addrs          TEXT,                           -- JSON [{"name": str|null, "email": str}]
-  cc_addrs          TEXT,                           -- same
+  to_addrs          TEXT,                           -- JSON [{"name": str|null, "email": str}],
+  cc_addrs          TEXT,                           -- NULL if empty
   in_reply_to       TEXT,
   references_hdr    TEXT,                           -- message ids without <>, space-separated
   list_id           TEXT,
@@ -97,16 +103,16 @@ CREATE INDEX message_thread ON message(thread_id);
 CREATE TABLE message_location (
   mailbox_id  INTEGER NOT NULL REFERENCES mailbox(id) ON DELETE CASCADE,
   message_id  INTEGER NOT NULL REFERENCES message(id) ON DELETE CASCADE,
-  uid         INTEGER NOT NULL,
-  seen        INTEGER NOT NULL DEFAULT 0,
-  flagged     INTEGER NOT NULL DEFAULT 0,
-  answered    INTEGER NOT NULL DEFAULT 0,
-  draft       INTEGER NOT NULL DEFAULT 0,
-  deleted     INTEGER NOT NULL DEFAULT 0,
+  uid         INTEGER NOT NULL CHECK (uid BETWEEN 1 AND 4294967295),
+  seen        INTEGER NOT NULL DEFAULT 0 CHECK (seen IN (0, 1)),
+  flagged     INTEGER NOT NULL DEFAULT 0 CHECK (flagged IN (0, 1)),
+  answered    INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
+  draft       INTEGER NOT NULL DEFAULT 0 CHECK (draft IN (0, 1)),
+  deleted     INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
   keywords    TEXT,                                 -- space-separated (IMAP atoms), NULL = none
   modseq      INTEGER,
   PRIMARY KEY (mailbox_id, message_id)
 ) STRICT, WITHOUT ROWID;
-CREATE UNIQUE INDEX loc_uid ON message_location(mailbox_id, uid);
-CREATE INDEX loc_message ON message_location(message_id);
-CREATE INDEX loc_unseen  ON message_location(mailbox_id, message_id) WHERE seen = 0;
+CREATE UNIQUE INDEX loc_uid ON message_location(mailbox_id, uid);                     -- sync by UID
+CREATE INDEX loc_message ON message_location(message_id);                              -- FK cascade
+CREATE INDEX loc_unseen  ON message_location(mailbox_id, message_id) WHERE seen = 0;   -- counters
