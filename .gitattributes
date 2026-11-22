@@ -1,0 +1,2 @@
+# Test mails are RFC 5322 data with CRLF line endings; never convert them.
+*.eml -text
