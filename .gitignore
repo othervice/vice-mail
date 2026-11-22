@@ -1,0 +1,24 @@
+# Build
+/target/
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Lokale Design-Vorlage: fremder Screenshot, darf nicht veröffentlicht werden
+/design-reference/
+
+# Testserver-Daten
+/testmail/.data/
+/testmail/bin/
+
+# Windows-SDK-Cache von cargo-xwin
+/.xwin-cache/
+
+# System
+.DS_Store
+*.log
+.env
+.env.*
+
+# Lokale Claude-Einstellungen
+.claude/settings.local.json
