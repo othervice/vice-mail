@@ -46,6 +46,10 @@ pub enum StoreError {
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
 
+    /// A writing action or outbox request was refused (stage 4); nothing was written.
+    #[error(transparent)]
+    Action(mail_model::ActionError),
+
     /// A sync write named another UIDVALIDITY than the stored one: the mailbox was reset in
     /// between, and the caller's UIDs are void. Nothing was written.
     #[error("mailbox {mailbox}: UIDVALIDITY is {stored:?}, the write was for {given}")]
@@ -94,6 +98,7 @@ impl From<StoreError> for CoreError {
             StoreError::AccountExists(email) => CoreError::AccountExists(email),
             StoreError::NotFound(what) => CoreError::NotFound(what),
             StoreError::InvalidArgument(what) => CoreError::InvalidArgument(what),
+            StoreError::Action(action) => CoreError::Action(action),
             other => CoreError::Database(other.to_string()),
         }
     }

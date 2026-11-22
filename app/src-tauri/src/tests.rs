@@ -21,7 +21,8 @@ fn manifest_dir() -> PathBuf {
 }
 
 /// Fails when `app/src/generated/bindings.ts` is stale.
-/// `UPDATE_BINDINGS=1 cargo test -p mail-app bindings` rewrites it.
+/// `UPDATE_BINDINGS=1 cargo test -p mail-app bindings` rewrites it; `BINDINGS_OUT=<file>` writes a
+/// fresh copy elsewhere.
 #[test]
 fn bindings_are_fresh() {
     let committed = manifest_dir().join("../src/generated/bindings.ts");
@@ -32,6 +33,12 @@ fn bindings_are_fresh() {
         .expect("tauri-specta export");
     let fresh_text = fs::read_to_string(&fresh).expect("read fresh bindings");
 
+    // `BINDINGS_OUT=<file>` writes the fresh bindings there instead, to compare them with the
+    // committed file without touching it.
+    if let Some(out) = std::env::var_os("BINDINGS_OUT") {
+        fs::write(out, &fresh_text).expect("write bindings copy");
+        return;
+    }
     if std::env::var("UPDATE_BINDINGS").as_deref() == Ok("1") {
         fs::create_dir_all(committed.parent().expect("parent")).expect("mkdir");
         fs::write(&committed, &fresh_text).expect("write bindings");

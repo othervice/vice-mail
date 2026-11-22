@@ -16,6 +16,7 @@ cssparser.workspace = true
 url.workspace = true
 icu_normalizer.workspace = true
 icu_properties.workspace = true
+mail-builder.workspace = true
 
 [dev-dependencies]
 markup5ever_rcdom.workspace = true

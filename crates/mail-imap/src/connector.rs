@@ -37,6 +37,19 @@ impl ImapConnector {
         self
     }
 
+    /// Connections of this connector act as if the server had not announced these
+    /// capabilities (for example `MOVE`, `UIDPLUS`), so the fallbacks run against the real test
+    /// server. Tests only.
+    #[cfg(feature = "test-support")]
+    pub fn with_masked_capabilities<I, S>(mut self, names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.hooks.masked_capabilities = names.into_iter().map(Into::into).collect();
+        self
+    }
+
     /// Verifies the certificate against `name` instead of the host. Tests only (to provoke a
     /// name mismatch on a server that answers on 127.0.0.1).
     #[cfg(feature = "test-support")]
@@ -121,7 +134,12 @@ impl MailConnector for ImapConnector {
                 (Client::new(self.stream(tls, &timeouts)), None)
             }
         };
-        ImapBackend::establish(client, timeouts, config, known_caps.as_deref()).await
+        #[cfg_attr(not(feature = "test-support"), allow(unused_mut))]
+        let mut backend =
+            ImapBackend::establish(client, timeouts, config, known_caps.as_deref()).await?;
+        #[cfg(feature = "test-support")]
+        backend.mask_capabilities(&self.hooks.masked_capabilities);
+        Ok(backend)
     }
 }
 

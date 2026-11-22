@@ -18,6 +18,9 @@ mail-model = { path = "crates/mail-model" }
 mail-store = { path = "crates/mail-store" }
 mail-engine = { path = "crates/mail-engine" }
 mail-imap = { path = "crates/mail-imap" }
+mail-content = { path = "crates/mail-content" }
+# Windows only: the one crate with `unsafe` (WebView2 COM calls, decision 0011).
+webview2-guard = { path = "crates/webview2-guard" }
 
 # Core
 serde = { version = "1.0.229", features = ["derive"] }
@@ -70,6 +73,15 @@ url = "2.5.9"
 icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 
+# Sending (stage 5). mail-builder writes the MIME message in mail-content; without default
+# features, so it never reads the host name (it would go into generated Message-IDs; we always
+# set our own). lettre only as the SMTP protocol layer (EHLO, AUTH, MAIL/RCPT/DATA, replies,
+# dot-stuffing) over the adapter's own TCP/TLS streams: no TLS backend of its own (rustls is set
+# up in mail-imap as for IMAP), no host name (EHLO sends an address literal), no `tracing`
+# (it would log AUTH lines and message data), no pool, no builder.
+mail-builder = { version = "2.0.1", default-features = false }
+lettre = { version = "0.11.24", default-features = false, features = ["smtp-transport", "tokio1"] }
+
 # Keychain (stage 2): keyring-core with the two native stores, chosen explicitly (no global
 # default store, no Linux D-Bus stack). The `keyring` crate's own README recommends this for apps.
 keyring-core = "1.1.0"
@@ -81,6 +93,13 @@ hickory-resolver = { version = "0.26.3", default-features = false, features = ["
 # HTTP/1.1 only, no cookies, no proxy, no compression; TLS config comes from our rustls setup.
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 roxmltree = "0.21.2"
+
+# Stage 3: opening links and attachments with the system's default app (macOS `open`, Windows
+# `ShellExecuteW` instead of `cmd /c start`, which re-parses `&` and `^` in URLs), and the save
+# dialog. rfd directly instead of tauri-plugin-dialog: the plugin injects a script into the page
+# (window.alert/confirm over IPC) and needs tauri-plugin-fs; neither is wanted.
+open = { version = "5.4.5", features = ["shellexecute-on-windows"] }
+rfd = { version = "0.18.0", default-features = false }
 
 # Tests
 tempfile = "3.27.0"

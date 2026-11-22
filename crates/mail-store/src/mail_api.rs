@@ -22,7 +22,7 @@ use mail_model::{
     UidSet, UidValidity,
 };
 
-use crate::{Store, StoreError, accounts, mailboxes, messages};
+use crate::{Store, StoreError, accounts, mailboxes, messages, outbox};
 
 /// Largest page [`Store::list_messages`] returns.
 pub const MAX_PAGE_SIZE: u32 = 500;
@@ -249,21 +249,29 @@ impl Store {
         sync_low_uid: Option<Uid>,
     ) -> Result<StoreReport, StoreError> {
         self.write(move |tx| {
-            messages::store_headers(tx, mailbox, uid_validity, headers, sync_low_uid)
+            let report = messages::store_headers(tx, mailbox, uid_validity, headers, sync_low_uid)?;
+            // Pending flag changes of the outbox win until the server confirmed them.
+            outbox::reapply_pending_in_mailbox(tx, mailbox)?;
+            Ok(report)
         })
         .await
     }
 
     /// Writes new flags of existing locations; UIDs not stored are ignored. Returns the number
-    /// of locations whose flags or keywords actually changed.
+    /// of locations whose flags or keywords actually changed. Pending flag operations of the
+    /// outbox are applied again on top (also in [`Store::store_headers`]).
     pub async fn update_flags(
         &self,
         mailbox: MailboxId,
         uid_validity: UidValidity,
         updates: Vec<FlagUpdate>,
     ) -> Result<usize, StoreError> {
-        self.write(move |tx| messages::update_flags(tx, mailbox, uid_validity, &updates))
-            .await
+        self.write(move |tx| {
+            let changed = messages::update_flags(tx, mailbox, uid_validity, &updates)?;
+            outbox::reapply_pending_in_mailbox(tx, mailbox)?;
+            Ok(changed)
+        })
+        .await
     }
 
     /// Deletes the locations of these UIDs (deleted or moved away on the server). Messages
@@ -314,7 +322,9 @@ impl Store {
     /// Deletes messages of the account that lie in no mailbox. The engine calls it after a
     /// full pass in which no mailbox of the account was in its first sync (otherwise a
     /// message on its way between two mailboxes would lose its local data). Their body files
-    /// go too. Returns the count.
+    /// go too. Messages an outbox operation refers to (queued, in flight or confirmed and not
+    /// yet purged) stay: a move removes the location before the target's sync brings it back.
+    /// Returns the count.
     pub async fn delete_orphan_messages(&self, account: AccountId) -> Result<usize, StoreError> {
         let (deleted, files) = self
             .write(move |tx| messages::delete_orphans(tx, account))

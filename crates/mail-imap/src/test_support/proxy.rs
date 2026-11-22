@@ -1,6 +1,8 @@
 //! Fault-injecting TCP proxy on 127.0.0.1 (random port) in front of the test server. A fault
 //! applies to the next accepted connection: close or stall after a number of bytes or
-//! milliseconds from server to client, or refuse the next connections. Counts the bytes in both
+//! milliseconds from server to client, or refuse the next connections. [`Proxy::cut_responses`]
+//! cuts the open connections right now, letting what the client still sends reach the server
+//! (with a wire-tap trigger: "cut right after this command"). Counts the bytes in both
 //! directions, so a test can prove that nothing at all left the client.
 
 use std::net::SocketAddr;
@@ -37,6 +39,11 @@ pub struct Proxy {
     bytes_to_client: AtomicU64,
     fired_at: Mutex<Option<Instant>>,
     release: Notify,
+    /// Bumped by [`Proxy::cut_responses`]; connections opened before the bump are cut.
+    cut_generation: AtomicU64,
+    cut_delay_ms: AtomicU64,
+    cut: Notify,
+    cuts: AtomicUsize,
 }
 
 impl Proxy {
@@ -52,6 +59,10 @@ impl Proxy {
             bytes_to_client: AtomicU64::new(0),
             fired_at: Mutex::new(None),
             release: Notify::new(),
+            cut_generation: AtomicU64::new(0),
+            cut_delay_ms: AtomicU64::new(0),
+            cut: Notify::new(),
+            cuts: AtomicUsize::new(0),
         });
         let weak = Arc::downgrade(&proxy);
         tokio::spawn(async move {
@@ -126,6 +137,26 @@ impl Proxy {
         self.release.notify_waiters();
     }
 
+    /// Cuts every connection open at this moment: from now on nothing more reaches the client,
+    /// and both sockets close after `delay`. Bytes from the client still reach the server
+    /// during `delay`, so a command written just before is executed, but its response is lost
+    /// ("connection cut right after the command"). Connections accepted later are not
+    /// affected. Does not block, so it can run inside a [`crate::WireTap::on_write`] trigger.
+    pub fn cut_responses(&self, delay: Duration) {
+        self.cut_delay_ms.store(
+            u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+            Ordering::SeqCst,
+        );
+        self.cut_generation.fetch_add(1, Ordering::SeqCst);
+        self.cuts.fetch_add(1, Ordering::SeqCst);
+        self.cut.notify_waiters();
+    }
+
+    /// Number of [`Proxy::cut_responses`] calls so far.
+    pub fn cuts(&self) -> usize {
+        self.cuts.load(Ordering::SeqCst)
+    }
+
     async fn fire(&self) {
         *self.fired_at.lock().await = Some(Instant::now());
     }
@@ -134,6 +165,7 @@ impl Proxy {
         // Best effort: the proxy works without TCP_NODELAY, only slower.
         client.set_nodelay(true).ok();
         server.set_nodelay(true).ok();
+        let generation = self.cut_generation.load(Ordering::SeqCst);
         let (mut client_read, mut client_write) = client.into_split();
         let (mut server_read, mut server_write) = server.into_split();
         let to_server = async {
@@ -156,15 +188,35 @@ impl Proxy {
             let mut sent: u64 = 0;
             let started = Instant::now();
             loop {
-                let read = match fault {
-                    Fault::CloseAfterMs(ms) | Fault::StallAfterMs(ms) => {
-                        let left = Duration::from_millis(ms).saturating_sub(started.elapsed());
-                        tokio::time::timeout(left, server_read.read(&mut buf))
-                            .await
-                            .ok()
-                    }
-                    _ => Some(server_read.read(&mut buf).await),
+                let cut = self.cut.notified();
+                tokio::pin!(cut);
+                cut.as_mut().enable();
+                if self.cut_generation.load(Ordering::SeqCst) != generation {
+                    self.fire().await;
+                    let delay = self.cut_delay_ms.load(Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    return;
+                }
+                let read = tokio::select! {
+                    biased;
+                    () = &mut cut => continue,
+                    read = async {
+                        match fault {
+                            Fault::CloseAfterMs(ms) | Fault::StallAfterMs(ms) => {
+                                let left =
+                                    Duration::from_millis(ms).saturating_sub(started.elapsed());
+                                tokio::time::timeout(left, server_read.read(&mut buf))
+                                    .await
+                                    .ok()
+                            }
+                            _ => Some(server_read.read(&mut buf).await),
+                        }
+                    } => read,
                 };
+                if self.cut_generation.load(Ordering::SeqCst) != generation {
+                    // Read after the cut: dropped, the client never sees it.
+                    continue;
+                }
                 let n = match read {
                     None => {
                         self.fire().await;

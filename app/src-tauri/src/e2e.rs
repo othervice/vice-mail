@@ -28,6 +28,11 @@ pub const DATA_DIR_ENV: &str = "MAIL_APP_E2E_DATA_DIR";
 /// certificates are still checked, against the system store plus this root.
 pub const EXTRA_CA_ENV: &str = "MAIL_APP_E2E_EXTRA_CA";
 
+/// `1` lets the core load external images from loopback addresses (`127.0.0.0/8`, `::1`), where
+/// the desktop test's counter server listens. Private and link-local addresses stay refused; the
+/// product build has no such switch at all.
+pub const LOOPBACK_IMAGES_ENV: &str = "MAIL_APP_E2E_LOOPBACK_IMAGES";
+
 /// Commands with this prefix go to the test handler; the app's own handler never sees them.
 const COMMAND_PREFIX: &str = "e2e_";
 
@@ -72,10 +77,20 @@ pub fn install(
         })
 }
 
-/// Adds the root CA named by [`EXTRA_CA_ENV`], if set, to the sync settings.
+/// Adds the root CA named by [`EXTRA_CA_ENV`], if set, to the sync settings, and the loopback
+/// switch for external images ([`LOOPBACK_IMAGES_ENV`]).
 pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreError> {
     services.sync.extra_root_ca = test_ca(std::env::var_os(EXTRA_CA_ENV))?;
+    services.reading.remote.allow_loopback = loopback_images(std::env::var_os(LOOPBACK_IMAGES_ENV));
+    if services.reading.remote.allow_loopback {
+        tracing::info!("desktop-test build: external images may load from loopback addresses");
+    }
     Ok(services)
+}
+
+/// Only exactly `1` switches it on.
+fn loopback_images(value: Option<OsString>) -> bool {
+    value.as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
 /// Reads the PEM file named by the value of [`EXTRA_CA_ENV`]; unset or empty is `None`.
@@ -98,6 +113,11 @@ pub fn data_dir<R: Runtime>(_app: &AppHandle<R>) -> tauri::Result<PathBuf> {
 /// The test run's log directory, in place of the app's log directory.
 pub fn log_dir<R: Runtime>(_app: &AppHandle<R>) -> tauri::Result<PathBuf> {
     Ok(test_root(std::env::var_os(DATA_DIR_ENV))?.join("logs"))
+}
+
+/// The test run's cache directory, in place of the app's cache directory.
+pub fn cache_dir<R: Runtime>(_app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(test_root(std::env::var_os(DATA_DIR_ENV))?.join("cache"))
 }
 
 /// Validates the value of [`DATA_DIR_ENV`]. There is no fallback to the real directories.
@@ -245,6 +265,20 @@ mod tests {
 
         let dir = std::env::temp_dir().join("mail-app-e2e");
         assert_eq!(test_root(Some(dir.clone().into())).expect("absolute"), dir);
+    }
+
+    #[test]
+    fn the_loopback_switch_needs_exactly_one() {
+        assert!(loopback_images(Some("1".into())));
+        for off in [
+            None,
+            Some(OsString::new()),
+            Some("0".into()),
+            Some("true".into()),
+            Some("1 ".into()),
+        ] {
+            assert!(!loopback_images(off.clone()), "{off:?}");
+        }
     }
 
     #[test]

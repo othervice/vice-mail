@@ -6,11 +6,16 @@ mod core;
 pub mod credentials;
 pub mod discovery;
 pub mod logging;
+pub mod outbox;
+pub mod reading;
 pub mod sync;
 pub mod sync_state;
 
 pub use crate::clock::{Clock, SystemClock};
 pub use crate::core::{AppCore, BuildInfo, CoreConfig, CoreServices, DATABASE_FILE};
+pub use crate::reading::{
+    DesktopOpener, ReadingServices, RecordingOpener, RemoteConfig, SystemOpener,
+};
 pub use crate::sync::SyncConfig;
 
 #[cfg(test)]

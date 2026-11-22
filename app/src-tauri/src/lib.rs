@@ -5,11 +5,7 @@ pub mod commands;
 #[cfg(feature = "e2e")]
 mod e2e;
 mod events;
-#[cfg(any(test, all(windows, feature = "webview2-frame-guard")))]
 mod navigation;
-// Windows only, off by default: needs `unsafe` (decision 0011, draft).
-#[cfg(all(windows, feature = "webview2-frame-guard"))]
-mod webview2_frames;
 mod window_theme;
 
 use std::sync::Mutex;
@@ -45,6 +41,18 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::mail::list_mailboxes,
             commands::mail::set_mailbox_role,
             commands::mail::list_messages,
+            commands::reading::get_message,
+            commands::reading::load_remote_content,
+            commands::reading::list_remote_content_senders,
+            commands::reading::revoke_remote_content,
+            commands::reading::describe_link,
+            commands::reading::open_link,
+            // The runtime parameter only matters for the type export; Tauri's handler infers it.
+            commands::reading::save_attachment::<tauri::Wry>,
+            commands::reading::open_attachment,
+            commands::reading::get_prefetch_settings,
+            commands::reading::set_prefetch_settings,
+            commands::reading::get_prefetch_status,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -156,10 +164,12 @@ fn init_logging<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// What the core gets: the system keychain under the app's identifier (the bundle id), the IMAP
-/// adapter, the system clock and the product sync settings.
-fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, mail_model::CoreError> {
+/// adapter, the system clock, the product sync settings, and the cache directory for copies of
+/// opened attachments.
+fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, Box<dyn std::error::Error>> {
     let keychain = SystemKeychain::new(&app.config().identifier)?;
-    let services = CoreServices::new(Credentials::new(keychain));
+    let mut services = CoreServices::new(Credentials::new(keychain));
+    services.reading.open_dir = Some(cache_dir(app)?.join("attachments"));
     // Desktop-test build: may trust the local test server's CA (decision 0007).
     #[cfg(feature = "e2e")]
     let services = e2e::with_test_ca(services)?;
@@ -181,9 +191,15 @@ fn log_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<std::path::PathBuf> 
     app.path().app_log_dir()
 }
 
+/// The app's cache directory (copies of opened attachments, emptied at every start).
+#[cfg(not(feature = "e2e"))]
+fn cache_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<std::path::PathBuf> {
+    app.path().app_cache_dir()
+}
+
 // Desktop-test builds use a directory of the test's own and never the user's (decision 0005).
 #[cfg(feature = "e2e")]
-use e2e::{data_dir, log_dir};
+use e2e::{cache_dir, data_dir, log_dir};
 
 /// Makes the core available to commands and forwards its events to the UI. Must run before the
 /// first window exists, so no command can arrive before the core is managed.
@@ -218,8 +234,23 @@ fn open_main_window<R: Runtime>(
         .find(|w| w.label == MAIN_WINDOW)
         .cloned()
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
+    // The Vite server of `tauri dev` is the app as well; never in a built app.
+    let dev_url = if cfg!(dev) {
+        app.config().build.dev_url.clone()
+    } else {
+        None
+    };
+    let links = app.clone();
     let window = tauri::WebviewWindowBuilder::from_config(app, &config)?
         .theme(theme)
+        // The only place that learns where a click in the mail frame goes (decision 0005): the
+        // app may load itself, the mail frame its own document; a link placeholder is
+        // cancelled and reported to the core; everything else is cancelled.
+        .on_navigation(move |url| {
+            navigation::decide_main_navigation(url, dev_url.as_ref(), &|token, index| {
+                report_link(&links, token, index);
+            })
+        })
         // Nothing in the page opens windows; `window.open` and `target=_blank`, also from the
         // mail frame, are refused (WebView2 marks the request handled, decision 0011).
         .on_new_window(|url, _features| {
@@ -236,18 +267,38 @@ fn open_main_window<R: Runtime>(
     Ok(window)
 }
 
-/// Windows: checks every navigation inside the mail frame (decision 0011, draft).
+/// A click on link `index` of a rendering: the core announces it to the UI (`linkActivated`),
+/// which asks `describeLink` and, after the user confirmed, `openLink`.
+fn report_link<R: Runtime>(app: &AppHandle<R>, token: mail_model::RenderToken, index: u32) {
+    match app.try_state::<AppCore>() {
+        Some(core) => {
+            core.link_activated(token, index);
+        }
+        None => tracing::warn!(index, "link clicked before the core was ready"),
+    }
+}
+
+/// Windows: checks every navigation inside the mail frame through WebView2's
+/// `FrameNavigationStarting` (decision 0011). The COM calls live in the crate `webview2-guard`;
+/// this crate only hands over the controller, which Tauri gives out safely.
 #[cfg(all(windows, feature = "webview2-frame-guard"))]
 fn install_frame_guard<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
-    webview2_frames::install(
-        window,
-        std::sync::Arc::new(|url: &str| {
-            navigation::decide_frame_navigation(url, &|_token, index| {
-                // Stage 3 hands the click to the core (link check, then the system browser).
-                tracing::info!(index, "link clicked in the mail frame");
+    let app = window.app_handle().clone();
+    let policy: std::sync::Arc<webview2_guard::FramePolicy> =
+        std::sync::Arc::new(move |url: &str| {
+            navigation::decide_frame_navigation(url, &|token, index| {
+                report_link(&app, token, index);
             })
-        }),
-    )
+        });
+    window.with_webview(move |webview| {
+        match webview2_guard::guard_frame_navigations(&webview.controller(), policy) {
+            Ok(()) => tracing::info!("WebView2 frame guard active"),
+            Err(err) => tracing::error!(
+                %err,
+                "WebView2 frame guard could not be installed: links in the mail frame do nothing"
+            ),
+        }
+    })
 }
 
 #[cfg(test)]

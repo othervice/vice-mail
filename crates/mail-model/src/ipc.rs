@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AccountId, AccountStatus, MailboxId};
+use crate::{
+    AccountId, AccountStatus, IpcError, MailboxId, MessageId, PrefetchStatus, RenderToken,
+};
 
 /// Operating system the app runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -77,6 +79,10 @@ pub struct Preferences {
 /// - `newMail`: `count` new unread messages arrived in a mailbox during an incremental sync
 ///   (never during the first sync of a mailbox). For notifications; lists react to
 ///   `messagesChanged`.
+/// - `messageBodyAvailable`: the body a `getMessage` answered `loading` for is stored; ask again.
+/// - `messageBodyFailed`: that fetch failed.
+/// - `prefetchProgress`: progress of the background prefetch of an account (about once a second).
+/// - `linkActivated`: the user clicked link `index` of the rendering `renderToken`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -103,6 +109,23 @@ pub enum CoreEvent {
         account_id: AccountId,
         mailbox_id: MailboxId,
         count: u32,
+    },
+    MessageBodyAvailable {
+        account_id: AccountId,
+        message_id: MessageId,
+    },
+    MessageBodyFailed {
+        account_id: AccountId,
+        message_id: MessageId,
+        error: IpcError,
+    },
+    PrefetchProgress {
+        account_id: AccountId,
+        status: PrefetchStatus,
+    },
+    LinkActivated {
+        render_token: RenderToken,
+        index: u32,
     },
 }
 
@@ -187,6 +210,65 @@ mod tests {
                 json!({ "type": "newMail",
                         "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
                         "mailboxId": 3, "count": 2 }),
+            ),
+        ];
+        for (event, wire) in cases {
+            assert_eq!(serde_json::to_value(&event).expect("serialize"), wire);
+            let back: CoreEvent = serde_json::from_value(wire).expect("deserialize");
+            assert_eq!(back, event);
+        }
+    }
+
+    #[test]
+    fn stage_3_events_wire_format() {
+        let account: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+        let cases = [
+            (
+                CoreEvent::MessageBodyAvailable {
+                    account_id: account,
+                    message_id: MessageId(1_764_000_000),
+                },
+                json!({ "type": "messageBodyAvailable",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                        "messageId": 1_764_000_000 }),
+            ),
+            (
+                CoreEvent::MessageBodyFailed {
+                    account_id: account,
+                    message_id: MessageId(7),
+                    error: IpcError {
+                        code: crate::ErrorCode::ConnectionLost,
+                        message: "The connection to the server was lost.".into(),
+                        detail: None,
+                    },
+                },
+                json!({ "type": "messageBodyFailed",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff", "messageId": 7,
+                        "error": { "code": "connection_lost",
+                                   "message": "The connection to the server was lost.",
+                                   "detail": null } }),
+            ),
+            (
+                CoreEvent::PrefetchProgress {
+                    account_id: account,
+                    status: PrefetchStatus {
+                        state: crate::PrefetchState::Running,
+                        done: 3,
+                        total: 10,
+                        bytes: 4_096,
+                    },
+                },
+                json!({ "type": "prefetchProgress",
+                        "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                        "status": { "state": "running", "done": 3, "total": 10, "bytes": 4_096 } }),
+            ),
+            (
+                CoreEvent::LinkActivated {
+                    render_token: RenderToken::from_random(0xabc),
+                    index: 4,
+                },
+                json!({ "type": "linkActivated",
+                        "renderToken": "00000000000000000000000000000abc", "index": 4 }),
             ),
         ];
         for (event, wire) in cases {

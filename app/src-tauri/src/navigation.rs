@@ -6,10 +6,14 @@
 //! the navigation hook cancels it and hands token and index to the core, which alone knows the
 //! real target. Every other navigation is cancelled before a request leaves the device.
 //!
-//! Platform neutral. On Windows the WebView2 frame guard (`webview2_frames`) asks this module;
-//! on macOS the navigation hook of the main window sees frame navigations itself (stage 3).
+//! Platform neutral. The navigation hook of the main window (`on_navigation`) asks
+//! [`decide_main_navigation`]: on macOS it sees the mail frame's navigations as well, without
+//! telling which frame navigates, so the app's own URLs are allowed and everything else follows
+//! the frame rule. On Windows it sees the top-level document only; the WebView2 frame guard
+//! (crate `webview2-guard`) asks [`decide_frame_navigation`] for the mail frame (decision 0011).
 
 use mail_model::{RenderToken, parse_link_placeholder};
+use tauri::Url;
 
 /// What the hook does with one navigation of the mail frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +35,28 @@ pub fn frame_navigation(url: &str) -> FrameNavigation {
         Some((token, index)) => FrameNavigation::Link { token, index },
         None => FrameNavigation::Block,
     }
+}
+
+/// Whether `url` is the app itself: `tauri://localhost` (macOS), `http(s)://tauri.localhost`
+/// (Windows), or the Vite server of `tauri dev` (only when `dev_url` is given).
+pub fn is_app_url(url: &Url, dev_url: Option<&Url>) -> bool {
+    let app_host = |host: &str| url.host_str() == Some(host) && url.port().is_none();
+    match url.scheme() {
+        "tauri" => app_host("localhost"),
+        "http" | "https" => {
+            app_host("tauri.localhost") || dev_url.is_some_and(|dev| dev.origin() == url.origin())
+        }
+        _ => false,
+    }
+}
+
+/// The main window's hook: the app's own URLs, then the frame rule.
+pub fn decide_main_navigation(
+    url: &Url,
+    dev_url: Option<&Url>,
+    on_link: &dyn Fn(RenderToken, u32),
+) -> bool {
+    is_app_url(url, dev_url) || decide_frame_navigation(url.as_str(), on_link)
 }
 
 /// The hook's answer for one frame navigation: `true` lets it proceed. A link click goes to
@@ -87,6 +113,58 @@ mod tests {
         ] {
             assert_eq!(frame_navigation(url), FrameNavigation::Block, "{url:?}");
         }
+    }
+
+    #[test]
+    fn the_main_window_may_load_the_app_and_nothing_else() {
+        let url = |s: &str| Url::parse(s).expect("url");
+        let dev = url("http://localhost:1420/");
+        let never = |_: RenderToken, _: u32| panic!("not a link");
+        for app in [
+            "tauri://localhost/",
+            "tauri://localhost/index.html",
+            "http://tauri.localhost/",
+            "https://tauri.localhost/index.html",
+        ] {
+            assert!(decide_main_navigation(&url(app), None, &never), "{app}");
+        }
+        assert!(decide_main_navigation(&url("about:srcdoc"), None, &never));
+        assert!(decide_main_navigation(
+            &url("http://localhost:1420/src/main.tsx"),
+            Some(&dev),
+            &never
+        ));
+        for other in [
+            "http://localhost:1420/",
+            "http://localhost:1421/",
+            "tauri://evil.example/",
+            "tauri://localhost:1/",
+            "http://tauri.localhost:8080/",
+            "http://tauri.localhost.evil.example/",
+            "https://example.com/",
+            "file:///etc/passwd",
+            "data:text/html,x",
+        ] {
+            assert!(
+                !decide_main_navigation(&url(other), None, &never),
+                "{other}"
+            );
+        }
+        assert!(!decide_main_navigation(
+            &url("http://localhost:1421/"),
+            Some(&dev),
+            &never
+        ));
+
+        // A link click in the mail frame reaches the main hook on macOS: reported, cancelled.
+        let seen = RefCell::new(Vec::new());
+        let on_link = |token: RenderToken, index: u32| seen.borrow_mut().push((token, index));
+        assert!(!decide_main_navigation(
+            &url(&link_placeholder(&token(), 3)),
+            None,
+            &on_link
+        ));
+        assert_eq!(*seen.borrow(), vec![(token(), 3)]);
     }
 
     #[test]

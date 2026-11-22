@@ -8,6 +8,7 @@
   behalten `forbid`. Umsetzung zusammen mit dem Link-Abfang in Stufe 3; bis dahin bleibt das Feature
   `webview2-frame-guard` aus. Ohne den Abfang öffnen sich Links unter Windows nicht, es fließen aber
   keine echten Ziele ab: Der Frame kennt nur Platzhalter, neue Fenster lehnt `on_new_window` ab.
+  **Umgesetzt in Stufe 3, Feature standardmäßig an** (Abschnitt „Umsetzung“ unten).
 
 ## Kontext
 
@@ -149,3 +150,46 @@ Stufe 3 den Platzhalter je Plattform wählen.
 
 Option C ohne `unsafe`. Die Regel (`navigation.rs`) bleibt dieselbe; nur die Stelle, die
 Navigationen meldet, ändert sich.
+
+## Umsetzung (Stufe 3, 22.11.2026)
+
+Option B ist gebaut, von der Engine- und Shell-Sitzung von Stufe 3.
+
+- **Crate `crates/webview2-guard`** (nur `cfg(windows)` hat Inhalt, auf anderen Plattformen ist
+  sie leer): eine Funktion `guard_frame_navigations(&ICoreWebView2Controller, Arc<FramePolicy>)`.
+  Eigener `[lints]`-Block statt `workspace = true`: `unsafe_code = "deny"`, sonst dieselben
+  Clippy-Regeln wie der Workspace plus `undocumented_unsafe_blocks` und
+  `multiple_unsafe_ops_per_block`. Vier `unsafe`-Stellen (`CoreWebView2`, `Uri`, `SetCancel`,
+  `add_FrameNavigationStarting`), jede mit eigenem `#[allow(unsafe_code)]` an der Anweisung und
+  einem `// SAFETY:`-Kommentar. Abhängigkeiten: `webview2-com` =0.39.1 (wie bisher, die Version
+  von wry) und `tracing`. Alle anderen Crates behalten `forbid`.
+- **`mail-app`**: hängt unter `cfg(windows)` an der Crate, über das Feature
+  `webview2-frame-guard`, das jetzt **standardmäßig an** ist (`default = ["webview2-frame-guard"]`;
+  abschaltbar zur Fehlersuche). `app/src-tauri/src/webview2_frames.rs` ist entfernt; die Shell
+  holt den Controller über Tauris sicheres `with_webview` und übergibt die Regel aus
+  `navigation.rs`. Ein Klick auf einen Platzhalter geht an denselben Kern-Aufruf wie unter macOS
+  (`AppCore::link_activated` → Ereignis `linkActivated`).
+- **macOS**: Der Navigations-Hook des Hauptfensters (`on_navigation`) ist jetzt gesetzt
+  (`navigation::decide_main_navigation`): App-URLs (`tauri://localhost`, `http(s)://tauri.localhost`,
+  unter `cfg(dev)` der Vite-Server), dann die Frame-Regel (`about:srcdoc`, `about:blank` erlauben;
+  exakter Platzhalter → abbrechen und melden; alles andere abbrechen und mit Schema und Host
+  protokollieren).
+- **`scripts/check.sh`**, Schritt „unsafe only in webview2-guard“: `grep` nach `unsafe {`,
+  `unsafe fn|impl|extern|trait` und `allow(… unsafe_code …)` in allen `.rs` unter `crates/` und
+  `app/src-tauri/src`, dazu `unsafe_code = "allow|warn|deny"` in jeder `Cargo.toml`; Treffer
+  außerhalb von `crates/webview2-guard/` lassen den Lauf scheitern. Positivkontrolle: In der
+  Guard-Crate muss das Muster mindestens zwei Treffer finden. Gegenprobe am 22.11.: eine Datei mit
+  `unsafe { 1 }` in `crates/mail-model/src/` ließ die Prüfung mit dem Fundort scheitern.
+
+**Nachweise (22.11.2026):**
+
+- `cargo xwin clippy -p webview2-guard -p mail-app -p mail-model -p mail-store -p mail-content
+  --all-targets --target x86_64-pc-windows-msvc -- -D warnings` und `cargo xwin clippy -p
+  mail-engine --lib …`: fehlerfrei, mit dem Feature (Standard). Der volle Lauf `--workspace
+  --all-targets` scheiterte am selben Tag nur an Testcode paralleler Sitzungen (Stufe 4:
+  `outbox/server_tests.rs`, `bool_assert_comparison`; Stufe 5: `mail-imap/src/smtp/tests.rs`,
+  `Send` als Variante importiert), nicht an dieser Crate.
+- macOS: `cargo clippy -p mail-app --all-targets -- -D warnings`, mit und ohne `--features e2e`,
+  fehlerfrei; die Guard-Crate ist dort leer.
+- **Weiter ungeprüft: alles zur Laufzeit unter Windows** (siehe oben). Die Windows-Handprüfung
+  (`docs/testing/windows-checklist.md`, Abschnitt Stufe 3) steht aus.

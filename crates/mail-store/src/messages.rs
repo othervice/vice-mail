@@ -18,7 +18,7 @@ use crate::mailboxes::{self, modseq_param};
 /// page is a contiguous range of the location key, each message a rowid lookup.
 pub(crate) const LIST_PAGE: &str = "
     SELECT l.message_id, l.seen, l.flagged, l.answered, l.draft, l.keywords,
-           m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments
+           m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview
     FROM message_location l CROSS JOIN message m ON m.id = l.message_id
     WHERE l.mailbox_id = ?1 AND l.message_id < ?2
     ORDER BY l.message_id DESC LIMIT ?3";
@@ -67,10 +67,15 @@ pub(crate) const REMOVE_UID_RANGE: &str =
 pub(crate) const KNOWN_UIDS: &str =
     "SELECT uid FROM message_location WHERE mailbox_id = ?1 ORDER BY uid";
 
+/// Messages without a location, except those an outbox operation still refers to (stage 4):
+/// a pending move has removed the source location, and a confirmed one may wait for the
+/// target's sync to merge the message back.
 pub(crate) const DELETE_ORPHANS: &str = "
     DELETE FROM message
     WHERE account_id = ?1
-      AND NOT EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = message.id)";
+      AND NOT EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = message.id)
+      AND NOT EXISTS (SELECT 1 FROM operation o WHERE o.message_id = message.id
+                      AND o.state IN ('queued', 'in_flight', 'confirmed'))";
 
 /// See [`crate::Store::store_headers`].
 pub(crate) fn store_headers(
@@ -233,6 +238,7 @@ pub(crate) fn list(
                 draft: r.get(4)?,
                 has_attachments: r.get(11)?,
                 keywords: keywords_from(r.get::<_, Option<String>>(5)?.as_deref()),
+                preview: r.get(12)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

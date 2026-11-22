@@ -30,8 +30,9 @@ use std::io;
 use std::time::Duration;
 
 use async_imap::Session;
+use async_imap::imap_proto::rfc4315::UidSetMember;
 use async_imap::imap_proto::{MailboxDatum, Outcome, ResponseCode, Status};
-use mail_model::{Access, BackendError, IdleOutcome};
+use mail_model::{Access, BackendError, CopyUid, IdleOutcome, Uid, UidSet, UidValidity};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub(crate) use async_imap::imap_proto::Response;
@@ -175,6 +176,11 @@ pub(crate) struct Tagged {
     pub(crate) status: TaggedStatus,
     /// `[READ-ONLY]` code (EXAMINE/SELECT).
     pub(crate) read_only: bool,
+    /// `[COPYUID ...]` (UIDPLUS, after COPY).
+    pub(crate) copy_uid: Option<CopyUid>,
+    /// `[MODIFIED ...]` (CONDSTORE, after `STORE (UNCHANGEDSINCE ...)`). imap-proto does not
+    /// know the code and leaves it in the text; it is read before the text is shortened.
+    pub(crate) modified: Option<UidSet>,
     /// Response code and text, shortened, for error details.
     pub(crate) text: String,
 }
@@ -192,9 +198,15 @@ impl Tagged {
             Some(code) => format!("[{}] {info}", code_name(code)),
             None => info.to_owned(),
         };
+        let modified = match &outcome.code {
+            None => modified_code(info),
+            Some(_) => None,
+        };
         Self {
             status,
             read_only: matches!(outcome.code, Some(ResponseCode::ReadOnly)),
+            copy_uid: outcome.code.as_ref().and_then(copy_uid_of),
+            modified,
             text: short(&text),
         }
     }
@@ -215,6 +227,59 @@ impl Tagged {
         let end = rest.find([']', ' '])?;
         Some(rest[..end].to_ascii_uppercase())
     }
+}
+
+/// COPYUID of a response code (tagged after COPY, untagged `* OK [COPYUID ...]` during MOVE,
+/// RFC 6851). Source and target sets correspond in order. `None` for other codes or when the
+/// two sets differ in size.
+pub(crate) fn copy_uid_of(code: &ResponseCode<'_>) -> Option<CopyUid> {
+    let ResponseCode::CopyUid(validity, source, target) = code else {
+        return None;
+    };
+    let expand = |set: &[UidSetMember]| -> Vec<Uid> {
+        set.iter()
+            .flat_map(|member| match member {
+                UidSetMember::Uid(uid) => *uid..=*uid,
+                UidSetMember::UidRange(range) => range.clone(),
+            })
+            .collect()
+    };
+    let (source, target) = (expand(source), expand(target));
+    if source.len() != target.len() {
+        tracing::warn!(
+            source = source.len(),
+            target = target.len(),
+            "COPYUID with sets of different size ignored"
+        );
+        return None;
+    }
+    Some(CopyUid {
+        uid_validity: UidValidity(*validity),
+        pairs: source.into_iter().zip(target).collect(),
+    })
+}
+
+/// `[MODIFIED 7,9:12] ...` at the start of a response text (RFC 7162, section 3.1.3).
+pub(crate) fn modified_code(text: &str) -> Option<UidSet> {
+    let rest = text.trim_start().strip_prefix('[')?;
+    let (code, rest) = rest.split_once(' ')?;
+    if !code.eq_ignore_ascii_case("MODIFIED") {
+        return None;
+    }
+    let set = rest.split(']').next()?.trim();
+    parse_uid_set(set)
+}
+
+/// An IMAP sequence set of UIDs (`7,9:12`); `None` if it is not one (`*` is not allowed here).
+pub(crate) fn parse_uid_set(text: &str) -> Option<UidSet> {
+    let mut ranges = Vec::new();
+    for part in text.split(',') {
+        let (a, b) = part.split_once(':').unwrap_or((part, part));
+        let a: Uid = a.trim().parse().ok()?;
+        let b: Uid = b.trim().parse().ok()?;
+        ranges.push((a, b));
+    }
+    Some(UidSet::from_ranges(ranges))
 }
 
 fn code_name(code: &ResponseCode<'_>) -> String {
@@ -676,6 +741,59 @@ mod tests {
         assert!(
             matches!(watch.closed(), BackendError::ConnectionLost(t) if t.contains("going down"))
         );
+    }
+
+    #[test]
+    fn copyuid_and_modified_codes() {
+        let parse = |line: &'static [u8]| match Response::parse(line) {
+            Ok((_, resp)) => resp,
+            Err(err) => panic!("{err:?}"),
+        };
+        let tagged = |line: &'static [u8]| match parse(line) {
+            Response::Done {
+                status, outcome, ..
+            } => Tagged::new(&status, &outcome),
+            other => panic!("not tagged: {other:?}"),
+        };
+        let copy = tagged(b"A1 OK [COPYUID 38505 304,319:320 3956:3958] Done\r\n");
+        assert_eq!(
+            copy.copy_uid,
+            Some(CopyUid {
+                uid_validity: UidValidity(38505),
+                pairs: vec![(304, 3956), (319, 3957), (320, 3958)],
+            })
+        );
+        assert!(copy.modified.is_none());
+        // Untagged during MOVE.
+        match parse(b"* OK [COPYUID 9 7 100] Moved\r\n") {
+            Response::Data { outcome, .. } => {
+                let copy = outcome
+                    .code
+                    .as_ref()
+                    .and_then(copy_uid_of)
+                    .expect("copyuid");
+                assert_eq!(copy.target_of(7), Some(100));
+            }
+            other => panic!("{other:?}"),
+        }
+        let long: String = (1..=400).map(|n| format!("{},", n * 2)).collect();
+        let line = format!(
+            "A2 OK [MODIFIED {}] Conditional STORE failed\r\n",
+            long.trim_end_matches(',')
+        );
+        let line: &'static [u8] = Box::leak(line.into_bytes().into_boxed_slice());
+        let modified = tagged(line);
+        let set = modified.modified.expect("modified");
+        assert_eq!(set.len(), 400, "read before the text is shortened");
+        assert!(set.contains(800) && !set.contains(801));
+        assert_eq!(
+            modified_code("[MODIFIED 7,9:12] x"),
+            Some(UidSet::from_uids([7, 9, 10, 11, 12]))
+        );
+        assert_eq!(modified_code("[READ-WRITE] x"), None);
+        assert_eq!(parse_uid_set("1:*"), None);
+        let plain = tagged(b"A3 OK STORE completed\r\n");
+        assert!(plain.modified.is_none() && plain.copy_uid.is_none());
     }
 
     #[test]

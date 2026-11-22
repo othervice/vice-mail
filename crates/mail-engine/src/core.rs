@@ -3,10 +3,11 @@ use std::sync::Arc;
 
 use mail_imap::ImapConnector;
 use mail_model::{
-    Account, AccountId, AccountSettings, AccountStatus, AppInfo, Capabilities,
-    ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, ListCursor, MailBackend,
-    MailConnector, Mailbox, MailboxId, MailboxRole, MessagePage, Platform, Preferences, Secret,
-    ServerSettings,
+    Account, AccountId, AccountSettings, AccountStatus, AppInfo, BodyFormat, Capabilities,
+    ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, LinkInfo, ListCursor, MailBackend,
+    MailConnector, Mailbox, MailboxId, MailboxRole, MessageId, MessagePage, MessageView,
+    OpenAttachmentResult, Platform, Preferences, PrefetchSettings, PrefetchStatus,
+    RemoteContentScope, RenderToken, Secret, ServerSettings,
 };
 use mail_store::{GLOBAL_SCOPE, NewAccount, Store, StoreOptions, StoredAccount};
 use serde::Serialize;
@@ -17,6 +18,7 @@ use tokio::task::JoinHandle;
 use crate::clock::{Clock, SystemClock};
 use crate::credentials::{CredentialRef, Credentials};
 use crate::discovery;
+use crate::reading::{Reading, ReadingServices};
 use crate::sync::account::{self, Control, Registry};
 use crate::sync::{Env, SyncConfig, emit, wake};
 
@@ -52,6 +54,9 @@ pub struct CoreServices<C: MailConnector = ImapConnector> {
     pub connector: C,
     pub clock: Arc<dyn Clock>,
     pub sync: SyncConfig,
+    /// Opening links and attachments, external images, the directory for opened attachments
+    /// (stage 3). Tests record instead of opening.
+    pub reading: ReadingServices,
 }
 
 impl CoreServices<ImapConnector> {
@@ -68,6 +73,7 @@ impl<C: MailConnector> CoreServices<C> {
             connector,
             clock: Arc::new(SystemClock),
             sync: SyncConfig::default(),
+            reading: ReadingServices::default(),
         }
     }
 }
@@ -86,7 +92,7 @@ impl<C: MailConnector + 'static> Clone for AppCore<C> {
     }
 }
 
-struct Inner<C> {
+struct Inner<C: MailConnector> {
     info: AppInfo,
     /// The store, or the error that kept it from opening (for example a database written by a
     /// newer app version). Storage-backed calls return that error, so the UI can explain it.
@@ -101,9 +107,11 @@ struct Inner<C> {
     /// change together).
     admin: tokio::sync::Mutex<()>,
     wake_detector: Option<JoinHandle<()>>,
+    /// Reading messages (stage 3); `None` if the store did not open.
+    reading: Option<Arc<Reading<C>>>,
 }
 
-impl<C> Drop for Inner<C> {
+impl<C: MailConnector> Drop for Inner<C> {
     /// Without an orderly [`AppCore::shutdown`] the sync tasks are aborted: connections close
     /// without LOGOUT, stored data is consistent anyway (one transaction per window).
     fn drop(&mut self) {
@@ -111,6 +119,14 @@ impl<C> Drop for Inner<C> {
             task.abort();
         }
         self.accounts.abort_all();
+    }
+}
+
+impl<C: MailConnector + 'static> Inner<C> {
+    fn stop_reading(&self) {
+        if let Some(reading) = &self.reading {
+            reading.shutdown();
+        }
     }
 }
 
@@ -147,6 +163,19 @@ impl<C: MailConnector + 'static> AppCore<C> {
         let (events, _) = broadcast::channel(EVENT_CAPACITY);
         let accounts = Arc::new(Registry::default());
         let sync = Arc::new(services.sync);
+        let connector = Arc::new(services.connector);
+        let reading = opened.as_ref().ok().map(|store| {
+            Reading::start(
+                store.clone(),
+                events.clone(),
+                Arc::clone(&connector),
+                services.credentials.clone(),
+                Arc::clone(&sync),
+                Arc::clone(&accounts),
+                services.reading,
+                &config.data_dir,
+            )
+        });
         let wake_detector = Some(wake::spawn(
             Arc::downgrade(&accounts),
             Arc::clone(&services.clock),
@@ -163,15 +192,19 @@ impl<C: MailConnector + 'static> AppCore<C> {
                 },
                 store: opened,
                 events,
-                connector: Arc::new(services.connector),
+                connector,
                 credentials: services.credentials,
                 clock: services.clock,
                 sync,
                 accounts,
                 admin: tokio::sync::Mutex::new(()),
                 wake_detector,
+                reading,
             }),
         };
+        if let Some(reading) = &core.inner.reading {
+            reading.clear_open_dir().await;
+        }
         core.start_stored_accounts().await;
         core
     }
@@ -333,6 +366,9 @@ impl<C: MailConnector + 'static> AppCore<C> {
         if let Some(handle) = self.inner.accounts.remove(id) {
             handle.stop(self.inner.sync.shutdown_grace).await;
         }
+        if let Some(reading) = &self.inner.reading {
+            reading.forget_account(id);
+        }
         let key = CredentialRef::parse(&account.credential_ref)?;
         if let Err(err) = self.inner.credentials.delete(&key).await {
             self.spawn_sync(account, None);
@@ -373,6 +409,9 @@ impl<C: MailConnector + 'static> AppCore<C> {
         let _admin = self.inner.admin.lock().await;
         let key = CredentialRef::parse(&account.credential_ref)?;
         self.inner.credentials.set(&key, password.clone()).await?;
+        if let Some(reading) = &self.inner.reading {
+            reading.credentials_changed(id);
+        }
         if !self
             .inner
             .accounts
@@ -424,6 +463,132 @@ impl<C: MailConnector + 'static> AppCore<C> {
     }
 
     // -----------------------------------------------------------------------------------------
+    // Reading (stage 3, see `crate::reading`)
+    // -----------------------------------------------------------------------------------------
+
+    /// The reading pane's data. Served from the stored body when there is one; otherwise
+    /// `loading` and a fetch starts (`messageBodyAvailable`/`messageBodyFailed` follow), or
+    /// `unavailable` offline.
+    pub async fn get_message(
+        &self,
+        message: MessageId,
+        format: BodyFormat,
+    ) -> Result<MessageView, CoreError> {
+        self.reading()?.get_message(message, format).await
+    }
+
+    /// Renders again with the external images, loaded by the core; `sender` also allows them
+    /// for the sender from now on.
+    pub async fn load_remote_content(
+        &self,
+        message: MessageId,
+        scope: RemoteContentScope,
+    ) -> Result<MessageView, CoreError> {
+        self.reading()?.load_remote_content(message, scope).await
+    }
+
+    /// Senders of the account whose external content always loads, sorted.
+    pub async fn list_remote_content_senders(
+        &self,
+        account: AccountId,
+    ) -> Result<Vec<String>, CoreError> {
+        let store = self.store()?;
+        if store.account(account).await?.is_none() {
+            return Err(CoreError::NotFound(format!("account {account}")));
+        }
+        Ok(store.remote_content_senders(account).await?)
+    }
+
+    /// Takes a sender off the account's allowlist (nothing happens if it was not on it).
+    pub async fn revoke_remote_content(
+        &self,
+        account: AccountId,
+        sender: &str,
+    ) -> Result<(), CoreError> {
+        self.store()?.revoke_remote_content(account, sender).await?;
+        Ok(())
+    }
+
+    /// The real target of link `index` of a rendering, with warnings; `not_found` for a token
+    /// that is unknown or no longer kept.
+    pub fn describe_link(&self, token: &RenderToken, index: u32) -> Result<LinkInfo, CoreError> {
+        self.reading()?.describe_link(token, index)
+    }
+
+    /// Opens link `index` of a rendering with the system (`http`, `https`, `mailto` only;
+    /// anything else is `invalid_argument`).
+    pub async fn open_link(&self, token: &RenderToken, index: u32) -> Result<(), CoreError> {
+        self.reading()?.open_link(token, index).await
+    }
+
+    /// The shell's navigation hook saw a click on a link placeholder: emits `linkActivated` if
+    /// the rendering is known. Returns whether it was.
+    pub fn link_activated(&self, token: RenderToken, index: u32) -> bool {
+        self.reading()
+            .is_ok_and(|reading| reading.link_activated(token, index))
+    }
+
+    /// The sanitised name of an attachment, as the save dialog suggests it.
+    pub async fn attachment_name(
+        &self,
+        message: MessageId,
+        index: u32,
+    ) -> Result<String, CoreError> {
+        self.reading()?.attachment_name(message, index).await
+    }
+
+    /// Writes an attachment to `path`, which the user chose in the system dialog (atomically;
+    /// fetched first if only part of the message is stored).
+    pub async fn save_attachment_to(
+        &self,
+        message: MessageId,
+        index: u32,
+        path: PathBuf,
+    ) -> Result<PathBuf, CoreError> {
+        self.reading()?
+            .save_attachment_to(message, index, path)
+            .await
+    }
+
+    /// Opens a read-only copy of an attachment with the system's default app. Executable types
+    /// answer `needsConfirmation` unless `confirmed_executable`; nothing is written then.
+    pub async fn open_attachment(
+        &self,
+        message: MessageId,
+        index: u32,
+        confirmed_executable: bool,
+    ) -> Result<OpenAttachmentResult, CoreError> {
+        self.reading()?
+            .open_attachment(message, index, confirmed_executable)
+            .await
+    }
+
+    pub async fn get_prefetch_settings(&self) -> Result<PrefetchSettings, CoreError> {
+        Ok(self.store()?.prefetch_settings().await?)
+    }
+
+    /// Stores the prefetch settings (`invalid_argument` for a size limit above 256 MiB) and
+    /// starts a new prefetch run for every account.
+    pub async fn set_prefetch_settings(
+        &self,
+        settings: PrefetchSettings,
+    ) -> Result<PrefetchSettings, CoreError> {
+        self.reading()?.set_prefetch_settings(settings).await
+    }
+
+    /// The prefetch state of an account; `prefetchProgress` events follow.
+    pub async fn get_prefetch_status(
+        &self,
+        account: AccountId,
+    ) -> Result<PrefetchStatus, CoreError> {
+        let reading = self.reading()?;
+        if self.store()?.account(account).await?.is_none() {
+            return Err(CoreError::NotFound(format!("account {account}")));
+        }
+        Ok(reading.prefetch_status(account))
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------------------------
 
@@ -453,6 +618,7 @@ impl<C: MailConnector + 'static> AppCore<C> {
         if let Some(task) = &self.inner.wake_detector {
             task.abort();
         }
+        self.inner.stop_reading();
         tracing::info!("sync stopped");
     }
 
@@ -508,6 +674,20 @@ impl<C: MailConnector + 'static> AppCore<C> {
 
     fn store(&self) -> Result<&Store, CoreError> {
         self.inner.store.as_ref().map_err(Clone::clone)
+    }
+
+    fn reading(&self) -> Result<&Arc<Reading<C>>, CoreError> {
+        self.store()?;
+        self.inner
+            .reading
+            .as_ref()
+            .ok_or_else(|| CoreError::Internal("reading is not available".into()))
+    }
+
+    /// For tests inside the crate: the store.
+    #[cfg(test)]
+    pub(crate) fn store_for_tests(&self) -> &Store {
+        self.inner.store.as_ref().expect("store")
     }
 
     fn emit(&self, event: CoreEvent) {

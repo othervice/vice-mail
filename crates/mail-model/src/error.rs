@@ -45,6 +45,14 @@ pub enum ErrorCode {
     Keychain,
     /// An account with this email address is already set up.
     AccountExists,
+    /// The SMTP server refused the message or a recipient; nothing was delivered.
+    /// Not exported to TypeScript yet (`specta(skip)`): stage 5's UI adds its texts.
+    #[specta(skip)]
+    SendRejected,
+    /// The message went out, but the server's confirmation never arrived; it may have been
+    /// delivered. Not exported to TypeScript yet (`specta(skip)`): stage 5's UI adds its texts.
+    #[specta(skip)]
+    SendUnclear,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -114,6 +122,17 @@ pub enum BackendError {
     /// open). A bug in the caller.
     #[error("backend used incorrectly: {0}")]
     InvalidState(String),
+
+    /// The SMTP server refused the message (sender, a recipient, DATA or the content); nothing
+    /// was delivered. `permanent` for 5xx replies; 4xx may succeed later. Holds the replies.
+    /// Built by the engine from [`crate::SendRejection`].
+    #[error("server refused the message: {detail}")]
+    SendRejected { permanent: bool, detail: String },
+
+    /// The message was transmitted, but the connection ended before the server confirmed it.
+    /// Never retried automatically. Built by the engine from [`crate::SendOutcome::Unclear`].
+    #[error("unclear whether the message was sent: {0}")]
+    SendUnclear(String),
 }
 
 impl BackendError {
@@ -135,6 +154,8 @@ impl BackendError {
             Self::MailboxNotFound(_) => ErrorCode::NotFound,
             Self::ReadOnly(_) => ErrorCode::ReadOnly,
             Self::InvalidState(_) => ErrorCode::Internal,
+            Self::SendRejected { .. } => ErrorCode::SendRejected,
+            Self::SendUnclear(_) => ErrorCode::SendUnclear,
         }
     }
 
@@ -151,6 +172,10 @@ impl BackendError {
                 | Self::Protocol(_)
                 | Self::Rejected(_)
                 | Self::MailboxNotFound(_)
+                | Self::SendRejected {
+                    permanent: false,
+                    ..
+                }
         )
     }
 
@@ -173,6 +198,10 @@ impl BackendError {
             Self::MailboxNotFound(_) => "The folder no longer exists on the server.",
             Self::ReadOnly(_) => "Changes are turned off for this account.",
             Self::InvalidState(_) => "An unexpected error occurred.",
+            Self::SendRejected { .. } => "The server refused to send the message.",
+            Self::SendUnclear(_) => {
+                "The connection broke while sending; the message may have been sent."
+            }
         }
     }
 
@@ -195,7 +224,9 @@ impl BackendError {
             | Self::Rejected(d)
             | Self::MailboxNotFound(d)
             | Self::ReadOnly(d)
-            | Self::InvalidState(d) => (!d.is_empty()).then(|| d.clone()),
+            | Self::InvalidState(d)
+            | Self::SendRejected { detail: d, .. }
+            | Self::SendUnclear(d) => (!d.is_empty()).then(|| d.clone()),
         }
     }
 }
@@ -235,6 +266,10 @@ pub enum CoreError {
     /// An account with this email address exists already; holds the address.
     #[error("an account for {0} exists already")]
     AccountExists(String),
+
+    /// A writing action was refused before anything was recorded (stage 4, outbox).
+    #[error(transparent)]
+    Action(#[from] crate::ActionError),
 }
 
 impl CoreError {
@@ -248,6 +283,7 @@ impl CoreError {
             Self::Mail(err) => err.code(),
             Self::Keychain(_) => ErrorCode::Keychain,
             Self::AccountExists(_) => ErrorCode::AccountExists,
+            Self::Action(err) => err.code(),
         }
     }
 
@@ -274,6 +310,7 @@ impl CoreError {
             Self::Mail(err) => err.message(),
             Self::Keychain(_) => "The password could not be stored in or read from the keychain.",
             Self::AccountExists(_) => "An account with this email address is already set up.",
+            Self::Action(err) => err.message(),
         }
     }
 
@@ -290,6 +327,7 @@ impl CoreError {
                 "database schema version {found}, this app supports up to {supported}"
             )),
             Self::Mail(err) => err.detail(),
+            Self::Action(err) => err.detail(),
         }
     }
 }
@@ -373,6 +411,8 @@ mod tests {
             (ErrorCode::UnsupportedServer, "unsupported_server"),
             (ErrorCode::Keychain, "keychain"),
             (ErrorCode::AccountExists, "account_exists"),
+            (ErrorCode::SendRejected, "send_rejected"),
+            (ErrorCode::SendUnclear, "send_unclear"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);
@@ -420,6 +460,23 @@ mod tests {
             ),
             (B::ReadOnly("STORE".into()), ErrorCode::ReadOnly, false),
             (B::InvalidState("x".into()), ErrorCode::Internal, false),
+            (
+                B::SendRejected {
+                    permanent: true,
+                    detail: "550 no".into(),
+                },
+                ErrorCode::SendRejected,
+                false,
+            ),
+            (
+                B::SendRejected {
+                    permanent: false,
+                    detail: "451 later".into(),
+                },
+                ErrorCode::SendRejected,
+                true,
+            ),
+            (B::SendUnclear("eof".into()), ErrorCode::SendUnclear, false),
         ];
         for (err, code, transient) in cases {
             assert_eq!(err.code(), code, "{err}");

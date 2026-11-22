@@ -1,5 +1,6 @@
 //! Types shared by every layer: ids, accounts, mailboxes, message headers, flags,
-//! capabilities, errors, the [`Secret`] wrapper, the [`MailBackend`] trait, role detection,
+//! capabilities, errors, the [`Secret`] wrapper, the [`MailBackend`] trait and its writing
+//! extension [`MailWriter`], writing actions and outbox operations, role detection,
 //! message bodies and their MIME structure, and the types that cross the IPC bridge. Pure data and logic: no IO, no dependency on other
 //! workspace crates.
 //!
@@ -16,10 +17,13 @@ mod ids;
 mod ipc;
 mod mailbox;
 mod message;
+mod outbox;
 mod reading;
 mod role;
 mod secret;
+mod send;
 mod uid_set;
+mod writer;
 
 pub use account::{
     Account, AccountColor, AccountSettings, AccountState, AccountStatus, ConnectionTestResult,
@@ -45,6 +49,12 @@ pub use message::{
     Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageHeader,
     MessageListItem, MessagePage, sort_date,
 };
+pub use outbox::{
+    ActionError, ActionKind, ActionResult, BatchId, ConflictReason, Flag, MAX_KEYWORD_LEN,
+    MailAction, MessageRef, OperationId, OperationInfo, OperationKind, OperationNotice,
+    OperationPayload, OperationState, OutboxEvent, PlanLocation, PlanMailbox, SourceLocation,
+    TargetMailbox, TargetMark, is_valid_keyword, plan_action,
+};
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
     LinkWarning, MessageBody, MessageProblem, MessageView, MessageViewHeader, OpenAttachmentResult,
@@ -54,4 +64,9 @@ pub use reading::{
 };
 pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use secret::Secret;
+pub use send::{Envelope, RecipientRefusal, SendOutcome, SendRejection, SmtpReply, SmtpStep};
 pub use uid_set::UidSet;
+pub use writer::{
+    CopyUid, ExpungeOutcome, MailWriter, MoveMethod, MoveOutcome, StoreMode, StoreOutcome,
+    WriteConnector,
+};

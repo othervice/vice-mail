@@ -84,6 +84,7 @@ impl Harness {
             connector: FakeConnector(Arc::clone(&server)),
             clock: Arc::clone(&clock) as Arc<dyn Clock>,
             sync: config,
+            reading: crate::ReadingServices::default(),
         };
         let core = AppCore::start(
             CoreConfig {

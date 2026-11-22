@@ -7,7 +7,7 @@ use mail_model::UidSet;
 use rusqlite::Connection;
 
 use crate::test_support::{Fixture, UV, db_path, fixture, header, seen};
-use crate::{Store, StoreOptions, accounts, bodies, mailboxes, messages, reading};
+use crate::{Store, StoreOptions, accounts, bodies, mailboxes, messages, outbox, reading};
 
 /// Detail lines of the plan of `sql` (parameters unbound, which does not change the plan).
 fn plan(conn: &Connection, sql: &str) -> Vec<String> {
@@ -119,6 +119,7 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
         &[
             "SEARCH message USING COVERING INDEX message_msgid (account_id=?)",
             "SEARCH l USING COVERING INDEX loc_message (message_id=?)",
+            "SEARCH o USING INDEX operation_message (message_id=?)",
         ],
     ),
     // Stage 3
@@ -156,6 +157,7 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
         &[
             "SEARCH m USING COVERING INDEX message_msgid (account_id=?)",
             "SEARCH l USING COVERING INDEX loc_message (message_id=?)",
+            "SEARCH o USING INDEX operation_message (message_id=?)",
             "SEARCH p USING PRIMARY KEY (message_id=?)",
         ],
     ),
@@ -207,6 +209,130 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
         "allowed senders",
         reading::SENDERS,
         &["SEARCH remote_content_sender USING PRIMARY KEY (account_uuid=?)"],
+    ),
+    // Stage 4: the outbox
+    (
+        "location for planning",
+        outbox::LOCATION_FOR_PLAN,
+        &[
+            "SEARCH l USING PRIMARY KEY (mailbox_id=? AND message_id=?)",
+            "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "account write access",
+        outbox::ACCOUNT_WRITES,
+        &["SEARCH account USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "set write access",
+        outbox::SET_WRITES,
+        &["SEARCH account USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "mailboxes for planning",
+        outbox::PLAN_MAILBOXES,
+        &["SEARCH mailbox USING INDEX mailbox_path (account_id=?)"],
+    ),
+    (
+        "mailbox generation",
+        outbox::MAILBOX_GENERATION,
+        &["SEARCH mailbox USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "message exists",
+        outbox::MESSAGE_EXISTS,
+        &["SEARCH message USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "request recorded before",
+        outbox::KEY_BATCH,
+        &["SEARCH operation USING INDEX sqlite_autoindex_operation_1 (idempotency_key=?)"],
+    ),
+    (
+        "batch of the first operation",
+        outbox::SET_BATCH,
+        &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "pending flags of a location",
+        outbox::PENDING_FLAGS_AT,
+        &["SEARCH operation USING INDEX operation_location (mailbox_id=? AND uid=?)"],
+    ),
+    (
+        "pending flags of a mailbox",
+        outbox::PENDING_FLAGS_IN,
+        &["SEARCH operation USING INDEX operation_location (mailbox_id=?)"],
+    ),
+    (
+        "local flags",
+        outbox::LOCATION_FLAGS,
+        &["SEARCH message_location USING PRIMARY KEY (mailbox_id=? AND message_id=?)"],
+    ),
+    (
+        "write local flags",
+        outbox::WRITE_FLAGS,
+        &["SEARCH message_location USING PRIMARY KEY (mailbox_id=? AND message_id=?)"],
+    ),
+    (
+        "write server flags",
+        outbox::WRITE_SERVER_FLAGS,
+        &["SEARCH message_location USING COVERING INDEX loc_uid (mailbox_id=? AND uid=?)"],
+    ),
+    (
+        "remove a location",
+        outbox::DELETE_LOCATION,
+        &["SEARCH message_location USING PRIMARY KEY (mailbox_id=? AND message_id=?)"],
+    ),
+    (
+        "pending operations",
+        outbox::PENDING_OPERATIONS,
+        &[
+            "SEARCH o USING INDEX operation_pending (account_id=?)",
+            "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH l USING PRIMARY KEY (mailbox_id=? AND message_id=?)",
+        ],
+    ),
+    (
+        "operation by id",
+        outbox::OPERATION_BY_ID,
+        &["SEARCH o USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "operations of a batch",
+        outbox::OPERATIONS_OF_BATCH,
+        &["SEARCH o USING INDEX operation_batch (batch=?)"],
+    ),
+    (
+        "activity of an account",
+        outbox::OPERATIONS_OF_ACCOUNT,
+        &["SEARCH o USING INDEX operation_account (account_id=? AND id<?)"],
+    ),
+    (
+        "begin an operation",
+        outbox::BEGIN_OPERATION,
+        &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "finish an operation",
+        outbox::FINISH_OPERATION,
+        &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "rewrite a payload",
+        outbox::SET_PAYLOAD,
+        &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "delete an operation",
+        outbox::DELETE_OPERATION,
+        &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "purge confirmed operations",
+        outbox::PURGE_CONFIRMED,
+        &["SEARCH operation USING INDEX operation_account (account_id=?)"],
     ),
 ];
 
@@ -279,6 +405,49 @@ async fn every_query_uses_its_index() {
         .remove_uids(f.inbox, UV, UidSet::range(1, 200))
         .await
         .expect("remove");
+    // Some outbox history: confirmed, failed and queued operations.
+    f.store
+        .set_writes_enabled(f.account, true)
+        .await
+        .expect("writes on");
+    let page = f
+        .store
+        .list_messages(f.inbox, None, 300)
+        .await
+        .expect("list");
+    for (n, item) in page.items.iter().enumerate() {
+        let action = match n % 3 {
+            0 => mail_model::MailAction::Flag,
+            1 => mail_model::MailAction::MarkUnread,
+            _ => mail_model::MailAction::Archive,
+        };
+        let at = mail_model::MessageRef {
+            mailbox_id: f.inbox,
+            message_id: item.id,
+        };
+        let change = f
+            .store
+            .enqueue_action(action, vec![at], format!("plan-{n}"))
+            .await
+            .expect("enqueue");
+        if n % 2 == 0 {
+            let results = change
+                .operations
+                .iter()
+                .map(|op| {
+                    (
+                        op.id,
+                        crate::OperationResult::Confirmed {
+                            flags: None,
+                            moved_to: None,
+                            notice: None,
+                        },
+                    )
+                })
+                .collect();
+            f.store.finish_operations(results).await.expect("finish");
+        }
+    }
     f.store
         .write(|tx| Ok(tx.execute_batch("ANALYZE")?))
         .await

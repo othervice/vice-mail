@@ -89,11 +89,15 @@ impl ListCursor {
 pub type Uid = u32;
 
 /// IMAP UIDVALIDITY of a mailbox. When it changes, all stored UIDs of the mailbox are void.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// Serialised (as a number) only into internal records (outbox payloads), never over IPC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct UidValidity(pub u32);
 
-/// CONDSTORE mod-sequence (RFC 7162): 1 to 2^63 - 1. Stored as SQLite INTEGER.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// CONDSTORE mod-sequence (RFC 7162): 1 to 2^63 - 1. Stored as SQLite INTEGER. Serialised (as a
+/// number) only into internal records (outbox payloads); over IPC it would need a string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ModSeq(pub u64);
 
 impl fmt::Display for UidValidity {

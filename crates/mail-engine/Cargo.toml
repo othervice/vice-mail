@@ -11,11 +11,14 @@ publish.workspace = true
 mail-model.workspace = true
 mail-store.workspace = true
 mail-imap.workspace = true
+# Parsing, sanitising, link checks and file names of message content (stage 3).
+mail-content.workspace = true
 # Account ids (UUID v4).
 uuid = { workspace = true, features = ["v4"] }
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
+# `net` for the resolver of external images (`lookup_host`).
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "net"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
@@ -27,6 +30,10 @@ reqwest.workspace = true
 roxmltree.workspace = true
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
+# Host checks of external images (stage 3).
+url.workspace = true
+# Opening links and attachments with the system's default apps (stage 3).
+open.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true

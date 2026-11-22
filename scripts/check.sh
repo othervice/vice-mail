@@ -54,7 +54,29 @@ if [[ ! -d app/node_modules ]]; then
   exit 1
 fi
 
+# `unsafe` only in crates/webview2-guard (decision 0011): every other crate keeps
+# `unsafe_code = "forbid"`, and no other code may allow or use `unsafe`. The guard crate itself
+# is the positive control: the pattern must find its `#[allow(unsafe_code)]` and `unsafe {`.
+check_unsafe() {
+  local pattern='\bunsafe[[:space:]]*(\{|fn[[:space:]]|impl[[:space:]<]|extern[[:space:]]|trait[[:space:]])|allow\([^)]*unsafe_code'
+  local lint='unsafe_code[[:space:]]*=[[:space:]]*"(allow|warn|deny)"'
+  local outside inside
+  outside="$( { grep -rnE "$pattern" --include='*.rs' crates app/src-tauri/src || true
+                grep -rnE "$lint" --include='Cargo.toml' Cargo.toml crates app/src-tauri || true
+              } | grep -v '^crates/webview2-guard/' || true)"
+  inside="$(grep -rcE "$pattern" --include='*.rs' crates/webview2-guard | awk -F: '{ n += $2 } END { print n + 0 }')"
+  if [[ -n "$outside" ]]; then
+    printf 'unsafe outside crates/webview2-guard:\n%s\n' "$outside" >&2
+    return 1
+  fi
+  if [[ "$inside" -lt 2 ]]; then
+    echo "the unsafe check found nothing in crates/webview2-guard; is the pattern broken?" >&2
+    return 1
+  fi
+}
+
 # Rust
+step "unsafe only in webview2-guard" check_unsafe
 step "Rust formatting" cargo fmt --all --check
 step "Clippy" cargo clippy --workspace --all-targets --locked -- -D warnings
 # The desktop-test build (decision 0005) must stay warning-free too; its WebDriver tests need a

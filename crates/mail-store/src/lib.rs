@@ -10,6 +10,8 @@
 //! - Message bodies after decision 0009: zstd-compressed files under `bodies/` next to the
 //!   database, written atomically, referenced from `message_body`; previews, prefetch settings
 //!   and the remote-content allowlist.
+//! - The outbox after decision 0012: operations with their local effects in one transaction,
+//!   their states, undo, retry and discard (`outbox_api`).
 
 mod accounts;
 pub mod backup;
@@ -21,6 +23,8 @@ mod mail_api;
 mod mailboxes;
 mod messages;
 mod migrations;
+mod outbox;
+mod outbox_api;
 mod reading;
 mod settings;
 mod store;
@@ -35,6 +39,7 @@ pub use mail_api::{
     StoredAccount,
 };
 pub use migrations::SCHEMA_VERSION;
+pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
 pub use reading::{
     MAX_PREFETCH_BATCH, MAX_PREVIEW_CHARS, MessageLocation, PrefetchCandidate, StoredMessage,
 };
@@ -49,6 +54,8 @@ mod body_bench;
 mod body_tests;
 #[cfg(test)]
 mod mail_tests;
+#[cfg(test)]
+mod outbox_tests;
 #[cfg(test)]
 mod plan_tests;
 #[cfg(test)]

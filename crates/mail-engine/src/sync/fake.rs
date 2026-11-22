@@ -11,9 +11,10 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use mail_model::{
-    Access, Address, BackendError, Capabilities, ConnectConfig, FlagUpdate, Flags, IdleOutcome,
-    MailBackend, MailConnector, MailboxStatus, MessageHeader, ModSeq, RemoteMailbox,
-    SelectedMailbox, Uid, UidSet, UidValidity,
+    Access, Address, BackendError, BodySection, Capabilities, ConnectConfig, FetchedSection,
+    FlagUpdate, Flags, IdleOutcome, MailBackend, MailConnector, MailboxStatus, MessageHeader,
+    MessageStructure, MimePart, ModSeq, RawMessage, RemoteMailbox, SelectedMailbox, Uid, UidSet,
+    UidValidity,
 };
 use tokio::sync::watch;
 
@@ -24,6 +25,8 @@ pub(crate) struct FakeMessage {
     pub flags: Flags,
     pub modseq: u64,
     pub serial: u64,
+    /// The raw message; `None` for the generated plain-text one ([`FakeServer::raw_of`]).
+    pub raw: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +51,10 @@ pub(crate) struct Faults {
     pub cut_after_fetches: Option<usize>,
     /// Each `fetch_headers` takes this long.
     pub fetch_delay: Duration,
+    /// Every body fetch (structure, messages, sections) fails with this.
+    pub bodies: Option<BackendError>,
+    /// Each body fetch takes this long.
+    pub body_delay: Duration,
 }
 
 #[derive(Debug)]
@@ -62,6 +69,10 @@ pub(crate) struct ServerState {
     pub fetched: usize,
     /// Access mode of every connect attempt.
     pub access: Vec<Access>,
+    /// Body fetch commands (`fetch_structure`, `fetch_messages`, `fetch_sections`), and the
+    /// UIDs whose whole body or sections were returned.
+    pub body_fetches: usize,
+    pub bodies_sent: Vec<Uid>,
     next_validity: u32,
     next_serial: u64,
 }
@@ -94,6 +105,8 @@ impl FakeServer {
             logins: 0,
             fetched: 0,
             access: Vec::new(),
+            body_fetches: 0,
+            bodies_sent: Vec::new(),
             next_validity: 100,
             next_serial: 1,
         };
@@ -164,12 +177,39 @@ impl FakeServer {
                         flags,
                         modseq,
                         serial,
+                        raw: None,
                     },
                 );
                 uids.push(uid);
             }
             uids
         })
+    }
+
+    /// Delivers one message with this raw content; returns its UID.
+    pub(crate) fn deliver_raw(&self, mailbox: &str, raw: &[u8]) -> Uid {
+        let uid = self.deliver(mailbox, 1, false)[0];
+        self.with(|s| {
+            if let Some(message) = s.mailbox(mailbox).messages.get_mut(&uid) {
+                message.raw = Some(raw.to_vec());
+            }
+        });
+        uid
+    }
+
+    /// The raw message: the stored one, or a small generated text mail with a link.
+    pub(crate) fn raw_of(message: &FakeMessage) -> Vec<u8> {
+        if let Some(raw) = &message.raw {
+            return raw.clone();
+        }
+        let serial = message.serial;
+        format!(
+            "From: Sender <sender@fake.test>\r\nTo: alice@fake.test\r\n\
+             Subject: Message {serial}\r\nMessage-ID: <{serial}@fake.test>\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\n\
+             Body of message {serial}, see https://example.org/{serial} \u{2013} gr\u{fc}\u{df}e.\r\n"
+        )
+        .into_bytes()
     }
 
     pub(crate) fn set_flagged(&self, mailbox: &str, uid: Uid, flagged: bool) {
@@ -220,14 +260,36 @@ impl FakeServer {
             uid,
             modseq: Some(ModSeq(message.modseq)),
             flags: message.flags.clone(),
-            size: 1_000,
+            size: u32::try_from(FakeServer::raw_of(message).len()).unwrap_or(u32::MAX),
             internal_date: date,
             date: Some(date),
-            subject: format!("Message {serial}"),
-            from: vec![Address {
-                name: Some("Sender".into()),
-                email: "sender@fake.test".into(),
-            }],
+            subject: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "Subject"))
+                .unwrap_or_else(|| format!("Message {serial}")),
+            from: vec![
+                message
+                    .raw
+                    .as_deref()
+                    .and_then(|raw| raw_header(raw, "From"))
+                    .map_or_else(
+                        || Address {
+                            name: Some("Sender".into()),
+                            email: "sender@fake.test".into(),
+                        },
+                        |from| match from.split_once('<') {
+                            Some((name, rest)) => Address {
+                                name: Some(name.trim().to_owned()).filter(|n| !n.is_empty()),
+                                email: rest.trim_end_matches('>').trim().to_owned(),
+                            },
+                            None => Address {
+                                name: None,
+                                email: from.trim().to_owned(),
+                            },
+                        },
+                    ),
+            ],
             to: vec![Address {
                 name: None,
                 email: "alice@fake.test".into(),
@@ -243,6 +305,16 @@ impl FakeServer {
             has_attachments: false,
         }
     }
+}
+
+/// A header field of a raw message (one unfolded line), for the header the fake reports.
+fn raw_header(raw: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{name}: ");
+    text.lines()
+        .take_while(|l| !l.is_empty())
+        .find_map(|l| l.strip_prefix(&prefix))
+        .map(str::to_owned)
 }
 
 #[derive(Debug, Clone)]
@@ -296,6 +368,39 @@ impl Drop for FakeBackend {
 }
 
 impl FakeBackend {
+    /// One body fetch: counted, delayed and failed as the faults say.
+    async fn body_of(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+    ) -> Result<Option<Vec<u8>>, BackendError> {
+        self.check(mailbox)?;
+        let (fault, delay) = self.server.with(|s| {
+            s.body_fetches += 1;
+            (s.faults.bodies.clone(), s.faults.body_delay)
+        });
+        if !delay.is_zero() {
+            tokio::time::sleep(delay).await;
+        }
+        if let Some(err) = fault {
+            if matches!(err, BackendError::ConnectionLost(_)) {
+                self.poisoned = true;
+            }
+            return Err(err);
+        }
+        let raw = self.server.read(|s| {
+            s.mailboxes
+                .get(&mailbox.name)
+                .filter(|mb| mb.uid_validity == mailbox.uid_validity.0)
+                .and_then(|mb| mb.messages.get(&uid))
+                .map(FakeServer::raw_of)
+        });
+        if raw.is_some() {
+            self.server.with(|s| s.bodies_sent.push(uid));
+        }
+        Ok(raw)
+    }
+
     fn usable(&self) -> Result<(), BackendError> {
         if self.poisoned {
             Err(BackendError::ConnectionLost(
@@ -512,6 +617,75 @@ impl MailBackend for FakeBackend {
                 }
             }
         }
+    }
+
+    async fn fetch_structure(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+    ) -> Result<Option<MessageStructure>, BackendError> {
+        let raw = self.body_of(mailbox, uid).await?;
+        Ok(raw.map(|raw| MessageStructure {
+            size: u32::try_from(raw.len()).unwrap_or(u32::MAX),
+            parts: vec![MimePart {
+                path: "1".parse().ok(),
+                depth: 0,
+                mime_type: "text/plain".into(),
+                charset: Some("utf-8".into()),
+                file_name: None,
+                disposition: None,
+                content_id: None,
+                encoding: "8bit".into(),
+                size: u32::try_from(raw.len()).unwrap_or(u32::MAX),
+            }],
+        }))
+    }
+
+    async fn fetch_messages(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+    ) -> Result<Vec<RawMessage>, BackendError> {
+        let mut out = Vec::new();
+        for uid in uids.iter() {
+            if let Some(data) = self.body_of(mailbox, uid).await? {
+                out.push(RawMessage { uid, data });
+            }
+        }
+        Ok(out)
+    }
+
+    async fn fetch_sections(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+        sections: &[BodySection],
+    ) -> Result<Option<Vec<FetchedSection>>, BackendError> {
+        let Some(raw) = self.body_of(mailbox, uid).await? else {
+            return Ok(None);
+        };
+        // A single-part message: the header and part 1 (the body).
+        let split = raw
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .map_or(raw.len(), |p| p + 4);
+        let (header, body) = raw.split_at(split);
+        Ok(Some(
+            sections
+                .iter()
+                .filter_map(|section| {
+                    let data = match section {
+                        BodySection::Header => header.to_vec(),
+                        BodySection::Part(path) if path.to_string() == "1" => body.to_vec(),
+                        _ => return None,
+                    };
+                    Some(FetchedSection {
+                        section: section.clone(),
+                        data,
+                    })
+                })
+                .collect(),
+        ))
     }
 
     async fn noop(&mut self) -> Result<(), BackendError> {

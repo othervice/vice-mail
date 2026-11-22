@@ -22,8 +22,8 @@ pub struct Address {
 }
 
 /// IMAP flags of one message in one mailbox. Flags belong to the location, as in IMAP.
-/// `\Recent` is ignored.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+/// `\Recent` is ignored. Serialised only into internal records (outbox payloads).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Flags {
     pub seen: bool,
     pub answered: bool,
@@ -162,6 +162,9 @@ pub struct MessageListItem {
     pub has_attachments: bool,
     /// Keywords as stored (for example `$Forwarded`), see [`Flags::keywords`].
     pub keywords: Vec<String>,
+    /// Start of the text, white space collapsed, at most 256 characters; null until the body
+    /// was parsed (opened or prefetched).
+    pub preview: Option<String>,
 }
 
 /// One page of a message list, newest first.

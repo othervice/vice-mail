@@ -1,12 +1,37 @@
 //! Records the plaintext bytes the adapter writes (inside TLS), for tests that must prove what
 //! did or did not leave the adapter. Only compiled for tests and the `test-support` feature.
+//!
+//! A trigger ([`WireTap::on_write`]) runs a callback the moment a given text is written, for
+//! example to cut the connection right after a command (stage 4 fault injection).
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::fmt;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+type Callback = Box<dyn Fn() + Send + Sync>;
+
+struct Trigger {
+    pattern: Vec<u8>,
+    callback: Callback,
+}
+
+#[derive(Default)]
+struct Inner {
+    bytes: Mutex<Vec<u8>>,
+    triggers: Mutex<Vec<Trigger>>,
+}
 
 /// Shared recorder of everything the client wrote, in order. Clone it into the connector and
 /// keep a copy to inspect it.
-#[derive(Debug, Clone, Default)]
-pub struct WireTap(Arc<Mutex<Vec<u8>>>);
+#[derive(Clone, Default)]
+pub struct WireTap(Arc<Inner>);
+
+impl fmt::Debug for WireTap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WireTap")
+            .field("bytes", &self.len())
+            .finish_non_exhaustive()
+    }
+}
 
 impl WireTap {
     pub fn new() -> Self {
@@ -15,13 +40,52 @@ impl WireTap {
 
     fn lock(&self) -> MutexGuard<'_, Vec<u8>> {
         // A panic while holding the lock cannot leave the byte buffer inconsistent.
+        self.0.bytes.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Calls `callback` once, as soon as `pattern` is written (it may span several writes). The
+    /// callback runs inside the write, so it must not block: set a flag, notify, cut a proxy.
+    pub fn on_write(&self, pattern: &str, callback: impl Fn() + Send + Sync + 'static) {
         self.0
+            .triggers
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Trigger {
+                pattern: pattern.as_bytes().to_vec(),
+                callback: Box::new(callback),
+            });
     }
 
     pub(crate) fn record(&self, bytes: &[u8]) {
-        self.lock().extend_from_slice(bytes);
+        let fired = {
+            let mut all = self.lock();
+            let before = all.len();
+            all.extend_from_slice(bytes);
+            let mut triggers = self
+                .0
+                .triggers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let mut fired = Vec::new();
+            let mut i = 0;
+            while i < triggers.len() {
+                let pattern_len = triggers.get(i).map_or(0, |t| t.pattern.len());
+                let start = before.saturating_sub(pattern_len);
+                let tail = all.get(start..).unwrap_or_default();
+                let hit = triggers.get(i).is_some_and(|t| {
+                    !t.pattern.is_empty() && tail.windows(t.pattern.len()).any(|w| w == t.pattern)
+                });
+                if hit {
+                    fired.push(triggers.remove(i));
+                } else {
+                    i += 1;
+                }
+            }
+            fired
+        };
+        for trigger in fired {
+            (trigger.callback)();
+        }
     }
 
     /// Every byte written so far, including the LOGIN line (test credentials only).
@@ -137,5 +201,22 @@ mod tests {
             ]
         );
         assert_eq!(tap.len(), tap.bytes().len());
+    }
+
+    #[test]
+    fn triggers_fire_once_also_across_writes() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let tap = WireTap::new();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&hits);
+        tap.on_write("UID MOVE", move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        });
+        tap.record(b"A1 NOOP\r\nA2 UID MO");
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        tap.record(b"VE 3 \"Archive\"\r\n");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        tap.record(b"A3 UID MOVE 4 \"Archive\"\r\n");
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "a trigger fires once");
     }
 }

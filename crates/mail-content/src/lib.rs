@@ -10,11 +10,15 @@
 //! - [`check_link`]: what to warn about before a link opens; only `http`, `https`, `mailto`.
 //! - [`sanitize_filename`], [`is_executable_type`]: attachment names and open warnings.
 //! - [`preview_from_text`], [`preview_from_html`]: the list preview.
+//! - [`build_message`], [`mail_html`], [`prepare_reply`], [`prepare_forward`]: composing
+//!   (stage 5, module `compose`): the outgoing MIME message (mail-builder), mail HTML from the
+//!   editor, replies and forwards.
 //!
 //! The crate owns no randomness and no network: render tokens come from the engine
 //! (`mail_model::RenderToken`), external images are fetched by the engine and passed in as
-//! bytes ([`RemotePolicy::Allow`]).
+//! bytes ([`RemotePolicy::Allow`]), the random part of a Message-ID too ([`new_message_id`]).
 
+mod compose;
 mod css;
 mod dom;
 mod filename;
@@ -26,6 +30,12 @@ mod parse;
 mod preview;
 mod text;
 
+pub use compose::{
+    Attachment, BuiltMessage, ComposeError, MAX_REFERENCES, Original, OutgoingMessage,
+    PreparedDraft, QuoteLanguage, QuoteOptions, ReplyKind, build_message, choose_identity,
+    forward_subject, mail_html, new_message_id, normalize_email, prepare_forward, prepare_reply,
+    reply_recipients, reply_references, reply_subject, strip_subject_prefixes,
+};
 pub use filename::{
     FALLBACK_NAME, MAX_NAME_BYTES, attachment_file_name, is_executable_type, sanitize_filename,
 };

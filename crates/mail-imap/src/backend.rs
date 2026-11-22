@@ -30,7 +30,7 @@ use crate::timeout_io::{IoTimeout, TimeoutHandle};
 pub type TlsTransport = TlsStream<TcpStream>;
 
 /// Response codes of a refused EXAMINE/SELECT that do not mean "no such mailbox" (RFC 5530).
-const NOT_A_MISSING_MAILBOX: &[&str] = &[
+pub(crate) const NOT_A_MISSING_MAILBOX: &[&str] = &[
     "NOPERM",
     "UNAVAILABLE",
     "SERVERBUG",
@@ -49,12 +49,12 @@ pub const MAX_IDLE: Duration = Duration::from_secs(25 * 60);
 
 /// One authenticated IMAP connection. Built by [`crate::ImapConnector`].
 pub struct ImapBackend<S: Transport = TlsTransport> {
-    conn: Conn<S>,
-    caps: Capabilities,
+    pub(crate) conn: Conn<S>,
+    pub(crate) caps: Capabilities,
     access: Access,
     /// Extensions the server confirmed with `* ENABLED` (upper case).
     enabled: Vec<String>,
-    selected: Option<SelectedMailbox>,
+    pub(crate) selected: Option<SelectedMailbox>,
 }
 
 impl<S: Transport> std::fmt::Debug for ImapBackend<S> {
@@ -169,7 +169,24 @@ impl<S: Transport> ImapBackend<S> {
         &self.enabled
     }
 
-    fn ensure_open(&self, mailbox: &SelectedMailbox) -> Result<(), BackendError> {
+    /// Pretends the server did not announce `names` (case-insensitive). Tests only, to run the
+    /// fallbacks (no MOVE, no UIDPLUS) against the real test server. Applied after login and
+    /// ENABLE, so masking CONDSTORE only stops the adapter from asking for mod-sequences.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn mask_capabilities(&mut self, names: &[String]) {
+        if names.is_empty() {
+            return;
+        }
+        let kept = self
+            .caps
+            .names
+            .iter()
+            .filter(|n| !names.iter().any(|m| m.eq_ignore_ascii_case(n)));
+        self.caps = Capabilities::from_names(kept);
+        tracing::debug!(masked = ?names, "capabilities masked for a test");
+    }
+
+    pub(crate) fn ensure_open(&self, mailbox: &SelectedMailbox) -> Result<(), BackendError> {
         match &self.selected {
             Some(open)
                 if open.name == mailbox.name && open.uid_validity == mailbox.uid_validity =>
@@ -187,7 +204,7 @@ impl<S: Transport> ImapBackend<S> {
         }
     }
 
-    fn status_items(&self) -> &'static str {
+    pub(crate) fn status_items(&self) -> &'static str {
         if self.caps.condstore {
             "MESSAGES UNSEEN UIDNEXT UIDVALIDITY HIGHESTMODSEQ"
         } else {
@@ -692,7 +709,7 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
     }
 }
 
-fn mailbox_status(attrs: &[StatusAttribute]) -> MailboxStatus {
+pub(crate) fn mailbox_status(attrs: &[StatusAttribute]) -> MailboxStatus {
     let mut status = MailboxStatus {
         messages: 0,
         unseen: None,

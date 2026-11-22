@@ -27,8 +27,12 @@ pub struct TestEnv {
     pub imaps_port: u16,
     /// SMTP submission with STARTTLS and AUTH.
     pub submission_port: u16,
+    /// SMTP submission with implicit TLS and AUTH.
+    pub smtps_port: u16,
     pub alice: TestAccount,
     pub bob: TestAccount,
+    /// The server administrator; it has a mailbox too (a third recipient, for Bcc tests).
+    pub admin: TestAccount,
     /// PEM of the test CA (`testmail/.data/tls/ca.pem`, created by `scripts/testmail.sh`).
     pub ca_pem: Vec<u8>,
 }
@@ -86,8 +90,10 @@ impl TestEnv {
             imap_port: port("TESTMAIL_IMAP_PORT")?,
             imaps_port: port("TESTMAIL_IMAPS_PORT")?,
             submission_port: port("TESTMAIL_SUBMISSION_PORT")?,
+            smtps_port: port("TESTMAIL_SMTPS_PORT")?,
             alice: account("ALICE")?,
             bob: account("BOB")?,
+            admin: account("ADMIN")?,
             ca_pem,
             repo,
         })
@@ -133,6 +139,26 @@ impl TestEnv {
             Security::Starttls => self.imap_port,
         };
         self.config_at(account, &self.host, port, security, access)
+    }
+
+    /// SMTP settings for `account`: submission with STARTTLS (1587) or implicit TLS (1465),
+    /// read-write, with the test CA.
+    pub fn smtp_config(&self, account: &TestAccount, security: Security) -> ConnectConfig {
+        self.config_at(
+            account,
+            &self.host,
+            self.smtp_port(security),
+            security,
+            Access::ReadWrite,
+        )
+    }
+
+    /// The SMTP submission port for `security`.
+    pub fn smtp_port(&self, security: Security) -> u16 {
+        match security {
+            Security::Tls => self.smtps_port,
+            Security::Starttls => self.submission_port,
+        }
     }
 
     /// Like [`TestEnv::config`] for any host and port (for example a [`super::Proxy`]).

@@ -13,6 +13,15 @@
 //!   mailbox names are decoded from modified UTF-7 ([`mutf7`]); header text is decoded with
 //!   mail-parser. Broken messages never panic.
 //!
+//! - **Writing** (stage 4): [`ImapWriter`] implements `MailWriter` for connections opened with
+//!   `Access::ReadWrite` only (`ImapConnector::connect_writer` refuses read-only
+//!   configurations before connecting); STORE with `UNCHANGEDSINCE`, MOVE with its COPY/EXPUNGE
+//!   fallback, CREATE.
+//!
+//! - **Sending** (stage 5): [`SmtpSender`] submits a message over SMTP with TLS or STARTTLS
+//!   (lettre's protocol layer on the adapter's own TLS streams) and reports accepted, refused
+//!   (per recipient) or unclear (connection ended after the data went out).
+//!
 //! The feature `test-support` adds helpers for integration tests against the local test
 //! server: a fault-injecting TCP proxy, a wire tap, raw commands and a small SMTP sender.
 
@@ -24,8 +33,10 @@ mod convert;
 mod error;
 pub mod mutf7;
 mod sasl;
+mod smtp;
 mod timeout_io;
 mod tls;
+mod writer;
 
 #[cfg(any(test, feature = "test-support"))]
 mod wire_tap;
@@ -39,5 +50,7 @@ mod tests;
 pub use backend::{ImapBackend, MAX_IDLE, TlsTransport};
 pub use command::Transport;
 pub use connector::ImapConnector;
+pub use smtp::SmtpSender;
 #[cfg(feature = "test-support")]
 pub use wire_tap::WireTap;
+pub use writer::ImapWriter;

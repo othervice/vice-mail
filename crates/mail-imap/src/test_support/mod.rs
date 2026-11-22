@@ -24,6 +24,7 @@ pub use smtp::send_mail;
 pub(crate) struct Hooks {
     pub(crate) wire_tap: Option<crate::WireTap>,
     pub(crate) tls_server_name: Option<String>,
+    pub(crate) masked_capabilities: Vec<String>,
 }
 
 /// Result of [`crate::ImapBackend::raw_command`].

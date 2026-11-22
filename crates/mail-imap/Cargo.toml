@@ -21,11 +21,17 @@ rustls-platform-verifier.workspace = true
 tokio = { workspace = true, features = ["net", "time", "io-util", "macros"] }
 tokio-rustls.workspace = true
 tracing.workspace = true
+# SMTP protocol layer (stage 5, module `smtp`); TCP, TLS and time limits are the adapter's own.
+lettre.workspace = true
 
 [dev-dependencies]
 # Turns on `test-support` for this crate's own tests.
 mail-imap = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+# Scripted TLS SMTP server in the `smtp` unit tests: a test CA and certificate made at test time.
+rcgen.workspace = true
+# The SMTP server tests build real messages and read them back (dev only; no product dependency).
+mail-content.workspace = true
 
 [lints]
 workspace = true

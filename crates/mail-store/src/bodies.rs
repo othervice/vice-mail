@@ -74,7 +74,9 @@ pub(crate) const ORPHAN_FILES: &str = "
     SELECT p.file
     FROM message m CROSS JOIN message_body_part p ON p.message_id = m.id
     WHERE m.account_id = ?1
-      AND NOT EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = m.id)";
+      AND NOT EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = m.id)
+      AND NOT EXISTS (SELECT 1 FROM operation o WHERE o.message_id = m.id
+                      AND o.state IN ('queued', 'in_flight', 'confirmed'))";
 
 /// Every referenced file, for the sweep: a scan of the covering index `body_part_file` on
 /// purpose (once at start).

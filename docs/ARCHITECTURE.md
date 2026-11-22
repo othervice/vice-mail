@@ -14,6 +14,7 @@ mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Rege
    ├── mail-store        SQLite, Migrationen, FTS5, Abfragen
    ├── mail-imap         IMAP- und SMTP-Adapter, implementiert MailBackend
    ├── mail-content      Parsen, HTML-Bereinigung, Link-Prüfung, Dateinamen (rein, ohne IO)
+   └── webview2-guard    nur Windows: Navigationen im Mail-Frame abfangen (einzige Crate mit `unsafe`, 0011)
    └── mail-model        Typen, Fehler, Capabilities, MailBackend-Trait, ohne IO
 ```
 
@@ -40,11 +41,13 @@ wenn er groß genug ist.
 | Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
 | Migrationen | rusqlite_migration | 2.7.0 | klein, nutzt `user_version`; legt rusqlite auf ^0.41 fest (0006) |
 | IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
-| SMTP | lettre (Tokio, rustls) | 0.11 | Standard in Rust |
-| MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
+| SMTP | lettre (nur Protokollschicht, `smtp-transport` + `tokio1`) | 0.11.24 | TLS, Zeitlimits und STARTTLS macht der Adapter selbst wie bei IMAP (Plattform-Verifier); lettre ohne eigenes TLS |
+| MIME lesen / schreiben | mail-parser / mail-builder | 1.0.1 / 2.0.1 | robust gegen kaputte Mails, vom Stalwart-Projekt |
 | Body-Ablage | zstd (Stufe 3, mit Prüfsumme) | 0.14.4 | gleiches Verhältnis wie Deflate, 4- bis 20-mal schneller beim Packen; Dateien statt BLOBs, damit Datenbank und Migrationssicherungen klein bleiben (0009) |
 | HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
 | TLS | rustls mit Provider `ring`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7 | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver. `ring` hat eine begründete Ausnahme von der 12-Monats-Regel (0002) |
+| System öffnen, Dateidialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | Links und Anhänge im System öffnen, Speichern-Dialog; beide nur in Rust, hinter Traits testbar. Nicht `tauri-plugin-dialog` (spritzt ein Script ein und bringt `tauri-plugin-fs` mit) |
+| WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
@@ -214,6 +217,11 @@ einer klaren Meldung abgelehnt.
 - Die Message-ID entsteht beim Anlegen des Entwurfs und bleibt über alle Versuche gleich.
 - Bricht die Verbindung ab, nachdem die Mail übertragen, aber bevor sie bestätigt wurde, wird nicht
   automatisch neu gesendet. Die App sucht die Message-ID im Gesendet-Ordner; bleibt es unklar, fragt sie den Nutzer.
+  Achtung: Dort liegt die Mail nur, wenn der Server selbst eine Kopie ablegt (z. B. Gmail); bei allen
+  anderen findet die Suche nichts, und die App fragt. Der SMTP-Adapter unterscheidet „nichts
+  übertragen“ (sicher zu wiederholen) von „unklar“ (Verbindung nach der Endmarke weg).
+- Die erzeugte Nachricht verrät das Programm nicht (kein `User-Agent`/`X-Mailer`, EHLO mit
+  `[127.0.0.1]`); `Date` in UTC; derselbe Entwurf ergibt byte-gleiche Nachrichten.
 - Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst.
 
 **Verbindungen (0002)**
@@ -285,6 +293,9 @@ einer klaren Meldung abgelehnt.
 - Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
   (Cargo-Feature `e2e`; ein Test prüft, dass das Release-Binary ihn nicht enthält, 0005).
 - Tauri-Init-Scripts werden nie für alle Frames eingespritzt.
+- `unsafe` ist überall verboten (`forbid`), außer in `crates/webview2-guard` (`deny` mit einzeln
+  begründeten `#[allow(unsafe_code)]` und `// SAFETY:`); `scripts/check.sh` prüft das per Suche.
+- Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab.
 
 **Geheimnisse**
 - Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
@@ -297,14 +308,28 @@ einer klaren Meldung abgelehnt.
   Nutzer im Systemdialog wählt.
 
 **Erlaubte Netzverbindungen**
-- Mailserver, die der Nutzer eingerichtet hat
+- Mailserver, die der Nutzer eingerichtet hat, auch für Bodies und Anhänge (Stufe 3): je Konto eine
+  eigene Leseverbindung neben Abgleich und IDLE, immer nur lesend (EXAMINE, `BODY.PEEK[…]`)
 - Bei der Einrichtung, nur nach Klick auf „online suchen“: DNS-SRV-Abfragen (RFC 6186) über die
   System-DNS-Server für die Domain der Adresse, danach HTTPS (Port 443) zur Autokonfiguration der
   eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
   dieselbe Domain oder ihre Subdomains, höchstens drei, ohne Cookies, Referrer und Proxy, 128 KiB
   höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
   Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft).
-- Externe Bilder einer Mail, nach Freigabe
+- Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“).
+  Der Kern lädt sie selbst (`mail-engine/src/reading/remote.rs`): reqwest über rustls mit der
+  Zertifikatsprüfung des Systems, HTTP/1.1, ohne Cookies, Referrer, Proxy und Wiederholungen, mit
+  neutraler Kennung (`Mozilla/5.0`), nur `http`/`https`, Weiterleitungen von Hand (höchstens drei,
+  wieder nur `http`/`https`), 5 s Verbindungsaufbau, 15 s je Bild, 30 s je Mail, höchstens 200
+  Adressen, 8 MiB je Bild und 32 MiB je Mail. **Nie zu privaten, Loopback- oder Link-Local-Adressen**
+  (auch nicht zu CGNAT, Multicast, reservierten und Dokumentationsnetzen, IPv4 in IPv6 eingeschlossen):
+  IP-Literale werden vor der Anfrage geprüft, Namen nach der Auflösung, und die Verbindung nutzt nur
+  die geprüften Adressen. Eine Ausnahme nur für Loopback gibt es allein in Tests
+  (`RemoteConfig::allow_loopback`; im Desktop-Test-Build `MAIL_APP_E2E_LOOPBACK_IMAGES=1`, nur mit
+  Feature `e2e`). Grenze: Die `From`-Adresse ist fälschbar; wer einen freigegebenen Absender fälscht,
+  bekommt seine Zählpixel geladen, mehr nicht
+- Links und Anhänge öffnet nicht die App, sondern das System (Browser, Mail-Programm, Standard-App),
+  erst nach Klick und Prüfung, Links nur `http`, `https`, `mailto`
 - KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13)
 - Der MCP-Server nimmt nur lokale Verbindungen an (stdio bzw. `127.0.0.1`) und baut selbst keine auf
 - Abmelde-Adressen (List-Unsubscribe) nach Klick

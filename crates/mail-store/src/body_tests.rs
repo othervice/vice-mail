@@ -1039,8 +1039,10 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
     let headers: Vec<_> = (1..=20)
         .map(|uid| header(uid, D + i64::from(uid), Some(&format!("{uid}@m"))))
         .collect();
+    // The SQL of stage 2 directly: `Store::store_headers` also re-applies outbox operations
+    // (stage 4), whose table a stage 2 database does not have.
     store
-        .store_headers(inbox, UV, headers, None)
+        .write(move |tx| crate::messages::store_headers(tx, inbox, UV, headers, None))
         .await
         .expect("headers");
     let before = store.list_messages(inbox, None, 100).await.expect("list");
@@ -1048,7 +1050,10 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
 
     let store = Store::open(&path, StoreOptions::default()).expect("migrate");
     let report = store.open_report().clone();
-    assert_eq!((report.previous_version, report.version), (2, 3));
+    assert_eq!(
+        (report.previous_version, report.version),
+        (2, crate::SCHEMA_VERSION)
+    );
     assert!(report.backup.is_some());
     assert_eq!(
         store.list_messages(inbox, None, 100).await.expect("list"),

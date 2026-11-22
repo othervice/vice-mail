@@ -972,3 +972,280 @@ async fn body_fetch_refusals_and_wrong_mailbox() {
     let lines = finish(backend, handle).await;
     assert_eq!(lines.len(), 5, "{lines:?}");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Writer (stage 4)
+
+mod writer {
+    use mail_model::{
+        ExpungeOutcome, Flag, Flags, MailWriter, MoveMethod, StoreMode, WriteConnector,
+    };
+
+    use super::*;
+    use crate::{ImapConnector, ImapWriter};
+
+    const SELECT: Step = Expect("SELECT \"INBOX\" (CONDSTORE)");
+    const SELECT_OK: Step = Send(
+        "* 3 EXISTS\r\n* OK [PERMANENTFLAGS (\\Seen \\Deleted \\*)] ok\r\n\
+* OK [UIDVALIDITY 77] ok\r\n* OK [UIDNEXT 40] ok\r\n* OK [HIGHESTMODSEQ 900] ok\r\n\
+{tag} OK [READ-WRITE] SELECT completed\r\n",
+    );
+
+    /// Login with `caps`, ENABLE, SELECT INBOX, then `rest`.
+    async fn writer(
+        caps: &'static str,
+        rest: Vec<Step>,
+    ) -> (
+        ImapWriter<DuplexStream>,
+        SelectedMailbox,
+        JoinHandle<Vec<String>>,
+    ) {
+        let mut script = vec![
+            GREETING,
+            LOGIN,
+            Send(caps),
+            ENABLE,
+            ENABLE_OK,
+            SELECT,
+            SELECT_OK,
+        ];
+        script.extend(rest);
+        let (backend, handle) = connect(Access::ReadWrite, Duration::from_secs(2), script).await;
+        let mut writer = ImapWriter::new(backend.expect("login")).expect("read-write");
+        let inbox = writer.open_mailbox("INBOX").await.expect("select");
+        assert!(!inbox.read_only && inbox.keywords_allowed);
+        (writer, inbox, handle)
+    }
+
+    async fn done(
+        writer: ImapWriter<DuplexStream>,
+        handle: JoinHandle<Vec<String>>,
+    ) -> Vec<String> {
+        drop(writer);
+        handle.await.expect("fake server")
+    }
+
+    const NO_MOVE: &str = "{tag} OK [CAPABILITY IMAP4rev1 CONDSTORE ENABLE] logged in\r\n";
+    const MOVE_UIDPLUS: &str =
+        "{tag} OK [CAPABILITY IMAP4rev1 CONDSTORE ENABLE MOVE UIDPLUS] logged in\r\n";
+
+    #[tokio::test]
+    async fn store_reports_new_flags_and_modified_uids() {
+        let (mut w, inbox, handle) = writer(
+            NO_MOVE,
+            vec![
+                Expect("UID STORE 5,7 (UNCHANGEDSINCE 900) +FLAGS (\\Seen $Junk)"),
+                Send(
+                    "* 1 FETCH (UID 5 FLAGS (\\Seen $Junk) MODSEQ (901))\r\n\
+* 2 FETCH (UID 6 FLAGS (\\Flagged) MODSEQ (902))\r\n\
+{tag} OK [MODIFIED 7] Conditional STORE failed\r\n",
+                ),
+                Expect("UID STORE 5 -FLAGS (\\Flagged)"),
+                Send("{tag} NO [CANNOT] not today\r\n"),
+            ],
+        )
+        .await;
+        let flags = [Flag::Seen, Flag::keyword("$Junk").expect("kw")];
+        let out = w
+            .store_flags(
+                &inbox,
+                &UidSet::from_uids([5, 7]),
+                StoreMode::Add,
+                &flags,
+                Some(ModSeq(900)),
+            )
+            .await
+            .expect("store");
+        assert_eq!(out.modified, UidSet::from_uids([7]));
+        assert_eq!(out.updates.len(), 1, "UID 6 was not asked for: {out:?}");
+        assert_eq!(out.updates[0].uid, 5);
+        assert_eq!(out.updates[0].modseq, Some(ModSeq(901)));
+        assert_eq!(out.updates[0].flags, Flags::from_imap(["\\Seen", "$Junk"]));
+
+        // A refusal is a typed error, not an empty success (async-imap's uid_store).
+        let err = w
+            .store_flags(
+                &inbox,
+                &UidSet::from_uids([5]),
+                StoreMode::Remove,
+                &[Flag::Flagged],
+                None,
+            )
+            .await
+            .expect_err("NO");
+        assert!(matches!(err, BackendError::Rejected(_)), "{err}");
+
+        // Invalid keywords never leave the adapter.
+        let err = w
+            .store_flags(
+                &inbox,
+                &UidSet::from_uids([5]),
+                StoreMode::Add,
+                &[Flag::Keyword("two words".into())],
+                None,
+            )
+            .await
+            .expect_err("invalid keyword");
+        assert!(matches!(err, BackendError::InvalidState(_)), "{err}");
+        let lines = done(w, handle).await;
+        assert!(lines.iter().all(|l| !l.contains("two words")), "{lines:?}");
+    }
+
+    #[tokio::test]
+    async fn move_without_move_or_uidplus_never_expunges_foreign_deleted_mail() {
+        let (mut w, inbox, handle) = writer(
+            NO_MOVE,
+            vec![
+                Expect("UID COPY 5 \"Archive\""),
+                Send("{tag} OK copied\r\n"),
+                Expect("UID STORE 5 +FLAGS.SILENT (\\Deleted)"),
+                Send("* 1 FETCH (UID 5 MODSEQ (950))\r\n{tag} OK stored\r\n"),
+                Expect("UID SEARCH DELETED"),
+                // UID 3 was marked deleted by someone else.
+                Send("* SEARCH 3 5\r\n{tag} OK searched\r\n"),
+                // Second move: only our message is marked, so EXPUNGE is safe.
+                Expect("UID COPY 6 \"Archive\""),
+                Send("{tag} OK copied\r\n"),
+                Expect("UID STORE 6 +FLAGS.SILENT (\\Deleted)"),
+                Send("{tag} OK stored\r\n"),
+                Expect("UID SEARCH DELETED"),
+                Send("* SEARCH 6\r\n{tag} OK searched\r\n"),
+                Expect("EXPUNGE"),
+                Send("* 2 EXPUNGE\r\n{tag} OK expunged\r\n"),
+            ],
+        )
+        .await;
+        let first = w
+            .move_messages(&inbox, &UidSet::from_uids([5]), "Archive")
+            .await
+            .expect("move");
+        assert_eq!(first.method, MoveMethod::CopyLeftDeleted);
+        assert!(first.copy_uid.is_none());
+        let second = w
+            .move_messages(&inbox, &UidSet::from_uids([6]), "Archive")
+            .await
+            .expect("move");
+        assert_eq!(second.method, MoveMethod::CopyExpunge);
+        let lines = done(w, handle).await;
+        let expunges = lines.iter().filter(|l| l.ends_with(" EXPUNGE")).count();
+        assert_eq!(expunges, 1, "{lines:?}");
+    }
+
+    #[tokio::test]
+    async fn move_and_expunge_with_move_and_uidplus() {
+        let (mut w, inbox, handle) = writer(
+            MOVE_UIDPLUS,
+            vec![
+                Expect("UID MOVE 5:6 \"Trash\""),
+                Send(
+                    "* OK [COPYUID 9 5:6 100:101] Moved\r\n* 1 EXPUNGE\r\n* 1 EXPUNGE\r\n\
+{tag} OK done\r\n",
+                ),
+                Expect("UID STORE 7 +FLAGS.SILENT (\\Deleted)"),
+                Send("{tag} OK stored\r\n"),
+                Expect("UID EXPUNGE 7"),
+                Send("* 1 EXPUNGE\r\n{tag} OK expunged\r\n"),
+                Expect("STATUS \"Trash\" (MESSAGES UNSEEN UIDNEXT UIDVALIDITY HIGHESTMODSEQ)"),
+                Send("* STATUS \"Trash\" (MESSAGES 2 UIDNEXT 102 UIDVALIDITY 9 UNSEEN 0 HIGHESTMODSEQ 5)\r\n{tag} OK\r\n"),
+                Expect("STATUS \"Gone\""),
+                Send("{tag} NO [NONEXISTENT] no such mailbox\r\n"),
+            ],
+        )
+        .await;
+        let moved = w
+            .move_messages(&inbox, &UidSet::range(5, 6), "Trash")
+            .await
+            .expect("move");
+        assert_eq!(moved.method, MoveMethod::Move);
+        let copy = moved.copy_uid.expect("COPYUID");
+        assert_eq!(
+            (copy.target_of(5), copy.target_of(6)),
+            (Some(100), Some(101))
+        );
+        assert_eq!(
+            w.expunge_messages(&inbox, &UidSet::from_uids([7]))
+                .await
+                .expect("expunge"),
+            ExpungeOutcome::Expunged
+        );
+        let status = w.mailbox_status("Trash").await.expect("status");
+        assert_eq!(status.uid_next, Some(102));
+        assert_eq!(status.uid_validity, Some(UidValidity(9)));
+        assert_eq!(
+            w.mailbox_status("Gone").await,
+            Err(BackendError::MailboxNotFound("Gone".into()))
+        );
+        done(w, handle).await;
+    }
+
+    #[tokio::test]
+    async fn create_is_idempotent() {
+        let (mut w, _inbox, handle) = writer(
+            NO_MOVE,
+            vec![
+                Expect("CREATE \"Archiv &APw-ber\""),
+                Send("{tag} NO [ALREADYEXISTS] exists\r\n"),
+                Expect("LIST \"\" \"Archiv &APw-ber\""),
+                Send("* LIST () \"/\" \"Archiv &APw-ber\"\r\n{tag} OK listed\r\n"),
+                Expect("SUBSCRIBE \"Archiv &APw-ber\""),
+                Send("{tag} OK subscribed\r\n"),
+                Expect("CREATE \"Bad\""),
+                Send("{tag} NO [NOPERM] not allowed\r\n"),
+                Expect("LIST \"\" \"Bad\""),
+                Send("{tag} OK listed\r\n"),
+            ],
+        )
+        .await;
+        let name = w
+            .create_mailbox("Archiv über", Some(mail_model::MailboxRole::Archive))
+            .await
+            .expect("exists already = success");
+        assert_eq!(name, "Archiv &APw-ber");
+        let err = w.create_mailbox("Bad", None).await.expect_err("refused");
+        assert!(matches!(err, BackendError::Rejected(t) if t.contains("NOPERM")));
+        done(w, handle).await;
+    }
+
+    #[tokio::test]
+    async fn create_without_the_special_use_the_server_refuses() {
+        let (mut w, _inbox, handle) = writer(
+            "{tag} OK [CAPABILITY IMAP4rev1 CONDSTORE ENABLE CREATE-SPECIAL-USE] logged in\r\n",
+            vec![
+                Expect("CREATE \"Ablage\" (USE (\\Archive))"),
+                Send("{tag} NO [USEATTR] a mailbox with this role exists\r\n"),
+                Expect("CREATE \"Ablage\""),
+                Send("{tag} OK created\r\n"),
+                Expect("SUBSCRIBE \"Ablage\""),
+                Send("{tag} OK subscribed\r\n"),
+            ],
+        )
+        .await;
+        let name = w
+            .create_mailbox("Ablage", Some(mail_model::MailboxRole::Archive))
+            .await
+            .expect("created without the attribute");
+        assert_eq!(name, "Ablage");
+        done(w, handle).await;
+    }
+
+    #[tokio::test]
+    async fn writers_need_read_write_access() {
+        // Refused before any network access: the host does not even resolve.
+        let err = ImapConnector::new()
+            .connect_writer(&config(Access::ReadOnly))
+            .await
+            .expect_err("read-only config");
+        assert!(matches!(err, BackendError::ReadOnly(_)), "{err}");
+
+        let (backend, handle) = connect(
+            Access::ReadOnly,
+            Duration::from_secs(2),
+            vec![GREETING, LOGIN, LOGIN_OK, ENABLE, ENABLE_OK],
+        )
+        .await;
+        let err = ImapWriter::new(backend.expect("login")).expect_err("read-only backend");
+        assert!(matches!(err, BackendError::ReadOnly(_)));
+        let lines = handle.await.expect("fake server");
+        assert_eq!(lines.len(), 2, "only LOGIN and ENABLE: {lines:?}");
+    }
+}

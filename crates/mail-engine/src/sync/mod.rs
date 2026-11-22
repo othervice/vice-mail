@@ -31,7 +31,7 @@ pub(crate) mod session;
 pub(crate) mod wake;
 
 #[cfg(test)]
-mod fake;
+pub(crate) mod fake;
 #[cfg(test)]
 mod tests;
 
