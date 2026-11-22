@@ -97,6 +97,55 @@ describe("stage 2 commands", () => {
   });
 });
 
+describe("stage 3 commands", () => {
+  it("send the command names and argument names of the contract", async () => {
+    const account = makeAccount();
+    const core = mockCore({ accounts: [account] });
+    const settings = { period: "days90" as const, maxMessageSize: 1024 };
+
+    // Answers do not matter here (unknown ids are `not_found`), only what goes over the bridge.
+    const calls: Promise<unknown>[] = [
+      ipc.getMessage(42, "text"),
+      ipc.loadRemoteContent(42, "sender"),
+      ipc.listRemoteContentSenders(account.id),
+      ipc.revokeRemoteContent(account.id, "news@shop.example"),
+      ipc.describeLink("a".repeat(32), 3),
+      ipc.openLink("a".repeat(32), 3),
+      ipc.saveAttachment(42, 1),
+      ipc.openAttachment(42, 1, true),
+      ipc.getPrefetchSettings(),
+      ipc.setPrefetchSettings(settings),
+      ipc.getPrefetchStatus(account.id),
+    ];
+    await Promise.allSettled(calls);
+
+    expect(core.calls).toEqual([
+      { cmd: "get_message", args: { messageId: 42, format: "text" } },
+      { cmd: "load_remote_content", args: { messageId: 42, scope: "sender" } },
+      { cmd: "list_remote_content_senders", args: { accountId: account.id } },
+      { cmd: "revoke_remote_content", args: { accountId: account.id, sender: "news@shop.example" } },
+      { cmd: "describe_link", args: { renderToken: "a".repeat(32), index: 3 } },
+      { cmd: "open_link", args: { renderToken: "a".repeat(32), index: 3 } },
+      { cmd: "save_attachment", args: { messageId: 42, index: 1 } },
+      { cmd: "open_attachment", args: { messageId: 42, index: 1, confirmedExecutable: true } },
+      { cmd: "get_prefetch_settings", args: {} },
+      { cmd: "set_prefetch_settings", args: { settings } },
+      { cmd: "get_prefetch_status", args: { accountId: account.id } },
+    ]);
+  });
+
+  it("an unknown rendering comes back as a typed not_found", async () => {
+    mockCore();
+    await expect(ipc.describeLink("b".repeat(32), 0)).rejects.toMatchObject({ name: "CoreError", code: "not_found" });
+  });
+
+  it("revokeRemoteContent and openLink resolve to undefined", async () => {
+    mockCore();
+    await expect(ipc.openLink("c".repeat(32), 0)).resolves.toBeUndefined();
+    await expect(ipc.revokeRemoteContent(makeAccount().id, "x@y.example")).resolves.toBeUndefined();
+  });
+});
+
 describe("error codes", () => {
   /** The 21 codes of the stage 2 contract, in the order of `ErrorCode` in Rust. */
   const CONTRACT = [

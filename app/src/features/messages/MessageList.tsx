@@ -2,13 +2,17 @@ import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/rea
 import { Inbox, LoaderCircle } from "lucide-react";
 import {
   useCallback,
+  useEffect,
+  useEffectEvent,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ComponentPropsWithRef,
   type KeyboardEvent,
+  type Ref,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
@@ -27,12 +31,32 @@ const OVERSCAN = 12;
 /** Ask for the next page this many rows before the end of what is loaded. */
 const LOAD_AHEAD_ROWS = 80;
 
+/** What the reading pane next to the list may ask of it. */
+export interface MessageListHandle {
+  focus: () => void;
+  /** Gives up the selection (closes the reading pane) and puts the focus on the list. */
+  clearSelection: () => void;
+}
+
 interface MessageListProps {
   account: Account;
   mailbox: Mailbox;
   /** Name of the folder as shown in the header, for the list's accessible name. */
   folderName: string;
   showRecipients: boolean;
+  /**
+   * The selected message changed (click, keys, focus, or the selected one disappeared and the
+   * next took its place). Selecting a message opens it in the reading pane.
+   */
+  onSelectionChange?: (messageId: MessageId | null) => void;
+  /** Enter or a double click: open the message and move the focus to it. */
+  onOpen?: (messageId: MessageId) => void;
+  handle?: Ref<MessageListHandle>;
+}
+
+/** DOM id of a row's preview text, which describes the row's option. */
+function previewDomId(optionId: string): string {
+  return `${optionId}-preview`;
 }
 
 /** Selected message, with its position as fallback when it disappears (deleted elsewhere). */
@@ -50,14 +74,16 @@ function SectionLabel({ section, bounds }: { section: Section; bounds: DayBounds
 type MessageOptionProps = ComponentPropsWithRef<"div"> & {
   item: MessageListItem;
   showRecipients: boolean;
+  /** Id of the preview text, which describes the option (read after its name). */
+  previewId: string | undefined;
   "data-index": number;
 };
 
 /** The `option` element of a message row, named for screen readers by `useRowLabel`. */
-function MessageOption({ item, showRecipients, children, ...rest }: MessageOptionProps) {
+function MessageOption({ item, showRecipients, previewId, children, ...rest }: MessageOptionProps) {
   const label = useRowLabel(item, showRecipients);
   return (
-    <div role="option" aria-label={label} {...rest}>
+    <div role="option" aria-label={label} aria-describedby={previewId} {...rest}>
       {children}
     </div>
   );
@@ -91,7 +117,15 @@ function SkeletonRows({ label }: { label: string }) {
  * rows get quick actions (stage 4), they stay reachable from the keyboard through shortcuts and
  * the toolbar rather than as controls inside the options, or the list becomes a `grid`.
  */
-export function MessageList({ account, mailbox, folderName, showRecipients }: MessageListProps) {
+export function MessageList({
+  account,
+  mailbox,
+  folderName,
+  showRecipients,
+  onSelectionChange,
+  onOpen,
+  handle,
+}: MessageListProps) {
   const { t, i18n } = useTranslation();
   const query = useMessagePages(account.id, mailbox.id);
   const today = useToday();
@@ -126,6 +160,29 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
   }
   const selectedItem = selectedRow === undefined ? undefined : rows[selectedRow];
   const selectedPosition = selectedItem?.kind === "message" ? selectedItem.position : -1;
+  const selectedId = selectedItem?.kind === "message" ? selectedItem.item.id : null;
+
+  const reportSelection = useEffectEvent((id: MessageId | null) => {
+    onSelectionChange?.(id);
+  });
+  useEffect(() => {
+    reportSelection(selectedId);
+  }, [selectedId]);
+
+  useImperativeHandle(
+    handle,
+    () => ({
+      focus: () => {
+        scrollRef.current?.focus({ preventScroll: true });
+      },
+      clearSelection: () => {
+        // Focus first: focusing an unselected list selects the first visible message.
+        scrollRef.current?.focus({ preventScroll: true });
+        setSelection(null);
+      },
+    }),
+    [],
+  );
 
   const rowSize = twoLine ? metrics.twoLineRow : metrics.row;
   const hasMore = query.hasNextPage;
@@ -178,9 +235,14 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
     };
   }, [scrollElement, metrics.twoLineBelow]);
 
-  // Row heights changed (two-line layout): recompute all positions.
+  // Row heights changed (two-line layout, e.g. the reading pane opened): recompute all
+  // positions and keep the selected row in view.
+  const keepSelectedInView = useEffectEvent(() => {
+    if (selectedRow !== undefined) virtualizer.scrollToIndex(selectedRow, { align: "auto" });
+  });
   useLayoutEffect(() => {
     virtualizer.measure();
+    keepSelectedInView();
   }, [virtualizer, rowSize]);
 
   // New rows above the first visible one (new mail while scrolled down) must not push the list.
@@ -245,8 +307,20 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
       PageDown: [selectedPosition + page, 1],
       PageUp: [Math.max(0, selectedPosition - page), -1],
     };
+    if (event.altKey || event.metaKey || event.ctrlKey) return;
+    if (event.key === "Enter" && selectedId !== null) {
+      event.preventDefault();
+      onOpen?.(selectedId);
+      return;
+    }
+    if (event.key === "Escape" && selection) {
+      // Closes the reading pane; the list keeps the focus.
+      event.preventDefault();
+      setSelection(null);
+      return;
+    }
     const move = moves[event.key];
-    if (!move || event.altKey || event.metaKey || event.ctrlKey) return;
+    if (!move) return;
     event.preventDefault();
     select(move[0], move[1]);
   };
@@ -356,13 +430,16 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
               );
             }
             const selected = virtualItem.index === selectedRow;
+            const optionId = `${optionPrefix}-${String(row.item.id)}`;
+            const previewId = row.item.preview?.trim() ? previewDomId(optionId) : undefined;
             return (
               <MessageOption
                 key={virtualItem.key}
                 {...common}
-                id={`${optionPrefix}-${String(row.item.id)}`}
+                id={optionId}
                 item={row.item}
                 showRecipients={showRecipients}
+                previewId={previewId}
                 aria-selected={selected}
                 aria-setsize={total}
                 aria-posinset={row.position + 1}
@@ -373,6 +450,10 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
                 onClick={() => {
                   setSelection({ id: row.item.id, position: row.position });
                   scrollRef.current?.focus({ preventScroll: true });
+                }}
+                onDoubleClick={() => {
+                  setSelection({ id: row.item.id, position: row.position });
+                  onOpen?.(row.item.id);
                 }}
                 className={cx(
                   "group/row absolute top-0 left-0 w-full",
@@ -386,6 +467,7 @@ export function MessageList({ account, mailbox, folderName, showRecipients }: Me
                   showRecipients={showRecipients}
                   twoLine={twoLine}
                   selected={selected}
+                  previewId={previewId}
                 />
               </MessageOption>
             );

@@ -4,14 +4,24 @@ import type {
   AccountSettings,
   AccountStatus,
   AppInfo,
+  AttachmentInfo,
+  BodyFormat,
   Capabilities,
   DiscoveryResult,
   IpcError,
+  LinkInfo,
   Mailbox,
   MailboxRole,
+  MessageBody,
   MessageListItem,
   MessagePage,
+  MessageView,
+  OpenAttachmentResult,
   Preferences,
+  PrefetchSettings,
+  PrefetchStatus,
+  RemoteContentScope,
+  SaveAttachmentResult,
 } from "../../src/services/ipc";
 
 export const APP_INFO: AppInfo = {
@@ -94,6 +104,7 @@ export function makeMessage(overrides: Partial<MessageListItem> = {}): MessageLi
     draft: false,
     hasAttachments: false,
     keywords: [],
+    preview: null,
     ...overrides,
   };
 }
@@ -116,6 +127,66 @@ export function makeMessages(count: number, options: { mailboxId?: number; newes
     });
   });
 }
+
+// ---- Stage 3: the reading pane ----
+
+/** The mandatory meta CSP every `srcdoc` from the core starts with (decision 0005). */
+export const MAIL_CSP =
+  "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'\">";
+
+let nextToken = 1;
+
+/** A fresh render token (32 hex digits), as the core makes one per rendering. */
+export function renderToken(): string {
+  return (nextToken++).toString(16).padStart(32, "0");
+}
+
+export function htmlBody(html: string, overrides: Partial<Extract<MessageBody, { kind: "html" }>> = {}): MessageBody {
+  return { kind: "html", srcdoc: MAIL_CSP + html, renderToken: renderToken(), blockedRemote: 0, remoteLoaded: false, ...overrides };
+}
+
+export function textBody(segments: Extract<MessageBody, { kind: "text" }>["segments"], token = renderToken()): MessageBody {
+  return { kind: "text", segments, renderToken: token };
+}
+
+export function makeAttachment(overrides: Partial<AttachmentInfo> = {}): AttachmentInfo {
+  return {
+    index: 0,
+    name: "report.pdf",
+    mimeType: "application/pdf",
+    size: 1_258_291,
+    executable: false,
+    local: true,
+    ...overrides,
+  };
+}
+
+/** What `getMessage` answers for a message of the list (same id, account, sender, subject). */
+export function makeView(item: MessageListItem, overrides: Partial<MessageView> = {}): MessageView {
+  return {
+    id: item.id,
+    accountId: item.accountId,
+    header: {
+      from: item.from ? [item.from] : [],
+      to: item.to,
+      cc: [],
+      bcc: [],
+      replyTo: [],
+      date: item.date,
+      subject: item.subject,
+    },
+    body: htmlBody("<p>Hello from the core</p>"),
+    formats: ["html", "text"],
+    attachments: [],
+    partial: false,
+    problems: [],
+    ...overrides,
+  };
+}
+
+export const PREFETCH_DEFAULTS: PrefetchSettings = { period: "days30", maxMessageSize: 5 * 1024 * 1024 };
+const PREFETCH_IDLE: PrefetchStatus = { state: "idle", done: 0, total: 0, bytes: 0 };
+const MAX_PREFETCH_SIZE = 256 * 1024 * 1024;
 
 export const CAPABILITIES: Capabilities = {
   imap4rev1: true,
@@ -157,6 +228,20 @@ interface FakeCoreOptions {
   knownProviders?: Record<string, DiscoveryResult>;
   online?: Record<string, DiscoveryResult>;
   capabilities?: Capabilities;
+  /** `getMessage` answers by message id: one view, or one per asked format. Unknown: `not_found`. */
+  views?: Record<number, MessageView | ((format: BodyFormat) => MessageView)>;
+  /** `loadRemoteContent` answers by message id. */
+  remoteViews?: Record<number, MessageView>;
+  /** `describeLink` answers by `<renderToken>/<index>`. Unknown: `not_found` (a forgotten rendering). */
+  links?: Record<string, LinkInfo>;
+  /** `saveAttachment` answers by `<messageId>/<index>`; default: saved under ~/Downloads. */
+  saveResults?: Record<string, SaveAttachmentResult>;
+  /** `openAttachment` answers by `<messageId>/<index>`; default: by the view's `executable`. */
+  openResults?: Record<string, OpenAttachmentResult>;
+  prefetchSettings?: PrefetchSettings;
+  prefetchStatus?: Record<string, PrefetchStatus>;
+  /** Senders allowed to load external content, by account id. */
+  remoteSenders?: Record<string, string[]>;
 }
 
 export interface FakeCore {
@@ -169,6 +254,10 @@ export interface FakeCore {
   setMailboxes: (mailboxes: Mailbox[]) => void;
   /** Calls of one command, with their arguments. */
   callsOf: (cmd: string) => Record<string, unknown>[];
+  /** Replaces what `getMessage` answers for a message (a fetch finished); the test then emits. */
+  setView: (messageId: number, view: MessageView | ((format: BodyFormat) => MessageView)) => void;
+  remoteSenders: (accountId: string) => string[];
+  readonly prefetchSettings: PrefetchSettings;
 }
 
 /**
@@ -186,6 +275,23 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   );
 
   const domain = (email: string) => email.split("@")[1]?.toLowerCase() ?? "";
+
+  const views = new Map(Object.entries(options.views ?? {}).map(([id, view]) => [Number(id), view]));
+  const senders = new Map(Object.entries(options.remoteSenders ?? {}).map(([id, list]) => [id, [...list]]));
+  let prefetchSettings: PrefetchSettings = options.prefetchSettings ?? PREFETCH_DEFAULTS;
+
+  function viewOf(messageId: number, format: BodyFormat): MessageView | undefined {
+    const view = views.get(messageId);
+    return typeof view === "function" ? view(format) : view;
+  }
+
+  function openAttachment(messageId: number, index: number, confirmed: boolean): OpenAttachmentResult | undefined {
+    const fixed = options.openResults?.[`${String(messageId)}/${String(index)}`];
+    if (fixed && !confirmed) return fixed;
+    const attachment = viewOf(messageId, "auto")?.attachments.find((a) => a.index === index);
+    if (!attachment) return undefined;
+    return attachment.executable && !confirmed ? { kind: "needsConfirmation" } : { kind: "opened" };
+  }
 
   function listMessages(mailboxId: number, cursor: number | null, limit: number): MessagePage {
     const all = messages.get(mailboxId) ?? [];
@@ -270,6 +376,65 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         }
         case "list_messages":
           return listMessages(args["mailboxId"] as number, args["cursor"] as number | null, args["limit"] as number);
+        case "get_message": {
+          const view = viewOf(args["messageId"] as number, args["format"] as BodyFormat);
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return view ?? Promise.reject(ipcError("not_found"));
+        }
+        case "load_remote_content": {
+          const messageId = args["messageId"] as number;
+          const view = options.remoteViews?.[messageId];
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          if (!view) return Promise.reject(ipcError("not_found"));
+          const sender = view.header.from[0]?.email.toLowerCase();
+          if ((args["scope"] as RemoteContentScope) === "sender" && sender) {
+            const list = senders.get(view.accountId) ?? [];
+            if (!list.includes(sender)) list.push(sender);
+            senders.set(view.accountId, list);
+          }
+          return view;
+        }
+        case "list_remote_content_senders":
+          return [...(senders.get(args["accountId"] as string) ?? [])];
+        case "revoke_remote_content": {
+          const accountId = args["accountId"] as string;
+          senders.set(accountId, (senders.get(accountId) ?? []).filter((s) => s !== args["sender"]));
+          return null;
+        }
+        case "describe_link": {
+          const link = options.links?.[`${String(args["renderToken"])}/${String(args["index"])}`];
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return link ?? Promise.reject(ipcError("not_found"));
+        }
+        case "open_link":
+          return null;
+        case "save_attachment":
+          return (
+            options.saveResults?.[`${String(args["messageId"])}/${String(args["index"])}`] ?? {
+              kind: "saved",
+              path: "/Users/ada/Downloads/report.pdf",
+            }
+          );
+        case "open_attachment": {
+          const result = openAttachment(
+            args["messageId"] as number,
+            args["index"] as number,
+            args["confirmedExecutable"] as boolean,
+          );
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return result ?? Promise.reject(ipcError("not_found"));
+        }
+        case "get_prefetch_settings":
+          return prefetchSettings;
+        case "set_prefetch_settings": {
+          const next = args["settings"] as PrefetchSettings;
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          if (next.maxMessageSize > MAX_PREFETCH_SIZE) return Promise.reject(ipcError("invalid_argument"));
+          prefetchSettings = next;
+          return prefetchSettings;
+        }
+        case "get_prefetch_status":
+          return options.prefetchStatus?.[args["accountId"] as string] ?? PREFETCH_IDLE;
         default:
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
@@ -294,5 +459,12 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       mailboxes = next;
     },
     callsOf: (cmd) => calls.filter((c) => c.cmd === cmd).map((c) => (c.args ?? {}) as Record<string, unknown>),
+    setView: (messageId, view) => {
+      views.set(messageId, view);
+    },
+    remoteSenders: (accountId) => [...(senders.get(accountId) ?? [])],
+    get prefetchSettings() {
+      return prefetchSettings;
+    },
   };
 }

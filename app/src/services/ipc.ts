@@ -14,6 +14,9 @@ import {
   type AccountStatus,
   type Address,
   type AppInfo,
+  type AttachmentInfo,
+  type BodyFormat,
+  type BodyUnavailableReason,
   type Capabilities,
   type ConnectionTestResult,
   type CoreEvent,
@@ -22,20 +25,35 @@ import {
   type ErrorCode,
   type IpcError,
   type LanguagePreference,
+  type LinkInfo,
+  type LinkWarning,
   type ListCursor,
   type Mailbox,
   type MailboxId,
   type MailboxRole,
+  type MessageBody,
   type MessageId,
   type MessageListItem,
   type MessagePage,
+  type MessageProblem,
+  type MessageView,
+  type MessageViewHeader,
+  type OpenAttachmentResult,
   type Platform,
   type Preferences,
+  type PrefetchPeriod,
+  type PrefetchSettings,
+  type PrefetchState,
+  type PrefetchStatus,
   type ProviderHint,
+  type RemoteContentScope,
+  type RenderToken,
   type RoleSource,
+  type SaveAttachmentResult,
   type Security,
   type ServerSettings,
   type SyncProgress,
+  type TextSegment,
   type ThemePreference,
 } from "../generated/bindings";
 
@@ -48,6 +66,9 @@ export type {
   AccountStatus,
   Address,
   AppInfo,
+  AttachmentInfo,
+  BodyFormat,
+  BodyUnavailableReason,
   Capabilities,
   ConnectionTestResult,
   CoreEvent,
@@ -56,20 +77,35 @@ export type {
   ErrorCode,
   IpcError,
   LanguagePreference,
+  LinkInfo,
+  LinkWarning,
   ListCursor,
   Mailbox,
   MailboxId,
   MailboxRole,
+  MessageBody,
   MessageId,
   MessageListItem,
   MessagePage,
+  MessageProblem,
+  MessageView,
+  MessageViewHeader,
+  OpenAttachmentResult,
   Platform,
   Preferences,
+  PrefetchPeriod,
+  PrefetchSettings,
+  PrefetchState,
+  PrefetchStatus,
   ProviderHint,
+  RemoteContentScope,
+  RenderToken,
   RoleSource,
+  SaveAttachmentResult,
   Security,
   ServerSettings,
   SyncProgress,
+  TextSegment,
   ThemePreference,
 };
 
@@ -189,6 +225,33 @@ export const ipc = {
     call(() => commands.setMailboxRole(mailboxId, role)),
   listMessages: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
     call(() => commands.listMessages(mailboxId, cursor, limit)),
+
+  /** Answers at once: a rendered body, `loading` (wait for `messageBodyAvailable`) or `unavailable`. */
+  getMessage: (messageId: MessageId, format: BodyFormat): Promise<MessageView> =>
+    call(() => commands.getMessage(messageId, format)),
+  /** The core fetches the external images itself and renders again. `sender` also remembers the sender. */
+  loadRemoteContent: (messageId: MessageId, scope: RemoteContentScope): Promise<MessageView> =>
+    call(() => commands.loadRemoteContent(messageId, scope)),
+  listRemoteContentSenders: (accountId: AccountId): Promise<string[]> =>
+    call(() => commands.listRemoteContentSenders(accountId)),
+  revokeRemoteContent: (accountId: AccountId, sender: string): Promise<void> =>
+    done(call(() => commands.revokeRemoteContent(accountId, sender))),
+  /** The real target of a clicked link. The UI never learns it any other way. */
+  describeLink: (renderToken: RenderToken, index: number): Promise<LinkInfo> =>
+    call(() => commands.describeLink(renderToken, index)),
+  /** Opens a link in the system browser. Only after the user confirmed the target. */
+  openLink: (renderToken: RenderToken, index: number): Promise<void> =>
+    done(call(() => commands.openLink(renderToken, index))),
+  /** The core shows the system's save dialog. */
+  saveAttachment: (messageId: MessageId, index: number): Promise<SaveAttachmentResult> =>
+    call(() => commands.saveAttachment(messageId, index)),
+  /** `confirmedExecutable` only after the user confirmed the warning for this attachment. */
+  openAttachment: (messageId: MessageId, index: number, confirmedExecutable: boolean): Promise<OpenAttachmentResult> =>
+    call(() => commands.openAttachment(messageId, index, confirmedExecutable)),
+  getPrefetchSettings: (): Promise<PrefetchSettings> => call(() => commands.getPrefetchSettings()),
+  setPrefetchSettings: (settings: PrefetchSettings): Promise<PrefetchSettings> =>
+    call(() => commands.setPrefetchSettings(settings)),
+  getPrefetchStatus: (accountId: AccountId): Promise<PrefetchStatus> => call(() => commands.getPrefetchStatus(accountId)),
 
   /** Subscribes to the typed event stream of the core. Resolves once the listener is registered. */
   onCoreEvent: async (handler: (event: CoreEvent) => void): Promise<Unsubscribe> => {

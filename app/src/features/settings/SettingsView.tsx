@@ -8,10 +8,12 @@ import { AboutSettings } from "./AboutSettings";
 import { AccountsSettings } from "./AccountsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { ReadingSettings } from "./ReadingSettings";
 
 const SECTIONS: Record<SettingsSectionId, ComponentType> = {
   general: GeneralSettings,
   accounts: AccountsSettings,
+  reading: ReadingSettings,
   appearance: AppearanceSettings,
   about: AboutSettings,
 };

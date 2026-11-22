@@ -119,10 +119,10 @@ describe("app frame (stage 1)", () => {
     for (const b of controls.buttons) assert.ok(b.y + b.height <= inset, `${b.name} below the ${inset}px inset`);
   });
 
-  it("opens the settings with all four sections", async () => {
+  it("opens the settings with all five sections", async () => {
     await testId("rail-settings").click();
     assert.equal(await $("main header h1").getText(), "Settings");
-    for (const id of ["general", "accounts", "appearance", "about"]) {
+    for (const id of ["general", "accounts", "reading", "appearance", "about"]) {
       assert.ok(await testId(`settings-tab-${id}`).isDisplayed(), `${id} tab`);
     }
   });

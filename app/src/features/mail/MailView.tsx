@@ -1,11 +1,12 @@
 import { FolderX, Hourglass, Inbox, Search, SquarePen } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
-import type { Account, Mailbox } from "../../services/ipc";
+import type { Account, Mailbox, MessageId } from "../../services/ipc";
 import { useUiStore, type View } from "../../stores/ui";
 import { accountFill } from "../accounts/accountColor";
 import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
@@ -13,7 +14,8 @@ import { isFirstSyncRunning, useSelectedAccount } from "../accounts/selection";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
-import { MessageList } from "../messages/MessageList";
+import { MessageList, type MessageListHandle } from "../messages/MessageList";
+import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 
 export type MailViewState = Extract<View, { kind: "mail" } | { kind: "mailbox" }>;
 
@@ -33,6 +35,64 @@ function AccountLine({ account }: { account: Account }) {
         {account.displayName ? t("nav.account", { name: account.displayName, email: account.email }) : account.email}
       </span>
     </>
+  );
+}
+
+interface MailboxPanesProps {
+  account: Account;
+  mailbox: Mailbox;
+  folderName: string;
+}
+
+/**
+ * The list of one folder and, once a message is selected, the reading pane to its right. The
+ * list then gets narrower and its rows two lines (docs/DESIGN.md). Focus: Enter or a double click
+ * moves it into the pane, Escape there brings it back to the list, Escape in the list or the
+ * pane's close button closes the pane.
+ */
+function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
+  const [selected, setSelected] = useState<MessageId | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const list = useRef<MessageListHandle>(null);
+  const open = selected !== null;
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      <div
+        className={cx(
+          "flex min-h-0 min-w-0 flex-col",
+          open ? "w-(--ui-list-width-reading) shrink-0 border-e border-border" : "flex-1",
+        )}
+      >
+        <MessageList
+          account={account}
+          mailbox={mailbox}
+          folderName={folderName}
+          showRecipients={mailbox.role === "sent" || mailbox.role === "drafts"}
+          handle={list}
+          onSelectionChange={(id) => {
+            setSelected(id);
+            // A request to focus belongs to the message it was made for.
+            setFocusRequest((request) => (request && request.messageId === id ? request : null));
+          }}
+          onOpen={(id) => {
+            setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
+          }}
+        />
+      </div>
+      {selected !== null && (
+        <ReadingPane
+          key={selected}
+          account={account}
+          messageId={selected}
+          focusRequest={focusRequest}
+          onEscape={() => list.current?.focus()}
+          onClose={() => {
+            list.current?.clearSelection();
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -104,15 +164,7 @@ function MailBody({ view, account }: MailBodyProps) {
     );
   }
 
-  return (
-    <MessageList
-      key={mailbox.id}
-      account={account}
-      mailbox={mailbox}
-      folderName={label(mailbox)}
-      showRecipients={mailbox.role === "sent" || mailbox.role === "drafts"}
-    />
-  );
+  return <MailboxPanes key={mailbox.id} account={account} mailbox={mailbox} folderName={label(mailbox)} />;
 }
 
 interface MailViewProps {

@@ -13,6 +13,8 @@ interface MessageRowContentProps {
   showRecipients: boolean;
   twoLine: boolean;
   selected: boolean;
+  /** Id for the preview text, so the option can point at it (`aria-describedby`). */
+  previewId?: string | undefined;
 }
 
 function addressName(address: Address): string {
@@ -49,10 +51,18 @@ export function useRowLabel(item: MessageListItem, showRecipients: boolean): str
 
 /**
  * One message in the list (docs/DESIGN.md, "Zeile"): unread dot, avatar, sender, subject with
- * attachment symbol, flag, time. The option around it carries the accessible name
- * (`useRowLabel`). No preview text and no quick actions yet (stages 3 and 4).
+ * attachment symbol, preview, flag, time. The option around it carries the accessible name
+ * (`useRowLabel`); the preview describes it. No quick actions yet (stage 4).
  */
-export function MessageRowContent({ item, accountColor, bounds, showRecipients, twoLine, selected }: MessageRowContentProps) {
+export function MessageRowContent({
+  item,
+  accountColor,
+  bounds,
+  showRecipients,
+  twoLine,
+  selected,
+  previewId,
+}: MessageRowContentProps) {
   const { t, i18n } = useTranslation();
   const person = showRecipients ? item.to[0] : item.from;
   const who = useWho(item, showRecipients);
@@ -77,13 +87,20 @@ export function MessageRowContent({ item, accountColor, bounds, showRecipients, 
       {who}
     </span>
   );
+  const preview = item.preview?.trim();
+  // The subject comes first; the preview takes what is left of the line (basis 0), down to nothing.
   const subjectLine = (
     <span className="flex min-w-0 flex-1 items-center gap-2">
-      <span title={subject} className={cx("truncate text-14", item.subject.trim() ? "text-primary" : "text-tertiary")}>
+      <span title={subject} className={cx("min-w-0 truncate text-14", item.subject.trim() ? "text-primary" : "text-tertiary")}>
         {subject}
       </span>
       {item.hasAttachments && (
         <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
+      )}
+      {preview && (
+        <span id={previewId} className="min-w-0 flex-1 basis-0 truncate text-13 text-tertiary" data-testid="row-preview">
+          {preview}
+        </span>
       )}
     </span>
   );

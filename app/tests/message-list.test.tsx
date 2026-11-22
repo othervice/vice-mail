@@ -176,6 +176,32 @@ describe("message list", () => {
     expect(within(second as HTMLElement).getByText("(Unknown sender)").className).toContain("font-regular");
   });
 
+  it("shows the preview muted after the subject and lets it describe the row", async () => {
+    withViewport();
+    mockCore({
+      accounts: [ACCOUNT],
+      mailboxes: standardMailboxes(),
+      messages: {
+        1: [
+          makeMessage({ subject: "Lunch", preview: "  Shall we meet on Friday at noon?  " }),
+          makeMessage({ subject: "Not parsed yet", preview: null }),
+        ],
+      },
+    });
+    renderApp();
+
+    const [first, second] = await screen.findAllByRole("option");
+    const preview = within(first as HTMLElement).getByTestId("row-preview");
+    expect(preview.textContent).toBe("Shall we meet on Friday at noon?");
+    expect(preview.className).toContain("text-tertiary");
+    expect(preview.className).toContain("truncate");
+    expect(first?.getAttribute("aria-describedby")).toBe(preview.id);
+    // The name stays short; the preview is read after it.
+    expect(first?.getAttribute("aria-label")).not.toContain("Friday");
+    expect(within(second as HTMLElement).queryByTestId("row-preview")).toBeNull();
+    expect(second?.hasAttribute("aria-describedby")).toBe(false);
+  });
+
   it("Sent shows the recipients instead of the sender", async () => {
     withViewport();
     mockCore({

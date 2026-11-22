@@ -47,6 +47,9 @@
   --color-account-7: var(--ui-account-7);
   --color-account-8: var(--ui-account-8);
 
+  /* Mail content: `bg-mail-canvas` behind HTML mail, in both themes */
+  --color-mail-canvas: var(--ui-mail-canvas);
+
   /* Type: `text-12` ... `text-28`, `font-regular|medium|semibold` */
   --font-sans: var(--ui-font-family);
   --default-font-family: var(--ui-font-family);

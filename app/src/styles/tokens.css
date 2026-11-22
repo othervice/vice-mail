@@ -49,6 +49,10 @@
   --ui-account-7: #0b7a80;
   --ui-account-8: #7a5f45;
 
+  /* Mail content. HTML mail is shown on its own white canvas, in the dark theme too: its colours
+     were made for white, and recolouring would break them (docs/DESIGN.md). Not redefined below. */
+  --ui-mail-canvas: #ffffff;
+
   /* Type: system font (SF Pro on macOS, Segoe UI Variable on Windows 11). Segoe UI Variable comes
      before system-ui, which WebView2 resolves to the older Segoe UI; Windows 10 falls back to
      that. rem so text scaling works. */
@@ -116,6 +120,11 @@
   --ui-section-height: 2rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
+  /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
+     lines), the line length of plain-text mail and the width of an attachment card. */
+  --ui-list-width-reading: 24rem;
+  --ui-reading-max-width: 46rem;
+  --ui-attachment-width: 16rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the
      platform draws its window buttons over the web view (macOS, see app.css). */
   --ui-titlebar-inset: 0px;

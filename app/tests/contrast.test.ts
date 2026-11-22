@@ -41,6 +41,13 @@ const TEXT_PAIRS: [string, string][] = [
   // Stage 2: label of the danger button ("Remove"), quiet buttons on hover.
   ["text-on-accent", "danger"],
   ["accent", "hover"],
+  // Stage 3, reading pane: link text in plain-text mail on the pane, the emphasised host of a
+  // link target, the warning texts of attachments, the saved note, the link card's surface.
+  ["accent", "surface"],
+  ["text-primary", "accent-soft"],
+  ["warning", "canvas"],
+  ["success", "canvas"],
+  ...["text-primary", "text-secondary"].map((fg): [string, string] => [fg, "surface-raised"]),
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -59,6 +66,12 @@ const CONTROL_PAIRS: [string, string][] = [
   ...["accent", "warning"].flatMap((fg) => ["surface", "selected", "hover"].map((bg): [string, string] => [fg, bg])),
   ["danger", "rail"],
   ["text-secondary", "rail"],
+  // Stage 3, reading pane. The pressed HTML/Text switch on its track; the border of the white
+  // mail canvas and of attachments that can run code; the warning symbol on cards.
+  ["accent", "canvas"],
+  ["border-strong", "surface"],
+  ["warning", "canvas"],
+  ["warning", "surface-raised"],
 ];
 
 describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
@@ -84,6 +97,7 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       "success",
       "warning",
       ...ACCOUNTS,
+      "mail-canvas",
     ];
     for (const name of expected) expect(tokens, name).toHaveProperty(name);
   });
@@ -103,6 +117,12 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       }
     }
   });
+});
+
+it("HTML mail keeps its own white canvas in the dark theme (DESIGN.md: never recoloured)", () => {
+  expect(light["mail-canvas"]).toBe("#ffffff");
+  expect(dark["mail-canvas"]).toBe(light["mail-canvas"]);
+  expect(colourTokens(block(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/))).not.toHaveProperty("mail-canvas");
 });
 
 it("dark theme has its own surface steps instead of reusing light ones", () => {

@@ -4,7 +4,9 @@ import { applyAccountStatus, invalidateAccountData } from "../features/accounts/
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
+import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
 import { ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
+import { useUiStore } from "../stores/ui";
 import { refreshQuery } from "./refreshQuery";
 
 /**
@@ -37,6 +39,22 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       break;
     case "newMail":
       // For notifications (a later stage); the list itself follows `messagesChanged`.
+      break;
+    case "messageBodyAvailable":
+      messageBodyAvailable(queryClient, event.accountId, event.messageId, (key) => {
+        refreshQuery(queryClient, key);
+      });
+      break;
+    case "messageBodyFailed":
+      messageBodyFailed(queryClient, event.accountId, event.messageId, event.error);
+      break;
+    case "prefetchProgress":
+      applyPrefetchStatus(queryClient, event.accountId, event.status);
+      break;
+    case "linkActivated":
+      // Only a click in a mail gets here (the navigation hook in Rust). The reading pane that
+      // shows this rendering asks the core for the target and lets the user confirm it.
+      useUiStore.getState().requestLink(event.renderToken, event.index);
       break;
   }
 }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AccountId, MailboxId } from "../services/ipc";
+import type { AccountId, MailboxId, RenderToken } from "../services/ipc";
 
 /** Mail views of the icon rail, top to bottom (docs/DESIGN.md). Ids double as i18n keys in `nav`. */
 export const MAIL_VIEW_IDS = [
@@ -17,7 +17,7 @@ export const MAIL_VIEW_IDS = [
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];
 
-export const SETTINGS_SECTION_IDS = ["general", "accounts", "appearance", "about"] as const;
+export const SETTINGS_SECTION_IDS = ["general", "accounts", "reading", "appearance", "about"] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
@@ -29,6 +29,17 @@ export type View =
   /** A folder picked in the folder tree that has no view of its own in the rail. */
   | { kind: "mailbox"; accountId: AccountId; mailboxId: MailboxId }
   | { kind: "settings"; section: SettingsSectionId };
+
+/**
+ * A link the user activated in the reading pane: a click in an HTML mail (the core's navigation
+ * hook sends `linkActivated`) or in a plain-text mail. `seq` makes a second click on the same
+ * link a new request. The pane only acts on it if it shows the rendering `renderToken`.
+ */
+export interface LinkRequest {
+  renderToken: RenderToken;
+  index: number;
+  seq: number;
+}
 
 interface UiState {
   view: View;
@@ -42,6 +53,7 @@ interface UiState {
   /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
   collapsedMailboxes: ReadonlySet<MailboxId>;
   accountsPage: AccountsPage;
+  linkRequest: LinkRequest | null;
   showMailView: (mailView: MailViewId) => void;
   showMailbox: (accountId: AccountId, mailboxId: MailboxId) => void;
   selectAccount: (accountId: AccountId) => void;
@@ -49,6 +61,8 @@ interface UiState {
   showAccountsPage: (page: AccountsPage) => void;
   toggleSidebar: () => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
+  requestLink: (renderToken: RenderToken, index: number) => void;
+  dismissLink: () => void;
 }
 
 /** Pure UI state (which view is open). Data from the core lives in TanStack Query, not here. */
@@ -58,6 +72,7 @@ export const useUiStore = create<UiState>()((set) => ({
   sidebarExpanded: false,
   collapsedMailboxes: new Set<MailboxId>(),
   accountsPage: { kind: "list" },
+  linkRequest: null,
   showMailView: (mailView) => {
     set({ view: { kind: "mail", mailView } });
   },
@@ -86,5 +101,11 @@ export const useUiStore = create<UiState>()((set) => ({
       if (!next.delete(mailboxId)) next.add(mailboxId);
       return { collapsedMailboxes: next };
     });
+  },
+  requestLink: (renderToken, index) => {
+    set((state) => ({ linkRequest: { renderToken, index, seq: (state.linkRequest?.seq ?? 0) + 1 } }));
+  },
+  dismissLink: () => {
+    set({ linkRequest: null });
   },
 }));

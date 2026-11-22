@@ -84,7 +84,7 @@ describe("app frame without an account", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Add account" })).toBeTruthy();
   });
 
-  it("settings is a view with General, Accounts, Appearance and About, not a dialog", async () => {
+  it("settings is a view with General, Accounts, Reading, Appearance and About, not a dialog", async () => {
     mockCore();
     const { user } = renderApp();
 
@@ -94,6 +94,7 @@ describe("app frame without an account", () => {
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "General",
       "Accounts",
+      "Reading",
       "Appearance",
       "About",
     ]);
