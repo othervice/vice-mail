@@ -38,3 +38,8 @@ Option 2: Der Migrations-Code steckt allein in `mail-store/src/migrations.rs`. S
 und Ablehnung zu neuer Datenbanken sind schon eigener Code; ein eigener Runner über `user_version`
 wären wenige Dutzend Zeilen. Anlass zum Wechsel: eine Sicherheitsmeldung zu rusqlite 0.41 oder
 eine SQLite-Funktion, die erst eine neuere rusqlite-Version freischaltet.
+
+## Nachtrag (Stufe 2)
+
+`mail-parser` 1.0.1 (Zeichensätze, RFC 2047, Datumsangaben im IMAP-Adapter) verlangt Rust 1.98. Die
+Mindestversion des Workspace ist deshalb 1.98. Geprüft wird weiter mit Rust 1.100.

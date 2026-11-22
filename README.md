@@ -20,7 +20,7 @@ Requirements and exact setup steps are in `docs/SETUP.md` (macOS on Apple Silico
 installer is cross-built from macOS). In short:
 
 ```sh
-# Rust (stable, at least 1.90), Node.js 24, pnpm, Xcode command line tools
+# Rust (stable, at least 1.98), Node.js 24, pnpm, Xcode command line tools
 pnpm --dir app install
 pnpm --dir app tauri dev        # run the app in development mode
 scripts/check.sh                # format, lint, tests, type check, license and security checks

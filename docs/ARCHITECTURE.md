@@ -25,7 +25,7 @@ wenn er groß genug ist.
 | Bereich | Wahl | Version | Warum |
 |---|---|---|---|
 | Desktop-Shell | Tauri | 2.12 (Crate 2.12.7, CLI 2.12.6) | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern; Spike-App: `.dmg` 2,2 MB, Windows-Installer 1,9 MB (0004) |
-| Kern | Rust stable, Edition 2024, Tokio | mind. 1.90, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.90 verlangt Tauri 2.12 (0006) |
+| Kern | Rust stable, Edition 2024, Tokio | mind. 1.98, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.98 verlangt mail-parser, 1.90 Tauri 2.12 (0006) |
 | Oberfläche | React, TypeScript strict | 19.3.1 / 7.0.2 | größtes Ökosystem für die nötigen Bausteine. Typecheck mit TS 7 (Paket-Alias `typescript7`); `typescript` 6.0.3 nur für typescript-eslint, das die klassische TS-API braucht |
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
@@ -43,7 +43,8 @@ wenn er groß genug ist.
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
 | HTML-Bereinigung | ammonia | 4.2 | Allowlist-Sanitizer |
 | TLS | rustls mit Provider `ring`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7 | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver. `ring` hat eine begründete Ausnahme von der 12-Monats-Regel (0002) |
-| Schlüsselbund | keyring | 4.2 | macOS-Schlüsselbund und Windows-Anmeldeinformationen |
+| Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
+| Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age | 0.12 | geprüftes Format, keine eigene Kryptografie |
 | Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
@@ -151,6 +152,12 @@ einer klaren Meldung abgelehnt.
   per `UNION ALL` je Postfach, nie per `IN (…)` (gemessen 0,14 ms gegen 393 ms). Feste
   Join-Reihenfolge per `CROSS JOIN`. Für jede Listen- und Suchabfrage prüft ein Test den Abfrageplan.
 - Erste Suchtreffer nach `rowid DESC`; `bm25` höchstens als Option.
+- Aus Stufe 2: Der Abfrageplaner wählt nach `ANALYZE` mit nur einem Konto für einen Join auf
+  `account` einen Scan, trotz `CROSS JOIN`; das Konto eines Postfachs wird deshalb per skalarer
+  Unterabfrage geholt. Lese-Verbindungen laden Statistiken erst beim Öffnen, Plan-Tests prüfen daher
+  Leser und Schreiber. Ein Fenster wird nach (Sortierdatum, UID) aufsteigend gespeichert. Zusätzliche
+  Indizes: `mailbox_role` (eindeutig je Konto, wenn gesetzt), `mailbox_path` (Reihenfolge der
+  Seitenleiste). Gemessen über die Store-API: 100.000 Kopfdaten in 1,1 s, Listenseite 0,07 ms.
 - FTS-Zeilen werden je Transaktion nach rowid aufsteigend eingefügt, auch wenn der Abgleich von neu
   nach alt läuft (absteigend kostet ein Drittel der Einfügerate).
 - Schreib-Verbindung: WAL, `synchronous=NORMAL`, `foreign_keys=ON`, 64 MB Cache, `mmap_size` 256 MB,
@@ -253,6 +260,12 @@ einer klaren Meldung abgelehnt.
 
 **Erlaubte Netzverbindungen**
 - Mailserver, die der Nutzer eingerichtet hat
+- Bei der Einrichtung, nur nach Klick auf „online suchen“: DNS-SRV-Abfragen (RFC 6186) über die
+  System-DNS-Server für die Domain der Adresse, danach HTTPS (Port 443) zur Autokonfiguration der
+  eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
+  dieselbe Domain oder ihre Subdomains, höchstens drei, ohne Cookies, Referrer und Proxy, 128 KiB
+  höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
+  Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft).
 - Externe Bilder einer Mail, nach Freigabe
 - KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat
 - Abmelde-Adressen (List-Unsubscribe) nach Klick
