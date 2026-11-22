@@ -150,10 +150,13 @@ fn command_error_is_typed() {
     let err = invoke(&h, "get_preferences", json!({})).expect_err("must fail");
     assert_eq!(err["code"], "database_too_new");
     assert!(err["message"].as_str().is_some_and(|m| !m.is_empty()));
-    assert_eq!(
-        err["detail"],
-        "database schema version 999, this app supports up to 2"
-    );
+    // The supported version grows with every migration; only its shape is fixed here.
+    let detail = err["detail"].as_str().expect("detail is a string");
+    let supported = detail
+        .strip_prefix("database schema version 999, this app supports up to ")
+        .and_then(|rest| rest.parse::<u32>().ok())
+        .unwrap_or_else(|| panic!("unexpected detail: {detail}"));
+    assert!((1..999).contains(&supported), "unexpected detail: {detail}");
 }
 
 /// Leaves a database in `data_dir` as a newer app version would: a current database whose
@@ -266,8 +269,13 @@ fn shipped_config_window_and_capabilities() {
         },
         services(),
     ));
+    let theme = initial_theme(&core);
+    assert_eq!(
+        theme, None,
+        "without stored preferences the frame follows the system"
+    );
     attach_core(app.handle(), &specta, core);
-    open_main_window(app.handle()).expect("open main window");
+    open_main_window(app.handle(), theme).expect("open main window");
     let window = app.get_webview_window(MAIN_WINDOW).expect("main window");
 
     assert!(invoke_from(&window, "get_app_info", json!({})).is_ok());
