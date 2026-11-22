@@ -26,14 +26,16 @@ wenn er groß genug ist.
 |---|---|---|---|
 | Desktop-Shell | Tauri | 2.12 (Crate 2.12.7, CLI 2.12.6) | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern; Spike-App: `.dmg` 2,2 MB, Windows-Installer 1,9 MB (0004) |
 | Kern | Rust stable, Edition 2024, Tokio | mind. 1.90, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.90 verlangt Tauri 2.12 (0006) |
-| Oberfläche | React, TypeScript strict | 19.3 / 7.0 | größtes Ökosystem für die nötigen Bausteine |
+| Oberfläche | React, TypeScript strict | 19.3.1 / 7.0.2 | größtes Ökosystem für die nötigen Bausteine. Typecheck mit TS 7 (Paket-Alias `typescript7`); `typescript` 6.0.3 nur für typescript-eslint, das die klassische TS-API braucht |
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
-| Styling | Tailwind CSS mit eigenen Tokens | 4.3 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
-| Bausteine | Radix UI, Lucide-Icons, cmdk | 1.8 / – / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen |
+| Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
+| Bausteine | Radix UI (`radix-ui`), Lucide-Icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen. Achtung CSP: Radix Dialog, Popover, Select und ScrollArea fügen `<style>`-Elemente ein; vor ihrer Verwendung im Release-Build prüfen |
 | Liste | TanStack Virtual | 3.14 | Virtualisierung für sehr lange Listen |
-| Daten im Frontend | TanStack Query, Zustand | 5.108 / 5.1 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
+| Daten im Frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
-| Sprachen | i18next, react-i18next | 27 / 18 | Standard, Englisch und Deutsch |
+| Sprachen | i18next, react-i18next | 27.2 / 18.0 | Standard, Englisch und Deutsch; Textliterale in Komponenten verbietet `eslint-plugin-i18next` (`no-literal-string`) |
+| Lint | ESLint, typescript-eslint, eslint-plugin-react-hooks, eslint-plugin-i18next | 10.15 / 8.73 / 7.1 / 6.1 | `eslint-plugin-react` scheidet aus (kein Release seit April 2025, kein ESLint 10) |
+| IDs | uuid | 1.29 | Konto-IDs (UUID v4) |
 | Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
 | Migrationen | rusqlite_migration | 2.7.0 | klein, nutzt `user_version`; legt rusqlite auf ^0.41 fest (0006) |
 | IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
@@ -231,6 +233,8 @@ einer klaren Meldung abgelehnt.
    Navigationen im Unter-Frame sieht (wry abonniert dort nur `NavigationStarting`); Stufe 6 prüft das.
 
 **Shell**
+- Das Hauptfenster entsteht erst, wenn der Kern bereitsteht (`"create": false` in `tauri.conf.json`); so kann die Oberfläche keine Commands senden, bevor `AppCore` läuft.
+- `devCsp` greift im Entwicklungsmodus nicht (die WebView lädt die `devUrl` direkt). CSP-Fehler zeigen sich erst im Release- oder e2e-Build; der Desktop-Test zeichnet CSP-Verstöße auf und scheitert daran.
 - Tauri-Capabilities minimal: keine Dateisystem-, Shell- oder HTTP-Plugins für das Frontend.
 - Strenge Content-Security-Policy für die App selbst, keine entfernten Quellen.
 - Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
