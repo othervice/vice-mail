@@ -258,7 +258,10 @@ einer klaren Meldung abgelehnt.
    'unsafe-inline'; base-uri 'none'; form-action 'none'` und `<meta name="referrer"
    content="no-referrer">`. Bilder nur als `data:` mit vom Kern erkannten Rasterformaten, nie SVG. Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
    `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
-   Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005).
+   Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005). Die Höhe des Frames
+   misst das Elternfenster: `contentDocument` ist lesbar (same-origin), ein `ResizeObserver` des
+   Elternfensters auf dem Wurzelelement im Frame feuert unter WKWebView (Stufe 3 geprüft); nachgemessen
+   wird per `setTimeout`, nicht per `requestAnimationFrame` (läuft in verdeckten Fenstern nicht).
 4. Freigegebene externe Bilder lädt der Rust-Kern: ohne Cookies, ohne Referrer, mit neutraler
    Kennung, mit Größen- und Typgrenzen.
 5. Links öffnen sich nie direkt. Ein Klick zeigt das echte Ziel und warnt bei Abweichung vom
