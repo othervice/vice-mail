@@ -21,6 +21,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import time
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # keep testmail/ free of __pycache__
@@ -42,12 +43,27 @@ class Jmap:
 
     def call(self, *calls: list) -> list:
         body = json.dumps({"using": USING, "methodCalls": list(calls)}).encode()
-        req = urllib.request.Request(self.url, data=body, headers=self.headers)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.load(resp)
-        except urllib.error.HTTPError as err:
-            raise ProvisionError(f"HTTP {err.code}: {err.read().decode(errors='replace')}") from err
+        # Right after Stalwart opens its HTTP port, the accounts created in the previous phase
+        # are not always loaded yet and the first calls are answered with 401 (seen roughly once
+        # in a few dozen resets). Retry such transient answers for up to ten seconds.
+        deadline = time.monotonic() + 10.0
+        while True:
+            req = urllib.request.Request(self.url, data=body, headers=self.headers)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = json.load(resp)
+                break
+            except urllib.error.HTTPError as err:
+                detail = err.read().decode(errors="replace")
+                if err.code in (401, 502, 503) and time.monotonic() < deadline:
+                    time.sleep(0.25)
+                    continue
+                raise ProvisionError(f"HTTP {err.code}: {detail}") from err
+            except urllib.error.URLError as err:
+                if time.monotonic() < deadline:
+                    time.sleep(0.25)
+                    continue
+                raise ProvisionError(f"cannot reach {self.url}: {err.reason}") from err
         responses = data.get("methodResponses", [])
         for name, args, call_id in responses:
             if name == "error":
