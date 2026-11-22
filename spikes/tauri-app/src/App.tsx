@@ -1,8 +1,12 @@
 import { useState, type ReactElement } from "react";
 import { IpcView } from "./views/IpcView";
+import { SandboxView } from "./views/SandboxView";
 
-// One entry per view. A later spike adds e.g. { id: "sandbox", title: "HTML sandbox", render: ... }.
-const views = [{ id: "ipc", title: "IPC", render: (): ReactElement => <IpcView /> }] as const;
+// One entry per view.
+const views = [
+  { id: "ipc", title: "IPC", render: (): ReactElement => <IpcView /> },
+  { id: "sandbox", title: "Sandbox", render: (): ReactElement => <SandboxView /> },
+] as const;
 
 type ViewId = (typeof views)[number]["id"];
 

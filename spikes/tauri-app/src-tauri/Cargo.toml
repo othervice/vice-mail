@@ -1,7 +1,7 @@
 [package]
 name = "vice-mail-spike"
 version = "0.1.0"
-description = "Stage 0 spike C: Tauri 2 + React, typed IPC, Windows cross-build"
+description = "Stage 0 spikes C and D: Tauri 2 + React, typed IPC, Windows cross-build, HTML sandbox"
 edition = "2024"
 rust-version = "1.90"
 license = "GPL-3.0-or-later"
@@ -31,6 +31,20 @@ tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
 
 # Candidate 2: ts-rs (types only)
 ts-rs = { version = "12.0.1", features = ["chrono-impl"] }
+
+# Spike D: embedded WebDriver for WebdriverIO (@wdio/tauri-service). Test builds only:
+# compiled in exclusively with `--features e2e`, never in a normal (release) build.
+tauri-plugin-wdio-webdriver = { version = "=1.5.1", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Spike D, e2e only: native (trusted) mouse events into the WKWebView.
+objc2 = { version = "0.6.5", optional = true }
+objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSGeometry", "NSProcessInfo"] }
+objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSApplication", "NSEvent", "NSGraphicsContext", "NSResponder", "NSView", "NSWindow"] }
+
+[features]
+# Test-only build: `pnpm build:e2e`. Adds the embedded WebDriver server and e2e helper commands.
+e2e = ["dep:tauri-plugin-wdio-webdriver", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit"]
 
 [profile.release]
 codegen-units = 1

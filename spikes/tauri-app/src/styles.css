@@ -13,3 +13,9 @@ body { margin: 0; }
 .pass::before { content: "PASS "; color: #2a8f4a; font-weight: 600; }
 .fail::before { content: "FAIL "; color: #c0392b; font-weight: 600; }
 pre { background: #8881; padding: 8px; border-radius: 6px; overflow: auto; }
+.sb-sets { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb-targets { font-size: 11px; max-height: 120px; overflow: auto; }
+.sb-grid { display: grid; grid-template-columns: repeat(3, 250px); gap: 6px; }
+.sb-cell { font-size: 10px; }
+.sb-label { display: block; overflow: hidden; white-space: nowrap; }
+.sb-cell iframe { display: block; width: 240px; height: 56px; border: 0; background: #8882; }

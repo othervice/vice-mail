@@ -1,9 +1,14 @@
 //! Spike C: smallest Tauri 2 app with typed commands and a typed event stream.
+//! Spike D: HTML sandbox (navigation hook, breach detector) and desktop tests (`e2e` feature).
 
 pub mod commands;
+#[cfg(feature = "e2e")]
+pub mod e2e;
 pub mod model;
+pub mod sandbox;
 
 use specta_typescript::Typescript;
+use tauri::Manager;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 /// Single source of truth for commands and events (tauri-specta).
@@ -13,8 +18,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             commands::get_message,
             commands::start_demo_sync,
             commands::report_frontend,
+            sandbox::sandbox_breach,
+            sandbox::sandbox_report,
+            sandbox::sandbox_reset,
         ])
-        .events(collect_events![model::CoreEvent])
+        .events(collect_events![model::CoreEvent, sandbox::SandboxEvent])
         .error_handling(ErrorHandlingMode::Result)
         // IPC types are one-way (args in, results/events out); one alias per type is clearer
         // than the `_Serialize | _Deserialize` pairs specta emits by default.
@@ -29,10 +37,47 @@ pub fn typescript() -> Typescript {
 
 pub fn run() {
     let builder = specta_builder();
-    tauri::Builder::default()
-        .invoke_handler(builder.invoke_handler())
+    let specta_handler = builder.invoke_handler();
+    #[cfg(feature = "e2e")]
+    let e2e_handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
+        Box::new(tauri::generate_handler![e2e::e2e_native_mouse]);
+
+    let app = tauri::Builder::default();
+    // Test builds only: embedded W3C WebDriver server for WebdriverIO (@wdio/tauri-service).
+    // It listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445). Never in a normal build.
+    #[cfg(feature = "e2e")]
+    let app = app.plugin(tauri_plugin_wdio_webdriver::init());
+
+    app.manage(sandbox::SandboxState::default())
+        .invoke_handler(move |invoke| {
+            // Log every command that reaches the core, whatever frame or origin sent it.
+            let name = invoke.message.command().to_owned();
+            if let Some(state) = invoke
+                .message
+                .webview()
+                .try_state::<sandbox::SandboxState>()
+            {
+                state.log_command(&name);
+            }
+            #[cfg(feature = "e2e")]
+            if name.starts_with("e2e_") {
+                return e2e_handler(invoke);
+            }
+            specta_handler(invoke)
+        })
         .setup(move |app| {
             builder.mount_events(app);
+            // The window is built in code (not in tauri.conf.json) to attach the navigation hook.
+            let handle = app.handle().clone();
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("Vice Mail Spike")
+            .inner_size(900.0, 700.0)
+            .on_navigation(move |url| sandbox::decide_navigation(&handle, url))
+            .build()?;
             Ok(())
         })
         .run(tauri::generate_context!())

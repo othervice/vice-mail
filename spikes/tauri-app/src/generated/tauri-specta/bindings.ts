@@ -16,11 +16,16 @@ export const commands = {
 	 *  afterwards (exit code 0 on success), which makes the release build checkable from a shell.
 	 */
 	reportFrontend: (ok: boolean, summary: string, options?: InvokeOptions) => __TAURI_INVOKE<void>("report_frontend", { ok, summary }, options),
+	/**  Called by hostile test scripts if they ever get to run with access to the Tauri interface. */
+	sandboxBreach: (vector: string, options?: InvokeOptions) => __TAURI_INVOKE<void>("sandbox_breach", { vector }, options),
+	sandboxReport: (options?: InvokeOptions) => __TAURI_INVOKE<SandboxReport>("sandbox_report", undefined, options),
+	sandboxReset: (options?: InvokeOptions) => __TAURI_INVOKE<void>("sandbox_reset", undefined, options),
 };
 
 /** Events */
 export const events = {
 	coreEvent: makeEvent<CoreEvent, CoreEvent>("core-event"),
+	sandboxEvent: makeEvent<SandboxEvent, SandboxEvent>("sandbox-event"),
 };
 
 /* Constants */
@@ -86,6 +91,28 @@ export type MessageQuery = {
 	accountId: string,
 	uid: number,
 	includeBody: boolean,
+};
+
+/**  One navigation decision of the main window's navigation hook. */
+export type NavigationRecord = {
+	seq: number,
+	url: string,
+	allowed: boolean,
+};
+
+/**  Pushed to the UI when the navigation hook blocks a target (the "link target" the UI shows). */
+export type SandboxEvent = {
+	url: string,
+	allowed: boolean,
+};
+
+/**  Everything the Rust side observed since the last `sandbox_reset`. */
+export type SandboxReport = {
+	navigations: NavigationRecord[],
+	/**  Vector ids passed to `sandbox_breach`. Must stay empty for every hostile vector. */
+	breaches: string[],
+	/**  Names of all commands that reached the invoke handler (capped). */
+	commands: string[],
 };
 
 /* Tauri Specta runtime */

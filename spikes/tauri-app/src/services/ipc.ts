@@ -11,9 +11,11 @@ import {
   type IpcError,
   type MessageDetail,
   type MessageQuery,
+  type SandboxEvent,
+  type SandboxReport,
 } from "../generated/tauri-specta/bindings";
 
-export type { CoreEvent, ErrorCode, IpcError, MessageDetail, MessageQuery };
+export type { CoreEvent, ErrorCode, IpcError, MessageDetail, MessageQuery, SandboxEvent, SandboxReport };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: IpcError };
 
@@ -59,6 +61,12 @@ export const ipc = {
   reportFrontend: (ok: boolean, summary: string): Promise<void> => commands.reportFrontend(ok, summary),
   onCoreEvent: (handler: (event: CoreEvent) => void): Promise<UnlistenFn> =>
     events.coreEvent.listen((e) => handler(e.payload)),
+
+  // Spike D: sandbox observations of the Rust side (navigation hook, breach detector).
+  sandboxReport: (): Promise<SandboxReport> => commands.sandboxReport(),
+  sandboxReset: (): Promise<void> => commands.sandboxReset(),
+  onSandboxEvent: (handler: (event: SandboxEvent) => void): Promise<UnlistenFn> =>
+    events.sandboxEvent.listen((e) => handler(e.payload)),
 
   /** Spike only: provoke a framework-level rejection to see what `invoke` rejects with. */
   probeFrameworkError: async (): Promise<{ rawType: string; error: IpcError }> => {
