@@ -1,0 +1,66 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "app/src-tauri"]
+# Stage 0 spikes are throwaway code with their own manifests; never part of the product build.
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# Tauri 2.12 and tauri-build 2.7 declare rust-version 1.90 (rusqlite 0.41 and
+# rusqlite_migration 2.7 need 1.89), so 1.90 is the real minimum for the workspace.
+rust-version = "1.90"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+# Own crates
+mail-model = { path = "crates/mail-model" }
+mail-store = { path = "crates/mail-store" }
+mail-engine = { path = "crates/mail-engine" }
+
+# Core
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "std", "registry", "ansi"] }
+tracing-appender = "0.2.5"
+
+# Database. rusqlite 0.41 (not 0.43) because rusqlite_migration 2.7.0 requires rusqlite ^0.41
+# and two rusqlite versions cannot coexist (both link the native `sqlite3`).
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+rusqlite_migration = "2.7.0"
+
+# IPC types (decision 0004): exact pins, release candidates.
+specta = { version = "=2.0.0-rc.28", features = ["derive"] }
+specta-typescript = "=0.0.15"
+tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
+
+# Shell
+tauri = { version = "2.12.7", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
+
+# Tests
+tempfile = "3.27.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_used = "warn"
+
+# Shipped builds (decision 0004): fat LTO, one codegen unit, stripped. Daily work uses debug builds.
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+
+# Keep `target/` small: no debug info for dependencies, full debug info for our own crates.
+[profile.dev.package."*"]
+debug = false
