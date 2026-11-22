@@ -173,13 +173,20 @@ pub(crate) fn known_uids(conn: &Connection, mailbox: MailboxId) -> Result<UidSet
     Ok(UidSet::from_uids(uids))
 }
 
-pub(crate) fn delete_orphans(conn: &Connection, account: AccountId) -> Result<usize, StoreError> {
+/// Deletes the orphans; returns their count and the body files that became unreferenced (to
+/// remove after the commit).
+pub(crate) fn delete_orphans(
+    conn: &Connection,
+    account: AccountId,
+) -> Result<(usize, Vec<String>), StoreError> {
     let account_row = accounts::row_id(conn, account)?;
+    let files = crate::bodies::orphan_files(conn, account_row)?;
     let deleted = conn
         .prepare_cached(DELETE_ORPHANS)?
         .execute([account_row])
         .map_err(StoreError::sqlite("delete orphan messages"))?;
-    Ok(deleted)
+    // A file packed with bodies of messages that still exist stays.
+    Ok((deleted, crate::bodies::unreferenced(conn, files)?))
 }
 
 /// See [`crate::Store::list_messages`].

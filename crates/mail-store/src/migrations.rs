@@ -8,6 +8,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0001_setting.sql")),
     // Stage 2: accounts, identities, mailboxes, message headers and locations.
     M::up(include_str!("../migrations/0002_mail.sql")),
+    // Stage 3: body references, prefetch index, remote-content allowlist (decision 0009).
+    M::up(include_str!("../migrations/0003_body.sql")),
 ];
 
 /// All migrations this build knows.

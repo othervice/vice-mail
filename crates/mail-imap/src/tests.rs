@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use async_imap::Client;
 use mail_model::{
-    Access, BackendError, ConnectConfig, IdleOutcome, MailBackend, ModSeq, Secret, Security,
-    SelectedMailbox, ServerSettings, UidSet, UidValidity,
+    Access, BackendError, BodyFetchPlan, BodySection, ConnectConfig, IdleOutcome,
+    LARGE_MESSAGE_THRESHOLD, MailBackend, ModSeq, Secret, Security, SelectedMailbox,
+    ServerSettings, UidSet, UidValidity,
 };
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
 use tokio::task::JoinHandle;
@@ -783,4 +784,191 @@ async fn non_ascii_password_uses_authenticate_plain() {
     )
     .await;
     drop(finish(backend.expect("login"), handle).await);
+}
+
+/// A raw message of `len` bytes (header plus filler lines), as a static string for the script.
+fn raw_message(len: usize) -> &'static str {
+    let mut text = String::from("Subject: big\r\nMessage-ID: <big@fake.test>\r\n\r\n");
+    while text.len() < len {
+        text.push_str("0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstu\r\n");
+    }
+    text.truncate(len);
+    Box::leak(text.into_boxed_str())
+}
+
+fn literal_response(seq: u32, uid: u32, item: &str, data: &str) -> &'static str {
+    Box::leak(
+        format!(
+            "* {seq} FETCH (UID {uid} {item} {{{}}}\r\n{data})\r\n",
+            data.len()
+        )
+        .into_boxed_str(),
+    )
+}
+
+#[tokio::test]
+async fn bodies_are_fetched_with_peek_only_and_parsed() {
+    let small = "From: a@x\r\nSubject: hi\r\nContent-Type: text/plain\r\n\r\nHello.\r\n";
+    let big = raw_message(3 * 1024 * 1024);
+    let structure = "* 2 FETCH (UID 12 RFC822.SIZE 3145728 BODYSTRUCTURE ((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 7 1 NIL NIL NIL NIL)\
+(\"APPLICATION\" \"PDF\" NIL NIL NIL \"BASE64\" 3145000 NIL (\"ATTACHMENT\" (\"FILENAME*\" \"utf-8''M%C3%A4rz.pdf\")) NIL NIL) \"MIXED\" (\"BOUNDARY\" \"b\") NIL NIL NIL))\r\n{tag} OK done\r\n";
+    let sections = "* 2 FETCH (UID 12 BODY[HEADER] {12}\r\nSubject: x\r\n BODY[1.MIME] {28}\r\n\
+Content-Type: text/plain\r\n\r\n BODY[1] {7}\r\nHello.\n)\r\n{tag} OK done\r\n";
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("UID FETCH 12 (UID RFC822.SIZE BODYSTRUCTURE)"),
+            Send(structure),
+            Expect("UID FETCH 12 (UID BODY.PEEK[HEADER] BODY.PEEK[1.MIME] BODY.PEEK[1])"),
+            Send(sections),
+            Expect("UID FETCH 11:13 (UID BODY.PEEK[])"),
+            Send(literal_response(1, 11, "BODY[]", small)),
+            Send(literal_response(2, 12, "BODY[]", big)),
+            // UID 13 is gone; a flag change of another message arrives on the side.
+            Send("* 3 FETCH (UID 20 FLAGS (\\Seen))\r\n{tag} OK done\r\n"),
+            Expect("UID FETCH 99 (UID RFC822.SIZE BODYSTRUCTURE)"),
+            Send("{tag} OK nothing\r\n"),
+            Expect("UID FETCH 99 (UID BODY.PEEK[HEADER])"),
+            Send("{tag} OK nothing\r\n"),
+        ],
+    )
+    .await;
+
+    let found = backend
+        .fetch_structure(&inbox, 12)
+        .await
+        .expect("structure")
+        .expect("uid 12 exists");
+    assert_eq!(found.size, 3_145_728);
+    let paths: Vec<String> = found
+        .parts
+        .iter()
+        .map(|p| p.path.as_ref().map(ToString::to_string).unwrap_or_default())
+        .collect();
+    assert_eq!(paths, ["", "1", "2"]);
+    assert_eq!(found.parts[2].file_name.as_deref(), Some("März.pdf"));
+    let BodyFetchPlan::Sections(plan) = found.fetch_plan(LARGE_MESSAGE_THRESHOLD) else {
+        panic!("a 3 MB message is fetched in sections");
+    };
+    let fetched = backend
+        .fetch_sections(&inbox, 12, &plan)
+        .await
+        .expect("sections")
+        .expect("uid 12 exists");
+    let got: Vec<(String, &[u8])> = fetched
+        .iter()
+        .map(|s| (s.section.spec(), s.data.as_slice()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("HEADER".to_owned(), &b"Subject: x\r\n"[..]),
+            (
+                "1.MIME".to_owned(),
+                &b"Content-Type: text/plain\r\n\r\n"[..]
+            ),
+            ("1".to_owned(), &b"Hello.\n"[..]),
+        ]
+    );
+
+    let mut messages = backend
+        .fetch_messages(&inbox, &UidSet::range(11, 13))
+        .await
+        .expect("messages");
+    messages.sort_by_key(|m| m.uid);
+    assert_eq!(messages.len(), 2, "UID 13 is missing, not an error");
+    assert_eq!(messages[0].data, small.as_bytes());
+    assert_eq!(messages[1].data.len(), big.len(), "3 MB literal read whole");
+    assert_eq!(messages[1].data, big.as_bytes());
+
+    assert_eq!(backend.fetch_structure(&inbox, 99).await, Ok(None));
+    assert_eq!(
+        backend
+            .fetch_sections(&inbox, 99, &[BodySection::Header])
+            .await,
+        Ok(None)
+    );
+    // Nothing to send: empty sets and UID 0 never reach the server.
+    assert_eq!(
+        backend.fetch_messages(&inbox, &UidSet::new()).await,
+        Ok(vec![])
+    );
+    assert_eq!(
+        backend.fetch_sections(&inbox, 12, &[]).await,
+        Ok(Some(vec![]))
+    );
+    assert_eq!(backend.fetch_structure(&inbox, 0).await, Ok(None));
+    // The flag change seen during the body fetch is reported by the next IDLE at once.
+    assert_eq!(
+        backend
+            .idle(&inbox, Duration::from_secs(30), std::future::pending())
+            .await,
+        Ok(IdleOutcome::Changed)
+    );
+
+    let lines = finish(backend, handle).await;
+    let fetches: Vec<&String> = lines.iter().filter(|l| l.contains("FETCH")).collect();
+    assert_eq!(fetches.len(), 5, "{lines:?}");
+    for line in &lines {
+        let upper = line.to_ascii_uppercase();
+        assert!(
+            !upper.replace("BODY.PEEK[", "").contains("BODY["),
+            "a body section without PEEK went out: {line}"
+        );
+        let verbs: Vec<&str> = upper.split(' ').skip(1).take(2).collect();
+        assert!(
+            !verbs.contains(&"STORE") && !upper.contains("\\SEEN"),
+            "{line}"
+        );
+        assert!(
+            !upper.contains("RFC822)") && !upper.contains("RFC822.TEXT"),
+            "{line}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn body_fetch_refusals_and_wrong_mailbox() {
+    let (mut backend, inbox, handle) = opened(
+        Access::ReadOnly,
+        vec![
+            Expect("UID FETCH 5 (UID BODY.PEEK[])"),
+            Send("{tag} NO [UNAVAILABLE] try later\r\n"),
+            Expect("NOOP"),
+            Send("{tag} OK fine\r\n"),
+        ],
+    )
+    .await;
+    let err = backend
+        .fetch_messages(&inbox, &UidSet::range(5, 5))
+        .await
+        .expect_err("NO");
+    assert!(
+        matches!(&err, BackendError::Rejected(text) if text.contains("UNAVAILABLE")),
+        "{err}"
+    );
+    let stale = SelectedMailbox {
+        uid_validity: UidValidity(1),
+        ..inbox.clone()
+    };
+    assert!(matches!(
+        backend.fetch_structure(&stale, 5).await,
+        Err(BackendError::InvalidState(_))
+    ));
+    assert!(matches!(
+        backend
+            .fetch_sections(&stale, 5, &[BodySection::Header])
+            .await,
+        Err(BackendError::InvalidState(_))
+    ));
+    assert!(matches!(
+        backend.fetch_messages(&stale, &UidSet::range(5, 5)).await,
+        Err(BackendError::InvalidState(_))
+    ));
+    backend
+        .noop()
+        .await
+        .expect("still usable after the refusal");
+    let lines = finish(backend, handle).await;
+    assert_eq!(lines.len(), 5, "{lines:?}");
 }

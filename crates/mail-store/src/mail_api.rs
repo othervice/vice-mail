@@ -151,11 +151,13 @@ impl Store {
         self.read(move |conn| accounts::one(conn, id)).await
     }
 
-    /// Deletes the account with all its identities, mailboxes, messages and locations.
-    /// Returns `false` if it did not exist. The keychain entry is the engine's job.
+    /// Deletes the account with all its identities, mailboxes, messages, locations, bodies (the
+    /// account's body directory) and remote-content permissions. Returns `false` if it did not
+    /// exist. The keychain entry is the engine's job.
     pub async fn delete_account(&self, id: AccountId) -> Result<bool, StoreError> {
         let deleted = self.write(move |tx| accounts::delete(tx, id)).await?;
         if deleted {
+            self.remove_account_bodies(id).await;
             tracing::info!(account = %id, "account and its local data deleted");
         }
         Ok(deleted)
@@ -311,10 +313,14 @@ impl Store {
 
     /// Deletes messages of the account that lie in no mailbox. The engine calls it after a
     /// full pass in which no mailbox of the account was in its first sync (otherwise a
-    /// message on its way between two mailboxes would lose its local data). Returns the count.
+    /// message on its way between two mailboxes would lose its local data). Their body files
+    /// go too. Returns the count.
     pub async fn delete_orphan_messages(&self, account: AccountId) -> Result<usize, StoreError> {
-        self.write(move |tx| messages::delete_orphans(tx, account))
-            .await
+        let (deleted, files) = self
+            .write(move |tx| messages::delete_orphans(tx, account))
+            .await?;
+        self.remove_body_files(files).await;
+        Ok(deleted)
     }
 
     // ---------------------------------------------------------------------------------------

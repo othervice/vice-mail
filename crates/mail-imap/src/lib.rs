@@ -8,7 +8,8 @@
 //!   after LOGIN runs through the own command layer in `command`, which checks the tagged
 //!   status, keeps response codes, records unsolicited changes and enforces the read-only
 //!   allowlist before a byte is sent.
-//! - **Data:** responses are turned into model types while they are read (`convert`);
+//! - **Data:** responses are turned into model types while they are read (`convert`, and
+//!   `bodies` for BODYSTRUCTURE and `BODY.PEEK[...]` sections);
 //!   mailbox names are decoded from modified UTF-7 ([`mutf7`]); header text is decoded with
 //!   mail-parser. Broken messages never panic.
 //!
@@ -16,6 +17,7 @@
 //! server: a fault-injecting TCP proxy, a wire tap, raw commands and a small SMTP sender.
 
 mod backend;
+mod bodies;
 mod command;
 mod connector;
 mod convert;

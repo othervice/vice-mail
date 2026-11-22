@@ -1,12 +1,13 @@
 //! Query plans (decision 0003): every list, counter and sync query is checked with
 //! `EXPLAIN QUERY PLAN`, on a fresh database and after `ANALYZE` with data. No full scan, no
-//! temporary B-tree, and the expected index for each.
+//! temporary B-tree, and the expected index for each. Not listed: `bodies::ALL_FILES`, which
+//! reads the whole index `body_part_file` on purpose (the sweep, once at start).
 
 use mail_model::UidSet;
 use rusqlite::Connection;
 
 use crate::test_support::{Fixture, UV, db_path, fixture, header, seen};
-use crate::{Store, StoreOptions, accounts, mailboxes, messages};
+use crate::{Store, StoreOptions, accounts, bodies, mailboxes, messages, reading};
 
 /// Detail lines of the plan of `sql` (parameters unbound, which does not change the plan).
 fn plan(conn: &Connection, sql: &str) -> Vec<String> {
@@ -119,6 +120,93 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
             "SEARCH message USING COVERING INDEX message_msgid (account_id=?)",
             "SEARCH l USING COVERING INDEX loc_message (message_id=?)",
         ],
+    ),
+    // Stage 3
+    (
+        "account of a message",
+        bodies::ACCOUNT_OF_MESSAGE,
+        &[
+            "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "body row",
+        bodies::BODY_ROW,
+        &["SEARCH message_body USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "body parts",
+        bodies::BODY_PARTS,
+        &["SEARCH message_body_part USING PRIMARY KEY (message_id=?)"],
+    ),
+    (
+        "body files",
+        bodies::BODY_FILES,
+        &["SEARCH message_body_part USING PRIMARY KEY (message_id=?)"],
+    ),
+    (
+        "file still referenced",
+        bodies::FILE_REFERENCED,
+        &["SEARCH message_body_part USING COVERING INDEX body_part_file (file=?)"],
+    ),
+    (
+        "body files of orphans",
+        bodies::ORPHAN_FILES,
+        &[
+            "SEARCH m USING COVERING INDEX message_msgid (account_id=?)",
+            "SEARCH l USING COVERING INDEX loc_message (message_id=?)",
+            "SEARCH p USING PRIMARY KEY (message_id=?)",
+        ],
+    ),
+    (
+        "message summary",
+        reading::MESSAGE_SUMMARY,
+        &[
+            "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "message locations",
+        reading::MESSAGE_LOCATIONS,
+        &[
+            "SEARCH l USING INDEX loc_message (message_id=?)",
+            "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "prefetch mailboxes",
+        reading::PREFETCH_MAILBOXES,
+        &["SEARCH mailbox USING INDEX mailbox_path (account_id=?)"],
+    ),
+    (
+        "prefetch in a mailbox",
+        reading::PREFETCH_IN_MAILBOX,
+        &[
+            "SEARCH l USING PRIMARY KEY (mailbox_id=? AND message_id>? AND message_id<?)",
+            "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "prefetch flagged mail in a mailbox",
+        reading::PREFETCH_FLAGGED_IN_MAILBOX,
+        &[
+            "SEARCH l USING INDEX loc_flagged (mailbox_id=? AND message_id>? AND message_id<?)",
+            "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        ],
+    ),
+    (
+        "sender allowed",
+        reading::SENDER_ALLOWED,
+        &["SEARCH remote_content_sender USING PRIMARY KEY (account_uuid=? AND sender=?)"],
+    ),
+    (
+        "allowed senders",
+        reading::SENDERS,
+        &["SEARCH remote_content_sender USING PRIMARY KEY (account_uuid=?)"],
     ),
 ];
 

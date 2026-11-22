@@ -33,6 +33,11 @@ tracing-appender = "0.2.5"
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 rusqlite_migration = "2.7.0"
 
+# Message bodies (stage 3, decision 0009): zstd level 3 with checksum, one file per fetch under
+# <data dir>/bodies. The C library is built by the cc crate (also with cargo-xwin for Windows);
+# without default features: no legacy formats, no dictionary builder.
+zstd = { version = "0.14.4", default-features = false }
+
 # Account ids (UUID v4). mail-model only parses and formats; mail-engine adds the `v4` feature.
 uuid = { version = "1.29.3", default-features = false, features = ["std", "serde"] }
 
@@ -54,6 +59,16 @@ tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring
 # dates of header data (stage 2) and whole messages (stage 3). mail-parser 1.0 needs Rust 1.98.
 async-imap = { version = "0.12.0", default-features = false, features = ["runtime-tokio"] }
 mail-parser = { version = "1.0.1", features = ["full_encoding"] }
+
+# Message content (stage 3, crate mail-content): ammonia sanitises mail HTML (decision 0005);
+# html5ever and cssparser are the parser and CSS tokenizer ammonia (and wry) already use; url
+# parses link targets; ICU4X (already in the tree via idna) gives NFC and the Script property.
+ammonia = "4.2.5"
+html5ever = "0.40.1"
+cssparser = { version = "0.38.0", default-features = false }
+url = "2.5.9"
+icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+icu_properties = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 
 # Keychain (stage 2): keyring-core with the two native stores, chosen explicitly (no global
 # default store, no Linux D-Bus stack). The `keyring` crate's own README recommends this for apps.

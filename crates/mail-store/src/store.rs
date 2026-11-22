@@ -11,6 +11,9 @@ use crate::{StoreError, backup, migrations};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Directory of the body files, next to the database file (decision 0009).
+pub const BODIES_DIR: &str = "bodies";
+
 /// Prepared statements kept per connection. The sync path alone uses about ten; rusqlite's
 /// default of 16 would evict statements between windows.
 const STATEMENT_CACHE: usize = 64;
@@ -67,6 +70,7 @@ pub struct Store {
 struct Inner {
     workers: Workers,
     path: PathBuf,
+    bodies: PathBuf,
     report: OpenReport,
 }
 
@@ -156,10 +160,14 @@ impl Store {
             .collect::<Result<Vec<_>, _>>()?;
         let workers = Workers::start(writer, readers)?;
 
+        let bodies = path
+            .parent()
+            .map_or_else(|| PathBuf::from(BODIES_DIR), |dir| dir.join(BODIES_DIR));
         Ok(Self {
             inner: Arc::new(Inner {
                 workers,
                 path: path.to_owned(),
+                bodies,
                 report: OpenReport {
                     previous_version,
                     version,
@@ -171,6 +179,12 @@ impl Store {
 
     pub fn path(&self) -> &Path {
         &self.inner.path
+    }
+
+    /// Directory of the message body files: [`BODIES_DIR`] next to the database file. Created
+    /// with the first body.
+    pub fn bodies_dir(&self) -> &Path {
+        &self.inner.bodies
     }
 
     pub fn open_report(&self) -> &OpenReport {

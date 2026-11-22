@@ -24,8 +24,9 @@ use std::future::Future;
 use std::time::Duration;
 
 use crate::{
-    BackendError, Capabilities, FlagUpdate, MessageHeader, ModSeq, RemoteMailbox, Secret, Security,
-    ServerSettings, Uid, UidSet, UidValidity,
+    BackendError, BodySection, Capabilities, FetchedSection, FlagUpdate, MessageHeader,
+    MessageStructure, ModSeq, RawMessage, RemoteMailbox, Secret, Security, ServerSettings, Uid,
+    UidSet, UidValidity,
 };
 
 /// Whether the connection may change anything on the server.
@@ -146,7 +147,9 @@ pub enum IdleOutcome {
     Stopped,
 }
 
-/// One authenticated connection to a mail server, read-only operations (stage 2).
+/// One authenticated connection to a mail server, read-only operations: sync (stage 2) and
+/// bodies (stage 3; the body methods have defaults that fail with `Unsupported`, so test fakes
+/// need not implement them).
 ///
 /// Mailbox-scoped methods take the [`SelectedMailbox`] that [`MailBackend::open_mailbox`]
 /// returned. If it is not the currently open mailbox (other name or UIDVALIDITY), they fail with
@@ -213,6 +216,57 @@ pub trait MailBackend: Send {
     ) -> impl Future<Output = Result<IdleOutcome, BackendError>> + Send
     where
         S: Future<Output = ()> + Send;
+
+    /// RFC822.SIZE and BODYSTRUCTURE of one message (stage 3), to plan the fetch of a large
+    /// message ([`MessageStructure::fetch_plan`]). `None` if the UID does not exist (any more).
+    ///
+    /// The default fails with [`BackendError::Unsupported`]: for backends (test fakes) that
+    /// cannot fetch bodies.
+    fn fetch_structure(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+    ) -> impl Future<Output = Result<Option<MessageStructure>, BackendError>> + Send {
+        let _ = (mailbox, uid);
+        std::future::ready(Err(BackendError::Unsupported(
+            "fetching message bodies".into(),
+        )))
+    }
+
+    /// Whole raw messages (`BODY.PEEK[]`, never sets `\Seen`), for opening and prefetching.
+    /// The caller keeps a batch small in bytes (RFC822.SIZE is stored), because the result is
+    /// held in memory. UIDs that no longer exist are missing from the result; order is
+    /// unspecified.
+    ///
+    /// The default fails with [`BackendError::Unsupported`].
+    fn fetch_messages(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+    ) -> impl Future<Output = Result<Vec<RawMessage>, BackendError>> + Send {
+        let _ = (mailbox, uids);
+        std::future::ready(Err(BackendError::Unsupported(
+            "fetching message bodies".into(),
+        )))
+    }
+
+    /// Sections of one message in one FETCH (`BODY.PEEK[HEADER]`, `BODY.PEEK[1.2.MIME]`,
+    /// `BODY.PEEK[1.2]`, never sets `\Seen`), raw as sent: part contents are still
+    /// transfer-encoded. `None` if the UID does not exist (any more); sections the server did not
+    /// return are missing from the result.
+    ///
+    /// The default fails with [`BackendError::Unsupported`].
+    fn fetch_sections(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+        sections: &[BodySection],
+    ) -> impl Future<Output = Result<Option<Vec<FetchedSection>>, BackendError>> + Send {
+        let _ = (mailbox, uid, sections);
+        std::future::ready(Err(BackendError::Unsupported(
+            "fetching message bodies".into(),
+        )))
+    }
 
     /// NOOP: checks that the connection is alive and collects pending server notices.
     fn noop(&mut self) -> impl Future<Output = Result<(), BackendError>> + Send;
@@ -350,6 +404,46 @@ mod tests {
         backend.idle(&inbox, Duration::from_secs(300), stop).await?;
         backend.logout().await?;
         Ok(count)
+    }
+
+    #[test]
+    fn body_methods_default_to_unsupported() {
+        let mut fake = Fake {
+            caps: Capabilities::from_names(["IMAP4rev1"]),
+        };
+        let mailbox = SelectedMailbox {
+            name: "INBOX".into(),
+            uid_validity: UidValidity(1),
+            uid_next: 2,
+            exists: 1,
+            highest_modseq: None,
+            read_only: true,
+            keywords_allowed: false,
+        };
+        let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+        let unsupported = |poll: std::task::Poll<Result<(), BackendError>>| {
+            matches!(
+                poll,
+                std::task::Poll::Ready(Err(BackendError::Unsupported(_)))
+            )
+        };
+        {
+            let fut = fake.fetch_structure(&mailbox, 1);
+            assert_send(&fut);
+            let mut fut = std::pin::pin!(fut);
+            assert!(unsupported(fut.as_mut().poll(&mut cx).map(|r| r.map(drop))));
+        }
+        let uids = UidSet::range(1, 1);
+        {
+            let fut = fake.fetch_messages(&mailbox, &uids);
+            assert_send(&fut);
+            let mut fut = std::pin::pin!(fut);
+            assert!(unsupported(fut.as_mut().poll(&mut cx).map(|r| r.map(drop))));
+        }
+        let fut = fake.fetch_sections(&mailbox, 1, &[BodySection::Header]);
+        assert_send(&fut);
+        let mut fut = std::pin::pin!(fut);
+        assert!(unsupported(fut.as_mut().poll(&mut cx).map(|r| r.map(drop))));
     }
 
     #[test]

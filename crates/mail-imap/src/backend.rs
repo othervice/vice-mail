@@ -7,13 +7,17 @@ use std::time::Duration;
 use async_imap::Client;
 use async_imap::imap_proto::{MailboxDatum, ResponseCode, StatusAttribute};
 use mail_model::{
-    Access, BackendError, Capabilities, ConnectConfig, FlagUpdate, IdleOutcome, MailBackend,
-    MailboxStatus, MessageHeader, ModSeq, RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet,
-    UidValidity,
+    Access, BackendError, BodySection, Capabilities, ConnectConfig, FetchedSection, FlagUpdate,
+    IdleOutcome, MailBackend, MailboxStatus, MessageHeader, MessageStructure, ModSeq, RawMessage,
+    RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet, UidValidity,
 };
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
 
+use crate::bodies::{
+    MESSAGE_ITEMS, MessageCollector, STRUCTURE_ITEMS, SectionCollector, StructureCollector,
+    section_items,
+};
 use crate::command::{Conn, Response, TaggedStatus, Transport, permit, quote};
 use crate::convert::{
     FlagCollector, HeaderCollector, capability_names, header_items, name_attribute, uid_of,
@@ -589,6 +593,73 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
             .await?
             .check("UID FETCH")?;
         Ok(collector.updates)
+    }
+
+    async fn fetch_structure(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+    ) -> Result<Option<MessageStructure>, BackendError> {
+        self.ensure_open(mailbox)?;
+        if uid == 0 {
+            return Ok(None);
+        }
+        let line = format!("UID FETCH {uid} ({STRUCTURE_ITEMS})");
+        let mut collector = StructureCollector::new(uid);
+        self.conn
+            .run(&line, |resp| collector.take(resp))
+            .await?
+            .check("UID FETCH")?;
+        if collector.unsolicited {
+            self.conn.watch.changed = true;
+        }
+        Ok(collector.finish())
+    }
+
+    async fn fetch_messages(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+    ) -> Result<Vec<RawMessage>, BackendError> {
+        self.ensure_open(mailbox)?;
+        if uids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let line = format!("UID FETCH {uids} ({MESSAGE_ITEMS})");
+        let mut collector = MessageCollector::new(uids);
+        self.conn
+            .run(&line, |resp| collector.take(resp))
+            .await?
+            .check("UID FETCH")?;
+        if collector.unsolicited {
+            self.conn.watch.changed = true;
+        }
+        Ok(collector.messages)
+    }
+
+    async fn fetch_sections(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uid: Uid,
+        sections: &[BodySection],
+    ) -> Result<Option<Vec<FetchedSection>>, BackendError> {
+        self.ensure_open(mailbox)?;
+        if uid == 0 {
+            return Ok(None);
+        }
+        if sections.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let line = format!("UID FETCH {uid} ({})", section_items(sections));
+        let mut collector = SectionCollector::new(uid, sections);
+        self.conn
+            .run(&line, |resp| collector.take(resp))
+            .await?
+            .check("UID FETCH")?;
+        if collector.unsolicited {
+            self.conn.watch.changed = true;
+        }
+        Ok(collector.sections)
     }
 
     async fn idle<St>(

@@ -64,10 +64,10 @@ async fn migrates_a_stage_1_database_and_backs_it_up() {
     drop(store);
     assert_eq!(inspect(&path).0, 1);
 
-    let store = Store::open(&path, StoreOptions::default()).expect("migrate to stage 2");
+    let store = Store::open(&path, StoreOptions::default()).expect("migrate to stage 3");
     let report = store.open_report().clone();
-    assert_eq!(SCHEMA_VERSION, 2);
-    assert_eq!((report.previous_version, report.version), (1, 2));
+    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!((report.previous_version, report.version), (1, 3));
 
     // The backup is the stage 1 database, with its data and without the new tables.
     let copy = report.backup.expect("backup before migration");
@@ -92,7 +92,7 @@ async fn migrates_a_stage_1_database_and_backs_it_up() {
     drop(store);
 
     let (version, names) = inspect(&path);
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     for table in MAIL_TABLES {
         assert!(names.contains(&table.to_owned()), "{table} missing");
     }
@@ -126,6 +126,12 @@ async fn creates_the_mail_schema_in_an_empty_database() {
         "message_msgid",
         "message_thread",
         "setting",
+        // Stage 3
+        "message_body",
+        "message_body_part",
+        "body_part_file",
+        "loc_flagged",
+        "remote_content_sender",
     ];
     for name in expected {
         assert!(

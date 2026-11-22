@@ -1,6 +1,6 @@
 [package]
 name = "mail-store"
-description = "SQLite storage: one writer thread, a pool of reader threads, migrations and backups."
+description = "SQLite storage: one writer thread, a pool of reader threads, migrations and backups; message bodies as compressed files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +13,10 @@ rusqlite.workspace = true
 rusqlite_migration.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+# `rt` for `spawn_blocking`: body files are compressed, written and read on the blocking pool.
+tokio = { workspace = true, features = ["sync", "rt"] }
 tracing.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
