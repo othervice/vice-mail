@@ -1,0 +1,891 @@
+//! Mail HTML for outgoing messages.
+//!
+//! Editor HTML (TipTap) and the HTML of a quoted original are read into a small document model
+//! — paragraphs of text runs with marks (bold, italic, underline, strike, code, link), lists,
+//! quotes, preformatted blocks — and written out again with a fixed allowlist: `p`, `br`,
+//! `strong`, `em`, `u`, `s`, `ul`, `ol`, `li`, `blockquote`, `a` (`http`, `https`, `mailto`
+//! only), `pre`, `code`. Every style is inline, there are no classes, ids, scripts or other
+//! attributes. Anything else in the input is dropped (scripts, styles, forms, images, frames)
+//! or unwrapped (spans, divs, tables, headings become paragraph boundaries).
+//!
+//! The walk over the parsed input is iterative and the nesting of quotes and lists is capped,
+//! so hostile or very deep HTML cannot overflow the stack; HTML the guard refuses is read as
+//! text instead.
+
+use url::Url;
+
+use crate::dom::{self, Descend, NodeData, Visit};
+use crate::guard;
+use crate::text::render_text;
+
+/// Deepest nesting of quotes and lists kept; deeper ones only split paragraphs.
+const MAX_NESTING: usize = 48;
+
+const FONT: &str = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;\
+                    font-size:14px;line-height:1.4";
+const MONO: &str = "font-family:Menlo,Consolas,'Courier New',monospace";
+const STYLE_P: &str = "margin:0 0 1em 0";
+const STYLE_P_IN_ITEM: &str = "margin:0";
+const STYLE_QUOTE: &str = "margin:0 0 1em 0;padding:0 0 0 1em;border-left:2px solid #cccccc";
+const STYLE_LIST: &str = "margin:0 0 1em 0;padding:0 0 0 2em";
+const STYLE_LIST_IN_ITEM: &str = "margin:0;padding:0 0 0 2em";
+const STYLE_ITEM: &str = "margin:0";
+const STYLE_PRE: &str = "margin:0 0 1em 0;padding:8px;background-color:#f4f4f4;\
+                         font-family:Menlo,Consolas,'Courier New',monospace;font-size:13px;\
+                         white-space:pre-wrap";
+
+/// Elements whose content is never shown.
+const SKIPPED: &[&str] = &[
+    "head", "script", "style", "template", "noscript", "title", "iframe", "object", "embed",
+    "select", "textarea", "noembed", "noframes", "xmp", "button", "img", "picture", "video",
+    "audio", "canvas", "map", "input", "option", "datalist", "meter", "progress",
+];
+
+/// Elements that end a paragraph (their content becomes paragraphs of its own).
+const BLOCKS: &[&str] = &[
+    "div",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "nav",
+    "aside",
+    "main",
+    "address",
+    "center",
+    "figure",
+    "figcaption",
+    "dl",
+    "dt",
+    "dd",
+    "table",
+    "caption",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "details",
+    "summary",
+    "fieldset",
+    "legend",
+    "form",
+    "hr",
+    "hgroup",
+    "menu",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "body",
+    "html",
+];
+
+/// Inline formatting of a run of text; written in this field order (link outermost).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Marks {
+    pub(crate) link: Option<String>,
+    pub(crate) bold: bool,
+    pub(crate) italic: bool,
+    pub(crate) underline: bool,
+    pub(crate) strike: bool,
+    pub(crate) code: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Inline {
+    Text(String, Marks),
+    Break,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Block {
+    /// An empty paragraph is an empty line the user typed.
+    Paragraph(Vec<Inline>),
+    Pre(String),
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    Quote(Vec<Block>),
+}
+
+/// The editor HTML as a complete mail HTML document (see module docs).
+pub fn mail_html(editor_html: &str) -> String {
+    document(&html_blocks(editor_html))
+}
+
+/// Blocks of editor HTML: empty paragraphs (empty lines the user typed) are kept, except at
+/// the start and the end.
+pub(crate) fn html_blocks(html: &str) -> Vec<Block> {
+    let mut blocks = html_blocks_with(html, true);
+    trim_paragraphs(&mut blocks);
+    blocks
+}
+
+/// Blocks of an HTML text. `keep_empty`: an empty `<p>` stays an empty line (editor content);
+/// in a received mail's HTML it is dropped (it is mostly layout, an image or a spacer).
+pub(crate) fn html_blocks_with(html: &str, keep_empty: bool) -> Vec<Block> {
+    if guard::check(html).is_err() {
+        return text_blocks(&guard::strip_tags(html));
+    }
+    let dom = dom::parse_document(html);
+    let mut collector = Collector::new(keep_empty);
+    dom::walk(&dom.document, |visit| match visit {
+        Visit::Enter(node) => collector.enter(node),
+        Visit::Leave(node) => {
+            collector.leave(node);
+            Descend::Yes
+        }
+    });
+    collector.finish()
+}
+
+/// Blocks of plain text: paragraphs at blank lines, `>` quotes as nested quotes, recognised
+/// URLs and addresses as links. Runs of spaces are kept with non-breaking spaces.
+pub(crate) fn text_blocks(text: &str) -> Vec<Block> {
+    let rendered = render_text(text);
+    // One frame per open quote level: finished blocks and the open paragraph.
+    let mut stack: Vec<(Vec<Block>, Vec<Inline>)> = vec![(Vec::new(), Vec::new())];
+    for line in &rendered.lines {
+        let depth = usize::from(line.quote_depth).min(MAX_NESTING);
+        while stack.len() > depth + 1 {
+            close_text_quote(&mut stack);
+        }
+        while stack.len() < depth + 1 {
+            if let Some((blocks, paragraph)) = stack.last_mut() {
+                end_paragraph(blocks, paragraph, false);
+            }
+            stack.push((Vec::new(), Vec::new()));
+        }
+        let Some((blocks, paragraph)) = stack.last_mut() else {
+            break;
+        };
+        let blank = line.spans.iter().all(|span| match span {
+            crate::TextSpan::Text(t) => t.trim().is_empty(),
+            crate::TextSpan::Link { .. } => false,
+        });
+        if blank {
+            end_paragraph(blocks, paragraph, false);
+            continue;
+        }
+        if !paragraph.is_empty() {
+            paragraph.push(Inline::Break);
+        }
+        for span in &line.spans {
+            match span {
+                crate::TextSpan::Text(text) => {
+                    paragraph.push(Inline::Text(keep_spaces(text), Marks::default()));
+                }
+                crate::TextSpan::Link { index, text } => {
+                    let href = usize::try_from(*index)
+                        .ok()
+                        .and_then(|i| rendered.links.get(i))
+                        .and_then(|link| allowed_href(&link.href));
+                    let marks = Marks {
+                        link: href,
+                        ..Marks::default()
+                    };
+                    paragraph.push(Inline::Text(text.clone(), marks));
+                }
+            }
+        }
+    }
+    while stack.len() > 1 {
+        close_text_quote(&mut stack);
+    }
+    let Some((mut blocks, mut paragraph)) = stack.pop() else {
+        return Vec::new();
+    };
+    end_paragraph(&mut blocks, &mut paragraph, false);
+    blocks
+}
+
+/// Removes empty paragraphs at the start and the end.
+pub(crate) fn trim_paragraphs(blocks: &mut Vec<Block>) {
+    let empty = |b: &Block| matches!(b, Block::Paragraph(inlines) if inlines.is_empty());
+    while blocks.last().is_some_and(empty) {
+        blocks.pop();
+    }
+    let leading = blocks.iter().take_while(|b| empty(b)).count();
+    blocks.drain(..leading);
+}
+
+fn close_text_quote(stack: &mut Vec<(Vec<Block>, Vec<Inline>)>) {
+    let Some((mut blocks, mut paragraph)) = stack.pop() else {
+        return;
+    };
+    end_paragraph(&mut blocks, &mut paragraph, false);
+    if let Some((parent, parent_paragraph)) = stack.last_mut()
+        && !blocks.is_empty()
+    {
+        end_paragraph(parent, parent_paragraph, false);
+        parent.push(Block::Quote(blocks));
+    }
+}
+
+/// Plain text spaces survive HTML: a run of n spaces becomes n-1 non-breaking spaces and one
+/// space; a leading space becomes non-breaking. Tabs become four spaces first.
+fn keep_spaces(text: &str) -> String {
+    let text = text.replace('\t', "    ");
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while let Some(&c) = chars.get(i) {
+        if c != ' ' {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let run = chars[i..].iter().take_while(|c| **c == ' ').count();
+        if run == 1 && i > 0 {
+            out.push(' ');
+        } else {
+            for _ in 1..run {
+                out.push('\u{a0}');
+            }
+            out.push(if i == 0 && run == 1 { '\u{a0}' } else { ' ' });
+        }
+        i += run;
+    }
+    out
+}
+
+/// A link target that may go into an outgoing mail: absolute `http`, `https` or `mailto`.
+pub(crate) fn allowed_href(href: &str) -> Option<String> {
+    let url = Url::parse(href.trim()).ok()?;
+    matches!(url.scheme(), "http" | "https" | "mailto").then(|| url.as_str().to_owned())
+}
+
+/// Ends the open paragraph: kept if it has visible content, or if it was an explicit `<p>`
+/// (then it is an empty line).
+fn end_paragraph(blocks: &mut Vec<Block>, paragraph: &mut Vec<Inline>, explicit: bool) {
+    let inlines = normalize(std::mem::take(paragraph));
+    if !inlines.is_empty() || explicit {
+        blocks.push(Block::Paragraph(inlines));
+    }
+}
+
+/// Collapses white space (not non-breaking spaces), merges runs with equal marks, trims the
+/// paragraph and drops empty runs. A paragraph of only white space becomes empty.
+fn normalize(inlines: Vec<Inline>) -> Vec<Inline> {
+    let mut out: Vec<Inline> = Vec::with_capacity(inlines.len());
+    for inline in inlines {
+        match inline {
+            Inline::Break => out.push(Inline::Break),
+            Inline::Text(text, marks) => {
+                let mut collapsed = String::with_capacity(text.len());
+                let mut space = false;
+                for c in text.chars() {
+                    if matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{c}') {
+                        space = true;
+                    } else {
+                        if space {
+                            collapsed.push(' ');
+                            space = false;
+                        }
+                        collapsed.push(c);
+                    }
+                }
+                if space {
+                    collapsed.push(' ');
+                }
+                // A space after a space or a line break is not shown.
+                let after_space = match out.last() {
+                    None | Some(Inline::Break) => true,
+                    Some(Inline::Text(prev, _)) => prev.ends_with(' '),
+                };
+                if after_space && collapsed.starts_with(' ') {
+                    collapsed.remove(0);
+                }
+                if collapsed.is_empty() {
+                    continue;
+                }
+                match out.last_mut() {
+                    Some(Inline::Text(prev, prev_marks)) if *prev_marks == marks => {
+                        prev.push_str(&collapsed);
+                    }
+                    _ => out.push(Inline::Text(collapsed, marks)),
+                }
+            }
+        }
+    }
+    // Trailing spaces, also before a line break.
+    for i in 0..out.len() {
+        let next_is_break = matches!(out.get(i + 1), None | Some(Inline::Break));
+        if next_is_break && let Some(Inline::Text(text, _)) = out.get_mut(i) {
+            while text.ends_with(' ') {
+                text.pop();
+            }
+        }
+    }
+    out.retain(|inline| !matches!(inline, Inline::Text(text, _) if text.is_empty()));
+    // Only line breaks: nothing visible.
+    if out.iter().all(|inline| matches!(inline, Inline::Break)) {
+        out.clear();
+    }
+    out
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Root,
+    Quote,
+    List {
+        ordered: bool,
+    },
+    /// A list item; `implicit` for content that sat in a list outside any `<li>`.
+    Item {
+        implicit: bool,
+    },
+}
+
+struct Container {
+    kind: Kind,
+    blocks: Vec<Block>,
+    items: Vec<Vec<Block>>,
+    paragraph: Vec<Inline>,
+    /// The open paragraph is an explicit `<p>`.
+    explicit: bool,
+}
+
+impl Container {
+    fn new(kind: Kind) -> Self {
+        Self {
+            kind,
+            blocks: Vec::new(),
+            items: Vec::new(),
+            paragraph: Vec::new(),
+            explicit: false,
+        }
+    }
+
+    fn end_paragraph(&mut self) {
+        let explicit = std::mem::take(&mut self.explicit);
+        end_paragraph(&mut self.blocks, &mut self.paragraph, explicit);
+    }
+}
+
+/// What entering an element did, undone when leaving it.
+enum Opened {
+    Nothing,
+    Mark,
+    Paragraph,
+    Boundary { bold: bool },
+    Container,
+    Pre,
+    Cell,
+}
+
+struct Collector {
+    containers: Vec<Container>,
+    marks: Vec<Marks>,
+    opened: Vec<Opened>,
+    /// Text of the `<pre>` being read, and how deep `<pre>`s nest.
+    pre: String,
+    pre_depth: usize,
+    /// Empty `<p>`s are kept as empty lines.
+    keep_empty: bool,
+}
+
+impl Collector {
+    fn new(keep_empty: bool) -> Self {
+        Self {
+            containers: vec![Container::new(Kind::Root)],
+            marks: Vec::new(),
+            opened: Vec::new(),
+            pre: String::new(),
+            pre_depth: 0,
+            keep_empty,
+        }
+    }
+
+    fn marks(&self) -> Marks {
+        self.marks.last().cloned().unwrap_or_default()
+    }
+
+    fn push_mark(&mut self, change: impl FnOnce(&mut Marks)) -> Opened {
+        let mut marks = self.marks();
+        change(&mut marks);
+        self.marks.push(marks);
+        Opened::Mark
+    }
+
+    /// The container inline content and blocks go into; opens an implicit item in a list.
+    fn target(&mut self) -> &mut Container {
+        if matches!(
+            self.containers.last().map(|c| c.kind),
+            Some(Kind::List { .. })
+        ) {
+            self.containers
+                .push(Container::new(Kind::Item { implicit: true }));
+        }
+        let last = self.containers.len() - 1;
+        &mut self.containers[last]
+    }
+
+    fn inline(&mut self, inline: Inline) {
+        // White space between list items must not open an item of its own.
+        let blank = matches!(&inline, Inline::Text(text, _) if text.trim().is_empty());
+        if blank
+            && matches!(
+                self.containers.last().map(|c| c.kind),
+                Some(Kind::List { .. })
+            )
+        {
+            return;
+        }
+        self.target().paragraph.push(inline);
+    }
+
+    fn end_paragraph(&mut self) {
+        if let Some(container) = self.containers.last_mut() {
+            container.end_paragraph();
+        }
+    }
+
+    fn push_block(&mut self, block: Block) {
+        let target = self.target();
+        target.end_paragraph();
+        target.blocks.push(block);
+    }
+
+    fn nesting(&self) -> usize {
+        self.containers.len()
+    }
+
+    fn open(&mut self, kind: Kind) -> Opened {
+        if self.nesting() >= MAX_NESTING {
+            self.end_paragraph();
+            return Opened::Boundary { bold: false };
+        }
+        if matches!(kind, Kind::Item { .. }) {
+            self.close_implicit_item();
+        } else {
+            self.target().end_paragraph();
+        }
+        self.containers.push(Container::new(kind));
+        Opened::Container
+    }
+
+    fn close_implicit_item(&mut self) {
+        if matches!(
+            self.containers.last().map(|c| c.kind),
+            Some(Kind::Item { implicit: true })
+        ) {
+            self.close_container();
+        }
+    }
+
+    /// Pops the top container and adds what it holds to its parent.
+    fn close_container(&mut self) {
+        if self.containers.len() <= 1 {
+            return;
+        }
+        let Some(mut container) = self.containers.pop() else {
+            return;
+        };
+        container.end_paragraph();
+        match container.kind {
+            Kind::Root => {}
+            Kind::Quote => {
+                if !container.blocks.is_empty() {
+                    self.push_block(Block::Quote(container.blocks));
+                }
+            }
+            Kind::List { ordered } => {
+                if !container.items.is_empty() {
+                    self.push_block(Block::List {
+                        ordered,
+                        items: container.items,
+                    });
+                }
+            }
+            Kind::Item { .. } if container.blocks.is_empty() => {}
+            Kind::Item { .. } => {
+                if let Some(list) = self.containers.last_mut()
+                    && matches!(list.kind, Kind::List { .. })
+                {
+                    list.items.push(container.blocks);
+                } else {
+                    // Not inside a list any more: keep the content.
+                    for block in container.blocks {
+                        self.push_block(block);
+                    }
+                }
+            }
+        }
+    }
+
+    fn enter(&mut self, node: &dom::Handle) -> Descend {
+        match &node.data {
+            NodeData::Text { contents } => {
+                let text = contents.borrow();
+                if self.pre_depth > 0 {
+                    self.pre.push_str(&text);
+                } else {
+                    let marks = self.marks();
+                    self.inline(Inline::Text(text.to_string(), marks));
+                }
+                return Descend::Yes;
+            }
+            NodeData::Element { .. } => {}
+            NodeData::Document => return Descend::Yes,
+            _ => return Descend::Skip,
+        }
+        // SVG and MathML: nothing to show.
+        let Some(name) = dom::html_name(node) else {
+            return Descend::Skip;
+        };
+        if SKIPPED.contains(&name) {
+            return Descend::Skip;
+        }
+        let opened = if self.pre_depth > 0 {
+            match name {
+                "br" => {
+                    self.pre.push('\n');
+                    Opened::Nothing
+                }
+                "pre" => {
+                    self.pre_depth += 1;
+                    Opened::Pre
+                }
+                _ => Opened::Nothing,
+            }
+        } else {
+            self.enter_element(node, name)
+        };
+        self.opened.push(opened);
+        Descend::Yes
+    }
+
+    fn enter_element(&mut self, node: &dom::Handle, name: &str) -> Opened {
+        match name {
+            "br" => {
+                self.inline(Inline::Break);
+                Opened::Nothing
+            }
+            "b" | "strong" => self.push_mark(|m| m.bold = true),
+            "i" | "em" | "cite" | "dfn" | "var" => self.push_mark(|m| m.italic = true),
+            "u" | "ins" => self.push_mark(|m| m.underline = true),
+            "s" | "strike" | "del" => self.push_mark(|m| m.strike = true),
+            "code" | "kbd" | "samp" | "tt" => self.push_mark(|m| m.code = true),
+            "a" => {
+                let href = dom::attribute(node, "href").and_then(|h| allowed_href(&h));
+                self.push_mark(|m| m.link = href)
+            }
+            "p" => {
+                let keep_empty = self.keep_empty;
+                let target = self.target();
+                target.end_paragraph();
+                target.explicit = keep_empty;
+                Opened::Paragraph
+            }
+            "blockquote" => self.open(Kind::Quote),
+            "ul" | "ol" => self.open(Kind::List {
+                ordered: name == "ol",
+            }),
+            "li" if matches!(
+                self.containers.last().map(|c| c.kind),
+                Some(Kind::List { .. } | Kind::Item { implicit: true })
+            ) =>
+            {
+                self.open(Kind::Item { implicit: false })
+            }
+            "pre" => {
+                self.target().end_paragraph();
+                self.pre_depth = 1;
+                self.pre.clear();
+                Opened::Pre
+            }
+            "td" | "th" => Opened::Cell,
+            _ if BLOCKS.contains(&name) || name == "li" => {
+                self.end_paragraph();
+                let bold = name.len() == 2 && name.starts_with('h') && name != "hr";
+                if bold {
+                    self.push_mark(|m| m.bold = true);
+                }
+                Opened::Boundary { bold }
+            }
+            _ => Opened::Nothing,
+        }
+    }
+
+    fn leave(&mut self, node: &dom::Handle) {
+        if !matches!(node.data, NodeData::Element { .. }) || dom::html_name(node).is_none() {
+            return;
+        }
+        let Some(opened) = self.opened.pop() else {
+            return;
+        };
+        match opened {
+            Opened::Nothing => {}
+            Opened::Mark => {
+                self.marks.pop();
+            }
+            Opened::Paragraph => {
+                if let Some(container) = self.containers.last_mut() {
+                    container.end_paragraph();
+                }
+            }
+            Opened::Boundary { bold } => {
+                if bold {
+                    self.marks.pop();
+                }
+                self.end_paragraph();
+            }
+            Opened::Container => {
+                self.close_implicit_item();
+                self.close_container();
+            }
+            Opened::Pre => {
+                self.pre_depth = self.pre_depth.saturating_sub(1);
+                if self.pre_depth == 0 {
+                    let text = std::mem::take(&mut self.pre).replace("\r\n", "\n");
+                    let text = text.trim_end_matches('\n').to_owned();
+                    if !text.trim().is_empty() {
+                        self.push_block(Block::Pre(text));
+                    }
+                }
+            }
+            Opened::Cell => {
+                self.inline(Inline::Text(" ".into(), Marks::default()));
+            }
+        }
+    }
+
+    fn finish(mut self) -> Vec<Block> {
+        while self.containers.len() > 1 {
+            self.close_implicit_item();
+            self.close_container();
+        }
+        let Some(mut root) = self.containers.pop() else {
+            return Vec::new();
+        };
+        root.end_paragraph();
+        root.blocks
+    }
+}
+
+/// Where a block sits; paragraphs and lists inside list items get no outer margins.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Context {
+    Flow,
+    Item,
+}
+
+/// A complete mail HTML document: doctype, charset, a wrapper with the font, the blocks.
+pub(crate) fn document(blocks: &[Block]) -> String {
+    let mut out = String::from(
+        "<!DOCTYPE html>\n<html>\n<head>\n\
+         <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n\
+         </head>\n<body>\n",
+    );
+    out.push_str("<div style=\"");
+    out.push_str(FONT);
+    out.push_str("\">\n");
+    write_blocks(blocks, Context::Flow, true, &mut out);
+    out.push_str("</div>\n</body>\n</html>\n");
+    out
+}
+
+/// Blocks as an HTML fragment without styles (content for the editor).
+pub(crate) fn fragment(blocks: &[Block]) -> String {
+    let mut out = String::new();
+    write_blocks(blocks, Context::Flow, false, &mut out);
+    out
+}
+
+fn open_tag(out: &mut String, tag: &str, style: &str, styled: bool) {
+    out.push('<');
+    out.push_str(tag);
+    if styled && !style.is_empty() {
+        out.push_str(" style=\"");
+        out.push_str(style);
+        out.push('"');
+    }
+    out.push('>');
+}
+
+fn write_blocks(blocks: &[Block], context: Context, styled: bool, out: &mut String) {
+    for (index, block) in blocks.iter().enumerate() {
+        match block {
+            Block::Paragraph(inlines) if context == Context::Item && index == 0 => {
+                // The first paragraph of an item is the item's own text.
+                write_inlines(inlines, styled, out);
+                if inlines.is_empty() {
+                    out.push_str("<br>");
+                }
+            }
+            Block::Paragraph(inlines) => {
+                let style = if context == Context::Item {
+                    STYLE_P_IN_ITEM
+                } else {
+                    STYLE_P
+                };
+                open_tag(out, "p", style, styled);
+                if inlines.is_empty() {
+                    out.push_str("<br>");
+                } else {
+                    write_inlines(inlines, styled, out);
+                }
+                out.push_str("</p>");
+            }
+            Block::Pre(text) => {
+                open_tag(out, "pre", STYLE_PRE, styled);
+                escape_into(text, out);
+                out.push_str("</pre>");
+            }
+            Block::Quote(children) => {
+                open_tag(out, "blockquote", STYLE_QUOTE, styled);
+                out.push('\n');
+                write_blocks(children, Context::Flow, styled, out);
+                out.push_str("</blockquote>");
+            }
+            Block::List { ordered, items } => {
+                let tag = if *ordered { "ol" } else { "ul" };
+                let style = if context == Context::Item {
+                    STYLE_LIST_IN_ITEM
+                } else {
+                    STYLE_LIST
+                };
+                open_tag(out, tag, style, styled);
+                out.push('\n');
+                for item in items {
+                    open_tag(out, "li", STYLE_ITEM, styled);
+                    write_blocks(item, Context::Item, styled, out);
+                    out.push_str("</li>\n");
+                }
+                out.push_str("</");
+                out.push_str(tag);
+                out.push('>');
+            }
+        }
+        if context == Context::Flow {
+            out.push('\n');
+        }
+    }
+}
+
+/// Mark tags, outermost first, for `marks`.
+fn mark_tags(marks: &Marks) -> Vec<MarkTag<'_>> {
+    let mut tags = Vec::new();
+    if let Some(href) = &marks.link {
+        tags.push(MarkTag::Link(href));
+    }
+    for (on, tag) in [
+        (marks.bold, "strong"),
+        (marks.italic, "em"),
+        (marks.underline, "u"),
+        (marks.strike, "s"),
+        (marks.code, "code"),
+    ] {
+        if on {
+            tags.push(MarkTag::Plain(tag));
+        }
+    }
+    tags
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MarkTag<'a> {
+    Link(&'a str),
+    Plain(&'static str),
+}
+
+impl MarkTag<'_> {
+    fn open(self, styled: bool, out: &mut String) {
+        match self {
+            Self::Link(href) => {
+                out.push_str("<a href=\"");
+                escape_attribute_into(href, out);
+                out.push_str("\">");
+            }
+            Self::Plain("code") if styled => {
+                out.push_str("<code style=\"");
+                out.push_str(MONO);
+                out.push_str("\">");
+            }
+            Self::Plain(tag) => {
+                out.push('<');
+                out.push_str(tag);
+                out.push('>');
+            }
+        }
+    }
+
+    fn close(self, out: &mut String) {
+        out.push_str("</");
+        out.push_str(match self {
+            Self::Link(_) => "a",
+            Self::Plain(tag) => tag,
+        });
+        out.push('>');
+    }
+}
+
+fn write_inlines(inlines: &[Inline], styled: bool, out: &mut String) {
+    let mut open: Vec<MarkTag<'_>> = Vec::new();
+    for inline in inlines {
+        let wanted = match inline {
+            Inline::Text(_, marks) => mark_tags(marks),
+            // A line break keeps the open marks.
+            Inline::Break => open.clone(),
+        };
+        let common = open.iter().zip(&wanted).take_while(|(a, b)| a == b).count();
+        while open.len() > common {
+            if let Some(tag) = open.pop() {
+                tag.close(out);
+            }
+        }
+        for tag in wanted.iter().skip(common) {
+            tag.open(styled, out);
+            open.push(*tag);
+        }
+        match inline {
+            Inline::Text(text, _) => escape_into(text, out),
+            Inline::Break => out.push_str("<br>"),
+        }
+    }
+    while let Some(tag) = open.pop() {
+        tag.close(out);
+    }
+}
+
+pub(crate) fn escape_into(text: &str, out: &mut String) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\u{a0}' => out.push_str("&nbsp;"),
+            c if c.is_control() && c != '\n' && c != '\t' => {}
+            c => out.push(c),
+        }
+    }
+}
+
+fn escape_attribute_into(text: &str, out: &mut String) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '"' => out.push_str("&quot;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+}
+
+/// One quoted line: `> text`, `>> text` for lines already quoted, `>` for empty ones.
+pub(crate) fn quote_line(line: &str) -> String {
+    if line.is_empty() {
+        ">".to_owned()
+    } else if line.starts_with('>') {
+        format!(">{line}")
+    } else {
+        format!("> {line}")
+    }
+}
