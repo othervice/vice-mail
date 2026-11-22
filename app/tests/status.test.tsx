@@ -187,6 +187,30 @@ describe("removing an account", () => {
     expect(await screen.findByRole("heading", { name: "No accounts yet" })).toBeTruthy();
   });
 
+  it("returns to the account list also when the list has refreshed before the core answered", async () => {
+    // The real core emits `accountsChanged` before `remove_account` returns. The refreshed list
+    // no longer has the account, so the account page drops its parts before the removal's own
+    // callbacks run (found by the desktop test of stage 2).
+    let answer = () => undefined as void;
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const { core, user } = setup(IDLE, { holdRemoveAccount: held });
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Accounts" }));
+    await user.click(await screen.findByTestId(`account-row-${ACCOUNT.id}`));
+    await user.click(screen.getByRole("button", { name: "Remove account…" }));
+    await user.click(within(screen.getByTestId("remove-confirm")).getByRole("button", { name: "Remove" }));
+
+    expect(core.callsOf("remove_account")).toEqual([{ accountId: ACCOUNT.id }]);
+    await emitCore({ type: "accountsChanged" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("account-detail")).toBeNull();
+    });
+    answer();
+    expect(await screen.findByRole("heading", { name: "No accounts yet" })).toBeTruthy();
+  });
+
   it("a failed removal keeps the account and shows the error", async () => {
     const { user } = setup(IDLE, { failures: { remove_account: ipcError("keychain", "errSecInteractionNotAllowed") } });
     await user.click(await screen.findByRole("button", { name: "Settings" }));

@@ -142,6 +142,11 @@ interface FakeCoreOptions {
   fail?: (cmd: string, args: Record<string, unknown>) => Failure | undefined;
   /** Commands whose answer never arrives (to see loading states). */
   hang?: readonly string[];
+  /**
+   * `remove_account` removes at once but answers only when this promise resolves. The real core
+   * sends `accountsChanged` before it answers, so the list can refresh first.
+   */
+  holdRemoveAccount?: Promise<void>;
   /** Simulate the event plugin (listen/emit). Off: event calls reach `failures` like commands. */
   mockEvents?: boolean;
   accounts?: Account[];
@@ -249,7 +254,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           if (index < 0) return Promise.reject(ipcError("not_found"));
           accounts.splice(index, 1);
-          return null;
+          return options.holdRemoveAccount?.then(() => null) ?? null;
         }
         case "retry_account":
         case "update_password":

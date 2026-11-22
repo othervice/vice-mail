@@ -1,11 +1,17 @@
 // WebdriverIO config for the desktop tests (decision 0005). `pnpm test:e2e` builds the test app
 // (`--features e2e`) and runs this; `pnpm test:e2e:run` skips the build. Needs a logged-in GUI
 // session (a window opens), so it is not part of scripts/check.sh.
+//
+// The run owns the local test server (scripts/testmail.sh): it resets it, starts it and seeds
+// 10,000 messages before the first app starts, and stops it at the end. `reset` creates a new
+// test CA, and the app reads the CA once at start, so this has to happen here and not in a spec.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA_DIR_ENV, WEBDRIVER_PORT, quitApp } from "./tests/e2e/support/lifecycle.mjs";
+import { SevereServiceError } from "webdriverio";
+import { CA_FILE, EXTRA_CA_ENV, prepareTestServer, testmailSync } from "./tests/e2e/support/testmail.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Built by `pnpm build:e2e`: debug profile, embedded assets, the production CSP.
@@ -16,7 +22,8 @@ export const config = {
   // In this order, one after the other. Every spec file gets a freshly started app on the same
   // data directory: `afterSession` quits the app, and before the next spec the service finds the
   // WebDriver port closed and starts the app again (it logs "unreachable — restarting").
-  specs: ["./tests/e2e/frame.e2e.mjs", "./tests/e2e/restart.e2e.mjs"],
+  // account-sync.e2e.mjs needs the empty data directory the first two leave behind.
+  specs: ["./tests/e2e/frame.e2e.mjs", "./tests/e2e/restart.e2e.mjs", "./tests/e2e/account-sync.e2e.mjs"],
   maxInstances: 1,
   capabilities: [
     {
@@ -40,7 +47,7 @@ export const config = {
   logLevel: "warn",
   framework: "mocha",
   reporters: ["spec"],
-  mochaOpts: { ui: "bdd", timeout: 120000 },
+  mochaOpts: { ui: "bdd", timeout: 180000 },
   waitforTimeout: 10000,
   afterSession: async () => {
     await quitApp();
@@ -65,5 +72,19 @@ export const config = {
     process.env.CFFIXED_USER_HOME = path.join(process.env[DATA_DIR_ENV], "home");
     fs.mkdirSync(process.env.CFFIXED_USER_HOME, { recursive: true });
     console.log(`test data directory: ${process.env[DATA_DIR_ENV]}`);
+
+    // A fresh test server with 10,000 messages for alice (9,959 in INBOX); about 8 s. Only a
+    // SevereServiceError stops the run here; any other error would be logged and the specs
+    // would start against no server.
+    try {
+      const ms = prepareTestServer();
+      console.log(`test server ready with 10,000 messages after ${ms} ms`);
+    } catch (e) {
+      throw new SevereServiceError(`the test server could not be prepared: ${String(e.stderr ?? e.message).trim()}`);
+    }
+    process.env[EXTRA_CA_ENV] = CA_FILE;
+  },
+  onComplete: () => {
+    testmailSync("stop");
   },
 };

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { mockCore } from "./support/core";
 import { renderApp } from "./support/render";
@@ -162,5 +162,24 @@ describe("app frame without an account", () => {
     await screen.findByRole("main");
     expect(document.documentElement.dataset["platform"]).toBe("windows");
     expect(document.querySelector("[data-tauri-drag-region]")).toBeNull();
+  });
+
+  it("folding the sidebar opens no tooltip of a button that had the focus while it was unfolded", async () => {
+    mockCore();
+    const { user } = renderApp();
+    await user.click(await screen.findByRole("button", { name: "Folders" }));
+    // Unfolded, the rail shows its labels and no tooltips. Keyboard focus passes over Inbox.
+    const inbox = screen.getByRole("button", { name: "Inbox" });
+    act(() => {
+      inbox.focus();
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => {
+      inbox.blur();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Folders" }));
+    expect(screen.getByRole("button", { name: "Folders" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });

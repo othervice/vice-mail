@@ -152,11 +152,20 @@ function RemoveAccount({ account }: { account: Account }) {
               variant="danger"
               disabled={remove.isPending}
               onClick={() => {
-                remove.mutate(account.id, {
-                  onSuccess: () => {
-                    showAccountsPage({ kind: "list" });
+                // Back to the list after the promise, not in a `mutate` callback: the core
+                // announces the removal (`accountsChanged`) before it answers, the refreshed
+                // list no longer has the account, and the account page unmounts this component.
+                // React Query drops the callbacks of an unmounted observer. Only if the user is
+                // still on this account's page; a failure is shown below (`remove.isError`).
+                remove.mutateAsync(account.id).then(
+                  () => {
+                    const { view, accountsPage } = useUiStore.getState();
+                    const stillHere =
+                      view.kind === "settings" && accountsPage.kind === "account" && accountsPage.accountId === account.id;
+                    if (stillHere) showAccountsPage({ kind: "list" });
                   },
-                });
+                  () => undefined,
+                );
               }}
             >
               {remove.isPending ? t("settings.accounts.detail.remove.removing") : t("settings.accounts.detail.remove.confirm")}

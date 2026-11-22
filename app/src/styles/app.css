@@ -117,6 +117,19 @@
     height: 100%;
   }
 
+  /*
+   * The frame never scrolls as a whole, only its panes do. An `overflow: hidden` viewport can
+   * still be scrolled by scrollIntoView or focus, and absolutely positioned elements without a
+   * positioned ancestor (Radix puts hidden native inputs next to the radio buttons of a form)
+   * made the document taller than the window: the whole frame then moved up and left an empty
+   * band below it. #root is their containing block now, and `clip` cuts them off without
+   * making #root a scroll container itself.
+   */
+  #root {
+    position: relative;
+    overflow: clip;
+  }
+
   body {
     margin: 0;
     overflow: hidden;

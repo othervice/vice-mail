@@ -16,7 +16,15 @@ interface TooltipProps {
 export function Tooltip({ label, side = "bottom", disabled = false, children }: TooltipProps) {
   const [open, setOpen] = useState(false);
   return (
-    <RadixTooltip.Root open={open && !disabled} onOpenChange={setOpen}>
+    <RadixTooltip.Root
+      open={open && !disabled}
+      // Hover and focus while disabled must not leave `open` set: Radix reports no close for a
+      // tooltip it already sees closed, so it would pop up as soon as `disabled` turns false
+      // (the rail's tooltips when the sidebar is folded again).
+      onOpenChange={(next) => {
+        setOpen(next && !disabled);
+      }}
+    >
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content
