@@ -41,6 +41,7 @@ wenn er groß genug ist.
 | IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
 | SMTP | lettre (Tokio, rustls) | 0.11 | Standard in Rust |
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
+| Body-Ablage | zstd (Stufe 3, mit Prüfsumme) | 0.14.4 | gleiches Verhältnis wie Deflate, 4- bis 20-mal schneller beim Packen; Dateien statt BLOBs, damit Datenbank und Migrationssicherungen klein bleiben (0009) |
 | HTML-Bereinigung | ammonia | 4.2 | Allowlist-Sanitizer |
 | TLS | rustls mit Provider `ring`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7 | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver. `ring` hat eine begründete Ausnahme von der 12-Monats-Regel (0002) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
@@ -115,6 +116,8 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `message_location` | Nachricht, Postfach, UID, Flags, Schlagwörter, MODSEQ | Cache |
 | `thread` | Konto, normalisierter Betreff, letzte Nachricht, Anzahl, ungelesen | Cache |
 | `attachment` | Nachricht, MIME-Teil, Dateiname, Typ, Größe, Content-ID | Cache |
+| `message_body`, `message_body_part` | Verweis auf die komprimierte Body-Datei (ganze Mail oder einzelne Teile großer Mails), Größe, Prüfsumme | Cache |
+| `remote_content_sender` | Absender, deren externe Bilder immer geladen werden (Konto-UUID, normalisierte Adresse) | sync |
 | `message_fts` | FTS5-Index über Betreff, Absender, Empfänger, Text, Anhangnamen | Cache |
 | `operation` | Outbox: Art, Nutzdaten, Idempotenzschlüssel, Zustand, Versuche, letzter Fehler | Gerät |
 | `draft` | UUID, Konto, Identität, Kopfzeilen, Inhalt, Anhänge, Revision, UID im Entwürfe-Ordner | Gerät (Abgleich über IMAP) |
@@ -225,8 +228,11 @@ einer klaren Meldung abgelehnt.
 **Offline**
 - Kopfzeilen aller Mails liegen lokal. Bodies werden beim Öffnen geholt und für einen einstellbaren
   Zeitraum im Voraus geladen (Standard 30 Tage für Posteingang, Gesendet, Entwürfe und Markiertes).
-- Bodies liegen komprimiert als Dateien im Datenverzeichnis der App, die Datenbank hält den Verweis.
-  Stufe 3 bestätigt das durch Messung.
+- Bodies liegen zstd-komprimiert als Dateien unter `bodies/<Konto-UUID>/` im Datenverzeichnis der
+  App, atomar geschrieben, die Datenbank hält den Verweis (gemessen in 0009: Lesen gleich schnell wie
+  BLOB, Datenbank 2,3 MB statt 57 MB bei 460 Bodies). Kleine vorausgeladene Mails eines Kontos werden
+  in Paketen bis 1 MiB geschrieben. Mails über 2 MiB werden teilweise geholt: Kopf und Textteile
+  zuerst, Anhänge auf Wunsch. Fehlt eine Datei oder ist sie beschädigt, wird sie neu geholt.
 
 **Threads**
 - Je Konto, über Message-ID, In-Reply-To und References. Rückfall auf den Betreff nur vorsichtig:
