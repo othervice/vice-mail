@@ -25,7 +25,7 @@ wenn er groß genug ist.
 | Bereich | Wahl | Version | Warum |
 |---|---|---|---|
 | Desktop-Shell | Tauri | 2.12 (Crate 2.12.7, CLI 2.12.6) | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern; Spike-App: `.dmg` 2,2 MB, Windows-Installer 1,9 MB (0004) |
-| Kern | Rust stable, Edition 2024, Tokio | mind. 1.88, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.88 verlangt async-imap |
+| Kern | Rust stable, Edition 2024, Tokio | mind. 1.90, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.90 verlangt Tauri 2.12 (0006) |
 | Oberfläche | React, TypeScript strict | 19.3 / 7.0 | größtes Ökosystem für die nötigen Bausteine |
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
@@ -34,8 +34,8 @@ wenn er groß genug ist.
 | Daten im Frontend | TanStack Query, Zustand | 5.108 / 5.1 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
 | Sprachen | i18next, react-i18next | 27 / 18 | Standard, Englisch und Deutsch |
-| Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.43 (SQLite 3.54.1) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
-| Migrationen | rusqlite_migration | 2.7 | klein, nutzt `user_version` |
+| Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
+| Migrationen | rusqlite_migration | 2.7.0 | klein, nutzt `user_version`; legt rusqlite auf ^0.41 fest (0006) |
 | IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
 | SMTP | lettre (Tokio, rustls) | 0.11 | Standard in Rust |
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
@@ -44,7 +44,8 @@ wenn er groß genug ist.
 | Schlüsselbund | keyring | 4.2 | macOS-Schlüsselbund und Windows-Anmeldeinformationen |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age | 0.12 | geprüftes Format, keine eigene Kryptografie |
-| Logging | tracing | – | strukturierte Logs mit Schwärzung |
+| Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
+| Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
 | Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
 | Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
 | Windows-Build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | Installer vom Mac aus, in Spike C gebaut (kalt 74 s); `makensis` nur mit UTF-8-Locale (`LANG=en_US.UTF-8`), siehe `docs/SETUP.md` |
@@ -328,3 +329,4 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | tauri-specta statt ts-rs (0004) | typisierte Commands und Events, erzwungene Entscheidung bei 64-Bit-Zahlen | ts-rs erzeugt dieselben Typen; nur `ipc.ts` müsste neu geschrieben werden |
 | Stalwart als Testserver (0001) | ein Binary, alle nötigen Fähigkeiten, kein Docker | Dovecot über Homebrew mit eigenem MTA |
 | FTS5 mit `unicode61` statt `trigram` (0003) | trigram ist 5,2-mal so groß und halb so schnell beim Einfügen | Tokenizer per Migration wechselbar, Index ist Cache |
+| rusqlite 0.41 statt 0.43 (0006) | `rusqlite_migration` 2.7 verlangt ^0.41; gleiches SQLite 3.54.1 | eigener Migrations-Runner, dann rusqlite 0.43 |

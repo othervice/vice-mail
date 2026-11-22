@@ -27,7 +27,7 @@ printf '\n. "$HOME/.cargo/env"\n' >> ~/.zshenv
 rustup target add x86_64-pc-windows-msvc
 ```
 
-Geprüft: `rustc 1.100.0`, `cargo 1.100.0`. Mindestens 1.88 ist nötig (async-imap).
+Geprüft: `rustc 1.100.0`, `cargo 1.100.0`. Mindestens 1.90 ist nötig (Tauri 2.12, siehe `docs/decisions/0006-rusqlite-version-und-msrv.md`).
 
 ### Nur auf dem Mac mini: `cc` ist belegt
 
