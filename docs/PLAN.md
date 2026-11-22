@@ -28,8 +28,8 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | offen | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
 | 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | offen | Signaturen, Vorlagen, Kontakte, Später senden |
 | 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | offen | **Geräte gleichen sich über das Postfach ab** |
-| 12 | [KI-Grundlage](stages/12-ki-grundlage.md) | offen | Zusammenfassen, Antwortvorschläge, Schreibhilfe |
-| 13 | [KI-Suche und Vorschläge](stages/13-ki-suche-und-vorschlaege.md) | offen | Fragen in natürlicher Sprache mit Quellen |
+| 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | offen | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
+| 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | offen | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
 | 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | bei Bedarf | Microsoft, Gmail-Eigenheiten, JMAP |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen | öffentliches Repo, signierte Builds, Updates |
 
@@ -39,7 +39,7 @@ Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
 
 Stufen 00 bis 06 sind der kritische Pfad und bauen streng aufeinander auf. Danach ist die Reihenfolge
 weniger fest: 07 bis 10 lassen sich tauschen, 11 braucht 09 (Snooze, Pins) und 10 (Signaturen,
-Vorlagen), 13 braucht 07 und 12. Stufe 14 kommt, sobald ein Konto sie braucht.
+Vorlagen), 12 braucht 05 und 07, 13 braucht 07 und 12. Stufe 14 kommt, sobald ein Konto sie braucht.
 
 ## Was der Mensch beisteuert
 
@@ -50,7 +50,8 @@ Vorlagen), 13 braucht 07 und 12. Stufe 14 kommt, sobald ein Konto sie braucht.
 | nach Stufe 2 | ein echtes Konto in der App einrichten (bleibt nur lesend) und Vollständigkeit prüfen |
 | nach Stufe 4 | entscheiden, für welches echte Konto Schreibzugriff freigeschaltet wird |
 | vor Stufe 6 | Zugang zum Windows-Rechner klären (SSH vom Mac mini oder Handprüfung nach Checkliste) |
-| vor Stufe 12 | Ollama oder einen API-Schlüssel bereitstellen |
+| vor Stufe 12 | einen MCP-fähigen KI-Client zum Testen (z. B. Claude Desktop oder Claude Code) |
+| vor Stufe 13 | Ollama oder einen API-Schlüssel, falls KI in der App gewünscht |
 | vor Stufe 15 | Apple-Developer-Konto und Windows-Signaturzertifikat, falls signierte Builds gewünscht |
 
 ## Mehrere Stufen am Stück

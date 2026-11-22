@@ -38,7 +38,7 @@ zwei Sitzungen verteilt werden (A: Kategorien, Pins, Snooze, Aufgaben, Regeln. B
 ## Nicht in dieser Stufe
 
 - Zu- oder Absagen von Einladungen, eigener Kalender
-- Kategorien per KI (Stufe 13)
+- Kategorien per KI (bei Bedarf nach Stufe 13)
 - Abgleich von Snooze und Pins zwischen Geräten (Stufe 11)
 
 ## Der Mensch prüft danach

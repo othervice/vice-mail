@@ -32,7 +32,7 @@ keine Mail wird versehentlich zweimal verschickt. Danach ist die App auf dem Mac
 ## Nicht in dieser Stufe
 
 - HTML-Signaturen, Vorlagen, Inline-Bilder, Kontaktverwaltung, Später senden (Stufe 10)
-- KI-Schreibhilfe (Stufe 12)
+- KI-Schreibhilfe (Stufe 13)
 
 ## Der Mensch prüft danach
 

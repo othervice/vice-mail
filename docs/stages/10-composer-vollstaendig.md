@@ -32,7 +32,7 @@ Kontakte und geplantes Senden.
 
 - Abgleich mit externen Adressbüchern (CardDAV)
 - Geplantes Senden über einen Server
-- KI-Schreibhilfe (Stufe 12)
+- KI-Schreibhilfe (Stufe 13)
 
 ## Der Mensch prüft danach
 

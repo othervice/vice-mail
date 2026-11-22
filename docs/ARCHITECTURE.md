@@ -16,7 +16,7 @@ mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Rege
    └── mail-model        Typen, Fehler, Capabilities, MailBackend-Trait, ohne IO
 ```
 
-Später kommen `mail-ai` (Stufe 12) und bei Bedarf weitere Adapter (Stufe 14) dazu. Der
+Später kommen der MCP-Server (Stufe 12), `mail-ai` (Stufe 13, optional) und bei Bedarf weitere Adapter (Stufe 14) dazu. Der
 Einstellungs-Sync (Stufe 11) beginnt als Modul in `mail-engine` und wird erst ein eigenes Crate,
 wenn er groß genug ist.
 
@@ -287,7 +287,8 @@ einer klaren Meldung abgelehnt.
   höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
   Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft).
 - Externe Bilder einer Mail, nach Freigabe
-- KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat
+- KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13)
+- Der MCP-Server nimmt nur lokale Verbindungen an (stdio bzw. `127.0.0.1`) und baut selbst keine auf
 - Abmelde-Adressen (List-Unsubscribe) nach Klick
 - Update-Prüfung ab Stufe 15, abschaltbar
 - Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
@@ -329,11 +330,28 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 
 ## KI
 
-- Trait `AiProvider` mit zwei Umsetzungen: OpenAI-kompatible Chat-Schnittstelle mit frei wählbarer
-  Basis-URL (Ollama, LM Studio, llama.cpp-Server, OpenRouter, OpenAI) und Anthropic Messages API.
-  Für Rust gibt es kein offizielles Anthropic-SDK, also direktes HTTP nach der offiziellen Doku.
+Zwei Wege, beide aus, bis der Nutzer sie einschaltet (`docs/decisions/0010-ki-ueber-mcp.md`):
+
+**MCP-Server (Stufe 12, Hauptweg).** Die App bietet einen lokalen MCP-Server an. Jeder MCP-fähige
+KI-Client (Claude Desktop, Claude Code, Cursor, LM Studio …) kann freigegebene Konten durchsuchen,
+Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und keinen Schlüssel.
+- Nur lokal: stdio über ein Hilfsprogramm oder HTTP auf `127.0.0.1` mit Token je Client; nie im Netz.
+- Je Konto: unsichtbar, lesen, lesen und Entwürfe. Standard: unsichtbar.
+- Kein Werkzeug sendet, löscht, verschiebt, markiert oder ändert Einstellungen.
+- Werkzeuge liefern bereinigten Text (kein rohes HTML, keine externen Bilder, Anhänge nur mit Namen),
+  als nicht vertrauenswürdige Daten gekennzeichnet, mit Größen- und Mengengrenzen.
+- Jeder Zugriff ist in der App sichtbar; Clients einzeln widerrufbar, Not-Aus für alle.
+- Grenze, ehrlich benannt: Der Client hat eigene Werkzeuge, und Mailinhalte können ihn mit
+  eingeschleusten Anweisungen manipulieren. Die App begrenzt, was er bekommt und tun darf; was ein
+  Cloud-Client mit gelesenen Mails macht, liegt außerhalb der App.
+
+**KI in der App (Stufe 13, optional).** Für Funktionen in der Oberfläche (Zusammenfassen,
+Antwortvorschläge, Schreibhilfe, Suche in natürlicher Sprache) ein Trait `AiProvider` mit einer
+Umsetzung über die OpenAI-kompatible Chat-Schnittstelle mit frei wählbarer Basis-URL (Ollama,
+LM Studio, llama.cpp-Server, OpenRouter, OpenAI); ein eigener Anbieter für die Anthropic Messages API
+nur, wenn die kompatible Schnittstelle nicht genügt.
 - Mail-Inhalte sind Daten, keine Anweisungen: fester Systemtext im Code, Mailtext klar abgegrenzt im Nutzerteil.
-- Das Modell bekommt keine Werkzeuge. Es kann also strukturell nichts senden, löschen oder abrufen.
+- Das eingebaute Modell bekommt keine Werkzeuge. Es kann also strukturell nichts senden, löschen oder abrufen.
 - Ausgaben werden als Text angezeigt. Bilder aus KI-Ausgaben werden nie geladen, Links laufen durch
   dieselbe Prüfung wie Links in Mails.
 - Gesendet wird nur, was die Anfrage braucht: der aktuelle Thread ohne doppelte Zitate und ohne
@@ -359,6 +377,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | Keine Datenbank-Verschlüsselung in Version 1 | FileVault und BitLocker schützen die Platte; SQLCipher kostet Tempo und erschwert Windows-Builds | rusqlite kann SQLCipher per Feature zuschalten |
 | rusqlite statt SQLx | ein Prozess, ein Schreiber; synchron ist einfacher und schneller | Speicherzugriff ist hinter `mail-store` gekapselt |
 | KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
+| KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
 | Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |

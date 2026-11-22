@@ -103,8 +103,11 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Passwörter und Tokens bleiben auf dem Gerät.
 
 ### KI
-- Anbieter frei wählbar: lokal (Ollama, LM Studio und alles mit OpenAI-kompatibler Schnittstelle)
-  oder mit eigenem API-Schlüssel (Anthropic, OpenAI-kompatible Dienste).
+- Eigene KI anschließen über eine lokale MCP-Schnittstelle (Claude Desktop, Claude Code, Cursor,
+  LM Studio und andere MCP-fähige Clients): Mails durchsuchen, Threads lesen, Entwürfe anlegen.
+  Je Konto freizugeben, standardmäßig nur lesend, nie senden, löschen oder verschieben.
+- Optional KI direkt in der App, Anbieter frei wählbar: lokal (Ollama, LM Studio und alles mit
+  OpenAI-kompatibler Schnittstelle) oder mit eigenem API-Schlüssel.
 - Funktionen: Thread zusammenfassen, Antwortvorschläge, Schreibhilfe (verbessern, kürzen,
   umformulieren, Ton, übersetzen), Suche in natürlicher Sprache, Hinweise auf mögliche offene Antworten.
 - Jede Aussage einer Zusammenfassung oder Suchantwort verweist auf die Mail, aus der sie stammt.
@@ -162,4 +165,5 @@ Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr lange
 | Frage | Empfehlung | Bis wann |
 |---|---|---|
 | Zugang zum Windows-Rechner für Tests | SSH vom Mac mini aus, sonst Handprüfung nach Checkliste | vor Stufe 6 |
-| KI-Anbieter für den eigenen Gebrauch | Ollama lokal zum Testen, API-Schlüssel nach Wahl | vor Stufe 12 |
+| KI-Client zum Testen der MCP-Schnittstelle | vorhandenes Claude Desktop oder Claude Code | vor Stufe 12 |
+| KI-Anbieter für KI in der App | Ollama lokal, API-Schlüssel nach Wahl | vor Stufe 13 |
