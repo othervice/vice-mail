@@ -13,6 +13,7 @@ app/src-tauri            dünne Shell: Fenster, Commands, Verdrahtung
 mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Regeln
    ├── mail-store        SQLite, Migrationen, FTS5, Abfragen
    ├── mail-imap         IMAP- und SMTP-Adapter, implementiert MailBackend
+   ├── mail-content      Parsen, HTML-Bereinigung, Link-Prüfung, Dateinamen (rein, ohne IO)
    └── mail-model        Typen, Fehler, Capabilities, MailBackend-Trait, ohne IO
 ```
 
@@ -42,7 +43,7 @@ wenn er groß genug ist.
 | SMTP | lettre (Tokio, rustls) | 0.11 | Standard in Rust |
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0 / 2.0 | robust gegen kaputte Mails, vom Stalwart-Projekt |
 | Body-Ablage | zstd (Stufe 3, mit Prüfsumme) | 0.14.4 | gleiches Verhältnis wie Deflate, 4- bis 20-mal schneller beim Packen; Dateien statt BLOBs, damit Datenbank und Migrationssicherungen klein bleiben (0009) |
-| HTML-Bereinigung | ammonia | 4.2 | Allowlist-Sanitizer |
+| HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
 | TLS | rustls mit Provider `ring`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7 | kein OpenSSL, einfache Windows-Builds; selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver. `ring` hat eine begründete Ausnahme von der 12-Monats-Regel (0002) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
@@ -86,6 +87,9 @@ vice-mail/
 - `mail-store`: einzige Stelle mit SQL. Ein Schreib-Thread, ein Pool von Lese-Verbindungen, WAL.
   Kein Datenbankaufruf blockiert einen Tokio-Worker.
 - `mail-imap`: spricht IMAP und SMTP, liefert Modelltypen. Kennt weder Datenbank noch Oberfläche.
+- `mail-content`: macht aus Rohdaten eine angezeigte Mail: Parsen, HTML-Bereinigung mit Pflicht-CSP,
+  Link-Platzhalter, Link-Warnungen, sichere Dateinamen, Vorschautext. Rein, ohne IO, ohne Tokio;
+  sicherheitskritisch und mit eigenem Korpus getestet (deshalb ein fünftes Crate).
 - `mail-engine`: verbindet Adapter und Speicher. Bietet der Shell eine Fassade `AppCore` und einen
   Strom typisierter Ereignisse. Alles Verhalten ist über `AppCore` ohne WebView testbar.
 - `app/src-tauri`: reicht Commands an `AppCore` durch und Ereignisse an die Oberfläche weiter.
@@ -241,14 +245,18 @@ einer klaren Meldung abgelehnt.
 ## Sicherheitsgrenzen
 
 **HTML aus Mails**
+0. Eine lineare Vorprüfung weist HTML ab, das html5ever quadratisch langsam machen oder die Ausgabe
+   aufblähen würde (mehr als 150.000 Tags, Tiefe über 1500, zu viele offene Formatierungs-Tags);
+   solche Mails werden als Text gezeigt.
 1. In Rust mit ammonia bereinigen: kein Script, keine Ereignis-Attribute, keine Formulare, kein
    `meta refresh`, kein `base`, keine eingebetteten Objekte oder Frames.
 2. Externe Adressen in Bildern, `srcset`, Hintergründen und CSS durch Platzhalter ersetzen, solange
    der Nutzer sie nicht freigegeben hat. Inline-Bilder (`cid:`) kommen aus dem lokalen Speicher.
 3. Anzeige in einem `srcdoc`-`iframe` mit `sandbox="allow-same-origin"` und sonst nichts, nie
    `allow-scripts` (mit beidem zusammen erreichte ein Script in Spike D `parent.__TAURI_INTERNALS__`).
-   Jedes `srcdoc` beginnt mit einer Pflicht-Meta-CSP (`default-src 'none'; img-src data: …;
-   style-src 'unsafe-inline'`). Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
+   Jedes `srcdoc` beginnt mit der Pflicht-Meta-CSP `default-src 'none'; img-src data:; style-src
+   'unsafe-inline'; base-uri 'none'; form-action 'none'` und `<meta name="referrer"
+   content="no-referrer">`. Bilder nur als `data:` mit vom Kern erkannten Rasterformaten, nie SVG. Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
    `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
    Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005).
 4. Freigegebene externe Bilder lädt der Rust-Kern: ohne Cookies, ohne Referrer, mit neutraler
@@ -257,7 +265,8 @@ einer klaren Meldung abgelehnt.
    Linktext oder bei verdächtigen Domains. Geöffnet wird im System-Browser, nur `http`, `https`, `mailto`.
    Einziger Abfangpunkt ist der Navigations-Hook in Rust (`on_navigation`): WebKit ruft in einem Frame
    ohne `allow-scripts` keine Event-Listener auf, auch keine vom Elternfenster. Der Bereiniger schreibt
-   deshalb jedes `href` auf einen http(s)-Platzhalter mit Index um (das echte Ziel kennt nur der Kern)
+   deshalb jedes `href` auf `https://link.invalid/<Render-Token>/<Index>` um (das echte Ziel kennt nur
+   der Kern; ein Platzhalter mit fremdem Token aus der Mail selbst wird ebenfalls umgeschrieben)
    und entfernt `<link>`, `target`, `ping` und `download`: `<link rel=preconnect>` und Klicks auf
    `target=_blank` öffnen sonst TCP-Verbindungen, die weder Sandbox noch CSP verhindern (0005).
 6. Die CSP der App erlaubt für die Mail-Anzeige `style-src 'self' 'unsafe-inline'` (sonst greift kein
