@@ -102,9 +102,25 @@
   --ui-header-height: 3.5rem;
   --ui-settings-nav-width: 12rem;
   --ui-content-max-width: 40rem;
+  --ui-form-max-width: 36rem;
+  /* The rail unfolded into the labelled sidebar with the folder tree. */
+  --ui-sidebar-width: 15rem;
+  --ui-avatar: 1.75rem;
+  --ui-dot: 0.5rem;
+  /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
+     width rows get two lines. The list reads these values for its virtualizer. */
+  --ui-row-height: 2.75rem;
+  --ui-row-height-two-line: 3.75rem;
+  --ui-section-height: 2rem;
+  --ui-list-two-line-below: 45rem;
+  --ui-list-sender-width: 12rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the
      platform draws its window buttons over the web view (macOS, see app.css). */
   --ui-titlebar-inset: 0px;
+  /* Right edge of the window buttons the platform draws over the web view (macOS, app.css). */
+  --ui-window-buttons-end: 0px;
+  /* Start padding of view headers; larger where the window buttons reach into the header. */
+  --ui-header-inset-start: var(--ui-space-6);
 }
 
 :root[data-theme="dark"] {

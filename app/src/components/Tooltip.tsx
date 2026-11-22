@@ -1,16 +1,22 @@
 import { Tooltip as RadixTooltip } from "radix-ui";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 
 interface TooltipProps {
   label: string;
   side?: "top" | "right" | "bottom" | "left";
+  /**
+   * No tooltip, e.g. where the label is visible anyway. The control stays the same element, so
+   * switching does not move the keyboard focus.
+   */
+  disabled?: boolean;
   children: ReactElement;
 }
 
 /** Shows `label` next to a control on hover and keyboard focus. The control keeps its own name. */
-export function Tooltip({ label, side = "bottom", children }: TooltipProps) {
+export function Tooltip({ label, side = "bottom", disabled = false, children }: TooltipProps) {
+  const [open, setOpen] = useState(false);
   return (
-    <RadixTooltip.Root>
+    <RadixTooltip.Root open={open && !disabled} onOpenChange={setOpen}>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content

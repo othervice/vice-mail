@@ -3,22 +3,31 @@ import { cx } from "./cx";
 
 interface ButtonProps {
   children: ReactNode;
-  onClick: () => void;
-  variant?: "primary" | "secondary";
+  onClick?: () => void;
+  variant?: "primary" | "secondary" | "danger" | "quiet";
+  type?: "button" | "submit";
+  disabled?: boolean;
+  /** Stable hook for the desktop tests (labels change with the language). */
+  "data-testid"?: string;
 }
 
 const VARIANTS = {
   primary: "bg-accent text-on-accent hover:bg-accent/90",
   secondary: "border border-border-strong bg-surface text-primary hover:bg-hover",
+  danger: "bg-danger text-on-accent hover:bg-danger/90",
+  quiet: "text-accent hover:bg-hover",
 } as const;
 
-export function Button({ children, onClick, variant = "primary" }: ButtonProps) {
+export function Button({ children, onClick, variant = "primary", type = "button", disabled = false, ...rest }: ButtonProps) {
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
+      disabled={disabled}
+      data-testid={rest["data-testid"]}
       className={cx(
-        "inline-flex h-8 items-center justify-center gap-2 rounded-control px-3 text-13 font-medium transition-colors",
+        "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control px-3 text-13 font-medium transition-colors",
+        "disabled:cursor-default disabled:opacity-50",
         VARIANTS[variant],
       )}
     >

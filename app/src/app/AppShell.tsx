@@ -14,9 +14,11 @@ interface AppShellProps {
 export function AppShell({ eventsError }: AppShellProps) {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
+  const sidebarExpanded = useUiStore((state) => state.sidebarExpanded);
 
   return (
-    <div className="flex h-full bg-canvas text-primary">
+    // `data-sidebar` lets app.css move header titles clear of the macOS window buttons.
+    <div className="flex h-full bg-canvas text-primary" data-sidebar={sidebarExpanded ? "expanded" : "collapsed"}>
       <IconRail />
       <main className="flex min-w-0 flex-1 flex-col bg-surface">
         {eventsError && (
@@ -24,7 +26,7 @@ export function AppShell({ eventsError }: AppShellProps) {
             <ErrorNotice context={t("errors.context.events")} error={eventsError} />
           </div>
         )}
-        {view.kind === "mail" ? <MailView viewId={view.mailView} /> : <SettingsView section={view.section} />}
+        {view.kind === "settings" ? <SettingsView section={view.section} /> : <MailView view={view} />}
       </main>
     </div>
   );

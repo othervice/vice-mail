@@ -6,24 +6,70 @@
 import {
   commands,
   events,
+  type Account,
+  type AccountColor,
+  type AccountId,
+  type AccountSettings,
+  type AccountState,
+  type AccountStatus,
+  type Address,
   type AppInfo,
+  type Capabilities,
+  type ConnectionTestResult,
   type CoreEvent,
+  type DiscoveryResult,
+  type DiscoverySource,
   type ErrorCode,
   type IpcError,
   type LanguagePreference,
+  type ListCursor,
+  type Mailbox,
+  type MailboxId,
+  type MailboxRole,
+  type MessageId,
+  type MessageListItem,
+  type MessagePage,
   type Platform,
   type Preferences,
+  type ProviderHint,
+  type RoleSource,
+  type Security,
+  type ServerSettings,
+  type SyncProgress,
   type ThemePreference,
 } from "../generated/bindings";
 
 export type {
+  Account,
+  AccountColor,
+  AccountId,
+  AccountSettings,
+  AccountState,
+  AccountStatus,
+  Address,
   AppInfo,
+  Capabilities,
+  ConnectionTestResult,
   CoreEvent,
+  DiscoveryResult,
+  DiscoverySource,
   ErrorCode,
   IpcError,
   LanguagePreference,
+  ListCursor,
+  Mailbox,
+  MailboxId,
+  MailboxRole,
+  MessageId,
+  MessageListItem,
+  MessagePage,
   Platform,
   Preferences,
+  ProviderHint,
+  RoleSource,
+  Security,
+  ServerSettings,
+  SyncProgress,
   ThemePreference,
 };
 
@@ -34,6 +80,22 @@ export const ERROR_CODES = [
   "not_found",
   "database",
   "database_too_new",
+  "auth_failed",
+  "cert_untrusted",
+  "cert_name_mismatch",
+  "cert_expired",
+  "tls_failed",
+  "starttls_unavailable",
+  "connection_refused",
+  "connection_timeout",
+  "connection_lost",
+  "dns_failed",
+  "protocol",
+  "server_rejected",
+  "read_only",
+  "unsupported_server",
+  "keychain",
+  "account_exists",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -95,6 +157,11 @@ async function call<T>(start: () => Promise<SpectaResult<T>>): Promise<T> {
   return result.data;
 }
 
+/** Commands without a result answer `null`; callers only need to know that they finished. */
+async function done(result: Promise<null>): Promise<void> {
+  await result;
+}
+
 export type Unsubscribe = () => void;
 
 export const ipc = {
@@ -102,6 +169,26 @@ export const ipc = {
   getPreferences: (): Promise<Preferences> => call(() => commands.getPreferences()),
   setPreferences: (preferences: Preferences): Promise<Preferences> =>
     call(() => commands.setPreferences(preferences)),
+
+  listAccounts: (): Promise<Account[]> => call(() => commands.listAccounts()),
+  /** Built-in provider table only; never touches the network. */
+  discoverKnownProvider: (email: string): Promise<DiscoveryResult> =>
+    call(() => commands.discoverKnownProvider(email)),
+  /** Contacts DNS and `autoconfig.<domain>`: only call this after the user clicked for it. */
+  discoverOnline: (email: string): Promise<DiscoveryResult> => call(() => commands.discoverOnline(email)),
+  testConnection: (settings: AccountSettings, password: string): Promise<ConnectionTestResult> =>
+    call(() => commands.testConnection(settings, password)),
+  addAccount: (settings: AccountSettings, password: string): Promise<Account> =>
+    call(() => commands.addAccount(settings, password)),
+  removeAccount: (accountId: AccountId): Promise<void> => done(call(() => commands.removeAccount(accountId))),
+  retryAccount: (accountId: AccountId): Promise<void> => done(call(() => commands.retryAccount(accountId))),
+  updatePassword: (accountId: AccountId, password: string): Promise<void> =>
+    done(call(() => commands.updatePassword(accountId, password))),
+  listMailboxes: (accountId: AccountId): Promise<Mailbox[]> => call(() => commands.listMailboxes(accountId)),
+  setMailboxRole: (mailboxId: MailboxId, role: MailboxRole): Promise<Mailbox[]> =>
+    call(() => commands.setMailboxRole(mailboxId, role)),
+  listMessages: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
+    call(() => commands.listMessages(mailboxId, cursor, limit)),
 
   /** Subscribes to the typed event stream of the core. Resolves once the listener is registered. */
   onCoreEvent: async (handler: (event: CoreEvent) => void): Promise<Unsubscribe> => {

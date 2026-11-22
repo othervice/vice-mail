@@ -33,8 +33,19 @@ function fakeMatchMedia(query: string): MediaQueryList {
   } as unknown as MediaQueryList;
 }
 
+/**
+ * jsdom has no layout, so nothing ever resizes: an observer that observes and never calls back.
+ * Radix form controls and the list virtualizer only need it to exist.
+ */
+class FakeResizeObserver implements ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
 export function installSystemFakes(): void {
   window.matchMedia = fakeMatchMedia;
+  window.ResizeObserver = FakeResizeObserver;
 }
 
 export function resetSystem(): void {

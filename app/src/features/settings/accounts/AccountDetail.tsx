@@ -1,0 +1,272 @@
+import { ArrowLeft } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "../../../components/Button";
+import { ErrorNotice } from "../../../components/ErrorNotice";
+import { Notice } from "../../../components/Notice";
+import { TextField } from "../../../components/TextField";
+import type { Account, ServerSettings } from "../../../services/ipc";
+import { useUiStore } from "../../../stores/ui";
+import { Avatar } from "../../accounts/Avatar";
+import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
+import { SpecialFolders } from "./SpecialFolders";
+
+function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 border-t border-border pt-6">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-14 font-semibold text-primary">{title}</h3>
+        {description && <p className="text-13 text-secondary">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function formatDateTime(ms: number, language: string): string {
+  return new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(ms);
+}
+
+function StatusBlock({ account }: { account: Account }) {
+  const { t, i18n } = useTranslation();
+  const retry = useRetryAccount();
+  const { status } = account;
+  const stateText = t(`settings.accounts.detail.states.${status.state}`);
+  return (
+    <Block title={t("settings.accounts.detail.status")}>
+      <p className="text-14 text-primary" data-testid="account-state">
+        {stateText}
+      </p>
+      <p className="text-13 text-secondary">
+        {status.lastSyncAt === null
+          ? t("settings.accounts.detail.neverSynced")
+          : t("settings.accounts.detail.lastSync", { time: formatDateTime(status.lastSyncAt, i18n.language) })}
+      </p>
+      {status.error && (status.state === "offline" || status.state === "error") && (
+        <ErrorNotice
+          context={stateText}
+          error={status.error}
+          onRetry={() => {
+            retry.mutate(account.id);
+          }}
+        />
+      )}
+      {retry.isError && <ErrorNotice context={t("status.retryFailed")} error={retry.error} />}
+    </Block>
+  );
+}
+
+function ServerRow({ label, server }: { label: string; server: ServerSettings }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col">
+      <dt className="text-12 text-secondary">{label}</dt>
+      <dd className="text-13 text-primary select-text">
+        {t("settings.accounts.setup.serverSummary", {
+          host: server.host,
+          port: String(server.port),
+          security: t(`settings.accounts.setup.securityOptions.${server.security}`),
+        })}
+      </dd>
+      <dd className="text-12 text-secondary select-text">
+        {t("settings.accounts.setup.usernameValue", { username: server.username })}
+      </dd>
+    </div>
+  );
+}
+
+function PasswordChange({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState("");
+  const update = useUpdatePassword();
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!password) return;
+    update.mutate(
+      { accountId: account.id, password },
+      {
+        onSuccess: () => {
+          setPassword("");
+        },
+      },
+    );
+  };
+  return (
+    <Block title={t("settings.accounts.detail.password.title")} description={t("settings.accounts.detail.password.description")}>
+      <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-3" data-testid="password-form">
+        <TextField
+          type="password"
+          label={t("settings.accounts.detail.password.label")}
+          value={password}
+          onChange={(next) => {
+            setPassword(next);
+            update.reset();
+          }}
+          data-testid="new-password"
+        />
+        <div>
+          <Button type="submit" variant="secondary" disabled={!password || update.isPending}>
+            {update.isPending ? t("settings.accounts.detail.password.saving") : t("settings.accounts.detail.password.save")}
+          </Button>
+        </div>
+        {update.isSuccess && <Notice tone="success" role="status" title={t("settings.accounts.detail.password.saved")} />}
+        {update.isError && <ErrorNotice context={t("settings.accounts.detail.password.failed")} error={update.error} />}
+      </form>
+    </Block>
+  );
+}
+
+/**
+ * Removing an account deletes local data and the keychain entry, which no undo can bring back.
+ * DESIGN.md keeps dialogs for permanently deleting mail, so this asks inline, in place: one more
+ * deliberate click, the consequences spelled out, nothing modal.
+ */
+function RemoveAccount({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const [confirming, setConfirming] = useState(false);
+  const remove = useRemoveAccount();
+  const showAccountsPage = useUiStore((state) => state.showAccountsPage);
+  const confirmRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+  }, [confirming]);
+
+  return (
+    <Block title={t("settings.accounts.detail.remove.title")} description={t("settings.accounts.detail.remove.description")}>
+      {confirming ? (
+        <div
+          ref={confirmRef}
+          tabIndex={-1}
+          role="group"
+          aria-labelledby="remove-account-title"
+          className="flex flex-col gap-3 rounded-card border border-danger p-4"
+          data-testid="remove-confirm"
+        >
+          <p id="remove-account-title" className="font-semibold text-primary">
+            {t("settings.accounts.detail.remove.confirmTitle", { email: account.email })}
+          </p>
+          <p className="text-secondary">{t("settings.accounts.detail.remove.confirmBody")}</p>
+          <div className="flex gap-2">
+            <Button
+              variant="danger"
+              disabled={remove.isPending}
+              onClick={() => {
+                remove.mutate(account.id, {
+                  onSuccess: () => {
+                    showAccountsPage({ kind: "list" });
+                  },
+                });
+              }}
+            >
+              {remove.isPending ? t("settings.accounts.detail.remove.removing") : t("settings.accounts.detail.remove.confirm")}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={remove.isPending}
+              onClick={() => {
+                setConfirming(false);
+                remove.reset();
+              }}
+            >
+              {t("settings.accounts.detail.remove.cancel")}
+            </Button>
+          </div>
+          {remove.isError && <ErrorNotice context={t("settings.accounts.detail.remove.failed")} error={remove.error} />}
+        </div>
+      ) : (
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setConfirming(true);
+            }}
+          >
+            {t("settings.accounts.detail.remove.action")}
+          </Button>
+        </div>
+      )}
+    </Block>
+  );
+}
+
+/** One account: status, read-only note, servers, password, special folders, removal. */
+export function AccountDetail({ accountId }: { accountId: string }) {
+  const { t } = useTranslation();
+  const accounts = useAccounts();
+  const showAccountsPage = useUiStore((state) => state.showAccountsPage);
+  const account = accounts.data?.find((a) => a.id === accountId);
+
+  const back = (
+    <div>
+      <Button
+        variant="quiet"
+        onClick={() => {
+          showAccountsPage({ kind: "list" });
+        }}
+      >
+        <ArrowLeft aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {t("settings.accounts.back")}
+      </Button>
+    </div>
+  );
+
+  if (!account) {
+    return (
+      <div className="flex max-w-(--ui-content-max-width) flex-col gap-6">
+        {back}
+        {accounts.isError ? (
+          <ErrorNotice
+            context={t("settings.accounts.loadFailed")}
+            error={accounts.error}
+            onRetry={() => {
+              void accounts.refetch();
+            }}
+          />
+        ) : (
+          accounts.isSuccess && <p className="text-14 text-secondary">{t("errors.codes.not_found.title")}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <section aria-labelledby="account-title" className="flex max-w-(--ui-content-max-width) flex-col gap-6" data-testid="account-detail">
+      {back}
+      <div className="flex items-center gap-3">
+        <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
+        <div className="flex min-w-0 flex-col">
+          <h2 id="account-title" className="truncate text-16 font-semibold text-primary">
+            {account.displayName || account.email}
+          </h2>
+          <p className="truncate text-13 text-secondary select-text">{account.email}</p>
+        </div>
+        {!account.writesEnabled && (
+          <span className="ms-auto shrink-0 rounded-control border border-border-strong px-2 text-12 font-medium text-secondary">
+            {t("settings.accounts.readOnly")}
+          </span>
+        )}
+      </div>
+      {!account.writesEnabled && (
+        <Notice title={t("settings.accounts.setup.readOnlyTitle")}>
+          <p>{t("settings.accounts.setup.readOnlyBody")}</p>
+        </Notice>
+      )}
+      <StatusBlock account={account} />
+      <Block title={t("settings.accounts.detail.servers")}>
+        <dl className="flex flex-col gap-3">
+          <ServerRow label={t("settings.accounts.setup.incoming")} server={account.imap} />
+          <ServerRow label={t("settings.accounts.setup.outgoing")} server={account.smtp} />
+        </dl>
+      </Block>
+      <PasswordChange account={account} />
+      <Block
+        title={t("settings.accounts.detail.folders.title")}
+        description={t("settings.accounts.detail.folders.description")}
+      >
+        <SpecialFolders account={account} />
+      </Block>
+      <RemoveAccount account={account} />
+    </section>
+  );
+}

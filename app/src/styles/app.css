@@ -93,9 +93,21 @@
   --default-transition-timing-function: var(--ui-ease-out);
 }
 
-/* macOS: the window buttons sit over the web view (titleBarStyle "Overlay"). */
+/*
+ * macOS: the window buttons sit over the web view (titleBarStyle "Overlay"). tauri.conf.json moves
+ * them (`trafficLightPosition`) onto the middle of the 56 px list header, so the title-bar band is
+ * as high as the header and the rail's first icon starts below the header line. Pixels, not the
+ * header token: the system places the buttons in pixels. The three buttons (14 px, 23 px apart,
+ * from x 20) end at 80 px, past the 56 px rail: while the rail is collapsed, header titles start
+ * after them.
+ */
 :root[data-platform="macos"] {
-  --ui-titlebar-inset: 32px;
+  --ui-titlebar-inset: 56px;
+  --ui-window-buttons-end: 80px;
+}
+
+:root[data-platform="macos"] [data-sidebar="collapsed"] {
+  --ui-header-inset-start: calc(var(--ui-window-buttons-end) - var(--ui-rail-width) + var(--ui-space-6));
 }
 
 @layer base {

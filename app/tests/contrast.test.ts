@@ -38,6 +38,9 @@ const TEXT_PAIRS: [string, string][] = [
   ...["danger", "success", "warning"].flatMap((fg) =>
     ["canvas", "surface", "surface-raised"].map((bg): [string, string] => [fg, bg]),
   ),
+  // Stage 2: label of the danger button ("Remove"), quiet buttons on hover.
+  ["text-on-accent", "danger"],
+  ["accent", "hover"],
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -48,9 +51,14 @@ const CONTROL_PAIRS: [string, string][] = [
   ["accent", "rail"],
   ["accent", "selected"],
   ["danger", "surface"],
+  // Stage 2. Account rings on avatars in list rows (plain, selected, hovered) and in the rail.
   ...ACCOUNTS.flatMap((account) =>
-    ["canvas", "surface", "surface-raised", "rail"].map((bg): [string, string] => [account, bg]),
+    ["canvas", "surface", "surface-raised", "rail", "selected", "hover"].map((bg): [string, string] => [account, bg]),
   ),
+  // Unread dot and flag in list rows, error badge on the rail's account entry.
+  ...["accent", "warning"].flatMap((fg) => ["surface", "selected", "hover"].map((bg): [string, string] => [fg, bg])),
+  ["danger", "rail"],
+  ["text-secondary", "rail"],
 ];
 
 describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {

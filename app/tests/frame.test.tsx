@@ -9,8 +9,11 @@ describe("app frame without an account", () => {
     renderApp();
 
     expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "No account yet" })).toBeTruthy();
+    // The account list comes from the core; without an account the empty state says what to do.
+    expect(await screen.findByRole("heading", { name: "No account yet" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add account" })).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.queryByTestId("sync-status")).toBeNull();
     // No mail rows, no counters: the only list in the main area would be mail, and there is none.
     const main = screen.getByRole("main");
     expect(within(main).queryAllByRole("listitem")).toHaveLength(0);
@@ -54,7 +57,7 @@ describe("app frame without an account", () => {
     expect(screen.getByRole("button", { name: "Inbox" }).getAttribute("aria-current")).toBeNull();
   });
 
-  it("'Add account' opens Settings → Accounts, which says honestly that setup comes later", async () => {
+  it("'Add account' opens the account setup as a view of Settings → Accounts, not a dialog", async () => {
     mockCore();
     const { user } = renderApp();
 
@@ -62,10 +65,23 @@ describe("app frame without an account", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Accounts" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("heading", { name: "No accounts yet" })).toBeTruthy();
-    expect(screen.getByText("Setting up email accounts arrives in a later version of the app.")).toBeTruthy();
-    // No fake form.
-    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "Add account" })).toBeTruthy();
+    expect(screen.getByLabelText("Email address")).toBeTruthy();
+    expect(screen.getByLabelText("Password")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Settings → Accounts without accounts offers to add one instead of an invented list", async () => {
+    mockCore();
+    const { user } = renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Accounts" }));
+
+    expect(await screen.findByRole("heading", { name: "No accounts yet" })).toBeTruthy();
+    expect(screen.getByRole("tabpanel").textContent).not.toMatch(/@/);
+    await user.click(screen.getByRole("button", { name: "Add account" }));
+    expect(screen.getByRole("heading", { level: 2, name: "Add account" })).toBeTruthy();
   });
 
   it("settings is a view with General, Accounts, Appearance and About, not a dialog", async () => {
