@@ -20,8 +20,10 @@ mod message;
 mod outbox;
 mod reading;
 mod role;
+pub mod search;
 mod secret;
 mod send;
+pub mod threading;
 mod uid_set;
 mod writer;
 
