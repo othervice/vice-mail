@@ -1,0 +1,7 @@
+# Dependency build scripts stay off unless listed as true. These three only download browser
+# drivers or binaries the desktop tests do not use (the WebDriver is embedded in the e2e app build;
+# Vite 8 bundles with Rolldown).
+allowBuilds:
+  edgedriver: false
+  esbuild: false
+  geckodriver: false

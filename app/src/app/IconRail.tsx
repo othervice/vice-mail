@@ -11,9 +11,11 @@ interface RailButtonProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  /** Stable hook for the desktop tests (labels change with the language). */
+  "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, active, onClick }: RailButtonProps) {
+function RailButton({ icon: Icon, label, active, onClick, "data-testid": testId }: RailButtonProps) {
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
   const className = cx(
     "relative flex size-(--ui-rail-item) items-center justify-center rounded-card transition-colors",
@@ -23,7 +25,14 @@ function RailButton({ icon: Icon, label, active, onClick }: RailButtonProps) {
   );
   return (
     <Tooltip label={label} side="right">
-      <button type="button" aria-label={label} aria-current={active ? "page" : undefined} onClick={onClick} className={className}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
+        onClick={onClick}
+        className={className}
+        data-testid={testId}
+      >
         <Icon aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
       </button>
     </Tooltip>
@@ -55,6 +64,7 @@ export function IconRail() {
               onClick={() => {
                 showMailView(id);
               }}
+              data-testid={`rail-${id}`}
             />
           </li>
         ))}
@@ -69,6 +79,7 @@ export function IconRail() {
           onClick={() => {
             showSettings();
           }}
+          data-testid="rail-settings"
         />
       </div>
     </nav>

@@ -57,7 +57,11 @@ fi
 # Rust
 step "Rust formatting" cargo fmt --all --check
 step "Clippy" cargo clippy --workspace --all-targets --locked -- -D warnings
+# The desktop-test build (decision 0005) must stay warning-free too; its WebDriver tests need a
+# GUI session and run separately: `pnpm --dir app test:e2e`.
+step "Clippy (feature e2e)" cargo clippy -p mail-app --all-targets --locked --features e2e -- -D warnings
 step "Rust tests" cargo test --workspace --locked
+step "Rust tests (feature e2e)" cargo test -p mail-app --locked --features e2e --lib e2e::
 
 # Frontend
 step "TypeScript typecheck" pnpm --dir app typecheck

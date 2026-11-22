@@ -18,9 +18,14 @@ export default defineConfig(
     },
   },
   {
-    files: ["**/*.js"],
+    files: ["**/*.js", "**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: { globals: globals.node },
+  },
+  // Desktop tests (WebdriverIO, mocha): Node code with callbacks that run in the app's page.
+  {
+    files: ["tests/e2e/**/*.mjs"],
+    languageOptions: { globals: { ...globals.node, ...globals.browser, ...globals.mocha } },
   },
 
   {

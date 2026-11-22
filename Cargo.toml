@@ -33,6 +33,9 @@ tracing-appender = "0.2.5"
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 rusqlite_migration = "2.7.0"
 
+# Account ids (UUID v4). mail-model only parses and formats; mail-engine adds the `v4` feature.
+uuid = { version = "1.29.3", default-features = false, features = ["std", "serde"] }
+
 # IPC types (decision 0004): exact pins, release candidates.
 specta = { version = "=2.0.0-rc.28", features = ["derive"] }
 specta-typescript = "=0.0.15"
@@ -44,6 +47,11 @@ tauri-build = { version = "2.7.6", features = [] }
 
 # Tests
 tempfile = "3.27.0"
+
+# Desktop tests (decision 0005): only in test builds of mail-app (`--features e2e`), never shipped.
+tauri-plugin-wdio-webdriver = "=1.5.1"
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

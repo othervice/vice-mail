@@ -25,3 +25,6 @@ dist/
 
 # Vitest cache
 .vitest/
+
+# Desktop-test screenshots (pnpm --dir app test:e2e)
+/app/tests/e2e/screenshots/

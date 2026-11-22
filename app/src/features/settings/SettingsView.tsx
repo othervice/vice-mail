@@ -46,6 +46,7 @@ export function SettingsView({ section }: SettingsViewProps) {
             <Tabs.Trigger
               key={id}
               value={id}
+              data-testid={`settings-tab-${id}`}
               className="relative flex h-8 items-center rounded-control px-3 text-left text-14 text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-selected data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-control data-[state=active]:before:bg-accent"
             >
               {t(`settings.${id}.title`)}

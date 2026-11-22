@@ -2,6 +2,8 @@
 //! only forwards commands to [`AppCore`] and core events to the UI.
 
 pub mod commands;
+#[cfg(feature = "e2e")]
+mod e2e;
 mod events;
 
 use std::sync::Mutex;
@@ -51,11 +53,15 @@ struct LogGuardState(Mutex<Option<LogGuard>>);
 
 pub fn run() {
     let specta = specta_builder::<tauri::Wry>();
-    let app = tauri::Builder::default()
-        .invoke_handler(specta.invoke_handler())
+    #[cfg(not(feature = "e2e"))]
+    let builder = tauri::Builder::default().invoke_handler(specta.invoke_handler());
+    // Desktop-test build: embedded WebDriver and the `e2e_*` test commands (decision 0005).
+    #[cfg(feature = "e2e")]
+    let builder = e2e::install(tauri::Builder::default(), specta.invoke_handler());
+    let app = builder
         .setup(move |app| {
             init_logging(app.handle());
-            let data_dir = app.path().app_data_dir()?;
+            let data_dir = data_dir(app.handle())?;
             let package = app.package_info();
             tracing::info!(version = %package.version, platform = std::env::consts::OS, "starting");
             let core = tauri::async_runtime::block_on(AppCore::start(CoreConfig {
@@ -99,7 +105,7 @@ pub fn run() {
 /// File logging in the app's log directory; console too in debug builds. A logging failure is
 /// reported on stderr but does not stop the app.
 fn init_logging<R: Runtime>(app: &AppHandle<R>) {
-    let dir = match app.path().app_log_dir() {
+    let dir = match log_dir(app) {
         Ok(dir) => dir,
         Err(err) => {
             eprintln!("no log directory, file logging disabled: {err}");
@@ -118,6 +124,22 @@ fn init_logging<R: Runtime>(app: &AppHandle<R>) {
         Err(err) => eprintln!("file logging disabled: {err}"),
     }
 }
+
+/// The app's data directory (database and backups).
+#[cfg(not(feature = "e2e"))]
+fn data_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<std::path::PathBuf> {
+    app.path().app_data_dir()
+}
+
+/// The app's log directory.
+#[cfg(not(feature = "e2e"))]
+fn log_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<std::path::PathBuf> {
+    app.path().app_log_dir()
+}
+
+// Desktop-test builds use a directory of the test's own and never the user's (decision 0005).
+#[cfg(feature = "e2e")]
+use e2e::{data_dir, log_dir};
 
 /// Makes the core available to commands and forwards its events to the UI. Must run before the
 /// first window exists, so no command can arrive before the core is managed.
