@@ -8,7 +8,11 @@
 #   scripts/testmail.sh reset            delete data and certificates, provision from scratch (stays stopped)
 #   scripts/testmail.sh check            prove IDLE, CONDSTORE, MOVE, SPECIAL-USE, keywords and SMTP
 #   scripts/testmail.sh log [N]          last N lines of the server log (default 50)
+#   scripts/testmail.sh lock NAME [MIN]  take the shared lock for exclusive use (waits up to MIN minutes, default 60)
+#   scripts/testmail.sh unlock NAME      release the lock taken by NAME
+#   scripts/testmail.sh lockinfo         who holds the lock
 #
+# Several sessions share one server: take the lock before reset/start/seed and tests, release it after.
 # Everything listens on 127.0.0.1 only. Data lives in testmail/.data/, the binary in testmail/bin/.
 # Ports and accounts: testmail/accounts.env. Details: testmail/README.md.
 set -euo pipefail
@@ -350,8 +354,44 @@ require_running() {
   server_pid >/dev/null || die "the server is not running; run 'scripts/testmail.sh start' first"
 }
 
+# Shared lock: a directory outside .data (reset deletes .data). mkdir is atomic.
+LOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/testmail/.lock"
+
+cmd_lock() {
+  local name="${1:?usage: testmail.sh lock NAME [MINUTES]}" minutes="${2:-60}" waited=0
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    if [ "$(cat "$LOCK_DIR/owner" 2>/dev/null)" = "$name" ]; then
+      echo "testmail: lock already held by $name"; return 0
+    fi
+    if [ "$waited" -ge $((minutes * 60)) ]; then
+      echo "testmail: lock still held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo '?') after $minutes min" >&2
+      return 4
+    fi
+    sleep 5; waited=$((waited + 5))
+  done
+  printf '%s\n' "$name" > "$LOCK_DIR/owner"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$LOCK_DIR/since"
+  echo "testmail: lock taken by $name"
+}
+
+cmd_unlock() {
+  local name="${1:?usage: testmail.sh unlock NAME}"
+  [ -d "$LOCK_DIR" ] || { echo "testmail: no lock held"; return 0; }
+  local owner; owner="$(cat "$LOCK_DIR/owner" 2>/dev/null || true)"
+  [ "$owner" = "$name" ] || { echo "testmail: lock is held by '$owner', not '$name'" >&2; return 4; }
+  rm -rf "$LOCK_DIR"; echo "testmail: lock released by $name"
+}
+
+cmd_lockinfo() {
+  if [ -d "$LOCK_DIR" ]; then
+    echo "held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo '?') since $(cat "$LOCK_DIR/since" 2>/dev/null || echo '?')"
+  else
+    echo "free"
+  fi
+}
+
 usage() {
-  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 main() {
@@ -365,6 +405,9 @@ main() {
     seed) require_running; "$PYTHON" "$TESTMAIL/seed.py" "$@" ;;
     check) require_running; "$PYTHON" "$TESTMAIL/check.py" "$@" ;;
     log) tail -n "${1:-50}" "$LOG_FILE" ;;
+    lock) cmd_lock "$@" ;;
+    unlock) cmd_unlock "$@" ;;
+    lockinfo) cmd_lockinfo ;;
     -h|--help|help) usage ;;
     *) usage >&2; exit 2 ;;
   esac
