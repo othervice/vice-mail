@@ -8,6 +8,7 @@ pub mod discovery;
 pub mod logging;
 pub mod outbox;
 pub mod reading;
+pub mod settings_sync;
 pub mod sync;
 pub mod sync_state;
 

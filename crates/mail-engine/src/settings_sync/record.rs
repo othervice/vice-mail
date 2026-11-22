@@ -1,0 +1,991 @@
+//! Sync records: the registry of synchronised kinds, record ids, secret-free content and
+//! tombstones.
+//!
+//! Only kinds in [`REGISTRY`] exist ([`RecordKind`] is closed), and of the `setting` table only
+//! the keys in [`SYNCED_SETTINGS`]. Everything else stays on the device.
+
+use std::collections::BTreeMap;
+use std::fmt;
+
+use mail_model::{AccountColor, AccountId, ServerSettings};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::error::RecordError;
+use super::hlc::{DeviceId, Hlc};
+
+/// What kind of data a record holds. Order and names are part of the format (`docs/SYNC.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RecordKind {
+    /// One registered setting (scope and key).
+    Setting,
+    Signature,
+    Template,
+    /// A filter rule.
+    Rule,
+    /// A saved search or view.
+    SavedView,
+    /// A snoozed message, by account and Message-ID.
+    Snooze,
+    /// A pinned message, by account and Message-ID.
+    Pin,
+    /// Account list entry: address, name, colour, server settings. Never passwords, never
+    /// `writes_enabled` (see [`ACCOUNT_FIELDS`]).
+    Account,
+    /// A sender identity.
+    Identity,
+    /// AI and MCP settings (provider, base URL, model, permissions), never keys or tokens.
+    AiSettings,
+    /// One device of the sync: name, system, last seen.
+    Device,
+}
+
+/// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, Einstellungs-Sync).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeRule {
+    /// The newer version wins, a tombstone like any other version.
+    NewerWins,
+    /// The newer version wins, but an edit the deleting device had not seen beats the delete.
+    EditBeatsDelete,
+    /// Like [`MergeRule::EditBeatsDelete`] per record, and among live versions every field
+    /// takes its newest value.
+    PerField,
+}
+
+/// The shape of a record id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdShape {
+    /// `<scope>/<key>`: scope `global` or an account UUID, key from [`SYNCED_SETTINGS`].
+    Setting,
+    /// A lowercase hyphenated UUID, the same on every device.
+    Uuid,
+    /// `<account uuid>/<Message-ID without angle brackets>`. Never local ids or UIDs.
+    Mail,
+}
+
+/// What a winning tombstone does to a live local record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removal {
+    /// The record is deleted locally.
+    Apply,
+    /// The user is asked first ([`super::Question::Removed`]); until then the record stays.
+    Ask,
+}
+
+/// One entry of the registry.
+#[derive(Debug)]
+pub struct KindSpec {
+    pub kind: RecordKind,
+    /// Name inside the encrypted payload and input of the opaque id.
+    pub name: &'static str,
+    /// The local table the integration keeps in sync with these records.
+    pub table: &'static str,
+    pub merge: MergeRule,
+    pub id: IdShape,
+    pub removal: Removal,
+    /// Largest serialised content. Bounds what one record can cost on every device.
+    pub max_content_bytes: usize,
+}
+
+const KIB: usize = 1024;
+
+/// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
+pub const REGISTRY: [KindSpec; 11] = [
+    spec(
+        RecordKind::Setting,
+        "setting",
+        "setting",
+        MergeRule::NewerWins,
+        IdShape::Setting,
+        Removal::Apply,
+        4 * KIB,
+    ),
+    spec(
+        RecordKind::Signature,
+        "signature",
+        "signature",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        64 * KIB,
+    ),
+    spec(
+        RecordKind::Template,
+        "template",
+        "template",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        256 * KIB,
+    ),
+    spec(
+        RecordKind::Rule,
+        "rule",
+        "rule",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::SavedView,
+        "savedView",
+        "saved_view",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::Snooze,
+        "snooze",
+        "snooze",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::Pin,
+        "pin",
+        "pin",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::Account,
+        "account",
+        "account",
+        MergeRule::PerField,
+        IdShape::Uuid,
+        Removal::Ask,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::Identity,
+        "identity",
+        "identity",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::AiSettings,
+        "aiSettings",
+        "ai_profile",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::Device,
+        "device",
+        "sync_device",
+        MergeRule::NewerWins,
+        IdShape::Uuid,
+        Removal::Apply,
+        4 * KIB,
+    ),
+];
+
+#[allow(clippy::too_many_arguments)]
+const fn spec(
+    kind: RecordKind,
+    name: &'static str,
+    table: &'static str,
+    merge: MergeRule,
+    id: IdShape,
+    removal: Removal,
+    max_content_bytes: usize,
+) -> KindSpec {
+    KindSpec {
+        kind,
+        name,
+        table,
+        merge,
+        id,
+        removal,
+        max_content_bytes,
+    }
+}
+
+/// Setting keys that are synchronised. Every other key of the `setting` table is a device
+/// setting: `prefetch.*` (what this machine keeps offline) stays local.
+pub const SYNCED_SETTINGS: &[&str] = &["ui.theme", "ui.language"];
+
+/// Fields of an account record, each with its own version. Passwords and tokens live in the
+/// keychain and have no field. `writes_enabled` is deliberately not synchronised: write access
+/// is switched on by the user per account on each device, and an account taken over from
+/// another device starts read-only.
+pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
+
+impl RecordKind {
+    pub const ALL: [Self; 11] = [
+        Self::Setting,
+        Self::Signature,
+        Self::Template,
+        Self::Rule,
+        Self::SavedView,
+        Self::Snooze,
+        Self::Pin,
+        Self::Account,
+        Self::Identity,
+        Self::AiSettings,
+        Self::Device,
+    ];
+
+    pub const fn spec(self) -> &'static KindSpec {
+        &REGISTRY[self as usize]
+    }
+
+    pub const fn name(self) -> &'static str {
+        self.spec().name
+    }
+
+    /// The kind with this payload name, `None` if it is not registered.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+}
+
+impl fmt::Display for RecordKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Scope of a synchronised setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SettingScope {
+    Global,
+    Account(AccountId),
+}
+
+/// Kind and id of a record: what the opaque id is derived from. Ordered by kind, then id.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RecordKey {
+    kind: RecordKind,
+    id: String,
+}
+
+/// Longest Message-ID accepted (RFC 5322 line limit).
+const MAX_MESSAGE_ID_BYTES: usize = 998;
+
+impl RecordKey {
+    /// A registered setting. Unregistered keys are refused: they are device settings.
+    pub fn setting(scope: SettingScope, key: &str) -> Result<Self, RecordError> {
+        let scope = match scope {
+            SettingScope::Global => "global".to_owned(),
+            SettingScope::Account(account) => account.to_string(),
+        };
+        Self::parse(RecordKind::Setting, &format!("{scope}/{key}"))
+    }
+
+    /// A record of a kind whose id is a UUID (signature, template, rule, saved view, account,
+    /// identity, AI settings, device).
+    pub fn uuid(kind: RecordKind, uuid: uuid::Uuid) -> Result<Self, RecordError> {
+        Self::parse(kind, &uuid.hyphenated().to_string())
+    }
+
+    pub fn account(account: AccountId) -> Self {
+        Self {
+            kind: RecordKind::Account,
+            id: account.to_string(),
+        }
+    }
+
+    pub fn device(device: DeviceId) -> Self {
+        Self {
+            kind: RecordKind::Device,
+            id: device.to_string(),
+        }
+    }
+
+    /// A snooze or pin: the message by account UUID and Message-ID header (surrounding
+    /// whitespace and one pair of angle brackets are removed).
+    pub fn mail(
+        kind: RecordKind,
+        account: AccountId,
+        message_id: &str,
+    ) -> Result<Self, RecordError> {
+        let trimmed = message_id.trim();
+        let bare = trimmed
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(trimmed);
+        Self::parse(kind, &format!("{account}/{bare}"))
+    }
+
+    /// Checks `id` against the shape of `kind` (also used for ids read from the payload).
+    pub fn parse(kind: RecordKind, id: &str) -> Result<Self, RecordError> {
+        let invalid = |reason: &str| RecordError::InvalidId {
+            kind: kind.name(),
+            reason: reason.to_owned(),
+        };
+        match kind.spec().id {
+            IdShape::Uuid => {
+                if !is_canonical_uuid(id) {
+                    return Err(invalid("not a lowercase hyphenated UUID"));
+                }
+            }
+            IdShape::Setting => {
+                let (scope, key) = id.split_once('/').ok_or_else(|| invalid("no scope"))?;
+                if scope != "global" && !is_canonical_uuid(scope) {
+                    return Err(invalid("scope is neither global nor an account UUID"));
+                }
+                if !SYNCED_SETTINGS.contains(&key) {
+                    return Err(RecordError::SettingNotSynced(key.to_owned()));
+                }
+            }
+            IdShape::Mail => {
+                let (account, message_id) =
+                    id.split_once('/').ok_or_else(|| invalid("no account"))?;
+                if !is_canonical_uuid(account) {
+                    return Err(invalid("account is not a lowercase hyphenated UUID"));
+                }
+                if message_id.is_empty() || message_id.len() > MAX_MESSAGE_ID_BYTES {
+                    return Err(invalid("Message-ID is empty or too long"));
+                }
+                if message_id
+                    .chars()
+                    .any(|c| c.is_whitespace() || c.is_control() || c == '<' || c == '>')
+                {
+                    return Err(invalid("Message-ID holds whitespace, controls or brackets"));
+                }
+            }
+        }
+        Ok(Self {
+            kind,
+            id: id.to_owned(),
+        })
+    }
+
+    pub const fn kind(&self) -> RecordKind {
+        self.kind
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl fmt::Display for RecordKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.kind, self.id)
+    }
+}
+
+fn is_canonical_uuid(s: &str) -> bool {
+    uuid::Uuid::try_parse(s).is_ok_and(|u| u.hyphenated().to_string() == s)
+}
+
+/// Validated record content (JSON). The only way to build one is [`SyncContent::new`] (or a
+/// helper that calls it), which refuses secrets, so a record can never carry one:
+///
+/// - [`mail_model::Secret`] has no `Serialize`, so a struct holding one cannot be turned into
+///   content at all ([`SyncContent::from_serialize`]).
+/// - No object key anywhere in the content may name a password, passphrase, secret, token,
+///   API or private key, credential, authorization or cookie (case, `_` and `-` ignored).
+/// - No string may contain key material (an age secret key or a PEM private key).
+/// - Account content only has the fields in [`ACCOUNT_FIELDS`], device content only
+///   [`DeviceInfo`]; both are checked against typed structs without password fields.
+/// - Content is bounded by the kind's `max_content_bytes`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncContent {
+    kind: RecordKind,
+    value: Value,
+}
+
+/// Parts of object keys that mark a secret (compared on the lowercased key without `_`/`-`).
+const SECRET_NAME_PARTS: &[&str] = &[
+    "password",
+    "passwd",
+    "passphrase",
+    "secret",
+    "apikey",
+    "accesskey",
+    "privatekey",
+    "credential",
+    "authorization",
+    "cookie",
+];
+/// Endings of object keys that mark a secret (`token`, `accessToken`, `refresh_token`), but not
+/// `maxTokens`.
+const SECRET_NAME_ENDINGS: &[&str] = &["token", "pwd"];
+/// Whole object keys that mark a secret.
+const SECRET_NAMES: &[&str] = &["pass", "otp"];
+/// Markers of key material in string values.
+const SECRET_VALUE_MARKERS: &[&str] = &["AGE-SECRET-KEY-", "PRIVATE KEY-----"];
+
+impl SyncContent {
+    /// Validates `value` for `kind` (see the type docs).
+    pub fn new(kind: RecordKind, value: Value) -> Result<Self, RecordError> {
+        let spec = kind.spec();
+        let size = serde_json::to_vec(&value)
+            .map_err(|err| RecordError::InvalidContent {
+                kind: spec.name,
+                reason: err.to_string(),
+            })?
+            .len();
+        if size > spec.max_content_bytes {
+            return Err(RecordError::TooLarge {
+                kind: spec.name,
+                size,
+                max: spec.max_content_bytes,
+            });
+        }
+        scan_for_secrets(spec.name, &value, &mut String::from("$"))?;
+        check_structure(kind, &value)?;
+        Ok(Self { kind, value })
+    }
+
+    /// Serialises `value` and validates it.
+    pub fn from_serialize<T: Serialize>(kind: RecordKind, value: &T) -> Result<Self, RecordError> {
+        let value = serde_json::to_value(value).map_err(|err| RecordError::InvalidContent {
+            kind: kind.name(),
+            reason: err.to_string(),
+        })?;
+        Self::new(kind, value)
+    }
+
+    /// Per-field content for [`MergeRule::PerField`] kinds.
+    pub fn from_fields(
+        kind: RecordKind,
+        fields: &BTreeMap<String, FieldValue>,
+    ) -> Result<Self, RecordError> {
+        if kind.spec().merge != MergeRule::PerField {
+            return Err(RecordError::InvalidContent {
+                kind: kind.name(),
+                reason: "kind has no per-field versions".to_owned(),
+            });
+        }
+        Self::from_serialize(kind, fields)
+    }
+
+    pub const fn kind(&self) -> RecordKind {
+        self.kind
+    }
+
+    pub const fn value(&self) -> &Value {
+        &self.value
+    }
+
+    pub fn into_value(self) -> Value {
+        self.value
+    }
+
+    /// Decodes the content into a typed value.
+    pub fn decode<T: DeserializeOwned>(&self) -> Result<T, RecordError> {
+        T::deserialize(&self.value).map_err(|err| RecordError::InvalidContent {
+            kind: self.kind.name(),
+            reason: err.to_string(),
+        })
+    }
+
+    /// The versioned fields of a [`MergeRule::PerField`] record, `None` for other kinds.
+    pub fn fields(&self) -> Option<BTreeMap<String, FieldValue>> {
+        if self.kind.spec().merge != MergeRule::PerField {
+            return None;
+        }
+        self.decode().ok()
+    }
+
+    /// The plain field values of a per-field record (without versions).
+    pub fn field_values(&self) -> Option<BTreeMap<String, Value>> {
+        self.fields()
+            .map(|fields| fields.into_iter().map(|(k, f)| (k, f.value)).collect())
+    }
+}
+
+fn scan_for_secrets(
+    kind: &'static str,
+    value: &Value,
+    path: &mut String,
+) -> Result<(), RecordError> {
+    match value {
+        Value::Object(map) => {
+            for (name, inner) in map {
+                let normalized: String = name
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .map(|c| c.to_ascii_lowercase())
+                    .collect();
+                let len = path.len();
+                path.push('.');
+                path.push_str(name);
+                let secret = SECRET_NAME_PARTS.iter().any(|p| normalized.contains(p))
+                    || SECRET_NAME_ENDINGS.iter().any(|e| normalized.ends_with(e))
+                    || SECRET_NAMES.contains(&normalized.as_str());
+                if secret {
+                    return Err(RecordError::SecretField {
+                        kind,
+                        path: path.clone(),
+                    });
+                }
+                scan_for_secrets(kind, inner, path)?;
+                path.truncate(len);
+            }
+        }
+        Value::Array(items) => {
+            for (i, inner) in items.iter().enumerate() {
+                let len = path.len();
+                path.push_str(&format!("[{i}]"));
+                scan_for_secrets(kind, inner, path)?;
+                path.truncate(len);
+            }
+        }
+        Value::String(text) => {
+            if SECRET_VALUE_MARKERS.iter().any(|m| text.contains(m)) {
+                return Err(RecordError::SecretValue {
+                    kind,
+                    path: path.clone(),
+                });
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+    Ok(())
+}
+
+fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
+    let invalid = |reason: String| RecordError::InvalidContent {
+        kind: kind.name(),
+        reason,
+    };
+    match kind {
+        RecordKind::Setting => {
+            if value.is_null() {
+                return Err(invalid(
+                    "a setting value is not null (delete it instead)".into(),
+                ));
+            }
+        }
+        RecordKind::Account => {
+            let fields: BTreeMap<String, FieldValue> =
+                BTreeMap::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            for (name, field) in &fields {
+                check_account_field(name, &field.value).map_err(invalid)?;
+            }
+        }
+        RecordKind::Device => {
+            DeviceInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Snooze => {
+            SnoozeInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Signature
+        | RecordKind::Template
+        | RecordKind::Rule
+        | RecordKind::SavedView
+        | RecordKind::Pin
+        | RecordKind::Identity
+        | RecordKind::AiSettings => {
+            if !value.is_object() {
+                return Err(invalid("content is not a JSON object".into()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_account_field(name: &str, value: &Value) -> Result<(), String> {
+    let typed = |result: Result<(), serde_json::Error>| {
+        result.map_err(|err| format!("field {name}: {err}"))
+    };
+    match name {
+        "email" | "displayName" => typed(String::deserialize(value).map(drop)),
+        "color" => match u8::deserialize(value).ok().and_then(AccountColor::new) {
+            Some(_) => Ok(()),
+            None => Err("field color: not an account colour index".to_owned()),
+        },
+        "imap" | "smtp" => typed(StrictServerSettings::deserialize(value).map(drop)),
+        _ => Err(format!("unknown account field {name:?}")),
+    }
+}
+
+/// [`ServerSettings`] with unknown fields refused, so a server entry cannot smuggle extra data.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(dead_code)] // only deserialised to check the shape
+struct StrictServerSettings {
+    host: String,
+    port: u16,
+    security: mail_model::Security,
+    username: String,
+}
+
+/// One field of a per-field record with the version that last changed it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FieldValue {
+    pub version: Hlc,
+    pub value: Value,
+}
+
+/// The synchronised part of an account. Built from the local account row; has no password,
+/// token or `writes_enabled` field by construction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SyncedAccount {
+    pub email: String,
+    pub display_name: String,
+    pub color: AccountColor,
+    pub imap: ServerSettings,
+    pub smtp: ServerSettings,
+}
+
+impl SyncedAccount {
+    /// The field values (keys are [`ACCOUNT_FIELDS`]).
+    pub fn to_values(&self) -> Result<BTreeMap<String, Value>, RecordError> {
+        let value = serde_json::to_value(self).map_err(|err| RecordError::InvalidContent {
+            kind: RecordKind::Account.name(),
+            reason: err.to_string(),
+        })?;
+        match value {
+            Value::Object(map) => Ok(map.into_iter().collect()),
+            _ => Err(RecordError::InvalidContent {
+                kind: RecordKind::Account.name(),
+                reason: "account did not serialise to an object".to_owned(),
+            }),
+        }
+    }
+
+    /// Reads an account record's content back.
+    pub fn from_content(content: &SyncContent) -> Result<Self, RecordError> {
+        let values = content
+            .field_values()
+            .ok_or_else(|| RecordError::InvalidContent {
+                kind: content.kind().name(),
+                reason: "not an account record".to_owned(),
+            })?;
+        Self::deserialize(Value::Object(values.into_iter().collect())).map_err(|err| {
+            RecordError::InvalidContent {
+                kind: RecordKind::Account.name(),
+                reason: err.to_string(),
+            }
+        })
+    }
+}
+
+/// Content of a device record (the device list in the sync status).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeviceInfo {
+    /// Name the user gave the device (default: the computer name).
+    pub name: String,
+    /// Operating system, for example `macOS 26.1`.
+    pub system: String,
+    /// Unix ms of the last completed pass. Updated at most daily, so the folder does not churn.
+    pub last_seen_ms: i64,
+}
+
+/// Content of a snooze record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SnoozeInfo {
+    /// Unix ms when the message comes back.
+    pub until_ms: i64,
+}
+
+/// A record: content or tombstone, with the version that produced it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncRecord {
+    key: RecordKey,
+    version: Hlc,
+    body: RecordBody,
+}
+
+/// What a record holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordBody {
+    Content(SyncContent),
+    /// The record was deleted at the tombstone's version (its time is the deletion time,
+    /// which starts the 180 days of retention). `deleted` is the version the deleting device
+    /// had seen: an edit newer than that was concurrent and beats the delete
+    /// ([`MergeRule::EditBeatsDelete`]).
+    Tombstone {
+        deleted: Hlc,
+    },
+}
+
+impl SyncRecord {
+    pub fn content(
+        key: RecordKey,
+        version: Hlc,
+        content: SyncContent,
+    ) -> Result<Self, RecordError> {
+        if content.kind() != key.kind() {
+            return Err(RecordError::InvalidContent {
+                kind: key.kind().name(),
+                reason: format!("content was validated as {}", content.kind()),
+            });
+        }
+        Ok(Self {
+            key,
+            version,
+            body: RecordBody::Content(content),
+        })
+    }
+
+    pub fn tombstone(key: RecordKey, version: Hlc, deleted: Hlc) -> Result<Self, RecordError> {
+        if deleted >= version {
+            return Err(RecordError::TombstoneOrder { version, deleted });
+        }
+        Ok(Self {
+            key,
+            version,
+            body: RecordBody::Tombstone { deleted },
+        })
+    }
+
+    pub const fn key(&self) -> &RecordKey {
+        &self.key
+    }
+
+    pub const fn kind(&self) -> RecordKind {
+        self.key.kind
+    }
+
+    pub const fn version(&self) -> Hlc {
+        self.version
+    }
+
+    pub const fn body(&self) -> &RecordBody {
+        &self.body
+    }
+
+    pub const fn content_ref(&self) -> Option<&SyncContent> {
+        match &self.body {
+            RecordBody::Content(content) => Some(content),
+            RecordBody::Tombstone { .. } => None,
+        }
+    }
+
+    pub const fn is_tombstone(&self) -> bool {
+        matches!(self.body, RecordBody::Tombstone { .. })
+    }
+
+    /// The version a tombstone deletes; `None` for content.
+    pub const fn deleted(&self) -> Option<Hlc> {
+        match self.body {
+            RecordBody::Tombstone { deleted } => Some(deleted),
+            RecordBody::Content(_) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn account_id() -> AccountId {
+        "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id")
+    }
+
+    #[test]
+    fn registry_lists_every_kind_once_in_enum_order() {
+        for (i, kind) in RecordKind::ALL.into_iter().enumerate() {
+            assert_eq!(REGISTRY.get(i).map(|s| s.kind), Some(kind));
+            assert_eq!(RecordKind::from_name(kind.name()), Some(kind));
+        }
+        let mut names: Vec<&str> = REGISTRY.iter().map(|s| s.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), REGISTRY.len());
+        assert_eq!(RecordKind::from_name("password"), None);
+        assert_eq!(RecordKind::from_name("message"), None);
+    }
+
+    #[test]
+    fn only_registered_settings_are_synced() {
+        let key = RecordKey::setting(SettingScope::Global, "ui.theme").expect("theme");
+        assert_eq!(key.id(), "global/ui.theme");
+        assert_eq!(
+            RecordKey::setting(SettingScope::Global, "prefetch.period"),
+            Err(RecordError::SettingNotSynced("prefetch.period".into()))
+        );
+        let scoped = RecordKey::setting(SettingScope::Account(account_id()), "ui.language")
+            .expect("account scope");
+        assert_eq!(
+            scoped.id(),
+            "6f9619ff-8b86-4d11-b42d-00c04fc964ff/ui.language"
+        );
+        assert!(RecordKey::parse(RecordKind::Setting, "device/ui.theme").is_err());
+    }
+
+    #[test]
+    fn mail_ids_use_account_uuid_and_message_id() {
+        let key = RecordKey::mail(RecordKind::Snooze, account_id(), " <abc.123@example.org> ")
+            .expect("snooze");
+        assert_eq!(
+            key.id(),
+            "6f9619ff-8b86-4d11-b42d-00c04fc964ff/abc.123@example.org"
+        );
+        assert_eq!(
+            RecordKey::mail(RecordKind::Pin, account_id(), "abc.123@example.org")
+                .expect("pin")
+                .id(),
+            key.id()
+        );
+        for bad in ["", "<>", "a b@c", "a\u{7}@c"] {
+            assert!(
+                RecordKey::mail(RecordKind::Pin, account_id(), bad).is_err(),
+                "{bad:?}"
+            );
+        }
+        // A local message id or UID is not a valid record id.
+        assert!(RecordKey::parse(RecordKind::Snooze, "1764000000").is_err());
+        assert!(RecordKey::mail(RecordKind::Signature, account_id(), "a@b").is_err());
+    }
+
+    #[test]
+    fn uuid_ids_are_canonical() {
+        let uuid = uuid::Uuid::from_u128(7);
+        let key = RecordKey::uuid(RecordKind::Signature, uuid).expect("signature");
+        assert_eq!(key.id(), "00000000-0000-0000-0000-000000000007");
+        assert!(
+            RecordKey::parse(
+                RecordKind::Signature,
+                "00000000-0000-0000-0000-00000000000A"
+            )
+            .is_err()
+        );
+        assert!(RecordKey::parse(RecordKind::Signature, "global/ui.theme").is_err());
+    }
+
+    #[test]
+    fn content_refuses_secret_fields_and_key_material() {
+        for (kind, value) in [
+            (
+                RecordKind::Identity,
+                json!({ "name": "A", "password": "x" }),
+            ),
+            (
+                RecordKind::Identity,
+                json!({ "smtp": { "Pass_Word": "x" } }),
+            ),
+            (
+                RecordKind::AiSettings,
+                json!({ "provider": "openai", "apiKey": "x" }),
+            ),
+            (
+                RecordKind::AiSettings,
+                json!({ "provider": "x", "api_key": "x" }),
+            ),
+            (
+                RecordKind::AiSettings,
+                json!({ "clients": [{ "name": "cli", "token": "x" }] }),
+            ),
+            (RecordKind::AiSettings, json!({ "refreshToken": "x" })),
+            (
+                RecordKind::Rule,
+                json!({ "oauth": { "access-token": "x" } }),
+            ),
+            (RecordKind::Template, json!({ "clientSecret": "x" })),
+            (RecordKind::Setting, json!({ "passphrase": "x" })),
+            (RecordKind::Identity, json!({ "credentials": {} })),
+            (RecordKind::SavedView, json!({ "pass": "x" })),
+        ] {
+            let err = SyncContent::new(kind, value.clone()).expect_err("refused");
+            assert!(
+                matches!(err, RecordError::SecretField { .. }),
+                "{value}: {err:?}"
+            );
+            assert!(!err.to_string().contains("\"x\""), "{err}");
+        }
+        let err = SyncContent::new(
+            RecordKind::Signature,
+            json!({ "html": "AGE-SECRET-KEY-1QQQQ" }),
+        )
+        .expect_err("key material");
+        assert_eq!(
+            err,
+            RecordError::SecretValue {
+                kind: "signature",
+                path: "$.html".into()
+            }
+        );
+        // Ordinary fields that merely contain similar letters are fine.
+        SyncContent::new(
+            RecordKind::AiSettings,
+            json!({ "maxTokens": 512, "model": "m" }),
+        )
+        .expect("maxTokens");
+        SyncContent::new(
+            RecordKind::Rule,
+            json!({ "keyword": "passport", "passive": true }),
+        )
+        .expect("passport");
+    }
+
+    #[test]
+    fn content_is_bounded_and_shaped_by_kind() {
+        let big = "x".repeat(5 * KIB);
+        assert!(matches!(
+            SyncContent::new(RecordKind::Setting, json!(big)),
+            Err(RecordError::TooLarge { .. })
+        ));
+        assert!(SyncContent::new(RecordKind::Setting, Value::Null).is_err());
+        assert!(SyncContent::new(RecordKind::Signature, json!("not an object")).is_err());
+        assert!(SyncContent::new(RecordKind::Snooze, json!({ "untilMs": 5 })).is_ok());
+        assert!(SyncContent::new(RecordKind::Snooze, json!({ "until": 5 })).is_err());
+        assert!(
+            SyncContent::new(
+                RecordKind::Device,
+                json!({ "name": "Mac", "system": "macOS", "lastSeenMs": 1, "extra": 1 })
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn account_content_has_only_the_listed_fields() {
+        let device = DeviceId::from_uuid(uuid::Uuid::from_u128(1));
+        let version = Hlc::new(1, 0, device).expect("version");
+        let server =
+            json!({ "host": "imap.example.org", "port": 993, "security": "tls", "username": "a" });
+        let field = |value: Value| FieldValue { version, value };
+        let mut fields = BTreeMap::new();
+        fields.insert("email".to_owned(), field(json!("a@example.org")));
+        fields.insert("imap".to_owned(), field(server.clone()));
+        SyncContent::from_fields(RecordKind::Account, &fields).expect("account");
+
+        let mut extra = fields.clone();
+        extra.insert("writesEnabled".to_owned(), field(json!(true)));
+        assert!(SyncContent::from_fields(RecordKind::Account, &extra).is_err());
+
+        let mut smuggled = fields.clone();
+        let mut with_password = server;
+        with_password["secretValue"] = json!("x");
+        smuggled.insert("smtp".to_owned(), field(with_password));
+        assert!(SyncContent::from_fields(RecordKind::Account, &smuggled).is_err());
+        let mut unknown = fields;
+        unknown.insert(
+            "smtp".to_owned(),
+            field(json!({ "host": "h", "port": 1, "security": "tls", "username": "u", "x": 1 })),
+        );
+        assert!(SyncContent::from_fields(RecordKind::Account, &unknown).is_err());
+    }
+
+    #[test]
+    fn tombstones_delete_older_versions_only() {
+        let device = DeviceId::from_uuid(uuid::Uuid::from_u128(1));
+        let key = RecordKey::uuid(RecordKind::Rule, uuid::Uuid::from_u128(3)).expect("key");
+        let v1 = Hlc::new(1, 0, device).expect("v1");
+        let v2 = Hlc::new(2, 0, device).expect("v2");
+        assert!(SyncRecord::tombstone(key.clone(), v2, v1).is_ok());
+        assert!(SyncRecord::tombstone(key.clone(), v1, v1).is_err());
+        let content = SyncContent::new(RecordKind::Signature, json!({})).expect("content");
+        assert!(
+            SyncRecord::content(key, v1, content).is_err(),
+            "kind mismatch"
+        );
+    }
+}

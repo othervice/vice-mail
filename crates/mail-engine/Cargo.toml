@@ -34,6 +34,11 @@ rustls-platform-verifier.workspace = true
 url.workspace = true
 # Opening links and attachments with the system's default apps (stage 3).
 open.workspace = true
+# Settings sync (settings_sync/): encryption, opaque record ids, typed errors.
+age.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true

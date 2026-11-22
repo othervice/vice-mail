@@ -101,6 +101,16 @@ roxmltree = "0.21.2"
 open = { version = "5.4.5", features = ["shellexecute-on-windows"] }
 rfd = { version = "0.18.0", default-features = false }
 
+# Settings sync (stage 11, docs/SYNC.md): age encrypts every record to a random X25519 key that is
+# itself wrapped with the passphrase (scrypt recipient). HMAC-SHA-256 (RustCrypto) derives the
+# opaque record ids the mail server sees; sha2 0.11 and digest 0.11 are in the tree already.
+# age 0.11.5 (14.07.2026, maintained next to 0.12) instead of 0.12.1: 0.12 always pulls in P-256
+# for its `tag` recipients, and that tree has RUSTSEC-2026-0387 (crypto-bigint 0.5.5), which fails
+# `cargo deny`. Same file format; only X25519 and scrypt recipients are used.
+age = "0.11.5"
+hmac = "0.13.0"
+sha2 = "0.11.1"
+
 # Tests
 tempfile = "3.27.0"
 # Test certificates generated at test time (no key material in the repository).
