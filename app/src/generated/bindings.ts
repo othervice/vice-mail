@@ -1002,7 +1002,10 @@ export type AiFunctionChoice = {
  *  core wraps the key in a [`crate::Secret`] at once. `Debug` never shows it.
  */
 export type AiKeyChange = 
-/**  Keep the stored key (or none). */
+/**
+ *  Keep the stored key (or none). When the base URL's server (scheme, host or port)
+ *  changes, the stored key is removed instead.
+ */
 { type: "keep" } | 
 /**  Delete the stored key. */
 { type: "remove" } | 
@@ -1049,6 +1052,12 @@ export type AiProfileInfo = {
 	maxOutputTokens: number | null,
 	/**  A key is stored in the keychain (never shown). */
 	hasKey: boolean,
+	/**
+	 *  The last save changed the base URL's server (scheme, host or port) without a new key,
+	 *  so the core removed the stored key (a key belongs to the server it was entered for).
+	 *  The settings ask for it again; cleared by the next save of the profile.
+	 */
+	keyRemovedOnServerChange: boolean,
 	/**  Host and port of the base URL ("an wen"). */
 	host: string,
 	locality: AiLocality,

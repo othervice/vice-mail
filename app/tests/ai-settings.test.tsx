@@ -128,6 +128,58 @@ describe("Settings, AI in the app", () => {
     });
   });
 
+  it("says before and after saving that another server removes the stored key, and asks for it again", async () => {
+    const { core, user } = setup({ enabled: true, profiles: [makeCloudProfile({ needsConsent: false, consentAt: 1 })] });
+    const panel = await openAi(user);
+    const row = within(panel).getByTestId(`ai-profile-${CLOUD_PROFILE_ID}`);
+    expect(within(row).queryByTestId("ai-key-removed")).toBeNull();
+    await user.click(within(row).getByRole("button", { name: "Edit OpenAI" }));
+    const form = within(panel).getByRole("form", { name: "Edit OpenAI" });
+    const address = within(form).getByLabelText("Address");
+    // Another path on the same server (written with its default port) keeps the key.
+    await user.clear(address);
+    await user.type(address, "https://API.openai.com:443/v2");
+    expect(within(form).getByText("A key is stored in the keychain. Leave the field empty to keep it.")).toBeTruthy();
+    // Another server: the form says what saving does to the key.
+    await user.clear(address);
+    await user.type(address, "https://api.openai.example/v1");
+    expect(
+      within(form).getByText(
+        "The server changes: saving removes the stored key, so it never reaches the new server. Enter it again here if the new server needs one.",
+      ),
+    ).toBeTruthy();
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(core.callsOf("save_ai_profile")).toHaveLength(1);
+    });
+    expect((core.callsOf("save_ai_profile")[0]?.["profile"] as { key: unknown }).key).toEqual({ type: "keep" });
+
+    // The core removed it; the provider says so and has no key.
+    const after = await within(panel).findByTestId(`ai-profile-${CLOUD_PROFILE_ID}`);
+    const notice = within(after).getByTestId("ai-key-removed");
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.textContent).toContain("Key removed: the server changed");
+    expect(notice.textContent).toContain(
+      "The API key was meant for the previous server, so it was removed from the keychain. If api.openai.example:443 needs a key, enter it again under Edit.",
+    );
+    expect(after.textContent).toContain("api.openai.example:443 · gpt-5 · No key");
+    expect(providerCalls(core)).toEqual([]);
+
+    // Editing asks for it again; entering it ends the notice.
+    await user.click(within(after).getByRole("button", { name: "Edit OpenAI" }));
+    const again = within(panel).getByRole("form", { name: "Edit OpenAI" });
+    expect(within(again).getByText("The stored key was removed because the server changed. Enter it again if this server needs one.")).toBeTruthy();
+    expect(within(again).queryByRole("checkbox", { name: "Remove the stored key" })).toBeNull();
+    await user.type(within(again).getByLabelText("API key"), "sk-new-456");
+    await user.click(within(again).getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(core.ai.keysReceived).toEqual(["sk-new-456"]);
+    });
+    const done = await within(panel).findByTestId(`ai-profile-${CLOUD_PROFILE_ID}`);
+    expect(done.textContent).toContain("api.openai.example:443 · gpt-5 · Key stored");
+    expect(within(done).queryByTestId("ai-key-removed")).toBeNull();
+  });
+
   it("checks the form before saving and shows the core's refusal at the form", async () => {
     const { core, user } = setup({ enabled: true });
     const panel = await openAi(user);

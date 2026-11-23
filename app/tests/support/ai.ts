@@ -94,6 +94,7 @@ export function makeAiProfile(overrides: Partial<AiProfileInfo> = {}): AiProfile
     structuredOutput: true,
     maxOutputTokens: null,
     hasKey: false,
+    keyRemovedOnServerChange: false,
     host: "localhost:11434",
     locality,
     consentAt: null,
@@ -269,7 +270,10 @@ export function createAiFake(options: AiFakeOptions, deps: Deps) {
     const locality = local ? (url.hostname === "localhost" || url.hostname.startsWith("127.") ? "this_device" : "local_network") : "internet";
     const sameHost = before?.host === host;
     const consentAt = locality === "internet" && sameHost ? (before.consentAt ?? null) : null;
-    const hasKey = input.key.type === "set" ? input.key.key !== "" : input.key.type === "remove" ? false : (before?.hasKey ?? false);
+    // V-02: a kept key stays only while scheme, host and port stay.
+    const keyRemovedOnServerChange = input.key.type === "keep" && before !== undefined && before.hasKey && new URL(before.baseUrl).origin !== url.origin;
+    const hasKey =
+      input.key.type === "set" ? input.key.key !== "" : input.key.type === "remove" || keyRemovedOnServerChange ? false : (before?.hasKey ?? false);
     const next: AiProfileInfo = {
       id: input.id ?? `${String(nextProfile++).padStart(2, "0")}${"a".repeat(30)}`,
       name: input.name,
@@ -279,6 +283,7 @@ export function createAiFake(options: AiFakeOptions, deps: Deps) {
       structuredOutput: input.structuredOutput,
       maxOutputTokens: input.maxOutputTokens,
       hasKey,
+      keyRemovedOnServerChange,
       host,
       locality,
       consentAt,

@@ -723,7 +723,14 @@ Verdrahtung (0024): `AppCore` (Modul `mail-engine/src/ai/`) prüft vor jeder Anf
 Profil der Funktion, Zustimmung (Cloud) und Cloud-Freigabe des Kontos, liest den Schlüssel aus dem
 Schlüsselbund und meldet jede Anfrage an den Anbieter vorher als Ereignis `aiRequest` (Mails,
 Bytes, Konten, Host, Modell), dann Fortschritt und Ende; abbrechbar über die Anfrage-ID. Ein
-Protokoll hält nur Metadaten. Ergebnisse sind geprüfte Daten: Aussagen nur mit Verweisen auf
+Protokoll hält nur Metadaten. Ein Schlüssel gehört zu dem Server, für den er eingegeben wurde
+(V-02): Wird ein Profil mit einer Basis-URL anderen Ursprungs (Schema, Host, Port) ohne neuen
+Schlüssel gespeichert, löscht der Kern den gespeicherten Schlüssel zuerst aus dem Schlüsselbund
+(scheitert das, wird nichts gespeichert); das Profil hat dann keinen Schlüssel und meldet
+`keyRemovedOnServerChange`, bis es wieder gespeichert wird, die Einstellungen bitten um den
+Schlüssel. Modell- und Pfadänderungen behalten ihn. Modellliste und Verbindungstest arbeiten nur
+mit dem gespeicherten Profil; jede Anfrage liest Profil und Schlüssel zusammen unter der Sperre
+der Einstellungen. Ergebnisse sind geprüfte Daten: Aussagen nur mit Verweisen auf
 gesendete Mails, Antwortvorschläge und Schreibhilfe als Text. Ein Antwortvorschlag wird erst auf
 Klick des Nutzers zu einem normalen Entwurf (Stufe 5). Hinweise auf offene Antworten sind Regeln
 ohne KI. Jede gespeicherte Änderung der Einstellungen meldet `aiSettingsChanged` mit der

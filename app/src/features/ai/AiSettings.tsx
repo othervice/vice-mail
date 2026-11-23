@@ -119,6 +119,8 @@ interface ProfileDraft {
   key: string;
   removeKey: boolean;
   hasKey: boolean;
+  /** The core removed the key when the server last changed (V-02); it must be entered again. */
+  keyRemoved: boolean;
   needsKey: boolean;
 }
 
@@ -134,6 +136,7 @@ function draftOf(profile: AiProfileInfo): ProfileDraft {
     key: "",
     removeKey: false,
     hasKey: profile.hasKey,
+    keyRemoved: profile.keyRemovedOnServerChange,
     needsKey: false,
   };
 }
@@ -150,6 +153,7 @@ function draftOfPreset(preset: AiPreset | null): ProfileDraft {
     key: "",
     removeKey: false,
     hasKey: false,
+    keyRemoved: false,
     needsKey: preset?.needsKey ?? false,
   };
 }
@@ -160,6 +164,11 @@ function parseUrl(text: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/** Scheme, host and port of an address, as the core compares them before it keeps a key. */
+function originOf(text: string): string | null {
+  return parseUrl(text.trim())?.origin ?? null;
 }
 
 /** Checks in the UI what the core would refuse anyway, so the message stands at the field. */
@@ -262,6 +271,11 @@ function ProfileForm({ initial, onDone, onCancel, existingIds }: ProfileFormProp
   const [showErrors, setShowErrors] = useState(false);
   const errors = draftErrors(draft, t);
   const invalid = Object.values(errors).some(Boolean);
+  // Saving an existing profile with another server and no new key removes its key (the core
+  // decides; this only says so beforehand).
+  const origin = originOf(draft.baseUrl);
+  const keyDropsOnSave =
+    draft.id !== null && draft.hasKey && !draft.removeKey && draft.key === "" && origin !== null && origin !== originOf(initial.baseUrl);
   const update = (patch: Partial<ProfileDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     save.reset();
@@ -336,11 +350,15 @@ function ProfileForm({ initial, onDone, onCancel, existingIds }: ProfileFormProp
         label={t("ai.profiles.form.key")}
         type="password"
         description={
-          draft.hasKey && !draft.removeKey
-            ? t("ai.profiles.form.keyStored")
-            : draft.needsKey
-              ? t("ai.profiles.form.keyNeeded")
-              : t("ai.profiles.form.keyOptional")
+          keyDropsOnSave
+            ? t("ai.profiles.form.keyDropsOnSave")
+            : draft.hasKey && !draft.removeKey
+              ? t("ai.profiles.form.keyStored")
+              : draft.keyRemoved
+                ? t("ai.profiles.form.keyRemovedServerChanged")
+                : draft.needsKey
+                  ? t("ai.profiles.form.keyNeeded")
+                  : t("ai.profiles.form.keyOptional")
         }
         value={draft.key}
         onChange={(key) => {
@@ -547,6 +565,11 @@ function ProfileRow({ profile, onEdit }: { profile: AiProfileInfo; onEdit: () =>
           </Button>
         </div>
       </div>
+      {profile.keyRemovedOnServerChange && (
+        <Notice tone="warning" role="status" title={t("ai.profiles.keyRemoved.title")} data-testid="ai-key-removed">
+          <p>{t("ai.profiles.keyRemoved.body", { host: profile.host })}</p>
+        </Notice>
+      )}
       {confirming && (
         <InlineConfirm
           title={t("ai.profiles.deleteConfirm.title", { name: profile.name })}

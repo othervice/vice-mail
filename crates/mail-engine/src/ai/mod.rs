@@ -380,9 +380,13 @@ impl<C: Connector> AppCore<C> {
     /// a session without id, consent or registration. Requests add those in
     /// [`Self::ai_session`]; a dry run uses it as it is.
     async fn ai_open(&self, function: AiFunction) -> Result<Session<'_, C>, CoreError> {
-        let stored = self.ai_stored().await?;
-        let profile = stored.usable_profile(function)?.clone();
-        let provider = self.ai_provider(&profile).await?;
+        let (stored, profile, provider) = {
+            let _admin = self.ai().admin.lock().await;
+            let stored = self.ai_stored().await?;
+            let profile = stored.usable_profile(function)?.clone();
+            let provider = self.ai_provider(&profile).await?;
+            (stored, profile, provider)
+        };
         Ok(Session {
             core: self,
             id: None,
@@ -406,7 +410,10 @@ impl<C: Connector> AppCore<C> {
             .remember_found_links(found, accounts.to_vec()))
     }
 
-    /// Builds the provider of a profile with its key from the keychain.
+    /// Builds the provider of a profile with its key from the keychain. Callers hold the settings
+    /// lock (`admin`) from loading the profile until this returns, so the base URL and the key
+    /// come from the same save: a save that changes the server and the key together is either
+    /// entirely before or entirely after (V-02).
     async fn ai_provider(&self, profile: &StoredProfile) -> Result<Box<dyn AiProvider>, CoreError> {
         let key = if profile.has_key {
             self.credentials_ref()
@@ -569,7 +576,8 @@ impl<C: Connector> AppCore<C> {
     }
 
     /// Creates or changes a provider profile. The key goes to the keychain; a changed host
-    /// withdraws the consent.
+    /// withdraws the consent. A changed server (scheme, host or port) without a new key removes
+    /// the stored key (V-02): the keychain entry goes first, and if that fails nothing is saved.
     pub async fn save_ai_profile(
         &self,
         input: AiProfileInput,
@@ -595,7 +603,11 @@ impl<C: Connector> AppCore<C> {
         }
         settings::save(store, &stored).await?;
         drop(_admin);
-        tracing::info!(profile = %profile.id, "AI profile saved");
+        tracing::info!(
+            profile = %profile.id,
+            key_removed_on_server_change = profile.key_removed_on_server_change,
+            "AI profile saved"
+        );
         self.ai_settings_changed().await;
         self.get_ai_settings().await
     }
@@ -692,11 +704,23 @@ impl<C: Connector> AppCore<C> {
         }
     }
 
+    /// A saved profile and its provider for the model list or the connection test: both work on
+    /// what is saved (the form's unsaved values never reach a provider), with the profile's own
+    /// key only. Needs AI on.
+    async fn ai_stored_provider(
+        &self,
+        profile_id: &str,
+    ) -> Result<(StoredProfile, Box<dyn AiProvider>), CoreError> {
+        let _admin = self.ai().admin.lock().await;
+        let stored = self.ai_stored().await?;
+        let profile = stored.enabled_profile(profile_id)?.clone();
+        let provider = self.ai_provider(&profile).await?;
+        Ok((profile, provider))
+    }
+
     /// The models of a profile (sends the key, no mail). Needs AI on.
     pub async fn list_ai_models(&self, profile_id: String) -> Result<Vec<AiModel>, CoreError> {
-        let stored = self.ai_stored().await?;
-        let profile = stored.enabled_profile(&profile_id)?.clone();
-        let provider = self.ai_provider(&profile).await?;
+        let provider = self.ai_stored_provider(&profile_id).await?.1;
         let models = provider
             .list_models(&CancelToken::new())
             .await
@@ -716,9 +740,7 @@ impl<C: Connector> AppCore<C> {
         &self,
         profile_id: String,
     ) -> Result<AiConnectionTest, CoreError> {
-        let stored = self.ai_stored().await?;
-        let profile = stored.enabled_profile(&profile_id)?.clone();
-        let provider = self.ai_provider(&profile).await?;
+        let (profile, provider) = self.ai_stored_provider(&profile_id).await?;
         let cancel = CancelToken::new();
         let models = provider.list_models(&cancel).await.map_err(failure)?;
         let model = profile.model.trim();

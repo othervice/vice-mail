@@ -31,6 +31,7 @@ use crate::sync_state::BackoffPolicy;
 use crate::{AppCore, BuildInfo, CoreConfig, CoreServices, ReadingServices, RecordingOpener};
 
 mod qa;
+mod server_change;
 
 const WAIT: Duration = Duration::from_secs(10);
 const KEY: &str = "sk-test-VERYSECRETKEY-0123456789";
@@ -684,7 +685,9 @@ async fn cloud_providers_need_consent_and_see_only_permitted_accounts() {
         .await
         .expect("saved");
     assert!(settings.profiles[0].needs_consent);
-    assert!(settings.profiles[0].has_key);
+    // The key stays with the server it was entered for (V-02, `server_change`).
+    assert!(!settings.profiles[0].has_key);
+    assert!(settings.profiles[0].key_removed_on_server_change);
 }
 
 #[tokio::test]

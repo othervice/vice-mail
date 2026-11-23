@@ -31,6 +31,9 @@ pub(crate) struct StoredProfile {
     /// A key is in the keychain under `CredentialRef::for_ai_profile(id)`.
     #[serde(default)]
     pub has_key: bool,
+    /// The last save removed the key because the server changed (V-02); the next save clears it.
+    #[serde(default)]
+    pub key_removed_on_server_change: bool,
     /// Consent to send data to `consent_host` (Unix ms).
     #[serde(default)]
     pub consent_at: Option<i64>,
@@ -79,6 +82,7 @@ impl StoredProfile {
             structured_output: self.structured_output,
             max_output_tokens: self.max_output_tokens,
             has_key: self.has_key,
+            key_removed_on_server_change: self.key_removed_on_server_change,
             host: self.host(),
             locality,
             consent_at: if local || !self.consented() {
@@ -103,6 +107,22 @@ pub(crate) fn host_of(base_url: &str) -> String {
             }
         }
         Err(_) => String::new(),
+    }
+}
+
+/// Whether a key stored for `before` may go to `after`: both have the same origin (scheme,
+/// host and port, the default port of the scheme when none is given). A change of the path
+/// keeps it; a URL that does not parse never matches.
+pub(crate) fn same_server(before: &str, after: &str) -> bool {
+    match (
+        url::Url::parse(before.trim()),
+        url::Url::parse(after.trim()),
+    ) {
+        (Ok(before), Ok(after)) => {
+            let before = before.origin();
+            before.is_tuple() && before == after.origin()
+        }
+        _ => false,
     }
 }
 
@@ -277,6 +297,12 @@ fn new_id() -> String {
 
 /// Applies a profile from the UI to `stored`: validated, a new id for a new profile, consent
 /// withdrawn when the host changes. Returns the profile and what to do with its key.
+///
+/// V-02: a key belongs to the server it was entered for. When an existing profile with a key
+/// moves to another server (scheme, host or port) and the input keeps the key, the key is
+/// removed instead (`KeyAction::Remove`) and the profile says so
+/// (`key_removed_on_server_change`), so neither the model list nor the connection test nor a
+/// request sends it to the new server. The caller deletes it from the keychain before it saves.
 pub(crate) fn apply_input(
     stored: &mut StoredAi,
     input: AiProfileInput,
@@ -296,7 +322,7 @@ pub(crate) fn apply_input(
             "the output limit is at least 1 token".into(),
         ));
     }
-    let key = match input.key {
+    let mut key = match input.key {
         AiKeyChange::Keep => KeyAction::Keep,
         AiKeyChange::Remove => KeyAction::Remove,
         AiKeyChange::Set { key } => match super::key_secret(key) {
@@ -332,10 +358,19 @@ pub(crate) fn apply_input(
             structured_output: true,
             max_output_tokens: None,
             has_key: false,
+            key_removed_on_server_change: false,
             consent_at: None,
             consent_host: None,
         },
     };
+    let key_dropped = index.is_some()
+        && profile.has_key
+        && matches!(key, KeyAction::Keep)
+        && !same_server(&profile.base_url, &base_url);
+    if key_dropped {
+        key = KeyAction::Remove;
+    }
+    profile.key_removed_on_server_change = key_dropped;
     profile.name = name;
     profile.kind = input.kind;
     profile.base_url = base_url;

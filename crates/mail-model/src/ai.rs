@@ -106,6 +106,10 @@ pub struct AiProfileInfo {
     pub max_output_tokens: Option<u32>,
     /// A key is stored in the keychain (never shown).
     pub has_key: bool,
+    /// The last save changed the base URL's server (scheme, host or port) without a new key,
+    /// so the core removed the stored key (a key belongs to the server it was entered for).
+    /// The settings ask for it again; cleared by the next save of the profile.
+    pub key_removed_on_server_change: bool,
     /// Host and port of the base URL ("an wen").
     pub host: String,
     pub locality: AiLocality,
@@ -126,7 +130,8 @@ pub struct AiProfileInfo {
     rename_all_fields = "camelCase"
 )]
 pub enum AiKeyChange {
-    /// Keep the stored key (or none).
+    /// Keep the stored key (or none). When the base URL's server (scheme, host or port)
+    /// changes, the stored key is removed instead.
     Keep,
     /// Delete the stored key.
     Remove,
