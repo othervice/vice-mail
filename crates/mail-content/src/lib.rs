@@ -18,7 +18,9 @@
 //! (`mail_model::RenderToken`), external images are fetched by the engine and passed in as
 //! bytes ([`RemotePolicy::Allow`]), the random part of a Message-ID too ([`new_message_id`]).
 
+mod classify;
 mod compose;
+mod contacts;
 mod css;
 mod dom;
 mod filename;
@@ -28,13 +30,25 @@ mod image;
 mod links;
 mod parse;
 mod preview;
+mod templates;
 mod text;
 
+pub use classify::{
+    CLASSIFY_HEADER_FIELDS, ClassifyHeaders, LocalSignals, SenderIdentity, SenderRules,
+    apply_user_rules, classify, classify_automatic, is_no_reply_address, normalize_key,
+};
 pub use compose::{
     Attachment, BuiltMessage, ComposeError, MAX_REFERENCES, Original, OutgoingMessage,
     PreparedDraft, QuoteLanguage, QuoteOptions, ReplyKind, build_message, choose_identity,
     forward_subject, mail_html, new_message_id, normalize_email, prepare_forward, prepare_reply,
     reply_recipients, reply_references, reply_subject, strip_subject_prefixes,
+};
+pub use contacts::{
+    Contact, ContactAddress, ContactBook, ContactError, ContactMatch, ContactMerge, Direction,
+    DuplicateKind, DuplicateSuggestion, HALF_LIFE_SECS, MAX_NAME_CHARS, MAX_NAMES_PER_CONTACT,
+    NormalizedAddress, Observation, PersonName, RECEIVED_WEIGHT, Rank, SENT_WEIGHT, SeenName,
+    Skipped, clean_display_name, fold, fold_german, normalize_address, normalize_domain,
+    observations, split_name, unicode_domain,
 };
 pub use filename::{
     FALLBACK_NAME, MAX_NAME_BYTES, attachment_file_name, is_executable_type, sanitize_filename,
@@ -50,4 +64,10 @@ pub use parse::{
     MAX_TEXT_BODY_BYTES, MessageHeaders, ParseProblem, ParsedMessage, attachment_bytes, parse,
 };
 pub use preview::{PREVIEW_CHARS, preview_from_html, preview_from_text};
+pub use templates::{
+    DraftBody, DraftParts, FilledTemplate, LocalDate, MAX_SIGNATURE_BYTES, MAX_SNIPPET_INPUT_BYTES,
+    MAX_TEMPLATE_BYTES, MAX_TEMPLATE_SUBJECT_CHARS, Placeholder, Quote, ReplyPosition,
+    SIGNATURE_SEPARATOR, SanitizeNotes, Signature, SnippetError, Template, TemplateProblem,
+    TemplateValues, assemble_draft, fill_template,
+};
 pub use text::{MAX_TEXT_BYTES, RenderedText, TextLine, TextSpan, html_to_text, render_text};

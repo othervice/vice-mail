@@ -23,6 +23,8 @@ mod tests;
 pub use address::{new_message_id, normalize_email};
 pub use build::{Attachment, BuiltMessage, ComposeError, OutgoingMessage, build_message};
 pub use html::mail_html;
+// The document model of mail HTML, for signatures and templates (`crate::templates`).
+pub(crate) use html::{Block, Inline, fragment, html_blocks, text_blocks, trim_paragraphs};
 pub use reply::{
     MAX_REFERENCES, Original, PreparedDraft, QuoteLanguage, QuoteOptions, ReplyKind,
     choose_identity, forward_subject, prepare_forward, prepare_reply, reply_recipients,

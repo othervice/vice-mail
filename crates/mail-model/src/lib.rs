@@ -11,7 +11,9 @@
 mod account;
 mod backend;
 mod body;
+mod bundle;
 mod capabilities;
+mod category;
 mod error;
 mod ids;
 mod ipc;
@@ -41,7 +43,14 @@ pub use body::{
     BodyFetchPlan, BodySection, Disposition, FetchedSection, LARGE_MESSAGE_THRESHOLD,
     MessageStructure, MimePart, PartPath, RawMessage,
 };
+pub use bundle::{
+    Bundle, BundleItem, BundleKey, BundleOptions, BundleRow, BundleState, BundleSummary,
+    DEFAULT_BUNDLE_CHIPS, MAX_BUNDLE_SENDERS, SenderChip, bundle_page,
+};
 pub use capabilities::Capabilities;
+pub use category::{
+    CategoryCorrection, CategoryDecision, CategoryReason, MessageCategory, SenderKey, SenderKeyKind,
+};
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
 pub use ipc::{
