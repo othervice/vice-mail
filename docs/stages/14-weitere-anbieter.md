@@ -42,14 +42,14 @@ Domain, Datenschutzerklärung und Demo-Video.
 
 ## Block D — JMAP
 
-- [ ] Adapter für JMAP (Fastmail, Stalwart). Der Testserver Stalwart spricht JMAP, also dieselben Integrationstests wie für IMAP
-- [ ] Push über EventSource statt IDLE
+- [x] Adapter für JMAP (Fastmail, Stalwart). Der Testserver Stalwart spricht JMAP, also dieselben Integrationstests wie für IMAP (0041; gegen Stalwart getestet, Fastmail ungeprüft)
+- [x] Push über EventSource statt IDLE
 
 ## Für jeden neuen Adapter
 
-- [ ] `MailBackend` nur dort erweitern, wo der zweite Adapter es wirklich verlangt; Unterschiede über `Capabilities` ausdrücken, nicht verstecken
-- [ ] Die gemeinsame Test-Suite (Abgleich, Aktionen, Senden, Konflikte) läuft gegen den neuen Adapter
-- [ ] Nur-Lese-Schutz gilt auch hier und ist getestet
+- [x] `MailBackend` nur dort erweitern, wo der zweite Adapter es wirklich verlangt; Unterschiede über `Capabilities` ausdrücken, nicht verstecken (JMAP: `MailBackend` unverändert, 0041)
+- [x] Die gemeinsame Test-Suite (Abgleich, Aktionen, Senden, Konflikte) läuft gegen den neuen Adapter (JMAP: dieselben Szenarien in eigenen Servertests, siehe Ergebnis)
+- [x] Nur-Lese-Schutz gilt auch hier und ist getestet (JMAP)
 
 ## Abnahme
 
@@ -241,3 +241,72 @@ keine.
   (Testnutzer): Anmeldung, Abgleich, Senden nach Freischalten, Erneuern nach über einer Stunde,
   „Erneut anmelden“ nach Widerruf beim Anbieter, Entfernen (bei Google danach unter
   myaccount.google.com/permissions verschwunden), eins davon als Sync-Konto.
+
+### Block D — JMAP (23.11.2026)
+
+**Stand: gebaut und gegen den lokalen Stalwart geprüft; Fastmail und Windows ungeprüft.**
+Ausgeführt am 23.11.2026 (Subagent der Hauptsitzung), Commits 9d5664b (Adapter `mail-jmap`,
+UID-Nummerierung, Protokoll am Konto, Migration `0017_jmap.sql`, Erkennung, Einstellungs-Sync,
+Testserver mit HTTPS), 4cb49b6 (Protokollwahl in der Kontoeinrichtung, Desktop-Test), 085f858
+(Clippy), da7b3ff (Desktop-Test unabhängig von der Systemsprache), dazu die Doku. Entscheidung: 0041 (JMAP hinter den IMAP-förmigen Traits).
+
+**Nachgewiesen**
+- Einheitentests ohne Server (in `check.sh`): `cargo test -p mail-jmap` (32 Tests: Parser mit
+  aufgezeichneten Stalwart-Antworten für Sitzung, Postfächer, `Email/get`, EventSource und
+  Ablehnungen; Fehlerabbildung; Allowlist; der ganze Adapter gegen einen geskripteten JMAP-Server:
+  Erstabgleich mit Paging, Änderungen über `Email/changes`, Neustart mit gespeicherter
+  Nummerierung, `cannotCalculateChanges`, Schreiben, Konflikt über den Zählerstand, Push, Senden mit
+  Ablehnung, Nur-Lese-Schutz ohne eine einzige Anfrage, `auth_failed`, `jmap_unavailable`,
+  `connection_refused`), Speicher `jmap::tests::the_map_round_trips_changes_and_goes_with_the_account`,
+  Engine `protocols::tests::jmap_refuses_read_only_writers_and_the_settings_sync_before_connecting`,
+  Erkennung `discovery::autoconfig::tests::jmap_is_found_at_the_well_known_address` und
+  `autoconfig_files_may_list_jmap`, Modell `account::tests::jmap_settings_use_one_tls_server_and_imap_stays_the_default`.
+  Oberfläche: `app/tests/jmap-setup.test.tsx` (4 Tests).
+- Servertests gegen Stalwart über HTTPS (`--include-ignored`, Sperre `jmap`):
+  im Worktree auf 085f858 gegen den gemeinsamen Stalwart (der beim Start den HTTPS-Listener
+  bekam): `cargo test -p mail-jmap --test server` 2 von 2 grün (Erstabgleich von INBOX, Archive,
+  `Projects/2026`, `Projects/Überprüfung` mit denselben Mails, Betreffs und Flags wie über IMAP und
+  byte-gleichem Body; Push bei einer über JMAP gesendeten Mail; Flag-Änderung über IMAP als
+  geändertes Flag; Schreiben, Konflikt über `unchanged_since`, Verschieben mit COPYUID, Löschen,
+  Anhängen mit APPENDUID und Suche nach Message-ID; abgelehnte Einreichung ohne Rest; nur lesende
+  Verbindungen sendeten nur Lese-Methoden), `cargo test -p mail-engine --test jmap` 1 von 1 grün
+  (über `AppCore`: Verbindungstest und Einrichtung eines JMAP-Kontos, Erstabgleich, Nur-Lese-Schutz
+  ohne Writer, neue Mail per Push bei zehn Minuten Abfrageabstand, Änderung über IMAP per Push,
+  Markieren, Archivieren und Löschen über die Outbox bis auf den Server, Konflikt `gone`, Senden mit
+  Gesendet-Kopie, nur Lese-Methoden auf den Leseverbindungen, Neustart ohne neue Auflistung).
+  Dazu `cargo test -p mail-imap -- --include-ignored` (alle Adapter- und Servertests, 107) grün
+  nach der Änderung am Testserver.
+- Desktop-Test (WebdriverIO, echtes WKWebView, `scripts/e2e-gui.sh --spec ./tests/e2e/jmap.e2e.mjs`)
+  im eigenen Worktree auf 085f858 mit der Spec aus da7b3ff, Testserver dort frisch eingerichtet:
+  2 von 2 grün (JMAP in den Server-Einstellungen gewählt, Verbindungstest meldet Push, Konto
+  hinzugefügt, Posteingang zeigt Bobs Mails, Konto nur lesend mit Protokoll `jmap`, keine
+  CSP-Verstöße). Die übrigen Desktop-Specs wurden nicht erneut ausgeführt.
+- Im Worktree auf 085f858 außerdem: `cargo test -p mail-jmap -p mail-model -p mail-store -p
+  mail-engine --lib` (32, 153, 151, 407 grün), Clippy dieser Crates mit `-D warnings`, und
+  TypeScript-Prüfung, ESLint und Vitest (84 Dateien, 3.961 Tests) grün.
+- Gesamtprüfung: `scripts/check.sh` im Hauptverzeichnis grün (23.11.2026 gegen 20:50 Uhr, auf
+  39ff096 mit den unfertigen Änderungen anderer Sitzungen im Arbeitsverzeichnis): alle Schritte bis
+  zur Lizenzliste, 1.283 Rust-Tests (96 Servertests ignoriert), 3.967 Vitest-Tests in 84 Dateien,
+  Clippy auch für das Windows-Ziel.
+
+**Abweichungen und Annahmen**
+- Keine eigene JMAP-Engine: der Adapter bildet UIDs, UIDVALIDITY und HIGHESTMODSEQ nach und
+  speichert seine Nummerierung (Tabellen `jmap_*`); siehe 0041.
+- `MailBackend` blieb unverändert; dazu kamen `Protocol`/`ConnectConfig::{protocol, account}`,
+  `Capabilities::jmap`, `MailConnector::attach_uid_map_store` mit `UidMapStore`,
+  `DiscoveryResult::jmap` und der Fehlercode `jmap_unavailable`.
+- Der Testserver hat einen HTTPS-Listener (18443) mit `STALWART_PUBLIC_URL`; ein alter Datenbestand
+  bekommt ihn beim nächsten `start`.
+- Kopfdaten kaputter Mails können sich zwischen IMAP und JMAP im Absender unterscheiden (0041).
+- Das Sync-Konto des Einstellungs-Syncs muss IMAP sprechen.
+
+**Ungeprüft / offen**
+- Fastmail (vermutlich nur mit API-Token, also nach 0042 als Bearer) und andere JMAP-Anbieter an
+  einem echten Konto.
+- Windows zur Laufzeit.
+- Mehrere Anbieter parallel im vereinten Posteingang mit einem JMAP-Konto: nicht eigens getestet.
+- Einstellungs-Sync auf einem JMAP-Konto (nicht umgesetzt, `unsupported_server`).
+
+**Wartet auf**
+- Mensch: falls JMAP bei Fastmail gebraucht wird, ein Fastmail-Testkonto; dann zuerst klären, ob
+  ein API-Token nötig ist.

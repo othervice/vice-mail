@@ -13,6 +13,7 @@ app/src-tauri            dünne Shell: Fenster, Commands, Verdrahtung
 mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Regeln
    ├── mail-store        SQLite, Migrationen, FTS5, Abfragen
    ├── mail-imap         IMAP- und SMTP-Adapter, implementiert MailBackend
+   ├── mail-jmap         JMAP-Adapter (Stufe 14, 0041), implementiert MailBackend, MailWriter, MailSender
    ├── mail-content      Parsen, HTML-Bereinigung, Link-Prüfung, Dateinamen (rein, ohne IO)
    ├── webview2-guard    nur Windows: Navigationen im Mail-Frame abfangen (einzige Crate mit `unsafe`, 0011)
    └── mail-mcp          MCP-Server: Hilfsprogramm und Werkzeuge gegen `MailAccess` (0015)
@@ -42,6 +43,7 @@ wenn er groß genug ist.
 | Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
 | Migrationen | rusqlite_migration | 2.7.0 | klein, nutzt `user_version`; legt rusqlite auf ^0.41 fest (0006) |
 | IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
+| JMAP | eigener Adapter `mail-jmap` über das reqwest des Workspace (HTTP/1.1, rustls aus `mail_imap::tls`) und serde_json | – | Stufe 14 (0041): RFC 8620/8621 sind JSON über HTTPS; die wenigen Methoden (Sitzung, `Mailbox/get`, `Email/query`, `/changes`, `/get`, `/set`, `/import`, `EmailSubmission/set`, Blobs, EventSource) sind schmaler als eine Bibliothek. Keine neue Abhängigkeit |
 | SMTP | lettre (nur Protokollschicht, `smtp-transport` + `tokio1`) | 0.11.24 | TLS, Zeitlimits und STARTTLS macht der Adapter selbst wie bei IMAP (Plattform-Verifier); lettre ohne eigenes TLS |
 | MIME lesen / schreiben | mail-parser / mail-builder | 1.0.1 / 2.0.1 | robust gegen kaputte Mails, vom Stalwart-Projekt |
 | Body-Ablage | zstd (Stufe 3, mit Prüfsumme) | 0.14.4 | gleiches Verhältnis wie Deflate, 4- bis 20-mal schneller beim Packen; Dateien statt BLOBs, damit Datenbank und Migrationssicherungen klein bleiben (0009) |
@@ -61,7 +63,7 @@ wenn er groß genug ist.
 | Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
 | Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
 | Barrierefreiheit (Tests) | axe-core (nur Entwicklung) | =4.14.0 | Stufe 8: prüft Rollen, Namen, ARIA und Struktur der gerenderten Ansichten in Vitest (`app/tests/a11y.test.tsx`), hell und dunkel; keine schweren oder kritischen Befunde erlaubt. Farbkontraste prüft `app/tests/contrast.test.ts` an den Tokens, weil jsdom keine Stylesheets rendert; die Mail im Sandbox-Frame bleibt außen vor. MPL-2.0 (verträglich mit GPL-3.0, wird nicht ausgeliefert); 4.14.0 vom 5. Oktober 2026 statt der eine Woche alten 4.14.1 |
-| Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
+| Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). JMAP über HTTPS auf 18443 mit `STALWART_PUBLIC_URL` (0041). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
 | Windows-Build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | Installer vom Mac aus, in Spike C gebaut (kalt 74 s); `makensis` nur mit UTF-8-Locale (`LANG=en_US.UTF-8`), siehe `docs/SETUP.md` |
 
 Verworfen: SQLx (asynchron ohne Nutzen bei einem Schreiber, SQLCipher nur über Umwege), SQLCipher
@@ -96,6 +98,10 @@ vice-mail/
 - `mail-store`: einzige Stelle mit SQL. Ein Schreib-Thread, ein Pool von Lese-Verbindungen, WAL.
   Kein Datenbankaufruf blockiert einen Tokio-Worker.
 - `mail-imap`: spricht IMAP und SMTP, liefert Modelltypen. Kennt weder Datenbank noch Oberfläche.
+- `mail-jmap` (Stufe 14, 0041): spricht JMAP über HTTPS hinter denselben Traits, liefert
+  Modelltypen. Kennt weder Datenbank noch Oberfläche; seine UID-Nummerierung schreibt er über den
+  Trait `UidMapStore`, den der Speicher umsetzt. Die Engine wählt den Adapter je Konto
+  (`AnyConnector`, `AnySender` in `mail-engine/src/protocols.rs`).
 - `mail-content`: macht aus Rohdaten eine angezeigte Mail: Parsen, HTML-Bereinigung mit Pflicht-CSP,
   Link-Platzhalter, Link-Warnungen, sichere Dateinamen, Vorschautext. Rein, ohne IO, ohne Tokio;
   sicherheitskritisch und mit eigenem Korpus getestet (deshalb ein fünftes Crate).
@@ -115,7 +121,8 @@ vice-mail/
 - Ereignisse empfängt die Oberfläche über die Capability `core:event:default`; weitere Capabilities nur mit Begründung.
 
 `MailBackend` meldet über eine `Capabilities`-Struktur, was der Server kann (IDLE, CONDSTORE, MOVE,
-UIDPLUS, SPECIAL-USE, eigene Schlagwörter, ab Stufe 14 Gmail mit `X-GM-EXT-1`). Die Engine und die
+UIDPLUS, SPECIAL-USE, eigene Schlagwörter, ab Stufe 14 Gmail mit `X-GM-EXT-1` und JMAP mit dem,
+was der Adapter dort nachbildet, 0041). Die Engine und die
 Oberfläche fragen danach. Was ein
 Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem klaren Hinweis versehen.
 
@@ -158,6 +165,8 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `sync_record` | je synchronisierbarem Datensatz die aktuelle Version (Inhalt oder Grabstein, bei Konten mit Feldversionen) und die zuletzt abgeglichene; `sync_dirty` hält die in einer Transaktion geänderten bis zum Commit (Stufe 11, 0022) | Gerät |
 | `sync_state`, `sync_adopted` | Geräte-ID im Sync, höchste Version der Uhr, an/aus, Sync-Konto und Ordner, letzter Durchlauf und letzte Vollprüfung, Ordnerstand; übernommene Konten ohne Passwort | Gerät |
 | `sync_device` | Geräte des Syncs mit Name, System, zuletzt gesehen | sync |
+| `account.protocol` | Stufe 14 (0041): `imap` oder `jmap`, fest ab der Einrichtung; bei JMAP nennen die `imap_*`-Spalten den JMAP-Server, `smtp_*` eine Kopie | sync (nur bei JMAP im Datensatz) |
+| `jmap_state`, `jmap_mailbox`, `jmap_uid` | Stufe 14 (0041): die UID-Nummerierung des JMAP-Adapters je Konto (JMAP-Konto-Id, Email-State, Zähler als HIGHESTMODSEQ), je JMAP-Postfach (UIDVALIDITY, nächste UID, fertig nummeriert) und je UID (Email-Id, Zählerstand der letzten Änderung) | Cache |
 | `account_server_change` | Server (IMAP und SMTP), die ein Konto-Datensatz aus dem Sync-Ordner für ein vorhandenes Konto nennt und die von denen dieses Geräts abweichen; warten auf „übernehmen“ oder „behalten“ (`dismissed`), solange sieht der Sync diese Server als die des Kontos (Sicherheitsprüfung F1, 0040) | Gerät |
 
 Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt auf dem Gerät.
@@ -345,6 +354,12 @@ einer klaren Meldung abgelehnt.
   EXAMINE über die Allowlist; Labels ändert nur die Outbox-Verbindung (`UID STORE ±X-GM-LABELS`,
   `Access::ReadWrite`), die Nur-Lese- und die Sync-Verbindung lehnen es ab (Tests in
   `crates/mail-imap/src/tests/gmail.rs`).
+- JMAP (Stufe 14, 0041): eine nur lesende Verbindung sendet nur Methoden einer Allowlist
+  (`Core/echo`, `*/get`, `*/query`, `*/changes`, `*/queryChanges`, `SearchSnippet/get`,
+  `Identity/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` und Uploads
+  scheitern mit `read_only`, bevor etwas gesendet wird. Writer und Sender lehnen eine nur lesende
+  Konfiguration vor jeder Verbindung ab (Tests in `crates/mail-jmap/src/tests.rs`, Mitschnitt der
+  Methoden in `crates/mail-engine/tests/jmap.rs`).
 - Ausnahme, nur nach „Sync einschalten“ (Stufe 11, 0014, 0022): Die Verbindung des
   Einstellungs-Syncs darf in genau einen Ordner schreiben, den Sync-Ordner; jede andere
   schreibende Zeile lehnt der Adapter mit `read_only` ab, bevor sie gesendet wird
@@ -382,6 +397,18 @@ einer klaren Meldung abgelehnt.
   Wirkung an der Mail, immer gesendet, ohne `UNCHANGEDSINCE`.
 - Archivieren entfernt `\Inbox` vom Ort im Posteingang (kein Archiv-Ordner nötig), Rückgängig über
   „Alle Nachrichten“; Verschieben aus „Alle Nachrichten“ setzt nur das Ziel-Label (kein EXPUNGE dort).
+
+**JMAP (Stufe 14, Block D, 0041)**
+- Ein Adapter hinter den IMAP-förmigen Traits, keine zweite Engine: der Adapter nummeriert die
+  Mails jedes JMAP-Postfachs selbst (UIDVALIDITY je Postfach, UIDs in der Reihenfolge des
+  Eintreffens), HIGHESTMODSEQ ist ein Zähler je Konto, der mit jedem neuen Email-State steigt.
+  „Postfach öffnen“ liest `Email/changes` seit dem gemerkten State und die `mailboxIds` der
+  geänderten Mails; ein Neustart behält die Nummern (Tabellen `jmap_*`).
+- Push über EventSource (RFC 8620, 7.3) in `idle`; ohne EventSource fragt die Engine ab.
+- Schreiben über die Outbox wie bei IMAP: `Email/set` (Keywords, `mailboxIds`, destroy),
+  `Email/import`, `Mailbox/set`; Senden über `EmailSubmission/set`, die Gesendet-Kopie legt die App
+  ab. Konflikte über den Zählerstand je Mail.
+- Das Sync-Konto des Einstellungs-Syncs muss IMAP sprechen.
 
 **Anmeldung mit Microsoft und Google (Stufe 14, Blöcke B und C, 0042)**
 - OAuth 2.0 Authorization Code mit PKCE (S256) im System-Browser, Weiterleitung an einen
@@ -550,6 +577,11 @@ einer klaren Meldung abgelehnt.
   eigene Leseverbindung neben Abgleich und IDLE, immer nur lesend (EXAMINE, `BODY.PEEK[…]`);
   beim Sync-Konto eine weitere für den Einstellungs-Sync (Stufe 11), die nur in den Sync-Ordner
   schreibt
+- JMAP-Konten (Stufe 14, 0041): die Sitzung unter `https://<host>[:<port>]/.well-known/jmap` des
+  eingerichteten Servers (Weiterleitungen nur auf denselben Host oder seine Subdomains, höchstens
+  drei) und die Adressen, die diese Sitzung nennt (API, Download, Upload, EventSource), nur HTTPS.
+  Je Konto die Verbindungen wie bei IMAP (Abgleich, Push, Lesebereich, Outbox), jede ein eigener
+  HTTP-Client ohne Proxy, Cookies, Referrer und Wiederholungen
 - Bei der Einrichtung, nur nach Klick auf „online suchen“: DNS-SRV-Abfragen (RFC 6186) über die
   System-DNS-Server für die Domain der Adresse, danach HTTPS (Port 443) zur Autokonfiguration der
   eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
@@ -560,7 +592,9 @@ einer klaren Meldung abgelehnt.
   Groß-/Kleinschreibung und Schlusspunkt) oder als IP-Adresse bekommt dabei eine eigene Warnung
   (`DiscoveryResult.warnings`, RFC 6186 Abschnitt 6, Sicherheitsprüfung N-4,
   `discovery/warning.rs`); ausgenommen sind die Server der eingebauten Anbietertabelle, deren
-  Ergebnisse nie eine Warnung tragen. MX wird nicht abgefragt.
+  Ergebnisse nie eine Warnung tragen. MX wird nicht abgefragt. Ab Stufe 14 (0041) dazu
+  ein HTTPS-GET ohne Zugangsdaten an `<domain>/.well-known/jmap` (gleiche Regeln für
+  Weiterleitungen), um einen JMAP-Server anzubieten.
 - Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“;
   bei einer geöffneten `.eml`-Datei nur „einmal laden“, 0027).
   Der Kern lädt sie selbst (`mail-engine/src/reading/remote.rs`): reqwest über rustls mit der
@@ -646,7 +680,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
 | Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
 | Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
-| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040) |
+| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040); das Protokoll (Feld `protocol`, nur bei JMAP-Konten) gilt nur beim Übernehmen eines Kontos, nie für ein vorhandenes (0041) |
 
 - **Neues Gerät:** Sync-Konto einrichten, Passphrase eingeben, Vorschau der zu übernehmenden Daten,
   zusammenführen. Übernommene Konten fragen einzeln nach ihrem Passwort.
@@ -805,6 +839,7 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
 | KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
+| JMAP hinter den IMAP-förmigen Traits mit eigener UID-Nummerierung (0041) | Abgleich, Outbox, Konflikte, Lesebereich und Suche bleiben eine Logik für beide Protokolle | eigener JMAP-Abgleich in der Engine über `Email/changes` |
 | Microsoft und Google über IMAP/SMTP mit OAuth statt Graph bzw. Gmail-API (0042) | vorhandener Adapter, Gmail-Eigenheiten aus Block A bleiben; die Gmail-API hätte denselben „restricted scope“ | eigener Adapter hinter `MailBackend` |
 | Anhangsvorschau im Kern statt im PDF-Betrachter der WebView (0036) | die WebView sieht nur neu kodierte Bilder und Text; keine CSP-Lockerung, keine PDF-Skripte | PDF-Vorschau abschalten (`preview_unsupported`), Öffnen im System bleibt |
 | Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
