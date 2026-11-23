@@ -423,6 +423,42 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   geladen); falls doch, notieren.
 - **Ergebnis:**
 
+## 20. Funktionsabgleich (Stufe 16, ab Prototyp 4)
+
+**20.1 Ordnen**
+- **Tun:** Eine Mail auf die Lese-Liste setzen (Q) und die Ansicht „Lese-Liste“ öffnen; im
+  Listenkopf „Nur ungelesene“ einschalten; einen Ordner über sein „…“-Menü zum Favoriten machen und
+  ihm eine Farbe geben; einen Absender blockieren und wieder freigeben.
+- **Erwartet:** Nichts davon ändert etwas auf dem Server. Favoriten stehen oben in der
+  Seitenleiste, die Farbe steht immer neben dem Namen. Mails blockierter Absender verschwinden aus
+  dem Posteingang, ein Hinweis nennt ihre Zahl.
+- **Ergebnis:**
+
+**20.2 Zwischen Konten verschieben (zwei Nebenkonten mit Schreibzugriff)**
+- **Tun:** Eine Mail auf einen Ordner des anderen Kontos ziehen; im Dialog „Verschieben“ wählen.
+  Danach eine zweite „Kopieren“.
+- **Erwartet:** Der Dialog erklärt, was passiert. Die Mail liegt danach genau einmal im Ziel; beim
+  Verschieben verschwindet sie erst danach aus der Quelle. „Aktivität“ zeigt den Fortschritt.
+- **Ergebnis:**
+
+**20.3 Schnellantwort, Suchen, Anhänge**
+- **Tun:** Unter einer geöffneten Mail in das Antwortfeld tippen und mit Strg+Enter senden; in einer
+  langen Mail Strg+F drücken und ein Wort suchen; bei einer Mail mit Bild, PDF und Textanhang die
+  Vorschau öffnen (Leertaste), „Alle speichern“, einen Anhang anheften.
+- **Erwartet:** Die Antwort geht mit der üblichen Verzögerung hinaus. Die Suche markiert Treffer auch
+  im Mailtext, Enter springt weiter, Escape schließt. Die Vorschau zeigt Bild, PDF-Seiten und Text
+  ohne Verzögerung; HTML- oder SVG-Anhänge haben keine Vorschau. „Alle speichern“ überschreibt keine
+  vorhandene Datei.
+- **Ergebnis:**
+
+**20.4 Lesebestätigung, Töne, Farbthemen**
+- **Tun:** Eine Mail mit „Lesebestätigung anfordern“ an dich selbst senden und beim Empfang „Nicht
+  senden“ wählen; Benachrichtigungston einstellen und eine neue Mail abwarten; unter Darstellung die
+  Farbthemen durchprobieren.
+- **Erwartet:** Ohne Klick auf „Bestätigung senden“ wird nie eine Bestätigung gesendet. Der Ton ist
+  zu hören (außer in Ruhezeiten). Jedes Farbthema ist in Hell und Dunkel gut lesbar.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

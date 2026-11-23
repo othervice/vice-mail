@@ -41,7 +41,7 @@ export const config = {
     "./tests/e2e/restart.e2e.mjs",
     "./tests/e2e/account-sync.e2e.mjs",
     "./tests/e2e/reading.e2e.mjs",
-    // Stage 16: find in the open message (written, not run yet).
+    // Stage 16: find in the open message.
     "./tests/e2e/find-in-message.e2e.mjs",
     "./tests/e2e/attachment-preview.e2e.mjs",
     "./tests/e2e/comfort.e2e.mjs",
@@ -58,7 +58,7 @@ export const config = {
     "./tests/e2e/mcp-sync.e2e.mjs",
     "./tests/e2e/ai.e2e.mjs",
     "./tests/e2e/a11y.e2e.mjs",
-    // Stage 15 (decision 0037): in-app updates against a local update server (written, not run yet).
+    // Stage 15 (decision 0037): in-app updates against a local update server.
     "./tests/e2e/updates.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],

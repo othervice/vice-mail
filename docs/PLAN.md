@@ -24,15 +24,15 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 05 | [Verfassen und Senden](stages/05-verfassen-und-senden.md) | fertig | **erste täglich nutzbare Version auf dem Mac** |
 | 06 | [Windows und Builds](stages/06-windows-und-builds.md) | wartet auf Windows-Test | **installierbar auf Windows und MacBook** |
 | 07 | [Suche, Threads, mehrere Konten](stages/07-suche-threads-konten.md) | fertig | vereinter Posteingang, schnelle Suche |
-| 08 | [Bedienung und Barrierefreiheit](stages/08-bedienung-und-barrierefreiheit.md) | in Arbeit | Layouts, Tastatur, Command Palette |
+| 08 | [Bedienung und Barrierefreiheit](stages/08-bedienung-und-barrierefreiheit.md) | fertig | Layouts, Tastatur, Command Palette |
 | 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | fertig | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
 | 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | fertig | Signaturen, Vorlagen, Kontakte, Später senden |
 | 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | fertig | **Geräte gleichen sich über das Postfach ab** |
 | 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | fertig | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
 | 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | fertig | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
-| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | geplant | Microsoft, Gmail-Eigenheiten, JMAP |
-| 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | offen | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
-| 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen | öffentliches Repo, signierte Builds, Updates |
+| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | in Arbeit (Block A fertig) | Microsoft, Gmail-Eigenheiten, JMAP |
+| 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | fertig | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
+| 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen (Updates vorbereitet) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
 
@@ -101,32 +101,41 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 
 ## Letzter Lauf
 
-Nachtlauf 22./23.11.2026, Hauptsitzung mit bis zu vier Subagenten gleichzeitig. Zwischenstand
-23.11., 08:00 (der Lauf geht weiter; dieser Abschnitt wird am Ende ersetzt).
+Lauf vom 22.11.2026 abends bis 23.11.2026 nachmittags, Hauptsitzung mit bis zu vier Subagenten
+gleichzeitig. Stand 23.11.2026, 14:00.
 
-**Fertig:** Stufen 00–04, 11, 12. Jeweils `scripts/check.sh` grün im sauberen Worktree, die
-Servertests gegen den lokalen Stalwart und die Desktop-Tests (WKWebView) grün; Einzelheiten unter
-„Ergebnis“ der Stufendateien.
+**Fertig:** Stufen 00–05, 07–13 und 16. Jede mit grünem `scripts/check.sh` im sauberen Worktree,
+Servertests gegen den lokalen Stalwart und Desktop-Tests (WKWebView); Einzelheiten und offene
+Handprüfungen unter „Ergebnis“ der Stufendateien. Letzte Läufe: `check.sh` auf a7dd759 (1.102 Rust-,
+3.860 Vitest-Tests, mit Clippy für Windows, cargo deny, pnpm audit), Servertests 1.185 von 1.186 (der
+eine Fehlschlag war ein Wettlauf zweier Testgruppen, behoben in 1b457f1), Desktop-Tests auf fe5cdec
+mit den Testständen aus de1b915: 21 Spec-Dateien, 115 Tests, axe ohne schwere Befunde.
 
-**Windows-Prototyp:** Gitea-Vorab-Release `prototype-2026-11-23` (Commit 5d40e88, Stufen 1–5, 7,
-9 Teil A, 11, 12 mit Oberfläche). Testanleitung: `docs/testing/windows-checklist.md`. Die macOS-.dmg
-folgt nach der Windows-Version.
+**In Arbeit:** 06 (braucht Läufe auf dem Windows-Rechner), 14 (Block A Gmail über IMAP fertig; B
+Microsoft und C Google-Anmeldung brauchen App-Registrierungen des Menschen), 15 (Veröffentlichung;
+Updates aus GitHub-Releases sind gebaut und lokal getestet).
 
-**In Arbeit** (Code und Tests weitgehend da, offen steht in der jeweiligen Stufendatei):
-- 05: zwei fehlende Tests (Entwurf aus einem anderen Programm, Sofortversand offline).
-- 06: braucht den Windows-Rechner (Installation, Laufzeitprüfungen, HTML-Sandbox unter WebView2).
-  `scripts/check.sh` übersetzt den Windows-Code jetzt mit (`cargo xwin clippy`).
-- 07: „Letzte Suchen“ und „Suchen speichern“ werden gebaut.
-- 08: Einstellungen und Layout ziehen vom Browser-Speicher in den Kern; Mail und Composer im
-  eigenen Fenster; Desktop-Tests für Tastatur und Layouts laufen noch nicht.
-- 09: `.eml`-Dateien öffnen fehlt; Handprüfung Benachrichtigungen und Standard-Mail-App.
-- 10: Oberfläche committet, Desktop-Tests und Rechtschreibprüfung offen.
-- 13: Oberfläche wird gebaut; Prüfsatz mit echtem Modell braucht Ollama.
+**Prototypen** (Gitea-Vorab-Releases): `prototype-2026-11-23` (Windows), `-2` (Windows und macOS),
+`-3` (Design und Logo), `-3.1` (Windows-Fix: Sicherung vor dem Datenbank-Umbau, „os error 5“),
+`-4` (de1b915: Stufe 16, Orange-Design, Anhangsvorschau, schärferes Taskleisten-Symbol).
 
-**Wartet auf den Menschen:** Windows-Prototyp testen; ein echtes Konto einrichten (bleibt nur
-lesend) und entscheiden, für welches Konto Schreibzugriff freigeschaltet wird; MCP mit einem echten
-Client prüfen; Einstellungs-Sync mit zwei Geräten; Ollama oder einen API-Schlüssel für Stufe 13
-(nur in der App eingeben); Screenreader-Checkliste (`docs/testing/screenreader-checklist.md`).
+**Entscheidungen des Menschen in diesem Lauf:** KI über MCP zuerst (0010); Mailbird-Abgleich als
+Stufe 16, kein Zählpixel-Tracking, keine eingebetteten Fremd-Apps, Kalender nach Version 1 (0032);
+Open Source auf `github.com/othervice`, Name „Vice Mail“, eigenes Logo, erste Releases ohne Signatur
+(0035). Von Claude entschieden: Orange als Standard-Akzent (0038), Updates nur mit Zustimmung (0037).
 
-**Offen aufgefallen:** Nach sehr vielen gerenderten Zeilen (alle 9.959 des Posteingangs zweimal)
-ruckelt das Scrollen in derselben Sitzung (längster Frame etwa 250 ms); wird untersucht.
+**Wartet auf den Menschen:**
+- Prototyp 4 unter Windows testen (`docs/testing/windows-checklist.md`, Abschnitte 1–20), auch die
+  Installation über eine ältere Version und das Taskleisten-Symbol bei 125/150 %.
+- Den privaten Update-Schlüssel sichern (`docs/RELEASING.md`): er liegt nur im Schlüsselbund des Mac
+  mini; ohne ihn lassen sich installierte Versionen nie wieder aktualisieren.
+- Echtes Konto (bleibt nur lesend), Schreibzugriff für ein Nebenkonto, Gmail-Konto (Liste in 0034),
+  MCP mit einem echten Client, Einstellungs-Sync mit zwei Geräten, Ollama oder API-Schlüssel für die
+  KI in der App, Screenreader-Checkliste, Bildschirm mit 2560×1440.
+- Für Stufe 14: App-Registrierung bei Microsoft Entra bzw. Google (Client-ID); für Stufe 15 das leere
+  Repo unter `othervice` oder der Zugang über das angemeldete `gh`-Konto.
+- Optional: OpenSSH auf dem Windows-Rechner, damit Tests dort laufen können.
+
+**Nächste Schritte:** Ordnerliste als ein Tab-Stopp (läuft), Rückmeldungen aus dem Windows-Test
+einarbeiten, dann Stufe 15 vorbereiten (Repo aufräumen, Übersetzung der Plan-Dokumente, Sicherheits-
+prüfung).
