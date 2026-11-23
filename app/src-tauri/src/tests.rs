@@ -911,6 +911,20 @@ fn message_window_opens_once_with_the_main_windows_permissions() {
             .is_some_and(|m| m.contains("not allowed")),
         "the ACL must refuse emit from a message window: {emit:?}"
     );
+    // Message and composer windows may close themselves (capability `secondary-windows`), the
+    // main window may not.
+    let not_allowed = |r: &Result<Value, Value>| {
+        r.as_ref()
+            .err()
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.contains("not allowed"))
+    };
+    let main = app.get_webview_window("main").expect("main window");
+    let close_main = invoke_from(&main, "plugin:window|close", json!({ "label": "main" }));
+    assert!(not_allowed(&close_main), "the main window must not close itself: {close_main:?}");
+    let label = window.label().to_owned();
+    let close_message = invoke_from(&window, "plugin:window|close", json!({ "label": label }));
+    assert!(!not_allowed(&close_message), "a message window may close itself: {close_message:?}");
     // A window outside the capability's labels has no permission at all.
     let stranger = WebviewWindowBuilder::new(&app, "stranger", Default::default())
         .build()

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "secondary-windows",
+  "description": "Message and composer windows (decision 0025) may close themselves, e.g. after the draft was sent or discarded. The main window may not; it closes with its close button only.",
+  "windows": ["message-*", "composer-*"],
+  "permissions": ["core:window:allow-close"]
+}
