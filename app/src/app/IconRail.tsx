@@ -120,11 +120,11 @@ function StateBadge({ account }: { account: Account }) {
  * The count of the activity and outbox entries: on the icon in the narrow rail, at the end of the
  * row in the labelled sidebar (so name and number read in the order they are shown).
  */
-function RailCount({ value, attention, testId, trailing = false }: { value: string; attention: boolean; testId: string; trailing?: boolean }) {
+function RailCount({ value, attention, trailing = false, ...rest }: { value: string; attention: boolean; trailing?: boolean; "data-testid": string }) {
   return (
     <span
       aria-hidden
-      data-testid={testId}
+      data-testid={rest["data-testid"]}
       data-attention={attention || undefined}
       className={cx(
         "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
@@ -165,8 +165,8 @@ function ActivityButton({ accounts, expanded, active }: { accounts: readonly Acc
       expanded={expanded}
       active={active}
       onClick={showActivity}
-      badge={count && <RailCount value={count} attention={attention > 0} testId="activity-badge" />}
-      trailing={count ? <RailCount value={count} attention={attention > 0} testId="activity-badge" trailing /> : undefined}
+      badge={count && <RailCount value={count} attention={attention > 0} data-testid="activity-badge" />}
+      trailing={count ? <RailCount value={count} attention={attention > 0} data-testid="activity-badge" trailing /> : undefined}
       data-testid="rail-activity"
     />
   );
@@ -196,8 +196,8 @@ function OutboxButton({ accounts, expanded, active }: { accounts: readonly Accou
       expanded={expanded}
       active={active}
       onClick={showOutbox}
-      badge={count && <RailCount value={count} attention={attention > 0} testId="outbox-badge" />}
-      trailing={count ? <RailCount value={count} attention={attention > 0} testId="outbox-badge" trailing /> : undefined}
+      badge={count && <RailCount value={count} attention={attention > 0} data-testid="outbox-badge" />}
+      trailing={count ? <RailCount value={count} attention={attention > 0} data-testid="outbox-badge" trailing /> : undefined}
       data-testid="rail-outbox"
     />
   );
