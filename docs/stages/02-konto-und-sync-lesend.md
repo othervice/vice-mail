@@ -76,6 +76,11 @@ Kontoerkennung/Schlüsselbund, Oberfläche, Engine, Desktop-Abnahme). Entscheidu
   Domain nur nach Klick; Passwort im Schlüsselbund, Konto entfernen löscht Eintrag und lokale Daten
   (in der Desktop-Abnahme geprüft: kein Eintrag bleibt zurück).
 
+**Nachtrag 23.11.2026:** Der Servertest `new_mail_flag_change_and_deletion_from_outside_arrive_by_idle`
+war ab dem Vorausladen aus Stufe 3 zeitabhängig rot (er hielt das Vorschau-Ereignis des Vorausladens
+für die Flag-Änderung); die Engine war korrekt. Seit `edd380b` wartet der Test auf die Wirkung statt auf
+das nächste Ereignis; 8/8 Servertests mit `seed 10000` wieder grün.
+
 **Behobene Fehler aus der Abnahme**: Rahmen verrutschte durch versteckte Radix-Eingaben; veralteter
 Fehlerhinweis nach „Konto entfernen“; hängende Tooltips beim Einklappen der Leiste.
 
