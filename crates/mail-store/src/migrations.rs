@@ -40,6 +40,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     // Security review F1: server changes from the settings sync wait for the user (decision
     // 0040).
     M::up(include_str!("../migrations/0016_account_server_change.sql")),
+    // Stage 14, block D: JMAP accounts and the JMAP adapter's UID map (decision 0041).
+    M::up(include_str!("../migrations/0017_jmap.sql")),
 ];
 
 /// All migrations this build knows.

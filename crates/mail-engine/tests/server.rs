@@ -52,7 +52,7 @@ fn sync_config(env: &TestEnv) -> SyncConfig {
 struct Engine {
     dir: TempDir,
     keychain: Arc<MemorySecretStore>,
-    core: AppCore,
+    core: AppCore<ImapConnector>,
     events: broadcast::Receiver<CoreEvent>,
 }
 
@@ -139,7 +139,7 @@ impl Engine {
     /// wait for their effect, not for "the next `messagesChanged`": since stage 3 the prefetch
     /// announces the preview of a body it stored with the same event, so the next event for
     /// the inbox may belong to the prefetch and the change may not be stored yet.
-    async fn until(&mut self, what: &str, done: impl AsyncFn(&AppCore) -> bool) {
+    async fn until(&mut self, what: &str, done: impl AsyncFn(&AppCore<ImapConnector>) -> bool) {
         let deadline = Instant::now() + WAIT;
         while !done(&self.core).await {
             match tokio::time::timeout_at(deadline, self.events.recv()).await {
@@ -200,6 +200,7 @@ fn settings(env: &TestEnv, port: u16) -> AccountSettings {
         username: env.alice.address.clone(),
     };
     AccountSettings {
+        protocol: Default::default(),
         email: env.alice.address.clone(),
         display_name: "Alice".into(),
         imap: server(port, Security::Tls),
@@ -476,7 +477,7 @@ async fn new_mail_flag_change_and_deletion_from_outside_arrive_by_idle() {
     .await;
     let changed = Instant::now();
     // The prefetch stores the new mail's body meanwhile (its own `messagesChanged`).
-    let listed = async |core: &AppCore| {
+    let listed = async |core: &AppCore<ImapConnector>| {
         core.list_messages(inbox.id, None, 5)
             .await
             .expect("page")

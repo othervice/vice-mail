@@ -112,6 +112,7 @@ async fn server_search_finds_what_is_not_stored_locally() {
     let account = core
         .add_account(
             AccountSettings {
+                protocol: Default::default(),
                 email: env.alice.address.clone(),
                 display_name: "Alice".into(),
                 imap: server(env.imaps_port, Security::Tls),

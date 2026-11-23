@@ -127,6 +127,7 @@ impl<C: MailConnector> Connections<C> {
                 .credentials
                 .with_login(&account.credential_ref, &account.imap, true, |login| {
                     let mut config = self.config.connect_config(&account.imap, login.secret);
+                    crate::protocols::for_account(&mut config, account);
                     config.auth = login.auth;
                     let connector = &self.connector;
                     async move { connector.connect(&config).await }

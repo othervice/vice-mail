@@ -221,6 +221,8 @@ export const ERROR_CODES = [
   "oauth_sign_in_required",
   // Stage 15: "Export diagnostics…".
   "diagnostics_write_failed",
+  // Stage 14 (decision 0041): JMAP.
+  "jmap_unavailable",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1765,3 +1767,6 @@ export const oauthIpc = {
   /** Ends the wait for the browser; the running command fails with `oauth_cancelled`. */
   cancel: (): Promise<boolean> => infallible(() => oauthCommands.cancelOauthSignIn()),
 };
+
+// ---- Stage 14 (decision 0041): JMAP ----
+export type { Protocol } from "../generated/bindings";

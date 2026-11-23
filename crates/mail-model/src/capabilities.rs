@@ -32,7 +32,16 @@ pub struct Capabilities {
     /// folders: `X-GM-MSGID` identifies one message across all its labels, `X-GM-LABELS`
     /// lists and changes them; the server files sent mail itself.
     pub gmail: bool,
-    /// Every announced capability, upper case, sorted, without duplicates.
+    /// Stage 14, block D (decision 0041): the server speaks JMAP, not IMAP. The adapter
+    /// numbers messages itself (`imap4rev1` is false); the other flags say what it emulates:
+    /// IDLE is push over EventSource (RFC 8620 section 7.3), CONDSTORE the server's state
+    /// strings, MOVE and UIDPLUS changes of `mailboxIds` with UIDs the adapter assigns. Left
+    /// out for IMAP servers.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[specta(optional)]
+    pub jmap: bool,
+    /// Every announced capability, upper case, sorted, without duplicates. On JMAP the
+    /// capability URIs of the session resource.
     pub names: Vec<String>,
 }
 
@@ -65,6 +74,7 @@ impl Capabilities {
             literal_plus: has("LITERAL+"),
             esearch: has("ESEARCH"),
             gmail: has("X-GM-EXT-1"),
+            jmap: false,
             names,
         }
     }

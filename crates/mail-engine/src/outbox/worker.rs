@@ -292,6 +292,7 @@ async fn connect<C: WriteConnector>(
         .credentials
         .with_login(&account.credential_ref, &account.imap, true, |login| {
             let mut config = login.config(&account.imap, Access::ReadWrite);
+            crate::protocols::for_account(&mut config, account);
             config.timeouts = shared.config.timeouts;
             config.extra_root_ca = shared.config.extra_root_ca.clone();
             let connector = &shared.connector;

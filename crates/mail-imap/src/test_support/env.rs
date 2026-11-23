@@ -29,6 +29,8 @@ pub struct TestEnv {
     pub submission_port: u16,
     /// SMTP submission with implicit TLS and AUTH.
     pub smtps_port: u16,
+    /// Stage 14 (decision 0041): JMAP over HTTPS (`https://localhost:<port>/.well-known/jmap`).
+    pub https_port: u16,
     pub alice: TestAccount,
     pub bob: TestAccount,
     /// The server administrator; it has a mailbox too (a third recipient, for Bcc tests).
@@ -91,6 +93,7 @@ impl TestEnv {
             imaps_port: port("TESTMAIL_IMAPS_PORT")?,
             submission_port: port("TESTMAIL_SUBMISSION_PORT")?,
             smtps_port: port("TESTMAIL_SMTPS_PORT")?,
+            https_port: port("TESTMAIL_HTTPS_PORT")?,
             alice: account("ALICE")?,
             bob: account("BOB")?,
             admin: account("ADMIN")?,
@@ -139,6 +142,20 @@ impl TestEnv {
             Security::Starttls => self.imap_port,
         };
         self.config_at(account, &self.host, port, security, access)
+    }
+
+    /// Stage 14 (decision 0041): JMAP settings for `account` (HTTPS on `localhost`, the name
+    /// the server gives its endpoints), with the test CA.
+    pub fn jmap_config(&self, account: &TestAccount, access: Access) -> ConnectConfig {
+        let mut config = self.config_at(
+            account,
+            &self.tls_name,
+            self.https_port,
+            Security::Tls,
+            access,
+        );
+        config.protocol = mail_model::Protocol::Jmap;
+        config
     }
 
     /// SMTP settings for `account`: submission with STARTTLS (1587) or implicit TLS (1465),

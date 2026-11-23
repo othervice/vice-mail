@@ -41,7 +41,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::Duration;
 
-use mail_imap::{ImapConnector, SmtpSender};
+use crate::protocols::{AnyConnector, AnySender};
 use mail_model::{
     AccountId, ActionResult, BatchId, CoreError, CoreEvent, ExtraRootCa, MAX_ACTION_MESSAGES,
     MailAction, MailSender, MailboxId, MailboxRole, MessageRef, OperationId, OperationInfo,
@@ -95,13 +95,14 @@ impl Default for OutboxConfig {
     }
 }
 
-/// The [`MailSender`] the outbox submits with. The product's is [`SmtpSender`].
+/// The [`MailSender`] the outbox submits with. The product's is [`AnySender`] (SMTP, or JMAP
+/// submission for JMAP accounts, decision 0041).
 #[derive(Clone)]
 pub struct SenderHandle(pub Arc<dyn MailSender>);
 
 impl Default for SenderHandle {
     fn default() -> Self {
-        Self(Arc::new(SmtpSender::new()))
+        Self(Arc::new(AnySender::default()))
     }
 }
 
@@ -342,8 +343,8 @@ struct WorkerHandle {
 }
 
 /// The outbox. Cheap to clone. Generic over the writer connector, so tests can use any
-/// [`WriteConnector`]; the product uses [`ImapConnector`].
-pub struct Outbox<C: WriteConnector + 'static = ImapConnector> {
+/// [`WriteConnector`]; the product uses [`AnyConnector`].
+pub struct Outbox<C: WriteConnector + 'static = AnyConnector> {
     shared: Arc<Shared<C>>,
     workers: Arc<Mutex<HashMap<AccountId, WorkerHandle>>>,
 }
@@ -693,6 +694,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
             .credentials
             .with_login(&account.credential_ref, &account.smtp, false, |login| {
                 let mut config = login.config(&account.smtp, mail_model::Access::ReadOnly);
+                crate::protocols::for_account(&mut config, account);
                 config.timeouts = self.shared.config.timeouts;
                 config.extra_root_ca = self.shared.config.extra_root_ca.clone();
                 let sender = std::sync::Arc::clone(&self.shared.config.sender.0);

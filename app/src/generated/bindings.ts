@@ -787,6 +787,8 @@ export type Account = {
 	 */
 	writesEnabled: boolean,
 	status: AccountStatus,
+	/**  Stage 14 (decision 0041): IMAP/SMTP or JMAP; left out for IMAP. */
+	protocol?: Protocol,
 };
 
 /**  Index 0–7 into the eight account color tokens (`docs/DESIGN.md`). */
@@ -835,6 +837,11 @@ export type AccountSettings = {
 	imap: ServerSettings,
 	/**  Stored for stage 5 (sending). Stage 2 checks it for plausibility only. */
 	smtp: ServerSettings,
+	/**
+	 *  Stage 14 (decision 0041): IMAP and SMTP unless the user chose JMAP in the advanced
+	 *  options. With JMAP, `imap` names the JMAP server and `smtp` is replaced by a copy of it.
+	 */
+	protocol?: Protocol,
 };
 
 /**  Coarse sync state of an account, for the status indicator. */
@@ -1558,7 +1565,18 @@ export type Capabilities = {
 	 *  lists and changes them; the server files sent mail itself.
 	 */
 	gmail: boolean,
-	/**  Every announced capability, upper case, sorted, without duplicates. */
+	/**
+	 *  Stage 14, block D (decision 0041): the server speaks JMAP, not IMAP. The adapter
+	 *  numbers messages itself (`imap4rev1` is false); the other flags say what it emulates:
+	 *  IDLE is push over EventSource (RFC 8620 section 7.3), CONDSTORE the server's state
+	 *  strings, MOVE and UIDPLUS changes of `mailboxIds` with UIDs the adapter assigns. Left
+	 *  out for IMAP servers.
+	 */
+	jmap?: boolean,
+	/**
+	 *  Every announced capability, upper case, sorted, without duplicates. On JMAP the
+	 *  capability URIs of the session resource.
+	 */
 	names: string[],
 };
 
@@ -1983,6 +2001,13 @@ export type DiscoveryResult = {
 	imap: ServerSettings | null,
 	smtp: ServerSettings | null,
 	providerHint: ProviderHint | null,
+	/**
+	 *  Stage 14 (decision 0041): a JMAP server found for the address (its session resource
+	 *  answered at `https://<host>/.well-known/jmap`, or the domain's autoconfig lists one).
+	 *  The setup form offers it as a protocol choice; IMAP stays the default. Left out when
+	 *  none was found.
+	 */
+	jmap?: ServerSettings | null,
 };
 
 /**  Where proposed server settings came from. */
@@ -2374,7 +2399,13 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 14 (decision 0042): the permission expired or was revoked; sign in again. */
 "oauth_sign_in_required" | 
 /**  Stage 15: the diagnostics file could not be written where the user chose. */
-"diagnostics_write_failed";
+"diagnostics_write_failed" | 
+/**
+ *  Stage 14, block D (decision 0041): no JMAP service answers at the address (no session
+ *  resource at `/.well-known/jmap`, or one without mail), or it names its endpoints without
+ *  encryption.
+ */
+"jmap_unavailable";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -3588,6 +3619,21 @@ export type PreviewKind =
 "pdf" | 
 /**  Plain text (`text/plain`, CSV, Markdown, logs; never HTML or XML-based images). */
 "text";
+
+/**
+ *  How the app talks to an account's server (stage 14, block D, decision 0041). Fixed when the
+ *  account is set up.
+ */
+export type Protocol = 
+/**  IMAP for reading, SMTP for sending: the account's `imap` and `smtp` servers. */
+"imap" | 
+/**
+ *  JMAP (RFC 8620, RFC 8621) over HTTPS for reading, changes and sending: the account's
+ *  `imap` server settings name the JMAP server (host, port, user name; always TLS), whose
+ *  session resource is `https://<host>[:<port>]/.well-known/jmap`. `smtp` holds the same
+ *  server and is not used.
+ */
+"jmap";
 
 /**
  *  Provider-specific advice for the setup form. The UI shows one note per hint; the server

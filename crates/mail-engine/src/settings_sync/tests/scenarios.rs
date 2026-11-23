@@ -714,6 +714,7 @@ async fn passwords_tokens_and_api_keys_appear_in_no_record() {
         color: mail_model::AccountColor::new(1).expect("color"),
         imap: typed.clone(),
         smtp: typed,
+        protocol: Default::default(),
     };
     let values = synced.to_values().expect("values");
     assert_eq!(values.keys().map(String::as_str).collect::<Vec<_>>(), {

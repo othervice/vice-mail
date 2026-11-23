@@ -100,6 +100,12 @@ pub struct ConnectConfig {
     pub timeouts: Timeouts,
     /// `None` in the product. Set only by tests (the engine's test configuration).
     pub extra_root_ca: Option<ExtraRootCa>,
+    /// Stage 14 (decision 0041): which adapter serves the connection, from the account. A
+    /// connector for one protocol ignores it; the engine's combined connector picks by it.
+    pub protocol: crate::Protocol,
+    /// The account the connection is for; `None` while an account is being set up. Adapters
+    /// that keep state per account (the JMAP UID map) key it by this.
+    pub account: Option<crate::AccountId>,
 }
 
 impl ConnectConfig {
@@ -115,6 +121,8 @@ impl ConnectConfig {
             access,
             timeouts: Timeouts::default(),
             extra_root_ca: None,
+            protocol: crate::Protocol::Imap,
+            account: None,
         }
     }
 }
@@ -307,6 +315,13 @@ pub trait MailConnector: Send + Sync {
         &self,
         config: &ConnectConfig,
     ) -> impl Future<Output = Result<Self::Backend, BackendError>> + Send;
+
+    /// Stage 14 (decision 0041): the engine hands over its store once it is open. Adapters
+    /// that number messages themselves (JMAP) keep that numbering there; until then, and for
+    /// connections without an account, they keep it in memory. The default ignores it.
+    fn attach_uid_map_store(&self, store: std::sync::Arc<dyn crate::UidMapStore>) {
+        let _ = store;
+    }
 }
 
 #[cfg(test)]
@@ -477,6 +492,8 @@ mod tests {
         let config = ConnectConfig::new(&server, Secret::new("pw".into()), Access::ReadOnly);
         assert_eq!(config.timeouts, Timeouts::default());
         assert!(config.extra_root_ca.is_none());
+        assert_eq!(config.protocol, crate::Protocol::Imap);
+        assert!(config.account.is_none());
         let connector = FakeConnector;
         let fut = first_pass(&connector, &config);
         assert_send(&fut);

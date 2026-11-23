@@ -181,6 +181,7 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                                 .env
                                 .config
                                 .connect_config(&self.account.imap, login.secret);
+                            crate::protocols::for_account(&mut config, &self.account);
                             config.auth = login.auth;
                             session = Some(Session::start(&self.env, id, config));
                         }

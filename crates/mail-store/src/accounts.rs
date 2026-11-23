@@ -13,14 +13,14 @@ pub(crate) const SELECT_ACCOUNTS: &str = "
     SELECT uuid, email, display_name, color,
            imap_host, imap_port, imap_security, imap_username,
            smtp_host, smtp_port, smtp_security, smtp_username,
-           credential_ref, writes_enabled, created_at
+           credential_ref, writes_enabled, created_at, protocol
     FROM account ORDER BY created_at, id";
 
 pub(crate) const SELECT_ACCOUNT: &str = "
     SELECT uuid, email, display_name, color,
            imap_host, imap_port, imap_security, imap_username,
            smtp_host, smtp_port, smtp_security, smtp_username,
-           credential_ref, writes_enabled, created_at
+           credential_ref, writes_enabled, created_at, protocol
     FROM account WHERE uuid = ?1";
 
 pub(crate) const ACCOUNT_ROW: &str = "SELECT id FROM account WHERE uuid = ?1";
@@ -33,7 +33,11 @@ pub(crate) fn row_id(conn: &Connection, account: AccountId) -> Result<i64, Store
         .ok_or_else(|| StoreError::NotFound(format!("account {account}")))
 }
 
-pub(crate) fn insert(conn: &Connection, new: &NewAccount) -> Result<StoredAccount, StoreError> {
+pub(crate) fn insert(
+    conn: &Connection,
+    new: &NewAccount,
+    protocol: mail_model::Protocol,
+) -> Result<StoredAccount, StoreError> {
     let taken: Option<i64> = conn
         .prepare_cached("SELECT id FROM account WHERE email = ?1")?
         .query_row([&new.email], |r| r.get(0))
@@ -74,6 +78,13 @@ pub(crate) fn insert(conn: &Connection, new: &NewAccount) -> Result<StoredAccoun
     ])
     .map_err(StoreError::sqlite("insert account"))?;
     let row = conn.last_insert_rowid();
+    // Stage 14 (decision 0041): the column defaults to IMAP (and older schemas, which the
+    // migration tests write to, have none).
+    if protocol != mail_model::Protocol::Imap {
+        conn.prepare_cached("UPDATE account SET protocol = ?2 WHERE id = ?1")?
+            .execute(params![row, protocol.as_str()])
+            .map_err(StoreError::sqlite("set account protocol"))?;
+    }
 
     conn.prepare_cached(
         "INSERT INTO identity (account_id, email, name, reply_to, is_default)
@@ -92,6 +103,7 @@ pub(crate) fn insert(conn: &Connection, new: &NewAccount) -> Result<StoredAccoun
         credential_ref: new.credential_ref.clone(),
         writes_enabled: false,
         created_at,
+        protocol,
     })
 }
 
@@ -183,5 +195,15 @@ fn account_from_row(r: &Row<'_>) -> rusqlite::Result<StoredAccount> {
         credential_ref: r.get(12)?,
         writes_enabled: r.get(13)?,
         created_at: r.get(14)?,
+        protocol: {
+            let text: String = r.get(15)?;
+            mail_model::Protocol::parse(&text).ok_or_else(|| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    15,
+                    Type::Text,
+                    format!("unknown protocol {text:?}").into(),
+                )
+            })?
+        },
     })
 }

@@ -223,6 +223,8 @@ describe("error codes", () => {
     "oauth_sign_in_required",
     // Stage 15: "Export diagnostics…".
     "diagnostics_write_failed",
+    // Stage 14 (decision 0041): JMAP.
+    "jmap_unavailable",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

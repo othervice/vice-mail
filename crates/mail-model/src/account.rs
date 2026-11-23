@@ -35,6 +35,45 @@ impl Security {
     }
 }
 
+/// How the app talks to an account's server (stage 14, block D, decision 0041). Fixed when the
+/// account is set up.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    /// IMAP for reading, SMTP for sending: the account's `imap` and `smtp` servers.
+    #[default]
+    Imap,
+    /// JMAP (RFC 8620, RFC 8621) over HTTPS for reading, changes and sending: the account's
+    /// `imap` server settings name the JMAP server (host, port, user name; always TLS), whose
+    /// session resource is `https://<host>[:<port>]/.well-known/jmap`. `smtp` holds the same
+    /// server and is not used.
+    Jmap,
+}
+
+impl Protocol {
+    /// Text form in the database and on the wire (`'imap'`, `'jmap'`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Imap => "imap",
+            Self::Jmap => "jmap",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "imap" => Some(Self::Imap),
+            "jmap" => Some(Self::Jmap),
+            _ => None,
+        }
+    }
+
+    pub const fn is_imap(&self) -> bool {
+        matches!(self, Self::Imap)
+    }
+}
+
 /// Where and how to reach one server (IMAP or SMTP). No password: that lives in the keychain.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +95,11 @@ pub struct AccountSettings {
     pub imap: ServerSettings,
     /// Stored for stage 5 (sending). Stage 2 checks it for plausibility only.
     pub smtp: ServerSettings,
+    /// Stage 14 (decision 0041): IMAP and SMTP unless the user chose JMAP in the advanced
+    /// options. With JMAP, `imap` names the JMAP server and `smtp` is replaced by a copy of it.
+    #[serde(default, skip_serializing_if = "Protocol::is_imap")]
+    #[specta(optional)]
+    pub protocol: Protocol,
 }
 
 impl AccountSettings {
@@ -70,6 +114,15 @@ impl AccountSettings {
         }
         trim(&mut self.email);
         trim(&mut self.display_name);
+        if self.protocol == Protocol::Jmap {
+            // One server for everything; JMAP runs over HTTPS only.
+            if self.imap.security != Security::Tls {
+                return Err(CoreError::InvalidArgument(
+                    "JMAP needs TLS (HTTPS), not STARTTLS".into(),
+                ));
+            }
+            self.smtp = self.imap.clone();
+        }
         let at = self.email.find('@');
         if !at.is_some_and(|i| i > 0 && i + 1 < self.email.len()) || self.email.contains(' ') {
             return Err(CoreError::InvalidArgument(format!(
@@ -158,6 +211,10 @@ pub struct Account {
     /// adapter opens mailboxes read-only and refuses every writing command.
     pub writes_enabled: bool,
     pub status: AccountStatus,
+    /// Stage 14 (decision 0041): IMAP/SMTP or JMAP; left out for IMAP.
+    #[serde(skip_serializing_if = "Protocol::is_imap")]
+    #[specta(optional)]
+    pub protocol: Protocol,
 }
 
 /// A sender identity of an account. Stage 2 creates one default identity per account
@@ -279,6 +336,13 @@ pub struct DiscoveryResult {
     pub imap: Option<ServerSettings>,
     pub smtp: Option<ServerSettings>,
     pub provider_hint: Option<ProviderHint>,
+    /// Stage 14 (decision 0041): a JMAP server found for the address (its session resource
+    /// answered at `https://<host>/.well-known/jmap`, or the domain's autoconfig lists one).
+    /// The setup form offers it as a protocol choice; IMAP stays the default. Left out when
+    /// none was found.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub jmap: Option<ServerSettings>,
 }
 
 /// A successful connection test. Failures arrive as `IpcError` with a specific code.
@@ -308,6 +372,7 @@ mod tests {
             display_name: "Alice ".into(),
             imap: server("imap.example.org", 993, Security::Tls),
             smtp: server("smtp.example.org ", 587, Security::Starttls),
+            protocol: Protocol::Imap,
         }
     }
 
@@ -333,6 +398,35 @@ mod tests {
             let err = s.validated().expect_err("invalid");
             assert_eq!(err.code(), crate::ErrorCode::InvalidArgument, "{err}");
         }
+    }
+
+    #[test]
+    fn jmap_settings_use_one_tls_server_and_imap_stays_the_default() {
+        let mut jmap = settings();
+        jmap.protocol = Protocol::Jmap;
+        jmap.imap.host = " jmap.example.org ".into();
+        jmap.imap.port = 443;
+        let ok = jmap.clone().validated().expect("valid");
+        assert_eq!(ok.smtp, ok.imap, "the JMAP server stands in for SMTP");
+        assert_eq!(ok.imap.host, "jmap.example.org");
+        jmap.imap.security = Security::Starttls;
+        let err = jmap.validated().expect_err("STARTTLS");
+        assert_eq!(err.code(), crate::ErrorCode::InvalidArgument);
+
+        // Old clients and records without the field are IMAP; IMAP is not written out.
+        let mut value = serde_json::to_value(settings()).expect("serialize");
+        assert!(value.get("protocol").is_none());
+        let parsed: AccountSettings = serde_json::from_value(value.clone()).expect("parse");
+        assert_eq!(parsed.protocol, Protocol::Imap);
+        value["protocol"] = json!("jmap");
+        let parsed: AccountSettings = serde_json::from_value(value).expect("parse");
+        assert_eq!(parsed.protocol, Protocol::Jmap);
+        assert_eq!(Protocol::parse("jmap"), Some(Protocol::Jmap));
+        assert_eq!(
+            Protocol::parse(Protocol::Imap.as_str()),
+            Some(Protocol::Imap)
+        );
+        assert_eq!(Protocol::parse("pop3"), None);
     }
 
     #[test]

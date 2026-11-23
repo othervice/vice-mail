@@ -29,6 +29,7 @@ PID_FILE="$DATA/stalwart.pid"
 LOG_FILE="$DATA/stalwart.log"
 PROVISION_LOG="$DATA/provision.log"
 MARKER="$DATA/provisioned"
+JMAP_MARKER="$DATA/provisioned-jmap"
 
 STALWART_VERSION="1.1.1"
 STALWART_URL="https://github.com/stalwartlabs/stalwart/releases/download/v$STALWART_VERSION"
@@ -43,7 +44,9 @@ export PYTHONDONTWRITEBYTECODE=1
 
 # shellcheck source=../testmail/accounts.env
 . "$TESTMAIL/accounts.env"
-ALL_PORTS="$TESTMAIL_IMAP_PORT $TESTMAIL_IMAPS_PORT $TESTMAIL_SUBMISSION_PORT $TESTMAIL_SMTPS_PORT $TESTMAIL_SMTP_PORT $TESTMAIL_HTTP_PORT"
+BASE_PORTS="$TESTMAIL_IMAP_PORT $TESTMAIL_IMAPS_PORT $TESTMAIL_SUBMISSION_PORT $TESTMAIL_SMTPS_PORT $TESTMAIL_SMTP_PORT $TESTMAIL_HTTP_PORT"
+# Stage 14 (decision 0041): JMAP over HTTPS. Stores provisioned before get the listener on start.
+ALL_PORTS="$BASE_PORTS $TESTMAIL_HTTPS_PORT"
 
 log() { printf 'testmail: %s\n' "$*"; }
 die() { printf 'testmail: error: %s\n' "$*" >&2; exit 1; }
@@ -208,6 +211,7 @@ launch() {
     # attempt (web UI bundle, spam rules, GeoIP data) fails at once instead of reaching the internet.
     exec env -u STALWART_RECOVERY_MODE -u STALWART_RECOVERY_ADMIN TMPDIR="$TMP_DIR" \
       STALWART_HOSTNAME="mail.$TESTMAIL_DOMAIN" \
+      STALWART_PUBLIC_URL="https://localhost:$TESTMAIL_HTTPS_PORT" \
       HTTP_PROXY="$DEAD_PROXY" HTTPS_PROXY="$DEAD_PROXY" ALL_PROXY="$DEAD_PROXY" \
       http_proxy="$DEAD_PROXY" https_proxy="$DEAD_PROXY" all_proxy="$DEAD_PROXY" \
       NO_PROXY="127.0.0.1,localhost,::1" no_proxy="127.0.0.1,localhost,::1" \
@@ -242,7 +246,7 @@ launch_and_wait() {
 provision() {
   local pw pid t0
   t0="$(now_ms)"
-  rm -rf "$STORE_DIR" "$TMP_DIR" "$MARKER"
+  rm -rf "$STORE_DIR" "$TMP_DIR" "$MARKER" "$JMAP_MARKER"
   mkdir -p "$DATA" "$TMP_DIR"
   make_tls
   # shellcheck disable=SC2086
@@ -273,7 +277,24 @@ provision() {
   trap - EXIT
   rm -rf "$TMP_DIR"
   printf 'stalwart %s provisioned %s\n' "$STALWART_VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$MARKER"
+  date -u +%Y-%m-%dT%H:%M:%SZ >"$JMAP_MARKER"
   log "provisioned in $(( $(now_ms) - t0 )) ms"
+}
+
+# A store provisioned before stage 14 has no HTTPS listener: add it (as admin) and keep the data.
+add_jmap_listener() {
+  local pid
+  # shellcheck disable=SC2086
+  ensure_ports_free $ALL_PORTS
+  launch_and_wait "$PROVISION_LOG" "$BASE_PORTS"
+  pid=$LAUNCHED_PID
+  if ! "$PYTHON" "$TESTMAIL/provision.py" --phase jmap --url "http://127.0.0.1:$TESTMAIL_HTTP_PORT"; then
+    stop_pid "$pid"
+    die "adding the HTTPS listener failed (server log: ${PROVISION_LOG#"$ROOT"/})"
+  fi
+  stop_pid "$pid"
+  date -u +%Y-%m-%dT%H:%M:%SZ >"$JMAP_MARKER"
+  log "added the HTTPS (JMAP) listener on $TESTMAIL_HTTPS_PORT"
 }
 
 cmd_start() {
@@ -286,6 +307,8 @@ cmd_start() {
   rm -f "$PID_FILE"
   if [ ! -f "$MARKER" ] || [ ! -d "$STORE_DIR" ]; then
     provision
+  elif [ ! -f "$JMAP_MARKER" ]; then
+    add_jmap_listener
   fi
   if ! openssl x509 -checkend 86400 -noout -in "$TLS_DIR/server.pem" >/dev/null 2>&1; then
     die "the test certificate is missing, expired or expires within a day; run 'scripts/testmail.sh reset'"
@@ -299,7 +322,7 @@ cmd_start() {
   launch_and_wait "$LOG_FILE" "$ALL_PORTS"
   echo "$LAUNCHED_PID" >"$PID_FILE"
   log "running (pid $LAUNCHED_PID), ready after $(( $(now_ms) - t0 )) ms"
-  log "IMAP 127.0.0.1:$TESTMAIL_IMAP_PORT (STARTTLS) / $TESTMAIL_IMAPS_PORT (TLS), SMTP submission $TESTMAIL_SUBMISSION_PORT (STARTTLS) / $TESTMAIL_SMTPS_PORT (TLS), local SMTP $TESTMAIL_SMTP_PORT, HTTP $TESTMAIL_HTTP_PORT"
+  log "IMAP 127.0.0.1:$TESTMAIL_IMAP_PORT (STARTTLS) / $TESTMAIL_IMAPS_PORT (TLS), SMTP submission $TESTMAIL_SUBMISSION_PORT (STARTTLS) / $TESTMAIL_SMTPS_PORT (TLS), local SMTP $TESTMAIL_SMTP_PORT, HTTP $TESTMAIL_HTTP_PORT, HTTPS (JMAP) $TESTMAIL_HTTPS_PORT"
 }
 
 cmd_stop() {

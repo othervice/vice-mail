@@ -258,6 +258,7 @@ async fn victim(server: &Arc<FakeServer>, folder: &Arc<Mutex<FolderState>>) -> V
                 display_name: "Alice".into(),
                 imap: self::server("imap.fake.test", 993),
                 smtp: self::server("smtp.fake.test", 465),
+                protocol: Default::default(),
             },
             Secret::new(PASSWORD.into()),
         )
@@ -566,6 +567,7 @@ async fn an_account_matched_by_address_on_joining_keeps_its_servers() {
                 display_name: "Alice".into(),
                 imap: self::server("imap.fake.test", 993),
                 smtp: self::server("smtp.fake.test", 465),
+                protocol: Default::default(),
             },
             Secret::new(PASSWORD.into()),
         )

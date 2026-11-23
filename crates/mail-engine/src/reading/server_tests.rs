@@ -42,7 +42,7 @@ const WAIT: Duration = Duration::from_secs(120);
 
 struct Engine {
     _dir: TempDir,
-    core: AppCore,
+    core: AppCore<mail_imap::ImapConnector>,
     events: broadcast::Receiver<CoreEvent>,
     account: AccountId,
 }
@@ -91,6 +91,7 @@ impl Engine {
         let account = core
             .add_account(
                 AccountSettings {
+                    protocol: Default::default(),
                     email: env.alice.address.clone(),
                     display_name: "Alice".into(),
                     imap: server(env.imaps_port, Security::Tls),

@@ -250,6 +250,7 @@ mod tests {
                 let address =
                     EmailAddress::parse(&format!("Alice.Example@{domain}")).expect("address");
                 let settings = AccountSettings {
+                    protocol: Default::default(),
                     email: address.address().to_owned(),
                     display_name: String::new(),
                     imap: provider.imap.settings(&address),

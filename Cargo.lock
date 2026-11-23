@@ -3559,6 +3559,7 @@ dependencies = [
  "mail-ai",
  "mail-content",
  "mail-imap",
+ "mail-jmap",
  "mail-mcp",
  "mail-model",
  "mail-store",
@@ -3598,6 +3599,24 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
+]
+
+[[package]]
+name = "mail-jmap"
+version = "0.1.0"
+dependencies = [
+ "mail-content",
+ "mail-imap",
+ "mail-jmap",
+ "mail-model",
+ "mail-parser",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]

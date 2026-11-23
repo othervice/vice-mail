@@ -669,7 +669,8 @@ impl<C: Connector> AppCore<C> {
             })?;
         // Read-only, like every connection of the account; the adapter lets it write to this
         // one folder only.
-        let config = self.sync_config().connect_config(&stored.imap, password);
+        let mut config = self.sync_config().connect_config(&stored.imap, password);
+        crate::protocols::for_account(&mut config, &stored);
         Ok(self
             .connector_ref()
             .connect_sync_folder(&config, folder)

@@ -201,6 +201,7 @@ pub async fn discover<R: SrvResolver>(
             ],
             address,
         ),
+        jmap: None,
     }
 }
 

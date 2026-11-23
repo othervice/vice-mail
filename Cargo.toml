@@ -18,6 +18,8 @@ mail-model = { path = "crates/mail-model" }
 mail-store = { path = "crates/mail-store" }
 mail-engine = { path = "crates/mail-engine" }
 mail-imap = { path = "crates/mail-imap" }
+# Stage 14, block D: the JMAP adapter (decision 0041).
+mail-jmap = { path = "crates/mail-jmap" }
 mail-content = { path = "crates/mail-content" }
 # Stage 12: the MCP host and its tools (decision 0015); the shell links its helper as a sidecar.
 mail-mcp = { path = "crates/mail-mcp" }

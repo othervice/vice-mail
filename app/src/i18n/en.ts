@@ -3256,6 +3256,10 @@ export const en = {
         title: "The diagnostics file could not be saved.",
         hint: "Choose another folder, for example Downloads, and check that the disk has free space.",
       },
+      jmap_unavailable: {
+        title: "No JMAP service was found at this address.",
+        hint: "Check the server name and port. A JMAP server answers at https://server/.well-known/jmap. If your provider offers no JMAP, choose IMAP and SMTP in the server settings.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

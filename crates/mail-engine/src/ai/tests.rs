@@ -318,6 +318,7 @@ impl Harness {
         let account = core
             .add_account(
                 AccountSettings {
+                    protocol: Default::default(),
                     email: "alice@fake.test".into(),
                     display_name: "Alice".into(),
                     imap: server_settings("imap.fake.test", 993),

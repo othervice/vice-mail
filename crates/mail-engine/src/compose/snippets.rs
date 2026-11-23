@@ -783,6 +783,7 @@ mod tests {
         let account = core
             .add_account(
                 AccountSettings {
+                    protocol: Default::default(),
                     email: "alice@fake.test".into(),
                     display_name: "Alice".into(),
                     imap: server("imap.fake.test", 993),

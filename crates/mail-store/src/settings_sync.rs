@@ -288,7 +288,7 @@ pub(crate) fn content_of(
             .prepare_cached(
                 "SELECT a.email, a.display_name, a.color, a.imap_host, a.imap_port,
                         a.imap_security, a.imap_username, a.smtp_host, a.smtp_port,
-                        a.smtp_security, a.smtp_username, c.imap, c.smtp
+                        a.smtp_security, a.smtp_username, c.imap, c.smtp, a.protocol
                  FROM account a LEFT JOIN account_server_change c ON c.account_uuid = a.uuid
                  WHERE a.uuid = ?1",
             )?
@@ -301,13 +301,22 @@ pub(crate) fn content_of(
                     Some(pending) => pending,
                     None => server_json(r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?),
                 };
-                Ok(json!({
+                let mut value = json!({
                     "email": r.get::<_, String>(0)?,
                     "displayName": r.get::<_, String>(1)?,
                     "color": r.get::<_, i64>(2)?,
                     "imap": imap,
                     "smtp": smtp,
-                }))
+                });
+                // Stage 14 (decision 0041): only JMAP accounts carry their protocol, so IMAP
+                // records stay as older versions wrote and read them.
+                let protocol: String = r.get(13)?;
+                if protocol != "imap"
+                    && let Some(map) = value.as_object_mut()
+                {
+                    map.insert("protocol".into(), Value::String(protocol));
+                }
+                Ok(value)
             })
             .optional()?,
         "identity" => conn
@@ -681,16 +690,23 @@ fn put_table(
                 // entry gets a fresh random name (decision 0040): an entry this device already
                 // has under the account's UUID (a re-keyed local account keeps its old UUID as
                 // the entry name) is never used for servers named only by the folder.
+                // Stage 14 (decision 0041): the protocol comes with the account and is fixed
+                // from then on (a record never changes it for an existing account).
+                let protocol = match opt_text(value, "protocol") {
+                    None => "imap",
+                    Some(p) if p == "imap" || p == "jmap" => p,
+                    Some(_) => return Err(refused("account protocol")),
+                };
                 conn.prepare_cached(
                     "INSERT INTO account (uuid, email, display_name, color,
                                           imap_host, imap_port, imap_security, imap_username,
                                           smtp_host, smtp_port, smtp_security, smtp_username,
-                                          credential_ref, writes_enabled, created_at)
+                                          credential_ref, writes_enabled, created_at, protocol)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                             'synced:' || lower(hex(randomblob(16))), 0, ?13)",
+                             'synced:' || lower(hex(randomblob(16))), 0, ?13, ?14)",
                 )?
                 .execute(params![
-                    id, email, name, color, ih, ip, is, iu, sh, sp, ss, su, now
+                    id, email, name, color, ih, ip, is, iu, sh, sp, ss, su, now, protocol
                 ])?;
                 conn.prepare_cached(
                     "INSERT OR REPLACE INTO sync_adopted (account_uuid, adopted_at) VALUES (?1, ?2)",

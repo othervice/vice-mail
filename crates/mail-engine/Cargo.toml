@@ -11,6 +11,8 @@ publish.workspace = true
 mail-model.workspace = true
 mail-store.workspace = true
 mail-imap.workspace = true
+# Stage 14, block D: the JMAP adapter (decision 0041).
+mail-jmap.workspace = true
 # Parsing, sanitising, link checks and file names of message content (stage 3).
 mail-content.workspace = true
 # Stage 12: the MCP host, its tools and the client configurations (decisions 0015, 0021).
@@ -57,6 +59,8 @@ windows-native-keyring-store.workspace = true
 [dev-dependencies]
 # Test server helpers (TestEnv, Proxy, WireTap, send_mail) for the server tests.
 mail-imap = { workspace = true, features = ["test-support"] }
+# Stage 14: the JMAP server tests log the methods each connection sends.
+mail-jmap = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
 # Local HTTPS and DNS servers in the discovery tests.

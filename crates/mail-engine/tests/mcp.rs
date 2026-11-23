@@ -539,6 +539,7 @@ async fn ai_clients_reach_only_what_is_shared_and_change_nothing_but_drafts() {
             username: account.address.clone(),
         };
         AccountSettings {
+            protocol: Default::default(),
             email: account.address.clone(),
             display_name: name.into(),
             imap: server(env.imaps_port, Security::Tls),

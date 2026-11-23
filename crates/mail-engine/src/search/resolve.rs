@@ -342,6 +342,7 @@ mod tests {
             credential_ref: "r".into(),
             writes_enabled: false,
             created_at: 0,
+            protocol: mail_model::Protocol::Imap,
         };
         for yes in [
             "alice@example.org",

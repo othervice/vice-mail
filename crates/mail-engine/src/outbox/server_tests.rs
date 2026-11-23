@@ -92,7 +92,7 @@ struct Bed {
     proxy: Arc<Proxy>,
     tap: WireTap,
     hook: Arc<Hook>,
-    outbox: Outbox,
+    outbox: Outbox<ImapConnector>,
     /// Direct read-write session to the server for setup and checks (not through the proxy).
     admin: ImapBackend,
     run: String,

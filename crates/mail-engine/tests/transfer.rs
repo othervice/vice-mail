@@ -57,6 +57,7 @@ fn settings(env: &TestEnv, who: &TestAccount) -> AccountSettings {
         username: who.address.clone(),
     };
     AccountSettings {
+        protocol: Default::default(),
         email: who.address.clone(),
         display_name: who.address.clone(),
         imap: server(env.imaps_port, Security::Tls),
@@ -130,7 +131,7 @@ where
     }
 }
 
-async fn idle(core: &AppCore, account: AccountId) {
+async fn idle(core: &AppCore<ImapConnector>, account: AccountId) {
     until("account idle", || async {
         core.list_accounts()
             .await

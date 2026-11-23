@@ -721,3 +721,79 @@ async fn discover_ignores_unusable_files() {
     assert_eq!(discover(&s.fetcher, "example.test", &address).await, None);
     assert_eq!(s.server.seen().len(), 2);
 }
+
+/// Stage 14 (decision 0041): a JMAP server is found at the domain's well-known address
+/// without credentials, also behind a redirect to a subdomain; never on another domain.
+#[tokio::test]
+async fn jmap_is_found_at_the_well_known_address() {
+    let address = EmailAddress::parse("bob@example.test").expect("address");
+    let s = setup(|req| match (req.host(), req.target.as_str()) {
+        ("example.test", "/.well-known/jmap") => {
+            Reply::redirect(307, "https://www.example.test/jmap/session")
+        }
+        ("www.example.test", "/jmap/session") => Reply::status(401),
+        _ => Reply::status(404),
+    })
+    .await;
+    let found = s
+        .fetcher
+        .probe_jmap("example.test", &address)
+        .await
+        .expect("found");
+    assert_eq!(
+        found,
+        ServerSettings {
+            host: "www.example.test".into(),
+            port: 443,
+            security: Security::Tls,
+            username: "bob@example.test".into(),
+        }
+    );
+    for request in s.server.seen() {
+        assert!(
+            !request.headers.contains_key("authorization"),
+            "{request:?}"
+        );
+    }
+
+    let plain = setup(|_| Reply::status(404)).await;
+    assert_eq!(
+        plain.fetcher.probe_jmap("example.test", &address).await,
+        None
+    );
+    let away = setup(|_| Reply::redirect(301, "https://evil.test/jmap/session")).await;
+    assert_eq!(
+        away.fetcher.probe_jmap("example.test", &address).await,
+        None
+    );
+    assert_eq!(away.foreign.connections(), 0, "never to another domain");
+}
+
+#[test]
+fn autoconfig_files_may_list_jmap() {
+    let file = r#"<?xml version="1.0"?>
+<clientConfig version="1.1"><emailProvider id="example.org">
+  <incomingServer type="jmap"><hostname>jmap.example.org</hostname></incomingServer>
+  <incomingServer type="imap"><hostname>imap.example.org</hostname><port>993</port>
+    <socketType>SSL</socketType><username>%EMAILADDRESS%</username></incomingServer>
+</emailProvider></clientConfig>"#;
+    let servers = parse(file.as_bytes(), &alice()).expect("parse");
+    let jmap = servers.jmap.expect("jmap");
+    assert_eq!(
+        (jmap.host.as_str(), jmap.port, jmap.security),
+        ("jmap.example.org", 443, Security::Tls)
+    );
+    assert_eq!(jmap.username, "alice+test@example.org");
+    assert!(servers.imap.is_some());
+    let starttls = file.replace(
+        "<hostname>jmap.example.org</hostname>",
+        "<hostname>jmap.example.org</hostname><port>8080</port><socketType>STARTTLS</socketType>",
+    );
+    assert!(
+        parse(starttls.as_bytes(), &alice())
+            .expect("parse")
+            .jmap
+            .is_none(),
+        "HTTPS only"
+    );
+}

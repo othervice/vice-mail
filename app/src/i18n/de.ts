@@ -3253,6 +3253,10 @@ export const de: Translation = {
         title: "Die Diagnosedatei konnte nicht gespeichert werden.",
         hint: "Wähle einen anderen Ordner, zum Beispiel Downloads, und prüfe, ob auf dem Datenträger Platz frei ist.",
       },
+      jmap_unavailable: {
+        title: "Unter dieser Adresse wurde kein JMAP-Dienst gefunden.",
+        hint: "Prüfe Servername und Port. Ein JMAP-Server antwortet unter https://server/.well-known/jmap. Bietet dein Anbieter kein JMAP an, wähle IMAP und SMTP in den Server-Einstellungen.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

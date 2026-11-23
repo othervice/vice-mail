@@ -146,6 +146,7 @@ pub(crate) async fn submit<C: Send + Sync + 'static>(
     };
     let bearer = login.auth == mail_model::LoginAuth::Bearer;
     let mut config = login.config(&account.smtp, Access::ReadWrite);
+    crate::protocols::for_account(&mut config, &account);
     config.timeouts = shared.config.timeouts;
     config.extra_root_ca = shared.config.extra_root_ca.clone();
     let envelope = Envelope {

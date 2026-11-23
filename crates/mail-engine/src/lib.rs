@@ -16,6 +16,7 @@ mod mcp;
 pub mod oauth;
 pub mod outbox;
 mod parity;
+pub mod protocols;
 pub mod reading;
 pub mod search;
 pub mod settings_sync;

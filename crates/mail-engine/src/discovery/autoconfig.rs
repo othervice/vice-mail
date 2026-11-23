@@ -61,6 +61,17 @@ pub trait AutoconfigFetch: Send + Sync {
         url: &Url,
         domain: &str,
     ) -> impl Future<Output = Result<Option<Vec<u8>>, LookupError>> + Send;
+
+    /// Stage 14 (decision 0041): a JMAP server at `https://<domain>/.well-known/jmap`, asked
+    /// without credentials. The default (test fakes) finds none.
+    fn probe_jmap(
+        &self,
+        domain: &str,
+        address: &EmailAddress,
+    ) -> impl Future<Output = Option<ServerSettings>> + Send {
+        let _ = (domain, address);
+        std::future::ready(None)
+    }
 }
 
 /// Tries both URLs and parses the first file that names at least one usable server.
@@ -227,6 +238,27 @@ impl AutoconfigFetch for HttpsFetcher {
             return read_limited(response).await.map(Some);
         }
     }
+
+    async fn probe_jmap(&self, domain: &str, address: &EmailAddress) -> Option<ServerSettings> {
+        let client = self.client.as_ref().ok()?;
+        match mail_jmap::probe(client, domain, 443, false).await {
+            Ok(Some(found))
+                if found.host == domain || found.host.ends_with(&format!(".{domain}")) =>
+            {
+                Some(ServerSettings {
+                    host: found.host,
+                    port: found.port,
+                    security: Security::Tls,
+                    username: address.address().to_owned(),
+                })
+            }
+            Ok(_) => None,
+            Err(err) => {
+                tracing::debug!(domain, error = %err, "no JMAP session found");
+                None
+            }
+        }
+    }
 }
 
 async fn read_limited(mut response: reqwest::Response) -> Result<Vec<u8>, LookupError> {
@@ -290,7 +322,43 @@ pub fn parse(body: &[u8], address: &EmailAddress) -> Result<Servers, LookupError
     Ok(Servers {
         imap: pick("incomingServer", "imap", [993, 143]),
         smtp: pick("outgoingServer", "smtp", [465, 587]),
+        // Stage 14 (decision 0041): HTTPS only; without a port 443.
+        jmap: provider
+            .children()
+            .filter(|node| {
+                node.has_tag_name("incomingServer") && node.attribute("type") == Some("jmap")
+            })
+            .find_map(|node| jmap_server(node, address)),
     })
+}
+
+/// A `<incomingServer type="jmap">`: host (and port) over TLS, password sign-in.
+fn jmap_server(node: roxmltree::Node<'_, '_>, address: &EmailAddress) -> Option<ServerSettings> {
+    let has_port = node.children().any(|c| c.has_tag_name("port"));
+    let has_socket = node.children().any(|c| c.has_tag_name("socketType"));
+    if !has_port && !has_socket {
+        // `server` needs one of them; JMAP is HTTPS on 443 by default.
+        let mut settings = server(node, address, [443, 443]).or_else(|| {
+            let host = node
+                .children()
+                .find(|c| c.has_tag_name("hostname"))
+                .and_then(|c| c.text())
+                .map(str::trim)?;
+            let host = address
+                .expand(host, true)?
+                .trim_end_matches('.')
+                .to_ascii_lowercase();
+            is_host_name(&host).then(|| ServerSettings {
+                host,
+                port: 443,
+                security: Security::Tls,
+                username: address.address().to_owned(),
+            })
+        })?;
+        settings.security = Security::Tls;
+        return Some(settings);
+    }
+    server(node, address, [443, 443]).filter(|s| s.security == Security::Tls)
 }
 
 /// One `<incomingServer>`/`<outgoingServer>`; `None` if the app cannot use it.

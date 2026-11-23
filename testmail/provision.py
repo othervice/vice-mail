@@ -99,6 +99,24 @@ def expr(value: str, match: list[tuple[str, str]] | None = None) -> dict:
     return out
 
 
+def https_listener(env: dict[str, str]) -> dict:
+    """Stage 14: JMAP over HTTPS for the client (the session names https://localhost:PORT)."""
+    host = env["TESTMAIL_HOST"]
+    return {"https": {"name": "https", "protocol": "http",
+                      "bind": {f"{host}:{env['TESTMAIL_HTTPS_PORT']}": True},
+                      "useTls": True, "implicitTls": True}}
+
+
+def add_jmap_listener(api: Jmap, env: dict[str, str]) -> None:
+    """For stores provisioned before stage 14: adds the HTTPS listener unless it exists."""
+    listeners = api.get("NetworkListener", None)
+    if any(item.get("name") == "https" for item in listeners):
+        print("HTTPS listener exists")
+        return
+    api.create("NetworkListener", https_listener(env))
+    print(f"added HTTPS listener on {env['TESTMAIL_HOST']}:{env['TESTMAIL_HTTPS_PORT']}")
+
+
 def provision(api: Jmap, env: dict[str, str], tls_dir: Path) -> None:
     host = env["TESTMAIL_HOST"]
     if host != "127.0.0.1":
@@ -164,6 +182,7 @@ def provision(api: Jmap, env: dict[str, str], tls_dir: Path) -> None:
                         "bind": bind("TESTMAIL_SMTPS_PORT"), "useTls": True, "implicitTls": True},
         "http": {"name": "http", "protocol": "http", "bind": bind("TESTMAIL_HTTP_PORT"),
                  "useTls": False, "implicitTls": False},
+        **https_listener(env),
     })
 
     api.update_singleton("SystemSettings", {
@@ -291,9 +310,10 @@ def adjust_defaults(api: Jmap) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", required=True, help="management URL (http://127.0.0.1:PORT)")
-    parser.add_argument("--phase", choices=["recovery", "defaults"], required=True,
+    parser.add_argument("--phase", choices=["recovery", "defaults", "jmap"], required=True,
                         help="recovery: initial setup as the recovery administrator; "
-                             "defaults: adjust objects created at the first normal start")
+                             "defaults: adjust objects created at the first normal start; "
+                             "jmap: add the HTTPS listener to a store provisioned before stage 14")
     parser.add_argument("--tls-dir", type=Path, help="directory with server.pem and server-key.pem")
     args = parser.parse_args()
     env = load_env()
@@ -304,6 +324,8 @@ def main() -> int:
                 print("TESTMAIL_PROVISION_PASSWORD and --tls-dir are required", file=sys.stderr)
                 return 2
             provision(Jmap(args.url, "provision", password), env, args.tls_dir)
+        elif args.phase == "jmap":
+            add_jmap_listener(Jmap(args.url, env["TESTMAIL_ADMIN_ADDRESS"], env["TESTMAIL_ADMIN_PASSWORD"]), env)
         else:
             adjust_defaults(Jmap(args.url, env["TESTMAIL_ADMIN_ADDRESS"], env["TESTMAIL_ADMIN_PASSWORD"]))
     except (ProvisionError, OSError, KeyError) as err:

@@ -16,6 +16,11 @@
 //!   or its subdomains (at most 3). The operating system may check the certificate's
 //!   revocation status (OCSP/CRL) with the issuing authority.
 //!
+//! - Stage 14 (decision 0041): HTTPS GET (port 443) to `<domain>/.well-known/jmap` without
+//!   credentials, to learn whether the domain has a JMAP server (it answers 401 or with a
+//!   session resource). Redirects only to `https` on `<domain>` or its subdomains (at most 3).
+//!   An autoconfig file may also list one (`<incomingServer type="jmap">`).
+//!
 //! Results never contain a password, and every failure on the way (no record, timeout,
 //! unreachable, bad file) ends in `source: none`, so the user fills in the form by hand. Only
 //! an address that cannot be valid is an error (`invalid_argument`).
@@ -43,6 +48,7 @@ pub fn discover_known(email: &str) -> Result<DiscoveryResult, CoreError> {
         imap: Some(provider.imap.settings(&address)),
         smtp: Some(provider.smtp.settings(&address)),
         provider_hint: provider.hint,
+        jmap: None,
     })
 }
 
@@ -88,9 +94,14 @@ impl<R: SrvResolver, F: AutoconfigFetch> OnlineDiscovery<R, F> {
         {
             found.add(DiscoverySource::Autoconfig, from_file);
         }
+        // Stage 14 (decision 0041): JMAP is offered beside IMAP, never instead of it.
+        if found.jmap.is_none() {
+            found.jmap = self.fetcher.probe_jmap(domain, &address).await;
+        }
         let result = found.into_result(hint);
         tracing::info!(domain, source = ?result.source, imap = result.imap.is_some(),
-            smtp = result.smtp.is_some(), "online server discovery finished");
+            smtp = result.smtp.is_some(), jmap = result.jmap.is_some(),
+            "online server discovery finished");
         Ok(result)
     }
 }
@@ -100,12 +111,15 @@ impl<R: SrvResolver, F: AutoconfigFetch> OnlineDiscovery<R, F> {
 pub struct Servers {
     pub imap: Option<ServerSettings>,
     pub smtp: Option<ServerSettings>,
+    /// Stage 14: a JMAP server (autoconfig `type="jmap"`).
+    pub jmap: Option<ServerSettings>,
 }
 
 #[derive(Default)]
 struct Found {
     imap: Option<(DiscoverySource, ServerSettings)>,
     smtp: Option<(DiscoverySource, ServerSettings)>,
+    jmap: Option<ServerSettings>,
 }
 
 impl Found {
@@ -116,6 +130,9 @@ impl Found {
         }
         if self.smtp.is_none() {
             self.smtp = servers.smtp.map(|s| (source, s));
+        }
+        if self.jmap.is_none() {
+            self.jmap = servers.jmap;
         }
     }
 
@@ -141,6 +158,7 @@ impl Found {
             imap: self.imap.map(|(_, s)| s),
             smtp: self.smtp.map(|(_, s)| s),
             provider_hint: hint,
+            jmap: self.jmap,
         }
     }
 }
@@ -151,6 +169,7 @@ const fn nothing(hint: Option<ProviderHint>) -> DiscoveryResult {
         imap: None,
         smtp: None,
         provider_hint: hint,
+        jmap: None,
     }
 }
 

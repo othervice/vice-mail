@@ -37,6 +37,11 @@ Requirements: `bash`, `curl`, `openssl`, `python3` (standard library only).
 | 1465  | SMTP submission | implicit TLS | required |
 | 1025  | SMTP | plain, STARTTLS offered | none; accepts only local recipients |
 | 18080 | HTTP (JMAP, management API) | none | required |
+| 18443 | HTTPS (JMAP for the client, stage 14) | implicit TLS | required |
+
+The server names its JMAP endpoints with `https://localhost:18443` (`STALWART_PUBLIC_URL`), so
+a client follows them to this port. A store provisioned before stage 14 gets the HTTPS listener
+at the next `start`; its data stays.
 
 Nothing leaves the machine: relaying to other domains is refused for everybody, the only
 delivery route is local, spam filter, DNSBL, GeoIP and web UI are disabled, and the server

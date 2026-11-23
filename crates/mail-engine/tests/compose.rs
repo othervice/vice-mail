@@ -114,7 +114,7 @@ struct Bed {
     env: TestEnv,
     dir: TempDir,
     keychain: Arc<MemorySecretStore>,
-    core: AppCore,
+    core: AppCore<ImapConnector>,
     events: broadcast::Receiver<CoreEvent>,
     bob: AccountId,
     alice: AccountId,
@@ -125,7 +125,7 @@ async fn start_core(
     data: &Path,
     keychain: &Arc<MemorySecretStore>,
     sender: SmtpSender,
-) -> AppCore {
+) -> AppCore<ImapConnector> {
     let mut services =
         CoreServices::with_connector(Credentials::new(Arc::clone(keychain)), ImapConnector::new());
     services.sync = sync_config(env);
@@ -157,6 +157,7 @@ fn settings(
         username: account.address.clone(),
     };
     AccountSettings {
+        protocol: Default::default(),
         email: account.address.clone(),
         display_name: name.to_owned(),
         imap: server(env.host.clone(), env.imaps_port, Security::Tls),
@@ -1848,7 +1849,7 @@ async fn a_read_receipt_goes_out_only_on_the_users_answer_smtp_capture() {
 }
 
 /// Opens the message in the reading pane until its body is stored.
-async fn opened(core: &AppCore, id: mail_model::MessageId) {
+async fn opened(core: &AppCore<ImapConnector>, id: mail_model::MessageId) {
     until("the body", || async {
         let view = core
             .get_message(id, mail_model::BodyFormat::Text)

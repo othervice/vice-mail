@@ -50,6 +50,7 @@ mod fts;
 mod gmail;
 mod groups;
 mod inbox;
+mod jmap;
 mod lists;
 mod mail_api;
 mod mailboxes;

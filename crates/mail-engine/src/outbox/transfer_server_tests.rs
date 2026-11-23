@@ -130,7 +130,7 @@ struct Bed {
     credentials: Credentials,
     proxy: Arc<Proxy>,
     tap: WireTap,
-    outbox: Outbox,
+    outbox: Outbox<ImapConnector>,
     source: Side,
     target: Side,
     folder: String,

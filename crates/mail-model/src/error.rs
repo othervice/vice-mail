@@ -151,6 +151,10 @@ pub enum ErrorCode {
     OauthSignInRequired,
     /// Stage 15: the diagnostics file could not be written where the user chose.
     DiagnosticsWriteFailed,
+    /// Stage 14, block D (decision 0041): no JMAP service answers at the address (no session
+    /// resource at `/.well-known/jmap`, or one without mail), or it names its endpoints without
+    /// encryption.
+    JmapUnavailable,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -231,6 +235,11 @@ pub enum BackendError {
     /// Never retried automatically. Built by the engine from [`crate::SendOutcome::Unclear`].
     #[error("unclear whether the message was sent: {0}")]
     SendUnclear(String),
+
+    /// Stage 14, block D (decision 0041): the address has no usable JMAP service (no session
+    /// resource, no mail capability, or endpoints without TLS). Holds the reason.
+    #[error("no JMAP service found: {0}")]
+    JmapUnavailable(String),
 }
 
 impl BackendError {
@@ -254,6 +263,7 @@ impl BackendError {
             Self::InvalidState(_) => ErrorCode::Internal,
             Self::SendRejected { .. } => ErrorCode::SendRejected,
             Self::SendUnclear(_) => ErrorCode::SendUnclear,
+            Self::JmapUnavailable(_) => ErrorCode::JmapUnavailable,
         }
     }
 
@@ -300,6 +310,7 @@ impl BackendError {
             Self::SendUnclear(_) => {
                 "The connection broke while sending; the message may have been sent."
             }
+            Self::JmapUnavailable(_) => "No JMAP service was found at this address.",
         }
     }
 
@@ -324,7 +335,8 @@ impl BackendError {
             | Self::ReadOnly(d)
             | Self::InvalidState(d)
             | Self::SendRejected { detail: d, .. }
-            | Self::SendUnclear(d) => (!d.is_empty()).then(|| d.clone()),
+            | Self::SendUnclear(d)
+            | Self::JmapUnavailable(d) => (!d.is_empty()).then(|| d.clone()),
         }
     }
 }

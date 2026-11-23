@@ -343,6 +343,7 @@ async fn actions_through_the_core_reach_the_server_and_the_sync_confirms_them() 
     let account = core
         .add_account(
             AccountSettings {
+                protocol: Default::default(),
                 email: env.bob.address.clone(),
                 display_name: "Bob".into(),
                 imap: server(env.imaps_port, Security::Tls),

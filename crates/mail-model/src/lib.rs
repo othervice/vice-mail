@@ -45,6 +45,7 @@ mod snippets;
 mod text;
 pub mod threading;
 mod ui;
+mod uid_map;
 mod uid_set;
 mod updates;
 mod views;
@@ -52,7 +53,7 @@ mod writer;
 
 pub use account::{
     Account, AccountColor, AccountSettings, AccountState, AccountStatus, ConnectionTestResult,
-    DiscoveryResult, DiscoverySource, Identity, ProviderHint, Security, ServerSettings,
+    DiscoveryResult, DiscoverySource, Identity, Protocol, ProviderHint, Security, ServerSettings,
     SyncProgress,
 };
 pub use ai::{
@@ -204,6 +205,9 @@ pub use ui::{
     MAX_TEXT_SIZE, MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE, PlatformShortcuts, ReadingPanePosition,
     Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
     validate_layout_slot, validate_overrides, validate_recent_commands,
+};
+pub use uid_map::{
+    UidMapChanges, UidMapEntry, UidMapFuture, UidMapMailbox, UidMapSnapshot, UidMapStore,
 };
 pub use uid_set::UidSet;
 pub use updates::{

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 
-use mail_imap::ImapConnector;
+use crate::protocols::AnyConnector;
 use mail_model::{
     Account, AccountId, AccountSettings, AccountStatus, ActionResult, AppInfo, BatchId, BodyFormat,
     Capabilities, ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, LinkInfo,
@@ -70,7 +70,7 @@ impl<T: MailConnector + WriteConnector + mail_model::SyncFolderConnector + 'stat
 /// What the core is given instead of reaching for it: the keychain, the mail connector, the
 /// clock and the sync tunables. Tests inject an in-memory keychain, a fake or instrumented
 /// connector, a movable clock and short intervals.
-pub struct CoreServices<C: MailConnector = ImapConnector> {
+pub struct CoreServices<C: MailConnector = AnyConnector> {
     pub credentials: Credentials,
     pub connector: C,
     pub clock: Arc<dyn Clock>,
@@ -83,10 +83,11 @@ pub struct CoreServices<C: MailConnector = ImapConnector> {
     pub outbox: Option<OutboxConfig>,
 }
 
-impl CoreServices<ImapConnector> {
-    /// The product services: the IMAP adapter, the system clock, the default sync settings.
+impl CoreServices<AnyConnector> {
+    /// The product services: the IMAP and JMAP adapters (stage 14, decision 0041), the system
+    /// clock, the default sync settings.
     pub fn new(credentials: Credentials) -> Self {
-        Self::with_connector(credentials, ImapConnector::new())
+        Self::with_connector(credentials, AnyConnector::new())
     }
 }
 
@@ -115,7 +116,7 @@ impl<C: Connector> WeakCore<C> {
 
 /// Facade of the core. The shell forwards every command here; everything is testable without
 /// a WebView. Cheap to clone. Generic over the mail connector so tests can use a fake server.
-pub struct AppCore<C: Connector = ImapConnector> {
+pub struct AppCore<C: Connector = AnyConnector> {
     inner: Arc<Inner<C>>,
 }
 
@@ -255,6 +256,10 @@ impl<C: Connector> AppCore<C> {
         let accounts = Arc::new(Registry::default());
         let sync = Arc::new(services.sync);
         let connector = Arc::new(services.connector);
+        // Stage 14 (decision 0041): the JMAP adapter keeps its UID map in the store.
+        if let Ok(store) = &opened {
+            connector.attach_uid_map_store(Arc::new(store.clone()));
+        }
         // Stage 9: the one-click unsubscribe client trusts what the sync trusts (the test CA in
         // tests) and reaches loopback only where external images may (tests).
         let comfort = crate::comfort::ComfortState::new(
@@ -503,6 +508,10 @@ impl<C: Connector> AppCore<C> {
         password: Secret<String>,
     ) -> Result<ConnectionTestResult, CoreError> {
         let settings = settings.validated()?;
+        if settings.protocol == mail_model::Protocol::Jmap {
+            let capabilities = self.check_jmap(&settings, password, true).await?;
+            return Ok(ConnectionTestResult { capabilities });
+        }
         let capabilities = self.check_login(&settings.imap, password.clone()).await?;
         self.check_smtp(&settings.smtp, password).await?;
         Ok(ConnectionTestResult { capabilities })
@@ -526,7 +535,11 @@ impl<C: Connector> AppCore<C> {
         {
             return Err(CoreError::AccountExists(settings.email));
         }
-        self.check_login(&settings.imap, password.clone()).await?;
+        if settings.protocol == mail_model::Protocol::Jmap {
+            self.check_jmap(&settings, password.clone(), false).await?;
+        } else {
+            self.check_login(&settings.imap, password.clone()).await?;
+        }
 
         let _admin = self.inner.admin.lock().await;
         let id = AccountId::from_uuid(uuid::Uuid::new_v4());
@@ -540,7 +553,10 @@ impl<C: Connector> AppCore<C> {
             smtp: settings.smtp,
             credential_ref: key.to_string(),
         };
-        let stored = match store.insert_account(new).await {
+        let stored = match store
+            .insert_account_with_protocol(new, settings.protocol)
+            .await
+        {
             Ok(stored) => stored,
             Err(err) => {
                 if let Err(cleanup) = self.inner.credentials.delete(&key).await {
@@ -1083,6 +1099,38 @@ impl<C: Connector> AppCore<C> {
             let capabilities = backend.capabilities().clone();
             if let Err(err) = backend.logout().await {
                 tracing::debug!(error = %err, "LOGOUT after the login check failed");
+            }
+            Ok::<_, CoreError>(capabilities)
+        });
+        match task.await {
+            Ok(result) => result,
+            Err(err) => Err(CoreError::Mail(mail_model::BackendError::Protocol(
+                format!("the login check failed unexpectedly: {err}"),
+            ))),
+        }
+    }
+
+    /// Stage 14 (decision 0041): the login check of a JMAP account: the session resource with
+    /// the password, read-only; with `sending`, also that the account may submit mail. Own
+    /// task, as for IMAP.
+    async fn check_jmap(
+        &self,
+        settings: &AccountSettings,
+        password: Secret<String>,
+        sending: bool,
+    ) -> Result<Capabilities, CoreError> {
+        let mut config = self.inner.sync.connect_config(&settings.imap, password);
+        config.protocol = mail_model::Protocol::Jmap;
+        let connector = Arc::clone(&self.inner.connector);
+        let sender = Arc::clone(&self.inner.sender);
+        let task = tokio::spawn(async move {
+            let backend = connector.connect(&config).await?;
+            let capabilities = backend.capabilities().clone();
+            if let Err(err) = backend.logout().await {
+                tracing::debug!(error = %err, "closing the JMAP login check failed");
+            }
+            if sending {
+                sender.verify(&config).await?;
             }
             Ok::<_, CoreError>(capabilities)
         });

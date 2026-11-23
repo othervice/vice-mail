@@ -68,6 +68,7 @@ fn settings() -> AccountSettings {
         username: "alice".into(),
     };
     AccountSettings {
+        protocol: Default::default(),
         email: "alice@fake.test".into(),
         display_name: "Alice".into(),
         imap: server("imap.fake.test", 993),

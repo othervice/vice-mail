@@ -908,6 +908,8 @@ fn check_account_field(name: &str, value: &Value) -> Result<(), String> {
             None => Err("field color: not an account colour index".to_owned()),
         },
         "imap" | "smtp" => typed(StrictServerSettings::deserialize(value).map(drop)),
+        // Stage 14 (decision 0041): only in records of JMAP accounts.
+        "protocol" => typed(mail_model::Protocol::deserialize(value).map(drop)),
         _ => Err(format!("unknown account field {name:?}")),
     }
 }
@@ -941,6 +943,10 @@ pub struct SyncedAccount {
     pub color: AccountColor,
     pub imap: ServerSettings,
     pub smtp: ServerSettings,
+    /// Stage 14 (decision 0041): only written for JMAP accounts (records without it are IMAP,
+    /// as before); fixed when the account is set up or taken over.
+    #[serde(default, skip_serializing_if = "mail_model::Protocol::is_imap")]
+    pub protocol: mail_model::Protocol,
 }
 
 impl SyncedAccount {

@@ -54,6 +54,8 @@ pub struct StoredAccount {
     pub writes_enabled: bool,
     /// Unix milliseconds.
     pub created_at: i64,
+    /// Stage 14 (decision 0041): IMAP/SMTP or JMAP; fixed when the account is set up.
+    pub protocol: mail_model::Protocol,
 }
 
 impl StoredAccount {
@@ -69,6 +71,7 @@ impl StoredAccount {
             smtp: self.smtp,
             writes_enabled: self.writes_enabled,
             status,
+            protocol: self.protocol,
         }
     }
 }
@@ -139,7 +142,20 @@ impl Store {
     /// ([`AccountColor::next_free`]) and one default identity (email and display name).
     /// [`StoreError::AccountExists`] if the email is taken (case-insensitive).
     pub async fn insert_account(&self, account: NewAccount) -> Result<StoredAccount, StoreError> {
-        let result = self.write(move |tx| accounts::insert(tx, &account)).await;
+        self.insert_account_with_protocol(account, mail_model::Protocol::Imap)
+            .await
+    }
+
+    /// Stage 14 (decision 0041): [`Store::insert_account`] for an account that speaks
+    /// `protocol` (IMAP or JMAP).
+    pub async fn insert_account_with_protocol(
+        &self,
+        account: NewAccount,
+        protocol: mail_model::Protocol,
+    ) -> Result<StoredAccount, StoreError> {
+        let result = self
+            .write(move |tx| accounts::insert(tx, &account, protocol))
+            .await;
         if let Ok(stored) = &result {
             tracing::info!(account = %stored.id, "account stored");
         }
