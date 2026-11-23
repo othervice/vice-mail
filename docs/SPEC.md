@@ -107,7 +107,8 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 ### Einstellungs-Sync
 - Gleicht zwischen Geräten ab, was der Mailserver nicht kennt: Kontenliste ohne Passwörter,
   Identitäten, Signaturen, Vorlagen, Einstellungen, Kürzel, Snooze, Pins, gespeicherte Suchen,
-  Regeln, KI-Einstellungen ohne Schlüssel.
+  Regeln. Die Einstellungen der KI in der App bleiben auf dem Gerät (Entscheidung 0024), ebenso
+  Schlüssel, Passwörter und Tokens.
 - Läuft über einen Ordner im eigenen Postfach, verschlüsselt mit einer Passphrase. Kein Server von uns.
 - Mails, Ordner, Gelesen-Status und Entwürfe gleicht weiterhin allein der Mailserver ab.
 - Passwörter und Tokens bleiben auf dem Gerät.
