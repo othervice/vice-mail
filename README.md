@@ -30,17 +30,17 @@ cloud service of ours, no account with us and no telemetry.
 
 ## Screenshots
 
-<!--
-  Screenshots go into docs/images/ (see docs/images/README.md for the list of views and how to
-  take them with the local test server). Uncomment once the files exist:
+![Unified inbox with the reading pane, light theme](docs/images/inbox-light.png)
+![Unified inbox with the reading pane, dark theme](docs/images/inbox-dark.png)
+![Link check: the link text names one site, the link leads to another](docs/images/reading-links.png)
+![Composer with formatting, a signature and an attachment](docs/images/composer.png)
+![Search with operators and highlighted results](docs/images/search.png)
+![Command palette over the inbox](docs/images/command-palette.png)
+![AI in the app: what a request would send to a cloud provider, before anything is sent](docs/images/ai-consent.png)
+![Settings: AI over MCP with access per account and the AI clients](docs/images/mcp.png)
 
-  ![Unified inbox with the reading pane, light theme](docs/images/inbox-light.png)
-  ![Unified inbox with the reading pane, dark theme](docs/images/inbox-dark.png)
-  ![Composer with a signature](docs/images/composer.png)
-  ![Search with operators](docs/images/search.png)
--->
-
-*Screenshots will follow with the first public release.*
+<!-- docs/images/windows-inbox.png follows once the Windows build has been tested on a Windows PC
+     (docs/images/README.md says how the screenshots are taken). -->
 
 ## Features
 
