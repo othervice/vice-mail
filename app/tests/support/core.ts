@@ -5,6 +5,11 @@ import { createSearchFake, type SearchFakeOptions, type SearchFakeState } from "
 import { createMcpSyncFake, type McpSyncFakeOptions, type McpSyncFakeState } from "./mcpSync";
 import { createComfortFake, type ComfortFake, type ComfortFakeOptions } from "./comfort";
 import { createExtrasFake, type ExtrasFake, type ExtrasFakeOptions } from "./extras";
+// Stage 10: signatures, templates and contacts.
+import { createSnippetsFake, type SnippetsFakeOptions, type SnippetsFakeState } from "./snippets";
+import { createContactsFake, type ContactsFakeOptions, type ContactsFakeState } from "./contacts";
+// Stage 13: AI in the app.
+import { createAiFake, type AiFakeOptions, type AiFakeState } from "./ai";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -275,6 +280,12 @@ interface FakeCoreOptions {
   comfort?: ComfortFakeOptions;
   /** Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, launch links. */
   extras?: ExtrasFakeOptions;
+  /** Stage 10: signature pool, identity defaults and templates. */
+  snippets?: SnippetsFakeOptions;
+  /** Stage 10: the contact directory. */
+  contacts?: ContactsFakeOptions;
+  /** Stage 13: AI in the app (off unless a test turns it on) and the open-reply hints. */
+  ai?: AiFakeOptions;
 }
 
 export interface FakeCore {
@@ -311,6 +322,12 @@ export interface FakeCore {
   readonly comfort: ComfortFake;
   /** Stage 9 part B: unsubscribe requests, opened invitations, exports, prints, default mail app. */
   readonly extras: ExtrasFake;
+  /** Stage 10: signatures and templates as the fake core holds them now. */
+  readonly snippets: SnippetsFakeState;
+  /** Stage 10: contacts as the fake core holds them now. */
+  readonly contacts: ContactsFakeState;
+  /** Stage 13: AI settings, calls that would reach a provider, keys received, dismissed hints. */
+  readonly ai: AiFakeState;
 }
 
 /**
@@ -651,6 +668,17 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   // Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, mailto.
   const extrasFake = createExtrasFake(options.extras ?? {});
 
+  // Stage 10: signatures, templates and contacts.
+  const snippetsFake = createSnippetsFake(options.snippets ?? {}, { drafts: () => composeFake.state.drafts });
+  const contactsFake = createContactsFake(options.contacts ?? {});
+
+  // Stage 13: AI in the app.
+  const aiFake = createAiFake(options.ai ?? {}, {
+    accounts: () => accounts,
+    accountOf: (messageId) => [...messages.values()].flat().find((m) => m.id === messageId)?.accountId ?? null,
+    createReply: (messageId) => composeFake.handle("create_draft", { request: { kind: "reply", messageId, language: "en" } }),
+  });
+
   mockIPC(
     (cmd, rawArgs) => {
       calls.push({ cmd, args: rawArgs });
@@ -789,6 +817,14 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, mailto.
           const extrasAnswer = extrasFake.handle(cmd, args);
           if (extrasAnswer !== undefined) return extrasAnswer;
+          // Stage 10: signatures, templates and contacts.
+          const snippetsAnswer = snippetsFake.handle(cmd, args);
+          if (snippetsAnswer !== undefined) return snippetsAnswer;
+          const contactsAnswer = contactsFake.handle(cmd, args);
+          if (contactsAnswer !== undefined) return contactsAnswer;
+          // Stage 13: AI in the app.
+          const aiAnswer = aiFake.handle(cmd, args);
+          if (aiAnswer !== undefined) return aiAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -859,5 +895,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     mcpSync: mcpSyncFake.state,
     comfort: comfortFake,
     extras: extrasFake,
+    snippets: snippetsFake.state,
+    contacts: contactsFake.state,
+    ai: aiFake.state,
   };
 }

@@ -23,6 +23,8 @@ export const SETTINGS_SECTION_IDS = [
   "reading",
   // Stage 5: undo delay, sent copies, signatures.
   "compose",
+  // Stage 10: the contact directory.
+  "contacts",
   // Stage 9: categories, bundles and sender rules; notifications.
   "inbox",
   "notifications",
@@ -30,6 +32,8 @@ export const SETTINGS_SECTION_IDS = [
   // Stage 8: shortcuts.
   "keyboard",
   "sync",
+  // Stage 13: AI in the app (next to AI over MCP, stage 12).
+  "ai",
   "mcp",
   "about",
 ] as const;

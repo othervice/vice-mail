@@ -600,7 +600,7 @@ describe("outbox view", () => {
 });
 
 describe("writing settings", () => {
-  it("changes the undo delay and saves a signature", async () => {
+  it("changes the undo delay and offers the default signatures per address", async () => {
     const identities = { [ADA.id]: [makeIdentity({ id: 1, email: ADA.email, name: "Ada" })] };
     const { core, user } = setup({ compose: { identities } });
     await screen.findByRole("button", { name: "New message" });
@@ -615,11 +615,10 @@ describe("writing settings", () => {
     await waitFor(() => {
       expect(core.callsOf("set_compose_settings")).toEqual([{ settings: { sendDelaySeconds: 30 } }]);
     });
-    const signature = await screen.findByTestId("signature-input");
-    await user.type(signature, "Ada");
-    await user.click(screen.getByRole("button", { name: "Save signature" }));
-    await waitFor(() => {
-      expect(core.callsOf("set_identity_signature")).toEqual([{ identityId: 1, signature: "Ada" }]);
-    });
+    // Stage 10: the plain text signature per address became a choice from the signature pool
+    // (tests/snippets-settings.test.tsx covers it).
+    const defaults = await screen.findByTestId("signature-defaults");
+    expect(within(defaults).getByRole("combobox", { name: "New messages" })).toBeTruthy();
+    expect(within(defaults).getByRole("combobox", { name: "Replies and forwards" })).toBeTruthy();
   });
 });

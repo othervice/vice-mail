@@ -139,6 +139,8 @@
   --ui-palette-width: 36rem;
   --ui-overview-width: 48rem;
   --ui-notice-width: 28rem;
+  /* Stage 13: the AI panel on the right (docs/DESIGN.md: 380 px). */
+  --ui-ai-panel-width: 23.75rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the
      platform draws its window buttons over the web view (macOS, see app.css). */
   --ui-titlebar-inset: 0px;

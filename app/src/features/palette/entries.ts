@@ -1,5 +1,6 @@
 import {
   Activity,
+  FileText,
   Folder,
   Inbox,
   LayoutPanelLeft,
@@ -17,6 +18,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { Account, Mailbox } from "../../services/ipc";
 import { openComposer } from "../../stores/composer";
+import { useComposerBridge } from "../../stores/composerBridge";
 import { currentActionTarget, useActionTargetStore, type ActionTarget } from "../../stores/actionTarget";
 import { useLayoutStore, type Density, type ReadingPanePosition } from "../../stores/layout";
 import { useNoticeStore } from "../../stores/notices";
@@ -37,7 +39,9 @@ import {
 } from "../actions/registry";
 import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { MAIL_VIEW_ICONS } from "../mail/views";
+import { useAiPaletteEntries } from "../ai/palette";
 import { useMailboxes } from "../mailboxes/queries";
+import { useTemplates } from "../snippets/queries";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -235,6 +239,27 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
     ...(helpShortcut && { shortcut: helpShortcut }),
     run: ui.openOverview,
   });
+
+  // Stage 10: templates go into the open composer (filled for its first recipient).
+  const insertTemplate = useComposerBridge((state) => state.insertTemplate);
+  const templates = useTemplates(insertTemplate !== null);
+  if (insertTemplate) {
+    for (const template of templates.data ?? []) {
+      entries.push({
+        key: `template:${template.id}`,
+        group: "commands",
+        label: t("writing.templates.paletteInsert", { name: template.name }),
+        icon: FileText,
+        ...(template.subject && { keywords: [template.subject] }),
+        run: () => {
+          insertTemplate(template.id);
+        },
+      });
+    }
+  }
+
+  // Stage 13: the AI commands of the panel (none while AI is off).
+  entries.push(...useAiPaletteEntries());
 
   for (const id of MAIL_VIEW_IDS) {
     const command = VIEW_COMMAND_OF.get(id);

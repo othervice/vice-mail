@@ -169,7 +169,7 @@ describe("draft fields", () => {
   it("the update carries every editable field and nothing of the core's own", () => {
     const update = updateOf(makeDraft({ subject: "S", includeQuote: false, quotePosition: "above" }));
     expect(Object.keys(update).sort()).toEqual(
-      ["bcc", "bodyHtml", "bodyText", "cc", "format", "identityId", "includeQuote", "includeSignature", "quotePosition", "subject", "to"].sort(),
+      ["bcc", "bodyHtml", "bodyText", "cc", "format", "identityId", "includeQuote", "includeSignature", "quotePosition", "signatureId", "subject", "to"].sort(),
     );
     expect(update).toMatchObject({ subject: "S", includeQuote: false, quotePosition: "above" });
   });

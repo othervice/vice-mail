@@ -172,9 +172,9 @@ describe("actions from the toolbar and the rows", () => {
     const names = within(toolbar)
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    // Stage 5: reply, reply all and forward come first.
-    expect(names.slice(0, 3)).toEqual(["Reply", "Reply all", "Forward"]);
-    expect(names.slice(3, 10)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
+    // Stage 5: reply, reply all and forward come first (stage 10: forward as attachment next to it).
+    expect(names.slice(0, 4)).toEqual(["Reply", "Reply all", "Forward", "Forward as attachment"]);
+    expect(names.slice(4, 11)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
     const archive = within(toolbar).getByRole("button", { name: "Archive" });
     expect(archive.getAttribute("aria-keyshortcuts")).toBe("E");
     // One tab stop (the first button, Reply since stage 5); arrows move along.
@@ -449,7 +449,7 @@ describe("read-only accounts", () => {
     const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
     // Stage 9: pins, snoozes and tasks are local marks and stay available on read-only accounts.
     // Stage 5: replying and forwarding write local drafts; sending explains read-only itself.
-    const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward"]);
+    const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward", "Forward as attachment"]);
     for (const button of within(toolbar).getAllByRole("button")) {
       if (local.has(button.getAttribute("aria-label") ?? "")) continue;
       expect(button.getAttribute("aria-disabled")).toBe("true");

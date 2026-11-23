@@ -84,6 +84,11 @@ const READING_COMMANDS = new Set([
   // Stage 5: drafts left from the last session and the outbox count in the rail (both read-only).
   "list_drafts",
   "list_outgoing",
+  // Stage 10: sends planned for later that the app missed, asked once at the start (read-only).
+  "list_scheduled_sends",
+  // Stage 13: whether AI is usable (the panel stays hidden) and the open-reply hints (local rules).
+  "get_ai_availability",
+  "list_open_reply_hints",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);

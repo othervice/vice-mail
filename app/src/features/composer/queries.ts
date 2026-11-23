@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { refreshQuery } from "../../app/refreshQuery";
 import {
   composeIpc,
+  composerIpc,
   type Account,
   type AccountId,
   type ComposeIdentity,
@@ -12,6 +13,7 @@ import {
   type SentCopyMode,
 } from "../../services/ipc";
 import { useComposerStore } from "../../stores/composer";
+import { handleSnippetsEvent } from "../snippets/queries";
 
 export const composeIdentitiesQueryKey = (accountId: AccountId) => ["composeIdentities", accountId] as const;
 export const composeSettingsQueryKey = ["composeSettings"] as const;
@@ -112,6 +114,19 @@ export function useDraftsAtStart() {
   });
 }
 
+/**
+ * Stage 10: waiting and missed scheduled sends of every account, asked once at the start (missed
+ * ones are found while the core starts, possibly before the UI listened for the event).
+ */
+export function useScheduledSendsAtStart() {
+  return useQuery({
+    queryKey: ["scheduledSendsAtStart"] as const,
+    queryFn: () => composerIpc.listScheduledSends(),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
 /** Suggestions for what is typed in a recipient field, asked for once typing pauses. */
 export function useContactSuggestions(query: string) {
   const [debounced, setDebounced] = useState(query);
@@ -169,8 +184,15 @@ export function handleComposeEvent(queryClient: QueryClient, event: CoreEvent): 
       store.needsDecision(event.mail);
       break;
     case "accountsChanged":
-      // Signatures and identities changed (`setIdentitySignature` emits it too).
+      // Signatures and identities changed (`setIdentitySignature` emits it too); stage 10: the
+      // default signatures of each identity come with it.
       void queryClient.invalidateQueries({ queryKey: ["composeIdentities"] });
+      void queryClient.invalidateQueries({ queryKey: ["signatureDefaults"] });
+      break;
+    // Stage 10: the signature pool and the templates (also after the settings sync applied a change).
+    case "signaturesChanged":
+    case "templatesChanged":
+      handleSnippetsEvent(queryClient, event.type);
       break;
     default:
       break;

@@ -1,6 +1,7 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { applyAccountStatus, invalidateAccountData } from "../features/accounts/queries";
+import { handleAiEvent } from "../features/ai/queries";
 import { handleComfortEvent } from "../features/comfort/events";
 import { handleComposeEvent } from "../features/composer/queries";
 import { handleExtrasEvent } from "../features/extras/queries";
@@ -34,6 +35,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleComfortEvent(queryClient, event);
   // Stage 9 part B: mailto: links for the composer, invitations once a body arrived.
   handleExtrasEvent(queryClient, event);
+  // Stage 13: progress of AI requests, the request log and the open-reply hints.
+  handleAiEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

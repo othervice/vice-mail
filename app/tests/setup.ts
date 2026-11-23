@@ -8,6 +8,8 @@ import { useNoticeStore } from "../src/stores/notices";
 import { useSearchStore } from "../src/stores/search";
 import { useUiStore } from "../src/stores/ui";
 import { useActionTargetStore } from "../src/stores/actionTarget";
+import { useAiPanelStore } from "../src/stores/aiPanel";
+import { useAiRequestStore } from "../src/stores/aiRequests";
 import { useLayoutStore } from "../src/stores/layout";
 import { usePaletteStore } from "../src/stores/palette";
 import { useShortcutStore } from "../src/stores/shortcuts";
@@ -35,6 +37,9 @@ afterEach(() => {
   useLayoutStore.setState(useLayoutStore.getInitialState(), true);
   usePaletteStore.setState(usePaletteStore.getInitialState(), true);
   useActionTargetStore.setState(useActionTargetStore.getInitialState(), true);
+  // Stage 13: the AI panel (open by default) and the progress of AI requests.
+  useAiPanelStore.setState({ ...useAiPanelStore.getInitialState(), open: true }, true);
+  useAiRequestStore.setState(useAiRequestStore.getInitialState(), true);
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];
   const root = document.documentElement;

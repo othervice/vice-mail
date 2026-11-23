@@ -18,6 +18,8 @@ export type ComposerSource =
   /** An empty message from the account, optionally to someone already (or filled from a link). */
   | { kind: "new"; accountId: AccountId; to?: readonly Address[]; prefill?: ComposePrefill }
   | { kind: "reply" | "reply_all" | "forward"; messageId: MessageId }
+  /** Stage 10: the whole message as an `.eml` attachment, nothing quoted. */
+  | { kind: "forward_as_attachment"; messageId: MessageId }
   /** A local draft again: after "Undo" of a send, "Edit" of a failed one, or a restored draft. */
   | { kind: "draft"; draftId: DraftId; draft?: Draft }
   /** A message of the Drafts folder (also one written by another program). */
@@ -42,7 +44,7 @@ export interface TrackedSend {
 /** A step outside the open composer failed (closing, undo, an answer in a notice). */
 export interface ComposerProblem {
   id: number;
-  context: "close" | "undo" | "edit" | "resolve" | "retry" | "restore";
+  context: "close" | "undo" | "edit" | "resolve" | "retry" | "restore" | "reschedule";
   error: IpcError;
 }
 
@@ -59,8 +61,8 @@ interface ComposerState {
   /** A send the user just started. */
   track: (mail: OutgoingMail) => void;
   /**
-   * New states from `outgoingChanged`. Only sends already shown change; a send that failed or
-   * became unclear is shown even if this window did not start it (it needs the user).
+   * New states from `outgoingChanged`. Only sends already shown change; a send that failed,
+   * became unclear or was missed (stage 10) is shown even if this window did not start it.
    */
   update: (mails: readonly OutgoingMail[]) => void;
   /** `sendNeedsDecision`: the question is shown until the user answers. */
@@ -90,12 +92,18 @@ function upsert(sends: readonly TrackedSend[], mail: OutgoingMail): TrackedSend[
   return next;
 }
 
+/** Failed, unclear and (stage 10) missed sends wait for the user's answer. */
+export function needsUser(mail: OutgoingMail): boolean {
+  return mail.state === "failed" || mail.state === "unclear" || mail.state === "missed";
+}
+
 function trim(sends: TrackedSend[]): TrackedSend[] {
   const next = [...sends];
   while (next.length > MAX_SENDS) {
-    // Finished ones go first; a question for the user stays.
-    const index = next.findIndex((s) => s.mail.state === "sent");
-    next.splice(index >= 0 ? index : 0, 1);
+    // Finished ones go first, then other calm ones; a question for the user stays.
+    const sent = next.findIndex((s) => s.mail.state === "sent");
+    const calm = next.findIndex((s) => !needsUser(s.mail));
+    next.splice(sent >= 0 ? sent : calm >= 0 ? calm : 0, 1);
   }
   return next;
 }
@@ -125,7 +133,7 @@ export const useComposerStore = create<ComposerState>()((set) => ({
       let sends = [...state.sends];
       for (const mail of mails) {
         const known = sends.some((s) => s.mail.operationId === mail.operationId);
-        if (known || mail.state === "failed" || mail.state === "unclear") sends = upsert(sends, mail);
+        if (known || needsUser(mail)) sends = upsert(sends, mail);
       }
       return { sends: trim(sends) };
     });

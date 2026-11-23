@@ -1,4 +1,4 @@
-import { Send, Trash2, Upload, X } from "lucide-react";
+import { FileText, Send, Trash2, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -9,23 +9,36 @@ import { Notice } from "../../components/Notice";
 import { Tooltip } from "../../components/Tooltip";
 import {
   composeIpc,
+  composerIpc,
+  snippetsIpc,
   toCoreError,
   type Address,
   type CoreError,
   type Draft,
   type DraftAttachment,
+  type DraftSizeCheck,
   type DraftUpdate,
+  type InlineImagesAdded,
   type QuoteLanguage,
+  type TemplateFillProblem,
+  type TemplateId,
 } from "../../services/ipc";
 import { takeReturnFocus, useComposerStore, type ComposePrefill, type ComposerSource } from "../../stores/composer";
+import { useComposerBridge } from "../../stores/composerBridge";
+import { boundShortcuts } from "../../stores/shortcuts";
+import { useSignatures, useTemplates } from "../snippets/queries";
+import { matchesShortcut } from "../actions/shortcuts";
+import type { PasteResult, RichEditorHandle } from "./RichEditor";
+import { SendLaterPicker } from "./SendLaterPicker";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
-import { htmlToText, invalidAddressIn, textToHtml } from "./addresses";
+import { formatSize, htmlToText, invalidAddressIn, textToHtml } from "./addresses";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { RecipientField } from "./RecipientField";
+import { WritingHelp } from "../ai/WritingHelp";
 
 // The editor (TipTap, ProseMirror) loads with the first rich text body, not with the app.
 const RichEditor = lazy(() => import("./RichEditor").then((module) => ({ default: module.RichEditor })));
@@ -50,7 +63,21 @@ export function updateOf(draft: Draft): DraftUpdate {
     includeQuote: draft.includeQuote,
     quotePosition: draft.quotePosition,
     includeSignature: draft.includeSignature,
+    signatureId: draft.signatureId,
   };
+}
+
+/** Files that go into the text when dropped on a rich text draft (the core checks the bytes). */
+export function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp)$/i.test(path);
+}
+
+/** Puts `text` into a plain text body at the textarea's cursor (at the end without one). */
+export function insertAtCursor(body: string, text: string, field: HTMLTextAreaElement | null): string {
+  if (!field || document.activeElement !== field) return body === "" ? text : `${body}\n${text}`;
+  const start = field.selectionStart;
+  const end = field.selectionEnd;
+  return body.slice(0, start) + text + body.slice(end);
 }
 
 /** The quote language follows the app's language ("On … wrote:" / "Am … schrieb …:"). */
@@ -85,6 +112,7 @@ function loadDraft(source: ComposerSource, language: QuoteLanguage): Promise<Dra
     case "reply":
     case "reply_all":
     case "forward":
+    case "forward_as_attachment":
       return composeIpc.createDraft({ kind: source.kind, messageId: source.messageId, language });
     case "draft":
       return source.draft ? Promise.resolve(source.draft) : composeIpc.getDraft(source.draftId);
@@ -154,7 +182,7 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
 
   if (draft) return <ComposerForm seq={seq} initial={draft} prefill={source.kind === "new" ? source.prefill : undefined} />;
   return (
-    <ComposerFrame title={t(`composer.title.${source.kind === "draft" || source.kind === "message" ? "draft" : source.kind}`)} onClose={close}>
+    <ComposerFrame title={t(`composer.title.${loadingTitle(source.kind)}`)} onClose={close}>
       {error ? (
         <div className="p-4">
           <ErrorNotice
@@ -176,6 +204,12 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
   );
 }
 
+function loadingTitle(kind: ComposerSource["kind"]): "new" | "reply" | "reply_all" | "forward" | "draft" {
+  if (kind === "draft" || kind === "message") return "draft";
+  if (kind === "forward_as_attachment") return "forward";
+  return kind;
+}
+
 interface ComposerFrameProps {
   title: string;
   onClose: () => void;
@@ -184,12 +218,15 @@ interface ComposerFrameProps {
   children: ReactNode;
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   dropping?: boolean;
+  /** A second line of the drop hint (rich text: images go into the text). */
+  dropDetail?: string | undefined;
 }
 
 /** The panel: over the reading pane, at the right of the window. */
-function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, dropping = false }: ComposerFrameProps) {
+function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, dropping = false, dropDetail }: ComposerFrameProps) {
   const { t } = useTranslation();
   const titleId = useId();
+  const platform = shortcutPlatform(useAppInfo().data?.platform);
   return (
     <section
       aria-labelledby={titleId}
@@ -201,8 +238,10 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
           event.preventDefault();
           onClose();
         }
-        // The list's single-key shortcuts (E, #, …) must not act on mail behind the composer.
-        event.stopPropagation();
+        // The list's single-key shortcuts (E, #, …) must not act on mail behind the composer. The
+        // command palette opens from here too (stage 10: templates are inserted through it).
+        const palette = boundShortcuts("palette", platform).some((s) => matchesShortcut(event, s, platform));
+        if (!palette) event.stopPropagation();
       }}
       className={cx(
         "absolute inset-y-0 end-0 z-20 flex w-full max-w-(--ui-reading-max-width) flex-col border-s border-border bg-surface shadow-panel",
@@ -232,6 +271,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
         <div className="flex shrink-0 items-center gap-2 bg-accent-soft px-4 py-2 text-13 text-primary" data-testid="composer-drop-hint">
           <Upload aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
           {t("composer.attachments.dropHere")}
+          {dropDetail && <span className="text-secondary">{dropDetail}</span>}
         </div>
       )}
       {children}
@@ -241,8 +281,24 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+type ActionErrorContext = "attach" | "discard" | "unfreeze" | "images" | "template" | "size";
+
+const ACTION_ERROR_TEXT = {
+  attach: "composer.errors.attach",
+  discard: "composer.errors.discard",
+  unfreeze: "composer.errors.unfreeze",
+  images: "writing.images.failed",
+  template: "writing.templates.failed",
+  size: "writing.size.checkFailed",
+} as const satisfies Record<ActionErrorContext, string>;
+
+/** The value of the signature choice: the draft kind's default, one of the pool, or none. */
+const SIGNATURE_DEFAULT = "default";
+const SIGNATURE_NONE = "none";
+
 function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; prefill?: ComposePrefill | undefined }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const language = quoteLanguage(i18n.language);
   const close = useComposerStore((state) => state.close);
   const track = useComposerStore((state) => state.track);
   const report = useComposerStore((state) => state.report);
@@ -257,11 +313,31 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<CoreError | null>(null);
   const [sendError, setSendError] = useState<CoreError | null>(null);
-  const [actionError, setActionError] = useState<{ context: "attach" | "discard" | "unfreeze"; error: CoreError } | null>(null);
+  const [actionError, setActionError] = useState<{ context: ActionErrorContext; error: CoreError } | null>(null);
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [dropping, setDropping] = useState(false);
+  // Stage 10: inline images (shown from `data:` URLs, saved as `cid:`), the size check, notes after
+  // pasting or inserting a template, the template menu and "send later".
+  const [imageSources, setImageSources] = useState<Record<string, string>>({});
+  const [addingImages, setAddingImages] = useState(false);
+  const [sizeCheck, setSizeCheck] = useState<DraftSizeCheck | null>(null);
+  const [pasteNote, setPasteNote] = useState<PasteResult | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateNote, setTemplateNote] = useState<{ name: string; problems: readonly TemplateFillProblem[] } | null>(null);
+  const [laterOpen, setLaterOpen] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [laterError, setLaterError] = useState<CoreError | null>(null);
+  const editorHandle = useRef<RichEditorHandle | null>(null);
+  const textBody = useRef<HTMLTextAreaElement | null>(null);
+  const requestedImages = useRef(new Set<string>());
+  const mounted = useRef(true);
+  const signatures = useSignatures();
+  const templates = useTemplates(templateOpen);
+  const setInsertTemplate = useComposerBridge((state) => state.setInsertTemplate);
+  const templateMenuId = useId();
+  const signatureId = useId();
   const identityId = useId();
   const subjectId = useId();
   const textBodyId = useId();
@@ -347,20 +423,33 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         else if (event.type === "drop") {
           setDropping(false);
           if (event.paths.length === 0) return;
-          setAttaching(true);
-          composeIpc
-            .addDroppedAttachments(draftId, event.paths)
-            .then(
-              (saved) => {
+          // Rich text: images go into the text (stage 10), everything else is attached.
+          const inline = latest.current.format === "html" ? event.paths.filter(isImagePath) : [];
+          const files = event.paths.filter((path) => !inline.includes(path));
+          void (async () => {
+            if (inline.length > 0) {
+              setAddingImages(true);
+              try {
+                applyAdded(await composerIpc.addDroppedInlineImages(draftId, inline));
+              } catch (e) {
+                setActionError({ context: "images", error: toCoreError(e) });
+              } finally {
+                setAddingImages(false);
+              }
+            }
+            if (files.length > 0) {
+              setAttaching(true);
+              try {
+                const saved = await composeIpc.addDroppedAttachments(draftId, files);
                 setDraft((d) => ({ ...d, attachments: saved.attachments, server: saved.server, state: saved.state }));
-              },
-              (e: unknown) => {
+                checkSize();
+              } catch (e) {
                 setActionError({ context: "attach", error: toCoreError(e) });
-              },
-            )
-            .finally(() => {
-              setAttaching(false);
-            });
+              } finally {
+                setAttaching(false);
+              }
+            }
+          })();
         }
       })
       .then((unsubscribe) => {
@@ -371,7 +460,66 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       active = false;
       stop?.();
     };
+    // `applyAdded` and `checkSize` read refs and stable setters only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // Inline images of the draft (also of a reopened one) are shown from `data:` URLs.
+  const inlineImages = draft.attachments.filter((a) => a.contentId !== null);
+  const inlineKey = inlineImages.map((a) => a.id).join(" ");
+  useEffect(() => {
+    for (const image of inlineImages) {
+      const contentId = image.contentId;
+      if (contentId === null || requestedImages.current.has(image.id)) continue;
+      requestedImages.current.add(image.id);
+      composerIpc.inlineImageData(draftId, image.id).then(
+        (url) => {
+          if (mounted.current) setImageSources((current) => ({ ...current, [contentId]: url }));
+        },
+        (e: unknown) => {
+          requestedImages.current.delete(image.id);
+          if (mounted.current) setActionError({ context: "images", error: toCoreError(e) });
+        },
+      );
+    }
+    // Keyed by the ids of the inline images; the list itself is new on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, inlineKey]);
+
+  // A draft that starts with files (a forward, "forward as attachment") is checked against the
+  // server's size limit at once.
+  useEffect(() => {
+    if (initial.attachments.length > 0) checkSize();
+    // Once per composer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Asks the core for the size against the SMTP server's SIZE limit; offline is no error. */
+  function checkSize(): void {
+    composerIpc.checkDraftSize(draftId).then(
+      (check) => {
+        if (mounted.current) setSizeCheck(check);
+      },
+      (e: unknown) => {
+        if (mounted.current) setActionError({ context: "size", error: toCoreError(e) });
+      },
+    );
+  }
+
+  /** New inline images: into the text at the cursor as `cid:` images, then the size check. */
+  function applyAdded(result: InlineImagesAdded): void {
+    setDraft((d) => ({ ...d, attachments: result.draft.attachments, server: result.draft.server }));
+    const images = result.added.flatMap((a) => (a.contentId ? [{ contentId: a.contentId, alt: "" }] : []));
+    editorHandle.current?.insertImages(images);
+    if (images.length > 0) checkSize();
+  }
 
   const closeComposer = async () => {
     finished.current = true;
@@ -431,6 +579,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       await flush().catch(() => undefined);
       const saved = await composeIpc.pickAttachments(draftId);
       setDraft((d) => ({ ...d, attachments: saved.attachments, server: saved.server }));
+      checkSize();
     } catch (e) {
       setActionError({ context: "attach", error: toCoreError(e) });
     } finally {
@@ -438,10 +587,78 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     }
   };
 
+  const pickImages = async () => {
+    setAddingImages(true);
+    try {
+      await flush().catch(() => undefined);
+      applyAdded(await composerIpc.pickInlineImages(draftId));
+    } catch (e) {
+      setActionError({ context: "images", error: toCoreError(e) });
+    } finally {
+      setAddingImages(false);
+    }
+  };
+
+  /** Fills the template for this draft (first To recipient) and puts it where the cursor is. */
+  const insertTemplate = async (templateId: TemplateId) => {
+    setTemplateOpen(false);
+    if (frozen) return;
+    try {
+      await flush().catch(() => undefined);
+      const filled = await snippetsIpc.fillTemplate(templateId, draftId, language);
+      const name = (templates.data ?? []).find((tpl) => tpl.id === templateId)?.name ?? "";
+      if (latest.current.subject.trim() === "" && filled.subject.trim() !== "") change({ subject: filled.subject });
+      if (latest.current.format === "html") {
+        if (editorHandle.current) editorHandle.current.insertHtml(filled.html);
+        else {
+          change({ bodyHtml: latest.current.bodyHtml + filled.html });
+          setEditorKey((n) => n + 1);
+        }
+      } else {
+        change({ bodyText: insertAtCursor(latest.current.bodyText, filled.text, textBody.current) });
+      }
+      setTemplateNote({ name, problems: filled.problems });
+    } catch (e) {
+      setActionError({ context: "template", error: toCoreError(e) });
+    }
+  };
+  // The command palette inserts templates through the open composer.
+  const insertRef = useRef(insertTemplate);
+  useEffect(() => {
+    insertRef.current = insertTemplate;
+  });
+  useEffect(() => {
+    setInsertTemplate((templateId) => {
+      void insertRef.current(templateId);
+    });
+    return () => {
+      setInsertTemplate(null);
+    };
+  }, [setInsertTemplate]);
+
+  /** "Send later": frozen like a send, sent at `sendAt` only if the app runs and is online then. */
+  const scheduleAt = async (sendAt: number) => {
+    if (scheduling || frozen) return;
+    setScheduling(true);
+    setLaterError(null);
+    try {
+      dirty.current = true;
+      await flush();
+      const mail = await composerIpc.scheduleSend(draftId, crypto.randomUUID(), { sendAt });
+      finished.current = true;
+      track(mail);
+      close();
+    } catch (e) {
+      setLaterError(toCoreError(e));
+      setScheduling(false);
+    }
+  };
+
   const removeAttachment = async (attachment: DraftAttachment) => {
     try {
       const saved = await composeIpc.removeDraftAttachment(draftId, attachment.id);
       setDraft((d) => ({ ...d, attachments: saved.attachments, server: saved.server }));
+      checkSize();
     } catch (e) {
       setActionError({ context: "attach", error: toCoreError(e) });
     }
@@ -464,13 +681,26 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const identityList = identities.data ?? [];
   const identity =
     identityList.find((i) => i.id === fields.identityId) ?? identityList.find((i) => i.isDefault) ?? identityList[0] ?? null;
-  const signature = identity?.signature?.trim() ? identity.signature : null;
+  const kind = draft.kind;
+  // Stage 10: the signature pool; the draft takes its kind's default unless the user chose one.
+  const pool = signatures.data ?? [];
+  const defaultSignatureId = (kind === "new" ? identity?.signatureNew : identity?.signatureReply) ?? null;
+  const defaultSignature = pool.find((s) => s.id === defaultSignatureId) ?? null;
+  const chosenSignature = fields.signatureId ? (pool.find((s) => s.id === fields.signatureId) ?? null) : defaultSignature;
+  // Without the pool (not loaded), the stage 5 text of the identity's default for new mail.
+  const fallbackText = pool.length === 0 && !fields.signatureId && kind === "new" && identity?.signature?.trim() ? identity.signature : null;
+  const signature = chosenSignature ? chosenSignature.text.trim() || null : fallbackText;
+  const signatureChoice = !fields.includeSignature ? SIGNATURE_NONE : (fields.signatureId ?? SIGNATURE_DEFAULT);
+  const chooseSignature = (value: string) => {
+    if (value === SIGNATURE_NONE) change({ includeSignature: false });
+    else if (value === SIGNATURE_DEFAULT) change({ includeSignature: true, signatureId: null });
+    else change({ includeSignature: true, signatureId: value });
+  };
   // The separator the core adds when it puts the message together (plain text, not translated).
   const signatureText = signature ? `-- \n${signature}` : "";
   const hasQuote = draft.quoteHtml !== null || draft.quoteText !== null;
   const refused = sendError?.code === "invalid_address" ? invalidAddressIn(sendError.detail, [fields.to, fields.cc, fields.bcc]) : null;
   const sendShortcut = formatShortcut({ key: "Enter", mod: true }, platform);
-  const kind = draft.kind;
   const title = fields.subject.trim() || t(`composer.title.${kind}`);
 
   const status = (
@@ -525,6 +755,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       actions={discardButton}
       onKeyDown={onKeyDown}
       dropping={dropping}
+      dropDetail={fields.format === "html" ? t("writing.images.dropHint") : undefined}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/* Stage 9: hints about the mailto: link this draft came from (blind copies first). */}
@@ -687,7 +918,64 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
               {t(`composer.format.${format}`)}
             </button>
           ))}
+          <span className="flex-1" />
+          <Button
+            variant="quiet"
+            disabled={frozen}
+            aria-expanded={templateOpen}
+            aria-controls={templateOpen ? templateMenuId : undefined}
+            onClick={() => {
+              setTemplateOpen((open) => !open);
+            }}
+            data-testid="composer-template"
+          >
+            <FileText aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+            {t("writing.templates.button")}
+          </Button>
         </div>
+        {templateOpen && (
+          <TemplateMenu
+            id={templateMenuId}
+            templates={templates}
+            onChoose={(templateId) => {
+              void insertTemplate(templateId);
+            }}
+            onClose={() => {
+              setTemplateOpen(false);
+            }}
+          />
+        )}
+        {templateNote && (
+          <div className="px-4 pt-2">
+            <Notice
+              tone={templateNote.problems.length > 0 ? "warning" : "info"}
+              title={t("writing.templates.inserted", { name: templateNote.name })}
+              data-testid="composer-template-note"
+            >
+              {templateNote.problems.map((problem) => (
+                <p key={problem.kind === "unknown" ? `u:${problem.name}` : `m:${problem.placeholder}`}>
+                  {problem.kind === "unknown"
+                    ? t("writing.templates.unknown", { name: `{{${problem.name}}}` })
+                    : t("writing.templates.missing", { placeholder: `{{${problem.placeholder}}}` })}
+                </p>
+              ))}
+              <div>
+                <Button
+                  variant="quiet"
+                  onClick={() => {
+                    setTemplateNote(null);
+                  }}
+                  data-testid="composer-template-note-dismiss"
+                >
+                  {t("writing.paste.dismiss")}
+                </Button>
+              </div>
+            </Notice>
+          </div>
+        )}
+        {pasteNote && <PasteNote result={pasteNote} onDismiss={() => {
+          setPasteNote(null);
+        }} />}
         {fields.quotePosition === "above" && quoteBlock}
         {fields.format === "html" ? (
           <Suspense
@@ -707,6 +995,16 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
               label={t("composer.body")}
               disabled={frozen}
               autoFocus={editorKey === 0 && (kind === "reply" || kind === "reply_all")}
+              imageSources={imageSources}
+              onInsertImage={() => {
+                void pickImages();
+              }}
+              handleRef={editorHandle}
+              onPasteResult={(result) => {
+                const notable =
+                  result.kind !== "cleaned" || result.imagesRemoved > 0 || result.formattingSimplified;
+                setPasteNote(notable ? result : null);
+              }}
             />
           </Suspense>
         ) : (
@@ -716,6 +1014,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             </label>
             <textarea
               id={textBodyId}
+              ref={textBody}
               value={fields.bodyText}
               disabled={frozen}
               autoFocus={kind === "reply" || kind === "reply_all"}
@@ -728,6 +1027,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             />
           </>
         )}
+        {/* Stage 13: AI writing help on the selection (only while it is set up). */}
+        <WritingHelp disabled={frozen} />
         {signature && fields.includeSignature && (
           <pre
             aria-label={t("composer.signature.preview")}
@@ -738,9 +1039,40 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </pre>
         )}
         {fields.quotePosition === "below" && quoteBlock}
-        {(signature || hasQuote) && (
+        {(signature || hasQuote || pool.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 text-13 text-secondary">
-            {signature && (
+            {pool.length > 0 && (
+              <span className="flex items-center gap-2">
+                <label htmlFor={signatureId}>{t("writing.signature.label")}</label>
+                <select
+                  id={signatureId}
+                  value={signatureChoice}
+                  disabled={frozen}
+                  onChange={(e) => {
+                    chooseSignature(e.target.value);
+                  }}
+                  onBlur={saveNow}
+                  className="h-8 rounded-control bg-transparent text-13 text-primary"
+                  data-testid="composer-signature-choice"
+                >
+                  <option value={SIGNATURE_DEFAULT}>
+                    {defaultSignature
+                      ? t("writing.signature.defaultNamed", { name: defaultSignature.name })
+                      : t("writing.signature.defaultNone")}
+                  </option>
+                  {pool.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                  {fields.signatureId && !pool.some((s) => s.id === fields.signatureId) && (
+                    <option value={fields.signatureId}>{t("writing.signature.deleted")}</option>
+                  )}
+                  <option value={SIGNATURE_NONE}>{t("writing.signature.none")}</option>
+                </select>
+              </span>
+            )}
+            {signature && pool.length === 0 && (
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -795,8 +1127,13 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </div>
         )}
       </div>
+      {addingImages && (
+        <p role="status" className="shrink-0 border-t border-border px-4 py-2 text-12 text-secondary" data-testid="composer-images-adding">
+          {t("writing.images.adding")}
+        </p>
+      )}
       <ComposerAttachments
-        attachments={draft.attachments}
+        attachments={draft.attachments.filter((a) => a.contentId === null)}
         busy={attaching}
         disabled={frozen}
         onPick={() => {
@@ -839,7 +1176,39 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           />
         )}
         {actionError && (
-          <ErrorNotice context={t(`composer.errors.${actionError.context}`)} error={actionError.error} data-testid="composer-action-error" />
+          <ErrorNotice context={t(ACTION_ERROR_TEXT[actionError.context])} error={actionError.error} data-testid="composer-action-error" />
+        )}
+        {sizeCheck?.exceedsServerLimit && sizeCheck.serverLimit !== null && (
+          <Notice
+            tone="warning"
+            title={t("writing.size.exceedsTitle", {
+              size: formatSize(sizeCheck.size, i18n.language),
+              limit: formatSize(sizeCheck.serverLimit, i18n.language),
+            })}
+            data-testid="composer-size-warning"
+          >
+            <p>{t("writing.size.exceedsHint")}</p>
+          </Notice>
+        )}
+        {sizeCheck && !sizeCheck.exceedsServerLimit && sizeCheck.large && (
+          <p className="text-12 text-secondary" data-testid="composer-size-large">
+            {t("writing.size.large")}
+          </p>
+        )}
+        {laterOpen && (
+          <SendLaterPicker
+            confirmLabel={t("writing.sendLater.confirm")}
+            busy={scheduling}
+            error={laterError}
+            onChoose={(sendAt) => {
+              void scheduleAt(sendAt);
+            }}
+            onCancel={() => {
+              setLaterOpen(false);
+              setLaterError(null);
+            }}
+            data-testid="composer-send-later-picker"
+          />
         )}
         <div className="flex items-center gap-3">
           <Button
@@ -856,6 +1225,18 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           <kbd aria-hidden className="rounded-control border border-border px-1 font-sans text-12 text-secondary">
             {sendShortcut}
           </kbd>
+          <Button
+            variant="secondary"
+            disabled={sending || frozen || scheduling}
+            aria-expanded={laterOpen}
+            onClick={() => {
+              setLaterOpen((open) => !open);
+              setLaterError(null);
+            }}
+            data-testid="composer-send-later"
+          >
+            {t("writing.sendLater.button")}
+          </Button>
         </div>
       </div>
       {confirmDiscard && (
@@ -874,5 +1255,108 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         />
       )}
     </ComposerFrame>
+  );
+}
+
+interface TemplateMenuProps {
+  id: string;
+  templates: ReturnType<typeof useTemplates>;
+  onChoose: (templateId: TemplateId) => void;
+  onClose: () => void;
+}
+
+/** The composer's template list: a plain panel under the format bar (no popover: CSP). */
+function TemplateMenu({ id, templates, onChoose, onClose }: TemplateMenuProps) {
+  const { t } = useTranslation();
+  const showSettings = useUiStore((state) => state.showSettings);
+  const list = templates.data ?? [];
+  return (
+    <div
+      id={id}
+      role="group"
+      aria-label={t("writing.templates.menu")}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          // Closes the list, not the composer.
+          event.preventDefault();
+          onClose();
+        }
+      }}
+      className="mx-4 mt-2 flex flex-col gap-1 rounded-card border border-border bg-surface-raised p-2 shadow-floating"
+      data-testid="composer-template-menu"
+    >
+      {templates.isError ? (
+        <ErrorNotice context={t("writing.templates.loadFailed")} error={templates.error} onRetry={() => void templates.refetch()} />
+      ) : templates.isPending ? (
+        <p role="status" className="px-2 py-1 text-13 text-secondary">
+          {t("writing.templates.loading")}
+        </p>
+      ) : list.length === 0 ? (
+        <p className="px-2 py-1 text-13 text-secondary">{t("writing.templates.empty")}</p>
+      ) : (
+        <ul className="flex flex-col">
+          {list.map((template, index) => (
+            <li key={template.id}>
+              <button
+                type="button"
+                autoFocus={index === 0}
+                onClick={() => {
+                  onChoose(template.id);
+                }}
+                className="flex w-full flex-col items-start rounded-control px-2 py-1 text-start hover:bg-hover"
+                data-testid="composer-template-option"
+              >
+                <span className="text-13 font-medium text-primary">{template.name}</span>
+                {template.subject && <span className="truncate text-12 text-secondary">{template.subject}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div>
+        <Button
+          variant="quiet"
+          onClick={() => {
+            showSettings("compose");
+          }}
+          data-testid="composer-template-manage"
+        >
+          {t("writing.templates.manage")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** What pasting did, when worth saying: images removed, formatting simplified, plain text, failure. */
+function PasteNote({ result, onDismiss }: { result: PasteResult; onDismiss: () => void }) {
+  const { t } = useTranslation();
+  if (result.kind === "failed") {
+    return (
+      <div className="px-4 pt-2">
+        <ErrorNotice context={t("writing.paste.failed")} error={result.error} data-testid="composer-paste-error" />
+      </div>
+    );
+  }
+  const lines =
+    result.kind === "plain"
+      ? [t("writing.paste.plain")]
+      : [
+          ...(result.imagesRemoved > 0 ? [t("writing.paste.imagesRemoved")] : []),
+          ...(result.formattingSimplified ? [t("writing.paste.simplified")] : []),
+        ];
+  return (
+    <div className="px-4 pt-2">
+      <Notice tone="info" title={lines[0] ?? ""} data-testid="composer-paste-note">
+        {lines.slice(1).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        <div>
+          <Button variant="quiet" onClick={onDismiss} data-testid="composer-paste-note-dismiss">
+            {t("writing.paste.dismiss")}
+          </Button>
+        </div>
+      </Notice>
+    </div>
   );
 }

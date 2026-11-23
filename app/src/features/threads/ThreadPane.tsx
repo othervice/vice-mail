@@ -5,6 +5,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import type { Account, MailboxId, MessageId, MessageListItem, ThreadEntry } from "../../services/ipc";
 import { formatFullDate } from "../messages/rows";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
+import { useAiSourceFocus } from "../ai/sources";
 import { useThread } from "./queries";
 
 interface ThreadPaneProps {
@@ -40,6 +41,11 @@ export function ThreadPane({ account, item, mailboxId, focusRequest, toolbarFor,
   const thread = useThread(account.id, item.id, mailboxId);
   const entries = thread.data?.messages ?? [];
   const [chosen, setChosen] = useState<MessageId | null>(null);
+  // Stage 13: a source of an AI statement in the panel shows its mail here.
+  useAiSourceFocus(
+    entries.map((entry) => entry.message.id),
+    setChosen,
+  );
   const openId = chosen !== null && entries.some((entry) => entry.message.id === chosen) ? chosen : initialEntry(entries, item.id);
   const open = entries.find((entry) => entry.message.id === openId)?.message ?? item;
   const total = thread.data?.total ?? entries.length;

@@ -1,22 +1,23 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../components/Button";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import {
   DEFAULT_SEND_DELAY_SECS,
   MAX_SEND_DELAY_SECS,
   type Account,
-  type ComposeIdentity,
   type SentCopyMode,
 } from "../../services/ipc";
 import { useAccounts } from "../accounts/queries";
+// Stage 10: the signature pool, the defaults per identity and the templates.
+import { SignatureDefaults } from "../snippets/SignatureDefaults";
+import { SignatureSettings } from "../snippets/SignatureSettings";
+import { TemplateSettings } from "../snippets/TemplateSettings";
 import {
   useComposeIdentities,
   useComposeSettings,
   useSendSettings,
   useSetComposeSettings,
-  useSetIdentitySignature,
   useSetSentCopyMode,
 } from "./queries";
 
@@ -24,49 +25,6 @@ import {
 export const SEND_DELAY_CHOICES = [0, 5, 10, 15, 20, 30].filter((s) => s <= MAX_SEND_DELAY_SECS);
 
 const SENT_COPY_MODES: readonly SentCopyMode[] = ["auto", "app", "server"];
-
-function SignatureEditor({ identity }: { identity: ComposeIdentity }) {
-  const { t } = useTranslation();
-  const id = useId();
-  const [value, setValue] = useState(identity.signature ?? "");
-  const save = useSetIdentitySignature();
-  const changed = value.trim() !== (identity.signature ?? "").trim();
-  return (
-    <div className="flex flex-col gap-2" data-testid="signature-editor">
-      <label htmlFor={id} className="text-13 font-medium text-primary">
-        {identity.name ? t("composer.identity", { name: identity.name, email: identity.email }) : identity.email}
-      </label>
-      <textarea
-        id={id}
-        value={value}
-        rows={3}
-        onChange={(e) => {
-          setValue(e.target.value);
-        }}
-        className="resize-y rounded-control border border-border-strong bg-surface px-3 py-2 font-sans text-13 text-primary"
-        data-testid="signature-input"
-      />
-      <div className="flex items-center gap-3">
-        <Button
-          variant="secondary"
-          disabled={!changed || save.isPending}
-          onClick={() => {
-            save.mutate({ identity, signature: value.trim() === "" ? null : value });
-          }}
-          data-testid="signature-save"
-        >
-          {t("composer.settings.signatureSave")}
-        </Button>
-        {save.isSuccess && !changed && (
-          <p role="status" className="text-12 text-secondary">
-            {t("composer.settings.signatureSaved")}
-          </p>
-        )}
-      </div>
-      {save.isError && <ErrorNotice context={t("composer.settings.signatureFailed")} error={save.error} />}
-    </div>
-  );
-}
 
 function AccountComposeSettings({ account }: { account: Account }) {
   const { t } = useTranslation();
@@ -110,9 +68,9 @@ function AccountComposeSettings({ account }: { account: Account }) {
       )}
       {identities.data && identities.data.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="text-13 text-secondary">{t("composer.settings.signatureHint")}</p>
+          <p className="text-13 text-secondary">{t("snippets.defaults.hint")}</p>
           {identities.data.map((identity) => (
-            <SignatureEditor key={identity.id} identity={identity} />
+            <SignatureDefaults key={identity.id} identity={identity} />
           ))}
         </div>
       )}
@@ -120,7 +78,10 @@ function AccountComposeSettings({ account }: { account: Account }) {
   );
 }
 
-/** Settings → General → Writing: the undo delay, and per account who files sent mail and the signatures. */
+/**
+ * Settings → Writing: the undo delay, the signature pool, per account who files sent mail and the
+ * default signatures of each address, and the templates (stage 10).
+ */
 export function ComposeSettings() {
   const { t } = useTranslation();
   const delayId = useId();
@@ -155,9 +116,11 @@ export function ComposeSettings() {
         <p className="text-12 text-secondary">{t("composer.settings.delayHint")}</p>
         {save.isError && <ErrorNotice context={t("composer.settings.saveFailed")} error={save.error} />}
       </div>
+      <SignatureSettings />
       {(accounts.data ?? []).map((account) => (
         <AccountComposeSettings key={account.id} account={account} />
       ))}
+      <TemplateSettings />
     </SettingsSection>
   );
 }

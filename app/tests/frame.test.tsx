@@ -98,11 +98,14 @@ describe("app frame without an account", () => {
       "Accounts",
       "Reading",
       "Writing",
+      "Contacts",
       "Inbox",
       "Notifications",
       "Appearance",
       "Keyboard",
       "Settings sync",
+      // Stage 13: AI in the app, next to AI over MCP.
+      "AI in the app",
       "AI over MCP",
       "About",
     ]);

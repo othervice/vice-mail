@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { AiPanel } from "../features/ai/AiPanel";
 import { Notices } from "../features/actions/Notices";
 import { useNotificationTexts } from "../features/comfort/events";
 import { ActivityView } from "../features/activity/ActivityView";
@@ -49,6 +50,8 @@ export function AppShell({ eventsError }: AppShellProps) {
         {/* Stage 5: the composer lies over the reading pane; send states at the bottom right. */}
         <ComposerHost />
       </main>
+      {/* Stage 13: the AI panel on the right; absent while no AI function is usable. */}
+      <AiPanel />
       <Notices />
       <SendNotices />
       {/* Stage 9: mailto: links from the system open the composer. */}

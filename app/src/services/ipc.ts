@@ -962,3 +962,294 @@ export const extrasIpc = {
   /** The `mailto:` links the app was started with; once at start, later ones come as `composeRequested`. */
   takeLaunchLinks: (): Promise<ComposeRequest[]> => extrasPlain(() => extrasCommands.takeLaunchLinks()),
 };
+
+// ---- Stage 10 (composer complete: send later, size, inline images, paste, signatures, templates, contacts) ----
+import {
+  commands as stage10Commands,
+  type CleanedPaste,
+  type ContactAddressInfo,
+  type ContactDuplicate,
+  type ContactEntry,
+  type ContactMergeRequest,
+  type ContactPage,
+  type DraftSizeCheck,
+  type DuplicateReason,
+  type FilledTemplateInfo,
+  type IdentitySignatureDefaults,
+  type InlineImagesAdded,
+  type MissedSendDecision,
+  type SanitizeReport,
+  type SavedSignature,
+  type SavedTemplate,
+  type SendLater,
+  type SignatureId,
+  type SignatureImageData,
+  type SignatureImageInfo,
+  type SignatureInfo,
+  type SignatureInput,
+  type TemplateFillProblem,
+  type TemplateId,
+  type TemplateInfo,
+  type TemplateInput,
+} from "../generated/bindings";
+
+export type {
+  CleanedPaste,
+  ContactAddressInfo,
+  ContactDuplicate,
+  ContactEntry,
+  ContactMergeRequest,
+  ContactPage,
+  DraftSizeCheck,
+  DuplicateReason,
+  FilledTemplateInfo,
+  IdentitySignatureDefaults,
+  InlineImagesAdded,
+  MissedSendDecision,
+  SanitizeReport,
+  SavedSignature,
+  SavedTemplate,
+  SendLater,
+  SignatureId,
+  SignatureImageData,
+  SignatureImageInfo,
+  SignatureInfo,
+  SignatureInput,
+  TemplateFillProblem,
+  TemplateId,
+  TemplateInfo,
+  TemplateInput,
+};
+
+/** Stage 10 limits of the core that the bindings do not export (decision 0023). */
+export const MISSED_SEND_GRACE_MS = 3_600_000;
+/** "Send later" at most this far ahead (366 days). */
+export const MAX_SCHEDULE_AHEAD_MS = 366 * 24 * 3_600_000;
+/** One inline image (8 MiB). */
+export const MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Pasted HTML above this goes in as plain text (the core refuses it with `invalid_argument`). */
+export const MAX_PASTE_BYTES = 2 * 1024 * 1024;
+/** `listContacts` takes 1..200 per page. */
+export const MAX_CONTACT_PAGE = 200;
+
+/**
+ * Stage 10, the composer's own commands: send later (local: only while the app runs and is
+ * online), the SMTP size check, inline images, cleaning pasted HTML and forwarding as `.eml`
+ * (`createDraft` with `forward_as_attachment`).
+ */
+export const composerIpc = {
+  /** `requestId`: a fresh UUID per click. `sendAt` in the future, at most 366 days ahead. */
+  scheduleSend: (draftId: DraftId, requestId: string, when: SendLater): Promise<OutgoingMail> =>
+    call(() => stage10Commands.scheduleSend(draftId, requestId, when)),
+  /** Waiting and missed scheduled sends of every account, earliest first. Ask once at start. */
+  listScheduledSends: (): Promise<OutgoingMail[]> => call(() => stage10Commands.listScheduledSends()),
+  /** A new time, or `null` = send now (after the usual undo delay). */
+  rescheduleSend: (operationId: OperationId, when: SendLater | null): Promise<OutgoingMail> =>
+    call(() => stage10Commands.rescheduleSend(operationId, when)),
+  /** The answer to a missed send; `null` after `keep_as_draft`. */
+  resolveMissedSend: (operationId: OperationId, decision: MissedSendDecision): Promise<OutgoingMail | null> =>
+    call(() => stage10Commands.resolveMissedSend(operationId, decision)),
+  /** The built message against the SMTP server's SIZE limit (the first call may take up to 15 s). */
+  checkDraftSize: (draftId: DraftId): Promise<DraftSizeCheck> => call(() => stage10Commands.checkDraftSize(draftId)),
+  /** The system dialog with an image filter (in Rust); cancelling answers `added: []`. */
+  pickInlineImages: (draftId: DraftId): Promise<InlineImagesAdded> => call(() => stage10Commands.pickInlineImages(draftId)),
+  /** Only paths of a drop the shell saw itself (`onFileDrop`). */
+  addDroppedInlineImages: (draftId: DraftId, paths: string[]): Promise<InlineImagesAdded> =>
+    call(() => stage10Commands.addDroppedInlineImages(draftId, paths)),
+  /** A `data:` URL to show an inline image in the editor; never saved into the body. */
+  inlineImageData: (draftId: DraftId, attachmentId: string): Promise<string> =>
+    call(() => stage10Commands.inlineImageData(draftId, attachmentId)),
+  /** Pasted HTML as editor HTML: no script, style, image or external reference. */
+  cleanPastedHtml: (html: string): Promise<CleanedPaste> => call(() => stage10Commands.cleanPastedHtml(html)),
+};
+
+/** Stage 10: the signature pool, the defaults per identity, and templates with placeholders. */
+export const snippetsIpc = {
+  listSignatures: (): Promise<SignatureInfo[]> => call(() => stage10Commands.listSignatures()),
+  saveSignature: (signature: SignatureInput): Promise<SavedSignature> => call(() => stage10Commands.saveSignature(signature)),
+  deleteSignature: (signatureId: SignatureId): Promise<void> => done(call(() => stage10Commands.deleteSignature(signatureId))),
+  getIdentitySignatureDefaults: (identityId: IdentityId): Promise<IdentitySignatureDefaults> =>
+    call(() => stage10Commands.getIdentitySignatureDefaults(identityId)),
+  setIdentitySignatureDefaults: (
+    identityId: IdentityId,
+    newSignature: SignatureId | null,
+    replySignature: SignatureId | null,
+  ): Promise<IdentitySignatureDefaults> =>
+    call(() => stage10Commands.setIdentitySignatureDefaults(identityId, newSignature, replySignature)),
+  /** The system dialog (in Rust); new images are the last entries. Save the signature first. */
+  pickSignatureImages: (signatureId: SignatureId): Promise<SignatureInfo> =>
+    call(() => stage10Commands.pickSignatureImages(signatureId)),
+  addDroppedSignatureImages: (signatureId: SignatureId, paths: string[]): Promise<SignatureInfo> =>
+    call(() => stage10Commands.addDroppedSignatureImages(signatureId, paths)),
+  removeSignatureImage: (signatureId: SignatureId, contentId: string): Promise<SignatureInfo> =>
+    call(() => stage10Commands.removeSignatureImage(signatureId, contentId)),
+  signatureImageData: (signatureId: SignatureId): Promise<SignatureImageData[]> =>
+    call(() => stage10Commands.signatureImageData(signatureId)),
+  listTemplates: (): Promise<TemplateInfo[]> => call(() => stage10Commands.listTemplates()),
+  saveTemplate: (template: TemplateInput): Promise<SavedTemplate> => call(() => stage10Commands.saveTemplate(template)),
+  deleteTemplate: (templateId: TemplateId): Promise<void> => done(call(() => stage10Commands.deleteTemplate(templateId))),
+  /** Fills the placeholders for this draft (first To recipient, the draft's identity); the draft is unchanged. */
+  fillTemplate: (templateId: TemplateId, draftId: DraftId, language: QuoteLanguage): Promise<FilledTemplateInfo> =>
+    call(() => stage10Commands.fillTemplate(templateId, draftId, language)),
+};
+
+/** Stage 10: the local contact directory (ranked by frequency and recency). */
+export const contactsIpc = {
+  /** `limit` 1..`MAX_CONTACT_PAGE`; `cursor` from the previous page. */
+  listContacts: (query: string | null, cursor: string | null, limit: number): Promise<ContactPage> =>
+    call(() => stage10Commands.listContacts(query, cursor, limit)),
+  getContact: (email: string): Promise<ContactEntry> => call(() => stage10Commands.getContact(email)),
+  /** `null` = back to the name seen most in mail. */
+  setContactName: (email: string, name: string | null): Promise<ContactEntry> =>
+    call(() => stage10Commands.setContactName(email, name)),
+  listContactDuplicates: (): Promise<ContactDuplicate[]> => call(() => stage10Commands.listContactDuplicates()),
+  /** Never suggested again on this device. */
+  dismissContactDuplicate: (contacts: string[]): Promise<void> =>
+    done(call(() => stage10Commands.dismissContactDuplicate(contacts))),
+  /** Only after the user confirmed in a dialog (`confirmed: true`), else `confirmation_required`. */
+  mergeContacts: (request: ContactMergeRequest): Promise<ContactEntry> => call(() => stage10Commands.mergeContacts(request)),
+  separateContact: (email: string): Promise<ContactEntry> => call(() => stage10Commands.separateContact(email)),
+};
+
+// ---- Stage 13 (AI in the app: settings, consent, request log, panel, writing help, open replies) ----
+import {
+  commands as aiCommands,
+  type AiAccountCloud,
+  type AiAnswer,
+  type AiAvailability,
+  type AiClaim,
+  type AiConnectionTest,
+  type AiDeadline,
+  type AiFunction,
+  type AiFunctionChoice,
+  type AiKeyChange,
+  type AiLocality,
+  type AiModel,
+  type AiPreset,
+  type AiProfileInfo,
+  type AiProfileInput,
+  type AiProviderKind,
+  type AiReplySuggestion,
+  type AiRequestEntry,
+  type AiRequestId,
+  type AiRequestOutcome,
+  type AiRequestPage,
+  type AiRequestPhase,
+  type AiSettingsInfo,
+  type AiSummary,
+  type AiTargetLanguage,
+  type AiTone,
+  type AiTransfer,
+  type AiTrimming,
+  type AiWritingResult,
+  type AiWritingTask,
+  type OpenReplyHint,
+  type OpenReplyKind,
+  type OpenReplySettings,
+} from "../generated/bindings";
+
+export type {
+  AiAccountCloud,
+  AiAnswer,
+  AiAvailability,
+  AiClaim,
+  AiConnectionTest,
+  AiDeadline,
+  AiFunction,
+  AiFunctionChoice,
+  AiKeyChange,
+  AiLocality,
+  AiModel,
+  AiPreset,
+  AiProfileInfo,
+  AiProfileInput,
+  AiProviderKind,
+  AiReplySuggestion,
+  AiRequestEntry,
+  AiRequestId,
+  AiRequestOutcome,
+  AiRequestPage,
+  AiRequestPhase,
+  AiSettingsInfo,
+  AiSummary,
+  AiTargetLanguage,
+  AiTone,
+  AiTransfer,
+  AiTrimming,
+  AiWritingResult,
+  AiWritingTask,
+  OpenReplyHint,
+  OpenReplyKind,
+  OpenReplySettings,
+};
+
+/** Stage 13 limits of the core that the bindings do not export (IPC contract). */
+export const AI_LIMITS = {
+  /** `aiWritingHelp`: characters of the passage. */
+  passageChars: 12_000,
+  /** `aiAsk`: characters of the question. */
+  questionChars: 1_000,
+  /** `saveAiProfile`: characters of the name. */
+  profileNameChars: 100,
+  /** `setOpenReplySettings`: days. */
+  openReplyDays: { min: 1, max: 30 },
+  /** `listAiRequests`: entries per page. */
+  requestPage: 500,
+  /** The request log keeps this many days and entries. */
+  logRetentionDays: 30,
+  logMaxEntries: 10_000,
+} as const;
+
+/**
+ * Stage 13: the optional built-in AI. Off until the user turns it on; while off every function
+ * (also the model list and the connection test) fails with `ai_off` before anything leaves the
+ * device. A key only ever goes UI → core (`AiKeyChange.set`); no answer contains one.
+ */
+export const aiIpc = {
+  getSettings: (): Promise<AiSettingsInfo> => call(() => aiCommands.getAiSettings()),
+  /** Which functions are usable now; the AI panel is hidden without any. */
+  getAvailability: (): Promise<AiAvailability> => call(() => aiCommands.getAiAvailability()),
+  /** Off also cancels running requests. */
+  setEnabled: (enabled: boolean): Promise<AiSettingsInfo> => call(() => aiCommands.setAiEnabled(enabled)),
+  saveProfile: (profile: AiProfileInput): Promise<AiSettingsInfo> => call(() => aiCommands.saveAiProfile(profile)),
+  /** Functions using it become off; its key leaves the keychain. */
+  deleteProfile: (profileId: string): Promise<AiSettingsInfo> => call(() => aiCommands.deleteAiProfile(profileId)),
+  /** `null` turns the function off. */
+  setFunction: (aiFunction: AiFunction, profileId: string | null): Promise<AiSettingsInfo> =>
+    call(() => aiCommands.setAiFunction(aiFunction, profileId)),
+  /** Whether cloud providers may see this account's mail (every account starts without). */
+  setAccountCloud: (accountId: AccountId, allowed: boolean): Promise<AiSettingsInfo> =>
+    call(() => aiCommands.setAiAccountCloud(accountId, allowed)),
+  /** Only after the user read the explanation and agreed (or withdrew it). */
+  setConsent: (profileId: string, granted: boolean): Promise<AiSettingsInfo> =>
+    call(() => aiCommands.setAiConsent(profileId, granted)),
+  /** The open-reply hints work without AI. */
+  setOpenReplySettings: (settings: OpenReplySettings): Promise<AiSettingsInfo> =>
+    call(() => aiCommands.setOpenReplySettings(settings)),
+  /** Needs AI on; sends the key to the provider, no mail. */
+  listModels: (profileId: string): Promise<AiModel[]> => call(() => aiCommands.listAiModels(profileId)),
+  testConnection: (profileId: string): Promise<AiConnectionTest> => call(() => aiCommands.testAiConnection(profileId)),
+  /** The request log (metadata only), newest first. `limit` 1..`AI_LIMITS.requestPage`. */
+  listRequests: (before: AiRequestId | null, limit: number): Promise<AiRequestPage> =>
+    call(() => aiCommands.listAiRequests(before, limit)),
+  /** `false`: nothing was running under this id. The running call then rejects with `ai_cancelled`. */
+  cancelRequest: (requestId: string): Promise<boolean> => infallible(() => aiCommands.cancelAiRequest(requestId)),
+  summarizeThread: (requestId: string, messageId: MessageId): Promise<AiSummary> =>
+    call(() => aiCommands.aiSummarizeThread(requestId, messageId)),
+  suggestReply: (requestId: string, messageId: MessageId): Promise<AiReplySuggestion> =>
+    call(() => aiCommands.aiSuggestReply(requestId, messageId)),
+  /** A normal stage 5 reply draft with this text, kept open. No AI call. */
+  openReplyDraft: (messageId: MessageId, text: string): Promise<Draft> =>
+    call(() => aiCommands.aiOpenReplyDraft(messageId, text)),
+  /** A preview; nothing in the draft changes until the UI applies it. */
+  writingHelp: (requestId: string, passage: string, task: AiWritingTask): Promise<AiWritingResult> =>
+    call(() => aiCommands.aiWritingHelp(requestId, passage, task)),
+  /** `accountIds` null: every account (the unified view). */
+  ask: (requestId: string, question: string, accountIds: AccountId[] | null): Promise<AiAnswer> =>
+    call(() => aiCommands.aiAsk(requestId, question, accountIds)),
+  /** Newest first, at most 50; empty while the hints are off. */
+  listOpenReplyHints: (): Promise<OpenReplyHint[]> => call(() => aiCommands.listOpenReplyHints()),
+  /** A dismissed hint never comes back. */
+  dismissOpenReplyHint: (messageId: MessageId): Promise<void> =>
+    done(call(() => aiCommands.dismissOpenReplyHint(messageId))),
+};

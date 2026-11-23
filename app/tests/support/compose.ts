@@ -16,7 +16,11 @@ import type {
   OutgoingMail,
   SentCopyMode,
   UnclearDecision,
+  MissedSendDecision,
+  SendLater,
 } from "../../src/services/ipc";
+
+import { MAX_SCHEDULE_AHEAD_MS } from "../../src/services/ipc";
 
 function composeError(code: IpcError["code"], detail: string | null = null): IpcError {
   return { code, message: `English fallback for ${code}`, detail };
@@ -106,6 +110,13 @@ export interface ComposeFakeOptions {
   picked?: DraftAttachment[];
   sentCopy?: SentCopyMode;
   serverSavesSent?: boolean;
+  // ---- Stage 10: size check, inline images, pasting (the composer's block) ----
+  /** What `checkDraftSize` answers (default: 2 kB, no limit known, nothing large). */
+  sizeCheck?: Partial<import("../../src/services/ipc").DraftSizeCheck>;
+  /** What the system dialog "picks" on `pickInlineImages` (empty: the user cancelled). */
+  pickedImages?: DraftAttachment[];
+  /** `cleanPastedHtml`; default: script, style, img and attributes other than href removed. */
+  cleanPaste?: (html: string) => import("../../src/services/ipc").CleanedPaste;
 }
 
 export interface ComposeFakeState {
@@ -221,12 +232,32 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (!draft) return Promise.reject(composeError("not_found"));
     const mail = outgoing.find((m) => m.draftId === draftId && m.state !== "sent");
-    if (mail && !["scheduled", "failed", "unclear"].includes(mail.state)) {
+    if (mail && !["scheduled", "failed", "unclear", "missed"].includes(mail.state)) {
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       return Promise.reject(composeError("send_in_progress"));
     }
     outgoing = outgoing.filter((m) => m !== mail);
     return store({ ...draft, state: "editing", outgoing: null });
+  }
+
+  // ---- Stage 10: send later ----
+  function invalidSendAt(sendAt: number): Promise<never> | null {
+    const now = Date.now();
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    if (sendAt <= now || sendAt - now > MAX_SCHEDULE_AHEAD_MS) return Promise.reject(composeError("invalid_argument", "send_at"));
+    return null;
+  }
+
+  /** "Send now": the usual undo delay, no longer the user's time. */
+  function sendNow(mail: OutgoingMail): OutgoingMail {
+    const delay = settings.sendDelaySeconds;
+    return { ...mail, state: delay > 0 ? "scheduled" : "queued", scheduled: false, sendAt: Date.now() + delay * 1000, error: null };
+  }
+
+  function replaceOutgoing(next: OutgoingMail): OutgoingMail {
+    const changed = { ...next, updatedAt: Date.now() };
+    outgoing = outgoing.map((m) => (m.operationId === changed.operationId ? changed : m));
+    return changed;
   }
 
   function handle(cmd: string, args: Record<string, unknown>): unknown {
@@ -348,6 +379,58 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
         outgoing = outgoing.map((m) => (m.operationId === operationId ? { ...m, state: "queued", error: null } : m));
         return { batch: null, queued: 1, cancelled: 0 };
       }
+      // ---- Stage 10: send later (local; the fake keeps the clock of the test) ----
+      case "schedule_send": {
+        const requestId = args["requestId"] as string;
+        const known = requests.get(requestId);
+        if (known) return known;
+        const when = args["when"] as SendLater;
+        const invalid = invalidSendAt(when.sendAt);
+        if (invalid) return invalid;
+        const started = send(args["draftId"] as string, requestId);
+        if (started instanceof Promise) return started;
+        const mail: OutgoingMail = { ...started, state: "scheduled", scheduled: true, sendAt: when.sendAt };
+        outgoing = outgoing.map((m) => (m.operationId === mail.operationId ? mail : m));
+        requests.set(requestId, mail);
+        return mail;
+      }
+      case "list_scheduled_sends":
+        return outgoing
+          .filter((m) => (m.state === "scheduled" && m.scheduled) || m.state === "missed")
+          .sort((a, b) => a.sendAt - b.sendAt);
+      case "reschedule_send": {
+        const operationId = args["operationId"] as number;
+        const mail = outgoing.find((m) => m.operationId === operationId);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!mail) return Promise.reject(composeError("not_found"));
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (mail.state !== "scheduled" || !mail.scheduled) return Promise.reject(composeError("send_in_progress"));
+        const when = args["when"] as SendLater | null;
+        if (when) {
+          const invalid = invalidSendAt(when.sendAt);
+          if (invalid) return invalid;
+        }
+        return replaceOutgoing(when ? { ...mail, sendAt: when.sendAt, error: null } : sendNow(mail));
+      }
+      case "resolve_missed_send": {
+        const operationId = args["operationId"] as number;
+        const mail = outgoing.find((m) => m.operationId === operationId);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!mail) return Promise.reject(composeError("not_found"));
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (mail.state !== "missed") return Promise.reject(composeError("send_in_progress"));
+        const decision = args["decision"] as MissedSendDecision;
+        if (decision.kind === "send_now") return replaceOutgoing(sendNow(mail));
+        if (decision.kind === "reschedule") {
+          const invalid = invalidSendAt(decision.sendAt);
+          if (invalid) return invalid;
+          return replaceOutgoing({ ...mail, state: "scheduled", scheduled: true, sendAt: decision.sendAt, error: null });
+        }
+        outgoing = outgoing.filter((m) => m.operationId !== operationId);
+        const draft = mail.draftId ? drafts.get(mail.draftId) : undefined;
+        if (draft) drafts.set(draft.id, { ...draft, state: "editing", outgoing: null });
+        return null;
+      }
       case "get_compose_settings":
         return settings;
       case "set_compose_settings": {
@@ -394,6 +477,50 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
             return words.every((w) => haystack.includes(` ${w}`));
           })
           .slice(0, args["limit"] as number);
+      }
+      // ---- Stage 10: size check, inline images, pasting (the composer's block) ----
+      case "check_draft_size": {
+        const draft = get(args["draftId"]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!draft) return Promise.reject(composeError("not_found"));
+        const size = 2000 + Math.ceil((draft.attachments.reduce((sum, a) => sum + a.size, 0) * 4) / 3);
+        const check = { size, serverLimit: null, limitKnown: false, exceedsServerLimit: false, large: false, ...options.sizeCheck };
+        return check;
+      }
+      case "pick_inline_images":
+      case "add_dropped_inline_images": {
+        const draft = get(args["draftId"]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!draft) return Promise.reject(composeError("not_found"));
+        const added: DraftAttachment[] =
+          cmd === "pick_inline_images"
+            ? (options.pickedImages ?? []).filter((p) => !draft.attachments.some((a) => a.id === p.id))
+            : (args["paths"] as string[]).map((path, i) => ({
+                id: `img-drop-${String(draft.attachments.length + i)}`,
+                fileName: path.split("/").pop() ?? path,
+                mime: "image/png",
+                size: 1000,
+                contentId: `drop${String(draft.attachments.length + i)}@vicemail.test`,
+              }));
+        const next = store({ ...draft, attachments: [...draft.attachments, ...added] });
+        return { draft: next, added };
+      }
+      case "inline_image_data": {
+        const draft = get(args["draftId"]);
+        const image = draft?.attachments.find((a) => a.id === args["attachmentId"] && a.contentId !== null);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!image) return Promise.reject(composeError("not_found"));
+        return `data:${image.mime};base64,${btoa(image.id)}`;
+      }
+      case "clean_pasted_html": {
+        const html = args["html"] as string;
+        if (options.cleanPaste) return options.cleanPaste(html);
+        const imagesRemoved = (html.match(/<img\b/gi) ?? []).length;
+        const cleaned = html
+          .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "")
+          .replace(/<img\b[^>]*>/gi, "")
+          .replace(/\s(?!href=)[a-z-]+="[^"]*"/gi, "");
+        return { html: cleaned, imagesRemoved, formattingSimplified: cleaned !== html };
       }
       default:
         return undefined;

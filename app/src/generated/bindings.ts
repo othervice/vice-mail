@@ -19,6 +19,38 @@ export const commands = {
 	getReadingPreferences: (options?: InvokeOptions) => typedError<ReadingPreferences, IpcError>(__TAURI_INVOKE("get_reading_preferences", undefined, options)),
 	/**  Stores the reading preferences and returns them. */
 	setReadingPreferences: (preferences: ReadingPreferences, options?: InvokeOptions) => typedError<ReadingPreferences, IpcError>(__TAURI_INVOKE("set_reading_preferences", { preferences }, options)),
+	/**
+	 *  Shortcut changes of both platforms, text size and recent palette commands; defaults when
+	 *  nothing is stored.
+	 */
+	getUiPreferences: (options?: InvokeOptions) => typedError<UiPreferences, IpcError>(__TAURI_INVOKE("get_ui_preferences", undefined, options)),
+	/**
+	 *  Validates and stores the UI preferences, emits `uiPreferencesChanged` to all windows and
+	 *  returns what is stored (each platform's list ordered by command). `invalid_argument` with a
+	 *  detail when a limit is broken; nothing is stored then.
+	 */
+	setUiPreferences: (preferences: UiPreferences, options?: InvokeOptions) => typedError<UiPreferences, IpcError>(__TAURI_INVOKE("set_ui_preferences", { preferences }, options)),
+	/**
+	 *  The layout of the calling window (the shell knows which window asks; all message windows
+	 *  share one layout). Defaults when nothing is stored.
+	 */
+	getWindowLayout: (options?: InvokeOptions) => typedError<WindowLayout, IpcError>(__TAURI_INVOKE("get_window_layout", undefined, options)),
+	/**  Stores the layout of the calling window on this device and returns it. */
+	setWindowLayout: (layout: WindowLayout, options?: InvokeOptions) => typedError<WindowLayout, IpcError>(__TAURI_INVOKE("set_window_layout", { layout }, options)),
+	/**
+	 *  Shows one message in a window of its own: the app's page with
+	 *  `?window=message&accountId=<uuid>&messageId=<id>`, the same CSP, capability and navigation
+	 *  guards as the main window. A second call for the same message focuses its window.
+	 *  `not_found` if the message does not exist or belongs to another account.
+	 */
+	openMessageWindow: (accountId: AccountId, messageId: MessageId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_message_window", { accountId, messageId }, options)),
+	/**
+	 *  Shows the composer of one draft in a window of its own (stage 10 composer, several drafts at
+	 *  once): the app's page with `?window=composer&draftId=<uuid>`, the same CSP, capability and
+	 *  guards as the main window. A second call for the same draft focuses its window.
+	 *  `invalid_argument` for an id that is no UUID, `not_found` if the draft does not exist.
+	 */
+	openComposerWindow: (draftId: DraftId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_composer_window", { draftId }, options)),
 	/**  All accounts, oldest first, with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
@@ -434,6 +466,8 @@ export const CORE_EVENT_NAME = "core-event" as const;
 
 export const DEFAULT_SEND_DELAY_SECS = 10 as const;
 
+export const DEFAULT_TEXT_SIZE = 100 as const;
+
 export const LARGE_ATTACHMENT_WARNING_BYTES = 15728640 as const;
 
 export const MARK_READ_DELAY_MS = 2000 as const;
@@ -444,7 +478,11 @@ export const MAX_ATTACHMENTS = 100 as const;
 
 export const MAX_ATTACHMENT_BYTES = 104857600 as const;
 
+export const MAX_COMMAND_ID_CHARS = 64 as const;
+
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
+
+export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
 
@@ -452,9 +490,29 @@ export const MAX_MCP_CLIENTS = 50 as const;
 
 export const MAX_MCP_CLIENT_NAME_CHARS = 100 as const;
 
+export const MAX_RECENT_COMMANDS = 5 as const;
+
+export const MAX_RECENT_COMMAND_CHARS = 200 as const;
+
+export const MAX_SCHEDULE_AHEAD_MS = 31622400000 as const;
+
 export const MAX_SEARCH_PAGE = 200 as const;
 
 export const MAX_SEND_DELAY_SECS = 30 as const;
+
+export const MAX_SHORTCUTS_PER_COMMAND = 4 as const;
+
+export const MAX_SHORTCUT_KEY_CHARS = 20 as const;
+
+export const MAX_SHORTCUT_OVERRIDES = 100 as const;
+
+export const MAX_SIGNATURE_IMAGES = 8 as const;
+
+export const MAX_SIGNATURE_IMAGES_BYTES = 131072 as const;
+
+export const MAX_SIGNATURE_IMAGE_BYTES = 65536 as const;
+
+export const MAX_TEXT_SIZE = 150 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
 
@@ -463,6 +521,10 @@ export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
 
 export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
+
+export const MIN_TEXT_SIZE = 80 as const;
+
+export const MISSED_SEND_GRACE_MS = 3600000 as const;
 
 export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
@@ -1268,6 +1330,13 @@ export type ComposeRequest = {
 export type ComposeSettings = {
 	/**  Undo delay before a message is submitted, 0 to [`MAX_SEND_DELAY_SECS`]. */
 	sendDelaySeconds: number,
+	/**
+	 *  Stage 8 (decision 0025): where a new reply or forward puts the answer relative to the
+	 *  quote: `above` (answer above, quote below; the default and the behaviour before), or
+	 *  `below`. The composer can still change it per draft. Left out by an older caller: the
+	 *  default.
+	 */
+	defaultQuotePosition?: QuotePosition,
 };
 
 /**
@@ -1426,6 +1495,9 @@ export type ContactSuggestion = {
  *  - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
  *    questions or detected folders changed. Data a pass took over from another device comes
  *    with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
+ *  - `uiPreferencesChanged` (stage 8): the UI preferences (shortcuts, text size, recent palette
+ *    commands) were stored, here in any window or by the settings sync; carries the stored
+ *    values. Every window applies them.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
@@ -1439,7 +1511,9 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  */
 { type: "signaturesChanged" } | 
 /**  Stage 10: the templates changed (here or from another device). */
-{ type: "templatesChanged" };
+{ type: "templatesChanged" } | 
+/**  Stage 8: the UI preferences were stored (any window, or another device). */
+{ type: "uiPreferencesChanged"; preferences: UiPreferences };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -1481,6 +1555,9 @@ export type DefaultMailAppOutcome =
  *  the system's own way (macOS: Mail, Settings, General, "Default email reader").
  */
 "manual";
+
+/**  Row height of the list: comfortable (default) or compact. */
+export type Density = "comfortable" | "compact";
 
 /**  Result of server discovery for an email address. Either server may be unknown. */
 export type DiscoveryResult = {
@@ -2805,6 +2882,15 @@ export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "te
 /**  Operating system the app runs on. */
 export type Platform = "macos" | "windows" | "linux";
 
+/**
+ *  The user's shortcut changes for both platforms: a synced setting carries both, and each
+ *  device uses the list of its own system.
+ */
+export type PlatformShortcuts = {
+	macos: ShortcutOverride[],
+	windows: ShortcutOverride[],
+};
+
 /**  User preferences stored in the `setting` table. */
 export type Preferences = {
 	theme: ThemePreference,
@@ -2895,6 +2981,15 @@ export type QuotePosition =
 "above" | 
 /**  The quote first, then the answer and the signature. */
 "below";
+
+/**  Where a window shows the opened message. */
+export type ReadingPanePosition = 
+/**  Right of the list (the default). */
+"right" | 
+/**  Below the list. */
+"bottom" | 
+/**  In place of the list. */
+"replace";
 
 /**
  *  Reading preferences stored in the `setting` table (stage 4). Separate from [`Preferences`],
@@ -3333,6 +3428,28 @@ export type SettingsSyncStatus = {
 };
 
 /**
+ *  One key combination. `mod` is Cmd on macOS and Ctrl on Windows; Option/Alt combinations do
+ *  not exist (`docs/ARCHITECTURE.md`, Tastaturkürzel).
+ */
+export type Shortcut = {
+	/**  The character the key produces (`event.key`), 1 to 20 characters. */
+	key: string,
+	shift: boolean,
+	mod: boolean,
+};
+
+/**
+ *  The complete list of shortcuts the user gave one command (an empty list: the command has no
+ *  shortcut). Commands without an entry keep the defaults of the action directory, which only
+ *  the UI knows.
+ */
+export type ShortcutOverride = {
+	/**  Command id of the action directory: 1 to 64 ASCII letters, digits, `.`, `_`, `-`, `:`. */
+	command: string,
+	shortcuts: Shortcut[],
+};
+
+/**
  *  Id of a signature: a UUID, the same on every device (the sync record id). A signature
  *  taken over from a stage 5 text signature has the UUID of its identity.
  */
@@ -3573,6 +3690,18 @@ export type ThreadView = {
 	total: number,
 };
 
+/**
+ *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
+ *  synchronised between devices; the recent commands stay on this device.
+ */
+export type UiPreferences = {
+	shortcuts: PlatformShortcuts,
+	/**  Percent of the system's text size, 80 to 150. */
+	textSize: number,
+	/**  Keys of the palette entries used last, newest first, at most 5, no duplicates. */
+	recentCommands: string[],
+};
+
 /**  The user's answer to an unclear send. */
 export type UnclearDecision = 
 /**  It arrived (the user checked): finish as sent (copy into Sent, draft removed). */
@@ -3614,6 +3743,17 @@ export type UnsubscribeOutcome =
 { kind: "compose"; request: ComposeRequest } | 
 /**  The page was handed to the system browser. */
 { kind: "opened" };
+
+/**
+ *  The layout of one window, stored per window on this device (not synchronised: the screens
+ *  differ). `getWindowLayout` / `setWindowLayout` take the window from the calling window.
+ */
+export type WindowLayout = {
+	readingPane: ReadingPanePosition,
+	density: Density,
+	/**  The icon rail unfolded into the labelled sidebar. */
+	sidebarExpanded: boolean,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

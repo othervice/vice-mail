@@ -126,6 +126,9 @@ function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionC
     forward: () => {
       composer("forward");
     },
+    forwardAsAttachment: () => {
+      composer("forward_as_attachment");
+    },
     editDraft: () => {
       composer("message");
     },

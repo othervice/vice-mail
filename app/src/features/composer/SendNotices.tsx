@@ -1,11 +1,21 @@
-import { CircleCheck, CircleExclamationPoint, CircleQuestionMark, Clock, Send, X, type LucideIcon } from "lucide-react";
+import { CalendarClock, CircleCheck, CircleExclamationPoint, CircleQuestionMark, Clock, Send, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
-import { composeIpc, ipc, toCoreError, type DraftSummary, type OutgoingMail } from "../../services/ipc";
-import { openComposer, useComposerStore, type ComposerProblem, type TrackedSend } from "../../stores/composer";
+import {
+  composeIpc,
+  composerIpc,
+  ipc,
+  toCoreError,
+  type CoreError,
+  type DraftSummary,
+  type MissedSendDecision,
+  type OutgoingMail,
+} from "../../services/ipc";
+import { needsUser, openComposer, useComposerStore, type ComposerProblem, type TrackedSend } from "../../stores/composer";
 import { useUiStore } from "../../stores/ui";
-import { useDraftsAtStart } from "./queries";
+import { useDraftsAtStart, useScheduledSendsAtStart } from "./queries";
+import { SendLaterPicker } from "./SendLaterPicker";
 
 /** A "Sent" notice goes after this long; questions and failures stay until the user acts. */
 export const SENT_NOTICE_MS = 6000;
@@ -65,6 +75,43 @@ export async function retrySend(mail: OutgoingMail): Promise<boolean> {
   }
 }
 
+/**
+ * Stage 10: the answer to a send planned for a time when the app was off (more than an hour ago).
+ * "Keep as draft" takes it out of the outbox and opens the draft again.
+ */
+export async function resolveMissed(mail: OutgoingMail, decision: MissedSendDecision): Promise<boolean> {
+  const store = useComposerStore.getState();
+  try {
+    const next = await composerIpc.resolveMissedSend(mail.operationId, decision);
+    if (next) {
+      store.update([next]);
+    } else {
+      store.dismiss(mail.operationId);
+      if (mail.draftId) openComposer({ kind: "draft", draftId: mail.draftId });
+    }
+    return true;
+  } catch (e) {
+    store.report("resolve", toCoreError(e));
+    return false;
+  }
+}
+
+/** Stage 10: moves a send the user planned (`null` = send now, after the undo delay). Throws a `CoreError`. */
+export async function rescheduleScheduled(mail: OutgoingMail, sendAt: number | null): Promise<OutgoingMail> {
+  try {
+    const next = await composerIpc.rescheduleSend(mail.operationId, sendAt === null ? null : { sendAt });
+    useComposerStore.getState().update([next]);
+    return next;
+  } catch (e) {
+    throw toCoreError(e);
+  }
+}
+
+/** A planned time as the notices and the outbox show it ("Mon, 24 Nov, 08:00"). */
+export function formatSendAt(ms: number, language: string): string {
+  return new Intl.DateTimeFormat(language, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(ms);
+}
+
 interface NoticeButton {
   label: string;
   run: () => void;
@@ -73,13 +120,16 @@ interface NoticeButton {
 }
 
 function SendNotice({ send }: { send: TrackedSend }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dismiss = useComposerStore((state) => state.dismiss);
   const setConfirming = useComposerStore((state) => state.setConfirmingSendAgain);
   const showOutbox = useUiStore((state) => state.showOutbox);
   const { mail, confirmingSendAgain } = send;
   const [busy, setBusy] = useState(false);
-  const now = useNow(mail.state === "scheduled");
+  const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState<CoreError | null>(null);
+  // A time the user chose is no undo countdown.
+  const now = useNow(mail.state === "scheduled" && !mail.scheduled);
 
   useEffect(() => {
     if (mail.state !== "sent") return undefined;
@@ -105,6 +155,14 @@ function SendNotice({ send }: { send: TrackedSend }) {
   let buttons: NoticeButton[] = [];
   switch (mail.state) {
     case "scheduled": {
+      if (mail.scheduled) {
+        // Stage 10: planned by the user ("send later"); it goes out only if the app runs then.
+        icon = CalendarClock;
+        text = t("sendLater.notice.scheduled", { time: formatSendAt(mail.sendAt, i18n.language) });
+        detail = t("sendLater.hint");
+        buttons = [{ label: t("composer.outbox.show"), run: showOutbox, testId: "send-show-outbox" }];
+        break;
+      }
       const seconds = Math.max(0, Math.ceil((mail.sendAt - now) / 1000));
       icon = Clock;
       text = seconds > 0 ? t("composer.send.scheduled", { count: seconds }) : t("composer.send.sending");
@@ -142,11 +200,25 @@ function SendNotice({ send }: { send: TrackedSend }) {
       ];
       break;
     case "missed":
-      // Stage 10: a scheduled send was due while the app was off; the outbox asks what to do.
-      icon = Clock;
+      // Stage 10: planned for a time when the app was off (over an hour ago). Nothing was sent.
+      icon = CalendarClock;
       tone = "warning";
-      text = t("composer.send.missed");
-      buttons = [{ label: t("composer.outbox.show"), run: showOutbox, testId: "send-show-outbox" }];
+      text = t("sendLater.missed.title", { time: formatSendAt(mail.sendAt, i18n.language) });
+      detail = t("sendLater.missed.body");
+      buttons = picking
+        ? []
+        : [
+            { label: t("sendLater.missed.sendNow"), run: act(() => resolveMissed(mail, { kind: "send_now" })), testId: "missed-send-now" },
+            {
+              label: t("sendLater.missed.reschedule"),
+              run: () => {
+                setPickError(null);
+                setPicking(true);
+              },
+              testId: "missed-reschedule",
+            },
+            { label: t("sendLater.missed.keep"), run: act(() => resolveMissed(mail, { kind: "keep_as_draft" })), testId: "missed-keep" },
+          ];
       break;
     case "unclear":
       icon = CircleQuestionMark;
@@ -182,10 +254,27 @@ function SendNotice({ send }: { send: TrackedSend }) {
       break;
   }
 
-  const needsUser = mail.state === "failed" || mail.state === "unclear" || mail.state === "missed";
+  const reschedule = (sendAt: number) => {
+    setBusy(true);
+    setPickError(null);
+    composerIpc
+      .resolveMissedSend(mail.operationId, { kind: "reschedule", sendAt })
+      .then(
+        (next) => {
+          setPicking(false);
+          if (next) useComposerStore.getState().update([next]);
+        },
+        (e: unknown) => {
+          setPickError(toCoreError(e));
+        },
+      )
+      .finally(() => {
+        setBusy(false);
+      });
+  };
   return (
     <div
-      role={needsUser ? "alert" : undefined}
+      role={needsUser(mail) ? "alert" : undefined}
       className={cx(
         "pointer-events-auto flex w-full max-w-(--ui-notice-width) items-start gap-3 rounded-card border bg-surface-raised px-4 py-3 shadow-floating",
         tone === "danger" ? "border-danger" : tone === "warning" ? "border-warning" : "border-border",
@@ -201,6 +290,18 @@ function SendNotice({ send }: { send: TrackedSend }) {
         <p className="text-13 font-medium text-primary">{text}</p>
         <p className="truncate text-12 text-secondary">{subject}</p>
         {detail && <p className="text-12 text-secondary">{detail}</p>}
+        {picking && mail.state === "missed" && (
+          <SendLaterPicker
+            confirmLabel={t("sendLater.missed.rescheduleConfirm")}
+            busy={busy}
+            error={pickError}
+            onChoose={reschedule}
+            onCancel={() => {
+              setPicking(false);
+            }}
+            data-testid="missed-picker"
+          />
+        )}
         {buttons.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {buttons.map((button) => (
@@ -221,7 +322,7 @@ function SendNotice({ send }: { send: TrackedSend }) {
           </div>
         )}
       </div>
-      {mail.state !== "unclear" && (
+      {mail.state !== "unclear" && mail.state !== "missed" && (
         <button
           type="button"
           aria-label={t("actions.dismiss")}
@@ -257,7 +358,9 @@ function ProblemNotice({ problem, onDismiss }: { problem: ComposerProblem; onDis
     >
       <Icon icon={CircleExclamationPoint} className="text-danger" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-13 font-medium text-primary">{t(`composer.problems.${problem.context}`)}</p>
+        <p className="text-13 font-medium text-primary">
+          {problem.context === "reschedule" ? t("sendLater.rescheduleFailed") : t(`composer.problems.${problem.context}`)}
+        </p>
         <p className="text-12 text-secondary">{t(`errors.codes.${problem.error.code}.title`)}</p>
         <p className="text-12 text-secondary">{t(`errors.codes.${problem.error.code}.hint`)}</p>
       </div>
@@ -333,6 +436,57 @@ function DraftRestore() {
 }
 
 /**
+ * Stage 10: sends planned for a time when the app was off become `missed` while the core starts,
+ * possibly before this window listened for `sendNeedsDecision`. So the list is asked once at the
+ * start, and every missed send gets the question.
+ */
+function MissedAtStart() {
+  const { t } = useTranslation();
+  const scheduled = useScheduledSendsAtStart();
+  const needsDecision = useComposerStore((state) => state.needsDecision);
+  const [errorDismissed, setErrorDismissed] = useState(false);
+  const data = scheduled.data;
+  useEffect(() => {
+    for (const mail of data ?? []) if (mail.state === "missed") needsDecision(mail);
+  }, [data, needsDecision]);
+  if (!scheduled.error || errorDismissed) return null;
+  return (
+    <div
+      role="alert"
+      className="pointer-events-auto flex w-full max-w-(--ui-notice-width) items-start gap-3 rounded-card border border-danger bg-surface-raised px-4 py-3 shadow-floating"
+      data-testid="missed-list-error"
+      data-error-code={scheduled.error.code}
+    >
+      <Icon icon={CircleExclamationPoint} className="text-danger" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-13 font-medium text-primary">{t("sendLater.listFailed")}</p>
+        <p className="text-12 text-secondary">{t(`errors.codes.${scheduled.error.code}.title`)}</p>
+        <p className="text-12 text-secondary">{t(`errors.codes.${scheduled.error.code}.hint`)}</p>
+        <div className="flex flex-wrap gap-1 pt-1">
+          <button
+            type="button"
+            onClick={() => void scheduled.refetch()}
+            className="rounded-control px-2 py-1 text-13 font-medium text-accent hover:bg-hover"
+          >
+            {t("errors.retry")}
+          </button>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-label={t("actions.dismiss")}
+        onClick={() => {
+          setErrorDismissed(true);
+        }}
+        className="flex size-6 shrink-0 items-center justify-center rounded-control text-secondary hover:bg-hover hover:text-primary"
+      >
+        <X aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+      </button>
+    </div>
+  );
+}
+
+/**
  * The state of each send the user started, at the bottom right: the undo countdown, "Sending",
  * "Sent", failures with "Retry" and "Edit", and the question after an unclear outcome. A send is
  * never repeated without the user's explicit, confirmed choice.
@@ -341,8 +495,8 @@ export function SendNotices() {
   const { t } = useTranslation();
   const sends = useComposerStore((state) => state.sends);
   const problems = useComposerStore((state) => state.problems);
-  const calm = sends.filter((s) => s.mail.state !== "failed" && s.mail.state !== "unclear");
-  const urgent = sends.filter((s) => s.mail.state === "failed" || s.mail.state === "unclear");
+  const calm = sends.filter((s) => !needsUser(s.mail));
+  const urgent = sends.filter((s) => needsUser(s.mail));
   return (
     <div
       role="group"
@@ -362,6 +516,7 @@ export function SendNotices() {
       {problems.map((problem) => (
         <ProblemNotice key={problem.id} problem={problem} />
       ))}
+      <MissedAtStart />
     </div>
   );
 }

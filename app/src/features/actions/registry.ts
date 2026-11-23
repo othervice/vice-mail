@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
-import { Command, FilePen, Forward, Keyboard, Reply, ReplyAll, SquarePen } from "lucide-react";
+import { Command, FilePen, Forward, Keyboard, Paperclip, Reply, ReplyAll, SquarePen } from "lucide-react";
 import { openComposer } from "../../stores/composer";
 import type { MailViewId } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
@@ -69,6 +69,8 @@ export const ACTION_IDS = [
   "reply",
   "replyAll",
   "forward",
+  // Stage 10: the whole message as an `.eml` attachment.
+  "forwardAsAttachment",
   "editDraft",
   "compose",
 ] as const;
@@ -533,6 +535,19 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
       if (item) openComposer({ kind: "forward", messageId: item.id });
     },
   },
+  forwardAsAttachment: {
+    id: "forwardAsAttachment",
+    label: () => "forwardAsAttachment",
+    icon: () => Paperclip,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && !ctx.items[0]?.draft,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "forward_as_attachment", messageId: item.id });
+    },
+  },
   // A message of the Drafts folder (also one of another program) opens as a draft.
   editDraft: {
     id: "editDraft",
@@ -578,6 +593,7 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   "reply",
   "replyAll",
   "forward",
+  "forwardAsAttachment",
   "editDraft",
   "archive",
   "delete",

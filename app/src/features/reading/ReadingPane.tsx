@@ -11,6 +11,7 @@ import { useUiStore } from "../../stores/ui";
 import { Attachments } from "./Attachments";
 import { LinkCard } from "./LinkCard";
 import { CategoryPanel } from "../comfort/CategoryPanel";
+import { OpenReplyHintBar } from "../ai/OpenReplyHints";
 import { MessageExtras } from "../extras/MessageExtras";
 import { MessageTools } from "../extras/MessageTools";
 import { MessageHeader } from "./MessageHeader";
@@ -291,6 +292,8 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
           <CategoryPanel messageId={view.id} />
         </div>
         <MessageExtras accountId={account.id} messageId={view.id} />
+        {/* Stage 13: "maybe still open" (rules in the core, no AI). */}
+        <OpenReplyHintBar messageId={view.id} />
         <Problems view={view} />
         <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
         <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />

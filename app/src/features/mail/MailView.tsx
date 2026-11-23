@@ -39,6 +39,7 @@ import {
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
 import { useActionController, type ActionController } from "../actions/useActionController";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
+import { AiPanelToggle } from "../ai/AiPanel";
 import { useAppInfo } from "../app-info/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
@@ -659,6 +660,8 @@ export function MailView({ view }: MailViewProps) {
           {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
           <div className="flex shrink-0 items-center gap-1">
             {account && conversationsApply && <ConversationToggle />}
+            {/* Stage 13: folds the AI panel in and out (only while AI is usable). */}
+            {account && <AiPanelToggle />}
             <IconButton icon={Search} label={t("search.open")} disabled={!account} onClick={openSearch} />
             <IconButton
               icon={SquarePen}

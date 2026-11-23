@@ -7,7 +7,9 @@ import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { InboxSettings } from "../comfort/InboxSettings";
 import { KeyboardSettings } from "../keyboard/KeyboardSettings";
 import { ComposeSettings } from "../composer/ComposeSettings";
+import { ContactsSettings } from "../contacts/ContactsSettings";
 import { NotificationSettings } from "../comfort/NotificationSettings";
+import { AiSettings } from "../ai/AiSettings";
 import { McpSettings } from "../mcp/McpSettings";
 import { SettingsSyncSettings } from "../settings-sync/SettingsSyncSettings";
 import { AboutSettings } from "./AboutSettings";
@@ -21,11 +23,13 @@ const SECTIONS: Record<SettingsSectionId, ComponentType> = {
   accounts: AccountsSettings,
   reading: ReadingSettings,
   compose: ComposeSettings,
+  contacts: ContactsSettings,
   inbox: InboxSettings,
   notifications: NotificationSettings,
   appearance: AppearanceSettings,
   keyboard: KeyboardSettings,
   sync: SettingsSyncSettings,
+  ai: AiSettings,
   mcp: McpSettings,
   about: AboutSettings,
 };
