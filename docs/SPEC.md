@@ -1,5 +1,7 @@
 # Produktbeschreibung
 
+> **English note:** the German product description, part of the project log. What exists today is summarised in English in [../README.md](../README.md) and [../CHANGELOG.md](../CHANGELOG.md); see [README.md](README.md).
+
 ## Rahmen
 
 - Ein schneller, ruhiger E-Mail-Client für macOS und Windows, der im Alltag angenehmer ist als

@@ -4,14 +4,14 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Lokale Design-Vorlage: fremder Screenshot, darf nicht veröffentlicht werden
+# Local design references (third-party screenshots, logo sketches): must never be published
 /design-reference/
 
-# Testserver-Daten
+# Test mail server data
 /testmail/.data/
 /testmail/bin/
 
-# Windows-SDK-Cache von cargo-xwin
+# Windows SDK cache of cargo-xwin
 /.xwin-cache/
 
 # System
@@ -20,8 +20,9 @@ dist/
 .env
 .env.*
 
-# Lokale Claude-Einstellungen
+# Local Claude Code settings and state
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Vitest cache
 .vitest/

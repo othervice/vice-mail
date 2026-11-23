@@ -1,5 +1,7 @@
 # Oberfläche
 
+> **English note:** the German interface design document, part of the project log. See [README.md](README.md) for how the documentation is organised.
+
 ## Richtung
 
 Hell, luftig, eine Zeile pro Mail, der Inhalt steht im Vordergrund. Die Vorlage liegt lokal unter

@@ -1,0 +1,111 @@
+# Privacy
+
+What Vice Mail sends where, what it keeps on your computer, and what it does not do. This describes
+the code in this repository; the technical rules behind it are under "Security boundaries" in
+[ARCHITECTURE.md](ARCHITECTURE.md). Adding a new kind of connection needs a recorded decision and a
+change to this page.
+
+## In short
+
+- The app talks to **the mail servers you set up**. Everything else is optional, off until you
+  turn it on, or happens only when you click something.
+- There is **no telemetry**, no usage statistics, no crash reports, no advertising, no account with
+  us and no server of ours. The project does not learn that you use the app.
+- Your mail, the search index and your settings are stored **on your computer, not encrypted by the
+  app**. Disk encryption (FileVault on macOS, BitLocker or device encryption on Windows) protects
+  them when the computer is off or the disk is taken out.
+- Passwords and keys are stored **only in the system keychain** (macOS) or **Credential Manager**
+  (Windows), never in the app's files or logs.
+
+## Connections the app makes
+
+| What | When | To whom | What they learn |
+|---|---|---|---|
+| **Your mail servers** (IMAP, SMTP) | while the app runs and an account is set up | the servers in the account settings | everything a mail server sees from any mail program: your login, which mail you fetch, what you send. The app fetches message bodies without marking them read |
+| **Finding server settings** | only during account setup, after you click "Search settings online" | your system's DNS servers (SRV records for your address's domain), then `autoconfig.<your domain>` and `<your domain>/.well-known/autoconfig/` over HTTPS | your IP address and the domain of the address you are adding. No third-party directory (such as Mozilla's ISPDB) is asked |
+| **Remote images in a message** | only after you allow them for this message, or always for a sender | the servers named in the message | your IP address, the time, and that you opened this message: remote images are often used to track exactly that. The app sends no cookies and no referrer, identifies itself only as `Mozilla/5.0`, and never connects to addresses in your local network |
+| **One-click unsubscribe** | only when you click "Unsubscribe" and the message offers one-click unsubscribe (RFC 8058) | the HTTPS address in the message's `List-Unsubscribe` header | your IP address and that you unsubscribed. Other kinds of unsubscribe open a draft (mail) or your browser (web page) instead |
+| **AI provider** (optional) | only if you turn on AI in the app and use an AI feature; a cloud provider only after you agreed for that provider, and only with mail from accounts you allowed for cloud use | the address in your AI profile: a local server such as Ollama or LM Studio, or a cloud provider with your own API key | the text needed for the request: for example the current conversation without repeated quotes and without attachments. Never your whole mailbox without a confirmation that states how many messages. Before the first transfer the app shows its size. What a cloud provider does with it is governed by that provider's terms |
+| **Update check** (optional) | only if you turn on "Check for updates automatically" (off by default; asked once after your first account), then at most once a day; or when you click "Check now" | `github.com` and GitHub's file hosts `objects.githubusercontent.com` and `release-assets.githubusercontent.com` | your IP address and the time; when you download an update, which file. The request contains no app version, no identifier and no account data. Updates are downloaded and installed only when you click |
+
+**Not by the app, but worth knowing:**
+
+- Links and attachments are opened by your browser or the program the system chooses, after you
+  click and after the app has shown you the real link target. Those programs make their own
+  connections.
+- The operating system may check server certificates for revocation (OCSP, CRL) with the issuing
+  certificate authority. This happens in the system, not in the app.
+- On Windows, the installer downloads the Microsoft Edge WebView2 runtime from Microsoft if it is
+  missing (Windows 11 normally has it). The runtime is a system component that Windows keeps up to
+  date. Whether it contacts Microsoft on its own while the app runs has not been examined yet.
+- The local MCP server (see below) makes no network connections at all.
+
+Nothing else: no fonts, scripts or images from the internet for the interface itself (its Content
+Security Policy forbids remote sources), and no lookups in third-party directories without a click.
+
+## What is stored on your computer
+
+| What | Encrypted by the app? |
+|---|---|
+| The database: accounts and server settings (without passwords), folders, message headers (senders, recipients, subjects, dates), previews, flags, the full-text search index, threads, contacts, drafts, signatures, templates, rules, saved searches, snoozes, pins, settings, the state of the settings sync | no |
+| Message bodies and attachments you have opened or the app has prefetched, stored compressed (zstd) as files | no |
+| Copies of attachments you added to a draft, and copies of attachments you opened with another program | no |
+| Backups of the database taken before each update of its format (the last three) | no |
+| Logs: technical events such as account IDs, server and link host names, error codes. Passwords are masked by design; the logs are not meant to contain message text. One file per day, the last 14 are kept | no |
+| The AI request log (only if you use AI in the app): feature, provider host, model, number of messages and bytes, result, duration. No message content. Kept 30 days, at most 10,000 entries | no |
+| The MCP access log (only if you turn on the MCP server): which client used which tool, when, on how many messages, and the outcome. Never the request's arguments or any content. Kept 30 days, at most 10,000 entries | no |
+| Web view data (the interface's local storage and cache) | no |
+
+Where these folders are on macOS and Windows, and how to remove them, is listed in
+[INSTALL.md](INSTALL.md) ("Where the app keeps its data" and "Uninstall"). Removing an account in
+the app deletes the mail the app stored for it and its password; your mail on the server is not
+touched.
+
+The app does not encrypt its local data because the operating system's disk encryption already
+does that without a second password. Anyone who can use your user account on the unlocked
+computer can read your stored mail, as they can with Apple Mail or Outlook.
+
+## What is in the keychain
+
+All entries are under the service name `org.vicemail.desktop`, in the macOS login keychain or in
+Windows Credential Manager (generic credentials):
+
+| Entry | Holds |
+|---|---|
+| the account's ID (a UUID) | the account password |
+| `ai-profile:<id>` | the API key of an AI provider profile |
+| `mcp-client:<id>` | the key an AI client uses to prove itself to the app's MCP server |
+| `settings-sync:key` | the settings sync key (the passphrase itself is never stored) |
+
+Keychain entries are not part of the settings sync: every device keeps its own.
+
+## Settings sync
+
+If you turn on the settings sync, the app writes encrypted entries to a hidden folder
+(`Settings-Sync`) in a mailbox you choose, on your own mail server. They are encrypted with
+[age](https://age-encryption.org) using a key protected by your passphrase. Passwords, API keys and
+other secrets are never part of them. Your mail server can see how many entries there are, their
+size and when they change, but not what they contain. Details: [SYNC.md](SYNC.md).
+
+## The MCP server for AI clients
+
+Off until you turn it on in **Settings → AI over MCP**. When it is on:
+
+- It accepts connections **only from this computer**: through a Unix socket that only your user
+  can open (macOS) or a named pipe limited to your user (Windows), never over TCP. Each AI client
+  must be added in the app first and proves itself with its own key.
+- It shows **only the accounts you share**, each set to hidden (the default), read, or read and
+  create drafts.
+- It gives clients cleaned-up text: no raw HTML, no remote images, attachments only by name, with
+  limits on size and number. Fetching a message does not mark it read.
+- No tool can send, delete, move or mark mail or change settings. Drafts that a client creates
+  appear in the app for you to review and send yourself.
+- Every access is listed in the app; you can revoke a single client or turn the server off.
+
+What an AI client does with the mail it reads is outside the app. A client that uses a cloud model
+sends what it reads to that model's provider.
+
+## Questions
+
+Questions about privacy can be asked in a public issue. Suspected security problems go through
+[SECURITY.md](../SECURITY.md).

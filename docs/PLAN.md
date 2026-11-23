@@ -1,5 +1,7 @@
 # Plan
 
+> **English note:** this is the German project plan, kept as a project log. See [README.md](README.md) for how the documentation is organised.
+
 Sechzehn Stufen, nacheinander. Jede Stufe ist ein abgeschlossener Auftrag für eine Sitzung, mit
 Aufgaben, überprüfbarer Abnahme und dem, was ausdrücklich nicht dazugehört.
 
