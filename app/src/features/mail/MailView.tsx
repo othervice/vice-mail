@@ -224,7 +224,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   // Stage 8: the reading pane right, below or in place of the list.
   const layout = useReadingLayout(list);
 
-  useMarkReadOnOpen(account, single, controller);
+  // In place of the list a message is open only once opened, not while the cursor rests on it.
+  useMarkReadOnOpen(account, layout.paneShown(open) ? single : null, controller);
 
   const ctxFor = (items: readonly MessageListItem[]): ActionContext => ({
     account,
@@ -276,7 +277,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
 
   return (
     <div className={layout.container} data-reading-pane={layout.position}>
-      <div className={layout.listColumn(open)} hidden={layout.listHidden(open)}>
+      <div {...layout.listColumn(open)}>
         {controller.missing && (
           <MissingMailboxPrompt
             key={`${controller.missing.role}-${String(controller.missing.items.length)}`}
@@ -313,10 +314,17 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
-            layout.onSelectionChange(next);
-            // A request to focus belongs to the message it was made for.
+            const focusPane = layout.onSelectionChange(next);
+            // A request to focus belongs to the message it was made for. In place of the list the
+            // next message after an action gets one (the hidden list cannot keep the focus).
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
-            setFocusRequest((request) => (request && request.messageId === only ? request : null));
+            setFocusRequest((request) =>
+              request && request.messageId === only
+                ? request
+                : focusPane && only !== undefined
+                  ? { messageId: only, seq: (request?.seq ?? 0) + 1 }
+                  : null,
+            );
           }}
           onOpen={(id) => {
             // Stage 5: a draft opens in the composer (also one written by another program).

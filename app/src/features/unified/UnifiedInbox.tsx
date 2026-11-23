@@ -72,7 +72,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
 
   return (
     <div className={layout.container} data-testid="unified-inbox" data-reading-pane={layout.position}>
-      <div className={layout.listColumn(open)} hidden={layout.listHidden(open)}>
+      <div {...layout.listColumn(open)}>
         <MessageList
           source={source}
           folderName={name}
@@ -81,9 +81,15 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
-            layout.onSelectionChange(next);
+            const focusPane = layout.onSelectionChange(next);
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
-            setFocusRequest((request) => (request && request.messageId === only ? request : null));
+            setFocusRequest((request) =>
+              request && request.messageId === only
+                ? request
+                : focusPane && only !== undefined
+                  ? { messageId: only, seq: (request?.seq ?? 0) + 1 }
+                  : null,
+            );
           }}
           onOpen={(id: MessageId) => {
             layout.onOpen();

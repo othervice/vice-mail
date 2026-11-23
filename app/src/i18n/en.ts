@@ -1306,6 +1306,8 @@ export const en = {
       problems: {
         system: "{{shortcut}} belongs to the system or to text editing and cannot be assigned.",
         fixed: "{{shortcut}} is used for moving around in the app and cannot be assigned.",
+        app: "{{shortcut}} is used elsewhere in the app (printing, sending) and cannot be assigned.",
+        resetConflict: "{{label}} cannot go back to standard: {{shortcut}} is assigned to “{{other}}” now. Remove it there first.",
         conflict: "{{shortcut}} is already assigned to “{{other}}”. Remove it there first.",
         duplicate: "{{shortcut}} is already assigned to {{label}}.",
         alt: "Option and Alt combinations type characters on many keyboards and cannot be used.",

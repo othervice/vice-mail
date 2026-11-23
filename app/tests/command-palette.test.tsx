@@ -381,6 +381,39 @@ describe("command palette", () => {
     expect(drafts?.getAttribute("aria-keyshortcuts")).toBe("Meta+6");
   });
 
+  it("keeps keys inside the palette and the overview: nothing acts on the view behind them", async () => {
+    const account = makeAccount({ writesEnabled: true });
+    const items = makeMessages(3);
+    const core = mockCore({
+      accounts: [account],
+      mailboxes: [...standardMailboxes(), makeMailbox({ id: 7, path: "Archive", role: "archive", roleSource: "server" })],
+      messages: { 1: items },
+      views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
+      readingPreferences: { markReadOnOpen: "never" },
+    });
+    const { user } = renderApp();
+    const list = await screen.findByRole("listbox", { name: /^Messages in/ });
+    list.focus();
+    await user.keyboard("?");
+    await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    await user.keyboard("e#/");
+    expect(core.callsOf("apply_action")).toEqual([]);
+    expect(useSearchStore.getState().open).toBe(false);
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(list);
+
+    await openPalette(user);
+    await user.keyboard("{Meta>}5{/Meta}{Meta>}f{/Meta}");
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "inbox" });
+    expect(useSearchStore.getState().open).toBe(false);
+    expect(document.activeElement).toBe(field());
+    // An input method's Enter (keyCode 229) does not run the active entry.
+    act(() => {
+      field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true }));
+    });
+    expect(palette()).toBeTruthy();
+  });
+
   it("shows the shortcut overview with ? and from the palette", async () => {
     mockCore();
     const { user } = renderApp();

@@ -3,6 +3,7 @@ import type { Shortcut, ShortcutPlatform } from "../features/actions/shortcuts";
 import {
   boundShortcutsFrom,
   checkShortcut,
+  defaultShortcuts,
   parseOverrides,
   sameShortcut,
   type CommandId,
@@ -21,7 +22,8 @@ interface ShortcutState {
   /** Adds a shortcut, unless it is taken: then nothing changes and the problem comes back. */
   addShortcut: (platform: ShortcutPlatform, id: CommandId, shortcut: Shortcut) => ShortcutProblem | null;
   removeShortcut: (platform: ShortcutPlatform, id: CommandId, shortcut: Shortcut) => void;
-  resetCommand: (platform: ShortcutPlatform, id: CommandId) => void;
+  /** Back to the standard, unless another command has one of its keys now (the problem comes back). */
+  resetCommand: (platform: ShortcutPlatform, id: CommandId) => ShortcutProblem | null;
   resetAll: (platform: ShortcutPlatform) => void;
 }
 
@@ -61,7 +63,13 @@ export const useShortcutStore = create<ShortcutState>()((set, get) => {
     resetCommand: (platform, id) => {
       const next = { ...get().overrides[platform] };
       delete next[id];
+      // Another command may have taken one of the standard keys meanwhile.
+      for (const shortcut of defaultShortcuts(id, platform)) {
+        const problem = checkShortcut(id, shortcut, platform, { ...next, [id]: [] });
+        if (problem?.kind === "conflict") return problem;
+      }
       change(platform, next);
+      return null;
     },
     resetAll: (platform) => {
       change(platform, {});

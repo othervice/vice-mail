@@ -1309,6 +1309,8 @@ export const de: Translation = {
       problems: {
         system: "{{shortcut}} gehört dem System oder der Textbearbeitung und lässt sich nicht belegen.",
         fixed: "{{shortcut}} dient zum Bewegen in der App und lässt sich nicht belegen.",
+        app: "{{shortcut}} wird schon anderswo in der App benutzt (Drucken, Senden) und lässt sich nicht belegen.",
+        resetConflict: "{{label}} lässt sich nicht zurücksetzen: {{shortcut}} ist jetzt „{{other}}“ zugewiesen. Entferne es dort zuerst.",
         conflict: "{{shortcut}} ist schon „{{other}}“ zugewiesen. Entferne es dort zuerst.",
         duplicate: "{{shortcut}} ist {{label}} schon zugewiesen.",
         alt: "Kombinationen mit Wahl- oder Alt-Taste erzeugen auf vielen Tastaturen Zeichen und gehen nicht.",

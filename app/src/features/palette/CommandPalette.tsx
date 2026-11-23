@@ -72,6 +72,9 @@ function PalettePanel({ platform }: CommandPaletteProps) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Enter that confirms an input method's text (Japanese, Chinese) is not a choice. WebKit
+    // reports that Enter only as keyCode 229.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     const last = flat.length - 1;
     const moves: Record<string, number> = {
       ArrowDown: current >= last ? 0 : current + 1,
@@ -119,6 +122,14 @@ function PalettePanel({ platform }: CommandPaletteProps) {
       aria-modal="true"
       aria-label={t("palette.title")}
       data-testid="command-palette"
+      // Keys stay in the palette: Cmd+F or Cmd+1 from its field must not act on the view behind it.
+      onKeyDown={(event) => {
+        event.stopPropagation();
+      }}
+      // A click outside the field keeps the focus in it, so typing and Escape still work.
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget.querySelector("input")) event.preventDefault();
+      }}
       className="fixed top-16 left-1/2 z-50 flex max-h-[calc(100%-6rem)] w-(--ui-palette-width) max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-panel border border-border bg-surface-raised shadow-floating"
     >
       <input

@@ -9,7 +9,15 @@ import { Tooltip } from "../../components/Tooltip";
 import { useBoundShortcuts, useShortcutStore } from "../../stores/shortcuts";
 import { ariaShortcut, formatShortcut, shortcutPlatform, type Shortcut, type ShortcutPlatform } from "../actions/shortcuts";
 import { useAppInfo } from "../app-info/queries";
-import { COMMAND_IDS, isActionId, shortcutFromEvent, type CommandId, type ShortcutProblem } from "./bindings";
+import {
+  COMMAND_IDS,
+  defaultShortcuts,
+  isActionId,
+  sameShortcut,
+  shortcutFromEvent,
+  type CommandId,
+  type ShortcutProblem,
+} from "./bindings";
 import { useCommandLabel } from "./labels";
 
 type Status = { tone: "ok" | "problem"; text: string } | null;
@@ -31,7 +39,8 @@ interface RowProps {
 function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
   const { t } = useTranslation();
   const label = useCommandLabel()(id);
-  const shortcuts = useBoundShortcuts(platform)(id);
+  const shortcutsOfAll = useBoundShortcuts(platform);
+  const shortcuts = shortcutsOfAll(id);
   const changed = useShortcutStore((state) => state.overrides[platform][id] !== undefined);
   const addShortcut = useShortcutStore((state) => state.addShortcut);
   const removeShortcut = useShortcutStore((state) => state.removeShortcut);
@@ -58,9 +67,11 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
   };
 
   const onRecordKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    // Every key belongs to the recorder now; nothing else may act on it.
-    event.preventDefault();
     event.stopPropagation();
+    // Tab and Shift+Tab leave the recorder (the blur ends the recording): they are fixed anyway.
+    if (event.key === "Tab" && !event.metaKey && !event.ctrlKey && !event.altKey) return;
+    // Every other key belongs to the recorder now; nothing else may act on it.
+    event.preventDefault();
     if (event.key === "Escape" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
       onRecord(null);
       onStatus(null);
@@ -148,7 +159,21 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
             type="button"
             aria-label={t("keyboard.settings.reset", { label })}
             onClick={() => {
-              resetCommand(platform, id);
+              const problem = resetCommand(platform, id);
+              if (problem?.kind === "conflict") {
+                const taken = defaultShortcuts(id, platform).find((shortcut) =>
+                  shortcutsOfAll(problem.other).some((other) => sameShortcut(other, shortcut)),
+                );
+                onStatus({
+                  tone: "problem",
+                  text: t("keyboard.settings.problems.resetConflict", {
+                    label,
+                    other: labelOf(problem.other),
+                    shortcut: taken ? formatShortcut(taken, platform) : "",
+                  }),
+                });
+                return;
+              }
               onStatus({ tone: "ok", text: t("keyboard.settings.resetDone", { label }) });
             }}
             className="flex h-7 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary"

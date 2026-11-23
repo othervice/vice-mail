@@ -87,6 +87,65 @@ describe("layouts", () => {
     expect(cursorRow(back)).toBe(cursor);
   });
 
+  it("in place of the list: resting on a message does not mark it read, an action moves on with the focus", async () => {
+    const items = makeMessages(4).map((item) => ({ ...item, unread: true }));
+    const core = mockCore({
+      accounts: [makeAccount({ writesEnabled: true })],
+      mailboxes: [...standardMailboxes(), makeMailbox({ id: 7, path: "Archive", role: "archive", roleSource: "server" })],
+      messages: { 1: items },
+      views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
+      readingPreferences: { markReadOnOpen: "immediately" },
+    });
+    const { user } = renderApp();
+    await chooseInAppearance(user, "Reading pane", "Instead of the list");
+    const list = await screen.findByRole("listbox", { name: /^Messages in/ });
+    list.focus();
+    await user.keyboard("j");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(core.callsOf("apply_action")).toEqual([]);
+
+    await user.keyboard("{Enter}");
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(core.callsOf("apply_action")).toHaveLength(1);
+    });
+    expect(core.callsOf("apply_action")[0]).toMatchObject({ action: { type: "markRead" }, messages: [{ messageId: items[1]?.id }] });
+    await waitFor(() => {
+      expect(pane.contains(document.activeElement)).toBe(true);
+    });
+
+    await user.keyboard("e");
+    await waitFor(() => {
+      expect(core.callsOf("apply_action").some((call) => (call["action"] as { type: string }).type === "archive")).toBe(true);
+    });
+    // The next message takes the place, with the focus; the list stays hidden.
+    await waitFor(() => {
+      const next = screen.getByRole("region", { name: "Message" });
+      expect(next.textContent).toContain(items[2]?.subject ?? "");
+      expect(next.contains(document.activeElement)).toBe(true);
+    });
+    expect(screen.queryByRole("listbox", { name: /^Messages in/ })).toBeNull();
+  });
+
+  it("forgets an opened message when the position changes", async () => {
+    const { user } = setup();
+    await chooseInAppearance(user, "Reading pane", "Instead of the list");
+    const list = await screen.findByRole("listbox", { name: /^Messages in/ });
+    list.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("region", { name: "Message" });
+    act(() => {
+      useLayoutStore.getState().setLayout({ readingPane: "right" });
+    });
+    act(() => {
+      useLayoutStore.getState().setLayout({ readingPane: "replace" });
+    });
+    expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
+    expect(screen.getByRole("listbox", { name: /^Messages in/ })).toBeTruthy();
+  });
+
   it("switches to compact rows at once and keeps them", async () => {
     const { user } = setup();
     expect(document.documentElement.dataset["density"]).not.toBe("compact");

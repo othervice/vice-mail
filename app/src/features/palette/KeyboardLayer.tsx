@@ -23,6 +23,8 @@ export function KeyboardLayer() {
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat) return;
+    // Not from inside a dialog or picker (the confirmation dialog makes the rest inert).
+    if (event.target instanceof Element && event.target.closest('[role="dialog"], [role="alertdialog"]')) return;
     const palette = boundShortcuts("palette", platform).find((s) => matchesShortcut(event, s, platform));
     if (palette && (palette.mod || !isEditableTarget(event.target))) {
       event.preventDefault();

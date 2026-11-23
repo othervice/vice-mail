@@ -202,17 +202,52 @@ describe("changeable shortcuts", () => {
     expect(option?.getAttribute("aria-keyshortcuts")).toBe("Y");
   });
 
+  it("Tab and Shift+Tab leave the recorder; Shift with the moving keys is not assignable", async () => {
+    setup();
+    const { user } = renderApp();
+    await openKeyboardSettings();
+    await record(user, "Archive", "{Shift>}{ArrowDown}{/Shift}");
+    expect(screen.getByTestId("shortcut-status").textContent).toBe(
+      "⇧↓ is used for moving around in the app and cannot be assigned.",
+    );
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(screen.queryByTestId("shortcut-recorder")).toBeNull();
+    expect(chips("archive")).toEqual(["E"]);
+    await record(user, "Archive", "{Tab}");
+    expect(screen.queryByTestId("shortcut-recorder")).toBeNull();
+    expect(chips("archive")).toEqual(["E"]);
+  });
+
+  it("does not reset a command whose standard key another command has now", async () => {
+    setup();
+    const { user } = renderApp();
+    await openKeyboardSettings();
+    await user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
+    await record(user, "Reply", "e");
+    await user.click(screen.getByRole("button", { name: "Reset Archive" }));
+    expect(screen.getByTestId("shortcut-status").textContent).toBe(
+      "Archive cannot go back to standard: E is assigned to “Reply” now. Remove it there first.",
+    );
+    expect(chips("archive")).toEqual([]);
+    expect(chips("reply")).toEqual(["R", "E"]);
+  });
+
   it("changes the palette shortcut itself, which works at once", async () => {
     mockCore();
     const { user } = renderApp();
     await openKeyboardSettings();
+    // Cmd+P prints (outside the directory), so it is taken.
     await record(user, "Command palette", "{Meta>}p{/Meta}");
-    expect(chips("palette")).toEqual(["⌘K", "⌘P"]);
+    expect(screen.getByTestId("shortcut-status").textContent).toBe(
+      "⌘P is used elsewhere in the app (printing, sending) and cannot be assigned.",
+    );
+    await user.keyboard("{Meta>}j{/Meta}");
+    expect(chips("palette")).toEqual(["⌘K", "⌘J"]);
     await user.click(screen.getByRole("button", { name: "Remove ⌘K from Command palette" }));
     screen.getByRole("button", { name: "Add shortcut for Archive" }).focus();
     await user.keyboard("{Meta>}k{/Meta}");
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
-    await user.keyboard("{Meta>}p{/Meta}");
+    await user.keyboard("{Meta>}j{/Meta}");
     expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeTruthy();
   });
 });

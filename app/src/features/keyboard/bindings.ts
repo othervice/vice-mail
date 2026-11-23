@@ -86,21 +86,19 @@ const withMod = (key: string): Shortcut => ({ key, mod: true });
  * Keys the app uses for moving around and that cannot be reassigned: the list (arrows, j/k,
  * Home/End, Page Up/Down), opening and closing (Enter, Escape), Tab for the focus order.
  */
+const MOVING_KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"];
+
 export const FIXED_KEYS: readonly Shortcut[] = [
-  "Enter",
-  "Escape",
-  "Tab",
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "Home",
-  "End",
-  "PageUp",
-  "PageDown",
-  "j",
-  "k",
-].map(plain);
+  ...[...MOVING_KEYS, "j", "k"].map(plain),
+  // With Shift they extend the selection (list) or go backwards (Tab).
+  ...MOVING_KEYS.map((key): Shortcut => ({ key, shift: true })),
+];
+
+/**
+ * Shortcuts of the app outside the directory: printing (features/extras, Cmd/Ctrl+P) and sending
+ * in the composer (Cmd/Ctrl+Enter). Not changeable, so not assignable either.
+ */
+const APP_KEYS: readonly Shortcut[] = [withMod("p"), withMod("Enter")];
 
 /**
  * What the operating system or every text field claims (docs/stages/08: no shortcuts the
@@ -117,6 +115,8 @@ export type ShortcutProblem =
   | { kind: "system" }
   /** One of the fixed keys for moving around. */
   | { kind: "fixed" }
+  /** Used by the app outside the directory (printing, sending). */
+  | { kind: "app" }
   /** Another command has it already. */
   | { kind: "conflict"; other: CommandId }
   /** This command has it already. */
@@ -131,6 +131,7 @@ export function checkShortcut(
 ): ShortcutProblem | null {
   if (SYSTEM_KEYS[platform].some((taken) => sameShortcut(taken, shortcut))) return { kind: "system" };
   if (FIXED_KEYS.some((taken) => sameShortcut(taken, shortcut))) return { kind: "fixed" };
+  if (APP_KEYS.some((taken) => sameShortcut(taken, shortcut))) return { kind: "app" };
   if (boundShortcutsFrom(overrides, id, platform).some((own) => sameShortcut(own, shortcut))) return { kind: "duplicate" };
   for (const other of COMMAND_IDS) {
     if (other === id || mayShareKeys(id, other)) continue;

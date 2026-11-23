@@ -85,10 +85,13 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
       aria-modal="true"
       aria-labelledby={titleId}
       data-testid="shortcut-overview"
+      // A click on the panel's background keeps the focus inside, so Escape still reaches it.
+      tabIndex={-1}
       onKeyDown={(event) => {
+        // A modal dialog: no key reaches the shortcuts of the view behind it ("e" must not archive).
+        event.stopPropagation();
         if (event.key === "Escape") {
           event.preventDefault();
-          event.stopPropagation();
           close();
           return;
         }
