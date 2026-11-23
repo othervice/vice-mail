@@ -154,6 +154,8 @@ pub(crate) struct Env<C> {
     pub config: Arc<SyncConfig>,
     pub events: broadcast::Sender<CoreEvent>,
     pub on_connected: OnConnected,
+    /// Stage 9: told after each stored new-mail window outside the first sync.
+    pub on_arrival: crate::comfort::OnArrival,
 }
 
 impl<C> Clone for Env<C> {
@@ -166,6 +168,7 @@ impl<C> Clone for Env<C> {
             config: Arc::clone(&self.config),
             events: self.events.clone(),
             on_connected: Arc::clone(&self.on_connected),
+            on_arrival: Arc::clone(&self.on_arrival),
         }
     }
 }

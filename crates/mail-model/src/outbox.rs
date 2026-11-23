@@ -114,10 +114,17 @@ pub enum ActionKind {
     CreateMailbox,
     /// Counter-operations of an undone batch.
     Undo,
+    /// Stage 5: sending a message, and what follows its acceptance (the copy in Sent, the
+    /// draft's copy removed, `\Answered` on the original).
+    Send,
+    /// Stage 5: a new version of a draft in the Drafts folder (the old one removed).
+    SaveDraft,
+    /// Stage 5: the server copy of a discarded draft removed.
+    DeleteDraft,
 }
 
 impl ActionKind {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 17] = [
         Self::MarkRead,
         Self::MarkUnread,
         Self::Flag,
@@ -132,6 +139,9 @@ impl ActionKind {
         Self::NotSpam,
         Self::CreateMailbox,
         Self::Undo,
+        Self::Send,
+        Self::SaveDraft,
+        Self::DeleteDraft,
     ];
 
     /// Text in the database, same as on the wire.
@@ -151,6 +161,9 @@ impl ActionKind {
             Self::NotSpam => "not_spam",
             Self::CreateMailbox => "create_mailbox",
             Self::Undo => "undo",
+            Self::Send => "send",
+            Self::SaveDraft => "save_draft",
+            Self::DeleteDraft => "delete_draft",
         }
     }
 
@@ -332,6 +345,12 @@ pub enum OperationKind {
     Move,
     Expunge,
     CreateMailbox,
+    /// Stage 5: SMTP submission of a message (decision 0018).
+    Send,
+    /// Stage 5: APPEND of a draft version or of the copy of a sent message.
+    Append,
+    /// Stage 5: removal of an own copy (an old draft version), checked by Message-ID.
+    RemoveCopy,
 }
 
 impl OperationKind {
@@ -341,6 +360,9 @@ impl OperationKind {
             Self::Move => "move",
             Self::Expunge => "expunge",
             Self::CreateMailbox => "create_mailbox",
+            Self::Send => "send",
+            Self::Append => "append",
+            Self::RemoveCopy => "remove_copy",
         }
     }
 }
@@ -391,17 +413,23 @@ pub enum OperationNotice {
     /// so a plain EXPUNGE would have removed them too. The message was copied but its original
     /// stays in the source, marked deleted, until the mailbox is expunged.
     LeftMarkedDeleted,
+    /// Stage 5: the message was sent, but no copy went into Sent: the account has no Sent
+    /// folder (the user can choose one with `setMailboxRole`).
+    NoSentCopy,
 }
 
 impl OperationNotice {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::LeftMarkedDeleted => "left_marked_deleted",
+            Self::NoSentCopy => "no_sent_copy",
         }
     }
 
     pub fn parse(s: &str) -> Option<Self> {
-        (s == Self::LeftMarkedDeleted.as_str()).then_some(Self::LeftMarkedDeleted)
+        [Self::LeftMarkedDeleted, Self::NoSentCopy]
+            .into_iter()
+            .find(|notice| notice.as_str() == s)
     }
 }
 
@@ -585,6 +613,46 @@ pub enum OperationPayload {
         path: String,
         role: Option<MailboxRole>,
     },
+    /// Stage 5: submit a message over SMTP (decision 0018). Never repeated after an unclear
+    /// outcome without the user's decision.
+    Send(crate::SendJob),
+    /// Stage 5: APPEND a message to `target`. `mark` (the target's UIDNEXT right before) and,
+    /// for drafts, `replace` (the previous version, removed afterwards) are recorded when the
+    /// command is about to be sent; a check after a crash finds this operation's copy by its
+    /// Message-ID at or above the mark.
+    Append {
+        target: TargetMailbox,
+        source: AppendSource,
+        message_id_header: String,
+        /// `\Draft` (draft versions). Every copy is `\Seen`.
+        draft_flag: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mark: Option<TargetMark>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replace: Option<crate::ServerCopy>,
+    },
+    /// Stage 5: remove an own copy (a draft's version), only if the UID still holds its
+    /// Message-ID.
+    RemoveCopy { copy: crate::ServerCopy },
+}
+
+/// What an [`OperationPayload::Append`] appends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "from",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum AppendSource {
+    /// The newest version of a draft, built when the command is about to be sent (`revision`
+    /// is recorded then).
+    Draft {
+        draft: crate::DraftId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        revision: Option<i64>,
+    },
+    /// Frozen bytes (the Sent copy of a sent message), relative to the compose directory.
+    File { file: String },
 }
 
 impl OperationPayload {
@@ -594,6 +662,9 @@ impl OperationPayload {
             Self::Move { .. } => OperationKind::Move,
             Self::Expunge { .. } => OperationKind::Expunge,
             Self::CreateMailbox { .. } => OperationKind::CreateMailbox,
+            Self::Send(_) => OperationKind::Send,
+            Self::Append { .. } => OperationKind::Append,
+            Self::RemoveCopy { .. } => OperationKind::RemoveCopy,
         }
     }
 
@@ -602,13 +673,30 @@ impl OperationPayload {
             Self::SetFlag { source, .. } | Self::Move { source, .. } | Self::Expunge { source } => {
                 Some(source)
             }
-            Self::CreateMailbox { .. } => None,
+            Self::CreateMailbox { .. }
+            | Self::Send(_)
+            | Self::Append { .. }
+            | Self::RemoveCopy { .. } => None,
         }
     }
 
+    /// The mailbox a move, an append or a removal of a copy changes on the server.
     pub fn target(&self) -> Option<&TargetMailbox> {
         match self {
-            Self::Move { target, .. } => Some(target),
+            Self::Move { target, .. } | Self::Append { target, .. } => Some(target),
+            Self::RemoveCopy { copy } => Some(&copy.mailbox),
+            _ => None,
+        }
+    }
+
+    /// The draft a stage 5 operation belongs to.
+    pub fn draft(&self) -> Option<&crate::DraftId> {
+        match self {
+            Self::Send(job) => Some(&job.draft),
+            Self::Append {
+                source: AppendSource::Draft { draft, .. },
+                ..
+            } => Some(draft),
             _ => None,
         }
     }

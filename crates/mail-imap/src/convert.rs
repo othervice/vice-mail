@@ -18,12 +18,79 @@ use mail_parser::{DateTime, HeaderForm, MessageParser};
 pub(crate) const HEADER_FIELDS: &str =
     "MESSAGE-ID REFERENCES IN-REPLY-TO LIST-ID LIST-UNSUBSCRIBE AUTO-SUBMITTED PRECEDENCE";
 
-/// FETCH items of [`mail_model::MailBackend::fetch_headers`] (without MODSEQ).
+/// Stage 9: the fields the category rules read (`mail_content::CLASSIFY_HEADER_FIELDS`,
+/// decision 0016; a test keeps both lists equal) and `List-Unsubscribe-Post` (RFC 8058). The
+/// raw block goes to [`MessageHeader::category_headers`].
+pub(crate) const CATEGORY_FIELDS: &[&str] = &[
+    "From",
+    "Sender",
+    "Reply-To",
+    "Subject",
+    "Return-Path",
+    "Content-Type",
+    "List-Id",
+    "List-Unsubscribe",
+    "List-Post",
+    "Auto-Submitted",
+    "Precedence",
+    "X-Autoreply",
+    "X-Autorespond",
+    "X-Mailer",
+    "Feedback-ID",
+    "X-CSA-Complaints",
+    "X-Report-Abuse",
+    "X-Campaign",
+    "X-CampaignID",
+    "X-Campaign-Id",
+    "X-Newsletter",
+    "X-MC-User",
+    "X-Mailjet-Campaign",
+    "X-Mailin-Campaign",
+    "X-SES-Outgoing",
+    "X-SG-EID",
+    "X-Mailgun-Sid",
+    "X-PM-Message-Id",
+    "X-Mandrill-User",
+    "X-MSFBL",
+    "X-MJ-Mid",
+    "X-SFMC-Stack",
+    "X-GitHub-Reason",
+    "X-GitLab-Project",
+    "X-GitLab-NotificationReason",
+    "X-Gitea-Reason",
+    "X-Forgejo-Reason",
+    "X-JIRA-FingerPrint",
+    "X-Bugzilla-Reason",
+    "X-Redmine-Project",
+    "X-Phabricator-Sent-This-Message",
+    "X-Gerrit-MessageType",
+    "X-Jenkins-Job",
+    "X-Discourse-Post-Id",
+    "X-Launchpad-Notification-Type",
+    "X-Facebook-Notify",
+    "List-Unsubscribe-Post",
+];
+
+/// FETCH items of [`mail_model::MailBackend::fetch_headers`] (without MODSEQ): one
+/// `HEADER.FIELDS` block with the stage 2 fields and the category fields.
 pub(crate) fn header_items() -> String {
+    let mut fields = HEADER_FIELDS.to_owned();
+    for field in CATEGORY_FIELDS {
+        if !HEADER_FIELDS
+            .split(' ')
+            .any(|f| f.eq_ignore_ascii_case(field))
+        {
+            fields.push(' ');
+            fields.push_str(&field.to_ascii_uppercase());
+        }
+    }
     format!(
-        "UID FLAGS RFC822.SIZE INTERNALDATE ENVELOPE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS ({HEADER_FIELDS})]"
+        "UID FLAGS RFC822.SIZE INTERNALDATE ENVELOPE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS ({fields})]"
     )
 }
+
+/// Longest raw header block kept for the category rules; a larger one is cut at a line end.
+const MAX_CATEGORY_BLOCK: usize = 16 * 1024;
 
 // ---------------------------------------------------------------------------------------------
 // FETCH: header data
@@ -40,6 +107,8 @@ struct Partial {
     envelope: Option<EnvelopeData>,
     has_attachments: Option<bool>,
     fields: Option<HeaderFields>,
+    /// The raw `HEADER.FIELDS` block (stage 9).
+    raw_fields: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Default)]
@@ -118,7 +187,11 @@ impl<'a> HeaderCollector<'a> {
                     section: Some(SectionPath::Full(MessageSection::Header)),
                     data,
                     ..
-                } => partial.fields = Some(header_fields(data.as_deref().unwrap_or_default())),
+                } => {
+                    let block = data.as_deref().unwrap_or_default();
+                    partial.fields = Some(header_fields(block));
+                    partial.raw_fields = Some(category_block(block));
+                }
                 _ => {}
             }
         }
@@ -155,6 +228,7 @@ impl<'a> HeaderCollector<'a> {
                 auto_submitted: fields.auto_submitted,
                 precedence: fields.precedence,
                 has_attachments: p.has_attachments.unwrap_or(false),
+                category_headers: p.raw_fields.unwrap_or_default(),
             });
         }
         (out, flags_only)
@@ -306,6 +380,16 @@ fn addresses(list: Option<&[imap_proto::Address<'_>]>) -> Vec<Address> {
             (!email.is_empty() || name.is_some()).then_some(Address { name, email })
         })
         .collect()
+}
+
+/// The block as fetched, at most [`MAX_CATEGORY_BLOCK`] bytes (cut after a line end).
+fn category_block(block: &[u8]) -> Vec<u8> {
+    if block.len() <= MAX_CATEGORY_BLOCK {
+        return block.to_vec();
+    }
+    let head = block.get(..MAX_CATEGORY_BLOCK).unwrap_or_default();
+    let end = head.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+    head.get(..end).unwrap_or_default().to_vec()
 }
 
 static FIELD_PARSER: LazyLock<MessageParser> = LazyLock::new(MessageParser::new);
@@ -508,6 +592,29 @@ mod tests {
             Ok(([], resp)) => resp,
             other => panic!("test response does not parse: {other:?}"),
         }
+    }
+
+    #[test]
+    fn category_fields_are_the_classifier_s() {
+        // Every field the category rules read is fetched, and nothing else besides
+        // `List-Unsubscribe-Post` (decision 0016).
+        let ours: Vec<&str> = CATEGORY_FIELDS
+            .iter()
+            .copied()
+            .filter(|f| *f != "List-Unsubscribe-Post")
+            .collect();
+        assert_eq!(ours, mail_content::CLASSIFY_HEADER_FIELDS);
+        let items = header_items();
+        for field in CATEGORY_FIELDS {
+            assert!(
+                items.contains(&format!(" {}", field.to_ascii_uppercase())),
+                "{field} is fetched"
+            );
+        }
+        assert_eq!(items.matches("LIST-ID").count(), 1, "no field twice");
+        let long = [&b"X-Mailer: a\r\n"[..]; 2_000].concat();
+        let cut = category_block(&long);
+        assert!(cut.len() <= MAX_CATEGORY_BLOCK && cut.ends_with(b"\n"));
     }
 
     #[test]

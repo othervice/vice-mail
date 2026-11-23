@@ -42,7 +42,7 @@ pub(crate) struct Plan {
     pub(crate) filter: SearchFilter,
     pub(crate) problems: Vec<SearchProblem>,
     pub(crate) chips: Vec<SearchTermInfo>,
-    /// Nothing can match: a contradiction, an unknown account or mailbox, `is:snoozed`.
+    /// Nothing can match: a contradiction, an unknown account or mailbox.
     pub(crate) matches_nothing: bool,
     /// No condition at all (empty input).
     pub(crate) empty: bool,
@@ -217,10 +217,6 @@ pub(crate) async fn plan(
             mailbox_sets.push(named);
         }
     }
-    // Nothing is snoozed before stage 9.
-    if compiled.snoozed == Some(true) {
-        matches_nothing = true;
-    }
     if allowed.is_empty() {
         matches_nothing = true;
     }
@@ -238,6 +234,7 @@ pub(crate) async fn plan(
         has_attachment: compiled.has_attachment,
         only: None,
         without_complete_body: false,
+        snoozed: compiled.snoozed,
     };
     let empty = compiled.is_unrestricted();
     Ok(Plan {

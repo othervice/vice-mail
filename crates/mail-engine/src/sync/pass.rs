@@ -244,6 +244,10 @@ async fn sync_mailbox<B: MailBackend>(
             unread = unread.saturating_add(count_unread(&headers));
             store.store_headers(id, uv, headers, None).await?;
             reporter.messages_changed(id);
+            if !first_sync {
+                // Stage 9: local rules and notifications for this window.
+                reporter.arrived(id, window);
+            }
             rest = more;
         }
         store.set_uid_next(id, uv, selected.uid_next).await?;

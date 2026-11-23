@@ -14,6 +14,10 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0004_operation.sql")),
     // Stage 7: full-text index, threads, account groups, hidden accounts (decision 0013).
     M::up(include_str!("../migrations/0005_search_threads.sql")),
+    // Stage 5: drafts, sends in the outbox, contacts, signatures (decision 0018).
+    M::up(include_str!("../migrations/0006_compose.sql")),
+    // Stage 9: categories, sender rules, snoozes, pins, tasks, local rules (decision 0020).
+    M::up(include_str!("../migrations/0007_inbox.sql")),
 ];
 
 /// All migrations this build knows.

@@ -212,6 +212,20 @@ impl Tally {
     }
 }
 
+impl BundleState {
+    /// Forgets the bundles of every date section but `section` (stage 9). Sections are
+    /// contiguous in the list, so once a page ends in `section`, earlier sections can get no
+    /// more members; this keeps the state that travels with a cursor small.
+    pub fn keep_section(&mut self, section: i64) {
+        self.tallies.retain(|t| t.key.section == section);
+    }
+
+    /// No bundle is open.
+    pub fn is_empty(&self) -> bool {
+        self.tallies.is_empty()
+    }
+}
+
 /// Bundles one page of a list (newest first); `state` comes from the previous page (default for
 /// the first) and is updated for the next one.
 pub fn bundle_page<T: BundleItem>(

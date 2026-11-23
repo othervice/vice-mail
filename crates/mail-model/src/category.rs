@@ -166,6 +166,29 @@ pub enum CategoryReason {
     NewsletterAddress { address: String, pattern: String },
     /// Nothing points to a program or a list.
     NoBulkSignals,
+    /// Stage 9: a local rule set the category of this message (its name at the time).
+    LocalRule { rule_name: String },
+}
+
+impl MessageCategory {
+    /// Stage 9: the number stored in `message.category` (0 person, 1 notification,
+    /// 2 newsletter).
+    pub const fn code(self) -> i64 {
+        match self {
+            Self::Person => 0,
+            Self::Notification => 1,
+            Self::Newsletter => 2,
+        }
+    }
+
+    pub const fn from_code(code: i64) -> Option<Self> {
+        match code {
+            0 => Some(Self::Person),
+            1 => Some(Self::Notification),
+            2 => Some(Self::Newsletter),
+            _ => None,
+        }
+    }
 }
 
 /// The category of a message, why, and whether it belongs to the "Priority" block.

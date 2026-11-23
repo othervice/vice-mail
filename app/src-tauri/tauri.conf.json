@@ -54,7 +54,8 @@
           "English",
           "German"
         ],
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "./windows/installer-hooks.nsh"
       }
     },
     "macOS": {

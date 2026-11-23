@@ -49,6 +49,8 @@ pub(crate) struct Reporter {
     account: AccountId,
     events: broadcast::Sender<CoreEvent>,
     session: mpsc::UnboundedSender<SessionEvent>,
+    /// Stage 9: new-mail windows for local rules and notifications.
+    arrival: crate::comfort::ArrivalHook,
 }
 
 impl Reporter {
@@ -86,6 +88,15 @@ impl Reporter {
                 count,
             },
         );
+    }
+
+    /// Stage 9: a new-mail window of `mailbox` (outside the first sync) was stored.
+    pub(crate) fn arrived(&self, mailbox: MailboxId, uids: mail_model::UidSet) {
+        (self.arrival.0)(crate::comfort::Arrival {
+            account: self.account,
+            mailbox,
+            uids,
+        });
     }
 
     pub(crate) fn progress(&self, progress: SyncProgress) {
@@ -180,6 +191,7 @@ impl Session {
             account,
             events: env.events.clone(),
             session: events_tx,
+            arrival: crate::comfort::ArrivalHook(Arc::clone(&env.on_arrival)),
         };
         let (passes_tx, passes_rx) = mpsc::unbounded_channel();
         let (shutdown, shutdown_rx) = watch::channel(false);

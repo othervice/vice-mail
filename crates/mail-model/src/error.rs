@@ -58,13 +58,17 @@ pub enum ErrorCode {
     /// A tag contains spaces or characters IMAP does not allow in keywords.
     InvalidKeyword,
     /// The SMTP server refused the message or a recipient; nothing was delivered.
-    /// Not exported to TypeScript yet (`specta(skip)`): stage 5's UI adds its texts.
-    #[specta(skip)]
     SendRejected,
     /// The message went out, but the server's confirmation never arrived; it may have been
-    /// delivered. Not exported to TypeScript yet (`specta(skip)`): stage 5's UI adds its texts.
-    #[specta(skip)]
+    /// delivered. Never sent again without the user's decision (`resolveUnclearSend`).
     SendUnclear,
+    /// Stage 5: an address is not valid, or the message has no recipient.
+    InvalidAddress,
+    /// Stage 5: the attachments together are larger than the app allows.
+    AttachmentTooLarge,
+    /// Stage 5: the message is in the outbox (cancel sending to change it), or its submission
+    /// started and can no longer be cancelled.
+    SendInProgress,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -282,6 +286,10 @@ pub enum CoreError {
     /// A writing action was refused before anything was recorded (stage 4, outbox).
     #[error(transparent)]
     Action(#[from] crate::ActionError),
+
+    /// A compose request was refused (stage 5); nothing changed.
+    #[error(transparent)]
+    Draft(#[from] crate::DraftError),
 }
 
 impl CoreError {
@@ -296,6 +304,7 @@ impl CoreError {
             Self::Keychain(_) => ErrorCode::Keychain,
             Self::AccountExists(_) => ErrorCode::AccountExists,
             Self::Action(err) => err.code(),
+            Self::Draft(err) => err.code(),
         }
     }
 
@@ -323,6 +332,7 @@ impl CoreError {
             Self::Keychain(_) => "The password could not be stored in or read from the keychain.",
             Self::AccountExists(_) => "An account with this email address is already set up.",
             Self::Action(err) => err.message(),
+            Self::Draft(err) => err.message(),
         }
     }
 
@@ -340,6 +350,7 @@ impl CoreError {
             )),
             Self::Mail(err) => err.detail(),
             Self::Action(err) => err.detail(),
+            Self::Draft(err) => err.detail(),
         }
     }
 }
@@ -429,6 +440,9 @@ mod tests {
             (ErrorCode::InvalidKeyword, "invalid_keyword"),
             (ErrorCode::SendRejected, "send_rejected"),
             (ErrorCode::SendUnclear, "send_unclear"),
+            (ErrorCode::InvalidAddress, "invalid_address"),
+            (ErrorCode::AttachmentTooLarge, "attachment_too_large"),
+            (ErrorCode::SendInProgress, "send_in_progress"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

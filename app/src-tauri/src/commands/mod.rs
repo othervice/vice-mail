@@ -4,6 +4,8 @@
 pub mod accounts;
 pub mod actions;
 pub mod app;
+pub mod comfort;
+pub mod compose;
 pub mod groups;
 pub mod mail;
 pub mod preferences;

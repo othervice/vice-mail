@@ -53,6 +53,7 @@ fn expected() -> Vec<Expected> {
         has_attachment: Some(true),
         only: None,
         without_complete_body: false,
+        snoozed: Some(true),
     };
     let fts_only = SearchFilter {
         text: TextMatch::Match("\"rechnung\"".into()),

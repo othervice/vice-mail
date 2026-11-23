@@ -16,23 +16,36 @@
 //!   background fill and rebuild with a swap at the end, search with filters, threads kept when
 //!   messages are stored, thread lists, the unified inbox, account groups, hidden accounts and
 //!   identities.
+//! - Stage 5 (`compose_api`): drafts, sends and their follow-ups in the outbox, the contact
+//!   directory for autocomplete, identity signatures, who files sent mail (decision 0018).
+//! - Stage 9 (`comfort_api`): categories classified when messages are stored (through the
+//!   engine's [`Classifier`]) and the user's sender rules, the inbox lists without snoozed and
+//!   pinned messages and per category, snoozes, pins, tasks, local rules (decision 0020).
 
 mod accounts;
 pub mod backup;
 mod bodies;
 mod body_api;
 mod body_files;
+mod categories;
+mod comfort_api;
+mod compose;
+mod compose_api;
+mod contacts;
 mod error;
 mod fts;
 mod groups;
+mod inbox;
 mod lists;
 mod mail_api;
 mod mailboxes;
+mod marks;
 mod messages;
 mod migrations;
 mod outbox;
 mod outbox_api;
 mod reading;
+mod rules;
 mod search;
 mod search_api;
 mod settings;
@@ -43,13 +56,24 @@ mod workers;
 pub use bodies::BodyInfo;
 pub use body_api::{BODY_PACK_LIMIT, SWEEP_MIN_AGE};
 pub use body_files::SweepReport;
+pub use categories::{
+    CATEGORY_BATCH, Classified, Classifier, Effective, LocalFacts, RuleSet, SenderKeys,
+    SenderRuleChange, StoredCategory,
+};
+pub use comfort_api::{CategoryStep, InboxMailboxes};
+pub use compose_api::{
+    ContactSource, DraftContent, MAX_DRAFTS_PAGE, NewDraftRow, StoredContact, StoredDraft,
+};
+pub use contacts::MAX_SEARCH_WORDS;
 pub use error::StoreError;
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;
+pub use inbox::{ArrivedMessage, InboxListKind};
 pub use mail_api::{
     MAX_PAGE_SIZE, MailboxBaseline, MailboxListReport, MailboxSyncState, NewAccount, StoreReport,
     StoredAccount,
 };
+pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
 pub use migrations::SCHEMA_VERSION;
 pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
 pub use reading::{
@@ -67,6 +91,8 @@ mod body_bench;
 #[cfg(test)]
 mod body_tests;
 #[cfg(test)]
+mod compose_tests;
+#[cfg(test)]
 mod mail_tests;
 #[cfg(test)]
 mod outbox_tests;
@@ -76,6 +102,10 @@ mod plan_tests;
 mod stage7_plan_tests;
 #[cfg(test)]
 mod stage7_tests;
+#[cfg(test)]
+mod stage9_plan_tests;
+#[cfg(test)]
+mod stage9_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

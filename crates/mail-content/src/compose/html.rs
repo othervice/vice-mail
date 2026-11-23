@@ -116,6 +116,23 @@ pub fn mail_html(editor_html: &str) -> String {
     document(&html_blocks(editor_html))
 }
 
+/// HTML of any origin (a draft another program saved, pasted content) as editor HTML: the same
+/// allowlist as outgoing mail, without styles. Empty paragraphs are dropped as in a received
+/// mail. Safe to hand to the composer: no script, no event attribute, no external image.
+pub fn editor_html(html: &str) -> String {
+    let mut blocks = html_blocks_with(html, false);
+    trim_paragraphs(&mut blocks);
+    fragment(&blocks)
+}
+
+/// Plain text as editor HTML (paragraphs, `>` quotes, links), for a text quote shown in the
+/// rich-text composer.
+pub fn text_to_editor_html(text: &str) -> String {
+    let mut blocks = text_blocks(text);
+    trim_paragraphs(&mut blocks);
+    fragment(&blocks)
+}
+
 /// Blocks of editor HTML: empty paragraphs (empty lines the user typed) are kept, except at
 /// the start and the end.
 pub(crate) fn html_blocks(html: &str) -> Vec<Block> {

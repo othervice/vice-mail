@@ -74,6 +74,8 @@ struct Inner {
     report: OpenReport,
     /// Makes index text from stored bodies (stage 7); set by the engine after opening.
     body_text: std::sync::RwLock<Option<Arc<dyn crate::BodyTextSource>>>,
+    /// Classifies new messages (stage 9); set by the engine after opening.
+    classifier: std::sync::RwLock<Option<Arc<dyn crate::Classifier>>>,
 }
 
 /// A set of migrations and the schema version they lead to.
@@ -176,6 +178,7 @@ impl Store {
                     backup,
                 },
                 body_text: std::sync::RwLock::new(None),
+                classifier: std::sync::RwLock::new(None),
             }),
         })
     }
@@ -208,6 +211,24 @@ impl Store {
     pub(crate) fn body_text_source(&self) -> Option<Arc<dyn crate::BodyTextSource>> {
         self.inner
             .body_text
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Sets the classifier of new messages (stage 9). Without one, messages are stored
+    /// without a category and classified once one is set ([`Store::category_step`]).
+    pub fn set_classifier(&self, classifier: Arc<dyn crate::Classifier>) {
+        *self
+            .inner
+            .classifier
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(classifier);
+    }
+
+    pub(crate) fn classifier(&self) -> Option<Arc<dyn crate::Classifier>> {
+        self.inner
+            .classifier
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()

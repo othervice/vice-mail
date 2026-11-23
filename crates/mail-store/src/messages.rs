@@ -63,8 +63,10 @@ pub(crate) const INSERT_MESSAGE: &str = "
     INSERT INTO message (id, account_id, message_id_hdr, date, subject, from_name, from_addr,
                          to_addrs, cc_addrs, in_reply_to, references_hdr, list_id,
                          list_unsubscribe, auto_submitted, precedence, size, has_attachments,
-                         thread_id, subject_key)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)";
+                         thread_id, subject_key, category, category_auto, category_reason,
+                         important, sender_key, sender_domain, list_key, unsubscribe_one_click)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
+            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)";
 
 pub(crate) const INSERT_LOCATION: &str = "
     INSERT INTO message_location (mailbox_id, message_id, uid, seen, flagged, answered, draft,
@@ -94,8 +96,12 @@ pub(crate) fn store_headers(
     uid_validity: UidValidity,
     mut headers: Vec<MessageHeader>,
     sync_low_uid: Option<Uid>,
+    classifier: Option<&std::sync::Arc<dyn crate::Classifier>>,
 ) -> Result<StoreReport, StoreError> {
     let account_row = mailboxes::check_uid_validity(conn, mailbox, uid_validity)?;
+    // Stage 9: new messages are classified in this transaction (own addresses and the sender
+    // rules loaded once per window, and only when a new message needs them).
+    let mut window: Option<crate::categories::WindowClassifier> = None;
 
     // Ascending sort date, then UID: new rows get ascending ids (B-tree appends, and the FTS
     // rows of stage 7 are cheapest in rowid order), and of two mails with the same date the
@@ -129,7 +135,30 @@ pub(crate) fn store_headers(
 
         let id = ids.allocate(conn, header.sort_date())?;
         let thread = threader.assign_new(conn, account_row, id, header)?;
-        insert_message(conn, id, account_row, message_id, header, thread)?;
+        let category = match classifier {
+            Some(classifier) => {
+                if window.is_none() {
+                    window = Some(crate::categories::WindowClassifier::new(
+                        conn,
+                        std::sync::Arc::clone(classifier),
+                    )?);
+                }
+                match &window {
+                    Some(w) => Some(w.columns(conn, account_row, header)?),
+                    None => None,
+                }
+            }
+            None => None,
+        };
+        insert_message(
+            conn,
+            id,
+            account_row,
+            message_id,
+            header,
+            thread,
+            category.as_ref(),
+        )?;
         insert_location(conn, mailbox, id, header.uid, &flags, header.modseq)?;
         fts_rows.push((id, crate::fts::Row::from_header(header)));
         report.inserted += 1;
@@ -232,7 +261,7 @@ pub(crate) fn list(
 
     let before = cursor.map_or(i64::MAX, |c| c.before().0);
     // One row more than asked tells whether another page follows.
-    let mut items = conn
+    let mut items: Vec<MessageListItem> = conn
         .prepare_cached(LIST_PAGE)?
         .query_map(params![mailbox.0, before, i64::from(limit) + 1], |r| {
             let from_name: Option<String> = r.get(7)?;
@@ -263,6 +292,11 @@ pub(crate) fn list(
                     Some(2) => Some(MessageActivity::Conflict),
                     Some(_) => Some(MessageActivity::Pending),
                 },
+                category: None,
+                important: false,
+                pinned: false,
+                snooze: None,
+                task: None,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -274,6 +308,8 @@ pub(crate) fn list(
     } else {
         None
     };
+    // Stage 9: category, important mark, pin, snooze and task of each row.
+    crate::marks::decorate(conn, &mut items)?;
     Ok(MessagePage { items, next_cursor })
 }
 
@@ -443,9 +479,14 @@ fn insert_message(
     message_id: Option<&str>,
     h: &MessageHeader,
     (thread, subject_key): (i64, Option<String>),
+    category: Option<&crate::categories::CategoryColumns>,
 ) -> Result<(), StoreError> {
     let from = h.from.first();
     let references = (!h.references.is_empty()).then(|| h.references.join(" "));
+    let (keys, one_click) = match category {
+        Some(c) => (c.keys.clone(), c.one_click),
+        None => (crate::categories::SenderKeys::default(), None),
+    };
     conn.prepare_cached(INSERT_MESSAGE)?
         .execute(params![
             id,
@@ -467,6 +508,14 @@ fn insert_message(
             h.has_attachments,
             thread,
             subject_key,
+            category.map(|c| c.category),
+            category.map(|c| c.category_auto),
+            category.map(|c| c.reason.as_str()),
+            category.is_some_and(|c| c.important),
+            keys.address,
+            keys.domain,
+            keys.list_id,
+            one_click,
         ])
         .map_err(StoreError::sqlite("insert message"))?;
     Ok(())

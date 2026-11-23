@@ -77,6 +77,7 @@ pub(crate) fn header(uid: u32, date: i64, message_id: Option<&str>) -> MessageHe
         auto_submitted: None,
         precedence: None,
         has_attachments: false,
+        category_headers: Vec::new(),
     }
 }
 

@@ -18,7 +18,8 @@ use crate::filename::{attachment_file_name, is_executable_type};
 use crate::html::InlineImages;
 use crate::image::{ImageBytes, sniff_image};
 use crate::preview::{preview_from_html, preview_from_text};
-use crate::text::html_to_text;
+use crate::text::{html_to_text, html_to_visible_text};
+use crate::visible::VisibleText;
 
 /// Longest text body kept; longer text is cut and reported.
 pub const MAX_TEXT_BODY_BYTES: usize = 4 << 20;
@@ -172,6 +173,19 @@ impl ParsedMessage {
             (Some(text), _) => Cow::Borrowed(text),
             (None, Some(html)) => Cow::Owned(html_to_text(html)),
             (None, None) => Cow::Borrowed(""),
+        }
+    }
+
+    /// Text for a model (MCP server, built-in AI): the text body as it is, else the text of the
+    /// HTML body without the text a reader does not see ([`crate::html_to_visible_text`]).
+    pub fn visible_text(&self) -> VisibleText {
+        match (&self.text, &self.html) {
+            (Some(text), _) => VisibleText {
+                text: text.clone(),
+                hidden_chars: 0,
+            },
+            (None, Some(html)) => html_to_visible_text(html),
+            (None, None) => VisibleText::default(),
         }
     }
 

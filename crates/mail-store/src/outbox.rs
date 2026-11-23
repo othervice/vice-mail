@@ -59,8 +59,9 @@ pub(crate) const KEY_BATCH: &str = "SELECT batch FROM operation WHERE idempotenc
 pub(crate) const INSERT_OPERATION: &str = "
     INSERT INTO operation (account_id, batch, action, kind, mailbox_id, message_id, uid,
                            target_mailbox_id, payload, idempotency_key, state, created_at,
-                           updated_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'queued', ?11, ?11)";
+                           updated_at, not_before, draft_id)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'queued', ?11, ?11, ?12,
+            (SELECT d.id FROM draft d WHERE d.uuid = ?13))";
 
 pub(crate) const SET_BATCH: &str = "UPDATE operation SET batch = id WHERE id = ?1";
 
@@ -111,7 +112,7 @@ macro_rules! select_operations {
                     o.notice, o.mailbox_id, o.message_id, o.target_mailbox_id,
                     (SELECT l.modseq FROM message_location l
                       WHERE l.mailbox_id = o.mailbox_id AND l.message_id = o.message_id),
-                    o.created_at, o.updated_at
+                    o.created_at, o.updated_at, o.not_before
              FROM operation o ",
             $rest
         )
@@ -129,6 +130,11 @@ pub(crate) const OPERATIONS_OF_BATCH: &str = select_operations!("WHERE o.batch =
 pub(crate) const OPERATIONS_OF_ACCOUNT: &str =
     select_operations!("WHERE o.account_id = ?1 AND o.id < ?2 ORDER BY o.id DESC LIMIT ?3");
 
+/// Stage 5: the account's sends, newest first (`operation_send`), for the outbox view.
+pub(crate) const SENDS_OF_ACCOUNT: &str = select_operations!(
+    "WHERE o.account_id = ?1 AND o.kind = 'send' AND o.id < ?2 ORDER BY o.id DESC LIMIT ?3"
+);
+
 pub(crate) const BEGIN_OPERATION: &str = "
     UPDATE operation SET state = 'in_flight', attempts = attempts + 1, payload = ?2,
                          updated_at = ?3
@@ -139,6 +145,13 @@ pub(crate) const FINISH_OPERATION: &str = "
     WHERE id = ?1";
 
 pub(crate) const DELETE_OPERATION: &str = "DELETE FROM operation WHERE id = ?1";
+
+/// Stage 5: an operation that is not done yet goes back to `queued` (or stays `in_flight`),
+/// with the error to show, the time of the next try and possibly a new payload.
+pub(crate) const LATER_OPERATION: &str = "
+    UPDATE operation SET state = ?2, last_error = ?3, not_before = ?4,
+                         payload = coalesce(?5, payload), updated_at = ?6
+    WHERE id = ?1";
 
 pub(crate) const SET_PAYLOAD: &str = "UPDATE operation SET payload = ?2 WHERE id = ?1";
 
@@ -156,15 +169,15 @@ pub(crate) const PURGE_CONFIRMED: &str = "
 // ---------------------------------------------------------------------------------------------
 // Rows
 
-fn json_error(context: &'static str) -> impl FnOnce(serde_json::Error) -> StoreError {
+pub(crate) fn json_error(context: &'static str) -> impl FnOnce(serde_json::Error) -> StoreError {
     move |err| StoreError::Config(format!("{context}: {err}"))
 }
 
-fn payload_text(payload: &OperationPayload) -> Result<String, StoreError> {
+pub(crate) fn payload_text(payload: &OperationPayload) -> Result<String, StoreError> {
     serde_json::to_string(payload).map_err(json_error("encode operation payload"))
 }
 
-fn payload_at(r: &Row<'_>, idx: usize) -> rusqlite::Result<OperationPayload> {
+pub(crate) fn payload_at(r: &Row<'_>, idx: usize) -> rusqlite::Result<OperationPayload> {
     let text: String = r.get(idx)?;
     serde_json::from_str(&text).map_err(|err| conversion_error(idx, Type::Text, err.to_string()))
 }
@@ -204,7 +217,7 @@ fn keywords_text(flags: &Flags) -> Option<String> {
     (!flags.keywords.is_empty()).then(|| flags.keywords.join(" "))
 }
 
-fn operation_from_row(r: &Row<'_>) -> rusqlite::Result<StoredOperation> {
+pub(crate) fn operation_from_row(r: &Row<'_>) -> rusqlite::Result<StoredOperation> {
     let action: String = r.get(3)?;
     let state: String = r.get(5)?;
     let last_error: Option<String> = r.get(7)?;
@@ -235,6 +248,7 @@ fn operation_from_row(r: &Row<'_>) -> rusqlite::Result<StoredOperation> {
         current_modseq: modseq_at(r, 13)?,
         created_at: r.get(14)?,
         updated_at: r.get(15)?,
+        not_before: r.get(16)?,
     })
 }
 
@@ -248,7 +262,10 @@ pub(crate) fn operation(
         .optional()?)
 }
 
-fn require_operation(conn: &Connection, id: OperationId) -> Result<StoredOperation, StoreError> {
+pub(crate) fn require_operation(
+    conn: &Connection,
+    id: OperationId,
+) -> Result<StoredOperation, StoreError> {
     operation(conn, id)?.ok_or(StoreError::Action(ActionError::OperationNotFound(id)))
 }
 
@@ -305,12 +322,15 @@ fn of_batch(conn: &Connection, batch: BatchId) -> Result<Vec<StoredOperation>, S
 // Locations
 
 /// A location read for planning, with its account row.
-struct Planned {
+pub(crate) struct Planned {
     account_row: i64,
-    location: PlanLocation,
+    pub(crate) location: PlanLocation,
 }
 
-fn location_for_plan(conn: &Connection, at: MessageRef) -> Result<Option<Planned>, StoreError> {
+pub(crate) fn location_for_plan(
+    conn: &Connection,
+    at: MessageRef,
+) -> Result<Option<Planned>, StoreError> {
     let found = conn
         .prepare_cached(LOCATION_FOR_PLAN)?
         .query_row(params![at.mailbox_id.0, at.message_id.0], |r| {
@@ -392,7 +412,10 @@ fn write_flags(
     Ok(())
 }
 
-fn generation(conn: &Connection, mailbox: MailboxId) -> Result<Option<UidValidity>, StoreError> {
+pub(crate) fn generation(
+    conn: &Connection,
+    mailbox: MailboxId,
+) -> Result<Option<UidValidity>, StoreError> {
     Ok(conn
         .prepare_cached(MAILBOX_GENERATION)?
         .query_row([mailbox.0], |r| opt_u32(r, 0))
@@ -639,7 +662,12 @@ fn revert(conn: &Connection, op: &StoredOperation) -> Result<Option<MailboxId>, 
         OperationPayload::Move { source, .. } | OperationPayload::Expunge { source } => {
             Ok(reinsert_location(conn, source)?.then_some(source.mailbox_id))
         }
-        OperationPayload::CreateMailbox { .. } => Ok(None),
+        // A failed send keeps its draft frozen (retry sends exactly what failed); cancelling
+        // releases it (`compose::release_draft`).
+        OperationPayload::CreateMailbox { .. }
+        | OperationPayload::Send(_)
+        | OperationPayload::Append { .. }
+        | OperationPayload::RemoveCopy { .. } => Ok(None),
     }
 }
 
@@ -647,18 +675,20 @@ fn revert(conn: &Connection, op: &StoredOperation) -> Result<Option<MailboxId>, 
 // Recording
 
 /// What one recording transaction did.
-struct Recorder<'a> {
+pub(crate) struct Recorder<'a> {
     conn: &'a Connection,
     account_row: i64,
     action: ActionKind,
     request: &'a str,
     now: i64,
     index: usize,
-    change: OutboxChange,
+    pub(crate) change: OutboxChange,
+    /// Stage 5: the operations recorded next wait until this time (Unix ms).
+    pub(crate) not_before: Option<i64>,
 }
 
 impl<'a> Recorder<'a> {
-    fn new(
+    pub(crate) fn new(
         conn: &'a Connection,
         account_row: i64,
         account: AccountId,
@@ -674,16 +704,17 @@ impl<'a> Recorder<'a> {
             now,
             index: 0,
             change: OutboxChange::new(account),
+            not_before: None,
         }
     }
 
-    fn touched(&mut self, mailbox: MailboxId) {
+    pub(crate) fn touched(&mut self, mailbox: MailboxId) {
         if !self.change.mailboxes.contains(&mailbox) {
             self.change.mailboxes.push(mailbox);
         }
     }
 
-    fn insert(&mut self, payload: &OperationPayload) -> Result<OperationId, StoreError> {
+    pub(crate) fn insert(&mut self, payload: &OperationPayload) -> Result<OperationId, StoreError> {
         let key = format!("{}:{}", self.request, self.index);
         self.index += 1;
         let source = payload.source();
@@ -702,6 +733,8 @@ impl<'a> Recorder<'a> {
                 payload_text(payload)?,
                 key,
                 self.now,
+                self.not_before,
+                payload.draft().map(|d| d.as_str().to_owned()),
             ])
             .map_err(StoreError::sqlite("insert operation"))?;
         let id = OperationId(self.conn.last_insert_rowid());
@@ -719,7 +752,7 @@ impl<'a> Recorder<'a> {
     }
 
     /// Records one planned operation with its local effect, or cancels a queued opposite.
-    fn record(&mut self, payload: OperationPayload) -> Result<(), StoreError> {
+    pub(crate) fn record(&mut self, payload: OperationPayload) -> Result<(), StoreError> {
         match payload {
             OperationPayload::SetFlag {
                 source,
@@ -739,14 +772,18 @@ impl<'a> Recorder<'a> {
                 self.touched(mailbox);
                 Ok(())
             }
-            OperationPayload::CreateMailbox { .. } => {
+            // Stage 5: their local effects (the frozen draft) are written by `compose`.
+            OperationPayload::CreateMailbox { .. }
+            | OperationPayload::Send(_)
+            | OperationPayload::Append { .. }
+            | OperationPayload::RemoveCopy { .. } => {
                 self.insert(&payload)?;
                 Ok(())
             }
         }
     }
 
-    fn record_flag(
+    pub(crate) fn record_flag(
         &mut self,
         mut source: SourceLocation,
         flag: Flag,
@@ -811,14 +848,17 @@ impl<'a> Recorder<'a> {
     }
 }
 
-fn account_writes(conn: &Connection, account_row: i64) -> Result<(AccountId, bool), StoreError> {
+pub(crate) fn account_writes(
+    conn: &Connection,
+    account_row: i64,
+) -> Result<(AccountId, bool), StoreError> {
     conn.prepare_cached(ACCOUNT_WRITES)?
         .query_row([account_row], |r| Ok((account_id_at(r, 0)?, r.get(1)?)))
         .optional()?
         .ok_or_else(|| StoreError::NotFound(format!("account row {account_row}")))
 }
 
-fn require_writes(conn: &Connection, account_row: i64) -> Result<AccountId, StoreError> {
+pub(crate) fn require_writes(conn: &Connection, account_row: i64) -> Result<AccountId, StoreError> {
     let (account, writes) = account_writes(conn, account_row)?;
     if !writes {
         return Err(StoreError::Action(ActionError::ReadOnly(account)));
@@ -844,7 +884,7 @@ fn plan_mailboxes(conn: &Connection, account_row: i64) -> Result<Vec<PlanMailbox
 }
 
 /// The batch recorded earlier under this request id, if any.
-fn repeated(conn: &Connection, request: &str) -> Result<Option<BatchId>, StoreError> {
+pub(crate) fn repeated(conn: &Connection, request: &str) -> Result<Option<BatchId>, StoreError> {
     Ok(conn
         .prepare_cached(KEY_BATCH)?
         .query_row([format!("{request}:0")], |r| r.get(0))
@@ -967,7 +1007,7 @@ pub(crate) fn begin(
     Ok(begun)
 }
 
-fn error_text(error: &IpcError) -> Result<String, StoreError> {
+pub(crate) fn error_text(error: &IpcError) -> Result<String, StoreError> {
     serde_json::to_string(error).map_err(json_error("encode operation error"))
 }
 
@@ -980,6 +1020,8 @@ pub(crate) fn finish(
     let mut change: Option<OutboxChange> = None;
     let mut touched = BTreeSet::new();
     let mut finished = Vec::new();
+    // Stage 5: what the follow-ups of a send recorded (new operations, drafts).
+    let mut extra: Option<OutboxChange> = None;
     for (id, result) in results {
         let Some(op) = operation(conn, *id)? else {
             continue;
@@ -988,6 +1030,31 @@ pub(crate) fn finish(
             continue;
         }
         change.get_or_insert_with(|| OutboxChange::new(op.account));
+        if let OperationResult::Later {
+            keep_in_flight,
+            error,
+            not_before,
+            payload,
+        } = result
+        {
+            let state = if *keep_in_flight {
+                OperationState::InFlight
+            } else {
+                OperationState::Queued
+            };
+            conn.prepare_cached(LATER_OPERATION)?
+                .execute(params![
+                    id.0,
+                    state.as_str(),
+                    error.as_ref().map(error_text).transpose()?,
+                    not_before,
+                    payload.as_deref().map(payload_text).transpose()?,
+                    now,
+                ])
+                .map_err(StoreError::sqlite("postpone operation"))?;
+            finished.push(*id);
+            continue;
+        }
         let (state, error, conflict, notice) = match result {
             OperationResult::Confirmed {
                 flags,
@@ -1018,10 +1085,26 @@ pub(crate) fn finish(
                             touched.insert(target.mailbox_id);
                         }
                     }
-                    OperationPayload::Expunge { .. } | OperationPayload::CreateMailbox { .. } => {}
+                    OperationPayload::Expunge { .. }
+                    | OperationPayload::CreateMailbox { .. }
+                    | OperationPayload::Send(_)
+                    | OperationPayload::Append { .. }
+                    | OperationPayload::RemoveCopy { .. } => {}
                 }
                 (OperationState::Confirmed, None, None, *notice)
             }
+            OperationResult::Sent { copy_on_server } => {
+                let extra = extra.get_or_insert_with(|| OutboxChange::new(op.account));
+                let notice =
+                    crate::compose::send_followups(conn, &op, *copy_on_server, now, extra)?;
+                (OperationState::Confirmed, None, None, notice)
+            }
+            OperationResult::Appended { copy } => {
+                let extra = extra.get_or_insert_with(|| OutboxChange::new(op.account));
+                crate::compose::appended(conn, &op, copy.as_ref(), now, extra)?;
+                (OperationState::Confirmed, None, None, None)
+            }
+            OperationResult::Later { .. } => continue,
             OperationResult::Failed { error } => {
                 if let Some(mailbox) = revert(conn, &op)? {
                     touched.insert(mailbox);
@@ -1062,6 +1145,13 @@ pub(crate) fn finish(
         if let Some(op) = operation(conn, id)? {
             change.operations.push(op);
         }
+    }
+    if let Some(extra) = extra {
+        touched.extend(extra.mailboxes.iter().copied());
+        change.operations.extend(extra.operations);
+        change.removed.extend(extra.removed);
+        change.drafts.extend(extra.drafts);
+        change.drafts_removed.extend(extra.drafts_removed);
     }
     change.mailboxes = touched.into_iter().collect();
     Ok(Some(change))
@@ -1161,6 +1251,16 @@ pub(crate) fn undo(
                     "a created folder is not removed automatically".into(),
                 )));
             }
+            (_, OperationPayload::Send(_)) => {
+                return Err(StoreError::Action(ActionError::NotUndoable(
+                    "the message is being sent or was sent".into(),
+                )));
+            }
+            (_, OperationPayload::Append { .. } | OperationPayload::RemoveCopy { .. }) => {
+                return Err(StoreError::Action(ActionError::NotUndoable(
+                    "a copy on the server is not changed back".into(),
+                )));
+            }
         }
     }
 
@@ -1179,6 +1279,7 @@ pub(crate) fn undo(
                     .execute([op.id.0])
                     .map_err(StoreError::sqlite("cancel operation"))?;
                 recorder.change.removed.push(op.id);
+                crate::compose::release_draft(conn, &op, now, &mut recorder.change)?;
             }
             Step::Inverse(payload) => recorder.record(payload)?,
         }
@@ -1236,6 +1337,40 @@ pub(crate) fn retry(
             OperationPayload::Expunge { source }
         }
         create @ OperationPayload::CreateMailbox { .. } => create,
+        OperationPayload::Send(mut job) => {
+            let unclear = op
+                .last_error
+                .as_ref()
+                .is_some_and(|e| e.code == mail_model::ErrorCode::SendUnclear);
+            if unclear {
+                return Err(StoreError::Draft(mail_model::DraftError::NeedsDecision(id)));
+            }
+            crate::compose::require_frozen(conn, &job.draft)?;
+            job.phase = mail_model::SendPhase::Submit;
+            job.checks = 0;
+            OperationPayload::Send(job)
+        }
+        OperationPayload::Append {
+            target,
+            source,
+            message_id_header,
+            draft_flag,
+            ..
+        } => OperationPayload::Append {
+            target,
+            source: match source {
+                mail_model::AppendSource::Draft { draft, .. } => mail_model::AppendSource::Draft {
+                    draft,
+                    revision: None,
+                },
+                file @ mail_model::AppendSource::File { .. } => file,
+            },
+            message_id_header,
+            draft_flag,
+            mark: None,
+            replace: None,
+        },
+        remove @ OperationPayload::RemoveCopy { .. } => remove,
     };
     // Queued again at the end, so it runs after what the user did since; same batch.
     conn.prepare_cached(DELETE_OPERATION)?
@@ -1279,7 +1414,15 @@ pub(crate) fn discard(conn: &Connection, id: OperationId) -> Result<OutboxChange
         .map_err(StoreError::sqlite("discard operation"))?;
     let mut change = OutboxChange::new(op.account);
     change.removed.push(id);
+    // A discarded send gives its draft back for editing.
+    if !matches!(op.state, OperationState::Confirmed) {
+        crate::compose::release_draft(conn, &op, now_ms(), &mut change)?;
+    }
     Ok(change)
+}
+
+fn now_ms() -> i64 {
+    crate::settings::now_millis()
 }
 
 /// See [`crate::Store::set_writes_enabled`].

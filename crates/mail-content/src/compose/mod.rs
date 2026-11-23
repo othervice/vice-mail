@@ -21,8 +21,10 @@ mod reply;
 mod tests;
 
 pub use address::{new_message_id, normalize_email};
-pub use build::{Attachment, BuiltMessage, ComposeError, OutgoingMessage, build_message};
-pub use html::mail_html;
+pub use build::{
+    Attachment, BuiltMessage, ComposeError, OutgoingMessage, build_draft_message, build_message,
+};
+pub use html::{editor_html, mail_html, text_to_editor_html};
 // The document model of mail HTML, for signatures and templates (`crate::templates`).
 pub(crate) use html::{Block, Inline, fragment, html_blocks, text_blocks, trim_paragraphs};
 pub use reply::{

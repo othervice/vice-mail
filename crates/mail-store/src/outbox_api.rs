@@ -8,9 +8,9 @@
 //! explicit action, an invalid keyword, messages the list showed but the store no longer has.
 
 use mail_model::{
-    AccountId, ActionError, ActionKind, BatchId, ConflictReason, FlagUpdate, IpcError, MailAction,
-    MailboxId, MailboxRole, MessageId, MessageRef, ModSeq, OperationId, OperationInfo,
-    OperationNotice, OperationPayload, OperationState, OutboxCounts, Uid, UidValidity,
+    AccountId, ActionError, ActionKind, BatchId, ConflictReason, DraftId, FlagUpdate, IpcError,
+    MailAction, MailboxId, MailboxRole, MessageId, MessageRef, ModSeq, OperationId, OperationInfo,
+    OperationNotice, OperationPayload, OperationState, OutboxCounts, ServerCopy, Uid, UidValidity,
 };
 
 use crate::settings::now_millis;
@@ -43,9 +43,17 @@ pub struct StoredOperation {
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
+    /// Stage 5: not to be executed before this time (Unix ms): the undo delay of a send, the
+    /// next look into Sent after an unclear one. `None`: at once.
+    pub not_before: Option<i64>,
 }
 
 impl StoredOperation {
+    /// Whether the outbox may execute it at `now` (Unix ms).
+    pub fn is_due(&self, now: i64) -> bool {
+        self.not_before.is_none_or(|at| at <= now)
+    }
+
     /// The form the activity view shows.
     pub fn info(&self) -> OperationInfo {
         OperationInfo {
@@ -89,6 +97,23 @@ pub enum OperationResult {
         reason: ConflictReason,
         flags: Option<FlagUpdate>,
     },
+    /// Stage 5: the server accepted a send (or the user treated an unclear one as sent):
+    /// confirmed, and its follow-ups are recorded in the same transaction: the copy into Sent
+    /// (unless `copy_on_server`, or the server files it itself), removing the draft's copy in
+    /// Drafts, `\Answered` or `$Forwarded` on the original; the draft is deleted.
+    Sent { copy_on_server: bool },
+    /// Stage 5: an append is done; `copy` is where the new copy lies (if known). A draft's
+    /// version becomes its server copy (or is removed again if the draft is gone meanwhile).
+    Appended { copy: Option<ServerCopy> },
+    /// Stage 5: not done yet. Back to `queued` (nothing went out), or kept `in_flight` with
+    /// `keep_in_flight` (an unclear send that must not be submitted again), with the error to
+    /// show and the time of the next try; `payload` replaces the stored one.
+    Later {
+        keep_in_flight: bool,
+        error: Option<IpcError>,
+        not_before: Option<i64>,
+        payload: Option<Box<OperationPayload>>,
+    },
 }
 
 /// What a call changed, so the engine can emit events.
@@ -105,10 +130,14 @@ pub struct OutboxChange {
     pub mailboxes: Vec<MailboxId>,
     /// The request id was recorded before; nothing was applied again.
     pub repeated: bool,
+    /// Stage 5: drafts whose state changed (frozen, released, server copy).
+    pub drafts: Vec<DraftId>,
+    /// Stage 5: drafts deleted (sent or discarded); their files can go.
+    pub drafts_removed: Vec<DraftId>,
 }
 
 impl OutboxChange {
-    pub(crate) fn new(account: AccountId) -> Self {
+    pub fn new(account: AccountId) -> Self {
         Self {
             account,
             batch: None,
@@ -116,6 +145,14 @@ impl OutboxChange {
             removed: Vec::new(),
             mailboxes: Vec::new(),
             repeated: false,
+            drafts: Vec::new(),
+            drafts_removed: Vec::new(),
+        }
+    }
+
+    pub(crate) fn draft_changed(&mut self, draft: &DraftId) {
+        if !self.drafts.contains(draft) {
+            self.drafts.push(draft.clone());
         }
     }
 }

@@ -5,6 +5,11 @@ Kontakte und geplantes Senden.
 
 **Voraussetzung:** Stufe 05 fertig (Stufe 08 empfohlen).
 
+**Aus Stufe 5 vorhanden (0018):** Tabelle `contact` (eine Zeile je Adresse, `contact_group` für
+Zusammenführungen noch ungenutzt), Autovervollständigung, Text-Signatur je Identität
+(`identity.signature`), Zitat-Position je Entwurf (`quotePosition`), `not_before` an Operationen
+(für „Später senden“ nutzbar: eine `send`-Operation mit spätem `not_before`).
+
 ## Aufgaben
 
 - [ ] **Formatierung.** Durchgestrichen, Überschriften, Code, Ausrichtung, Rückgängig/Wiederholen. Eingefügter Inhalt aus Word oder Webseiten wird bereinigt.

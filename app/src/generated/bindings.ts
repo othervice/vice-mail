@@ -118,6 +118,128 @@ export const commands = {
 	deleteIdentity: (identityId: IdentityId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_identity", { identityId }, options)),
 	/**  The identity a reply to the message is sent from. */
 	getReplyIdentity: (messageId: MessageId, options?: InvokeOptions) => typedError<IdentityInfo, IpcError>(__TAURI_INVOKE("get_reply_identity", { messageId }, options)),
+	/**  A new draft: empty, a reply, a reply to all, or a forward (with the original's attachments). */
+	createDraft: (request: NewDraft, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("create_draft", { request }, options)),
+	getDraft: (draftId: DraftId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("get_draft", { draftId }, options)),
+	/**  Saves the composer's fields locally; call it every few seconds while the user types. */
+	saveDraft: (draftId: DraftId, update: DraftUpdate, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("save_draft", { draftId, update }, options)),
+	/**  The composer closed: the newest version goes to the server's Drafts folder now. */
+	closeDraft: (draftId: DraftId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("close_draft", { draftId }, options)),
+	/**  Discards a draft, its attachments and its copy in the Drafts folder. */
+	deleteDraft: (draftId: DraftId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_draft", { draftId }, options)),
+	/**  Local drafts, newest change first; all accounts when `accountId` is null. */
+	listDrafts: (accountId: AccountId | null, options?: InvokeOptions) => typedError<DraftSummary[], IpcError>(__TAURI_INVOKE("list_drafts", { accountId }, options)),
+	/**  Opens a message of the Drafts folder in the composer. */
+	openDraftFromMessage: (messageId: MessageId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("open_draft_from_message", { messageId }, options)),
+	/**  Lets the user pick files in the system dialog and attaches them; cancelling changes nothing. */
+	pickAttachments: (draftId: DraftId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("pick_attachments", { draftId }, options)),
+	/**
+	 *  Attaches files dropped on the window: only paths of a drop the shell saw itself, shortly
+	 *  before (`invalid_argument` otherwise; see `drops.rs`).
+	 */
+	addDroppedAttachments: (draftId: DraftId, paths: string[], options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("add_dropped_attachments", { draftId, paths }, options)),
+	removeDraftAttachment: (draftId: DraftId, attachmentId: string, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("remove_draft_attachment", { draftId, attachmentId }, options)),
+	/**  Queues the draft for sending after the undo delay. `requestId` is a UUID per press of "send". */
+	sendDraft: (draftId: DraftId, requestId: string, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("send_draft", { draftId, requestId }, options)),
+	/**  Undo within the delay, or edit a failed or unclear send: back to the draft, nothing sent. */
+	cancelSend: (draftId: DraftId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("cancel_send", { draftId }, options)),
+	/**  The outbox view of an account, newest first, below `before`. `limit` 1..500. */
+	listOutgoing: (accountId: AccountId, before: OperationId | null, limit: number, options?: InvokeOptions) => typedError<OutgoingMail[], IpcError>(__TAURI_INVOKE("list_outgoing", { accountId, before, limit }, options)),
+	/**  The user's answer to `sendNeedsDecision`. */
+	resolveUnclearSend: (operationId: OperationId, decision: UnclearDecision, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("resolve_unclear_send", { operationId, decision }, options)),
+	getComposeSettings: (options?: InvokeOptions) => typedError<ComposeSettings, IpcError>(__TAURI_INVOKE("get_compose_settings", undefined, options)),
+	/**  Stores the undo delay (0 to 30 seconds). */
+	setComposeSettings: (settings: ComposeSettings, options?: InvokeOptions) => typedError<ComposeSettings, IpcError>(__TAURI_INVOKE("set_compose_settings", { settings }, options)),
+	getSendSettings: (accountId: AccountId, options?: InvokeOptions) => typedError<AccountSendSettings, IpcError>(__TAURI_INVOKE("get_send_settings", { accountId }, options)),
+	/**  Who files sent mail of the account: `auto`, `app` or `server`. */
+	setSentCopyMode: (accountId: AccountId, mode: SentCopyMode, options?: InvokeOptions) => typedError<AccountSendSettings, IpcError>(__TAURI_INVOKE("set_sent_copy_mode", { accountId, mode }, options)),
+	/**  Identities of an account with their text signatures, the default first. */
+	listComposeIdentities: (accountId: AccountId, options?: InvokeOptions) => typedError<ComposeIdentity[], IpcError>(__TAURI_INVOKE("list_compose_identities", { accountId }, options)),
+	/**  Sets or removes (null) an identity's text signature. */
+	setIdentitySignature: (identityId: IdentityId, signature: string | null, options?: InvokeOptions) => typedError<ComposeIdentity, IpcError>(__TAURI_INVOKE("set_identity_signature", { identityId, signature }, options)),
+	/**  Autocomplete from addresses of earlier mail. `limit` 1..50. */
+	searchContacts: (query: string, limit: number, options?: InvokeOptions) => typedError<ContactSuggestion[], IpcError>(__TAURI_INVOKE("search_contacts", { query, limit }, options)),
+	/**
+	 *  One page of the inbox: rows with date sections, bundles when categories are on, and on the
+	 *  first page the pinned, returned and priority messages. `limit` counts messages.
+	 */
+	listInbox: (scope: InboxScope, cursor: InboxCursor | null, limit: number, options?: InvokeOptions) => typedError<InboxPage, IpcError>(__TAURI_INVOKE("list_inbox", { scope, cursor, limit }, options)),
+	/**  The inbox by category or the important senders ("Alle anzeigen"). */
+	listInboxFiltered: (scope: InboxScope, filter: InboxFilter, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_inbox_filtered", { scope, filter, cursor, limit }, options)),
+	getInboxSettings: (options?: InvokeOptions) => typedError<InboxSettings, IpcError>(__TAURI_INVOKE("get_inbox_settings", undefined, options)),
+	/**  Categories on or off, bundles per category; emits `inboxChanged`. */
+	setInboxSettings: (settings: InboxSettings, options?: InvokeOptions) => typedError<InboxSettings, IpcError>(__TAURI_INVOKE("set_inbox_settings", { settings }, options)),
+	/**  "Why here?" for a message, with the keys an "always as …" can use. */
+	getMessageCategory: (messageId: MessageId, options?: InvokeOptions) => typedError<MessageCategoryInfo, IpcError>(__TAURI_INVOKE("get_message_category", { messageId }, options)),
+	/**
+	 *  "Always as …" for a sender, domain or list (null removes it); applied to every message in
+	 *  the background, `inboxChanged` follows.
+	 */
+	setSenderCategory: (key: SenderKey, category: MessageCategory | null, options?: InvokeOptions) => typedError<SenderRule | null, IpcError>(__TAURI_INVOKE("set_sender_category", { key, category }, options)),
+	/**  Marks a sender, domain or list important (the "Priority" block), or not. */
+	setSenderImportant: (key: SenderKey, important: boolean, options?: InvokeOptions) => typedError<SenderRule | null, IpcError>(__TAURI_INVOKE("set_sender_important", { key, important }, options)),
+	listSenderRules: (options?: InvokeOptions) => typedError<SenderRule[], IpcError>(__TAURI_INVOKE("list_sender_rules", undefined, options)),
+	deleteSenderRule: (id: string, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_sender_rule", { id }, options)),
+	/**  The times the snooze menu offers now. */
+	getSnoozeTimes: (options?: InvokeOptions) => __TAURI_INVOKE<SnoozeTimes>("get_snooze_times", undefined, options),
+	/**  Snoozes messages; answers when they come back. */
+	snoozeMessages: (messageIds: MessageId[], choice: SnoozeChoice, options?: InvokeOptions) => typedError<SnoozeResult, IpcError>(__TAURI_INVOKE("snooze_messages", { messageIds, choice }, options)),
+	/**  Ends snoozes (waiting ones come back now) or clears the mark of returned ones. */
+	unsnoozeMessages: (messageIds: MessageId[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("unsnooze_messages", { messageIds }, options)),
+	setPinned: (messageIds: MessageId[], pinned: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_pinned", { messageIds, pinned }, options)),
+	/**  A task (`{ done: false }`), done (`{ done: true }`) or no task (null). */
+	setTask: (messageIds: MessageId[], mark: TaskMark | null, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_task", { messageIds, mark }, options)),
+	/**  "Später": waiting snoozes, the next due first. */
+	listSnoozed: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_snoozed", { scope }, options)),
+	/**  "Angepinnt": the most recently pinned first. */
+	listPinned: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_pinned", { scope }, options)),
+	/**  "Aufgaben": open, done or all tasks, the newest first. */
+	listTasks: (scope: MarkScope, filter: TaskFilter, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_tasks", { scope, filter }, options)),
+	listRules: (options?: InvokeOptions) => typedError<MailRule[], IpcError>(__TAURI_INVOKE("list_rules", undefined, options)),
+	createRule: (input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("create_rule", { input }, options)),
+	updateRule: (id: RuleId, input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("update_rule", { id, input }, options)),
+	deleteRule: (id: RuleId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_rule", { id }, options)),
+	/**  Puts the rules in this order; returns all of them. */
+	reorderRules: (ids: RuleId[], options?: InvokeOptions) => typedError<MailRule[], IpcError>(__TAURI_INVOKE("reorder_rules", { ids }, options)),
+	getNotificationSettings: (options?: InvokeOptions) => typedError<NotificationSettings, IpcError>(__TAURI_INVOKE("get_notification_settings", undefined, options)),
+	/**  Stores the settings and updates the Dock or taskbar counter. */
+	setNotificationSettings: (settings: NotificationSettings, options?: InvokeOptions) => typedError<NotificationSettings, IpcError>(__TAURI_INVOKE("set_notification_settings", { settings }, options)),
+	/**
+	 *  The texts of system notifications in the UI's language (send at start and on a language
+	 *  change).
+	 */
+	setNotificationTexts: (texts: NotificationTexts, options?: InvokeOptions) => __TAURI_INVOKE<void>("set_notification_texts", { texts }, options),
+	/**  "Why here?", unsubscribe options and calendar invitations of a message. */
+	getMessageExtras: (messageId: MessageId, options?: InvokeOptions) => typedError<MessageExtras, IpcError>(__TAURI_INVOKE("get_message_extras", { messageId }, options)),
+	/**
+	 *  Unsubscribes after the user's click (`oneClick` POSTs; `mailto` returns the composer's
+	 *  fields; `web` opens the page in the browser, after the UI asked).
+	 */
+	unsubscribe: (messageId: MessageId, method: UnsubscribeMethod, options?: InvokeOptions) => typedError<UnsubscribeOutcome, IpcError>(__TAURI_INVOKE("unsubscribe", { messageId, method }, options)),
+	/**  "Im Kalender öffnen": hands the invitation to the system's calendar app. */
+	openInvite: (messageId: MessageId, partId: number, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_invite", { messageId, partId }, options)),
+	/**
+	 *  Saves the message as `.eml` where the user chooses (system dialog); null when cancelled,
+	 *  else the path.
+	 */
+	exportMessage: (messageId: MessageId, options?: InvokeOptions) => typedError<string | null, IpcError>(__TAURI_INVOKE("export_message", { messageId }, options)),
+	/**
+	 *  Opens the system's print dialog for the window (which offers "Save as PDF"). The UI shows
+	 *  only the cleaned message while printing (print styles).
+	 */
+	printWindow: (options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("print_window", undefined, options)),
+	/**  Whether the app handles `mailto:` links, and whether it can make itself the default. */
+	getDefaultMailApp: (options?: InvokeOptions) => __TAURI_INVOKE<DefaultMailApp>("get_default_mail_app", undefined, options),
+	/**
+	 *  Makes the app the default mail app where the system allows it (macOS), else opens the
+	 *  system's settings for it (Windows).
+	 */
+	setDefaultMailApp: (options?: InvokeOptions) => __TAURI_INVOKE<DefaultMailAppOutcome>("set_default_mail_app", undefined, options),
+	/**
+	 *  The `mailto:` links the app was started with (or got before the UI was ready), as composer
+	 *  fields. Call once at start; later links arrive as `composeRequested`.
+	 */
+	takeLaunchLinks: (options?: InvokeOptions) => __TAURI_INVOKE<ComposeRequest[]>("take_launch_links", undefined, options),
 };
 
 /** Events */
@@ -128,11 +250,23 @@ export const events = {
 /* Constants */
 export const CORE_EVENT_NAME = "core-event" as const;
 
+export const DEFAULT_SEND_DELAY_SECS = 10 as const;
+
+export const LARGE_ATTACHMENT_WARNING_BYTES = 15728640 as const;
+
 export const MARK_READ_DELAY_MS = 2000 as const;
 
 export const MAX_ACTION_MESSAGES = 10000 as const;
 
+export const MAX_ATTACHMENTS = 100 as const;
+
+export const MAX_ATTACHMENT_BYTES = 104857600 as const;
+
+export const MAX_CONTACT_SUGGESTIONS = 50 as const;
+
 export const MAX_SEARCH_PAGE = 200 as const;
+
+export const MAX_SEND_DELAY_SECS = 30 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
 
@@ -174,6 +308,14 @@ export type AccountGroupId = string;
  *  device, so synced records refer to accounts by it, never by a local row id.
  */
 export type AccountId = string;
+
+/**  Sending settings of one account. */
+export type AccountSendSettings = {
+	accountId: AccountId,
+	sentCopy: SentCopyMode,
+	/**  What `sentCopy: auto` amounts to for this account: the server files sent mail itself. */
+	serverSavesSent: boolean,
+};
 
 /**
  *  What the user enters to set up an account (input of `testConnection` and `addAccount`).
@@ -219,7 +361,16 @@ export type AccountStatus = {
 /**  What an operation was recorded for, for the activity view. */
 export type ActionKind = "mark_read" | "mark_unread" | "flag" | "unflag" | "add_keyword" | "remove_keyword" | "archive" | "delete" | "delete_permanently" | "move" | "spam" | "not_spam" | "create_mailbox" | 
 /**  Counter-operations of an undone batch. */
-"undo";
+"undo" | 
+/**
+ *  Stage 5: sending a message, and what follows its acceptance (the copy in Sent, the
+ *  draft's copy removed, `\Answered` on the original).
+ */
+"send" | 
+/**  Stage 5: a new version of a draft in the Drafts folder (the old one removed). */
+"save_draft" | 
+/**  Stage 5: the server copy of a discarded draft removed. */
+"delete_draft";
 
 /**  Result of applying an action. */
 export type ActionResult = {
@@ -270,6 +421,22 @@ export type AttachmentInfo = {
 	local: boolean,
 };
 
+/**  `ROLE` of an attendee. */
+export type AttendeeRole = "chair" | 
+/**  `REQ-PARTICIPANT`. */
+"required" | 
+/**  `OPT-PARTICIPANT`. */
+"optional" | 
+/**  `NON-PARTICIPANT` (for information only). */
+"non_participant";
+
+/**  What the Dock (macOS) or taskbar (Windows) icon counts. */
+export type BadgeMode = "off" | 
+/**  Unread messages in the inboxes of the visible accounts. */
+"inboxUnread" | 
+/**  Unread messages of people (and unclassified ones) in those inboxes. */
+"peopleUnread";
+
 /**  The operations of one action (one call, possibly many messages). Undo works on a batch. */
 export type BatchId = number;
 
@@ -285,6 +452,201 @@ export type BodyUnavailableReason =
 "notOnServer" | 
 /**  The fetch failed; see `error`. */
 "fetchFailed";
+
+/**  One bundle: a category within a date section. */
+export type BundleKey = {
+	category: MessageCategory,
+	section: number,
+};
+
+/**  Counter and chips of a bundle, over every member seen so far. */
+export type BundleSummary = {
+	key: BundleKey,
+	count: number,
+	unread: number,
+	/**  Most frequent senders first; equal counts: the one with the newer message first. */
+	senders: SenderChip[],
+};
+
+/**  One `VEVENT`. */
+export type CalendarEvent = {
+	uid: string | null,
+	/**  The title; one line. */
+	summary: string | null,
+	/**  One line, as written (a room, an address or a meeting link). */
+	location: string | null,
+	/**
+	 *  Plain text with `\n` line breaks, cut to a few KiB (then ending in `…`). Untrusted like
+	 *  any mail text: links in it are opened only through the link check.
+	 */
+	description: string | null,
+	organizer: CalendarPerson | null,
+	/**  The first attendees in file order (capped, see `mail_content::MAX_CALENDAR_ATTENDEES`). */
+	attendees: CalendarPerson[],
+	/**  Every `ATTENDEE` of the event, also those beyond `attendees`. */
+	attendeeCount: number,
+	/**  `None` when the event has no readable `DTSTART` (allowed in `CANCEL` and `REPLY`). */
+	start: CalendarTime | null,
+	/**
+	 *  Exclusive end, from `DTEND` or `DTSTART` + `DURATION`. An all-day event without either
+	 *  lasts one day; a timed one without either has no end (`None`).
+	 */
+	end: CalendarTime | null,
+	recurrence: CalendarRecurrence | null,
+	/**
+	 *  Set when this event changes or cancels one occurrence of a recurring event
+	 *  (`RECURRENCE-ID`): the original start of that occurrence.
+	 */
+	recurrenceId: CalendarTime | null,
+	status: EventStatus | null,
+	/**  `SEQUENCE`: revision of the invitation, 0 for the first one. */
+	sequence: number,
+	/**  The organizer cancelled it: `METHOD:CANCEL` or `STATUS:CANCELLED`. */
+	cancelled: boolean,
+};
+
+/**
+ *  A calendar file as far as it could be read. Never an error: an unreadable file has no events
+ *  and says why in `problems`.
+ */
+export type CalendarInvite = {
+	/**
+	 *  `METHOD` of the iTIP message (RFC 5546) in upper case: `REQUEST` (invitation or update),
+	 *  `CANCEL`, `REPLY`, `PUBLISH`, `COUNTER`, … `None` for a plain calendar file.
+	 */
+	method: string | null,
+	/**
+	 *  The events in file order (capped, see `mail_content::MAX_CALENDAR_EVENTS`). A recurring
+	 *  meeting with changed occurrences has one master event and one event per changed
+	 *  occurrence (with `recurrence_id`).
+	 */
+	events: CalendarEvent[],
+	/**  What was damaged or left out; empty for a well-formed file. */
+	problems: CalendarProblem[],
+};
+
+/**  One calendar part of a message, read for display. */
+export type CalendarInviteInfo = {
+	partId: number,
+	invite: CalendarInvite,
+};
+
+/**  Organizer or attendee (`CAL-ADDRESS` with its parameters). */
+export type CalendarPerson = {
+	/**  `CN`, the display name. */
+	name: string | null,
+	/**  The address of a `mailto:` value (or of the `EMAIL` parameter). */
+	email: string | null,
+	/**  `ROLE`; attendees only. `None` when missing (RFC 5545 then means `required`) or unknown. */
+	role: AttendeeRole | null,
+	/**  `PARTSTAT`; attendees only. `None` when missing or unknown. */
+	status: ParticipationStatus | null,
+};
+
+/**  Something about the calendar file that is damaged or was left out. */
+export type CalendarProblem = {
+	code: CalendarProblemCode,
+	/**
+	 *  What it is about, for diagnostics (not translated), cut to 64 bytes: the `TZID` for
+	 *  `unknown_time_zone`, the value as written for `bad_date`/`bad_duration`/`bad_recurrence`,
+	 *  the property name for `line_too_long`, `"2097152 bytes"` or `"100000 lines"` for
+	 *  `too_large`, the number of events found for `too_many_events`. `None` when there is
+	 *  nothing to add.
+	 */
+	detail: string | null,
+};
+
+/**  Problem codes of a calendar file. */
+export type CalendarProblemCode = 
+/**  Not a calendar: no `BEGIN:VCALENDAR` and no event. */
+"not_calendar" | 
+/**  A calendar without events (only tasks, free/busy data, time zones, or nothing). */
+"no_event" | 
+/**  Larger than the input limit (bytes or lines): only the beginning was read. */
+"too_large" | 
+/**  More events than the limit; the rest was skipped. `detail`: how many there were. */
+"too_many_events" | 
+/**  The file ends inside a component (`END` missing, cut off): what was read is shown. */
+"truncated" | 
+/**  `BEGIN`/`END` do not match, components nested too deep, or an event outside a calendar. */
+"broken_structure" | 
+/**  A content line that cannot be read (no colon, invalid name, unclosed quote); skipped. */
+"broken_line" | 
+/**  A property line longer than the line limit; its value was cut. */
+"line_too_long" | 
+/**  Bytes that are not UTF-8 were replaced by U+FFFD. */
+"malformed_text" | 
+/**
+ *  A date or date-time that cannot be read (`DTSTART`, `DTEND`, `RECURRENCE-ID`, `UNTIL`),
+ *  or `DTSTART` and `DTEND` of different kinds; the value is left out.
+ */
+"bad_date" | 
+/**  `DURATION` cannot be read or is negative; the end is left out. */
+"bad_duration" | 
+/**  `RRULE` without a readable `FREQ`; the recurrence is left out. */
+"bad_recurrence" | 
+/**  `DTEND` is before `DTSTART`; the end is left out. */
+"end_before_start" | 
+/**  An event without `DTSTART` (outside `CANCEL`, `REPLY` and other replies). */
+"missing_start" | 
+/**
+ *  A `TZID` that is neither known to the system, nor a Windows zone name, nor defined by a
+ *  `VTIMEZONE` in the file: the time is shown as floating (in the user's zone).
+ */
+"unknown_time_zone" | 
+/**  The reader failed unexpectedly (a bug); nothing is shown. */
+"internal";
+
+/**  `RRULE`, described for the card ("every 2 weeks on Monday until 31 December"), not expanded. */
+export type CalendarRecurrence = {
+	frequency: RecurrenceFrequency,
+	/**  `INTERVAL`, at least 1: every `interval` days, weeks, months or years. */
+	interval: number,
+	/**  `COUNT`: number of occurrences. */
+	count: number | null,
+	/**  `UNTIL`: last possible occurrence (inclusive). */
+	until: CalendarTime | null,
+	/**  `BYDAY`, normalised: `MO`, `-1SU` (last Sunday), `2TU` (second Tuesday). */
+	byDay: string[],
+	/**  `BYMONTHDAY`: 1 to 31, or -1 (last day) to -31. */
+	byMonthDay: number[],
+	/**  `BYMONTH`: 1 to 12. */
+	byMonth: number[],
+	/**  `BYSETPOS`: which of the matching days (`-1` = the last). */
+	bySetPos: number[],
+	/**
+	 *  The `RRULE` value as written (cut to 256 bytes), for what the fields above do not cover
+	 *  (`BYWEEKNO`, `BYHOUR`, …).
+	 */
+	rule: string,
+};
+
+/**  A point in time of an event. */
+export type CalendarTime = 
+/**  A calendar day without time or zone (`VALUE=DATE`, all-day events): `YYYY-MM-DD`. */
+{ kind: "date"; date: string } | 
+/**  A date and time. */
+{ kind: "dateTime"; 
+/**  The instant in Unix milliseconds. Show it in the user's own time zone. */
+utc: number; 
+/**
+ *  The wall-clock time as the file wrote it, `YYYY-MM-DDTHH:MM:SS` (in `zone`; UTC for
+ *  `zone: "UTC"`). For an end computed from `DURATION` it is start + duration.
+ */
+local: string; 
+/**
+ *  The zone `local` is in: `"UTC"`, an IANA name (`America/New_York`; also when the
+ *  file used a Windows name such as `Eastern Standard Time` or a prefixed name such as
+ *  `/mozilla.org/…/Europe/Berlin`), or the `TZID` as written when only the file's own
+ *  `VTIMEZONE` defines it. `None` when floating.
+ */
+zone: string | null; 
+/**
+ *  No usable zone: a floating time (no `TZID`, no `Z`) or an unknown `TZID`
+ *  (`unknown_time_zone` problem). `utc` was computed in the user's own time zone, so the
+ *  wall-clock time stays as written.
+ */
+floating: boolean };
 
 /**
  *  Server capabilities the engine and the UI ask about. Nothing is faked: what a server lacks
@@ -315,6 +677,108 @@ export type Capabilities = {
 	names: string[],
 };
 
+/**  The category of a message, why, and whether it belongs to the "Priority" block. */
+export type CategoryDecision = {
+	category: MessageCategory,
+	reason: CategoryReason,
+	/**  The important mark that matched (sender, domain or list); `None` outside "Priority". */
+	important: SenderKey | null,
+};
+
+/**
+ *  Why a message got its category: the first rule that matched (decision 0016 lists the order).
+ *  Values are copied from the message (header values cut to a few dozen characters).
+ */
+export type CategoryReason = 
+/**  The user's correction ("always as …") for this sender, list or domain. */
+{ kind: "userRule"; key: SenderKey } | 
+/**  `Auto-Submitted` other than `no` (RFC 3834): written by a program. */
+{ kind: "autoSubmitted"; value: string } | 
+/**
+ *  An automatic reply (vacation, out of office): `Precedence: auto_reply`, `X-Autoreply`,
+ *  `X-Autorespond` or a subject such as "Automatic reply:" / "Automatische Antwort:".
+ */
+{ kind: "autoReply"; evidence: string } | 
+/**
+ *  A delivery, read or other report (`multipart/report`, `MAILER-DAEMON`, empty
+ *  `Return-Path`).
+ */
+{ kind: "report"; evidence: string } | 
+/**  A header only a known system writes (`X-GitHub-Reason`, `X-GitLab-Project`, ...). */
+{ kind: "knownSystem"; system: string; header: string } | 
+/**  Sent from one of the user's own addresses. */
+{ kind: "ownMessage" } | 
+/**  Answers a message the user sent. */
+{ kind: "replyToOwn" } | 
+/**  A mailing list the members write to (`List-Post`). */
+{ kind: "discussionList"; listId: string | null } | 
+/**  A mailing list (`List-Id`). */
+{ kind: "mailingList"; listId: string } | 
+/**  `Precedence: bulk`, `list` or `junk`. */
+{ kind: "precedence"; value: string } | 
+/**
+ *  Newsletter software or a campaign header (`X-CSA-Complaints`, `X-Campaign`, the
+ *  `X-Mailer` of a newsletter tool, a marketing service's bounce address).
+ */
+{ kind: "campaign"; evidence: string } | 
+/**  The user has written to this sender before. */
+{ kind: "correspondent"; sent: number } | 
+/**  Offers unsubscribing (`List-Unsubscribe`) and nothing points to a person. */
+{ kind: "unsubscribe" } | 
+/**
+ *  Sent through a mailing service (`Feedback-ID`, a service's bounce address) and offers no
+ *  unsubscribing: a transactional mail.
+ */
+{ kind: "mailingService"; evidence: string } | 
+/**  An address nobody reads (`noreply@`, `nicht-antworten@`). */
+{ kind: "noReplyAddress"; address: string } | 
+/**  An address of a program (`notifications@`, `alerts@`, `rechnung@`). */
+{ kind: "automatedAddress"; address: string; pattern: string } | 
+/**  An address that sends newsletters (`newsletter@`, `news@`). */
+{ kind: "newsletterAddress"; address: string; pattern: string } | 
+/**  Nothing points to a program or a list. */
+{ kind: "noBulkSignals" } | 
+/**  Stage 9: a local rule set the category of this message (its name at the time). */
+{ kind: "localRule"; ruleName: string };
+
+/**  Rich text (HTML from the editor, sent as `multipart/alternative`) or plain text only. */
+export type ComposeFormat = "html" | "text";
+
+/**  An identity for the composer: the sender choice and its text signature. */
+export type ComposeIdentity = {
+	id: IdentityId,
+	accountId: AccountId,
+	email: string,
+	name: string,
+	replyTo: string | null,
+	isDefault: boolean,
+	/**  Plain text without the `-- ` separator (added when the message is put together). */
+	signature: string | null,
+};
+
+/**
+ *  The fields a `mailto:` link fills in a new draft. Recipients are checked and unique across
+ *  To, Cc and Bcc (the address as it goes into the message: local part as written, domain in
+ *  ASCII); `subject` is one line; `body` is plain text with `\n` line breaks.
+ */
+export type ComposeRequest = {
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+	subject: string | null,
+	body: string | null,
+	/**  Message-ID of the message this answers, without angle brackets. */
+	inReplyTo: string | null,
+	/**  What the user should know before sending; shown as hints in the composer. */
+	notices: MailtoNotice[],
+};
+
+/**  App-wide compose settings. */
+export type ComposeSettings = {
+	/**  Undo delay before a message is submitted, 0 to [`MAX_SEND_DELAY_SECS`]. */
+	sendDelaySeconds: number,
+};
+
 /**
  *  Why an operation ended in [`OperationState::Conflict`]. In every case the server state is
  *  kept and shown.
@@ -339,6 +803,16 @@ export type ConnectionTestResult = {
 	 *  with a delay".
 	 */
 	capabilities: Capabilities,
+};
+
+/**  An autocomplete suggestion from addresses of earlier mail. */
+export type ContactSuggestion = {
+	/**  The name to show and to write (the user's choice, else the most used one). */
+	name: string | null,
+	/**  The address to write to. */
+	email: string,
+	/**  Messages the user sent to this address. */
+	sent: number,
 };
 
 /**
@@ -367,8 +841,67 @@ export type ConnectionTestResult = {
  *    states, `removed` the ids that are gone. Re-query `getOutboxCounts` and a visible
  *    activity page; show a notice for `failed`/`conflict` states of the user's own batches.
  *    The messages' rows change with `messagesChanged`.
+ *  - `draftsChanged` (stage 5): local drafts of an account were saved, frozen for sending,
+ *    released, got a new server copy (`changed`) or were deleted, sent or discarded
+ *    (`removed`). An open composer reloads its draft only if it did not cause the change.
+ *  - `outgoingChanged` (stage 5): messages in the outbox view changed state (scheduled,
+ *    sending, verifying, unclear, failed, sent); carries their complete states.
+ *  - `sendNeedsDecision` (stage 5): it stayed unclear whether a message went out. Ask the user
+ *    and answer with `resolveUnclearSend`; nothing is sent again before.
+ *  - `inboxChanged` (stage 9): pins, snoozes, tasks or categories changed (a snooze came back,
+ *    a sender rule was applied, a local rule pinned something). Re-query the inbox and the
+ *    views of pinned, snoozed and task messages; `accountId` is null when several accounts
+ *    changed.
+ *  - `ruleSkipped` (stage 9): a local rule's action did not run for `count` new messages
+ *    (`readOnly`: the account is read-only). Show a notice; nothing else happened.
+ *  - `openMessageRequested` (stage 9): the user clicked a system notification; show the
+ *    message (in `mailboxId` if given).
+ *  - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
+ *    composer with these fields and show `request.notices` (a link that sets blind copies, or
+ *    tried to set headers that were ignored).
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest };
+
+export type DateSection = {
+	kind: DateSectionKind,
+	/**  Start of the section (local midnight) in Unix milliseconds. */
+	start: number,
+};
+
+/**
+ *  Date section of a row, in the user's time zone (`docs/DESIGN.md`: Heute, Gestern, Diese
+ *  Woche, then by month). Rows of one section are contiguous in the newest-first list.
+ */
+export type DateSectionKind = 
+/**  Today, and anything dated in the future. */
+"today" | "yesterday" | 
+/**  Earlier this week (from Monday), before yesterday. */
+"thisWeek" | 
+/**  The calendar month of `start`. */
+"month";
+
+/**  Whether the app is the system's handler of `mailto:` links. */
+export type DefaultMailApp = {
+	/**  Null when the app cannot tell (Windows keeps the choice to itself). */
+	isDefault: boolean | null,
+	/**
+	 *  The app can make itself the default (macOS); otherwise `setDefaultMailApp` opens the
+	 *  system's settings (Windows: Settings, Default apps).
+	 */
+	direct: boolean,
+};
+
+/**  What `setDefaultMailApp` did. */
+export type DefaultMailAppOutcome = 
+/**  The app is the default now. */
+"done" | 
+/**  The system's settings are open; the user picks the app there. */
+"openedSettings" | 
+/**
+ *  It did not work (for example a build that is not installed as an app); the UI explains
+ *  the system's own way (macOS: Mail, Settings, General, "Default email reader").
+ */
+"manual";
 
 /**  Result of server discovery for an email address. Either server may be unknown. */
 export type DiscoveryResult = {
@@ -388,6 +921,120 @@ export type DiscoverySource =
 "autoconfig" | 
 /**  Nothing found; the user fills in the form. */
 "none";
+
+/**
+ *  A local draft, as the composer opens it.
+ * 
+ *  The composer keeps three parts apart (decision 0016): what the user writes (`bodyHtml` or
+ *  `bodyText`), the identity's signature (`includeSignature`, switched with the identity) and
+ *  the quote of a reply or forward (`quoteHtml`/`quoteText`, read-only in stage 5). The core
+ *  puts them together when it saves the draft to the server and when it sends.
+ */
+export type Draft = {
+	id: DraftId,
+	accountId: AccountId,
+	/**  The sending identity; null when it was deleted (the composer asks for another one). */
+	identityId: IdentityId | null,
+	kind: DraftKind,
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+	subject: string,
+	format: ComposeFormat,
+	/**  Editor HTML of what the user wrote (`format: html`). */
+	bodyHtml: string,
+	/**  Plain text of what the user wrote (`format: text`). */
+	bodyText: string,
+	/**  The quoted original as editor HTML (allowlisted) and as plain text with `> `. */
+	quoteHtml: string | null,
+	quoteText: string | null,
+	includeQuote: boolean,
+	quotePosition: QuotePosition,
+	/**  The identity's text signature goes below what the user wrote. */
+	includeSignature: boolean,
+	attachments: DraftAttachment[],
+	/**  The message answered or forwarded, while it is still stored locally. */
+	originalMessageId: MessageId | null,
+	/**  Grows with every save. */
+	revision: number,
+	state: DraftState,
+	server: DraftServerState,
+	/**  The send operation while `state` is `sending`. */
+	outgoing: OperationId | null,
+	/**  Unix milliseconds. */
+	createdAt: number,
+	updatedAt: number,
+};
+
+/**
+ *  A file attached to a draft. The core keeps its own copy of the bytes (taken when the file
+ *  was added), so moving or changing the original file afterwards changes nothing.
+ */
+export type DraftAttachment = {
+	/**  Unique within the draft. */
+	id: string,
+	/**  Sanitised file name as it will be sent. */
+	fileName: string,
+	mime: string,
+	/**  Decoded bytes. */
+	size: number,
+};
+
+/**  Id of a local draft: a UUID, lower case. Stable for the life of the draft. */
+export type DraftId = string;
+
+/**  What a draft was started as. */
+export type DraftKind = "new" | "reply" | "reply_all" | "forward";
+
+/**  Where the draft's copy in the server's Drafts folder stands. */
+export type DraftServerState = 
+/**  Kept on this device only: writes are off for the account, or it has no Drafts folder. */
+"local_only" | 
+/**  Changed since the last copy on the server; a copy is saved after a quiet moment. */
+"pending" | 
+/**  The outbox is putting the newest version on the server. */
+"saving" | 
+/**  The server has the newest version. */
+"saved";
+
+/**  Whether the local draft is a draft or already on its way. */
+export type DraftState = 
+/**  Being written; saves are accepted. */
+"editing" | 
+/**
+ *  Frozen in the outbox (waiting for the undo delay, sending, failed or unclear); see
+ *  [`Draft::outgoing`]. Saves are refused with `send_in_progress` until the user cancels
+ *  the send or edits the failed one.
+ */
+"sending";
+
+/**  A draft in a list (restoring drafts after a crash, the local drafts of an account). */
+export type DraftSummary = {
+	id: DraftId,
+	accountId: AccountId,
+	kind: DraftKind,
+	subject: string,
+	/**  The first To recipients (at most five). */
+	to: Address[],
+	state: DraftState,
+	attachmentCount: number,
+	updatedAt: number,
+};
+
+/**  What the composer saves: every editable field. Attachments have their own commands. */
+export type DraftUpdate = {
+	identityId: IdentityId | null,
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+	subject: string,
+	format: ComposeFormat,
+	bodyHtml: string,
+	bodyText: string,
+	includeQuote: boolean,
+	quotePosition: QuotePosition,
+	includeSignature: boolean,
+};
 
 /**
  *  Stable, machine-readable error kinds. The UI picks its (translated) text by this code.
@@ -446,7 +1093,26 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  */
 "not_undoable" | 
 /**  A tag contains spaces or characters IMAP does not allow in keywords. */
-"invalid_keyword";
+"invalid_keyword" | 
+/**  The SMTP server refused the message or a recipient; nothing was delivered. */
+"send_rejected" | 
+/**
+ *  The message went out, but the server's confirmation never arrived; it may have been
+ *  delivered. Never sent again without the user's decision (`resolveUnclearSend`).
+ */
+"send_unclear" | 
+/**  Stage 5: an address is not valid, or the message has no recipient. */
+"invalid_address" | 
+/**  Stage 5: the attachments together are larger than the app allows. */
+"attachment_too_large" | 
+/**
+ *  Stage 5: the message is in the outbox (cancel sending to change it), or its submission
+ *  started and can no longer be cancelled.
+ */
+"send_in_progress";
+
+/**  `STATUS` of an event. */
+export type EventStatus = "tentative" | "confirmed" | "cancelled";
 
 /**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
@@ -469,6 +1135,94 @@ export type IdentityInput = {
 	email: string,
 	name: string,
 	replyTo: string | null,
+};
+
+/**
+ *  Keyset cursor of the inbox: the message cursor plus the bundles the current date section
+ *  has started (opaque; pass it back unchanged).
+ */
+export type InboxCursor = {
+	before: ListCursor,
+	/**  Serialised bundle state, null when categories are off or nothing is open. */
+	bundles: string | null,
+};
+
+/**  A filtered inbox list ("Alle anzeigen", a click on a bundle's category). */
+export type InboxFilter = 
+/**  Messages of one category (after the user's sender rules). */
+{ kind: "category"; category: MessageCategory } | 
+/**  Messages of important senders. */
+{ kind: "priority" };
+
+/**  One page of the inbox. */
+export type InboxPage = {
+	rows: InboxRow[],
+	/**  Null on the last page. */
+	nextCursor: InboxCursor | null,
+	/**  Pinned, returned and priority messages; only on the first page (no cursor given). */
+	top: InboxTop | null,
+	/**
+	 *  Categories are on: notifications and newsletters are bundled. Off: the rows are purely
+	 *  chronological.
+	 */
+	categories: boolean,
+};
+
+/**  One row of the inbox list. */
+export type InboxRow = 
+/**
+ *  A message of its own (people, important senders, and everything when categories are
+ *  off).
+ */
+{ kind: "message"; item: MessageListItem; section: DateSection } | 
+/**
+ *  Notifications or newsletters of one date section as one row; it stands where its newest
+ *  member is. `members` are the members on this page, newest first; a click expands them in
+ *  place. A bundle with one member may be drawn like a normal row.
+ */
+{ kind: "bundle"; summary: BundleSummary; section: DateSection; members: MessageListItem[] } | 
+/**
+ *  More members of a bundle an earlier page started: append them to that row (same
+ *  `summary.key`) and replace its summary with this one.
+ */
+{ kind: "more"; summary: BundleSummary; members: MessageListItem[] };
+
+/**  Which inbox a view shows. */
+export type InboxScope = 
+/**  One mailbox, usually an account's inbox. */
+{ kind: "mailbox"; mailboxId: MailboxId } | 
+/**  The unified inbox, or the inboxes of a group (hidden accounts left out). */
+{ kind: "unified"; view: UnifiedView };
+
+/**  The inbox settings (stage 9). Device settings, stored in the `setting` table. */
+export type InboxSettings = {
+	/**  Off: no bundles and no priority block, the inbox is purely chronological. */
+	categories?: boolean,
+	bundleNotifications?: boolean,
+	bundleNewsletters?: boolean,
+};
+
+/**  What stands above the date sections. Only on the first page. */
+export type InboxTop = {
+	/**
+	 *  Pinned messages of the scope, newest first (at most [`MAX_TOP_PINNED`]). They are not
+	 *  repeated in the rows.
+	 */
+	pinned: MessageListItem[],
+	/**
+	 *  Snoozed messages that came back, most recently returned first (at most
+	 *  [`MAX_TOP_RETURNED`]). Not repeated in the rows; they stay here until the user clears
+	 *  the mark (`clearSnooze`), snoozes them again or they leave the inbox.
+	 */
+	returned: MessageListItem[],
+	/**
+	 *  The newest messages of important senders (at most [`PRIORITY_PREVIEW`]); they also
+	 *  stand in the rows, never bundled. Empty when categories are off.
+	 */
+	priority: MessageListItem[],
+	/**  All messages of important senders in the scope ("Alle anzeigen (n)"). */
+	priorityTotal: number,
+	priorityUnread: number,
 };
 
 /**  The error as it crosses the IPC bridge: `{ code, message, detail }`. */
@@ -545,6 +1299,21 @@ export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type:
 /**  Moves messages from the junk mailbox to the inbox; others are left alone. */
 { type: "notSpam" };
 
+/**  A local rule: runs on new mail in the inbox while the app runs (labelled so in the UI). */
+export type MailRule = {
+	id: RuleId,
+	name: string,
+	enabled: boolean,
+	/**  All conditions must hold (`true`) or any (`false`). No condition: every message. */
+	matchAll: boolean,
+	conditions: RuleCondition[],
+	actions: RuleAction[],
+	/**  Later rules are not evaluated for a message this rule matched. */
+	stop: boolean,
+	/**  Order: lower runs first. */
+	position: number,
+};
+
 /**  A mailbox as the UI sees it (sidebar, folder tree). */
 export type Mailbox = {
 	id: MailboxId,
@@ -578,6 +1347,52 @@ export type MailboxRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "j
 /**  An ordinary folder. */
 "custom";
 
+/**  A field of a `mailto:` link that a [`MailtoNotice`] refers to. */
+export type MailtoField = "to" | "cc" | "bcc" | "subject" | "body" | "in_reply_to";
+
+/**
+ *  Something about a `mailto:` link the composer shows as a hint. Values are copied from the
+ *  link (decoded, on one line, cut to a few hundred characters).
+ */
+export type MailtoNotice = 
+/**
+ *  The link adds blind copies: the user must see them before sending. Always the first
+ *  notice when present.
+ */
+{ kind: "bcc_present" } | 
+/**
+ *  A header field outside the allowlist (`to`, `cc`, `bcc`, `subject`, `body`,
+ *  `in-reply-to`), for example `from`, `reply-to` or `x-mailer`. Never applied; `name` in
+ *  lower case.
+ */
+{ kind: "header_ignored"; name: string } | 
+/**
+ *  `subject`, `body` or `in-reply-to` came more than once; only the first usable one is
+ *  used.
+ */
+{ kind: "duplicate_ignored"; field: MailtoField } | 
+/**
+ *  Not a usable address (left out). Quoted local parts (`"not@me"@example.org`) are
+ *  decoded but not supported by the composer, so they end up here too.
+ */
+{ kind: "address_invalid"; value: string } | 
+/**  `in-reply-to` is not one valid Message-ID (left out). */
+{ kind: "message_id_invalid"; value: string } | 
+/**
+ *  The field was over its limit and was cut (subject, body) or recipients were left out
+ *  (To, Cc, Bcc: more than `MAX_RECIPIENTS` together).
+ */
+{ kind: "truncated"; field: MailtoField } | 
+/**  Percent-encoded bytes were not valid UTF-8; they were replaced with U+FFFD. */
+{ kind: "invalid_encoding"; field: MailtoField } | 
+/**
+ *  Control characters were removed: line breaks in the subject became spaces, characters
+ *  other than line breaks and tabs were dropped from the body.
+ */
+{ kind: "control_characters_removed"; field: MailtoField } | 
+/**  More hints of the kinds above that carry a value than are listed. */
+{ kind: "notices_omitted"; count: number };
+
 /**
  *  When the reading pane marks an opened message as read (stage 4). The UI does the marking
  *  (an ordinary `markRead` action), and only for accounts with `writesEnabled`; read-only
@@ -588,6 +1403,15 @@ export type MarkReadOnOpen =
 "immediately" | 
 /**  After it was shown for [`MARK_READ_DELAY_MS`] without the selection changing. */
 "afterDelay" | "never";
+
+/**  The accounts a view of pinned, snoozed or task messages covers. */
+export type MarkScope = 
+/**  Every visible account. */
+{ kind: "all" } | 
+/**  The visible accounts of a group. */
+{ kind: "group"; groupId: AccountGroupId } | 
+/**  One account (also a hidden one). */
+{ kind: "account"; accountId: AccountId };
 
 /**
  *  Outbox state of a message as its list row shows it (stage 4). If several operations touch
@@ -629,6 +1453,49 @@ blockedRemote: number; remoteLoaded: boolean } |
 /**  Details for `fetchFailed`, null otherwise. */
 error: IpcError | null };
 
+/**  The category of a message in the inbox. */
+export type MessageCategory = 
+/**  Written by a person (the default when nothing points to a program or a list). */
+"person" | 
+/**
+ *  Written by a program for the user: notifications, confirmations, automatic replies,
+ *  delivery reports.
+ */
+"notification" | 
+/**  Mass mail: newsletters, mailing lists, marketing. */
+"newsletter";
+
+/**  "Why here?" for one message, and the keys an "always as …" can use. */
+export type MessageCategoryInfo = {
+	messageId: MessageId,
+	/**  Null while the message is not classified yet. */
+	decision: CategoryDecision | null,
+	/**
+	 *  The normalised sender address, its domain and the list, for "always as …" (each null
+	 *  when the message has none).
+	 */
+	address: SenderKey | null,
+	domain: SenderKey | null,
+	list: SenderKey | null,
+};
+
+/**
+ *  What the reading pane shows besides the body (stage 9): the category ("Why here?"),
+ *  unsubscribing, calendar invitations.
+ */
+export type MessageExtras = {
+	category: MessageCategoryInfo,
+	/**  Empty when the message offers nothing. */
+	unsubscribe: UnsubscribeOptions,
+	/**
+	 *  Invitations of the `text/calendar` parts (`partId` for `openInvite`). Empty while the
+	 *  body is not stored whole (`bodyComplete` false): ask again after
+	 *  `messageBodyAvailable`.
+	 */
+	invites: CalendarInviteInfo[],
+	bodyComplete: boolean,
+};
+
 /**
  *  Local id of a message (`message.id`): its sort date in Unix seconds, or the next free number
  *  above it (decision 0003). Larger is newer. Below 2^33, so exact as a JavaScript number.
@@ -665,6 +1532,19 @@ export type MessageListItem = {
 	 *  nothing is pending or needs the user (most rows), so pages stay small.
 	 */
 	activity?: MessageActivity | null,
+	/**
+	 *  Stage 9: the category after the user's sender rules; null until the message is
+	 *  classified (treat it as a person's).
+	 */
+	category: MessageCategory | null,
+	/**  Stage 9: the sender, domain or list is marked important ("Priority" block). */
+	important: boolean,
+	/**  Stage 9: pinned. */
+	pinned: boolean,
+	/**  Stage 9: snoozed (waiting, or came back). Absent when not snoozed. */
+	snooze?: SnoozeMark | null,
+	/**  Stage 9: marked as a task. Absent when not. */
+	task?: TaskMark | null,
 };
 
 /**  One page of a message list, newest first. */
@@ -730,6 +1610,70 @@ export type MessageViewHeader = {
 	subject: string,
 };
 
+/**  How a new draft starts. */
+export type NewDraft = 
+/**
+ *  An empty message from the account (its default identity unless `identityId`), optionally
+ *  to someone already (a `mailto:` click, "write to" in a contact).
+ */
+{ kind: "new"; accountId: AccountId; identityId: IdentityId | null; to: Address[] } | 
+/**  An answer to the sender of `messageId`, from the identity the message went to. */
+{ kind: "reply"; messageId: MessageId; language: QuoteLanguage } | 
+/**  An answer to the sender and every other recipient except the user's own addresses. */
+{ kind: "reply_all"; messageId: MessageId; language: QuoteLanguage } | 
+/**  The message with its attachments, to new recipients. */
+{ kind: "forward"; messageId: MessageId; language: QuoteLanguage };
+
+/**  Notification settings (device settings). */
+export type NotificationSettings = {
+	/**  Off: no notification at all. */
+	enabled?: boolean,
+	newMail?: boolean,
+	categories?: NotifyCategories,
+	failedSends?: boolean,
+	snoozes?: boolean,
+	quietHours?: QuietHours,
+	/**
+	 *  Show "New message" instead of sender and subject. The system decides separately whether
+	 *  previews appear on the lock screen (macOS: Notifications, "Show previews"; Windows:
+	 *  Notifications, "Show notifications on the lock screen").
+	 */
+	hideContent?: boolean,
+	/**  Accounts whose new mail is never announced. */
+	mutedAccounts?: AccountId[],
+	badge?: BadgeMode,
+};
+
+/**
+ *  The texts of system notifications, in the UI's language. The UI sends them from
+ *  `app/src/i18n/` at start and when the language changes (`setNotificationTexts`); until then
+ *  the English defaults apply. `{count}` is replaced by a number, `{subject}` by a subject.
+ */
+export type NotificationTexts = {
+	/**  Title when content is hidden, or for one message without a sender. */
+	newMessage?: string,
+	/**  Title for several messages at once. */
+	newMessages?: string,
+	/**  Body when the subject is empty. */
+	noSubject?: string,
+	/**  Title of a failed send; the body is the subject. */
+	sendFailed?: string,
+	/**  Title of a returned snooze; the body is the subject (or hidden). */
+	snoozeDue?: string,
+};
+
+/**
+ *  Which new mail is announced (by category after the user's rules; a rule's `notify` action
+ *  overrides).
+ */
+export type NotifyCategories = {
+	people?: boolean,
+	/**  Important senders, whatever their category. */
+	priority?: boolean,
+	notifications?: boolean,
+	newsletters?: boolean,
+};
+
 /**  Result of `openAttachment`. */
 export type OpenAttachmentResult = 
 /**  Handed to the system's default app. */
@@ -771,7 +1715,13 @@ export type OperationInfo = {
 };
 
 /**  What an operation does on the server. */
-export type OperationKind = "set_flag" | "move" | "expunge" | "create_mailbox";
+export type OperationKind = "set_flag" | "move" | "expunge" | "create_mailbox" | 
+/**  Stage 5: SMTP submission of a message (decision 0018). */
+"send" | 
+/**  Stage 5: APPEND of a draft version or of the copy of a sent message. */
+"append" | 
+/**  Stage 5: removal of an own copy (an old draft version), checked by Message-ID. */
+"remove_copy";
 
 /**  Something the user should know about a confirmed operation. */
 export type OperationNotice = 
@@ -780,7 +1730,12 @@ export type OperationNotice =
  *  so a plain EXPUNGE would have removed them too. The message was copied but its original
  *  stays in the source, marked deleted, until the mailbox is expunged.
  */
-"left_marked_deleted";
+"left_marked_deleted" | 
+/**
+ *  Stage 5: the message was sent, but no copy went into Sent: the account has no Sent
+ *  folder (the user can choose one with `setMailboxRole`).
+ */
+"no_sent_copy";
 
 /**
  *  Where an operation stands.
@@ -820,6 +1775,32 @@ export type OutboxCounts = {
 	/**  `conflict`: changed elsewhere meanwhile, the server's state was kept. Discard. */
 	conflict: number,
 };
+
+/**  A message on its way, for the outbox view. */
+export type OutgoingMail = {
+	operationId: OperationId,
+	accountId: AccountId,
+	/**  The frozen draft while it exists (until the server accepted the message). */
+	draftId: DraftId | null,
+	subject: string,
+	/**  The first recipients (at most five) and how many there are in all. */
+	to: Address[],
+	recipientCount: number,
+	state: SendState,
+	/**  When the submission starts (Unix ms): the end of the undo delay. */
+	sendAt: number,
+	/**  Why it failed, is unclear or waits (the last temporary error). */
+	error: IpcError | null,
+	/**  Times the submission was started. */
+	attempts: number,
+	/**  `noSentCopy` when no copy went into Sent (no Sent folder). */
+	notice: OperationNotice | null,
+	createdAt: number,
+	updatedAt: number,
+};
+
+/**  `PARTSTAT` of an attendee. */
+export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "tentative" | "delegated";
 
 /**  Operating system the app runs on. */
 export type Platform = "macos" | "windows" | "linux";
@@ -893,12 +1874,40 @@ export type ProviderHint =
 "tonline";
 
 /**
+ *  Quiet hours: no sound and no banner between `start` and `end` (minutes after local
+ *  midnight; may wrap midnight). Notifications are dropped, not delayed.
+ */
+export type QuietHours = {
+	enabled: boolean,
+	startMinute: number,
+	endMinute: number,
+};
+
+/**
+ *  Language of the attribution line ("On … wrote:") and the forward header of a new reply or
+ *  forward: the UI's resolved language.
+ */
+export type QuoteLanguage = "en" | "de";
+
+/**  Where the answer goes relative to the quoted original. */
+export type QuotePosition = 
+/**  Answer and signature above the quote (the common default). */
+"above" | 
+/**  The quote first, then the answer and the signature. */
+"below";
+
+/**
  *  Reading preferences stored in the `setting` table (stage 4). Separate from [`Preferences`],
  *  so the appearance settings keep their shape.
  */
 export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
 };
+
+/**  `FREQ` of a recurrence rule. */
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly" | 
+/**  `SECONDLY`, `MINUTELY` or `HOURLY`: shown from `rule`. */
+"other";
 
 /**  Scope of `loadRemoteContent`. */
 export type RemoteContentScope = 
@@ -925,6 +1934,53 @@ export type RoleSource =
 "user" | 
 /**  No role (`custom`) and no reason to think otherwise. */
 "none";
+
+/**
+ *  An action of a local rule. Moving and marking as read are writing actions: they go through
+ *  the outbox and are skipped (and reported) on read-only accounts.
+ */
+export type RuleAction = 
+/**  To a mailbox of the message's account, by decoded path (stable across devices). */
+{ type: "move"; accountId: AccountId; path: string } | { type: "markRead" } | 
+/**  Sets the message's category (this message only; "always as …" is a sender rule). */
+{ type: "setCategory"; category: MessageCategory } | { type: "pin" } | 
+/**  Notify about the message, or not, whatever the notification settings say. */
+{ type: "notify"; enabled: boolean };
+
+/**  A condition of a local rule. */
+export type RuleCondition = 
+/**  The From address or name. */
+{ field: "from"; op: TextMatchOp; value: string } | 
+/**  Any To or Cc address or name. */
+{ field: "to"; op: TextMatchOp; value: string } | { field: "subject"; op: TextMatchOp; value: string } | 
+/**  The `List-Id` identifier (`contains` or `is`). */
+{ field: "list"; op: TextMatchOp; value: string } | 
+/**  The message arrived in this account. */
+{ field: "account"; accountId: AccountId };
+
+/**  Stable id of a local rule (UUID v4, lower case), synced like the rule. */
+export type RuleId = string;
+
+/**  What the UI sends to create or change a local rule. */
+export type RuleInput = {
+	name: string,
+	enabled: boolean,
+	matchAll: boolean,
+	conditions: RuleCondition[],
+	actions: RuleAction[],
+	stop: boolean,
+};
+
+/**  Why a rule's action did not run. */
+export type RuleSkipReason = 
+/**  The account is read-only; moving and marking need writing. */
+"read_only" | 
+/**  The target mailbox does not exist (any more) or belongs to another account. */
+"missing_mailbox" | 
+/**  The message has no Message-ID, so it cannot be pinned. */
+"no_message_id" | 
+/**  The outbox refused the action (detail in the log). */
+"failed";
 
 /**  Result of `saveAttachment`. */
 export type SaveAttachmentResult = 
@@ -1075,6 +2131,80 @@ export type Security =
  */
 "starttls";
 
+/**  Where a sent message stands, for the outbox view ("Ausgang"). */
+export type SendState = 
+/**  Waiting out the undo delay until `sendAt`; can be cancelled. */
+"scheduled" | 
+/**  Due, waiting for the server (offline, or a temporary refusal); `error` says why. */
+"queued" | 
+/**  Being submitted right now; can no longer be cancelled. */
+"sending" | 
+/**
+ *  The connection broke after the whole message went out: the core looks for it in the
+ *  Sent folder (only where the server files sent mail itself).
+ */
+"verifying" | 
+/**
+ *  It stayed unclear whether the message went out. The user decides
+ *  ([`UnclearDecision`]); nothing is sent again by itself.
+ */
+"unclear" | 
+/**  Refused (`error`); nothing was delivered. Retry, or edit the draft again. */
+"failed" | 
+/**  The server accepted it. */
+"sent";
+
+/**  A sender chip on a bundle row. */
+export type SenderChip = {
+	/**  The address as first seen (newest message), with the first display name seen. */
+	sender: Address,
+	count: number,
+	unread: number,
+};
+
+/**
+ *  A sender, domain or list a user rule applies to. `value` as the user chose it; the
+ *  classifier normalises it (lower case, ASCII domain) before comparing.
+ */
+export type SenderKey = {
+	kind: SenderKeyKind,
+	value: string,
+};
+
+/**  What a correction or an important mark applies to. */
+export type SenderKeyKind = 
+/**  One sender address. */
+"address" | 
+/**  A domain and all its subdomains. */
+"domain" | 
+/**  A mailing list, by the identifier of its `List-Id`. */
+"list_id";
+
+/**
+ *  A rule for a sender, domain or list: the category correction ("always as …") and the
+ *  important mark. Synced (class sync).
+ */
+export type SenderRule = {
+	/**  UUID, lower case. */
+	id: string,
+	/**  The key as normalised for comparing (lower case, ASCII domain). */
+	key: SenderKey,
+	/**  The correction; null if the rule only marks the sender important. */
+	category: MessageCategory | null,
+	important: boolean,
+	/**  Unix milliseconds. */
+	updatedAt: number,
+};
+
+/**  Who puts the copy of a sent message into the Sent folder. */
+export type SentCopyMode = 
+/**  Recognised from the server: Gmail files sent mail itself, everyone else needs the app. */
+"auto" | 
+/**  The app appends the copy. */
+"app" | 
+/**  The server files it itself; the app appends nothing. */
+"server";
+
 /**
  *  Result of searching on the server (IMAP SEARCH over the read-only connection) for messages
  *  whose content is not stored locally.
@@ -1105,6 +2235,47 @@ export type ServerSettings = {
 	username: string,
 };
 
+/**
+ *  When a snoozed message comes back. Times are computed in the user's time zone; daylight
+ *  saving changes are taken into account (a local time that does not exist moves forward).
+ */
+export type SnoozeChoice = 
+/**  Three hours from now, rounded up to the full hour; only while that is still today. */
+{ kind: "laterToday" } | 
+/**  Tomorrow at 08:00. */
+{ kind: "tomorrow" } | 
+/**  Next Saturday at 09:00 (on a weekend: the following one). */
+{ kind: "weekend" } | 
+/**  Next Monday at 08:00. */
+{ kind: "nextWeek" } | 
+/**  A time the user picked, Unix milliseconds; at least a minute ahead, at most 5 years. */
+{ kind: "at"; at: number };
+
+/**  A snooze on a list row. */
+export type SnoozeMark = {
+	/**  When the message comes (or came) back, Unix milliseconds. */
+	until: number,
+	/**  It came back and waits for the user (shown on top with a mark). */
+	returned: boolean,
+};
+
+/**  What `snoozeMessages` answers. */
+export type SnoozeResult = {
+	/**  When the messages come back, Unix milliseconds. */
+	until: number,
+};
+
+/**
+ *  The times the snooze menu offers right now, Unix milliseconds. `laterToday` is null late in
+ *  the day.
+ */
+export type SnoozeTimes = {
+	laterToday: number | null,
+	tomorrow: number,
+	weekend: number,
+	nextWeek: number,
+};
+
 /**  Progress of the first sync of one mailbox. */
 export type SyncProgress = {
 	mailboxId: MailboxId,
@@ -1113,6 +2284,21 @@ export type SyncProgress = {
 	/**  Messages in this mailbox on the server (EXISTS when the pass started). */
 	total: number,
 };
+
+/**  Which tasks the "Aufgaben" view lists. */
+export type TaskFilter = "open" | "done" | "all";
+
+/**  A task mark on a list row. */
+export type TaskMark = {
+	done: boolean,
+};
+
+/**  How a text condition compares (case and accents ignored). */
+export type TextMatchOp = "contains" | 
+/**  The whole value (for addresses: the address). */
+"is" | 
+/**  Addresses: the domain or a subdomain of it. */
+"domain";
 
 /**  A range of UTF-16 code units (`start..end`). */
 export type TextRange = {
@@ -1174,12 +2360,47 @@ export type ThreadView = {
 	total: number,
 };
 
+/**  The user's answer to an unclear send. */
+export type UnclearDecision = 
+/**  It arrived (the user checked): finish as sent (copy into Sent, draft removed). */
+"treat_as_sent" | 
+/**
+ *  Submit it once more with the same Message-ID. The user confirmed that recipients may get
+ *  it twice.
+ */
+"send_again";
+
 /**  Which inboxes a unified view mixes. */
 export type UnifiedView = 
 /**  The inboxes of every visible account. */
 { kind: "all" } | 
 /**  The inboxes of the group's visible accounts. */
 { kind: "group"; groupId: AccountGroupId };
+
+/**  How the user chose to unsubscribe. */
+export type UnsubscribeMethod = "oneClick" | "mailto" | "web";
+
+/**
+ *  What a message offers for unsubscribing, from `List-Unsubscribe` and
+ *  `List-Unsubscribe-Post`.
+ */
+export type UnsubscribeOptions = {
+	/**  One-click (RFC 8058): an HTTPS POST the core sends after the click. Shows the host. */
+	oneClickHost: string | null,
+	/**  A `mailto:` address: a prepared draft the user sends. */
+	mailto: string | null,
+	/**  An `http`/`https` page that only opens in the browser, after the user confirmed. */
+	web: string | null,
+};
+
+/**  The result of an unsubscribe click. */
+export type UnsubscribeOutcome = 
+/**  The list's server accepted the one-click request (HTTP 2xx). */
+{ kind: "requested"; status: number } | 
+/**  Open the composer with these fields; the user sends the request. */
+{ kind: "compose"; request: ComposeRequest } | 
+/**  The page was handed to the system browser. */
+{ kind: "opened" };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

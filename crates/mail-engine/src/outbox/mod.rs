@@ -39,11 +39,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::Duration;
 
-use mail_imap::ImapConnector;
+use mail_imap::{ImapConnector, SmtpSender};
 use mail_model::{
     AccountId, ActionResult, BatchId, CoreError, CoreEvent, ExtraRootCa, MAX_ACTION_MESSAGES,
-    MailAction, MailboxId, MailboxRole, MessageRef, OperationId, OperationInfo, OutboxCounts,
-    OutboxEvent, Timeouts, WriteConnector,
+    MailAction, MailSender, MailboxId, MailboxRole, MessageRef, OperationId, OperationInfo,
+    OperationKind, OperationState, OutboxCounts, OutboxEvent, SendState, Timeouts, WriteConnector,
 };
 use mail_store::{OutboxChange, Store};
 use tokio::sync::{Notify, broadcast, watch};
@@ -71,6 +71,11 @@ pub struct OutboxConfig {
     pub max_attempts: u32,
     /// Confirmed operations are kept this long (activity view, undo), then purged.
     pub keep_confirmed: Duration,
+    /// Stage 5: how messages are submitted (the SMTP adapter); tests hand in an instrumented
+    /// one.
+    pub sender: SenderHandle,
+    /// Stage 5: tunables of drafts and sending.
+    pub compose: ComposeConfig,
 }
 
 impl Default for OutboxConfig {
@@ -82,6 +87,51 @@ impl Default for OutboxConfig {
             linger: Duration::from_secs(60),
             max_attempts: 5,
             keep_confirmed: Duration::from_secs(24 * 60 * 60),
+            sender: SenderHandle::default(),
+            compose: ComposeConfig::default(),
+        }
+    }
+}
+
+/// The [`MailSender`] the outbox submits with. The product's is [`SmtpSender`].
+#[derive(Clone)]
+pub struct SenderHandle(pub Arc<dyn MailSender>);
+
+impl Default for SenderHandle {
+    fn default() -> Self {
+        Self(Arc::new(SmtpSender::new()))
+    }
+}
+
+impl std::fmt::Debug for SenderHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SenderHandle")
+    }
+}
+
+/// Tunables of drafts and sending (stage 5). The defaults are the product values.
+#[derive(Debug, Clone)]
+pub struct ComposeConfig {
+    /// A draft goes to the server's Drafts folder after this long without a save (and at
+    /// once when the composer closes).
+    pub draft_save_delay: Duration,
+    /// After an unclear send on a server that files sent mail itself: waits before each look
+    /// into Sent (the server may take a moment to file it). Then the user is asked.
+    pub sent_checks: Vec<Duration>,
+    /// The contact directory reads new messages this long after they arrived (batched).
+    pub contacts_delay: Duration,
+}
+
+impl Default for ComposeConfig {
+    fn default() -> Self {
+        Self {
+            draft_save_delay: Duration::from_secs(30),
+            sent_checks: vec![
+                Duration::from_secs(5),
+                Duration::from_secs(20),
+                Duration::from_secs(60),
+            ],
+            contacts_delay: Duration::from_secs(2),
         }
     }
 }
@@ -117,14 +167,73 @@ impl SyncHook for NoSyncHook {
 pub(crate) struct Emitter {
     pub(crate) events: broadcast::Sender<OutboxEvent>,
     core: RwLock<Option<broadcast::Sender<CoreEvent>>>,
+    /// Stage 5: for removing the files of sent and discarded drafts.
+    store: Store,
+    /// Held while compose files are written before their operation is recorded, so the sweep
+    /// never removes them in between.
+    pub(crate) files_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Emitter {
-    fn new() -> Self {
+    fn new(store: Store) -> Self {
         let (events, _) = broadcast::channel(EVENT_CAPACITY);
         Self {
             events,
             core: RwLock::new(None),
+            store,
+            files_lock: Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+
+    /// Stage 5: events of drafts and sends, and the removal of files nothing needs any more.
+    fn compose_change(&self, change: &OutboxChange, send: &dyn Fn(CoreEvent)) {
+        if !change.drafts.is_empty() || !change.drafts_removed.is_empty() {
+            send(CoreEvent::DraftsChanged {
+                account_id: change.account,
+                changed: change
+                    .drafts
+                    .iter()
+                    .filter(|d| !change.drafts_removed.contains(d))
+                    .cloned()
+                    .collect(),
+                removed: change.drafts_removed.clone(),
+            });
+        }
+        let now = crate::clock::Clock::now_ms(&crate::clock::SystemClock);
+        let mails: Vec<_> = change
+            .operations
+            .iter()
+            .filter_map(|op| crate::compose::outgoing::outgoing_mail(op, now))
+            .collect();
+        if !mails.is_empty() {
+            for mail in &mails {
+                if mail.state == SendState::Unclear {
+                    send(CoreEvent::SendNeedsDecision {
+                        account_id: change.account,
+                        mail: mail.clone(),
+                    });
+                }
+            }
+            send(CoreEvent::OutgoingChanged {
+                account_id: change.account,
+                mails,
+            });
+        }
+        let compose_files_may_be_free = !change.drafts_removed.is_empty()
+            || !change.removed.is_empty()
+            || change.operations.iter().any(|op| {
+                matches!(
+                    op.payload.kind(),
+                    OperationKind::Send | OperationKind::Append
+                ) && matches!(op.state, OperationState::Confirmed | OperationState::Failed)
+            });
+        if compose_files_may_be_free && tokio::runtime::Handle::try_current().is_ok() {
+            let store = self.store.clone();
+            let lock = Arc::clone(&self.files_lock);
+            tokio::spawn(async move {
+                let _held = lock.lock().await;
+                crate::compose::files::sweep(&store).await;
+            });
         }
     }
 
@@ -139,12 +248,18 @@ impl Emitter {
     /// the core's.
     pub(crate) fn change(&self, change: &OutboxChange) {
         emit_change(&self.events, change);
-        let Some(core) = self.core() else { return };
+        let core = self.core();
         let send = |event| {
-            if core.send(event).is_err() {
+            if let Some(core) = &core
+                && core.send(event).is_err()
+            {
                 tracing::trace!("core event dropped: no subscribers");
             }
         };
+        self.compose_change(change, &send);
+        if core.is_none() {
+            return;
+        }
         if !change.operations.is_empty() || !change.removed.is_empty() {
             send(CoreEvent::OperationsChanged {
                 account_id: change.account,
@@ -278,6 +393,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         credentials: Credentials,
         config: OutboxConfig,
     ) -> Self {
+        let store_for_emitter = store.clone();
         Self {
             shared: Arc::new(Shared {
                 store,
@@ -285,7 +401,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
                 credentials,
                 config,
                 clock: Arc::new(SystemClock),
-                emitter: Emitter::new(),
+                emitter: Emitter::new(store_for_emitter),
                 hook: RwLock::new(Arc::new(NoSyncHook)),
             }),
             workers: Arc::new(Mutex::new(HashMap::new())),
@@ -394,7 +510,9 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         Ok(self.recorded(&change))
     }
 
-    /// Queues a failed or conflicting operation again (activity view, "retry").
+    /// Queues a failed or conflicting operation again (activity view, "retry"). An unclear
+    /// send is refused (`confirmation_required`): it is only sent again through the user's
+    /// explicit decision ([`mail_model::UnclearDecision::SendAgain`]).
     pub async fn retry(&self, id: OperationId) -> Result<ActionResult, CoreError> {
         let change = self.shared.store.retry_operation(id, request_id()).await?;
         Ok(self.recorded(&change))
@@ -505,6 +623,24 @@ impl<C: WriteConnector + 'static> Outbox<C> {
                 task.abort();
             }
         }
+    }
+
+    /// Stage 5: a change the compose module recorded in the store (a send, a draft's copy, a
+    /// discarded draft): emits its events and wakes the account's worker.
+    pub(crate) fn changed(&self, change: &OutboxChange) {
+        self.shared.emitter.change(change);
+        if !change.operations.is_empty() {
+            self.kick(change.account);
+        }
+    }
+
+    pub(crate) fn compose_config(&self) -> &ComposeConfig {
+        &self.shared.config.compose
+    }
+
+    /// Held while compose files are written ahead of their operation.
+    pub(crate) fn files_lock(&self) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(&self.shared.emitter.files_lock)
     }
 
     fn recorded(&self, change: &OutboxChange) -> ActionResult {

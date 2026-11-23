@@ -32,7 +32,7 @@ use std::time::Duration;
 use async_imap::Session;
 use async_imap::imap_proto::rfc4315::UidSetMember;
 use async_imap::imap_proto::{MailboxDatum, Outcome, ResponseCode, Status};
-use mail_model::{Access, BackendError, CopyUid, IdleOutcome, Uid, UidSet, UidValidity};
+use mail_model::{Access, AppendUid, BackendError, CopyUid, IdleOutcome, Uid, UidSet, UidValidity};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub(crate) use async_imap::imap_proto::Response;
@@ -178,6 +178,8 @@ pub(crate) struct Tagged {
     pub(crate) read_only: bool,
     /// `[COPYUID ...]` (UIDPLUS, after COPY).
     pub(crate) copy_uid: Option<CopyUid>,
+    /// `[APPENDUID ...]` (UIDPLUS, after APPEND of one message).
+    pub(crate) append_uid: Option<AppendUid>,
     /// `[MODIFIED ...]` (CONDSTORE, after `STORE (UNCHANGEDSINCE ...)`). imap-proto does not
     /// know the code and leaves it in the text; it is read before the text is shortened.
     pub(crate) modified: Option<UidSet>,
@@ -206,6 +208,7 @@ impl Tagged {
             status,
             read_only: matches!(outcome.code, Some(ResponseCode::ReadOnly)),
             copy_uid: outcome.code.as_ref().and_then(copy_uid_of),
+            append_uid: outcome.code.as_ref().and_then(append_uid_of),
             modified,
             text: short(&text),
         }
@@ -256,6 +259,22 @@ pub(crate) fn copy_uid_of(code: &ResponseCode<'_>) -> Option<CopyUid> {
     Some(CopyUid {
         uid_validity: UidValidity(*validity),
         pairs: source.into_iter().zip(target).collect(),
+    })
+}
+
+/// APPENDUID of a tagged OK after APPEND (RFC 4315): one UID for one message.
+pub(crate) fn append_uid_of(code: &ResponseCode<'_>) -> Option<AppendUid> {
+    let ResponseCode::AppendUid(validity, set) = code else {
+        return None;
+    };
+    let uid = match set.as_slice() {
+        [UidSetMember::Uid(uid)] => *uid,
+        [UidSetMember::UidRange(range)] if range.start() == range.end() => *range.start(),
+        _ => return None,
+    };
+    Some(AppendUid {
+        uid_validity: UidValidity(*validity),
+        uid,
     })
 }
 
@@ -454,6 +473,101 @@ impl<S: Transport> Conn<S> {
         F: FnMut(&Response<'_>) -> bool + Send,
     {
         let tag = self.session.run_command(line).await.map_err(from_imap)?;
+        loop {
+            let resp = got(self.session.read_response().await, &self.watch)?;
+            match resp.parsed() {
+                Response::Done {
+                    tag: done,
+                    status,
+                    outcome,
+                } if *done == tag => return Ok(Tagged::new(status, outcome)),
+                Response::Continue(_) => {
+                    return Err(BackendError::Protocol(format!(
+                        "unexpected continuation request during {}",
+                        command_name(line)
+                    )));
+                }
+                other => {
+                    if !on_untagged(other) {
+                        self.watch.note(other);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Runs a command whose last argument is a literal (APPEND): `line` is the command up to
+    /// the literal, `literal` its bytes. With `non_sync` (LITERAL+, RFC 7888) the literal
+    /// follows at once; otherwise after the server's continuation request. A refusal before the
+    /// continuation is a tagged NO/BAD like any other.
+    pub(crate) async fn run_literal<F>(
+        &mut self,
+        line: &str,
+        literal: &[u8],
+        non_sync: bool,
+        mut on_untagged: F,
+    ) -> Result<Tagged, BackendError>
+    where
+        F: FnMut(&Response<'_>) -> bool + Send,
+    {
+        self.usable()?;
+        permit(self.access, line)?;
+        if line.contains(['\r', '\n']) {
+            return Err(BackendError::InvalidState(format!(
+                "{} with a line break before the literal",
+                command_name(line)
+            )));
+        }
+        self.poisoned = Some(format!("{} was aborted", command_name(line)));
+        let result = self
+            .literal_exchange(line, literal, non_sync, &mut on_untagged)
+            .await;
+        self.settle(&result);
+        result
+    }
+
+    async fn literal_exchange<F>(
+        &mut self,
+        line: &str,
+        literal: &[u8],
+        non_sync: bool,
+        on_untagged: &mut F,
+    ) -> Result<Tagged, BackendError>
+    where
+        F: FnMut(&Response<'_>) -> bool + Send,
+    {
+        let marker = if non_sync {
+            format!("{{{}+}}", literal.len())
+        } else {
+            format!("{{{}}}", literal.len())
+        };
+        let tag = self
+            .session
+            .run_command(format!("{line} {marker}"))
+            .await
+            .map_err(from_imap)?;
+        if !non_sync {
+            loop {
+                let resp = got(self.session.read_response().await, &self.watch)?;
+                match resp.parsed() {
+                    Response::Continue(_) => break,
+                    Response::Done {
+                        tag: done,
+                        status,
+                        outcome,
+                    } if *done == tag => return Ok(Tagged::new(status, outcome)),
+                    other => {
+                        if !on_untagged(other) {
+                            self.watch.note(other);
+                        }
+                    }
+                }
+            }
+        }
+        let stream = AsMut::<IoTimeout<S>>::as_mut(&mut self.session);
+        stream.write_all(literal).await.map_err(|e| from_io(&e))?;
+        stream.write_all(b"\r\n").await.map_err(|e| from_io(&e))?;
+        stream.flush().await.map_err(|e| from_io(&e))?;
         loop {
             let resp = got(self.session.read_response().await, &self.watch)?;
             match resp.parsed() {
@@ -794,6 +908,15 @@ mod tests {
         assert_eq!(parse_uid_set("1:*"), None);
         let plain = tagged(b"A3 OK STORE completed\r\n");
         assert!(plain.modified.is_none() && plain.copy_uid.is_none());
+        let appended = tagged(b"A4 OK [APPENDUID 38505 3955] APPEND completed\r\n");
+        assert_eq!(
+            appended.append_uid,
+            Some(AppendUid {
+                uid_validity: UidValidity(38505),
+                uid: 3955
+            })
+        );
+        assert!(plain.append_uid.is_none());
     }
 
     #[test]

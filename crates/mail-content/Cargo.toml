@@ -17,6 +17,8 @@ url.workspace = true
 icu_normalizer.workspace = true
 icu_properties.workspace = true
 mail-builder.workspace = true
+# Civil dates only (calendar reader); never the time-zone database outside tests.
+jiff.workspace = true
 
 [dev-dependencies]
 markup5ever_rcdom.workspace = true

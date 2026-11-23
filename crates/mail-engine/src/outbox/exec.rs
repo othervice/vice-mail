@@ -25,6 +25,7 @@
 //! reconnecting. Outcomes collected before a connection broke are stored anyway.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::time::Duration;
 
 use mail_model::{
     AccountId, BackendError, ConflictReason, CoreError, ExpungeOutcome, FlagUpdate, IpcError,
@@ -33,6 +34,8 @@ use mail_model::{
     TargetMark, Uid, UidSet, UidValidity,
 };
 use mail_store::{OperationResult, OutboxChange, Store, StoreError, StoredOperation};
+
+pub(crate) mod compose;
 
 /// Most operations sent in one command.
 pub(crate) const MAX_GROUP: usize = 500;
@@ -102,9 +105,11 @@ pub(crate) fn next_group(pending: &[StoredOperation]) -> Vec<StoredOperation> {
                 format!("{}={value}", flag.imap().to_ascii_lowercase())
             }
             OperationPayload::Move { target, .. } => target.name.clone(),
-            OperationPayload::Expunge { .. } | OperationPayload::CreateMailbox { .. } => {
-                String::new()
-            }
+            OperationPayload::Expunge { .. }
+            | OperationPayload::CreateMailbox { .. }
+            | OperationPayload::Send(_)
+            | OperationPayload::Append { .. }
+            | OperationPayload::RemoveCopy { .. } => String::new(),
         };
         Some(format!(
             "{}|{:?}|{}|{}|{}|{params}",
@@ -156,6 +161,7 @@ pub(crate) async fn run_step<W: MailWriter>(
     store: &Store,
     account: AccountId,
     max_attempts: u32,
+    sent_checks: &[Duration],
     group: Vec<StoredOperation>,
 ) -> Result<StepOutcome, StepError> {
     let mut step = Step {
@@ -163,6 +169,7 @@ pub(crate) async fn run_step<W: MailWriter>(
         store,
         account,
         max_attempts,
+        sent_checks,
         results: Vec::new(),
         server_mailboxes: BTreeSet::new(),
         list_changed: false,
@@ -188,6 +195,8 @@ struct Step<'a, W> {
     store: &'a Store,
     account: AccountId,
     max_attempts: u32,
+    /// Stage 5: delays between the looks into Sent after an unclear send.
+    sent_checks: &'a [Duration],
     results: Vec<(OperationId, OperationResult)>,
     server_mailboxes: BTreeSet<MailboxId>,
     list_changed: bool,
@@ -211,6 +220,25 @@ impl<W: MailWriter> Step<'_, W> {
             OperationPayload::CreateMailbox { .. } => {
                 for op in group {
                     self.create(op).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::Send(_) => {
+                let checks = self.sent_checks;
+                for op in group {
+                    self.verify_send(op, checks).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::Append { .. } => {
+                for op in group {
+                    self.append(op).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::RemoveCopy { .. } => {
+                for op in group {
+                    self.remove_copy(op).await?;
                 }
                 Ok(())
             }
@@ -766,6 +794,7 @@ mod tests {
             current_modseq: None,
             created_at: 0,
             updated_at: 0,
+            not_before: None,
         }
     }
 

@@ -84,6 +84,32 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
         }
         purged = false;
 
+        // Stage 5: delayed operations (the undo delay of a send, the next look into Sent) wait
+        // for their time; the rest runs in order.
+        let now = shared.clock.now_ms();
+        let pending: Vec<_> = {
+            let due: Vec<_> = pending
+                .iter()
+                .filter(|op| op.is_due(now))
+                .cloned()
+                .collect();
+            if due.is_empty() {
+                let next = pending
+                    .iter()
+                    .filter_map(|op| op.not_before)
+                    .min()
+                    .unwrap_or(now);
+                let delay = Duration::from_millis(
+                    u64::try_from(next.saturating_sub(now)).unwrap_or(0).max(1),
+                );
+                match wait(&kick, &mut stop, Some(delay)).await {
+                    Wake::Stop => break,
+                    Wake::Kick | Wake::Timer => continue,
+                }
+            }
+            due
+        };
+
         let stored = match shared.store.account(account).await {
             Ok(Some(stored)) => stored,
             Ok(None) => break,
@@ -117,6 +143,51 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
             }
         }
 
+        // Stage 5: a send is submitted over SMTP; no IMAP connection needed.
+        if let Some(first) = pending.first().filter(|op| exec::compose::is_submit(op)) {
+            let task = tokio::spawn(exec::compose::submit(
+                Arc::clone(&shared),
+                stored.clone(),
+                first.clone(),
+            ));
+            let retry = match task.await {
+                Ok(Ok(exec::compose::Submitted::Done(change))) => {
+                    failures = 0;
+                    if let Some(change) = &change {
+                        shared.emitter.change(change);
+                    }
+                    None
+                }
+                Ok(Ok(exec::compose::Submitted::RetryLater(change, err))) => {
+                    if let Some(change) = &change {
+                        shared.emitter.change(change);
+                    }
+                    Some(err)
+                }
+                Ok(Err(err)) => {
+                    tracing::error!(%account, error = %err, "outbox could not record a send");
+                    Some(CoreError::from(err))
+                }
+                Err(join) => {
+                    tracing::error!(%account, panicked = join.is_panic(), "a send ended abnormally");
+                    Some(CoreError::Mail(BackendError::Protocol(
+                        "the send could not be completed".into(),
+                    )))
+                }
+            };
+            if let Some(err) = retry {
+                failures = failures.saturating_add(1);
+                let delay = backoff(failures, &mut jitter);
+                tracing::info!(%account, code = ?err.code(), ?delay, "send waits");
+                match wait(&kick, &mut stop, Some(delay)).await {
+                    Wake::Stop => break,
+                    Wake::Kick => failures = 0,
+                    Wake::Timer => {}
+                }
+            }
+            continue;
+        }
+
         let open = match conn.take() {
             Some(open) => open,
             None => match connect(&shared, &stored).await {
@@ -141,9 +212,11 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
         let group = exec::next_group(&pending);
         let store = shared.store.clone();
         let max_attempts = shared.config.max_attempts;
+        let checks = shared.config.compose.sent_checks.clone();
         let task = tokio::spawn(async move {
             let mut open = open;
-            let result = exec::run_step(&mut open, &store, account, max_attempts, group).await;
+            let result =
+                exec::run_step(&mut open, &store, account, max_attempts, &checks, group).await;
             (open, result)
         });
         let error = match task.await {

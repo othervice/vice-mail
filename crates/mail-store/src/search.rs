@@ -49,6 +49,8 @@ pub struct SearchFilter {
     pub only: Option<Vec<MessageId>>,
     /// Only messages whose whole body is not stored (server search).
     pub without_complete_body: bool,
+    /// Stage 9: `Some(true)` waiting snoozes only (`is:snoozed`), `Some(false)` none of them.
+    pub snoozed: Option<bool>,
 }
 
 /// One result of [`crate::Store::search`].
@@ -140,6 +142,14 @@ fn conditions(
         out.push(format!(
             "NOT EXISTS (SELECT 1 FROM message_location xl WHERE xl.message_id = m.id AND xl.mailbox_id IN ({}))",
             ids_list(f.excluded_mailboxes.iter().map(|m| m.0))
+        ));
+    }
+    if let Some(snoozed) = f.snoozed {
+        out.push(format!(
+            "{}EXISTS (SELECT 1 FROM snooze sz
+                        WHERE sz.message_id_hdr = m.message_id_hdr AND sz.returned_at IS NULL
+                          AND sz.account_uuid = (SELECT a.uuid FROM account a WHERE a.id = m.account_id))",
+            if snoozed { "" } else { "NOT " }
         ));
     }
     if f.without_complete_body {

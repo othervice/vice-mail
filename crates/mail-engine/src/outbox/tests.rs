@@ -463,6 +463,7 @@ fn header(uid: Uid, m: &Msg) -> MessageHeader {
         auto_submitted: None,
         precedence: None,
         has_attachments: false,
+        category_headers: Vec::new(),
     }
 }
 

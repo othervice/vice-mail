@@ -342,6 +342,23 @@ impl Session {
     }
 }
 
+/// The engine sends through this trait (decision 0018), so tests can hand it an instrumented
+/// sender.
+impl mail_model::MailSender for SmtpSender {
+    fn send<'a>(
+        &'a self,
+        config: &'a ConnectConfig,
+        envelope: &'a Envelope,
+        message: &'a [u8],
+    ) -> mail_model::SendFuture<'a, SendOutcome> {
+        Box::pin(SmtpSender::send(self, config, envelope, message))
+    }
+
+    fn verify<'a>(&'a self, config: &'a ConnectConfig) -> mail_model::SendFuture<'a, ()> {
+        Box::pin(SmtpSender::verify(self, config))
+    }
+}
+
 /// The outcome of a refused command, or the connection error if there was no reply.
 fn refused(
     err: &lettre::transport::smtp::Error,

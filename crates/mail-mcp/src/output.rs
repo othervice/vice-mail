@@ -5,9 +5,9 @@
 //! boundary="…">`. The boundary is 96 random bits per result, so a mail cannot close the block
 //! early; JSON keeps every line break of a mail inside a string; any `<mail_data` or
 //! `</mail_data` a mail contains is escaped. Text from mails is cleaned first: control
-//! characters and invisible characters that can smuggle instructions past a human (Unicode tag
-//! characters, variation selectors of the supplement, bidi overrides, zero-width spaces) are
-//! removed and counted.
+//! characters and invisible characters that can smuggle instructions past a human
+//! (`mail_content::strip_hidden_chars`: Unicode tag characters, variation selectors outside
+//! emoji sequences, bidi overrides, zero-width spaces) are removed and counted.
 
 use mail_model::search::CivilDate;
 use serde::Serialize;
@@ -72,22 +72,6 @@ fn escape_block_tags(json: &str) -> String {
     out
 }
 
-/// Characters that show nothing to a human reader but are read by a model: removed from every
-/// text taken from a mail. Not removed: zero-width (non-)joiners (needed for emoji and some
-/// scripts) and ordinary directional marks.
-pub(crate) fn is_hidden_char(c: char) -> bool {
-    matches!(c,
-        // Unicode tag characters ("ASCII smuggling") and variation selectors supplement.
-        '\u{E0000}'..='\u{E007F}' | '\u{E0100}'..='\u{E01EF}'
-        // Bidi embeddings, overrides and isolates (reorder text on screen).
-        | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
-        // Zero-width space, word joiner, invisible operators, BOM, Mongolian vowel separator.
-        | '\u{200B}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}' | '\u{180E}'
-        // Hangul fillers (render as blank).
-        | '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}'
-    )
-}
-
 /// Text cleaned for a result.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Cleaned {
@@ -100,11 +84,16 @@ pub(crate) struct Cleaned {
 }
 
 /// A multi-line text (a body): line ends `\n`, tabs kept, other control characters and hidden
-/// characters removed, more than two blank lines in a row collapsed, cut to `max_chars`.
+/// characters (`mail_content::strip_hidden_chars`) removed, more than two blank lines in a row
+/// collapsed, cut to `max_chars`.
 pub(crate) fn clean_text(input: &str, max_chars: usize) -> Cleaned {
-    let mut out = Cleaned::default();
+    let stripped = mail_content::strip_hidden_chars(input);
+    let mut out = Cleaned {
+        hidden_removed: stripped.removed,
+        ..Cleaned::default()
+    };
     let mut newlines = 0_usize;
-    let mut chars = input.chars().peekable();
+    let mut chars = stripped.text.chars().peekable();
     while let Some(c) = chars.next() {
         let c = match c {
             '\r' => {
@@ -112,10 +101,6 @@ pub(crate) fn clean_text(input: &str, max_chars: usize) -> Cleaned {
                     continue;
                 }
                 '\n'
-            }
-            c if is_hidden_char(c) => {
-                out.hidden_removed += 1;
-                continue;
             }
             '\n' | '\t' => c,
             c if c.is_control() => continue,
@@ -147,10 +132,7 @@ pub(crate) fn clean_line(input: &str, max_chars: usize) -> String {
     let mut out = String::new();
     let mut count = 0;
     let mut space = false;
-    for c in input.chars() {
-        if is_hidden_char(c) {
-            continue;
-        }
+    for c in mail_content::strip_hidden_chars(input).text.chars() {
         if c.is_whitespace() || c.is_control() {
             space = !out.is_empty();
             continue;

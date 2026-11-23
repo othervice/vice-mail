@@ -1125,6 +1125,7 @@ fn from_adapter_header_data() {
         auto_submitted: None,
         precedence: None,
         has_attachments: false,
+        category_headers: Vec::new(),
     };
     let m = ThreadMessage::from_header(MessageId(T0), &header);
     assert_eq!(m.participants, [BOB, "rust-users@lists.example", CAROL]);

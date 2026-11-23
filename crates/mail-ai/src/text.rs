@@ -1,30 +1,16 @@
 //! Text cleaning in both directions.
 //!
 //! Into the model: mail text loses control characters and characters that show nothing to a
-//! human but are read by a model ([`is_hidden_char`]: Unicode tag characters, bidi overrides,
-//! zero-width spaces, …), so an instruction cannot hide from the user in plain text.
+//! human but are read by a model (`mail_content::strip_hidden_chars`: Unicode tag characters,
+//! bidi overrides, zero-width spaces, variation selectors outside emoji sequences, …), so an
+//! instruction cannot hide from the user in plain text. Text hidden by CSS in HTML bodies never
+//! gets here (`mail_content::ParsedMessage::visible_text`).
 //!
 //! Out of the model: [`clean_output`] makes one plain line of every text the model returns: no
 //! control or hidden characters, Markdown image embeds reduced to their alt text (so a later
 //! Markdown renderer cannot load them), limited length. Output is only ever data for text
 //! nodes; links in it are shown through `mail_content::render_text` and opened only after
 //! `mail_content::check_link`, like links in mails.
-
-/// Characters that show nothing to a human reader but are read by a model. Not removed:
-/// zero-width (non-)joiners (needed for emoji and some scripts) and ordinary directional marks.
-/// Same set as the MCP server's (`mail-mcp`, stage 12).
-pub(crate) fn is_hidden_char(c: char) -> bool {
-    matches!(c,
-        // Unicode tag characters ("ASCII smuggling") and variation selectors supplement.
-        '\u{E0000}'..='\u{E007F}' | '\u{E0100}'..='\u{E01EF}'
-        // Bidi embeddings, overrides and isolates (reorder text on screen).
-        | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
-        // Zero-width space, word joiner, invisible operators, BOM, Mongolian vowel separator.
-        | '\u{200B}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}' | '\u{180E}'
-        // Hangul fillers (render as blank), soft hyphen.
-        | '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}' | '\u{00AD}'
-    )
-}
 
 /// A multi-line text (a body) cleaned for the model.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -37,15 +23,17 @@ pub(crate) struct Cleaned {
 /// Line ends `\n`, tabs kept, other control characters and hidden characters removed, more
 /// than two blank lines in a row collapsed, trailing white space of lines removed.
 pub(crate) fn clean_text(input: &str) -> Cleaned {
-    let mut out = Cleaned::default();
+    let stripped = mail_content::strip_hidden_chars(input);
+    let mut out = Cleaned {
+        hidden_removed: stripped.removed,
+        ..Cleaned::default()
+    };
     let mut blank_run = 0_usize;
-    let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
+    let normalized = stripped.text.replace("\r\n", "\n").replace('\r', "\n");
     for line in normalized.split('\n') {
         let mut kept = String::with_capacity(line.len());
         for c in line.chars() {
-            if is_hidden_char(c) {
-                out.hidden_removed += 1;
-            } else if c == '\t' || !c.is_control() {
+            if c == '\t' || !c.is_control() {
                 kept.push(c);
             }
         }
@@ -74,10 +62,7 @@ pub(crate) fn clean_line(input: &str, max_chars: usize) -> String {
     let mut out = String::new();
     let mut count = 0;
     let mut space = false;
-    for c in input.chars() {
-        if is_hidden_char(c) {
-            continue;
-        }
+    for c in mail_content::strip_hidden_chars(input).text.chars() {
         if c.is_whitespace() || c.is_control() {
             space = !out.is_empty();
             continue;

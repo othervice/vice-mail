@@ -6,8 +6,33 @@
 //! [`BackendError::SendUnclear`].
 
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 
-use crate::BackendError;
+use crate::{BackendError, ConnectConfig};
+
+/// A boxed future of a [`MailSender`] (the trait is used as `dyn`, so the engine can be given
+/// an instrumented or fake sender in tests).
+pub type SendFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, BackendError>> + Send + 'a>>;
+
+/// Submits messages: the SMTP adapter (`mail_imap::SmtpSender`) in the product.
+///
+/// Contract of [`MailSender::send`]: `Err` means nothing was delivered (connect, TLS, login, or
+/// the connection broke before the end of the message went out); `Ok` holds what the server did
+/// with the message, including [`SendOutcome::Unclear`], which must never be retried
+/// automatically. A configuration with [`crate::Access::ReadOnly`] is refused with
+/// [`BackendError::ReadOnly`] before any connection.
+pub trait MailSender: Send + Sync + 'static {
+    fn send<'a>(
+        &'a self,
+        config: &'a ConnectConfig,
+        envelope: &'a Envelope,
+        message: &'a [u8],
+    ) -> SendFuture<'a, SendOutcome>;
+
+    /// Connects and logs in, then says goodbye (account setup); also for read-only accounts.
+    fn verify<'a>(&'a self, config: &'a ConnectConfig) -> SendFuture<'a, ()>;
+}
 
 /// `MAIL FROM` and `RCPT TO` of one submission. Blind-copy recipients are listed here and appear
 /// nowhere in the message that is sent.

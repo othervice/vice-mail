@@ -248,8 +248,16 @@ impl Store {
         headers: Vec<MessageHeader>,
         sync_low_uid: Option<Uid>,
     ) -> Result<StoreReport, StoreError> {
+        let classifier = self.classifier();
         self.write(move |tx| {
-            let report = messages::store_headers(tx, mailbox, uid_validity, headers, sync_low_uid)?;
+            let report = messages::store_headers(
+                tx,
+                mailbox,
+                uid_validity,
+                headers,
+                sync_low_uid,
+                classifier.as_ref(),
+            )?;
             // Pending flag changes of the outbox win until the server confirmed them.
             outbox::reapply_pending_in_mailbox(tx, mailbox)?;
             Ok(report)

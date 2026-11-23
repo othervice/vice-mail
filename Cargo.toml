@@ -55,6 +55,12 @@ tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
 # Shell
 tauri = { version = "2.12.7", features = [] }
 tauri-build = { version = "2.7.6", features = [] }
+# Stage 9 (decision 0020): native notifications from Rust only (no frontend permission); clicks
+# come back through the plugin's action handler. Windows only: one running instance, so a
+# `mailto:` link opened while the app runs reaches it (and no second process opens the
+# database).
+tauri-plugin-notification = "2.8.1"
+tauri-plugin-single-instance = "2.5.5"
 
 # TLS (decision 0002): rustls with the `aws-lc-rs` provider (chosen in `mail_imap::tls`, nowhere
 # else), certificates checked by the system. aws-lc-sys builds with `cc` and, on Windows without

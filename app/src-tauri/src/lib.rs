@@ -2,10 +2,14 @@
 //! only forwards commands to [`AppCore`] and core events to the UI.
 
 pub mod commands;
+mod default_app;
+pub mod drops;
 #[cfg(feature = "e2e")]
 mod e2e;
 mod events;
+pub mod links;
 mod navigation;
+mod notifications;
 mod window_theme;
 
 use std::sync::Mutex;
@@ -21,7 +25,7 @@ use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events}
 pub use events::{CORE_EVENT_NAME, CoreEventMessage};
 
 /// Label of the main window in `tauri.conf.json`.
-const MAIN_WINDOW: &str = "main";
+pub(crate) const MAIN_WINDOW: &str = "main";
 
 /// Single source of truth for the commands and events the UI sees (decision 0004).
 pub fn specta_builder<R: Runtime>() -> Builder<R> {
@@ -84,6 +88,62 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::groups::set_default_identity,
             commands::groups::delete_identity,
             commands::groups::get_reply_identity,
+            // Stage 5: drafts, attachments, sending, the outbox view, settings, contacts.
+            commands::compose::create_draft,
+            commands::compose::get_draft,
+            commands::compose::save_draft,
+            commands::compose::close_draft,
+            commands::compose::delete_draft,
+            commands::compose::list_drafts,
+            commands::compose::open_draft_from_message,
+            commands::compose::pick_attachments::<tauri::Wry>,
+            commands::compose::add_dropped_attachments,
+            commands::compose::remove_draft_attachment,
+            commands::compose::send_draft,
+            commands::compose::cancel_send,
+            commands::compose::list_outgoing,
+            commands::compose::resolve_unclear_send,
+            commands::compose::get_compose_settings,
+            commands::compose::set_compose_settings,
+            commands::compose::get_send_settings,
+            commands::compose::set_sent_copy_mode,
+            commands::compose::list_compose_identities,
+            commands::compose::set_identity_signature,
+            commands::compose::search_contacts,
+            // Stage 9: inbox comfort (decision 0020).
+            commands::comfort::list_inbox,
+            commands::comfort::list_inbox_filtered,
+            commands::comfort::get_inbox_settings,
+            commands::comfort::set_inbox_settings,
+            commands::comfort::get_message_category,
+            commands::comfort::set_sender_category,
+            commands::comfort::set_sender_important,
+            commands::comfort::list_sender_rules,
+            commands::comfort::delete_sender_rule,
+            commands::comfort::get_snooze_times,
+            commands::comfort::snooze_messages,
+            commands::comfort::unsnooze_messages,
+            commands::comfort::set_pinned,
+            commands::comfort::set_task,
+            commands::comfort::list_snoozed,
+            commands::comfort::list_pinned,
+            commands::comfort::list_tasks,
+            commands::comfort::list_rules,
+            commands::comfort::create_rule,
+            commands::comfort::update_rule,
+            commands::comfort::delete_rule,
+            commands::comfort::reorder_rules,
+            commands::comfort::get_notification_settings,
+            commands::comfort::set_notification_settings::<tauri::Wry>,
+            commands::comfort::set_notification_texts,
+            commands::comfort::get_message_extras,
+            commands::comfort::unsubscribe,
+            commands::comfort::open_invite,
+            commands::comfort::export_message::<tauri::Wry>,
+            commands::comfort::print_window::<tauri::Wry>,
+            commands::comfort::get_default_mail_app::<tauri::Wry>,
+            commands::comfort::set_default_mail_app::<tauri::Wry>,
+            commands::comfort::take_launch_links,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -98,6 +158,25 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)
         .constant("MAX_THREAD_MESSAGES", mail_model::MAX_THREAD_MESSAGES)
+        // Stage 5: the undo delay's range and default, and the attachment limits (bytes).
+        .constant("MAX_SEND_DELAY_SECS", mail_model::MAX_SEND_DELAY_SECS)
+        .constant(
+            "DEFAULT_SEND_DELAY_SECS",
+            mail_model::DEFAULT_SEND_DELAY_SECS,
+        )
+        .constant(
+            "MAX_ATTACHMENT_BYTES",
+            u32::try_from(mail_model::MAX_ATTACHMENT_BYTES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "LARGE_ATTACHMENT_WARNING_BYTES",
+            u32::try_from(mail_model::LARGE_ATTACHMENT_WARNING_BYTES).unwrap_or(u32::MAX),
+        )
+        .constant("MAX_ATTACHMENTS", mail_model::MAX_ATTACHMENTS)
+        .constant(
+            "MAX_CONTACT_SUGGESTIONS",
+            mail_model::MAX_CONTACT_SUGGESTIONS,
+        )
 }
 
 /// TypeScript exporter settings, shared by the freshness test and `UPDATE_BINDINGS=1`.
@@ -124,7 +203,7 @@ pub fn run() {
     // Desktop-test build: embedded WebDriver and the `e2e_*` test commands (decision 0005).
     #[cfg(feature = "e2e")]
     let builder = e2e::install(tauri::Builder::default(), specta.invoke_handler());
-    let app = builder
+    let app = with_system_plugins(builder)
         .setup(move |app| {
             init_logging(app.handle());
             let data_dir = data_dir(app.handle())?;
@@ -144,6 +223,13 @@ pub fn run() {
             ));
             let theme = initial_theme(&core);
             let theme_events = core.subscribe();
+            // Stage 9: native notifications, the Dock/taskbar counter, mailto: links.
+            core.set_notification_sink(notifications::NativeNotifications::install(app.handle()));
+            notifications::follow_badge(app.handle().clone(), core.subscribe());
+            app.manage(links::LinkQueue::default());
+            for url in default_app::mailto_arguments(std::env::args().skip(1)) {
+                links::opened(app.handle(), &url);
+            }
             attach_core(app.handle(), &specta, core);
             let window = open_main_window(app.handle(), theme)?;
             window_theme::follow(window, theme_events);
@@ -160,6 +246,13 @@ pub fn run() {
         }
     };
     app.run(|handle, event| {
+        // Stage 9: macOS hands `mailto:` links (the app as default mail app) to the app.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = &event {
+            for url in urls {
+                links::opened(handle, url.as_str());
+            }
+        }
         if let RunEvent::Exit = event {
             tracing::info!("exiting");
             // Ends the sync tasks; connections get a moment to log out.
@@ -177,6 +270,27 @@ pub fn run() {
             }
         }
     });
+}
+
+/// Stage 9: the notification plugin (used from Rust only; the UI has no notification
+/// permission) and, on Windows, the single-instance plugin: a second start (a `mailto:` link
+/// while the app runs) hands its arguments to this process and ends.
+fn with_system_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        let urls = default_app::mailto_arguments(argv.into_iter().skip(1));
+        if urls.is_empty()
+            && let Some(window) = app.get_webview_window(MAIN_WINDOW)
+        {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        for url in urls {
+            links::opened(app, &url);
+        }
+    }));
+    builder.plugin(tauri_plugin_notification::init())
 }
 
 /// File logging in the app's log directory; console too in debug builds. A logging failure is
@@ -246,6 +360,8 @@ fn attach_core<R: Runtime>(app: &AppHandle<R>, specta: &Builder<R>, core: AppCor
     specta.mount_events(app);
     events::forward(app.clone(), core.subscribe());
     app.manage(core);
+    // Stage 5: paths of files dropped on the window (see `drops`).
+    app.manage(drops::DropRegistry::default());
 }
 
 /// The window frame's theme at start, from the stored preferences (see [`window_theme`]).
@@ -301,6 +417,16 @@ fn open_main_window<R: Runtime>(
             NewWindowResponse::Deny
         })
         .build()?;
+    // Stage 5: remember what the user drops on the window; the composer may attach exactly
+    // these files (`addDroppedAttachments`).
+    let drop_app = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
+            && let Some(registry) = drop_app.try_state::<drops::DropRegistry>()
+        {
+            registry.record(paths);
+        }
+    });
     #[cfg(all(windows, feature = "webview2-frame-guard"))]
     install_frame_guard(&window)?;
     Ok(window)

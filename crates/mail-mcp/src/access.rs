@@ -134,7 +134,7 @@ pub struct BodyParts {
     /// The text/plain body.
     pub text: Option<String>,
     /// The HTML body, unsanitised. The host only ever passes it through
-    /// `mail_content::html_to_text`.
+    /// `mail_content::html_to_visible_text`.
     pub html: Option<String>,
     pub attachments: Vec<AttachmentMeta>,
 }

@@ -27,6 +27,7 @@
 //!
 //! **Prefetch** ([`prefetch`]) runs per account after each completed sync pass.
 
+mod export;
 mod fetch;
 mod files;
 pub mod index_text;

@@ -127,14 +127,33 @@ impl std::error::Error for ComposeError {}
 
 /// Builds the message (see module docs).
 pub fn build_message(message: &OutgoingMessage) -> Result<BuiltMessage, ComposeError> {
+    build(message, false)
+}
+
+/// Builds a draft for the server's Drafts folder: like [`build_message`], but a draft may have
+/// no recipient yet (then there is no `To` header) and recipients or reply addresses that are
+/// not valid (yet) are left out instead of failing; they stay in the local draft. The bytes are
+/// the copy with `Bcc` ([`BuiltMessage::for_sent_folder`]): a draft keeps its blind copies.
+/// Only an invalid sender or Message-ID fails.
+pub fn build_draft_message(message: &OutgoingMessage) -> Result<Vec<u8>, ComposeError> {
+    build(message, true).map(|built| built.for_sent_folder)
+}
+
+fn build(message: &OutgoingMessage, draft: bool) -> Result<BuiltMessage, ComposeError> {
     let from = mailbox(&message.from)?;
     // Each recipient once: in To before Cc before Bcc.
     let mut seen = Vec::new();
-    let to = recipients(&message.to, &mut seen)?;
-    let cc = recipients(&message.cc, &mut seen)?;
-    let bcc = recipients(&message.bcc, &mut seen)?;
-    let reply_to = mailboxes(&message.reply_to)?;
-    if to.is_empty() && cc.is_empty() && bcc.is_empty() {
+    let valid = |list: &[Address]| -> Vec<Address> {
+        list.iter()
+            .filter(|a| !draft || mailbox(a).is_ok())
+            .cloned()
+            .collect()
+    };
+    let to = recipients(&valid(&message.to), &mut seen)?;
+    let cc = recipients(&valid(&message.cc), &mut seen)?;
+    let bcc = recipients(&valid(&message.bcc), &mut seen)?;
+    let reply_to = mailboxes(&valid(&message.reply_to))?;
+    if !draft && to.is_empty() && cc.is_empty() && bcc.is_empty() {
         return Err(ComposeError::NoRecipients);
     }
     let message_id = message.message_id.trim();
@@ -164,7 +183,7 @@ pub fn build_message(message: &OutgoingMessage) -> Result<BuiltMessage, ComposeE
         "From",
         &address_header(std::slice::from_ref(&from)),
     );
-    if to.is_empty() && cc.is_empty() {
+    if to.is_empty() && cc.is_empty() && !(draft && bcc.is_empty()) {
         write_header(
             &mut head,
             "To",

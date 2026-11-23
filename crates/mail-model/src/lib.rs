@@ -12,12 +12,16 @@ mod account;
 mod backend;
 mod body;
 mod bundle;
+mod calendar;
 mod capabilities;
 mod category;
+mod compose;
 mod error;
 mod ids;
+mod inbox;
 mod ipc;
 mod mailbox;
+mod mailto;
 mod message;
 mod outbox;
 mod reading;
@@ -47,12 +51,36 @@ pub use bundle::{
     Bundle, BundleItem, BundleKey, BundleOptions, BundleRow, BundleState, BundleSummary,
     DEFAULT_BUNDLE_CHIPS, MAX_BUNDLE_SENDERS, SenderChip, bundle_page,
 };
+pub use calendar::{
+    AttendeeRole, CalendarEvent, CalendarInvite, CalendarPerson, CalendarProblem,
+    CalendarProblemCode, CalendarRecurrence, CalendarTime, EventStatus, ParticipationStatus,
+    RecurrenceFrequency,
+};
 pub use capabilities::Capabilities;
 pub use category::{
     CategoryCorrection, CategoryDecision, CategoryReason, MessageCategory, SenderKey, SenderKeyKind,
 };
+pub use compose::{
+    AccountSendSettings, ComposeFormat, ComposeIdentity, ComposeSettings, ContactNameRecord,
+    ContactSuggestion, DEFAULT_SEND_DELAY_SECS, Draft, DraftAttachment, DraftError, DraftFile,
+    DraftId, DraftKind, DraftServerState, DraftState, DraftSummary, DraftUpdate,
+    LARGE_ATTACHMENT_WARNING_BYTES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
+    MAX_DRAFT_BODY_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS,
+    MAX_TEXT_SIGNATURE_BYTES, NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition,
+    SendJob, SendPhase, SendState, SentCopyMode, ServerCopy, UnclearDecision,
+};
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
+pub use inbox::{
+    BadgeMode, CalendarInviteInfo, DateSection, DateSectionKind, DefaultMailApp,
+    DefaultMailAppOutcome, InboxCursor, InboxFilter, InboxPage, InboxRow, InboxScope,
+    InboxSettings, InboxTop, MAX_RULE_PARTS, MAX_RULE_TEXT, MAX_RULES, MAX_TOP_PINNED,
+    MAX_TOP_RETURNED, MailRule, MarkScope, MessageCategoryInfo, MessageExtras,
+    NotificationSettings, NotificationTexts, NotifyCategories, PRIORITY_PREVIEW, QuietHours,
+    RuleAction, RuleCondition, RuleId, RuleInput, RuleSkipReason, SenderRule, SnoozeChoice,
+    SnoozeMark, SnoozeResult, SnoozeTimes, TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod,
+    UnsubscribeOptions, UnsubscribeOutcome,
+};
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
     Preferences, ReadingPreferences, ThemePreference,
@@ -60,15 +88,17 @@ pub use ipc::{
 pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
+pub use mailto::{ComposeRequest, MailtoField, MailtoNotice};
 pub use message::{
     Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageActivity,
     MessageHeader, MessageListItem, MessagePage, sort_date,
 };
 pub use outbox::{
-    ActionError, ActionKind, ActionResult, BatchId, ConflictReason, Flag, MAX_ACTION_MESSAGES,
-    MAX_KEYWORD_LEN, MailAction, MessageRef, OperationId, OperationInfo, OperationKind,
-    OperationNotice, OperationPayload, OperationState, OutboxCounts, OutboxEvent, PlanLocation,
-    PlanMailbox, SourceLocation, TargetMailbox, TargetMark, is_valid_keyword, plan_action,
+    ActionError, ActionKind, ActionResult, AppendSource, BatchId, ConflictReason, Flag,
+    MAX_ACTION_MESSAGES, MAX_KEYWORD_LEN, MailAction, MessageRef, OperationId, OperationInfo,
+    OperationKind, OperationNotice, OperationPayload, OperationState, OutboxCounts, OutboxEvent,
+    PlanLocation, PlanMailbox, SourceLocation, TargetMailbox, TargetMark, is_valid_keyword,
+    plan_action,
 };
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
@@ -79,7 +109,10 @@ pub use reading::{
 };
 pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use secret::Secret;
-pub use send::{Envelope, RecipientRefusal, SendOutcome, SendRejection, SmtpReply, SmtpStep};
+pub use send::{
+    Envelope, MailSender, RecipientRefusal, SendFuture, SendOutcome, SendRejection, SmtpReply,
+    SmtpStep,
+};
 pub use uid_set::UidSet;
 pub use views::{
     AccountGroup, AccountGroupId, IdentityInfo, IdentityInput, MAX_GROUP_NAME_CHARS,
@@ -89,6 +122,6 @@ pub use views::{
     ThreadPage, ThreadView, UnifiedView, utf16_range,
 };
 pub use writer::{
-    CopyUid, ExpungeOutcome, MailWriter, MoveMethod, MoveOutcome, StoreMode, StoreOutcome,
-    WriteConnector,
+    AppendUid, CopyUid, ExpungeOutcome, MailWriter, MoveMethod, MoveOutcome, StoreMode,
+    StoreOutcome, WriteConnector,
 };

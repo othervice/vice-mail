@@ -27,7 +27,7 @@ const ACTIVITY: &str =
               AND +o.message_id = l.message_id AND o.state <> 'confirmed')";
 
 /// Columns 0..=13 of every list row, as in `messages::LIST_PAGE`.
-fn list_columns() -> String {
+pub(crate) fn list_columns() -> String {
     format!(
         "l.message_id, l.seen, l.flagged, l.answered, l.draft, l.keywords,
            m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview,
@@ -36,7 +36,7 @@ fn list_columns() -> String {
 }
 
 /// A list row from columns 0..=13.
-fn item_at(
+pub(crate) fn item_at(
     r: &Row<'_>,
     account: AccountId,
     mailbox: MailboxId,
@@ -63,6 +63,11 @@ fn item_at(
         keywords: keywords_from(r.get::<_, Option<String>>(5)?.as_deref()),
         preview: r.get(12)?,
         activity: activity(r.get(13)?),
+        category: None,
+        important: false,
+        pinned: false,
+        snooze: None,
+        task: None,
     })
 }
 
@@ -96,7 +101,7 @@ pub(crate) fn mailbox_account(
 }
 
 /// Cuts `rows` (newest first, one more than `limit` asked for) to a page.
-fn page<T>(
+pub(crate) fn page<T>(
     mut rows: Vec<T>,
     limit: u32,
     id: impl Fn(&T) -> MessageId,
@@ -171,7 +176,8 @@ pub(crate) fn unified(
             item_at(r, account, mailbox)
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let (items, next_cursor) = page(rows, limit, |i| i.id);
+    let (mut items, next_cursor) = page(rows, limit, |i| i.id);
+    crate::marks::decorate(conn, &mut items)?;
     Ok(MessagePage { items, next_cursor })
 }
 
@@ -255,7 +261,10 @@ pub(crate) fn threads(
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let (items, next_cursor) = page(rows, limit, |i| i.message.id);
+    let (mut items, next_cursor) = page(rows, limit, |i| i.message.id);
+    for item in &mut items {
+        crate::marks::decorate(conn, std::slice::from_mut(&mut item.message))?;
+    }
     Ok(ThreadPage { items, next_cursor })
 }
 
@@ -410,7 +419,7 @@ pub(crate) fn entry(
     };
     let mut mailbox_ids: Vec<MailboxId> = locations.iter().map(|l| l.mailbox).collect();
     mailbox_ids.sort();
-    Ok(Some(Entry {
+    let mut entry = Entry {
         item: MessageListItem {
             id: message,
             account_id: head.account,
@@ -427,8 +436,15 @@ pub(crate) fn entry(
             keywords: keywords_from(loc.keywords.as_deref()),
             preview: head.preview,
             activity: activity(loc.activity),
+            category: None,
+            important: false,
+            pinned: false,
+            snooze: None,
+            task: None,
         },
         mailbox_ids,
         body_complete: head.complete == Some(true),
-    }))
+    };
+    crate::marks::decorate(conn, std::slice::from_mut(&mut entry.item))?;
+    Ok(Some(entry))
 }

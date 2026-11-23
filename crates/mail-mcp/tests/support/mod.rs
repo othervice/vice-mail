@@ -294,6 +294,11 @@ impl FakeAccess {
             keywords: Vec::new(),
             preview: Some(text.chars().take(120).collect()),
             activity: None,
+            category: None,
+            important: false,
+            pinned: false,
+            snooze: None,
+            task: None,
         }
     }
 

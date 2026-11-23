@@ -19,6 +19,13 @@ use crate::{
     SelectedMailbox, Uid, UidSet, UidValidity,
 };
 
+/// APPENDUID (RFC 4315): where an appended message ended up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AppendUid {
+    pub uid_validity: UidValidity,
+    pub uid: Uid,
+}
+
 /// Whether [`MailWriter::store_flags`] sets or clears the flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StoreMode {
@@ -146,6 +153,44 @@ pub trait MailWriter: MailBackend {
         path: &str,
         role: Option<MailboxRole>,
     ) -> impl Future<Output = Result<String, BackendError>> + Send;
+
+    /// Stage 5: `APPEND` of `message` to the mailbox with this wire name, with `flags` (system
+    /// flags only: `\Seen`, `\Draft`). Returns APPENDUID when the server has UIDPLUS. A missing
+    /// mailbox is [`BackendError::MailboxNotFound`]. The default fails with
+    /// [`BackendError::Unsupported`] (test fakes without APPEND).
+    fn append(
+        &mut self,
+        mailbox: &str,
+        flags: &[Flag],
+        message: &[u8],
+    ) -> impl Future<Output = Result<Option<AppendUid>, BackendError>> + Send {
+        let _ = (mailbox, flags, message);
+        std::future::ready(Err(BackendError::Unsupported("APPEND".into())))
+    }
+
+    /// Stage 5: UIDs of the open mailbox whose `Message-ID` header is exactly `message_id`
+    /// (without angle brackets). The default reads the headers of the whole mailbox; the IMAP
+    /// writer asks the server (`SEARCH HEADER`) and checks the hits, and also reads the newest
+    /// messages, because a server's search index may lag behind a fresh APPEND.
+    fn find_message_id(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        message_id: &str,
+    ) -> impl Future<Output = Result<UidSet, BackendError>> + Send {
+        async move {
+            let all = self.search_uids(mailbox).await?;
+            if all.is_empty() {
+                return Ok(UidSet::new());
+            }
+            let headers = self.fetch_headers(mailbox, &all).await?;
+            Ok(UidSet::from_uids(
+                headers
+                    .iter()
+                    .filter(|h| h.message_id.as_deref() == Some(message_id))
+                    .map(|h| h.uid),
+            ))
+        }
+    }
 }
 
 /// Opens [`MailWriter`] connections.

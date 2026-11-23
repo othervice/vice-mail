@@ -219,16 +219,19 @@ async fn hostile_mail_stays_data_in_every_tool() {
             json!({ "message_id": find("injection-hidden-html.eml") }),
         )
         .await;
-    let body = data_block(&text)["message"]["body"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert!(body.contains("INJECTION-MARKER-2") && body.contains("INJECTION-MARKER-3"));
+    let message = data_block(&text)["message"].clone();
+    let body = message["body"].as_str().unwrap().to_owned();
+    // Text hidden by CSS (`display:none`, white on white, `font-size:0`) is left out and
+    // counted (`mail_content::html_to_visible_text`).
+    assert!(message["hidden_text_chars_omitted"].as_u64().unwrap() > 50);
     assert!(
         body.contains("See all deals <https://shop.example/deals>"),
         "{body}"
     );
     for gone in [
+        "INJECTION-MARKER-2",
+        "INJECTION-MARKER-3",
+        "exfil@attacker.example",
         "INJECTION-MARKER-COMMENT",
         "document.cookie",
         "tracker.attacker",

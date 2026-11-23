@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccountId, AccountStatus, IpcError, MailboxId, MessageId, OperationId, OperationInfo,
-    PrefetchStatus, RenderToken,
+    AccountId, AccountStatus, DraftId, IpcError, MailboxId, MessageId, OperationId, OperationInfo,
+    OutgoingMail, PrefetchStatus, RenderToken,
 };
 
 /// Operating system the app runs on.
@@ -117,6 +117,24 @@ pub struct ReadingPreferences {
 ///   states, `removed` the ids that are gone. Re-query `getOutboxCounts` and a visible
 ///   activity page; show a notice for `failed`/`conflict` states of the user's own batches.
 ///   The messages' rows change with `messagesChanged`.
+/// - `draftsChanged` (stage 5): local drafts of an account were saved, frozen for sending,
+///   released, got a new server copy (`changed`) or were deleted, sent or discarded
+///   (`removed`). An open composer reloads its draft only if it did not cause the change.
+/// - `outgoingChanged` (stage 5): messages in the outbox view changed state (scheduled,
+///   sending, verifying, unclear, failed, sent); carries their complete states.
+/// - `sendNeedsDecision` (stage 5): it stayed unclear whether a message went out. Ask the user
+///   and answer with `resolveUnclearSend`; nothing is sent again before.
+/// - `inboxChanged` (stage 9): pins, snoozes, tasks or categories changed (a snooze came back,
+///   a sender rule was applied, a local rule pinned something). Re-query the inbox and the
+///   views of pinned, snoozed and task messages; `accountId` is null when several accounts
+///   changed.
+/// - `ruleSkipped` (stage 9): a local rule's action did not run for `count` new messages
+///   (`readOnly`: the account is read-only). Show a notice; nothing else happened.
+/// - `openMessageRequested` (stage 9): the user clicked a system notification; show the
+///   message (in `mailboxId` if given).
+/// - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
+///   composer with these fields and show `request.notices` (a link that sets blind copies, or
+///   tried to set headers that were ignored).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -165,6 +183,37 @@ pub enum CoreEvent {
         account_id: AccountId,
         operations: Vec<OperationInfo>,
         removed: Vec<OperationId>,
+    },
+    DraftsChanged {
+        account_id: AccountId,
+        changed: Vec<DraftId>,
+        removed: Vec<DraftId>,
+    },
+    OutgoingChanged {
+        account_id: AccountId,
+        mails: Vec<OutgoingMail>,
+    },
+    SendNeedsDecision {
+        account_id: AccountId,
+        mail: OutgoingMail,
+    },
+    InboxChanged {
+        account_id: Option<AccountId>,
+    },
+    RuleSkipped {
+        account_id: AccountId,
+        rule_id: crate::RuleId,
+        rule_name: String,
+        reason: crate::RuleSkipReason,
+        count: u32,
+    },
+    OpenMessageRequested {
+        account_id: AccountId,
+        mailbox_id: Option<MailboxId>,
+        message_id: MessageId,
+    },
+    ComposeRequested {
+        request: crate::ComposeRequest,
     },
 }
 

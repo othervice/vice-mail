@@ -1,13 +1,15 @@
 //! Plain text for the reading pane: lines with their quote depth and recognised links, as data.
 //! The interface renders spans as text nodes and links as elements of its own, so no text from
 //! a mail is ever interpreted as HTML. Also the HTML-to-text conversion for the text view and
-//! the preview.
+//! the preview, and for models without the text a reader does not see
+//! ([`html_to_visible_text`]).
 
 use url::Url;
 
 use crate::dom::{self, Descend, NodeData, Visit};
 use crate::guard;
 use crate::html::LinkTarget;
+use crate::visible::{Visibility, VisibleText};
 
 /// Longest text that is turned into lines; the rest is cut (the parser already limits bodies).
 pub const MAX_TEXT_BYTES: usize = 4 << 20;
@@ -202,12 +204,27 @@ fn count(text: &str, wanted: char) -> usize {
 /// Text of an HTML body for the text view: block structure as line breaks, `<blockquote>` as
 /// `> ` quotes, link targets in angle brackets after the link text when the text does not show
 /// them. Scripts, styles and other non-content is skipped.
+///
+/// Everything else stays, also text hidden by CSS: this is the text of the mail (search,
+/// quoting, the text part of a message the user wrote). What goes to a model uses
+/// [`html_to_visible_text`].
 pub fn html_to_text(html: &str) -> String {
-    html_text(html, true)
+    html_text_with(html, true, false).text
+}
+
+/// Like [`html_to_text`], but without the text a reader of the mail does not see: hidden with
+/// CSS (`display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`, a clipped box of size
+/// 0, text in the colour of its background or transparent, positioned or indented off the
+/// screen, clipped away), with the `hidden` attribute, or in `<template>`/`<noscript>`. The
+/// rules, thresholds and limits are in the module `visible`. For everything that hands mail
+/// text to a model (MCP server, built-in AI): hidden text is a known way to smuggle
+/// instructions past the user.
+pub fn html_to_visible_text(html: &str) -> VisibleText {
+    html_text_with(html, true, true)
 }
 
 /// Elements whose content is never text the reader sees.
-const SKIPPED: &[&str] = &[
+pub(crate) const SKIPPED: &[&str] = &[
     "head", "script", "style", "template", "noscript", "title", "iframe", "object", "embed",
     "select", "textarea", "noembed", "noframes", "xmp", "button",
 ];
@@ -259,23 +276,43 @@ const LINE: &[&str] = &[
 ];
 
 pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
+    html_text_with(html, with_link_targets, false).text
+}
+
+/// The text of `html`; with `visible_only`, without hidden text (counted instead).
+fn html_text_with(html: &str, with_link_targets: bool, visible_only: bool) -> VisibleText {
     let html = &html[..html.floor_char_boundary(MAX_TEXT_BYTES * 2)];
     if guard::check(html).is_err() {
+        // The reading pane shows such a mail as this same text, so nothing in it is hidden.
         let mut out = TextBuilder::default();
         for line in guard::strip_tags(html).split('\n') {
             out.line_break(1);
             out.text(line);
         }
-        return out.finish();
+        return VisibleText {
+            text: out.finish(),
+            hidden_chars: 0,
+        };
     }
     let dom = dom::parse_document(html);
+    let mut visibility = visible_only.then(|| Visibility::new(&dom));
     let mut out = TextBuilder::default();
-    let mut link_stack: Vec<(Option<String>, usize)> = Vec::new();
+    // Per open link: its target, where its text starts, and the hidden count at its start.
+    let mut link_stack: Vec<(Option<String>, usize, usize)> = Vec::new();
+    let hidden_so_far =
+        |visibility: &Option<Visibility>| visibility.as_ref().map_or(0, Visibility::hidden_chars);
     dom::walk(&dom.document, |visit| match visit {
         Visit::Enter(node) => {
             match &node.data {
                 NodeData::Text { contents } => {
-                    out.text(&contents.borrow());
+                    let contents = contents.borrow();
+                    if let Some(visibility) = &mut visibility
+                        && visibility.text_hidden()
+                    {
+                        visibility.hide_text(&contents);
+                    } else {
+                        out.text(&contents);
+                    }
                     return Descend::Yes;
                 }
                 NodeData::Element { .. } => {}
@@ -286,6 +323,16 @@ pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
                 return Descend::Skip;
             };
             if SKIPPED.contains(&name) {
+                if let Some(visibility) = &mut visibility
+                    && matches!(name, "template" | "noscript")
+                {
+                    visibility.hide_unrendered(node);
+                }
+                return Descend::Skip;
+            }
+            if let Some(visibility) = &mut visibility
+                && !visibility.enter(node, name)
+            {
                 return Descend::Skip;
             }
             match name {
@@ -303,7 +350,11 @@ pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
                     out.line_break(1);
                     out.text("• ");
                 }
-                "a" => link_stack.push((dom::attribute(node, "href"), out.text.len())),
+                "a" => link_stack.push((
+                    dom::attribute(node, "href"),
+                    out.text.len(),
+                    hidden_so_far(&visibility),
+                )),
                 _ if PARAGRAPH.contains(&name) => out.line_break(2),
                 _ if LINE.contains(&name) => out.line_break(1),
                 _ => {}
@@ -314,6 +365,9 @@ pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
             let Some(name) = dom::html_name(node) else {
                 return Descend::Yes;
             };
+            if let Some(visibility) = &mut visibility {
+                visibility.leave();
+            }
             match name {
                 "blockquote" => {
                     out.line_break(2);
@@ -324,10 +378,15 @@ pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
                     out.line_break(2);
                 }
                 "a" => {
-                    if let Some((Some(href), start)) = link_stack.pop()
+                    if let Some((Some(href), start, hidden_at_start)) = link_stack.pop()
                         && with_link_targets
                     {
                         let shown = out.text.get(start..).unwrap_or("");
+                        // A link whose whole text is hidden is hidden too (an image link has
+                        // no text, but nothing hidden either).
+                        if shown.trim().is_empty() && hidden_so_far(&visibility) > hidden_at_start {
+                            return Descend::Yes;
+                        }
                         let target = href.trim();
                         let address = target.strip_prefix("mailto:").unwrap_or(target);
                         let wanted = ["http://", "https://", "mailto:"]
@@ -345,7 +404,10 @@ pub(crate) fn html_text(html: &str, with_link_targets: bool) -> String {
             Descend::Yes
         }
     });
-    out.finish()
+    VisibleText {
+        hidden_chars: hidden_so_far(&visibility),
+        text: out.finish(),
+    }
 }
 
 /// Builds text with lazily inserted line breaks, so no trailing blank lines pile up.

@@ -112,6 +112,16 @@ stay local.
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
 ids or UIDs.
 
+**Planned for stage 11, from stage 9 (decision 0020):** the tables exist (`snooze`, `pin`,
+`task`, `sender_rule`, `rule`), the kinds are not in `REGISTRY` yet:
+- `task`: id `<account uuid>/<Message-ID>`, newer wins, content `{doneAt}` (null while open);
+- sender rules: id = the rule's UUID, newer wins, content `{key: {kind, value}, category,
+  important}` (key normalised); either a kind of its own (`senderRule`) or `rule` with
+  `"type": "sender"`;
+- local rules: `rule`, content `{name, enabled, position, matchAll, conditions, actions, stop}`;
+- `snooze` content `{until, returnedAt}`, `pin` content `{pinnedAt}`.
+`inbox.settings` and `notifications.settings` stay device settings.
+
 ### No secrets
 
 Content is only accepted through a validating type:

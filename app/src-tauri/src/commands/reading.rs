@@ -168,7 +168,7 @@ pub async fn get_prefetch_status(
 /// The system's save dialog, as a sheet of the window, starting in the Downloads folder with the
 /// sanitised name. `None` when the user cancels. Only the path comes back; the core writes.
 #[cfg(any(target_os = "macos", windows))]
-async fn ask_save_path<R: Runtime>(
+pub(crate) async fn ask_save_path<R: Runtime>(
     window: &WebviewWindow<R>,
     name: &str,
 ) -> Result<Option<PathBuf>, CoreError> {
@@ -185,7 +185,7 @@ async fn ask_save_path<R: Runtime>(
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
-async fn ask_save_path<R: Runtime>(
+pub(crate) async fn ask_save_path<R: Runtime>(
     _window: &WebviewWindow<R>,
     _name: &str,
 ) -> Result<Option<PathBuf>, CoreError> {

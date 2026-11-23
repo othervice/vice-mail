@@ -485,6 +485,7 @@ fn seed_account(data_dir: &std::path::Path) {
                 auto_submitted: None,
                 precedence: None,
                 has_attachments: false,
+                category_headers: Vec::new(),
             };
             store
                 .store_headers(mailbox.id, uv, vec![header], None)

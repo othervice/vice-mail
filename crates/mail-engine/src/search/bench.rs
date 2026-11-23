@@ -254,6 +254,7 @@ fn account_messages(
             auto_submitted: None,
             precedence: None,
             has_attachments: rng.chance(15),
+            category_headers: Vec::new(),
         };
         if FOLDERS[folder].0 == "Sent" {
             header.from = vec![Address {

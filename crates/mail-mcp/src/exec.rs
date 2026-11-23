@@ -211,6 +211,10 @@ struct MessageOut {
     /// the subject and body.
     #[serde(skip_serializing_if = "is_zero")]
     hidden_characters_removed: usize,
+    /// Characters (without white space) of HTML text a reader does not see (hidden by CSS or
+    /// attributes) that were left out of the body (`mail_content::html_to_visible_text`).
+    #[serde(skip_serializing_if = "is_zero")]
+    hidden_text_chars_omitted: usize,
     body: String,
 }
 
@@ -282,24 +286,29 @@ fn hit(item: &MessageListItem) -> HitOut {
     }
 }
 
-/// The body as text: HTML (what the reading pane shows first) through `html_to_text`, else the
-/// text part. Never HTML.
-fn body_text(message: &MessageContent, max_chars: usize) -> (&'static str, Cleaned) {
+/// The body as text: HTML (what the reading pane shows first) through
+/// `html_to_visible_text`, without the text a reader does not see, else the text part. Never
+/// HTML. Also returns how many characters of hidden HTML text were left out.
+fn body_text(message: &MessageContent, max_chars: usize) -> (&'static str, Cleaned, usize) {
     let Some(parts) = &message.body else {
-        return ("unavailable", Cleaned::default());
+        return ("unavailable", Cleaned::default(), 0);
     };
     if let Some(html) = parts.html.as_deref().filter(|h| !h.trim().is_empty()) {
-        let text = mail_content::html_to_text(html);
-        return ("html_as_text", clean_text(&text, max_chars));
+        let visible = mail_content::html_to_visible_text(html);
+        return (
+            "html_as_text",
+            clean_text(&visible.text, max_chars),
+            visible.hidden_chars,
+        );
     }
     match parts.text.as_deref().filter(|t| !t.trim().is_empty()) {
-        Some(text) => ("text", clean_text(text, max_chars)),
-        None => ("empty", Cleaned::default()),
+        Some(text) => ("text", clean_text(text, max_chars), 0),
+        None => ("empty", Cleaned::default(), 0),
     }
 }
 
 fn message_out(message: &MessageContent, max_chars: usize) -> MessageOut {
-    let (body_format, body) = body_text(message, max_chars);
+    let (body_format, body, hidden_text) = body_text(message, max_chars);
     let (to, to_more) = addresses(&message.to, limits::ADDRESSES_PER_FIELD);
     let (cc, cc_more) = addresses(&message.cc, limits::ADDRESSES_PER_FIELD);
     let (reply_to, _) = addresses(&message.reply_to, limits::ADDRESSES_PER_FIELD);
@@ -309,11 +318,7 @@ fn message_out(message: &MessageContent, max_chars: usize) -> MessageOut {
         .as_ref()
         .map(|parts| parts.attachments.as_slice())
         .unwrap_or_default();
-    let subject_hidden = message
-        .subject
-        .chars()
-        .filter(|c| crate::output::is_hidden_char(*c))
-        .count();
+    let subject_hidden = mail_content::strip_hidden_chars(&message.subject).removed;
     MessageOut {
         message_id: message.id.0,
         account_id: message.account_id.to_string(),
@@ -345,6 +350,7 @@ fn message_out(message: &MessageContent, max_chars: usize) -> MessageOut {
         body_chars: body.chars,
         body_truncated: body.truncated,
         hidden_characters_removed: body.hidden_removed + subject_hidden,
+        hidden_text_chars_omitted: hidden_text,
         body: body.text,
     }
 }

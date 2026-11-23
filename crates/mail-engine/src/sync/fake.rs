@@ -347,11 +347,35 @@ impl FakeServer {
             message_id: Some(format!("{serial}@fake.test")),
             in_reply_to: None,
             references: Vec::new(),
-            list_id: None,
-            list_unsubscribe: None,
-            auto_submitted: None,
-            precedence: None,
+            list_id: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "List-Id")),
+            list_unsubscribe: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "List-Unsubscribe")),
+            auto_submitted: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "Auto-Submitted")),
+            precedence: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "Precedence")),
             has_attachments: false,
+            // Like the adapter: the header block (stage 9, the category rules read it).
+            category_headers: message
+                .raw
+                .as_deref()
+                .map(|raw| {
+                    let end = raw
+                        .windows(4)
+                        .position(|w| w == b"\r\n\r\n")
+                        .map_or(raw.len(), |i| i + 2);
+                    raw.get(..end).unwrap_or_default().to_vec()
+                })
+                .unwrap_or_default(),
         }
     }
 }

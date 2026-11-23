@@ -26,10 +26,12 @@ specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
 tauri-specta.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "time", "process"] }
 tracing.workspace = true
 # Test builds only (feature `e2e`): embedded W3C WebDriver for WebdriverIO.
 tauri-plugin-wdio-webdriver = { workspace = true, optional = true }
+# Stage 9: native notifications, used from Rust only (decision 0020).
+tauri-plugin-notification.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Test builds only (feature `e2e`): reads the native window buttons for the desktop test and
@@ -55,6 +57,10 @@ objc2-foundation = { workspace = true, optional = true, features = [
 ] }
 
 [target.'cfg(windows)'.dependencies]
+# Stage 9: a second start (a `mailto:` link) hands its arguments to the running app; the
+# Settings app opens for "set as default" (the core's opener crate).
+tauri-plugin-single-instance.workspace = true
+open.workspace = true
 # WebView2 frame guard (feature `webview2-frame-guard`, decision 0011): the one crate with
 # `unsafe`; this crate itself keeps `forbid`.
 webview2-guard = { workspace = true, optional = true }

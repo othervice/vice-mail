@@ -176,7 +176,8 @@ async fn fetch_one(
 }
 
 /// Scheme and, for IP literals, the address. Host names are checked by [`PublicResolver`].
-fn check_url(url: &Url, allow_loopback: bool) -> Result<(), String> {
+/// Also used for one-click unsubscribing (stage 9).
+pub(crate) fn check_url(url: &Url, allow_loopback: bool) -> Result<(), String> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err(format!("scheme {} refused", url.scheme()));
     }
@@ -239,9 +240,16 @@ fn take_budget(budget: &AtomicUsize, amount: usize) -> bool {
 }
 
 /// Resolves host names with the system resolver and keeps only addresses that may be
-/// contacted ([`target_allowed`]); none left is an error.
-struct PublicResolver {
+/// contacted ([`target_allowed`]); none left is an error. Also used for one-click
+/// unsubscribing (stage 9).
+pub(crate) struct PublicResolver {
     allow_loopback: bool,
+}
+
+impl PublicResolver {
+    pub(crate) const fn new(allow_loopback: bool) -> Self {
+        Self { allow_loopback }
+    }
 }
 
 impl reqwest::dns::Resolve for PublicResolver {

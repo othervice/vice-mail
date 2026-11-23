@@ -126,3 +126,36 @@ Er findet also nur echte Rückschritte (einen Scan, eine Sortierung über ein ga
 Pläne selbst prüfen `mail-store`s Plan-Tests.
 
 **Ungeprüft:** Kaltstart nach Neustart des Rechners, die App mit WebView, echte Postfächer, Windows.
+
+## Stufe 9 – 23.11.2026
+
+**Umgebung:** wie Stufe 7 (Mac mini M4, Release-Build), Load 2,7–3,6, andere Sitzungen bauten
+nebenher. **Wie gemessen:** `crates/mail-engine/src/comfort/bench.rs`
+
+```text
+cargo test -p mail-engine --release --lib comfort::bench -- --ignored --nocapture --test-threads 1
+```
+
+100.000 Kopfdaten in einem Posteingang, Fenster von 500 wie ein Erstabgleich, einmal ohne und
+einmal mit Einordnung (rohe Kopfzeilen-Blöcke wie vom Adapter, ein Drittel Newsletter, ein Sechstel
+Benachrichtigungen); fünf Pins, fünf Snoozes, ein wichtiger Absender. Abfragen über die Store-API,
+200 Wiederholungen.
+
+| Messgröße | Ergebnis |
+|---|---:|
+| 100.000 Kopfdaten speichern ohne / mit Einordnung | 2.703 / 3.201 ms (13,5 / 16,0 ms je Fenster) |
+| Absender-Regel auf 100.000 Mails anwenden (Hintergrund) | 27 ms |
+| `listMessages`, 100 Zeilen samt Markierungen | 0,21 ms Median (p95 0,22) |
+| Posteingang ohne Snoozes und Pins, 100 Zeilen | 0,25 ms (p95 0,25) |
+| Posteingang einer Kategorie, 100 Zeilen | 0,25 ms (p95 0,26) |
+| Block „Priorität“ (3) und Zähler | 0,05 ms |
+| Angepinnte und zurückgekehrte oben | 0,09 ms |
+| Zähler am Symbol (ungelesene Personen, 11.000 ungelesen) | 2,3 ms |
+| Bündeln einer Seite von 100 (Abschnitte, Chips) | 0,01 ms |
+
+- Die Einordnung kostet je Fenster rund 2,5 ms (Parsen des Kopfzeilen-Blocks, eine Kontakt- und
+  bis zu zehn Antwort-Abfragen je Mail). Die Basis ohne Einordnung (13,5 ms) ist höher als die
+  10,4 ms aus Stufe 7: anderer Generator (alle Mails in einem Postfach), Trigger für die Kopie der
+  Kategorie am Ort, Last durch andere Sitzungen; nicht getrennt gemessen.
+- Alle Listen bleiben um Größenordnungen unter den Zielen; Pläne prüft
+  `crates/mail-store/src/stage9_plan_tests.rs`.

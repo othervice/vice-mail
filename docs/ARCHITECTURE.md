@@ -48,12 +48,13 @@ wenn er groß genug ist.
 | HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
 | TLS | rustls mit Provider `aws-lc-rs`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7, aws-lc-rs 1.19 | kein OpenSSL; der Standard-Provider von rustls, regelmäßig veröffentlicht, baut auch für Windows ohne CMake und NASM (vorab assemblierte Objekte aus dem Crate, 0002). Provider und Client-Konfiguration entstehen an einer Stelle (`mail_imap::tls`), auch für reqwest und die TLS-Server der Tests. Selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver |
 | System öffnen, Dateidialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | Links und Anhänge im System öffnen, Speichern-Dialog; beide nur in Rust, hinter Traits testbar. Nicht `tauri-plugin-dialog` (spritzt ein Script ein und bringt `tauri-plugin-fs` mit) |
+| Benachrichtigungen, eine Instanz | tauri-plugin-notification, tauri-plugin-single-instance (nur Windows) | 2.8.1 / 2.5.5 | Stufe 9 (0020): native Mitteilungen nur aus Rust (keine Capability für die Oberfläche), Klicks über den Aktions-Handler des Plugins; auf Windows reicht ein zweiter Start (`mailto:`-Link) seine Argumente an die laufende App weiter. Beide Apache-2.0 OR MIT |
 | WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age (X25519, scrypt), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014) |
-| Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017) |
+| Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017). `mail-content` nutzt nur die zivilen Datumstypen (Kalendereinladungen: Datum, Wochentag, Datumsrechnung); Zeitzonen löst dort die Engine über den Trait `ZoneResolver`, die tzdb wird in `mail-content` nur in Tests gelesen |
 | Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
 | Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
 | Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
@@ -121,7 +122,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled` | sync (ohne Geheimnisse) |
 | `identity` | Absenderadresse, Name, Reply-To, Signatur, Standard | sync |
 | `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
-| `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie, Verweis auf den Body | Cache |
+| `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
 | `message_location` | Nachricht, Postfach, UID, Flags, Schlagwörter, MODSEQ | Cache |
 | `thread` | Konto, normalisierter Betreff, letzte Nachricht, Anzahl, ungelesen | Cache |
 | `attachment` | Nachricht, MIME-Teil, Dateiname, Typ, Größe, Content-ID | Cache |
@@ -129,10 +130,11 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `remote_content_sender` | Absender, deren externe Bilder immer geladen werden (Konto-UUID, normalisierte Adresse) | sync |
 | `message_fts` | FTS5-Index über Betreff, Absender, Empfänger, Text, Anhangnamen | Cache |
 | `operation` | Outbox: Art, Nutzdaten, Idempotenzschlüssel, Zustand, Versuche, letzter Fehler | Gerät |
-| `draft` | UUID, Konto, Identität, Kopfzeilen, Inhalt, Anhänge, Revision, UID im Entwürfe-Ordner | Gerät (Abgleich über IMAP) |
-| `contact` | Adresse, Name, Quelle, Häufigkeit, zuletzt benutzt | Cache; von Hand bearbeitete Einträge sync |
-| `signature`, `template`, `rule`, `saved_view` | wie benannt | sync |
-| `snooze`, `pin` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt | sync |
+| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein, Anhänge als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018) | Gerät (Abgleich über IMAP) |
+| `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter (0016, 0018) | Cache; von Hand bearbeitete Einträge sync |
+| `signature`, `template`, `rule`, `saved_view` | wie benannt; `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge) | sync |
+| `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
+| `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `ai_profile` | Anbieter, Basis-URL, Modell, Freigaben | sync (ohne Schlüssel) |
 | `sync_record` | zuletzt abgeglichene Version je Datensatz | Gerät |
@@ -184,6 +186,14 @@ einer klaren Meldung abgelehnt.
   (sync, über Konto-UUID) und ausgeblendete Konten (Gerät) in eigenen Tabellen. Gemessen in
   `docs/testing/performance.md`: erste Suchtreffer bei 500.000 Mails 0,3–17 ms, Thread-Liste 0,3 ms;
   ein Abgleichsfenster kostet 4,7 ms mehr als in Stufe 2.
+- Aus Stufe 9 (`docs/decisions/0020-posteingang-komfort.md`): Neue Mails werden in der
+  Transaktion eingeordnet, die sie speichert (Regeln aus `mail-content` über einen `Classifier` der
+  Engine, lokale Signale aus der Datenbank); geänderte Absender-Regeln und Bestandsmails laufen als
+  Auftrag im Hintergrund, neueste zuerst. Kategorie und Wichtig-Markierung stehen per Trigger auch
+  am Ort (`loc_category`, Teilindex `loc_important`), damit Listen nach Kategorie per Keyset laufen.
+  Snooze, Pins und Aufgaben verweisen über Konto-UUID und Message-ID; die Posteingangsliste lässt
+  sie je Zeile über den eindeutigen Index weg. Gemessen: Einordnen kostet je Fenster von 500
+  Kopfdaten 2,5 ms; Listenseiten bleiben unter 0,3 ms.
 
 ## Regeln der Mail-Engine
 
@@ -234,6 +244,14 @@ einer klaren Meldung abgelehnt.
 - Die erzeugte Nachricht verrät das Programm nicht (kein `User-Agent`/`X-Mailer`, EHLO mit
   `[127.0.0.1]`); `Date` in UTC; derselbe Entwurf ergibt byte-gleiche Nachrichten.
 - Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst.
+- Ab Stufe 5 (0018): Senden ist die Outbox-Operation `send`. Die Bytes werden beim Klick einmal
+  gebaut und eingefroren, der Entwurf ist bis zum Ergebnis gesperrt; `not_before` hält die
+  Verzögerung zum Rückgängigmachen (Abbrechen löscht die Operation, nichts geht ins Netz).
+  Unklar heißt `failed` mit `send_unclear` und eine Frage an den Nutzer (`sendNeedsDecision`);
+  erneut gesendet wird nur auf seine ausdrückliche Entscheidung. Nach der Annahme folgen in
+  derselben Transaktion Gesendet-Kopie (`append`), Entfernen der Entwurfskopie (`remove_copy`)
+  und `\Answered`/`$Forwarded` am Original. Entwürfe gehen als `append` in den Entwürfe-Ordner
+  (neue Fassung anhängen, alte nur bei passender Message-ID entfernen).
 
 **Verbindungen (0002)**
 - Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
@@ -305,6 +323,9 @@ einer klaren Meldung abgelehnt.
 - Das Hauptfenster entsteht erst, wenn der Kern bereitsteht (`"create": false` in `tauri.conf.json`); so kann die Oberfläche keine Commands senden, bevor `AppCore` läuft.
 - `devCsp` greift im Entwicklungsmodus nicht (die WebView lädt die `devUrl` direkt). CSP-Fehler zeigen sich erst im Release- oder e2e-Build; der Desktop-Test zeichnet CSP-Verstöße auf und scheitert daran.
 - Tauri-Capabilities minimal: keine Dateisystem-, Shell- oder HTTP-Plugins für das Frontend.
+  Das Notification-Plugin (Stufe 9) benutzt nur die Shell; die Oberfläche hat keine Berechtigung
+  dafür. Den Standard für `mailto:` fragt und setzt die Shell auf macOS über `osascript` mit festem
+  Skript (Launch Services ohne `unsafe`, 0020).
 - Strenge Content-Security-Policy für die App selbst, keine entfernten Quellen.
 - Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
   (Cargo-Feature `e2e`; ein Test prüft, dass das Release-Binary ihn nicht enthält, 0005).
@@ -348,7 +369,12 @@ einer klaren Meldung abgelehnt.
   erst nach Klick und Prüfung, Links nur `http`, `https`, `mailto`
 - KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13)
 - Der MCP-Server nimmt nur lokale Verbindungen an (stdio bzw. `127.0.0.1`) und baut selbst keine auf
-- Abmelde-Adressen (List-Unsubscribe) nach Klick
+- Abmelden (Stufe 9, 0020), nur nach Klick: Ein-Klick nach RFC 8058 als HTTPS-POST
+  (`List-Unsubscribe=One-Click`) an die `https`-Adresse aus `List-Unsubscribe`, nur wenn
+  `List-Unsubscribe-Post` es anbietet; Client wie bei externen Bildern (gemeinsame TLS-Konfiguration,
+  ohne Cookies, Referrer, Proxy und Wiederholungen, neutrale Kennung, nie zu privaten, Loopback- oder
+  Link-Local-Adressen), keine Weiterleitungen, 5 s Aufbau, 15 s gesamt. Eine `mailto:`-Abmeldung ist
+  ein Entwurf, den der Nutzer sendet; eine Web-Abmeldung öffnet nur der System-Browser
 - Update-Prüfung ab Stufe 15, abschaltbar
 - Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
   (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.

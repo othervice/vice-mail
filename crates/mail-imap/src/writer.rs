@@ -14,10 +14,10 @@
 
 use async_imap::imap_proto::{MailboxDatum, Status};
 use mail_model::{
-    Access, BackendError, BodySection, Capabilities, ConnectConfig, CopyUid, ExpungeOutcome,
-    FetchedSection, Flag, FlagUpdate, IdleOutcome, MailBackend, MailConnector, MailWriter,
-    MailboxRole, MailboxStatus, MessageHeader, MessageStructure, ModSeq, MoveMethod, MoveOutcome,
-    RawMessage, RemoteMailbox, SelectedMailbox, StoreMode, StoreOutcome, Uid, UidSet,
+    Access, AppendUid, BackendError, BodySection, Capabilities, ConnectConfig, CopyUid,
+    ExpungeOutcome, FetchedSection, Flag, FlagUpdate, IdleOutcome, MailBackend, MailConnector,
+    MailWriter, MailboxRole, MailboxStatus, MessageHeader, MessageStructure, ModSeq, MoveMethod,
+    MoveOutcome, RawMessage, RemoteMailbox, SelectedMailbox, StoreMode, StoreOutcome, Uid, UidSet,
     WriteConnector, is_valid_keyword,
 };
 
@@ -245,6 +245,14 @@ impl<S: Transport> MailBackend for ImapWriter<S> {
         self.backend.fetch_sections(mailbox, uid, sections).await
     }
 
+    async fn search_text(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        criteria: &[mail_model::search::ServerCriterion],
+    ) -> Result<UidSet, BackendError> {
+        self.backend.search_text(mailbox, criteria).await
+    }
+
     async fn noop(&mut self) -> Result<(), BackendError> {
         self.backend.noop().await
     }
@@ -254,7 +262,94 @@ impl<S: Transport> MailBackend for ImapWriter<S> {
     }
 }
 
+/// Newest UIDs [`MailWriter::find_message_id`] reads besides the server's search hits: a fresh
+/// APPEND may not be in the search index yet (Stalwart indexes asynchronously, decision 0001).
+const RECENT_FOR_MESSAGE_ID: usize = 100;
+
+/// A Message-ID as a quoted SEARCH string: printable ASCII only (the command layer sends one
+/// line; a Message-ID with anything else is not searched for, only read from the headers).
+fn search_string(message_id: &str) -> Option<String> {
+    let id = format!("<{message_id}>");
+    id.bytes()
+        .all(|b| b.is_ascii_graphic() && b != b'"' && b != b'\\')
+        .then(|| format!("\"{id}\""))
+}
+
 impl<S: Transport> MailWriter for ImapWriter<S> {
+    async fn append(
+        &mut self,
+        mailbox: &str,
+        flags: &[Flag],
+        message: &[u8],
+    ) -> Result<Option<AppendUid>, BackendError> {
+        if message.is_empty() || message.contains(&0) {
+            return Err(BackendError::InvalidState(
+                "APPEND of an empty message or one with NUL bytes".into(),
+            ));
+        }
+        if let Some(keyword) = flags.iter().find(|f| matches!(f, Flag::Keyword(_))) {
+            return Err(BackendError::InvalidState(format!(
+                "APPEND with the keyword {}",
+                short(keyword.imap())
+            )));
+        }
+        let list: Vec<&str> = flags.iter().map(Flag::imap).collect();
+        let line = format!("APPEND {} ({})", quote(mailbox)?, list.join(" "));
+        let non_sync = self.backend.caps.literal_plus;
+        let tagged = self
+            .backend
+            .conn
+            .run_literal(&line, message, non_sync, |_| false)
+            .await?;
+        if tagged.status != TaggedStatus::Ok
+            && (tagged.bracket_code().as_deref() == Some("TRYCREATE")
+                || tagged.text.starts_with("[TRYCREATE]"))
+        {
+            return Err(BackendError::MailboxNotFound(mailbox.to_owned()));
+        }
+        let tagged = tagged.check("APPEND")?;
+        Ok(tagged.append_uid.filter(|_| self.backend.caps.uidplus))
+    }
+
+    async fn find_message_id(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        message_id: &str,
+    ) -> Result<UidSet, BackendError> {
+        self.backend.ensure_open(mailbox)?;
+        let mut candidates: Vec<Uid> = Vec::new();
+        if let Some(wanted) = search_string(message_id) {
+            let line = format!("UID SEARCH HEADER Message-ID {wanted}");
+            let tagged = self
+                .backend
+                .conn
+                .run(&line, |resp| match resp {
+                    Response::MailboxData(MailboxDatum::Search(found)) => {
+                        candidates.extend_from_slice(found);
+                        true
+                    }
+                    _ => false,
+                })
+                .await?;
+            if tagged.status != TaggedStatus::Ok {
+                tracing::debug!(response = %tagged.text, "SEARCH HEADER refused; reading headers");
+            }
+        }
+        let all = self.backend.search_uids(mailbox).await?;
+        candidates.extend(all.iter().rev().take(RECENT_FOR_MESSAGE_ID));
+        let candidates = UidSet::from_uids(candidates);
+        if candidates.is_empty() {
+            return Ok(UidSet::new());
+        }
+        let headers = self.backend.fetch_headers(mailbox, &candidates).await?;
+        Ok(UidSet::from_uids(
+            headers
+                .iter()
+                .filter(|h| h.message_id.as_deref() == Some(message_id))
+                .map(|h| h.uid),
+        ))
+    }
+
     async fn mailbox_status(&mut self, name: &str) -> Result<MailboxStatus, BackendError> {
         self.status_of(name).await
     }

@@ -111,6 +111,10 @@ pub struct MessageHeader {
     /// From BODYSTRUCTURE: some part has `Content-Disposition: attachment`, or a non-text part
     /// has a file name.
     pub has_attachments: bool,
+    /// Stage 9: the raw `HEADER.FIELDS` block the adapter fetched, with the fields the
+    /// category rules read (`mail_content::CLASSIFY_HEADER_FIELDS`, decision 0016); empty if
+    /// not fetched. The store hands it to its classifier and does not keep it.
+    pub category_headers: Vec<u8>,
 }
 
 impl MessageHeader {
@@ -170,6 +174,21 @@ pub struct MessageListItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub activity: Option<MessageActivity>,
+    /// Stage 9: the category after the user's sender rules; null until the message is
+    /// classified (treat it as a person's).
+    pub category: Option<crate::MessageCategory>,
+    /// Stage 9: the sender, domain or list is marked important ("Priority" block).
+    pub important: bool,
+    /// Stage 9: pinned.
+    pub pinned: bool,
+    /// Stage 9: snoozed (waiting, or came back). Absent when not snoozed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub snooze: Option<crate::SnoozeMark>,
+    /// Stage 9: marked as a task. Absent when not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub task: Option<crate::TaskMark>,
 }
 
 /// Outbox state of a message as its list row shows it (stage 4). If several operations touch

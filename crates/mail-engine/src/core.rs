@@ -17,6 +17,7 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 
 use crate::clock::{Clock, SystemClock};
+use crate::compose::Compose;
 use crate::credentials::{CredentialRef, Credentials};
 use crate::discovery;
 use crate::outbox::{Outbox, OutboxConfig, SyncHook};
@@ -94,6 +95,16 @@ impl<C: MailConnector> CoreServices<C> {
     }
 }
 
+/// A weak reference to the core, for background tasks (stage 9): they end once the core is
+/// gone instead of keeping it (and the database) open.
+pub(crate) struct WeakCore<C: Connector>(Weak<Inner<C>>);
+
+impl<C: Connector> WeakCore<C> {
+    pub(crate) fn upgrade(&self) -> Option<AppCore<C>> {
+        self.0.upgrade().map(|inner| AppCore { inner })
+    }
+}
+
 /// Facade of the core. The shell forwards every command here; everything is testable without
 /// a WebView. Cheap to clone. Generic over the mail connector so tests can use a fake server.
 pub struct AppCore<C: Connector = ImapConnector> {
@@ -131,6 +142,12 @@ struct Inner<C: Connector> {
     on_connected: OnConnected,
     /// Stage 7: the index job and the threading of old messages in the background.
     search: crate::search::SearchState,
+    /// Stage 5: drafts, sending, contacts; `None` if the store did not open.
+    compose: Option<Compose<C>>,
+    /// Stage 5: submits messages and checks SMTP logins (account setup).
+    sender: std::sync::Arc<dyn mail_model::MailSender>,
+    /// Stage 9: categories, snoozes, rules and notifications in the background.
+    comfort: crate::comfort::ComfortState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -145,6 +162,10 @@ impl<C: Connector> Drop for Inner<C> {
         if let Some(outbox) = &self.outbox {
             outbox.abort_all();
         }
+        if let Some(compose) = &self.compose {
+            compose.shutdown();
+        }
+        self.comfort.stop();
     }
 }
 
@@ -206,6 +227,13 @@ impl<C: Connector> AppCore<C> {
         let accounts = Arc::new(Registry::default());
         let sync = Arc::new(services.sync);
         let connector = Arc::new(services.connector);
+        // Stage 9: the one-click unsubscribe client trusts what the sync trusts (the test CA in
+        // tests) and reaches loopback only where external images may (tests).
+        let comfort = crate::comfort::ComfortState::new(
+            opened.as_ref().ok(),
+            sync.extra_root_ca.as_ref(),
+            services.reading.remote.allow_loopback,
+        );
         let reading = opened.as_ref().ok().map(|store| {
             Reading::start(
                 store.clone(),
@@ -218,10 +246,12 @@ impl<C: Connector> AppCore<C> {
                 &config.data_dir,
             )
         });
+        let outbox_config = services
+            .outbox
+            .unwrap_or_else(|| OutboxConfig::from_sync(&sync));
+        let sender = Arc::clone(&outbox_config.sender.0);
         let outbox = opened.as_ref().ok().map(|store| {
-            let config = services
-                .outbox
-                .unwrap_or_else(|| OutboxConfig::from_sync(&sync));
+            let config = outbox_config.clone();
             let outbox = Outbox::new(
                 store.clone(),
                 Arc::clone(&connector),
@@ -248,6 +278,15 @@ impl<C: Connector> AppCore<C> {
             sync.wake_threshold,
         ));
         let search = crate::search::SearchState::start(opened.as_ref().ok()).await;
+        let compose = match (opened.as_ref().ok(), &outbox, &reading) {
+            (Some(store), Some(outbox), Some(reading)) => Some(Compose::new(
+                store.clone(),
+                outbox.clone(),
+                Arc::clone(reading),
+                events.clone(),
+            )),
+            _ => None,
+        };
         let core = Self {
             inner: Arc::new(Inner {
                 info: AppInfo {
@@ -269,17 +308,25 @@ impl<C: Connector> AppCore<C> {
                 outbox,
                 on_connected,
                 search,
+                compose,
+                sender,
+                comfort,
             }),
         };
         if let Some(reading) = &core.inner.reading {
             reading.clear_open_dir().await;
         }
+        // Stage 9 before the sync starts, so no arrival is missed.
+        crate::comfort::start(&core).await;
         core.start_stored_accounts().await;
         if let Some(outbox) = &core.inner.outbox
             && let Err(err) = outbox.start().await
         {
             // The queue stays stored; the next action or wake starts the worker.
             tracing::error!(code = ?err.code(), error = %err, "the outbox could not resume");
+        }
+        if let Some(compose) = &core.inner.compose {
+            compose.start().await;
         }
         core
     }
@@ -397,14 +444,17 @@ impl<C: Connector> AppCore<C> {
         discovery::discover_online(email).await
     }
 
-    /// Validates the settings, logs in to IMAP read-only and out again. Stores nothing.
+    /// Validates the settings, logs in to IMAP read-only and out again, then to SMTP (log in
+    /// and say goodbye; nothing is sent). Stores nothing. An SMTP failure carries `SMTP` in
+    /// its detail, so the UI can tell which server it was.
     pub async fn test_connection(
         &self,
         settings: AccountSettings,
         password: Secret<String>,
     ) -> Result<ConnectionTestResult, CoreError> {
         let settings = settings.validated()?;
-        let capabilities = self.check_login(&settings.imap, password).await?;
+        let capabilities = self.check_login(&settings.imap, password.clone()).await?;
+        self.check_smtp(&settings.smtp, password).await?;
         Ok(ConnectionTestResult { capabilities })
     }
 
@@ -817,6 +867,8 @@ impl<C: Connector> AppCore<C> {
         tracing::info!("resumed; reconnecting all accounts");
         self.inner.accounts.wake_all();
         self.wake_outbox();
+        // Stage 9: snoozes due while the computer slept come back now.
+        self.inner.comfort.wake_snoozes();
     }
 
     /// Stops every sync task and the outbox; connections get a moment to log out. Call when the
@@ -831,12 +883,16 @@ impl<C: Connector> AppCore<C> {
         if let Some(outbox) = self.inner.outbox.clone() {
             stopping.spawn(async move { outbox.shutdown().await });
         }
+        if let Some(compose) = &self.inner.compose {
+            compose.shutdown();
+        }
         while stopping.join_next().await.is_some() {}
         if let Some(task) = &self.inner.wake_detector {
             task.abort();
         }
         self.inner.stop_reading();
         self.inner.search.stop();
+        self.inner.comfort.stop();
         tracing::info!("sync stopped");
     }
 
@@ -866,6 +922,7 @@ impl<C: Connector> AppCore<C> {
             config: Arc::clone(&self.inner.sync),
             events: self.inner.events.clone(),
             on_connected: Arc::clone(&self.inner.on_connected),
+            on_arrival: self.inner.comfort.on_arrival(),
         };
         let id = account.id;
         let handle = account::spawn(env, account, password);
@@ -898,8 +955,38 @@ impl<C: Connector> AppCore<C> {
         }
     }
 
+    /// SMTP login check of the account setup (decision 0007: added in stage 5). Own task, as
+    /// for IMAP.
+    async fn check_smtp(
+        &self,
+        server: &ServerSettings,
+        password: Secret<String>,
+    ) -> Result<(), CoreError> {
+        let mut config =
+            mail_model::ConnectConfig::new(server, password, mail_model::Access::ReadOnly);
+        config.timeouts = self.inner.sync.timeouts;
+        config.extra_root_ca = self.inner.sync.extra_root_ca.clone();
+        let sender = Arc::clone(&self.inner.sender);
+        let task = tokio::spawn(async move { sender.verify(&config).await });
+        match task.await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(err)) => Err(CoreError::Mail(smtp_detail(err))),
+            Err(err) => Err(CoreError::Mail(mail_model::BackendError::Protocol(
+                format!("SMTP: the login check failed unexpectedly: {err}"),
+            ))),
+        }
+    }
+
     fn store(&self) -> Result<&Store, CoreError> {
         self.inner.store.as_ref().map_err(Clone::clone)
+    }
+
+    fn compose(&self) -> Result<&Compose<C>, CoreError> {
+        self.store()?;
+        self.inner
+            .compose
+            .as_ref()
+            .ok_or_else(|| CoreError::Internal("composing is not available".into()))
     }
 
     fn outbox(&self) -> Result<&Outbox<C>, CoreError> {
@@ -948,6 +1035,205 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn search_state(&self) -> &crate::search::SearchState {
         &self.inner.search
+    }
+
+    // Stage 9 (`crate::comfort`) works through these.
+
+    pub(crate) fn comfort(&self) -> &crate::comfort::ComfortState {
+        &self.inner.comfort
+    }
+
+    /// A reference that does not keep the core alive (for background tasks).
+    pub(crate) fn downgrade(&self) -> WeakCore<C> {
+        WeakCore(Arc::downgrade(&self.inner))
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Composing and sending (stage 5, see `crate::compose`)
+    // -----------------------------------------------------------------------------------------
+
+    /// A new local draft: empty, or a reply, reply to all or forward of a stored message
+    /// (recipients, identity, subject, References and the quote prepared; a forward takes the
+    /// attachments). Emits `draftsChanged`.
+    pub async fn create_draft(
+        &self,
+        request: mail_model::NewDraft,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.create(request).await
+    }
+
+    pub async fn get_draft(&self, id: mail_model::DraftId) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.get(id).await
+    }
+
+    /// Saves the composer's fields locally (call every few seconds while typing); the server
+    /// copy follows after a quiet moment. `send_in_progress` while the draft is in the outbox.
+    pub async fn save_draft(
+        &self,
+        id: mail_model::DraftId,
+        update: mail_model::DraftUpdate,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.save(id, update).await
+    }
+
+    /// The composer closed: the newest version goes to the Drafts folder now.
+    pub async fn close_draft(
+        &self,
+        id: mail_model::DraftId,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.close(id).await
+    }
+
+    /// Discards a draft (local, files, and its copy in the Drafts folder with writes on).
+    pub async fn delete_draft(&self, id: mail_model::DraftId) -> Result<(), CoreError> {
+        self.compose()?.delete(id).await
+    }
+
+    /// Local drafts (also after a crash), newest change first; all accounts without `account`.
+    pub async fn list_drafts(
+        &self,
+        account: Option<AccountId>,
+    ) -> Result<Vec<mail_model::DraftSummary>, CoreError> {
+        self.compose()?.list(account).await
+    }
+
+    /// Opens a message of the Drafts folder as a draft (the app's own, or one of another
+    /// program made into a local draft).
+    pub async fn open_draft_from_message(
+        &self,
+        message: MessageId,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.open_from_message(message).await
+    }
+
+    /// Copies files into the draft. The shell passes only paths from the system file dialog or
+    /// from a drag-and-drop event of the window.
+    pub async fn add_draft_attachments(
+        &self,
+        id: mail_model::DraftId,
+        paths: Vec<PathBuf>,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.add_attachments(id, paths).await
+    }
+
+    pub async fn remove_draft_attachment(
+        &self,
+        id: mail_model::DraftId,
+        attachment: String,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.remove_attachment(id, attachment).await
+    }
+
+    /// Freezes the draft and queues it for sending after the undo delay. `request_id` names
+    /// the press of "send" (a UUID): the same id twice sends once. Refused before anything
+    /// changes: `read_only`, `invalid_address`, `attachment_too_large`, `send_in_progress`.
+    pub async fn send_draft(
+        &self,
+        id: mail_model::DraftId,
+        request_id: String,
+    ) -> Result<mail_model::OutgoingMail, CoreError> {
+        self.compose()?.send(id, request_id).await
+    }
+
+    /// Undo of a send within the delay, or "edit" of a failed or unclear one: the draft is
+    /// editable again; nothing was sent. `send_in_progress` once the submission started.
+    pub async fn cancel_send(
+        &self,
+        id: mail_model::DraftId,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.cancel_send(id).await
+    }
+
+    /// The outbox view: the account's sends, newest first, below `before`. `limit` 1..=500.
+    pub async fn list_outgoing(
+        &self,
+        account: AccountId,
+        before: Option<OperationId>,
+        limit: u32,
+    ) -> Result<Vec<mail_model::OutgoingMail>, CoreError> {
+        self.compose()?.outgoing(account, before, limit).await
+    }
+
+    /// The user's decision on an unclear send (`sendNeedsDecision`).
+    pub async fn resolve_unclear_send(
+        &self,
+        operation: OperationId,
+        decision: mail_model::UnclearDecision,
+    ) -> Result<mail_model::OutgoingMail, CoreError> {
+        self.compose()?.resolve_unclear(operation, decision).await
+    }
+
+    pub async fn get_compose_settings(&self) -> Result<mail_model::ComposeSettings, CoreError> {
+        self.compose()?.compose_settings().await
+    }
+
+    /// Stores the undo delay (0 to 30 seconds; `invalid_argument` otherwise).
+    pub async fn set_compose_settings(
+        &self,
+        settings: mail_model::ComposeSettings,
+    ) -> Result<mail_model::ComposeSettings, CoreError> {
+        self.compose()?.set_compose_settings(settings).await
+    }
+
+    pub async fn get_send_settings(
+        &self,
+        account: AccountId,
+    ) -> Result<mail_model::AccountSendSettings, CoreError> {
+        self.compose()?.send_settings(account).await
+    }
+
+    /// Who files sent mail of the account (`auto`: Gmail does it itself).
+    pub async fn set_sent_copy_mode(
+        &self,
+        account: AccountId,
+        mode: mail_model::SentCopyMode,
+    ) -> Result<mail_model::AccountSendSettings, CoreError> {
+        self.compose()?.set_sent_copy(account, mode).await
+    }
+
+    /// Identities with their text signatures, for the composer's sender choice.
+    pub async fn list_compose_identities(
+        &self,
+        account: AccountId,
+    ) -> Result<Vec<mail_model::ComposeIdentity>, CoreError> {
+        self.compose()?.identities(account).await
+    }
+
+    /// Sets or removes (`None`) the identity's text signature. Emits `accountsChanged`.
+    pub async fn set_identity_signature(
+        &self,
+        identity: mail_model::IdentityId,
+        signature: Option<String>,
+    ) -> Result<mail_model::ComposeIdentity, CoreError> {
+        self.compose()?.set_signature(identity, signature).await
+    }
+
+    /// Autocomplete from addresses of earlier mail: every word of `query` starts a word of the
+    /// name or the address; ordered by how often and how recently the user wrote to them.
+    pub async fn search_contacts(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<mail_model::ContactSuggestion>, CoreError> {
+        self.compose()?.search_contacts(query, limit).await
+    }
+}
+
+/// Marks an SMTP failure of the setup check as such in its detail.
+fn smtp_detail(err: mail_model::BackendError) -> mail_model::BackendError {
+    use mail_model::BackendError as B;
+    let tag = |d: String| format!("SMTP: {d}");
+    match err {
+        B::Dns(d) => B::Dns(tag(d)),
+        B::Timeout(d) => B::Timeout(tag(d)),
+        B::ConnectionLost(d) => B::ConnectionLost(tag(d)),
+        B::CertUntrusted(d) => B::CertUntrusted(tag(d)),
+        B::Tls(d) => B::Tls(tag(d)),
+        B::AuthFailed(d) => B::AuthFailed(tag(d)),
+        B::Unsupported(d) => B::Unsupported(tag(d)),
+        B::Protocol(d) => B::Protocol(tag(d)),
+        B::Rejected(d) => B::Rejected(tag(d)),
+        other => other,
     }
 }
 

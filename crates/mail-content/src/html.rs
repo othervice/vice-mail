@@ -265,7 +265,7 @@ const PRESENTATIONAL: &[&str] = &[
 const GENERIC_PREFIXES: &[&str] = &["aria-"];
 
 /// Attributes kept on the `<body>` element of the output.
-const BODY_ATTRIBUTES: &[&str] = &[
+pub(crate) const BODY_ATTRIBUTES: &[&str] = &[
     "bgcolor",
     "text",
     "link",
@@ -526,17 +526,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
 
     // 1. Style blocks and body attributes from a full document parse.
     let document = dom::parse_document(html);
-    let mut css_text = String::new();
-    dom::walk(&document.document, |visit| {
-        if let Visit::Enter(node) = visit
-            && dom::html_name(node) == Some("style")
-        {
-            css_text.push_str(&dom::text_content(node));
-            css_text.push('\n');
-            return Descend::Skip;
-        }
-        Descend::Yes
-    });
+    let css_text = style_text(&document);
     let stylesheet = css::sanitize_stylesheet(&css_text, &mut |url| pipeline.css_image(url));
     let mut body_attributes = String::new();
     if let Some(body) = dom::find_element(&document.document, "body")
@@ -621,6 +611,23 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
         truncated,
         fallback: None,
     }
+}
+
+/// The text of all `<style>` elements of a document, in order (also read by the visibility
+/// check, `crate::visible`, so both see the same rules).
+pub(crate) fn style_text(document: &dom::Dom) -> String {
+    let mut css_text = String::new();
+    dom::walk(&document.document, |visit| {
+        if let Visit::Enter(node) = visit
+            && dom::html_name(node) == Some("style")
+        {
+            css_text.push_str(&dom::text_content(node));
+            css_text.push('\n');
+            return Descend::Skip;
+        }
+        Descend::Yes
+    });
+    css_text
 }
 
 fn ammonia_builder() -> ammonia::Builder<'static> {
