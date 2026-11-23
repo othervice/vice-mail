@@ -24,6 +24,8 @@ import { createParityComposeFake, type ParityComposeFakeOptions, type ParityComp
 import { createAttachmentsFake, type AttachmentsFakeOptions, type AttachmentsFakeState } from "./attachments";
 // Stage 15 (decision 0037): in-app updates.
 import { createUpdatesFake, type UpdatesFakeOptions, type UpdatesFakeState } from "./updates";
+// Stage 15 (decision 0044): the guided first start.
+import { createFirstStartFake, type FirstStartFakeOptions, type FirstStartFakeState } from "./firstStart";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -327,6 +329,8 @@ interface FakeCoreOptions {
   diagnostics?: DiagnosticsExportResult;
   /** Decision 0039: which messages form a thread (default: every message is its own). */
   conversations?: ConversationFakeOptions;
+  /** Stage 15 (decision 0044): the guided first start (default: ended, the frame shows). */
+  firstStart?: FirstStartFakeOptions;
 }
 
 export interface FakeCore {
@@ -381,6 +385,8 @@ export interface FakeCore {
   readonly attachments: AttachmentsFakeState;
   /** Stage 15 (decision 0037): the update setting and state as the fake holds them now. */
   readonly updates: UpdatesFakeState;
+  /** Stage 15 (decision 0044): the first start as the fake holds it now. */
+  readonly firstStart: FirstStartFakeState;
 }
 
 /**
@@ -790,6 +796,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   });
 
   const updatesFake = createUpdatesFake(options.updates ?? {}, { reject: (code) => reject(code) });
+  // Stage 15 (decision 0044): the guided first start.
+  const firstStartFake = createFirstStartFake(options.firstStart ?? {}, { accounts: () => accounts });
 
   // Stage 16: rows carry `readingList` wherever the fake core lists them (as the core does).
   const markReadingList = (answer: unknown): unknown => {
@@ -995,6 +1003,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 15 (decision 0037): in-app updates.
           const updatesAnswer = updatesFake.handle(cmd, args);
           if (updatesAnswer !== undefined) return updatesAnswer;
+          // Stage 15 (decision 0044): the guided first start.
+          const firstStartAnswer = firstStartFake.handle(cmd, args);
+          if (firstStartAnswer !== undefined) return firstStartAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -1073,5 +1084,6 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     receipts: parityComposeFake.state,
     attachments: attachmentsFake.state,
     updates: updatesFake.state,
+    firstStart: firstStartFake.state,
   };
 }

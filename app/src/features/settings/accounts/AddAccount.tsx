@@ -5,7 +5,7 @@ import { Button } from "../../../components/Button";
 import { ErrorNotice } from "../../../components/ErrorNotice";
 import { Notice } from "../../../components/Notice";
 import { TextField } from "../../../components/TextField";
-import type { DiscoveryResult, ServerSettings } from "../../../services/ipc";
+import type { Account, DiscoveryResult, ServerSettings } from "../../../services/ipc";
 import { useUiStore } from "../../../stores/ui";
 import {
   useAddAccount,
@@ -70,6 +70,15 @@ function serverOf(settings: ServerSettings | null): boolean {
   return settings !== null && settings.host.trim() !== "";
 }
 
+interface AddAccountProps {
+  /**
+   * Stage 15 (decision 0044): the form inside the guided first start. The step has the heading
+   * and the way on, so the form leaves out its own heading, the way back to the account list and
+   * "Cancel", and reports the new account instead of opening the inbox.
+   */
+  embedded?: { onAdded: (account: Account) => void };
+}
+
 /**
  * Account setup as its own view (docs/DESIGN.md: no dialogs for everyday things). Address,
  * name and password first; the core's built-in provider table answers at once and offline.
@@ -78,7 +87,7 @@ function serverOf(settings: ServerSettings | null): boolean {
  * servers are always shown, with a note to check them, before the user adds the account. "Test connection" logs in without storing anything;
  * "Add account" checks the login again in the core and stores the account read-only.
  */
-export function AddAccount() {
+export function AddAccount({ embedded }: AddAccountProps = {}) {
   const { t } = useTranslation();
   const titleId = useId();
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
@@ -174,6 +183,7 @@ export function AddAccount() {
           setPassword("");
           selectAccount(account.id);
           showMailView("inbox");
+          embedded?.onAdded(account);
         },
       },
     );
@@ -190,25 +200,7 @@ export function AddAccount() {
   const offerOnline = lookupDone && !suggestion && origin?.kind !== "online";
   const nothingFoundOnline = online.isSuccess && (online.data.source === "none" || online.data.source === "knownProvider" || (!serverOf(online.data.imap) && !serverOf(online.data.smtp)));
 
-  return (
-    <section aria-labelledby={titleId} className="flex max-w-(--ui-content-max-width) flex-col gap-6">
-      <div>
-        <Button
-          variant="quiet"
-          onClick={() => {
-            showAccountsPage({ kind: "list" });
-          }}
-        >
-          <ArrowLeft aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-          {t("settings.accounts.back")}
-        </Button>
-      </div>
-      <div className="flex flex-col gap-2">
-        <h2 id={titleId} className="text-20 font-semibold text-primary">
-          {t("settings.accounts.setup.title")}
-        </h2>
-        <p className="text-14 text-secondary">{t("settings.accounts.setup.intro")}</p>
-      </div>
+  const form = (
       <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-6" data-testid="add-account">
         <div className="flex flex-col gap-4">
           <TextField
@@ -351,16 +343,41 @@ export function AddAccount() {
           <Button variant="secondary" onClick={runTest} disabled={busy || (attempted && !ready)} data-testid="setup-test">
             {test.isPending ? t("settings.accounts.setup.testing") : t("settings.accounts.setup.test")}
           </Button>
-          <Button
-            variant="quiet"
-            onClick={() => {
-              showAccountsPage({ kind: "list" });
-            }}
-          >
-            {t("settings.accounts.setup.cancel")}
-          </Button>
+          {!embedded && (
+            <Button
+              variant="quiet"
+              onClick={() => {
+                showAccountsPage({ kind: "list" });
+              }}
+            >
+              {t("settings.accounts.setup.cancel")}
+            </Button>
+          )}
         </div>
       </form>
+  );
+  if (embedded) return form;
+
+  return (
+    <section aria-labelledby={titleId} className="flex max-w-(--ui-content-max-width) flex-col gap-6">
+      <div>
+        <Button
+          variant="quiet"
+          onClick={() => {
+            showAccountsPage({ kind: "list" });
+          }}
+        >
+          <ArrowLeft aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+          {t("settings.accounts.back")}
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2">
+        <h2 id={titleId} className="text-20 font-semibold text-primary">
+          {t("settings.accounts.setup.title")}
+        </h2>
+        <p className="text-14 text-secondary">{t("settings.accounts.setup.intro")}</p>
+      </div>
+      {form}
     </section>
   );
 }

@@ -105,6 +105,8 @@ const READING_COMMANDS = new Set([
   "get_unread_first_views",
   // Stage 15 (decision 0037): the update setting and state (local; nothing is requested).
   "get_update_info",
+  // Stage 15 (decision 0044): whether to show the guided first start (a device setting, read-only).
+  "get_first_start",
   // Stage 16: the blocked senders, for the quiet note on a blocked sender's message (read-only).
   "list_blocked_senders",
   "plugin:event|listen",

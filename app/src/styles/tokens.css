@@ -190,6 +190,9 @@
   --ui-wordmark-height: 3rem;
   --ui-lettering-height: 1.75rem;
   --ui-app-icon: 4.5rem;
+  /* Stage 15 (decision 0044): the card of the guided first start keeps one height on every step
+     (the step bar does not jump), smaller only where the window is lower. */
+  --ui-first-start-height: 44rem;
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
      lines), the line length of plain-text mail and the width of an attachment card. */
   --ui-list-width-reading: 24rem;

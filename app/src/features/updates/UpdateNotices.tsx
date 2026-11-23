@@ -12,7 +12,9 @@ const CARD =
 /**
  * Stage 15 (decision 0037), in the main window: the one-time question about automatic update
  * checks (after the first account is set up; not a dialog, nothing waits for it), and a quiet
- * note when an update is available or ready. Neither downloads or installs anything.
+ * note when an update is available or ready. Neither downloads or installs anything. Since
+ * decision 0044 the guided first start asks the question on its optional step; this card is the
+ * fallback for anyone who never saw that step (the core no longer asks once it is answered).
  */
 export function UpdateNotices() {
   const query = useUpdateInfo();

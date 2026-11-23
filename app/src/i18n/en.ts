@@ -72,6 +72,8 @@ export const en = {
       points: {
         readOnly: "New accounts only read at first. Nothing changes on the server until you allow it.",
         local: "Your mail goes straight between this computer and your provider. No cloud service in between.",
+        // Stage 15 (decision 0044): the fourth promise, shown on the first start too.
+        telemetry: "No telemetry. The app collects no usage data and reports nothing about you.",
         keychain: "Your password stays in the system keychain of this computer.",
       },
     },
@@ -3585,6 +3587,67 @@ export const en = {
     previous: "Previous match",
     next: "Next match",
     close: "Close find",
+  },
+
+  // ---- Stage 15 (decision 0044): the guided first start ----
+  firstStart: {
+    skip: "Skip setup",
+    back: "Back",
+    next: "Continue",
+    finishFailed: "The setup could not be finished.",
+    steps: {
+      label: "Setup steps",
+      completed: ", done",
+      welcome: "Welcome",
+      account: "Account",
+      appearance: "Appearance",
+      extras: "Optional",
+      done: "Done",
+    },
+    welcome: {
+      title: "Welcome",
+      body: "{{product}} is an email client for your own accounts. It talks directly to your mail provider and keeps your mail on this computer.",
+      time: "Setting it up takes a minute: an account, the look and a few optional extras. You can skip any of it.",
+      start: "Get started",
+      promises: "What you can rely on",
+    },
+    account: {
+      title: "Add your first account",
+      body: "For most providers your address and password are enough. The password goes straight into the system keychain.",
+      later: "Set up later",
+      addedTitle: "{{email}} is set up",
+      addedBody: "The app is downloading your mail now. It only reads for now: nothing changes on the server until you allow it.",
+    },
+    appearance: {
+      title: "Choose your look",
+      body: "Your choice applies right away. You can change it any time in Settings → Appearance.",
+    },
+    extras: {
+      title: "Optional extras",
+      body: "None of this is on yet. Turn on what you want now, or later in Settings.",
+      sync: {
+        title: "Settings sync",
+        body: "Keeps your settings the same on all your devices, encrypted in a folder of your own mailbox. No server of ours is involved.",
+        setUp: "Set up now",
+        on: "On",
+        noAccount: "Needs an account. You can set it up later in Settings → Settings sync.",
+        back: "Back to setup",
+      },
+      ai: {
+        title: "AI",
+        body: "Optional and off. To use it, connect your own AI app in Settings → AI over MCP, or set up a provider in Settings → AI in the app.",
+      },
+    },
+    done: {
+      title: "You’re all set",
+      readOnlyTitle: "{{email}} only reads for now",
+      readOnlyBody: "The app changes nothing on the server yet: no read status, no moving, no deleting. To allow changes, open Settings → Accounts, choose the account and turn on “Allow changes”.",
+      noAccountTitle: "No account yet",
+      noAccountBody: "Add one whenever you like with “Add account” or in Settings → Accounts. New accounts only read at first; you allow changes for each account in its settings.",
+      later: "Everything you chose here can be changed later in Settings.",
+      openInbox: "Open inbox",
+      start: "Start using {{product}}",
+    },
   },
 } as const;
 

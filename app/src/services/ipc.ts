@@ -1710,3 +1710,24 @@ export const conversationIpc = {
   targets: (rows: ConversationRowRef[], intent: ConversationIntent): Promise<MessageListItem[]> =>
     call(() => conversationCommands.conversationTargets(rows, intent)),
 };
+
+// ---- Stage 15 (decision 0044): the guided first start ----
+import {
+  commands as firstStartCommands,
+  type FirstStart,
+  type FirstStartEnd,
+  type FirstStartOutcome,
+} from "../generated/bindings";
+
+export type { FirstStart, FirstStartEnd, FirstStartOutcome };
+
+/**
+ * The guided first start (welcome, account, appearance, optional extras, done). The core says
+ * whether the main window shows it and remembers that it ended; the steps use the usual commands.
+ */
+export const firstStartIpc = {
+  /** Show it: never ended and no account yet (an installation with an account counts as done). */
+  get: (): Promise<FirstStart> => call(() => firstStartCommands.getFirstStart()),
+  /** "Skip setup" or the last step; it does not show again on this device. */
+  finish: (end: FirstStartEnd): Promise<FirstStart> => call(() => firstStartCommands.finishFirstStart(end)),
+};

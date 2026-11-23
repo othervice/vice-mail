@@ -16,6 +16,8 @@ import { MessageWindow } from "../features/windows/MessageWindow";
 import { currentWindowRoute } from "../features/windows/route";
 // Stage 9 (decision 0027): an opened `.eml` file in a window of its own.
 import { EmlWindow } from "../features/eml/EmlWindow";
+// Stage 15 (decision 0044): the guided first start of a new installation.
+import { FirstStartGate } from "../features/first-start/FirstStartGate";
 import { AppShell } from "./AppShell";
 import { useCoreEvents } from "./useCoreEvents";
 
@@ -52,7 +54,11 @@ function AppRoot() {
   if (!hasSettled(preferences) || !hasSettled(appInfo) || !ui.settled) return null;
   switch (route.kind) {
     case "main":
-      return <AppShell eventsError={eventsError} />;
+      return (
+        <FirstStartGate eventsError={eventsError}>
+          <AppShell eventsError={eventsError} />
+        </FirstStartGate>
+      );
     case "message":
       return <MessageWindow accountId={route.accountId} messageId={route.messageId} eventsError={eventsError} />;
     case "composer":

@@ -70,6 +70,8 @@ export const de: Translation = {
       points: {
         readOnly: "Neue Konten lesen zuerst nur. Auf dem Server ändert sich nichts, bis du es erlaubst.",
         local: "Deine Mails gehen direkt zwischen diesem Computer und deinem Anbieter hin und her. Kein Cloud-Dienst dazwischen.",
+        // Stufe 15 (Entscheidung 0044): die vierte Zusage, auch beim ersten Start.
+        telemetry: "Keine Telemetrie. Die App sammelt keine Nutzungsdaten und meldet nichts über dich.",
         keychain: "Dein Passwort bleibt im Schlüsselbund dieses Computers.",
       },
     },
@@ -3582,5 +3584,66 @@ export const de: Translation = {
     previous: "Vorheriger Treffer",
     next: "Nächster Treffer",
     close: "Suche schließen",
+  },
+
+  // ---- Stufe 15 (Entscheidung 0044): der geführte erste Start ----
+  firstStart: {
+    skip: "Einrichtung überspringen",
+    back: "Zurück",
+    next: "Weiter",
+    finishFailed: "Die Einrichtung konnte nicht abgeschlossen werden.",
+    steps: {
+      label: "Schritte der Einrichtung",
+      completed: ", erledigt",
+      welcome: "Willkommen",
+      account: "Konto",
+      appearance: "Darstellung",
+      extras: "Optional",
+      done: "Fertig",
+    },
+    welcome: {
+      title: "Willkommen",
+      body: "{{product}} ist ein E-Mail-Programm für deine eigenen Konten. Es spricht direkt mit deinem Mail-Anbieter und behält deine Mails auf diesem Computer.",
+      time: "Die Einrichtung dauert eine Minute: ein Konto, das Aussehen und ein paar optionale Extras. Du kannst alles davon überspringen.",
+      start: "Los geht’s",
+      promises: "Darauf kannst du dich verlassen",
+    },
+    account: {
+      title: "Dein erstes Konto hinzufügen",
+      body: "Bei den meisten Anbietern genügen Adresse und Passwort. Das Passwort kommt direkt in den Schlüsselbund des Systems.",
+      later: "Später einrichten",
+      addedTitle: "{{email}} ist eingerichtet",
+      addedBody: "Die App lädt jetzt deine Mails. Sie liest vorerst nur: Auf dem Server ändert sich nichts, bis du es erlaubst.",
+    },
+    appearance: {
+      title: "Wähle dein Aussehen",
+      body: "Deine Wahl gilt sofort. Du kannst sie jederzeit unter Einstellungen → Darstellung ändern.",
+    },
+    extras: {
+      title: "Optionale Extras",
+      body: "Nichts davon ist schon an. Schalte ein, was du möchtest, jetzt oder später in den Einstellungen.",
+      sync: {
+        title: "Einstellungs-Sync",
+        body: "Hält deine Einstellungen auf allen deinen Geräten gleich, verschlüsselt in einem Ordner deines eigenen Postfachs. Kein Server von uns ist beteiligt.",
+        setUp: "Jetzt einrichten",
+        on: "An",
+        noAccount: "Braucht ein Konto. Du kannst ihn später unter Einstellungen → Einstellungs-Sync einrichten.",
+        back: "Zurück zur Einrichtung",
+      },
+      ai: {
+        title: "KI",
+        body: "Optional und aus. Wenn du sie nutzen möchtest, verbinde deine eigene KI-App unter Einstellungen → KI über MCP oder richte einen Anbieter unter Einstellungen → KI in der App ein.",
+      },
+    },
+    done: {
+      title: "Alles bereit",
+      readOnlyTitle: "{{email}} liest vorerst nur",
+      readOnlyBody: "Die App ändert noch nichts auf dem Server: kein Gelesen-Status, kein Verschieben, kein Löschen. Um Änderungen zu erlauben, öffne Einstellungen → Konten, wähle das Konto und schalte „Änderungen erlauben“ ein.",
+      noAccountTitle: "Noch kein Konto",
+      noAccountBody: "Füge eines hinzu, wann du möchtest, mit „Konto hinzufügen“ oder unter Einstellungen → Konten. Neue Konten lesen zuerst nur; Änderungen erlaubst du für jedes Konto in seinen Einstellungen.",
+      later: "Alles, was du hier gewählt hast, kannst du später in den Einstellungen ändern.",
+      openInbox: "Posteingang öffnen",
+      start: "{{product}} verwenden",
+    },
   },
 };

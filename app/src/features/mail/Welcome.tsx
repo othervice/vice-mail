@@ -1,19 +1,14 @@
-import { KeyRound, ShieldCheck, Waypoints, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Wordmark } from "../../components/Brand";
 import { Button } from "../../components/Button";
 import { PRODUCT_NAME } from "../../config/product";
-
-const POINTS: readonly { key: "readOnly" | "local" | "keychain"; icon: LucideIcon }[] = [
-  { key: "readOnly", icon: ShieldCheck },
-  { key: "local", icon: Waypoints },
-  { key: "keychain", icon: KeyRound },
-];
+import { Promises } from "../first-start/Promises";
 
 /**
- * Design pass 23.11.2026: the first start, before any account exists. The wordmark from
- * docs/brand, the one next step (add an account) and three facts that hold from the first
- * account on. Calm: no illustration, the brand colour only in the mark and the primary button.
+ * Design pass 23.11.2026: the main area before any account exists (after the guided first start
+ * of stage 15 was skipped or done without one). The wordmark from docs/brand, the one next step
+ * (add an account) and the promises that hold from the first account on. Calm: no illustration,
+ * the brand colour only in the mark and the primary button.
  */
 export function Welcome({ onAdd }: { onAdd: () => void }) {
   const { t } = useTranslation();
@@ -28,16 +23,9 @@ export function Welcome({ onAdd }: { onAdd: () => void }) {
         <Button onClick={onAdd} data-testid="welcome-add-account">
           {t("mail.noAccount.action")}
         </Button>
-        {/* Three short facts, not a list of mail: the main area holds no list while there is no account. */}
-        <div className="mt-4 flex w-full flex-col divide-y divide-border-subtle rounded-card border border-border-subtle bg-surface-raised text-start shadow-card">
-          {POINTS.map(({ key, icon: Icon }) => (
-            <div key={key} className="flex items-start gap-3 px-4 py-3">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-row bg-accent-soft text-accent">
-                <Icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-              </span>
-              <p className="pt-1 text-13 text-secondary">{t(`mail.noAccount.points.${key}`)}</p>
-            </div>
-          ))}
+        {/* Short facts, not a list of mail: the main area holds no list while there is no account. */}
+        <div className="mt-4 w-full">
+          <Promises raised />
         </div>
       </div>
     </div>
