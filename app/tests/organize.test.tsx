@@ -252,7 +252,12 @@ describe("favourite folders and folder colours", () => {
     await list();
     await openFolders(user);
     const favorites = await screen.findByRole("region", { name: "Favourites" });
-    const names = () => within(favorites).getAllByRole("treeitem").map((b) => b.getAttribute("aria-label"));
+    // The favourites under the section's label row (level 1).
+    const names = () =>
+      within(favorites)
+        .getAllByRole("treeitem")
+        .filter((row) => row.getAttribute("aria-level") === "2")
+        .map((b) => b.getAttribute("aria-label"));
     expect(names()).toEqual(["Projekte, 2 unread", "Sent"]);
     const projekte = within(favorites).getByRole("treeitem", { name: "Projekte, 2 unread" });
     projekte.focus();
@@ -456,7 +461,8 @@ describe.each(["light", "dark"] as const)("axe for the stage 16 lists and folder
     await screen.findByRole("region", { name: "Favourites" });
     expect(await seriousFindings()).toEqual([]);
 
-    await user.click(screen.getByRole("button", { name: /^Reading list/ }));
+    // In the column the views are rows of its "Views" tree.
+    await user.click(screen.getByRole("treeitem", { name: "Reading list" }));
     await list(/^Messages in Reading list/);
     expect(await seriousFindings()).toEqual([]);
 

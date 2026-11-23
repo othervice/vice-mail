@@ -376,7 +376,8 @@ describe("command palette", () => {
     const later = await screen.findByTestId("rail-later");
     expect(later.getAttribute("aria-keyshortcuts")).toBe("Meta+2");
     expect(screen.getByTestId("rail-trash").getAttribute("aria-keyshortcuts")).toBe("Meta+8");
-    expect(screen.getByTestId("rail-folders").getAttribute("aria-keyshortcuts")).toBeNull();
+    // "Folders" opens the accounts-and-folders column: Cmd/Ctrl+Shift+S.
+    expect(screen.getByTestId("rail-folders").getAttribute("aria-keyshortcuts")).toBe("Meta+Shift+S");
 
     await user.keyboard("{Meta>}2{/Meta}");
     expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "later" });

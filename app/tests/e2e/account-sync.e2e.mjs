@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openSettings, screenshot, SCREENSHOT_DIR, setPreference, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSettings, openView, screenshot, SCREENSHOT_DIR, setConversations, setPreference, setSidebar, testId } from "./support/app.mjs";
 import { measureScroll } from "./support/scroll.mjs";
 import {
   ALICE,
@@ -441,6 +441,9 @@ describe("account and read-only sync (stage 2)", function () {
 
   before(async () => {
     await attach();
+    // Decision 0039: rows are compared with the server's messages, so one row per message (the
+    // later specs keep it; search.e2e.mjs turns conversations on and off again).
+    await setConversations(false);
     expected = await serverFolders();
     report.server = Object.fromEntries(Object.entries(expected).map(([p, i]) => [p, `${i.messages} (${i.unseen} unread)`]));
     report.serverTotal = Object.values(expected).reduce((sum, i) => sum + i.messages, 0);
@@ -593,7 +596,7 @@ describe("account and read-only sync (stage 2)", function () {
     await browser.waitUntil(async () => (await renderedRows()).length === expected.Archive.messages, {
       timeoutMsg: "the archive does not show its messages",
     });
-    await testId("rail-inbox").click();
+    await openView("inbox");
     await browser.waitUntil(async () => (await renderedRows()).length > 0);
   });
 
@@ -770,8 +773,12 @@ describe("account and read-only sync (stage 2)", function () {
     assert.equal(account.status.state, "offline");
     assert.ok(account.status.error, "offline carries the reason");
     report.offline.reason = account.status.error.code;
-    // The unfolded sidebar marks the account too (its badge has no text; the account's
-    // button in the folded rail names the state).
+    // The accounts-and-folders column marks the account with a quiet sign and names the state and
+    // its reason in the account's row (docs/DESIGN.md, "Seitenspalte"); the folded rail's account
+    // button names the state too (below).
+    report.offline.columnLabel = await testId(`sidebar-account-${account.id}`).getAttribute("aria-label");
+    assert.match(report.offline.columnLabel, /, offline(: .+)?$/);
+    assert.ok(await testId(`account-status-${account.id}`).isExisting(), "no offline mark in the column");
 
     // Scroll, click and use the keyboard in the list while offline: down to about entry 300
     // (rows, section headings and cards differ in height, so step until it is rendered).
@@ -883,7 +890,7 @@ describe("account and read-only sync (stage 2)", function () {
     const account = await onlyAccount();
     report.finalRemove = await removeAccountThroughUi(account);
     assert.equal(keychainHasEntry(), false, "the keychain entry is gone");
-    await testId("rail-inbox").click();
+    await openView("inbox");
     await waitForMainText("No account yet");
     assert.equal((await renderedRows()).length, 0);
     assert.deepEqual(await newCspViolations(), [], "CSP violations at the end");

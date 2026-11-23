@@ -15,9 +15,11 @@ import {
   luminance,
   markWindowButtons,
   openSettings,
+  openView,
   overlaps,
   screenshot,
   setPreference,
+  setSidebar,
   testId,
   writeState,
 } from "./support/app.mjs";
@@ -47,8 +49,7 @@ const RAIL = [
 const report = {};
 
 async function showInbox() {
-  await testId("rail-inbox").click();
-  await browser.waitUntil(async () => (await testId("rail-inbox").getAttribute("aria-current")) === "page");
+  await openView("inbox");
 }
 
 describe("app frame (stage 1)", () => {
@@ -103,7 +104,9 @@ describe("app frame (stage 1)", () => {
     assert.equal((await documentState()).lang, "en");
   });
 
-  it("shows the icon rail and the list header", async () => {
+  it("shows the icon rail, or the accounts-and-folders column in its place, and the list header", async () => {
+    // Folded: the narrow rail with every view.
+    const was = await setSidebar(false);
     await showInbox();
     const ids = await $$("nav [data-testid^='rail-']").map((el) => el.getAttribute("data-testid"));
     assert.deepEqual(ids, RAIL.map((id) => `rail-${id}`));
@@ -113,6 +116,26 @@ describe("app frame (stage 1)", () => {
     const header = $("main header h1");
     assert.ok(await header.isDisplayed());
     assert.equal(await header.getText(), "Inbox");
+
+    // Unfolded (docs/DESIGN.md, "Seitenspalte"): the column replaces the rail, nothing twice. Its
+    // toggle, the views across folders, then activity, outbox and settings; without an account no
+    // folders and no unified inbox, a note instead.
+    await setSidebar(true);
+    report.column = await $$('[data-testid="sidebar-column"] [data-testid^="rail-"], [data-testid="sidebar-column"] [data-testid^="sidebar-view-"]').map((el) =>
+      el.getAttribute("data-testid"),
+    );
+    assert.deepEqual(report.column, [
+      "rail-folders",
+      ...["later", "tasks", "readingList", "pinnedAttachments", "pinned", "savedViews"].map((id) => `sidebar-view-${id}`),
+      "rail-activity",
+      "rail-outbox",
+      "rail-settings",
+    ]);
+    assert.equal(await testId("icon-rail").isExisting(), false, "the rail is gone while the column shows");
+    assert.ok(await testId("sidebar-no-accounts").isDisplayed());
+    assert.equal(await testId("rail-folders").getAttribute("aria-label"), "Hide sidebar");
+    await screenshot("frame-column-light");
+    await setSidebar(was);
   });
 
   it("shows the empty state without any invented mail", async () => {
@@ -121,8 +144,12 @@ describe("app frame (stage 1)", () => {
     assert.ok(buttons.includes("Add account"), JSON.stringify(buttons));
     assert.equal((await $$("main li")).length, 0, "no list rows");
     assert.doesNotMatch(await $("main").getText(), /\d/, "no counters or dates");
-    // Without accounts the account switcher in the rail is empty.
-    assert.equal(await browser.execute(() => document.querySelector("nav ul[aria-label]")?.children.length ?? -1), 0);
+    // Without accounts the account switcher in the rail is empty, the column shows no account.
+    if (await testId("icon-rail").isExisting()) {
+      assert.equal(await browser.execute(() => document.querySelector("nav ul[aria-label]")?.children.length ?? -1), 0);
+    } else {
+      assert.equal(await browser.execute(() => document.querySelectorAll('[data-testid^="sidebar-account-"]').length), 0);
+    }
   });
 
   it("keeps the macOS window buttons clear of the frame's controls", async () => {
@@ -191,14 +218,15 @@ describe("app frame (stage 1)", () => {
       timeoutMsg: "the settings title did not turn German",
     });
     assert.equal(await testId("settings-tab-general").getText(), "Allgemein");
-    assert.equal(await testId("rail-inbox").getAttribute("aria-label"), "Posteingang");
+    // Rail or column: the bottom group's settings entry is in both.
+    assert.equal(await testId("rail-settings").getAttribute("aria-label"), "Einstellungen");
     assert.equal((await documentState()).lang, "de");
     assert.equal(await browser.execute(() => window.__e2eNoReload === true), true, "no reload");
     await screenshot("settings-general-de-dark");
 
     await setPreference("language", "en");
     await browser.waitUntil(async () => (await $("main header h1").getText()) === "Settings", { timeout: 2000 });
-    assert.equal(await testId("rail-inbox").getAttribute("aria-label"), "Inbox");
+    assert.equal(await testId("rail-settings").getAttribute("aria-label"), "Settings");
     assert.equal(await browser.execute(() => window.__e2eNoReload === true), true, "no reload");
   });
 

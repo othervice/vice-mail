@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import {
   comfortIpc,
+  conversationIpc,
   parityIpc,
   type Account,
   type InboxCursor,
@@ -16,8 +17,18 @@ import {
   type MessageListItem,
   type MessagePage,
   type TaskFilter,
+  type ThreadPage,
   type UnifiedView,
 } from "../../services/ipc";
+import {
+  conversationInboxPage,
+  conversationKey,
+  mergeInfo,
+  threadRows,
+  type ConversationInfoById,
+} from "../threads/conversationRows";
+import { decorateConversations } from "../threads/source";
+import { useConversationsOn } from "../threads/preference";
 import type { MessageListSource } from "../messages/listSource";
 import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
 import { buildInboxRows, inboxPageItems, type InboxListRow, type InboxViewPage } from "./inboxRows";
@@ -89,10 +100,34 @@ export function toListRows(rows: readonly InboxListRow[], options: ListRowsOptio
 /** The inbox pages as the list reads them (stable function: TanStack keeps the result stable too). */
 function selectInboxPages(data: InfiniteData<InboxPage, InboxCursor | null>) {
   return {
-    pages: data.pages.map((page): InboxViewPage => ({ items: inboxPageItems(page), page })),
+    pages: data.pages.map((page): InboxViewPage & { info?: ConversationInfoById } => ({ items: inboxPageItems(page), page })),
     pageParams: data.pageParams,
   };
 }
+
+/** Decision 0039: the same for conversation pages; every message stands for its conversation. */
+function selectConversationPages(data: InfiniteData<InboxPage, InboxCursor | null>) {
+  return {
+    pages: data.pages.map((raw): InboxViewPage & { info?: ConversationInfoById } => {
+      const { page, info } = conversationInboxPage(raw);
+      return { items: inboxPageItems(page), page, info };
+    }),
+    pageParams: data.pageParams,
+  };
+}
+
+/** Decision 0039: a page of conversations as message rows. */
+function selectThreadPages(data: InfiniteData<ThreadPage, ListCursor | null>) {
+  return {
+    pages: data.pages.map((page) => {
+      const { items, info } = threadRows(page.items);
+      return { items, info, nextCursor: page.nextCursor };
+    }),
+    pageParams: data.pageParams,
+  };
+}
+
+
 
 function mailboxScope(mailbox: Mailbox): InboxScope {
   return { kind: "mailbox", mailboxId: mailbox.id };
@@ -114,13 +149,18 @@ function useSortedInboxSource(
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [priorityOnly, setPriorityOnly] = useState(false);
+  // Decision 0039: one row per conversation (a UI preference, on by default).
+  const conversations = useConversationsOn();
 
   const inbox = useInfiniteQuery({
-    queryKey: keys.inbox,
-    queryFn: ({ pageParam }: { pageParam: InboxCursor | null }) => comfortIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE),
+    queryKey: conversations ? [...keys.inbox, "conversations"] : keys.inbox,
+    queryFn: ({ pageParam }: { pageParam: InboxCursor | null }) =>
+      conversations
+        ? conversationIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE)
+        : comfortIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE),
     initialPageParam: null as InboxCursor | null,
     getNextPageParam: (last: InboxPage) => last.nextCursor,
-    select: selectInboxPages,
+    select: conversations ? selectConversationPages : selectInboxPages,
     enabled: enabled && !priorityOnly,
   });
 
@@ -130,7 +170,16 @@ function useSortedInboxSource(
       comfortIpc.listInboxFiltered(scope, { kind: "priority" }, pageParam, INBOX_PAGE_SIZE),
     initialPageParam: null as ListCursor | null,
     getNextPageParam: (last: MessagePage) => last.nextCursor,
-    enabled: enabled && priorityOnly,
+    enabled: enabled && priorityOnly && !conversations,
+  });
+  const priorityConversations = useInfiniteQuery({
+    queryKey: [...keys.priority, "conversations"],
+    queryFn: ({ pageParam }: { pageParam: ListCursor | null }) =>
+      conversationIpc.listInboxFiltered(scope, { kind: "priority" }, pageParam, INBOX_PAGE_SIZE),
+    initialPageParam: null as ListCursor | null,
+    getNextPageParam: (last: ThreadPage) => last.nextCursor,
+    select: selectThreadPages,
+    enabled: enabled && priorityOnly && conversations,
   });
 
   const toggle = useCallback((key: string) => {
@@ -148,13 +197,20 @@ function useSortedInboxSource(
   }, []);
 
   const inboxPages = inbox.data?.pages;
+  const inboxInfo = useMemo(() => (conversations ? mergeInfo(inboxPages) : null), [conversations, inboxPages]);
+  const priorityInfo = useMemo(() => mergeInfo(priorityConversations.data?.pages), [priorityConversations.data]);
   const inboxRows = useCallback(
     (items: readonly MessageListItem[]) => {
       const visible = new Set(items.map((item) => item.id));
-      const rows = buildInboxRows(inboxPages?.map((entry) => entry.page) ?? [], expanded, visible);
+      const rows = buildInboxRows(
+        inboxPages?.map((entry) => entry.page) ?? [],
+        expanded,
+        visible,
+        inboxInfo ? conversationKey(inboxInfo) : undefined,
+      );
       return toListRows(rows, { expanded, toggle, showAll });
     },
-    [inboxPages, expanded, toggle, showAll],
+    [inboxPages, inboxInfo, expanded, toggle, showAll],
   );
   const priorityRows = useCallback(
     (items: readonly MessageListItem[], bounds: DayBounds): ListRow[] => [
@@ -173,13 +229,14 @@ function useSortedInboxSource(
   return useMemo((): MessageListSource => {
     if (priorityOnly) {
       return {
-        query: priority,
+        query: conversations ? priorityConversations : priority,
         buildRows: priorityRows,
         empty: { icon: Zap, title: t("comfort.priority.empty.title"), body: t("comfort.priority.empty.body") },
+        ...(conversations && { decorate: decorateConversations(priorityInfo) }),
       };
     }
-    return { query: inbox, buildRows: inboxRows };
-  }, [priorityOnly, priority, priorityRows, inbox, inboxRows, t]);
+    return { query: inbox, buildRows: inboxRows, ...(inboxInfo && { decorate: decorateConversations(inboxInfo) }) };
+  }, [priorityOnly, conversations, priorityConversations, priority, priorityRows, priorityInfo, inbox, inboxRows, inboxInfo, t]);
 }
 
 /**

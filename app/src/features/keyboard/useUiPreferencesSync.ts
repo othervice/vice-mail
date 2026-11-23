@@ -6,6 +6,7 @@ import { useLayoutStore } from "../../stores/layout";
 import { usePaletteStore } from "../../stores/palette";
 import { useShortcutStore } from "../../stores/shortcuts";
 import { useAccentStore } from "../preferences/accent";
+import { useConversationStore } from "../threads/preference";
 import { migrateLocalAccent, migrateLocalFallback } from "./migrateLocal";
 import { connectUiPreferences, overridesFromCore, uiPreferencesQueryKey, windowLayoutQueryKey } from "./uiPreferences";
 
@@ -17,6 +18,8 @@ function applyUiPreferences(preferences: UiPreferences): void {
   useAiPanelStore.getState().applyStored(preferences.aiPanel);
   // Stage 16 (decision 0036): the accent theme of every window of the app.
   useAccentStore.getState().applyStored(preferences.accentTheme);
+  // Decision 0039: conversations or single messages in the lists of every window.
+  useConversationStore.getState().applyStored(preferences.conversations);
 }
 
 /** `uiPreferencesChanged`: another window or (via the settings sync) another device saved them. */

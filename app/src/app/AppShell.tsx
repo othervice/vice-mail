@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { AiPanel } from "../features/ai/AiPanel";
@@ -14,24 +15,68 @@ import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
 import { useUiStore } from "../stores/ui";
+import { useSidebarFit } from "../features/layout/useSidebarFit";
 import { IconRail } from "./IconRail";
+import { SidebarColumn } from "./SidebarColumn";
+
+/** The column stands next to the content (not folded, the window wide enough). */
+const isDocked = (state: { sidebarExpanded: boolean; sidebarNarrow: boolean }) => state.sidebarExpanded && !state.sidebarNarrow;
 
 interface AppShellProps {
   eventsError: CoreError | null;
 }
 
-/** The window frame: icon rail on the left, the current view on the right. */
+/**
+ * The window frame: the accounts-and-folders column (folded: the icon rail) on the left, the
+ * current view on the right. In a narrow window the column opens over the content.
+ */
 export function AppShell({ eventsError }: AppShellProps) {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
-  const sidebarExpanded = useUiStore((state) => state.sidebarExpanded);
+  const docked = useUiStore(isDocked);
+  const overlay = useUiStore((state) => state.sidebarNarrow && state.sidebarOverlay);
   // Stage 9: system notifications speak the UI's language.
   useNotificationTexts();
+  useSidebarFit();
+  // Folding or unfolding replaces the control that had the focus (the toggle, a row): with the
+  // keyboard, the other side's toggle takes it. Not after a click (no tooltip pops up for the
+  // mouse) nor when loading the layout changes it.
+  const refocus = useRef(false);
+  useEffect(() => {
+    let keyboard = false;
+    const onKey = () => {
+      keyboard = true;
+    };
+    const onPointer = () => {
+      keyboard = false;
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    const off = useUiStore.subscribe((state, previous) => {
+      if (isDocked(state) === isDocked(previous)) return;
+      const active = document.activeElement;
+      refocus.current =
+        keyboard && active instanceof Element && active.closest('[data-testid="sidebar-column"], [data-testid="icon-rail"]') !== null;
+    });
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+      off();
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      document.querySelector<HTMLElement>('[data-testid="rail-folders"]')?.focus();
+    }
+  }, [docked]);
 
   return (
     // `data-sidebar` lets app.css move header titles clear of the macOS window buttons.
-    <div className="flex h-full bg-canvas text-primary" data-sidebar={sidebarExpanded ? "expanded" : "collapsed"}>
-      <IconRail />
+    <div className="relative flex h-full bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"}>
+      {docked ? <SidebarColumn overlay={false} /> : <IconRail />}
+      {overlay && <SidebarColumn overlay />}
       {/* Focusable (not in the Tab order): where the focus goes when what had it is gone (stage 8). */}
       <main tabIndex={-1} className="relative flex min-w-0 flex-1 flex-col bg-surface outline-none">
         {eventsError && (

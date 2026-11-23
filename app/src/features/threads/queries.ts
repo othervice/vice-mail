@@ -10,12 +10,16 @@ import {
   type ThreadPage,
 } from "../../services/ipc";
 import { MESSAGE_PAGE_SIZE } from "../messages/queries";
+import { threadRows } from "./conversationRows";
 
 export const threadsQueryKey = (accountId: AccountId, mailboxId: MailboxId) => ["threads", accountId, mailboxId] as const;
 export const threadQueryKey = (accountId: AccountId, messageId: MessageId, mailboxId: MailboxId | null) =>
   ["thread", accountId, messageId, mailboxId] as const;
 
-/** A page of conversations, plus the rows the message list shows (the newest message of each). */
+/**
+ * A page of conversations, plus the rows the message list shows: the newest message of each, as
+ * the conversation (unread, flagged or with attachments when any of its messages is).
+ */
 export interface ThreadListPage {
   threads: ThreadListItem[];
   items: MessageListItem[];
@@ -27,7 +31,7 @@ function withItems(data: InfiniteData<ThreadPage, ListCursor | null>): InfiniteD
     ...data,
     pages: data.pages.map((page) => ({
       threads: page.items,
-      items: page.items.map((thread) => thread.message),
+      items: threadRows(page.items).items,
       nextCursor: page.nextCursor,
     })),
   };

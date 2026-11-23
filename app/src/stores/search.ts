@@ -13,27 +13,23 @@ interface SearchState {
   scope: SearchScopeChoice;
   /** Counts up whenever the shortcut or the button asks for the field's focus. */
   focusSeq: number;
-  /**
-   * Lists show conversations (one row per thread) instead of single messages. A UI setting
-   * only; the core does not store it (stage 7 contract).
-   */
-  conversations: boolean;
   openSearch: () => void;
   closeSearch: () => void;
   setQuery: (query: string) => void;
   submit: () => void;
   setScope: (scope: SearchScopeChoice) => void;
-  setConversations: (on: boolean) => void;
 }
 
-/** UI state of the search and the conversation view (stage 7). Results live in TanStack Query. */
+/**
+ * UI state of the search (stage 7). Results live in TanStack Query. The conversation view is a
+ * stored UI preference since decision 0039 (`features/threads/preference.ts`).
+ */
 export const useSearchStore = create<SearchState>()((set) => ({
   open: false,
   query: "",
   submitted: false,
   scope: "all",
   focusSeq: 0,
-  conversations: false,
   openSearch: () => {
     set((state) => ({ open: true, focusSeq: state.focusSeq + 1 }));
   },
@@ -48,8 +44,5 @@ export const useSearchStore = create<SearchState>()((set) => ({
   },
   setScope: (scope) => {
     set({ scope });
-  },
-  setConversations: (conversations) => {
-    set({ conversations });
   },
 }));

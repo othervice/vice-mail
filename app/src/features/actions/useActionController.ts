@@ -1,11 +1,13 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
+  conversationIpc,
   ipc,
   MAX_ACTION_MESSAGES,
   toCoreError,
   type Account,
   type BatchId,
+  type ConversationIntent,
   type CoreError,
   type MailAction,
   type Mailbox,
@@ -22,11 +24,14 @@ import { messagesQueryKey } from "../messages/queries";
 import { actionKind, leavesFolder, requiredRole, type ActionHost } from "./registry";
 import { undoAction } from "./undo";
 
-/** Overlays an action opens: the one dialog (permanent delete) and the two pickers. */
+/**
+ * Overlays an action opens: the one dialog (permanent delete) and the two pickers. `exact`: opened
+ * for the one message of the reading pane, not for conversation rows (decision 0039).
+ */
 export type ActionOverlay =
-  | { kind: "confirmDelete"; items: readonly MessageListItem[] }
-  | { kind: "move"; ids: readonly MessageId[] }
-  | { kind: "tags"; ids: readonly MessageId[] };
+  | { kind: "confirmDelete"; items: readonly MessageListItem[]; exact?: boolean }
+  | { kind: "move"; ids: readonly MessageId[]; exact?: boolean }
+  | { kind: "tags"; ids: readonly MessageId[]; exact?: boolean };
 
 /** An action that found no folder for its role (`missing_mailbox`): the inline question. */
 export interface MissingMailbox {
@@ -35,6 +40,8 @@ export interface MissingMailbox {
   items: readonly MessageListItem[];
   /** A folder is being created for it; the action runs once it exists with the role. */
   creating: string | null;
+  /** Decision 0039: asked for the one message of the reading pane, not conversation rows. */
+  exact?: boolean;
 }
 
 export interface ApplyOptions {
@@ -46,6 +53,11 @@ export interface ApplyOptions {
   ownErrors?: readonly CoreError["code"][];
   /** What failed, for the error notice. */
   errorContext?: "action" | "markRead";
+  /**
+   * Decision 0039: the messages themselves, also while the rows are conversations (the one
+   * message open in the reading pane, marking as read on open).
+   */
+  exact?: boolean;
 }
 
 export type ApplyOutcome = { ok: true } | { ok: false; error: CoreError | null };
@@ -54,6 +66,12 @@ interface ControllerOptions {
   account: Account;
   mailbox: Mailbox;
   list: RefObject<MessageListHandle | null>;
+  /**
+   * Decision 0039: the list's rows are conversations. An action on rows then acts on the messages
+   * the core names for it (`conversationTargets`: the conversation in this folder, everywhere, or
+   * its newest message), unless it is `exact`.
+   */
+  conversations?: boolean;
 }
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
@@ -95,7 +113,7 @@ function waitForRole(queryClient: QueryClient, account: Account, role: MailboxRo
  * once and the cursor moved to the next mail, the undo notice, and the answers to the core's
  * questions (which folder, delete for good?).
  */
-export function useActionController({ account, mailbox, list }: ControllerOptions) {
+export function useActionController({ account, mailbox, list, conversations = false }: ControllerOptions) {
   const queryClient = useQueryClient();
   const push = useNoticeStore((state) => state.push);
   const remember = useNoticeStore((state) => state.remember);
@@ -104,8 +122,14 @@ export function useActionController({ account, mailbox, list }: ControllerOption
   const [overlay, setOverlay] = useState<ActionOverlay | null>(null);
   const [missing, setMissing] = useState<MissingMailbox | null>(null);
   const waiting = useRef<AbortController | null>(null);
+  /** Decision 0039: what an action on conversation rows touches, as the core decides. */
+  const expand = async (items: readonly MessageListItem[], intent: ConversationIntent): Promise<readonly MessageListItem[]> =>
+    conversationIpc.targets(
+      items.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
+      intent,
+    );
   // Stage 9: pins, snoozes and tasks (local marks, their own menu).
-  const comfort = useComfortActions(account);
+  const comfort = useComfortActions(account, conversations ? expand : undefined);
 
   // A folder creation still waited for belongs to this view only.
   useEffect(
@@ -131,18 +155,19 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     action: MailAction,
     items: readonly MessageListItem[],
     context: "action" | "markRead",
+    exact = false,
   ) => {
     switch (error.code) {
       case "missing_mailbox": {
         const role = requiredRole(action);
         if (role) {
-          setMissing({ role, action, items, creating: null });
+          setMissing({ role, action, items, creating: null, exact });
           return;
         }
         break;
       }
       case "confirmation_required":
-        setOverlay({ kind: "confirmDelete", items });
+        setOverlay({ kind: "confirmDelete", items, exact });
         return;
       case "read_only":
         // Turned off meanwhile (another window): the account list is out of date.
@@ -169,19 +194,36 @@ export function useActionController({ account, mailbox, list }: ControllerOption
       if (!options.silent) push({ kind: "readOnly", accountId: account.id });
       return { ok: false, error: null };
     }
-    const ids = items.map((item) => item.id);
+    const rowIds = items.map((item) => item.id);
     const leaves = leavesFolder(action, mailbox);
     if (leaves) {
       // The next mail takes the cursor before the rows go (DESIGN.md: focus on the next mail).
-      list.current?.advancePast(ids);
-      hide(ids, true);
+      list.current?.advancePast(rowIds);
+      hide(rowIds, true);
       list.current?.focus();
     }
+    // Decision 0039: conversation rows act on the messages the core names for the action.
+    let targets: readonly MessageListItem[] = items;
+    if (conversations && !options.exact) {
+      try {
+        targets = await expand(items, { kind: "action", action });
+      } catch (e) {
+        if (leaves) hide(rowIds, false);
+        handleError(toCoreError(e), action, items, options.errorContext ?? "action", false);
+        return { ok: false, error: toCoreError(e) };
+      }
+      if (targets.length === 0) {
+        if (leaves) hide(rowIds, false);
+        return { ok: false, error: null };
+      }
+    }
+    const ids = [...new Set([...rowIds, ...targets.map((item) => item.id)])];
+    if (leaves) hide(ids, true);
     const batches: BatchId[] = [];
     let done = 0;
     let recorded = false;
     let failure: CoreError | null = null;
-    for (const part of chunks(items, MAX_ACTION_MESSAGES)) {
+    for (const part of chunks(targets, MAX_ACTION_MESSAGES)) {
       try {
         const refs = part.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id }));
         const result = await ipc.applyAction(action, refs, crypto.randomUUID());
@@ -205,7 +247,7 @@ export function useActionController({ account, mailbox, list }: ControllerOption
       });
     }
     if (failure && !options.ownErrors?.includes(failure.code)) {
-      handleError(failure, action, items, options.errorContext ?? "action");
+      handleError(failure, action, items, options.errorContext ?? "action", options.exact === true);
     }
     if (leaves) {
       // The core changed its local state before it answered: the reloaded list no longer has
@@ -217,22 +259,23 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     return failure ? { ok: false, error: failure } : { ok: true };
   };
 
-  const host: ActionHost = {
+  /** The actions for list rows (`exact` false) or for the one message of the reading pane. */
+  const makeHost = (exact: boolean): ActionHost => ({
     apply: (action, items) => {
-      void apply(action, items);
+      void apply(action, items, exact ? { exact } : {});
     },
     confirmDeletePermanently: (items) => {
       if (!account.writesEnabled) {
         push({ kind: "readOnly", accountId: account.id });
         return;
       }
-      setOverlay({ kind: "confirmDelete", items });
+      setOverlay({ kind: "confirmDelete", items, exact });
     },
     openMove: (items) => {
-      setOverlay({ kind: "move", ids: items.map((item) => item.id) });
+      setOverlay({ kind: "move", ids: items.map((item) => item.id), exact });
     },
     openTags: (items) => {
-      setOverlay({ kind: "tags", ids: items.map((item) => item.id) });
+      setOverlay({ kind: "tags", ids: items.map((item) => item.id), exact });
     },
     undo: () => {
       if (lastUndo) void undoAction(queryClient, lastUndo);
@@ -243,8 +286,11 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     selectAll: () => {
       list.current?.selectAll();
     },
-    ...comfort.host,
-  };
+    ...(exact ? comfort.exactHost : comfort.host),
+  });
+  const host = makeHost(false);
+  // Without conversations both act on what they are given.
+  const messageHost = conversations ? makeHost(true) : host;
 
   /** The answer to `missing_mailbox`: this folder has the role from now on; then the action runs. */
   const chooseFolderForRole = async (target: Mailbox): Promise<CoreError | null> => {
@@ -255,9 +301,9 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     } catch (e) {
       return toCoreError(e);
     }
-    const { action, items } = missing;
+    const { action, items, exact } = missing;
     setMissing(null);
-    await apply(action, items);
+    await apply(action, items, { exact: exact === true });
     return null;
   };
 
@@ -280,7 +326,7 @@ export function useActionController({ account, mailbox, list }: ControllerOption
       return null; // cancelled by the user or the view closed
     }
     setMissing(null);
-    await apply(pending.action, pending.items);
+    await apply(pending.action, pending.items, { exact: pending.exact === true });
     return null;
   };
 
@@ -292,6 +338,10 @@ export function useActionController({ account, mailbox, list }: ControllerOption
   return {
     apply,
     host,
+    /** Decision 0039: the toolbar of the reading pane acts on its one message. */
+    messageHost,
+    /** Whether the rows are conversations (actions on them act on the conversation). */
+    conversations,
     hiddenIds,
     overlay,
     closeOverlay: () => {

@@ -12,6 +12,7 @@ import { createContactsFake, type ContactsFakeOptions, type ContactsFakeState } 
 import { createAiFake, type AiFakeOptions, type AiFakeState } from "./ai";
 // Stage 8: UI preferences, window layouts, message and composer windows.
 import { createUiFake, type UiFakeOptions, type UiFakeState } from "./uiPrefs";
+import { createConversationFake, type ConversationFakeOptions } from "./conversations";
 // Stage 9 and 13 gaps (decision 0027): `.eml` files and messages by id.
 import { createEmlFake, type EmlFakeOptions, type EmlFakeState } from "./eml";
 // Stage 16 (decision 0033): reading list, unread views, favourites, transfers, blocked senders.
@@ -321,6 +322,8 @@ interface FakeCoreOptions {
   attachments?: AttachmentsFakeOptions;
   /** Stage 15 (decision 0037): the update setting and state (default: a build without updater). */
   updates?: UpdatesFakeOptions;
+  /** Decision 0039: which messages form a thread (default: every message is its own). */
+  conversations?: ConversationFakeOptions;
 }
 
 export interface FakeCore {
@@ -810,15 +813,26 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     { shouldMockEvents: options.mockEvents ?? true },
   );
 
-  function handleCommand(cmd: string, rawArgs: unknown): unknown {
+  // Decision 0039: conversation lists group the message lists of the fakes above.
+  const conversationFake = createConversationFake(options.conversations ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    answer: (cmd, args) => handleCommand(cmd, args, false),
+  });
+
+  /** `record`: false for a fake asking another one (decision 0039), not a call of the UI. */
+  function handleCommand(cmd: string, rawArgs: unknown, record = true): unknown {
     {
-      calls.push({ cmd, args: rawArgs });
       const args = (rawArgs ?? {}) as Record<string, unknown>;
-      const failure = options.failures?.[cmd] ?? options.fail?.(cmd, args);
-      // Tauri rejects with the serialised error value (an object or a plain string), not an Error.
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-      if (failure !== undefined) return Promise.reject(failure);
-      if (options.hang?.includes(cmd)) return new Promise(() => undefined);
+      if (record) {
+        calls.push({ cmd, args: rawArgs });
+        const failure = options.failures?.[cmd] ?? options.fail?.(cmd, args);
+        // Tauri rejects with the serialised error value (an object or a plain string), not an Error.
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (failure !== undefined) return Promise.reject(failure);
+        if (options.hang?.includes(cmd)) return new Promise(() => undefined);
+        const conversationAnswer = conversationFake.handle(cmd, args);
+        if (conversationAnswer !== undefined) return conversationAnswer;
+      }
       switch (cmd) {
         case "get_app_info":
           return appInfo;

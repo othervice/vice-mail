@@ -2,13 +2,23 @@
 // open a message or a draft in a window of its own, with the contract's rules.
 import type { CoreWindowLayout, IpcError, ShortcutOverride, UiPreferences } from "../../src/services/ipc";
 
+/**
+ * The fake core's stored preferences. The real core's default for `conversations` is on
+ * (decision 0039); the list tests of earlier stages are about single messages, so the fake core
+ * starts with the conversation view off and the conversation tests turn it on
+ * (`CONVERSATION_PREFERENCES`).
+ */
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   shortcuts: { macos: [], windows: [] },
   textSize: 100,
   recentCommands: [],
   aiPanel: "open",
   accentTheme: "orange",
+  conversations: false,
 };
+
+/** Decision 0039: the core's own default, the conversation view on. */
+export const CONVERSATION_PREFERENCES: UiPreferences = { ...DEFAULT_UI_PREFERENCES, conversations: true };
 
 export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = { readingPane: "right", density: "comfortable", sidebarExpanded: false };
 
@@ -57,6 +67,8 @@ function problemOf(preferences: UiPreferences): string | null {
   if (!["teal", "blue", "violet", "rose", "orange", "green"].includes(preferences.accentTheme)) {
     return `accentTheme ${String(preferences.accentTheme)} is not a theme`;
   }
+  // Decision 0039: serde refuses anything but a boolean (a missing field too).
+  if (typeof (preferences.conversations as unknown) !== "boolean") return "conversations is not a boolean";
   const recent = preferences.recentCommands;
   if (recent.length > 5) return "at most 5 recent commands";
   if (new Set(recent).size !== recent.length) return "a recent command appears twice";

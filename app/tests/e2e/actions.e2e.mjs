@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders, testmail } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -86,8 +86,7 @@ function rows() {
 }
 
 async function showRole(role) {
-  await testId(`rail-${role}`).click();
-  await browser.waitUntil(async () => (await testId(`rail-${role}`).getAttribute("aria-current")) === "page");
+  await openView(role);
   await testId("message-list").waitForExist({ timeout: 20000 });
 }
 

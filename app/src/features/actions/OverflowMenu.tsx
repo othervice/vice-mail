@@ -31,6 +31,11 @@ interface OverflowMenuProps {
    * whose menu this is (the button itself is not in the Tab order there).
    */
   returnFocus?: () => void;
+  /**
+   * A narrower menu for a row of the accounts-and-folders column, whose scrolling area would cut
+   * off a wider one at the column's start (it may be only 200 px wide).
+   */
+  narrow?: boolean;
   "data-testid"?: string;
 }
 
@@ -40,7 +45,7 @@ interface OverflowMenuProps {
  * item, Arrow Up on the last; arrows, Home and End move, Escape and Tab close it, a click outside
  * too. Choosing an item closes the menu and gives the focus back to the button first.
  */
-export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, ...rest }: OverflowMenuProps) {
+export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, narrow = false, ...rest }: OverflowMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -151,7 +156,8 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           className={cx(
-            "absolute top-full z-30 mt-1 flex max-h-(--ui-picker-list-height) min-w-(--ui-reading-menu-width) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            "absolute top-full z-30 mt-1 flex max-h-(--ui-picker-list-height) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            narrow ? "min-w-(--ui-sidebar-menu-width)" : "min-w-(--ui-reading-menu-width)",
             align === "end" ? "end-0" : "start-0",
           )}
           data-testid="overflow-menu"

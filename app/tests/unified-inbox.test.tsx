@@ -176,21 +176,29 @@ describe("unified inbox", () => {
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Inbox");
     });
 
-    // The unfolded sidebar lists the unified inbox and the groups.
+    // The column lists the unified inbox (with its unread count in the name) and the groups.
     await user.click(screen.getByTestId("rail-folders"));
     const tree = await screen.findByRole("region", { name: "Inboxes" });
-    await user.click(within(tree).getByRole("treeitem", { name: "All inboxes" }));
+    await user.click(within(tree).getByRole("treeitem", { name: /^All inboxes/ }));
     expect(await screen.findByRole("listbox", { name: "Messages in All inboxes" })).toBeTruthy();
-    expect(within(tree).getByRole("treeitem", { name: "All inboxes" }).getAttribute("aria-current")).toBe("page");
+    expect(within(tree).getByRole("treeitem", { name: /^All inboxes/ }).getAttribute("aria-current")).toBe("page");
   });
 
-  it("stays a sorted inbox: the conversation view is not offered for inboxes", async () => {
+  it("stays a sorted inbox in the conversation view (decision 0039): the sorted inbox as conversations", async () => {
     const { core, user } = setup();
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
-    expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
     await choose(user, "All accounts");
     await screen.findByRole("listbox", { name: "Messages in All inboxes" });
-    expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Conversations" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    await user.click(toggle);
+    await waitFor(() => {
+      expect(core.callsOf("list_inbox_conversations")).toContainEqual({
+        scope: { kind: "unified", view: { kind: "all" } },
+        cursor: null,
+        limit: 200,
+      });
+    });
     expect(core.callsOf("list_unified_threads")).toEqual([]);
   });
 

@@ -78,6 +78,7 @@ describe("the sorted inbox", () => {
     nextCursor: null,
     top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 4, priorityUnread: 1 },
     categories: true,
+    conversations: [],
   };
   const all = [pinned, back, vip, person, n1, n2];
 

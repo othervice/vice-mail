@@ -26,7 +26,7 @@ import {
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
 import { Command, FilePen, Forward, Keyboard, Paperclip, Reply, ReplyAll, SquarePen } from "lucide-react";
-import { AppWindow } from "lucide-react";
+import { AppWindow, PanelLeft } from "lucide-react";
 // Stage 16: the reading list and blocked senders.
 import { BookOpen, BookX, UserX } from "lucide-react";
 import { openComposer } from "../../stores/composer";
@@ -811,6 +811,8 @@ export const APP_COMMAND_IDS = [
   // Stage 16 (decision 0036): pinned attachments; no shortcut of its own (Cmd/Ctrl+0 resets the
   // zoom in web views), the user can give it one.
   "goPinnedAttachments",
+  // The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): open or fold it.
+  "toggleSidebar",
 ] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
@@ -874,4 +876,7 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   goTrash: viewCommand("goTrash", 8),
   goReadingList: viewCommand("goReadingList", 9),
   goPinnedAttachments: { id: "goPinnedAttachments", icon: MAIL_VIEW_ICONS.pinnedAttachments, shortcuts: both() },
+  // Cmd/Ctrl+Shift+S ("sidebar"): with a modifier, so it also works from text fields and is no
+  // type-ahead letter in the trees; the system claims neither.
+  toggleSidebar: { id: "toggleSidebar", icon: PanelLeft, shortcuts: both({ key: "S", shift: true, mod: true }) },
 };

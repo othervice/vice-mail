@@ -13,6 +13,8 @@ import { FloatingPanel } from "../actions/Pickers";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { isRoleView } from "../mailboxes/tree";
 import { useDropTarget } from "../mailboxes/useDropTarget";
+import { SECTION_KEY, SectionRow, useSection } from "../layout/SectionRow";
+import { sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { isFavorite, useChangeFolder, useFavoriteMailboxes } from "./queries";
 
 /** The eight colours of the account palette (decision 0033: folders use the same). */
@@ -178,6 +180,7 @@ export function FolderMenu({ mailbox, order, onColor, returnFocus }: FolderMenuP
       label={t("organize.favorites.menu", { name })}
       items={items}
       {...(returnFocus && { tabIndex: -1, returnFocus })}
+      narrow
       data-testid={`folder-menu-${String(mailbox.id)}`}
     />
   );
@@ -185,7 +188,9 @@ export function FolderMenu({ mailbox, order, onColor, returnFocus }: FolderMenuP
 
 /**
  * The "…" of a row in a sidebar tree: shown on hover, while the row has the keyboard focus and
- * while its menu is open. Its clicks stay here, so they do not also open the folder.
+ * while its menu is open, over the end of the row where the unread counter is (which hides
+ * meanwhile), so it takes no width from the name. Its clicks stay here, so they do not also open
+ * the folder.
  */
 export function RowMenuSlot({ children }: { children: ReactNode }) {
   return (
@@ -193,7 +198,7 @@ export function RowMenuSlot({ children }: { children: ReactNode }) {
       onClick={(event) => {
         event.stopPropagation();
       }}
-      className="flex shrink-0 opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100"
+      className="absolute inset-y-0 end-0 flex items-center opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100"
     >
       {children}
     </div>
@@ -204,8 +209,8 @@ function folderIcon(mailbox: Mailbox): LucideIcon {
   return isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder;
 }
 
-function FolderGlyph({ icon: Icon }: { icon: LucideIcon }) {
-  return <Icon aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />;
+function FolderGlyph({ icon: Icon, current }: { icon: LucideIcon; current: boolean }) {
+  return <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />;
 }
 
 interface FavoriteRowProps {
@@ -264,19 +269,22 @@ function FavoriteRow({ item, mailbox, order, accountName, current, nav, onColor,
       {...drop.handlers}
       data-testid={`favorite-${String(mailbox.id)}`}
       data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
-      className={cx(
-        "group/folder flex h-8 min-w-0 items-center gap-1 rounded-control ps-2 pe-1 text-13 transition-colors",
-        current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
-        drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+      className={sidebarRowClass(
+        current,
+        cx("group/folder gap-1 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent"),
       )}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <FolderGlyph icon={folderIcon(mailbox)} />
-        <span className="truncate">{name}</span>
+        <FolderGlyph icon={folderIcon(mailbox)} current={current} />
+        <span className={cx("truncate", mailbox.unread > 0 && "text-primary")}>{name}</span>
         <FolderColorDot color={mailbox.color} />
-        {accountName && <span className="truncate text-12 text-tertiary">{accountName}</span>}
+        {/* The folder's name keeps its room; the account's short name gives way first. */}
+        {accountName && <span className="shrink-[4] truncate text-12 text-tertiary">{accountName}</span>}
         {mailbox.unread > 0 && (
-          <span aria-hidden className="ms-auto shrink-0 text-12 font-medium text-secondary tabular-nums">
+          <span
+            aria-hidden
+            className="ms-auto shrink-0 ps-2 text-12 font-medium text-secondary tabular-nums group-hover/folder:invisible group-focus-visible/folder:invisible group-has-[[aria-expanded=true]]/folder:invisible"
+          >
             {new Intl.NumberFormat(i18n.language).format(mailbox.unread)}
           </span>
         )}
@@ -312,22 +320,25 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
   const [moved, setMoved] = useState<string | null>(null);
   const headingId = useId();
   const names = accounts.length > 1 ? accountShortNames(accounts) : null;
+  const section = useSection("favorites", t("organize.favorites.title"));
   const list = (favorites.data ?? []).filter((mailbox) => accounts.some((account) => account.id === mailbox.accountId));
   const items: TreeNavItem[] = list.map((mailbox, index) => ({
     key: String(mailbox.id),
-    level: 1,
+    level: 2,
     posinset: index + 1,
     setsize: list.length,
     text: folderName(mailbox),
   }));
   const currentId = view.kind === "mailbox" ? view.mailboxId : null;
   const nav = useTreeNavigation({
-    items,
+    items: [section.item, ...(section.open ? items : [])],
     currentKey: currentId === null ? null : String(currentId),
     onOpen: (key) => {
+      if (key === SECTION_KEY) section.toggle();
       const mailbox = list.find((entry) => String(entry.id) === key);
       if (mailbox?.selectable) showMailbox(mailbox.accountId, mailbox.id);
     },
+    onExpand: section.onExpand,
   });
   if (favorites.isError) {
     return (
@@ -343,12 +354,13 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
   if (list.length === 0) return null;
   const order = list.map((mailbox) => mailbox.id);
   return (
-    <section aria-label={t("organize.favorites.title")} className="flex flex-col gap-1" data-testid="favorite-folders">
-      <h2 id={headingId} className="flex h-8 items-center px-2 text-12 font-semibold text-secondary">
+    <section aria-label={t("organize.favorites.title")} className="flex flex-col" data-testid="favorite-folders">
+      <h2 id={headingId} className="sr-only">
         {t("organize.favorites.title")}
       </h2>
       <ul {...nav.treeProps} aria-labelledby={headingId} className="flex flex-col">
-        {list.map((mailbox, index) => {
+        <SectionRow section={section} nav={nav} data-testid="sidebar-section-favorites" />
+        {(section.open ? list : []).map((mailbox, index) => {
           const item = items[index];
           if (!item) return null;
           return (

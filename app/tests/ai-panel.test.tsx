@@ -14,6 +14,7 @@ import {
 import { makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
 import { renderApp } from "./support/render";
+import { singleThread } from "./support/search";
 
 const ADA = makeAccount();
 const LOCAL = makeAiProfile();
@@ -418,7 +419,7 @@ describe("AI panel in the conversation view", () => {
       views: Object.fromEntries([first, answer].map((m) => [m.id, makeView(m)])),
       readingPreferences: { markReadOnOpen: "never" },
       search: {
-        threads: { 5: [{ message: answer, threadId: 7, messageCount: 2, unreadCount: 0, lastActivity: answer.date }] },
+        threads: { 5: [singleThread(answer, { threadId: 7, messageCount: 2, unreadCount: 0 })] },
         threadViews: { [answer.id]: thread },
       },
       ai: {

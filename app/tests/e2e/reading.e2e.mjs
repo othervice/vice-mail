@@ -28,7 +28,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, dataDir, invoke, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, dataDir, invoke, openView, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { counter, startCounter } from "./support/counter-server.mjs";
 import { ALICE, REPO, SERVER, appendMessages, attachmentDigests, copySeedMessages, testmail } from "./support/testmail.mjs";
 
@@ -483,8 +483,7 @@ async function clickLink(kind, index, expectCard = true) {
 }
 
 async function showInbox() {
-  await testId("rail-inbox").click();
-  await browser.waitUntil(async () => (await testId("rail-inbox").getAttribute("aria-current")) === "page");
+  await openView("inbox");
   await testId("message-list").waitForExist();
 }
 

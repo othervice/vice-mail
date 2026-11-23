@@ -34,6 +34,11 @@ interface MessageRowContentProps {
 export interface RowDecoration {
   /** Messages in the conversation; shown after the subject when more than one. */
   threadCount?: number;
+  /**
+   * Decision 0039: the senders of the conversation, oldest first; with more than one the row names
+   * them all instead of the sender of its message.
+   */
+  participants?: readonly Address[];
   /** Found places (UTF-16 ranges) in subject, sender and preview. */
   highlights?: SearchHighlights;
   /** Stage 8: the account's name, in lists that mix accounts; shown with the colour. */
@@ -49,12 +54,14 @@ function addressName(address: Address): string {
   return address.name?.trim() || address.email;
 }
 
-/** Who a row names: the sender, or the recipients in Sent and Drafts. */
-function useWho(item: MessageListItem, showRecipients: boolean): string {
+/** Who a row names: the sender, or the recipients in Sent and Drafts; a conversation's senders. */
+function useWho(item: MessageListItem, showRecipients: boolean, decoration?: RowDecoration): string {
   const { t } = useTranslation();
   if (showRecipients) {
     return item.to.length > 0 ? t("list.to", { names: item.to.map(addressName).join(", ") }) : t("list.unknownSender");
   }
+  const participants = decoration?.participants ?? [];
+  if (participants.length > 1) return participants.map(addressName).join(", ");
   return item.from ? addressName(item.from) : t("list.unknownSender");
 }
 
@@ -77,7 +84,7 @@ export function useRowLabel(
   bounds: DayBounds,
 ): string {
   const { t, i18n } = useTranslation();
-  const who = useWho(item, showRecipients);
+  const who = useWho(item, showRecipients, decoration);
   const activity = rowActivity(item);
   const threadCount = decoration?.threadCount ?? 1;
   const comfortMarks = useRowMarkLabels();
@@ -187,7 +194,9 @@ export function MessageRowContent({
   const { t, i18n } = useTranslation();
   const compact = useLayoutStore((state) => state.density === "compact");
   const person = showRecipients ? item.to[0] : item.from;
-  const who = useWho(item, showRecipients);
+  const who = useWho(item, showRecipients, decoration);
+  // Search highlights mark the message's own sender, not a list of a conversation's senders.
+  const ownSender = (decoration?.participants?.length ?? 0) <= 1;
   const subject = item.subject.trim() || t("list.noSubject");
   const time = formatListDate(item.date, bounds, i18n.language);
   const activity = rowActivity(item);
@@ -207,7 +216,7 @@ export function MessageRowContent({
         twoLine && "min-w-0 flex-1",
       )}
     >
-      {highlights && !showRecipients && item.from ? (
+      {highlights && !showRecipients && item.from && ownSender ? (
         <HighlightedText text={who} ranges={highlights.from} offset={item.from.name?.trim() ? leadingSpace(item.from.name) : 0} />
       ) : (
         who

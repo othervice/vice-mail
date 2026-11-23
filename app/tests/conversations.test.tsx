@@ -1,0 +1,449 @@
+// Decision 0039: the conversation view as a stored UI preference, conversation rows in the sorted
+// inbox, the unified inbox, the unread lists and search, the thread pane, and actions on
+// conversation rows through the core's `conversationTargets`.
+import { act, screen, waitFor, within } from "@testing-library/react";
+import axe from "axe-core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  asConversation,
+  conversationInboxPage,
+  conversationKey,
+  groupByThread,
+  mergeInfo,
+  type ConversationInfo,
+} from "../src/features/threads/conversationRows";
+import type { InboxPage, SearchRequest, ThreadView, UiPreferences } from "../src/services/ipc";
+import { useUiStore } from "../src/stores/ui";
+import { inboxSection, messageRow } from "./support/comfort";
+import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
+import { emitCore } from "./support/events";
+import { optionName } from "./support/names";
+import { renderApp } from "./support/render";
+import { makeHit, searchPage } from "./support/search";
+import { CONVERSATION_PREFERENCES, DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
+
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+});
+
+const ADA = makeAccount({ writesEnabled: true });
+const now = Date.now();
+const ANNA = { name: "Anna", email: "anna@example.org" };
+const BOB = { name: "Bob", email: "bob@example.org" };
+// A conversation over Inbox and Sent: Anna asks, Ada answers from Sent, Bob answers.
+const FIRST = makeMessage({ id: 1000, mailboxId: 1, subject: "Plan", from: ANNA, date: now - 3 * 3_600_000, unread: true, preview: "Montag?" });
+const REPLY = makeMessage({ id: 1100, mailboxId: 2, subject: "Re: Plan", from: { name: "Ada Lovelace", email: "ada@vicemail.test" }, date: now - 2 * 3_600_000 });
+const ANSWER = makeMessage({ id: 1200, mailboxId: 1, subject: "Re: Plan", from: BOB, date: now - 3_600_000, preview: "Montag passt" });
+const SOLO = makeMessage({ id: 900, mailboxId: 1, subject: "Allein", date: now - 5 * 3_600_000 });
+const THREAD_OF = { [FIRST.id]: 7, [REPLY.id]: 7, [ANSWER.id]: 7 };
+const THREAD: ThreadView = {
+  threadId: 7,
+  messages: [FIRST, REPLY, ANSWER].map((message) => ({ message, mailboxIds: [message.mailboxId] })),
+  total: 3,
+};
+
+function setup(options: Parameters<typeof mockCore>[0] = {}, preferences: UiPreferences = CONVERSATION_PREFERENCES) {
+  const core = mockCore({
+    accounts: [ADA],
+    mailboxes: standardMailboxes(),
+    messages: { 1: [ANSWER, FIRST, SOLO], 2: [REPLY] },
+    views: Object.fromEntries([FIRST, REPLY, ANSWER, SOLO].map((m) => [m.id, makeView(m)])),
+    readingPreferences: { markReadOnOpen: "never" },
+    conversations: { threadOf: THREAD_OF },
+    search: { threadViews: { [ANSWER.id]: THREAD } },
+    ui: { preferences },
+    ...options,
+  });
+  return { core, ...renderApp() };
+}
+
+async function inboxList() {
+  const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+  await waitFor(() => {
+    expect(within(list).getAllByRole("option")).toHaveLength(2);
+  });
+  return list;
+}
+
+const savedConversations = (core: ReturnType<typeof mockCore>) =>
+  core.callsOf("set_ui_preferences").map((call) => (call["preferences"] as UiPreferences).conversations);
+
+async function seriousFindings(): Promise<string[]> {
+  const results = await axe.run(document.body, {
+    resultTypes: ["violations"],
+    iframes: false,
+    rules: { "color-contrast": { enabled: false } },
+  });
+  return results.violations
+    .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
+    .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+}
+
+describe("conversation rows (pure)", () => {
+  const info = (overrides: Partial<ConversationInfo> = {}): ConversationInfo => ({
+    threadId: 7,
+    messageCount: 3,
+    unreadCount: 1,
+    participants: [ANNA, BOB],
+    hasAttachments: true,
+    flagged: true,
+    ...overrides,
+  });
+
+  it("show the conversation's state on its row message", () => {
+    const row = asConversation(ANSWER, info());
+    expect([row.unread, row.flagged, row.hasAttachments]).toEqual([true, true, true]);
+    // "Unread first" groups by the message's own state.
+    expect(asConversation(ANSWER, info(), true).unread).toBe(false);
+    expect(asConversation(ANSWER, undefined)).toBe(ANSWER);
+  });
+
+  it("swap every message of an inbox page and key rows by their thread", () => {
+    const page: InboxPage = {
+      rows: [messageRow(ANSWER)],
+      nextCursor: null,
+      top: { pinned: [], returned: [], priority: [FIRST], priorityTotal: 1, priorityUnread: 1 },
+      categories: true,
+      conversations: [
+        { messageId: ANSWER.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false },
+        { messageId: FIRST.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false },
+      ],
+    };
+    const { page: swapped, info } = conversationInboxPage(page);
+    const row = swapped.rows[0];
+    expect(row?.kind === "message" && row.item.unread).toBe(true);
+    const key = conversationKey(mergeInfo([{ info }]));
+    expect(key(ANSWER)).toBe(key(FIRST));
+    expect(swapped).toBeDefined();
+    expect(key(SOLO)).toBe(`m${String(SOLO.id)}`);
+  });
+
+  it("group search hits: the newest hit of a thread is its row", () => {
+    const hits = [{ id: 3, thread: 7 }, { id: 2, thread: null }, { id: 1, thread: 7 }];
+    expect(groupByThread(hits, (hit) => hit.thread).map((hit) => hit.id)).toEqual([3, 2]);
+  });
+});
+
+describe("the conversation view as a preference (decision 0039)", () => {
+  it("is on by default: the core's default, and the UI's own when the core cannot answer", async () => {
+    const { core } = setup();
+    await inboxList();
+    expect(core.callsOf("list_inbox_conversations")).toEqual([{ scope: { kind: "mailbox", mailboxId: 1 }, cursor: null, limit: 200 }]);
+    expect(core.callsOf("list_inbox")).toEqual([]);
+    expect(screen.getByRole("button", { name: "Conversations" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("starts on also when the stored preferences cannot be read", async () => {
+    const { core } = setup({ failures: { get_ui_preferences: ipcError("database") } });
+    await inboxList();
+    expect(core.callsOf("list_inbox_conversations")).not.toHaveLength(0);
+  });
+
+  it("the header switch, the list menu, the palette and Settings → Reading change the stored value", async () => {
+    const { core, user } = setup({}, DEFAULT_UI_PREFERENCES);
+    const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(3);
+    });
+    expect(core.callsOf("list_inbox_conversations")).toEqual([]);
+
+    // Header switch.
+    const toggle = screen.getByRole("button", { name: "Conversations" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    await user.click(toggle);
+    await waitFor(() => {
+      expect(savedConversations(core)).toEqual([true]);
+    });
+    await inboxList();
+
+    // The list's options menu.
+    await user.click(screen.getByRole("button", { name: "List options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Show single messages" }));
+    await waitFor(() => {
+      expect(savedConversations(core)).toEqual([true, false]);
+    });
+    expect(screen.getByRole("button", { name: "Conversations" }).getAttribute("aria-pressed")).toBe("false");
+
+    // The command palette, keyboard only.
+    await user.keyboard("{Meta>}k{/Meta}");
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    const field = within(palette).getByRole("combobox", { name: "Command" });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(field);
+    });
+    await user.keyboard("Show conversations");
+    await waitFor(() => {
+      expect(within(palette).getAllByRole("option")[0]?.textContent).toContain("Show conversations");
+    });
+    await user.keyboard("{Enter}");
+    // The palette also saves its recent commands (with the value of the moment) before.
+    await waitFor(() => {
+      expect(core.ui.preferences.conversations).toBe(true);
+    });
+    expect(savedConversations(core).at(-1)).toBe(true);
+
+    // Settings → Reading.
+    act(() => {
+      useUiStore.getState().showSettings("reading");
+    });
+    const group = await screen.findByRole("radiogroup", { name: "Lists show" });
+    expect(within(group).getByRole("radio", { name: "One row per conversation" }).getAttribute("aria-checked")).toBe("true");
+    await user.click(within(group).getByRole("radio", { name: "One row per message" }));
+    await waitFor(() => {
+      expect(core.ui.preferences.conversations).toBe(false);
+    });
+  });
+
+  it("follows another device (uiPreferencesChanged) and puts a refused change back with the reason", async () => {
+    const { core, user } = setup({ failures: { set_ui_preferences: ipcError("invalid_argument") } }, DEFAULT_UI_PREFERENCES);
+    await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await emitCore({ type: "uiPreferencesChanged", preferences: CONVERSATION_PREFERENCES });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Conversations" }).getAttribute("aria-pressed")).toBe("true");
+    });
+    await waitFor(() => {
+      expect(core.callsOf("list_inbox_conversations")).not.toHaveLength(0);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Conversations" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Conversations" }).getAttribute("aria-pressed")).toBe("true");
+    });
+    act(() => {
+      useUiStore.getState().showSettings("reading");
+    });
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("The conversation view could not be saved")).toBeTruthy();
+  });
+});
+
+describe("conversation rows in the lists", () => {
+  it("the sorted inbox shows one row per conversation: size, senders, unread when any message is", async () => {
+    setup();
+    const list = await inboxList();
+    const [thread, single] = within(list).getAllByRole("option");
+    const name = optionName(thread);
+    // Label in name: the visible senders, subject and size, in reading order.
+    expect(name).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan, conversation with 3 messages, /);
+    expect(within(thread as HTMLElement).getByTestId("row-thread-count").textContent).toBe("3");
+    expect(within(thread as HTMLElement).getByTitle("Anna, Ada Lovelace, Bob")).toBeTruthy();
+    expect(optionName(single)).not.toContain("conversation");
+  });
+
+  it("shows a conversation of the priority block once", async () => {
+    const vip = makeMessage({ id: 1300, mailboxId: 1, subject: "Wichtig", important: true, date: now - 600_000 });
+    const reply = makeMessage({ id: 1400, mailboxId: 1, subject: "Re: Wichtig", date: now - 300_000 });
+    const page: InboxPage = {
+      rows: [messageRow(reply)],
+      nextCursor: null,
+      top: { pinned: [], returned: [], priority: [vip], priorityTotal: 1, priorityUnread: 0 },
+      categories: true,
+      conversations: [],
+    };
+    setup({
+      messages: { 1: [reply, vip] },
+      conversations: { threadOf: { [vip.id]: 9, [reply.id]: 9 } },
+      comfort: { inboxPages: { 1: [page] } },
+    });
+    const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(1);
+    });
+    expect(optionName(within(list).getByRole("option"))).toContain("Wichtig");
+    expect(optionName(within(list).getByRole("option"))).toContain("conversation with 2 messages");
+  });
+
+  it("a bundle holds conversations: an unfolded member shows the size of its conversation", async () => {
+    const failed = makeMessage({ id: 1500, mailboxId: 1, subject: "CI failed", category: "notification", date: now - 60_000 });
+    const earlier = makeMessage({ id: 1450, mailboxId: 1, subject: "CI failed", category: "notification", date: now - 120_000 });
+    const review = makeMessage({ id: 1400, mailboxId: 1, subject: "Review requested", category: "notification", date: now - 180_000 });
+    const section = inboxSection(failed.date);
+    const page: InboxPage = {
+      rows: [
+        {
+          kind: "bundle",
+          summary: { key: { category: "notification", section: section.start }, count: 2, unread: 0, senders: [] },
+          section,
+          members: [failed, earlier, review],
+        },
+      ],
+      nextCursor: null,
+      top: null,
+      categories: true,
+      conversations: [],
+    };
+    const { user } = setup({
+      messages: { 1: [failed, earlier, review] },
+      conversations: { threadOf: { [failed.id]: 4, [earlier.id]: 4 } },
+      comfort: { inboxPages: { 1: [page] } },
+    });
+    const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await user.click(await within(list).findByTestId("bundle-row"));
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(3);
+    });
+    const members = within(list)
+      .getAllByRole("option")
+      .filter((option) => optionName(option).includes("CI failed") || optionName(option).includes("Review"));
+    expect(members.map((option) => optionName(option).includes("conversation with 2 messages"))).toEqual([true, false]);
+  });
+
+  it("Unread only and Unread first list conversations", async () => {
+    const { core, user } = setup({ parity: {} });
+    await inboxList();
+    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await waitFor(() => {
+      expect(core.callsOf("list_inbox_conversations_filtered")).toContainEqual({
+        scope: { kind: "mailbox", mailboxId: 1 },
+        filter: { kind: "unread" },
+        cursor: null,
+        limit: 200,
+      });
+    });
+    const list = screen.getByRole("listbox", { name: "Messages in Inbox" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(1);
+    });
+    expect(optionName(within(list).getByRole("option"))).toContain("conversation with 3 messages");
+
+    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await user.click(screen.getByRole("button", { name: "List options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Show unread first" }));
+    await waitFor(() => {
+      expect(core.callsOf("list_unread_first_conversations")).toContainEqual({
+        scope: { kind: "mailbox", mailboxId: 1 },
+        cursor: null,
+        limit: 200,
+      });
+    });
+  });
+
+  it("search results show one row per conversation with its size", async () => {
+    const { user } = setup({
+      search: {
+        threadViews: { [ANSWER.id]: THREAD },
+        search: (request: SearchRequest) =>
+          request.query.includes("Plan")
+            ? searchPage({
+                hits: [
+                  makeHit(ANSWER, ["Plan"], { threadId: 7, threadMessageCount: 3 }),
+                  makeHit(FIRST, ["Plan"], { threadId: 7, threadMessageCount: 3 }),
+                ],
+              })
+            : searchPage(),
+      },
+    });
+    await inboxList();
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.keyboard("Plan");
+    const results = await screen.findByRole("listbox", { name: "Messages in the search results for “Plan”" });
+    await waitFor(() => {
+      expect(within(results).getAllByRole("option")).toHaveLength(1);
+    });
+    const row = within(results).getByRole("option");
+    expect(within(row).getByTestId("row-thread-count").textContent).toBe("3");
+    await user.click(row);
+    expect(await screen.findByRole("region", { name: "Conversation with 3 messages" })).toBeTruthy();
+  });
+});
+
+describe("opening a conversation", () => {
+  it("in the inbox shows the thread pane with every message", async () => {
+    const { core, user } = setup();
+    const list = await inboxList();
+    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    const entries = await screen.findByRole("region", { name: "Conversation with 3 messages" });
+    expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
+    expect(within(entries).getAllByTestId("thread-entry")).toHaveLength(3);
+    expect(await seriousFindings()).toEqual([]);
+  });
+
+  it("in the unified inbox shows the thread pane of the row's account", async () => {
+    const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
+    const WORK_MAIL = makeMessage({ id: 2000, accountId: WORK.id, mailboxId: 20, subject: "Projekt", date: now - 120_000 });
+    const { core, user } = setup({
+      accounts: [ADA, WORK],
+      mailboxes: [...standardMailboxes(), makeMailbox({ id: 20, accountId: WORK.id, path: "INBOX", role: "inbox", roleSource: "server" })],
+      messages: { 1: [ANSWER, FIRST, SOLO], 2: [REPLY], 20: [WORK_MAIL] },
+      views: Object.fromEntries([FIRST, REPLY, ANSWER, SOLO, WORK_MAIL].map((m) => [m.id, makeView(m)])),
+    });
+    await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await user.click(await screen.findByRole("button", { name: /^Show the inbox of/ }));
+    const choices = await screen.findByRole("list", { name: "Show the inbox of" });
+    await user.click(within(choices).getByRole("button", { name: "All accounts" }));
+    const list = await screen.findByRole("listbox", { name: "Messages in All inboxes" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(3);
+    });
+    expect(core.callsOf("list_inbox_conversations")).toContainEqual({ scope: { kind: "unified", view: { kind: "all" } }, cursor: null, limit: 200 });
+    const projekt = within(list)
+      .getAllByRole("option")
+      .find((option) => optionName(option).includes("Projekt"));
+    await user.click(projekt as HTMLElement);
+    await waitFor(() => {
+      expect(core.callsOf("get_thread")).toContainEqual({ messageId: WORK_MAIL.id, mailboxId: 20 });
+    });
+    expect(await screen.findByTestId("thread-pane")).toBeTruthy();
+  });
+});
+
+describe("actions on conversation rows", () => {
+  const actionCalls = (core: ReturnType<typeof mockCore>) =>
+    core.callsOf("apply_action") as { action: { type: string }; messages: { mailboxId: number; messageId: number }[] }[];
+
+  it("delete the whole conversation in this folder; the thread pane's toolbar acts on its one message", async () => {
+    const { core, user } = setup();
+    const list = await inboxList();
+    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    const pane = await screen.findByRole("region", { name: "Message" });
+
+    // The toolbar: the open message only (the first unread one, Anna's question).
+    await user.click(within(within(pane).getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: /^Flag/ }));
+    await waitFor(() => {
+      expect(actionCalls(core)).toHaveLength(1);
+    });
+    expect(actionCalls(core)[0]?.messages).toEqual([{ mailboxId: 1, messageId: FIRST.id }]);
+    expect(core.callsOf("conversation_targets")).toEqual([]);
+
+    // A shortcut on the row: the conversation's messages in the inbox (not the reply in Sent).
+    list.focus();
+    await user.keyboard("#");
+    await waitFor(() => {
+      expect(actionCalls(core)).toHaveLength(2);
+    });
+    expect(core.callsOf("conversation_targets")).toEqual([
+      { rows: [{ mailboxId: 1, messageId: ANSWER.id }], intent: { kind: "action", action: { type: "delete" } } },
+    ]);
+    expect(actionCalls(core)[1]?.messages).toEqual([
+      { mailboxId: 1, messageId: ANSWER.id },
+      { mailboxId: 1, messageId: FIRST.id },
+    ]);
+    // Both leave the list at once; the other conversation stays.
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(1);
+    });
+  });
+
+  it("pin the conversation and snooze it with its messages in the folder", async () => {
+    const { core, user } = setup();
+    const list = await inboxList();
+    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    list.focus();
+    await user.keyboard("p");
+    await waitFor(() => {
+      expect(core.callsOf("set_pinned")).toEqual([{ messageIds: [ANSWER.id], pinned: true }]);
+    });
+    expect(core.callsOf("conversation_targets")[0]).toEqual({
+      rows: [{ mailboxId: 1, messageId: ANSWER.id }],
+      intent: { kind: "pin", pinned: true },
+    });
+
+    list.focus();
+    await user.keyboard("b");
+    const picker = await screen.findByTestId("snooze-picker");
+    await user.click(within(picker).getByTestId("snooze-tomorrow"));
+    await waitFor(() => {
+      expect(core.callsOf("snooze_messages")).toEqual([{ messageIds: [ANSWER.id, FIRST.id], choice: { kind: "tomorrow" } }]);
+    });
+  });
+});

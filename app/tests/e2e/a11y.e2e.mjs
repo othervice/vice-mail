@@ -19,7 +19,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { $, $$, browser } from "@wdio/globals";
-import { attach, coreCall, openSettings, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, openSettings, openView, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const require = createRequire(import.meta.url);
@@ -119,7 +119,7 @@ async function setTheme(theme) {
 }
 
 async function backToInbox() {
-  await testId("rail-inbox").click();
+  await openView("inbox");
   await testId("message-list").waitForExist({ timeout: 20000 });
   await browser.waitUntil(async () => (await $$('[data-testid="message-row"]').length) > 0, {
     timeout: 20000,
@@ -173,6 +173,17 @@ describe("stage 8: axe in the real web view, light and dark", () => {
       it("finds nothing serious in the inbox", async () => {
         await backToInbox();
         await check(theme, "inbox");
+      });
+
+      // docs/DESIGN.md, "Seitenspalte": the accounts-and-folders column and the folded rail.
+      it("finds nothing serious with the accounts-and-folders column open and folded", async () => {
+        await backToInbox();
+        const was = await setSidebar(true);
+        await testId(`sidebar-account-${account.id}`).waitForExist({ timeout: 20000 });
+        await check(theme, "column");
+        await setSidebar(false);
+        await check(theme, "rail");
+        await setSidebar(was);
       });
 
       it("finds nothing serious in the reading pane", async () => {

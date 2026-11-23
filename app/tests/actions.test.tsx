@@ -774,7 +774,7 @@ describe("move to folder", () => {
     expect(document.activeElement).toBe(field);
     const options = within(picker).getAllByRole("option").map((o) => o.textContent);
     // Every other folder, roles first; not the inbox it is in.
-    expect(options).toEqual(["Sent", "Drafts", "Archive", "Trash", "Junk", "Projekte", "2026Projekte/2026"]);
+    expect(options).toEqual(["Drafts", "Sent", "Archive", "Junk", "Trash", "Projekte", "2026Projekte/2026"]);
 
     await user.type(field, "proj");
     expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual(["Projekte", "2026Projekte/2026"]);

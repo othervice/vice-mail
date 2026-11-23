@@ -23,6 +23,12 @@ export const en = {
     // Stage 8, keyboard: the rail's two groups, each one Tab stop with the arrow keys inside.
     viewGroup: "Mail views",
     statusGroup: "Activity and settings",
+    // docs/DESIGN.md, "Seitenspalte": the accounts-and-folders column.
+    sidebar: "Accounts and folders",
+    viewsSection: "Views",
+    hideSidebar: "Hide sidebar",
+    resizeSidebar: "Sidebar width",
+    sidebarWidth: "{{width}} pixels",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "connecting",
@@ -40,6 +46,9 @@ export const en = {
     collapse: "Hide subfolders of {{name}}",
     noFolders: "Folders appear after the first sync.",
     loadFailed: "Folders could not be loaded.",
+    // An account in trouble: its name, then what is wrong ("offline", "not syncing: reason").
+    accountTrouble: "{{label}}, {{status}}",
+    statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
     inbox: "Inbox",
@@ -1581,6 +1590,7 @@ export const en = {
     commands: {
       palette: "Command palette",
       shortcutHelp: "Show keyboard shortcuts",
+      toggleSidebar: "Show or hide the sidebar",
     },
     toggles: {
       toggleRead: "Mark as read or unread",
@@ -1807,6 +1817,16 @@ export const en = {
     shown: "Shown below",
     loadFailed: "The conversation could not be loaded",
     truncated: "Shows the newest {{shown}} of {{total}} messages.",
+    // Decision 0039: the conversation view is a stored preference, on by default.
+    setting: {
+      title: "Conversations",
+      description:
+        "Messages that answer each other are one row with their number. Opening the row shows all of them; actions on the row apply to the whole conversation.",
+      label: "Lists show",
+      on: "One row per conversation",
+      off: "One row per message",
+      saveFailed: "The conversation view could not be saved",
+    },
   },
   unified: {
     title: "All inboxes",

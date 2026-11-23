@@ -2,13 +2,16 @@ import { MessagesSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { Tooltip } from "../../components/Tooltip";
-import { useSearchStore } from "../../stores/search";
+import { useConversationStore } from "./preference";
 
-/** Header switch between one row per conversation and one row per message (stage 7). */
+/**
+ * Header switch between one row per conversation and one row per message (stage 7). Since
+ * decision 0039 a stored UI preference, on by default and synced like the text size.
+ */
 export function ConversationToggle() {
   const { t } = useTranslation();
-  const on = useSearchStore((state) => state.conversations);
-  const setConversations = useSearchStore((state) => state.setConversations);
+  const on = useConversationStore((state) => state.on);
+  const setOn = useConversationStore((state) => state.setOn);
   const label = on ? t("threads.toggleOff") : t("threads.toggleOn");
   return (
     <Tooltip label={label}>
@@ -17,10 +20,10 @@ export function ConversationToggle() {
         aria-pressed={on}
         aria-label={t("threads.toggle")}
         onClick={() => {
-          setConversations(!on);
+          setOn(!on);
         }}
         className={cx(
-          "flex size-8 items-center justify-center rounded-control transition-colors",
+          "flex size-8 items-center justify-center rounded-control transition-colors focus-visible:outline-2 focus-visible:outline-focus-ring",
           on ? "bg-selected text-primary" : "text-secondary hover:bg-hover hover:text-primary",
         )}
         data-testid="conversation-toggle"

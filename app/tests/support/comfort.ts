@@ -134,7 +134,7 @@ export function createComfortFake(
     if (pages) {
       const index = cursor?.before ?? 0;
       const page = pages[index];
-      if (!page) return { rows: [], nextCursor: null, top: null, categories: inboxSettings.categories ?? true };
+      if (!page) return { rows: [], nextCursor: null, top: null, categories: inboxSettings.categories ?? true, conversations: [] };
       return { ...page, nextCursor: index + 1 < pages.length ? { before: index + 1, bundles: null } : null };
     }
     const folder = core.listMessages(mailboxId, cursor?.before ?? null, limit);
@@ -155,6 +155,7 @@ export function createComfortFake(
       nextCursor: folder.nextCursor === null ? null : { before: folder.nextCursor, bundles: null },
       top,
       categories: false,
+      conversations: [],
     };
   }
 

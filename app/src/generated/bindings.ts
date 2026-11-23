@@ -175,6 +175,23 @@ export const commands = {
 	getThread: (messageId: MessageId, mailboxId: MailboxId | null, options?: InvokeOptions) => typedError<ThreadView, IpcError>(__TAURI_INVOKE("get_thread", { messageId, mailboxId }, options)),
 	/**  The unified inbox (or a group's), newest first. `limit` 1..500. */
 	listUnifiedInbox: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_unified_inbox", { view, cursor, limit }, options)),
+	/**
+	 *  Decision 0039: the sorted inbox as conversations (one row per conversation at its newest
+	 *  message, summaries in `conversations`). `limit` 1..500 counts conversations.
+	 */
+	listInboxConversations: (scope: InboxScope, cursor: InboxCursor | null, limit: number, options?: InvokeOptions) => typedError<InboxPage, IpcError>(__TAURI_INVOKE("list_inbox_conversations", { scope, cursor, limit }, options)),
+	/**
+	 *  Decision 0039: the inbox by category, the important senders or unread only, as
+	 *  conversations. `limit` 1..500.
+	 */
+	listInboxConversationsFiltered: (scope: InboxScope, filter: InboxFilter, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<ThreadPage, IpcError>(__TAURI_INVOKE("list_inbox_conversations_filtered", { scope, filter, cursor, limit }, options)),
+	/**  Decision 0039: "unread first" as conversations. `limit` 1..500. */
+	listUnreadFirstConversations: (scope: InboxScope, cursor: UnreadFirstCursor | null, limit: number, options?: InvokeOptions) => typedError<UnreadFirstThreadPage, IpcError>(__TAURI_INVOKE("list_unread_first_conversations", { scope, cursor, limit }, options)),
+	/**
+	 *  Decision 0039: which messages an action on conversation rows touches (`rows`: each row's
+	 *  message in the mailbox it is listed in), as list rows to run the action on.
+	 */
+	conversationTargets: (rows: MessageRef[], intent: ConversationIntent, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("conversation_targets", { rows, intent }, options)),
 	/**  All account groups in sidebar order. */
 	listAccountGroups: (options?: InvokeOptions) => typedError<AccountGroup[], IpcError>(__TAURI_INVOKE("list_account_groups", undefined, options)),
 	createAccountGroup: (name: string, accountIds: AccountId[], options?: InvokeOptions) => typedError<AccountGroup, IpcError>(__TAURI_INVOKE("create_account_group", { name, accountIds }, options)),
@@ -1742,6 +1759,42 @@ export type ContactSuggestion = {
 };
 
 /**
+ *  Decision 0039: what the user does with conversation rows. The core answers which messages
+ *  it touches ([`ConversationIntent::reach`]); the UI then runs its usual per-message action
+ *  (`applyAction` through the outbox, or the marks).
+ */
+export type ConversationIntent = 
+/**  A mail action of the outbox. */
+{ kind: "action"; action: MailAction } | 
+/**  Pin (`true`) or unpin. */
+{ kind: "pin"; pinned: boolean } | { kind: "snooze" } | 
+/**  End or clear snoozes. */
+{ kind: "unsnooze" } | 
+/**  Set or change a task mark (`clear`: take it off). */
+{ kind: "task"; clear: boolean } | 
+/**  Put on (`true`) or take off the reading list. */
+{ kind: "readingList"; on: boolean } | 
+/**  Block the sender. */
+{ kind: "block" };
+
+/**
+ *  Decision 0039: what a conversation row adds to its message (the newest of the conversation in
+ *  the listed mailbox), for lists whose rows stay message rows (the sorted inbox with its blocks
+ *  and bundles). Same fields as [`ThreadListItem`] without the message.
+ */
+export type ConversationSummary = {
+	/**  The row's message. */
+	messageId: MessageId,
+	threadId: number | null,
+	messageCount: number,
+	unreadCount: number,
+	lastActivity: number,
+	participants: Address[],
+	hasAttachments: boolean,
+	flagged: boolean,
+};
+
+/**
  *  The one event stream from the core to the UI. Internally tagged by `type`.
  * 
  *  The UI never polls: it re-queries what an event says has changed. The engine coalesces
@@ -2345,6 +2398,11 @@ export type InboxPage = {
 	 *  chronological.
 	 */
 	categories: boolean,
+	/**
+	 *  Decision 0039 (`listInboxConversations`): every message of the rows and of `top` stands
+	 *  for its conversation; one summary per such message. Empty for `listInbox`.
+	 */
+	conversations: ConversationSummary[],
 };
 
 /**  One row of the inbox list. */
@@ -3722,6 +3780,12 @@ export type SearchHit = {
 	 *  (and the text parts of a large message) were: "search on the server" can find more.
 	 */
 	bodyLocal: boolean,
+	/**
+	 *  Decision 0039: the message's conversation (null while it is not threaded) and how many
+	 *  messages it has, so the results can show one row per conversation.
+	 */
+	threadId: number | null,
+	threadMessageCount: number,
 };
 
 /**  State of the full-text index. */
@@ -4283,6 +4347,17 @@ export type ThreadListItem = {
 	 *  reply in Sent.
 	 */
 	lastActivity: number,
+	/**
+	 *  Decision 0039: the distinct senders of the conversation, oldest first, at most
+	 *  [`MAX_CONVERSATION_PARTICIPANTS`] (compared by address without case). Like the two
+	 *  marks below, taken from the newest 200 messages of the conversation (the counts are
+	 *  exact).
+	 */
+	participants: Address[],
+	/**  Decision 0039: a message of the conversation has attachments. */
+	hasAttachments: boolean,
+	/**  Decision 0039: a message of the conversation is flagged (in any mailbox). */
+	flagged: boolean,
 };
 
 export type ThreadPage = {
@@ -4310,8 +4385,8 @@ export type TransferMode =
 "move";
 
 /**
- *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size and (stage
- *  16) the accent theme are synchronised between devices; the recent commands and the AI
+ *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
+ *  16) the accent theme and (decision 0039) the conversation view are synchronised between devices; the recent commands and the AI
  *  panel's state stay on this device.
  */
 export type UiPreferences = {
@@ -4327,6 +4402,11 @@ export type UiPreferences = {
 	 *  themes are accepted (anything else is refused when the value is read from the UI).
 	 */
 	accentTheme: AccentTheme,
+	/**
+	 *  Decision 0039: lists show one row per conversation (default) instead of one per message;
+	 *  synced like the text size.
+	 */
+	conversations: boolean,
 };
 
 /**  The user's answer to an unclear send. */
@@ -4359,6 +4439,16 @@ export type UnreadFirstCursor = {
  */
 export type UnreadFirstPage = {
 	items: MessageListItem[],
+	/**  Null on the last page. */
+	nextCursor: UnreadFirstCursor | null,
+};
+
+/**
+ *  Decision 0039: "unread first" as conversations: the conversations with an unread message in
+ *  the listed mailboxes, then the others.
+ */
+export type UnreadFirstThreadPage = {
+	items: ThreadListItem[],
 	/**  Null on the last page. */
 	nextCursor: UnreadFirstCursor | null,
 };

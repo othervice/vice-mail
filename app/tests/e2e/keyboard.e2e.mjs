@@ -4,9 +4,9 @@
 //
 // Only keys drive the UI (`browser.keys`, and `pressTab` for Tab, whose focus move the embedded
 // WebDriver does not perform); `coreCall` sets up the account and reads the results back.
-// 1. A message from bob arrives. With the sidebar unfolded, Tab reaches the message list from the
-//    start of the window in a handful of presses (each tree and each rail group is one Tab stop,
-//    arrow keys inside), Home and Enter open the newest message (the delivered one).
+// 1. A message from bob arrives. With the accounts-and-folders column open, Tab reaches the message
+//    list from the start of the window in a handful of presses (each tree and the bottom group is
+//    one Tab stop, arrow keys inside), Home and Enter open the newest message (the delivered one).
 // 2. "r" opens the reply with the focus in the text, typing writes the answer, Cmd+Enter sends it.
 // 3. Escape goes back to the list, "e" archives the message; the focus is on the next message.
 // 4. Cmd+K, "Go to Archive", Enter: the archived message is there. On the server the reply was
@@ -25,15 +25,20 @@ const RUN = Date.now().toString(36);
 const SUBJECT = `Tastatur ${RUN}`;
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 /**
- * Most Tab presses from the start of the window to the message list with the sidebar unfolded:
- * the rail's views (1), the account's button and its folder tree (2), the rail's bottom group (1),
- * the list header (4) and the list itself make 9; trees another spec left behind (favourites,
- * inboxes, saved searches: 1 each) and the header's account choice may add up to 4. Before the
- * trees were single Tab stops it took 46.
+ * Most Tab presses from the start of the window to the message list with the accounts-and-folders
+ * column open (docs/DESIGN.md, "Seitenspalte"): the column's toggle (1) and its edge, a window
+ * splitter (1), the views (1), the account with its folders, one tree since the account is the
+ * tree's root (1), the bottom group (1), the list header (5: Unread only, List options,
+ * Conversations, Search, New message) and the list itself make 11. Against the labelled sidebar before
+ * (rail views, account button, folder tree, bottom group, 4 in the header: 9) the column adds one
+ * (the account's button became the root of its tree, the toggle and the splitter are new) and the
+ * header's "Conversations" switch (decision 0039) one. Trees another spec left behind
+ * (favourites, inboxes, saved searches: 1 each) and the header's account choice may add up to 4.
+ * Before the trees were single Tab stops it took 46.
  */
-const TAB_LIMIT = 14;
+const TAB_LIMIT = 16;
 /** The presses for the path above without trees left by other specs. */
-const SHORT_PATH = 9;
+const SHORT_PATH = 11;
 let account;
 let sidebarWas;
 
@@ -86,10 +91,15 @@ async function tabToList(limit = TAB_LIMIT) {
   throw new Error(`Tab never reached the message list (${String(limit)} presses): ${stops.join(" | ")}`);
 }
 
-/** Trees other than the accounts' folder trees (favourites, inboxes, saved searches) and the header's account choice. */
+/**
+ * Trees other than the accounts' folder trees and the views, which are always there (favourites,
+ * inboxes, saved searches), and the header's account choice.
+ */
 const extraStops = () =>
   browser.execute(
-    () => document.querySelectorAll('[role="tree"][aria-labelledby]').length + (document.querySelector('[data-testid="inbox-scope"]') ? 1 : 0),
+    () =>
+      document.querySelectorAll('[role="tree"][aria-labelledby]:not([data-testid="sidebar-views"])').length +
+      (document.querySelector('[data-testid="inbox-scope"]') ? 1 : 0),
   );
 
 async function mailboxByRole(role) {
@@ -146,7 +156,7 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
   });
 
-  it("Tab reaches the list in a handful of presses with the sidebar unfolded, Home and Enter open the newest message", async () => {
+  it("Tab reaches the list in a handful of presses with the column open, Home and Enter open the newest message", async () => {
     sidebarWas = await setSidebar(true);
     await testId(`mailbox-${(await mailboxByRole("inbox")).id}`).waitForExist({ timeout: 20000 });
     const reached = await tabToList();

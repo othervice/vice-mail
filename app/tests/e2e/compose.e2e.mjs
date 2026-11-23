@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -126,7 +126,7 @@ describe("stage 5: writing and sending", () => {
     await waitForServer((f) => count(f, "Drafts") === count(before, "Drafts") + 1, "the draft is not on the server");
 
     // Open it again from the Drafts folder and change it.
-    await testId("rail-drafts").click();
+    await openView("drafts");
     await testId("message-list").waitForExist({ timeout: 20000 });
     // A double-click opens a draft in the composer (MessageList's onDoubleClick, like Enter).
     // The embedded WebDriver's pointer actions fire two clicks but no `dblclick` (its
@@ -157,7 +157,7 @@ describe("stage 5: writing and sending", () => {
     report.screenshots.push(await screenshot("compose-outbox"));
 
     // "New message" is in the header of the mail views, not of the outbox.
-    await testId("rail-inbox").click();
+    await openView("inbox");
     await openComposer();
     await testId("composer-format-html").click();
     await testId("composer-rich-body").click();

@@ -98,6 +98,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::threads::list_unified_threads,
             commands::threads::get_thread,
             commands::threads::list_unified_inbox,
+            // Decision 0039: the sorted inbox as conversations.
+            commands::threads::list_inbox_conversations,
+            commands::threads::list_inbox_conversations_filtered,
+            commands::threads::list_unread_first_conversations,
+            commands::threads::conversation_targets,
             commands::groups::list_account_groups,
             commands::groups::create_account_group,
             commands::groups::update_account_group,

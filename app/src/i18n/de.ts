@@ -23,6 +23,11 @@ export const de: Translation = {
     account: "{{name}} ({{email}})",
     viewGroup: "Mail-Ansichten",
     statusGroup: "Aktivität und Einstellungen",
+    sidebar: "Konten und Ordner",
+    viewsSection: "Ansichten",
+    hideSidebar: "Seitenleiste ausblenden",
+    resizeSidebar: "Breite der Seitenleiste",
+    sidebarWidth: "{{width}} Pixel",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "verbindet",
@@ -40,6 +45,8 @@ export const de: Translation = {
     collapse: "Unterordner von {{name}} ausblenden",
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",
     loadFailed: "Die Ordner konnten nicht geladen werden.",
+    accountTrouble: "{{label}}, {{status}}",
+    statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
     inbox: "Posteingang",
@@ -1580,6 +1587,7 @@ export const de: Translation = {
     commands: {
       palette: "Befehlspalette",
       shortcutHelp: "Tastenkürzel anzeigen",
+      toggleSidebar: "Seitenleiste ein- oder ausblenden",
     },
     toggles: {
       toggleRead: "Als gelesen oder ungelesen markieren",
@@ -1806,6 +1814,16 @@ export const de: Translation = {
     shown: "Unten geöffnet",
     loadFailed: "Die Konversation konnte nicht geladen werden",
     truncated: "Zeigt die neuesten {{shown}} von {{total}} Mails.",
+    // Entscheidung 0039: die Konversationsansicht ist eine gespeicherte Einstellung, standardmäßig an.
+    setting: {
+      title: "Konversationen",
+      description:
+        "Mails, die aufeinander antworten, stehen als eine Zeile mit ihrer Anzahl in der Liste. Die Zeile öffnet alle; Aktionen an der Zeile gelten für die ganze Konversation.",
+      label: "Listen zeigen",
+      on: "Eine Zeile je Konversation",
+      off: "Eine Zeile je Mail",
+      saveFailed: "Die Konversationsansicht konnte nicht gespeichert werden",
+    },
   },
   unified: {
     title: "Alle Posteingänge",

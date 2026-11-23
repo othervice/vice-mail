@@ -12,6 +12,7 @@ import { useMailboxes } from "../mailboxes/queries";
 import type { ReadingLayout } from "../layout/useReadingLayout";
 import type { MessageListHandle } from "../messages/MessageList";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
+import { ThreadPane } from "../threads/ThreadPane";
 
 /**
  * Actions of the reading pane in a mixed list: those that need no picker or dialog of the folder
@@ -29,6 +30,11 @@ interface ReadingProps {
   list: RefObject<MessageListHandle | null>;
   /** Stage 8: where the pane sits; Escape and closing go through it (in place of the list). */
   layout?: Pick<ReadingLayout, "backToList" | "close">;
+  /**
+   * Decision 0039: the row is a conversation: the pane shows all of its messages, the list's
+   * shortcuts act on the conversation, the toolbar on the open message.
+   */
+  conversation?: boolean;
 }
 
 /** Escape and the close button of the pane, by the layout of the list it belongs to. */
@@ -53,10 +59,19 @@ function paneExits(list: ReadingProps["list"], layout: ReadingProps["layout"]) {
 }
 
 /** The open row with the actions of its own account and folder (one action controller each). */
-function ReadingWithActions({ account, mailbox, item, focusRequest, platform, list, layout }: ReadingProps & { mailbox: Mailbox }) {
+function ReadingWithActions({
+  account,
+  mailbox,
+  item,
+  focusRequest,
+  platform,
+  list,
+  layout,
+  conversation = false,
+}: ReadingProps & { mailbox: Mailbox }) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id).data ?? [];
-  const controller = useActionController({ account, mailbox, list });
+  const controller = useActionController({ account, mailbox, list, conversations: conversation });
   // Like the folder view: mark as read on open, and the shortcuts of the toolbar's actions.
   useMarkReadOnOpen(account, item, controller);
   useActionShortcuts({
@@ -93,14 +108,37 @@ function ReadingWithActions({ account, mailbox, item, focusRequest, platform, li
           }}
         />
       )}
-      <ReadingPane
-        account={account}
-        messageId={item.id}
-        focusRequest={focusRequest}
-        toolbar={toolbar}
-        onEscape={onEscape}
-        onClose={onClose}
-      />
+      {conversation ? (
+        <ThreadPane
+          account={account}
+          item={item}
+          mailboxId={mailbox.id}
+          focusRequest={focusRequest}
+          // The open message's own actions, where it lies in the row's folder.
+          toolbarFor={(message) =>
+            message.mailboxId === mailbox.id && (
+              <ActionToolbar
+                ids={UNIFIED_TOOLBAR}
+                ctx={{ account, mailbox, items: [message], canUndo: controller.canUndo }}
+                host={controller.messageHost}
+                platform={platform}
+                label={t("actions.toolbar")}
+              />
+            )
+          }
+          onEscape={onEscape}
+          onClose={onClose}
+        />
+      ) : (
+        <ReadingPane
+          account={account}
+          messageId={item.id}
+          focusRequest={focusRequest}
+          toolbar={toolbar}
+          onEscape={onEscape}
+          onClose={onClose}
+        />
+      )}
     </div>
   );
 }
@@ -113,6 +151,19 @@ export function MixedReading(props: ReadingProps) {
   const mailbox = useMailboxes(props.account.id).data?.find((m) => m.id === props.item.mailboxId);
   if (mailbox) return <ReadingWithActions key={`${String(mailbox.id)}-${String(props.item.id)}`} {...props} mailbox={mailbox} />;
   const { onEscape, onClose } = paneExits(props.list, props.layout);
+  if (props.conversation) {
+    return (
+      <ThreadPane
+        key={props.item.id}
+        account={props.account}
+        item={props.item}
+        mailboxId={props.item.mailboxId}
+        focusRequest={props.focusRequest}
+        onEscape={onEscape}
+        onClose={onClose}
+      />
+    );
+  }
   return (
     <ReadingPane
       key={props.item.id}

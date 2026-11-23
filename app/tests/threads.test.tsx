@@ -4,6 +4,7 @@ import type { ThreadListItem, ThreadView } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
 import { optionName } from "./support/names";
+import { singleThread } from "./support/search";
 
 const ACCOUNT = makeAccount({ writesEnabled: true });
 const now = Date.now();
@@ -19,8 +20,8 @@ const THREAD: ThreadView = {
   total: 3,
 };
 const THREADS: ThreadListItem[] = [
-  { message: ANSWER, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date },
-  { message: SINGLE, threadId: 8, messageCount: 1, unreadCount: 0, lastActivity: SINGLE.date },
+  singleThread(ANSWER, { threadId: 7, messageCount: 3, unreadCount: 1 }),
+  singleThread(SINGLE, { threadId: 8 }),
 ];
 
 function setup(options: Parameters<typeof mockCore>[0] = {}) {
@@ -36,10 +37,13 @@ function setup(options: Parameters<typeof mockCore>[0] = {}) {
   return { core, ...renderApp() };
 }
 
-/** Opens the folder "Projekte" (conversations are for plain folders, not the sorted inbox). */
+/**
+ * Opens the folder "Projekte" and turns the conversation view on (the fake core starts with it
+ * off; the real default is on, decision 0039). The sorted inbox offers it too.
+ */
 async function conversations(user: ReturnType<typeof renderApp>["user"]) {
   await screen.findByRole("listbox", { name: "Messages in Inbox" });
-  expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Conversations" })).toBeTruthy();
   await user.click(screen.getByTestId("rail-folders"));
   await user.click(await screen.findByTestId("mailbox-5"));
   await screen.findByRole("listbox", { name: "Messages in Projekte" });

@@ -1,5 +1,5 @@
 import { ArrowLeft, SearchX, Server } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
@@ -11,19 +11,26 @@ import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query
 import type { ListPage, MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
-import { buildRows } from "../messages/rows";
+import { buildRows, type DayBounds } from "../messages/rows";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
+import { groupByThread } from "../threads/conversationRows";
+import { useConversationsOn } from "../threads/preference";
 
 /** What the result lists need of a search query: pages with hits and their rows. */
 type HitPage = ListPage & { hits: readonly SearchHit[]; matchesNothing?: boolean };
 type HitQuery = UseInfiniteQueryResult<InfiniteData<HitPage, unknown>>;
 
-/** Rows of hits from any account: the account colour and the found places of each. */
+/**
+ * Rows of hits from any account: the account colour and the found places of each. Decision 0039:
+ * with the conversation view on, the newest hit of a conversation is its row (later hits of the
+ * same thread are left out) and shows the conversation's size.
+ */
 function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: MessageListSource; hitById: ReadonlyMap<MessageId, SearchHit> } {
+  const conversations = useConversationsOn();
   const pages = query.data?.pages;
   const hitById = useMemo(
     () => new Map((pages ?? []).flatMap((page) => page.hits).map((hit) => [hit.message.id, hit] as const)),
@@ -32,14 +39,22 @@ function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: 
   const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
   // Stage 8: with more than one account, each hit names its account next to the colour.
   const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
+  // Stable between renders: the list rebuilds its rows (and reports its selection) when it changes.
+  const groupedRows = useCallback(
+    (items: readonly MessageListItem[], bounds: DayBounds) =>
+      buildRows(groupByThread(items, (item) => hitById.get(item.id)?.threadId ?? null), bounds),
+    [hitById],
+  );
   const source: MessageListSource = {
     query,
-    buildRows,
+    buildRows: conversations ? groupedRows : buildRows,
     accountColor: (item) => colors.get(item.accountId) ?? 0,
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
     decorate: (item) => {
       const hit = hitById.get(item.id);
-      return hit ? { highlights: hit.highlights } : undefined;
+      if (!hit) return undefined;
+      const count = conversations ? hit.threadMessageCount : 1;
+      return { highlights: hit.highlights, ...(count > 1 && { threadCount: count }) };
     },
   };
   return { source, hitById };
@@ -70,6 +85,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
   const list = useRef<MessageListHandle>(null);
   const { t } = useTranslation();
   const { source, hitById } = useHitSource(query, accounts);
+  const conversations = useConversationsOn();
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
   const open = Boolean(single && account);
@@ -127,6 +143,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
           platform={platform}
           list={list}
           layout={layout}
+          conversation={conversations}
           />
         </div>
       )}

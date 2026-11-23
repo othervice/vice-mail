@@ -74,18 +74,22 @@ type Dated =
  * - a bundle (`more` rows of later pages are appended to it and replace its summary) as one row,
  *   its members below it while it is expanded; a bundle with a single message is a plain row;
  * - each message once: one shown in a block is not repeated below (priority messages also come
- *   in the rows), and messages not in `visible` (an action is moving them away) are left out.
+ *   in the rows), and messages not in `visible` (an action is moving them away) are left out;
+ * - decision 0039: `keyOf` names what is shown once, by default the message; conversation rows
+ *   pass their thread, so a conversation of the priority block is not repeated below either.
  */
 export function buildInboxRows(
   pages: readonly InboxPage[],
   expanded: ReadonlySet<string>,
   visible: ReadonlySet<MessageId>,
+  keyOf: (item: MessageListItem) => string | number = (item) => item.id,
 ): InboxListRow[] {
   const rows: InboxListRow[] = [];
-  const seen = new Set<MessageId>();
+  const seen = new Set<string | number>();
+  const taken = (item: MessageListItem) => seen.has(keyOf(item));
   const take = (item: MessageListItem) => {
-    if (seen.has(item.id) || !visible.has(item.id)) return false;
-    seen.add(item.id);
+    if (taken(item) || !visible.has(item.id)) return false;
+    seen.add(keyOf(item));
     return true;
   };
 
@@ -149,7 +153,7 @@ export function buildInboxRows(
       rows.push({ kind: "message", key: `message-${String(entry.item.id)}`, item: entry.item, block: null, bundle: null });
       continue;
     }
-    const members = entry.bundle.members.filter((item) => !seen.has(item.id) && visible.has(item.id));
+    const members = entry.bundle.members.filter((item) => !taken(item) && visible.has(item.id));
     const first = members[0];
     if (!first) continue;
     heading(entry.section);

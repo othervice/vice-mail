@@ -21,6 +21,13 @@ export const MAIL_VIEW_IDS = [
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];
 
+/** Width of the accounts-and-folders column in px at 100 % text size (it scales with the text). */
+export const SIDEBAR_WIDTH = { min: 200, default: 240, max: 320, step: 16 } as const;
+
+export function clampSidebarWidth(width: number): number {
+  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+}
+
 export const SETTINGS_SECTION_IDS = [
   "general",
   "accounts",
@@ -81,10 +88,26 @@ interface UiState {
    * instead of the selected account's inbox. Picking an account or a folder ends it.
    */
   unifiedInbox: UnifiedView | null;
-  /** The rail is unfolded into the labelled sidebar with the folder tree. */
+  /**
+   * The accounts-and-folders column is open (docs/DESIGN.md, "Seitenspalte"); folded, the narrow
+   * icon rail shows instead. Stored with the window's layout (`useStoredSidebar`).
+   */
   sidebarExpanded: boolean;
+  /**
+   * The window is too narrow for the column next to the list and the reading pane
+   * (`useSidebarFit`): the rail shows, and the column opens over the content instead.
+   */
+  sidebarNarrow: boolean;
+  /** In a narrow window: the column lies over the content (not stored). */
+  sidebarOverlay: boolean;
+  /** Width of the column in px at 100 % text size, 200 to 320 (`SIDEBAR_WIDTH`). */
+  sidebarWidth: number;
   /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
   collapsedMailboxes: ReadonlySet<MailboxId>;
+  /** Accounts of the column whose folders are hidden. */
+  collapsedAccounts: ReadonlySet<AccountId>;
+  /** Labelled sections of the column ("views", "savedSearches", "favorites") folded to their label. */
+  collapsedSections: ReadonlySet<string>;
   accountsPage: AccountsPage;
   linkRequest: LinkRequest | null;
   showMailView: (mailView: MailViewId) => void;
@@ -97,8 +120,14 @@ interface UiState {
   showAccountsPage: (page: AccountsPage) => void;
   showActivity: () => void;
   showOutbox: () => void;
+  /** The column's toggle (button, shortcut, palette): docked or folded, in a narrow window over the content. */
   toggleSidebar: () => void;
+  setSidebarNarrow: (narrow: boolean) => void;
+  closeSidebarOverlay: () => void;
+  setSidebarWidth: (width: number) => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
+  toggleAccount: (accountId: AccountId) => void;
+  toggleSection: (section: string) => void;
   requestLink: (renderToken: RenderToken, index: number) => void;
   dismissLink: () => void;
 }
@@ -109,7 +138,12 @@ export const useUiStore = create<UiState>()((set) => ({
   selectedAccountId: null,
   unifiedInbox: null,
   sidebarExpanded: false,
+  sidebarNarrow: false,
+  sidebarOverlay: false,
+  sidebarWidth: SIDEBAR_WIDTH.default,
   collapsedMailboxes: new Set<MailboxId>(),
+  collapsedAccounts: new Set<AccountId>(),
+  collapsedSections: new Set<string>(),
   accountsPage: { kind: "list" },
   linkRequest: null,
   showMailView: (mailView) => {
@@ -145,13 +179,36 @@ export const useUiStore = create<UiState>()((set) => ({
     set({ view: { kind: "outbox" } });
   },
   toggleSidebar: () => {
-    set((state) => ({ sidebarExpanded: !state.sidebarExpanded }));
+    set((state) => (state.sidebarNarrow ? { sidebarOverlay: !state.sidebarOverlay } : { sidebarExpanded: !state.sidebarExpanded }));
+  },
+  setSidebarNarrow: (sidebarNarrow) => {
+    set((state) => (state.sidebarNarrow === sidebarNarrow ? state : { sidebarNarrow, sidebarOverlay: false }));
+  },
+  closeSidebarOverlay: () => {
+    set({ sidebarOverlay: false });
+  },
+  setSidebarWidth: (width) => {
+    set({ sidebarWidth: clampSidebarWidth(width) });
   },
   toggleMailbox: (mailboxId) => {
     set((state) => {
       const next = new Set(state.collapsedMailboxes);
       if (!next.delete(mailboxId)) next.add(mailboxId);
       return { collapsedMailboxes: next };
+    });
+  },
+  toggleAccount: (accountId) => {
+    set((state) => {
+      const next = new Set(state.collapsedAccounts);
+      if (!next.delete(accountId)) next.add(accountId);
+      return { collapsedAccounts: next };
+    });
+  },
+  toggleSection: (section) => {
+    set((state) => {
+      const next = new Set(state.collapsedSections);
+      if (!next.delete(section)) next.add(section);
+      return { collapsedSections: next };
     });
   },
   requestLink: (renderToken, index) => {

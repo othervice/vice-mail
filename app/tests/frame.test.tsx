@@ -183,17 +183,17 @@ describe("app frame without an account", () => {
     mockCore();
     const { user } = renderApp();
     await user.click(await screen.findByRole("button", { name: "Folders" }));
-    // Unfolded, the rail shows its labels and no tooltips. Keyboard focus passes over Inbox.
-    const inbox = screen.getByRole("button", { name: "Inbox" });
+    // Unfolded, the column replaces the rail; its rows show their labels and no tooltips.
+    const settings = screen.getByRole("button", { name: "Settings" });
     act(() => {
-      inbox.focus();
+      settings.focus();
     });
     expect(screen.queryByRole("tooltip")).toBeNull();
     act(() => {
-      inbox.blur();
+      settings.blur();
     });
 
-    await user.click(screen.getByRole("button", { name: "Folders" }));
+    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
     expect(screen.getByRole("button", { name: "Folders" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("tooltip")).toBeNull();
   });

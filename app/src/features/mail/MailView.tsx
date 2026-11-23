@@ -11,6 +11,8 @@ import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
 import {
   MAX_ACTION_MESSAGES,
+  conversationIpc,
+  toCoreError,
   type Account,
   type Mailbox,
   type MessageId,
@@ -57,6 +59,7 @@ import { SavedSearchesView } from "../search/SavedSearchesView";
 import { SearchArea } from "../search/SearchArea";
 import { useSearchShortcut } from "../search/shortcut";
 import { ConversationToggle } from "../threads/ConversationToggle";
+import { useConversationsOn } from "../threads/preference";
 import { useThreadSource } from "../threads/source";
 import { ThreadPane } from "../threads/ThreadPane";
 import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
@@ -212,15 +215,15 @@ function SelectionSummary({ count, platform }: { count: number; platform: Shortc
  */
 function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: MailboxPanesProps) {
   const { t } = useTranslation();
-  // Stage 7: conversation view for plain folders. The sorted inbox (stage 9) and Later, Pinned and
-  // Tasks keep their rows: the core has no thread variant of them.
+  // Decision 0039: conversation view (a stored preference, on by default) for folders and the
+  // sorted inbox, also "Unread only" and "Unread first"; Later, Pinned and Tasks stay per message.
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
   // Stage 16: "Unread only" and "Unread first" replace the folder's or the inbox's own list.
   const unreadScope: InboxScope | null = kind === "folder" || kind === "inbox" ? { kind: "mailbox", mailboxId: mailbox.id } : null;
   const unreadMode = useUnreadMode(unreadScope && unreadViewKey(unreadScope));
   const unreadSource = useUnreadSource(unreadScope, ["messages", account.id, mailbox.id], unreadMode, selection.items);
-  const conversations = useSearchStore((state) => state.conversations) && kind === "folder" && !unreadSource;
-  const threadSource = useThreadSource(account.id, mailbox.id, conversations);
+  const conversations = useConversationsOn() && (kind === "folder" || kind === "inbox");
+  const threadSource = useThreadSource(account.id, mailbox.id, conversations && kind === "folder" && !unreadSource);
   const comfortSource = useListSource(unreadSource ? "folder" : kind, account, mailbox);
   const source = unreadSource ?? threadSource ?? comfortSource;
   const platform = shortcutPlatform(useAppInfo().data?.platform);
@@ -233,20 +236,37 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const otherFolders = useOtherAccountFolders(account.id);
   const transfer = useTransfer();
   const [transferRequest, setTransferRequest] = useState<TransferRequest | null>(null);
-  /** A folder of another account asks first (decision 0033); one of this account moves at once. */
-  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[]) => {
+  /**
+   * A folder of another account asks first (decision 0033); one of this account moves at once.
+   * Decision 0039: conversation rows move with their messages in this folder (`exact`: the one
+   * message of the reading pane).
+   */
+  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[], exact = false) => {
     if (target.accountId === account.id) {
-      void controller.apply({ type: "move", target: target.id }, items, { detail: label(target) });
+      void controller.apply({ type: "move", target: target.id }, items, { detail: label(target), exact });
       return;
     }
     const targetAccount = otherFolders.find((entry) => entry.account.id === target.accountId)?.account;
-    if (targetAccount && items.length > 0) {
-      setTransferRequest({ items, source: { account, mailbox }, target: { account: targetAccount, mailbox: target } });
+    if (!targetAccount || items.length === 0) return;
+    const ask = (moved: readonly MessageListItem[]) => {
+      if (moved.length > 0) setTransferRequest({ items: moved, source: { account, mailbox }, target: { account: targetAccount, mailbox: target } });
+    };
+    if (!conversations || exact) {
+      ask(items);
+      return;
     }
+    conversationIpc
+      .targets(
+        items.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
+        { kind: "action", action: { type: "move", target: target.id } },
+      )
+      .then(ask, (error: unknown) => {
+        push({ kind: "error", context: "action", error: toCoreError(error) });
+      });
   };
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
-  const controller = useActionController({ account, mailbox, list });
+  const controller = useActionController({ account, mailbox, list, conversations });
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const open = selection.items.length > 0;
   // Stage 8: the reading pane right, below or in place of the list.
@@ -398,13 +418,14 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           item={single}
           mailboxId={mailbox.id}
           focusRequest={focusRequest}
-          // Actions only for messages of this folder; the controller works per folder.
+          // Actions only for messages of this folder; the controller works per folder. The
+          // toolbar acts on the open message, the row's actions on the whole conversation.
           toolbarFor={(message) =>
             message.mailboxId === mailbox.id && (
               <ActionToolbar
                 ids={TOOLBAR_ACTIONS}
                 ctx={ctxFor([message])}
-                host={controller.host}
+                host={controller.messageHost}
                 platform={platform}
                 label={t("actions.toolbar")}
               />
@@ -450,9 +471,9 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           confirmLabel={t("actions.confirmDelete.confirm")}
           cancelLabel={t("actions.confirmDelete.cancel")}
           onConfirm={() => {
-            const { items } = overlay;
+            const { items, exact } = overlay;
             controller.closeOverlay();
-            void controller.apply({ type: "deletePermanently" }, items);
+            void controller.apply({ type: "deletePermanently" }, items, { exact: exact === true });
           }}
           onCancel={controller.closeOverlay}
           focusAfterConfirm={focusList}
@@ -478,7 +499,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           onChoose={(target) => {
             const items = fresh(overlay.ids);
             controller.closeOverlay();
-            moveOrAsk(target, items);
+            moveOrAsk(target, items, overlay.exact === true);
           }}
           onClose={controller.closeOverlay}
           restoreFocus={focusList}
@@ -506,13 +527,14 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             controller.apply({ type: "addKeyword", keyword: tag }, fresh(overlay.ids), {
               detail: tag,
               ownErrors: ["invalid_keyword"],
+              exact: overlay.exact === true,
             })
           }
           onRemove={(tag) =>
             controller.apply(
               { type: "removeKeyword", keyword: tag },
               fresh(overlay.ids).filter((item) => item.keywords.some((k) => k.toLowerCase() === tag.toLowerCase())),
-              { detail: tag },
+              { detail: tag, exact: overlay.exact === true },
             )
           }
           onClose={controller.closeOverlay}
@@ -637,9 +659,8 @@ export function MailView({ view }: MailViewProps) {
   const unified = useUiStore((state) => state.unifiedInbox);
   const accountList = accounts.data ?? [];
   const inboxView = view.kind === "mail" && view.mailView === "inbox";
-  // Conversations exist for plain folders only (not the sorted inbox, Later, Pinned, Tasks).
-  const conversationsApply =
-    view.kind === "mailbox" || (isRoleView(view.mailView) && view.mailView !== "inbox");
+  // Decision 0039: conversations for folders, inboxes and the unified inbox (not Later, Pinned, Tasks).
+  const conversationsApply = view.kind === "mailbox" || isRoleView(view.mailView);
   const unifiedView = inboxView && account ? unified : null;
   const unifiedName = useUnifiedName(unifiedView ?? { kind: "all" });
   const roleMailboxes = useMailboxes(unifiedView ? null : account?.id).data ?? [];

@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const SIZES = [
@@ -74,6 +74,13 @@ const measure = () =>
       listState: why('[data-testid="message-list"]'),
       paneState: why('[data-testid="reading-pane"]'),
       scrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      // docs/DESIGN.md, "Seitenspalte": the column beside the list, over the content, or the rail.
+      sidebar: document.querySelector('[data-testid="sidebar-column"][data-overlay]')
+        ? "overlay"
+        : document.querySelector('[data-testid="sidebar-column"]')
+          ? "column"
+          : "rail",
+      column: rect('[data-testid="sidebar-column"]'),
       list: rect('[data-testid="message-list"]'),
       pane: rect('[data-testid="reading-pane"]'),
       buttonsOutsideToolbar: toolbarRect
@@ -180,6 +187,37 @@ describe("stage 8: layouts at 900×600 and 2560×1440", () => {
       }
     }
   }
+
+  it("the column stands beside the list at 1280×800, folds to the rail at 900×600 and opens over the content there", async () => {
+    await browser.setWindowSize(1280, 800);
+    await paletteCommand(PANE_COMMANDS.right);
+    await paletteCommand("Go to Inbox");
+    const was = await setSidebar(true);
+    await browser.waitUntil(async () => (await measure()).sidebar === "column", { timeoutMsg: "no column at 1280×800" });
+    let facts = await measure();
+    report.layouts.push({ name: "layout-1280x800-column", ...facts });
+    report.screenshots.push(await screenshot("layout-1280x800-column"));
+    assert.equal(facts.scrollsSideways, false, "1280×800 with the column: the window scrolls sideways");
+    assert.ok(inside(facts.column, facts.window), "the column is not inside the window");
+    assert.ok(facts.list && facts.list.left >= facts.column.right - 1, "the list does not start right of the column");
+
+    // Too narrow for the column next to list and pane: the rail, nothing cut off.
+    await browser.setWindowSize(900, 600);
+    await browser.waitUntil(async () => (await measure()).sidebar === "rail", { timeoutMsg: "the column did not fold at 900×600" });
+    // "Folders" opens it over the content; Escape closes it again, the stored state stays open.
+    await testId("rail-folders").click();
+    await browser.waitUntil(async () => (await measure()).sidebar === "overlay", { timeoutMsg: "the column did not open over the content" });
+    facts = await measure();
+    report.layouts.push({ name: "layout-900x600-column-overlay", ...facts });
+    report.screenshots.push(await screenshot("layout-900x600-column-overlay"));
+    assert.equal(facts.scrollsSideways, false, "900×600 with the column over the content: the window scrolls sideways");
+    assert.ok(inside(facts.column, facts.window), "the column over the content is not inside the window");
+    await browser.keys("Escape");
+    await browser.waitUntil(async () => (await measure()).sidebar === "rail", { timeoutMsg: "Escape did not close the column" });
+    await browser.setWindowSize(1280, 800);
+    await browser.waitUntil(async () => (await measure()).sidebar === "column", { timeoutMsg: "the column did not come back at 1280×800" });
+    await setSidebar(was);
+  });
 
   it("150 % text at 900×600 cuts nothing off", async () => {
     await browser.setWindowSize(900, 600);

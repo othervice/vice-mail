@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, deliverMail, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -67,7 +67,7 @@ describe("stage 16: inline quick reply", () => {
     await coreCall("set_writes_enabled", { accountId: account.id, enabled: true });
     await coreCall("set_compose_settings", { settings: { sendDelaySeconds: 5 } });
     await deliverMail(SUBJECT);
-    await testId("rail-inbox").click();
+    await openView("inbox");
   });
 
   after(async () => {

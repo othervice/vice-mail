@@ -43,12 +43,17 @@ export function ThreadPane({ account, item, mailboxId, focusRequest, toolbarFor,
   const thread = useThread(account.id, item.id, mailboxId);
   const entries = thread.data?.messages ?? [];
   const [chosen, setChosen] = useState<MessageId | null>(null);
+  // The message that opened first stays open when the thread reloads (decision 0039: opening
+  // marks the conversation read, after which the first unread one would be another).
+  const [first, setFirst] = useState<MessageId | null>(null);
+  if (first === null && entries.length > 0) setFirst(initialEntry(entries, item.id));
   // Stage 13: a source of an AI statement in the panel shows its mail here.
   useAiSourceFocus(
     entries.map((entry) => entry.message.id),
     setChosen,
   );
-  const openId = chosen !== null && entries.some((entry) => entry.message.id === chosen) ? chosen : initialEntry(entries, item.id);
+  const known = (id: MessageId | null): id is MessageId => id !== null && entries.some((entry) => entry.message.id === id);
+  const openId = known(chosen) ? chosen : known(first) ? first : initialEntry(entries, item.id);
   const open = entries.find((entry) => entry.message.id === openId)?.message ?? item;
   const total = thread.data?.total ?? entries.length;
   const bounds = dayBounds(new Date(), 1);

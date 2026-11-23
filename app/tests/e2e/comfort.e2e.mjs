@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, $$, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openSettings, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSettings, openView, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { steps: {} };
@@ -140,10 +140,10 @@ describe("stage 9: inbox comfort", () => {
     report.steps.serverUnchanged = true;
 
     for (const view of ["later", "pinned", "tasks"]) {
-      await (await testId(`rail-${view}`)).click();
+      await openView(view);
       await browser.waitUntil(async () => (await optionLabels()).length === 1, { timeoutMsg: `${view} is not listed` });
     }
-    await (await testId("rail-inbox")).click();
+    await openView("inbox");
   });
 
   it("explains in the reading pane why a message is where it is", async () => {
@@ -158,7 +158,7 @@ describe("stage 9: inbox comfort", () => {
   it("sorting off makes the inbox purely chronological", async () => {
     await openSettings("inbox");
     await (await testId("inbox-categories")).click();
-    await (await testId("rail-inbox")).click();
+    await openView("inbox");
     await browser.waitUntil(async () => (await $$('[data-testid="bundle-row"]')).length === 0, { timeoutMsg: "bundles stayed" });
     await openSettings("inbox");
     await (await testId("inbox-categories")).click();

@@ -684,7 +684,9 @@ fn ui_preference_commands_store_validate_and_emit() {
             "recentCommands": [],
             "aiPanel": "open",
             // Decisions 0036 and 0038: synced, orange by default.
-            "accentTheme": "orange"
+            "accentTheme": "orange",
+            // Decision 0039: one row per conversation by default.
+            "conversations": true
         })
     );
 
@@ -699,10 +701,12 @@ fn ui_preference_commands_store_validate_and_emit() {
         "textSize": 115,
         "recentCommands": ["action:archive"],
         "aiPanel": "folded",
-        "accentTheme": "violet"
+        "accentTheme": "violet",
+        "conversations": false
     });
     let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
     assert_eq!(stored["accentTheme"], "violet");
+    assert_eq!(stored["conversations"], false);
     // Decision 0028: the AI panel's state is part of the preferences.
     assert_eq!(stored["aiPanel"], "folded");
     // Ordered by command, as stored.
@@ -1282,4 +1286,67 @@ fn eml_files_open_in_message_windows_and_messages_come_by_id() {
     )
     .expect_err("too many");
     assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Decision 0039: the sorted inbox as conversations
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn conversation_commands_answer_typed_pages_and_errors() {
+    let h = harness(|_| {});
+    let unified = json!({ "kind": "unified", "view": { "kind": "all" } });
+    // No account yet: empty pages of the right shape.
+    let page = invoke(
+        &h,
+        "list_inbox_conversations",
+        json!({ "scope": unified, "cursor": null, "limit": 50 }),
+    )
+    .expect("inbox");
+    assert_eq!(page["rows"], json!([]));
+    assert_eq!(page["conversations"], json!([]));
+    assert_eq!(page["nextCursor"], Value::Null);
+    let page = invoke(
+        &h,
+        "list_inbox_conversations_filtered",
+        json!({ "scope": unified, "filter": { "kind": "unread" }, "cursor": null, "limit": 50 }),
+    )
+    .expect("filtered");
+    assert_eq!(page, json!({ "items": [], "nextCursor": null }));
+    let page = invoke(
+        &h,
+        "list_unread_first_conversations",
+        json!({ "scope": unified, "cursor": null, "limit": 50 }),
+    )
+    .expect("unread first");
+    assert_eq!(page["items"], json!([]));
+    // A mailbox that does not exist, a limit out of range, no rows: typed errors.
+    let err = invoke(
+        &h,
+        "list_inbox_conversations",
+        json!({ "scope": { "kind": "mailbox", "mailboxId": 99 }, "cursor": null, "limit": 50 }),
+    )
+    .expect_err("unknown mailbox");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    let err = invoke(
+        &h,
+        "list_inbox_conversations",
+        json!({ "scope": unified, "cursor": null, "limit": 0 }),
+    )
+    .expect_err("limit out of range");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    let err = invoke(
+        &h,
+        "conversation_targets",
+        json!({ "rows": [], "intent": { "kind": "action", "action": { "type": "archive" } } }),
+    )
+    .expect_err("no rows");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    let err = invoke(
+        &h,
+        "conversation_targets",
+        json!({ "rows": [{ "mailboxId": 1, "messageId": 5 }], "intent": { "kind": "snooze" } }),
+    )
+    .expect_err("unknown message");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
 }

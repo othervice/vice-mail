@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
 });
 
-const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "orange" };
+const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "orange", conversations: false };
 
 function setup(options: { preferences?: UiPreferences; layout?: CoreWindowLayout; failures?: Record<string, Failure> } = {}) {
   const items = makeMessages(4);
@@ -71,10 +71,12 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         recentCommands: ["action:compose"],
         aiPanel: "open",
         accentTheme: "orange",
+        conversations: false,
       },
       layout: { readingPane: "bottom", density: "compact", sidebarExpanded: true },
     });
-    await screen.findByRole("navigation", { name: "Views" });
+    // Unfolded: the accounts-and-folders column instead of the rail.
+    await screen.findByRole("navigation", { name: "Accounts and folders" });
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "y" }]);
     expect(document.documentElement.dataset["textSize"]).toBe("130");
     expect(document.documentElement.dataset["density"]).toBe("compact");
@@ -116,6 +118,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         recentCommands: ["action:reply"],
         aiPanel: "open",
         accentTheme: "orange",
+        conversations: false,
       },
     });
   });
@@ -131,6 +134,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         recentCommands: ["view:inbox"],
         aiPanel: "open",
         accentTheme: "orange",
+        conversations: false,
       },
     });
     await waitFor(() => {
@@ -203,6 +207,7 @@ describe("moving the old local fallback to the core, once", () => {
       recentCommands: ["action:compose", "view:sent"],
       aiPanel: "open",
       accentTheme: "orange",
+      conversations: false,
     });
     expect(core.ui.layout).toEqual({ readingPane: "bottom", density: "compact", sidebarExpanded: true });
     expect(stored("paletteRecent")).toBeNull();

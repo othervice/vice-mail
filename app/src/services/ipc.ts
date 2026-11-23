@@ -1637,3 +1637,45 @@ export const updateIpc = {
   /** "Restart to install": the app closes, updates itself and starts again. */
   install: (): Promise<UpdateInfo> => call(() => updateCommands.installUpdate()),
 };
+
+// ---- Decision 0039: the sorted inbox as conversations ----
+import {
+  commands as conversationCommands,
+  type ConversationIntent,
+  type ConversationSummary,
+  type InboxCursor as ConversationInboxCursor,
+  type InboxFilter as ConversationInboxFilter,
+  type InboxPage as ConversationInboxPage,
+  type InboxScope as ConversationInboxScope,
+  type MessageRef as ConversationRowRef,
+  type UnreadFirstCursor as ConversationUnreadFirstCursor,
+  type UnreadFirstThreadPage,
+} from "../generated/bindings";
+
+export type { ConversationIntent, ConversationSummary, UnreadFirstThreadPage };
+
+/**
+ * Conversation view (decision 0039): the sorted inbox, its filtered lists and "unread first" with
+ * one row per conversation, and which messages an action on conversation rows touches.
+ */
+export const conversationIpc = {
+  /** Like `listInbox`; every message of rows and top stands for its conversation (`conversations`). */
+  listInbox: (scope: ConversationInboxScope, cursor: ConversationInboxCursor | null, limit: number): Promise<ConversationInboxPage> =>
+    call(() => conversationCommands.listInboxConversations(scope, cursor, limit)),
+  /** A category, the important senders or unread only, as conversations. */
+  listInboxFiltered: (
+    scope: ConversationInboxScope,
+    filter: ConversationInboxFilter,
+    cursor: ListCursor | null,
+    limit: number,
+  ): Promise<ThreadPage> => call(() => conversationCommands.listInboxConversationsFiltered(scope, filter, cursor, limit)),
+  /** "Unread first" as conversations. */
+  listUnreadFirst: (
+    scope: ConversationInboxScope,
+    cursor: ConversationUnreadFirstCursor | null,
+    limit: number,
+  ): Promise<UnreadFirstThreadPage> => call(() => conversationCommands.listUnreadFirstConversations(scope, cursor, limit)),
+  /** The messages an action on these rows touches (each row: its message and listed mailbox). */
+  targets: (rows: ConversationRowRef[], intent: ConversationIntent): Promise<MessageListItem[]> =>
+    call(() => conversationCommands.conversationTargets(rows, intent)),
+};

@@ -350,7 +350,7 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await user.click(screen.getByRole("button", { name: "Close search" }));
     await user.click(screen.getByTestId("rail-folders"));
     await screen.findByRole("region", { name: "Saved searches" });
-    await user.click(screen.getByRole("button", { name: /^Saved views/ }));
+    await user.click(screen.getByRole("treeitem", { name: "Saved views" }));
     await user.click(await screen.findByRole("button", { name: "Rename “Invoices”" }));
     expect(await seriousFindings()).toEqual([]);
     await user.keyboard("{Escape}");

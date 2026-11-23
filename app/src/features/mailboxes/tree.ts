@@ -1,14 +1,17 @@
 import type { Mailbox, MailboxRole } from "../../services/ipc";
 import type { MailViewId } from "../../stores/ui";
 
-/** Roles in the order the folder tree shows them, before the ordinary folders. */
+/**
+ * Roles in the order the folder tree shows them, before the ordinary folders (docs/DESIGN.md,
+ * "Seitenspalte": Inbox, Drafts, Sent, Archive, Junk, Trash, as most mail apps order them).
+ */
 export const ROLE_ORDER = [
   "inbox",
-  "sent",
   "drafts",
+  "sent",
   "archive",
-  "trash",
   "junk",
+  "trash",
   "flagged",
   "all",
 ] as const satisfies readonly Exclude<MailboxRole, "custom">[];

@@ -35,6 +35,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   aiPanel: "open",
   // Decision 0038: orange is the default accent.
   accentTheme: "orange",
+  // Decision 0039: one row per conversation.
+  conversations: true,
 };
 
 export type PlatformOverrides = Record<ShortcutPlatform, ShortcutOverrides>;
@@ -101,6 +103,8 @@ export interface UiPreferencesChange {
   aiPanel?: AiPanelState;
   /** Stage 16 (decision 0036): the accent colours, synced like the text size. */
   accentTheme?: AccentTheme;
+  /** Decision 0039: one row per conversation or per message, synced like the text size. */
+  conversations?: boolean;
 }
 
 let saves: Promise<unknown> = Promise.resolve();
@@ -130,6 +134,7 @@ export function saveUiPreferences(change: UiPreferencesChange): Promise<UiPrefer
       recentCommands: change.recentCommands ? cleanRecent(change.recentCommands) : previous.recentCommands,
       aiPanel: change.aiPanel ?? previous.aiPanel,
       accentTheme: change.accentTheme ?? previous.accentTheme,
+      conversations: change.conversations ?? previous.conversations,
     };
     await queryClient?.cancelQueries({ queryKey: uiPreferencesQueryKey });
     queryClient?.setQueryData(uiPreferencesQueryKey, next);

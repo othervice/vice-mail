@@ -1,28 +1,24 @@
 import { CircleExclamationPoint, CloudOff, History, SendHorizontal, Settings, type LucideIcon } from "lucide-react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { useRovingFocus } from "../components/useRovingFocus";
-import { accountFill } from "../features/accounts/accountColor";
 import { Avatar } from "../features/accounts/Avatar";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
 import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
-import { MailboxTree } from "../features/mailboxes/MailboxTree";
-import { UnifiedTree } from "../features/unified/UnifiedTree";
-import { FavoriteFolders } from "../features/organize/folders";
-import { SavedSearchNav } from "../features/search/SavedSearchNav";
 import { useMailboxes } from "../features/mailboxes/queries";
-import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
+import { mailboxWithRole } from "../features/mailboxes/tree";
 import { useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
+import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
 import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
 import { useAppInfo } from "../features/app-info/queries";
 import { useBoundShortcuts } from "../stores/shortcuts";
-import type { Account, Mailbox, MailboxId } from "../services/ipc";
+import type { Account, Mailbox } from "../services/ipc";
 import { MAIL_VIEW_IDS, useUiStore } from "../stores/ui";
 
 /** Roving focus of the rail group the entry belongs to (`useRovingFocus`). */
@@ -78,15 +74,17 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     if (item.top < area.top) scroller.scrollTop -= area.top - item.top;
     else if (item.bottom > area.bottom) scroller.scrollTop += item.bottom - area.bottom;
   }, [active]);
-  // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
-  const className = cx(
-    "relative flex items-center rounded-row transition-colors",
-    expanded ? "h-8 w-full gap-3 px-3 text-13" : "size-(--ui-rail-item) justify-center",
-    active
-      ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
-      : "text-secondary hover:bg-rail-hover hover:text-primary",
-    drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
-  );
+  // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone. In
+  // the column the rows look like the rows of its trees.
+  const className = expanded
+    ? sidebarRowClass(active, cx("w-full gap-2 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent"))
+    : cx(
+        "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
+        active
+          ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
+          : "text-secondary hover:bg-rail-hover hover:text-primary",
+        drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+      );
   const button = (
     <button
       ref={buttonRef}
@@ -104,7 +102,7 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
       data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
     >
       <span className="relative flex shrink-0">
-        <Icon aria-hidden className="size-(--ui-icon) shrink-0" strokeWidth={1.75} />
+        <Icon aria-hidden className={expanded ? sidebarIconClass(active) : "size-(--ui-icon) shrink-0"} strokeWidth={1.75} />
         {(!expanded || trailing === undefined) && badge}
       </span>
       {expanded && (
@@ -115,7 +113,6 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
       {expanded && trailing}
     </button>
   );
-  // Same element in both modes: unfolding the sidebar keeps the focus on the button.
   return (
     <Tooltip
       label={shortcut ? t("actions.withShortcut", { label, shortcut: shortcut.hint }) : label}
@@ -284,59 +281,63 @@ function AccountSwitcher({ accounts, selected, roving }: { accounts: readonly Ac
   );
 }
 
-/** Folder tree of one account in the unfolded sidebar, headed by the account's name. */
-function AccountFolders({ account, selected }: { account: Account; selected: boolean }) {
+/**
+ * The bottom group of the rail and of the column: activity, outbox and settings with their counts
+ * (in the narrow rail also the account switcher). One Tab stop, arrow keys inside.
+ */
+export function StatusGroup({ accounts, expanded }: { accounts: readonly Account[]; expanded: boolean }) {
+  const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
-  const selectAccount = useUiStore((state) => state.selectAccount);
-  const mailboxes = useMailboxes(account.id);
-  const accountLabel = useAccountLabel();
-
-  let current: MailboxId | null = null;
-  if (view.kind === "mailbox" && view.accountId === account.id) current = view.mailboxId;
-  // Stage 7: while the unified inbox is shown, no account's own inbox is the current folder.
-  const unified = useUiStore((state) => state.unifiedInbox !== null);
-  if (view.kind === "mail" && selected && isRoleView(view.mailView) && !(unified && view.mailView === "inbox")) {
-    current = mailboxWithRole(mailboxes.data ?? [], view.mailView)?.id ?? null;
-  }
-
+  const showSettings = useUiStore((state) => state.showSettings);
+  const { account: selected } = useSelectedAccount();
+  const bottomActive = view.kind === "activity" || view.kind === "outbox" || view.kind === "settings" ? view.kind : null;
+  const bottom = useRovingFocus({
+    keys: [...(expanded ? [] : accounts.map((account) => accountKey(account.id))), ...STATUS_KEYS],
+    activeKey: bottomActive ?? (!expanded && selected ? accountKey(selected.id) : null),
+  });
+  const activityRoving = bottom.itemProps(ACTIVITY_KEY);
+  const outboxRoving = bottom.itemProps(OUTBOX_KEY);
+  const settingsRoving = bottom.itemProps(SETTINGS_KEY);
+  // A hairline above the group: where the views scroll under it in a low window.
   return (
-    <section aria-label={accountLabel(account)} className="flex flex-col gap-1">
-      <button
-        type="button"
-        aria-pressed={selected}
+    <div
+      role="toolbar"
+      aria-label={t("nav.statusGroup")}
+      {...bottom.groupProps}
+      className={cx("flex shrink-0 flex-col border-t border-border-subtle py-3", expanded ? "gap-1 px-2" : "items-center gap-2")}
+    >
+      {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
+      {expanded ? null : <AccountSwitcher accounts={accounts} selected={selected} roving={bottom.itemProps} />}
+      <ActivityButton accounts={accounts} expanded={expanded} active={view.kind === "activity"} roving={activityRoving} />
+      <OutboxButton accounts={accounts} expanded={expanded} active={view.kind === "outbox"} roving={outboxRoving} />
+      <RailButton
+        icon={Settings}
+        label={t("nav.settings")}
+        expanded={expanded}
+        active={view.kind === "settings"}
         onClick={() => {
-          selectAccount(account.id);
+          showSettings();
         }}
-        className={cx(
-          "flex h-8 items-center gap-2 rounded-control px-2 text-12 font-semibold transition-colors",
-          selected ? "text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
-        )}
-      >
-        <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
-        <span className="truncate">{account.displayName || account.email}</span>
-        <span className="relative ms-auto flex size-3">
-          <StateBadge account={account} />
-        </span>
-      </button>
-      <MailboxTree account={account} currentMailboxId={current} />
-    </section>
+        roving={settingsRoving}
+        data-testid="rail-settings"
+      />
+    </div>
   );
 }
 
 /**
- * The 56 px icon rail: mail views on top, account switcher and settings at the bottom. "Folders"
- * unfolds it into a labelled sidebar with the folder tree of every account (docs/DESIGN.md).
+ * The 56 px icon rail, shown while the accounts-and-folders column is folded (docs/DESIGN.md):
+ * mail views on top, account switcher, activity, outbox and settings at the bottom. "Folders"
+ * opens the column (in a narrow window over the content, `SidebarColumn`).
  */
 export function IconRail() {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
-  const expanded = useUiStore((state) => state.sidebarExpanded);
+  const overlay = useUiStore((state) => state.sidebarOverlay);
   const showMailView = useUiStore((state) => state.showMailView);
-  const showSettings = useUiStore((state) => state.showSettings);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const dragRegion = useWindowDragRegion();
   const { accounts, account: selected } = useSelectedAccount();
-  const foldersId = useId();
   const accountList = accounts.data ?? [];
   const mailboxes = useMailboxes(selected?.id).data ?? [];
   /** Rail views that take dragged rows: they move into the folder the view shows. */
@@ -345,31 +346,26 @@ export function IconRail() {
   // Stage 8: Cmd/Ctrl+1 to 8 open the views (as the user assigned them).
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const shortcutsOf = useBoundShortcuts(platform);
-  const viewShortcut = (id: (typeof MAIL_VIEW_IDS)[number]) => {
-    const command = (Object.keys(VIEW_COMMANDS) as ViewCommandId[]).find((key) => VIEW_COMMANDS[key] === id);
-    const first = command ? shortcutsOf(command)[0] : undefined;
+  const commandShortcut = (command: ViewCommandId | "toggleSidebar") => {
+    const first = shortcutsOf(command)[0];
     return first && { hint: formatShortcut(first, platform), aria: ariaShortcut(first, platform) };
   };
+  const viewShortcut = (id: (typeof MAIL_VIEW_IDS)[number]) => {
+    const command = (Object.keys(VIEW_COMMANDS) as ViewCommandId[]).find((key) => VIEW_COMMANDS[key] === id);
+    return command ? commandShortcut(command) : undefined;
+  };
   // Stage 8, keyboard: the views and the bottom group are one Tab stop each (arrow keys inside),
-  // so Tab goes rail, sidebar trees, list instead of through every entry.
+  // so Tab goes rail views, bottom group, list instead of through every entry.
   const views = useRovingFocus({ keys: MAIL_VIEW_IDS, activeKey: view.kind === "mail" ? view.mailView : null });
-  const bottomActive = view.kind === "activity" || view.kind === "outbox" || view.kind === "settings" ? view.kind : null;
-  const bottom = useRovingFocus({
-    keys: [...(expanded ? [] : accountList.map((account) => accountKey(account.id))), ...STATUS_KEYS],
-    activeKey: bottomActive ?? (!expanded && selected ? accountKey(selected.id) : null),
-  });
-  const activityRoving = bottom.itemProps(ACTIVITY_KEY);
-  const outboxRoving = bottom.itemProps(OUTBOX_KEY);
-  const settingsRoving = bottom.itemProps(SETTINGS_KEY);
 
   return (
     <nav
       aria-label={t("nav.label")}
-      className={cx(
-        // Decision 0031: the darkest tonal step of the frame, a hairline to the list.
-        "flex h-full shrink-0 flex-col border-r border-border-subtle bg-rail",
-        expanded ? "w-(--ui-sidebar-width)" : "w-(--ui-rail-width) items-center",
-      )}
+      // While the column lies over the content, the rail under it is out of reach.
+      inert={overlay || undefined}
+      // Decision 0031: the darkest tonal step of the frame, a hairline to the list.
+      className="flex h-full w-(--ui-rail-width) shrink-0 flex-col items-center border-r border-border-subtle bg-rail"
+      data-testid="icon-rail"
     >
       {/* Room for the window buttons that macOS draws over this corner. */}
       <div aria-hidden data-tauri-drag-region={dragRegion ? "deep" : undefined} className="h-(--ui-titlebar-inset) w-full shrink-0" />
@@ -380,23 +376,23 @@ export function IconRail() {
       <div
         data-rail-scroll
         className={cx(
-          "flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto py-3",
+          "flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto py-3 [scrollbar-width:none]",
           "[mask-image:linear-gradient(to_bottom,transparent,black_var(--ui-space-2),black_calc(100%-var(--ui-space-2)),transparent)]",
-          expanded ? "gap-4 px-3 [scrollbar-width:thin]" : "items-center [scrollbar-width:none]",
         )}
       >
         {/* Stage 8, keyboard: one Tab stop for the views, Up and Down move between them. */}
         <div role="toolbar" aria-label={t("nav.viewGroup")} {...views.groupProps} className="flex w-full flex-col">
-          <ul className={cx("flex w-full flex-col gap-1", !expanded && "items-center")}>
+          <ul className="flex w-full flex-col items-center gap-1">
             {MAIL_VIEW_IDS.map((id) => (
-              <li key={id} className={cx(expanded && "w-full")}>
+              <li key={id}>
                 {id === "folders" ? (
                   <RailButton
                     icon={MAIL_VIEW_ICONS[id]}
-                    label={t(`nav.${id}`)}
-                    expanded={expanded}
-                    disclosure={{ expanded, ...(expanded && { controls: foldersId }) }}
+                    label={t("nav.folders")}
+                    expanded={false}
+                    disclosure={{ expanded: overlay }}
                     onClick={toggleSidebar}
+                    shortcut={commandShortcut("toggleSidebar")}
                     roving={views.itemProps(id)}
                     data-testid={`rail-${id}`}
                   />
@@ -404,7 +400,7 @@ export function IconRail() {
                   <RailButton
                     icon={MAIL_VIEW_ICONS[id]}
                     label={t(`nav.${id}`)}
-                    expanded={expanded}
+                    expanded={false}
                     active={view.kind === "mail" && view.mailView === id}
                     onClick={() => {
                       showMailView(id);
@@ -419,48 +415,8 @@ export function IconRail() {
             ))}
           </ul>
         </div>
-        {expanded && (
-          <div id={foldersId} className="flex flex-col gap-4 border-t border-border-subtle pt-4">
-            {/* Stage 16: favourite folders of every account, at the top. */}
-            <FavoriteFolders accounts={accountList} />
-            <UnifiedTree accountCount={accountList.length} />
-            {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
-            {accounts.isSuccess && accountList.length === 0 && (
-              <p className="px-2 text-12 text-tertiary" data-testid="sidebar-no-accounts">
-                {t("presentation.sidebar.noAccounts")}
-              </p>
-            )}
-            {/* Stage 7: saved searches as views. */}
-            <SavedSearchNav />
-            {accountList.map((account) => (
-              <AccountFolders key={account.id} account={account} selected={account.id === selected?.id} />
-            ))}
-          </div>
-        )}
       </div>
-      {/* A hairline above the bottom group: where the views scroll under it in a low window. */}
-      <div
-        role="toolbar"
-        aria-label={t("nav.statusGroup")}
-        {...bottom.groupProps}
-        className={cx("flex shrink-0 flex-col gap-2 border-t border-border-subtle py-3", expanded ? "px-3" : "items-center")}
-      >
-        {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
-        {expanded ? null : <AccountSwitcher accounts={accountList} selected={selected} roving={bottom.itemProps} />}
-        <ActivityButton accounts={accountList} expanded={expanded} active={view.kind === "activity"} roving={activityRoving} />
-        <OutboxButton accounts={accountList} expanded={expanded} active={view.kind === "outbox"} roving={outboxRoving} />
-        <RailButton
-          icon={Settings}
-          label={t("nav.settings")}
-          expanded={expanded}
-          active={view.kind === "settings"}
-          onClick={() => {
-            showSettings();
-          }}
-          roving={settingsRoving}
-          data-testid="rail-settings"
-        />
-      </div>
+      <StatusGroup accounts={accountList} expanded={false} />
     </nav>
   );
 }

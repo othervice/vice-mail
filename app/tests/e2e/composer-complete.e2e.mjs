@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -168,7 +168,7 @@ describe("stage 10: the composer complete", () => {
   });
 
   it("forwards a message as an .eml attachment from the reading pane", async () => {
-    await testId("rail-inbox").click();
+    await openView("inbox");
     const row = await $('[data-testid="message-list"] [role="option"]');
     await row.waitForExist({ timeout: 20000 });
     await row.click();

@@ -8,7 +8,7 @@
 // 3. The request log shows nothing for the model list (it carries no content).
 import assert from "node:assert/strict";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, invoke, openSettings, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, invoke, openSettings, openView, testId } from "./support/app.mjs";
 import { counter, startCounter } from "./support/counter-server.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
@@ -59,7 +59,7 @@ describe("stage 13: AI in the app", () => {
   it("is off: no panel, no writing help, and nothing reaches the provider", async () => {
     await counter.reset();
     assert.equal((await coreCall("get_ai_availability")).enabled, false);
-    await testId("rail-inbox").click().catch(() => undefined);
+    await openView("inbox").catch(() => undefined);
     await browser.pause(500);
     assert.equal(await testId("ai-panel").isExisting(), false, "the AI panel is hidden while AI is off");
     const models = await invoke("list_ai_models", { profileId });

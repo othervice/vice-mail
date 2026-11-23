@@ -17,6 +17,7 @@ import { useAccountGroups, useHiddenAccounts } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
 import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
+import { useConversationsOn } from "../threads/preference";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -37,8 +38,8 @@ interface PanesProps {
 /**
  * The list of a unified view and the reading pane: the sorted inbox (stage 9: blocks, bundles,
  * hidden snoozes) over every shown account, each row in its account's colour (the avatar ring),
- * opened with the account it belongs to. The conversation view does not apply to inboxes: the
- * core has no thread variant of the sorted inbox.
+ * opened with the account it belongs to. Decision 0039: with the conversation view on (the
+ * default) each row is a conversation of its account and opens in the thread pane.
  */
 function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const { t } = useTranslation();
@@ -54,6 +55,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const unreadMode = useUnreadMode(unreadViewKey(unreadScope));
   const unread = useUnreadSource(unreadScope, ["unified", view], unreadMode, selection.items);
   const sorted = useUnifiedInboxSource(view, !unread);
+  const conversations = useConversationsOn();
   const source: MessageListSource = {
     empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
     ...(unread ?? sorted),
@@ -124,6 +126,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           platform={platform}
           list={list}
           layout={layout}
+          conversation={conversations}
         />
       )}
     </div>

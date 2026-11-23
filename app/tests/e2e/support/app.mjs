@@ -106,20 +106,59 @@ export function pressTab({ shift = false } = {}) {
 }
 
 /**
- * Folds or unfolds the sidebar (the "Folders" rail button) unless it already is so, and returns
- * the state it had. Since stage 8 the app remembers the state across restarts, so a spec cannot
- * assume the folded rail it would see on a first start.
+ * Folds or unfolds the accounts-and-folders column unless it already is so, and returns the state
+ * it had. Since stage 8 the app remembers the state across restarts, so a spec cannot assume the
+ * state it would see on a first start. The toggle is the rail's "Folders" while the rail shows and
+ * the column's "Hide sidebar" while the column does (both `rail-folders`, `aria-expanded`); the
+ * element changes, so it is looked up again each time. In a window narrower than the column's
+ * limit (docs/DESIGN.md, "Seitenspalte") "unfolded" is the column over the content.
  */
 export async function setSidebar(expanded) {
-  const button = testId("rail-folders");
-  const was = (await button.getAttribute("aria-expanded")) === "true";
+  const shown = async () => (await $('[data-testid="rail-folders"]').getAttribute("aria-expanded")) === "true";
+  const was = await shown();
   if (was !== expanded) {
-    await button.click();
-    await browser.waitUntil(async () => ((await button.getAttribute("aria-expanded")) === "true") === expanded, {
+    await $('[data-testid="rail-folders"]').click();
+    await browser.waitUntil(async () => (await shown()) === expanded, {
       timeoutMsg: `the sidebar did not ${expanded ? "unfold" : "fold"}`,
     });
   }
   return was;
+}
+
+/**
+ * Opens a mail view whether the rail or the column shows, and waits until it is the current one:
+ * the rail's entry, else the column's row of that view, else (inbox, sent, drafts, archive,
+ * trash) the folder with that role of the first account in the column.
+ */
+export async function openView(view) {
+  const selectors = [
+    `[data-testid="rail-${view}"]`,
+    `[data-testid="sidebar-view-${view}"]`,
+    `[data-testid="sidebar-column"] [role="treeitem"][data-folder-role="${view}"]`,
+  ];
+  for (const selector of selectors) {
+    const entry = $(selector);
+    if (!(await entry.isExisting())) continue;
+    await entry.click();
+    await browser.waitUntil(async () => (await $(selector).getAttribute("aria-current")) === "page", {
+      timeoutMsg: `the view ${view} did not open`,
+    });
+    return;
+  }
+  throw new Error(`neither the rail nor the column offers the view ${view}`);
+}
+
+/**
+ * Decision 0039: one row per conversation (the app's default) or one per message. Stored through
+ * the core like any UI preference; its `uiPreferencesChanged` switches the open window's lists.
+ * Specs that compare list rows with the server's messages turn conversations off.
+ */
+export async function setConversations(on) {
+  const preferences = await coreCall("get_ui_preferences");
+  if (preferences.conversations !== on) await coreCall("set_ui_preferences", { preferences: { ...preferences, conversations: on } });
+  await browser.waitUntil(async () => (await coreCall("get_ui_preferences")).conversations === on, {
+    timeoutMsg: `the core did not store conversations = ${String(on)}`,
+  });
 }
 
 export async function openSettings(section) {

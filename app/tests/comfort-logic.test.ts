@@ -72,6 +72,7 @@ describe("sorted inbox rows", () => {
     nextCursor: { before: 1, bundles: "{}" },
     top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 5, priorityUnread: 2 },
     categories: true,
+    conversations: [],
   };
   const second: InboxPage = {
     rows: [
@@ -81,6 +82,7 @@ describe("sorted inbox rows", () => {
     nextCursor: null,
     top: null,
     categories: true,
+    conversations: [],
   };
   const everything = [...inboxPageItems(first), ...inboxPageItems(second)];
 
@@ -132,6 +134,7 @@ describe("sorted inbox rows", () => {
       nextCursor: null,
       top: { pinned: [], returned: [], priority: [], priorityTotal: 0, priorityUnread: 0 },
       categories: false,
+      conversations: [],
     };
     expect(describeRows(buildInboxRows([plain], new Set(), ids(inboxPageItems(plain))))).toEqual([
       "# today",

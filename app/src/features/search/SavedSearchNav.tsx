@@ -1,14 +1,15 @@
-import { Bookmark } from "lucide-react";
+import { Search } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { cx } from "../../components/cx";
 import { treeItemAria, useTreeNavigation } from "../../components/useTreeNavigation";
 import { useUiStore } from "../../stores/ui";
+import { SECTION_KEY, SectionRow, useSection } from "../layout/SectionRow";
+import { sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { useSavedSearches } from "./savedQueries";
 
 /**
- * Stage 7: the saved searches as views of the unfolded sidebar, in their order. Nothing while
- * there are none (the "Saved views" entry of the rail explains how to make one).
+ * Stage 7: the saved searches as views of the accounts-and-folders column, in their order, right
+ * below the views. Nothing while there are none ("Saved views" explains how to make one).
  */
 export function SavedSearchNav() {
   const { t } = useTranslation();
@@ -16,24 +17,28 @@ export function SavedSearchNav() {
   const showSavedSearch = useUiStore((state) => state.showSavedSearch);
   const saved = useSavedSearches().data ?? [];
   const headingId = useId();
+  const section = useSection("savedSearches", t("savedSearches.view.sidebarLabel"));
   const openId = view.kind === "mail" && view.mailView === "savedViews" ? view.savedSearchId : undefined;
-  const items = saved.map((search, index) => ({ key: String(search.id), level: 1, posinset: index + 1, setsize: saved.length, text: search.name }));
+  const items = saved.map((search, index) => ({ key: String(search.id), level: 2, posinset: index + 1, setsize: saved.length, text: search.name }));
   const nav = useTreeNavigation({
-    items,
+    items: [section.item, ...(section.open ? items : [])],
     currentKey: openId === undefined ? null : String(openId),
     onOpen: (key) => {
+      if (key === SECTION_KEY) section.toggle();
       const search = saved.find((entry) => String(entry.id) === key);
       if (search) showSavedSearch(search.id);
     },
+    onExpand: section.onExpand,
   });
   if (saved.length === 0) return null;
   return (
-    <section aria-label={t("savedSearches.view.sidebarLabel")} className="flex flex-col gap-1" data-testid="saved-search-nav">
-      <h2 id={headingId} className="flex h-8 items-center px-2 text-12 font-semibold text-secondary">
+    <section aria-label={t("savedSearches.view.sidebarLabel")} className="flex flex-col" data-testid="saved-search-nav">
+      <h2 id={headingId} className="sr-only">
         {t("savedSearches.view.sidebarLabel")}
       </h2>
       <ul {...nav.treeProps} aria-labelledby={headingId} className="flex flex-col">
-        {saved.map((search, index) => {
+        <SectionRow section={section} nav={nav} data-testid="sidebar-section-savedSearches" />
+        {(section.open ? saved : []).map((search, index) => {
           const item = items[index];
           if (!item) return null;
           const current = openId === search.id;
@@ -46,13 +51,10 @@ export function SavedSearchNav() {
               onClick={() => {
                 showSavedSearch(search.id);
               }}
-              className={cx(
-                "flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-13 transition-colors",
-                current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
-              )}
+              className={sidebarRowClass(current, "gap-2 ps-3 pe-2")}
               data-testid="saved-search-nav-entry"
             >
-              <Bookmark aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
+              <Search aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />
               <span className="truncate">{search.name}</span>
             </li>
           );

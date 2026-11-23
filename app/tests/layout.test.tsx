@@ -180,7 +180,7 @@ describe("layouts", () => {
   });
 
   it("shows a text size the UI does not offer at the nearest one it does", async () => {
-    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open", accentTheme: "orange" } });
+    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open", accentTheme: "orange", conversations: false } });
     await screen.findByRole("navigation", { name: "Views" });
     expect(document.documentElement.dataset["textSize"]).toBe("115");
   });
@@ -245,7 +245,7 @@ describe("layouts", () => {
     useUiStore.setState(useUiStore.getInitialState(), true);
     useLayoutStore.setState(useLayoutStore.getInitialState(), true);
     renderApp();
-    await screen.findByRole("navigation", { name: "Views" });
+    await screen.findByRole("navigation", { name: "Accounts and folders" });
     expect(useUiStore.getState().sidebarExpanded).toBe(true);
   });
 

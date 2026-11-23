@@ -21,6 +21,7 @@ import { useOnlyUnreadStore } from "../src/features/organize/unread";
 import { useAccentStore } from "../src/features/preferences/accent";
 import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequest";
 import { useBlockedFocusStore } from "../src/features/blocked/focus";
+import { useConversationStore } from "../src/features/threads/preference";
 
 beforeEach(() => {
   installSystemFakes();
@@ -60,6 +61,8 @@ afterEach(() => {
   useAccentStore.setState(useAccentStore.getInitialState(), true);
   resetSaveAllRequestForTests();
   useBlockedFocusStore.setState(useBlockedFocusStore.getInitialState(), true);
+  // Decision 0039: the conversation view, a UI preference of the core.
+  useConversationStore.setState(useConversationStore.getInitialState(), true);
   delete document.documentElement.dataset["accent"];
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];

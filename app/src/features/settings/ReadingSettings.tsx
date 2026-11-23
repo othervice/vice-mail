@@ -10,6 +10,7 @@ import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
 import { useReadingPreferences, useSetReadingPreferences } from "../actions/queries";
 import { formatSize } from "../reading/format";
+import { useConversationStore } from "../threads/preference";
 import {
   usePrefetchSettings,
   usePrefetchStatus,
@@ -147,6 +148,35 @@ function PrefetchBlock({ accounts }: { accounts: readonly Account[] }) {
   );
 }
 
+/**
+ * Decision 0039: one row per conversation (the default) or per message, in every list that can
+ * show conversations. A UI preference of the core, synced like the text size; the header's switch
+ * and the list's menu change the same value.
+ */
+function ConversationsBlock() {
+  const { t } = useTranslation();
+  const on = useConversationStore((state) => state.on);
+  const setOn = useConversationStore((state) => state.setOn);
+  const saveError = useConversationStore((state) => state.saveError);
+  const options: ChoiceOption<"on" | "off">[] = [
+    { value: "on", label: t("threads.setting.on") },
+    { value: "off", label: t("threads.setting.off") },
+  ];
+  return (
+    <Block divided title={t("threads.setting.title")} description={t("threads.setting.description")}>
+      <ChoiceGroup
+        label={t("threads.setting.label")}
+        value={on ? "on" : "off"}
+        options={options}
+        onChange={(value) => {
+          setOn(value === "on");
+        }}
+      />
+      {saveError && <ErrorNotice context={t("threads.setting.saveFailed")} error={saveError} />}
+    </Block>
+  );
+}
+
 const MARK_READ: readonly MarkReadOnOpen[] = ["immediately", "afterDelay", "never"];
 
 /** When an opened message counts as read (stage 4). Only accounts with writes on are marked. */
@@ -237,6 +267,7 @@ export function ReadingSettings() {
   return (
     <SettingsSection title={t("settings.reading.title")}>
       <MarkReadBlock />
+      <ConversationsBlock />
       <Block divided title={t("settings.reading.prefetch.title")} description={t("settings.reading.prefetch.description")}>
         <PrefetchBlock accounts={list} />
       </Block>

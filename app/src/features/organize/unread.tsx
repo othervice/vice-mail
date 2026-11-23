@@ -1,24 +1,53 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { ArrowUpNarrowWide, ListFilter, MailCheck, MailOpen } from "lucide-react";
+import { ArrowUpNarrowWide, ListFilter, MailCheck, MailOpen, MessagesSquare } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { cx } from "../../components/cx";
 import {
   comfortIpc,
+  conversationIpc,
   parityIpc,
   toCoreError,
   type InboxScope,
   type ListCursor,
   type MessageListItem,
   type MessagePage,
+  type ThreadPage,
   type UnreadFirstCursor,
   type UnreadFirstPage,
+  type UnreadFirstThreadPage,
 } from "../../services/ipc";
 import { useNoticeStore } from "../../stores/notices";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import type { MessageListSource } from "../messages/listSource";
 import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
+import { mergeInfo, threadRows, type ConversationInfoById } from "../threads/conversationRows";
+import { useConversationStore } from "../threads/preference";
+import { decorateConversations } from "../threads/source";
+
+/** A page of conversations as message rows (decision 0039), with their info by row id. */
+interface ConversationListPage {
+  items: MessageListItem[];
+  info: ConversationInfoById;
+  nextCursor: ListCursor | null;
+}
+
+function conversationPages(data: InfiniteData<ThreadPage, ListCursor | null>): InfiniteData<ConversationListPage, ListCursor | null> {
+  return {
+    pages: data.pages.map((page) => ({ ...threadRows(page.items), nextCursor: page.nextCursor })),
+    pageParams: data.pageParams,
+  };
+}
+
+/** "Unread first" groups by the row message's own state: the first part's rows are unread. */
+function unreadFirstConversationPages(data: InfiniteData<UnreadFirstThreadPage, UnreadFirstCursor | null>) {
+  return {
+    pages: data.pages.map((page) => ({ ...threadRows(page.items, true), nextCursor: page.nextCursor })),
+    pageParams: data.pageParams,
+  };
+}
+
 
 /** Messages per page of the unread lists (the contract allows 1..500). */
 export const UNREAD_PAGE_SIZE = 200;
@@ -114,10 +143,10 @@ export function unreadFirstRows(items: readonly MessageListItem[]): ListRow[] {
  * Keeps the open message in "Unread only" once it was read (opening marks it read): it stays in
  * its place until the selection moves on, so the reading pane does not close under the reader.
  */
-function withKept(
-  data: InfiniteData<MessagePage, ListCursor | null>,
+function withKept<P extends { items: MessageListItem[] }>(
+  data: InfiniteData<P, ListCursor | null>,
   kept: readonly MessageListItem[],
-): InfiniteData<MessagePage, ListCursor | null> {
+): InfiniteData<P, ListCursor | null> {
   const present = new Set(data.pages.flatMap((page) => page.items.map((item) => item.id)));
   const missing = kept.filter((item) => !present.has(item.id));
   if (missing.length === 0) return data;
@@ -144,11 +173,39 @@ export function useUnreadSource(
   kept: readonly MessageListItem[],
 ): MessageListSource | undefined {
   const { t } = useTranslation();
+  // Decision 0039: one row per conversation while the view is on.
+  const conversations = useConversationStore((state) => state.on);
   const selectOnly = useCallback(
     (data: InfiniteData<MessagePage, ListCursor | null>) => withKept(data, kept),
     // The selection is state of the view: the same array until it changes.
     [kept],
   );
+  const selectOnlyConversations = useCallback(
+    (data: InfiniteData<ThreadPage, ListCursor | null>) => withKept(conversationPages(data), kept),
+    [kept],
+  );
+
+  const onlyConversations = useInfiniteQuery({
+    queryKey: [...keyBase, "unread", "conversations"],
+    queryFn: ({ pageParam }: { pageParam: ListCursor | null }) =>
+      conversationIpc.listInboxFiltered(scope ?? { kind: "unified", view: { kind: "all" } }, { kind: "unread" }, pageParam, UNREAD_PAGE_SIZE),
+    initialPageParam: null as ListCursor | null,
+    getNextPageParam: (last: ThreadPage) => last.nextCursor,
+    select: selectOnlyConversations,
+    enabled: scope !== null && mode === "only" && conversations,
+  });
+
+  const firstConversations = useInfiniteQuery({
+    queryKey: [...keyBase, "unreadFirst", "conversations"],
+    queryFn: ({ pageParam }: { pageParam: UnreadFirstCursor | null }) =>
+      conversationIpc.listUnreadFirst(scope ?? { kind: "unified", view: { kind: "all" } }, pageParam, UNREAD_PAGE_SIZE),
+    initialPageParam: null as UnreadFirstCursor | null,
+    getNextPageParam: (last: UnreadFirstThreadPage) => last.nextCursor,
+    select: unreadFirstConversationPages,
+    enabled: scope !== null && mode === "first" && conversations,
+  });
+  const onlyInfo = useMemo(() => mergeInfo(onlyConversations.data?.pages), [onlyConversations.data]);
+  const firstInfo = useMemo(() => mergeInfo(firstConversations.data?.pages), [firstConversations.data]);
 
   const only = useInfiniteQuery({
     queryKey: [...keyBase, "unread"],
@@ -157,7 +214,7 @@ export function useUnreadSource(
     initialPageParam: null as ListCursor | null,
     getNextPageParam: (last: MessagePage) => last.nextCursor,
     select: selectOnly,
-    enabled: scope !== null && mode === "only",
+    enabled: scope !== null && mode === "only" && !conversations,
   });
 
   const first = useInfiniteQuery({
@@ -166,7 +223,7 @@ export function useUnreadSource(
       parityIpc.listUnreadFirst(scope ?? { kind: "unified", view: { kind: "all" } }, pageParam, UNREAD_PAGE_SIZE),
     initialPageParam: null as UnreadFirstCursor | null,
     getNextPageParam: (last: UnreadFirstPage) => last.nextCursor,
-    enabled: scope !== null && mode === "first",
+    enabled: scope !== null && mode === "first" && !conversations,
   });
 
   const dated = useCallback((items: readonly MessageListItem[], bounds: DayBounds) => buildRows(items, bounds), []);
@@ -174,16 +231,21 @@ export function useUnreadSource(
 
   return useMemo((): MessageListSource | undefined => {
     if (mode === "only") {
+      const query = conversations ? onlyConversations : only;
       return {
-        query: only,
+        query,
         buildRows: dated,
-        total: only.data?.pages[0]?.items.length ?? 0,
+        total: query.data?.pages[0]?.items.length ?? 0,
         empty: { icon: MailCheck, title: t("organize.unread.emptyTitle"), body: t("organize.unread.emptyBody") },
+        ...(conversations && { decorate: decorateConversations(onlyInfo) }),
       };
     }
-    if (mode === "first") return { query: first, buildRows: grouped };
+    if (mode === "first") {
+      if (conversations) return { query: firstConversations, buildRows: grouped, decorate: decorateConversations(firstInfo) };
+      return { query: first, buildRows: grouped };
+    }
     return undefined;
-  }, [mode, only, first, dated, grouped, t]);
+  }, [mode, conversations, only, onlyConversations, onlyInfo, first, firstConversations, firstInfo, dated, grouped, t]);
 }
 
 /**
@@ -197,6 +259,9 @@ export function UnreadControls({ viewKey }: { viewKey: string }) {
   const firstViews = useUnreadFirstViews();
   const setFirst = useSetUnreadFirstView();
   const first = firstViews.data?.includes(viewKey) ?? false;
+  // Decision 0039: the conversation view, a stored preference for every list.
+  const conversations = useConversationStore((state) => state.on);
+  const setConversations = useConversationStore((state) => state.setOn);
   const items: OverflowItem[] = [
     {
       id: "unread-first",
@@ -207,6 +272,15 @@ export function UnreadControls({ viewKey }: { viewKey: string }) {
         if (!firstViews.isPending) setFirst.mutate({ view: viewKey, enabled: !first });
       },
       "data-testid": "unread-first-toggle",
+    },
+    {
+      id: "conversations",
+      label: conversations ? t("threads.toggleOff") : t("threads.toggleOn"),
+      icon: MessagesSquare,
+      onSelect: () => {
+        setConversations(!conversations);
+      },
+      "data-testid": "conversations-menu-toggle",
     },
   ];
   return (

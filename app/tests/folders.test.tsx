@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useUiStore } from "../src/stores/ui";
 import { buildMailboxTree, type MailboxNode } from "../src/features/mailboxes/tree";
 import { makeAccount, makeMailbox, makeMessages, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
@@ -21,7 +22,8 @@ async function openFolders(user: ReturnType<typeof renderApp>["user"]) {
   const toggle = await screen.findByRole("button", { name: "Folders" });
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   await user.click(toggle);
-  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  // The column replaces the rail; its own toggle folds it again.
+  expect((await screen.findByRole("button", { name: "Hide sidebar" })).getAttribute("aria-expanded")).toBe("true");
 }
 
 describe("folder tree", () => {
@@ -91,15 +93,17 @@ describe("folder tree", () => {
     const names = within(ada)
       .getAllByTestId(/^mailbox-/)
       .map((button) => button.querySelector(".truncate")?.textContent);
-    expect(names).toEqual(["Inbox", "Sent", "Drafts", "Trash", "Projekte", "2026"]);
+    expect(names).toEqual(["Inbox", "Drafts", "Sent", "Trash", "Projekte", "2026"]);
     // The counter is read as "3 unread", not as a bare number.
     expect(within(ada).getByRole("treeitem", { name: "Inbox, 3 unread" })).toBeTruthy();
     expect(within(ada).getByRole("treeitem", { name: "Projekte, 2 unread" })).toBeTruthy();
     expect(within(ada).getByRole("treeitem", { name: "Sent" })).toBeTruthy();
     const work = await screen.findByRole("tree", { name: "Folders of Work" });
     expect(within(work).getByRole("treeitem", { name: "Inbox, 7 unread" })).toBeTruthy();
-    // The account headers carry the name, never just the colour.
-    expect(screen.getByRole("region", { name: "Work (work@example.com), up to date" })).toBeTruthy();
+    // The account's row carries its name and address, never just the colour, and its unread total.
+    expect(within(work).getByRole("treeitem", { name: "Work (work@example.com), 7 unread" }).getAttribute("aria-level")).toBe("1");
+    expect(within(ada).getByRole("treeitem", { name: "Ada Lovelace (ada@vicemail.test), 6 unread" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Work" })).toBeTruthy();
   });
 
   it("subfolders fold away and back", async () => {
@@ -137,7 +141,7 @@ describe("folder tree", () => {
 
     await user.click(screen.getByTestId("mailbox-2"));
     expect(screen.getByRole("heading", { level: 1, name: "Sent" })).toBeTruthy();
-    expect(screen.getByTestId("rail-sent").getAttribute("aria-current")).toBe("page");
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });
     expect(screen.getByTestId("mailbox-2").getAttribute("aria-current")).toBe("page");
   });
 

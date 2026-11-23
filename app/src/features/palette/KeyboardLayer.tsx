@@ -12,13 +12,15 @@ import { CommandPalette } from "./CommandPalette";
 /**
  * Stage 8, mounted once in the frame: the command palette (Cmd/Ctrl+K, also from text fields
  * like Cmd/Ctrl+F), the shortcut overview ("?", not while typing) and the views of the rail
- * (Cmd/Ctrl+1 to 8), with the user's assignment; the sidebar state of the window.
+ * (Cmd/Ctrl+1 to 8) and the accounts-and-folders column (Cmd/Ctrl+Shift+S), with the user's
+ * assignment; the sidebar state of the window.
  */
 export function KeyboardLayer() {
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const openPalette = usePaletteStore((state) => state.openPalette);
   const openOverview = usePaletteStore((state) => state.openOverview);
   const showMailView = useUiStore((state) => state.showMailView);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   useStoredSidebar();
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
@@ -35,6 +37,12 @@ export function KeyboardLayer() {
     if (help && (help.mod || !isEditableTarget(event.target))) {
       event.preventDefault();
       openOverview();
+      return;
+    }
+    const sidebar = boundShortcuts("toggleSidebar", platform).find((s) => matchesShortcut(event, s, platform));
+    if (sidebar && (sidebar.mod || !isEditableTarget(event.target))) {
+      event.preventDefault();
+      toggleSidebar();
       return;
     }
     for (const id of Object.keys(VIEW_COMMANDS) as ViewCommandId[]) {

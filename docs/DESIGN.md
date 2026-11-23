@@ -9,7 +9,8 @@ eigene Icons, eigene Typografie. Die Datei wird nicht eingecheckt und nirgends v
 
 Was aus der Vorlage übernommen wird:
 
-- schmale Icon-Leiste links statt breiter Ordnerspalte
+- schmale Icon-Leiste links statt breiter Ordnerspalte (seit 23.11.2026 ist die Spalte mit Konten und
+  Ordnern Standard und die Leiste ihre eingeklappte Form, siehe „Seitenspalte“)
 - breite Liste mit einzeiligen Zeilen: Absender, Betreff, Vorschau, Zeit
 - Abschnitte nach Tag („Heute“, „Gestern“), darüber ein abgesetzter Block „Priorität“
 - gebündelte Zeilen für Benachrichtigungen und Newsletter mit Absender-Chips und Zählern
@@ -39,11 +40,13 @@ steht im Abschnitt „Feinschliff 23.11.2026“ und in `docs/decisions/0031-fein
 └────┴──────────────────────────────────────────────┴───────────────┘
 ```
 
-**Icon-Leiste** (56 px). Von oben: vereinter Posteingang, Später, Aufgaben, Zum Lesen und
-Angeheftete Anhänge (Stufe 16, 0033 und 0036), Angepinnt, Gesendet,
-Entwürfe, Archiv, Papierkorb, Ordner, gespeicherte Ansichten. Unten: Konten-Umschalter mit
-Kontofarben, Einstellungen. Jedes Icon hat einen Tooltip mit Name und Tastenkürzel. Die Leiste lässt
-sich zu einer beschrifteten Seitenleiste mit Ordnerbaum aufklappen.
+**Seitenspalte** (Standard, 240 px, siehe „Seitenspalte“): vereinter Posteingang, Ansichten,
+gespeicherte Suchen, Favoriten, dann jedes Konto mit seinen Ordnern, unten Aktivität, Ausgang,
+Einstellungen. Eingeklappt bleibt die **Icon-Leiste** (56 px). Von oben: vereinter Posteingang,
+Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Angepinnt, Gesendet,
+Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf), gespeicherte Ansichten. Unten:
+Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
+mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
 **Kopf der Liste.** Titel der Ansicht mit Auswahl von Konto oder Kontogruppe, darunter eine
 Unterzeile (z. B. „Fokussiert“ oder „Alle“). Rechts: Kategorien an/aus, Suche, Neue Mail.
@@ -282,33 +285,107 @@ Knöpfe und Reiter hatten keine feste Höhe. Die .eml-Ansicht steht in derselben
 der Lesebereich. Das blaue Löschkreuz der Engine im Suchfeld ist ausgeblendet (die App hat ein
 eigenes).
 
+## Seitenspalte: Konten und Ordner (23.11.2026)
+
+Wunsch: eine Spalte links mit den Konten und ihren Ordnern, wie Mailbird, Outlook oder Thunderbird.
+Die bisherige ausklappbare Seitenleiste ist dazu umgebaut (`app/src/app/SidebarColumn.tsx`).
+
+**Aufbau von oben.** Kopfzeile so hoch wie der Kopf der Liste (unter macOS liegen dort die
+Fensterknöpfe), rechts der Knopf „Seitenleiste ausblenden“. Dann „Alle Posteingänge“ mit der Zahl
+der ungelesenen Mails aller nicht ausgeblendeten Konten, darunter die Kontogruppen (nur ab zwei
+Konten oder mit Gruppen). Dann „Ansichten“: Später, Aufgaben, Zum Lesen, Angeheftete Anhänge,
+Angepinnt, Gespeicherte Ansichten. Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
+in jedem Konto: Der Kern kennt vereinte Ansichten nur für den Posteingang (`UnifiedView`). Dann
+gespeicherte Suchen, Favoriten, danach je Konto ein Baum. Unten, mit Haarlinie abgesetzt, Aktivität,
+Ausgang und Einstellungen mit ihren Zählern. Ohne Konto: Ansichten, der Hinweis „Noch kein Konto“
+und die untere Gruppe; keine Zahlen.
+
+**Konto.** Die Zeile des Kontos ist die Wurzel seines Baums: Pfeil, Kontofarbe als Punkt, Name
+(halbfett), bei Problemen ein ruhiges Zeichen (offline: Wolke durchgestrichen, gedämpft; Fehler:
+Ausrufezeichen in `danger`), rechts die Summe der Ungelesenen in Posteingang und eigenen Ordnern
+(nicht Spam, Papierkorb, Gesendet, Entwürfe, nicht Gmails „Alle Nachrichten“ und „Markiert“, die
+andere Ordner wiederholen). Name der Zeile und Tooltip: „Name (Adresse), n ungelesen“, bei Problemen
+dazu Zustand und Grund („offline: Die Verbindung zum Server wurde unterbrochen.“). Die Farbe steht nie
+allein. Ein Klick, Eingabe, Leertaste, ← und → klappen das Konto zu und auf; der Zustand gilt bis
+zum Beenden der App.
+
+**Ordner.** Rollen zuerst in fester Reihenfolge Posteingang, Entwürfe, Gesendet, Archiv, Spam,
+Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als Baum, je Ebene
+16 px eingerückt (als Innenabstand, damit Fläche und Balken über die ganze Zeile gehen). Symbole
+16 px, Rollen mit eigenem Symbol. Zähler rechtsbündig mit Tabellenziffern; ein Ordner mit
+Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen halbfetten Zähler. Der
+„…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
+und nimmt dem Namen keine Breite; sein Menü ist 12 rem breit, damit es auch in der schmalsten Spalte
+nicht abgeschnitten wird. Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+
+**Abschnitte.** „Ansichten“, „Gespeicherte Suchen“ und „Favoriten“ haben ein leises Etikett (12 px,
+halbfett, `text-tertiary`), das die erste Zeile ihres Baums ist: Klick, Eingabe, ← und → klappen den
+Abschnitt ein. Der Pfeil erscheint beim Überfahren und bei Fokus, eingeklappt immer (wie die
+Seitenleisten von macOS). So bleibt die Spalte kompakt, ohne zusätzliche Tab-Stopps. „Alle
+Posteingänge“ hat kein sichtbares Etikett (eine verborgene Überschrift für Screenreader).
+
+**Zeilen.** 32 px, Rundung 6, Text 13 px. Ruhend `text-secondary`, beim Überfahren `rail-hover`. Die
+gezeigte Zeile: `accent-soft`, Symbol im Akzent, Name in Primärfarbe, Balken in `accent-fill` am
+Zeilenanfang (nicht Farbe allein). Fläche der Spalte: `rail`, die dunkelste Stufe, Haarlinie zur
+Liste. Abstand zwischen Abschnitten 20 px, Kontobäume 12 px.
+
+**Breite.** Standard 240 px, mit dem Griff am rechten Rand zwischen 200 und 320 px (Doppelklick:
+Standard). Der Griff ist ein Fenster-Trenner nach WAI-ARIA (`role="separator"`, Wert in px):
+← und → ändern um 16 px, Pos1 und Ende auf Minimum und Maximum, Eingabe klappt die Spalte ein. Die
+Breite wird in px bei 100 % Schrift gehalten und wächst mit der Schriftgröße (rem); gesetzt wird sie
+per CSSOM an der Spalte, nicht als Stil-Attribut (CSP). Gespeichert ist sie noch nicht über einen
+Neustart hinaus: Das Fenster-Layout des Kerns hat kein Feld dafür (offen, siehe Ergebnis der
+Sitzung).
+
+**Ein- und ausklappen.** Knopf in der Kopfzeile, Cmd/Strg+Umschalt+S (Befehl „Seitenleiste ein- oder
+ausblenden“ im Aktionsverzeichnis, änderbar, wirkt mit Modifier auch in Textfeldern; im Editor des
+Verfassens bleibt es „Durchgestrichen“, der Editor behandelt es zuerst), Eintrag in der
+Befehlspalette (Gruppe Layout) und in der Leiste der Eintrag „Ordner“. Gespeichert wird der Zustand
+mit dem Layout des Fensters (`sidebarExpanded`). Wird mit der Tastatur umgeschaltet, landet der
+Fokus auf dem Gegenstück (Leiste „Ordner“ bzw. „Seitenleiste ausblenden“); nach einem Klick nicht,
+damit kein Tooltip aufspringt.
+
+**Schmale Fenster.** Unter 1100 px Fensterbreite mit Lesebereich rechts (880 px mit Lesebereich unten
+oder anstelle der Liste; beides mal Schriftgröße/100) klappt die Spalte von selbst zur Leiste, der
+gespeicherte Zustand bleibt. „Ordner“ oder das Kürzel öffnen sie dann über dem Inhalt
+(`shadow-panel`, die Leiste darunter ist `inert`, kein Griff). Escape schließt sie und gibt den Fokus
+an „Ordner“ zurück; ein Klick oder Fokus außerhalb und das Öffnen einer Ansicht schließen sie auch.
+Nie eine waagrechte Bildlaufleiste; bei 900 × 600 bleibt alles erreichbar.
+
+**Tastatur.** Jeder Baum ist ein Tab-Stopp (siehe unten); Kopfknopf und Griff sind je einer. Mit
+einem Konto kostet die Spalte 5 Stopps (Seitenleiste ausblenden, Griff, Ansichten, Konto mit
+Ordnern, untere Gruppe), einen mehr als die Seitenleiste vorher. Mit zwei Konten, Favoriten, Gruppen
+und gespeicherten Suchen sind es 8, gleich viele wie vorher: Der Kontoknopf über dem Ordnerbaum ist
+jetzt dessen Wurzel.
+
 ## Tastatur: Tab-Stopps, Bäume und Leiste
 
 Tab springt von Bereich zu Bereich, die Pfeiltasten bewegen innerhalb eines Bereichs (Roving
 Tabindex: genau ein Eintrag je Bereich hat `tabindex="0"`). Vorher war jeder Ordner mit seinem „…“
 ein eigener Tab-Stopp; bei aufgeklappter Seitenleiste brauchte die echte App 46 Tastendrücke bis zur
-Liste. Jetzt sind es mit einem Konto 9 vom Fensteranfang: Ansichten der Leiste, Kontoknopf,
-Ordnerbaum, untere Gruppe der Leiste, Kopf der Liste (Nur ungelesene, Listenoptionen, Suche, Neue
-Mail), Liste. Jeder weitere Baum kostet einen Stopp, jedes weitere Konto zwei (Knopf und Baum),
-egal wie viele Ordner es hat.
+Liste. Mit der Seitenspalte sind es mit einem Konto 11 vom Fensteranfang: Seitenleiste ausblenden,
+Griff, Ansichten, Konto mit Ordnern, untere Gruppe, Kopf der Liste (Nur ungelesene, Listenoptionen,
+Konversationen, Suche, Neue Mail), Liste. Jeder weitere Baum kostet einen Stopp, jedes weitere Konto einen (sein
+Baum mit dem Konto als Wurzel), egal wie viele Ordner es hat.
 
-**Bäume der Seitenleiste** (WAI-ARIA Tree View, Variante Navigation). Favoriten, Posteingänge
-(vereinter Posteingang und Kontogruppen), gespeicherte Suchen und die Ordner jedes Kontos sind je
-ein eigener Baum (`role="tree"`), kein gemeinsamer Baum mit Gruppen. Begründung: Jeder Abschnitt
-bleibt ein benannter Bereich mit Überschrift, den Screenreader über Bereiche und Überschriften
-direkt anspringen; Tab wird zum Sprung „nächster Abschnitt“, statt durch alle Favoriten und
-Posteingänge zu den Ordnern des zweiten Kontos zu pfeilen. Die Abschnitte bedeuten Verschiedenes
-(Ansichten, Favoriten mit eigener Reihenfolge, Ordner eines Kontos), und der Kontoknopf über einem
-Ordnerbaum bleibt ein Knopf mit `aria-pressed`, statt als Baumknoten zwei Aufgaben zu haben.
+**Bäume der Seitenspalte** (WAI-ARIA Tree View, Variante Navigation). Posteingänge (vereinter
+Posteingang und Kontogruppen), Ansichten, gespeicherte Suchen, Favoriten und jedes Konto mit seinen
+Ordnern sind je ein eigener Baum (`role="tree"`), kein gemeinsamer Baum mit Gruppen. Begründung:
+Jeder Abschnitt bleibt ein benannter Bereich mit Überschrift, den Screenreader über Bereiche und
+Überschriften direkt anspringen; Tab wird zum Sprung „nächster Abschnitt“, statt durch alle Favoriten
+und Posteingänge zu den Ordnern des zweiten Kontos zu pfeilen. Seit der Seitenspalte ist das Konto
+die Wurzel seines Baums (Ebene 1, seine Ordner ab Ebene 2): Der Kontoknopf hat nur noch eine Aufgabe,
+Auf- und Zuklappen, genau die eines Baumknotens. Ebenso ist das Etikett von Ansichten, gespeicherten
+Suchen und Favoriten die Wurzel ihres Baums.
 
 | Taste | Wirkung im Baum |
 |---|---|
 | ↓ / ↑ | nächste / vorige sichtbare Zeile (kein Umlauf); öffnet nichts |
-| → | zugeklappten Ordner aufklappen; aufgeklappten: zum ersten Unterordner |
-| ← | aufgeklappten Ordner zuklappen; sonst zum übergeordneten Ordner |
+| → | zugeklappten Ordner, Konto oder Abschnitt aufklappen; aufgeklappten: zum ersten Eintrag darunter |
+| ← | aufgeklappten Ordner, Konto oder Abschnitt zuklappen; sonst zum übergeordneten (bis zum Konto) |
 | Pos1 / Ende | erste / letzte sichtbare Zeile |
 | Buchstabe, Ziffer | nächste Zeile, deren Name so beginnt; schnell getippte Zeichen (500 ms) bilden ein Suchwort, findet es nichts, beginnt das Zeichen eine neue Suche; derselbe Buchstabe wiederholt geht weiter; Groß- und Kleinschreibung und Akzente zählen nicht |
-| Eingabe, Leertaste | Ordner bzw. Ansicht öffnen (ein Platzhalter ohne Mails klappt auf und zu) |
+| Eingabe, Leertaste | Ordner bzw. Ansicht öffnen (ein Platzhalter ohne Mails, ein Konto und ein Abschnittsetikett klappen auf und zu) |
 | Umschalt+F10, Kontextmenütaste | Menü „…“ der Zeile, Fokus auf dem ersten Eintrag; Escape gibt den Fokus an die Zeile zurück; Rechtsklick öffnet dasselbe Menü |
 | Alt+↑ / Alt+↓ | nur Favoriten: Eintrag verschieben, der Fokus bleibt auf ihm |
 | Tab | verlässt den Baum; Tab hinein landet auf der gezeigten Zeile (`aria-current`), sonst auf der ersten |
@@ -327,16 +404,50 @@ dem Namen ist für die Maus (Tooltip „Unterordner … zeigen“); der „…�
 Gezogene Mails werden auf der Zeile selbst abgelegt.
 
 **Leiste.** Die Ansichten oben und die Gruppe unten (in der schmalen Leiste die Konten, dazu
-Aktivität, Ausgang, Einstellungen) sind je eine senkrechte Symbolleiste (`role="toolbar"`,
-`aria-orientation="vertical"`, „Mail-Ansichten“ und „Aktivität und Einstellungen“): ↑/↓ und
-Pos1/Ende bewegen, Eingabe und Leertaste wirken wie bei jedem Knopf. Tab kommt auf der aktiven
-Ansicht an, unten ohne aktive Ansicht auf dem gewählten Konto. Cmd/Strg+1 bis 8 bleiben.
+Aktivität, Ausgang, Einstellungen; in der Seitenspalte nur die drei) sind je eine senkrechte
+Symbolleiste (`role="toolbar"`, `aria-orientation="vertical"`, „Mail-Ansichten“ und „Aktivität und
+Einstellungen“): ↑/↓ und Pos1/Ende bewegen, Eingabe und Leertaste wirken wie bei jedem Knopf. Tab
+kommt auf der aktiven Ansicht an, unten ohne aktive Ansicht auf dem gewählten Konto. Cmd/Strg+1 bis
+8 bleiben, Cmd/Strg+Umschalt+S klappt die Seitenspalte ein und aus.
 
 **Geprüft, unverändert.** Die Abschnittsliste der Einstellungen ist schon ein Stopp (Reiter mit
 Pfeiltasten), danach kommt der Inhalt des Abschnitts. Im Lesebereich ist die Symbolleiste ein Stopp;
 bis zum Text der Mail folgen „Als .eml speichern“, „Drucken“, „Schließen“, Empfänger, „…“ der Karte,
 „Warum hier?“ und HTML/Text, zusammen 9 Tastendrücke. Das sind einzelne Bedienelemente eines
 Dokuments, keine Liste; Eingabe auf einer Zeile der Liste setzt den Fokus ohnehin in den Lesebereich.
+
+## Konversationsansicht (Entscheidung 0039)
+
+**Standard an.** Listen zeigen eine Zeile je Konversation: Posteingang eines Kontos und vereinter
+Posteingang (mit Priorität, Angepinntem, Zurückgekehrtem und Bündeln), normale Ordner, „Nur
+ungelesene“, „Ungelesene oben“, „Alle anzeigen“ der Priorität und Suchtreffer. Später, Angepinnt,
+Aufgaben und die Lese-Liste bleiben je Mail. Die Einstellung ist eine Oberflächen-Einstellung des
+Kerns und wird wie die Schriftgröße zwischen Geräten abgeglichen.
+
+**Zeile.** Steht an der neuesten Mail der Konversation im gezeigten Ordner. Absender-Spalte: bei
+mehreren Absendern ihre Namen in der Reihenfolge des Gesprächs („Anna, Ada Lovelace, Bob“), sonst
+der Absender. Nach dem Betreff die Anzahl der Mails als Pille (`badge`). Ungelesen (Punkt, halbfett),
+Markierung und Büroklammer, sobald eine Mail der Konversation es ist bzw. hat. Der Name der Zeile
+enthält den sichtbaren Text in derselben Reihenfolge, dazu „Konversation mit n Mails“. Eine
+Konversation steht nur einmal in der Liste: Steht sie im Block „Priorität“, wiederholt sie sich
+darunter nicht. Suchtreffer: der neueste Treffer einer Konversation ist ihre Zeile.
+
+**Öffnen.** Die Zeile öffnet die Konversation im Lesebereich (alle Mails, ältere eingeklappt, die
+erste ungelesene offen), auch im vereinten Posteingang und in Suchtreffern. Die offene Mail bleibt
+offen, wenn die Konversation danach als gelesen gilt.
+
+**Aktionen.** Aktionen an der Zeile (Schnellaktionen, Auswahlleiste, Tastenkürzel, Ziehen auf einen
+Ordner, Palette auf der Zeile) gelten der ganzen Konversation; welche Mails, entscheidet der Kern:
+Archivieren, Löschen, Verschieben, Spam, Schlagwörter und Zurückstellen nehmen ihre Mails im
+gezeigten Ordner; Gelesen, Markierung entfernen, Nicht mehr anpinnen und Nicht mehr zurückstellen
+alle ihre Mails; Ungelesen, Markieren, Anpinnen, Aufgabe und Lese-Liste die Mail der Zeile. Die
+Symbolleiste im Lesebereich wirkt auf die offene Mail allein. Öffnen markiert (mit „Beim Öffnen als
+gelesen markieren“) die ganze Konversation als gelesen, wie „Gelesen“ an der Zeile.
+
+**Umschalten.** Schalter „Konversationen“ im Kopf der Liste (gedrückt = an), Eintrag „Einzelne Mails
+zeigen“/„Konversationen zeigen“ im Menü „Listenoptionen“ und in der Befehlspalette (Gruppe
+Layout), Einstellungen → Lesen → „Konversationen“. Lehnt der Kern die Änderung ab, gilt der alte
+Wert wieder und Lesen nennt den Grund.
 
 ## Regeln für Interaktion
 

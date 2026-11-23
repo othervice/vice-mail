@@ -107,6 +107,23 @@ export function makeHit(message: MessageListItem, words: readonly string[] = [],
       preview: words.flatMap((w) => find(message.preview ?? "", w)),
     },
     bodyLocal: true,
+    threadId: null,
+    threadMessageCount: 1,
+    ...overrides,
+  };
+}
+
+/** A message as a conversation of its own (not threaded yet). */
+export function singleThread(message: MessageListItem, overrides: Partial<ThreadListItem> = {}): ThreadListItem {
+  return {
+    message,
+    threadId: null,
+    messageCount: 1,
+    unreadCount: message.unread ? 1 : 0,
+    lastActivity: message.date,
+    participants: message.from ? [message.from] : [],
+    hasAttachments: message.hasAttachments,
+    flagged: message.flagged,
     ...overrides,
   };
 }
@@ -254,13 +271,7 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
         const mailboxId = args["mailboxId"] as number;
         const threads =
           options.threads?.[mailboxId] ??
-          core.messages(mailboxId).map((message) => ({
-            message,
-            threadId: null,
-            messageCount: 1,
-            unreadCount: message.unread ? 1 : 0,
-            lastActivity: message.date,
-          }));
+          core.messages(mailboxId).map((message) => singleThread(message));
         const paged = page(
           threads.map((thread) => ({ id: thread.message.id, thread })),
           args["cursor"] as number | null,
@@ -283,6 +294,7 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
           nextCursor: paged.nextCursor === null ? null : { before: paged.nextCursor, bundles: null },
           top: null,
           categories: false,
+          conversations: [],
         } satisfies InboxPage;
       }
       case "list_inbox_filtered": {
@@ -293,13 +305,7 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
         const view = args["view"] as UnifiedView;
         const paged = page(inboxMessages(view), args["cursor"] as number | null, args["limit"] as number);
         return {
-          items: paged.items.map((message) => ({
-            message,
-            threadId: null,
-            messageCount: 1,
-            unreadCount: message.unread ? 1 : 0,
-            lastActivity: message.date,
-          })),
+          items: paged.items.map((message) => singleThread(message)),
           nextCursor: paged.nextCursor,
         };
       }

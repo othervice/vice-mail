@@ -4,6 +4,7 @@ import {
   Folder,
   Inbox,
   LayoutPanelLeft,
+  MessagesSquare,
   PanelBottom,
   PanelRight,
   Rows3,
@@ -49,6 +50,8 @@ import { useFavoriteMailboxes } from "../organize/queries";
 // Stage 16 (decision 0036): "Save all attachments" of the open message.
 import { FolderDown } from "lucide-react";
 import { saveAllCandidate, useSaveAllRequestStore } from "../reading/saveAllRequest";
+// Decision 0039: one row per conversation or per message.
+import { useConversationStore } from "../threads/preference";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -219,6 +222,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const mailboxes = useMailboxes(account?.id ?? null).data ?? [];
   const favorites = useFavoriteMailboxes().data ?? [];
   const layout = useLayoutStore();
+  const conversations = useConversationStore();
   const openSearch = useSearchStore((state) => state.openSearch);
   const setQuery = useSearchStore((state) => state.setQuery);
   const accountList = accounts.data ?? [];
@@ -400,11 +404,24 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
       },
     });
   }
+  // The column as it shows now: docked, or (in a narrow window) over the content.
+  const sidebarShown = ui.sidebarNarrow ? ui.sidebarOverlay : ui.sidebarExpanded;
+  const sidebarShortcut = shortcutsOf("toggleSidebar")[0];
+  entries.push({
+    key: "layout:conversations",
+    group: "layout",
+    label: t(conversations.on ? "threads.toggleOff" : "threads.toggleOn"),
+    icon: MessagesSquare,
+    run: () => {
+      conversations.setOn(!conversations.on);
+    },
+  });
   entries.push({
     key: "layout:sidebar",
     group: "layout",
-    label: t(ui.sidebarExpanded ? "layout.sidebar.collapse" : "layout.sidebar.expand"),
+    label: t(sidebarShown ? "layout.sidebar.collapse" : "layout.sidebar.expand"),
     icon: LayoutPanelLeft,
+    ...(sidebarShortcut && { shortcut: sidebarShortcut }),
     run: ui.toggleSidebar,
   });
 
