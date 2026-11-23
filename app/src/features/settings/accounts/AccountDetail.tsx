@@ -183,8 +183,8 @@ function RemoveAccount({ account }: { account: Account }) {
             <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
             <span>{t("settings.accounts.detail.remove.confirmTitle", { email: account.email })}</span>
           </p>
-          <p className="ps-8 text-secondary">{t("settings.accounts.detail.remove.confirmBody")}</p>
-          <div className="flex gap-2 ps-8">
+          <p className="text-secondary">{t("settings.accounts.detail.remove.confirmBody")}</p>
+          <div className="flex gap-2">
             <Button
               variant="danger"
               disabled={remove.isPending}

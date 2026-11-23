@@ -15,7 +15,7 @@ export function SettingsSection({ title, children, sub = false }: SettingsSectio
     // same page as 16 px headings with a hairline above; the settings below them.
     <section
       aria-labelledby={headingId}
-      className={cx("flex max-w-(--ui-content-max-width) flex-col", sub ? "gap-4 border-t border-border-subtle pt-8" : "gap-6")}
+      className={cx("flex max-w-(--ui-content-max-width) flex-col", sub ? "gap-4 border-t border-border-subtle pt-6" : "gap-6")}
     >
       <h2 id={headingId} className={cx("font-semibold text-primary", sub ? "text-16" : "text-20")}>
         {title}

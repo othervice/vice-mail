@@ -60,8 +60,8 @@ export function InlineConfirm({
         <Icon aria-hidden className={cx("size-(--ui-icon) shrink-0", tone === "danger" ? "text-danger" : "text-accent")} strokeWidth={1.75} />
         <span>{title}</span>
       </p>
-      <div className="flex flex-col gap-2 ps-8 text-secondary">{children}</div>
-      <div className="flex flex-wrap gap-2 ps-8">
+      <div className="flex flex-col gap-2 text-secondary">{children}</div>
+      <div className="flex flex-wrap gap-2">
         <Button variant={tone === "danger" ? "danger" : "primary"} disabled={busy} onClick={onConfirm} data-testid="inline-confirm">
           {confirmLabel}
         </Button>

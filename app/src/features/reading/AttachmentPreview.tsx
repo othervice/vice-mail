@@ -256,7 +256,7 @@ export function AttachmentPreviewDialog({ owner, attachment, onClose, onSave, on
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-6 py-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-6 py-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

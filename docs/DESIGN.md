@@ -242,6 +242,39 @@ bleibt unverändert. Der Name kommt immer aus `config/product.ts`.
   Adresse des Quellcodes (`PROJECT_URL`) mit „Adresse kopieren“. Die App öffnet keine Webseiten
   selbst, deshalb ist die Adresse kein Link. Der Bereich „Updates“ (Stufe 15) folgt unverändert.
 
+**Überlagerungen.** Befehlspalette, Tastenübersicht und Bestätigungsdialoge liegen über einem
+abgedunkelten Hintergrund (`scrim`: hell 24 % warmes Schwarz, dunkel 50 % Schwarz). Er erscheint
+ohne Bewegung, also auch bei „Bewegung reduzieren“ gleich; ein Klick darauf schließt wie bisher ein
+Klick außerhalb. Das Feld der Palette ist eine Zeile mit Lupe auf der Spur (`track`); der Fokusring
+liegt auf dieser Zeile, solange das Feld den Fokus hat, statt als Rahmen am abgeschnittenen Rand
+des Panels.
+
+**Schreibbereich.** Der Editor des Verfassens (Rich Text und Text) ist 8 px von den Rändern
+eingerückt, gerundet wie eine Karte und reicht bis zur Anhangsleiste (mindestens 12 rem). Der
+Fokusring (2 px, `focus-ring`, ≥ 3:1) umrahmt damit die ganze Schreibfläche wie ein Textfeld statt
+als eckiger Kasten an den Rändern des Fensters; ein Klick irgendwo in die Fläche erreicht den Text.
+
+**Leiste in niedrigen Fenstern.** Die obere Gruppe der Leiste scrollt (nie seitwärts); ihre Ränder
+blenden innerhalb des 12-px-Abstands aus, sodass ein angeschnittener Eintrag als „mehr“ lesbar ist.
+Die schmale Leiste zeigt keinen Scrollbalken (unter Windows würde er die Symbole aus der Mitte
+schieben); Mausrad, Trackpad und Tab erreichen jeden Eintrag, und die aktive Ansicht wird in den
+sichtbaren Bereich gerückt, auch wenn ein Kürzel sie öffnet. Die aufgeklappte Seitenleiste behält
+einen schmalen Balken. Einträge in ein „Mehr“-Menü zu falten hätte eine Messung der Höhe gebraucht,
+die es in den Tests ohne Layout nicht gibt.
+
+**Rückfragen an Ort und Stelle.** `InlineConfirm` (KI-Zustimmung, MCP, Einstellungs-Sync) und das
+Entfernen eines Kontos sind erhabene Karten mit einem Balken in der Tonfarbe am Anfang und dem
+Symbol am Titel (Gefahr: Warndreieck, Akzent: Info) statt eines farbigen Rahmens um den ganzen Text.
+
+**Weitere Abschnitte einer Seite.** Auf der Seite „Posteingang“ sind „Ungelesene oben“, „Deine
+Einordnungen“, „Blockierte Absender“ und „Lokale Regeln“ Unterabschnitte: 16 px mit Haarlinie
+darüber (`SettingsSection sub`), nicht 20 px wie der Seitentitel.
+
+**Auswahllisten.** Native `<select>` bleiben: Ein gestaltetes Auswahlfeld mit eigenem Popup passt
+weder in `ComboBox` (Filterfeld mit Liste) noch in `ChoiceGroup` (Segmente) und wäre ein neues
+Bedienelement mit eigener Tastaturbedienung. Sie haben einheitlich 32 px, `surface-raised` und den
+Rand `border-strong`; das Aufklappmenü zeichnet das System.
+
 **Korrigiert.** Klassen, die es im Token-Theme nicht gibt und die deshalb nichts bewirkten
 (`top-16`, `min-h-9`, `h-7`, `h-9`, `w-7`, `gap-1.5`, `py-1.5`, `px-1.5`, `mt-0.5`, `sm:` und `md:`
 ohne Breakpoints), sind durch Rasterstufen ersetzt: Die Befehlspalette klebte am oberen Rand, einige
