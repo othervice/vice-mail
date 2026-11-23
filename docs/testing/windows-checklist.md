@@ -229,18 +229,65 @@ freischalten. Das Passwort gibt nur der Mensch in der App ein.
 - **Erwartet:** Leere Ansicht wie bei 2.1, keine alten Konten.
 - **Ergebnis:**
 
-## 8. Später: Lesen und Links (Stufe 3)
+## 8. Lesen und Links (Stufe 3)
 
-Wird ergänzt, sobald Stufe 3 HTML-Mails anzeigt. Geplant:
+**8.1 HTML-Mail**
+- **Tun:** Eine Newsletter-Mail mit Bildern öffnen.
+- **Erwartet:** Die Mail erscheint im Lesebereich, externe Bilder sind blockiert; ein Hinweis bietet
+  „Bilder laden“ (einmal, für diesen Absender). Nach der Freigabe erscheinen die Bilder. Keine
+  Ruckler beim Scrollen, die Höhe des Mail-Rahmens passt zum Inhalt.
+- **Ergebnis:**
 
-- HTML-Mail anzeigen, externe Bilder blockiert, nach Freigabe geladen.
-- Klick auf einen Link: Zielprüfung, dann Öffnen im Standardbrowser; `mailto:`-Links.
-- WebView2-Wächter für den Mail-Frame (`docs/decisions/0011-webview2-frame-navigation.md`, Feature
-  `webview2-frame-guard`): Mail wird angezeigt (der Wächter lässt `about:srcdoc` durch), Klicks
-  kommen an, `target=_blank` und `window.open` öffnen kein Fenster.
-- Feindlicher Korpus (`testmail/corpus/hostile/`, Vektoren aus 0005) mit Zähl-Server und
-  Positivkontrollen unter WebView2.
-- Anhang speichern über den Windows-Dialog, Dateinamen auf NTFS.
+**8.2 Links**
+- **Tun:** Auf einen Link in der Mail klicken, danach auf einen `mailto:`-Link.
+- **Erwartet:** Vor dem Öffnen zeigt die App das echte Ziel (bei abweichendem Linktext eine Warnung).
+  Der Link öffnet im Standardbrowser, nie im App-Fenster. `target=_blank` und `window.open` öffnen
+  kein Fenster. (WebView2-Wächter, `docs/decisions/0011-webview2-frame-navigation.md`.)
+- **Ergebnis:**
+
+**8.3 Anhang**
+- **Tun:** Einen Anhang speichern (Windows-Dialog) und einen öffnen.
+- **Erwartet:** Der Dateiname bleibt erhalten (Umlaute), unzulässige Zeichen sind ersetzt. Ausführbare
+  Dateien öffnet die App nicht direkt, sie fragt nach.
+- **Ergebnis:**
+
+## 9. Aktionen und Schreibzugriff (Stufe 4)
+
+Das echte Konto ist nur lesend. Für diese Schritte ein Nebenkonto nehmen oder sie auslassen.
+
+**9.1 Nur lesend**
+- **Tun:** Eine Mail auswählen und `E` (Archivieren) bzw. `Entf` drücken.
+- **Erwartet:** Nichts ändert sich auf dem Server. Die App erklärt, dass das Konto nur lesend ist, und
+  zeigt den Weg zum Schalter in den Kontoeinstellungen.
+- **Ergebnis:**
+
+**9.2 Schreibzugriff freischalten (nur Nebenkonto)**
+- **Tun:** Einstellungen → Konto → „Änderungen erlauben“, Erklärung lesen, einschalten.
+- **Erwartet:** Der Schalter ist danach an. Andere Konten bleiben aus.
+- **Ergebnis:**
+
+**9.3 Aktionen**
+- **Tun:** Als gelesen/ungelesen markieren, markieren (Fahne), archivieren, in den Papierkorb,
+  verschieben (auch per Ziehen auf einen Ordner), mit Umschalt mehrere auswählen. Nach jeder Aktion
+  „Rückgängig“ im Hinweis probieren.
+- **Erwartet:** Die Liste reagiert sofort; im Webmail des Anbieters ist die Änderung nach wenigen
+  Sekunden zu sehen. „Rückgängig“ stellt den Zustand wieder her. Im Papierkorb fragt „Endgültig
+  löschen“ nach.
+- **Ergebnis:**
+
+**9.4 Offline und Aktivität**
+- **Tun:** WLAN aus, zwei Mails archivieren, WLAN wieder an. Danach die Ansicht „Aktivität“ öffnen.
+- **Erwartet:** Offline sind die Mails sofort archiviert und mit einem kleinen Symbol als ausstehend
+  markiert. Nach dem Verbinden werden sie ausgeführt; „Aktivität“ zeigt sie als erledigt.
+- **Ergebnis:**
+
+## 10. KI über MCP (Stufe 12, wenn ein MCP-Client vorhanden ist)
+
+- **Tun:** Einstellungen → KI über MCP einschalten, ein Konto freigeben, die angezeigte Konfiguration
+  in Claude Desktop oder Claude Code eintragen. Den Client nach den letzten Mails fragen.
+- **Erwartet:** Der Client findet `mail-mcp.exe` neben der App; er sieht nur das freigegebene Konto.
+  Jeder Zugriff erscheint in der App unter „Zugriffe“. Not-Aus trennt den Client sofort.
+- **Ergebnis:**
 
 ## Notizen und „Wartet auf“
 
