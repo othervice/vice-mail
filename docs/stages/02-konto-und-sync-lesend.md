@@ -47,7 +47,8 @@ aktuell und überstehen Netzabbrüche. Es wird nichts auf dem Server verändert.
 
 ## Ergebnis
 
-Ausgeführt am 22.11.2026 (Hauptsitzung mit Subagenten: Grundstein, Speicher, IMAP-Adapter,
+Ausgeführt am 22./23.11.2026; `scripts/check.sh` und `pnpm --dir app test:e2e` am 23.11. von der
+Hauptsitzung in einem sauberen Worktree (Commit 034eaed) grün ausgeführt. (Hauptsitzung mit Subagenten: Grundstein, Speicher, IMAP-Adapter,
 Kontoerkennung/Schlüsselbund, Oberfläche, Engine, Desktop-Abnahme). Entscheidungen: 0007
 (Schnittstellen), 0008 (Abgleich-Engine).
 

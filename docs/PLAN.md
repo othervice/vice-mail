@@ -18,9 +18,9 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 |---|---|---|---|
 | 00 | [Umgebung und Risiko-Spikes](stages/00-umgebung-und-spikes.md) | fertig | Werkzeuge stehen, die vier riskanten Annahmen sind geprüft |
 | 01 | [Projektgerüst und Design-Grundlage](stages/01-projektgeruest.md) | fertig | App startet mit leerer Oberfläche im Zieldesign |
-| 02 | [Konto und Synchronisierung, nur lesend](stages/02-konto-und-sync-lesend.md) | in Arbeit | echte Postfächer erscheinen als Liste |
-| 03 | [Nachricht lesen](stages/03-nachricht-lesen.md) | offen | Mails und Anhänge sicher lesbar, auch offline |
-| 04 | [Aktionen und Outbox](stages/04-aktionen-und-outbox.md) | offen | archivieren, löschen, verschieben, markieren |
+| 02 | [Konto und Synchronisierung, nur lesend](stages/02-konto-und-sync-lesend.md) | fertig | echte Postfächer erscheinen als Liste |
+| 03 | [Nachricht lesen](stages/03-nachricht-lesen.md) | fertig | Mails und Anhänge sicher lesbar, auch offline |
+| 04 | [Aktionen und Outbox](stages/04-aktionen-und-outbox.md) | in Arbeit | archivieren, löschen, verschieben, markieren |
 | 05 | [Verfassen und Senden](stages/05-verfassen-und-senden.md) | offen | **erste täglich nutzbare Version auf dem Mac** |
 | 06 | [Windows und Builds](stages/06-windows-und-builds.md) | offen | **installierbar auf Windows und MacBook** |
 | 07 | [Suche, Threads, mehrere Konten](stages/07-suche-threads-konten.md) | offen | vereinter Posteingang, schnelle Suche |
