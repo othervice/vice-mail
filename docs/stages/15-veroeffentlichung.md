@@ -3,9 +3,11 @@
 **Ziel:** Das Projekt ist öffentlich, andere können es bauen und installieren, Updates kommen
 sicher an, und eine Sicherheitsprüfung ist gelaufen.
 
-**Voraussetzung:** Mindestens Stufen 00 bis 11 fertig. Vom Menschen: Entscheidung, wo das
-öffentliche Repo liegt (GitHub empfohlen), und ob signierte Builds gewünscht sind (Apple-Developer-
-Konto, Windows-Signaturzertifikat; beides kostet Geld).
+**Voraussetzung:** Mindestens Stufen 00 bis 11 fertig, dazu 14 und 16 (0032). Entschieden (0035):
+Open Source unter GPL-3.0-or-later, öffentliches Repo unter `github.com/othervice`; das Repo legt der
+Mensch an oder gibt dafür einen Zugang frei. Noch vom Menschen: endgültiger Produktname (Marken- und
+Domain-Prüfung) und ob signierte Builds gewünscht sind (Apple-Developer-Konto,
+Windows-Signaturzertifikat; beides kostet Geld).
 
 ## Aufgaben
 

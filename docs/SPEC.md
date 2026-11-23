@@ -167,6 +167,7 @@ Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr lange
 | Frage | Entscheidung | Stand |
 |---|---|---|
 | Lizenz | GPL-3.0-or-later | vom Menschen bestätigt am 22.11.2026 |
+| Veröffentlichung | Open Source, öffentliches Repo unter `github.com/othervice`, sobald Stufe 15 so weit ist; kein Lizenzverkauf (0035) | vom Menschen entschieden am 23.11.2026 |
 | Produktname | „Vice Mail“ (Arbeitstitel) | 22.11.2026 |
 | Bundle-ID (technische Kennung für macOS und Windows) | `org.vicemail.desktop`; vor Stufe 15 noch änderbar, danach nicht mehr ohne Datenumzug | von Claude gewählt am 22.11.2026, der Mensch braucht keine eigene |
 | Auslieferung von Test-Installern | als Anhang eines Vorab-Releases im Gitea-Repo, Link per Benachrichtigung an den Menschen | 22.11.2026 |
