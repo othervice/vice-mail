@@ -907,6 +907,9 @@ fn check_account_field(name: &str, value: &Value) -> Result<(), String> {
             Some(_) => Ok(()),
             None => Err("field color: not an account colour index".to_owned()),
         },
+        // Stage 14 (decision 0042): only in records of accounts that sign in with a provider;
+        // the provider's name, never a token.
+        "oauth" => typed(mail_model::OAuthProvider::deserialize(value).map(drop)),
         "imap" | "smtp" => typed(StrictServerSettings::deserialize(value).map(drop)),
         // Stage 14 (decision 0041): only in records of JMAP accounts.
         "protocol" => typed(mail_model::Protocol::deserialize(value).map(drop)),
@@ -941,6 +944,10 @@ pub struct SyncedAccount {
     pub email: String,
     pub display_name: String,
     pub color: AccountColor,
+    /// Stage 14 (decision 0042): only written for accounts that sign in with Microsoft or
+    /// Google; a device taking the account over signs in itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<mail_model::OAuthProvider>,
     pub imap: ServerSettings,
     pub smtp: ServerSettings,
     /// Stage 14 (decision 0041): only written for JMAP accounts (records without it are IMAP,
@@ -1555,12 +1562,21 @@ mod tests {
         with_password["secretValue"] = json!("x");
         smuggled.insert("smtp".to_owned(), field(with_password));
         assert!(SyncContent::from_fields(RecordKind::Account, &smuggled).is_err());
-        let mut unknown = fields;
+        let mut unknown = fields.clone();
         unknown.insert(
             "smtp".to_owned(),
             field(json!({ "host": "h", "port": 1, "security": "tls", "username": "u", "x": 1 })),
         );
         assert!(SyncContent::from_fields(RecordKind::Account, &unknown).is_err());
+
+        // Stage 14 (decision 0042): the sign-in provider, by name only.
+        let mut oauth = fields.clone();
+        oauth.insert("oauth".to_owned(), field(json!("microsoft")));
+        SyncContent::from_fields(RecordKind::Account, &oauth).expect("provider");
+        oauth.insert("oauth".to_owned(), field(json!("yahoo")));
+        assert!(SyncContent::from_fields(RecordKind::Account, &oauth).is_err());
+        oauth.insert("oauth".to_owned(), field(json!({ "refreshToken": "x" })));
+        assert!(SyncContent::from_fields(RecordKind::Account, &oauth).is_err());
     }
 
     #[test]

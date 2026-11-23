@@ -532,3 +532,83 @@ async fn adopted_accounts_get_a_fresh_keychain_reference() {
         [account_id(7)]
     );
 }
+
+/// Stage 14 (decision 0042): an account that signs in with its provider names it in its record
+/// (never a token), and a device that takes it over keeps the sign-in kind under an entry name
+/// of its own, without a token.
+#[tokio::test]
+async fn accounts_that_sign_in_with_a_provider_say_so_and_are_taken_over_as_such() {
+    let (_dir, store, _recorder) = open().await;
+    let apply = |id: String, content: Value| SyncApply {
+        kind: "account".into(),
+        id: id.clone(),
+        expected: None,
+        row: Some(SyncRecordRow {
+            kind: "account".into(),
+            id,
+            version: "1764000000000-00000000-x".into(),
+            synced_version: Some("1764000000000-00000000-x".into()),
+            content: Some(content.clone()),
+            deleted_version: None,
+        }),
+        table: TableWrite::Put(content),
+        rekey_from: None,
+    };
+    let server = json!({ "host": "outlook.office365.com", "port": 993, "security": "tls",
+                         "username": "ada@outlook.com" });
+    let content = json!({ "email": "ada@outlook.com", "displayName": "Ada", "color": 2,
+                          "imap": server, "smtp": server, "oauth": "microsoft" });
+    let outcome = store
+        .apply_sync(vec![apply(account_id(8).to_string(), content)], None)
+        .await
+        .expect("apply");
+    assert_eq!(outcome.accounts_added, [account_id(8)]);
+    let adopted = store
+        .account(account_id(8))
+        .await
+        .expect("read")
+        .expect("account");
+    assert!(
+        adopted
+            .credential_ref
+            .starts_with("oauth:microsoft:synced:"),
+        "{}",
+        adopted.credential_ref
+    );
+    assert!(!adopted.writes_enabled);
+    assert_eq!(
+        adopted
+            .into_account(mail_model::AccountStatus::connecting())
+            .oauth,
+        Some(mail_model::OAuthProvider::Microsoft)
+    );
+    // Its record names the provider, and only the provider.
+    let record = store
+        .sync_table_content("account", &account_id(8).to_string())
+        .await
+        .expect("content")
+        .expect("record");
+    assert_eq!(record["oauth"], "microsoft");
+
+    // Unknown providers are refused; nothing is added.
+    let bad = json!({ "email": "x@example.org", "displayName": "", "color": 0,
+                      "imap": server, "smtp": server, "oauth": "yahoo" });
+    let outcome = store
+        .apply_sync(vec![apply(account_id(9).to_string(), bad)], None)
+        .await
+        .expect("apply");
+    assert!(outcome.accounts_added.is_empty());
+    assert!(store.account(account_id(9)).await.expect("read").is_none());
+
+    // A password account's record has no such field.
+    let password = store
+        .insert_account(new_account(3, "carol@example.org"))
+        .await
+        .expect("insert");
+    let record = store
+        .sync_table_content("account", &password.id.to_string())
+        .await
+        .expect("content")
+        .expect("record");
+    assert!(record.get("oauth").is_none(), "{record}");
+}

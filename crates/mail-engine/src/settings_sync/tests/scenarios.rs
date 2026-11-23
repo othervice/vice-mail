@@ -712,6 +712,8 @@ async fn passwords_tokens_and_api_keys_appear_in_no_record() {
         email: "ann@example.org".into(),
         display_name: "Ann".into(),
         color: mail_model::AccountColor::new(1).expect("color"),
+        // Stage 14 (decision 0042): a password account names no sign-in provider.
+        oauth: None,
         imap: typed.clone(),
         smtp: typed,
         protocol: Default::default(),

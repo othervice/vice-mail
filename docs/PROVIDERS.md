@@ -110,9 +110,9 @@ adds the account read-only, like every account.
 Manager); the short-lived access token only in memory. The app renews the access token before it
 runs out and once more if a server rejects it. If the provider says the permission has expired or
 was withdrawn, the account stops syncing and its settings show "Sign in again". Tokens are never
-logged, never in the database or a diagnostics file, never in the settings sync. (Taking such an
-account over on another computer through the settings sync is not finished: that computer still asks
-for a password; decision 0042.) A token is only ever sent to
+logged, never in the database or a diagnostics file, never in the settings sync: the synced account
+names only its provider, and another computer that gets the account through the settings sync shows
+"Sign in again" and signs in there itself. A token is only ever sent to
 the provider's own IMAP and SMTP servers. Removing the account deletes the tokens; at Google the app
 also revokes them. Microsoft offers no revocation to apps like this one: the permission ends with its
 lifetime, or you remove the app in your Microsoft account.

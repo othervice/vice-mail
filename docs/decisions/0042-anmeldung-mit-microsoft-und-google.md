@@ -124,14 +124,18 @@ SASL (eigener Code, lettre für SMTP) sind schon im Workspace.
 
 ## Einstellungs-Sync
 
-Stand: Der Konto-Datensatz trägt die Anmeldeart noch nicht. Ein anderes Gerät übernimmt ein
-Anmelde-Konto deshalb wie ein Passwort-Konto (`synced:<zufällig>`, nur lesend, ohne Passwort) und
-fragt nach einem Passwort, das bei Microsoft nicht funktioniert. Ein Anmelde-Konto kann noch nicht
-das Sync-Konto sein: die Verbindung des Sync-Ordners verlangt ein Passwort und bekommt den
-Schlüsselbund-Eintrag nicht (sicherer Fehlschlag mit `keychain`). Die Änderung am Einstellungs-Sync
-(Anbieter im Datensatz, Übernahme als `oauth:<Anbieter>:synced:<zufällig>`, Sync-Verbindung mit
-Token) folgt, sobald die gleichzeitigen Änderungen anderer Stufen an denselben Stellen eingecheckt
-sind.
+- Der Konto-Datensatz eines Anmelde-Kontos nennt den Anbieter (`"oauth": "microsoft"` bzw.
+  `"google"`), nur bei solchen Konten; Datensätze von Passwort-Konten bleiben, wie ältere Versionen
+  sie schreiben und lesen. Ein anderer Wert als die beiden Anbieter wird abgelehnt.
+- Ein Gerät, das ein solches Konto übernimmt, legt es mit der Referenz
+  `oauth:<Anbieter>:synced:<zufällig>` an: nur lesend, ohne Token. Es zeigt dort
+  `oauth_sign_in_required` und „Erneut anmelden“; die Anmeldung auf diesem Gerät speichert ein
+  eigenes Refresh-Token. Ein vorhandenes Konto ändert seine Anmeldeart durch einen Datensatz nie.
+- Ein Anmelde-Konto kann das Sync-Konto sein: die Verbindung des Sync-Ordners meldet sich wie alle
+  anderen über `Credentials::login` an (Token, nur zu den Servern des Anbieters).
+- Tests: `settings_sync_tests::accounts_that_sign_in_with_a_provider_say_so_and_are_taken_over_as_such`
+  (Speicher), `record::tests::account_content_has_only_the_listed_fields` (Feld nur mit Anbieternamen).
+  Nicht gegen zwei echte Geräte geprüft.
 
 ## Getestet
 

@@ -658,23 +658,20 @@ impl<C: Connector> AppCore<C> {
             .account(account)
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {account}")))?;
-        let reference = CredentialRef::parse(&stored.credential_ref)?;
-        let password = self
+        // Stage 14 (decision 0042): a password, or an access token for a sync account that
+        // signs in with its provider.
+        let login = self
             .credentials_ref()
-            .get(&reference)
-            .await?
-            .ok_or_else(|| {
-                CoreError::Keychain(
-                    "no password stored for the sync account; enter it again".into(),
-                )
-            })?;
+            .login(&stored.credential_ref, &stored.imap, true)
+            .await?;
+        let (password, auth) = (login.secret, login.auth);
         // Read-only, like every connection of the account; the adapter lets it write to this
         // one folder only.
         let mut config = self.sync_config().connect_config(&stored.imap, password);
         crate::protocols::for_account(&mut config, &stored);
         Ok(self
             .connector_ref()
-            .connect_sync_folder(&config, folder)
+            .connect_sync_folder(&mail_model::ConnectConfig { auth, ..config }, folder)
             .await?)
     }
 

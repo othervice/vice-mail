@@ -500,6 +500,28 @@ pub(crate) fn content_of(
             .optional()?,
         _ => None,
     };
+    // Stage 14 (decision 0042): an account that signs in with its provider names it (never a
+    // token); records of password accounts stay as they were.
+    let value = match (kind, value) {
+        ("account", Some(value)) => Some(with_sign_in(conn, id, value)?),
+        (_, value) => value,
+    };
+    Ok(value)
+}
+
+/// Adds `"oauth": "<provider>"` to an account's content when its keychain entry is a sign-in.
+fn with_sign_in(conn: &Connection, uuid: &str, mut value: Value) -> Result<Value, StoreError> {
+    let credential_ref: Option<String> = conn
+        .prepare_cached("SELECT credential_ref FROM account WHERE uuid = ?1")?
+        .query_row([uuid], |r| r.get(0))
+        .optional()?;
+    if let Some(provider) = credential_ref
+        .as_deref()
+        .and_then(mail_model::oauth_provider_of_credential_ref)
+        && let Some(map) = value.as_object_mut()
+    {
+        map.insert("oauth".into(), Value::String(provider.as_str().into()));
+    }
     Ok(value)
 }
 
@@ -685,6 +707,16 @@ fn put_table(
                 }
                 outcome.accounts_updated.push(account);
             } else {
+                // Stage 14 (decision 0042): an account that signs in with its provider keeps
+                // doing so here, under an entry name of its own and without a token (this device
+                // signs in itself).
+                let sign_in = match opt_text(value, "oauth") {
+                    None => None,
+                    Some(name) => Some(
+                        mail_model::OAuthProvider::parse(name)
+                            .ok_or_else(|| refused("account sign-in"))?,
+                    ),
+                };
                 // Taken over from another device: read-only, no password yet, and no default
                 // identity of its own (the identities come from the folder too). Its keychain
                 // entry gets a fresh random name (decision 0040): an entry this device already
@@ -712,6 +744,19 @@ fn put_table(
                     "INSERT OR REPLACE INTO sync_adopted (account_uuid, adopted_at) VALUES (?1, ?2)",
                 )?
                 .execute(params![id, now])?;
+                if let Some(provider) = sign_in {
+                    conn.prepare_cached(
+                        "UPDATE account SET credential_ref = ?2 || credential_ref WHERE uuid = ?1",
+                    )?
+                    .execute(params![
+                        id,
+                        format!(
+                            "{}{}:",
+                            mail_model::OAUTH_CREDENTIAL_PREFIX,
+                            provider.as_str()
+                        )
+                    ])?;
+                }
                 outcome.accounts_added.push(account);
             }
         }

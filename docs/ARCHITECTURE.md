@@ -400,7 +400,8 @@ einer klaren Meldung abgelehnt.
   Einträge nie als Passwort aus.
 - Gmail und Microsoft bleiben bei IMAP und SMTP (keine Gmail-API, kein Microsoft Graph).
 - Konto entfernen widerruft bei Google (RFC 7009) und löscht die Einträge. Tokens wandern nie über
-  den Einstellungs-Sync; wie ein anderes Gerät ein solches Konto übernimmt, steht in 0042.
+  den Einstellungs-Sync; der Konto-Datensatz nennt nur den Anbieter (`"oauth"`), ein anderes Gerät
+  übernimmt das Konto als `oauth:<Anbieter>:synced:<zufällig>` ohne Token und meldet sich selbst an.
 
 ## Sicherheitsgrenzen
 
