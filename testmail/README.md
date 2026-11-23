@@ -114,6 +114,14 @@ when alice's INBOX is not empty; use `reset` first.
   accepted with 250 but silently dropped (`message-ingest.duplicate` in the log). IMAP APPEND
   stores duplicates. Tests that send the same message twice must expect one copy.
 - `UIDNEXT` and `MODSEQ` keep counting after `check` (it removes its messages again).
+- Stalwart is an OAuth 2.0 authorization server too (stage 14, decision 0042): metadata at
+  `/.well-known/oauth-authorization-server`, open dynamic client registration (`/auth/register`,
+  redirect `http://127.0.0.1/` for native clients, any port), authorization code with PKCE S256
+  only, token `/auth/token` (refresh tokens rotate), revocation `/auth/revoke` (public clients send
+  `client_id`). The sign-in page `/login` uses the JSON API `/api/auth` (`authCode`, then
+  `authConsent`), which `crates/mail-engine/tests/oauth_server.rs` drives as the "browser". IMAP
+  offers `AUTH=XOAUTH2` and `AUTH=OAUTHBEARER`; `provision.py` adds both to SMTP submission (after
+  TLS), so a store provisioned before 23 November 2026 needs `reset` for SMTP with a token.
 
 ## Files
 

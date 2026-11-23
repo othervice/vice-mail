@@ -205,7 +205,10 @@ def provision(api: Jmap, env: dict[str, str], tls_dir: Path) -> None:
     # relay, and the only route is local delivery, so no mail leaves the machine.
     api.update_singleton("MtaStageAuth", {
         "require": expr(f"local_port != {smtp_plain_port}", []),
-        "saslMechanisms": expr("false", [(f"local_port != {smtp_plain_port} && is_tls", "[plain, login]")]),
+        # Stage 14 (decision 0042): XOAUTH2 and OAUTHBEARER for accounts that sign in with an
+        # access token from the server's own OAuth endpoints (IMAP offers both by default).
+        "saslMechanisms": expr("false", [(f"local_port != {smtp_plain_port} && is_tls",
+                                          "[plain, login, xoauth2, oauthbearer]")]),
     })
     # No tarpitting (5 s by default after a failed AUTH or RCPT): tests provoke failures on purpose.
     # Not "0s": with a zero duration Stalwart 1.1.1 never answers the failed command.
