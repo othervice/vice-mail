@@ -36,7 +36,9 @@ const report = {};
 
 const ROLE_BY_FLAG = { "\\sent": "sent", "\\drafts": "drafts", "\\archive": "archive", "\\junk": "junk", "\\trash": "trash" };
 const ROLE_NAMES = { inbox: "Inbox", sent: "Sent", drafts: "Drafts", archive: "Archive", trash: "Trash", junk: "Junk" };
-const TOP_LEVEL_ORDER = ["Inbox", "Sent", "Drafts", "Archive", "Trash", "Junk", "Projects"];
+// Role folders first in the column's order (docs/DESIGN.md, "Seitenspalte"; ROLE_ORDER in
+// src/features/mailboxes/tree.ts), then the account's own folders.
+const TOP_LEVEL_ORDER = ["Inbox", "Drafts", "Sent", "Archive", "Junk", "Trash", "Projects"];
 const PROGRESS_TEXT = /^Syncing…[\d,]+ of [\d,]+$/;
 /**
  * The slowed-down server: it runs 5 ms, then pauses 745 ms. The app, not the server, does most of
@@ -541,8 +543,9 @@ describe("account and read-only sync (stage 2)", function () {
         id: Number(b.dataset.testid.slice("mailbox-".length)),
         text: b.textContent,
         label: b.getAttribute("aria-label"),
-        // The tree's rows are flat; the depth is their level (WAI-ARIA tree view).
-        depth: Number(b.getAttribute("aria-level")) - 1,
+        // The tree's rows are flat; the depth is their level (WAI-ARIA tree view) below the
+        // account's own row, which is level 1: the top folders are level 2.
+        depth: Number(b.getAttribute("aria-level")) - 2,
       })),
     );
     const rows = [];

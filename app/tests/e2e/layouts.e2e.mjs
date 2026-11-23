@@ -209,7 +209,13 @@ describe("stage 8: layouts at 900×600 and 2560×1440", () => {
     await browser.waitUntil(async () => (await measure()).sidebar === "overlay", { timeoutMsg: "the column did not open over the content" });
     facts = await measure();
     report.layouts.push({ name: "layout-900x600-column-overlay", ...facts });
+    // The screenshot takes the focus away (no focus ring in the picture); it goes back after, so
+    // Escape reaches the column as it would.
+    await browser.execute(() => {
+      window.__e2eFocus = document.activeElement;
+    });
     report.screenshots.push(await screenshot("layout-900x600-column-overlay"));
+    await browser.execute(() => window.__e2eFocus?.focus());
     assert.equal(facts.scrollsSideways, false, "900×600 with the column over the content: the window scrolls sideways");
     assert.ok(inside(facts.column, facts.window), "the column over the content is not inside the window");
     await browser.keys("Escape");

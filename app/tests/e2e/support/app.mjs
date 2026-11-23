@@ -145,6 +145,23 @@ export async function openView(view) {
     });
     return;
   }
+  // Without an account the open column offers no inbox (no account tree, no unified inbox) and
+  // the rail, which has every view, is folded away: fold the column for this, open the view in
+  // the rail and unfold the column again, as a user would.
+  if ((await $('[data-testid="rail-folders"]').getAttribute("aria-expanded")) === "true") {
+    const rail = `[data-testid="rail-${view}"]`;
+    await setSidebar(false);
+    try {
+      if (!(await $(rail).isExisting())) throw new Error(`neither the rail nor the column offers the view ${view}`);
+      await $(rail).click();
+      await browser.waitUntil(async () => (await $(rail).getAttribute("aria-current")) === "page", {
+        timeoutMsg: `the view ${view} did not open`,
+      });
+    } finally {
+      await setSidebar(true);
+    }
+    return;
+  }
   throw new Error(`neither the rail nor the column offers the view ${view}`);
 }
 
