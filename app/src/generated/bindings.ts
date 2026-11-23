@@ -615,6 +615,12 @@ export const commands = {
 	 *  comes back on every device.
 	 */
 	resolveSyncQuestion: (accountId: AccountId, remove: boolean, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("resolve_sync_question", { accountId, remove }, options)),
+	/**
+	 *  Another device changed the servers of `account_id` (decision 0040): `apply` takes them
+	 *  (writing off, the stored password is removed and asked for again); otherwise this device
+	 *  keeps its servers.
+	 */
+	resolveServerChange: (accountId: AccountId, apply: boolean, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("resolve_server_change", { accountId, apply }, options)),
 	/**  Protects the key with a new passphrase; other devices keep working. */
 	changeSettingsSyncPassphrase: (passphrase: string, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("change_settings_sync_passphrase", { passphrase }, options)),
 	/**
@@ -4105,6 +4111,12 @@ export type SettingsSyncStatus = {
 	 *  with the passphrase.
 	 */
 	detectedAccounts: AccountId[],
+	/**
+	 *  Server settings another device changed for an account of this device. Not applied:
+	 *  the account keeps its servers (and the password stays with them) until the user
+	 *  confirms or dismisses the change (`resolveServerChange`, decision 0040).
+	 */
+	serverChanges: SyncServerChange[],
 };
 
 /**
@@ -4267,6 +4279,17 @@ export type SyncQuestion =
  *  which brings it back on every device.
  */
 { type: "accountRemoved"; accountId: AccountId; email: string };
+
+/**
+ *  Server settings that arrived through the settings sync for an existing account and differ
+ *  from the ones this device uses (finding F1, decision 0040). The account's own `imap`/`smtp`
+ *  are the settings in use.
+ */
+export type SyncServerChange = {
+	accountId: AccountId,
+	imap: ServerSettings,
+	smtp: ServerSettings,
+};
 
 /**  Which tasks the "Aufgaben" view lists. */
 export type TaskFilter = "open" | "done" | "all";

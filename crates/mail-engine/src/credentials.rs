@@ -4,6 +4,8 @@
 //! The database only holds a [`CredentialRef`] (column `account.credential_ref`); the secret
 //! itself lives in the macOS keychain or the Windows Credential Manager under the app's service
 //! name (the bundle id, passed in by the shell) and the account's UUID as the account name.
+//! Accounts taken over from the settings sync get a random name of their own (`synced:<hex>`,
+//! decision 0040), so they never find a password this device holds under their UUID.
 //!
 //! [`SecretStore`] is the blocking interface with two implementations: [`SystemKeychain`] for
 //! the product and [`MemorySecretStore`] for tests (automatic tests never touch the real

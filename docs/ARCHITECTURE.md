@@ -52,7 +52,7 @@ wenn er groß genug ist.
 | Benachrichtigungen, eine Instanz | tauri-plugin-notification, tauri-plugin-single-instance (nur Windows) | 2.8.1 / 2.5.5 | Stufe 9 (0020): native Mitteilungen nur aus Rust (keine Capability für die Oberfläche), Klicks über den Aktions-Handler des Plugins; auf Windows reicht ein zweiter Start (`mailto:`-Link) seine Argumente an die laufende App weiter. Beide Apache-2.0 OR MIT |
 | Updates in der App | tauri-plugin-updater | =2.14.1 | Stufe 15 (0037): Manifest, Signaturprüfung (minisign/Ed25519, `requireSignedVersion`), Austausch des App-Bundles (macOS) und NSIS-Installer im Modus `passive` (Windows); nur aus Rust, keine Capability für die Oberfläche. Ohne Default-Features (kein `ring`, kein System-Proxy, kein zip), TLS über unser reqwest/rustls per `configure_client`, deshalb exakt gepinnt. Release 28.10.2026, Apache-2.0 OR MIT. `tauri-plugin-process` nicht nötig (`AppHandle::request_restart`) |
 | WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
-| Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
+| Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID; aus dem Einstellungs-Sync übernommene Konten bekommen einen zufälligen Namen `synced:<hex>` (0040) |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age (X25519, scrypt, Feature `armor`), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014). Im IMAP-Ordner liegt der Chiffretext als age-ASCII-Armor (0022) |
@@ -158,6 +158,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `sync_record` | je synchronisierbarem Datensatz die aktuelle Version (Inhalt oder Grabstein, bei Konten mit Feldversionen) und die zuletzt abgeglichene; `sync_dirty` hält die in einer Transaktion geänderten bis zum Commit (Stufe 11, 0022) | Gerät |
 | `sync_state`, `sync_adopted` | Geräte-ID im Sync, höchste Version der Uhr, an/aus, Sync-Konto und Ordner, letzter Durchlauf und letzte Vollprüfung, Ordnerstand; übernommene Konten ohne Passwort | Gerät |
 | `sync_device` | Geräte des Syncs mit Name, System, zuletzt gesehen | sync |
+| `account_server_change` | Server (IMAP und SMTP), die ein Konto-Datensatz aus dem Sync-Ordner für ein vorhandenes Konto nennt und die von denen dieses Geräts abweichen; warten auf „übernehmen“ oder „behalten“ (`dismissed`), solange sieht der Sync diese Server als die des Kontos (Sicherheitsprüfung F1, 0040) | Gerät |
 
 Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt auf dem Gerät.
 **sync** wandert über den Einstellungs-Sync. Eine Tabelle wird nur abgeglichen, wenn sie
@@ -586,7 +587,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
 | Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
 | Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
-| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt |
+| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040) |
 
 - **Neues Gerät:** Sync-Konto einrichten, Passphrase eingeben, Vorschau der zu übernehmenden Daten,
   zusammenführen. Übernommene Konten fragen einzeln nach ihrem Passwort.
@@ -610,7 +611,12 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
     nichts lokal offen heißt: nichts zu tun. Täglich eine Vollprüfung.
   - Zweites Gerät: das vorher eingerichtete Sync-Konto und seine Standard-Identität übernehmen
     die IDs aus dem Ordner (gleiche Adresse, nie abgeglichen); übernommene Konten starten nur
-    lesend und ohne Passwort.
+    lesend und ohne Passwort, mit einem neuen, zufälligen Schlüsselbund-Namen.
+  - Server sind eine Grenze für Zugangsdaten (Sicherheitsprüfung F1, 0040): Nennt ein Datensatz
+    andere Server für ein vorhandenes Konto, behält das Gerät seine Server und sein Passwort; das
+    Konto zeigt „Server-Einstellungen auf einem anderen Gerät geändert“. „Übernehmen“ löscht
+    zuerst das Passwort, schaltet Schreibzugriff aus und schreibt dann die Server; das Konto
+    fragt danach nach dem Passwort. „Behalten“ lässt alles, wie es ist.
   - Konto anderswo entfernt: Rückfrage; bis zur Antwort warten auch die Löschungen seiner
     Identitäten, Snoozes usw.; „behalten“ erneuert Konto und diese Datensätze.
 

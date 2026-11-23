@@ -84,6 +84,7 @@ export const SYNC_OFF: SettingsSyncStatus = {
   questions: [],
   accountsNeedingPassword: [],
   detectedAccounts: [],
+  serverChanges: [],
 };
 
 export function makeDevice(overrides: Partial<SyncDevice> = {}): SyncDevice {
@@ -306,6 +307,21 @@ export function createMcpSyncFake(options: McpSyncFakeOptions, deps: Deps) {
           const list = deps.accounts();
           const index = list.findIndex((account) => account.id === accountId);
           if (index >= 0) list.splice(index, 1);
+        }
+        return syncNow();
+      }
+      // Decision 0040: taking the servers switches writing off and asks for the password again.
+      case "resolve_server_change": {
+        const accountId = args["accountId"] as string;
+        const change = sync.serverChanges.find((c) => c.accountId === accountId);
+        if (!change) return reject("not_found");
+        sync = { ...sync, serverChanges: sync.serverChanges.filter((c) => c.accountId !== accountId) };
+        if (args["apply"] === true) {
+          const list = deps.accounts();
+          const index = list.findIndex((account) => account.id === accountId);
+          const account = list[index];
+          if (account) list[index] = { ...account, imap: change.imap, smtp: change.smtp, writesEnabled: false };
+          sync = { ...sync, accountsNeedingPassword: [...sync.accountsNeedingPassword, accountId] };
         }
         return syncNow();
       }

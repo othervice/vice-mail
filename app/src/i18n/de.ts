@@ -1066,6 +1066,19 @@ export const de: Translation = {
         neverSynced: "Noch nicht vollständig abgeglichen.",
         retry: "Erneut versuchen",
         servers: "Server",
+        // Entscheidung 0040: Server-Einstellungen von einem anderen Gerät warten auf dich.
+        serverChange: {
+          title: "Server-Einstellungen auf einem anderen Gerät geändert",
+          body: "Ein anderes Gerät im Einstellungs-Sync hat für dieses Konto diese Server eingetragen. Dieses Gerät verwendet weiter seine bisherigen Server, bis du entscheidest, und dein Passwort geht nicht an die neuen.",
+          incoming: "Neuer Server für eingehende Mails",
+          outgoing: "Neuer Server für ausgehende Mails",
+          applyNote:
+            "Übernimmst du die neuen Server, werden Änderungen auf dem Server ausgeschaltet und das gespeicherte Passwort gelöscht: Gib danach das Passwort für den neuen Server ein. Hast du die Server nicht selbst geändert, behalte die bisherigen.",
+          apply: "Neue Server verwenden",
+          keep: "Bisherige Server behalten",
+          applying: "Wird übernommen …",
+          failed: "Die Server-Änderung konnte nicht abgeschlossen werden.",
+        },
         gmail: {
           title: "Gmail",
           body: "Das ist ein Gmail-Konto. Labels erscheinen als Ordner, und eine Mail unter mehreren Labels ist eine Mail. Archivieren entfernt das Label „Posteingang“. Gmail legt Gesendetes selbst in „Gesendet“ ab, die App fügt deshalb keine Kopie hinzu (siehe Einstellungen zum Schreiben).",

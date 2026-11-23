@@ -116,8 +116,8 @@ pub use search::{MAX_SEARCH_LIMIT, SearchFilter, StoredHit, StoredHitPage};
 pub use search_api::{INDEX_BATCH, IndexStep};
 pub use settings::{GLOBAL_SCOPE, Setting};
 pub use settings_sync::{
-    ApplyOutcome, ApplySkip, CaptureOutcome, CapturedChange, StoredSyncDevice, SyncApply,
-    SyncCapture, SyncProgress, SyncRecordRow, SyncStateRow, TableWrite,
+    AccountServerChange, ApplyOutcome, ApplySkip, CaptureOutcome, CapturedChange, StoredSyncDevice,
+    SyncApply, SyncCapture, SyncProgress, SyncRecordRow, SyncStateRow, TableWrite,
 };
 pub use signatures::{
     SignatureDefaults, SignatureRow, StoredSignature, StoredSignatureImage, StoredTemplate,

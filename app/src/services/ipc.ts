@@ -411,6 +411,7 @@ import {
   type SyncDevice,
   type SyncKindCount,
   type SyncQuestion,
+  type SyncServerChange,
 } from "../generated/bindings";
 
 export {
@@ -449,6 +450,7 @@ export type {
   SyncDevice,
   SyncKindCount,
   SyncQuestion,
+  SyncServerChange,
 };
 
 /** Commands that cannot fail on the Rust side still reject on framework errors (no runtime, ACL). */
@@ -494,6 +496,12 @@ export const settingsSyncIpc = {
   syncNow: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.syncSettingsNow()),
   resolveQuestion: (accountId: AccountId, remove: boolean): Promise<SettingsSyncStatus> =>
     call(() => mcpSyncCommands.resolveSyncQuestion(accountId, remove)),
+  /**
+   * Decision 0040: another device changed the account's servers. `apply` takes them (writing off,
+   * the password is removed and asked for again); otherwise this device keeps its servers.
+   */
+  resolveServerChange: (accountId: AccountId, apply: boolean): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.resolveServerChange(accountId, apply)),
   changePassphrase: (passphrase: string): Promise<void> =>
     done(call(() => mcpSyncCommands.changeSettingsSyncPassphrase(passphrase))),
   /** New key from this device; the other devices need the new passphrase. */

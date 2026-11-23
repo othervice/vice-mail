@@ -1213,20 +1213,61 @@ impl<C: Connector> AppCore<C> {
         }
     }
 
-    /// The account's settings changed through the settings sync: its sync reconnects with them.
-    pub(crate) async fn restart_account_sync(&self, id: AccountId) {
-        let Ok(store) = self.store() else { return };
-        let Ok(Some(account)) = store.account(id).await else {
-            return;
-        };
-        let _admin = self.inner.admin.lock().await;
+    /// Decision 0040 (finding F1): the user confirmed the server settings another device set
+    /// for `id`. The stored password must never reach servers named only by the sync folder, so
+    /// the order matters: the account's sync stops, the password is removed from the keychain
+    /// (if that fails nothing else changes), writing is switched off, and only then are the
+    /// new servers written. The account then waits for its password (`sync_adopted`).
+    pub(crate) async fn apply_server_change(&self, id: AccountId) -> Result<(), CoreError> {
+        let store = self.store()?;
+        let account = store
+            .account(id)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {id}")))?;
+        if !store
+            .account_server_changes()
+            .await?
+            .iter()
+            .any(|change| change.account == id)
+        {
+            return Err(CoreError::NotFound(format!(
+                "server change of account {id}"
+            )));
+        }
+        let key = CredentialRef::parse(&account.credential_ref)?;
+        let admin = self.inner.admin.lock().await;
         if let Some(handle) = self.inner.accounts.remove(id) {
             handle.stop(self.inner.sync.shutdown_grace).await;
         }
         if let Some(reading) = &self.inner.reading {
             reading.credentials_changed(id);
         }
-        self.spawn_sync(account, None);
+        if let Err(err) = self.inner.credentials.delete(&key).await {
+            self.spawn_sync(account, None);
+            return Err(err);
+        }
+        let written = async {
+            if let Some(outbox) = &self.inner.outbox {
+                // Queued writes fail with `read_only` and are reverted, as with the switch.
+                outbox.set_writes_enabled(id, false).await?;
+            }
+            Ok::<_, CoreError>(store.confirm_account_server_change(id).await?)
+        }
+        .await;
+        match written {
+            Ok(changed) => {
+                tracing::info!(account = %id, "server change from another device applied; password removed");
+                self.spawn_sync(changed, None);
+            }
+            Err(err) => {
+                // The password is gone already; the account shows that until it gets one.
+                self.spawn_sync(account, None);
+                return Err(err);
+            }
+        }
+        drop(admin);
+        self.emit(CoreEvent::AccountsChanged);
+        Ok(())
     }
 
     /// A local account took the id of the same account in the settings sync folder: its tasks

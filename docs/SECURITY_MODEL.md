@@ -17,7 +17,7 @@ party, which is advisable before wide distribution.
 | Mail account passwords (IMAP/SMTP) | System keychain (macOS login keychain, Windows Credential Manager), service = bundle id, account = account UUID | Full control of the mailbox |
 | AI provider API keys | System keychain (`ai-profile:<id>`) | Billing, access to the provider account |
 | MCP client keys | System keychain (app side); the AI client's own config file (client side, as `MAIL_MCP_TOKEN`) | Read access to the shared accounts, draft creation |
-| Settings-sync key and passphrase | The random X25519 key: locally in the keychain (`settings-sync:key`), in the sync folder only wrapped with the passphrase (age scrypt); the passphrase is never stored | Decrypts every synced record; whoever holds it can also write records (see F1) |
+| Settings-sync key and passphrase | The random X25519 key: locally in the keychain (`settings-sync:key`), in the sync folder only wrapped with the passphrase (age scrypt); the passphrase is never stored | Decrypts every synced record; whoever holds it can also write records (server changes wait for the user on every device, F1) |
 | Update signing key (minisign/Ed25519) | Only in the login keychain of the build Mac (`org.vicemail.updater`) | Whoever has it can ship code to every installation |
 | Mail content, headers, attachments, contacts | Local SQLite database and zstd body files in the app data directory; the mail server | Privacy of the user and their correspondents |
 | Integrity of the mailbox | Mail server; local outbox (`operation` table) | No mail lost, sent twice, sent, moved or deleted without the user |
@@ -185,7 +185,11 @@ party, which is advisable before wide distribution.
   Record kind and content are inside the ciphertext and bound to the header through an HMAC-derived
   opaque id; ciphertexts over 1 MiB are refused before decryption; records from clocks more than
   five minutes ahead are deferred. `writes_enabled` is never synced, and accounts adopted from
-  another device start read-only and without a password. The passphrase is never stored.
+  another device start read-only and without a password, under a keychain entry name of their
+  own (never one this device already holds). A record that names other servers for an existing
+  account does not change them: this device keeps its servers and password until the user
+  confirms (password removed first, writing off) or dismisses the change (F1, decision 0040).
+  The passphrase is never stored.
 
 ### 4.5 AI and MCP (A5 → B6)
 
@@ -289,10 +293,12 @@ party, which is advisable before wide distribution.
   can make the app allocate up to 512 MiB per IMAP literal and per sync entry (N-1, F2), hold a
   command open by trickling bytes (I-4) or send unbounded folder lists. The user chose that server;
   the effect is memory pressure or a stuck account, not code execution or data loss.
-- **Settings sync trusts every holder of the sync key** (F1): a record that changes an account's
-  server is applied, and the stored password then goes to that server. The key is protected by
-  the passphrase (scrypt) and the devices; a weak passphrase cracked by the provider of the sync
-  account, or one compromised device, is enough.
+- **Settings sync trusts every holder of the sync key** for everything except credentials: a
+  holder (one compromised device, or the provider of the sync account after cracking a weak
+  passphrase) can change names, identities, signatures, rules and other synced settings on every
+  device. Server changes wait for the user, and the stored password never goes to servers named
+  only by the folder (F1, fixed). A new device takes over accounts with the folder's servers; the
+  user sees them on the account's page before entering the password there.
 - **System image decoders see inline images.** `cid:` and allowed remote images are sniffed but
   passed to the WebView's decoders unchanged (C-4); a decoder vulnerability in WebKit/ImageIO or
   WebView2 is reachable by a received mail without a click, as in every mail client that shows
@@ -331,13 +337,13 @@ unlikely preconditions; **info** = hardening or documentation.
 | N-2 | d | low | The private-network block for remote images and one-click unsubscribe let through IPv4-translated (`::ffff:0:a.b.c.d`), local-use NAT64 (`64:ff9b:1::/48`), Teredo and the rest of `2001::/23`, discard (`100::/64`) and the new documentation range (`3fff::/20`). | `reading/remote.rs`: refused (the embedded IPv4 address decides for IPv4-translated). Test: `reading::remote::tests::only_public_addresses_are_contacted` (10 new cases, 4 public controls). |
 | V-08 (part) | b | low | `remove_draft_dir`/`remove_outgoing_dir` joined the raw draft id to the compose directory; a draft id from the UI is not validated when deserialised (`"../.."`), so only the store's earlier refusal of unknown ids kept `remove_dir_all` inside. | `compose/files.rs`: both go through `resolve`, the allowlist every other compose path uses. Test: `compose::files::tests::draft_directories_are_removed_only_inside_the_compose_directory` (removes `../../victim` with the old code). |
 | V-07 | b | low | The IPC bridge logged every command error text; some contain file paths (drag and drop), addresses or contact search text, which then sat in the local logs (and would go into a diagnostics export). | 177ef1b: the bridge logs command, code and the fixed summary of the error kind (`logging::command_failed`); only `internal` and `database` errors add their detail, redacted (home paths as `~/…`, other paths as `<path>`, addresses, hosts, secret-looking values). The diagnostics export (b13d553) redacts every log line again in the same way, with the accounts' names and folder names. Tests: `tests::failed_commands_are_logged_without_personal_error_texts`, `diagnostics::tests::the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content` (error texts with a home path and an address). Error texts themselves are unchanged and still reach the UI's technical details. |
+| F1 | e | medium | A synced account record that changed IMAP/SMTP host, port, security or user name was applied as is (also when a local account was matched by address on joining); the stored password then went to the new server and `writes_enabled` stayed as it was. A record for a *new* account with the UUID that a re-keyed local account keeps as its keychain entry name would even have used that password. Whoever has the sync key got the passwords of the other accounts on every device. | Decision 0040: server settings are a credential boundary. A pass keeps this device's servers and records the folder's in `account_server_change`; the account shows "Server settings changed on another device". Confirming removes the password from the keychain first (nothing changes if that fails), switches writing off, then writes the servers and asks for the password; dismissing keeps the servers and is remembered. Accounts taken over from the folder get a random keychain entry name. Tests: `settings_sync::tests::server_change` (through `AppCore` with a connector that records host and password of every login and an in-memory sync folder; an attacker with the sync key writes into it: changed servers, dismissing, a new account under a planted keychain entry, an account matched by address on joining — no login ever reaches the attacker's hosts; all four fail on the old code), `settings_sync_tests::other_servers_from_the_folder_wait_for_the_user`, `adopted_accounts_get_a_fresh_keychain_reference`, `app/tests/server-change.test.tsx`. |
 | N-3 (part) | d | low | On `github.com` an update manifest could point to any repository's release files (the signature check still applied). | `updates/http.rs`: on `github.com` only paths under the endpoint's `/<owner>/<repo>/releases/`. Test: `updates::http::tests::github_endpoint_allows_its_file_hosts_over_https_only`. Size and time limits of the download: open, see 7.2. |
 
 ### 7.2 Open, with reason
 
 | ID | Area | Severity | Finding | Impact | Proposed fix | Why not now |
 |---|---|---|---|---|---|---|
-| F1 | e | medium | A synced account record that changes IMAP/SMTP host, port or user name is applied as is (also when a local account is matched by address); the stored password is then sent to the new server and `writes_enabled` stays as it was. | Whoever has the sync key (one compromised device, or the sync provider after cracking a weak passphrase offline) gets the passwords of all other accounts on every device. | Treat a synced server change as a credential boundary: do not use the stored password, set `writes_enabled = false`, mark the account "server changed on another device – confirm or enter the password again". Test with a fake connector. | Changes sync semantics and needs UI; decision for the next sync work. |
 | C-2 | c | medium | hayro decompresses PDF streams without a size cap (`read_to_end`), and the preview has no time limit (runs on the blocking pool, cannot be cancelled). | A small PDF can exhaust memory when its preview is opened; out of memory aborts the app. A slow PDF keeps a CPU busy. One click needed. | Render previews in a separate process (the app binary in a preview mode) with memory and time limits; interim: patch hayro to cap decoded stream sizes and image dimensions. | Process isolation is a larger change; patching a dependency needs a decision. Reproduced: a 1,121-byte PDF (a content stream behind two `FlateDecode` filters, 256 MiB decoded) made the optimised preview reach 578 MB resident in 0.3 s (`replay_preview_file` in `tests/fuzz.rs`); more nesting or a larger stream reaches any size. |
 | C-4 | c | medium (defence in depth) | `cid:` images and allowed remote images are sniffed and passed unchanged as `data:` URIs to the WebView, whose system decoders (ImageIO/WebKit, WebView2) parse them; the sniffer also accepts BMP, AVIF and ICO. | A decoder vulnerability in the OS is reachable by a received mail without a click (inline images show by default). | Re-encode inline and remote images with the attachment-preview pipeline (PNG/JPEG out) and cache the result; at least drop BMP, AVIF, ICO. | Changes rendering cost and output; needs measurement. |
 | N-1 | d | low | async-imap allocates the announced literal size (up to 512 MiB) before data arrives; mail-imap adds no cap. | A malicious server can make each connection hold up to 512 MiB until the 30 s timeout. | Check `RFC822.SIZE` before `BODY.PEEK[]`, fetch large bodies in parts, get a configurable maximum into async-imap. | Needs a library change. |

@@ -1070,6 +1070,19 @@ export const en = {
         neverSynced: "Not completely synced yet.",
         retry: "Try again",
         servers: "Servers",
+        // Decision 0040: server settings from another device wait for the user.
+        serverChange: {
+          title: "Server settings changed on another device",
+          body: "Another device in the settings sync set these servers for this account. This device keeps using its current servers until you decide, and your password is not sent to the new ones.",
+          incoming: "New server for incoming mail",
+          outgoing: "New server for outgoing mail",
+          applyNote:
+            "If you use the new servers, changes on the server are switched off and the stored password is removed: enter the password for the new server afterwards. If you did not change the servers yourself, keep the current ones.",
+          apply: "Use the new servers",
+          keep: "Keep the current servers",
+          applying: "Applying…",
+          failed: "The server change could not be resolved.",
+        },
         gmail: {
           title: "Gmail",
           body: "This is a Gmail account. Labels show up as folders, and a message under several labels is one message. Archiving removes the Inbox label. Gmail files sent messages in Sent itself, so the app adds no copy (see Compose settings).",

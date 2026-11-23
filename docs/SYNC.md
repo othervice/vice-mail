@@ -190,7 +190,8 @@ Content is only accepted through a validating type:
 - Account records only have the fields `email`, `displayName`, `color`, `imap`, `smtp`, and the
   server entries only `host`, `port`, `security`, `username`. `writes_enabled` is deliberately
   not synced: write access is switched on by the user per account and device, and an account
-  taken over from another device starts read-only.
+  taken over from another device starts read-only. Other servers for an existing account wait
+  for the user (see "Accounts taken over" below).
 
 ## Versions
 
@@ -258,7 +259,21 @@ in the folder, that was never synced takes the folder's id (the keychain entry, 
 mail and the local data stay); its local records are replaced by the folder's.
 
 **Accounts taken over** start read-only and without a password ("password missing"), and
-without a default identity of their own (their identities come from the folder).
+without a default identity of their own (their identities come from the folder). Their keychain
+entry gets a fresh random name (`synced:` and 32 hex digits) instead of the account UUID, so a
+password this device already holds under that UUID is never used for servers named only by the
+folder (decision 0040).
+
+**Server settings are a credential boundary** (decision 0040, security review F1). A record that
+names other servers (any difference in host, port, security or user name of IMAP or SMTP) for an
+account that exists here is applied without them: email, name and colour are written, the
+servers stay, and the folder's servers wait in `account_server_change` until the user decides on
+the account's page. Confirming removes the stored password first, switches writing off, then
+writes the new servers; the account asks for its password again. Dismissing keeps this device's
+servers and is remembered, so the same change is not offered again (a different one is). While a
+change waits or was dismissed, the sync sees the folder's servers as the account's, so a local
+change of another field never sends this device's servers back. This also applies to a local
+account that takes the folder's id when a device joins.
 
 ## Tombstones and absent records
 

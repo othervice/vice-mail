@@ -14,7 +14,10 @@ use std::future::Future;
 use serde::{Deserialize, Serialize};
 use specta_typescript::Number;
 
-use crate::{AccountId, BackendError, ConnectConfig, IpcError, ModSeq, Uid, UidSet, UidValidity};
+use crate::{
+    AccountId, BackendError, ConnectConfig, IpcError, ModSeq, ServerSettings, Uid, UidSet,
+    UidValidity,
+};
 
 /// Name of the settings sync folder (decision 0022). Plain ASCII without hierarchy
 /// delimiters, spaces or a leading dot, so it needs no modified UTF-7, never splits into a
@@ -199,6 +202,21 @@ pub struct SettingsSyncStatus {
     /// Accounts whose mailbox holds a sync folder while the sync is off here: offer to join
     /// with the passphrase.
     pub detected_accounts: Vec<AccountId>,
+    /// Server settings another device changed for an account of this device. Not applied:
+    /// the account keeps its servers (and the password stays with them) until the user
+    /// confirms or dismisses the change (`resolveServerChange`, decision 0040).
+    pub server_changes: Vec<SyncServerChange>,
+}
+
+/// Server settings that arrived through the settings sync for an existing account and differ
+/// from the ones this device uses (finding F1, decision 0040). The account's own `imap`/`smtp`
+/// are the settings in use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncServerChange {
+    pub account_id: AccountId,
+    pub imap: ServerSettings,
+    pub smtp: ServerSettings,
 }
 
 /// What joining would take over, per kind of data.
@@ -327,6 +345,7 @@ mod tests {
             }],
             accounts_needing_password: vec![],
             detected_accounts: vec![],
+            server_changes: vec![],
         };
         let json = serde_json::to_value(&status).expect("serialize");
         assert_eq!(json["state"], "needsPassphrase");

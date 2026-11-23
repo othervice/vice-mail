@@ -74,6 +74,17 @@ export function useResolveSyncQuestion() {
   );
 }
 
+/**
+ * Decision 0040: take or keep the servers another device set for an account. Taking them changes
+ * the account (servers, writing off, password needed); the account list follows.
+ */
+export function useResolveServerChange() {
+  return useStatusMutation(
+    ({ accountId, apply }: { accountId: AccountId; apply: boolean }) => settingsSyncIpc.resolveServerChange(accountId, apply),
+    { after: invalidateAccountData },
+  );
+}
+
 export function useChangeSettingsSyncPassphrase() {
   return useMutation({ mutationFn: (passphrase: string) => settingsSyncIpc.changePassphrase(passphrase), ...FORGET_SECRET });
 }

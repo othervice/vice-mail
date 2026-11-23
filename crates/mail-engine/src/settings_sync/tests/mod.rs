@@ -5,6 +5,7 @@ mod capture;
 mod convergence;
 mod perf;
 mod scenarios;
+mod server_change;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

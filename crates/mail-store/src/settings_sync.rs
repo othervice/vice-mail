@@ -18,10 +18,11 @@
 
 use std::collections::BTreeSet;
 
-use mail_model::{AccountId, MessageCategory};
+use mail_model::{AccountId, MessageCategory, ServerSettings};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
+use crate::mail_api::StoredAccount;
 use crate::settings::now_millis;
 use crate::{Store, StoreError};
 
@@ -113,6 +114,9 @@ pub struct ApplyOutcome {
     pub accounts_added: Vec<AccountId>,
     /// Existing accounts whose settings were written.
     pub accounts_updated: Vec<AccountId>,
+    /// Existing accounts whose record names other servers than this device uses: the change
+    /// waits for the user (`account_server_change`, decision 0040); the servers stayed.
+    pub accounts_server_changed: Vec<AccountId>,
     /// Local accounts that took the id of the folder's record: (old, new).
     pub accounts_rekeyed: Vec<(AccountId, AccountId)>,
     /// Kinds whose table changed (for the UI's events).
@@ -277,19 +281,32 @@ pub(crate) fn content_of(
                 .optional()?;
             text.and_then(|t| serde_json::from_str(&t).ok())
         }
+        // Decision 0040: while a server change from the folder waits for the user (or was
+        // dismissed here), the sync sees the folder's servers; this device keeps using its
+        // own, and a change of another field does not send them back to the folder.
         "account" => conn
             .prepare_cached(
-                "SELECT email, display_name, color, imap_host, imap_port, imap_security,
-                        imap_username, smtp_host, smtp_port, smtp_security, smtp_username
-                 FROM account WHERE uuid = ?1",
+                "SELECT a.email, a.display_name, a.color, a.imap_host, a.imap_port,
+                        a.imap_security, a.imap_username, a.smtp_host, a.smtp_port,
+                        a.smtp_security, a.smtp_username, c.imap, c.smtp
+                 FROM account a LEFT JOIN account_server_change c ON c.account_uuid = a.uuid
+                 WHERE a.uuid = ?1",
             )?
             .query_row([id], |r| {
+                let imap = match json_column(r, 11)? {
+                    Some(pending) => pending,
+                    None => server_json(r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?),
+                };
+                let smtp = match json_column(r, 12)? {
+                    Some(pending) => pending,
+                    None => server_json(r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?),
+                };
                 Ok(json!({
                     "email": r.get::<_, String>(0)?,
                     "displayName": r.get::<_, String>(1)?,
                     "color": r.get::<_, i64>(2)?,
-                    "imap": server_json(r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?),
-                    "smtp": server_json(r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?),
+                    "imap": imap,
+                    "smtp": smtp,
                 }))
             })
             .optional()?,
@@ -487,6 +504,24 @@ fn account_row(conn: &Connection, uuid: &str) -> Result<Option<i64>, StoreError>
         .optional()?)
 }
 
+/// The servers this device uses for the account (as sync server objects), `None` if there is
+/// no such account.
+fn local_servers(conn: &Connection, uuid: &str) -> Result<Option<(Value, Value)>, StoreError> {
+    Ok(conn
+        .prepare_cached(
+            "SELECT imap_host, imap_port, imap_security, imap_username,
+                    smtp_host, smtp_port, smtp_security, smtp_username
+             FROM account WHERE uuid = ?1",
+        )?
+        .query_row([uuid], |r| {
+            Ok((
+                server_json(r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?),
+                server_json(r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?),
+            ))
+        })
+        .optional()?)
+}
+
 fn missing(what: impl Into<String>) -> ApplyError {
     ApplyError::Skip(ApplySkip::Missing(what.into()))
 }
@@ -601,26 +636,58 @@ fn put_table(
             let name = text(value, "displayName")?;
             let color = int(value, "color")?;
             let account: AccountId = id.parse().map_err(|_| refused("account id"))?;
-            if account_row(conn, id)?.is_some() {
+            if let Some(local) = local_servers(conn, id)? {
+                let incoming = (
+                    server_json(ih.to_owned(), ip, is.to_owned(), iu.to_owned()),
+                    server_json(sh.to_owned(), sp, ss.to_owned(), su.to_owned()),
+                );
                 conn.prepare_cached(
-                    "UPDATE account SET email = ?2, display_name = ?3, color = ?4,
-                       imap_host = ?5, imap_port = ?6, imap_security = ?7, imap_username = ?8,
-                       smtp_host = ?9, smtp_port = ?10, smtp_security = ?11, smtp_username = ?12
-                     WHERE uuid = ?1",
+                    "UPDATE account SET email = ?2, display_name = ?3, color = ?4 WHERE uuid = ?1",
                 )?
-                .execute(params![
-                    id, email, name, color, ih, ip, is, iu, sh, sp, ss, su
-                ])?;
+                .execute(params![id, email, name, color])?;
+                if incoming == local {
+                    // The folder agrees with this device (again): nothing waits any more.
+                    conn.prepare_cached(
+                        "DELETE FROM account_server_change WHERE account_uuid = ?1",
+                    )?
+                    .execute([id])?;
+                } else {
+                    // Decision 0040: other servers are a credential boundary. This device keeps
+                    // its servers (and the password stays with them) until the user confirms.
+                    // The same change dismissed before stays dismissed.
+                    conn.prepare_cached(
+                        "INSERT INTO account_server_change (account_uuid, imap, smtp, dismissed,
+                                                            received_at)
+                         VALUES (?1, ?2, ?3, 0, ?4)
+                         ON CONFLICT (account_uuid) DO UPDATE SET
+                           dismissed = CASE WHEN imap = excluded.imap AND smtp = excluded.smtp
+                                            THEN dismissed ELSE 0 END,
+                           received_at = CASE WHEN imap = excluded.imap AND smtp = excluded.smtp
+                                              THEN received_at ELSE excluded.received_at END,
+                           imap = excluded.imap, smtp = excluded.smtp",
+                    )?
+                    .execute(params![
+                        id,
+                        incoming.0.to_string(),
+                        incoming.1.to_string(),
+                        now
+                    ])?;
+                    outcome.accounts_server_changed.push(account);
+                }
                 outcome.accounts_updated.push(account);
             } else {
                 // Taken over from another device: read-only, no password yet, and no default
-                // identity of its own (the identities come from the folder too).
+                // identity of its own (the identities come from the folder too). Its keychain
+                // entry gets a fresh random name (decision 0040): an entry this device already
+                // has under the account's UUID (a re-keyed local account keeps its old UUID as
+                // the entry name) is never used for servers named only by the folder.
                 conn.prepare_cached(
                     "INSERT INTO account (uuid, email, display_name, color,
                                           imap_host, imap_port, imap_security, imap_username,
                                           smtp_host, smtp_port, smtp_security, smtp_username,
                                           credential_ref, writes_enabled, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?1, 0, ?13)",
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+                             'synced:' || lower(hex(randomblob(16))), 0, ?13)",
                 )?
                 .execute(params![
                     id, email, name, color, ih, ip, is, iu, sh, sp, ss, su, now
@@ -1425,4 +1492,117 @@ impl Store {
         })
         .await
     }
+
+    /// Server changes from the folder that wait for the user (not dismissed), oldest first
+    /// (decision 0040).
+    pub async fn account_server_changes(&self) -> Result<Vec<AccountServerChange>, StoreError> {
+        self.read(|conn| {
+            let rows = conn
+                .prepare_cached(
+                    "SELECT account_uuid, imap, smtp FROM account_server_change
+                     WHERE dismissed = 0 ORDER BY received_at, account_uuid",
+                )?
+                .query_map([], |r| {
+                    Ok(AccountServerChange {
+                        account: crate::accounts::account_id_at(r, 0)?,
+                        imap: server_column(r, 1)?,
+                        smtp: server_column(r, 2)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await
+    }
+
+    /// The user confirmed the waiting server change of `account`: its servers become the
+    /// folder's, writing is switched off and the account needs its password again
+    /// (`sync_adopted`), in one transaction. The caller removes the stored password first.
+    /// [`StoreError::NotFound`] if no change waits.
+    pub async fn confirm_account_server_change(
+        &self,
+        account: AccountId,
+    ) -> Result<StoredAccount, StoreError> {
+        self.write(move |tx| {
+            let id = account.to_string();
+            let change = tx
+                .prepare_cached(
+                    "SELECT imap, smtp FROM account_server_change
+                     WHERE account_uuid = ?1 AND dismissed = 0",
+                )?
+                .query_row([&id], |r| Ok((server_column(r, 0)?, server_column(r, 1)?)))
+                .optional()?;
+            let Some((imap, smtp)) = change else {
+                return Err(StoreError::NotFound(format!(
+                    "server change of account {account}"
+                )));
+            };
+            tx.prepare_cached(
+                "UPDATE account SET imap_host = ?2, imap_port = ?3, imap_security = ?4,
+                   imap_username = ?5, smtp_host = ?6, smtp_port = ?7, smtp_security = ?8,
+                   smtp_username = ?9, writes_enabled = 0
+                 WHERE uuid = ?1",
+            )?
+            .execute(params![
+                id,
+                imap.host,
+                imap.port,
+                imap.security.as_str(),
+                imap.username,
+                smtp.host,
+                smtp.port,
+                smtp.security.as_str(),
+                smtp.username
+            ])
+            .map_err(StoreError::sqlite("apply server change"))?;
+            tx.prepare_cached("DELETE FROM account_server_change WHERE account_uuid = ?1")?
+                .execute([&id])?;
+            tx.prepare_cached(
+                "INSERT OR REPLACE INTO sync_adopted (account_uuid, adopted_at) VALUES (?1, ?2)",
+            )?
+            .execute(params![id, now_millis()])?;
+            crate::accounts::one(tx, account)?
+                .ok_or_else(|| StoreError::NotFound(format!("account {account}")))
+        })
+        .await
+    }
+
+    /// The user keeps this device's servers: the waiting change is not offered again (a
+    /// different change from the folder is). [`StoreError::NotFound`] if no change waits.
+    pub async fn dismiss_account_server_change(
+        &self,
+        account: AccountId,
+    ) -> Result<(), StoreError> {
+        self.write(move |tx| {
+            let n = tx
+                .prepare_cached(
+                    "UPDATE account_server_change SET dismissed = 1
+                     WHERE account_uuid = ?1 AND dismissed = 0",
+                )?
+                .execute([account.to_string()])?;
+            if n == 0 {
+                return Err(StoreError::NotFound(format!(
+                    "server change of account {account}"
+                )));
+            }
+            Ok(())
+        })
+        .await
+    }
+}
+
+/// Server settings from the settings sync folder that differ from the ones this device uses
+/// for an existing account and wait for the user (decision 0040).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountServerChange {
+    pub account: AccountId,
+    pub imap: ServerSettings,
+    pub smtp: ServerSettings,
+}
+
+fn server_column(r: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<ServerSettings> {
+    let text: String = r.get(idx)?;
+    serde_json::from_str(&text).map_err(|err| {
+        crate::accounts::conversion_error(idx, rusqlite::types::Type::Text, err.to_string())
+    })
 }

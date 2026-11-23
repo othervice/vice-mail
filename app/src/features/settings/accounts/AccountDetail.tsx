@@ -15,6 +15,7 @@ import { useSendSettings } from "../../composer/queries";
 import { SpecialFolders } from "./SpecialFolders";
 import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
 import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
+import { useResolveServerChange, useSettingsSyncStatus } from "../../settings-sync/queries";
 
 function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -107,6 +108,55 @@ function ServerRow({ label, server }: { label: string; server: ServerSettings })
         {t("settings.accounts.setup.usernameValue", { username: server.username })}
       </dd>
     </div>
+  );
+}
+
+/**
+ * Decision 0040 (security review F1): another device in the settings sync set other servers for
+ * this account. The core keeps using the current ones, and the stored password stays with them,
+ * until the user takes the new servers (writing off, password asked for again) or keeps these.
+ */
+function ServerChangeNotice({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const status = useSettingsSyncStatus();
+  const resolve = useResolveServerChange();
+  const change = status.data?.serverChanges.find((c) => c.accountId === account.id);
+  if (!change) return null;
+  const answer = (apply: boolean) => {
+    resolve.mutate({ accountId: account.id, apply });
+  };
+  return (
+    <Notice tone="warning" title={t("settings.accounts.detail.serverChange.title")} data-testid="server-change">
+      <p>{t("settings.accounts.detail.serverChange.body")}</p>
+      <dl className="flex flex-col gap-3">
+        <ServerRow label={t("settings.accounts.detail.serverChange.incoming")} server={change.imap} />
+        <ServerRow label={t("settings.accounts.detail.serverChange.outgoing")} server={change.smtp} />
+      </dl>
+      <p className="text-12">{t("settings.accounts.detail.serverChange.applyNote")}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          disabled={resolve.isPending}
+          onClick={() => {
+            answer(true);
+          }}
+        >
+          {resolve.isPending && resolve.variables.apply
+            ? t("settings.accounts.detail.serverChange.applying")
+            : t("settings.accounts.detail.serverChange.apply")}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={resolve.isPending}
+          onClick={() => {
+            answer(false);
+          }}
+        >
+          {t("settings.accounts.detail.serverChange.keep")}
+        </Button>
+      </div>
+      {resolve.isError && <ErrorNotice context={t("settings.accounts.detail.serverChange.failed")} error={resolve.error} />}
+    </Notice>
   );
 }
 
@@ -314,6 +364,7 @@ export function AccountDetail({ accountId }: { accountId: string }) {
           <p>{t("settings.accounts.setup.readOnlyAccountBody")}</p>
         </Notice>
       )}
+      <ServerChangeNotice account={account} />
       <StatusBlock account={account} />
       <WritesBlock account={account} />
       <Block title={t("settings.accounts.detail.servers")}>

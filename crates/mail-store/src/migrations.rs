@@ -37,6 +37,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0014_gmail.sql")),
     // Stage 16: pinned attachments (decision 0036).
     M::up(include_str!("../migrations/0015_attachment_pins.sql")),
+    // Security review F1: server changes from the settings sync wait for the user (decision
+    // 0040).
+    M::up(include_str!("../migrations/0016_account_server_change.sql")),
 ];
 
 /// All migrations this build knows.

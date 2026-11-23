@@ -275,6 +275,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::settings_sync::join_settings_sync,
             commands::settings_sync::sync_settings_now,
             commands::settings_sync::resolve_sync_question,
+            // Security review F1 (decision 0040).
+            commands::settings_sync::resolve_server_change,
             commands::settings_sync::change_settings_sync_passphrase,
             commands::settings_sync::reset_settings_sync,
             commands::settings_sync::disable_settings_sync,

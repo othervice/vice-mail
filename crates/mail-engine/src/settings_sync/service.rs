@@ -26,7 +26,7 @@ use mail_model::{
     AccountId, BackendError, CoreError, CoreEvent, IpcError, MIN_SYNC_PASSPHRASE_CHARS,
     SETTINGS_SYNC_FOLDER, Secret, SettingsSyncFailure, SettingsSyncPreview, SettingsSyncState,
     SettingsSyncStatus, SyncDevice, SyncFolder, SyncFolderConnector, SyncFolderState,
-    SyncKindCount, SyncQuestion,
+    SyncKindCount, SyncQuestion, SyncServerChange,
 };
 use mail_store::{
     ApplyOutcome, Store, StoredSyncDevice, SyncApply, SyncProgress, SyncStateRow, TableWrite,
@@ -923,10 +923,13 @@ impl<C: Connector> AppCore<C> {
         for added in &outcome.accounts_added {
             self.start_synced_account(*added).await;
         }
-        for updated in &outcome.accounts_updated {
-            if !outcome.accounts_rekeyed.iter().any(|(_, n)| n == updated) {
-                self.restart_account_sync(*updated).await;
-            }
+        // Decision 0040: a pass never changes the servers of an existing account (other
+        // servers wait for the user), so the accounts it updated keep their connections.
+        for changed in &outcome.accounts_server_changed {
+            tracing::warn!(
+                account = %changed,
+                "server settings changed on another device; kept until the user decides"
+            );
         }
         let kinds = &outcome.kinds;
         let any = |names: &[&str]| names.iter().any(|n| kinds.contains(*n));
@@ -1054,6 +1057,17 @@ impl<C: Connector> AppCore<C> {
             } else {
                 state.signals.detected().into_keys().collect()
             },
+            // Shown whether the sync is on or not: the change waits until the user decides.
+            server_changes: store
+                .account_server_changes()
+                .await?
+                .into_iter()
+                .map(|change| SyncServerChange {
+                    account_id: change.account,
+                    imap: change.imap,
+                    smtp: change.smtp,
+                })
+                .collect(),
         })
     }
 
@@ -1378,6 +1392,31 @@ impl<C: Connector> AppCore<C> {
             self.remove_account(account).await?;
         }
         state.signals.wake();
+        let status = self.get_settings_sync_status().await?;
+        self.emit_event(CoreEvent::SettingsSyncChanged {
+            status: status.clone(),
+        });
+        Ok(status)
+    }
+
+    /// Answers "server settings changed on another device" (decision 0040). `apply` takes the
+    /// new servers: writing is switched off and the stored password is removed, so it never
+    /// reaches servers named only by the sync folder; the account then asks for its password.
+    /// Otherwise this device keeps its servers and the same change is not offered again.
+    /// `not_found` if no change waits for `account`.
+    pub async fn resolve_server_change(
+        &self,
+        account: AccountId,
+        apply: bool,
+    ) -> Result<SettingsSyncStatus, CoreError> {
+        if apply {
+            self.apply_server_change(account).await?;
+        } else {
+            self.store_ref()?
+                .dismiss_account_server_change(account)
+                .await?;
+        }
+        tracing::info!(%account, apply, "server change from the settings sync resolved");
         let status = self.get_settings_sync_status().await?;
         self.emit_event(CoreEvent::SettingsSyncChanged {
             status: status.clone(),

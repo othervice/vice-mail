@@ -85,6 +85,21 @@ pub async fn resolve_sync_question(
         .map_err(to_ipc("resolve_sync_question"))
 }
 
+/// Another device changed the servers of `account_id` (decision 0040): `apply` takes them
+/// (writing off, the stored password is removed and asked for again); otherwise this device
+/// keeps its servers.
+#[tauri::command]
+#[specta::specta]
+pub async fn resolve_server_change(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    apply: bool,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.resolve_server_change(account_id, apply)
+        .await
+        .map_err(to_ipc("resolve_server_change"))
+}
+
 /// Protects the key with a new passphrase; other devices keep working.
 #[tauri::command]
 #[specta::specta]
