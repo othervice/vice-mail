@@ -332,3 +332,108 @@ describe("account setup: errors", () => {
     expect((await screen.findByTestId("setup-error")).textContent).toContain("This account is already set up.");
   });
 });
+
+/** Security review N-4: servers found online outside the address's domain or as IP addresses. */
+const FOUND_ELSEWHERE: DiscoveryResult = {
+  source: "srv",
+  imap: { host: "imap.example.org.evil.test", port: 993, security: "tls", username: "me@example.org" },
+  smtp: { host: "192.0.2.25", port: 465, security: "tls", username: "me@example.org" },
+  providerHint: null,
+  jmap: { host: "jmap.evil.test", port: 443, security: "tls", username: "me@example.org" },
+  warnings: { imap: "outsideDomain", smtp: "ipAddress", jmap: "outsideDomain" },
+};
+
+describe("account setup: warnings for servers found online (N-4)", () => {
+  it("warns per flagged server in the summary before anything is saved", async () => {
+    const core = mockCore({ online: { "example.org": FOUND_ELSEWHERE } });
+    const { user } = await openSetup();
+    await fillAddress(user, "me@example.org");
+    await user.click(await screen.findByRole("button", { name: "Search settings online" }));
+
+    const summary = await screen.findByTestId("server-summary");
+    const warnings = within(summary).getAllByTestId("found-server-warning");
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]?.textContent).toContain("This server is not part of example.org");
+    expect(warnings[0]?.textContent).toContain("Check that imap.example.org.evil.test belongs to your provider");
+    expect(warnings[1]?.textContent).toContain("This server is given as an IP address");
+    expect(warnings[1]?.textContent).toContain("Check that 192.0.2.25 belongs to your provider");
+    // Each warning sits with its server.
+    const incoming = within(summary).getByText("Incoming mail (IMAP)").parentElement;
+    expect(incoming?.textContent).toContain("not part of example.org");
+    expect(incoming?.textContent).not.toContain("IP address");
+    expect(core.callsOf("add_account")).toEqual([]);
+
+    // A warning, not a block: the user decides.
+    await user.click(screen.getByRole("button", { name: "Add account" }));
+    await waitFor(() => {
+      expect(core.callsOf("add_account")).toHaveLength(1);
+    });
+  });
+
+  it("keeps the warning in the form while the host is the found one, also for JMAP", async () => {
+    mockCore({ online: { "example.org": FOUND_ELSEWHERE } });
+    const { user } = await openSetup();
+    await fillAddress(user, "me@example.org");
+    await user.click(await screen.findByRole("button", { name: "Search settings online" }));
+    await user.click(await screen.findByRole("button", { name: "Edit server settings" }));
+
+    const imap = screen.getByRole("group", { name: "Incoming mail (IMAP)" });
+    const smtp = screen.getByRole("group", { name: "Outgoing mail (SMTP)" });
+    expect(within(imap).getByTestId("found-server-warning").textContent).toContain("not part of example.org");
+    expect(within(smtp).getByTestId("found-server-warning").textContent).toContain("given as an IP address");
+
+    // Another port keeps the server; another host is the user's own choice.
+    await user.clear(within(imap).getByLabelText("Port"));
+    await user.type(within(imap).getByLabelText("Port"), "1993");
+    expect(within(imap).queryByTestId("found-server-warning")).not.toBeNull();
+    await user.clear(within(imap).getByLabelText("Server"));
+    await user.type(within(imap).getByLabelText("Server"), "imap.example.org");
+    expect(within(imap).queryByTestId("found-server-warning")).toBeNull();
+    expect(within(smtp).queryByTestId("found-server-warning")).not.toBeNull();
+    // Typing the found host again (any case, trailing dot) brings it back.
+    await user.clear(within(imap).getByLabelText("Server"));
+    await user.type(within(imap).getByLabelText("Server"), "IMAP.example.org.evil.test.");
+    expect(within(imap).queryByTestId("found-server-warning")).not.toBeNull();
+
+    const choice = screen.getByRole("radiogroup", { name: "Protocol" });
+    await user.click(within(choice).getByRole("radio", { name: "JMAP" }));
+    const jmap = screen.getByRole("group", { name: "JMAP server" });
+    expect(within(jmap).getByLabelText("Server")).toHaveProperty("value", "jmap.evil.test");
+    expect(within(jmap).getByTestId("found-server-warning").textContent).toContain("not part of example.org");
+  });
+
+  it("shows no warning for unflagged servers or the built-in table, and drops it with the domain", async () => {
+    mockCore({
+      knownProviders: { "gmail.com": GMAIL },
+      online: { "example.org": { ...AUTOCONFIG, warnings: { smtp: "outsideDomain" } } },
+    });
+    const { user } = await openSetup();
+    await fillAddress(user, "me@example.org");
+    await user.click(await screen.findByRole("button", { name: "Search settings online" }));
+    const summary = await screen.findByTestId("server-summary");
+    expect(within(summary).getAllByTestId("found-server-warning")).toHaveLength(1);
+    expect(within(summary).getByText("Outgoing mail (SMTP)").parentElement?.textContent).toContain(
+      "This server is not part of example.org",
+    );
+
+    const email = screen.getByLabelText("Email address");
+    await user.clear(email);
+    await user.type(email, "someone@gmail.com");
+    expect(await screen.findByText("Server settings for gmail.com are known.")).toBeTruthy();
+    expect(screen.queryByTestId("found-server-warning")).toBeNull();
+  });
+
+  it("speaks German", async () => {
+    const setup = de.settings.accounts.setup;
+    mockCore({ preferences: { theme: "light", language: "de" }, online: { "example.org": FOUND_ELSEWHERE } });
+    const { user } = renderApp("de");
+    await user.click(await screen.findByRole("button", { name: de.mail.noAccount.action }));
+    await user.type(screen.getByLabelText(setup.email), "me@example.org");
+    await user.click(await screen.findByRole("button", { name: setup.onlineAction }));
+
+    const warnings = await screen.findAllByTestId("found-server-warning");
+    expect(warnings[0]?.textContent).toContain("Dieser Server gehört nicht zu example.org");
+    expect(warnings[0]?.textContent).toContain("Prüfe, ob imap.example.org.evil.test zu deinem Anbieter gehört");
+    expect(warnings[1]?.textContent).toContain("Dieser Server ist als IP-Adresse angegeben");
+  });
+});

@@ -2017,6 +2017,12 @@ export type DiscoveryResult = {
 	 *  none was found.
 	 */
 	jmap?: ServerSettings | null,
+	/**
+	 *  Security review N-4 (RFC 6186, section 6): found servers that deserve a second look
+	 *  before the account is added. Only the online search sets them, never the built-in table.
+	 *  Left out when there is none.
+	 */
+	warnings?: ServerWarnings,
 };
 
 /**  Where proposed server settings came from. */
@@ -4205,6 +4211,30 @@ export type ServerSettings = {
 	port: number,
 	security: Security,
 	username: string,
+};
+
+/**
+ *  Why a server the online search found deserves a second look (security review N-4,
+ *  RFC 6186 section 6): DNS and autoconfig answers are not verified, so a network attacker
+ *  during setup could propose his own server.
+ */
+export type ServerWarning = 
+/**
+ *  The host is neither the address's domain nor one of its subdomains (and not a server of
+ *  the built-in provider table).
+ */
+"outsideDomain" | 
+/**  The host is an IP address (IPv4 or IPv6), not a name. */
+"ipAddress";
+
+/**
+ *  At most one [`ServerWarning`] per server of a [`DiscoveryResult`]; an IP address is not
+ *  also reported as outside the domain.
+ */
+export type ServerWarnings = {
+	imap?: ServerWarning | null,
+	smtp?: ServerWarning | null,
+	jmap?: ServerWarning | null,
 };
 
 /**  The preview a new device shows before it merges (`previewSettingsSyncJoin`). */

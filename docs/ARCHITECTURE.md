@@ -555,7 +555,12 @@ einer klaren Meldung abgelehnt.
   eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
   dieselbe Domain oder ihre Subdomains, höchstens drei, ohne Cookies, Referrer und Proxy, 128 KiB
   höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
-  Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft).
+  Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft). Ein Server außerhalb der
+  Domain der Adresse (weder sie noch eine Subdomain, verglichen in ASCII-/IDNA-Form ohne
+  Groß-/Kleinschreibung und Schlusspunkt) oder als IP-Adresse bekommt dabei eine eigene Warnung
+  (`DiscoveryResult.warnings`, RFC 6186 Abschnitt 6, Sicherheitsprüfung N-4,
+  `discovery/warning.rs`); ausgenommen sind die Server der eingebauten Anbietertabelle, deren
+  Ergebnisse nie eine Warnung tragen. MX wird nicht abgefragt.
 - Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“;
   bei einer geöffneten `.eml`-Datei nur „einmal laden“, 0027).
   Der Kern lädt sie selbst (`mail-engine/src/reading/remote.rs`): reqwest über rustls mit der

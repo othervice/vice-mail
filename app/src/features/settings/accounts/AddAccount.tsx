@@ -1,5 +1,5 @@
 import { ArrowLeft, Globe } from "lucide-react";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/Button";
 import { ErrorNotice } from "../../../components/ErrorNotice";
@@ -16,6 +16,7 @@ import {
 import {
   domainOf,
   emptyServers,
+  foundServerWarning,
   fromDiscovery,
   isEmail,
   isGmailHost,
@@ -24,7 +25,7 @@ import {
   type ServerKind,
   type ServersDraft,
 } from "./serverDraft";
-import { ServerFields } from "./ServerFields";
+import { FoundServerWarning, ServerFields } from "./ServerFields";
 import { JmapFields, ProtocolChoice } from "./ProtocolChoice";
 import { useJmapChoice } from "./jmapChoice";
 import { OAuthSetup, oauthProviderFor } from "./OAuthSignIn";
@@ -46,7 +47,7 @@ function useDebounced<T>(value: T, delay: number): T {
 /** Where the server settings in the form came from. */
 type ServerOrigin = { kind: "user" } | { kind: "online"; source: "srv" | "autoconfig"; domain: string };
 
-function ServerSummary({ settings, label }: { settings: ServerDraft; label: string }) {
+function ServerSummary({ settings, label, warning }: { settings: ServerDraft; label: string; warning?: ReactNode }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col">
@@ -61,6 +62,7 @@ function ServerSummary({ settings, label }: { settings: ServerDraft; label: stri
       <dd className="text-12 text-secondary select-text">
         {t("settings.accounts.setup.usernameValue", { username: settings.username })}
       </dd>
+      {warning && <dd className="mt-2">{warning}</dd>}
     </div>
   );
 }
@@ -87,7 +89,9 @@ interface AddAccountProps {
  * name and password first; the core's built-in provider table answers at once and offline.
  * Anything else is found only on request (DNS and the domain's autoconfig file, explained
  * before the click) or entered by hand. Online answers are not DNSSEC-verified, so the found
- * servers are always shown, with a note to check them, before the user adds the account. "Test connection" logs in without storing anything;
+ * servers are always shown, with a note to check them, before the user adds the account; a
+ * server outside the address's domain or given as an IP address gets its own warning (security
+ * review N-4). "Test connection" logs in without storing anything;
  * "Add account" checks the login again in the core and stores the account read-only.
  */
 export function AddAccount({ embedded }: AddAccountProps = {}) {
@@ -103,6 +107,8 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   /** Server settings the user edited or an online search found; null follows the provider table. */
   const [manual, setManual] = useState<ServersDraft | null>(null);
   const [origin, setOrigin] = useState<ServerOrigin | null>(null);
+  /** Security review N-4: the online search's answer, for its warnings per found server. */
+  const [foundOnline, setFoundOnline] = useState<DiscoveryResult | null>(null);
   const [editing, setEditing] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
@@ -141,6 +147,8 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   };
 
   const changeEmail = (next: string) => {
+    // Its warnings name the domain they were found for.
+    if (domainOf(next) !== domain) setFoundOnline(null);
     if (domainOf(next) !== domain && origin?.kind === "online") {
       // Settings found online belong to the old domain.
       setManual(null);
@@ -162,6 +170,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
     const address = email.trim();
     online.mutate(address, {
       onSuccess: (result) => {
+        setFoundOnline(result);
         if (result.source === "none" || result.source === "knownProvider") return;
         if (!serverOf(result.imap) && !serverOf(result.smtp) && !serverOf(result.jmap)) return;
         setManual(fromDiscovery(result, address));
@@ -207,6 +216,11 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
         : t("settings.accounts.setup.foundAutoconfig", { domain: origin.domain });
   }
   const offerOnline = lookupDone && !suggestion && origin?.kind !== "online";
+  /** Security review N-4: the warning for a found server the form still names. */
+  const warningFor = (kind: ServerKind | "jmap", host: string) => {
+    const warning = foundServerWarning(foundOnline, kind, host);
+    return warning && <FoundServerWarning warning={warning} domain={domain} host={host.trim()} />;
+  };
   const nothingFoundOnline = online.isSuccess && !serverOf(online.data.jmap) && (online.data.source === "none" || online.data.source === "knownProvider" || (!serverOf(online.data.imap) && !serverOf(online.data.smtp)));
 
   const form = (
@@ -296,8 +310,16 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
             <p className="text-14 font-medium text-primary">{sourceNote}</p>
             {origin?.kind === "online" && <p className="text-13 text-secondary">{t("settings.accounts.setup.checkFound")}</p>}
             <dl className="flex flex-col gap-2">
-              <ServerSummary label={t("settings.accounts.setup.incoming")} settings={servers.imap} />
-              <ServerSummary label={t("settings.accounts.setup.outgoing")} settings={servers.smtp} />
+              <ServerSummary
+                label={t("settings.accounts.setup.incoming")}
+                settings={servers.imap}
+                warning={warningFor("imap", servers.imap.host)}
+              />
+              <ServerSummary
+                label={t("settings.accounts.setup.outgoing")}
+                settings={servers.smtp}
+                warning={warningFor("smtp", servers.smtp.host)}
+              />
             </dl>
             <div>
               <Button
@@ -331,6 +353,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
                   changed();
                 }}
                 showErrors={attempted}
+                warning={warningFor("jmap", jmap.draft.host)}
               />
             ) : (
               <>
@@ -342,6 +365,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
                     changeServer("imap", draft);
                   }}
                   showErrors={attempted}
+                  warning={warningFor("imap", servers.imap.host)}
                 />
                 <ServerFields
                   kind="smtp"
@@ -352,6 +376,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
                     changeServer("smtp", draft);
                   }}
                   showErrors={attempted}
+                  warning={warningFor("smtp", servers.smtp.host)}
                 />
               </>
             )}

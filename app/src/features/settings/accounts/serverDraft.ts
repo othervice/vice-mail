@@ -94,6 +94,30 @@ export function toSettings(email: string, displayName: string, servers: ServersD
   return { email: email.trim(), displayName: displayName.trim(), imap, smtp };
 }
 
+/** Security review N-4: why a server the online search found deserves a second look. */
+export type ServerWarning = NonNullable<NonNullable<DiscoveryResult["warnings"]>["imap"]>;
+
+function sameHost(a: string, b: string): boolean {
+  const name = (host: string) => host.trim().replace(/\.$/, "").toLowerCase();
+  return name(a) === name(b);
+}
+
+/**
+ * Security review N-4: the core's warning for a server the online search found (outside the
+ * address's domain, or an IP address), as long as the form still names that host. A host the
+ * user typed in gets none, and the built-in table never has any.
+ */
+export function foundServerWarning(
+  found: DiscoveryResult | null,
+  kind: ServerKind | "jmap",
+  host: string,
+): ServerWarning | null {
+  const warning = found?.warnings?.[kind];
+  const server = found?.[kind];
+  if (!warning || !server) return null;
+  return sameHost(host, server.host) ? warning : null;
+}
+
 /** Stage 14 (decision 0034): Gmail's servers (also for Google Workspace domains), as the core's `is_gmail_host`. */
 export function isGmailHost(host: string): boolean {
   const name = host.trim().replace(/\.$/, "").toLowerCase();

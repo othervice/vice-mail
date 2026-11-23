@@ -975,6 +975,16 @@ export const de: Translation = {
         foundSrv: "Servereinstellungen in den DNS-Einträgen von {{domain}} gefunden.",
         foundAutoconfig: "Servereinstellungen unter autoconfig.{{domain}} gefunden.",
         checkFound: "Prüfe, ob diese Server zu deinem Anbieter gehören. Die Antworten der Online-Suche sind nicht abgesichert, ein manipuliertes Netz könnte woandershin verweisen.",
+        foundWarning: {
+          outsideDomain: {
+            title: "Dieser Server gehört nicht zu {{domain}}",
+            body: "Prüfe, ob {{host}} zu deinem Anbieter gehört, bevor du das Konto hinzufügst. Ein manipuliertes Netz könnte dich auf den Server eines anderen lenken, der dann dein Passwort bekäme.",
+          },
+          ipAddress: {
+            title: "Dieser Server ist als IP-Adresse angegeben",
+            body: "Anbieter geben ihren Servern Namen. Prüfe, ob {{host}} zu deinem Anbieter gehört, bevor du das Konto hinzufügst. Ein manipuliertes Netz könnte dich auf den Server eines anderen lenken, der dann dein Passwort bekäme.",
+          },
+        },
         unknown: "Die App kennt die Server von {{domain}} nicht.",
         onlineAction: "Einstellungen online suchen",
         onlineExplanation:

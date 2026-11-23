@@ -343,6 +343,54 @@ pub struct DiscoveryResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub jmap: Option<ServerSettings>,
+    /// Security review N-4 (RFC 6186, section 6): found servers that deserve a second look
+    /// before the account is added. Only the online search sets them, never the built-in table.
+    /// Left out when there is none.
+    #[serde(skip_serializing_if = "ServerWarnings::is_empty")]
+    #[specta(optional)]
+    pub warnings: ServerWarnings,
+}
+
+/// Why a server the online search found deserves a second look (security review N-4,
+/// RFC 6186 section 6): DNS and autoconfig answers are not verified, so a network attacker
+/// during setup could propose his own server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ServerWarning {
+    /// The host is neither the address's domain nor one of its subdomains (and not a server of
+    /// the built-in provider table).
+    OutsideDomain,
+    /// The host is an IP address (IPv4 or IPv6), not a name.
+    IpAddress,
+}
+
+/// At most one [`ServerWarning`] per server of a [`DiscoveryResult`]; an IP address is not
+/// also reported as outside the domain.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerWarnings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub imap: Option<ServerWarning>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub smtp: Option<ServerWarning>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub jmap: Option<ServerWarning>,
+}
+
+impl ServerWarnings {
+    /// No warning for any server.
+    pub const NONE: Self = Self {
+        imap: None,
+        smtp: None,
+        jmap: None,
+    };
+
+    pub const fn is_empty(&self) -> bool {
+        self.imap.is_none() && self.smtp.is_none() && self.jmap.is_none()
+    }
 }
 
 /// A successful connection test. Failures arrive as `IpcError` with a specific code.

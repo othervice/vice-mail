@@ -979,6 +979,17 @@ export const en = {
         foundSrv: "Server settings found in the DNS records of {{domain}}.",
         foundAutoconfig: "Server settings found at autoconfig.{{domain}}.",
         checkFound: "Check that these servers belong to your provider. The answers of the online search are not verified, so a manipulated network could point elsewhere.",
+        // Security review N-4: one warning per found server that deserves a second look.
+        foundWarning: {
+          outsideDomain: {
+            title: "This server is not part of {{domain}}",
+            body: "Check that {{host}} belongs to your provider before you add the account. A manipulated network could point you to someone else's server, which would then get your password.",
+          },
+          ipAddress: {
+            title: "This server is given as an IP address",
+            body: "Providers give their servers names. Check that {{host}} belongs to your provider before you add the account. A manipulated network could point you to someone else's server, which would then get your password.",
+          },
+        },
         unknown: "The app does not know the servers of {{domain}}.",
         onlineAction: "Search settings online",
         onlineExplanation:

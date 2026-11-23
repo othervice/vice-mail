@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChoiceGroup, type ChoiceOption } from "../../../components/ChoiceGroup";
 import { TextField } from "../../../components/TextField";
@@ -37,10 +38,12 @@ interface JmapFieldsProps {
   onChange: (draft: ServerDraft) => void;
   /** Show what is missing or wrong (after the first attempt to submit). */
   showErrors: boolean;
+  /** Security review N-4: the warning for a server the online search found. */
+  warning?: ReactNode;
 }
 
 /** Host, port and user name of a JMAP server. Always HTTPS, so there is no security choice. */
-export function JmapFields({ draft, onChange, showErrors }: JmapFieldsProps) {
+export function JmapFields({ draft, onChange, showErrors, warning }: JmapFieldsProps) {
   const { t } = useTranslation();
   const errors = showErrors ? serverErrors(draft) : null;
   const host = draft.host.trim() || t("settings.accounts.setup.jmap.hostPlaceholder");
@@ -53,6 +56,7 @@ export function JmapFields({ draft, onChange, showErrors }: JmapFieldsProps) {
         {t("settings.accounts.setup.jmap.server")}
       </legend>
       <p className="text-13 text-secondary">{t("settings.accounts.setup.jmap.serverNote", { host })}</p>
+      {warning}
       <div className="flex gap-3">
         <TextField
           label={t("settings.accounts.setup.host")}

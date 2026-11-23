@@ -24,12 +24,19 @@
 //! Results never contain a password, and every failure on the way (no record, timeout,
 //! unreachable, bad file) ends in `source: none`, so the user fills in the form by hand. Only
 //! an address that cannot be valid is an error (`invalid_argument`).
+//!
+//! Online results are not verified (no DNSSEC). A found server outside the address's domain or
+//! given as an IP address carries a warning for the setup form ([`warning`], security review
+//! N-4); the built-in table never does.
 
 pub mod autoconfig;
 pub mod known;
 pub mod srv;
+pub mod warning;
 
-use mail_model::{CoreError, DiscoveryResult, DiscoverySource, ProviderHint, ServerSettings};
+use mail_model::{
+    CoreError, DiscoveryResult, DiscoverySource, ProviderHint, ServerSettings, ServerWarnings,
+};
 
 use self::autoconfig::{AutoconfigFetch, HttpsFetcher};
 use self::srv::{SrvResolver, SystemSrvResolver};
@@ -49,6 +56,7 @@ pub fn discover_known(email: &str) -> Result<DiscoveryResult, CoreError> {
         smtp: Some(provider.smtp.settings(&address)),
         provider_hint: provider.hint,
         jmap: None,
+        warnings: ServerWarnings::NONE,
     })
 }
 
@@ -98,10 +106,11 @@ impl<R: SrvResolver, F: AutoconfigFetch> OnlineDiscovery<R, F> {
         if found.jmap.is_none() {
             found.jmap = self.fetcher.probe_jmap(domain, &address).await;
         }
-        let result = found.into_result(hint);
+        let mut result = found.into_result(hint);
+        result.warnings = warning::check(&result, domain);
         tracing::info!(domain, source = ?result.source, imap = result.imap.is_some(),
             smtp = result.smtp.is_some(), jmap = result.jmap.is_some(),
-            "online server discovery finished");
+            warnings = ?result.warnings, "online server discovery finished");
         Ok(result)
     }
 }
@@ -159,6 +168,7 @@ impl Found {
             smtp: self.smtp.map(|(_, s)| s),
             provider_hint: hint,
             jmap: self.jmap,
+            warnings: ServerWarnings::NONE,
         }
     }
 }
@@ -170,6 +180,7 @@ const fn nothing(hint: Option<ProviderHint>) -> DiscoveryResult {
         smtp: None,
         provider_hint: hint,
         jmap: None,
+        warnings: ServerWarnings::NONE,
     }
 }
 

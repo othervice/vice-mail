@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 
-use mail_model::{ErrorCode, Security};
+use mail_model::{ErrorCode, Security, ServerWarning};
 use reqwest::Url;
 use serde_json::json;
 
@@ -423,4 +423,180 @@ async fn workspace_domains_get_the_gmail_hint_from_their_servers() {
         .await
         .expect("discover");
     assert_eq!(found.provider_hint, None);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Warnings for found servers (security review N-4)
+
+#[tokio::test]
+async fn srv_targets_outside_the_domain_or_as_ip_addresses_are_flagged() {
+    let dns = FakeDns::default()
+        .with(
+            "_imaps._tcp.example.org.",
+            993,
+            "imap.example.org.evil.test",
+        )
+        .with("_submissions._tcp.example.org.", 465, "192.0.2.25");
+    let found = OnlineDiscovery::new(dns, FakeWeb::default())
+        .discover("alice@example.org")
+        .await
+        .expect("discover");
+    assert_eq!(found.source, DiscoverySource::Srv);
+    assert_eq!(
+        found.warnings,
+        ServerWarnings {
+            imap: Some(ServerWarning::OutsideDomain),
+            smtp: Some(ServerWarning::IpAddress),
+            jmap: None,
+        }
+    );
+
+    // Subdomains of the address's domain (any case in the address) and the built-in table's
+    // servers (a Google Workspace domain) are not.
+    for (email, imap, smtp) in [
+        (
+            "alice@Example.ORG",
+            "imap.example.org",
+            "smtp.mail.example.org",
+        ),
+        ("alice@example.org", "imap.gmail.com", "smtp.gmail.com"),
+    ] {
+        let dns = FakeDns::default()
+            .with("_imaps._tcp.example.org.", 993, imap)
+            .with("_submissions._tcp.example.org.", 465, smtp);
+        let found = OnlineDiscovery::new(dns, FakeWeb::default())
+            .discover(email)
+            .await
+            .expect("discover");
+        assert_eq!(found.warnings, ServerWarnings::NONE, "{email} {imap}");
+    }
+}
+
+#[tokio::test]
+async fn autoconfig_servers_are_flagged_per_server() {
+    // FILE names servers of another domain, as many hosted domains do.
+    let discovery = OnlineDiscovery::new(
+        FakeDns::default(),
+        FakeWeb::default().with(AUTOCONFIG_URL, FILE),
+    );
+    let found = discovery
+        .discover("alice@example.org")
+        .await
+        .expect("discover");
+    assert_eq!(found.source, DiscoverySource::Autoconfig);
+    assert_eq!(
+        found.warnings,
+        ServerWarnings {
+            imap: Some(ServerWarning::OutsideDomain),
+            smtp: Some(ServerWarning::OutsideDomain),
+            jmap: None,
+        }
+    );
+
+    // A file with an IP address, a subdomain and a JMAP server elsewhere; SRV gave nothing.
+    let file = r#"<clientConfig version="1.1"><emailProvider id="example.org">
+  <incomingServer type="imap"><hostname>192.0.2.10</hostname><port>993</port>
+    <socketType>SSL</socketType></incomingServer>
+  <outgoingServer type="smtp"><hostname>SMTP.%EMAILDOMAIN%.</hostname><port>465</port>
+    <socketType>SSL</socketType></outgoingServer>
+  <incomingServer type="jmap"><hostname>jmap.evil.test</hostname></incomingServer>
+</emailProvider></clientConfig>"#;
+    let found = OnlineDiscovery::new(
+        FakeDns::default(),
+        FakeWeb::default().with(WELL_KNOWN_URL, file),
+    )
+    .discover("alice@example.org")
+    .await
+    .expect("discover");
+    assert_eq!(
+        found.imap.as_ref().map(|s| s.host.as_str()),
+        Some("192.0.2.10")
+    );
+    assert_eq!(
+        found.jmap.as_ref().map(|s| s.host.as_str()),
+        Some("jmap.evil.test")
+    );
+    assert_eq!(
+        found.warnings,
+        ServerWarnings {
+            imap: Some(ServerWarning::IpAddress),
+            smtp: None,
+            jmap: Some(ServerWarning::OutsideDomain),
+        }
+    );
+
+    // Mixed sources: the SRV server inside the domain, the autoconfig one outside.
+    let dns = FakeDns::default().with("_imap._tcp.example.org.", 143, "imap.example.org");
+    let found = OnlineDiscovery::new(dns, FakeWeb::default().with(WELL_KNOWN_URL, FILE))
+        .discover("alice@example.org")
+        .await
+        .expect("discover");
+    assert_eq!(
+        found.warnings,
+        ServerWarnings {
+            imap: None,
+            smtp: Some(ServerWarning::OutsideDomain),
+            jmap: None,
+        }
+    );
+}
+
+#[tokio::test]
+async fn idn_domains_compare_in_their_ascii_form() {
+    let dns = FakeDns::default()
+        .with(
+            "_imaps._tcp.xn--mller-kva.de.",
+            993,
+            "imap.xn--mller-kva.de",
+        )
+        .with(
+            "_submissions._tcp.xn--mller-kva.de.",
+            465,
+            "smtp.mueller.de",
+        );
+    let found = OnlineDiscovery::new(dns, FakeWeb::default())
+        .discover("max@Müller.de")
+        .await
+        .expect("discover");
+    assert_eq!(
+        found.warnings,
+        ServerWarnings {
+            imap: None,
+            smtp: Some(ServerWarning::OutsideDomain),
+            jmap: None,
+        }
+    );
+}
+
+/// The built-in table is trusted: no warning, also for Proton's Bridge on `127.0.0.1`.
+#[test]
+fn known_providers_carry_no_warning() {
+    for provider in known::all() {
+        let email = format!("someone@{}", provider.domains[0]);
+        let found = discover_known(&email).expect("known");
+        assert_eq!(found.warnings, ServerWarnings::NONE, "{email}");
+    }
+    assert_eq!(
+        discover_known("someone@proton.me")
+            .expect("known")
+            .imap
+            .map(|s| s.host)
+            .as_deref(),
+        Some("127.0.0.1")
+    );
+}
+
+#[test]
+fn warnings_on_the_wire() {
+    let mut found = nothing(None);
+    found.warnings = ServerWarnings {
+        imap: Some(ServerWarning::OutsideDomain),
+        smtp: None,
+        jmap: Some(ServerWarning::IpAddress),
+    };
+    assert_eq!(
+        serde_json::to_value(&found).expect("serialize"),
+        json!({ "source": "none", "imap": null, "smtp": null, "providerHint": null,
+                "warnings": { "imap": "outsideDomain", "jmap": "ipAddress" } })
+    );
 }
