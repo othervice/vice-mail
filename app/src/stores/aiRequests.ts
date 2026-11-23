@@ -21,6 +21,20 @@ interface AiRequestState {
 const EMPTY: AiRequestProgress = { transfers: [], chars: 0, outcome: null };
 
 /**
+ * Requests another window started are never forgotten by a view of this one; past this many
+ * entries the finished ones go first, so the store stays small.
+ */
+const MAX_TRACKED = 50;
+
+function trimmed(requests: Record<string, AiRequestProgress>): Record<string, AiRequestProgress> {
+  const ids = Object.keys(requests);
+  if (ids.length <= MAX_TRACKED) return requests;
+  const finished = ids.filter((id) => requests[id]?.outcome !== null);
+  const drop = new Set(finished.slice(0, ids.length - MAX_TRACKED));
+  return Object.fromEntries(Object.entries(requests).filter(([id]) => !drop.has(id)));
+}
+
+/**
  * Running AI requests by the id the UI chose. Fed only by the core's `aiRequest` events, so what
  * the UI shows ("N mails, X KB to host") is what the core is about to send, not a guess.
  */
@@ -35,7 +49,7 @@ export const useAiRequestStore = create<AiRequestState>()((set) => ({
           : phase.phase === "receiving"
             ? { ...current, chars: phase.chars }
             : { ...current, outcome: phase.outcome };
-      return { requests: { ...state.requests, [requestId]: next } };
+      return { requests: trimmed({ ...state.requests, [requestId]: next }) };
     });
   },
   forget: (requestId) => {

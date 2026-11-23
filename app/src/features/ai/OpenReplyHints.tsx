@@ -105,7 +105,7 @@ export function OpenReplyHintBar({ messageId }: { messageId: MessageId }) {
   if (!hint) return null;
   const { title } = text(hint);
   return (
-    <div className="mx-6 mt-3 flex flex-col gap-2 rounded-card border border-border bg-priority-tint p-3" data-print-hide data-testid="open-reply-bar">
+    <div className="flex flex-col gap-2 rounded-card border border-border bg-priority-tint p-3" data-print-hide data-testid="open-reply-bar">
       <div className="flex items-start gap-3">
         <MessageCircleQuestionMark aria-hidden className="mt-0.5 size-(--ui-icon) shrink-0 text-secondary" strokeWidth={1.75} />
         <div role="note" aria-label={t("ai.openReplies.barLabel")} className="flex min-w-0 flex-1 flex-col gap-1">

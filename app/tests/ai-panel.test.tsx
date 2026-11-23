@@ -418,8 +418,7 @@ describe("AI panel in the conversation view", () => {
       },
     });
     const { user } = renderApp();
-    await screen.findByRole("listbox", { name: "Messages in Inbox" });
-    await user.click(screen.getByTestId("rail-folders"));
+    await user.click(await screen.findByTestId("rail-folders"));
     await user.click(await screen.findByTestId("mailbox-5"));
     await screen.findByRole("listbox", { name: "Messages in Projekte" });
     await user.click(screen.getByRole("button", { name: "Conversations" }));
