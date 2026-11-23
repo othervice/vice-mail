@@ -1,6 +1,6 @@
 // Stage 7 in the real app: search, conversations and identities against the local test server
-// (wdio.conf.mjs seeds 10,000 messages for alice). Written by the stage 7 UI session and NOT RUN
-// there (the main session runs the desktop suite in a clean worktree).
+// (wdio.conf.mjs seeds 10,000 messages for alice). In `specs` before actions.e2e.mjs: it needs
+// the seed's offsite thread in Archive as seeded.
 //
 // 1. Cmd+F opens the search field with the focus in it; typing a word of a real subject shows
 //    hits with the word marked, and the core answers within 200 ms.

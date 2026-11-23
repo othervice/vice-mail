@@ -1,6 +1,5 @@
-// Stages 12 and 11 in the real app, against the local test server. NOT YET RUN: written by the
-// UI session without a build (the main session runs the e2e suite in its own worktree). It is not
-// in wdio.conf.mjs `specs` yet; add it after actions.e2e.mjs, which leaves no account behind.
+// Stages 12 and 11 in the real app, against the local test server (last in `specs` of
+// wdio.conf.mjs, after actions.e2e.mjs and compose.e2e.mjs, which leave no account behind).
 //
 // AI over MCP (stage 12):
 // 1. MCP is off after setup; turning it on asks first and explains what a cloud client does.
@@ -152,8 +151,20 @@ describe("stage 12: AI over MCP", () => {
     await waitForCore("list_mcp_clients", (clients) => clients.some((c) => c.clientId === client.clientId && c.revokedAt), "not revoked");
     const refused = await callHelper(config, "list_accounts");
     assert.ok(!refused.call || refused.call.error || refused.call.result?.isError, `a revoked token still works: ${JSON.stringify(refused)}`);
-    const log = await coreCall("list_mcp_access", { before: null, limit: 10 });
-    assert.equal(log.entries[0].outcome, "refused");
+    // The host reports the refusal after answering the helper, and a task writes the log in
+    // batches (decision 0021): the entry comes shortly after the helper has its answer.
+    let log;
+    await browser
+      .waitUntil(
+        async () => {
+          log = await coreCall("list_mcp_access", { before: null, limit: 10 });
+          return log.entries[0]?.outcome === "refused";
+        },
+        { timeout: 10000, interval: 250, timeoutMsg: "the refusal is not in the access log" },
+      )
+      .catch((e) => {
+        throw new Error(`${e.message}: ${JSON.stringify(log?.entries.slice(0, 3))}`);
+      });
   });
 
   it("stops everything with the emergency stop in Access", async () => {

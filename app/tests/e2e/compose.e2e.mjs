@@ -1,6 +1,5 @@
-// Stage 5 in the real app: writing, undo, sending and drafts against the local test server.
-// NOT RUN YET (written by the composer UI session, which may not run the desktop tests). It is not
-// in `specs` of wdio.conf.mjs; add it after actions.e2e.mjs to run it.
+// Stage 5 in the real app: writing, undo, sending and drafts against the local test server
+// (in `specs` of wdio.conf.mjs after actions.e2e.mjs).
 //
 // 1. A new message to alice herself (umlauts and emoji in the subject): "Send" shows the undo
 //    countdown; "Undo" brings the draft back and nothing reaches the server.
@@ -129,8 +128,16 @@ describe("stage 5: writing and sending", () => {
     // Open it again from the Drafts folder and change it.
     await testId("rail-drafts").click();
     await testId("message-list").waitForExist({ timeout: 20000 });
-    await $('[data-testid="message-list"] [role="option"]').doubleClick();
+    // A double-click opens a draft in the composer (MessageList's onDoubleClick, like Enter).
+    // The embedded WebDriver's pointer actions fire two clicks but no `dblclick` (its
+    // pointer_input.rs), so the test clicks the row and dispatches the `dblclick` WebKit would.
+    const row = await $('[data-testid="message-list"] [role="option"]');
+    await row.click();
+    await browser.execute((el) => {
+      el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2, view: window }));
+    }, row);
     await testId("composer-subject").waitForExist();
+    assert.equal(await testId("composer-subject").getValue(), `Entwurf ${RUN}`, "the composer shows another draft");
     await testId("composer-subject").setValue(`Entwurf ${RUN} v2`);
     await testId("composer-close").click();
     await waitForServer(
@@ -149,6 +156,8 @@ describe("stage 5: writing and sending", () => {
     assert.ok(states.includes("sent"), JSON.stringify(states));
     report.screenshots.push(await screenshot("compose-outbox"));
 
+    // "New message" is in the header of the mail views, not of the outbox.
+    await testId("rail-inbox").click();
     await openComposer();
     await testId("composer-format-html").click();
     await testId("composer-rich-body").click();

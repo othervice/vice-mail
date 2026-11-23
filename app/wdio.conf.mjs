@@ -29,14 +29,20 @@ export const config = {
   // data directory: `afterSession` quits the app, and before the next spec the service finds the
   // WebDriver port closed and starts the app again (it logs "unreachable — restarting").
   // account-sync.e2e.mjs needs the empty data directory the first two leave behind, and the
-  // server exactly as seeded; reading.e2e.mjs adds folders to it. actions.e2e.mjs changes the
-  // inbox on the server (archive, trash) and comes last.
+  // server exactly as seeded; reading.e2e.mjs adds folders to it. comfort.e2e.mjs and
+  // search.e2e.mjs read the seed (search the offsite thread in Archive). actions.e2e.mjs changes
+  // the inbox on the server (archive, trash); compose.e2e.mjs sends and saves drafts;
+  // mcp-sync.e2e.mjs comes last.
   specs: [
     "./tests/e2e/frame.e2e.mjs",
     "./tests/e2e/restart.e2e.mjs",
     "./tests/e2e/account-sync.e2e.mjs",
     "./tests/e2e/reading.e2e.mjs",
+    "./tests/e2e/comfort.e2e.mjs",
+    "./tests/e2e/search.e2e.mjs",
     "./tests/e2e/actions.e2e.mjs",
+    "./tests/e2e/compose.e2e.mjs",
+    "./tests/e2e/mcp-sync.e2e.mjs",
   ],
   maxInstances: 1,
   capabilities: [

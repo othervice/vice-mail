@@ -1,9 +1,9 @@
-// Stage 9 in the real app (written by the UI session, NOT RUN yet; add it to `specs` in
-// wdio.conf.mjs before actions.e2e.mjs, which changes the inbox on the server). Against the local
-// test server with alice's seed; the account is added through the core and stays read-only.
+// Stage 9 in the real app (in `specs` of wdio.conf.mjs before actions.e2e.mjs, which changes the
+// inbox on the server). Against the local test server with alice's seed; the account is added
+// through the core and stays read-only.
 //
 // 1. The inbox is the sorted inbox: `listInbox` answers, bundles of notifications and newsletters
-//    are single rows that unfold in place (Enter on the bundle button).
+//    are single rows that unfold in place (a click on the bundle button).
 // 2. Pin (P), snooze (B → Tomorrow) and task (T) on a read-only account: each works, the marks
 //    show in the rows and the views Later, Pinned and Tasks, and nothing moves on the server
 //    (folder counts before and after are equal, no operation in the outbox).
@@ -74,14 +74,41 @@ describe("stage 9: inbox comfort", () => {
     await browser.waitUntil(async () => (await optionLabels()).length > 0, { timeoutMsg: "no rows" });
     const bundles = await $$('[data-testid="bundle-row"]');
     report.steps.bundles = bundles.length;
-    if (bundles.length > 0) {
-      const bundle = bundles[0];
-      assert.equal(await bundle.getAttribute("aria-expanded"), "false");
-      const before = (await optionLabels()).length;
-      await bundle.click();
-      await browser.waitUntil(async () => (await optionLabels()).length > before, { timeoutMsg: "bundle did not unfold" });
-      assert.equal(await bundle.getAttribute("aria-expanded"), "true");
-    }
+    assert.ok(bundles.length > 0, "no bundle row in the sorted inbox (the seed has newsletters and notifications)");
+    const bundle = bundles[0];
+    assert.equal(await bundle.getAttribute("aria-expanded"), "false");
+    // The list is virtualized: the number of rendered rows stays about the same when a bundle
+    // unfolds. What changes is the row right below the bundle (now its first member, a message
+    // that had no row before) and the height of the list.
+    const below = () =>
+      browser.execute(() => {
+        const list = document.querySelector('[data-testid="message-list"]');
+        const bundleRow = list.querySelector('[data-testid="bundle-row"]').closest("[data-index]");
+        const next = list.querySelector(`[data-index="${Number(bundleRow.dataset.index) + 1}"]`);
+        return {
+          bundle: list.querySelector('[data-testid="bundle-row"]').dataset.bundle,
+          next: next?.getAttribute("role") === "option" ? next.id : null,
+          ids: [...list.querySelectorAll('[role="option"]')].map((o) => o.id),
+          height: list.scrollHeight,
+        };
+      });
+    const before = await below();
+    await bundle.click();
+    let after;
+    await browser
+      .waitUntil(
+        async () => {
+          after = await below();
+          return after.bundle === before.bundle && after.next !== null && !before.ids.includes(after.next) && after.height > before.height;
+        },
+        { timeoutMsg: "bundle did not unfold" },
+      )
+      .catch((e) => {
+        const brief = (state) => state && { ...state, ids: state.ids.length };
+        throw new Error(`${e.message}: ${JSON.stringify({ before: brief(before), after: brief(after) })}`);
+      });
+    assert.equal(await bundle.getAttribute("aria-expanded"), "true");
+    report.steps.unfolded = { bundle: before.bundle, firstMember: after.next, heightBefore: before.height, heightAfter: after.height };
   });
 
   it("pins, snoozes and marks tasks on a read-only account without moving anything on the server", async () => {

@@ -1,8 +1,9 @@
 // Stage 4 in the real app: actions and the outbox against the local test server (wdio.conf.mjs
 // seeds 10,000 messages for alice). The account is added through the core and starts read-only.
 //
-// 1. Read-only: the toolbar's actions are disabled and say why, a shortcut explains it as well,
-//    and nothing reaches the core's outbox.
+// 1. Read-only: the toolbar's server actions are disabled and say why (reply, forward, pins,
+//    snoozes and tasks are local and stay usable), a shortcut explains it as well, and nothing
+//    reaches the core's outbox.
 // 2. Writes are turned on in the UI (Settings, Accounts, the switch); the core stores it.
 // 3. E archives the open message: it leaves the list at once, the next one is shown, and the
 //    server has it in Archive. "Undo" in the notice brings it back, on the server too.
@@ -24,6 +25,11 @@ import { ALICE, SERVER, serverFolders, testmail } from "./support/testmail.mjs";
 const report = { screenshots: [], steps: {} };
 let account;
 let boxes;
+
+/** Toolbar actions that change mail on the server (`writes: true` in src/features/actions/registry.ts). */
+const SERVER_ACTIONS = new Set(["archive", "delete", "deletePermanently", "toggleRead", "toggleFlag", "move", "tags", "spam", "notSpam"]);
+/** Toolbar actions that change nothing on the server: they work on read-only accounts too. */
+const LOCAL_ACTIONS = new Set(["reply", "replyAll", "forward", "editDraft", "togglePin", "snooze", "unsnooze", "toggleTask", "toggleTaskDone"]);
 
 async function onlyAccount() {
   const accounts = await coreCall("list_accounts");
@@ -137,10 +143,24 @@ describe("stage 4: actions and the outbox", () => {
   it("explains why a read-only account changes nothing", async () => {
     await showRole("inbox");
     await openRow(0);
-    const disabled = await browser.execute(() =>
-      [...document.querySelectorAll('[data-testid="action-toolbar"] button')].map((b) => b.getAttribute("aria-disabled")),
+    const buttons = await browser.execute(() =>
+      [...document.querySelectorAll('[data-testid="action-toolbar"] button')].map((b) => ({
+        id: b.dataset.testid.replace(/^action-/, ""),
+        disabled: b.getAttribute("aria-disabled") === "true",
+      })),
     );
-    assert.ok(disabled.length >= 6 && disabled.every((d) => d === "true"), `toolbar not disabled: ${disabled}`);
+    report.steps.readOnlyToolbar = buttons;
+    // Every action that changes mail on the server is disabled and says why. Replying, forwarding
+    // (drafts are local, stage 5), pins, snoozes and tasks (local marks, stage 9) stay usable.
+    const server = buttons.filter((b) => SERVER_ACTIONS.has(b.id));
+    assert.ok(server.length >= 6, `too few server actions in the toolbar: ${JSON.stringify(buttons)}`);
+    assert.deepEqual(server.filter((b) => !b.disabled).map((b) => b.id), [], "server actions enabled on a read-only account");
+    assert.deepEqual(
+      buttons.filter((b) => !SERVER_ACTIONS.has(b.id) && !LOCAL_ACTIONS.has(b.id)).map((b) => b.id),
+      [],
+      "toolbar actions this test does not know",
+    );
+    assert.deepEqual(buttons.filter((b) => LOCAL_ACTIONS.has(b.id) && b.disabled).map((b) => b.id), [], "local actions disabled");
     const note = await testId("read-only-actions").getText();
     assert.match(note, /Read-only/);
     await browser.keys(["e"]);

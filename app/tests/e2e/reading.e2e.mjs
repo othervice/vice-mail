@@ -133,7 +133,8 @@ function corpusCheck(headers) {
 /** Names of every command the app registers (from the generated bindings) and the test commands. */
 function knownCommands() {
   const bindings = fs.readFileSync(path.join(REPO, "app", "src", "generated", "bindings.ts"), "utf8");
-  const names = new Set([...bindings.matchAll(/__TAURI_INVOKE\("([a-z0-9_]+)"/g)].map((m) => m[1]));
+  // With or without a type argument: `__TAURI_INVOKE("x"` and `__TAURI_INVOKE<void>("x"`.
+  const names = new Set([...bindings.matchAll(/__TAURI_INVOKE(?:<[^>(]*>)?\("([a-z0-9_]+)"/g)].map((m) => m[1]));
   for (const name of ["e2e_window_controls", "e2e_native_mouse", "e2e_opened", "e2e_invoked"]) names.add(name);
   return names;
 }
@@ -512,6 +513,8 @@ describe("reading mail (stage 3)", function () {
   let known;
   let invokedBefore;
   let initialHref;
+  /** The inbox settings before this spec turned sorting off; restored at its end. */
+  let inboxSettings = null;
 
   before(async () => {
     report.screenshots = [];
@@ -521,6 +524,12 @@ describe("reading mail (stage 3)", function () {
     initialHref = (await detectors()).href;
     report.visibilityState = await browser.execute(() => document.visibilityState);
     known = knownCommands();
+    // Stage 3 opens messages from the chronological inbox: the positions here are those of
+    // `list_messages`. The sorted inbox of stage 9 folds newsletters and notifications into
+    // bundles whose members have no row until the bundle is unfolded (comfort.e2e.mjs covers
+    // that), so this spec turns sorting off and restores the setting at its end.
+    inboxSettings = await coreCall("get_inbox_settings");
+    await coreCall("set_inbox_settings", { settings: { ...inboxSettings, categories: false } });
     counterServer = await startCounter();
 
     // The corpus and a control mail of another sender into "Hostile", the broken seed into "Broken".
@@ -593,6 +602,9 @@ describe("reading mail (stage 3)", function () {
     const left = await coreCall("list_accounts").catch(() => []);
     for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
     await counterServer?.stop();
+    if (inboxSettings) {
+      await coreCall("set_inbox_settings", { settings: inboxSettings }).catch((e) => console.log(`restoring the inbox settings failed: ${e}`));
+    }
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
     fs.writeFileSync(path.join(SCREENSHOT_DIR, "reading-report.json"), JSON.stringify(report, null, 2));
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
