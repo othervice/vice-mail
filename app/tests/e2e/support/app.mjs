@@ -30,13 +30,42 @@ export function readState() {
   return fs.existsSync(statePath()) ? JSON.parse(fs.readFileSync(statePath(), "utf8")) : null;
 }
 
-/** Attaches to the app window and waits until the frame is rendered. */
-export async function attach() {
+/**
+ * Attaches to the app window and waits until the frame is rendered. A fresh data directory starts
+ * with the guided first start (stage 15, decision 0044) instead of the frame: it is skipped here,
+ * the way a user would ("Skip setup"), so every spec starts from the frame as before. Only
+ * first-start.e2e.mjs keeps it (`{ firstStart: "keep" }`) and then waits for it instead.
+ */
+export async function attach({ firstStart = "skip" } = {}) {
   // @wdio/tauri-service re-focuses the "active" window before getTitle, $ and clicks through
   // tauri-plugin-wdio, which this app does not include; every such command would wait 5 s.
   // An explicit switchToWindow turns that off (decision 0005).
   await browser.switchToWindow(await browser.getWindowHandle());
+  const frame = $('[data-testid="rail-settings"]');
+  const steps = $('[data-testid="first-start"]');
+  await browser.waitUntil(async () => (await frame.isExisting()) || (await steps.isExisting()), {
+    timeout: 20000,
+    timeoutMsg: "neither the frame nor the first start appeared",
+  });
+  if (firstStart === "keep") {
+    await steps.waitForExist({ timeout: 1000 });
+    return;
+  }
+  await skipFirstStart();
+}
+
+/**
+ * Skips the guided first start if it shows ("Skip setup"; the core then never shows it again on
+ * this data directory) and waits for the frame. Returns whether it was there.
+ */
+export async function skipFirstStart() {
+  if (!(await $('[data-testid="first-start"]').isExisting())) {
+    await $('[data-testid="rail-settings"]').waitForExist({ timeout: 20000 });
+    return false;
+  }
+  await $('[data-testid="first-start-skip"]').click();
   await $('[data-testid="rail-settings"]').waitForExist({ timeout: 20000 });
+  return true;
 }
 
 /**

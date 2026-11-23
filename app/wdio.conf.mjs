@@ -28,7 +28,7 @@ export const config = {
   // In this order, one after the other. Every spec file gets a freshly started app on the same
   // data directory: `afterSession` quits the app, and before the next spec the service finds the
   // WebDriver port closed and starts the app again (it logs "unreachable — restarting").
-  // account-sync.e2e.mjs needs the empty data directory the first two leave behind, and the
+  // account-sync.e2e.mjs needs the empty data directory the first three leave behind, and the
   // server exactly as seeded; reading.e2e.mjs adds folders to it. comfort.e2e.mjs,
   // search.e2e.mjs (the offsite thread in Archive) and extras.e2e.mjs read the seed;
   // keyboard.e2e.mjs archives a message it delivered itself; windows.e2e.mjs only reads.
@@ -36,7 +36,11 @@ export const config = {
   // composer-complete.e2e.mjs and send-later.e2e.mjs write drafts and send to alice.
   // ai.e2e.mjs uses the counting server as its provider; a11y.e2e.mjs runs axe over the main
   // views. layouts.e2e.mjs changes the stored window layout (and restores it) and comes last.
+  // first-start.e2e.mjs needs the fresh data directory (the guided first start shows only there)
+  // and comes first; every other spec skips the first start in `attach()` if it shows.
   specs: [
+    // Stage 15 (decision 0044): the guided first start.
+    "./tests/e2e/first-start.e2e.mjs",
     "./tests/e2e/frame.e2e.mjs",
     "./tests/e2e/restart.e2e.mjs",
     "./tests/e2e/account-sync.e2e.mjs",
