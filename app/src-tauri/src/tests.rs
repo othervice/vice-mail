@@ -657,3 +657,321 @@ fn action_commands_answer_typed_results() {
         never
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 8: UI preferences, window layouts, message windows (decision 0025)
+// ---------------------------------------------------------------------------------------------
+
+fn code_of(err: &Value) -> Option<&str> {
+    err.get("code").and_then(Value::as_str)
+}
+
+#[test]
+fn ui_preference_commands_store_validate_and_emit() {
+    let h = harness(|_| {});
+    let (tx, rx) = mpsc::channel::<String>();
+    h.app.listen_any(CORE_EVENT_NAME, move |event| {
+        let _ = tx.send(event.payload().to_owned());
+    });
+
+    let defaults = invoke(&h, "get_ui_preferences", json!({})).expect("get");
+    assert_eq!(
+        defaults,
+        json!({
+            "shortcuts": { "macos": [], "windows": [] },
+            "textSize": 100,
+            "recentCommands": []
+        })
+    );
+
+    let prefs = json!({
+        "shortcuts": {
+            "macos": [
+                { "command": "toggleRead", "shortcuts": [{ "key": "u", "shift": true, "mod": true }] },
+                { "command": "archive", "shortcuts": [{ "key": "y", "shift": false, "mod": true }] }
+            ],
+            "windows": [{ "command": "delete", "shortcuts": [] }]
+        },
+        "textSize": 115,
+        "recentCommands": ["action:archive"]
+    });
+    let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
+    // Ordered by command, as stored.
+    assert_eq!(stored["shortcuts"]["macos"][0]["command"], "archive");
+    assert_eq!(stored["shortcuts"]["macos"][1]["command"], "toggleRead");
+    assert_eq!(stored["textSize"], 115);
+    assert_eq!(
+        invoke(&h, "get_ui_preferences", json!({})).expect("get"),
+        stored
+    );
+    let payload = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("core-event within 5 s");
+    let payload: Value = serde_json::from_str(&payload).expect("JSON payload");
+    assert_eq!(
+        payload,
+        json!({ "type": "uiPreferencesChanged", "preferences": stored })
+    );
+
+    // A broken limit is a typed error with a detail; nothing changes.
+    let mut duplicate = stored.clone();
+    duplicate["shortcuts"]["windows"] = json!([
+        { "command": "delete", "shortcuts": [] },
+        { "command": "delete", "shortcuts": [] }
+    ]);
+    let err = invoke(
+        &h,
+        "set_ui_preferences",
+        json!({ "preferences": duplicate }),
+    )
+    .expect_err("duplicate command");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    assert!(
+        err["detail"]
+            .as_str()
+            .is_some_and(|d| d.contains("appears twice")),
+        "{err}"
+    );
+    let mut small = stored.clone();
+    small["textSize"] = json!(79);
+    let err =
+        invoke(&h, "set_ui_preferences", json!({ "preferences": small })).expect_err("too small");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    assert_eq!(
+        invoke(&h, "get_ui_preferences", json!({})).expect("get"),
+        stored
+    );
+}
+
+#[test]
+fn window_layout_belongs_to_the_calling_window() {
+    let h = harness(|_| {});
+    let layout = json!({ "readingPane": "bottom", "density": "compact", "sidebarExpanded": true });
+    let default =
+        json!({ "readingPane": "right", "density": "comfortable", "sidebarExpanded": false });
+    assert_eq!(
+        invoke(&h, "get_window_layout", json!({})).expect("get"),
+        default
+    );
+    assert_eq!(
+        invoke(&h, "set_window_layout", json!({ "layout": layout })).expect("set"),
+        layout
+    );
+    assert_eq!(
+        invoke(&h, "get_window_layout", json!({})).expect("get"),
+        layout
+    );
+
+    // A message window has a layout of its own, shared by all message windows.
+    let label = |id: i64| {
+        windows::message_window_label(
+            SEEDED_ACCOUNT.parse().expect("id"),
+            mail_model::MessageId(id),
+        )
+    };
+    let first = WebviewWindowBuilder::new(&h.app, label(1), Default::default())
+        .build()
+        .expect("message window");
+    assert_eq!(
+        invoke_from(&first, "get_window_layout", json!({})).expect("get"),
+        default
+    );
+    let replace =
+        json!({ "readingPane": "replace", "density": "comfortable", "sidebarExpanded": false });
+    invoke_from(&first, "set_window_layout", json!({ "layout": replace })).expect("set");
+    let second = WebviewWindowBuilder::new(&h.app, label(2), Default::default())
+        .build()
+        .expect("second message window");
+    assert_eq!(
+        invoke_from(&second, "get_window_layout", json!({})).expect("get"),
+        replace
+    );
+    assert_eq!(
+        invoke(&h, "get_window_layout", json!({})).expect("main unchanged"),
+        layout
+    );
+
+    // The UI cannot name another window: an argument is ignored, the caller decides.
+    assert_eq!(
+        invoke(&h, "get_window_layout", json!({ "window": "message" })).expect("get"),
+        layout
+    );
+    // A window the app does not know has no layout.
+    let other = WebviewWindowBuilder::new(&h.app, "other", Default::default())
+        .build()
+        .expect("other window");
+    let err = invoke_from(&other, "get_window_layout", json!({})).expect_err("no layout");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+}
+
+/// The message window under the shipped configuration: opened by the main window for a stored
+/// message, once per message, with the main window's permissions (listen yes, emit no) and the
+/// same navigation decision; a window outside the capability's labels gets nothing.
+#[test]
+fn message_window_opens_once_with_the_main_windows_permissions() {
+    let dir = TempDir::new().expect("temp dir");
+    seed_account(dir.path());
+    let specta = specta_builder::<MockRuntime>();
+    let app = mock_builder()
+        .invoke_handler(specta.invoke_handler())
+        .build(context())
+        .expect("mock app with the real config");
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
+    attach_core(app.handle(), &specta, core);
+    let main = open_main_window(app.handle(), None).expect("open main window");
+
+    let mailboxes = invoke_from(
+        &main,
+        "list_mailboxes",
+        json!({ "accountId": SEEDED_ACCOUNT }),
+    )
+    .expect("mailboxes");
+    let inbox = mailboxes
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["path"] == "INBOX")
+        .map(|m| m["id"].clone())
+        .expect("inbox");
+    let page = invoke_from(
+        &main,
+        "list_messages",
+        json!({ "mailboxId": inbox, "cursor": null, "limit": 10 }),
+    )
+    .expect("list");
+    let message_id = page["items"][0]["id"].as_i64().expect("message id");
+    let label = windows::message_window_label(
+        SEEDED_ACCOUNT.parse().expect("id"),
+        mail_model::MessageId(message_id),
+    );
+
+    let args = json!({ "accountId": SEEDED_ACCOUNT, "messageId": message_id });
+    assert_eq!(
+        invoke_from(&main, "open_message_window", args.clone()).expect("open"),
+        Value::Null
+    );
+    let window = app.get_webview_window(&label).expect("message window");
+    let url = window.url().expect("url");
+    assert_eq!(url.path(), "/index.html");
+    assert_eq!(
+        url.query(),
+        Some(format!("window=message&accountId={SEEDED_ACCOUNT}&messageId={message_id}").as_str())
+    );
+
+    // A second call focuses the same window.
+    invoke_from(&main, "open_message_window", args).expect("again");
+    assert_eq!(
+        app.webview_windows().len(),
+        2,
+        "main and one message window"
+    );
+
+    // Unknown message, or one of another account: not found, no window.
+    let err = invoke_from(
+        &main,
+        "open_message_window",
+        json!({ "accountId": SEEDED_ACCOUNT, "messageId": 999_999 }),
+    )
+    .expect_err("unknown message");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    let err = invoke_from(
+        &main,
+        "open_message_window",
+        json!({ "accountId": "6f9619ff-8b86-4011-b42d-00c04fc964ff", "messageId": message_id }),
+    )
+    .expect_err("other account");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    assert_eq!(app.webview_windows().len(), 2);
+
+    // The message window: app commands and listening work, emitting does not.
+    assert!(invoke_from(&window, "get_app_info", json!({})).is_ok());
+    let listen = |w: &WebviewWindow<MockRuntime>| {
+        invoke_from(
+            w,
+            "plugin:event|listen",
+            json!({ "event": CORE_EVENT_NAME, "target": { "kind": "Any" }, "handler": 7 }),
+        )
+    };
+    assert!(listen(&window).is_ok(), "listen must be allowed");
+    let emit = invoke_from(
+        &window,
+        "plugin:event|emit",
+        json!({ "event": CORE_EVENT_NAME, "payload": null }),
+    );
+    assert!(
+        emit.as_ref()
+            .err()
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.contains("not allowed")),
+        "the ACL must refuse emit from a message window: {emit:?}"
+    );
+    // A window outside the capability's labels has no permission at all.
+    let stranger = WebviewWindowBuilder::new(&app, "stranger", Default::default())
+        .build()
+        .expect("stranger");
+    assert!(
+        listen(&stranger)
+            .err()
+            .and_then(|e| e.as_str().map(str::to_owned))
+            .is_some_and(|m| m.contains("not allowed")),
+        "no capability for other windows"
+    );
+
+    // Composer windows (stage 10 composer in a window of its own): one per draft, the same
+    // capability. An id that is no UUID or an unknown draft opens nothing.
+    let err = invoke_from(&main, "open_composer_window", json!({ "draftId": "../x" }))
+        .expect_err("not a uuid");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    let unknown = "0b5e8f43-6c1f-4a51-9a51-0c4f5b3f6a02";
+    let err = invoke_from(&main, "open_composer_window", json!({ "draftId": unknown }))
+        .expect_err("unknown draft");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    assert_eq!(app.webview_windows().len(), 3, "main, message, stranger");
+    let draft = mail_model::DraftId::parse(unknown).expect("draft id");
+    let composer = windows::open_composer_window(app.handle(), &draft, "Re: Lunch", None)
+        .expect("composer window");
+    assert_eq!(composer.label(), windows::composer_window_label(&draft));
+    assert_eq!(
+        composer.url().expect("url").query(),
+        Some(format!("window=composer&draftId={unknown}").as_str())
+    );
+    // Opening it again (a parallel call that lost the race) focuses the same window.
+    windows::open_composer_window(app.handle(), &draft, "Re: Lunch", None).expect("again");
+    assert_eq!(app.webview_windows().len(), 4);
+    assert!(listen(&composer).is_ok(), "listen must be allowed");
+    assert!(
+        invoke_from(
+            &composer,
+            "plugin:event|emit",
+            json!({ "event": CORE_EVENT_NAME, "payload": null }),
+        )
+        .is_err(),
+        "the ACL must refuse emit from a composer window"
+    );
+    assert_eq!(
+        invoke_from(&composer, "get_window_layout", json!({})).expect("layout")["readingPane"],
+        "right"
+    );
+
+    // The navigation decision every window is built with: the app itself, never a link
+    // placeholder (it is reported to the core instead) or anything else.
+    let decide = windows::navigation_policy(app.handle());
+    let app_url = if cfg!(windows) {
+        "http://tauri.localhost/index.html?window=message"
+    } else {
+        "tauri://localhost/index.html?window=message"
+    };
+    assert!(decide(&app_url.parse().expect("url")));
+    let placeholder = mail_model::link_placeholder(
+        &mail_model::RenderToken::parse(&"a".repeat(32)).expect("token"),
+        0,
+    );
+    assert!(!decide(&placeholder.parse().expect("url")));
+    assert!(!decide(&"https://example.com/".parse().expect("url")));
+}

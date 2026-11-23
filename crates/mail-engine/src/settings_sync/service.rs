@@ -937,6 +937,12 @@ impl<C: Connector> AppCore<C> {
         {
             self.emit_event(CoreEvent::PreferencesChanged { preferences });
         }
+        // Stage 8: shortcuts or text size from another device (decision 0025).
+        if any(&["setting"])
+            && let Ok(preferences) = self.get_ui_preferences().await
+        {
+            self.emit_event(CoreEvent::UiPreferencesChanged { preferences });
+        }
         if any(&["signature"]) {
             self.emit_event(CoreEvent::SignaturesChanged);
         }

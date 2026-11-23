@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use mail_model::{
     AccountSettings, AccountState, ComposeSettings, CoreEvent, IdentityInput, LanguagePreference,
-    MarkReadOnOpen, MessageCategory, NotificationSettings, Preferences, PrefetchPeriod,
-    PrefetchSettings, ReadingPreferences, RuleAction, RuleCondition, RuleInput, Secret, Security,
-    SenderKey, ServerSettings, SnoozeChoice, TaskMark, TextMatchOp, ThemePreference,
+    MarkReadOnOpen, MessageCategory, NotificationSettings, PlatformShortcuts, Preferences,
+    PrefetchPeriod, PrefetchSettings, ReadingPreferences, RuleAction, RuleCondition, RuleInput,
+    Secret, Security, SenderKey, ServerSettings, Shortcut, ShortcutOverride, SnoozeChoice,
+    TaskMark, TextMatchOp, ThemePreference, UiPreferences, WindowLayout,
 };
 use mail_store::StoredContact;
 use tempfile::TempDir;
@@ -116,6 +117,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     .expect("reading");
     core.set_compose_settings(ComposeSettings {
         send_delay_seconds: 7,
+        ..ComposeSettings::default()
     })
     .await
     .expect("compose");
@@ -136,6 +138,27 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_inbox_settings(inbox_settings)
         .await
         .expect("inbox");
+    // Stage 8: shortcuts and text size are synced; recent commands and layouts are not.
+    core.set_ui_preferences(UiPreferences {
+        shortcuts: PlatformShortcuts {
+            macos: vec![ShortcutOverride {
+                command: "archive".into(),
+                shortcuts: vec![Shortcut {
+                    key: "y".into(),
+                    shift: false,
+                    modifier: true,
+                }],
+            }],
+            windows: Vec::new(),
+        },
+        text_size: 115,
+        recent_commands: vec!["action:archive".into()],
+    })
+    .await
+    .expect("ui preferences");
+    core.set_window_layout("main", WindowLayout::default())
+        .await
+        .expect("layout");
 
     // Identities with a signature, sender rules, local rules, marks, groups, remote content.
     let identity = core

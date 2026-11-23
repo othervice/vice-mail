@@ -35,6 +35,7 @@ mod send;
 mod settings_sync;
 mod snippets;
 pub mod threading;
+mod ui;
 mod uid_set;
 mod views;
 mod writer;
@@ -153,6 +154,14 @@ pub use snippets::{
     SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
+};
+pub use ui::{
+    DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS,
+    MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES,
+    MAX_SHORTCUTS_PER_COMMAND, MAX_TEXT_SIZE, MIN_TEXT_SIZE, PlatformShortcuts,
+    ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences,
+    UiPreferencesError, WindowLayout, validate_layout_slot, validate_overrides,
+    validate_recent_commands,
 };
 pub use uid_set::UidSet;
 pub use views::{

@@ -140,6 +140,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
+| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung) | sync bzw. Gerät |
 | `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
 | `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
@@ -366,6 +367,15 @@ einer klaren Meldung abgelehnt.
 - `unsafe` ist überall verboten (`forbid`), außer in `crates/webview2-guard` (`deny` mit einzeln
   begründeten `#[allow(unsafe_code)]` und `// SAFETY:`); `scripts/check.sh` prüft das per Suche.
 - Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab.
+- Fenster öffnet nur die Shell (Stufe 8, 0025): das Hauptfenster, je Mail ein Mail-Fenster
+  (`openMessageWindow`, Label `message-<Konto>-<Mail>`, Seite `index.html?window=message&…`) und
+  je Entwurf ein Composer-Fenster (`openComposerWindow`, `composer-<Entwurf>`,
+  `index.html?window=composer&draftId=…`). Jedes Fenster entsteht über `windows::guard` und
+  `windows::finish`: derselbe Navigations-Hook, dieselbe Ablehnung neuer Fenster, auf Windows
+  derselbe WebView2-Frame-Guard. Die Capability `default` gilt für `main`, `message-*` und
+  `composer-*`, also hat jedes dieser Fenster genau die Rechte des Hauptfensters; andere Labels
+  haben keine. Welches Fenster ein Command aufruft (Layout je
+  Fenster), entnimmt die Shell dem aufrufenden `WebviewWindow`, nie einem Argument.
 
 **Geheimnisse**
 - Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
@@ -545,10 +555,16 @@ die aktuelle Belegung, eine Änderung wirkt also sofort. Regeln (`app/src/featur
   denen Ziffern Umschalt brauchen (AZERTY), gilt Cmd/Strg+Umschalt+Ziffer, weil Umschalt bei
   Zeichen nicht zählt.
 
-Bis der Kern einen Befehl für Oberflächen-Einstellungen hat, liegen Kürzel, Layout je Fenster und die
-zuletzt benutzten Befehle der Palette in einem klar markierten Ersatzspeicher im Web-Storage des
-Geräts (`app/src/features/keyboard/localFallback.ts`): keine Mail-Daten, nichts Geheimes, beim Lesen
-geprüft. Sie werden dadurch noch nicht synchronisiert.
+Gespeichert werden die Änderungen im Kern (0025): `getUiPreferences` / `setUiPreferences` mit den
+geänderten Befehlen je Plattform (`{ command, shortcuts: [{ key, shift, mod }] }`, höchstens 100
+Befehle mit je höchstens 4 Kürzeln), der Schriftgröße (80 bis 150) und den höchstens 5 zuletzt
+benutzten Befehlen der Palette; jede Änderung geht als `uiPreferencesChanged` an alle Fenster.
+Kürzel und Schriftgröße gleicht der Einstellungs-Sync ab (ein Schlüssel je Plattform), der Verlauf
+der Palette bleibt auf dem Gerät. Das Layout (Lesebereich rechts, unten oder anstelle der Liste,
+Dichte, Seitenleiste) speichert `setWindowLayout` je Fensterart auf dem Gerät. Der Kern prüft Form
+und Grenzen; welche Befehle es gibt und welche Kürzel belegbar sind, entscheidet die Oberfläche.
+Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatzspeicher
+`app/src/features/keyboard/localFallback.ts`.
 
 ## Tests
 

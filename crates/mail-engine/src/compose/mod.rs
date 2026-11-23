@@ -60,6 +60,8 @@ use crate::reading::Reading;
 
 /// Setting key of the undo delay (global scope, JSON number of seconds).
 const SEND_DELAY_KEY: &str = "compose.send_delay_seconds";
+/// Stage 8 (decision 0025): the position of the answer in new replies and forwards.
+const QUOTE_POSITION_KEY: &str = "compose.default_quote_position";
 /// Longest request id of a send (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
 /// How long creating a reply waits for the original's body to be fetched.
@@ -990,6 +992,7 @@ impl<C: Connector> Compose<C> {
         let mut content = Self::empty_content(identity, prepared.to.clone(), ComposeFormat::Html);
         content.cc = prepared.cc.clone();
         content.subject = prepared.subject.clone();
+        content.quote_position = self.compose_settings().await?.default_quote_position;
         let row = NewDraftRow {
             id,
             account,
@@ -1592,6 +1595,12 @@ impl<C: Connector> Compose<C> {
                 Err(err) => tracing::warn!(%err, "stored send delay unreadable; default used"),
             }
         }
+        if let Some(stored) = settings.iter().find(|s| s.key == QUOTE_POSITION_KEY) {
+            match serde_json::from_str::<QuotePosition>(&stored.value) {
+                Ok(position) => out.default_quote_position = position,
+                Err(err) => tracing::warn!(%err, "stored quote position unreadable; default used"),
+            }
+        }
         Ok(out)
     }
 
@@ -1608,10 +1617,16 @@ impl<C: Connector> Compose<C> {
             .store
             .put_settings(
                 GLOBAL_SCOPE,
-                vec![(
-                    SEND_DELAY_KEY.to_owned(),
-                    settings.send_delay_seconds.to_string(),
-                )],
+                vec![
+                    (
+                        SEND_DELAY_KEY.to_owned(),
+                        settings.send_delay_seconds.to_string(),
+                    ),
+                    (
+                        QUOTE_POSITION_KEY.to_owned(),
+                        format!("\"{}\"", settings.default_quote_position.as_str()),
+                    ),
+                ],
             )
             .await?;
         Ok(settings)

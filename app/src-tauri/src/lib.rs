@@ -11,6 +11,7 @@ pub mod links;
 mod navigation;
 mod notifications;
 mod window_theme;
+pub mod windows;
 
 use std::sync::Mutex;
 
@@ -18,7 +19,6 @@ use mail_engine::credentials::{Credentials, SystemKeychain};
 use mail_engine::logging::{self, LogConfig, LogGuard};
 use mail_engine::{AppCore, BuildInfo, CoreConfig, CoreServices};
 use specta_typescript::Typescript;
-use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Runtime, Theme, WebviewWindow};
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
@@ -36,6 +36,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::preferences::set_preferences,
             commands::preferences::get_reading_preferences,
             commands::preferences::set_reading_preferences,
+            // Stage 8: UI preferences, window layouts, message windows (decision 0025).
+            commands::ui::get_ui_preferences,
+            commands::ui::set_ui_preferences,
+            commands::ui::get_window_layout::<tauri::Wry>,
+            commands::ui::set_window_layout::<tauri::Wry>,
+            commands::ui::open_message_window::<tauri::Wry>,
+            commands::ui::open_composer_window::<tauri::Wry>,
             commands::accounts::list_accounts,
             commands::accounts::discover_known_provider,
             commands::accounts::discover_online,
@@ -268,7 +275,65 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             mail_model::MIN_SYNC_PASSPHRASE_CHARS,
         )
         .constant("SETTINGS_SYNC_FOLDER", mail_model::SETTINGS_SYNC_FOLDER)
+        // Stage 10 limits the composer checks before the core does (decision 0023).
+        .constant(
+            "MISSED_SEND_GRACE_MS",
+            SafeInteger(mail_model::MISSED_SEND_GRACE_MS),
+        )
+        .constant(
+            "MAX_SCHEDULE_AHEAD_MS",
+            SafeInteger(mail_model::MAX_SCHEDULE_AHEAD_MS),
+        )
+        .constant(
+            "MAX_INLINE_IMAGE_BYTES",
+            u32::try_from(mail_model::MAX_INLINE_IMAGE_BYTES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SIGNATURE_IMAGES",
+            u32::try_from(mail_model::MAX_SIGNATURE_IMAGES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SIGNATURE_IMAGE_BYTES",
+            u32::try_from(mail_model::MAX_SIGNATURE_IMAGE_BYTES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SIGNATURE_IMAGES_BYTES",
+            u32::try_from(mail_model::MAX_SIGNATURE_IMAGES_BYTES).unwrap_or(u32::MAX),
+        )
+        // Stage 8: the limits of the UI preferences (decision 0025).
+        .constant("MIN_TEXT_SIZE", mail_model::MIN_TEXT_SIZE)
+        .constant("MAX_TEXT_SIZE", mail_model::MAX_TEXT_SIZE)
+        .constant("DEFAULT_TEXT_SIZE", mail_model::DEFAULT_TEXT_SIZE)
+        .constant(
+            "MAX_RECENT_COMMANDS",
+            u32::try_from(mail_model::MAX_RECENT_COMMANDS).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SHORTCUT_KEY_CHARS",
+            u32::try_from(mail_model::MAX_SHORTCUT_KEY_CHARS).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SHORTCUTS_PER_COMMAND",
+            u32::try_from(mail_model::MAX_SHORTCUTS_PER_COMMAND).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SHORTCUT_OVERRIDES",
+            u32::try_from(mail_model::MAX_SHORTCUT_OVERRIDES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_COMMAND_ID_CHARS",
+            u32::try_from(mail_model::MAX_COMMAND_ID_CHARS).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_RECENT_COMMAND_CHARS",
+            u32::try_from(mail_model::MAX_RECENT_COMMAND_CHARS).unwrap_or(u32::MAX),
+        )
 }
+
+/// An `i64` constant below 2^53 (milliseconds), exported as a plain TypeScript number.
+#[derive(serde::Serialize, specta::Type)]
+#[serde(transparent)]
+struct SafeInteger(#[specta(type = specta_typescript::Number)] i64);
 
 /// TypeScript exporter settings, shared by the freshness test and `UPDATE_BINDINGS=1`.
 pub fn typescript() -> Typescript {
@@ -480,52 +545,22 @@ fn open_main_window<R: Runtime>(
         .find(|w| w.label == MAIN_WINDOW)
         .cloned()
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
-    // The Vite server of `tauri dev` is the app as well; never in a built app.
-    let dev_url = if cfg!(dev) {
-        app.config().build.dev_url.clone()
-    } else {
-        None
-    };
-    let links = app.clone();
-    let window = tauri::WebviewWindowBuilder::from_config(app, &config)?
-        .theme(theme)
-        // The only place that learns where a click in the mail frame goes (decision 0005): the
-        // app may load itself, the mail frame its own document; a link placeholder is
-        // cancelled and reported to the core; everything else is cancelled.
-        .on_navigation(move |url| {
-            navigation::decide_main_navigation(url, dev_url.as_ref(), &|token, index| {
-                report_link(&links, token, index);
-            })
-        })
-        // Nothing in the page opens windows; `window.open` and `target=_blank`, also from the
-        // mail frame, are refused (WebView2 marks the request handled, decision 0011).
-        .on_new_window(|url, _features| {
-            tracing::warn!(
-                scheme = url.scheme(),
-                host = url.host_str(),
-                "refused to open a new window"
-            );
-            NewWindowResponse::Deny
-        })
-        .build()?;
-    // Stage 5: remember what the user drops on the window; the composer may attach exactly
-    // these files (`addDroppedAttachments`).
-    let drop_app = app.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
-            && let Some(registry) = drop_app.try_state::<drops::DropRegistry>()
-        {
-            registry.record(paths);
-        }
-    });
-    #[cfg(all(windows, feature = "webview2-frame-guard"))]
-    install_frame_guard(&window)?;
+    // The only place that learns where a click in the mail frame goes (decision 0005), the
+    // same for every window of the app (`windows::guard`, decision 0025).
+    let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?.theme(theme);
+    let window = windows::guard(builder, app).build()?;
+    // Stage 5: remember what the user drops on the window; on Windows the frame guard.
+    windows::finish(app, &window)?;
     Ok(window)
 }
 
 /// A click on link `index` of a rendering: the core announces it to the UI (`linkActivated`),
 /// which asks `describeLink` and, after the user confirmed, `openLink`.
-fn report_link<R: Runtime>(app: &AppHandle<R>, token: mail_model::RenderToken, index: u32) {
+pub(crate) fn report_link<R: Runtime>(
+    app: &AppHandle<R>,
+    token: mail_model::RenderToken,
+    index: u32,
+) {
     match app.try_state::<AppCore>() {
         Some(core) => {
             core.link_activated(token, index);
@@ -538,7 +573,7 @@ fn report_link<R: Runtime>(app: &AppHandle<R>, token: mail_model::RenderToken, i
 /// `FrameNavigationStarting` (decision 0011). The COM calls live in the crate `webview2-guard`;
 /// this crate only hands over the controller, which Tauri gives out safely.
 #[cfg(all(windows, feature = "webview2-frame-guard"))]
-fn install_frame_guard<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+pub(crate) fn install_frame_guard<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     let app = window.app_handle().clone();
     let policy: std::sync::Arc<webview2_guard::FramePolicy> =
         std::sync::Arc::new(move |url: &str| {

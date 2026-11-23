@@ -115,13 +115,16 @@ new `format` or a new kind name; older versions then leave such records alone.
 
 Only kinds in the registry (`REGISTRY` in `record.rs`) exist; of the `setting` table only the
 keys in `SYNCED_SETTINGS`: `ui.theme`, `ui.language`, `reading.mark_read_on_open`,
-`compose.send_delay_seconds`, `notifications.settings`. Device settings such as `prefetch.*`
-(what this machine keeps offline) and `inbox.settings` (categories and bundles on this screen)
-stay local.
+`compose.send_delay_seconds`, `notifications.settings`, and since stage 8 (decision 0025)
+`compose.default_quote_position` (where new replies put the answer), `ui.shortcuts.macos`, `ui.shortcuts.windows` (the shortcut changes of one platform, a list of
+`{ command, shortcuts: [{ key, shift?, mod? }] }` ordered by command) and `ui.text_size`
+(80 to 150). Device settings such as `prefetch.*` (what this machine keeps offline),
+`inbox.settings` (categories and bundles on this screen), `ui.recent_commands` (the palette's
+history) and `ui.layout.<slot>` (window layouts) stay local.
 
 | Kind (`kind`) | Id | Merge rule | Removed elsewhere | Max content | Local data |
 |---|---|---|---|---|---|
-| `setting` | `global/<key>` or `<account uuid>/<key>` | newer wins | applied | 4 KiB | `setting` |
+| `setting` | `global/<key>` or `<account uuid>/<key>` | newer wins | applied | 16 KiB (4 KiB before stage 8) | `setting` |
 | `signature` | signature UUID (a stage 5 text signature kept its identity's UUID) | newer wins, edit beats delete | applied | 256 KiB | `signature` |
 | `template` | UUID | newer wins, edit beats delete | applied | 256 KiB | `template` |
 | `rule` | UUID | newer wins, edit beats delete | applied | 16 KiB | `rule` |

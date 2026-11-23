@@ -537,12 +537,19 @@ pub enum MissedSendDecision {
 pub struct ComposeSettings {
     /// Undo delay before a message is submitted, 0 to [`MAX_SEND_DELAY_SECS`].
     pub send_delay_seconds: u32,
+    /// Stage 8 (decision 0025): where a new reply or forward puts the answer relative to the
+    /// quote: `above` (answer above, quote below; the default and the behaviour before), or
+    /// `below`. The composer can still change it per draft. Left out by an older caller: the
+    /// default.
+    #[serde(default)]
+    pub default_quote_position: QuotePosition,
 }
 
 impl Default for ComposeSettings {
     fn default() -> Self {
         Self {
             send_delay_seconds: DEFAULT_SEND_DELAY_SECS,
+            default_quote_position: QuotePosition::default(),
         }
     }
 }
@@ -862,7 +869,16 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(ComposeSettings::default()).expect("settings"),
-            json!({ "sendDelaySeconds": 10 })
+            json!({ "sendDelaySeconds": 10, "defaultQuotePosition": "above" })
+        );
+        // An older caller that does not know the quote position yet gets the default.
+        assert_eq!(
+            serde_json::from_value::<ComposeSettings>(json!({ "sendDelaySeconds": 3 }))
+                .expect("settings"),
+            ComposeSettings {
+                send_delay_seconds: 3,
+                default_quote_position: QuotePosition::Above,
+            }
         );
         assert_eq!(
             serde_json::to_value(SendState::Verifying).expect("state"),

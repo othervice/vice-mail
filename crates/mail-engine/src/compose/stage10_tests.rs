@@ -141,6 +141,7 @@ impl Bed {
         bed.core
             .set_compose_settings(ComposeSettings {
                 send_delay_seconds: 0,
+                ..ComposeSettings::default()
             })
             .await
             .expect("no undo delay");
@@ -918,4 +919,93 @@ async fn a_compose_request_fills_every_field_and_threads_the_reply() {
         .await
         .expect_err("refused");
     assert_eq!(err.code(), ErrorCode::InvalidArgument);
+}
+
+/// Stage 8 (decision 0025): new replies and forwards take the app-wide quote position; it is
+/// stored with the other compose settings and survives a restart.
+#[tokio::test]
+async fn replies_and_forwards_start_with_the_default_quote_position() {
+    let mut bed = Bed::new().await;
+    assert_eq!(
+        bed.core
+            .get_compose_settings()
+            .await
+            .expect("settings")
+            .default_quote_position,
+        QuotePosition::Above,
+        "the default keeps the behaviour before"
+    );
+    let original = b"From: Carol <carol@work.example>\r\nTo: alice@fake.test\r\n\
+Subject: Quote test\r\nMessage-ID: <quote-1@work.example>\r\n\
+Date: Mon, 23 Nov 2026 08:00:00 +0000\r\nContent-Type: text/plain\r\n\r\nOriginal text.\r\n";
+    bed.server.deliver_raw("INBOX", original);
+    bed.core.retry_account(bed.account).await.expect("sync");
+    let inbox = bed
+        .core
+        .list_mailboxes(bed.account)
+        .await
+        .expect("mailboxes")
+        .into_iter()
+        .find(|m| m.role == mail_model::MailboxRole::Inbox)
+        .expect("inbox")
+        .id;
+    let item = bed
+        .until("the original", || async {
+            bed.core
+                .list_messages(inbox, None, 50)
+                .await
+                .ok()?
+                .items
+                .into_iter()
+                .find(|i| i.subject == "Quote test")
+        })
+        .await;
+    bed.idle().await;
+    let reply = |id| NewDraft::Reply {
+        message_id: id,
+        language: QuoteLanguage::En,
+    };
+    let before = bed.core.create_draft(reply(item.id)).await.expect("reply");
+    assert_eq!(before.quote_position, QuotePosition::Above);
+
+    let stored = bed
+        .core
+        .set_compose_settings(ComposeSettings {
+            send_delay_seconds: 0,
+            default_quote_position: QuotePosition::Below,
+        })
+        .await
+        .expect("store");
+    assert_eq!(stored.default_quote_position, QuotePosition::Below);
+    let reply = bed.core.create_draft(reply(item.id)).await.expect("reply");
+    assert_eq!(reply.quote_position, QuotePosition::Below);
+    let forward = bed
+        .core
+        .create_draft(NewDraft::Forward {
+            message_id: item.id,
+            language: QuoteLanguage::En,
+        })
+        .await
+        .expect("forward");
+    assert_eq!(forward.quote_position, QuotePosition::Below);
+    // A new message has no quote; it keeps the type's default.
+    let new = bed
+        .core
+        .create_draft(NewDraft::New {
+            account_id: bed.account,
+            identity_id: None,
+            to: Vec::new(),
+        })
+        .await
+        .expect("new");
+    assert_eq!(new.quote_position, QuotePosition::Above);
+
+    let bed = bed.restart(0).await;
+    assert_eq!(
+        bed.core.get_compose_settings().await.expect("settings"),
+        ComposeSettings {
+            send_delay_seconds: 0,
+            default_quote_position: QuotePosition::Below,
+        }
+    );
 }

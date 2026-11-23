@@ -18,6 +18,7 @@ pub mod search;
 pub mod settings_sync;
 pub mod snippets;
 pub mod threads;
+pub mod ui;
 
 use mail_model::{CoreError, IpcError};
 

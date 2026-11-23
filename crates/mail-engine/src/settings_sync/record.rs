@@ -109,6 +109,7 @@ const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
 pub const REGISTRY: [KindSpec; 16] = [
+    // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
         "setting",
@@ -116,7 +117,7 @@ pub const REGISTRY: [KindSpec; 16] = [
         MergeRule::NewerWins,
         IdShape::Setting,
         Removal::Apply,
-        4 * KIB,
+        16 * KIB,
     ),
     // A signature of the pool (stage 10, decision 0023), by its UUID (a stage 5 text
     // signature kept its identity's UUID); a deleted signature and a concurrent edit merge as
@@ -280,15 +281,22 @@ const fn spec(
 }
 
 /// Setting keys that are synchronised (decision 0022): theme, language, when an opened message
-/// counts as read, the undo delay of sending, and the notification settings. Every other key
-/// of the `setting` table is a device setting: `prefetch.*` (what this machine keeps offline),
-/// `inbox.settings` (categories and bundles on this screen, decision 0020).
+/// counts as read, the undo delay of sending, the notification settings, and (stage 8,
+/// decision 0025) the default quote position of replies, the shortcut changes of each platform
+/// and the text size. Every other key of
+/// the `setting` table is a device setting: `prefetch.*` (what this machine keeps offline),
+/// `inbox.settings` (categories and bundles on this screen, decision 0020),
+/// `ui.recent_commands` and `ui.layout.*` (this device's palette history and window layouts).
 pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.theme",
     "ui.language",
     "reading.mark_read_on_open",
     "compose.send_delay_seconds",
     "notifications.settings",
+    "compose.default_quote_position",
+    "ui.shortcuts.macos",
+    "ui.shortcuts.windows",
+    "ui.text_size",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the
@@ -1192,7 +1200,7 @@ mod tests {
 
     #[test]
     fn content_is_bounded_and_shaped_by_kind() {
-        let big = "x".repeat(5 * KIB);
+        let big = "x".repeat(17 * KIB);
         assert!(matches!(
             SyncContent::new(RecordKind::Setting, json!(big)),
             Err(RecordError::TooLarge { .. })

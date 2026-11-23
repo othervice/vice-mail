@@ -1,0 +1,328 @@
+//! Stage 8: UI preferences and window layouts through `AppCore` with the real store.
+
+use std::time::Duration;
+
+use mail_model::{
+    CoreError, CoreEvent, Density, ErrorCode, PlatformShortcuts, ReadingPanePosition, Shortcut,
+    ShortcutOverride, UiPreferences, WindowLayout,
+};
+use mail_store::GLOBAL_SCOPE;
+use serde_json::{Value, json};
+use tempfile::TempDir;
+
+use super::*;
+use crate::credentials::{Credentials, MemorySecretStore};
+use crate::settings_sync::{RecordKey, SettingScope};
+use crate::{AppCore, BuildInfo, CoreConfig, CoreServices};
+
+async fn core(dir: &TempDir) -> AppCore {
+    let core = AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().join("data"),
+            build: BuildInfo {
+                version: "0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        CoreServices::new(Credentials::new(MemorySecretStore::new())),
+    )
+    .await;
+    assert!(core.startup_error().is_none());
+    core
+}
+
+fn shortcut(key: &str, shift: bool, modifier: bool) -> Shortcut {
+    Shortcut {
+        key: key.into(),
+        shift,
+        modifier,
+    }
+}
+
+fn entry(command: &str, shortcuts: Vec<Shortcut>) -> ShortcutOverride {
+    ShortcutOverride {
+        command: command.into(),
+        shortcuts,
+    }
+}
+
+fn sample() -> UiPreferences {
+    UiPreferences {
+        shortcuts: PlatformShortcuts {
+            macos: vec![
+                entry("toggleRead", vec![shortcut("u", true, true)]),
+                entry("archive", vec![shortcut("y", false, true)]),
+            ],
+            windows: vec![entry("delete", Vec::new())],
+        },
+        text_size: 130,
+        recent_commands: vec!["action:archive".into(), "view:inbox".into()],
+    }
+}
+
+async fn stored(core: &AppCore, key: &str) -> Option<Value> {
+    core.store_for_tests()
+        .settings(GLOBAL_SCOPE)
+        .await
+        .expect("settings")
+        .into_iter()
+        .find(|s| s.key == key)
+        .map(|s| serde_json::from_str(&s.value).expect("stored JSON"))
+}
+
+fn invalid(result: Result<UiPreferences, CoreError>) -> String {
+    match result {
+        Err(err) => {
+            assert_eq!(err.code(), ErrorCode::InvalidArgument, "{err}");
+            err.detail().unwrap_or_default()
+        }
+        Ok(stored) => panic!("accepted: {stored:?}"),
+    }
+}
+
+#[tokio::test]
+async fn ui_preferences_are_defaults_until_stored() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let prefs = core.get_ui_preferences().await.expect("read");
+    assert_eq!(prefs, UiPreferences::default());
+    assert_eq!(prefs.text_size, 100);
+}
+
+#[tokio::test]
+async fn set_ui_preferences_stores_returns_and_emits() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let mut events = core.subscribe();
+
+    let stored_prefs = core.set_ui_preferences(sample()).await.expect("store");
+    // Returned as stored: each platform's list ordered by command.
+    let mut expected = sample();
+    expected.shortcuts.macos.reverse();
+    assert_eq!(stored_prefs, expected);
+    assert_eq!(core.get_ui_preferences().await.expect("read"), expected);
+
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("event in time")
+        .expect("event");
+    assert_eq!(
+        event,
+        CoreEvent::UiPreferencesChanged {
+            preferences: expected.clone()
+        }
+    );
+
+    // Survives a restart (the same database).
+    drop(core);
+    let again = self::core(&dir).await;
+    assert_eq!(again.get_ui_preferences().await.expect("read"), expected);
+}
+
+#[tokio::test]
+async fn shortcuts_are_stored_compactly_per_platform() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    core.set_ui_preferences(sample()).await.expect("store");
+    assert_eq!(
+        stored(&core, "ui.shortcuts.macos").await,
+        Some(json!([
+            { "command": "archive", "shortcuts": [{ "key": "y", "mod": true }] },
+            { "command": "toggleRead", "shortcuts": [{ "key": "u", "shift": true, "mod": true }] }
+        ]))
+    );
+    assert_eq!(
+        stored(&core, "ui.shortcuts.windows").await,
+        Some(json!([{ "command": "delete", "shortcuts": [] }]))
+    );
+    assert_eq!(stored(&core, "ui.text_size").await, Some(json!(130)));
+    assert_eq!(
+        stored(&core, "ui.recent_commands").await,
+        Some(json!(["action:archive", "view:inbox"]))
+    );
+}
+
+#[tokio::test]
+async fn invalid_ui_preferences_are_refused_and_nothing_changes() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    core.set_ui_preferences(sample()).await.expect("store");
+    let mut events = core.subscribe();
+
+    let mut big_text = sample();
+    big_text.text_size = 151;
+    assert!(invalid(core.set_ui_preferences(big_text).await).contains("text size 151"));
+
+    let mut twice = sample();
+    twice.shortcuts.windows = vec![entry("delete", Vec::new()), entry("delete", Vec::new())];
+    assert!(invalid(core.set_ui_preferences(twice).await).contains("appears twice"));
+
+    let mut recent = sample();
+    recent.recent_commands = (0..6).map(|i| format!("action:{i}")).collect();
+    assert!(invalid(core.set_ui_preferences(recent).await).contains("recent commands"));
+
+    let mut long_key = sample();
+    long_key.shortcuts.macos = vec![entry(
+        "archive",
+        vec![shortcut(&"k".repeat(21), false, false)],
+    )];
+    assert!(invalid(core.set_ui_preferences(long_key).await).contains("longer than 20"));
+
+    let mut sorted = sample();
+    sorted.shortcuts.macos.reverse();
+    assert_eq!(core.get_ui_preferences().await.expect("read"), sorted);
+    assert!(events.try_recv().is_err(), "no event for a refused change");
+}
+
+#[tokio::test]
+async fn every_command_with_two_shortcuts_fits_a_sync_record() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    // About the size of the action directory (stage 8: 35 actions and app commands), each with
+    // two shortcuts and modifiers.
+    let all: Vec<ShortcutOverride> = (0..50)
+        .map(|i| {
+            entry(
+                &format!("command{i:02}"),
+                vec![
+                    shortcut("ArrowDown", true, true),
+                    shortcut("F12", false, true),
+                ],
+            )
+        })
+        .collect();
+    let prefs = UiPreferences {
+        shortcuts: PlatformShortcuts {
+            macos: all.clone(),
+            windows: all,
+        },
+        ..UiPreferences::default()
+    };
+    core.set_ui_preferences(prefs).await.expect("fits");
+    let value = stored(&core, "ui.shortcuts.macos").await.expect("stored");
+    assert!(SyncContent::new(RecordKind::Setting, value).is_ok());
+
+    // The limits alone would allow more than one record holds: refused with the size.
+    let huge: Vec<ShortcutOverride> = (0..100)
+        .map(|i| {
+            entry(
+                &format!("{i:0>64}"),
+                (0..4)
+                    .map(|k| shortcut(&format!("{k:x>20}"), true, true))
+                    .collect(),
+            )
+        })
+        .collect();
+    let too_large = UiPreferences {
+        shortcuts: PlatformShortcuts {
+            macos: huge,
+            windows: Vec::new(),
+        },
+        ..UiPreferences::default()
+    };
+    assert!(too_large.validate().is_ok(), "within the per-field limits");
+    let detail = invalid(core.set_ui_preferences(too_large).await);
+    assert!(
+        detail.contains("macos") && detail.contains("at most 16384"),
+        "{detail}"
+    );
+}
+
+#[tokio::test]
+async fn unreadable_stored_values_fall_back_to_defaults() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let put = |key: &str, value: &str| (key.to_owned(), value.to_owned());
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![
+                put("ui.shortcuts.macos", "{\"archive\": \"e\"}"),
+                // A list another version might accept, this one does not (duplicate command).
+                put(
+                    "ui.shortcuts.windows",
+                    "[{\"command\":\"a\",\"shortcuts\":[]},{\"command\":\"a\",\"shortcuts\":[]}]",
+                ),
+                put("ui.text_size", "300"),
+                put("ui.recent_commands", "[\"\"]"),
+                put("ui.layout.main", "{\"readingPane\":\"left\"}"),
+            ],
+        )
+        .await
+        .expect("seed");
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read"),
+        UiPreferences::default()
+    );
+    assert_eq!(
+        core.get_window_layout("main").await.expect("layout"),
+        WindowLayout::default()
+    );
+}
+
+#[tokio::test]
+async fn window_layouts_are_stored_per_slot_on_this_device() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    assert_eq!(
+        core.get_window_layout("main").await.expect("default"),
+        WindowLayout::default()
+    );
+    let main = WindowLayout {
+        reading_pane: ReadingPanePosition::Bottom,
+        density: Density::Compact,
+        sidebar_expanded: true,
+    };
+    let message = WindowLayout {
+        reading_pane: ReadingPanePosition::Replace,
+        ..WindowLayout::default()
+    };
+    assert_eq!(
+        core.set_window_layout("main", main).await.expect("main"),
+        main
+    );
+    core.set_window_layout("message", message)
+        .await
+        .expect("message");
+    assert_eq!(core.get_window_layout("main").await.expect("main"), main);
+    assert_eq!(
+        core.get_window_layout("message").await.expect("message"),
+        message
+    );
+    assert_eq!(
+        stored(&core, "ui.layout.main").await,
+        Some(json!({ "readingPane": "bottom", "density": "compact", "sidebarExpanded": true }))
+    );
+
+    for slot in ["", "Main", "../x", "ui.theme"] {
+        let err = core.get_window_layout(slot).await.expect_err("bad slot");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument, "{slot:?}");
+        let err = core
+            .set_window_layout(slot, main)
+            .await
+            .expect_err("bad slot");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument, "{slot:?}");
+    }
+    // Layouts are no UI preferences and never synchronised (see the capture test).
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read"),
+        UiPreferences::default()
+    );
+    assert!(RecordKey::setting(SettingScope::Global, "ui.layout.main").is_err());
+    assert!(RecordKey::setting(SettingScope::Global, "ui.recent_commands").is_err());
+    assert!(RecordKey::setting(SettingScope::Global, "ui.shortcuts.macos").is_ok());
+    assert!(RecordKey::setting(SettingScope::Global, "ui.text_size").is_ok());
+}
+
+#[tokio::test]
+async fn a_message_window_needs_a_message_of_the_account() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let account = mail_model::AccountId::from_uuid(uuid::Uuid::new_v4());
+    let err = core
+        .message_window_subject(account, mail_model::MessageId(1))
+        .await
+        .expect_err("no such message");
+    assert_eq!(err.code(), ErrorCode::NotFound);
+}

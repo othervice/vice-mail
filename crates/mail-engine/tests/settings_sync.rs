@@ -1271,3 +1271,76 @@ async fn after_a_restart_the_sync_goes_on_with_the_stored_key_and_clock() {
     b.shutdown().await;
     clean(&env).await;
 }
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay() {
+    use mail_model::{
+        Density, PlatformShortcuts, Shortcut, ShortcutOverride, UiPreferences, WindowLayout,
+    };
+    let _serial = SERVER.lock().await;
+    let env = TestEnv::require();
+    clean(&env).await;
+    let a = Device::first(&env).await;
+    let mut b = Device::second(&env).await;
+    let prefs = UiPreferences {
+        shortcuts: PlatformShortcuts {
+            macos: vec![ShortcutOverride {
+                command: "archive".into(),
+                shortcuts: vec![Shortcut {
+                    key: "y".into(),
+                    shift: false,
+                    modifier: true,
+                }],
+            }],
+            windows: vec![ShortcutOverride {
+                command: "delete".into(),
+                shortcuts: Vec::new(),
+            }],
+        },
+        text_size: 130,
+        recent_commands: vec!["action:archive".into()],
+    };
+    a.core
+        .set_ui_preferences(prefs.clone())
+        .await
+        .expect("ui preferences");
+    let compact = WindowLayout {
+        density: Density::Compact,
+        ..WindowLayout::default()
+    };
+    a.core
+        .set_window_layout("main", compact)
+        .await
+        .expect("layout");
+    a.pass().await;
+    while b.events.try_recv().is_ok() {}
+    b.pass().await;
+
+    let taken = b.core.get_ui_preferences().await.expect("ui preferences");
+    assert_eq!(taken.shortcuts, prefs.shortcuts);
+    assert_eq!(taken.text_size, 130);
+    assert!(
+        taken.recent_commands.is_empty(),
+        "the palette history stays on its device"
+    );
+    assert_eq!(
+        b.core.get_window_layout("main").await.expect("layout"),
+        WindowLayout::default(),
+        "layouts stay on their device"
+    );
+    let announced = until("B announces the taken-over UI preferences", || {
+        let event = b.events.try_recv().ok();
+        async move {
+            match event {
+                Some(CoreEvent::UiPreferencesChanged { preferences }) => Some(preferences),
+                _ => None,
+            }
+        }
+    })
+    .await;
+    assert_eq!(announced, taken);
+    a.shutdown().await;
+    b.shutdown().await;
+    clean(&env).await;
+}

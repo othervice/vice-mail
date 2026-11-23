@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window, all platforms. Receives core events (listen/unlisten only, no emit). The custom title bar (data-tauri-drag-region) may drag the window and toggle maximise on double click. The app's own commands need no entry. No fs, shell or http plugins.",
-  "windows": ["main"],
+  "description": "Main window, message windows and composer windows (stage 8, labels message-* and composer-*), all platforms, with the same permissions. Receives core events (listen/unlisten only, no emit). The custom title bar (data-tauri-drag-region) may drag the window and toggle maximise on double click. The app's own commands need no entry. No fs, shell or http plugins.",
+  "windows": ["main", "message-*", "composer-*"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",

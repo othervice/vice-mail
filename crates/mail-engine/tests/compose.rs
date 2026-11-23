@@ -217,6 +217,7 @@ impl Bed {
         }
         core.set_compose_settings(ComposeSettings {
             send_delay_seconds: 0,
+            ..ComposeSettings::default()
         })
         .await
         .expect("no delay");
@@ -863,6 +864,7 @@ async fn cancelling_within_the_delay_sends_nothing() {
     bed.core
         .set_compose_settings(ComposeSettings {
             send_delay_seconds: 3,
+            ..ComposeSettings::default()
         })
         .await
         .expect("delay");
@@ -941,6 +943,7 @@ async fn cancelling_within_the_delay_sends_nothing() {
     bed.core
         .set_compose_settings(ComposeSettings {
             send_delay_seconds: 0,
+            ..ComposeSettings::default()
         })
         .await
         .expect("no delay");

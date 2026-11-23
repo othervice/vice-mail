@@ -143,6 +143,9 @@ pub struct ReadingPreferences {
 /// - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
 ///   questions or detected folders changed. Data a pass took over from another device comes
 ///   with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
+/// - `uiPreferencesChanged` (stage 8): the UI preferences (shortcuts, text size, recent palette
+///   commands) were stored, here in any window or by the settings sync; carries the stored
+///   values. Every window applies them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -243,6 +246,10 @@ pub enum CoreEvent {
     SignaturesChanged,
     /// Stage 10: the templates changed (here or from another device).
     TemplatesChanged,
+    /// Stage 8: the UI preferences were stored (any window, or another device).
+    UiPreferencesChanged {
+        preferences: crate::UiPreferences,
+    },
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@
 //! buttons. `System` hands the decision back to the operating system.
 
 use mail_model::{CoreEvent, ThemePreference};
-use tauri::{Runtime, Theme, WebviewWindow};
+use tauri::{Manager, Runtime, Theme, WebviewWindow};
 use tokio::sync::broadcast::{self, error::RecvError};
 
 /// The window theme for a theme preference; `None` follows the system.
@@ -18,12 +18,16 @@ pub fn window_theme(preference: ThemePreference) -> Option<Theme> {
     }
 }
 
-/// Applies every theme change to `window` until the core shuts down.
+/// Applies every theme change to `window` until the core shuts down or the window is closed
+/// (message windows, stage 8).
 pub fn follow<R: Runtime>(window: WebviewWindow<R>, mut events: broadcast::Receiver<CoreEvent>) {
     tauri::async_runtime::spawn(async move {
         loop {
             match events.recv().await {
                 Ok(CoreEvent::PreferencesChanged { preferences }) => {
+                    if window.get_webview_window(window.label()).is_none() {
+                        break;
+                    }
                     if let Err(err) = window.set_theme(window_theme(preferences.theme)) {
                         tracing::warn!(%err, "could not apply the theme to the window frame");
                     }
