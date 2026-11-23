@@ -25,7 +25,9 @@ use cssparser::{
 
 use super::values::media_matches;
 use crate::dom::{self, Handle, NodeData};
-use crate::html::{ALLOWED_TAGS, BODY_ATTRIBUTES, is_allowed_attribute};
+use crate::html::{
+    ALLOWED_TAGS, BODY_ATTRIBUTES, is_allowed_attribute, is_presentational, presentational_value,
+};
 
 /// The longhand properties the check reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,9 +64,12 @@ pub(super) enum Prop {
     Transform,
     Translate,
     Scale,
+    Zoom,
+    /// `mask-image`, also as part of the `mask` shorthand.
+    MaskImage,
 }
 
-pub(super) const PROP_COUNT: usize = Prop::Scale as usize + 1;
+pub(super) const PROP_COUNT: usize = Prop::MaskImage as usize + 1;
 
 /// CSS properties (as written) and the longhands they set. A shorthand's value is kept whole;
 /// the evaluator picks its part by the property name.
@@ -135,6 +140,11 @@ const PROPERTIES: &[(&str, &[Prop])] = &[
     ("-ms-transform", &[Prop::Transform]),
     ("translate", &[Prop::Translate]),
     ("scale", &[Prop::Scale]),
+    ("zoom", &[Prop::Zoom]),
+    ("mask", &[Prop::MaskImage]),
+    ("-webkit-mask", &[Prop::MaskImage]),
+    ("mask-image", &[Prop::MaskImage]),
+    ("-webkit-mask-image", &[Prop::MaskImage]),
 ];
 
 /// One declaration of a property the check reads.
@@ -769,11 +779,14 @@ pub(super) fn kept_attribute(node: &Handle, name: &str) -> Option<String> {
         "body" => BODY_ATTRIBUTES.contains(&name),
         _ => is_allowed_attribute(tag, name),
     };
-    if kept {
-        dom::attribute(node, name)
-    } else {
-        None
+    if !kept {
+        return None;
     }
+    let value = dom::attribute(node, name)?;
+    if is_presentational(name) {
+        return presentational_value(&value).map(str::to_owned);
+    }
+    Some(value)
 }
 
 /// The nearest kept ancestor.

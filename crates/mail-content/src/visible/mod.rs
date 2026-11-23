@@ -17,20 +17,32 @@
 //! on inline elements and table parts, where browsers ignore them), an offset of at least
 //! [`OFFSCREEN_PX`] off the left or top edge (`left`/`top`/`right`/`bottom` when positioned,
 //! `margin-left`, `margin-top`, `translate`), `scale(0)`, `clip: rect()` of no area when
-//! absolutely positioned, and `clip-path` of no area (`inset(50%)`, `circle(0)`).
+//! absolutely positioned, `clip-path` of no area (`inset(50%)`, `circle(0)`), and a mask that
+//! lets nothing through (`mask`, `mask-image`, also with `-webkit-`: every layer `none` or a
+//! gradient whose colour stops are all transparent, at least one gradient). In a closed
+//! `<details>` (no `open`), everything but its first `<summary>` child is hidden.
 //!
 //! A text is hidden where it inherits `visibility:hidden`/`collapse`, a font size below
-//! [`MIN_FONT_PX`], a `text-indent` of at least [`OFFSCREEN_PX`] to the left, a text colour with
-//! an alpha of at most [`TRANSPARENT_ALPHA`], or a colour with a contrast ratio below
-//! [`MIN_CONTRAST`] to its backdrop: the nearest background colour of the element or an
+//! [`MIN_FONT_PX`] (after `zoom`, multiplied through the ancestors), a `text-indent` of at
+//! least [`OFFSCREEN_PX`] to the left, or where neither its glyphs nor a `text-shadow` show. A
+//! colour does not show with an alpha of at most [`TRANSPARENT_ALPHA`] or a contrast ratio below
+//! [`MIN_CONTRAST`] to the backdrop: the nearest background colour of the element or an
 //! ancestor (`bgcolor` included, alpha blended), white where none is set. A background image or
-//! gradient makes the backdrop unknown, and then only transparency counts; text drawn by
-//! `text-shadow`, `-webkit-text-stroke` or `background-clip:text` is visible whatever its
-//! colour. `<template>` and `<noscript>` are never shown either and are counted as hidden.
+//! gradient makes the backdrop unknown, and then only transparency counts. A shadow layer is
+//! checked like the text colour (`currentcolor` where it names none) and shows nothing when it
+//! is moved [`OFFSCREEN_PX`] off the left or top edge, so transparent text with a transparent
+//! shadow stays hidden. A `text-shadow` or mask value longer than [`MAX_LAYERS_VALUE`] counts
+//! as showing nothing. Text drawn by `-webkit-text-stroke` or `background-clip:text` is
+//! visible whatever its colour. `<template>` and `<noscript>` are never shown either and are
+//! counted as hidden.
 //!
 //! Decisions:
 //! - `aria-hidden` alone hides nothing: sighted readers see the text. Visually hidden text for
 //!   screen readers (`sr-only`) is left out, because it is hidden the same way.
+//! - The content of a closed `<details>` is left out although one click shows it: the reader
+//!   sees only the summary, and a model must not read more than that (finding C-6).
+//! - `zoom: 0` and `zoom: 0%` hide nothing: WebKit and Blink treat them as `zoom: 1` (checked
+//!   in WKWebView and Chromium). A small zoom makes the text small and hides it by font size.
 //! - The thresholds are the points where text stops being readable, not where it is merely
 //!   small or faint: 4 px is less than half the smallest size mails use for fine print (9 px);
 //!   a contrast of 1.1 is `#f2f2f2` on white, far below the 4.5 accessibility needs; text at 5 %
@@ -46,7 +58,9 @@
 //! Limits: text over a background image, text placed over an `<img>` or another element with
 //! positioning, negative `letter-spacing`, `::first-line` and other pseudo-element styles,
 //! `polygon()` clip paths and offsets of less than [`OFFSCREEN_PX`] combined with a small box
-//! are not recognised. `@media (prefers-color-scheme: dark)` rules are not applied, so text that
+//! are not recognised; nor are a stroke in a transparent colour, a shadow blurred beyond
+//! reading, masks of images, partly transparent or luminance masks, and masks sized or placed
+//! away from the text. `@media (prefers-color-scheme: dark)` rules are not applied, so text that
 //! only dark mode hides is kept. Siblings of elements the sanitiser unwraps are approximated.
 
 mod cascade;
@@ -54,6 +68,8 @@ mod values;
 
 #[cfg(test)]
 mod tests;
+
+use std::rc::Rc;
 
 use cascade::{AncestorKeys, Applied, Budget, Declaration, PROP_COUNT, Prop, StyleSheet};
 use cssparser::{Parser, Token};
@@ -85,6 +101,10 @@ pub const MIN_BOX_PX: f32 = 1.0;
 pub const OFFSCREEN_PX: f32 = 500.0;
 /// Selector matching steps per mail. A large newsletter needs a few hundred thousand.
 pub const MATCH_BUDGET: u64 = 10_000_000;
+/// Longest `text-shadow` or mask value that is evaluated (bytes); a longer one counts as
+/// showing nothing (fail closed). Mails use a few dozen bytes; evaluating long values for
+/// every element would cost seconds.
+pub const MAX_LAYERS_VALUE: usize = 2048;
 
 /// Stands in for every image URL in CSS: the check only needs to know there is one.
 const IMAGE: &str = "data:,";
@@ -116,13 +136,24 @@ struct Frame {
     color: Paint,
     /// `-webkit-text-fill-color`; `None`: the text colour.
     fill: Option<Paint>,
-    shadow: bool,
+    /// The colours of the `text-shadow` layers drawn on the screen; `None`: `currentcolor`,
+    /// the text colour where the text is.
+    shadows: Rc<[Option<Paint>]>,
     stroke: bool,
     /// An ancestor paints its background into the glyphs (`background-clip:text`).
     clip_text: bool,
     font_px: Option<f32>,
+    /// `zoom` multiplied through the ancestors: text is drawn at `font_px * zoom`.
+    zoom: f32,
+    /// The element's own `zoom` factor, for a child with `zoom: inherit`.
+    own_zoom: f32,
     visibility_hidden: bool,
     indent_hidden: bool,
+    /// Directly inside a closed `<details>` (or inside an element the sanitiser unwraps there):
+    /// the index of its frame. Only its first `<summary>` is shown there.
+    closed_details: Option<usize>,
+    /// For a closed `<details>`: its first `<summary>` was entered.
+    summary_found: bool,
     /// The colour behind the content; `None`: unknown (an image).
     backdrop: Option<Rgba>,
     opacity: f32,
@@ -133,12 +164,16 @@ impl Frame {
         Self {
             color: Paint::Rgba(Rgba::BLACK),
             fill: None,
-            shadow: false,
+            shadows: Rc::from([]),
             stroke: false,
             clip_text: false,
             font_px: Some(values::ROOT_FONT_PX),
+            zoom: 1.0,
+            own_zoom: 1.0,
             visibility_hidden: false,
             indent_hidden: false,
+            closed_details: None,
+            summary_found: false,
             backdrop: Some(Rgba::WHITE),
             opacity: 1.0,
         }
@@ -147,23 +182,30 @@ impl Frame {
     fn text_hidden(&self) -> bool {
         if self.visibility_hidden
             || self.indent_hidden
-            || self.font_px.is_some_and(|px| px < MIN_FONT_PX)
+            || self.closed_details.is_some()
+            || self.font_px.is_some_and(|px| px * self.zoom < MIN_FONT_PX)
         {
             return true;
         }
-        if self.shadow || self.stroke || self.clip_text {
+        if self.stroke || self.clip_text {
             return false;
         }
-        match self.fill.unwrap_or(self.color) {
-            Paint::Relative => true,
-            Paint::Unknown => false,
+        let shows = |paint: Paint| match paint {
+            Paint::Relative => false,
+            Paint::Unknown => true,
             Paint::Rgba(color) => {
-                color.a <= TRANSPARENT_ALPHA
-                    || self
+                color.a > TRANSPARENT_ALPHA
+                    && self
                         .backdrop
-                        .is_some_and(|b| values::contrast(color.over(b), b) < MIN_CONTRAST)
+                        .is_none_or(|b| values::contrast(color.over(b), b) >= MIN_CONTRAST)
             }
-        }
+        };
+        // The glyphs, or a shadow that draws them in its own colour.
+        !(shows(self.fill.unwrap_or(self.color))
+            || self
+                .shadows
+                .iter()
+                .any(|shadow| shows(shadow.unwrap_or(self.color))))
     }
 }
 
@@ -216,6 +258,19 @@ impl Visibility {
             self.frames.push((parent, Vec::new()));
             return true;
         }
+        // A closed `<details>` shows its first `<summary>` child and nothing else.
+        if let Some(index) = parent.closed_details {
+            let first_summary = name == "summary"
+                && self.frames.get_mut(index).is_some_and(|(details, _)| {
+                    let first = !details.summary_found;
+                    details.summary_found = true;
+                    first
+                });
+            if !first_summary {
+                self.hidden_chars += subtree_chars(node);
+                return false;
+            }
+        }
         let mut applied: Vec<Applied<'_>> = Vec::new();
         if self
             .sheet
@@ -263,7 +318,10 @@ impl Visibility {
             winners: &winners,
         };
         match style.frame(&parent, self.link_color) {
-            Some(frame) => {
+            Some(mut frame) => {
+                if name == "details" && style.attribute("open").is_none() {
+                    frame.closed_details = Some(self.frames.len());
+                }
                 let keys = self.ancestors.add(node);
                 self.frames.push((frame, keys));
                 true
@@ -484,10 +542,14 @@ impl Style<'_, '_> {
             return None;
         }
         let color = self.color(parent, link_color);
+        if self.mask_hidden(color) {
+            return None;
+        }
+        let own_zoom = self.zoom(parent.own_zoom);
         let mut frame = Frame {
             color,
             fill: self.fill(parent),
-            shadow: self.flag(Prop::TextShadow, parent.shadow, |v| keyword(v) != "none"),
+            shadows: self.shadows(parent, font_px),
             stroke: self.flag(Prop::TextStroke, parent.stroke, |v| {
                 components(v).first().is_some_and(|w| {
                     values::length_value(w, Basis::default()).is_none_or(|px| px > 0.0)
@@ -495,8 +557,12 @@ impl Style<'_, '_> {
             }),
             clip_text: parent.clip_text || self.clips_text(),
             font_px,
+            zoom: parent.zoom * own_zoom,
+            own_zoom,
             visibility_hidden: self.visibility(parent.visibility_hidden),
             indent_hidden: self.indent_hidden(parent.indent_hidden, font_px),
+            closed_details: None,
+            summary_found: false,
             backdrop: None,
             opacity,
         };
@@ -791,6 +857,81 @@ impl Style<'_, '_> {
         }
     }
 
+    /// `text-shadow` (inherited): the layers that draw on the screen.
+    fn shadows(&self, parent: &Frame, font_px: Option<f32>) -> Rc<[Option<Paint>]> {
+        match (self.wide(Prop::TextShadow), self.value(Prop::TextShadow)) {
+            (Some(Wide::Inherit), _) | (None, None) => Rc::clone(&parent.shadows),
+            (Some(_), _) => Rc::from([]),
+            (None, Some(value)) if value.len() > MAX_LAYERS_VALUE => Rc::from([]),
+            // An invalid value is ignored, as the browser does.
+            (None, Some(value)) => {
+                text_shadow(value, font_px).map_or_else(|| Rc::clone(&parent.shadows), Rc::from)
+            }
+        }
+    }
+
+    /// The element's own `zoom` factor. `0` counts as `1`, as in WebKit and Blink.
+    fn zoom(&self, parent_own: f32) -> f32 {
+        match self.wide(Prop::Zoom) {
+            Some(Wide::Inherit) => return parent_own,
+            Some(_) => return 1.0,
+            None => {}
+        }
+        match self.value(Prop::Zoom).map(keyword).as_deref() {
+            None | Some("normal" | "reset") => 1.0,
+            Some(value) => values::number_value(value)
+                .filter(|zoom| *zoom > 0.0 && zoom.is_finite())
+                .unwrap_or(1.0),
+        }
+    }
+
+    /// A mask (`mask`, `mask-image`, also with `-webkit-`) that lets nothing through: every
+    /// layer is `none` or a gradient of transparent colours, and at least one is a gradient.
+    /// Masks of images, and gradients with any colour that shows, count as showing.
+    fn mask_hidden(&self, color: Paint) -> bool {
+        let Some(value) = self.value(Prop::MaskImage) else {
+            return false;
+        };
+        if value.len() > MAX_LAYERS_VALUE {
+            return true;
+        }
+        let transparent = |found: Color| match found {
+            Color::Rgba(c) => c.a <= TRANSPARENT_ALPHA,
+            Color::Current => matches!(color, Paint::Rgba(c) if c.a <= TRANSPARENT_ALPHA),
+            Color::Relative => true,
+            Color::Unknown => false,
+        };
+        let mut input = Parser::new(value);
+        let layers = input.parse_comma_separated(|layer| {
+            // `None`: no image in this layer; `Some(shows)`: whether its image may let
+            // something through.
+            let mut image = None;
+            while let Ok(token) = layer.next() {
+                let shows = match token {
+                    Token::UnquotedUrl(_) => true,
+                    Token::Function(name) if name.to_ascii_lowercase().contains("gradient") => {
+                        layer
+                            .parse_nested_block(|inner| {
+                                Ok::<_, cssparser::ParseError<()>>(gradient_colors(inner))
+                            })
+                            .ok()
+                            .is_none_or(|colors| {
+                                colors.is_empty() || !colors.into_iter().all(transparent)
+                            })
+                    }
+                    Token::Function(name) if is_image_function(name) => true,
+                    _ => continue,
+                };
+                image = Some(image.unwrap_or(false) || shows);
+            }
+            Ok::<_, cssparser::ParseError<()>>(image)
+        });
+        let Ok(layers) = layers else {
+            return false;
+        };
+        layers.iter().any(Option::is_some) && layers.iter().all(|layer| *layer != Some(true))
+    }
+
     /// An inherited on/off property: `inherit` keeps the parent's, `initial` is off.
     fn flag(&self, prop: Prop, inherited: bool, on: impl Fn(&str) -> bool) -> bool {
         match (self.wide(prop), self.value(prop)) {
@@ -966,6 +1107,85 @@ fn arguments(input: &mut Parser<'_>, font_px: Option<f32>) -> Vec<Argument> {
     }
     while input.next().is_ok() {}
     out
+}
+
+/// The colours in a gradient's arguments (its colour stops).
+fn gradient_colors(input: &mut Parser<'_>) -> Vec<Color> {
+    let mut colors = Vec::new();
+    while !input.is_exhausted() && colors.len() <= 64 {
+        let state = input.state();
+        if let Some(color) = values::color(input) {
+            colors.push(color);
+            continue;
+        }
+        input.reset(&state);
+        if input.next().is_err() {
+            break;
+        }
+    }
+    colors
+}
+
+/// The colours of the `text-shadow` layers in `value` that draw on the screen (`None`:
+/// `currentcolor`); `None` for a value the browser ignores. A layer moved [`OFFSCREEN_PX`] off
+/// the left or top edge draws nothing a reader sees.
+fn text_shadow(value: &str, font_px: Option<f32>) -> Option<Vec<Option<Paint>>> {
+    if keyword(value) == "none" {
+        return Some(Vec::new());
+    }
+    let basis = Basis {
+        em: font_px,
+        percent: None,
+    };
+    let invalid = || cssparser::ParseError::<()>::custom(());
+    let mut input = Parser::new(value);
+    let layers = input
+        .parse_comma_separated(|layer| {
+            let mut color = None;
+            let mut offsets: Vec<Option<f32>> = Vec::new();
+            while !layer.is_exhausted() {
+                let state = layer.state();
+                if let Some(found) = values::color(layer) {
+                    if color.replace(found).is_some() {
+                        return Err(invalid());
+                    }
+                    continue;
+                }
+                layer.reset(&state);
+                if let Some(px) = values::length(layer, basis) {
+                    offsets.push(Some(px));
+                    continue;
+                }
+                layer.reset(&state);
+                match layer.next() {
+                    // A length this module does not evaluate.
+                    Ok(Token::Dimension { .. } | Token::Function(_)) => offsets.push(None),
+                    _ => return Err(invalid()),
+                }
+            }
+            // Two offsets and an optional blur radius.
+            if !(2..=3).contains(&offsets.len()) {
+                return Err(invalid());
+            }
+            let off_screen = offsets
+                .iter()
+                .take(2)
+                .any(|px| px.is_some_and(|px| px <= -OFFSCREEN_PX));
+            Ok((!off_screen).then_some(color))
+        })
+        .ok()?;
+    Some(
+        layers
+            .into_iter()
+            .flatten()
+            .map(|color| match color {
+                None | Some(Color::Current) => None,
+                Some(Color::Rgba(c)) => Some(Paint::Rgba(c)),
+                Some(Color::Unknown) => Some(Paint::Unknown),
+                Some(Color::Relative) => Some(Paint::Relative),
+            })
+            .collect(),
+    )
 }
 
 /// Functions that make an image in a background.

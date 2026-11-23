@@ -767,6 +767,22 @@ fn first_alt(node: &dom::Handle, tag: &str) -> String {
     alt
 }
 
+/// Attributes whose value is kept only when it is simple ([`presentational_value`]).
+pub(crate) fn is_presentational(attribute: &str) -> bool {
+    PRESENTATIONAL.contains(&attribute)
+}
+
+/// The value the sanitiser keeps for a presentational attribute; `None`: it removes the
+/// attribute.
+pub(crate) fn presentational_value(value: &str) -> Option<&str> {
+    let value = value.trim();
+    let simple = value.len() <= 128
+        && value.chars().all(|c| {
+            c.is_alphanumeric() || matches!(c, '#' | '%' | '.' | ',' | '-' | ' ' | '\'' | '"' | '*')
+        });
+    simple.then_some(value)
+}
+
 pub(crate) fn is_allowed_attribute(tag: &str, attribute: &str) -> bool {
     GENERIC_ATTRIBUTES.contains(&attribute)
         || GENERIC_PREFIXES.iter().any(|p| attribute.starts_with(p))
@@ -849,15 +865,7 @@ impl Pipeline {
             }
             "src" | "poster" | "action" | "formaction" | "data" | "cite" | "longdesc"
             | "srcdoc" | "target" | "ping" | "download" | "rel" | "http-equiv" => None,
-            _ if PRESENTATIONAL.contains(&attribute) => {
-                let value = value.trim();
-                let simple = value.len() <= 128
-                    && value.chars().all(|c| {
-                        c.is_alphanumeric()
-                            || matches!(c, '#' | '%' | '.' | ',' | '-' | ' ' | '\'' | '"' | '*')
-                    });
-                simple.then(|| value.to_owned())
-            }
+            _ if is_presentational(attribute) => presentational_value(value).map(str::to_owned),
             _ if element == "body" || is_allowed_attribute(element, attribute) => {
                 Some(value.to_owned())
             }

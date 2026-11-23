@@ -221,16 +221,20 @@ async fn hostile_mail_stays_data_in_every_tool() {
         .await;
     let message = data_block(&text)["message"].clone();
     let body = message["body"].as_str().unwrap().to_owned();
-    // Text hidden by CSS (`display:none`, white on white, `font-size:0`) is left out and
-    // counted (`mail_content::html_to_visible_text`).
+    // Text hidden by CSS (`display:none`, white on white, `font-size:0`, transparent text with
+    // a transparent shadow) or in a closed `<details>` is left out and counted
+    // (`mail_content::html_to_visible_text`); the summary of the `<details>` stays.
     assert!(message["hidden_text_chars_omitted"].as_u64().unwrap() > 50);
     assert!(
         body.contains("See all deals <https://shop.example/deals>"),
         "{body}"
     );
+    assert!(body.contains("Deal of the day"), "{body}");
     for gone in [
         "INJECTION-MARKER-2",
         "INJECTION-MARKER-3",
+        "INJECTION-MARKER-4",
+        "INJECTION-MARKER-5",
         "exfil@attacker.example",
         "INJECTION-MARKER-COMMENT",
         "document.cookie",

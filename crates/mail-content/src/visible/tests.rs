@@ -4,7 +4,10 @@
 
 use std::path::Path;
 
-use crate::{html_to_text, html_to_visible_text, parse};
+use mail_model::RenderToken;
+
+use super::MAX_LAYERS_VALUE;
+use crate::{RenderOptions, html_to_text, html_to_visible_text, parse, render_html};
 
 fn doc(body: &str) -> String {
     format!("<!DOCTYPE html><html><head></head><body>{body}</body></html>")
@@ -58,16 +61,57 @@ fn display_attributes_and_unrendered_elements() {
     hidden("<div style='visibility:collapse'><b>HIDDEN</b></div>SHOWN");
     // The mail sets `display` itself: the attribute no longer hides.
     shown("<div hidden style='display:block'>SHOWN</div>");
+    // A value the sanitiser does not keep: the pane has no `hidden` attribute.
+    shown("<div hidden='x:y'>SHOWN</div>");
     // A child made visible again.
     let html =
         doc("<div style='visibility:hidden'>HIDDEN <p style='visibility:visible'>SHOWN</p></div>");
     let result = html_to_visible_text(&html);
     assert_eq!(result.text, "SHOWN");
     assert_eq!(result.hidden_chars, 6);
-    // Decided: `aria-hidden` alone hides nothing from a sighted reader, nor does a closed
-    // `<details>` (one click shows it).
+    // Decided: `aria-hidden` alone hides nothing from a sighted reader.
     shown("<p aria-hidden='true'>SHOWN</p>");
-    shown("<details><summary>SHOWN</summary><p>SHOWN too</p></details>");
+}
+
+#[test]
+fn closed_details_show_only_their_first_summary() {
+    for body in [
+        "<details><summary>SHOWN</summary><p>HIDDEN</p></details>",
+        "<details><summary>SHOWN</summary>HIDDEN right in it</details>",
+        "<details>HIDDEN before it<summary>SHOWN</summary></details>",
+        "<details><summary>SHOWN</summary><summary>HIDDEN</summary></details>",
+        // Without a summary of its own the browser shows "Details" and nothing else.
+        "<p>SHOWN</p><details><p>HIDDEN</p></details>",
+        "<p>SHOWN</p><details><div><summary>HIDDEN</summary></div></details>",
+        // CSS on the content or the element does not open it (checked in WebKit and Blink).
+        "<style>details > p{display:block!important}</style><details><summary>SHOWN</summary><p>HIDDEN</p></details>",
+        "<details style='display:contents'><summary>SHOWN</summary><p>HIDDEN</p></details>",
+        // The sanitiser drops an `open` with such a value.
+        "<details open='x:y'><summary>SHOWN</summary><p>HIDDEN</p></details>",
+        // An element the sanitiser unwraps: its summary is the first child in the pane.
+        "<details><x-wrap><summary>SHOWN</summary></x-wrap><summary>HIDDEN</summary></details>",
+        // The first summary takes its place even when CSS hides it.
+        "<p>SHOWN</p><details><summary style='display:none'>HIDDEN</summary><summary>HIDDEN too</summary></details>",
+        "<details open><summary>SHOWN</summary><details><summary>SHOWN too</summary><p>HIDDEN</p></details></details>",
+    ] {
+        hidden(body);
+    }
+    // After the element everything shows again.
+    let result = html_to_visible_text(&doc(
+        "<details><summary>A</summary><p>HIDDEN</p></details><p>SHOWN</p>",
+    ));
+    assert_eq!(result.text, "A\n\nSHOWN");
+    assert_eq!(result.hidden_chars, 6);
+    // The pane gets the same `open` attributes the check reads.
+    let options = RenderOptions::new(RenderToken::from_random(1));
+    let pane = |body: &str| render_html(&doc(body), &options).srcdoc;
+    assert!(!pane("<details open='x:y'><summary>A</summary></details>").contains("open"));
+    assert!(pane("<details open><summary>A</summary></details>").contains("<details open"));
+    // Positive controls: open, and only a summary.
+    shown("<details open><summary>SHOWN</summary><p>SHOWN too</p></details>");
+    shown("<details open=''><summary>SHOWN</summary>SHOWN too</details>");
+    shown("<details OPEN='open'><summary>SHOWN</summary><div><p>SHOWN too</p></div></details>");
+    shown("<details><summary>SHOWN <b>in bold</b> <x-wrap>wrapped</x-wrap></summary></details>");
 }
 
 #[test]
@@ -196,6 +240,161 @@ fn colours_like_the_background() {
         shown(body);
     }
     shown("<body bgcolor='black' text='white'><p>SHOWN</p></body>");
+}
+
+#[test]
+fn text_shadows_draw_text_unless_they_do_not_show_either() {
+    for style in [
+        "color:transparent;text-shadow:0 0 0 transparent",
+        "color:transparent;text-shadow:1px 1px 0 rgba(255,0,0,0)",
+        "color:transparent;text-shadow:0 0 #ff000008",
+        // Without a colour the shadow takes the transparent text colour.
+        "color:transparent;text-shadow:2px 2px",
+        "color:transparent;text-shadow:2px 2px currentcolor",
+        "color:transparent;text-shadow:0 0 0 transparent, 1px 1px rgba(0,0,0,0)",
+        "-webkit-text-fill-color:transparent;color:transparent;text-shadow:0 0",
+        // White glyphs with a white shadow on white.
+        "color:#fff;text-shadow:0 0 0 #fff",
+        "color:transparent;text-shadow:0 0 0 #fefefe",
+        // Off the screen.
+        "color:transparent;text-shadow:-9999px 0 0 red",
+        "color:transparent;text-shadow:0 -600px red",
+        // Invalid: the browser draws no shadow.
+        "color:transparent;text-shadow:red",
+        "color:transparent;text-shadow:1px 1px 1px 1px red",
+        "color:transparent;text-shadow:1px 1px red blue",
+        "color:transparent;text-shadow:1 1 red",
+        "color:transparent;text-shadow:0 0 0 #000;text-shadow:none",
+    ] {
+        hidden(&format!("<p style='{style}'>HIDDEN</p><p>SHOWN</p>"));
+    }
+    // `currentcolor` is the colour where the text is, not where the shadow is set.
+    hidden(
+        "<div style='text-shadow:0 0 0'><p style='color:transparent'>HIDDEN</p></div><p>SHOWN</p>",
+    );
+    hidden(
+        "<div style='color:transparent;text-shadow:0 0 red'><p style='text-shadow:initial'>HIDDEN</p>SHOWN</div>",
+    );
+    hidden(
+        "<style>.s{color:transparent;text-shadow:0 0 transparent}</style><p class='s'>HIDDEN</p><p>SHOWN</p>",
+    );
+    // A value too long to evaluate draws nothing (fail closed).
+    let long = "0 0 red, ".repeat(MAX_LAYERS_VALUE / 8);
+    hidden(&format!(
+        "<p style='color:transparent;text-shadow:{long}0 0 red'>HIDDEN</p><p>SHOWN</p>"
+    ));
+    shown(&format!("<p style='text-shadow:{long}0 0 red'>SHOWN</p>"));
+    // Positive controls: a shadow that shows draws the text.
+    for style in [
+        "color:transparent;text-shadow:0 0 0 red",
+        "color:transparent;text-shadow:red 1px 1px",
+        "color:transparent;text-shadow:1px 1px transparent, 0 0 0 #000",
+        "color:transparent;text-shadow:0 0 0 #000, -9999px 0 red",
+        "color:transparent;text-shadow:0 0 5px rgba(0,0,0,0.5)",
+        "color:transparent;text-shadow:calc(1px + 1vw) 0 #000",
+        "color:transparent;text-shadow:0 0 1em AccentColor",
+        "-webkit-text-fill-color:transparent;text-shadow:0 0 0",
+        "color:#fff;text-shadow:1px 1px 2px #000",
+        "color:transparent;text-shadow:0 -100px #000",
+    ] {
+        shown(&format!("<p style='{style}'>SHOWN</p>"));
+    }
+    shown("<div style='color:transparent;text-shadow:0 0 0 #000'><p>SHOWN</p></div>");
+    shown(
+        "<div style='text-shadow:0 0 0'><p style='-webkit-text-fill-color:transparent'>SHOWN</p></div>",
+    );
+}
+
+#[test]
+fn zoom_scales_the_text() {
+    for style in [
+        "zoom:0.05",
+        "zoom:5%",
+        "zoom:0.2",
+        "font-size:12px;zoom:0.3",
+        "zoom:calc(1 / 10)",
+    ] {
+        hidden(&format!("<p style='{style}'>HIDDEN</p><p>SHOWN</p>"));
+    }
+    // Multiplied through the ancestors.
+    hidden(
+        "<div style='zoom:0.5'><p style='zoom:0.5'><span style='zoom:0.5'>HIDDEN</span></p></div><p>SHOWN</p>",
+    );
+    hidden("<div style='font-size:12px;zoom:0.5'>SHOWN<p style='zoom:inherit'>HIDDEN</p></div>");
+    hidden("<style>.z{zoom:4%}</style><p class='z'>HIDDEN</p><p>SHOWN</p>");
+    // `initial` resets the element's own factor, not its ancestors'.
+    hidden("<div style='zoom:0.2'><p style='zoom:initial'>HIDDEN</p></div><p>SHOWN</p>");
+    // Positive controls. `zoom:0` and `0%` count as 1 in WebKit and Blink.
+    for style in [
+        "zoom:0",
+        "zoom:0%",
+        "zoom:1",
+        "zoom:normal",
+        "zoom:0.5",
+        "zoom:-1",
+        "zoom:2",
+        "font-size:2px;zoom:4",
+    ] {
+        shown(&format!("<p style='{style}'>SHOWN</p>"));
+    }
+    shown("<div style='zoom:0.2'><p style='zoom:5'>SHOWN</p></div>");
+}
+
+#[test]
+fn masks_that_let_nothing_through() {
+    for style in [
+        "mask-image:linear-gradient(transparent,transparent)",
+        "-webkit-mask-image:linear-gradient(rgba(0,0,0,0) 0%, rgba(0,0,0,0) 100%)",
+        "mask:linear-gradient(transparent,transparent)",
+        "-webkit-mask:linear-gradient(to right, #0000, transparent 50%) no-repeat center / cover",
+        "mask-image:radial-gradient(circle at center, transparent 0, transparent 100%)",
+        "mask-image:repeating-linear-gradient(45deg, transparent, transparent 10px)",
+        "mask-image:conic-gradient(from 90deg, hsl(0 0% 0% / 0), transparent)",
+        "mask-image:-webkit-linear-gradient(top, transparent, transparent)",
+        "mask-image:linear-gradient(in oklch, transparent, transparent)",
+        "mask-image:none, linear-gradient(transparent, transparent)",
+        "mask-image:linear-gradient(transparent,transparent), linear-gradient(#0000,#0000)",
+        "mask-image:linear-gradient(transparent,transparent) !important",
+    ] {
+        hidden(&format!("<div style='{style}'>HIDDEN</div><p>SHOWN</p>"));
+    }
+    // Inline elements too, and everything inside.
+    hidden(
+        "<p>SHOWN <span style='-webkit-mask-image:linear-gradient(transparent,transparent)'>HIDDEN</span></p>",
+    );
+    hidden(
+        "<div style='mask:linear-gradient(transparent,transparent)'><p style='color:#000;opacity:1'>HIDDEN</p></div><p>SHOWN</p>",
+    );
+    // `currentcolor` in the mask is the element's colour.
+    hidden(
+        "<div style='color:transparent;mask-image:linear-gradient(currentcolor,currentcolor)'><p style='color:#000'>HIDDEN</p></div><p>SHOWN</p>",
+    );
+    hidden(
+        "<style>.m{-webkit-mask:linear-gradient(transparent,transparent)}</style><p class='m'>HIDDEN</p><p>SHOWN</p>",
+    );
+    // A value too long to evaluate lets nothing through (fail closed).
+    let long = "linear-gradient(#000,#000), ".repeat(MAX_LAYERS_VALUE / 20);
+    hidden(&format!(
+        "<div style='mask-image:{long}none'>HIDDEN</div><p>SHOWN</p>"
+    ));
+    // Positive controls: masks that show the content or part of it, and masks not evaluated.
+    for style in [
+        "mask:linear-gradient(#000,#000)",
+        "mask-image:linear-gradient(transparent, #000)",
+        "-webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,1) 60%, rgba(0,0,0,0))",
+        "mask-image:linear-gradient(transparent,transparent), linear-gradient(#000,#000)",
+        "mask-image:linear-gradient(currentcolor, currentcolor)",
+        "mask-image:linear-gradient(AccentColor, transparent)",
+        "mask-image:linear-gradient(foo)",
+        "mask-image:none",
+        "mask:none",
+        "mask-image:url(cid:mask)",
+        "mask:url(#m)",
+        "mask-image:inherit",
+        "mask-image:linear-gradient(transparent,transparent);mask-image:none",
+    ] {
+        shown(&format!("<div style='{style}'>SHOWN</div>"));
+    }
 }
 
 #[test]
