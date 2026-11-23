@@ -84,16 +84,47 @@ PATH="/opt/homebrew/opt/llvm/bin:$PATH" \
 - Der erste Lauf lädt CRT und Windows-SDK (einmalig, etwa 35 s) und `nsis_tauri_utils.dll` von GitHub.
 - Aus LLVM werden `clang-cl`, `llvm-lib` und `llvm-rc` gebraucht; den Linker bringt cargo-xwin mit.
 - Etwa 60 Linker-Warnungen `LNK4099` (fehlende PDB-Dateien) sind harmlos.
-- Ab Stufe 6 kapselt `scripts/build-windows.sh` diese Befehle.
+- `scripts/build-windows.sh [version]` kapselt diese Befehle (siehe unten).
 
 ### macOS-App bauen
 
 ```sh
-CI=true pnpm tauri build --bundles app,dmg
+CI=true pnpm tauri build --bundles app,dmg --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
 ```
 
 `CI=true` ist nötig, wenn über SSH oder tmux gebaut wird: Sonst versucht der DMG-Schritt, das
 Finder-Fenster per AppleScript zu gestalten, und bricht mit einer Zeitüberschreitung ab.
+`signingIdentity "-"` versiegelt das ganze Bundle ad hoc. Ohne das trägt nur das Binary die
+Signatur des Linkers, `codesign --verify` scheitert („code has no resources but signature
+indicates they must be present“), und ein heruntergeladenes Exemplar gilt als beschädigt.
+`scripts/build-macos.sh [version]` kapselt das (siehe unten).
+
+### Builds für die Verteilung
+
+| Skript | Ergebnis |
+|---|---|
+| `scripts/build-macos.sh [version]` | `.app` und `.dmg` für Apple Silicon unter `target/release/bundle/`, ad hoc signiert. Prüft Signatur und Disk-Image, startet die App aus dem Image unter einem temporären `HOME` und beendet sie wieder (`SKIP_LAUNCH_CHECK=1` ohne GUI-Sitzung). Gibt Pfad, Größe und SHA-256 aus, dazu eine `.sha256`-Datei |
+| `scripts/build-windows.sh [version]` | NSIS-Installer unter `target/x86_64-pc-windows-msvc/release/bundle/nsis/`, mit Pfad, Größe, SHA-256 und `.sha256`-Datei |
+| `scripts/release-local.sh [--force] [version]` | beide Builds, danach `dist/<version>/<Produktname>-<version>-macos-arm64.dmg`, `…-windows-x64-setup.exe` und `SHA256SUMS` |
+
+- **Version:** aus dem Argument (semver), sonst aus `tauri.conf.json` (`version`), sonst aus dem
+  Cargo-Workspace. Sie geht per `--config '{"version":"…"}'` in den Build, keine Datei wird
+  geändert. Tauri setzt damit `package_info().version`; das zeigt „Über“, ebenso Info.plist,
+  VERSIONINFO der `.exe` und die Dateinamen.
+- **Build-Stand:** `app/src-tauri/build.rs` setzt Commit (`git rev-parse --short=10`, mit
+  `-dirty`, wenn verfolgte Dateien vom Commit abweichen) und Build-Datum. Die Skripte setzen
+  `SOURCE_DATE_EPOCH`: bei sauberem Baum die Commit-Zeit, sonst die aktuelle Zeit; ein gesetzter
+  Wert gilt. Weil cargo `build.rs` nur bei geändertem HEAD, `SOURCE_DATE_EPOCH` oder Tauri-Config
+  neu ausführt, hält das beide Angaben aktuell. `release-local.sh` gibt beiden Builds denselben
+  Wert. Es bricht ab, wenn `Cargo.lock` nicht zu den Manifesten passt oder wenn HEAD sich während
+  der Builds bewegt (sonst zeigten macOS- und Windows-App in „Über“ verschiedene Commits).
+- **Nur Apple Silicon.** Ein Intel- oder Universal-Build bräuchte das Rust-Ziel
+  `x86_64-apple-darwin`, auf dem Mac mini zusätzlich Linker und `CC` für dieses Ziel in
+  `~/.cargo/config.toml` (wegen `cc`, siehe oben), einen zweiten vollen LTO-Build (etwa doppelte
+  Bauzeit) und rund 2,5 GB mehr in `target/`. Das ist Mehraufwand, Intel-Macs bleiben deshalb
+  vorerst außen vor. Ob sie mit den CI-Builds (Stufe 15) dazukommen, ist offen.
+- Installation, Warnungen von Gatekeeper und SmartScreen, Datenorte und Deinstallation:
+  `docs/INSTALL.md`.
 
 ## Testserver
 

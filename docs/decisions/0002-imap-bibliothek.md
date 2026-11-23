@@ -289,6 +289,79 @@ für neue Abhängigkeiten. Es bekommt eine begründete Ausnahme:
 
 Der Mensch wird darüber informiert und kann die Ausnahme widerrufen.
 
+### Nachtrag Stufe 6 (23.11.2026): `aws-lc-rs` mit cargo-xwin geprüft
+
+**Aufbau.** Wegwerf-Crate außerhalb des Workspace (im Scratchpad, danach gelöscht) mit dem
+TLS-Stapel des Produkts: rustls 0.23.46 (`std`, `tls12`, `logging`), tokio-rustls 0.26.6,
+rustls-platform-verifier 0.7.1, Client-Konfiguration wie in `crates/mail-imap/src/tls.rs`. Ein
+Feature wählt `ring` oder `aws_lc_rs` für rustls und tokio-rustls. Release-Profil wie im Workspace
+(fat LTO, eine Codegen-Unit, strip), jede Variante kalt in einem eigenen Target-Verzeichnis. Der
+PATH enthielt absichtlich nur `~/.cargo/bin`, `/usr/bin`, `/bin` (für Windows dazu LLVM), damit
+CMake und Go aus Homebrew nicht gefunden werden. NASM ist auf dem Mac mini nicht installiert.
+Windows-Umgebung wie in `scripts/build-windows.sh` (`XWIN_CACHE_DIR`, `XWIN_ARCH=x86_64`).
+
+**Versionen:** aws-lc-rs 1.19.0 und aws-lc-sys 0.47.0, beide vom 28.10.2026 (davor Releases am
+12.10., 01.09. und 07.08.2026), MSRV 1.71.
+
+| | `ring` 0.17.14 | `aws-lc-rs` 1.19.0 |
+|---|---|---|
+| macOS (`aarch64-apple-darwin`), kalt | 14 s | 22 s |
+| Windows (`cargo xwin build --target x86_64-pc-windows-msvc`), kalt | 11 s | 19 s |
+| Binary macOS | 1.382.336 B | 2.824.640 B (+1,4 MB) |
+| Binary Windows (`.exe`) | 1.609.216 B | 2.636.800 B (+1,0 MB) |
+| Target-Verzeichnis macOS / Windows | 82 / 102 MB | 116 / 139 MB |
+| Zusätzliche Werkzeuge | keine | keine (siehe unten) |
+| TLS-Handshake gegen Stalwart (127.0.0.1:1993, Test-CA, macOS) | TLS 1.3, AES-256-GCM | TLS 1.3, AES-256-GCM |
+
+Während der Messung liefen Builds anderer Sitzungen (Load etwa 10 auf 10 Kernen). Die Zeiten sind
+deshalb Obergrenzen; der Unterschied von rund 8 s ist das Kompilieren von AWS-LC in C.
+
+**Werkzeuge.**
+
+- aws-lc-sys 0.47 nimmt von sich aus den `cc`-Builder („Building with: CC“) mit vorgenerierten
+  Bindings. CMake, bindgen/libclang und Go (nur für FIPS) werden nicht gebraucht, auch nicht unter
+  Windows. Die C-Teile übersetzt dort `clang-cl`, wie cargo-xwin es einstellt.
+- Die x86_64-Assemblerquellen für Windows sind in NASM-Syntax. Das rustls-Feature `aws_lc_rs`
+  schaltet `aws-lc-rs/prebuilt-nasm` ein. Ohne `nasm` im PATH linkt aws-lc-sys deshalb die im Crate
+  mitgelieferten, vorab assemblierten Objektdateien (`builder/prebuilt-nasm/`, 26 Stück; im Log nur
+  die Warnung „NASM command not found“). Ihr Inhalt ist über die Prüfsumme in `Cargo.lock` festgelegt.
+  Mit installiertem NASM (`brew install nasm`) assembliert aws-lc-sys selbst aus den Quellen.
+- Mit aws-lc-rs ist `ring` ganz aus dem Graphen verschwunden: `cargo tree -i ring` findet für beide
+  Ziele nichts.
+
+**Lizenzen.** aws-lc-rs: `ISC AND (Apache-2.0 OR ISC)`. aws-lc-sys: `ISC AND (Apache-2.0 OR ISC)
+AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR
+MIT-0)`. Die alte OpenSSL/SSLeay-Lizenz mit Werbeklausel, die mit der GPL nicht verträglich ist,
+kommt nicht mehr vor. Laut `LICENSE` des Crates stehen die von OpenSSL abgeleiteten Teile nach der
+Umlizenzierung von OpenSSL und BoringSSL unter Apache-2.0. jitterentropy wird ausdrücklich unter
+BSD-3-Clause weitergegeben, nicht unter GPL-2.0. Jede einzelne Lizenz verträgt sich mit
+GPL-3.0-or-later: Apache-2.0 mit GPLv3, ISC, MIT und BSD-3-Clause sind freizügig, MIT-0 kommt nur als
+Alternative vor. `cargo deny check licenses advisories bans sources` mit unserer unveränderten
+`deny.toml` meldet für beide Varianten „ok“. Die Allowlist braucht keinen neuen Eintrag.
+
+**Empfehlung: zu `aws-lc-rs` wechseln.** Die Bedingung dieser Ausnahme ist erfüllt: aws-lc-rs baut mit
+cargo-xwin ohne Mehraufwand, ohne Zusatzwerkzeuge und ohne Lizenzprobleme. Damit entfällt die
+Ausnahme für `ring`, und das Produkt nutzt den Standard-Provider von rustls, der regelmäßig
+veröffentlicht wird. Der Preis: rund 1 bis 1,5 MB mehr im Binary, etwa 8 s mehr im kalten Build und
+unter Windows vorab assemblierte Objektdateien aus dem Crate, solange kein NASM installiert ist.
+
+Umstellung (nicht Teil dieser Prüfung, Entscheidung der Hauptsitzung):
+
+1. `Cargo.toml`: Features von `rustls` und `tokio-rustls` von `ring` auf `aws_lc_rs` ändern.
+2. Der Provider wird heute nicht an einer Stelle gewählt, sondern an sieben: im Produkt
+   `crates/mail-imap/src/tls.rs`, `crates/mail-engine/src/reading/links.rs`, `reading/remote.rs`
+   und `discovery/autoconfig.rs`, in Tests `discovery/autoconfig.rs` (Testhilfe),
+   `discovery/autoconfig/tests.rs` und `crates/mail-imap/src/smtp/tests.rs`. Zuerst eine gemeinsame
+   Funktion schaffen (etwa `mail_imap::tls::provider()` öffentlich machen) und überall verwenden.
+3. Anpassen: `deny.toml` (Kommentar zu ISC), `docs/ARCHITECTURE.md` (TLS in der Stack-Tabelle) und
+   den Abschnitt „TLS-Konzept“ oben.
+4. Danach `scripts/check.sh`, die TLS-Tests gegen den Testserver und beide Builds laufen lassen und
+   die Größen von `.dmg` und Installer neu messen.
+
+**Ungeprüft:** die Laufzeit unter Windows (Plattform-Verifier über CryptoAPI mit aws-lc-rs, die
+vorab assemblierten Objekte auf echter Hardware) und die Größe der echten App. Gemessen wurde nur
+am Wegwerf-Crate.
+
 ## Rückweg
 
 Der Adapter steckt hinter dem Trait `MailBackend`, und die eigene Befehlsschicht nutzt von async-imap

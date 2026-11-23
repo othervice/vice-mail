@@ -1,6 +1,13 @@
 //! Build script: Tauri's code generation plus two facts for `AppInfo`, the short git commit
-//! (`MAIL_APP_COMMIT`) and the build time (`MAIL_APP_BUILD_DATE`, RFC 3339, UTC). Both stay unset
-//! when unknown; the app then reports `null`.
+//! (`MAIL_APP_COMMIT`, with `-dirty` when tracked files differ from it) and the build time
+//! (`MAIL_APP_BUILD_DATE`, RFC 3339, UTC). Both stay unset when unknown; the app then reports
+//! `null`.
+//!
+//! Cargo reruns this script only when HEAD moves, `SOURCE_DATE_EPOCH` changes or Tauri's config
+//! changes, not on every edit. `scripts/build-macos.sh` and `scripts/build-windows.sh` therefore
+//! set `SOURCE_DATE_EPOCH` for every build: the commit time for a clean tree, the current time for
+//! a dirty one. That keeps both facts fresh in shipped builds; a plain `cargo build` may keep an
+//! older value until one of the triggers fires.
 
 use std::path::Path;
 use std::process::Command;
@@ -21,9 +28,38 @@ fn git(args: &[&str]) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// Whether tracked files differ from HEAD, staged or not (as `git describe --dirty` sees it;
+/// untracked files do not count). `--no-optional-locks`: never rewrite the index, another git
+/// process may hold it. If git cannot answer, the build counts as dirty: clean must be proven.
+fn working_tree_dirty() -> bool {
+    let out = Command::new("git")
+        .args([
+            "--no-optional-locks",
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+        ])
+        .output();
+    match out {
+        Ok(out) if out.status.success() => !out.stdout.is_empty(),
+        Ok(out) => {
+            println!(
+                "cargo:warning=git status failed ({}); marking the commit as dirty",
+                out.status
+            );
+            true
+        }
+        Err(err) => {
+            println!("cargo:warning=git status failed ({err}); marking the commit as dirty");
+            true
+        }
+    }
+}
+
 fn emit_git_commit() {
     if let Some(commit) = git(&["rev-parse", "--short=10", "HEAD"]) {
-        println!("cargo:rustc-env=MAIL_APP_COMMIT={commit}");
+        let suffix = if working_tree_dirty() { "-dirty" } else { "" };
+        println!("cargo:rustc-env=MAIL_APP_COMMIT={commit}{suffix}");
     }
     // Re-run when HEAD moves. Only existing files: a missing one would re-run on every build.
     if let Some(git_dir) = git(&["rev-parse", "--absolute-git-dir"]) {

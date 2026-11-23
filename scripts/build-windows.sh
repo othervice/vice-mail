@@ -2,16 +2,18 @@
 # Builds the Windows installer (NSIS, x86_64) on the Mac by cross-compiling with cargo-xwin
 # (docs/SETUP.md, decision 0004). Prints path, size and SHA-256 of the installer at the end.
 #
-#   scripts/build-windows.sh            version from the Cargo workspace
+#   scripts/build-windows.sh            version from tauri.conf.json, else the Cargo workspace
 #   scripts/build-windows.sh 0.1.0-preview.1
 #                                       this version for the app and the installer (semver)
 #
 # Environment: LLVM_BIN (default /opt/homebrew/opt/llvm/bin) is the LLVM that provides clang-cl,
 # llvm-lib and llvm-rc; it goes onto PATH for this build only. CARGO_TARGET_DIR is honoured.
+# SOURCE_DATE_EPOCH, if set, is the build date shown in About; otherwise the commit time of a
+# clean tree or the current time of a dirty one.
 set -euo pipefail
 
 usage() {
-  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -77,8 +79,26 @@ if ! makensis -V1 "$tmp/probe.nsi" >"$tmp/probe.log" 2>&1; then
   fail "makensis cannot compile a minimal script (UTF-8 locale available? locale -a | grep en_US.UTF-8)"
 fi
 
+# Build date and the commit's -dirty mark come from app/src-tauri/build.rs, which cargo reruns
+# only when SOURCE_DATE_EPOCH (among a few others) changes. So every build sets it: the commit
+# time for a clean tree (reproducible), the current time for a dirty one. A caller's value wins.
+if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
+  [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] ||
+    fail "SOURCE_DATE_EPOCH '$SOURCE_DATE_EPOCH' is not a Unix time in seconds"
+elif git -C "$repo" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  changes="$(git -C "$repo" --no-optional-locks status --porcelain --untracked-files=no)" ||
+    fail "git status failed"
+  if [[ -z "$changes" ]]; then
+    SOURCE_DATE_EPOCH="$(git -C "$repo" log -1 --format=%ct HEAD)"
+  else
+    SOURCE_DATE_EPOCH="$(date +%s)"
+  fi
+fi
+[[ -z "${SOURCE_DATE_EPOCH:-}" ]] || export SOURCE_DATE_EPOCH
+
 # --- Build -----------------------------------------------------------------------------------
 
+# The version goes in through --config (as in build-macos.sh): no project file is changed.
 args=(build --runner cargo-xwin --target "$target" --bundles nsis)
 if [[ -n "$version" ]]; then
   args+=(--config "{\"version\":\"$version\"}")
@@ -87,7 +107,7 @@ fi
 nsis_dir="${CARGO_TARGET_DIR:-$repo/target}/$target/release/bundle/nsis"
 touch "$tmp/started"
 started=$(date +%s)
-printf 'build-windows: pnpm --dir app tauri %s\n' "${args[*]}"
+printf 'build-windows: SOURCE_DATE_EPOCH=%s pnpm --dir app tauri %s\n' "${SOURCE_DATE_EPOCH:-}" "${args[*]}"
 pnpm --dir "$repo/app" tauri "${args[@]}" || fail "tauri build failed (exit $?)"
 seconds=$(($(date +%s) - started))
 
@@ -100,6 +120,8 @@ done < <(find "$nsis_dir" -maxdepth 1 -name '*-setup.exe' -newer "$tmp/started" 
 [[ ${#installers[@]} -eq 1 ]] ||
   fail "expected one new installer in $nsis_dir, found ${#installers[@]}"
 installer="${installers[0]}"
+[[ -z "$version" || "$(basename "$installer")" == *"_${version}_"* ]] ||
+  fail "$(basename "$installer") does not carry version $version"
 
 bytes=$(wc -c <"$installer" | tr -d ' ')
 sha256=$(shasum -a 256 "$installer" | cut -d' ' -f1)

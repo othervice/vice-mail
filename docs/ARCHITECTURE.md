@@ -236,6 +236,11 @@ einer klaren Meldung abgelehnt.
 **Nur-Lese-Modus**
 - Konten mit `writes_enabled = false` öffnen Postfächer mit EXAMINE. Der Adapter lehnt jeden
   schreibenden Befehl mit einem typisierten Fehler ab. Ein Test beweist das.
+- Auch bei freigeschaltetem Schreibzugriff verbinden sich Abgleich, IDLE, Lesebereich und
+  Verbindungstest immer nur lesend (EXAMINE, PEEK); geschrieben wird ausschließlich über die eigene
+  Verbindung der Outbox (Mitschnitt-Test in `crates/mail-engine/tests/actions.rs`).
+- Nach jedem Schritt der Outbox stößt ein Hook sofort einen Abgleich genau der betroffenen Ordner an;
+  die Oberfläche bekommt je Änderung ein gebündeltes Ereignis `operationsChanged`.
 
 **Offline**
 - Kopfzeilen aller Mails liegen lokal. Bodies werden beim Öffnen geholt und für einen einstellbaren
