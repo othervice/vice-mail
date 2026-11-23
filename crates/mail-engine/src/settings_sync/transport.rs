@@ -4,6 +4,9 @@
 //! A transport stores opaque blobs with two header values and knows nothing about kinds,
 //! merging or encryption. Changing a record is "write the new version, then delete the old
 //! one"; a crash in between leaves two versions, which the next pass cleans up.
+//!
+//! What a pass downloads is bounded by the transport's [`FetchLimits`] (finding F2 of the
+//! stage 15 review): the planner decides from the listed sizes, before anything is read.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -31,8 +34,49 @@ pub struct RemoteEntry {
     pub size: u64,
 }
 
+/// How much one pass downloads, decided from the listed sizes before anything is read (finding
+/// F2 of the stage 15 review: a server that hosts the folder must not make every device
+/// allocate whatever it offers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FetchLimits {
+    /// Entries listed larger than this are never downloaded: no record can be that large (the
+    /// largest ciphertext opened is 1 MiB, about 1.4 MiB in ASCII armor). They are reported
+    /// and left alone (`Notice::TooLarge`).
+    pub max_entry_bytes: u64,
+    /// At most this many entries per pass; what is over waits for the next pass
+    /// (`Notice::Postponed`).
+    pub max_entries: usize,
+    /// At most this many bytes (listed sizes) per pass; what is over waits for the next pass.
+    pub max_bytes: u64,
+}
+
+impl FetchLimits {
+    /// 2 MiB per entry; 5,000 entries and 64 MiB per pass.
+    pub const DEFAULT: Self = Self {
+        max_entry_bytes: 2 * 1024 * 1024,
+        max_entries: 5_000,
+        max_bytes: 64 * 1024 * 1024,
+    };
+
+    /// Whether an entry of `size` bytes may be downloaded at all.
+    pub const fn fits(&self, size: u64) -> bool {
+        size <= self.max_entry_bytes
+    }
+}
+
+impl Default for FetchLimits {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 /// The storage behind the settings sync. Futures are `Send`, so a pass can run on a Tokio task.
 pub trait SettingsTransport: Send {
+    /// How much a pass may download through this transport.
+    fn fetch_limits(&self) -> FetchLimits {
+        FetchLimits::DEFAULT
+    }
+
     /// All entries with their headers, without bodies.
     fn list(&mut self) -> impl Future<Output = Result<Vec<RemoteEntry>, TransportError>> + Send;
 
@@ -76,6 +120,8 @@ struct Folder {
     offline: bool,
     writes: u64,
     deletes: u64,
+    /// Every handle whose body was read, in order (by any clone).
+    reads: Vec<EntryHandle>,
 }
 
 /// An in-memory folder shared by every clone (one folder, several simulated devices), with
@@ -83,6 +129,8 @@ struct Folder {
 #[derive(Debug, Clone, Default)]
 pub struct MemoryTransport {
     folder: Arc<Mutex<Folder>>,
+    /// Limits of this clone (one simulated device), not of the shared folder.
+    limits: FetchLimits,
 }
 
 impl MemoryTransport {
@@ -115,6 +163,16 @@ impl MemoryTransport {
     pub fn counters(&self) -> (u64, u64) {
         let folder = self.folder();
         (folder.writes, folder.deletes)
+    }
+
+    /// Every handle whose body any clone read so far, in order.
+    pub fn reads(&self) -> Vec<EntryHandle> {
+        self.folder().reads.clone()
+    }
+
+    /// The limits passes over this clone use (other clones keep theirs).
+    pub fn set_fetch_limits(&mut self, limits: FetchLimits) {
+        self.limits = limits;
     }
 
     /// Stores an entry as the server would (replays, foreign entries, manipulated headers).
@@ -181,6 +239,10 @@ fn online(folder: &Folder) -> Result<(), TransportError> {
 }
 
 impl SettingsTransport for MemoryTransport {
+    fn fetch_limits(&self) -> FetchLimits {
+        self.limits
+    }
+
     async fn list(&mut self) -> Result<Vec<RemoteEntry>, TransportError> {
         let folder = self.folder();
         online(&folder)?;
@@ -199,12 +261,14 @@ impl SettingsTransport for MemoryTransport {
         &mut self,
         handles: &[EntryHandle],
     ) -> Result<Vec<(EntryHandle, Vec<u8>)>, TransportError> {
-        let folder = self.folder();
+        let mut folder = self.folder();
         online(&folder)?;
-        Ok(handles
+        let bodies: Vec<(EntryHandle, Vec<u8>)> = handles
             .iter()
             .filter_map(|h| folder.entries.get(h).map(|e| (*h, e.body.clone())))
-            .collect())
+            .collect();
+        folder.reads.extend(bodies.iter().map(|(h, _)| *h));
+        Ok(bodies)
     }
 
     async fn write(
@@ -277,6 +341,25 @@ mod tests {
         b.delete(&[handle, handle]).await.expect("delete");
         assert!(a.is_empty());
         assert_eq!(a.counters(), (1, 1));
+        assert_eq!(a.reads(), vec![handle], "only what was there is logged");
+    }
+
+    #[test]
+    fn limits_belong_to_the_clone() {
+        let a = MemoryTransport::new();
+        let mut b = a.clone();
+        let small = FetchLimits {
+            max_entry_bytes: 10,
+            max_entries: 1,
+            max_bytes: 10,
+        };
+        b.set_fetch_limits(small);
+        assert_eq!(a.fetch_limits(), FetchLimits::DEFAULT);
+        assert_eq!(b.fetch_limits(), small);
+        assert!(small.fits(10));
+        assert!(!small.fits(11));
+        // An armored record of the largest ciphertext a device opens fits by default.
+        assert!(FetchLimits::DEFAULT.fits(1024 * 1024 * 3 / 2));
     }
 
     #[tokio::test]

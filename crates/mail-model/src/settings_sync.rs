@@ -191,8 +191,8 @@ pub struct SettingsSyncStatus {
     pub last_error: Option<IpcError>,
     /// Local changes not yet in the folder.
     pub pending_changes: u32,
-    /// Entries of the folder the last pass rejected (modified, damaged, from another key) and
-    /// reported; the rest synced as usual.
+    /// Entries of the folder the last pass left out and reported (modified, damaged, from
+    /// another key, too large, or waiting for the next pass); the rest synced as usual.
     pub rejected_entries: u32,
     pub devices: Vec<SyncDevice>,
     pub questions: Vec<SyncQuestion>,

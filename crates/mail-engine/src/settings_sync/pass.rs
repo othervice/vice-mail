@@ -20,7 +20,8 @@ use super::transport::{EntryHandle, RemoteEntry, SettingsTransport};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocalState {
     records: BTreeMap<RecordKey, LocalRecord>,
-    /// When this device last listed the complete folder in a successful pass.
+    /// When this device last listed the complete folder in a successful pass (one that
+    /// postponed no record, see [`super::plan`]).
     pub last_complete_sync_ms: Option<i64>,
 }
 
@@ -338,7 +339,8 @@ impl FetchedPass<'_> {
 }
 
 /// Lists the folder, downloads and opens what is new (see [`prepare_pass`]). `now_ms` is the
-/// wall clock at the start (the listing's time).
+/// wall clock at the start (the listing's time). Downloads stay within the transport's
+/// [`FetchLimits`](super::transport::FetchLimits); see [`super::plan`] for what is left out.
 pub async fn fetch_pass<'a, T: SettingsTransport>(
     transport: &mut T,
     key: &SyncKey,
@@ -347,8 +349,10 @@ pub async fn fetch_pass<'a, T: SettingsTransport>(
     mode: PassMode,
 ) -> Result<FetchedPass<'a>, SettingsSyncError> {
     let listed_at_ms = now_ms;
+    let limits = transport.fetch_limits();
     let listing = transport.list().await?;
-    let mut ours = key_records(&listing)
+    // Too large to be a key record of ours: neither the one kept nor an old copy to delete.
+    let mut ours = key_records(listing.iter().filter(|e| limits.fits(e.size)))
         .into_iter()
         .filter(|(_, header)| header.opaque_id == key.key_record_id())
         .collect::<Vec<_>>();
@@ -367,6 +371,7 @@ pub async fn fetch_pass<'a, T: SettingsTransport>(
         now_ms: listed_at_ms,
         last_complete_sync_ms: state.last_complete_sync_ms,
         full_check: mode == PassMode::FullCheck,
+        limits,
     };
     let planner = Planner::new(key, &state.records, &listing, ctx);
     let requests = planner.to_fetch();
@@ -406,6 +411,11 @@ pub async fn execute_pass<T: SettingsTransport>(
         old_key_records,
         listed_at_ms,
     } = prepared;
+    // Postponed records were listed but not looked at: the folder was not seen completely.
+    let complete = !plan
+        .notices
+        .iter()
+        .any(|n| matches!(n, Notice::Postponed { .. }));
     let mut report = PassReport {
         questions: plan.questions,
         notices: plan.notices,
@@ -462,14 +472,18 @@ pub async fn execute_pass<T: SettingsTransport>(
             Err(error) => report.failed.push(Failure { key: None, error }),
         }
     }
-    state.last_complete_sync_ms = Some(listed_at_ms);
+    if complete {
+        state.last_complete_sync_ms = Some(listed_at_ms);
+    }
     report
 }
 
 /// Key records in a listing with valid headers.
-fn key_records(listing: &[RemoteEntry]) -> Vec<(EntryHandle, RecordHeader)> {
+fn key_records<'a>(
+    listing: impl IntoIterator<Item = &'a RemoteEntry>,
+) -> Vec<(EntryHandle, RecordHeader)> {
     listing
-        .iter()
+        .into_iter()
         .filter_map(|e| RecordHeader::parse(&e.header).map(|h| (e.handle, h)))
         .filter(|(_, h)| h.opaque_id.is_key_record())
         .collect()
@@ -494,15 +508,22 @@ pub async fn setup<T: SettingsTransport>(
 }
 
 /// Unlocks the folder's key with the passphrase (a new device, or after a reset elsewhere).
-/// Tries the key records newest first. Writes nothing, so a wrong passphrase changes nothing
-/// on the server or locally.
+/// Tries the key records newest first; key records listed larger than the transport's
+/// [`FetchLimits::max_entry_bytes`](super::transport::FetchLimits) are not downloaded. Writes
+/// nothing, so a wrong passphrase changes nothing on the server or locally.
 pub async fn join<T: SettingsTransport>(
     transport: &mut T,
     passphrase: &Secret<String>,
 ) -> Result<SyncKey, SettingsSyncError> {
-    let mut records = key_records(&transport.list().await?);
+    let limits = transport.fetch_limits();
+    let listing = transport.list().await?;
+    let mut records = key_records(listing.iter().filter(|e| limits.fits(e.size)));
     if records.is_empty() {
-        return Err(SettingsSyncError::NotSetUp);
+        return Err(if key_records(&listing).is_empty() {
+            SettingsSyncError::NotSetUp
+        } else {
+            SettingsSyncError::InvalidKeyRecord("too large".to_owned())
+        });
     }
     records.sort_by_key(|(handle, header)| std::cmp::Reverse((header.version, *handle)));
     let handles: Vec<EntryHandle> = records.iter().map(|(h, _)| *h).collect();
@@ -532,6 +553,7 @@ pub async fn join<T: SettingsTransport>(
 /// If the deletion fails, the error is returned although the new passphrase already works:
 /// until the next pass of any device removes the old key record, the old passphrase still
 /// unlocks the key too. The user should know that when the old passphrase has leaked.
+/// Entries too large to be a key record are left alone, as in a pass.
 pub async fn change_passphrase<T: SettingsTransport>(
     transport: &mut T,
     key: &SyncKey,
@@ -539,7 +561,9 @@ pub async fn change_passphrase<T: SettingsTransport>(
     hlc: &mut HlcClock,
     work_factor: WorkFactor,
 ) -> Result<(), SettingsSyncError> {
-    let old: Vec<EntryHandle> = key_records(&transport.list().await?)
+    let limits = transport.fetch_limits();
+    let listing = transport.list().await?;
+    let old: Vec<EntryHandle> = key_records(listing.iter().filter(|e| limits.fits(e.size)))
         .into_iter()
         .filter(|(_, h)| h.opaque_id == key.key_record_id())
         .map(|(handle, _)| handle)

@@ -29,6 +29,17 @@
 //!   malformed content are left on the server. An entry damaged under an unchanged header is
 //!   only noticed by a device that downloads it: other devices, or a full check
 //!   ([`PlanContext::full_check`]) on the device that wrote it.
+//! - **Download limits** ([`FetchLimits`], finding F2 of the stage 15 review), decided from
+//!   the listed sizes before anything is read. An entry listed larger than a record can be is
+//!   never downloaded, never counts as a version and is never deleted (like an entry of another
+//!   key); it is reported ([`Notice::TooLarge`]). Per pass at most `max_entries` entries and
+//!   `max_bytes` bytes are downloaded: records in the order of their opaque ids, each with all
+//!   of its new entries or not at all. A record that does not fit waits as a whole, like a
+//!   deferred one, and is reported ([`Notice::Postponed`]); later records that fit still come.
+//!   Records downloaded once are known in the next pass, so repeated passes work through the
+//!   folder (as long as entries that stay unreadable do not fill a pass alone). A pass that
+//!   postponed records does not count as complete. A full check downloads the entries it only
+//!   re-checks after that, as far as room is left; the others are treated as known.
 
 use std::collections::BTreeMap;
 
@@ -37,7 +48,7 @@ use super::error::{HlcError, SettingsSyncError};
 use super::hlc::{Hlc, HlcClock, MAX_CLOCK_DRIFT_MS};
 use super::merge::{Resolution, resolve};
 use super::record::{MergeRule, RecordKey, Removal, SyncRecord};
-use super::transport::{EntryHandle, RemoteEntry};
+use super::transport::{EntryHandle, FetchLimits, RemoteEntry};
 
 /// Tombstones stay on the server for 180 days after the deletion, so a device that was away
 /// for up to half a year still learns about it.
@@ -70,6 +81,8 @@ pub struct PlanContext {
     /// damaged on the server under an unchanged header (which only a full check can tell);
     /// the integration runs it now and then, for example once a day.
     pub full_check: bool,
+    /// What this pass may download (see the module docs).
+    pub limits: FetchLimits,
 }
 
 impl PlanContext {
@@ -96,6 +109,12 @@ pub enum Notice {
         handle: EntryHandle,
         error: OpenError,
     },
+    /// Listed larger than any record can be ([`FetchLimits::max_entry_bytes`]): not
+    /// downloaded, ignored and left on the server.
+    TooLarge { handle: EntryHandle, size: u64 },
+    /// Over the limits of this pass ([`FetchLimits::max_entries`], [`FetchLimits::max_bytes`]):
+    /// not downloaded; its record waits for the next pass.
+    Postponed { handle: EntryHandle, size: u64 },
 }
 
 impl Notice {
@@ -103,8 +122,26 @@ impl Notice {
         match self {
             Self::InvalidHeader { handle }
             | Self::Deferred { handle, .. }
-            | Self::Rejected { handle, .. } => *handle,
+            | Self::Rejected { handle, .. }
+            | Self::TooLarge { handle, .. }
+            | Self::Postponed { handle, .. } => *handle,
         }
+    }
+
+    /// The entry was left out of this pass, and the user should know (the status counts it).
+    pub const fn is_left_out(&self) -> bool {
+        matches!(
+            self,
+            Self::InvalidHeader { .. }
+                | Self::Rejected { .. }
+                | Self::TooLarge { .. }
+                | Self::Postponed { .. }
+        )
+    }
+
+    /// Its record waits for a later pass: the next one must run even if nothing else changed.
+    pub const fn waits(&self) -> bool {
+        matches!(self, Self::Deferred { .. } | Self::Postponed { .. })
     }
 }
 
@@ -180,13 +217,22 @@ enum EntryState {
     Dominated,
     Fetch,
     Deferred,
+    /// Listed larger than a record can be: ignored, never downloaded or deleted.
+    TooLarge,
+    /// Over the limits of this pass: its record waits.
+    Postponed,
 }
 
 #[derive(Debug, Clone)]
 struct Entry {
     handle: EntryHandle,
     header: RecordHeader,
+    /// The listed size.
+    size: u64,
     state: EntryState,
+    /// A full check downloads an entry that is known (or dominated) only to check it: its
+    /// state in a normal pass, which it falls back to when the limits leave no room.
+    recheck: Option<EntryState>,
 }
 
 /// Plans one pass; see the module docs.
@@ -223,7 +269,15 @@ impl<'a> Planner<'a> {
             }
             let ahead_ms = header.version.millis() - ctx.now_ms;
             let local_record = by_opaque.get(&header.opaque_id).and_then(|k| local.get(*k));
-            let state = if ahead_ms > MAX_CLOCK_DRIFT_MS {
+            let mut recheck = None;
+            let state = if !ctx.limits.fits(entry.size) {
+                // Never downloaded, so it cannot hold its record back either.
+                notices.push(Notice::TooLarge {
+                    handle: entry.handle,
+                    size: entry.size,
+                });
+                EntryState::TooLarge
+            } else if ahead_ms > MAX_CLOCK_DRIFT_MS {
                 notices.push(Notice::Deferred {
                     handle: entry.handle,
                     version: header.version,
@@ -231,16 +285,23 @@ impl<'a> Planner<'a> {
                 });
                 EntryState::Deferred
             } else {
-                match local_record {
-                    _ if ctx.full_check => EntryState::Fetch,
+                let known = match local_record {
                     Some(lr)
                         if header.version == lr.record.version()
                             || Some(header.version) == lr.synced =>
                     {
-                        EntryState::Known
+                        Some(EntryState::Known)
                     }
-                    Some(lr) if dominated_by(lr, header.version) => EntryState::Dominated,
-                    _ => EntryState::Fetch,
+                    Some(lr) if dominated_by(lr, header.version) => Some(EntryState::Dominated),
+                    _ => None,
+                };
+                match known {
+                    Some(known) if ctx.full_check => {
+                        recheck = Some(known);
+                        EntryState::Fetch
+                    }
+                    Some(known) => known,
+                    None => EntryState::Fetch,
                 }
             };
             groups
@@ -249,9 +310,12 @@ impl<'a> Planner<'a> {
                 .push(Entry {
                     handle: entry.handle,
                     header,
+                    size: entry.size,
                     state,
+                    recheck,
                 });
         }
+        apply_limits(&mut groups, ctx.limits, &mut notices);
         Self {
             local,
             ctx,
@@ -302,7 +366,9 @@ impl<'a> Planner<'a> {
                             .present
                             .push((entry.handle, entry.header.version, false));
                     }
-                    EntryState::Deferred => group.deferred = true,
+                    EntryState::Deferred | EntryState::Postponed => group.held = true,
+                    // Reported already; never a version of the record, never deleted.
+                    EntryState::TooLarge => {}
                     EntryState::Fetch => match opened.remove(&entry.handle) {
                         None => {}
                         Some(Err(error)) => {
@@ -328,7 +394,7 @@ impl<'a> Planner<'a> {
                                     version: record.version(),
                                     ahead_ms,
                                 });
-                                group.deferred = true;
+                                group.held = true;
                             }
                             Err(other) => return Err(other.into()),
                         },
@@ -352,6 +418,62 @@ impl<'a> Planner<'a> {
         }
         plan.notices.sort_by_key(Notice::handle);
         Ok(plan)
+    }
+}
+
+/// Applies the limits of one pass to what [`Planner::new`] wants to download (see the module
+/// docs): first the entries records need, all of a record's or none, in the order of the opaque
+/// ids; then the re-checks of a full check, one by one, while room is left.
+fn apply_limits(
+    groups: &mut BTreeMap<OpaqueId, Vec<Entry>>,
+    limits: FetchLimits,
+    notices: &mut Vec<Notice>,
+) {
+    let mut entries_left = limits.max_entries;
+    let mut bytes_left = limits.max_bytes;
+    for entries in groups.values_mut() {
+        let (count, bytes) = entries
+            .iter()
+            .filter(|e| e.state == EntryState::Fetch && e.recheck.is_none())
+            .fold((0_usize, 0_u64), |(n, b), e| {
+                (n + 1, b.saturating_add(e.size))
+            });
+        if count == 0 {
+            continue;
+        }
+        if count <= entries_left && bytes <= bytes_left {
+            entries_left -= count;
+            bytes_left -= bytes;
+            continue;
+        }
+        // A record is decided only with all of its new entries: it waits as a whole.
+        for entry in entries.iter_mut().filter(|e| e.state == EntryState::Fetch) {
+            match entry.recheck.take() {
+                Some(known) => entry.state = known,
+                None => {
+                    entry.state = EntryState::Postponed;
+                    notices.push(Notice::Postponed {
+                        handle: entry.handle,
+                        size: entry.size,
+                    });
+                }
+            }
+        }
+    }
+    for entry in groups.values_mut().flatten() {
+        let Some(known) = entry.recheck else {
+            continue;
+        };
+        if entry.state != EntryState::Fetch {
+            continue;
+        }
+        if entries_left > 0 && entry.size <= bytes_left {
+            entries_left -= 1;
+            bytes_left -= entry.size;
+        } else {
+            // Not checked this time; as in a normal pass.
+            entry.state = known;
+        }
     }
 }
 
@@ -379,10 +501,12 @@ struct Work<'a> {
     /// Opened entries.
     fetched: Vec<SyncRecord>,
     /// Damaged or misplaced entries under this opaque id: removed once a valid winner is
-    /// stored, so the folder heals. (Entries of newer versions, malformed ones and those of
-    /// another key stay.)
+    /// stored, so the folder heals. (Entries of newer versions, malformed ones, those of
+    /// another key and those too large to download stay.)
     garbage: Vec<EntryHandle>,
-    deferred: bool,
+    /// An entry was deferred (clock ahead) or postponed (limits of the pass): the record is
+    /// left as it is in this pass.
+    held: bool,
 }
 
 fn decide(
@@ -392,7 +516,7 @@ fn decide(
     hlc: &mut HlcClock,
     plan: &mut SyncPlan,
 ) -> Result<(), SettingsSyncError> {
-    if work.deferred {
+    if work.held {
         return Ok(());
     }
     let horizon = ctx.horizon_ms();

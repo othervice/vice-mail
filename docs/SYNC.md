@@ -106,7 +106,9 @@ usual. Rejected entries never count as a version. Damaged and misplaced ones are
 valid winner of their record is stored; entries of another key, of a newer app version
 (`format` > 1 or an unknown kind) or with malformed content stay on the server. An entry
 damaged under an unchanged header is only noticed by a device that downloads it: other
-devices, or a periodic full check on the writing device (`PassMode::FullCheck`).
+devices, or a periodic full check on the writing device (`PassMode::FullCheck`). Entries listed
+too large to be a record are not downloaded at all and stay like those of another key (see "A
+pass").
 
 Content shapes are strict (unknown fields are refused). A change of shape therefore needs a
 new `format` or a new kind name; older versions then leave such records alone.
@@ -235,7 +237,24 @@ tests).
    another key only: "reset elsewhere, enter the passphrase again". Nothing is written then.
 2. Decide what to download: not the versions equal to the local or last synced version, and not
    those that provably lose against the local version from the header alone. Once a day the
-   pass downloads and checks every entry (`PassMode::FullCheck`).
+   pass downloads and checks every entry (`PassMode::FullCheck`). **Limits** (security review
+   F2, `FetchLimits`), decided from the listed sizes (`RFC822.SIZE`) before anything is read:
+   - An entry listed larger than **2 MiB** is never downloaded: no record can be that large (the
+     largest ciphertext a device opens is 1 MiB, about 1.4 MiB in ASCII armor; the largest
+     content is 256 KiB). It never counts as a version and is never deleted, neither as a loser
+     nor as a damaged or misplaced entry; like a rejected entry it is reported and counted in
+     the status. Joining reads no key record listed that large, and neither a pass nor a
+     passphrase change keeps or deletes one as a copy of the key record. Only a reset deletes it.
+   - A pass downloads at most **5,000 entries and 64 MiB**. Records are taken in the order of
+     their opaque ids, each with all of its new entries or not at all. A record that does not
+     fit waits as a whole (nothing of it is uploaded, deleted or changed locally), is reported
+     and counted in the status; later records that fit still come. The next check then runs a
+     pass even if the folder did not change, and a pass that postponed a record does not count
+     as complete (see "Tombstones and absent records"). Records downloaded once are known in
+     the next pass, so repeated passes work through the folder, as long as entries that stay
+     unreadable (another key, a newer app version) do not fill a pass on their own.
+   - A full check downloads the new entries first; the known entries it only re-checks follow
+     as far as the limits leave room, the others are treated as in a normal pass.
 3. Download, decrypt, check against the header.
 4. Merge every record. Upload the winner if it is not on the server, then delete the other
    versions and extra copies (upload first, so a crash leaves a duplicate, never a gap), then
@@ -286,8 +305,8 @@ account that takes the folder's id when a device joins.
   and takes it over until that announcement arrives.
 - A local record that was synced before and is no longer on the server was either lost
   (deleted by another client, data loss) or deleted with a tombstone that has expired since. It
-  counts as deleted only if its version **and** this device's last complete pass are older than
-  180 days; otherwise a tombstone would still be there. Such a stale record is forgotten
+  counts as deleted only if its version **and** this device's last complete pass (one that
+  postponed no record) are older than 180 days; otherwise a tombstone would still be there. Such a stale record is forgotten
   locally (accounts: the user is asked). Everything else is uploaded again, so the folder heals.
 - A device that was away for longer than 180 days therefore drops its stale records instead of
   bringing deleted ones back; its changes newer than 180 days are uploaded and follow the merge
@@ -323,7 +342,10 @@ account that takes the folder's id when a device joins.
 
 It does not see kinds, ids, contents, account addresses or which kind a record is. It can
 delete, withhold or replay entries; deletions heal from the devices' local copies, replays are
-recognised (see above), and modifications are detected and rejected.
+recognised (see above), and modifications are detected and rejected. Entries it adds are read
+only within the limits of a pass (see "A pass"); one listed larger than 2 MiB is never read. A
+server that lists a smaller size than it sends is bounded only by the IMAP library (security
+model, N-1).
 
 ## Measurements
 

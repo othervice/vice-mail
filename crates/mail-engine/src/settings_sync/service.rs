@@ -105,7 +105,8 @@ struct Live {
     problem: Option<(SettingsSyncState, IpcError)>,
     rejected: u32,
     questions: Vec<Question>,
-    /// Some entry waited for this device's clock: the next check must not skip.
+    /// Some entry waited for this device's clock or for the next pass (the download limits of
+    /// a pass): the next check must not skip.
     deferred: bool,
     /// A pass ran since the core started: questions and rejected entries are known (they are
     /// not stored, so the first check after a start never skips).
@@ -868,10 +869,13 @@ impl<C: Connector> AppCore<C> {
         };
         let outcome = store.apply_sync(items, Some(progress)).await?;
         self.after_apply(&outcome).await;
-        let rejected = report
+        // Entries left out of this pass: rejected, unreadable, too large, or postponed by the
+        // download limits (finding F2).
+        let rejected = report.notices.iter().filter(|n| n.is_left_out()).count();
+        let postponed = report
             .notices
             .iter()
-            .filter(|n| matches!(n, Notice::Rejected { .. } | Notice::InvalidHeader { .. }))
+            .filter(|n| matches!(n, Notice::Postponed { .. }))
             .count();
         for notice in &report.notices {
             match notice {
@@ -884,16 +888,18 @@ impl<C: Connector> AppCore<C> {
                 Notice::Deferred { ahead_ms, .. } => {
                     tracing::info!(ahead_ms, "settings sync entry from a clock ahead deferred");
                 }
+                Notice::TooLarge { handle, size } => {
+                    tracing::warn!(uid = handle.0, size, "settings sync entry too large");
+                }
+                // Counted in the summary below.
+                Notice::Postponed { .. } => {}
             }
         }
         {
             let mut live = lock(&state.live);
             live.rejected = u32::try_from(rejected).unwrap_or(u32::MAX);
             live.questions = report.questions.clone();
-            live.deferred = report
-                .notices
-                .iter()
-                .any(|n| matches!(n, Notice::Deferred { .. }));
+            live.deferred = report.notices.iter().any(Notice::waits);
             live.ran = true;
         }
         tracing::info!(
@@ -904,6 +910,7 @@ impl<C: Connector> AppCore<C> {
             skipped = outcome.skipped.len(),
             questions = report.questions.len(),
             rejected,
+            postponed,
             full_check = mode == PassMode::FullCheck,
             elapsed_ms = started.elapsed().as_millis(),
             "settings sync pass"

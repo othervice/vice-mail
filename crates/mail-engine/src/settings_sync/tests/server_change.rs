@@ -39,6 +39,8 @@ struct FolderState {
     next_uid: Uid,
     modseq: u64,
     messages: BTreeMap<Uid, Vec<u8>>,
+    /// Every UID whose body was read (finding F2).
+    reads: Vec<Uid>,
 }
 
 /// One connection to the shared in-memory folder.
@@ -106,13 +108,15 @@ impl SyncFolder for MemFolder {
     }
 
     async fn read(&mut self, uids: &UidSet) -> Result<Vec<(Uid, Vec<u8>)>, BackendError> {
-        let state = self.lock();
-        Ok(state
+        let mut state = self.lock();
+        let bodies: Vec<(Uid, Vec<u8>)> = state
             .messages
             .iter()
             .filter(|(uid, _)| uids.contains(**uid))
             .map(|(uid, raw)| (*uid, split_message(raw).1.to_vec()))
-            .collect())
+            .collect();
+        state.reads.extend(bodies.iter().map(|(uid, _)| *uid));
+        Ok(bodies)
     }
 
     async fn append(&mut self, message: &[u8]) -> Result<Option<Uid>, BackendError> {
@@ -596,4 +600,42 @@ async fn an_account_matched_by_address_on_joining_keeps_its_servers() {
         logins.iter().all(|(host, _)| !host.contains("attacker")),
         "{logins:?}"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Finding F2, with the same harness: the size the folder lists (RFC822.SIZE) decides before
+// anything is read.
+
+#[tokio::test]
+async fn an_entry_listed_too_large_is_not_read_kept_and_counted_in_the_status() {
+    let server = FakeServer::new();
+    let folder = Arc::new(Mutex::new(FolderState::default()));
+    let victim = victim(&server, &folder).await;
+    let status = victim.core.sync_settings_now().await.expect("pass");
+    assert_eq!(status.rejected_entries, 0);
+    // Valid sync headers (a version of now) and a body far larger than a record can be.
+    let now = crate::clock::Clock::now_ms(&crate::clock::SystemClock);
+    let device = hlc::DeviceId::from_uuid(uuid::Uuid::from_u128(0xf2));
+    let version = Hlc::new(now, 0, device).expect("version");
+    let mut message = format!(
+        "{}: 00112233445566778899aabbccddeeff\r\n{}: {version}\r\n\r\n",
+        mail_model::SYNC_ID_HEADER,
+        mail_model::SYNC_VERSION_HEADER,
+    )
+    .into_bytes();
+    message.resize(message.len() + 3 * 1024 * 1024, b'x');
+    let uid = MemFolder(Arc::clone(&folder))
+        .append(&message)
+        .await
+        .expect("append")
+        .expect("uid");
+
+    for _ in 0..2 {
+        let status = victim.core.sync_settings_now().await.expect("pass");
+        assert_eq!(status.rejected_entries, 1, "{status:?}");
+        let state = folder.lock().unwrap_or_else(PoisonError::into_inner);
+        assert!(state.messages.contains_key(&uid), "kept");
+        // Without the limit it would be read: its id is new to this device.
+        assert!(!state.reads.contains(&uid), "never read");
+    }
 }

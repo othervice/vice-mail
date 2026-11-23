@@ -3,6 +3,7 @@
 
 mod capture;
 mod convergence;
+mod limits;
 mod perf;
 mod scenarios;
 mod server_change;

@@ -116,6 +116,7 @@ async fn thousand_records_first_sync_is_measured() {
         now_ms: a.now(),
         last_complete_sync_ms: None,
         full_check: false,
+        limits: FetchLimits::DEFAULT,
     };
     let mut b = Device::joining(&folder, 2, a.now()).await;
     let start = Instant::now();
@@ -136,6 +137,7 @@ async fn thousand_records_first_sync_is_measured() {
         now_ms: b.now(),
         last_complete_sync_ms: b.state.last_complete_sync_ms,
         full_check: false,
+        limits: FetchLimits::DEFAULT,
     };
     let listing_now: Vec<RemoteEntry> = folder
         .entries()

@@ -662,6 +662,11 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
   - Durchläufe nach lokalen Änderungen, nach jedem Mail-Durchlauf des Sync-Kontos und im
     Poll-Abstand; unveränderter Ordnerstand (UIDVALIDITY, UIDNEXT, EXISTS, HIGHESTMODSEQ) und
     nichts lokal offen heißt: nichts zu tun. Täglich eine Vollprüfung.
+  - Grenzen je Durchlauf (Sicherheitsprüfung F2, `FetchLimits`), nach den gelisteten Größen
+    (`RFC822.SIZE`), bevor etwas gelesen wird: Einträge über 2 MiB werden nie geladen, nie
+    gelöscht und zählen nie als Fassung (gemeldet wie abgelehnte); höchstens 5.000 Einträge und
+    64 MiB je Durchlauf, ein Datensatz ganz oder gar nicht. Was nicht passt, wartet als Ganzes auf
+    den nächsten Durchlauf, der dann auch bei unverändertem Ordner läuft.
   - Zweites Gerät: das vorher eingerichtete Sync-Konto und seine Standard-Identität übernehmen
     die IDs aus dem Ordner (gleiche Adresse, nie abgeglichen); übernommene Konten starten nur
     lesend und ohne Passwort, mit einem neuen, zufälligen Schlüsselbund-Namen.

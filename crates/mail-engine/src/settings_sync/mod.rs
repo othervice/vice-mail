@@ -51,5 +51,6 @@ pub use record::{
     SyncRecord, SyncedAccount, TaskInfo,
 };
 pub use transport::{
-    EntryHandle, MemoryTransport, RawHeader, RemoteEntry, SettingsTransport, StoredEntry,
+    EntryHandle, FetchLimits, MemoryTransport, RawHeader, RemoteEntry, SettingsTransport,
+    StoredEntry,
 };

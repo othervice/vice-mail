@@ -1581,7 +1581,7 @@ export const de: Translation = {
       pending: "Noch nicht hochgeladene Änderungen:",
       rejectedTitle_one: "{{count, number}} Eintrag im Sync-Ordner wurde nicht übernommen",
       rejectedTitle_other: "{{count, number}} Einträge im Sync-Ordner wurden nicht übernommen",
-      rejectedBody: "Sie wurden verändert, sind beschädigt oder mit einem anderen Schlüssel verschlüsselt. Alles andere wurde wie gewohnt abgeglichen.",
+      rejectedBody: "Sie wurden verändert, sind beschädigt, zu groß oder mit einem anderen Schlüssel verschlüsselt, oder sie folgen beim nächsten Abgleich. Alles andere wurde wie gewohnt abgeglichen.",
       errorContext: "Der letzte Einstellungs-Sync ist fehlgeschlagen. Lesen und Senden von Mails sind nicht betroffen.",
       syncNow: "Jetzt abgleichen",
       syncing: "Wird abgeglichen…",

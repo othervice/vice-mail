@@ -1584,7 +1584,7 @@ export const en = {
       pending: "Changes not yet uploaded:",
       rejectedTitle_one: "{{count, number}} entry in the sync folder was ignored",
       rejectedTitle_other: "{{count, number}} entries in the sync folder were ignored",
-      rejectedBody: "They were changed, damaged or encrypted with another key. Everything else synced as usual.",
+      rejectedBody: "They were changed, damaged, too large or encrypted with another key, or follow with the next sync. Everything else synced as usual.",
       errorContext: "The last settings sync failed. Reading and sending mail are not affected.",
       syncNow: "Sync now",
       syncing: "Syncing…",

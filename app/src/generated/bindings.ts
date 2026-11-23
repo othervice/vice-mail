@@ -4235,8 +4235,8 @@ export type SettingsSyncStatus = {
 	/**  Local changes not yet in the folder. */
 	pendingChanges: number,
 	/**
-	 *  Entries of the folder the last pass rejected (modified, damaged, from another key) and
-	 *  reported; the rest synced as usual.
+	 *  Entries of the folder the last pass left out and reported (modified, damaged, from
+	 *  another key, too large, or waiting for the next pass); the rest synced as usual.
 	 */
 	rejectedEntries: number,
 	devices: SyncDevice[],
