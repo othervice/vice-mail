@@ -41,20 +41,25 @@ pub trait MailAccess: Send + Sync + 'static {
         query: ListQuery,
     ) -> impl Future<Output = Result<SearchResults, CoreError>> + Send;
 
-    /// One message with its body, or `None` if it does not exist or lies outside `accounts`.
+    /// One message with its body, or `None` if it does not exist, lies outside `accounts`, or
+    /// lies only in Trash or Junk and not in `named` ([`readable_in`], decision 0045): the
+    /// client cannot tell such a message from a missing one.
     fn message(
         &self,
         id: MessageId,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> impl Future<Output = Result<Option<MessageContent>, CoreError>> + Send;
 
-    /// The thread of a message: its newest `newest` messages, oldest first, or `None` if the
-    /// message does not exist or lies outside `accounts`.
+    /// The thread of a message: its newest `newest` messages, oldest first, or `None` when
+    /// [`MailAccess::message`] would give `None`. Members that lie only in Trash or Junk and
+    /// not in `named` are left out of the messages and of the total.
     fn thread(
         &self,
         id: MessageId,
         newest: u32,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> impl Future<Output = Result<Option<ThreadContent>, CoreError>> + Send;
 
     /// Saves a draft in the account's Drafts mailbox through the outbox (it appears in the app
@@ -63,6 +68,20 @@ pub trait MailAccess: Send + Sync + 'static {
         &self,
         draft: NewDraft,
     ) -> impl Future<Output = Result<DraftCreated, CoreError>> + Send;
+}
+
+/// Whether the tools may read a message that lies in `locations` (decision 0045): somewhere
+/// outside Trash and Junk (`trash_or_junk`, the account's mailboxes with these roles), or in
+/// the mailbox the call names. A message only in Trash or Junk is read only when the call names
+/// that mailbox, as the searches leave both out unless the call names them.
+pub fn readable_in(
+    locations: &[MailboxId],
+    trash_or_junk: &[MailboxId],
+    named: Option<MailboxId>,
+) -> bool {
+    locations
+        .iter()
+        .any(|mailbox| !trash_or_junk.contains(mailbox) || Some(*mailbox) == named)
 }
 
 /// [`MailAccess::search`].
@@ -179,7 +198,7 @@ pub struct ThreadContent {
 
 /// [`MailAccess::create_draft`]. Checked by the host: the account allows drafts, addresses are
 /// normalised (`mail_content::normalize_email`), lengths are within [`crate::limits`], and a
-/// replied-to message is visible and of the same account.
+/// replied-to message is visible, of the same account and not only in Trash or Junk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDraft {
     pub account_id: AccountId,
@@ -202,4 +221,27 @@ pub struct DraftCreated {
     /// server for this account (or it has no Drafts folder). Otherwise it goes to the Drafts
     /// folder.
     pub local_only: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mail_only_in_trash_or_junk_needs_its_mailbox_named() {
+        let (inbox, trash, junk) = (MailboxId(1), MailboxId(2), MailboxId(3));
+        let hidden = [trash, junk];
+        assert!(readable_in(&[inbox], &hidden, None));
+        assert!(
+            readable_in(&[inbox, trash], &hidden, None),
+            "also elsewhere"
+        );
+        assert!(!readable_in(&[trash], &hidden, None));
+        assert!(!readable_in(&[trash, junk], &hidden, None));
+        assert!(readable_in(&[trash], &hidden, Some(trash)));
+        assert!(!readable_in(&[trash], &hidden, Some(junk)), "another one");
+        assert!(!readable_in(&[trash], &hidden, Some(inbox)));
+        assert!(readable_in(&[trash, junk], &hidden, Some(junk)));
+        assert!(!readable_in(&[], &hidden, Some(inbox)), "no location");
+    }
 }

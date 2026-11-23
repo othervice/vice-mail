@@ -58,7 +58,10 @@ impl From<OutputError> for Failure {
 const NO_ACCOUNTS: &str = "No account is shared with this client. The user can share accounts \
 in the mail app's settings under AI access.";
 const NOT_SHARED: &str = "No shared account has this id; use an account_id from list_accounts.";
-const NO_MESSAGE: &str = "No message with this id in the shared accounts.";
+/// The same text whether the message does not exist, lies in an account that is not shared, or
+/// lies only in Trash or Junk without that mailbox named (decision 0045).
+const NO_MESSAGE: &str = "No message with this id in the shared accounts. A message that lies \
+only in Trash or Junk is read only with the mailbox_id of that mailbox.";
 
 /// Runs `tool`. Never panics; every failure is a result with `is_error`.
 pub(crate) async fn execute<A: MailAccess>(
@@ -586,9 +589,10 @@ async fn read_message<A: MailAccess>(
     args: &Args,
 ) -> Result<Done, Failure> {
     let id = required(args.message_id("message_id")?, "message_id")?;
+    let named = args.mailbox_id("mailbox_id")?;
     let visible = visible_or_error(grant)?;
     let message = access
-        .message(id, visible)
+        .message(id, visible, named)
         .await?
         .filter(|message| grant.can_read(&message.account_id))
         .ok_or_else(|| ToolError::new(NO_MESSAGE))?;
@@ -607,9 +611,10 @@ async fn read_thread<A: MailAccess>(
     args: &Args,
 ) -> Result<Done, Failure> {
     let id = required(args.message_id("message_id")?, "message_id")?;
+    let named = args.mailbox_id("mailbox_id")?;
     let visible = visible_or_error(grant)?;
     let thread = access
-        .thread(id, limits::THREAD_MESSAGES, visible)
+        .thread(id, limits::THREAD_MESSAGES, visible, named)
         .await?
         .ok_or_else(|| ToolError::new(NO_MESSAGE))?;
     let messages: Vec<&MessageContent> = thread
@@ -697,9 +702,11 @@ async fn create_draft<A: MailAccess>(
     )
     .text;
     let in_reply_to = args.message_id("in_reply_to")?;
+    // Not a message only in Trash or Junk: the reply's quote would hand its text to the client
+    // through the Drafts folder (decision 0045).
     if let Some(id) = in_reply_to {
         access
-            .message(id, vec![account])
+            .message(id, vec![account], None)
             .await?
             .filter(|message| message.account_id == account)
             .ok_or_else(|| ToolError::new("in_reply_to is not a message of this account."))?;

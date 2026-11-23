@@ -35,7 +35,7 @@ pub mod tools;
 
 pub use access::{
     AttachmentMeta, BodyParts, DraftCreated, ListFilter, ListQuery, MailAccess, MessageContent,
-    NewDraft, SearchQuery, SearchResults, ThreadContent,
+    NewDraft, SearchQuery, SearchResults, ThreadContent, readable_in,
 };
 pub use endpoint::{Endpoint, EndpointError, ListenError};
 pub use host::{AccessEvent, AccessKind, AccessLog, CallOutcome, HostStatus, McpHost};

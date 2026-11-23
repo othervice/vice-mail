@@ -651,7 +651,8 @@ Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und
   der Lesebereich zeigt: der sichtbare Text des HTML-Teils, nur ohne HTML der Text-Teil (für MCP und
   die eingebaute KI gleich, 0021). Bodies werden nur mit `BODY.PEEK` geholt; nichts wird gelesen markiert.
 - Integration (0021): `AppCore` setzt `MailAccess` um (genau die freigegebenen Konten, Papierkorb und
-  Spam nur mit Postfachangabe), Entwürfe über die Entwürfe aus Stufe 5 (ohne Schreibzugriff nur lokal),
+  Spam nur mit Postfachangabe, auch beim Lesen per ID: Eine Mail, die nur dort liegt, gilt ohne
+  `mailbox_id` als nicht vorhanden, ein Thread lässt sie weg, 0045), Entwürfe über die Entwürfe aus Stufe 5 (ohne Schreibzugriff nur lokal),
   das Hilfsprogramm liegt als Tauri-Sidecar im Bundle (`Contents/MacOS/mail-mcp`, neben der App unter Windows).
 - Jeder Zugriff ist in der App sichtbar; Clients einzeln widerrufbar, Not-Aus für alle.
 - Grenze, ehrlich benannt: Der Client hat eigene Werkzeuge, und Mailinhalte können ihn mit

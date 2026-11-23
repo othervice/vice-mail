@@ -269,3 +269,217 @@ async fn the_probe_explains_what_is_missing() {
     let probe = core.test_mcp_connection().await.expect("probe");
     assert_eq!(probe.problem, Some(McpTestProblem::Disabled));
 }
+
+/// Decision 0045 against the real store: reading by id follows the searches' rule for Trash
+/// and Junk. A message only there is missing unless the call names its mailbox; a thread
+/// leaves such members out before it picks the newest, and from its total.
+#[tokio::test]
+async fn reading_by_id_leaves_out_mail_only_in_trash_or_junk() {
+    use mail_mcp::MailAccess;
+    use mail_model::{
+        Address, Flags, MailboxId, MailboxRole, MessageHeader, MessageId, RemoteMailbox,
+        UidValidity,
+    };
+    use mail_store::MailboxBaseline;
+
+    const UV: UidValidity = UidValidity(3);
+    const D: i64 = 1_790_000_000;
+    let header =
+        |uid: u32, minutes: i64, subject: &str, id: &str, parent: Option<&str>| MessageHeader {
+            uid,
+            modseq: None,
+            flags: Flags::default(),
+            size: 500,
+            internal_date: D + minutes * 60,
+            date: Some(D + minutes * 60),
+            subject: subject.into(),
+            from: vec![Address {
+                name: None,
+                email: "bob@example.org".into(),
+            }],
+            to: Vec::new(),
+            cc: Vec::new(),
+            message_id: Some(id.into()),
+            in_reply_to: parent.map(str::to_owned),
+            references: parent.map(str::to_owned).into_iter().collect(),
+            list_id: None,
+            list_unsubscribe: None,
+            auto_submitted: None,
+            precedence: None,
+            has_attachments: false,
+            category_headers: Vec::new(),
+            gmail: None,
+        };
+
+    let dir = TempDir::new().expect("temp dir");
+    let keychain: Arc<MemorySecretStore> = Arc::default();
+    let core = start(&dir, &keychain).await;
+    let store = core.store_for_tests().clone();
+    let account = AccountId::from_uuid(uuid::Uuid::from_u128(9));
+    let other = AccountId::from_uuid(uuid::Uuid::from_u128(10));
+    let server = |port| ServerSettings {
+        host: "imap.invalid".into(),
+        port,
+        security: Security::Tls,
+        username: "a@example.org".into(),
+    };
+    store
+        .insert_account(NewAccount {
+            id: account,
+            email: "a@example.org".into(),
+            display_name: "A".into(),
+            imap: server(993),
+            smtp: server(465),
+            credential_ref: account.to_string(),
+        })
+        .await
+        .expect("account");
+    let remote = |name: &str, attribute: Option<&str>| RemoteMailbox {
+        name: name.into(),
+        path: name.into(),
+        delimiter: Some('/'),
+        attributes: attribute.into_iter().map(str::to_owned).collect(),
+        status: None,
+    };
+    store
+        .sync_mailboxes(
+            account,
+            vec![
+                remote("INBOX", None),
+                remote("Trash", Some("\\Trash")),
+                remote("Junk", Some("\\Junk")),
+            ],
+        )
+        .await
+        .expect("mailboxes");
+    let boxes = store.mailboxes(account).await.expect("mailboxes");
+    let by = |role| boxes.iter().find(|m| m.role == role).expect("role").id;
+    let (inbox, trash, junk) = (
+        by(MailboxRole::Inbox),
+        by(MailboxRole::Trash),
+        by(MailboxRole::Junk),
+    );
+    for mailbox in [inbox, trash, junk] {
+        store
+            .reset_mailbox(
+                mailbox,
+                MailboxBaseline {
+                    uid_validity: UV,
+                    uid_next: 1,
+                    highest_modseq: None,
+                },
+            )
+            .await
+            .expect("reset");
+    }
+    let start_id = Some("1@t");
+    store
+        .store_headers(
+            inbox,
+            UV,
+            vec![
+                header(1, 0, "Kickoff", "1@t", None),
+                header(2, 1, "Re: Kickoff", "2@t", start_id),
+            ],
+            None,
+        )
+        .await
+        .expect("inbox");
+    store
+        .store_headers(
+            trash,
+            UV,
+            vec![
+                header(1, 2, "Re: Kickoff (deleted)", "3@t", start_id),
+                // The answer also lies in the trash: it stays readable.
+                header(2, 1, "Re: Kickoff", "2@t", start_id),
+            ],
+            None,
+        )
+        .await
+        .expect("trash");
+    store
+        .store_headers(junk, UV, vec![header(1, 3, "You won", "4@t", None)], None)
+        .await
+        .expect("junk");
+    let mut ids = std::collections::HashMap::new();
+    for mailbox in [inbox, trash, junk] {
+        for item in core
+            .list_messages(mailbox, None, 50)
+            .await
+            .expect("list")
+            .items
+        {
+            ids.insert(item.subject.clone(), item.id);
+        }
+    }
+    let id = |subject: &str| -> MessageId { *ids.get(subject).expect(subject) };
+    let (kickoff, answer, deleted, spam) = (
+        id("Kickoff"),
+        id("Re: Kickoff"),
+        id("Re: Kickoff (deleted)"),
+        id("You won"),
+    );
+
+    let access = super::access::CoreAccess(core.downgrade());
+    let read = |message: MessageId, named: Option<MailboxId>| {
+        let access = &access;
+        async move {
+            access
+                .message(message, vec![account], named)
+                .await
+                .expect("message")
+                .map(|m| m.id)
+        }
+    };
+    assert_eq!(read(kickoff, None).await, Some(kickoff));
+    let both = access
+        .message(answer, vec![account], None)
+        .await
+        .expect("message")
+        .expect("in the inbox too");
+    assert_eq!(both.mailbox_ids.len(), 2, "{:?}", both.mailbox_ids);
+    assert_eq!(read(deleted, None).await, None);
+    assert_eq!(read(spam, None).await, None);
+    assert_eq!(read(deleted, Some(trash)).await, Some(deleted));
+    assert_eq!(read(spam, Some(junk)).await, Some(spam));
+    assert_eq!(read(deleted, Some(junk)).await, None, "another mailbox");
+    assert_eq!(read(deleted, Some(inbox)).await, None);
+    assert_eq!(read(MessageId(999_999), Some(trash)).await, None);
+    let elsewhere = access
+        .message(kickoff, vec![other], None)
+        .await
+        .expect("message");
+    assert!(elsewhere.is_none(), "not a given account");
+
+    let thread = |message: MessageId, newest: u32, named: Option<MailboxId>| {
+        let access = &access;
+        async move {
+            access
+                .thread(message, newest, vec![account], named)
+                .await
+                .expect("thread")
+                .map(|t| (t.messages.iter().map(|m| m.id).collect::<Vec<_>>(), t.total))
+        }
+    };
+    assert_eq!(
+        thread(answer, 25, None).await,
+        Some((vec![kickoff, answer], 2))
+    );
+    assert_eq!(
+        thread(answer, 1, None).await,
+        Some((vec![answer], 2)),
+        "the newest shown one, not the deleted one"
+    );
+    assert_eq!(thread(deleted, 25, None).await, None);
+    assert_eq!(thread(spam, 25, None).await, None);
+    assert_eq!(
+        thread(answer, 25, Some(trash)).await,
+        Some((vec![kickoff, answer, deleted], 3))
+    );
+    assert_eq!(
+        thread(deleted, 25, Some(trash)).await,
+        Some((vec![kickoff, answer, deleted], 3))
+    );
+    assert_eq!(thread(spam, 25, Some(junk)).await, Some((vec![spam], 1)));
+}

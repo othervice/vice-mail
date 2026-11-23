@@ -67,7 +67,7 @@ fn account(n: u128, email: &str, name: &str) -> Account {
     }
 }
 
-fn mailbox(id: i64, account: u128, path: &str, role: MailboxRole) -> Mailbox {
+pub fn mailbox(id: i64, account: u128, path: &str, role: MailboxRole) -> Mailbox {
     Mailbox {
         id: MailboxId(id),
         account_id: account_id(account),
@@ -149,8 +149,9 @@ pub enum Call {
     Mailboxes(AccountId),
     Search(SearchQuery),
     List(ListQuery),
-    Message(MessageId, Vec<AccountId>),
-    Thread(MessageId, u32, Vec<AccountId>),
+    /// Id, accounts, the mailbox the call named.
+    Message(MessageId, Vec<AccountId>, Option<MailboxId>),
+    Thread(MessageId, u32, Vec<AccountId>, Option<MailboxId>),
     CreateDraft(NewDraft),
 }
 
@@ -262,7 +263,9 @@ impl FakeAccess {
                 Call::Mailboxes(account) => asked.push(account),
                 Call::Search(q) => asked.extend(q.accounts),
                 Call::List(q) => asked.extend(q.accounts),
-                Call::Message(_, accounts) | Call::Thread(_, _, accounts) => asked.extend(accounts),
+                Call::Message(_, accounts, _) | Call::Thread(_, _, accounts, _) => {
+                    asked.extend(accounts);
+                }
                 Call::CreateDraft(draft) => asked.push(draft.account_id),
             }
         }
@@ -324,6 +327,18 @@ impl FakeAccess {
             next_cursor,
             problems: Vec::new(),
         }
+    }
+
+    /// Readable by id as the core decides it (decision 0045): somewhere outside Trash and
+    /// Junk, or in the named mailbox.
+    fn readable(&self, message: &MessageContent, named: Option<MailboxId>) -> bool {
+        let hidden: Vec<MailboxId> = self
+            .mailboxes
+            .iter()
+            .filter(|mb| matches!(mb.role, MailboxRole::Trash | MailboxRole::Junk))
+            .map(|mb| mb.id)
+            .collect();
+        mail_mcp::readable_in(&message.mailbox_ids, &hidden, named)
     }
 
     fn in_trash_or_junk(&self, message: &MessageContent) -> bool {
@@ -406,8 +421,9 @@ impl MailAccess for FakeAccess {
         &self,
         id: MessageId,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> Result<Option<MessageContent>, CoreError> {
-        self.record(Call::Message(id, accounts.clone()));
+        self.record(Call::Message(id, accounts.clone(), named));
         let gate = self.gate.lock().unwrap().clone();
         if let Some(gate) = gate {
             gate.notified().await;
@@ -417,7 +433,7 @@ impl MailAccess for FakeAccess {
             .lock()
             .unwrap()
             .iter()
-            .find(|m| m.id == id && self.allowed(&accounts, m))
+            .find(|m| m.id == id && self.allowed(&accounts, m) && self.readable(m, named))
             .cloned())
     }
 
@@ -426,19 +442,20 @@ impl MailAccess for FakeAccess {
         id: MessageId,
         newest: u32,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> Result<Option<ThreadContent>, CoreError> {
-        self.record(Call::Thread(id, newest, accounts.clone()));
+        self.record(Call::Thread(id, newest, accounts.clone(), named));
         let messages = self.messages.lock().unwrap().clone();
         let Some(start) = messages
             .iter()
-            .find(|m| m.id == id && self.allowed(&accounts, m))
+            .find(|m| m.id == id && self.allowed(&accounts, m) && self.readable(m, named))
         else {
             return Ok(None);
         };
         let mut thread: Vec<MessageContent> = match self.threads.get(&id.0) {
             Some(key) => messages
                 .iter()
-                .filter(|m| self.threads.get(&m.id.0) == Some(key))
+                .filter(|m| self.threads.get(&m.id.0) == Some(key) && self.readable(m, named))
                 .cloned()
                 .collect(),
             None => vec![start.clone()],

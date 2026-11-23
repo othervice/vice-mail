@@ -5,7 +5,9 @@
 //!   core never marks on open (the UI does, after its own setting).
 //! - **Exactly the given accounts.** Search and lists run in the accounts the host passes (the
 //!   shared ones), never in "all" (the app's hidden accounts are a view setting, not a
-//!   permission). Without a mailbox, Trash and Junk are left out.
+//!   permission). Without a mailbox, Trash and Junk are left out; reading by id follows the
+//!   same rule: a message that lies only in Trash or Junk counts as missing unless the call
+//!   names that mailbox, and a thread leaves such members out (decision 0045).
 //! - **Bodies as parsed** ([`BodyParts`]): text, HTML and the reading pane's attachment list.
 //!   The host turns HTML into the text a reader sees (`mail_content::html_to_visible_text`,
 //!   HTML first like the reading pane) and counts the hidden text it left out.
@@ -16,11 +18,12 @@
 
 use mail_mcp::{
     AccountAccess, AttachmentMeta, BodyParts, DraftCreated, ListFilter, ListQuery, MailAccess,
-    MessageContent, NewDraft, SearchQuery, SearchResults, ThreadContent,
+    MessageContent, NewDraft, SearchQuery, SearchResults, ThreadContent, readable_in,
 };
 use mail_model::{
     Account, AccountId, Address, AttachmentInfo, ComposeFormat, CoreError, DraftServerState,
-    DraftUpdate, LanguagePreference, Mailbox, MailboxId, MessageId, MessageListItem, QuoteLanguage,
+    DraftUpdate, LanguagePreference, Mailbox, MailboxId, MailboxRole, MessageId, MessageListItem,
+    QuoteLanguage,
 };
 use mail_store::{SearchFilter, Store, StoredMessage};
 
@@ -86,6 +89,7 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         &self,
         id: MessageId,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> Result<Option<MessageContent>, CoreError> {
         let core = self.core()?;
         let store = core.store_ref()?;
@@ -98,6 +102,10 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         let Some((row, mailboxes)) = list_row(store, id, summary.account_id).await? else {
             return Ok(None);
         };
+        let hidden = trash_and_junk(store, summary.account_id).await?;
+        if !readable_in(&mailboxes, &hidden, named) {
+            return Ok(None);
+        }
         let body = body_of(&core, &summary).await;
         Ok(Some(content(&summary, &row, mailboxes, body)))
     }
@@ -107,6 +115,7 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         id: MessageId,
         newest: u32,
         accounts: Vec<AccountId>,
+        named: Option<MailboxId>,
     ) -> Result<Option<ThreadContent>, CoreError> {
         let core = self.core()?;
         let store = core.store_ref()?;
@@ -116,14 +125,28 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         if !accounts.contains(&summary.account_id) {
             return Ok(None);
         }
+        let hidden = trash_and_junk(store, summary.account_id).await?;
+        // The message itself as `message` sees it (a long thread may not list it).
+        match list_row(store, id, summary.account_id).await? {
+            Some((_, mailboxes)) if readable_in(&mailboxes, &hidden, named) => {}
+            _ => return Ok(None),
+        }
         let view = store.thread(id, None).await?;
+        // Members only in Trash or Junk are left out before the newest are chosen, and from the
+        // total, so neither tells that they exist.
+        let shown: Vec<_> = view
+            .messages
+            .iter()
+            .filter(|entry| {
+                entry.message.account_id == summary.account_id
+                    && readable_in(&entry.mailbox_ids, &hidden, named)
+            })
+            .collect();
+        let left_out = u32::try_from(view.messages.len() - shown.len()).unwrap_or(u32::MAX);
         let keep = usize::try_from(newest).unwrap_or(usize::MAX);
-        let start = view.messages.len().saturating_sub(keep);
+        let start = shown.len().saturating_sub(keep);
         let mut messages = Vec::new();
-        for entry in view.messages.get(start..).unwrap_or_default() {
-            if entry.message.account_id != summary.account_id {
-                continue;
-            }
+        for entry in shown.get(start..).unwrap_or_default() {
             let Some(member) = store.message_summary(entry.message.id).await? else {
                 continue;
             };
@@ -137,7 +160,7 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         }
         Ok(Some(ThreadContent {
             messages,
-            total: view.total,
+            total: view.total.saturating_sub(left_out),
         }))
     }
 
@@ -151,6 +174,17 @@ impl<C: Connector> MailAccess for CoreAccess<C> {
         }
         core.create_assistant_draft(draft).await
     }
+}
+
+/// The account's Trash and Junk mailboxes.
+async fn trash_and_junk(store: &Store, account: AccountId) -> Result<Vec<MailboxId>, CoreError> {
+    Ok(store
+        .mailbox_names(account)
+        .await?
+        .into_iter()
+        .filter(|mailbox| matches!(mailbox.role, MailboxRole::Trash | MailboxRole::Junk))
+        .map(|mailbox| mailbox.id)
+        .collect())
 }
 
 /// The message as a list row (flags) with all its mailboxes.
