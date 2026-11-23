@@ -5,6 +5,7 @@ import {
   type AiFunction,
   type AiProfileInput,
   type AiSettingsInfo,
+  type AiTransferInput,
   type CoreEvent,
   type MessageId,
   type OpenReplyHint,
@@ -24,6 +25,21 @@ export const AI_REQUEST_PAGE_SIZE = 100;
 /** The page "AI in the app": switch, profiles, functions, cloud permission, open replies. */
 export function useAiSettings(enabled = true) {
   return useQuery({ queryKey: aiSettingsQueryKey, queryFn: aiIpc.getSettings, enabled });
+}
+
+/**
+ * Decision 0028: what a function would send for this input, from the core's dry run (no request
+ * to the provider). Asked anew each time the consent step shows; never cached.
+ */
+export function useAiTransferPreview(input: AiTransferInput | null) {
+  return useQuery({
+    queryKey: ["ai", "dryRun", input],
+    queryFn: () => aiIpc.prepareTransfer(input as AiTransferInput),
+    enabled: input !== null,
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  });
 }
 
 /** Which functions are usable now. Everything AI in the mail views hangs on this. */

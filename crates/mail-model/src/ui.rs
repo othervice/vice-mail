@@ -77,8 +77,20 @@ impl ShortcutPlatform {
     }
 }
 
+/// Stage 13 (decision 0028): whether the AI panel of the main window is unfolded or folded in.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum AiPanelState {
+    #[default]
+    Open,
+    Folded,
+}
+
 /// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
-/// synchronised between devices; the recent commands stay on this device.
+/// synchronised between devices; the recent commands and the AI panel's state stay on this
+/// device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
@@ -87,6 +99,8 @@ pub struct UiPreferences {
     pub text_size: u8,
     /// Keys of the palette entries used last, newest first, at most 5, no duplicates.
     pub recent_commands: Vec<String>,
+    /// The AI panel unfolded (default) or folded in; device only (decision 0028).
+    pub ai_panel: AiPanelState,
 }
 
 impl Default for UiPreferences {
@@ -95,6 +109,7 @@ impl Default for UiPreferences {
             shortcuts: PlatformShortcuts::default(),
             text_size: DEFAULT_TEXT_SIZE,
             recent_commands: Vec::new(),
+            ai_panel: AiPanelState::Open,
         }
     }
 }
@@ -362,6 +377,7 @@ mod tests {
             },
             text_size: 115,
             recent_commands: vec!["action:archive".into()],
+            ai_panel: AiPanelState::Folded,
         };
         let wire = json!({
             "shortcuts": {
@@ -369,7 +385,8 @@ mod tests {
                 "windows": [{ "command": "delete", "shortcuts": [] }]
             },
             "textSize": 115,
-            "recentCommands": ["action:archive"]
+            "recentCommands": ["action:archive"],
+            "aiPanel": "folded"
         });
         assert_eq!(serde_json::to_value(&prefs).expect("json"), wire);
         assert_eq!(
@@ -394,7 +411,36 @@ mod tests {
     #[test]
     fn defaults_are_valid() {
         assert_eq!(UiPreferences::default().text_size, 100);
+        assert_eq!(UiPreferences::default().ai_panel, AiPanelState::Open);
         assert!(UiPreferences::default().validate().is_ok());
+    }
+
+    #[test]
+    fn the_ai_panel_state_is_one_of_two_values() {
+        let wire = |panel: serde_json::Value| {
+            json!({
+                "shortcuts": { "macos": [], "windows": [] },
+                "textSize": 100,
+                "recentCommands": [],
+                "aiPanel": panel
+            })
+        };
+        for (text, state) in [
+            ("open", AiPanelState::Open),
+            ("folded", AiPanelState::Folded),
+        ] {
+            let prefs: UiPreferences = serde_json::from_value(wire(json!(text))).expect("parse");
+            assert_eq!(prefs.ai_panel, state);
+        }
+        for refused in [json!("sideways"), json!(true), json!(null), json!("Open")] {
+            assert!(
+                serde_json::from_value::<UiPreferences>(wire(refused.clone())).is_err(),
+                "{refused}"
+            );
+        }
+        let mut missing = wire(json!("open"));
+        missing.as_object_mut().expect("object").remove("aiPanel");
+        assert!(serde_json::from_value::<UiPreferences>(missing).is_err());
     }
 
     #[test]

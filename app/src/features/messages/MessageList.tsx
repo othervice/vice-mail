@@ -24,6 +24,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { MAX_ACTION_MESSAGES, type Account, type Mailbox, type MessageId, type MessageListItem } from "../../services/ipc";
 import { MESSAGE_DRAG_TYPE } from "../../stores/drag";
 import { useLayoutStore } from "../../stores/layout";
+import { useListSelectAnswer, type ListSelectScope } from "../../stores/listSelect";
 import { isFirstSyncRunning } from "../accounts/selection";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import { readListMetrics } from "./listMetrics";
@@ -57,6 +58,12 @@ export interface MessageListHandle {
   loadAndSelectAll: () => Promise<void>;
   /** Whether a node lies inside the list (shortcuts that only apply there). */
   contains: (node: Node | null) => boolean;
+  /**
+   * Stage 9 (decision 0028): selects only this message, like a click, scrolls it into view and
+   * lets the view open it (`onSelectedById`), if it is among the loaded rows. False otherwise
+   * (not loaded, or a member of a closed bundle, which is no row).
+   */
+  selectById: (messageId: MessageId) => boolean;
 }
 
 /** What the list reports to its view whenever the selection or the rows behind it change. */
@@ -94,6 +101,13 @@ interface MessageListProps {
   handle?: Ref<MessageListHandle>;
   /** Stage 9: rows from another source than the folder's pages (sorted inbox, Later, Pinned, Tasks). */
   source?: MessageListSource | undefined;
+  /**
+   * Stage 9 (decision 0028): the list answers requests to select a message by id (a click on a
+   * notification, a source of an AI answer) for this scope; absent: it answers none.
+   */
+  selectScope?: ListSelectScope | undefined;
+  /** A message was selected by id: the view opens it (in place of the list, too). */
+  onSelectedById?: (messageId: MessageId) => void;
 }
 
 /** DOM id of a row's preview text, which describes the row's option. */
@@ -200,6 +214,8 @@ export function MessageList({
   onDragEnd,
   handle,
   source,
+  selectScope,
+  onSelectedById,
 }: MessageListProps) {
   const { t, i18n } = useTranslation();
   const folderQuery = useMessagePages(account?.id ?? "", mailbox?.id ?? 0, source === undefined && account !== undefined && mailbox !== undefined);
@@ -388,6 +404,18 @@ export function MessageList({
     return ids;
   };
 
+  /** Selects one message by id, like a click, and scrolls it into view; false if it is no row. */
+  const selectById = (messageId: MessageId): boolean => {
+    const index = rowById.get(messageId);
+    const row = index === undefined ? undefined : rows[index];
+    if (index === undefined || row?.kind !== "message") return false;
+    setState(only({ id: messageId, position: row.position }));
+    virtualizer.scrollToIndex(index, { align: "auto" });
+    onSelectedById?.(messageId);
+    return true;
+  };
+  useListSelectAnswer(selectScope, !query.isPending, !query.isFetching, selectById);
+
   const selectAllOf = (all: readonly MessageListItem[]) => {
     const chosen = all.slice(0, MAX_ACTION_MESSAGES);
     const first = chosen[0];
@@ -463,6 +491,7 @@ export function MessageList({
         selectAllOf(pages.flatMap((page) => page.items).filter((item) => !hiddenIds?.has(item.id)));
       },
       contains: (node) => Boolean(node && scrollRef.current?.contains(node)),
+      selectById,
     }),
   );
 

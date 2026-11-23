@@ -227,6 +227,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::ai::ai_open_reply_draft,
             commands::ai::ai_writing_help,
             commands::ai::ai_ask,
+            commands::ai::ai_prepare_transfer,
             commands::ai::list_open_reply_hints,
             commands::ai::dismiss_open_reply_hint,
             // Stage 11: settings sync (decisions 0014, 0022).

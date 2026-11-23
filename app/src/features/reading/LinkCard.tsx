@@ -48,8 +48,10 @@ interface LinkCardProps {
   request: LinkRequest;
   /** Back to where the reader was, after the card closes. */
   onClosed: () => void;
-  /** Asks the core for the message again (a rendering it no longer knows). */
-  onReload: () => void;
+  /** Asks the core for the message again (a rendering it no longer knows). Without it no button. */
+  onReload?: () => void;
+  /** What a forgotten rendering means here (decision 0028: an AI result has no message to show again). */
+  staleText?: string;
 }
 
 /**
@@ -58,7 +60,7 @@ interface LinkCardProps {
  * then the system browser. A bar in the reading pane, not a dialog: nothing else is blocked, and
  * Radix dialogs insert `<style>` elements the app's CSP refuses.
  */
-export function LinkCard({ request, onClosed, onReload }: LinkCardProps) {
+export function LinkCard({ request, onClosed, onReload, staleText }: LinkCardProps) {
   const { t } = useTranslation();
   const dismissLink = useUiStore((state) => state.dismissLink);
   const info = useDescribeLink(request.renderToken, request.index);
@@ -94,7 +96,7 @@ export function LinkCard({ request, onClosed, onReload }: LinkCardProps) {
   } else if (info.isError) {
     title = stale ? t("reading.link.staleTitle") : t("reading.link.failed");
     body = stale ? (
-      <p className="text-secondary">{t("reading.link.stale")}</p>
+      <p className="text-secondary">{staleText ?? t("reading.link.stale")}</p>
     ) : (
       <ErrorNotice context={t("reading.link.failed")} error={info.error} />
     );
@@ -167,7 +169,7 @@ export function LinkCard({ request, onClosed, onReload }: LinkCardProps) {
       {body}
       {(info.isPending || info.isError) && (
         <div className="flex flex-wrap gap-2">
-          {stale && (
+          {stale && onReload && (
             <Button
               onClick={() => {
                 close();

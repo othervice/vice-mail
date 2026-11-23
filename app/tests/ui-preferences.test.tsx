@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
 });
 
-const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [] };
+const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open" };
 
 function setup(options: { preferences?: UiPreferences; layout?: CoreWindowLayout; failures?: Record<string, Failure> } = {}) {
   const items = makeMessages(4);
@@ -69,6 +69,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         shortcuts: { macos: [{ command: "archive", shortcuts: [{ key: "y", shift: false, mod: false }] }], windows: [] },
         textSize: 130,
         recentCommands: ["action:compose"],
+        aiPanel: "open",
       },
       layout: { readingPane: "bottom", density: "compact", sidebarExpanded: true },
     });
@@ -112,6 +113,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         shortcuts: { macos: [{ command: "archive", shortcuts: [{ key: "e", shift: false, mod: false }, { key: "y", shift: false, mod: false }] }], windows: [] },
         textSize: 115,
         recentCommands: ["action:reply"],
+        aiPanel: "open",
       },
     });
   });
@@ -125,6 +127,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         shortcuts: { macos: [{ command: "reply", shortcuts: [{ key: "R", shift: true, mod: false }] }], windows: [] },
         textSize: 90,
         recentCommands: ["view:inbox"],
+        aiPanel: "open",
       },
     });
     await waitFor(() => {
@@ -195,6 +198,7 @@ describe("moving the old local fallback to the core, once", () => {
       shortcuts: { macos: [{ command: "archive", shortcuts: [{ key: "y", shift: false, mod: false }] }], windows: [] },
       textSize: 130,
       recentCommands: ["action:compose", "view:sent"],
+      aiPanel: "open",
     });
     expect(core.ui.layout).toEqual({ readingPane: "bottom", density: "compact", sidebarExpanded: true });
     expect(stored("paletteRecent")).toBeNull();

@@ -314,6 +314,16 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           hiddenIds={controller.hiddenIds}
           source={source}
           handle={list}
+          // Stage 9 (decision 0028): notifications and AI sources select their message here. Later,
+          // Pinned and Tasks show the inbox's messages but are not the inbox: no folder scope.
+          selectScope={{
+            accountId: account.id,
+            mailboxId: kind === "folder" || kind === "inbox" ? mailbox.id : null,
+            inbox: kind === "inbox",
+          }}
+          onSelectedById={() => {
+            layout.onOpen();
+          }}
           onSelectionChange={(next) => {
             setSelection(next);
             const focusPane = layout.onSelectionChange(next);

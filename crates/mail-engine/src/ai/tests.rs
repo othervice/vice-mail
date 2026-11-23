@@ -1111,3 +1111,324 @@ async fn sources_are_named_by_id_in_the_order_asked_and_bounded() {
         ErrorCode::InvalidArgument
     );
 }
+
+/// Every `aiRequest` event that arrives within a short while.
+async fn ai_request_events(h: &mut Harness) -> usize {
+    let mut count = 0;
+    while let Ok(Ok(event)) =
+        tokio::time::timeout(Duration::from_millis(200), h.events.recv()).await
+    {
+        if matches!(event, CoreEvent::AiRequest { .. }) {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn link_segments(segments: &[mail_model::TextSegment]) -> Vec<(String, u32)> {
+    segments
+        .iter()
+        .filter_map(|segment| match segment {
+            mail_model::TextSegment::Link { text, index } => Some((text.clone(), *index)),
+            mail_model::TextSegment::Text { .. } => None,
+        })
+        .collect()
+}
+
+/// Decision 0028: links in AI output are found by the core and go through the link check of
+/// stage 3 (`describeLink`/`openLink`): the same warnings, `http(s)` to the system, `mailto:`
+/// into the composer, nothing else; unknown tokens and indexes are refused; images are never
+/// loaded and markup stays text.
+#[tokio::test]
+async fn links_in_results_go_through_the_link_check_of_mail() {
+    let mut h = Harness::new().await;
+    let message = h.message("Offer for the garden").await;
+    h.profile(&h.mock.url()).await;
+    h.core.set_ai_enabled(true).await.expect("on");
+    h.mock.answer(
+        &serde_json::json!({
+            "key_points": [{"text": "Pay at https://pay.example/x now. ![chart](https://evil.example/chart.png) <img src=https://evil.example/p.png>", "refs": ["m1"]}],
+            "open_questions": [{"text": "Is https://bank.example@evil.example/login real?", "refs": ["m1"]}],
+            "deadlines": [{"text": "Write to bob@friends.example", "due": "Friday", "refs": ["m1"]}]
+        })
+        .to_string(),
+    );
+    let summary = h
+        .core
+        .ai_summarize_thread("l-1".into(), message)
+        .await
+        .expect("summary");
+    let token = summary.link_token.clone().expect("the result has links");
+    // The image embed lost its target; markup is text, an address in it a link to check.
+    assert_eq!(
+        link_segments(&summary.key_points[0].segments),
+        [
+            ("https://pay.example/x".to_owned(), 0),
+            ("https://evil.example/p.png".to_owned(), 1)
+        ]
+    );
+    assert_eq!(
+        link_segments(&summary.open_questions[0].segments),
+        [("https://bank.example@evil.example/login".to_owned(), 2)]
+    );
+    assert_eq!(
+        link_segments(&summary.deadlines[0].segments),
+        [("bob@friends.example".to_owned(), 3)]
+    );
+    let shown = serde_json::to_string(&summary.key_points[0]).expect("json");
+    assert!(!shown.contains("chart.png"), "{shown}");
+    assert!(
+        summary.key_points[0].segments.iter().any(
+            |s| matches!(s, mail_model::TextSegment::Text { text } if text.contains("<img src="))
+        ),
+        "markup stays text"
+    );
+
+    // The same analysis as a link in a mail.
+    let plain = h.core.describe_link(&token, 0).expect("link 0");
+    assert_eq!(plain.target, "https://pay.example/x");
+    assert!(plain.openable && plain.warnings.is_empty(), "{plain:?}");
+    let image = h.core.describe_link(&token, 1).expect("link 1");
+    assert_eq!(image.target, "https://evil.example/p.png");
+    let credentials = h.core.describe_link(&token, 2).expect("link 2");
+    assert!(
+        credentials
+            .warnings
+            .contains(&mail_model::LinkWarning::CredentialsInUrl),
+        "{credentials:?}"
+    );
+    assert_eq!(credentials.host.as_deref(), Some("evil.example"));
+    let mail = h.core.describe_link(&token, 3).expect("link 3");
+    assert_eq!(mail.scheme, "mailto");
+
+    // Unknown index, unknown token: refused, nothing opened.
+    assert_eq!(
+        IpcError::from(h.core.describe_link(&token, 4).expect_err("no link 4")).code,
+        ErrorCode::NotFound
+    );
+    let forged = mail_model::RenderToken::from_random(0x1234);
+    assert_eq!(
+        IpcError::from(h.core.describe_link(&forged, 0).expect_err("forged")).code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        code(h.core.open_link(&forged, 0).await),
+        ErrorCode::NotFound
+    );
+    assert_eq!(code(h.core.open_link(&token, 9).await), ErrorCode::NotFound);
+    // AI results are never in a frame: a navigation with their token is ignored.
+    assert!(!h.core.link_activated(token.clone(), 0));
+    assert!(h.opener.opened().is_empty());
+
+    // Opening: http(s) to the system, mailto into the composer queue.
+    assert_eq!(
+        h.core.open_link(&token, 0).await.expect("open"),
+        mail_model::LinkOpened::Opened
+    );
+    assert_eq!(h.opener.opened(), ["https://pay.example/x"]);
+    match h.core.open_link(&token, 3).await.expect("mailto") {
+        mail_model::LinkOpened::Compose { request } => {
+            assert_eq!(request.to[0].email, "bob@friends.example");
+        }
+        other => panic!("not a compose request: {other:?}"),
+    }
+    assert_eq!(
+        h.opener.opened().len(),
+        1,
+        "mailto never goes to the system"
+    );
+    // Nothing of this reached the provider or anything else.
+    assert_eq!(h.mock.count(), 1);
+
+    // A reply suggestion: its links too; other schemes stay text.
+    h.mock.answer(
+        r#"{"reply": "Hi Bob,\nsee https://example.org/terms and javascript:alert(1).\nAlice"}"#,
+    );
+    let reply = h
+        .core
+        .ai_suggest_reply("l-2".into(), message)
+        .await
+        .expect("reply");
+    let reply_token = reply.link_token.clone().expect("reply links");
+    assert_ne!(reply_token, token);
+    assert_eq!(
+        link_segments(&reply.segments),
+        [("https://example.org/terms".to_owned(), 0)]
+    );
+    assert!(
+        reply
+            .segments
+            .iter()
+            .any(|s| matches!(s, mail_model::TextSegment::Text { text } if text.contains("javascript:alert(1)")))
+    );
+    assert_eq!(
+        h.core
+            .describe_link(&reply_token, 0)
+            .expect("reply link")
+            .target,
+        "https://example.org/terms"
+    );
+
+    // Without links: no token, one text segment.
+    h.mock.answer(r#"{"text": "Hello Bob, thanks."}"#);
+    let writing = h
+        .core
+        .ai_writing_help("l-3".into(), "hello bob thx".into(), AiWritingTask::Improve)
+        .await
+        .expect("rewrite");
+    assert_eq!(writing.link_token, None);
+    assert_eq!(
+        writing.segments,
+        [mail_model::TextSegment::Text {
+            text: "Hello Bob, thanks.".into()
+        }]
+    );
+    let _ = ai_request_events(&mut h).await;
+}
+
+/// Decision 0028: the dry run prepares what a function would send, exactly as the request
+/// does, without consent and without a single request to the provider; it fails like the
+/// request would before sending.
+#[tokio::test]
+async fn the_dry_run_shows_exactly_what_would_be_sent_and_sends_nothing() {
+    use mail_model::AiTransferInput as Input;
+    let mut h = Harness::new().await;
+    let message = h.message("Offer for the garden").await;
+    let profile = h.profile("https://ai.example.test/v1").await;
+    let summary_input = Input::Summary {
+        message_id: message,
+    };
+    // AI off: nothing to prepare.
+    assert_eq!(
+        code(h.core.ai_prepare_transfer(summary_input.clone()).await),
+        ErrorCode::AiOff
+    );
+    h.core.set_ai_enabled(true).await.expect("on");
+    // Cloud profile, the account without cloud permission: refused before any body is read.
+    assert_eq!(
+        code(h.core.ai_prepare_transfer(summary_input.clone()).await),
+        ErrorCode::AiNotPermitted
+    );
+    h.core
+        .set_ai_account_cloud(h.account, true)
+        .await
+        .expect("permission");
+    // No consent yet: the dry run is what the consent step shows.
+    assert!(h.core.get_ai_settings().await.expect("settings").profiles[0].needs_consent);
+    let summary_dry = h
+        .core
+        .ai_prepare_transfer(summary_input)
+        .await
+        .expect("summary dry run");
+    assert_eq!(summary_dry.function, AiFunction::Summary);
+    assert_eq!(summary_dry.mails, 1);
+    assert_eq!(summary_dry.accounts, vec![h.account]);
+    assert_eq!(summary_dry.host, "ai.example.test:443");
+    assert!(!summary_dry.locality.is_local());
+    assert_eq!(summary_dry.model, "test-model");
+    assert!(summary_dry.bytes > 0);
+    let reply_dry = h
+        .core
+        .ai_prepare_transfer(Input::ReplySuggestion {
+            message_id: message,
+        })
+        .await
+        .expect("reply dry run");
+    assert_eq!(reply_dry.function, AiFunction::ReplySuggestion);
+    let passage = "hello bob thx, see you friday".to_owned();
+    let writing_dry = h
+        .core
+        .ai_prepare_transfer(Input::WritingHelp {
+            passage: passage.clone(),
+            task: AiWritingTask::Shorten,
+        })
+        .await
+        .expect("writing dry run");
+    assert_eq!((writing_dry.mails, writing_dry.accounts.len()), (0, 0));
+    let question = "Where is the offer?".to_owned();
+    let search_dry = h
+        .core
+        .ai_prepare_transfer(Input::Search {
+            question: question.clone(),
+        })
+        .await
+        .expect("search dry run");
+    assert_eq!(search_dry.mails, 0);
+    // Refused like the requests: unknown message, nothing to send, a question too long.
+    assert_eq!(
+        code(
+            h.core
+                .ai_prepare_transfer(Input::Summary {
+                    message_id: MessageId(999_999)
+                })
+                .await
+        ),
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        code(
+            h.core
+                .ai_prepare_transfer(Input::WritingHelp {
+                    passage: "  ".into(),
+                    task: AiWritingTask::Improve
+                })
+                .await
+        ),
+        ErrorCode::InvalidArgument
+    );
+    assert_eq!(
+        code(
+            h.core
+                .ai_prepare_transfer(Input::Search {
+                    question: "x".repeat(1_001)
+                })
+                .await
+        ),
+        ErrorCode::InvalidArgument
+    );
+    // Zero requests, no events, nothing logged.
+    assert_eq!(h.mock.count(), 0);
+    assert!(h.mock.requests().is_empty());
+    assert_eq!(ai_request_events(&mut h).await, 0);
+    assert!(
+        h.core
+            .list_ai_requests(None, 10)
+            .await
+            .expect("log")
+            .entries
+            .is_empty()
+    );
+
+    // After consent the requests send exactly what the dry run showed.
+    h.core.set_ai_consent(profile, true).await.expect("consent");
+    h.mock.answer(&summary_answer());
+    let summary = h
+        .core
+        .ai_summarize_thread("d-1".into(), message)
+        .await
+        .expect("summary");
+    assert_eq!(summary.transfer, summary_dry);
+    h.mock.answer(r#"{"reply": "Hi Bob, yes."}"#);
+    let reply = h
+        .core
+        .ai_suggest_reply("d-2".into(), message)
+        .await
+        .expect("reply");
+    assert_eq!(reply.transfer, reply_dry);
+    h.mock.answer(r#"{"text": "See you Friday, Bob."}"#);
+    let writing = h
+        .core
+        .ai_writing_help("d-3".into(), passage, AiWritingTask::Shorten)
+        .await
+        .expect("rewrite");
+    assert_eq!(writing.transfer, writing_dry);
+    h.mock.answer(r#"{"query": "offer"}"#);
+    h.mock.answer(r#"{"found": false, "statements": []}"#);
+    let answer = h
+        .core
+        .ai_ask("d-4".into(), question, None)
+        .await
+        .expect("answer");
+    assert_eq!(answer.transfers[0], search_dry);
+    let _ = ai_request_events(&mut h).await;
+}

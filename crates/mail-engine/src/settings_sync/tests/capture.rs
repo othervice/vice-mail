@@ -138,7 +138,8 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_inbox_settings(inbox_settings)
         .await
         .expect("inbox");
-    // Stage 8: shortcuts and text size are synced; recent commands and layouts are not.
+    // Stage 8: shortcuts and text size are synced; recent commands, layouts and (decision
+    // 0028) the AI panel's state are not.
     core.set_ui_preferences(UiPreferences {
         shortcuts: PlatformShortcuts {
             macos: vec![ShortcutOverride {
@@ -153,6 +154,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         },
         text_size: 115,
         recent_commands: vec!["action:archive".into()],
+        ai_panel: mail_model::AiPanelState::Folded,
     })
     .await
     .expect("ui preferences");

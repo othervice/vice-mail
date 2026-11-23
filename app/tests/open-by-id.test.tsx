@@ -32,12 +32,13 @@ function mail(overrides: Partial<MessageListItem> = {}): MessageListItem {
   });
 }
 
-function setup(ai: AiFakeOptions) {
-  const message = mail();
+/** `mailboxId`: where the message lies (decision 0028: one in the shown list is selected there). */
+function setup(ai: AiFakeOptions, mailboxId = 1) {
+  const message = mail({ mailboxId });
   const core = mockCore({
     accounts: [ADA],
     mailboxes: standardMailboxes(),
-    messages: { 1: [message] },
+    messages: { [mailboxId]: [message] },
     views: { [message.id]: makeView(message) },
     readingPreferences: { markReadOnOpen: "never" },
     ai,
@@ -64,7 +65,8 @@ async function ask(user: ReturnType<typeof renderApp>["user"]) {
 
 describe("sources and messages by id (decision 0027)", () => {
   it("names the sources the core has and opens one the main window does not show in a window of its own", async () => {
-    const { core, user } = setup({ enabled: true, profiles: [LOCAL], functions: ALL_LOCAL, answer: answerWith([5001, 4000]) });
+    // In another folder than the inbox on screen (decision 0028: a listed one is selected instead).
+    const { core, user } = setup({ enabled: true, profiles: [LOCAL], functions: ALL_LOCAL, answer: answerWith([5001, 4000]) }, 5);
     const answer = await ask(user);
     const named = await within(answer).findByRole("button", { name: /^Show source: Grace Hopper, / });
     expect(within(answer).getByRole("button", { name: "Show source: Mail 2" })).toBeTruthy();
@@ -120,7 +122,8 @@ describe("aiSettingsChanged (decision 0027)", () => {
 
 describe("a click on a system notification (decision 0027)", () => {
   it("shows the folder and opens the mail itself in a window of its own", async () => {
-    const { core } = setup({ enabled: false });
+    // The folder's list does not have the mail (decision 0028: a listed one is selected there).
+    const { core } = setup({ enabled: false }, 5);
     await screen.findByRole("navigation", { name: "Views" });
     await emitCore({ type: "openMessageRequested", accountId: ADA.id, mailboxId: 1, messageId: 5001 });
     await waitFor(() => {

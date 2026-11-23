@@ -680,7 +680,8 @@ fn ui_preference_commands_store_validate_and_emit() {
         json!({
             "shortcuts": { "macos": [], "windows": [] },
             "textSize": 100,
-            "recentCommands": []
+            "recentCommands": [],
+            "aiPanel": "open"
         })
     );
 
@@ -693,9 +694,12 @@ fn ui_preference_commands_store_validate_and_emit() {
             "windows": [{ "command": "delete", "shortcuts": [] }]
         },
         "textSize": 115,
-        "recentCommands": ["action:archive"]
+        "recentCommands": ["action:archive"],
+        "aiPanel": "folded"
     });
     let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
+    // Decision 0028: the AI panel's state is part of the preferences.
+    assert_eq!(stored["aiPanel"], "folded");
     // Ordered by command, as stored.
     assert_eq!(stored["shortcuts"]["macos"][0]["command"], "archive");
     assert_eq!(stored["shortcuts"]["macos"][1]["command"], "toggleRead");
@@ -732,6 +736,11 @@ fn ui_preference_commands_store_validate_and_emit() {
             .is_some_and(|d| d.contains("appears twice")),
         "{err}"
     );
+    // Decision 0028: only "open" or "folded"; the bridge refuses anything else.
+    let mut sideways = stored.clone();
+    sideways["aiPanel"] = json!("sideways");
+    invoke(&h, "set_ui_preferences", json!({ "preferences": sideways }))
+        .expect_err("unknown panel state");
     let mut small = stored.clone();
     small["textSize"] = json!(79);
     let err =

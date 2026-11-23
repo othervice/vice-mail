@@ -18,6 +18,14 @@
 //!   Nothing here turns model output into an action: a reply suggestion becomes a draft only
 //!   through `ai_open_reply_draft`, which the user triggers, and the writing help returns a
 //!   preview.
+//! - **Links in results** (decision 0028): the core finds the links in the text it returns
+//!   (`reading::FoundLinks`, the recognition of plain-text mail) and keeps them under a token
+//!   of the reading register; the UI gets segments and opens a link only through
+//!   `describeLink`/`openLink`, with the same checks as a link in a mail. Images in results
+//!   are never loaded (Markdown embeds are reduced to their text by `mail-ai`, markup stays
+//!   text).
+//! - **Dry run** (`ai_prepare_transfer`, decision 0028): the same preparation as the request,
+//!   without consent and without sending, so the consent step can show the exact size.
 //! - **Open-reply hints** ([`open_replies`]) are rules over stored headers, without AI.
 
 mod open_replies;
@@ -35,14 +43,16 @@ use mail_model::{
     AccountId, AiAnswer, AiAvailability, AiClaim, AiConnectionTest, AiDeadline, AiFailure,
     AiFunction, AiLocality, AiModel, AiProfileInput, AiReplySuggestion, AiRequestOutcome,
     AiRequestPage, AiRequestPhase, AiSettingsInfo, AiSummary, AiTargetLanguage, AiTone, AiTransfer,
-    AiTrimming, AiWritingResult, AiWritingTask, ComposeFormat, CoreError, CoreEvent, Draft,
-    DraftUpdate, LanguagePreference, MAX_AI_QUESTION_CHARS, MAX_AI_REQUEST_ID_CHARS, MessageId,
-    NewDraft, OpenReplySettings, QuoteLanguage, Secret,
+    AiTransferInput, AiTrimming, AiWritingResult, AiWritingTask, ComposeFormat, CoreError,
+    CoreEvent, Draft, DraftUpdate, LanguagePreference, MAX_AI_QUESTION_CHARS,
+    MAX_AI_REQUEST_ID_CHARS, MessageId, NewDraft, OpenReplySettings, QuoteLanguage, RenderToken,
+    Secret,
 };
 use mail_store::{NewAiRequest, StoredMessage};
 
 use crate::core::{AppCore, Connector};
 use crate::credentials::CredentialRef;
+use crate::reading::FoundLinks;
 use crate::search::LocalZone;
 
 use settings::StoredAi;
@@ -136,13 +146,25 @@ pub(crate) const fn locality(locality: mail_ai::Locality) -> AiLocality {
     }
 }
 
-fn claims(list: Vec<Claim>) -> Vec<AiClaim> {
+/// Claims for the UI, their links found and numbered in `found`.
+fn claims(list: Vec<Claim>, found: &mut FoundLinks) -> Vec<AiClaim> {
     list.into_iter()
         .map(|claim| AiClaim {
+            segments: found.segments(&claim.text),
             text: claim.text,
             sources: claim.sources,
         })
         .collect()
+}
+
+/// A question has at most [`MAX_AI_QUESTION_CHARS`] characters.
+fn check_question(question: &str) -> Result<(), CoreError> {
+    if question.chars().count() > usize::try_from(MAX_AI_QUESTION_CHARS).unwrap_or(usize::MAX) {
+        return Err(CoreError::InvalidArgument(format!(
+            "a question has at most {MAX_AI_QUESTION_CHARS} characters"
+        )));
+    }
+    Ok(())
 }
 
 const fn writing_task(task: AiWritingTask) -> mail_ai::WritingTask {
@@ -186,10 +208,11 @@ fn request_id(id: &str) -> Result<String, CoreError> {
 }
 
 /// One request of the UI: the provider, the cancel token, what the log needs. Unregisters
-/// its id when dropped.
+/// its id when dropped. A dry run (`aiPrepareTransfer`) has no id: it is not registered,
+/// emits nothing and never sends.
 struct Session<'a, C: Connector> {
     core: &'a AppCore<C>,
-    id: String,
+    id: Option<String>,
     function: AiFunction,
     profile: StoredProfile,
     provider: Box<dyn AiProvider>,
@@ -199,7 +222,9 @@ struct Session<'a, C: Connector> {
 
 impl<C: Connector> Drop for Session<'_, C> {
     fn drop(&mut self) {
-        lock(&self.core.ai().requests).remove(&self.id);
+        if let Some(id) = &self.id {
+            lock(&self.core.ai().requests).remove(id);
+        }
     }
 }
 
@@ -213,10 +238,12 @@ impl<C: Connector> Session<'_, C> {
     }
 
     fn emit(&self, phase: AiRequestPhase) {
-        self.core.emit_event(CoreEvent::AiRequest {
-            request_id: self.id.clone(),
-            phase,
-        });
+        if let Some(id) = &self.id {
+            self.core.emit_event(CoreEvent::AiRequest {
+                request_id: id.clone(),
+                phase,
+            });
+        }
     }
 
     fn transfer(&self, info: &TransferInfo) -> AiTransfer {
@@ -330,15 +357,12 @@ impl<C: Connector> AppCore<C> {
         function: AiFunction,
     ) -> Result<Session<'_, C>, CoreError> {
         let id = request_id(id)?;
-        let stored = self.ai_stored().await?;
-        let profile = stored.usable_profile(function)?.clone();
-        let provider = self.ai_provider(&profile).await?;
-        if !provider.info().locality.is_local() && !profile.consented() {
+        let mut session = self.ai_open(function).await?;
+        if !session.locality().is_local() && !session.profile.consented() {
             return Err(CoreError::Ai(AiFailure::ConsentRequired {
-                profile_id: profile.id.clone(),
+                profile_id: session.profile.id.clone(),
             }));
         }
-        let cancel = CancelToken::new();
         {
             let mut requests = lock(&self.ai().requests);
             if requests.contains_key(&id) {
@@ -346,17 +370,40 @@ impl<C: Connector> AppCore<C> {
                     "the request id {id} is in use"
                 )));
             }
-            requests.insert(id.clone(), cancel.clone());
+            requests.insert(id.clone(), session.cancel.clone());
         }
+        session.id = Some(id);
+        Ok(session)
+    }
+
+    /// AI on, the function has a usable profile, its provider can be built (no connection):
+    /// a session without id, consent or registration. Requests add those in
+    /// [`Self::ai_session`]; a dry run uses it as it is.
+    async fn ai_open(&self, function: AiFunction) -> Result<Session<'_, C>, CoreError> {
+        let stored = self.ai_stored().await?;
+        let profile = stored.usable_profile(function)?.clone();
+        let provider = self.ai_provider(&profile).await?;
         Ok(Session {
             core: self,
-            id,
+            id: None,
             function,
             profile,
             provider,
-            cancel,
+            cancel: CancelToken::new(),
             cloud: stored.cloud_accounts,
         })
+    }
+
+    /// Decision 0028: the links of an AI result under a token of the reading register
+    /// (`describeLink`/`openLink`), kept with the accounts whose mail the result was made from.
+    fn ai_links(
+        &self,
+        found: FoundLinks,
+        accounts: &[AccountId],
+    ) -> Result<Option<RenderToken>, CoreError> {
+        Ok(self
+            .reading_ref()?
+            .remember_found_links(found, accounts.to_vec()))
     }
 
     /// Builds the provider of a profile with its key from the keychain.
@@ -715,17 +762,25 @@ impl<C: Connector> AppCore<C> {
         session.finish(result)
     }
 
+    /// The summary request for `message`'s thread, as it would be sent.
+    async fn prepare_summary_in(
+        &self,
+        session: &Session<'_, C>,
+        message: MessageId,
+    ) -> Result<mail_ai::PreparedSummary, CoreError> {
+        let thread = self.ai_thread(session, message, false).await?;
+        let zone = LocalZone::system();
+        let context = self.ai_context(self.ai_language().await, &zone);
+        mail_ai::prepare_summary(&session.profile.model, &thread, Budget::THREAD, &context)
+            .map_err(failure)
+    }
+
     async fn summarize_in(
         &self,
         session: &Session<'_, C>,
         message: MessageId,
     ) -> Result<AiSummary, CoreError> {
-        let thread = self.ai_thread(session, message, false).await?;
-        let zone = LocalZone::system();
-        let context = self.ai_context(self.ai_language().await, &zone);
-        let prepared =
-            mail_ai::prepare_summary(&session.profile.model, &thread, Budget::THREAD, &context)
-                .map_err(failure)?;
+        let prepared = self.prepare_summary_in(session, message).await?;
         let transfer = session.sending(prepared.transfer());
         let cloud = |account: &AccountId| session.cloud_allowed(account);
         let summary = session
@@ -740,20 +795,27 @@ impl<C: Connector> AppCore<C> {
                 ),
             )
             .await?;
+        let mut found = FoundLinks::default();
+        let key_points = claims(summary.key_points, &mut found);
+        let open_questions = claims(summary.open_questions, &mut found);
+        let deadlines = summary
+            .deadlines
+            .into_iter()
+            .map(|d| AiDeadline {
+                segments: found.segments(&d.text),
+                text: d.text,
+                due: d.due,
+                sources: d.sources,
+            })
+            .collect();
+        let link_token = self.ai_links(found, &transfer.accounts)?;
         Ok(AiSummary {
-            key_points: claims(summary.key_points),
-            open_questions: claims(summary.open_questions),
-            deadlines: summary
-                .deadlines
-                .into_iter()
-                .map(|d| AiDeadline {
-                    text: d.text,
-                    due: d.due,
-                    sources: d.sources,
-                })
-                .collect(),
+            key_points,
+            open_questions,
+            deadlines,
             dropped: summary.dropped,
             transfer,
+            link_token,
         })
     }
 
@@ -771,11 +833,12 @@ impl<C: Connector> AppCore<C> {
         session.finish(result)
     }
 
-    async fn reply_in(
+    /// The reply request for `message` (with its thread up to it), as it would be sent.
+    async fn prepare_reply_in(
         &self,
         session: &Session<'_, C>,
         message: MessageId,
-    ) -> Result<AiReplySuggestion, CoreError> {
+    ) -> Result<mail_ai::PreparedReply, CoreError> {
         let thread = self.ai_thread(session, message, true).await?;
         let account = thread
             .last()
@@ -791,14 +854,22 @@ impl<C: Connector> AppCore<C> {
             });
         let zone = LocalZone::system();
         let context = self.ai_context(self.ai_language().await, &zone);
-        let prepared = mail_ai::prepare_reply(
+        mail_ai::prepare_reply(
             &session.profile.model,
             &thread,
             user.as_ref(),
             Budget::THREAD,
             &context,
         )
-        .map_err(failure)?;
+        .map_err(failure)
+    }
+
+    async fn reply_in(
+        &self,
+        session: &Session<'_, C>,
+        message: MessageId,
+    ) -> Result<AiReplySuggestion, CoreError> {
+        let prepared = self.prepare_reply_in(session, message).await?;
         let transfer = session.sending(prepared.transfer());
         let cloud = |account: &AccountId| session.cloud_allowed(account);
         let suggestion = session
@@ -813,10 +884,15 @@ impl<C: Connector> AppCore<C> {
                 ),
             )
             .await?;
+        let mut found = FoundLinks::default();
+        let segments = found.segments(&suggestion.text);
+        let link_token = self.ai_links(found, &transfer.accounts)?;
         Ok(AiReplySuggestion {
             text: suggestion.text,
+            segments,
             in_reply_to: suggestion.in_reply_to,
             transfer,
+            link_token,
         })
     }
 
@@ -890,9 +966,14 @@ impl<C: Connector> AppCore<C> {
                     ),
                 )
                 .await?;
+            let mut found = FoundLinks::default();
+            let segments = found.segments(&result.text);
+            let link_token = self.ai_links(found, &transfer.accounts)?;
             Ok(AiWritingResult {
                 text: result.text,
+                segments,
                 transfer,
+                link_token,
             })
         }
         .await;
@@ -909,11 +990,7 @@ impl<C: Connector> AppCore<C> {
         question: String,
         accounts: Option<Vec<AccountId>>,
     ) -> Result<AiAnswer, CoreError> {
-        if question.chars().count() > usize::try_from(MAX_AI_QUESTION_CHARS).unwrap_or(usize::MAX) {
-            return Err(CoreError::InvalidArgument(format!(
-                "a question has at most {MAX_AI_QUESTION_CHARS} characters"
-            )));
-        }
+        check_question(&question)?;
         let session = self.ai_session(&request_id, AiFunction::Search).await?;
         let result = self.ask_in(&session, &question, accounts).await;
         session.finish(result)
@@ -943,6 +1020,7 @@ impl<C: Connector> AppCore<C> {
             excluded: 0,
             dropped: 0,
             transfers: vec![first.clone()],
+            link_token: None,
         };
         let plan = session
             .request(
@@ -1004,9 +1082,58 @@ impl<C: Connector> AppCore<C> {
         answer.dropped = dropped;
         if let AnswerOutcome::Found(statements) = outcome {
             answer.found = true;
-            answer.statements = claims(statements);
+            let mut found = FoundLinks::default();
+            answer.statements = claims(statements, &mut found);
+            answer.link_token = self.ai_links(found, &second.accounts)?;
         }
         Ok(answer)
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Dry run
+    // -----------------------------------------------------------------------------------------
+
+    /// Decision 0028: what a function would send for `input`, prepared exactly as the request
+    /// prepares it (same thread, same budget, same cleaning), without consent and without any
+    /// request to the provider; nothing is logged and no event is sent. Fails like the request
+    /// would before sending (`ai_off`, `ai_not_permitted` before any body is loaded,
+    /// `not_found`, `invalid_argument`). For a question it is the first request (the question
+    /// alone); the candidates follow after the local search.
+    pub async fn ai_prepare_transfer(
+        &self,
+        input: AiTransferInput,
+    ) -> Result<AiTransfer, CoreError> {
+        if let AiTransferInput::Search { question } = &input {
+            check_question(question)?;
+        }
+        let session = self.ai_open(input.function()).await?;
+        let info = match input {
+            AiTransferInput::Summary { message_id } => self
+                .prepare_summary_in(&session, message_id)
+                .await?
+                .transfer()
+                .clone(),
+            AiTransferInput::ReplySuggestion { message_id } => self
+                .prepare_reply_in(&session, message_id)
+                .await?
+                .transfer()
+                .clone(),
+            AiTransferInput::WritingHelp { passage, task } => {
+                mail_ai::prepare_writing(&session.profile.model, &passage, writing_task(task))
+                    .map_err(failure)?
+                    .transfer()
+                    .clone()
+            }
+            AiTransferInput::Search { question } => {
+                let zone = LocalZone::system();
+                let context = self.ai_context(self.ai_language().await, &zone);
+                mail_ai::prepare_query(&session.profile.model, &question, &context)
+                    .map_err(failure)?
+                    .transfer()
+                    .clone()
+            }
+        };
+        Ok(session.transfer(&info))
     }
 
     // -----------------------------------------------------------------------------------------

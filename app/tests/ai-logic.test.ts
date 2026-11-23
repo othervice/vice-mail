@@ -48,8 +48,8 @@ describe("AI rules in the UI", () => {
 
   it("numbers sources in the order they first appear", () => {
     const numbers = numberSources([
-      { text: "a", sources: [30, 10] },
-      { text: "b", sources: [10, 20] },
+      { text: "a", segments: [], sources: [30, 10] },
+      { text: "b", segments: [], sources: [10, 20] },
     ]);
     expect([...numbers.entries()]).toEqual([
       [30, 1],

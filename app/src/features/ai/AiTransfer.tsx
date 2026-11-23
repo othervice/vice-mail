@@ -34,7 +34,7 @@ export function transferText(transfer: AiTransfer, t: TFunction, language: strin
 }
 
 /** Shortened, quotes left out, attachment names: what the user should know about the content sent. */
-function TransferNotes({ transfer }: { transfer: AiTransfer }) {
+export function TransferNotes({ transfer }: { transfer: AiTransfer }) {
   const { t } = useTranslation();
   const { trimming } = transfer;
   const notes: string[] = [];

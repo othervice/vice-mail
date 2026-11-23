@@ -68,6 +68,7 @@ pub use opener::{DesktopOpener, RecordingOpener, SystemOpener};
 pub use remote::RemoteConfig;
 
 use fetch::{Connections, Fetched};
+pub(crate) use links::FoundLinks;
 use links::{RenderOwner, Rendering, Renderings};
 use prefetch::Prefetcher;
 use view::{Attachment, AttachmentSource, Content};
@@ -661,6 +662,16 @@ impl<C: MailConnector + 'static> Reading<C> {
     // Links
     // -----------------------------------------------------------------------------------------
 
+    /// Decision 0028: the links found in an AI result, under a token of their own for
+    /// `describe_link`/`open_link`; `None` when there are none.
+    pub(crate) fn remember_found_links(
+        &self,
+        found: FoundLinks,
+        accounts: Vec<AccountId>,
+    ) -> Option<RenderToken> {
+        self.renderings.insert_found(found, accounts)
+    }
+
     pub(crate) fn describe_link(
         &self,
         token: &RenderToken,
@@ -709,6 +720,11 @@ impl<C: MailConnector + 'static> Reading<C> {
                 tracing::debug!(message = message.0, index, "link clicked");
             }
             RenderOwner::File(_) => tracing::debug!(index, "link of an opened file clicked"),
+            // AI results are never shown in a frame; a navigation with their token is forged.
+            RenderOwner::AiResult { .. } => {
+                tracing::warn!(index, "navigation to a link of an AI result ignored");
+                return false;
+            }
         }
         self.emit(CoreEvent::LinkActivated {
             render_token: token,

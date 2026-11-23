@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiSummary, MessageListItem } from "../src/services/ipc";
+import type { MessageListItem } from "../src/services/ipc";
 import { useAiPanelStore } from "../src/stores/aiPanel";
 import {
   AI_PROVIDER_COMMANDS,
@@ -9,8 +9,10 @@ import {
   makeCloudProfile,
   makeTransfer,
   type AiFakeOptions,
+  type SummaryFixture,
 } from "./support/ai";
 import { makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
+import { DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
 import { renderApp } from "./support/render";
 
 const ADA = makeAccount();
@@ -32,7 +34,7 @@ function mail(overrides: Partial<MessageListItem> = {}): MessageListItem {
   });
 }
 
-function summaryOf(messageId: number, overrides: Partial<AiSummary> = {}): AiSummary {
+function summaryOf(messageId: number, overrides: Partial<SummaryFixture> = {}): SummaryFixture {
   return {
     keyPoints: [{ text: "The budget is due on Friday.", sources: [messageId] }],
     openQuestions: [{ text: "<img src=x onerror=alert(1)> Who signs it?", sources: [messageId] }],
@@ -377,7 +379,6 @@ describe("AI panel", () => {
 
 describe("AI panel from the palette", () => {
   it("runs a summary asked for while the panel was folded in, once the settings are known", async () => {
-    useAiPanelStore.setState({ open: false });
     const message = mail();
     const core = mockCore({
       accounts: [ADA],
@@ -386,6 +387,8 @@ describe("AI panel from the palette", () => {
       views: { [message.id]: makeView(message) },
       readingPreferences: { markReadOnOpen: "never" },
       ai: { enabled: true, profiles: [LOCAL], functions: ALL_LOCAL, summary: (id) => summaryOf(id) },
+      // Decision 0028: folded in is a UI preference of the core.
+      ui: { preferences: { ...DEFAULT_UI_PREFERENCES, aiPanel: "folded" } },
     });
     const { user } = renderApp();
     await user.click(await screen.findByRole("option"));
@@ -395,6 +398,10 @@ describe("AI panel from the palette", () => {
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
     await within(panel).findByRole("article", { name: "Summary" });
     expect(core.callsOf("ai_summarize_thread")).toEqual([{ requestId: expect.any(String) as string, messageId: message.id }]);
+    // Opening it for the command is stored too.
+    await waitFor(() => {
+      expect(core.ui.preferences.aiPanel).toBe("open");
+    });
   });
 });
 

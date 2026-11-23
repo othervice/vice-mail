@@ -2,13 +2,15 @@
 //! to the keychain and never come back), the choice per function, the cloud permission per
 //! account, consent, the request log, the functions (summary, reply suggestion and its draft,
 //! writing help, questions), model list, connection test, cancelling, and the open-reply
-//! hints (no AI). Each one forwards to [`AppCore`]. Event: `aiRequest`.
+//! hints (no AI), and the dry run that shows the exact size before consent (decision 0028).
+//! Each one forwards to [`AppCore`]. Event: `aiRequest`.
 
 use mail_engine::AppCore;
 use mail_model::{
     AccountId, AiAnswer, AiAvailability, AiConnectionTest, AiFunction, AiModel, AiProfileInput,
-    AiReplySuggestion, AiRequestId, AiRequestPage, AiSettingsInfo, AiSummary, AiWritingResult,
-    AiWritingTask, Draft, IpcError, MessageId, OpenReplyHint, OpenReplySettings,
+    AiReplySuggestion, AiRequestId, AiRequestPage, AiSettingsInfo, AiSummary, AiTransfer,
+    AiTransferInput, AiWritingResult, AiWritingTask, Draft, IpcError, MessageId, OpenReplyHint,
+    OpenReplySettings,
 };
 use tauri::State;
 
@@ -228,6 +230,19 @@ pub async fn ai_ask(
     core.ai_ask(request_id, question, account_ids)
         .await
         .map_err(to_ipc("ai_ask"))
+}
+
+/// Decision 0028: what a function would send for this input (mails, bytes, accounts, host,
+/// model, trimming), prepared like the request but never sent; no consent needed.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_prepare_transfer(
+    core: State<'_, AppCore>,
+    input: AiTransferInput,
+) -> Result<AiTransfer, IpcError> {
+    core.ai_prepare_transfer(input)
+        .await
+        .map_err(to_ipc("ai_prepare_transfer"))
 }
 
 /// Open-reply hints over every account (no AI).

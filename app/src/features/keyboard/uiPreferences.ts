@@ -7,6 +7,7 @@ import {
   MIN_TEXT_SIZE,
   toCoreError,
   uiIpc,
+  type AiPanelState,
   type CoreWindowLayout,
   type PlatformShortcuts,
   type ShortcutOverride,
@@ -30,6 +31,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   shortcuts: { macos: [], windows: [] },
   textSize: DEFAULT_TEXT_SIZE,
   recentCommands: [],
+  aiPanel: "open",
 };
 
 export type PlatformOverrides = Record<ShortcutPlatform, ShortcutOverrides>;
@@ -92,6 +94,8 @@ export interface UiPreferencesChange {
   overrides?: PlatformOverrides;
   textSize?: number;
   recentCommands?: readonly string[];
+  /** Stage 13 (decision 0028): the AI panel unfolded or folded in, on this device. */
+  aiPanel?: AiPanelState;
 }
 
 let saves: Promise<unknown> = Promise.resolve();
@@ -119,6 +123,7 @@ export function saveUiPreferences(change: UiPreferencesChange): Promise<UiPrefer
       shortcuts: change.overrides ? overridesToCore(change.overrides, previous.shortcuts) : previous.shortcuts,
       textSize: change.textSize === undefined ? previous.textSize : clampTextSize(change.textSize),
       recentCommands: change.recentCommands ? cleanRecent(change.recentCommands) : previous.recentCommands,
+      aiPanel: change.aiPanel ?? previous.aiPanel,
     };
     await queryClient?.cancelQueries({ queryKey: uiPreferencesQueryKey });
     queryClient?.setQueryData(uiPreferencesQueryKey, next);

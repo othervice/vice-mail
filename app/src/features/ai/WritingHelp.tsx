@@ -7,6 +7,7 @@ import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { AI_LIMITS, aiIpc, type AiTargetLanguage, type AiTone, type AiWritingResult, type AiWritingTask } from "../../services/ipc";
 import { AiProgress, TransferSummary } from "./AiTransfer";
+import { AiLinkCheck, AiText } from "./AiText";
 import { ConsentStep } from "./ConsentStep";
 import { useAiAvailability } from "./queries";
 import { useAiRun } from "./useAiRun";
@@ -111,7 +112,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
       return;
     }
     setTarget(selection);
-    run.run((requestId) => aiIpc.writingHelp(requestId, selection.passage, task));
+    run.run((requestId) => aiIpc.writingHelp(requestId, selection.passage, task), { function: "writing_help", passage: selection.passage, task });
   };
   const discard = () => {
     run.reset();
@@ -250,6 +251,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
             <ConsentStep
               aiFunction="writing_help"
               profile={state.profile}
+              input={state.input}
               error={run.agreeError}
               onAgree={() => void run.agree()}
               onCancel={discard}
@@ -275,7 +277,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
                 <div className="flex flex-col gap-1">
                   <p className="text-12 text-secondary">{t("ai.writing.after")}</p>
                   <p className="text-13 break-words whitespace-pre-wrap text-primary" data-testid="ai-writing-after">
-                    {state.result.text}
+                    <AiText segments={state.result.segments} linkToken={state.result.linkToken} />
                   </p>
                 </div>
               </div>
@@ -292,6 +294,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
                   {t("ai.writing.discard")}
                 </Button>
               </div>
+              <AiLinkCheck linkToken={state.result.linkToken} />
               <TransferSummary transfers={[state.result.transfer]} />
             </section>
           )}

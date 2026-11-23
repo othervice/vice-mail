@@ -5,17 +5,28 @@
 //! source, so a mail cannot guess the token of another rendering. The register keeps the last
 //! [`RENDERINGS`] renderings; an older token is unknown (`not_found`), and the UI reloads the
 //! message.
+//!
+//! **Results of AI in the app** (decision 0028) are kept here too: the core finds the links in
+//! the text it returns itself ([`FoundLinks`], the same recognition as plain-text mail) and
+//! remembers them under a token of their own, so `describeLink`/`openLink` check and open
+//! them exactly like the links of a mail. The UI never hands a URL to the core. AI results
+//! have their own bound ([`AI_RESULTS`]), so they never push out the renderings of mail.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use mail_content::{LinkCheck, LinkTarget, LinkWarning as ContentWarning};
-use mail_model::{AccountId, CoreError, EmlFileId, LinkInfo, LinkWarning, MessageId, RenderToken};
+use mail_model::{
+    AccountId, CoreError, EmlFileId, LinkInfo, LinkWarning, MessageId, RenderToken, TextSegment,
+};
 
 /// Renderings whose links stay known.
 pub const RENDERINGS: usize = 32;
+/// AI results whose links stay known, besides the renderings.
+pub const AI_RESULTS: usize = 32;
 
-/// What a rendering shows: a stored message, or an opened `.eml` file (decision 0027).
+/// What a rendering shows: a stored message, an opened `.eml` file (decision 0027), or the
+/// text of an AI result with the accounts whose mail it was made from (decision 0028).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RenderOwner {
     Message {
@@ -23,6 +34,52 @@ pub(crate) enum RenderOwner {
         message: MessageId,
     },
     File(EmlFileId),
+    AiResult {
+        accounts: Vec<AccountId>,
+    },
+}
+
+impl RenderOwner {
+    /// Entries of the same kind share one bound.
+    fn is_ai(&self) -> bool {
+        matches!(self, Self::AiResult { .. })
+    }
+
+    fn limit(&self) -> usize {
+        if self.is_ai() { AI_RESULTS } else { RENDERINGS }
+    }
+}
+
+/// The links found in texts the core itself returns (AI results), numbered across all texts of
+/// one result. `segments` is the text for display; `link` segments point into the list.
+#[derive(Debug, Default)]
+pub(crate) struct FoundLinks {
+    links: Vec<LinkTarget>,
+}
+
+impl FoundLinks {
+    /// `text` as segments: `http(s)://`, `www.`, `mailto:` and bare e-mail addresses are
+    /// links (as in plain-text mail, `mail_content::render_text`), everything else text.
+    pub fn segments(&mut self, text: &str) -> Vec<TextSegment> {
+        let rendered = mail_content::render_text(text);
+        let offset = u32::try_from(self.links.len()).unwrap_or(u32::MAX);
+        let mut segments = super::view::text_segments(&rendered);
+        for segment in &mut segments {
+            if let TextSegment::Link { index, .. } = segment {
+                *index = index.saturating_add(offset);
+            }
+        }
+        self.links
+            .extend(rendered.links.into_iter().map(|link| LinkTarget {
+                index: link.index.saturating_add(offset),
+                ..link
+            }));
+        segments
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.links.is_empty()
+    }
 }
 
 /// One rendering and its links.
@@ -59,14 +116,41 @@ impl Renderings {
         RenderToken::from_random(u128::from_be_bytes(bytes))
     }
 
-    /// Remembers a rendering; the oldest beyond [`RENDERINGS`] is forgotten.
+    /// Remembers a rendering; the oldest of its kind beyond [`RENDERINGS`] (mail and files) or
+    /// [`AI_RESULTS`] is forgotten.
     pub fn insert(&self, token: RenderToken, rendering: Rendering) {
+        let ai = rendering.owner.is_ai();
+        let limit = rendering.owner.limit();
         let mut entries = self.lock();
         entries.retain(|(t, _)| *t != token);
         entries.push_back((token, Arc::new(rendering)));
-        while entries.len() > RENDERINGS {
-            entries.pop_front();
+        let mut count = entries
+            .iter()
+            .filter(|(_, r)| r.owner.is_ai() == ai)
+            .count();
+        while count > limit {
+            let Some(oldest) = entries.iter().position(|(_, r)| r.owner.is_ai() == ai) else {
+                break;
+            };
+            entries.remove(oldest);
+            count -= 1;
         }
+    }
+
+    /// Remembers the links of an AI result under a new token; `None` when it has none.
+    pub fn insert_found(&self, found: FoundLinks, accounts: Vec<AccountId>) -> Option<RenderToken> {
+        if found.is_empty() {
+            return None;
+        }
+        let token = Self::new_token();
+        self.insert(
+            token.clone(),
+            Rendering {
+                owner: RenderOwner::AiResult { accounts },
+                links: found.links,
+            },
+        );
+        Some(token)
     }
 
     pub fn get(&self, token: &RenderToken) -> Option<Arc<Rendering>> {
@@ -76,11 +160,13 @@ impl Renderings {
             .map(|(_, r)| Arc::clone(r))
     }
 
-    /// Forgets the renderings of an account (removed).
+    /// Forgets the renderings of an account (removed), and the AI results made from its mail.
     pub fn forget_account(&self, account: AccountId) {
-        self.lock().retain(
-            |(_, r)| !matches!(r.owner, RenderOwner::Message { account: a, .. } if a == account),
-        );
+        self.lock().retain(|(_, r)| match &r.owner {
+            RenderOwner::Message { account: a, .. } => *a != account,
+            RenderOwner::AiResult { accounts } => !accounts.contains(&account),
+            RenderOwner::File(_) => true,
+        });
     }
 
     /// Forgets the renderings of an opened file (its window closed).
@@ -205,6 +291,111 @@ mod tests {
         assert_eq!(err.code(), mail_model::ErrorCode::NotFound);
         let err = register.link(&last, 0).expect_err("unknown index");
         assert_eq!(err.code(), mail_model::ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn ai_results_have_their_own_bound_and_go_with_their_accounts() {
+        let register = Renderings::default();
+        let mail = Renderings::new_token();
+        register.insert(mail.clone(), rendering(&[("https://example.org/", "x")]));
+        // Not the account of the mail rendering.
+        let account: AccountId = "8f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+        let other: AccountId = "7f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+        let result = |accounts: Vec<AccountId>| {
+            let mut found = FoundLinks::default();
+            found.segments("see https://example.org/a");
+            register.insert_found(found, accounts).expect("token")
+        };
+        let first = result(vec![account]);
+        let mut last = first.clone();
+        for _ in 0..AI_RESULTS {
+            last = result(vec![other]);
+        }
+        assert!(
+            register.get(&first).is_none(),
+            "the oldest AI result is forgotten"
+        );
+        assert!(register.get(&last).is_some());
+        assert!(
+            register.get(&mail).is_some(),
+            "AI results never push out mail"
+        );
+        assert_eq!(
+            register.insert_found(FoundLinks::default(), vec![account]),
+            None,
+            "no links, no token"
+        );
+        let kept = result(vec![account, other]);
+        register.forget_account(account);
+        assert!(
+            register.get(&kept).is_none(),
+            "made from the removed account's mail"
+        );
+        assert!(register.get(&last).is_some());
+        assert!(
+            register.get(&mail).is_some(),
+            "the mail belongs to another account"
+        );
+    }
+
+    #[test]
+    fn found_links_are_numbered_across_the_texts_of_a_result() {
+        let mut found = FoundLinks::default();
+        let first = found.segments("Pay at https://pay.example/x or write to bob@friends.example.");
+        let second = found.segments("Plain <img src=https://evil.example/p.png> www.example.org");
+        assert_eq!(
+            first,
+            [
+                TextSegment::Text {
+                    text: "Pay at ".into()
+                },
+                TextSegment::Link {
+                    text: "https://pay.example/x".into(),
+                    index: 0
+                },
+                TextSegment::Text {
+                    text: " or write to ".into()
+                },
+                TextSegment::Link {
+                    text: "bob@friends.example".into(),
+                    index: 1
+                },
+                TextSegment::Text { text: ".".into() },
+            ]
+        );
+        // Markup stays text; an image address in it is a link to check like any other, never
+        // an image (nothing in a result is ever loaded).
+        assert_eq!(
+            second,
+            [
+                TextSegment::Text {
+                    text: "Plain <img src=".into()
+                },
+                TextSegment::Link {
+                    text: "https://evil.example/p.png".into(),
+                    index: 2
+                },
+                TextSegment::Text { text: "> ".into() },
+                TextSegment::Link {
+                    text: "www.example.org".into(),
+                    index: 3
+                },
+            ]
+        );
+        let hrefs: Vec<&str> = found.links.iter().map(|l| l.href.as_str()).collect();
+        assert_eq!(
+            hrefs,
+            [
+                "https://pay.example/x",
+                "mailto:bob@friends.example",
+                "https://evil.example/p.png",
+                "https://www.example.org"
+            ]
+        );
+        assert_eq!(
+            found.links.iter().map(|l| l.index).collect::<Vec<_>>(),
+            [0, 1, 2, 3]
+        );
     }
 
     #[test]

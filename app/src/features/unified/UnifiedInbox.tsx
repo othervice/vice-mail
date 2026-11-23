@@ -8,6 +8,7 @@ import { useUiStore } from "../../stores/ui";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
+import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { useUnifiedInboxSource } from "../comfort/listSources";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "./MixedReading";
@@ -79,6 +80,11 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           showRecipients={false}
           platform={platform}
           handle={list}
+          // Stage 9 (decision 0028): an AI source among these rows is selected here.
+          selectScope={MIXED_LIST_SCOPE}
+          onSelectedById={() => {
+            layout.onOpen();
+          }}
           onSelectionChange={(next) => {
             setSelection(next);
             const focusPane = layout.onSelectionChange(next);

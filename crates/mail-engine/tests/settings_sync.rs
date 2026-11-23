@@ -1300,6 +1300,7 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         },
         text_size: 130,
         recent_commands: vec!["action:archive".into()],
+        ai_panel: mail_model::AiPanelState::Folded,
     };
     a.core
         .set_ui_preferences(prefs.clone())
@@ -1323,6 +1324,11 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
     assert!(
         taken.recent_commands.is_empty(),
         "the palette history stays on its device"
+    );
+    assert_eq!(
+        taken.ai_panel,
+        mail_model::AiPanelState::Open,
+        "the AI panel's state stays on its device (decision 0028)"
     );
     assert_eq!(
         b.core.get_window_layout("main").await.expect("layout"),

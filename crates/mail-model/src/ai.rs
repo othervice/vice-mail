@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use specta_typescript::Number;
 
-use crate::{AccountId, Address, ErrorCode, MessageId};
+use crate::{AccountId, Address, ErrorCode, MessageId, RenderToken, TextSegment};
 
 /// Most entries one `listAiRequests` page returns.
 pub const MAX_AI_REQUEST_PAGE: u32 = 500;
@@ -314,6 +314,9 @@ pub struct AiRequestPage {
 #[serde(rename_all = "camelCase")]
 pub struct AiClaim {
     pub text: String,
+    /// `text` for display (decision 0028): links the core found are `link` segments, opened
+    /// only through `describeLink`/`openLink` with the result's `linkToken`.
+    pub segments: Vec<TextSegment>,
     pub sources: Vec<MessageId>,
 }
 
@@ -321,6 +324,8 @@ pub struct AiClaim {
 #[serde(rename_all = "camelCase")]
 pub struct AiDeadline {
     pub text: String,
+    /// `text` for display, as in [`AiClaim::segments`].
+    pub segments: Vec<TextSegment>,
     /// As the message states it ("Friday", "30.11.").
     pub due: String,
     pub sources: Vec<MessageId>,
@@ -336,6 +341,9 @@ pub struct AiSummary {
     /// Statements dropped because they named no message that was sent.
     pub dropped: u32,
     pub transfer: AiTransfer,
+    /// The token of the links in the segments of this result (decision 0028); `null` when the
+    /// result has none.
+    pub link_token: Option<RenderToken>,
 }
 
 /// A reply suggestion; "open draft" (`aiOpenReplyDraft`) turns it into an editable draft.
@@ -343,9 +351,13 @@ pub struct AiSummary {
 #[serde(rename_all = "camelCase")]
 pub struct AiReplySuggestion {
     pub text: String,
+    /// `text` with its links as segments (decision 0028).
+    pub segments: Vec<TextSegment>,
     /// The message the reply answers.
     pub in_reply_to: MessageId,
     pub transfer: AiTransfer,
+    /// See [`AiSummary::link_token`].
+    pub link_token: Option<RenderToken>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -392,7 +404,48 @@ pub enum AiWritingTask {
 #[serde(rename_all = "camelCase")]
 pub struct AiWritingResult {
     pub text: String,
+    /// `text` with its links as segments (decision 0028).
+    pub segments: Vec<TextSegment>,
     pub transfer: AiTransfer,
+    /// See [`AiSummary::link_token`].
+    pub link_token: Option<RenderToken>,
+}
+
+/// What `aiPrepareTransfer` prepares without sending (decision 0028): a function with the
+/// input it would get. The tag is the function's name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(
+    tag = "function",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum AiTransferInput {
+    Summary {
+        message_id: MessageId,
+    },
+    ReplySuggestion {
+        message_id: MessageId,
+    },
+    WritingHelp {
+        passage: String,
+        task: AiWritingTask,
+    },
+    /// The first request of a question (the question alone). The candidates follow in a second
+    /// request whose size is known only after the local search; `aiRequest` announces it.
+    Search {
+        question: String,
+    },
+}
+
+impl AiTransferInput {
+    pub const fn function(&self) -> AiFunction {
+        match self {
+            Self::Summary { .. } => AiFunction::Summary,
+            Self::ReplySuggestion { .. } => AiFunction::ReplySuggestion,
+            Self::WritingHelp { .. } => AiFunction::WritingHelp,
+            Self::Search { .. } => AiFunction::Search,
+        }
+    }
 }
 
 /// The answer to a question in natural language.
@@ -413,6 +466,8 @@ pub struct AiAnswer {
     pub dropped: u32,
     /// One per request sent.
     pub transfers: Vec<AiTransfer>,
+    /// See [`AiSummary::link_token`].
+    pub link_token: Option<RenderToken>,
 }
 
 /// A model of a provider.
@@ -553,5 +608,86 @@ impl AiFailure {
                 (!d.is_empty()).then(|| d.clone())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn transfer_inputs_are_tagged_with_the_function() {
+        let cases = [
+            (
+                json!({ "function": "summary", "messageId": 7 }),
+                AiTransferInput::Summary {
+                    message_id: MessageId(7),
+                },
+            ),
+            (
+                json!({ "function": "reply_suggestion", "messageId": 8 }),
+                AiTransferInput::ReplySuggestion {
+                    message_id: MessageId(8),
+                },
+            ),
+            (
+                json!({ "function": "writing_help", "passage": "hi", "task": { "type": "shorten" } }),
+                AiTransferInput::WritingHelp {
+                    passage: "hi".into(),
+                    task: AiWritingTask::Shorten,
+                },
+            ),
+            (
+                json!({ "function": "search", "question": "Where?" }),
+                AiTransferInput::Search {
+                    question: "Where?".into(),
+                },
+            ),
+        ];
+        for (wire, input) in cases {
+            assert_eq!(serde_json::to_value(&input).expect("json"), wire);
+            let function = input.function();
+            assert_eq!(
+                serde_json::to_value(function).expect("json"),
+                wire["function"]
+            );
+            assert_eq!(
+                serde_json::from_value::<AiTransferInput>(wire).expect("parse"),
+                input
+            );
+        }
+        assert!(
+            serde_json::from_value::<AiTransferInput>(json!({ "function": "everything" })).is_err()
+        );
+    }
+
+    #[test]
+    fn claims_carry_their_segments_and_results_their_link_token() {
+        let claim = AiClaim {
+            text: "See https://example.org".into(),
+            segments: vec![
+                TextSegment::Text {
+                    text: "See ".into(),
+                },
+                TextSegment::Link {
+                    text: "https://example.org".into(),
+                    index: 0,
+                },
+            ],
+            sources: vec![MessageId(1)],
+        };
+        assert_eq!(
+            serde_json::to_value(&claim).expect("json"),
+            json!({
+                "text": "See https://example.org",
+                "segments": [
+                    { "kind": "text", "text": "See " },
+                    { "kind": "link", "text": "https://example.org", "index": 0 }
+                ],
+                "sources": [1]
+            })
+        );
     }
 }

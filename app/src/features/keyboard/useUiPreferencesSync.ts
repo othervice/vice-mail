@@ -1,6 +1,7 @@
 import { hashKey, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { uiIpc, type CoreError, type CoreEvent, type CoreWindowLayout, type UiPreferences } from "../../services/ipc";
+import { useAiPanelStore } from "../../stores/aiPanel";
 import { useLayoutStore } from "../../stores/layout";
 import { usePaletteStore } from "../../stores/palette";
 import { useShortcutStore } from "../../stores/shortcuts";
@@ -12,6 +13,7 @@ function applyUiPreferences(preferences: UiPreferences): void {
   useShortcutStore.getState().applyStored(overridesFromCore(preferences.shortcuts));
   usePaletteStore.getState().applyStored(preferences.recentCommands);
   useLayoutStore.getState().applyStoredTextSize(preferences.textSize);
+  useAiPanelStore.getState().applyStored(preferences.aiPanel);
 }
 
 /** `uiPreferencesChanged`: another window or (via the settings sync) another device saved them. */

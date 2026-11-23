@@ -24,6 +24,7 @@ import {
   type CoreError,
   type MessageId,
   type MessageListItem,
+  type RenderToken,
 } from "../../services/ipc";
 import { currentActionTarget, useActionTargetStore } from "../../stores/actionTarget";
 import { useAiPanelStore } from "../../stores/aiPanel";
@@ -32,6 +33,7 @@ import { useSearchStore } from "../../stores/search";
 import { useUiStore } from "../../stores/ui";
 import { useAccounts } from "../accounts/queries";
 import { threadQueryKey } from "../threads/queries";
+import { AiLinkCheck, AiLinkList, AiText } from "./AiText";
 import { AiProgress, isLocal, TransferSummary } from "./AiTransfer";
 import { ConsentStep } from "./ConsentStep";
 import { OpenReplyHintList } from "./OpenReplyHints";
@@ -105,7 +107,18 @@ export function numberSources(claims: readonly AiClaim[]): Map<MessageId, number
  * The mails a statement rests on, as buttons that show the mail in the thread, or (decision 0027)
  * in a window of its own when the thread pane does not have it.
  */
-function Sources({ sources, labels, numbers }: { sources: readonly MessageId[]; labels: Map<MessageId, string>; numbers: Map<MessageId, number> }) {
+function Sources({
+  sources,
+  labels,
+  numbers,
+  inList = true,
+}: {
+  sources: readonly MessageId[];
+  labels: Map<MessageId, string>;
+  numbers: Map<MessageId, number>;
+  /** False for a summary: selecting another row of the list would bind the panel to it. */
+  inList?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <span className="mt-1 flex flex-wrap gap-1" aria-label={t("ai.sources.title")} role="group">
@@ -116,7 +129,7 @@ function Sources({ sources, labels, numbers }: { sources: readonly MessageId[]; 
             key={id}
             type="button"
             onClick={() => {
-              void openSource(id);
+              void openSource(id, { inList });
             }}
             aria-label={t("ai.sources.show", { label })}
             className="rounded-control border border-border px-2 text-12 text-secondary hover:bg-hover hover:text-primary"
@@ -131,8 +144,25 @@ function Sources({ sources, labels, numbers }: { sources: readonly MessageId[]; 
   );
 }
 
-/** AI text is untrusted: a text node only, never HTML, never an image, links stay text. */
-function ClaimList({ title, claims, labels, numbers, ...rest }: { title: string; claims: readonly (AiClaim & { due?: string })[]; labels: Map<MessageId, string>; numbers: Map<MessageId, number>; "data-testid": string }) {
+/**
+ * AI text is untrusted: text nodes only, never HTML, never an image; links the core found open
+ * only through the link check (decision 0028).
+ */
+function ClaimList({
+  title,
+  claims,
+  labels,
+  numbers,
+  linkToken,
+  ...rest
+}: {
+  title: string;
+  claims: readonly (AiClaim & { due?: string })[];
+  labels: Map<MessageId, string>;
+  numbers: Map<MessageId, number>;
+  linkToken: RenderToken | null;
+  "data-testid": string;
+}) {
   const { t } = useTranslation();
   if (claims.length === 0) return null;
   return (
@@ -142,9 +172,10 @@ function ClaimList({ title, claims, labels, numbers, ...rest }: { title: string;
         {claims.map((claim, index) => (
           <li key={index} className="flex flex-col text-13 text-primary" data-testid="ai-claim">
             <span className="break-words whitespace-pre-wrap">
-              {claim.due !== undefined ? t("ai.summary.deadline", { text: claim.text, due: claim.due }) : claim.text}
+              <AiText segments={claim.segments} linkToken={linkToken} />
+              {claim.due !== undefined && ` ${t("ai.summary.due", { due: claim.due })}`}
             </span>
-            <Sources sources={claim.sources} labels={labels} numbers={numbers} />
+            <Sources sources={claim.sources} labels={labels} numbers={numbers} inList={false} />
           </li>
         ))}
       </ul>
@@ -169,14 +200,15 @@ function SummaryCard({ summary, account, messageId }: { summary: AiSummary; acco
   return (
     <Card title={t("ai.summary.title")} data-testid="ai-summary">
       {empty && <p className="text-13 text-secondary">{t("ai.summary.empty")}</p>}
-      <ClaimList title={t("ai.summary.keyPoints")} claims={summary.keyPoints} labels={labels} numbers={numbers} data-testid="ai-key-points" />
-      <ClaimList title={t("ai.summary.openQuestions")} claims={summary.openQuestions} labels={labels} numbers={numbers} data-testid="ai-open-questions" />
-      <ClaimList title={t("ai.summary.deadlines")} claims={summary.deadlines} labels={labels} numbers={numbers} data-testid="ai-deadlines" />
+      <ClaimList title={t("ai.summary.keyPoints")} claims={summary.keyPoints} labels={labels} numbers={numbers} linkToken={summary.linkToken} data-testid="ai-key-points" />
+      <ClaimList title={t("ai.summary.openQuestions")} claims={summary.openQuestions} labels={labels} numbers={numbers} linkToken={summary.linkToken} data-testid="ai-open-questions" />
+      <ClaimList title={t("ai.summary.deadlines")} claims={summary.deadlines} labels={labels} numbers={numbers} linkToken={summary.linkToken} data-testid="ai-deadlines" />
       {summary.dropped > 0 && (
         <p className="text-12 text-secondary" data-testid="ai-dropped">
           {t("ai.summary.dropped", { count: summary.dropped })}
         </p>
       )}
+      <AiLinkCheck linkToken={summary.linkToken} />
       <TransferSummary transfers={[summary.transfer]} />
     </Card>
   );
@@ -222,6 +254,8 @@ function ReplyCard({ suggestion }: { suggestion: AiReplySuggestion }) {
         </Button>
       </div>
       {error && <ErrorNotice context={t("ai.reply.openFailed")} error={error} />}
+      <AiLinkList segments={suggestion.segments} linkToken={suggestion.linkToken} />
+      <AiLinkCheck linkToken={suggestion.linkToken} />
       <TransferSummary transfers={[suggestion.transfer]} />
     </Card>
   );
@@ -237,6 +271,7 @@ function RunState<T>({ run, aiFunction, context }: { run: AiRun<T>; aiFunction: 
       <ConsentStep
         aiFunction={aiFunction}
         profile={state.profile}
+        input={state.input}
         error={run.agreeError}
         onAgree={() => void run.agree()}
         onCancel={run.cancel}
@@ -308,10 +343,10 @@ function ThreadTools({ item, account, availability, settings }: { item: MessageL
   const blocked = (availability.summary && summaryBlocked) || (availability.replySuggestion && replyBlocked);
   const busy = (run: { state: { kind: string } }) => run.state.kind === "running" || run.state.kind === "consent";
   const startSummary = () => {
-    summary.run((requestId) => aiIpc.summarizeThread(requestId, item.id));
+    summary.run((requestId) => aiIpc.summarizeThread(requestId, item.id), { function: "summary", messageId: item.id });
   };
   const startReply = () => {
-    reply.run((requestId) => aiIpc.suggestReply(requestId, item.id));
+    reply.run((requestId) => aiIpc.suggestReply(requestId, item.id), { function: "reply_suggestion", messageId: item.id });
   };
   // Stage 8 palette: "Summarize" and "Suggest a reply" run here, where their progress shows.
   const command = useAiPanelStore((state) => state.command);
@@ -381,7 +416,9 @@ function AnswerCard({ answer, leftOut }: { answer: AiAnswer; leftOut: number }) 
         <ul className="flex flex-col gap-2">
           {answer.statements.map((claim, index) => (
             <li key={index} className="flex flex-col text-13 text-primary" data-testid="ai-claim">
-              <span className="break-words whitespace-pre-wrap">{claim.text}</span>
+              <span className="break-words whitespace-pre-wrap">
+                <AiText segments={claim.segments} linkToken={answer.linkToken} />
+              </span>
               <Sources sources={claim.sources} labels={labels} numbers={numbers} />
             </li>
           ))}
@@ -398,6 +435,7 @@ function AnswerCard({ answer, leftOut }: { answer: AiAnswer; leftOut: number }) 
         </p>
       )}
       {answer.dropped > 0 && <p className="text-12 text-secondary">{t("ai.summary.dropped", { count: answer.dropped })}</p>}
+      <AiLinkCheck linkToken={answer.linkToken} />
       {answer.query && (
         <div>
           <Button
@@ -452,7 +490,7 @@ function AskBox({ account, settings }: { account: Account | null; settings: AiSe
     // those alone and says how many it left out.
     const accountIds = cloud ? allowed : scope === "account" && account ? [account.id] : null;
     setLeftOut(cloud ? inScope.length - allowed.length : 0);
-    ask.run((requestId) => aiIpc.ask(requestId, text, accountIds));
+    ask.run((requestId) => aiIpc.ask(requestId, text, accountIds), { function: "search", question: text });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

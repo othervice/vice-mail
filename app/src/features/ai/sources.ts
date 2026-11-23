@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { emlIpc, MAX_MESSAGES_BY_IDS, toCoreError, type MessageId, type MessageListItem } from "../../services/ipc";
 import { currentActionTarget, useActionTargetStore } from "../../stores/actionTarget";
 import { useAiPanelStore } from "../../stores/aiPanel";
+import { selectInList } from "../../stores/listSelect";
 import { useNoticeStore } from "../../stores/notices";
 import { formatFullDate } from "../messages/rows";
 import { openMessageInWindow } from "../windows/open";
@@ -55,10 +56,12 @@ export function useSourceItems(ids: readonly MessageId[]): Map<MessageId, Messag
 
 /**
  * A click on a source: the main window shows it when it has the message (the selected one, or
- * one of the open thread, which then selects it); otherwise the message opens in a window of
- * its own. A message that is gone is a notice with the reason.
+ * one of the open thread, which then selects it; decision 0028: or a row the list has loaded,
+ * which it selects and opens); otherwise the message opens in a window of its own. A message
+ * that is gone is a notice with the reason. `inList: false` leaves the list alone (a summary's
+ * sources: selecting another row would bind the panel to that message).
  */
-export async function openSource(messageId: MessageId): Promise<void> {
+export async function openSource(messageId: MessageId, options: { inList?: boolean } = {}): Promise<void> {
   const panel = useAiPanelStore.getState();
   const items = currentActionTarget(useActionTargetStore.getState().targets)?.ctx?.items ?? [];
   const selected = items.length === 1 && items[0]?.id === messageId;
@@ -66,6 +69,7 @@ export async function openSource(messageId: MessageId): Promise<void> {
     panel.showSource(messageId);
     return;
   }
+  if (options.inList !== false && selectInList(messageId)) return;
   try {
     const [item] = await emlIpc.getMessagesByIds([messageId]);
     if (item) {

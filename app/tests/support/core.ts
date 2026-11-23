@@ -36,6 +36,7 @@ import type {
   DiscoveryResult,
   IpcError,
   LinkInfo,
+  LinkOpened,
   Mailbox,
   MailboxRole,
   MessageBody,
@@ -263,6 +264,8 @@ interface FakeCoreOptions {
   remoteViews?: Record<number, MessageView>;
   /** `describeLink` answers by `<renderToken>/<index>`. Unknown: `not_found` (a forgotten rendering). */
   links?: Record<string, LinkInfo>;
+  /** Decision 0028: `openLink` answers by `<renderToken>/<index>`; default: opened in the system. */
+  linkOpened?: Record<string, LinkOpened>;
   /** `saveAttachment` answers by `<messageId>/<index>`; default: saved under ~/Downloads. */
   saveResults?: Record<string, SaveAttachmentResult>;
   /** `openAttachment` answers by `<messageId>/<index>`; default: by the view's `executable`. */
@@ -796,7 +799,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           return link ?? Promise.reject(ipcError("not_found"));
         }
         case "open_link":
-          return { kind: "opened" };
+          return options.linkOpened?.[`${String(args["renderToken"])}/${String(args["index"])}`] ?? { kind: "opened" };
         case "save_attachment":
           return (
             options.saveResults?.[`${String(args["messageId"])}/${String(args["index"])}`] ?? {

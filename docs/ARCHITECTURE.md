@@ -141,7 +141,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
-| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung) | sync bzw. Gerät |
+| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung) | sync bzw. Gerät |
 | `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
 | `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
@@ -349,6 +349,10 @@ einer klaren Meldung abgelehnt.
    der Kern; ein Platzhalter mit fremdem Token aus der Mail selbst wird ebenfalls umgeschrieben)
    und entfernt `<link>`, `target`, `ping` und `download`: `<link rel=preconnect>` und Klicks auf
    `target=_blank` öffnen sonst TCP-Verbindungen, die weder Sandbox noch CSP verhindern (0005).
+   Links in KI-Ausgaben (0028) findet der Kern selbst im Text, den er zurückgibt, und hält sie
+   unter einem eigenen Token im selben Register (höchstens 32 Ergebnisse neben den 32
+   Darstellungen); die Oberfläche bekommt Segmente und öffnet einen Link nur über
+   `describeLink`/`openLink` mit Token und Index, nie mit einer URL.
 6. Die CSP der App erlaubt für die Mail-Anzeige `style-src 'self' 'unsafe-inline'` (sonst greift kein
    Mail-CSS) und `frame-src 'self' http: https:` (sonst verwirft WebKit Link-Navigationen, bevor der
    Hook sie sieht); Scripts bleiben auf `'self'` beschränkt. Unter WebView2 ist offen, ob der Hook
@@ -531,7 +535,8 @@ die kompatible Schnittstelle sind Ablehnungen nicht erkennbar (0019). Crate `mai
 - Mail-Inhalte sind Daten, keine Anweisungen: fester Systemtext im Code, Mailtext klar abgegrenzt im Nutzerteil.
 - Das eingebaute Modell bekommt keine Werkzeuge. Es kann also strukturell nichts senden, löschen oder abrufen.
 - Ausgaben werden als Text angezeigt. Bilder aus KI-Ausgaben werden nie geladen, Links laufen durch
-  dieselbe Prüfung wie Links in Mails.
+  dieselbe Prüfung wie Links in Mails (0028: der Kern erkennt sie im eigenen Ergebnis wie in
+  Mails im Textformat, `segments` und `linkToken` je Ergebnis, `describeLink`/`openLink`).
 - Gesendet wird nur, was die Anfrage braucht: der aktuelle Thread ohne doppelte Zitate und ohne
   Anhänge. Nie das ganze Postfach ohne ausdrückliche Bestätigung mit Mengenangabe.
 
@@ -544,7 +549,11 @@ gesendete Mails, Antwortvorschläge und Schreibhilfe als Text. Ein Antwortvorsch
 Klick des Nutzers zu einem normalen Entwurf (Stufe 5). Hinweise auf offene Antworten sind Regeln
 ohne KI. Jede gespeicherte Änderung der Einstellungen meldet `aiSettingsChanged` mit der
 Verfügbarkeit danach an alle Fenster (0027). Quellen einer Antwort benennt und öffnet die
-Oberfläche über `getMessagesByIds` (höchstens 200 IDs, unbekannte fehlen).
+Oberfläche über `getMessagesByIds` (höchstens 200 IDs, unbekannte fehlen). Vor der Zustimmung zeigt
+der Zustimmungsschritt die genaue Größe aus einem Probelauf (`aiPrepareTransfer`, 0028): dieselbe
+Vorbereitung wie die Anfrage, ohne Zustimmung, ohne Ereignis, ohne Protokoll und ohne Verbindung
+zum Anbieter; bei Fragen die erste der zwei Anfragen. Ob das KI-Panel auf- oder zugeklappt ist,
+steht in den Oberflächen-Einstellungen des Kerns (`aiPanel`, nur auf diesem Gerät).
 
 ## Tastaturkürzel
 

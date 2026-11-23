@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { comfortIpc, type CoreEvent, type NotificationTexts } from "../../services/ipc";
 import { useAiPanelStore } from "../../stores/aiPanel";
+import { selectWhenListed } from "../../stores/listSelect";
 import { useNoticeStore } from "../../stores/notices";
 import { useUiStore } from "../../stores/ui";
 import { openMessageInWindow } from "../windows/open";
@@ -13,9 +14,10 @@ import { handleInboxChanged, refreshComfortListsOf } from "./queries";
  * Stage 9 events: `inboxChanged` (pins, snoozes, tasks or categories changed, a snooze came
  * back) and `messagesChanged` reload the sorted inbox and the mark views; `ruleSkipped` says
  * which local rule could not act and why; a click on a system notification
- * (`openMessageRequested`) brings its folder to the front and opens the mail (decision 0027):
- * in the thread pane when it shows the mail already, else in a window of its own (the list
- * cannot select a message it may not have loaded).
+ * (`openMessageRequested`) brings its folder to the front and opens the mail (decisions 0027,
+ * 0028): in the thread pane when it shows the mail already, else selected in the folder's list
+ * once that has loaded it, else in a window of its own (the list is paged; the mail may be on
+ * no loaded page).
  */
 export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): void {
   switch (event.type) {
@@ -43,8 +45,19 @@ export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): 
         ui.showMailView("inbox");
       }
       const panel = useAiPanelStore.getState();
-      if (sameFolder && panel.shownSources.includes(event.messageId)) panel.showSource(event.messageId);
-      else openMessageInWindow(event.accountId, event.messageId);
+      if (sameFolder && panel.shownSources.includes(event.messageId)) {
+        panel.showSource(event.messageId);
+        break;
+      }
+      const { accountId, mailboxId, messageId } = event;
+      selectWhenListed({
+        accountId,
+        mailboxId,
+        messageId,
+        fallback: () => {
+          openMessageInWindow(accountId, messageId);
+        },
+      });
       break;
     }
     default:

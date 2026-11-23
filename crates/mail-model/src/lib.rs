@@ -52,10 +52,10 @@ pub use ai::{
     AiClaim, AiConnectionTest, AiDeadline, AiFailure, AiFunction, AiFunctionChoice, AiKeyChange,
     AiLocality, AiModel, AiPreset, AiProfileInfo, AiProfileInput, AiProviderKind,
     AiReplySuggestion, AiRequestEntry, AiRequestId, AiRequestOutcome, AiRequestPage,
-    AiRequestPhase, AiSettingsInfo, AiSummary, AiTargetLanguage, AiTone, AiTransfer, AiTrimming,
-    AiWritingResult, AiWritingTask, MAX_AI_PASSAGE_CHARS, MAX_AI_PROFILE_NAME_CHARS,
-    MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS, MAX_AI_REQUEST_ID_CHARS, MAX_AI_REQUEST_PAGE,
-    OpenReplyHint, OpenReplyKind, OpenReplySettings,
+    AiRequestPhase, AiSettingsInfo, AiSummary, AiTargetLanguage, AiTone, AiTransfer,
+    AiTransferInput, AiTrimming, AiWritingResult, AiWritingTask, MAX_AI_PASSAGE_CHARS,
+    MAX_AI_PROFILE_NAME_CHARS, MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS, MAX_AI_REQUEST_ID_CHARS,
+    MAX_AI_REQUEST_PAGE, OpenReplyHint, OpenReplyKind, OpenReplySettings,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,
@@ -166,7 +166,7 @@ pub use snippets::{
     TemplateInfo, TemplateInput,
 };
 pub use ui::{
-    DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS,
+    AiPanelState, DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS,
     MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES,
     MAX_SHORTCUTS_PER_COMMAND, MAX_TEXT_SIZE, MIN_TEXT_SIZE, PlatformShortcuts,
     ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences,

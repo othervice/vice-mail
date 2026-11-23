@@ -11,6 +11,7 @@ import { useActionTargetStore } from "../src/stores/actionTarget";
 import { useAiPanelStore } from "../src/stores/aiPanel";
 import { useAiRequestStore } from "../src/stores/aiRequests";
 import { useLayoutStore } from "../src/stores/layout";
+import { resetListSelectForTests } from "../src/stores/listSelect";
 import { usePaletteStore } from "../src/stores/palette";
 import { useShortcutStore } from "../src/stores/shortcuts";
 import { installSystemFakes, resetSystem } from "./support/system";
@@ -46,6 +47,8 @@ afterEach(() => {
   // Stage 13: the AI panel (open by default) and the progress of AI requests.
   useAiPanelStore.setState({ ...useAiPanelStore.getInitialState(), open: true }, true);
   useAiRequestStore.setState(useAiRequestStore.getInitialState(), true);
+  // Stage 9: lists that select messages by id, and a request waiting for one (decision 0028).
+  resetListSelectForTests();
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];
   const root = document.documentElement;

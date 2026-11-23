@@ -5,15 +5,19 @@ import { parseStoredOverrides } from "../../stores/shortcuts";
 import { readLocal, removeLocal, type LocalKey } from "./localFallback";
 import { DEFAULT_UI_PREFERENCES, saveUiPreferences, saveWindowLayout, type UiPreferencesChange } from "./uiPreferences";
 
-/** The keys the stage 8 fallback used (the main window's layout under `layout.main`). */
-const LEGACY_KEYS: readonly LocalKey[] = ["shortcuts", "paletteRecent", "layout.main"];
+/**
+ * The keys the stage 8 fallback used (the main window's layout under `layout.main`), and the AI
+ * panel's state of stage 13 until decision 0028.
+ */
+const LEGACY_KEYS: readonly LocalKey[] = ["shortcuts", "paletteRecent", "layout.main", "layout.aiPanel"];
 
 function isDefaultPreferences(preferences: UiPreferences): boolean {
   return (
     preferences.shortcuts.macos.length === 0 &&
     preferences.shortcuts.windows.length === 0 &&
     preferences.textSize === DEFAULT_UI_PREFERENCES.textSize &&
-    preferences.recentCommands.length === 0
+    preferences.recentCommands.length === 0 &&
+    preferences.aiPanel === DEFAULT_UI_PREFERENCES.aiPanel
   );
 }
 
@@ -37,7 +41,7 @@ function isDefaultLayout(layout: CoreWindowLayout): boolean {
 export async function migrateLocalFallback(preferences: UiPreferences, layout: CoreWindowLayout): Promise<boolean> {
   const raw = LEGACY_KEYS.map((key) => readLocal(key));
   if (raw.every((value) => value === null)) return false;
-  const [shortcuts, recent, legacyLayout] = raw;
+  const [shortcuts, recent, legacyLayout, aiPanel] = raw;
 
   const change: UiPreferencesChange = {};
   if (isDefaultPreferences(preferences)) {
@@ -49,6 +53,8 @@ export async function migrateLocalFallback(preferences: UiPreferences, layout: C
       const { textSize } = parseStoredLayout(legacyLayout);
       if (textSize !== DEFAULT_UI_PREFERENCES.textSize) change.textSize = textSize;
     }
+    // The panel was stored as `open: boolean`; only "folded" differs from the default.
+    if (aiPanel === false) change.aiPanel = "folded";
   }
   const stored = legacyLayout === null ? null : parseStoredLayout(legacyLayout);
   const layoutChange =

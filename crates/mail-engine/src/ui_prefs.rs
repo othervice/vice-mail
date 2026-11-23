@@ -5,6 +5,7 @@
 //! | `ui.shortcuts.macos`, `ui.shortcuts.windows` | changed commands of one platform | synced |
 //! | `ui.text_size` | percent, 80 to 150 | synced |
 //! | `ui.recent_commands` | palette entry keys, newest first | device |
+//! | `ui.ai_panel` | the AI panel unfolded or folded in (decision 0028) | device |
 //! | `ui.layout.<slot>` | [`WindowLayout`] of one kind of window | device |
 //!
 //! One key per platform, so a change on the Mac and one on a Windows machine never compete for
@@ -13,9 +14,9 @@
 //! before they are stored, so a stored list always fits into a sync record.
 
 use mail_model::{
-    CoreError, CoreEvent, DEFAULT_TEXT_SIZE, PlatformShortcuts, Shortcut, ShortcutOverride,
-    ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout, validate_layout_slot,
-    validate_overrides, validate_recent_commands,
+    AiPanelState, CoreError, CoreEvent, DEFAULT_TEXT_SIZE, PlatformShortcuts, Shortcut,
+    ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
+    validate_layout_slot, validate_overrides, validate_recent_commands,
 };
 use mail_store::GLOBAL_SCOPE;
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,9 @@ pub(crate) const SHORTCUTS_MACOS_KEY: &str = "ui.shortcuts.macos";
 pub(crate) const SHORTCUTS_WINDOWS_KEY: &str = "ui.shortcuts.windows";
 pub(crate) const TEXT_SIZE_KEY: &str = "ui.text_size";
 pub(crate) const RECENT_COMMANDS_KEY: &str = "ui.recent_commands";
+/// Device only (decision 0028): AI in the app is set up per device (0024), and the panel is
+/// part of the window's layout, which stays on the device too (0025).
+pub(crate) const AI_PANEL_KEY: &str = "ui.ai_panel";
 const LAYOUT_PREFIX: &str = "ui.layout.";
 
 /// The stored form of one changed command.
@@ -161,6 +165,13 @@ fn decode_recent(json: &str) -> Vec<String> {
     }
 }
 
+fn decode_ai_panel(json: &str) -> AiPanelState {
+    serde_json::from_str(json).unwrap_or_else(|err| {
+        tracing::warn!(key = AI_PANEL_KEY, %err, "stored AI panel state unreadable, using open");
+        AiPanelState::default()
+    })
+}
+
 fn decode_layout(key: &str, json: &str) -> WindowLayout {
     serde_json::from_str(json).unwrap_or_else(|err| {
         tracing::warn!(key, %err, "stored window layout unreadable, using the default");
@@ -196,6 +207,7 @@ impl<C: Connector> AppCore<C> {
                 }
                 TEXT_SIZE_KEY => prefs.text_size = decode_text_size(value),
                 RECENT_COMMANDS_KEY => prefs.recent_commands = decode_recent(value),
+                AI_PANEL_KEY => prefs.ai_panel = decode_ai_panel(value),
                 _ => {}
             }
         }
@@ -227,6 +239,7 @@ impl<C: Connector> AppCore<C> {
                 RECENT_COMMANDS_KEY.to_owned(),
                 encode(&preferences.recent_commands)?,
             ),
+            (AI_PANEL_KEY.to_owned(), encode(&preferences.ai_panel)?),
         ];
         self.store_ref()?
             .put_settings(GLOBAL_SCOPE, entries)

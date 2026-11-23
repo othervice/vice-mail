@@ -457,6 +457,11 @@ export const commands = {
 	aiWritingHelp: (requestId: string, passage: string, task: AiWritingTask, options?: InvokeOptions) => typedError<AiWritingResult, IpcError>(__TAURI_INVOKE("ai_writing_help", { requestId, passage, task }, options)),
 	/**  A question in natural language over the given accounts (`null`: all). */
 	aiAsk: (requestId: string, question: string, accountIds: AccountId[] | null, options?: InvokeOptions) => typedError<AiAnswer, IpcError>(__TAURI_INVOKE("ai_ask", { requestId, question, accountIds }, options)),
+	/**
+	 *  Decision 0028: what a function would send for this input (mails, bytes, accounts, host,
+	 *  model, trimming), prepared like the request but never sent; no consent needed.
+	 */
+	aiPrepareTransfer: (input: AiTransferInput, options?: InvokeOptions) => typedError<AiTransfer, IpcError>(__TAURI_INVOKE("ai_prepare_transfer", { input }, options)),
 	/**  Open-reply hints over every account (no AI). */
 	listOpenReplyHints: (options?: InvokeOptions) => typedError<OpenReplyHint[], IpcError>(__TAURI_INVOKE("list_open_reply_hints", undefined, options)),
 	/**  Dismisses the hint of a message for good. */
@@ -727,6 +732,8 @@ export type AiAnswer = {
 	dropped: number,
 	/**  One per request sent. */
 	transfers: AiTransfer[],
+	/**  See [`AiSummary::link_token`]. */
+	linkToken: RenderToken | null,
 };
 
 /**
@@ -744,6 +751,11 @@ export type AiAvailability = {
 /**  A statement with the messages it is based on (each one exists and was sent). */
 export type AiClaim = {
 	text: string,
+	/**
+	 *  `text` for display (decision 0028): links the core found are `link` segments, opened
+	 *  only through `describeLink`/`openLink` with the result's `linkToken`.
+	 */
+	segments: TextSegment[],
 	sources: MessageId[],
 };
 
@@ -761,6 +773,8 @@ export type AiConnectionTest = {
 
 export type AiDeadline = {
 	text: string,
+	/**  `text` for display, as in [`AiClaim::segments`]. */
+	segments: TextSegment[],
 	/**  As the message states it ("Friday", "30.11."). */
 	due: string,
 	sources: MessageId[],
@@ -803,6 +817,9 @@ export type AiModel = {
 	id: string,
 	displayName: string | null,
 };
+
+/**  Stage 13 (decision 0028): whether the AI panel of the main window is unfolded or folded in. */
+export type AiPanelState = "open" | "folded";
 
 /**  A known endpoint for "new profile". */
 export type AiPreset = {
@@ -864,9 +881,13 @@ export type AiProviderKind =
 /**  A reply suggestion; "open draft" (`aiOpenReplyDraft`) turns it into an editable draft. */
 export type AiReplySuggestion = {
 	text: string,
+	/**  `text` with its links as segments (decision 0028). */
+	segments: TextSegment[],
 	/**  The message the reply answers. */
 	inReplyTo: MessageId,
 	transfer: AiTransfer,
+	/**  See [`AiSummary::link_token`]. */
+	linkToken: RenderToken | null,
 };
 
 /**  One entry of the request log: metadata only, never content or keys. */
@@ -930,6 +951,11 @@ export type AiSummary = {
 	/**  Statements dropped because they named no message that was sent. */
 	dropped: number,
 	transfer: AiTransfer,
+	/**
+	 *  The token of the links in the segments of this result (decision 0028); `null` when the
+	 *  result has none.
+	 */
+	linkToken: RenderToken | null,
 };
 
 /**  Target languages of "translate". */
@@ -959,6 +985,17 @@ export type AiTransfer = {
 	trimming: AiTrimming,
 };
 
+/**
+ *  What `aiPrepareTransfer` prepares without sending (decision 0028): a function with the
+ *  input it would get. The tag is the function's name.
+ */
+export type AiTransferInput = { function: "summary"; messageId: MessageId } | { function: "reply_suggestion"; messageId: MessageId } | { function: "writing_help"; passage: string; task: AiWritingTask } | 
+/**
+ *  The first request of a question (the question alone). The candidates follow in a second
+ *  request whose size is known only after the local search; `aiRequest` announces it.
+ */
+{ function: "search"; question: string };
+
 /**  What was shortened for the length budget. All zero: nothing. */
 export type AiTrimming = {
 	mailsLeftOut: number,
@@ -972,7 +1009,11 @@ export type AiTrimming = {
  */
 export type AiWritingResult = {
 	text: string,
+	/**  `text` with its links as segments (decision 0028). */
+	segments: TextSegment[],
 	transfer: AiTransfer,
+	/**  See [`AiSummary::link_token`]. */
+	linkToken: RenderToken | null,
 };
 
 /**  What the writing help does with the passage. */
@@ -3815,7 +3856,8 @@ export type ThreadView = {
 
 /**
  *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
- *  synchronised between devices; the recent commands stay on this device.
+ *  synchronised between devices; the recent commands and the AI panel's state stay on this
+ *  device.
  */
 export type UiPreferences = {
 	shortcuts: PlatformShortcuts,
@@ -3823,6 +3865,8 @@ export type UiPreferences = {
 	textSize: number,
 	/**  Keys of the palette entries used last, newest first, at most 5, no duplicates. */
 	recentCommands: string[],
+	/**  The AI panel unfolded (default) or folded in; device only (decision 0028). */
+	aiPanel: AiPanelState,
 };
 
 /**  The user's answer to an unclear send. */

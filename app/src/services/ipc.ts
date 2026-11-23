@@ -1154,6 +1154,7 @@ import {
   type AiTargetLanguage,
   type AiTone,
   type AiTransfer,
+  type AiTransferInput,
   type AiTrimming,
   type AiWritingResult,
   type AiWritingTask,
@@ -1189,6 +1190,7 @@ export type {
   AiTargetLanguage,
   AiTone,
   AiTransfer,
+  AiTransferInput,
   AiTrimming,
   AiWritingResult,
   AiWritingTask,
@@ -1261,6 +1263,11 @@ export const aiIpc = {
   /** `accountIds` null: every account (the unified view). */
   ask: (requestId: string, question: string, accountIds: AccountId[] | null): Promise<AiAnswer> =>
     call(() => aiCommands.aiAsk(requestId, question, accountIds)),
+  /**
+   * Decision 0028: what the function would send for this input, prepared like the request but
+   * never sent (no consent needed, no event, no log entry). The consent step shows it.
+   */
+  prepareTransfer: (input: AiTransferInput): Promise<AiTransfer> => call(() => aiCommands.aiPrepareTransfer(input)),
   /** Newest first, at most 50; empty while the hints are off. */
   listOpenReplyHints: (): Promise<OpenReplyHint[]> => call(() => aiCommands.listOpenReplyHints()),
   /** A dismissed hint never comes back. */
@@ -1323,6 +1330,8 @@ import {
   type UiPreferences,
   type WindowLayout as CoreWindowLayout,
 } from "../generated/bindings";
+// Stage 13 (decision 0028): the AI panel's state is a UI preference of this device.
+import type { AiPanelState } from "../generated/bindings";
 
 export {
   DEFAULT_TEXT_SIZE,
@@ -1337,6 +1346,7 @@ export {
 };
 
 export type {
+  AiPanelState,
   CoreDensity,
   CoreReadingPanePosition,
   CoreShortcut,

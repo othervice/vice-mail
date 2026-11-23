@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use mail_model::{
-    CoreError, CoreEvent, Density, ErrorCode, PlatformShortcuts, ReadingPanePosition, Shortcut,
-    ShortcutOverride, UiPreferences, WindowLayout,
+    AiPanelState, CoreError, CoreEvent, Density, ErrorCode, PlatformShortcuts, ReadingPanePosition,
+    Shortcut, ShortcutOverride, UiPreferences, WindowLayout,
 };
 use mail_store::GLOBAL_SCOPE;
 use serde_json::{Value, json};
@@ -58,6 +58,7 @@ fn sample() -> UiPreferences {
         },
         text_size: 130,
         recent_commands: vec!["action:archive".into(), "view:inbox".into()],
+        ai_panel: AiPanelState::Folded,
     }
 }
 
@@ -140,6 +141,54 @@ async fn shortcuts_are_stored_compactly_per_platform() {
     assert_eq!(
         stored(&core, "ui.recent_commands").await,
         Some(json!(["action:archive", "view:inbox"]))
+    );
+    assert_eq!(stored(&core, "ui.ai_panel").await, Some(json!("folded")));
+}
+
+/// Decision 0028: the AI panel's state is a UI preference of this device: stored, announced,
+/// back after a restart, unreadable values count as open, never synchronised.
+#[tokio::test]
+async fn the_ai_panel_state_stays_on_this_device() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").ai_panel,
+        AiPanelState::Open
+    );
+    let mut events = core.subscribe();
+    let folded = UiPreferences {
+        ai_panel: AiPanelState::Folded,
+        ..UiPreferences::default()
+    };
+    assert_eq!(
+        core.set_ui_preferences(folded.clone())
+            .await
+            .expect("store")
+            .ai_panel,
+        AiPanelState::Folded
+    );
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("event in time")
+        .expect("event");
+    assert!(
+        matches!(&event, CoreEvent::UiPreferencesChanged { preferences } if preferences.ai_panel == AiPanelState::Folded),
+        "{event:?}"
+    );
+    drop(core);
+    let core = self::core(&dir).await;
+    assert_eq!(core.get_ui_preferences().await.expect("read"), folded);
+    assert!(RecordKey::setting(SettingScope::Global, "ui.ai_panel").is_err());
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![("ui.ai_panel".into(), "\"sideways\"".into())],
+        )
+        .await
+        .expect("seed");
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").ai_panel,
+        AiPanelState::Open
     );
 }
 
@@ -246,6 +295,7 @@ async fn unreadable_stored_values_fall_back_to_defaults() {
                 ),
                 put("ui.text_size", "300"),
                 put("ui.recent_commands", "[\"\"]"),
+                put("ui.ai_panel", "42"),
                 put("ui.layout.main", "{\"readingPane\":\"left\"}"),
             ],
         )

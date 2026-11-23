@@ -10,6 +10,7 @@ import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { ListPage, MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
+import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { buildRows } from "../messages/rows";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useReadingLayout } from "../layout/useReadingLayout";
@@ -81,6 +82,11 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
           showRecipients={false}
           platform={platform}
           handle={list}
+          // Stage 9 (decision 0028): an AI source among these rows is selected here.
+          selectScope={MIXED_LIST_SCOPE}
+          onSelectedById={() => {
+            layout.onOpen();
+          }}
           onSelectionChange={(next) => {
             setSelection(next);
             const focusPane = layout.onSelectionChange(next);

@@ -8,7 +8,9 @@ import type {
   Account,
   AccountId,
   AiAnswer,
+  AiClaim,
   AiConnectionTest,
+  AiDeadline,
   AiFunction,
   AiModel,
   AiPreset,
@@ -19,6 +21,7 @@ import type {
   AiSettingsInfo,
   AiSummary,
   AiTransfer,
+  AiTransferInput,
   AiWritingResult,
   AiWritingTask,
   CoreEvent,
@@ -27,7 +30,39 @@ import type {
   MessageId,
   OpenReplyHint,
   OpenReplySettings,
+  RenderToken,
+  TextSegment,
 } from "../../src/services/ipc";
+
+// Decision 0028: results as tests write them. `segments` and `linkToken` may be left out; the
+// fake fills them in as the core does for text without links (one text segment, no token).
+type WithSegments<T> = Omit<T, "segments"> & { segments?: TextSegment[] };
+type WithLinks<T> = Omit<T, "linkToken"> & { linkToken?: RenderToken | null };
+export type ClaimFixture = WithSegments<AiClaim>;
+export type SummaryFixture = WithLinks<Omit<AiSummary, "keyPoints" | "openQuestions" | "deadlines">> & {
+  keyPoints: ClaimFixture[];
+  openQuestions: ClaimFixture[];
+  deadlines: WithSegments<AiDeadline>[];
+};
+export type ReplyFixture = WithLinks<WithSegments<AiReplySuggestion>>;
+export type WritingFixture = WithLinks<WithSegments<AiWritingResult>>;
+export type AnswerFixture = WithLinks<Omit<AiAnswer, "statements">> & { statements: ClaimFixture[] };
+
+const textOnly = (text: string): TextSegment[] => (text === "" ? [] : [{ kind: "text", text }]);
+const withSegments = <T extends { text: string; segments?: TextSegment[] }>(item: T): T & { segments: TextSegment[] } => ({
+  ...item,
+  segments: item.segments ?? textOnly(item.text),
+});
+const summaryOf = (s: SummaryFixture): AiSummary => ({
+  ...s,
+  keyPoints: s.keyPoints.map(withSegments),
+  openQuestions: s.openQuestions.map(withSegments),
+  deadlines: s.deadlines.map(withSegments),
+  linkToken: s.linkToken ?? null,
+});
+const replyOf = (r: ReplyFixture): AiReplySuggestion => ({ ...withSegments(r), linkToken: r.linkToken ?? null });
+const writingOf = (w: WritingFixture): AiWritingResult => ({ ...withSegments(w), linkToken: w.linkToken ?? null });
+const answerOf = (a: AnswerFixture): AiAnswer => ({ ...a, statements: a.statements.map(withSegments), linkToken: a.linkToken ?? null });
 
 export const AI_FUNCTIONS: readonly AiFunction[] = ["summary", "reply_suggestion", "writing_help", "search"];
 
@@ -144,10 +179,12 @@ export interface AiFakeOptions {
   models?: Record<string, AiModel[]>;
   connection?: AiConnectionTest;
   /** Results of the functions (a function without one fails with `ai_failed`). */
-  summary?: (messageId: MessageId) => AiSummary;
-  reply?: (messageId: MessageId) => AiReplySuggestion;
-  writing?: (passage: string, task: AiWritingTask) => AiWritingResult;
-  answer?: (question: string, accountIds: AccountId[] | null) => AiAnswer;
+  summary?: (messageId: MessageId) => SummaryFixture;
+  reply?: (messageId: MessageId) => ReplyFixture;
+  writing?: (passage: string, task: AiWritingTask) => WritingFixture;
+  answer?: (question: string, accountIds: AccountId[] | null) => AnswerFixture;
+  /** Decision 0028: what `aiPrepareTransfer` answers; default: the transfer the request would announce. */
+  dryRun?: (input: AiTransferInput) => AiTransfer | Promise<never>;
   /** The account each message belongs to (for the cloud permission). Default: from the stored messages. */
   messageAccounts?: Record<number, AccountId>;
   /** Requests do not finish until `release()` (to see progress and cancel). */
@@ -162,6 +199,8 @@ export interface AiFakeState {
   readonly keysReceived: readonly string[];
   readonly dismissed: readonly MessageId[];
   readonly cancelled: readonly string[];
+  /** Decision 0028: every `aiPrepareTransfer` input (never a provider call). */
+  readonly dryRuns: readonly AiTransferInput[];
   /** Finishes the held requests. */
   release: () => Promise<void>;
   setHints: (hints: OpenReplyHint[]) => void;
@@ -193,6 +232,7 @@ export function createAiFake(options: AiFakeOptions, deps: Deps) {
   const keysReceived: string[] = [];
   const dismissed: MessageId[] = [];
   const cancelled: string[] = [];
+  const dryRuns: AiTransferInput[] = [];
   const running = new Map<string, { finish: () => void; cancel: () => void }>();
   let nextProfile = 1;
 
@@ -390,26 +430,39 @@ export function createAiFake(options: AiFakeOptions, deps: Deps) {
       case "ai_summarize_thread": {
         const messageId = args["messageId"] as number;
         const summary = options.summary;
-        return request(cmd, args, "summary", accountOf(messageId), summary && (() => summary(messageId)), transferFor("summary", 3));
+        return request(cmd, args, "summary", accountOf(messageId), summary && (() => summaryOf(summary(messageId))), transferFor("summary", 3));
       }
       case "ai_suggest_reply": {
         const messageId = args["messageId"] as number;
         const reply = options.reply;
-        return request(cmd, args, "reply_suggestion", accountOf(messageId), reply && (() => reply(messageId)), transferFor("reply_suggestion", 3));
+        return request(cmd, args, "reply_suggestion", accountOf(messageId), reply && (() => replyOf(reply(messageId))), transferFor("reply_suggestion", 3));
       }
       case "ai_writing_help": {
         const passage = args["passage"] as string;
         if (!passage.trim() || passage.length > 12_000) return reject("invalid_argument", "passage");
         const writing = options.writing;
         const task = args["task"] as AiWritingTask;
-        return request(cmd, args, "writing_help", null, writing && (() => writing(passage, task)), transferFor("writing_help", 0));
+        return request(cmd, args, "writing_help", null, writing && (() => writingOf(writing(passage, task))), transferFor("writing_help", 0));
       }
       case "ai_ask": {
         const question = args["question"] as string;
         const accountIds = args["accountIds"] as AccountId[] | null;
         if (!question.trim()) return reject("invalid_argument", "question");
         const answer = options.answer;
-        return request(cmd, args, "search", null, answer && (() => answer(question, accountIds)), transferFor("search", 0));
+        return request(cmd, args, "search", null, answer && (() => answerOf(answer(question, accountIds))), transferFor("search", 0));
+      }
+      case "ai_prepare_transfer": {
+        // Decision 0028: the checks of the core before preparing, but no consent and no request.
+        const input = args["input"] as AiTransferInput;
+        dryRuns.push(input);
+        if (!enabled) return reject("ai_off");
+        const profile = profileOf(input.function);
+        if (!profile?.model) return reject("ai_off");
+        const accountId = "messageId" in input ? accountOf(input.messageId) : null;
+        if (profile.locality === "internet" && accountId !== null && !cloud.has(accountId)) return reject("ai_not_permitted");
+        if (options.dryRun) return options.dryRun(input);
+        const mails = input.function === "summary" || input.function === "reply_suggestion" ? 3 : 0;
+        return transferFor(input.function, mails)(profile);
       }
       case "ai_open_reply_draft": {
         const messageId = args["messageId"] as number;
@@ -437,6 +490,7 @@ export function createAiFake(options: AiFakeOptions, deps: Deps) {
     keysReceived,
     dismissed,
     cancelled,
+    dryRuns,
     release: async () => {
       for (const run of [...running.values()]) run.finish();
       await Promise.resolve();

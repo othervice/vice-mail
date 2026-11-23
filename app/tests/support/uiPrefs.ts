@@ -6,6 +6,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   shortcuts: { macos: [], windows: [] },
   textSize: 100,
   recentCommands: [],
+  aiPanel: "open",
 };
 
 export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = { readingPane: "right", density: "comfortable", sidebarExpanded: false };
@@ -46,6 +47,10 @@ const COMMAND = /^[A-Za-z0-9._:-]{1,64}$/;
 function problemOf(preferences: UiPreferences): string | null {
   if (!Number.isInteger(preferences.textSize) || preferences.textSize < 80 || preferences.textSize > 150) {
     return `text size ${String(preferences.textSize)} is outside 80..=150`;
+  }
+  // Decision 0028: serde refuses anything else (a missing field too).
+  if ((preferences.aiPanel as unknown) !== "open" && (preferences.aiPanel as unknown) !== "folded") {
+    return `aiPanel ${String(preferences.aiPanel)} is neither open nor folded`;
   }
   const recent = preferences.recentCommands;
   if (recent.length > 5) return "at most 5 recent commands";
