@@ -2,10 +2,12 @@
 
 What Vice Mail supports per provider, and what it does not. "Tested" means: covered by automated
 tests in this repository. Where only a check on a real account can prove something, this page says
-so. Last updated 23 November 2026 (stage 14, block A; decision `docs/decisions/0034-gmail-ueber-imap.md`).
+so. Last updated 23 November 2026 (stage 14, blocks A to C; decisions
+`docs/decisions/0034-gmail-ueber-imap.md` and `docs/decisions/0042-anmeldung-mit-microsoft-und-google.md`).
 
-Vice Mail speaks IMAP and SMTP with a password (or an app password) and nothing else for now. It
-never talks to servers other than those of the accounts you set up.
+Vice Mail speaks IMAP and SMTP, with a password (or an app password) or, for Microsoft and Google,
+with the provider's own sign-in (OAuth 2.0). It never talks to servers other than those of the
+accounts you set up and, while you sign in, the provider's sign-in service.
 
 ## Overview
 
@@ -18,8 +20,8 @@ never talks to servers other than those of the accounts you set up.
 | GMX, WEB.DE | IMAP and SMTP with the account password, after turning on IMAP in the web mail | expected to work as plain IMAP; not tested with a real account |
 | Fastmail, Posteo, mailbox.org, Telekom, Infomaniak | IMAP and SMTP (app password where the provider asks for one) | expected to work as plain IMAP; not tested with a real account |
 | Proton Mail | only through Proton Mail Bridge on the same computer | expected to work as plain IMAP; not tested |
-| Outlook.com, Hotmail, Microsoft 365 | needs sign-in with Microsoft (OAuth) | **not supported yet**, planned (stage 14, block B) |
-| Gmail with "Sign in with Google" | OAuth instead of an app password | **not supported yet**, planned (stage 14, block C) |
+| Outlook.com, Hotmail, Microsoft 365 | "Sign in with Microsoft" (OAuth 2.0 in the system browser), IMAP and SMTP with the access token | **built, not yet usable**: needs the project's app registration at Microsoft (client ID) in the build; the whole sign-in is tested against a local OAuth server, not against Microsoft |
+| Gmail with "Sign in with Google" | OAuth 2.0 instead of an app password, IMAP and SMTP with the access token | **built, not yet usable**: needs the project's Google Cloud client in the build and, beyond 100 test users, Google's verification; tested against a local OAuth server, not against Google |
 | JMAP (Fastmail, Stalwart) | JMAP instead of IMAP | not supported, planned (stage 14, block D) |
 | POP3, Exchange (EWS, MAPI) | – | not supported, not planned |
 
@@ -75,7 +77,10 @@ servers; their server tests still run against Stalwart.
 interface, archive and undo, exactly one Sent copy, label changes with non-ASCII names, delete and
 spam). Until that is done, treat the Gmail specifics as implemented but unconfirmed.
 
-**Not supported on Gmail:** sign-in with Google (block C), the Gmail API, labels on list rows and
+**Sign in with Google** instead of an app password: built (block C), but not usable in current
+builds; see "Sign-in with Microsoft and Google" below.
+
+**Not supported on Gmail:** the Gmail API, labels on list rows and
 for several messages at once, renaming or deleting labels in the app, Gmail's own conversation ids
 (`X-GM-THRID`). Old settings sync records stay in Gmail's "All Mail" (visible in the web interface).
 
@@ -88,15 +93,82 @@ the SMTP user name the full address; the app fills both in. Not tested with a re
 
 Use an app password from the Yahoo account security page. Not tested with a real account.
 
+## Sign-in with Microsoft and Google (OAuth 2.0)
+
+**How it works.** For these providers the account setup shows "Sign in with Microsoft" (instead of
+a password field: Microsoft accepts no passwords for mail apps) or "Or sign in with Google" (next to
+the app password). The app opens the provider's sign-in page in your **system browser**, never inside
+the app, and waits up to five minutes; you can cancel the wait. You sign in on the provider's page
+and allow access to your mail; the app never sees your provider password. The browser then returns
+to a one-time address on your own computer (`http://localhost:<port>` for Microsoft,
+`http://127.0.0.1:<port>/` for Google), where the app accepts exactly the answer that belongs to
+this sign-in (authorization code with PKCE, RFC 7636, and a random `state`; RFC 8252). The app logs
+in to IMAP with the access token (`XOAUTH2`, or `OAUTHBEARER` where a server offers only that) and
+adds the account read-only, like every account.
+
+**What is stored.** The refresh token, in the system keychain (macOS keychain, Windows Credential
+Manager); the short-lived access token only in memory. The app renews the access token before it
+runs out and once more if a server rejects it. If the provider says the permission has expired or
+was withdrawn, the account stops syncing and its settings show "Sign in again". Tokens are never
+logged, never in the database or a diagnostics file, never in the settings sync. (Taking such an
+account over on another computer through the settings sync is not finished: that computer still asks
+for a password; decision 0042.) A token is only ever sent to
+the provider's own IMAP and SMTP servers. Removing the account deletes the tokens; at Google the app
+also revokes them. Microsoft offers no revocation to apps like this one: the permission ends with its
+lifetime, or you remove the app in your Microsoft account.
+
+**Servers.** Microsoft: `outlook.office365.com` (IMAP, port 993), `smtp-mail.outlook.com`
+(Outlook.com) or `smtp.office365.com` (Microsoft 365), port 587 with STARTTLS. Google:
+`imap.gmail.com`, `smtp.gmail.com`. Microsoft 365 and Google Workspace domains are recognised by
+these servers after the online search or when you type them in.
+
+**Availability.** Each build needs the project's registration at the provider: a client ID for
+Microsoft (Microsoft Entra, public client, no secret) and a client ID with its "client secret" for
+Google (a "Desktop app" client; Google states that this secret is not confidential in installed
+apps). A build without them says that it cannot sign in with Microsoft, and offers only the app
+password for Gmail. As of 23 November 2026 the project has **not registered** either app yet, so
+current builds cannot sign in with Microsoft or Google.
+
+**Tested:** the complete sign-in against Stalwart, the local test server, which is an OAuth 2.0
+authorization server too: PKCE, `state`, forged answers, wrong paths and ports, time limit, cancel,
+refusal, renewal before expiry and after a rejected login, refresh token rotation, revocation,
+`XOAUTH2` and `OAUTHBEARER` for IMAP, `XOAUTH2` for SMTP (logging in and sending), read-only
+protection; the Microsoft and Google profiles against a mock authorization server.
+**Not tested:** real Microsoft and Google accounts (needs the registrations), Windows.
+
+**Microsoft Graph and the Gmail API** are not used. IMAP and SMTP with OAuth cover what the app
+does; Graph would only be needed where a Microsoft 365 administrator has turned off IMAP or SMTP
+AUTH for the organisation, which the app then reports as a failed login.
+
+## Google's verification
+
+`https://mail.google.com/` (full IMAP and SMTP access) is a **restricted scope**. What that means for
+"Sign in with Google":
+
+- **Without verification** (the Google Cloud project's consent screen in the "Testing" status), only
+  the test users entered in the project can sign in, at most **100**, and Google shows them a warning
+  that the app is not verified. Refresh tokens of apps in "Testing" expire after **7 days**, after
+  which the account shows "Sign in again". This is enough for the project's own tests.
+- **For everybody** the consent screen must be "In production" and **verified** by Google:
+  - a verified **domain** (Google Search Console) for the app's home page and the links below,
+  - a public **home page** describing the app, and a **privacy policy** on that domain that says
+    what the app does with Gmail data (Vice Mail keeps mail on the user's computer and sends it
+    nowhere else),
+  - the app's name and logo matching the home page, a support address,
+  - a **demo video** (YouTube, unlisted is fine) that shows the sign-in, the consent screen with the
+    requested scope, and how the app uses the data,
+  - a justification why a narrower scope does not suffice (IMAP and SMTP need
+    `https://mail.google.com/`),
+  - for restricted scopes in addition a yearly **security assessment** (CASA, by an assessor Google
+    accepts; tier and cost depend on the assessor). Apps that store restricted data only on the
+    user's device may qualify for a lighter assessment; Google decides.
+  - Verification typically takes several weeks; changes to scopes or branding need it again.
+- Until then Gmail works with an **app password** (above).
+
 ## Outlook.com and Microsoft 365
 
-Microsoft only accepts sign-in through its own login page (OAuth), not a password. The app knows the
-servers and says so in the account setup; adding such an account fails until block B is done
-(sign-in in the system browser, IMAP and SMTP with OAuth, Microsoft Graph only if IMAP does not
-suffice).
-
-## Google sign-in (planned)
-
-Block C adds "Sign in with Google" instead of an app password. It needs a Google Cloud project and,
-beyond 100 users, Google's verification (domain, privacy policy, demo video). Until then Gmail works
-with an app password as described above.
+Microsoft only accepts sign-in through its own sign-in page (OAuth), not a password; see "Sign-in
+with Microsoft and Google" above. The app knows the servers, shows "Sign in with Microsoft" in the
+account setup and has no password field for these accounts. For a work or school account the
+organisation may require an administrator to approve the app first; the sign-in then ends with
+"The provider did not allow the sign-in".

@@ -15,6 +15,7 @@ party, which is advisable before wide distribution.
 | Asset | Where it lives | Why it matters |
 |---|---|---|
 | Mail account passwords (IMAP/SMTP) | System keychain (macOS login keychain, Windows Credential Manager), service = bundle id, account = account UUID | Full control of the mailbox |
+| OAuth refresh tokens of accounts that sign in with Microsoft or Google (stage 14, decision 0042) | System keychain (`oauth:<provider>:<account>`, split into pieces of at most 1,000 characters); access tokens only in memory | Mailbox access until revoked or expired, without the password |
 | AI provider API keys | System keychain (`ai-profile:<id>`) | Billing, access to the provider account |
 | MCP client keys | System keychain (app side); the AI client's own config file (client side, as `MAIL_MCP_TOKEN`) | Read access to the shared accounts, draft creation |
 | Settings-sync key and passphrase | The random X25519 key: locally in the keychain (`settings-sync:key`), in the sync folder only wrapped with the passphrase (age scrypt); the passphrase is never stored | Decrypts every synced record; whoever holds it can also write records (server changes wait for the user on every device, F1) |
@@ -137,6 +138,10 @@ party, which is advisable before wide distribution.
   taken from the calling `WebviewWindow`, never from an argument. The app's own commands are not
   restricted per window by capabilities (no `AppManifest` command list): every window the shell
   creates is equally trusted, and no other web content is ever loaded into one (finding V-09).
+- The app never opens a web page itself except, after a click on "Sign in with Microsoft/Google"
+  or "Sign in again", the provider's fixed sign-in address in the **system browser**, through the
+  same opener as links (decision 0042). The answer comes back to a loopback listener in the core,
+  not to the WebView.
 - No command takes a file path from the UI. Files are read only from paths the OS hands over
   (`.eml` open events and arguments; drag and drop onto the window, accepted only when the OS
   reported the drop, within 120 seconds and once) or the user picks in a core-owned dialog.
@@ -167,6 +172,15 @@ party, which is advisable before wide distribution.
 - AI providers: only the configured base URL, `http` only to local addresses, no redirects,
   proxies or retries; cloud providers only after consent and only with mail from accounts the
   user released for the cloud.
+- Sign-in with Microsoft and Google (decision 0042): OAuth 2.0 authorization code with PKCE (S256)
+  and a 256-bit `state`, in the system browser, redirected to `127.0.0.1`/`::1` on a random port.
+  The listener accepts exactly one `GET /` carrying the `state` (constant-time comparison, no
+  repeated parameters, 16 KiB and 5 s per request); forged answers, other paths and other ports
+  change nothing, the wait ends after five minutes or on cancel. Token endpoints are fixed per
+  provider, HTTPS only, no redirects, proxy, cookies or retries, 64 KiB answers. Access tokens are
+  only handed to the provider's own IMAP/SMTP hosts (a list in the profile), so a changed server
+  setting (or a settings-sync record) cannot send a token elsewhere; they go out only with
+  `XOAUTH2`/`OAUTHBEARER`, never as a LOGIN/PLAIN password.
 - No telemetry, no crash reports, no other connections.
 
 ### 4.4 Secrets (B5)
@@ -179,6 +193,12 @@ party, which is advisable before wide distribution.
   stored secret back (an MCP client token is shown once, at creation). Removing an account
   deletes its keychain entry first and stops if the keychain refuses; revoking an MCP client,
   deleting an AI profile and switching sync off delete their entries.
+- OAuth (decision 0042): the refresh token is a keychain entry like a password; `Credentials::get`
+  refuses such entries, so no code path can send one as a password. Access tokens live only in
+  memory. Neither appears in logs, errors, the database, the settings sync or the diagnostics export
+  (tested). Removing the account revokes the grant where the provider offers revocation (Google)
+  and deletes all pieces of the entry. Client IDs, and Google's installed-app "client secret"
+  (which Google documents as not confidential), are public build configuration, not secrets.
 - Logs are local files (14 days, our crates at `info` in release builds) without secrets,
   subjects, bodies or addresses logged on purpose; failed commands are logged with their code
   only (V-07, fixed). Error texts logged inside the core can still contain a path or an address.
@@ -329,6 +349,13 @@ party, which is advisable before wide distribution.
   within its 30 s limit.
 - **Windows-specific code is reviewed but not tested on Windows** in this review (WebView2 frame
   guard, named pipe, mark of the web, installer).
+- **OAuth sign-in (decision 0042).** During a sign-in any local program can connect to the loopback
+  port, but without the `state` it can neither finish nor break it; it cannot see the provider's
+  page in the browser. Whoever holds a stolen refresh token reads the mailbox until it expires or is
+  revoked; at Microsoft the app cannot revoke it (no revocation for public clients). The client IDs
+  are public, so another app could present itself with them; PKCE keeps it from using codes meant
+  for this app, but users see this app's name on its consent screen. Tested against a local OAuth
+  server and a mock, not against Microsoft or Google; not on Windows (keychain size limit, `::1`).
 
 ## 7. Findings of the stage-15 review
 

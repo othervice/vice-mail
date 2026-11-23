@@ -53,7 +53,7 @@ wenn er groß genug ist.
 | Updates in der App | tauri-plugin-updater | =2.14.1 | Stufe 15 (0037): Manifest, Signaturprüfung (minisign/Ed25519, `requireSignedVersion`), Austausch des App-Bundles (macOS) und NSIS-Installer im Modus `passive` (Windows); nur aus Rust, keine Capability für die Oberfläche. Ohne Default-Features (kein `ring`, kein System-Proxy, kein zip), TLS über unser reqwest/rustls per `configure_client`, deshalb exakt gepinnt. Release 28.10.2026, Apache-2.0 OR MIT. `tauri-plugin-process` nicht nötig (`AppHandle::request_restart`) |
 | WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID; aus dem Einstellungs-Sync übernommene Konten bekommen einen zufälligen Namen `synced:<hex>` (0040) |
-| Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
+| Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht, ab Stufe 14 für die Token-Endpunkte der Anmeldung bei Microsoft und Google (0042; PKCE mit sha2, Zufall aus aws-lc-rs, keine OAuth-Bibliothek) |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age (X25519, scrypt, Feature `armor`), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014). Im IMAP-Ordner liegt der Chiffretext als age-ASCII-Armor (0022) |
 | Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017). `mail-content` nutzt nur die zivilen Datumstypen (Kalendereinladungen: Datum, Wochentag, Datumsrechnung); Zeitzonen löst dort die Engine über den Trait `ZoneResolver`, die tzdb wird in `mail-content` nur in Tests gelesen |
@@ -123,7 +123,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 
 | Tabelle | Inhalt | Klasse |
 |---|---|---|
-| `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled` | sync (ohne Geheimnisse) |
+| `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled`; ab Stufe 14 (0042) heißt der Verweis bei Konten mit Anmeldung beim Anbieter `oauth:<microsoft\|google>:<id>` und der Eintrag hält das Refresh-Token | sync (ohne Geheimnisse) |
 | `identity` | Absenderadresse, Name, Reply-To, Standard; ab Stufe 10 Standard-Signatur für neue Mails und für Antworten (UUIDs, 0023) | sync |
 | `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
 | `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
@@ -326,7 +326,10 @@ einer klaren Meldung abgelehnt.
 **Verbindungen (0002)**
 - Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
 - Anmeldung per LOGIN; enthalten Benutzername oder Passwort Nicht-ASCII-Zeichen, per
-  `AUTHENTICATE PLAIN` (UTF-8, mit SASL-IR, wenn angeboten), siehe 0008.
+  `AUTHENTICATE PLAIN` (UTF-8, mit SASL-IR, wenn angeboten), siehe 0008. Konten mit Anmeldung bei
+  Microsoft oder Google (0042) melden sich mit dem Access-Token per `AUTHENTICATE XOAUTH2` an, per
+  `OAUTHBEARER` (RFC 7628), wo ein Server nur das anbietet; SMTP ebenso (`AUTH XOAUTH2`). Ein Token
+  geht nie über LOGIN oder PLAIN.
 - Nach dem Login `ENABLE CONDSTORE`, bei QRESYNC-fähigen Servern `ENABLE QRESYNC`.
 - Ein abgebrochener Befehl schließt die Verbindung; sie wird nie mit halb gelesenen Antworten weiterbenutzt.
 - Unaufgeforderte Antworten werden nach jedem Befehl abgeholt (die Bibliothek puffert nur 100).
@@ -379,6 +382,25 @@ einer klaren Meldung abgelehnt.
   Wirkung an der Mail, immer gesendet, ohne `UNCHANGEDSINCE`.
 - Archivieren entfernt `\Inbox` vom Ort im Posteingang (kein Archiv-Ordner nötig), Rückgängig über
   „Alle Nachrichten“; Verschieben aus „Alle Nachrichten“ setzt nur das Ziel-Label (kein EXPUNGE dort).
+
+**Anmeldung mit Microsoft und Google (Stufe 14, Blöcke B und C, 0042)**
+- OAuth 2.0 Authorization Code mit PKCE (S256) im System-Browser, Weiterleitung an einen
+  Loopback-Listener des Kerns auf einem freien Port (`http://localhost:<port>` für Microsoft,
+  `http://127.0.0.1:<port>/` sonst). Angenommen wird nur `GET /` mit dem gesendeten `state`; alles
+  andere bekommt 400/404, und der Kern wartet weiter (5 Minuten, abbrechbar). Modul
+  `mail-engine/src/oauth/`, Commands `getOauthAvailability`, `addOauthAccount`, `signInAgain`,
+  `cancelOauthSignIn`.
+- Profile je Anbieter (Endpunkte, Scopes, erlaubte IMAP-/SMTP-Server); Client-IDs (und Googles
+  nicht vertrauliches Installed-App-Secret) aus der Build-Umgebung (`MAIL_APP_OAUTH_*`, gelesen in
+  `app/src-tauri/src/oauth.rs`). Ohne Client-ID ist der Anbieter in diesem Build nicht verfügbar.
+- Tokens hinter `Credentials`: Refresh-Token im Schlüsselbund (in Stücken bis 1.000 Zeichen wegen
+  Windows), Access-Token im Speicher, erneuert fünf Minuten vor Ablauf und einmal nach einer
+  Ablehnung; `invalid_grant` ist `oauth_sign_in_required` und stoppt das Konto bis „Erneut
+  anmelden“. Ein Token gibt es nur für die Server des Anbieters; `Credentials::get` liefert solche
+  Einträge nie als Passwort aus.
+- Gmail und Microsoft bleiben bei IMAP und SMTP (keine Gmail-API, kein Microsoft Graph).
+- Konto entfernen widerruft bei Google (RFC 7009) und löscht die Einträge. Tokens wandern nie über
+  den Einstellungs-Sync; wie ein anderes Gerät ein solches Konto übernimmt, steht in 0042.
 
 ## Sicherheitsgrenzen
 
@@ -450,6 +472,11 @@ einer klaren Meldung abgelehnt.
   begründeten `#[allow(unsafe_code)]` und `// SAFETY:`); `scripts/check.sh` prüft das per Suche.
 - Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab, ebenso Downloads der
   WebView selbst (Kontextmenü „Verknüpfte Datei laden“, „Bild sichern“; Stufe 15).
+- Webseiten öffnet die App sonst nie selbst, nur nach Klick und Prüfung über den System-Browser.
+  Einzige Ausnahme (Stufe 14, 0042): „Mit Microsoft/Google anmelden“ und „Erneut anmelden“ öffnen
+  die feste Anmeldeadresse des Anbieters im System-Browser, über denselben Öffner wie Links (nie in
+  der WebView, kein eigenes Fenster). Die Antwort kommt über den Loopback-Listener des Kerns, nicht
+  über die Oberfläche.
 - Fenster öffnet nur die Shell (Stufe 8, 0025): das Hauptfenster, je Mail ein Mail-Fenster
   (`openMessageWindow`, Label `message-<Konto>-<Mail>`, Seite `index.html?window=message&…`) und
   je Entwurf ein Composer-Fenster (`openComposerWindow`, `composer-<Entwurf>`,
@@ -469,7 +496,10 @@ einer klaren Meldung abgelehnt.
 **Geheimnisse**
 - Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
   dass sie in Logs oder Fehlermeldungen landen; ein Test prüft das.
-- Konto entfernen löscht Schlüsselbund-Eintrag, lokale Daten und Dateien dieses Kontos.
+- Stufe 14 (0042): OAuth-Refresh-Tokens ebenso (Eintrag `oauth:<Anbieter>:<id>`); Access-Tokens nur
+  im Speicher. Der Diagnose-Export enthält keins von beiden (Test). Client-IDs sind keine Geheimnisse.
+- Konto entfernen löscht Schlüsselbund-Eintrag, lokale Daten und Dateien dieses Kontos; bei Google
+  wird das Refresh-Token vorher widerrufen.
 
 **Dateien**
 - Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
@@ -569,6 +599,16 @@ einer klaren Meldung abgelehnt.
   der Download bricht ab, sobald mehr als 300 MiB angekündigt oder angekommen sind
   (Sicherheitsprüfung N-3). Andere Endpunkte nur in Tests und im Desktop-Test-Build
   (`MAIL_APP_E2E_UPDATE_ENDPOINT`), HTTP nur zu Loopback-Endpunkten
+- Anmeldung bei Microsoft und Google (Stufe 14, 0042), nur nach Klick auf „Mit Microsoft/Google
+  anmelden“ oder „Erneut anmelden“ und für solche Konten: Der System-Browser öffnet die
+  Anmeldeseite (`login.microsoftonline.com`, `accounts.google.com`); der Kern spricht mit dem
+  Token-Endpunkt (`login.microsoftonline.com/common/oauth2/v2.0/token`,
+  `oauth2.googleapis.com/token`) beim Anmelden und etwa stündlich zum Erneuern, solange das Konto
+  läuft, und mit `oauth2.googleapis.com/revoke` beim Entfernen eines Google-Kontos. Client wie bei
+  der Kontoerkennung (gemeinsame TLS-Konfiguration, HTTPS, ohne Weiterleitungen, Cookies, Proxy und
+  Wiederholungen, neutrale Kennung, 64 KiB Antwort). Während der Anmeldung lauscht der Kern auf
+  `127.0.0.1` (und `::1`) auf einem freien Port, nur für die Rückleitung des Browsers; HTTP zu
+  anderen Endpunkten nur in Tests zu Loopback-Adressen
 - Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
   (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.
 
@@ -747,6 +787,7 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
 | KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
+| Microsoft und Google über IMAP/SMTP mit OAuth statt Graph bzw. Gmail-API (0042) | vorhandener Adapter, Gmail-Eigenheiten aus Block A bleiben; die Gmail-API hätte denselben „restricted scope“ | eigener Adapter hinter `MailBackend` |
 | Anhangsvorschau im Kern statt im PDF-Betrachter der WebView (0036) | die WebView sieht nur neu kodierte Bilder und Text; keine CSP-Lockerung, keine PDF-Skripte | PDF-Vorschau abschalten (`preview_unsupported`), Öffnen im System bleibt |
 | Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
