@@ -331,7 +331,7 @@ describe("pending and failed changes", () => {
     await emitCore({ type: "operationsChanged", accountId: ADA.id, operations: core.operations, removed: [] });
 
     await waitFor(() => {
-      expect(activity.getAttribute("aria-label")).toBe("Activity: 1 waiting, 0 need attention");
+      expect(activity.getAttribute("aria-label")).toBe("Activity, 1 waiting, 0 need attention");
     });
     expect(within(activity).getByTestId("activity-badge").textContent).toBe("1");
 
@@ -342,7 +342,7 @@ describe("pending and failed changes", () => {
     expect(alert.textContent).toContain("A change could not be made on the server: Archive");
     expect(alert.textContent).toContain("The server refused the request.");
     await waitFor(() => {
-      expect(activity.getAttribute("aria-label")).toBe("Activity: 0 waiting, 1 need attention");
+      expect(activity.getAttribute("aria-label")).toBe("Activity, 1 need attention, 0 waiting");
     });
     expect(within(activity).getByTestId("activity-badge").dataset["attention"]).toBe("true");
 
@@ -386,7 +386,7 @@ describe("activity view", () => {
     });
     const { user } = renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "Activity: 1 waiting, 2 need attention" }));
+    await user.click(await screen.findByRole("button", { name: "Activity, 2 need attention, 1 waiting" }));
 
     const view = await screen.findByTestId(`activity-${ADA.id}`);
     expect(within(view).getByRole("heading", { level: 2 }).textContent).toBe("Ada Lovelace (ada@vicemail.test)");

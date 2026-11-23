@@ -35,6 +35,13 @@ interface RailButtonProps {
   disclosure?: { expanded: boolean; controls?: string };
   /** Small count or mark on the icon (activity). */
   badge?: ReactNode;
+  /**
+   * Visible name in the labelled sidebar when `label` (the accessible name) says more, e.g. a
+   * count. `label` must start with this text (WCAG 2.5.3, label in name).
+   */
+  text?: string;
+  /** In the labelled sidebar: shown at the end of the row instead of `badge` on the icon. */
+  trailing?: ReactNode;
   /** Rows dragged out of the list can be dropped here: they move into this folder. */
   dropMailbox?: Mailbox | undefined;
   /** Stage 8: the view's shortcut, in the tooltip and for screen readers. */
@@ -43,7 +50,7 @@ interface RailButtonProps {
   "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, dropMailbox, shortcut, ...rest }: RailButtonProps) {
+function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, text, trailing, dropMailbox, shortcut, ...rest }: RailButtonProps) {
   const { t } = useTranslation();
   const drop = useDropTarget(dropMailbox);
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
@@ -71,13 +78,14 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     >
       <span className="relative flex shrink-0">
         <Icon aria-hidden className="size-(--ui-icon) shrink-0" strokeWidth={1.75} />
-        {badge}
+        {(!expanded || trailing === undefined) && badge}
       </span>
       {expanded && (
         <span aria-hidden className="truncate">
-          {label}
+          {text ?? label}
         </span>
       )}
+      {expanded && trailing}
     </button>
   );
   // Same element in both modes: unfolding the sidebar keeps the focus on the button.
@@ -109,6 +117,27 @@ function StateBadge({ account }: { account: Account }) {
 }
 
 /**
+ * The count of the activity and outbox entries: on the icon in the narrow rail, at the end of the
+ * row in the labelled sidebar (so name and number read in the order they are shown).
+ */
+function RailCount({ value, attention, testId, trailing = false }: { value: string; attention: boolean; testId: string; trailing?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      data-testid={testId}
+      data-attention={attention || undefined}
+      className={cx(
+        "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
+        trailing ? "ms-auto shrink-0" : "absolute -top-2 -right-2",
+        attention ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
+/**
  * The collected state of the outbox (docs/DESIGN.md: pending and failed actions visible but
  * quiet): a count on the activity icon, in the danger colour once something needs the user.
  */
@@ -119,30 +148,25 @@ function ActivityButton({ accounts, expanded, active }: { accounts: readonly Acc
   const pending = counts.reduce((sum, c) => sum + c.pending, 0);
   const attention = counts.reduce((sum, c) => sum + c.failed + c.conflict, 0);
   const numbers = new Intl.NumberFormat(i18n.language);
-  const label = pending + attention > 0 ? t("activity.badge", { pending, attention }) : t("activity.nav");
+  // The name starts with what is visible: the view's name, then the number on the badge.
+  const label =
+    attention > 0
+      ? t("activity.badgeAttention", { pending, attention })
+      : pending > 0
+        ? t("activity.badgeWaiting", { pending, attention })
+        : t("activity.nav");
   const shown = attention > 0 ? attention : pending;
-  const badge =
-    shown > 0 ? (
-      <span
-        aria-hidden
-        data-testid="activity-badge"
-        data-attention={attention > 0 || undefined}
-        className={cx(
-          "absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
-          attention > 0 ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
-        )}
-      >
-        {numbers.format(shown)}
-      </span>
-    ) : null;
+  const count = shown > 0 ? numbers.format(shown) : null;
   return (
     <RailButton
       icon={History}
       label={label}
+      text={t("activity.nav")}
       expanded={expanded}
       active={active}
       onClick={showActivity}
-      badge={badge}
+      badge={count && <RailCount value={count} attention={attention > 0} testId="activity-badge" />}
+      trailing={count ? <RailCount value={count} attention={attention > 0} testId="activity-badge" trailing /> : undefined}
       data-testid="rail-activity"
     />
   );
@@ -156,28 +180,24 @@ function OutboxButton({ accounts, expanded, active }: { accounts: readonly Accou
   const attention = mails.filter((m) => m.state === "failed" || m.state === "unclear").length;
   const pending = mails.filter((m) => m.state !== "sent" && m.state !== "failed" && m.state !== "unclear").length;
   const shown = attention > 0 ? attention : pending;
-  const badge =
-    shown > 0 ? (
-      <span
-        aria-hidden
-        data-testid="outbox-badge"
-        data-attention={attention > 0 || undefined}
-        className={cx(
-          "absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
-          attention > 0 ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
-        )}
-      >
-        {new Intl.NumberFormat(i18n.language).format(shown)}
-      </span>
-    ) : null;
+  const count = shown > 0 ? new Intl.NumberFormat(i18n.language).format(shown) : null;
+  // The name starts with what is visible: the view's name, then the number on the badge.
+  const label =
+    attention > 0
+      ? t("composer.outbox.badgeAttention", { attention, pending })
+      : pending > 0
+        ? t("composer.outbox.badgeWaiting", { attention, pending })
+        : t("composer.outbox.nav");
   return (
     <RailButton
       icon={SendHorizontal}
-      label={shown > 0 ? t("composer.outbox.badge", { attention, pending }) : t("composer.outbox.nav")}
+      label={label}
+      text={t("composer.outbox.nav")}
       expanded={expanded}
       active={active}
       onClick={showOutbox}
-      badge={badge}
+      badge={count && <RailCount value={count} attention={attention > 0} testId="outbox-badge" />}
+      trailing={count ? <RailCount value={count} attention={attention > 0} testId="outbox-badge" trailing /> : undefined}
       data-testid="rail-outbox"
     />
   );
