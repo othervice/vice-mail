@@ -1301,7 +1301,7 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         text_size: 130,
         recent_commands: vec!["action:archive".into()],
         ai_panel: mail_model::AiPanelState::Folded,
-        accent_theme: mail_model::AccentTheme::Orange,
+        accent_theme: mail_model::AccentTheme::Green,
     };
     a.core
         .set_ui_preferences(prefs.clone())
@@ -1322,8 +1322,9 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
     let taken = b.core.get_ui_preferences().await.expect("ui preferences");
     assert_eq!(taken.shortcuts, prefs.shortcuts);
     assert_eq!(taken.text_size, 130);
-    // Stage 16 (decision 0036): the accent theme goes along like the text size.
-    assert_eq!(taken.accent_theme, mail_model::AccentTheme::Orange);
+    // Stage 16 (decision 0036): the accent theme goes along like the text size. Green, not
+    // orange: orange is the default since decision 0038 and would prove nothing.
+    assert_eq!(taken.accent_theme, mail_model::AccentTheme::Green);
     assert!(
         taken.recent_commands.is_empty(),
         "the palette history stays on its device"
