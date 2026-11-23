@@ -33,11 +33,12 @@ export function testmailSync(...args) {
 }
 
 /**
- * A fresh server with 10,000 messages for alice (9,959 in INBOX): reset, start, seed. `reset`
- * provisions the new data store through the management API, which has once answered the admin
- * login with HTTP 401 right after the start; another attempt then succeeds. Returns the time taken.
+ * A fresh server with 10,000 messages for alice (9,959 in INBOX), or the arguments of `seed`
+ * given: reset, start, seed. `reset` provisions the new data store through the management API,
+ * which has once answered the admin login with HTTP 401 right after the start; another attempt
+ * then succeeds. Returns the time taken.
  */
-export function prepareTestServer({ attempts = 3 } = {}) {
+export function prepareTestServer({ attempts = 3, seed = ["10000", "--filler-folder", "INBOX"] } = {}) {
   const started = Date.now();
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -49,7 +50,7 @@ export function prepareTestServer({ attempts = 3 } = {}) {
     }
   }
   testmailSync("start");
-  testmailSync("seed", "10000", "--filler-folder", "INBOX");
+  testmailSync("seed", ...seed);
   return Date.now() - started;
 }
 

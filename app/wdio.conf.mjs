@@ -20,6 +20,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Built by `pnpm build:e2e`: debug profile, embedded assets, the production CSP.
 const APP = process.env.E2E_APP ?? path.join(here, "../target/debug/mail-app");
 const LOCK_NAME = process.env.TESTMAIL_LOCK_NAME || "desktop-e2e";
+// README_SHOTS=1: the README screenshots (tests/e2e/readme-shots.e2e.mjs, docs/images/README.md),
+// taken with `--spec`. They need the seed of the screenshot rules (1,000 messages, without the
+// SMTP test messages) instead of the 10,000 the other specs use; without the variable the spec is
+// excluded, even when named.
+const README_SHOTS = process.env.README_SHOTS === "1";
 /** Whether this run took the lock (and so releases it); false if the caller held it already. */
 let ownLock = false;
 
@@ -68,6 +73,7 @@ export const config = {
     "./tests/e2e/updates.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
+  exclude: README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"],
   maxInstances: 1,
   capabilities: [
     {
@@ -117,15 +123,16 @@ export const config = {
     fs.mkdirSync(process.env.CFFIXED_USER_HOME, { recursive: true });
     console.log(`test data directory: ${process.env[DATA_DIR_ENV]}`);
 
-    // A fresh test server with 10,000 messages for alice (9,959 in INBOX); about 8 s. Only a
-    // SevereServiceError stops the run here; any other error would be logged and the specs
-    // would start against no server.
+    // A fresh test server with 10,000 messages for alice (9,959 in INBOX), or the 1,000 of the
+    // screenshot rules with README_SHOTS=1; about 8 s. Only a SevereServiceError stops the run
+    // here; any other error would be logged and the specs would start against no server.
     try {
       // Waits up to 30 minutes for another session's tests; prints "already held" if ours.
       ownLock = !testmailSync("lock", LOCK_NAME, "30").includes("already held");
       console.log(`test server lock: ${LOCK_NAME}${ownLock ? "" : " (held by the caller)"}`);
-      const ms = prepareTestServer();
-      console.log(`test server ready with 10,000 messages after ${ms} ms`);
+      const seed = README_SHOTS ? ["1000", "--no-smtp"] : ["10000", "--filler-folder", "INBOX"];
+      const ms = prepareTestServer({ seed });
+      console.log(`test server ready with ${seed[0]} messages after ${ms} ms`);
     } catch (e) {
       // onComplete does not run after a failed onPrepare: give the lock back here.
       if (ownLock) testmailSync("unlock", LOCK_NAME);
