@@ -9,7 +9,7 @@ X-Corpus-Vector: hidden-text opacity-0 opacity-nested filter-opacity font-size-0
 X-Corpus-Expect: html_to_visible_text leaves out every HIDDEN-* marker (instructions
  for a model) and counts it; every VISIBLE-* marker stays, also where the same
  colours, sizes or offsets are used visibly; the sanitised HTML shows the visible text.
-X-Corpus-Check: text=SAFE-CONTENT-VISIBLE
+X-Corpus-Check: links=1; remote=0; text=SAFE-CONTENT-VISIBLE
 Content-Type: text/html; charset=utf-8
 Content-Transfer-Encoding: 8bit
 

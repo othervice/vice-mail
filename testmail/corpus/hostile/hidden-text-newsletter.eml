@@ -9,7 +9,7 @@ X-Corpus-Expect: html_to_visible_text leaves out every HIDDEN-* marker (instruct
  for a model) and counts it, also the mobile-only copy
  (hidden in a reading pane wider than 480 px); every VISIBLE-* marker stays, also where the same
  colours, sizes or offsets are used visibly; the sanitised HTML shows the visible text.
-X-Corpus-Check: text=SAFE-CONTENT-VISIBLE
+X-Corpus-Check: links=2; remote=1; text=SAFE-CONTENT-VISIBLE
 Content-Type: text/html; charset=utf-8
 Content-Transfer-Encoding: 8bit
 
