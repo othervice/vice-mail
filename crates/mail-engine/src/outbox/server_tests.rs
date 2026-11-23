@@ -38,8 +38,9 @@ const WAIT: Duration = Duration::from_secs(20);
 const DOMAIN: &str = "outbox.test";
 const KEYWORD: &str = "$VmLabel";
 
-/// The tests share bob's account: one at a time.
-static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// The tests share bob's account: one at a time, together with `transfer_server_tests`, whose
+/// folders this file's tests would otherwise see appear and vanish while they list bob's folders.
+pub(super) static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn config(env: &TestEnv) -> OutboxConfig {
     let mut config = OutboxConfig {

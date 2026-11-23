@@ -35,7 +35,8 @@ use crate::sync_state::BackoffPolicy;
 const WAIT: Duration = Duration::from_secs(20);
 const DOMAIN: &str = "transfer.test";
 
-static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+// One lock with the other outbox server tests: both use bob's account (and alice's).
+use super::server_tests::SERVER;
 
 fn config(env: &TestEnv) -> OutboxConfig {
     let mut config = OutboxConfig {
