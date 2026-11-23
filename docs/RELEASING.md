@@ -279,6 +279,17 @@ brew services restart gitea-runner
 If the disk runs low, `~/.cache/vice-mail-ci/target` can be deleted at any time; the next run
 rebuilds it.
 
+### After the move to GitHub
+
+`.github/workflows/ci.yml` is ready and does the same on GitHub's hosted runners, on macOS and on
+Windows (`macos-latest`, `windows-latest`): `scripts/check.sh` on every push to `main` and every
+pull request, both installers on tags and on a manual start (Windows built natively, the MCP
+helper first, as `scripts/build-windows.sh` does it with cargo-xwin). Gitea ignores
+`.github/workflows` as long as `.gitea/workflows` exists. It has not run yet: the first push to
+GitHub is its first test, and on Windows the first time the tests run on the real platform.
+After the move, delete `.gitea/workflows/` and unregister the runner on the build Mac
+(`brew services stop gitea-runner`, then remove it under the repository's Actions → Runners).
+
 ## Building a release
 
 On the build Mac (Apple silicon), from a clean checkout of the release commit:

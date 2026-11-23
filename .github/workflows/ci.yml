@@ -1,0 +1,124 @@
+# Continuous integration on GitHub (stage 15), for the public repository. Hosted runners only:
+# pull requests from forks must never reach a machine of the maintainer. Gitea ignores this
+# directory while .gitea/workflows exists (the private CI before the move, docs/RELEASING.md).
+#
+# Every push to main and every pull request runs scripts/check.sh on macOS and on Windows; on
+# Windows that is the first regular test run on the real platform. Tags and a manual start also
+# build both installers, unsigned and without update signature, as run artifacts. Releases stay
+# a manual step (docs/RELEASING.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  LANG: en_US.UTF-8
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - name: Frontend dependencies
+        run: pnpm --dir app install --frozen-lockfile
+      - name: scripts/check.sh
+        run: scripts/check.sh
+
+  installers:
+    name: installer (${{ matrix.os }})
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - name: Frontend dependencies
+        run: pnpm --dir app install --frozen-lockfile
+      - name: macOS disk image
+        if: runner.os == 'macOS'
+        # Ad hoc signed, not notarised; the start test is skipped (no reliable GUI session).
+        env:
+          VICEMAIL_SIGNING_IDENTITY: "-"
+          SKIP_LAUNCH_CHECK: "1"
+        run: |
+          scripts/build-macos.sh
+          mkdir -p ci-out
+          cp target/release/bundle/dmg/*.dmg ci-out/
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        # Native build of what scripts/build-windows.sh cross-compiles on the Mac: the MCP helper
+        # first, handed to Tauri as bundle.externalBin (decision 0021), then the NSIS installer.
+        run: |
+          cargo build --release --locked -p mail-mcp --bin mail-mcp
+          mkdir -p target/sidecar
+          cp target/release/mail-mcp.exe target/sidecar/mail-mcp-x86_64-pc-windows-msvc.exe
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
+          pnpm --dir app tauri build --bundles nsis \
+            --config '{"bundle":{"externalBin":["../../target/sidecar/mail-mcp"]}}'
+          grep -q 'mail-mcp\.exe' target/release/nsis/x64/installer.nsi
+          mkdir -p ci-out
+          cp target/release/bundle/nsis/*-setup.exe ci-out/
+      - name: Checksums
+        run: |
+          cd ci-out
+          if command -v sha256sum >/dev/null; then sha256sum * > SHA256SUMS; else shasum -a 256 * > SHA256SUMS; fi
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ runner.os }}
+          path: ci-out/
+          retention-days: 14
