@@ -222,7 +222,7 @@ pub(crate) async fn sweep(store: &Store) {
                 needed.insert(job.draft.as_str().to_owned());
             }
             OperationPayload::Append {
-                source: AppendSource::File { file },
+                source: AppendSource::File { file } | AppendSource::Transfer { file, .. },
                 ..
             } => {
                 if let Some(dir) = file.split('/').nth(1) {

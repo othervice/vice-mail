@@ -178,6 +178,9 @@ pub(crate) fn outgoing(
         references: draft.references.clone(),
         date,
         user_agent: None,
+        // Stage 16: the read-receipt request names the sending identity.
+        disposition_notification_to: draft.request_receipt.then(|| sender.identity.email.clone()),
+        report: None,
     }
 }
 

@@ -4,6 +4,8 @@ import { accountRing } from "../src/features/accounts/accountColor";
 import type { AccountGroup, InboxScope } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
+import { showHeaderDetails } from "./support/reading";
+import { optionName } from "./support/names";
 
 const ADA = makeAccount();
 const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
@@ -39,7 +41,7 @@ async function choose(user: ReturnType<typeof renderApp>["user"], name: string) 
 const subjects = (list: HTMLElement) =>
   within(list)
     .getAllByRole("option")
-    .map((option) => option.getAttribute("aria-label")?.split(", ")[1]);
+    .map((option) => optionName(option).split(", ")[1]);
 
 describe("unified inbox", () => {
   it("mixes the inboxes of all accounts by time; every row keeps its account and colour", async () => {
@@ -63,6 +65,7 @@ describe("unified inbox", () => {
     // Opening a row opens it with its own account.
     await user.click(options[1] as HTMLElement);
     const pane = await screen.findByRole("region", { name: "Message" });
+    await showHeaderDetails(user, pane);
     expect(within(pane).getByTestId("reading-account").textContent).toBe("Work (work@example.com)");
     expect(core.callsOf("get_message")).toEqual([{ messageId: WORK_MAIL.id, format: "auto" }]);
   });

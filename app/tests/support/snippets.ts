@@ -48,6 +48,9 @@ export function makeTemplate(overrides: Partial<TemplateInfo> = {}): TemplateInf
     name: "Thank you",
     subject,
     html,
+    to: [],
+    cc: [],
+    bcc: [],
     ...placeholdersOf(`${subject} ${html}`),
     updatedAt: 1_700_000_000_000,
     ...overrides,
@@ -166,6 +169,9 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
       name: input.name.trim(),
       subject: input.subject,
       html: cleaned.html,
+      to: input.to ?? [],
+      cc: input.cc ?? [],
+      bcc: input.bcc ?? [],
       ...placeholdersOf(`${input.subject} ${cleaned.html}`),
       updatedAt: clock++,
     };
@@ -205,7 +211,16 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
         return "";
       });
     const html = fill(template.html);
-    return { subject: fill(template.subject), html, text: htmlText(html), problems };
+    return {
+      subject: fill(template.subject),
+      html,
+      text: htmlText(html),
+      problems,
+      to: draft.to,
+      cc: draft.cc,
+      bcc: draft.bcc,
+      recipientsAdded: 0,
+    };
   }
 
   function handle(cmd: string, args: Record<string, unknown>): unknown {

@@ -45,9 +45,10 @@ pub use plan::{
 };
 pub use record::{
     ACCOUNT_FIELDS, AccountGroupContent, ContactContent, DeviceInfo, EmptyContent, FieldValue,
-    IdShape, IdentityContent, KindSpec, MergeRule, PinInfo, REGISTRY, RecordBody, RecordKey,
-    RecordKind, Removal, RuleContent, SYNCED_SETTINGS, SenderRuleContent, SettingScope,
-    SignatureContent, SnoozeInfo, SyncContent, SyncRecord, SyncedAccount, TaskInfo,
+    IdShape, IdentityContent, KindSpec, MailboxPrefContent, MergeRule, PinInfo, REGISTRY,
+    ReadingListInfo, RecordBody, RecordKey, RecordKind, Removal, RuleContent, SYNCED_SETTINGS,
+    SenderRuleContent, SettingScope, SignatureContent, SnoozeInfo, SyncContent, SyncRecord,
+    SyncedAccount, TaskInfo,
 };
 pub use transport::{
     EntryHandle, MemoryTransport, RawHeader, RemoteEntry, SettingsTransport, StoredEntry,

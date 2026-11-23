@@ -117,8 +117,8 @@ export function RecipientField({
   };
 
   return (
-    <div className={cx("relative flex min-w-0 items-start gap-2 border-b border-border px-4 py-1", FIELD_ROW_FOCUS)} data-testid={rest["data-testid"]}>
-      <label htmlFor={inputId} className="w-12 shrink-0 py-1 text-13 text-secondary">
+    <div className={cx("relative flex min-w-0 items-start gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)} data-testid={rest["data-testid"]}>
+      <label htmlFor={inputId} className="w-12 shrink-0 py-1 text-13 text-tertiary">
         {label}
       </label>
       <ul aria-label={label} className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
@@ -128,8 +128,8 @@ export function RecipientField({
             <li
               key={address.email.toLowerCase()}
               className={cx(
-                "flex max-w-full items-center gap-1 h-6 rounded-control border ps-2 pe-1 text-13",
-                bad ? "border-danger text-danger" : "border-border bg-canvas text-primary",
+                "flex max-w-full items-center gap-1 h-6 rounded-full border ps-2 pe-1 text-13",
+                bad ? "border-danger text-danger" : "border-border-subtle bg-hover text-primary",
               )}
               title={addressFull(address)}
               data-testid="recipient-chip"
@@ -144,7 +144,7 @@ export function RecipientField({
                 onClick={() => {
                   remove(address);
                 }}
-                className="flex size-4 shrink-0 items-center justify-center rounded-control text-secondary hover:bg-hover hover:text-primary"
+                className="flex size-4 shrink-0 items-center justify-center rounded-full text-secondary hover:bg-surface-raised hover:text-primary"
               >
                 <X aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
               </button>

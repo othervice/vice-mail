@@ -14,9 +14,10 @@
 
 use mail_model::{
     AccountId, ActionError, ActionKind, Address, AppendSource, ComposeFormat, DraftError,
-    DraftFile, DraftId, DraftKind, DraftState, ErrorCode, Flag, IdentityId, MailboxId, MailboxRole,
-    MessageId, MessageRef, OperationId, OperationNotice, OperationPayload, OperationState,
-    QuotePosition, SendJob, SendPhase, ServerCopy, TargetMailbox, UidValidity, UnclearDecision,
+    DraftFile, DraftId, DraftKind, DraftState, ErrorCode, Flag, IdentityId, MailAction, MailboxId,
+    MailboxRole, MessageId, MessageRef, OperationId, OperationNotice, OperationPayload,
+    OperationState, QuotePosition, SendJob, SendPhase, ServerCopy, TargetMailbox, UidValidity,
+    UnclearDecision,
 };
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -50,7 +51,7 @@ macro_rules! select_drafts {
                     EXISTS (SELECT 1 FROM operation o
                              WHERE o.draft_id = d.id AND o.kind = 'append'
                                AND o.state IN ('queued', 'in_flight')),
-                    d.signature_uuid
+                    d.signature_uuid, d.archive_original, d.request_receipt
              FROM draft d ",
             $rest
         )
@@ -107,6 +108,13 @@ pub(crate) const SET_DRAFT_SERVER_COPY: &str = "
     WHERE id = ?1";
 
 pub(crate) const DELETE_DRAFT: &str = "DELETE FROM draft WHERE id = ?1";
+
+/// Stage 16: the send options of a draft; a new revision (the Drafts copy carries the
+/// read-receipt request).
+pub(crate) const SET_DRAFT_SEND_OPTIONS: &str = "
+    UPDATE draft
+    SET archive_original = ?2, request_receipt = ?3, revision = revision + 1, updated_at = ?4
+    WHERE id = ?1 AND state = 'editing'";
 
 /// Queued (not yet sent) appends of a draft (`operation_draft`).
 pub(crate) const QUEUED_APPENDS_OF_DRAFT: &str =
@@ -211,6 +219,8 @@ fn draft_from_row(r: &Row<'_>) -> rusqlite::Result<StoredDraft> {
             .get::<_, Option<String>>(35)?
             .as_deref()
             .and_then(mail_model::SignatureId::parse),
+        archive_original: r.get(36)?,
+        request_receipt: r.get(37)?,
     })
 }
 
@@ -382,6 +392,23 @@ pub(crate) fn save_draft(
                 .map(mail_model::SignatureId::as_str),
         ])
         .map_err(StoreError::sqlite("save draft"))?;
+    require_draft(conn, id)
+}
+
+/// See [`crate::Store::set_draft_send_options`].
+pub(crate) fn set_send_options(
+    conn: &Connection,
+    id: &DraftId,
+    archive_original: bool,
+    request_receipt: bool,
+    now: i64,
+) -> Result<StoredDraft, StoreError> {
+    let draft = require_editing(conn, id)?;
+    if draft.archive_original != archive_original || draft.request_receipt != request_receipt {
+        conn.prepare_cached(SET_DRAFT_SEND_OPTIONS)?
+            .execute(params![draft.row, archive_original, request_receipt, now])
+            .map_err(StoreError::sqlite("set draft send options"))?;
+    }
     require_draft(conn, id)
 }
 
@@ -691,6 +718,10 @@ pub(crate) fn send_followups(
         return Ok(None);
     };
     let account_row = accounts::row_id(conn, op.account)?;
+    if let Some(original) = &job.receipt_for {
+        receipt_sent(conn, op, account_row, original, now, change)?;
+        return Ok(None);
+    }
     let request = format!("send-{}", op.id);
     let mut recorder = Recorder::new(
         conn,
@@ -756,6 +787,23 @@ pub(crate) fn send_followups(
         }
     }
     let recorded = recorder.change;
+    merge_change(change, recorded);
+    if job.archive_original
+        && let Some(original) = &job.original
+    {
+        archive_original(
+            conn,
+            op,
+            account_row,
+            &original.message_id_header,
+            now,
+            change,
+        )?;
+    }
+    Ok(notice)
+}
+
+fn merge_change(change: &mut OutboxChange, recorded: OutboxChange) {
     change.operations.extend(recorded.operations);
     change.removed.extend(recorded.removed);
     for mailbox in recorded.mailboxes {
@@ -764,7 +812,340 @@ pub(crate) fn send_followups(
         }
     }
     change.drafts_removed.extend(recorded.drafts_removed);
-    Ok(notice)
+}
+
+/// The locations of the account's messages with this Message-ID, as the planner sees them.
+fn original_locations(
+    conn: &Connection,
+    account_row: i64,
+    message_id_header: &str,
+) -> Result<Vec<mail_model::PlanLocation>, StoreError> {
+    let messages = conn
+        .prepare_cached(MESSAGES_WITH_MSGID)?
+        .query_map(params![account_row, message_id_header], |r| {
+            Ok(MessageId(r.get(0)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut out = Vec::new();
+    for message in messages {
+        let mailboxes = conn
+            .prepare_cached(LOCATIONS_OF_MESSAGE)?
+            .query_map([message.0], |r| Ok(MailboxId(r.get(0)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for mailbox in mailboxes {
+            let at = MessageRef {
+                mailbox_id: mailbox,
+                message_id: message,
+            };
+            if let Some(planned) = outbox::location_for_plan(conn, at)? {
+                out.push(planned.location);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Stage 16, "send and archive" (decision 0033): the original's locations outside Archive
+/// (and outside Trash, Junk, Sent and Drafts) move to the archive mailbox, recorded in the
+/// transaction that confirms the send. Without an archive mailbox the send's payload notes it
+/// (`archive_missing`); the send itself stays confirmed.
+fn archive_original(
+    conn: &Connection,
+    op: &StoredOperation,
+    account_row: i64,
+    message_id_header: &str,
+    now: i64,
+    change: &mut OutboxChange,
+) -> Result<(), StoreError> {
+    let locations: Vec<_> = original_locations(conn, account_row, message_id_header)?
+        .into_iter()
+        .filter(|l| {
+            !matches!(
+                l.role,
+                MailboxRole::Trash | MailboxRole::Junk | MailboxRole::Sent | MailboxRole::Drafts
+            )
+        })
+        .collect();
+    let mailboxes = outbox::plan_mailboxes(conn, account_row)?;
+    let missing = !mailboxes
+        .iter()
+        .any(|m| m.role == MailboxRole::Archive && m.selectable);
+    if missing {
+        if let OperationPayload::Send(mut job) = op.payload.clone() {
+            job.archive_missing = true;
+            conn.prepare_cached(outbox::SET_PAYLOAD)?
+                .execute(params![
+                    op.id.0,
+                    payload_text(&OperationPayload::Send(job))?
+                ])
+                .map_err(StoreError::sqlite("note missing archive"))?;
+        }
+        return Ok(());
+    }
+    if locations.is_empty() {
+        return Ok(());
+    }
+    let payloads = match mail_model::plan_action(&MailAction::Archive, &locations, &mailboxes) {
+        Ok(payloads) => payloads,
+        Err(err) => {
+            // Never a reason to fail the send that was accepted.
+            tracing::warn!(error = %err, "archiving the original after the send was not planned");
+            return Ok(());
+        }
+    };
+    let (account, writes) = account_writes(conn, account_row)?;
+    if !writes {
+        return Ok(());
+    }
+    let request = format!("send-{}-archive", op.id);
+    let mut recorder = Recorder::new(
+        conn,
+        account_row,
+        account,
+        ActionKind::Archive,
+        &request,
+        now,
+    );
+    recorder.change.batch = Some(op.batch);
+    for payload in payloads {
+        recorder.record(payload)?;
+    }
+    merge_change(change, recorder.change);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Read receipts (stage 16, decision 0033)
+
+/// The keyword that tells every program the read-receipt request was answered (RFC 3503).
+pub const MDN_SENT_KEYWORD: &str = "$MDNSent";
+
+const UPSERT_RECEIPT_ANSWER: &str = "
+    INSERT INTO receipt_answer (account_uuid, message_id_hdr, state, operation_id, updated_at)
+    VALUES (?1, ?2, ?3, ?4, ?5)
+    ON CONFLICT (account_uuid, message_id_hdr)
+    DO UPDATE SET state = excluded.state, operation_id = excluded.operation_id,
+                  updated_at = excluded.updated_at";
+
+pub(crate) const RECEIPT_ANSWER: &str = "
+    SELECT a.state, a.operation_id, (SELECT o.state FROM operation o WHERE o.id = a.operation_id)
+    FROM receipt_answer a WHERE a.account_uuid = ?1 AND a.message_id_hdr = ?2";
+
+const UPSERT_RECEIPT_RECEIVED: &str = "
+    INSERT INTO receipt_received (account_uuid, original_msgid_hdr, recipient, disposition,
+                                  received_at)
+    VALUES (?1, ?2, ?3, ?4, ?5)
+    ON CONFLICT (account_uuid, original_msgid_hdr, recipient)
+    DO UPDATE SET disposition = excluded.disposition, received_at = excluded.received_at
+    WHERE excluded.received_at >= receipt_received.received_at";
+
+pub(crate) const RECEIPTS_RECEIVED: &str = "
+    SELECT recipient, disposition, received_at FROM receipt_received
+    WHERE account_uuid = ?1 AND original_msgid_hdr = ?2 LIMIT 100";
+
+/// The user's answer to a read-receipt request as stored: the state, and for a queued one the
+/// state of its send operation (`None` once purged).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredReceiptAnswer {
+    /// `queued`, `sent` or `declined`.
+    pub state: String,
+    pub operation: Option<OperationId>,
+    pub operation_state: Option<OperationState>,
+}
+
+fn set_answer(
+    conn: &Connection,
+    account: AccountId,
+    message_id_header: &str,
+    state: &str,
+    operation: Option<OperationId>,
+    now: i64,
+) -> Result<(), StoreError> {
+    conn.prepare_cached(UPSERT_RECEIPT_ANSWER)?
+        .execute(params![
+            account.to_string(),
+            message_id_header,
+            state,
+            operation.map(|o| o.0),
+            now
+        ])
+        .map_err(StoreError::sqlite("record read receipt answer"))?;
+    Ok(())
+}
+
+/// `$MDNSent` on the original's locations, where the account may write.
+fn mark_answered(
+    conn: &Connection,
+    account_row: i64,
+    message_id_header: &str,
+    request: &str,
+    now: i64,
+    change: &mut OutboxChange,
+) -> Result<(), StoreError> {
+    let (account, writes) = account_writes(conn, account_row)?;
+    if !writes {
+        return Ok(());
+    }
+    let locations = original_locations(conn, account_row, message_id_header)?;
+    let mut recorder = Recorder::new(
+        conn,
+        account_row,
+        account,
+        ActionKind::AddKeyword,
+        request,
+        now,
+    );
+    for location in locations {
+        recorder.record_flag(
+            location.source,
+            Flag::Keyword(MDN_SENT_KEYWORD.into()),
+            true,
+        )?;
+    }
+    merge_change(change, recorder.change);
+    Ok(())
+}
+
+/// The follow-up of an accepted read receipt: the answer is `sent`, the original gets
+/// `$MDNSent`. No copy in Sent, no draft.
+fn receipt_sent(
+    conn: &Connection,
+    op: &StoredOperation,
+    account_row: i64,
+    original: &str,
+    now: i64,
+    change: &mut OutboxChange,
+) -> Result<(), StoreError> {
+    set_answer(conn, op.account, original, "sent", Some(op.id), now)?;
+    mark_answered(
+        conn,
+        account_row,
+        original,
+        &format!("receipt-{}", op.id),
+        now,
+        change,
+    )
+}
+
+/// See [`crate::Store::enqueue_receipt`].
+pub(crate) fn enqueue_receipt(
+    conn: &Connection,
+    account: AccountId,
+    job: SendJob,
+    request: &str,
+    now: i64,
+) -> Result<OutboxChange, StoreError> {
+    let account_row = accounts::row_id(conn, account)?;
+    require_writes(conn, account_row)?;
+    let original = job
+        .receipt_for
+        .clone()
+        .ok_or_else(|| StoreError::InvalidArgument("not a read receipt".into()))?;
+    if let Some(batch) = repeated(conn, request)? {
+        let mut change = OutboxChange::new(account);
+        change.batch = Some(batch);
+        change.repeated = true;
+        return Ok(change);
+    }
+    let mut recorder = Recorder::new(conn, account_row, account, ActionKind::Send, request, now);
+    let id = recorder.insert(&OperationPayload::Send(job))?;
+    set_answer(conn, account, &original, "queued", Some(id), now)?;
+    Ok(recorder.change)
+}
+
+/// See [`crate::Store::decline_receipt`].
+pub(crate) fn decline_receipt(
+    conn: &Connection,
+    account: AccountId,
+    message_id_header: &str,
+    request: &str,
+    now: i64,
+) -> Result<OutboxChange, StoreError> {
+    let account_row = accounts::row_id(conn, account)?;
+    let mut change = OutboxChange::new(account);
+    if repeated(conn, request)?.is_some() {
+        change.repeated = true;
+        return Ok(change);
+    }
+    set_answer(conn, account, message_id_header, "declined", None, now)?;
+    mark_answered(
+        conn,
+        account_row,
+        message_id_header,
+        request,
+        now,
+        &mut change,
+    )?;
+    Ok(change)
+}
+
+pub(crate) fn receipt_answer(
+    conn: &Connection,
+    account: AccountId,
+    message_id_header: &str,
+) -> Result<Option<StoredReceiptAnswer>, StoreError> {
+    Ok(conn
+        .prepare_cached(RECEIPT_ANSWER)?
+        .query_row(params![account.to_string(), message_id_header], |r| {
+            let state: Option<String> = r.get(2)?;
+            Ok(StoredReceiptAnswer {
+                state: r.get(0)?,
+                operation: r.get::<_, Option<i64>>(1)?.map(OperationId),
+                operation_state: state.as_deref().and_then(OperationState::parse),
+            })
+        })
+        .optional()?)
+}
+
+/// A read receipt whose body was just stored: recorded for the message it reports on.
+pub(crate) fn record_received(
+    conn: &Connection,
+    receipt: MessageId,
+    report: &crate::ReceivedReceipt,
+) -> Result<(), StoreError> {
+    let row: Option<(String, i64)> = conn
+        .prepare_cached(
+            "SELECT (SELECT a.uuid FROM account a WHERE a.id = m.account_id), m.date
+             FROM message m WHERE m.id = ?1",
+        )?
+        .query_row([receipt.0], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()?;
+    let Some((account, date)) = row else {
+        return Ok(());
+    };
+    conn.prepare_cached(UPSERT_RECEIPT_RECEIVED)?
+        .execute(params![
+            account,
+            report.original_message_id,
+            report.recipient.as_deref().unwrap_or_default(),
+            report.disposition.as_str(),
+            date.saturating_mul(1000)
+        ])
+        .map_err(StoreError::sqlite("record received read receipt"))?;
+    Ok(())
+}
+
+pub(crate) fn received_receipts(
+    conn: &Connection,
+    account: AccountId,
+    message_id_header: &str,
+) -> Result<Vec<mail_model::ReceivedReadReceipt>, StoreError> {
+    // One row per recipient of one message: sorted here, not by a temporary B-tree.
+    let mut out = conn
+        .prepare_cached(RECEIPTS_RECEIVED)?
+        .query_map(params![account.to_string(), message_id_header], |r| {
+            let recipient: String = r.get(0)?;
+            let disposition: String = r.get(1)?;
+            Ok(mail_model::ReceivedReadReceipt {
+                recipient: (!recipient.is_empty()).then_some(recipient),
+                disposition: mail_model::ReceiptDisposition::parse(&disposition)
+                    .unwrap_or(mail_model::ReceiptDisposition::Other),
+                received_at: r.get(2)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    out.sort_by_key(|r| std::cmp::Reverse(r.received_at));
+    Ok(out)
 }
 
 /// See [`crate::OperationResult::Appended`].

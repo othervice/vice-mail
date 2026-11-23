@@ -2,8 +2,8 @@
 
 use mail_engine::AppCore;
 use mail_model::{
-    AccountId, IpcError, ListCursor, Mailbox, MailboxId, MailboxRole, MessageId, MessageListItem,
-    MessagePage,
+    AccountId, ActionResult, IpcError, ListCursor, Mailbox, MailboxId, MailboxRole, MessageId,
+    MessageListItem, MessagePage,
 };
 use tauri::State;
 
@@ -60,4 +60,34 @@ pub async fn get_messages_by_ids(
     core.get_messages_by_ids(message_ids)
         .await
         .map_err(to_ipc("get_messages_by_ids"))
+}
+
+/// Stage 14 (decision 0034): the Gmail labels of a message (`\Inbox`, `\Important`, user
+/// labels by their folder path); null for messages of other servers. They change through
+/// `apply_action` with `addLabel` / `removeLabel`.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_message_labels(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+) -> Result<Option<Vec<String>>, IpcError> {
+    core.get_message_labels(message_id)
+        .await
+        .map_err(to_ipc("get_message_labels"))
+}
+
+/// Stage 14: adds (`add`) or removes a Gmail label of one message through the outbox; the core
+/// picks the folder the change is sent from. `requestId` is a fresh UUID per user action.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_message_label(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+    label: String,
+    add: bool,
+    request_id: String,
+) -> Result<ActionResult, IpcError> {
+    core.set_message_label(message_id, label, add, request_id)
+        .await
+        .map_err(to_ipc("set_message_label"))
 }

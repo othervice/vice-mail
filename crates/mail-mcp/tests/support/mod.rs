@@ -78,6 +78,8 @@ fn mailbox(id: i64, account: u128, path: &str, role: MailboxRole) -> Mailbox {
         selectable: true,
         unread: 1,
         total: 3,
+        favorite_position: None,
+        color: None,
     }
 }
 
@@ -299,6 +301,7 @@ impl FakeAccess {
             pinned: false,
             snooze: None,
             task: None,
+            reading_list: false,
         }
     }
 

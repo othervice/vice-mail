@@ -43,7 +43,7 @@ export function UnifiedTree({ accountCount }: { accountCount: number }) {
                 }}
                 className={cx(
                   "flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-13 transition-colors",
-                  current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-hover hover:text-primary",
+                  current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
                 )}
                 data-testid={`unified-${entry.key}`}
               >

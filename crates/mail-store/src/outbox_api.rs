@@ -134,6 +134,9 @@ pub struct OutboxChange {
     pub drafts: Vec<DraftId>,
     /// Stage 5: drafts deleted (sent or discarded); their files can go.
     pub drafts_removed: Vec<DraftId>,
+    /// Stage 16: what the change recorded in other accounts (a move between accounts removes
+    /// its source once the copy is confirmed in the target).
+    pub others: Vec<OutboxChange>,
 }
 
 impl OutboxChange {
@@ -147,6 +150,7 @@ impl OutboxChange {
             repeated: false,
             drafts: Vec::new(),
             drafts_removed: Vec::new(),
+            others: Vec::new(),
         }
     }
 

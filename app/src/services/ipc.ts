@@ -1426,3 +1426,18 @@ export const emlIpc = {
   getMessagesByIds: (messageIds: MessageId[]): Promise<MessageListItem[]> =>
     call(() => emlCommands.getMessagesByIds(messageIds)),
 };
+
+// ---- Stage 14, block A (decision 0034): Gmail labels ----
+import { commands as gmailCommands } from "../generated/bindings";
+
+export const gmailIpc = {
+  /** The Gmail labels of a message (system labels as `\Inbox`, `\Important`, …); null off Gmail. */
+  getMessageLabels: (messageId: MessageId): Promise<string[] | null> =>
+    call(() => gmailCommands.getMessageLabels(messageId)),
+  /**
+   * Adds (`add`) or removes one label through the outbox; the core picks the folder it is sent
+   * from. `requestId` is a fresh UUID per user action. `unsupported_server` off Gmail.
+   */
+  setMessageLabel: (messageId: MessageId, label: string, add: boolean, requestId: string): Promise<ActionResult> =>
+    call(() => gmailCommands.setMessageLabel(messageId, label, add, requestId)),
+};

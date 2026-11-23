@@ -51,7 +51,7 @@ export function RecentSearches({ id, items, active, optionId, onPick, onClear, c
           </li>
         ))}
       </ul>
-      <div className="border-t border-border px-2 py-1">
+      <div className="border-t border-border-subtle px-2 py-1">
         <button
           type="button"
           disabled={clearing}

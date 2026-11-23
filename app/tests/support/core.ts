@@ -230,6 +230,7 @@ export const CAPABILITIES: Capabilities = {
   listStatus: true,
   literalPlus: true,
   esearch: true,
+  gmail: false,
   names: ["IDLE", "IMAP4REV1"],
 };
 
@@ -237,6 +238,8 @@ const NOTHING: DiscoveryResult = { source: "none", imap: null, smtp: null, provi
 
 interface FakeCoreOptions {
   appInfo?: AppInfo;
+  /** Stage 14: Gmail labels by message id; messages without an entry are not Gmail (null). */
+  gmailLabels?: Record<number, string[]>;
   preferences?: Preferences;
   failures?: Partial<Record<string, Failure>>;
   /** Fails a call by its arguments, e.g. only the second page of a list. */
@@ -471,6 +474,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     unflag: "unflag",
     addKeyword: "add_keyword",
     removeKeyword: "remove_keyword",
+    addLabel: "add_label",
+    removeLabel: "remove_label",
     archive: "archive",
     delete: "delete",
     deletePermanently: "delete_permanently",
@@ -612,6 +617,18 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         return readingPreferences;
       case "apply_action":
         return applyAction(args["action"] as MailAction, args["messages"] as MessageRef[], args["requestId"] as string);
+      // Stage 14: Gmail labels, kept per message in the options' map.
+      case "get_message_labels":
+        return options.gmailLabels?.[args["messageId"] as number] ?? null;
+      case "set_message_label": {
+        const labels = options.gmailLabels?.[args["messageId"] as number];
+        if (!labels) return reject("unsupported_server");
+        const label = args["label"] as string;
+        const next = labels.filter((l) => l !== label);
+        if (args["add"] as boolean) next.push(label);
+        (options.gmailLabels ?? {})[args["messageId"] as number] = next;
+        return { batch: nextBatch++, queued: 1, cancelled: 0 };
+      }
       case "undo_action":
         return undoAction(args["batch"] as number);
       case "create_mailbox": {

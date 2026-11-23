@@ -5,6 +5,7 @@ import type { UiPreferences } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -73,7 +74,7 @@ describe("layouts", () => {
     // Moving through the list does not open anything.
     expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
     const cursor = cursorRow(list);
-    expect(cursor?.getAttribute("aria-label")).toContain(items[1]?.subject ?? "");
+    expect(optionName(cursor)).toContain(items[1]?.subject ?? "");
 
     await user.keyboard("{Enter}");
     const pane = await screen.findByRole("region", { name: "Message" });
@@ -189,9 +190,9 @@ describe("layouts", () => {
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });
     list.focus();
     await user.keyboard("jj");
-    expect(cursorRow(list)?.getAttribute("aria-label")).toContain(items[2]?.subject ?? "");
+    expect(optionName(cursorRow(list))).toContain(items[2]?.subject ?? "");
     await user.keyboard("k");
-    expect(cursorRow(list)?.getAttribute("aria-label")).toContain(items[1]?.subject ?? "");
+    expect(optionName(cursorRow(list))).toContain(items[1]?.subject ?? "");
   });
 
   it("applies to the unified inbox too", async () => {

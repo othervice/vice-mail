@@ -200,6 +200,13 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         name: "Thanks".into(),
         subject: "Thanks, {{first_name}}".into(),
         html: "<p>Hi {{first_name}}</p>".into(),
+        // Stage 16: a template with recipients is a record like any other.
+        to: vec![mail_model::Address {
+            name: None,
+            email: "bob@friends.example".into(),
+        }],
+        cc: Vec::new(),
+        bcc: Vec::new(),
     })
     .await
     .expect("template");
@@ -229,6 +236,31 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_task(vec![message], Some(TaskMark { done: false }))
         .await
         .expect("task");
+    // Stage 16 (decision 0033): the reading list, a folder's favourite and colour and a
+    // blocked sender are records; the views that group unread on top are not.
+    core.set_reading_list(vec![message], true)
+        .await
+        .expect("reading list");
+    let inbox = core
+        .list_mailboxes(account)
+        .await
+        .expect("mailboxes")
+        .into_iter()
+        .find(|m| m.path == "INBOX")
+        .expect("inbox")
+        .id;
+    core.set_mailbox_favorite(inbox, true)
+        .await
+        .expect("favourite");
+    core.set_mailbox_color(inbox, mail_model::AccountColor::new(1))
+        .await
+        .expect("colour");
+    core.block_sender("spam@offers.example".into())
+        .await
+        .expect("blocked sender");
+    core.set_unread_first_view("unified:all".into(), true)
+        .await
+        .expect("unread first");
     core.create_account_group("Work".into(), vec![account])
         .await
         .expect("group");

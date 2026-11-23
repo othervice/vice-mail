@@ -146,7 +146,7 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
     <form
       role="search"
       aria-label={t("search.field")}
-      className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3"
+      className="flex shrink-0 flex-col gap-2 border-b border-border-subtle px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         submit();

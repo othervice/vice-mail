@@ -18,6 +18,7 @@ import {
   emptyServers,
   fromDiscovery,
   isEmail,
+  isGmailHost,
   toSettings,
   type ServerDraft,
   type ServerKind,
@@ -106,7 +107,9 @@ export function AddAccount() {
   const showForm = editing || !discovered;
   const settings = toSettings(email, displayName, servers);
   const ready = settings !== null && password !== "";
-  const providerHint = suggestion?.providerHint ?? (online.data?.providerHint || null);
+  // Stage 14: Gmail also by its server (Google Workspace domains, servers typed in by hand).
+  const providerHint =
+    suggestion?.providerHint ?? (online.data?.providerHint || null) ?? (isGmailHost(servers.imap.host) ? "gmail" : null);
   const lookupSettled = isEmail(email) && debouncedEmail === email.trim() && (known.isSuccess || known.isError);
   const lookupDone = lookupSettled && known.isSuccess;
   // Address first: the server part appears once the lookup for it has answered.

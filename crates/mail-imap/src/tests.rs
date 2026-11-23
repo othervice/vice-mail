@@ -1249,3 +1249,6 @@ mod writer {
         assert_eq!(lines.len(), 2, "only LOGIN and ENABLE: {lines:?}");
     }
 }
+
+// Stage 14, block A: Gmail over IMAP (recorded responses).
+mod gmail;

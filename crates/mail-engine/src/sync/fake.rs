@@ -376,6 +376,7 @@ impl FakeServer {
                     raw.get(..end).unwrap_or_default().to_vec()
                 })
                 .unwrap_or_default(),
+            gmail: None,
         }
     }
 }
@@ -671,6 +672,7 @@ impl MailWriter for FakeBackend {
                         uid,
                         flags: message.flags.clone(),
                         modseq: Some(ModSeq(modseq)),
+                        gmail_labels: None,
                     });
                 }
             }
@@ -920,6 +922,7 @@ impl MailBackend for FakeBackend {
                             uid: *uid,
                             flags: m.flags.clone(),
                             modseq: Some(ModSeq(m.modseq)),
+                            gmail_labels: None,
                         })
                         .collect()
                 })

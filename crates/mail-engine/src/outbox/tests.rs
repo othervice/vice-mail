@@ -244,6 +244,7 @@ impl MailBackend for FakeWriter {
                 uid: *uid,
                 flags: m.flags.clone(),
                 modseq: Some(ModSeq(m.modseq)),
+                gmail_labels: None,
             })
             .collect())
     }
@@ -296,6 +297,16 @@ impl MailWriter for FakeWriter {
     ) -> Result<StoreOutcome, BackendError> {
         self.open(mailbox)?;
         let mut server = self.begin("UID STORE")?;
+        // Stage 14: Gmail label STOREs are logged with what they carry (see `tests/gmail.rs`).
+        for flag in flags {
+            if let Flag::Label(label) = flag {
+                let sign = if mode == StoreMode::Add { '+' } else { '-' };
+                let since = unchanged_since.is_some();
+                server
+                    .log
+                    .push(format!("X-GM-LABELS {sign}{label} since={since}"));
+            }
+        }
         let mut outcome = StoreOutcome::default();
         let mut modified = Vec::new();
         let candidates: Vec<Uid> = server.boxes[&mailbox.name]
@@ -325,6 +336,7 @@ impl MailWriter for FakeWriter {
                 uid,
                 flags: m.flags.clone(),
                 modseq: Some(ModSeq(modseq)),
+                gmail_labels: None,
             });
         }
         outcome.modified = UidSet::from_uids(modified);
@@ -464,6 +476,7 @@ fn header(uid: Uid, m: &Msg) -> MessageHeader {
         precedence: None,
         has_attachments: false,
         category_headers: Vec::new(),
+        gmail: None,
     }
 }
 
@@ -971,3 +984,6 @@ async fn undo_and_opposites_cancel_before_anything_is_sent() {
     }
     bed.outbox.shutdown().await;
 }
+
+// Stage 14, block A: Gmail labels and archive (decision 0034).
+mod gmail;

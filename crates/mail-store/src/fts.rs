@@ -43,6 +43,9 @@ pub struct BodyText {
     pub body: String,
     /// File names of the attachments.
     pub attachments: Vec<String>,
+    /// Stage 16: the message is a read receipt (RFC 8098); recorded for the message it reports
+    /// on when a complete body is stored.
+    pub receipt: Option<crate::ReceivedReceipt>,
 }
 
 /// Makes [`BodyText`] from stored bodies. The engine implements it with `mail-content`; the

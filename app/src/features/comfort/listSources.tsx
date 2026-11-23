@@ -43,30 +43,43 @@ export function toListRows(rows: readonly InboxListRow[], options: ListRowsOptio
       case "section":
         return row;
       case "message":
-        return { kind: "message", key: row.key, item: row.item, position: position++ };
+        return {
+          kind: "message",
+          key: row.key,
+          item: row.item,
+          position: position++,
+          ...(row.block === "priority" && { card: "priority" as const }),
+          ...(row.bundle !== null && { card: "bundle" as const }),
+        };
       case "block":
-        return { kind: "extra", key: row.key, size: "section", render: () => <BlockHeading block={row.block} /> };
+        return {
+          kind: "extra",
+          key: row.key,
+          size: "section",
+          render: () => <BlockHeading block={row.block} />,
+          ...(row.block === "priority" && { card: "priority" as const }),
+        };
       case "showAll":
         return {
           kind: "extra",
           key: row.key,
           size: "section",
-          render: () => <ShowAllRow total={row.total} unread={row.unread} onShow={options.showAll} />,
+          card: "priority",
+          render: () => <ShowAllRow total={row.total} unread={row.unread} />,
+          action: { activate: options.showAll },
         };
       case "bundle":
         return {
           kind: "extra",
           key: row.key,
           size: "row",
-          render: () => (
-            <BundleRow
-              bundle={row.bundle}
-              expanded={row.expanded}
-              onToggle={() => {
-                options.toggle(row.bundle.key);
-              }}
-            />
-          ),
+          render: () => <BundleRow bundle={row.bundle} expanded={row.expanded} />,
+          ...(row.expanded && { card: "bundle" as const }),
+          action: {
+            activate: () => {
+              options.toggle(row.bundle.key);
+            },
+          },
         };
     }
   });
@@ -148,7 +161,8 @@ function useSortedInboxSource(
         kind: "extra",
         key: "priority-back",
         size: "section",
-        render: () => <PriorityBack onBack={back} />,
+        render: () => <PriorityBack />,
+        action: { activate: back },
       },
       ...buildRows(items, bounds),
     ],
@@ -241,7 +255,7 @@ function TaskFilterBar({ value, onChange }: { value: TaskFilter; onChange: (filt
     <div
       role="group"
       aria-label={t("comfort.tasks.filter")}
-      className="flex shrink-0 items-center gap-1 border-b border-border px-4 py-2"
+      className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-surface-list px-4 py-2"
       data-testid="task-filter"
     >
       {TASK_FILTERS.map((filter) => (
@@ -253,7 +267,7 @@ function TaskFilterBar({ value, onChange }: { value: TaskFilter; onChange: (filt
             onChange(filter);
           }}
           className={cx(
-            "rounded-control px-2 py-1 text-13 focus-visible:outline-2 focus-visible:outline-focus-ring",
+            "rounded-full px-3 py-1 text-13 transition-colors focus-visible:outline-2 focus-visible:outline-focus-ring",
             value === filter ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-hover",
           )}
         >
@@ -264,27 +278,27 @@ function TaskFilterBar({ value, onChange }: { value: TaskFilter; onChange: (filt
   );
 }
 
-/** First row of the "Priority" list: its name and the way back to the whole inbox. */
-function PriorityBack({ onBack }: { onBack: () => void }) {
+/**
+ * First row of the "Priority" list: its name and the way back to the whole inbox. An option of the
+ * list (Enter, Space or a click lead back), so it holds no button of its own.
+ */
+function PriorityBack() {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full items-end justify-between gap-2 rounded-card bg-priority-tint px-3 pb-1">
-      <span className="flex items-center gap-2 text-12 font-semibold text-primary">
-        <Zap aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+    <div
+      className="flex h-full items-center justify-between gap-2 rounded-card border border-priority-border bg-priority-tint px-3 shadow-card"
+      data-testid="priority-back"
+    >
+      {/* One text names the option (WCAG 2.5.3); the drawn parts are hidden from screen readers. */}
+      <span className="sr-only">{`${t("comfort.blocks.priority")}, ${t("comfort.priority.back")}`}</span>
+      <span aria-hidden className="flex items-center gap-2 text-13 font-semibold text-primary">
+        <Zap aria-hidden className="size-(--ui-icon-small) text-warning" strokeWidth={2} />
         {t("comfort.blocks.priority")}
       </span>
-      <button
-        type="button"
-        onClick={onBack}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") event.stopPropagation();
-        }}
-        data-testid="priority-back"
-        className="flex items-center gap-1 rounded-control px-1 text-12 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-focus-ring"
-      >
+      <span aria-hidden className="flex items-center gap-1 rounded-full px-2 py-1 text-12 font-medium text-accent group-hover/row:underline">
         <Inbox aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         {t("comfort.priority.back")}
-      </button>
+      </span>
     </div>
   );
 }

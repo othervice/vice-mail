@@ -12,6 +12,8 @@ import {
 } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { toolbarAction } from "./support/reading";
+import { optionName } from "./support/names";
 
 const ADA = makeAccount({ writesEnabled: true });
 const READ_ONLY = makeAccount({ writesEnabled: false });
@@ -63,7 +65,7 @@ async function list() {
 function row(listbox: HTMLElement, subject: string): HTMLElement {
   const option = within(listbox)
     .getAllByRole("option")
-    .find((o) => (o.getAttribute("aria-label") ?? "").includes(`, ${subject},`));
+    .find((o) => optionName(o).includes(`, ${subject},`));
   if (!option) throw new Error(`no row ${subject}`);
   return option;
 }
@@ -77,7 +79,7 @@ function selectedRows(listbox: HTMLElement): string[] {
   return within(listbox)
     .getAllByRole("option")
     .filter((o) => o.getAttribute("aria-selected") === "true")
-    .map((o) => /Message \d+(?=,)/.exec(o.getAttribute("aria-label") ?? "")?.[0] ?? "");
+    .map((o) => /Message \d+(?=,)/.exec(optionName(o))?.[0] ?? "");
 }
 
 async function openFirst(user: ReturnType<typeof renderApp>["user"], subject = "Message 1") {
@@ -172,9 +174,15 @@ describe("actions from the toolbar and the rows", () => {
     const names = within(toolbar)
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    // Stage 5: reply, reply all and forward come first (stage 10: forward as attachment next to it).
-    expect(names.slice(0, 4)).toEqual(["Reply", "Reply all", "Forward", "Forward as attachment"]);
-    expect(names.slice(4, 11)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
+    // The toolbar shows its primary groups (respond, file away, mark); the rest is in "More".
+    expect(names).toEqual(["Reply", "Reply all", "Forward", "Archive", "Delete", "Mark as read", "Flag", "More actions"]);
+    // Every action keeps its (hidden) button in toolbar order. Stage 5: reply, reply all and
+    // forward come first (stage 10: forward as attachment next to it).
+    const all = within(toolbar)
+      .getAllByRole("button", { hidden: true })
+      .map((b) => b.getAttribute("aria-label"));
+    expect(all.slice(0, 4)).toEqual(["Reply", "Reply all", "Forward", "Forward as attachment"]);
+    expect(all.slice(4, 11)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
     const archive = within(toolbar).getByRole("button", { name: "Archive" });
     expect(archive.getAttribute("aria-keyshortcuts")).toBe("E");
     // One tab stop (the first button, Reply since stage 5); arrows move along.
@@ -305,8 +313,8 @@ describe("pending and failed changes", () => {
     expect(within(row(listbox, "Message 2")).getByTestId("row-activity-failed")).toBeTruthy();
     expect(within(row(listbox, "Message 3")).getByTestId("row-activity-conflict")).toBeTruthy();
     expect(within(row(listbox, "Message 4")).queryByTestId(/row-activity/)).toBeNull();
-    expect(row(listbox, "Message 2").getAttribute("aria-label")).toContain("Change failed");
-    expect(row(listbox, "Message 1").getAttribute("aria-label")).toContain("Change waiting for the server");
+    expect(optionName(row(listbox, "Message 2"))).toContain("Change failed");
+    expect(optionName(row(listbox, "Message 1"))).toContain("Change waiting for the server");
   });
 
   it("the rail counts what waits and what needs the user; a failure of an own action gets a notice", async () => {
@@ -451,8 +459,9 @@ describe("read-only accounts", () => {
     // Stage 5: replying and forwarding write local drafts; sending explains read-only itself.
     // Stage 8: opening the message in a window of its own changes nothing either.
     const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward", "Forward as attachment", "Open in new window"]);
-    for (const button of within(toolbar).getAllByRole("button")) {
-      if (local.has(button.getAttribute("aria-label") ?? "")) continue;
+    // The primary buttons and those in "More actions" (hidden in the toolbar, same set).
+    for (const button of within(toolbar).getAllByRole("button", { hidden: true })) {
+      if (local.has(button.getAttribute("aria-label") ?? "") || button.getAttribute("aria-label") === "More actions") continue;
       expect(button.getAttribute("aria-disabled")).toBe("true");
     }
     const note = within(pane).getByTestId("read-only-actions");
@@ -586,7 +595,7 @@ describe("multi-selection", () => {
       expect(within(listbox).getAllByRole("option")).toHaveLength(6);
     });
     // The next mail after the selection takes over.
-    expect(cursorRow(listbox)?.getAttribute("aria-label")).toContain(", Message 9,");
+    expect(optionName(cursorRow(listbox))).toContain(", Message 9,");
   });
 
   it("the selection box at the start of a row toggles it, and shows in every row while several are selected", async () => {
@@ -771,14 +780,15 @@ describe("move to folder", () => {
   it("Escape closes the list without moving and gives the focus back", async () => {
     const { core, user } = setup();
     const { pane } = await openFirst(user);
-    const button = within(within(pane).getByRole("toolbar")).getByRole("button", { name: "Move to folder" });
-    await user.click(button);
+    const toolbar = within(pane).getByRole("toolbar");
+    // "Move to folder" is in "More actions"; the menu gives the focus back to its button first.
+    await user.click(await toolbarAction(user, toolbar, "Move to folder"));
     await screen.findByRole("dialog", { name: "Move message to" });
 
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(button);
+    expect(document.activeElement).toBe(within(toolbar).getByRole("button", { name: "More actions" }));
     expect(actionCalls(core)).toHaveLength(0);
   });
 });
@@ -995,7 +1005,7 @@ describe("deleting for good", () => {
     expect(notice.textContent).toContain("Deleted permanently");
     expect(within(notice).queryByRole("button", { name: /Undo/ })).toBeNull();
     await waitFor(() => {
-      expect(cursorRow(listbox)?.getAttribute("aria-label")).toContain(", Message 2,");
+      expect(optionName(cursorRow(listbox))).toContain(", Message 2,");
     });
     expect(document.activeElement).toBe(listbox);
   });
@@ -1075,7 +1085,7 @@ describe("marking as read when opened", () => {
     listbox.focus();
 
     await waitFor(() => {
-      expect(row(listbox, "Message 1").getAttribute("aria-label")).not.toContain("Unread");
+      expect(optionName(row(listbox, "Message 1"))).not.toContain("Unread");
     });
 
     await user.keyboard("{Shift>}U{/Shift}");
@@ -1140,7 +1150,7 @@ describe("every action from every surface", () => {
   ])("toolbar button %s sends %s", async (name, type) => {
     const { core, user, items } = setup();
     const { pane } = await openFirst(user);
-    await user.click(within(within(pane).getByRole("toolbar")).getByRole("button", { name }));
+    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar"), name));
     await waitFor(() => {
       expect(actionCalls(core)).toHaveLength(1);
     });
@@ -1150,7 +1160,7 @@ describe("every action from every surface", () => {
   it("the toolbar's Tags button opens the tag editor", async () => {
     const { user } = setup();
     const { pane } = await openFirst(user);
-    await user.click(within(within(pane).getByRole("toolbar")).getByRole("button", { name: "Tags" }));
+    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar"), "Tags"));
     expect(await screen.findByRole("dialog", { name: "Tags of this message" })).toBeTruthy();
   });
 

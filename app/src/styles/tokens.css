@@ -12,18 +12,25 @@
 :root {
   color-scheme: light;
 
-  /* Surfaces */
-  --ui-canvas: #f7f6f3;
+  /* Surfaces. Feinschliff (decision 0031): three tonal steps from the frame inwards: the rail
+     darkest, the list column slightly tinted, the reading pane brightest; cards are raised. */
+  --ui-canvas: #f4f2ee;
   --ui-surface: #fdfcfa;
+  --ui-surface-list: #f8f7f4;
   --ui-surface-raised: #ffffff;
-  --ui-rail: #eeece7;
-  --ui-priority-tint: #faf0df;
+  --ui-rail: #e9e6df;
+  --ui-rail-hover: #e2dfd8;
+  --ui-priority-tint: #fbf1e1;
   --ui-selected: #dfefec;
   --ui-hover: #efede8;
+  /* Fill of small pills: conversation size, counters. */
+  --ui-badge: #ebe8e2;
 
-  /* Lines */
+  /* Lines. `border-subtle` separates panes and rows without drawing attention. */
   --ui-border: #e3e0da;
-  --ui-border-strong: #8a847b;
+  --ui-border-subtle: #ebe8e2;
+  --ui-priority-border: #f0dfc2;
+  --ui-border-strong: #847e75;
   --ui-focus-ring: #0b6e66;
 
   /* Text */
@@ -49,6 +56,25 @@
   --ui-account-7: #0b7a80;
   --ui-account-8: #7a5f45;
 
+  /* Avatar tints (decision 0031): initials of a sender on a soft fill, the hue chosen by a stable
+     hash of the address (features/accounts/senderTint.ts). Text on fill >= 4.5:1. */
+  --ui-avatar-1-bg: #dce8fb;
+  --ui-avatar-1-text: #1f4e9a;
+  --ui-avatar-2-bg: #e8e0fa;
+  --ui-avatar-2-text: #5b3aa6;
+  --ui-avatar-3-bg: #f8dff0;
+  --ui-avatar-3-text: #962f6c;
+  --ui-avatar-4-bg: #fbe2dc;
+  --ui-avatar-4-text: #a0331f;
+  --ui-avatar-5-bg: #f8e7cf;
+  --ui-avatar-5-text: #8a4a00;
+  --ui-avatar-6-bg: #e0eed3;
+  --ui-avatar-6-text: #3e6a14;
+  --ui-avatar-7-bg: #d5eeee;
+  --ui-avatar-7-text: #0b6669;
+  --ui-avatar-8-bg: #ece4da;
+  --ui-avatar-8-text: #6b533b;
+
   /* Mail content. HTML mail is shown on its own white canvas, in the dark theme too: its colours
      were made for white, and recolouring would break them (docs/DESIGN.md). Not redefined below. */
   --ui-mail-canvas: #ffffff;
@@ -60,6 +86,9 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable", system-ui,
     "Segoe UI", sans-serif;
   --ui-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  /* 9 px only for the decorative initial of the 16 px mini avatar (aria-hidden, the name stands next to it). */
+  --ui-font-size-9: 0.5625rem;
+  --ui-line-height-9: 0.75rem;
   --ui-font-size-12: 0.75rem;
   --ui-line-height-12: 1rem;
   --ui-font-size-13: 0.8125rem;
@@ -81,16 +110,22 @@
   --ui-space-2: 0.5rem;
   --ui-space-3: 0.75rem;
   --ui-space-4: 1rem;
+  --ui-space-5: 1.25rem;
   --ui-space-6: 1.5rem;
   --ui-space-8: 2rem;
+  --ui-space-10: 2.5rem;
   --ui-space-12: 3rem;
 
-  /* Radius */
+  /* Radius: controls, rows and icon tiles, cards, panels. Pills use `rounded-full`. */
   --ui-radius-control: 6px;
+  --ui-radius-row: 8px;
   --ui-radius-card: 10px;
   --ui-radius-panel: 16px;
 
-  /* Shadows: floating (menus, tooltips) and panel */
+  /* Elevation (decision 0031): soft shadows instead of hard borders. `card` lifts a block in the
+     list (priority) or a selected row by a hair; floating (menus, tooltips) and panel above it. */
+  --ui-shadow-card: 0 1px 2px rgb(30 28 25 / 0.06), 0 2px 8px rgb(30 28 25 / 0.05);
+  --ui-shadow-row: 0 1px 2px rgb(30 28 25 / 0.07);
   --ui-shadow-floating: 0 4px 16px rgb(30 28 25 / 0.12), 0 1px 3px rgb(30 28 25 / 0.08);
   --ui-shadow-panel: 0 12px 40px rgb(30 28 25 / 0.14), 0 2px 6px rgb(30 28 25 / 0.06);
 
@@ -111,12 +146,15 @@
   --ui-form-max-width: 36rem;
   /* The rail unfolded into the labelled sidebar with the folder tree. */
   --ui-sidebar-width: 15rem;
-  --ui-avatar: 1.75rem;
+  /* Avatars: 32 px in rows and the rail, 16 px in the sender chips of bundles. */
+  --ui-avatar: 2rem;
+  --ui-avatar-mini: 1rem;
   --ui-dot: 0.5rem;
   /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
-     width rows get two lines. The list reads these values for its virtualizer. */
+     width rows get more lines: three comfortable (sender and time, subject, preview), two compact
+     (no preview). The list reads these values for its virtualizer. */
   --ui-row-height: 2.75rem;
-  --ui-row-height-two-line: 3.75rem;
+  --ui-row-height-two-line: 4.75rem;
   --ui-section-height: 2rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
@@ -156,16 +194,21 @@
   color-scheme: dark;
 
   /* Surfaces */
-  --ui-canvas: #171615;
+  --ui-canvas: #141312;
   --ui-surface: #1d1c1a;
+  --ui-surface-list: #1a1917;
   --ui-surface-raised: #272522;
-  --ui-rail: #121110;
+  --ui-rail: #0e0d0c;
+  --ui-rail-hover: #1f1d1b;
   --ui-priority-tint: #2c2519;
   --ui-selected: #1d3633;
   --ui-hover: #252320;
+  --ui-badge: #2e2c28;
 
   /* Lines */
   --ui-border: #34312d;
+  --ui-border-subtle: #2a2825;
+  --ui-priority-border: #3d3222;
   --ui-border-strong: #77716a;
   --ui-focus-ring: #63c7ba;
 
@@ -192,7 +235,27 @@
   --ui-account-7: #55c3c9;
   --ui-account-8: #c9ac8b;
 
+  /* Avatar tints: deep fills with light initials, the same hues as in light */
+  --ui-avatar-1-bg: #22314a;
+  --ui-avatar-1-text: #a9c5f5;
+  --ui-avatar-2-bg: #2f2848;
+  --ui-avatar-2-text: #c6b3f3;
+  --ui-avatar-3-bg: #3d2537;
+  --ui-avatar-3-text: #efb0d8;
+  --ui-avatar-4-bg: #42271f;
+  --ui-avatar-4-text: #f5b2a3;
+  --ui-avatar-5-bg: #3d2e19;
+  --ui-avatar-5-text: #edc086;
+  --ui-avatar-6-bg: #28351d;
+  --ui-avatar-6-text: #b5d98f;
+  --ui-avatar-7-bg: #1b3637;
+  --ui-avatar-7-text: #8fd8db;
+  --ui-avatar-8-bg: #36302a;
+  --ui-avatar-8-text: #d8c3aa;
+
   /* Shadows need more weight on dark surfaces */
+  --ui-shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.25);
+  --ui-shadow-row: 0 1px 2px rgb(0 0 0 / 0.4);
   --ui-shadow-floating: 0 4px 16px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.35);
   --ui-shadow-panel: 0 12px 40px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
 }
@@ -205,8 +268,8 @@
   }
 }
 
-/* Stage 8: compact rows (docs/DESIGN.md, "Zeile": 34 px instead of 44 px). The list reads the
-   heights from here, so only the tokens change. */
+/* Stage 8: compact rows (docs/DESIGN.md, "Zeile": 34 px instead of 44 px; narrow rows two lines
+   without the preview). The list reads the heights from here, so only the tokens change. */
 :root[data-density="compact"] {
   --ui-row-height: 2.125rem;
   --ui-row-height-two-line: 3.25rem;
@@ -229,4 +292,19 @@
 }
 :root[data-text-size="150"] {
   font-size: 150%;
+}
+
+/* ---- reading (owned by the reading-pane work; the design lead's tokens stay above) ----
+   Conversation cards, the reading toolbar's menu, the AI ask bar. Sizes in rem, so text scaling
+   follows; no colours here (the cards use the surface, border and shadow tokens above). */
+:root {
+  /* The column of message cards: wide enough for a mail, centred in wide panes. */
+  --ui-reading-column: 54rem;
+  /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. */
+  --ui-reading-line-height: 1.6;
+  /* Menus that unfold from a "…" button (reading toolbar, message card). */
+  --ui-reading-menu-width: 15rem;
+  /* The floating "Ask anything" bar at the bottom of the reading pane and room kept for it. */
+  --ui-reading-ask-width: 26rem;
+  --ui-reading-ask-room: 5rem;
 }

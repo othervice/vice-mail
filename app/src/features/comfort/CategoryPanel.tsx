@@ -76,7 +76,7 @@ export function CategoryPanel({ messageId }: { messageId: MessageId }) {
   if (info.isPending) return null;
   if (info.isError) {
     return (
-      <div className="px-6 pb-2">
+      <div>
         <ErrorNotice
           context={t("comfort.category.loadFailed")}
           error={info.error}
@@ -91,11 +91,15 @@ export function CategoryPanel({ messageId }: { messageId: MessageId }) {
   const category = decision?.category ?? null;
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <div className="flex flex-col gap-2 px-6 pb-2" data-testid="category-panel">
-      <div className="flex flex-wrap items-center gap-2 text-13 text-secondary">
+    <div className="flex flex-col gap-2" data-testid="category-panel">
+      {/* A quiet chip in the message card: the category and the way to "Why here?". */}
+      <div className="flex h-6 max-w-full items-center gap-1 self-start rounded-full bg-hover ps-2 pe-1 text-12 text-secondary">
         <Tag aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-        <span data-testid="category-current">
+        <span className="truncate" data-testid="category-current">
           {category ? t("comfort.category.current", { category: t(`comfort.categories.${category}`) }) : t("comfort.category.unsorted")}
+        </span>
+        <span aria-hidden className="text-tertiary">
+          ·
         </span>
         <button
           type="button"
@@ -105,10 +109,10 @@ export function CategoryPanel({ messageId }: { messageId: MessageId }) {
             setOpen((value) => !value);
           }}
           data-testid="category-why"
-          className="flex items-center gap-1 rounded-control px-1 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-focus-ring"
+          className="flex shrink-0 items-center gap-1 rounded-full px-1 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-focus-ring"
         >
-          <Chevron aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
           {t("comfort.category.why")}
+          <Chevron aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         </button>
       </div>
       {open && (

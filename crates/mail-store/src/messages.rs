@@ -117,19 +117,41 @@ pub(crate) fn store_headers(
     // Stage 7: each new message is threaded and indexed (headers) in this transaction.
     let mut threader = crate::threads::Threader::default();
     let mut fts_rows = Vec::new();
+    // Stage 14 (decision 0034): the label this mailbox stands for on Gmail.
+    let gmail_label = if headers.iter().any(|h| h.gmail.is_some()) {
+        crate::gmail::mailbox_label(conn, mailbox)?
+    } else {
+        None
+    };
     for header in &headers {
         let flags = clean_flags(mailbox, header.uid, &header.flags);
         if apply_flags(conn, mailbox, header.uid, &flags, header.modseq)?.is_some() {
+            if let Some(info) = &header.gmail {
+                crate::gmail::refresh_labels(
+                    conn,
+                    mailbox,
+                    header.uid,
+                    &info.labels,
+                    gmail_label.as_deref(),
+                )?;
+            }
             report.updated += 1;
             continue;
         }
 
         let message_id = header.message_id.as_deref().filter(|m| !m.is_empty());
-        if let Some(message_id) = message_id {
-            let existing: Option<i64> = conn
+        // Gmail: one message across labels by X-GM-MSGID; elsewhere by Message-ID.
+        let existing: Option<i64> = match (&header.gmail, message_id) {
+            (Some(info), _) => {
+                crate::gmail::merge_candidate(conn, account_row, mailbox, info, message_id)?
+            }
+            (None, Some(message_id)) => conn
                 .prepare_cached(MERGE_CANDIDATE)?
                 .query_row(params![account_row, message_id, mailbox.0], |r| r.get(0))
-                .optional()?;
+                .optional()?,
+            (None, None) => None,
+        };
+        {
             if let Some(existing) = existing {
                 // The trigger copies the message's category onto the new location.
                 insert_location(
@@ -141,6 +163,9 @@ pub(crate) fn store_headers(
                     header.modseq,
                     None,
                 )?;
+                if let Some(info) = &header.gmail {
+                    crate::gmail::tag_message(conn, existing, info, gmail_label.as_deref())?;
+                }
                 report.merged += 1;
                 continue;
             }
@@ -181,8 +206,14 @@ pub(crate) fn store_headers(
             header.modseq,
             category.as_ref(),
         )?;
+        if let Some(info) = &header.gmail {
+            crate::gmail::tag_message(conn, id, info, gmail_label.as_deref())?;
+        }
         fts_rows.push((id, crate::fts::Row::from_header(header)));
         report.inserted += 1;
+        if !flags.seen && !flags.deleted {
+            report.new_unread += 1;
+        }
     }
     if !fts_rows.is_empty() {
         crate::fts::write(conn, &crate::fts::targets(conn)?, &mut fts_rows)?;
@@ -209,10 +240,27 @@ pub(crate) fn update_flags(
     updates: &[FlagUpdate],
 ) -> Result<usize, StoreError> {
     mailboxes::check_uid_validity(conn, mailbox, uid_validity)?;
+    let gmail_label = if updates.iter().any(|u| u.gmail_labels.is_some()) {
+        crate::gmail::mailbox_label(conn, mailbox)?
+    } else {
+        None
+    };
     let mut changed = 0;
     for update in updates {
         let flags = clean_flags(mailbox, update.uid, &update.flags);
-        if apply_flags(conn, mailbox, update.uid, &flags, update.modseq)? == Some(true) {
+        let mut moved =
+            apply_flags(conn, mailbox, update.uid, &flags, update.modseq)? == Some(true);
+        // Stage 14: Gmail labels read with the flags.
+        if let Some(labels) = &update.gmail_labels {
+            moved |= crate::gmail::refresh_labels(
+                conn,
+                mailbox,
+                update.uid,
+                labels,
+                gmail_label.as_deref(),
+            )?;
+        }
+        if moved {
             changed += 1;
         }
     }
@@ -318,6 +366,7 @@ pub(crate) fn list(
                 pinned: false,
                 snooze: None,
                 task: None,
+                reading_list: false,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

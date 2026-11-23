@@ -12,6 +12,7 @@ import { makeDraft, makeIdentity, type ComposeFakeOptions } from "./support/comp
 import { ipcError, makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { toolbarAction } from "./support/reading";
 import { makeSignature, makeTemplate, type SnippetsFakeOptions } from "./support/snippets";
 
 // Stage 10: the composer complete (formatting, pasting, inline images, size, signatures in the
@@ -430,7 +431,7 @@ describe("forward as attachment", () => {
     const eml: DraftAttachment = { id: "eml", fileName: "Hello.eml", mime: "message/rfc822", size: 5000, contentId: null };
     const { core, user } = setup({ items, compose: { replies: { [first.id]: { subject: "Fwd: Hello", attachments: [eml] } } } });
     await user.click(await screen.findByRole("option", { name: new RegExp(first.subject) }));
-    await user.click(await screen.findByRole("button", { name: "Forward as attachment" }));
+    await user.click(await toolbarAction(user, await screen.findByRole("toolbar", { name: "Message actions" }), "Forward as attachment"));
     await waitFor(() => {
       expect(core.callsOf("create_draft")[0]?.["request"]).toEqual({ kind: "forward_as_attachment", messageId: first.id, language: "en" });
     });

@@ -657,6 +657,10 @@ export function actionKind(action: MailAction): ActionKind {
       return "add_keyword";
     case "removeKeyword":
       return "remove_keyword";
+    case "addLabel":
+      return "add_label";
+    case "removeLabel":
+      return "remove_label";
     case "archive":
       return "archive";
     case "delete":

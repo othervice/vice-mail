@@ -11,15 +11,33 @@ export type Section =
   | { kind: "thisWeek" }
   | { kind: "month"; year: number; month: number };
 
+/**
+ * Decision 0031: consecutive rows with the same card are drawn as one card: the priority block
+ * (heading, its messages, "Show all") on its warm tint, an unfolded bundle with its members on a
+ * raised surface.
+ */
+export type ListCard = "priority" | "bundle";
+
 export type ListRow =
   | { kind: "section"; key: string; section: Section }
   /** `position` counts messages only (0-based), for `aria-posinset` and keyboard moves. */
-  | { kind: "message"; key: string; item: MessageListItem; position: number }
+  | { kind: "message"; key: string; item: MessageListItem; position: number; card?: ListCard }
   /**
-   * Stage 9: a row the list only draws (block heading, bundle, "Show all"), with the height of a
-   * section heading or of a message row. Not an option: the arrow keys skip it like a heading.
+   * Stage 9: a row the list draws from its source (block heading, bundle, "Show all"), with the
+   * height of a section heading or of a message row. Without `action` it is decoration that the
+   * arrow keys skip like a heading. With one it is an `option` of the list (axe
+   * `aria-required-children`: a listbox holds options, no buttons): the arrow keys reach it,
+   * Enter, Space or a click run `activate`; it is never part of the selection. Its accessible name
+   * comes from its content.
    */
-  | { kind: "extra"; key: string; size: "section" | "row"; render: () => ReactNode };
+  | {
+      kind: "extra";
+      key: string;
+      size: "section" | "row";
+      render: () => ReactNode;
+      card?: ListCard;
+      action?: { activate: () => void };
+    };
 
 /** The rows of one folder's pages: headings and messages, never drawn-only rows. */
 export type FolderRow = Exclude<ListRow, { kind: "extra" }>;

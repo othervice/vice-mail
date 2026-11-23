@@ -1419,3 +1419,182 @@ async fn saved_searches_reach_the_other_device_recent_ones_stay() {
     b.shutdown().await;
     clean(&env).await;
 }
+
+/// Stage 16 (decision 0033): the reading list, folder favourites and colours and blocked
+/// senders reach the other device, and their removal does too.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_device() {
+    let _serial = SERVER.lock().await;
+    let env = TestEnv::require();
+    clean(&env).await;
+    let a = Device::first(&env).await;
+    let b = Device::second(&env).await;
+    let inbox_of = |device: &Device| {
+        let core = device.core.clone();
+        let alice = device.alice;
+        async move {
+            core.list_mailboxes(alice)
+                .await
+                .expect("mailboxes")
+                .into_iter()
+                .find(|m| m.path == "INBOX")
+                .expect("inbox")
+        }
+    };
+    // A message of the test's own in alice's inbox; both devices see it arrive.
+    let subject = format!("Stage 16 reading list {}", std::process::id());
+    let mut admin = ImapConnector::new()
+        .connect(&env.config(&env.alice, Security::Tls, Access::ReadWrite))
+        .await
+        .expect("admin");
+    let body = format!(
+        "From: Reader <reader@stage16.test>\r\nTo: alice@vicemail.test\r\nSubject: {subject}\r\n\
+         Message-ID: <reading-{}@stage16.test>\r\n\r\nLater.\r\n",
+        std::process::id()
+    );
+    let reply = admin
+        .raw_command(
+            &format!("APPEND \"INBOX\" () {{{}+}}\r\n{body}", body.len()),
+            |_| false,
+        )
+        .await
+        .expect("append");
+    assert!(reply.ok, "{}", reply.text);
+    let inbox_a = inbox_of(&a).await;
+    let find = |device: &Device| {
+        let core = device.core.clone();
+        let alice = device.alice;
+        let subject = subject.clone();
+        async move {
+            let inbox = core
+                .list_mailboxes(alice)
+                .await
+                .ok()?
+                .into_iter()
+                .find(|m| m.path == "INBOX")?;
+            core.list_messages(inbox.id, None, 50)
+                .await
+                .ok()?
+                .items
+                .into_iter()
+                .find(|i| i.subject == subject)
+        }
+    };
+    let message = until("the message on a", || find(&a)).await;
+    until("the message on b", || find(&b)).await;
+    a.core
+        .set_reading_list(vec![message.id], true)
+        .await
+        .expect("reading list");
+    a.core
+        .set_mailbox_favorite(inbox_a.id, true)
+        .await
+        .expect("favourite");
+    let colour = mail_model::AccountColor::new(5).expect("colour");
+    a.core
+        .set_mailbox_color(inbox_a.id, Some(colour))
+        .await
+        .expect("colour");
+    a.core
+        .block_sender("Offers@Spam.Example".into())
+        .await
+        .expect("block");
+    a.pass().await;
+    b.pass().await;
+
+    let inbox_b = inbox_of(&b).await;
+    assert_eq!(inbox_b.favorite_position, Some(0));
+    assert_eq!(inbox_b.color, Some(colour));
+    assert_eq!(
+        b.core
+            .list_favorite_mailboxes()
+            .await
+            .expect("favourites")
+            .into_iter()
+            .map(|m| m.id)
+            .collect::<Vec<_>>(),
+        vec![inbox_b.id]
+    );
+    let blocked: Vec<String> = b
+        .core
+        .list_blocked_senders()
+        .await
+        .expect("blocked")
+        .into_iter()
+        .map(|s| s.address)
+        .collect();
+    assert_eq!(blocked, ["offers@spam.example"]);
+    let reading = until("the reading list on b", || async {
+        let items = b
+            .core
+            .list_reading_list(mail_model::MarkScope::All)
+            .await
+            .expect("reading list");
+        (!items.is_empty()).then_some(items)
+    })
+    .await;
+    assert_eq!(reading.len(), 1);
+    assert_eq!(reading[0].subject, message.subject);
+
+    // Removed on b: gone on a.
+    b.core
+        .unblock_sender("offers@spam.example".into())
+        .await
+        .expect("unblock");
+    b.core
+        .set_reading_list(vec![reading[0].id], false)
+        .await
+        .expect("off the list");
+    b.core
+        .set_mailbox_color(inbox_b.id, None)
+        .await
+        .expect("no colour");
+    b.pass().await;
+    a.pass().await;
+    assert!(
+        a.core
+            .list_blocked_senders()
+            .await
+            .expect("blocked")
+            .is_empty()
+    );
+    assert!(
+        a.core
+            .list_reading_list(mail_model::MarkScope::All)
+            .await
+            .expect("reading list")
+            .is_empty()
+    );
+    let inbox_a = inbox_of(&a).await;
+    assert_eq!((inbox_a.favorite_position, inbox_a.color), (Some(0), None));
+    assert!(per_record(&env).await.values().all(|n| *n == 1));
+    a.shutdown().await;
+    b.shutdown().await;
+    clean(&env).await;
+    let opened = admin.open_mailbox("INBOX").await.expect("select");
+    let all = admin.search_uids(&opened).await.expect("search");
+    let ours: Vec<u32> = admin
+        .fetch_headers(&opened, &all)
+        .await
+        .expect("headers")
+        .into_iter()
+        .filter(|h| h.subject == subject)
+        .map(|h| h.uid)
+        .collect();
+    if !ours.is_empty() {
+        let set = UidSet::from_uids(ours);
+        admin
+            .raw_command(
+                &format!("UID STORE {set} +FLAGS.SILENT (\\Deleted)"),
+                |_| false,
+            )
+            .await
+            .ok();
+        admin
+            .raw_command(&format!("UID EXPUNGE {set}"), |_| false)
+            .await
+            .ok();
+    }
+    admin.logout().await.ok();
+}

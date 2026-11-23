@@ -19,7 +19,10 @@ pub(crate) const LIST_MAILBOXES: &str = "
            (SELECT count(*) FROM message_location l
              WHERE l.mailbox_id = b.id AND l.seen = 0),
            (SELECT count(*) FROM message_location l INDEXED BY loc_uid
-             WHERE l.mailbox_id = b.id)
+             WHERE l.mailbox_id = b.id),
+           (SELECT p.favorite_position FROM mailbox_pref p
+             WHERE p.account_uuid = ?2 AND p.path = b.path),
+           (SELECT p.color FROM mailbox_pref p WHERE p.account_uuid = ?2 AND p.path = b.path)
     FROM mailbox b WHERE b.account_id = ?1 ORDER BY b.path";
 
 /// Unread count of every mailbox of an account (`loc_unseen`).
@@ -309,7 +312,7 @@ pub(crate) fn list(
 ) -> Result<Vec<Mailbox>, StoreError> {
     let mailboxes = conn
         .prepare_cached(LIST_MAILBOXES)?
-        .query_map([account_row], |r| {
+        .query_map(rusqlite::params![account_row, account.to_string()], |r| {
             let path: String = r.get(1)?;
             let delimiter: Option<String> = r.get(2)?;
             let name =
@@ -328,6 +331,10 @@ pub(crate) fn list(
                 selectable: r.get(6)?,
                 unread: count_at(r, 7)?,
                 total: count_at(r, 8)?,
+                favorite_position: r.get(9)?,
+                color: r
+                    .get::<_, Option<u8>>(10)?
+                    .and_then(mail_model::AccountColor::new),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

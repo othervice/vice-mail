@@ -525,6 +525,8 @@ impl<C: Connector> AppCore<C> {
         let kind = match filter {
             InboxFilter::Category { category } => InboxListKind::Category(category),
             InboxFilter::Priority => InboxListKind::Important,
+            // Stage 16 (decision 0033): "Nur ungelesene".
+            InboxFilter::Unread => InboxListKind::Unread,
         };
         Ok(self
             .store_ref()?
@@ -806,7 +808,7 @@ impl<C: Connector> AppCore<C> {
         self.mark_view(MarkView::Tasks(filter), scope).await
     }
 
-    async fn mark_view(
+    pub(crate) async fn mark_view(
         &self,
         view: MarkView,
         scope: MarkScope,
@@ -989,6 +991,13 @@ impl<C: Connector> AppCore<C> {
             .account(arrival.account)
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {}", arrival.account)))?;
+        // Stage 16 (decision 0033): mail of blocked senders goes to junk or is hidden; no
+        // rules, no notification.
+        let blocked = self.handle_blocked_arrivals(&account, &messages).await?;
+        messages.retain(|m| !blocked.contains(&m.id));
+        if messages.is_empty() {
+            return Ok(());
+        }
         let all_rules = store.rules().await?;
         // Per rule and reason the messages it skipped (a message counts once per rule).
         let mut skipped: HashMap<(RuleId, String, RuleSkipReason), HashSet<MessageId>> =
@@ -1149,7 +1158,8 @@ impl<C: Connector> AppCore<C> {
         ))
     }
 
-    /// Stores the notification settings (`invalid_argument` for quiet hours outside the day).
+    /// Stores the notification settings (`invalid_argument` for quiet hours outside the day,
+    /// and, stage 16, for a sound name that is not in its platform's list).
     pub async fn set_notification_settings(
         &self,
         settings: NotificationSettings,
@@ -1160,12 +1170,26 @@ impl<C: Connector> AppCore<C> {
                 "quiet hours are minutes 0..1440 of the day".into(),
             ));
         }
+        if let Some(name) = settings.sound.unknown_name() {
+            return Err(CoreError::InvalidArgument(format!(
+                "{name:?} is not a notification sound"
+            )));
+        }
         let json = serde_json::to_string(&settings)
             .map_err(|err| CoreError::Internal(format!("notification settings: {err}")))?;
         self.store_ref()?
             .put_settings(GLOBAL_SCOPE, vec![(NOTIFY_SETTINGS_KEY.to_owned(), json)])
             .await?;
         Ok(settings)
+    }
+
+    /// Stage 16: the notification sounds this platform offers, `Default` first.
+    pub fn notification_sound_choices(&self) -> mail_model::NotificationSoundChoices {
+        let platform = mail_model::SoundPlatform::current();
+        mail_model::NotificationSoundChoices {
+            platform,
+            sounds: platform.sounds().iter().map(|s| (*s).to_owned()).collect(),
+        }
     }
 
     /// The texts of system notifications in the UI's language (from `app/src/i18n/`).

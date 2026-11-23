@@ -716,4 +716,463 @@ mod with_core {
             .expect_err("the draft is gone after sending");
         assert_eq!(err.code(), ErrorCode::NotFound);
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Stage 16 (decision 0033): send and archive, read receipts (RFC 8098)
+
+    /// Puts `raw` into `mailbox` (unread) in one step. As with [`put_draft`], `serial` must be
+    /// unique and the raw message must carry `<serial>@fake.test` as its Message-ID.
+    fn put_message(server: &FakeServer, mailbox: &str, serial: u64, raw: Vec<u8>) -> Uid {
+        server.with(|s| {
+            let mb = s.mailboxes.get_mut(mailbox).expect("mailbox");
+            let uid = mb.uid_next;
+            mb.uid_next = uid + 1;
+            mb.modseq += 1;
+            mb.changes += 1;
+            mb.messages.insert(
+                uid,
+                FakeMessage {
+                    flags: Flags::default(),
+                    modseq: mb.modseq,
+                    serial,
+                    raw: Some(raw),
+                },
+            );
+            uid
+        })
+    }
+
+    fn question(serial: u64, subject: &str, receipt: bool) -> Vec<u8> {
+        let request = if receipt {
+            "Disposition-Notification-To: Bob <bob@friends.example>\r\n"
+        } else {
+            ""
+        };
+        format!(
+            "Return-Path: <bob@friends.example>\r\n\
+             From: Bob <bob@friends.example>\r\n\
+             To: Alice <alice@fake.test>\r\n\
+             Subject: {subject}\r\n\
+             Message-ID: <{serial}@fake.test>\r\n\
+             Date: Mon, 23 Nov 2026 08:00:00 +0100\r\n\
+             {request}\
+             MIME-Version: 1.0\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\
+             \r\n\
+             What do you think?\r\n"
+        )
+        .into_bytes()
+    }
+
+    fn count_in(server: &FakeServer, mailbox: &str) -> usize {
+        server.read(|s| s.mailboxes.get(mailbox).map_or(0, |mb| mb.messages.len()))
+    }
+
+    impl Bed {
+        async fn folder(&self, role: MailboxRole) -> MailboxId {
+            self.core
+                .list_mailboxes(self.account)
+                .await
+                .expect("mailboxes")
+                .into_iter()
+                .find(|m| m.role == role)
+                .expect("the folder")
+                .id
+        }
+
+        /// Waits for the message with `subject` in the local folder with `role`.
+        async fn arrived(&self, role: MailboxRole, subject: &str) -> MessageId {
+            let folder = self.folder(role).await;
+            self.until(&format!("{subject:?} arrived"), || async {
+                self.core
+                    .list_messages(folder, None, 50)
+                    .await
+                    .ok()?
+                    .items
+                    .into_iter()
+                    .find(|i| i.subject == subject)
+                    .map(|i| i.id)
+            })
+            .await
+        }
+
+        /// Opens the message in the reading pane until its body is stored.
+        async fn opened(&self, message: MessageId) {
+            self.until("the body", || async {
+                let view = self
+                    .core
+                    .get_message(message, mail_model::BodyFormat::Text)
+                    .await
+                    .ok()?;
+                (!matches!(
+                    view.body,
+                    mail_model::MessageBody::Loading | mail_model::MessageBody::Unavailable { .. }
+                ))
+                .then_some(())
+            })
+            .await;
+        }
+
+        fn submitted(&self) -> Vec<String> {
+            self.sender
+                .sent
+                .lock()
+                .expect("sent")
+                .iter()
+                .map(|m| String::from_utf8_lossy(m).into_owned())
+                .collect()
+        }
+
+        async fn keywords(&self, message: MessageId) -> Vec<String> {
+            self.core
+                .get_messages_by_ids(vec![message])
+                .await
+                .expect("item")
+                .into_iter()
+                .flat_map(|i| i.keywords)
+                .collect()
+        }
+    }
+
+    /// Stage 16: "send and archive". The compose setting turns it on for new replies (not for
+    /// new messages). A send that fails and is cancelled archives nothing; once the server
+    /// accepted the reply, the original moves from the inbox to Archive through the outbox.
+    #[tokio::test]
+    async fn send_and_archive_moves_the_original_only_once_the_send_is_accepted() {
+        let bed = Bed::new().await;
+        bed.core
+            .set_compose_settings(ComposeSettings {
+                send_delay_seconds: 0,
+                archive_on_reply: true,
+                ..ComposeSettings::default()
+            })
+            .await
+            .expect("settings");
+        put_message(
+            &bed.server,
+            "INBOX",
+            8101,
+            question(8101, "Question", false),
+        );
+        let original = bed.arrived(MailboxRole::Inbox, "Question").await;
+        let new = bed.write("Unrelated").await;
+        assert!(!new.archive_original, "only replies start with it");
+        let reply = bed
+            .core
+            .create_draft(NewDraft::Reply {
+                message_id: original,
+                language: mail_model::QuoteLanguage::En,
+            })
+            .await
+            .expect("reply");
+        assert!(reply.archive_original, "the compose setting");
+
+        // The send fails (offline) and is cancelled: nothing is archived.
+        bed.sender.offline.store(true, Ordering::SeqCst);
+        let mail = bed
+            .core
+            .send_draft(reply.id.clone(), "req-archive-1".into())
+            .await
+            .expect("send");
+        assert_eq!(mail.archive, Some(mail_model::ArchiveAfterSend::Waiting));
+        bed.until("a failed attempt", || async {
+            let m = bed.outgoing(mail.operation_id).await;
+            (m.attempts >= 1 && m.error.is_some()).then_some(())
+        })
+        .await;
+        // Between two attempts (one in flight cannot be cancelled).
+        bed.until("the send cancelled", || async {
+            bed.core.cancel_send(reply.id.clone()).await.ok()
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        bed.settled().await;
+        assert_eq!(count_in(&bed.server, "INBOX"), 1);
+        assert_eq!(count_in(&bed.server, "Archive"), 0);
+        assert_eq!(
+            bed.arrived(MailboxRole::Inbox, "Question").await,
+            original,
+            "still in the inbox"
+        );
+
+        // Accepted: the original goes to Archive afterwards.
+        bed.sender.offline.store(false, Ordering::SeqCst);
+        let mail = bed
+            .core
+            .send_draft(reply.id.clone(), "req-archive-2".into())
+            .await
+            .expect("send again");
+        let sent = bed
+            .until("the reply sent", || async {
+                let m = bed.outgoing(mail.operation_id).await;
+                (m.state == SendState::Sent).then_some(m)
+            })
+            .await;
+        assert_eq!(sent.archive, Some(mail_model::ArchiveAfterSend::Queued));
+        bed.until("the original in Archive", || async {
+            (count_in(&bed.server, "Archive") == 1 && count_in(&bed.server, "INBOX") == 0)
+                .then_some(())
+        })
+        .await;
+        bed.settled().await;
+        assert_eq!(bed.sender.sent_with("Re: Question"), 1);
+        let archived = bed.arrived(MailboxRole::Archive, "Question").await;
+        assert!(archived.0 > 0);
+    }
+
+    /// Stage 16: without an archive mailbox the send is still sent and says so; the original
+    /// stays. The draft's read-receipt request goes out with the identity's address.
+    #[tokio::test]
+    async fn send_and_archive_without_an_archive_mailbox_keeps_the_original() {
+        let server = drafts_server();
+        server.with(|s| {
+            s.mailboxes.remove("Archive");
+        });
+        let bed = Bed::on(server).await;
+        put_message(&bed.server, "INBOX", 8201, question(8201, "Lunch?", false));
+        let original = bed.arrived(MailboxRole::Inbox, "Lunch?").await;
+        let reply = bed
+            .core
+            .create_draft(NewDraft::Reply {
+                message_id: original,
+                language: mail_model::QuoteLanguage::En,
+            })
+            .await
+            .expect("reply");
+        assert!(!reply.archive_original, "off by default");
+        let reply = bed
+            .core
+            .set_draft_send_options(
+                reply.id.clone(),
+                mail_model::DraftSendOptions {
+                    archive_original: true,
+                    request_read_receipt: true,
+                },
+            )
+            .await
+            .expect("options");
+        assert!(reply.archive_original && reply.request_read_receipt);
+        let mail = bed
+            .core
+            .send_draft(reply.id.clone(), "req-no-archive".into())
+            .await
+            .expect("send");
+        let sent = bed
+            .until("sent", || async {
+                let m = bed.outgoing(mail.operation_id).await;
+                (m.state == SendState::Sent).then_some(m)
+            })
+            .await;
+        assert_eq!(
+            sent.archive,
+            Some(mail_model::ArchiveAfterSend::NoArchiveMailbox)
+        );
+        bed.settled().await;
+        assert_eq!(count_in(&bed.server, "INBOX"), 1, "the original stayed");
+        let submitted = bed.submitted();
+        assert_eq!(submitted.len(), 1);
+        assert!(
+            submitted[0].contains("Disposition-Notification-To: <alice@fake.test>")
+                || submitted[0].contains("Disposition-Notification-To: alice@fake.test"),
+            "{}",
+            submitted[0]
+        );
+    }
+
+    /// Stage 16 (acceptance): an incoming read-receipt request never leads to an SMTP
+    /// submission without the user's explicit answer: not when the message arrives, is opened
+    /// again, after a restart, nor with the setting `never` (the command is refused). Only
+    /// `sendReadReceipt` sends one: a `multipart/report` disposition notification to the
+    /// requested address, without a copy in Sent, and `$MDNSent` on the original; pressed
+    /// again it sends nothing more.
+    #[tokio::test]
+    async fn a_read_receipt_request_never_sends_anything_without_the_users_answer() {
+        let mut bed = Bed::new().await;
+        put_message(
+            &bed.server,
+            "INBOX",
+            8301,
+            question(8301, "Please confirm", true),
+        );
+        let message = bed.arrived(MailboxRole::Inbox, "Please confirm").await;
+        bed.opened(message).await;
+        let info = bed.core.get_read_receipt(message).await.expect("info");
+        let request = info.request.expect("a request");
+        assert_eq!(request.to, "bob@friends.example");
+        assert!(!request.return_path_differs);
+        assert_eq!(request.answer, mail_model::ReadReceiptAnswer::Ask);
+        assert!(!info.requested);
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        bed.opened(message).await;
+        bed = bed.restart().await;
+        bed.opened(message).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(bed.sender.attempts(), 0, "no SMTP submission at all");
+
+        bed.core
+            .set_compose_settings(ComposeSettings {
+                send_delay_seconds: 0,
+                read_receipts: mail_model::ReadReceiptPolicy::Never,
+                ..ComposeSettings::default()
+            })
+            .await
+            .expect("never");
+        let info = bed.core.get_read_receipt(message).await.expect("info");
+        assert_eq!(
+            info.request.map(|r| r.answer),
+            Some(mail_model::ReadReceiptAnswer::Off)
+        );
+        let refused = bed
+            .core
+            .send_read_receipt(message, mail_model::QuoteLanguage::En, "req-mdn-0".into())
+            .await
+            .expect_err("refused with never");
+        assert_eq!(refused.code(), ErrorCode::InvalidArgument);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(bed.sender.attempts(), 0);
+
+        // The user's explicit answer.
+        bed.core
+            .set_compose_settings(ComposeSettings {
+                send_delay_seconds: 0,
+                ..ComposeSettings::default()
+            })
+            .await
+            .expect("ask");
+        let mail = bed
+            .core
+            .send_read_receipt(message, mail_model::QuoteLanguage::En, "req-mdn-1".into())
+            .await
+            .expect("send the receipt");
+        assert!(mail.read_receipt);
+        assert_eq!(mail.draft_id, None);
+        bed.until("the receipt sent", || async {
+            (bed.outgoing(mail.operation_id).await.state == SendState::Sent).then_some(())
+        })
+        .await;
+        bed.settled().await;
+        let submitted = bed.submitted();
+        assert_eq!(submitted.len(), 1, "exactly one submission");
+        let receipt = &submitted[0];
+        for needed in [
+            "Content-Type: multipart/report",
+            "disposition-notification",
+            "Content-Type: message/disposition-notification",
+            "Final-Recipient: rfc822;alice@fake.test",
+            "Original-Message-ID: <8301@fake.test>",
+            "Disposition: manual-action/MDN-sent-manually; displayed",
+            "Subject: Read: Please confirm",
+        ] {
+            assert!(receipt.contains(needed), "{needed} missing in {receipt}");
+        }
+        assert!(!receipt.contains("Disposition-Notification-To"));
+        let info = bed.core.get_read_receipt(message).await.expect("info");
+        assert_eq!(
+            info.request.map(|r| r.answer),
+            Some(mail_model::ReadReceiptAnswer::Sent)
+        );
+        assert!(
+            bed.keywords(message)
+                .await
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case("$MDNSent")),
+            "the original carries $MDNSent"
+        );
+        // Pressed again: the same receipt, nothing more sent; no copy in Sent.
+        let again = bed
+            .core
+            .send_read_receipt(message, mail_model::QuoteLanguage::En, "req-mdn-2".into())
+            .await
+            .expect("again");
+        assert_eq!(again.operation_id, mail.operation_id);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        bed.settled().await;
+        assert_eq!(bed.sender.attempts(), 1);
+        assert_eq!(count_in(&bed.server, "Sent"), 0);
+    }
+
+    /// Stage 16: declining sends nothing (and sets `$MDNSent`); a receipt that comes back is
+    /// shown at the sent message it reports on, and the receipt itself knows what it is for.
+    #[tokio::test]
+    async fn declined_requests_send_nothing_and_received_receipts_show_at_the_sent_message() {
+        let server = drafts_server();
+        // A message the user sent with a request (synced at the start: Sent is polled).
+        put_message(
+            &server,
+            "Sent",
+            8402,
+            b"From: Alice <alice@fake.test>\r\nTo: Bob <bob@friends.example>\r\n\
+Subject: Offer\r\nMessage-ID: <8402@fake.test>\r\nDisposition-Notification-To: alice@fake.test\r\n\
+Content-Type: text/plain\r\n\r\nThe offer.\r\n"
+                .to_vec(),
+        );
+        let bed = Bed::on(server).await;
+        put_message(
+            &bed.server,
+            "INBOX",
+            8401,
+            question(8401, "Confirm too", true),
+        );
+        let message = bed.arrived(MailboxRole::Inbox, "Confirm too").await;
+        bed.opened(message).await;
+        let info = bed
+            .core
+            .decline_read_receipt(message, "req-decline-1".into())
+            .await
+            .expect("decline");
+        assert_eq!(
+            info.request.map(|r| r.answer),
+            Some(mail_model::ReadReceiptAnswer::Declined)
+        );
+        bed.settled().await;
+        assert!(
+            bed.keywords(message)
+                .await
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case("$MDNSent"))
+        );
+        assert_eq!(bed.sender.attempts(), 0);
+
+        // The receipt that came back for the message the user sent with a request.
+        put_message(
+            &bed.server,
+            "INBOX",
+            8403,
+            b"From: Bob <bob@friends.example>\r\nTo: alice@fake.test\r\n\
+Subject: Return Receipt (displayed) - Offer\r\nMessage-ID: <8403@fake.test>\r\nMIME-Version: 1.0\r\n\
+Content-Type: multipart/report; report-type=disposition-notification;\r\n\tboundary=\"b1\"\r\n\r\n\
+--b1\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nThis is a Return Receipt.\r\n\
+--b1\r\nContent-Type: message/disposition-notification\r\n\r\n\
+Final-Recipient: rfc822;bob@friends.example\r\nOriginal-Message-ID: <8402@fake.test>\r\n\
+Disposition: manual-action/MDN-sent-manually; displayed\r\n\r\n--b1--\r\n"
+                .to_vec(),
+        );
+        let sent = bed.arrived(MailboxRole::Sent, "Offer").await;
+        let receipt = bed
+            .arrived(MailboxRole::Inbox, "Return Receipt (displayed) - Offer")
+            .await;
+        bed.opened(receipt).await;
+        bed.opened(sent).await;
+        let info = bed.core.get_read_receipt(sent).await.expect("sent info");
+        assert!(info.requested);
+        assert_eq!(info.request, None, "the user's own message asks nothing");
+        assert_eq!(info.received.len(), 1);
+        assert_eq!(
+            info.received[0].recipient.as_deref(),
+            Some("bob@friends.example")
+        );
+        assert_eq!(
+            info.received[0].disposition,
+            mail_model::ReceiptDisposition::Displayed
+        );
+        let about = bed
+            .core
+            .get_read_receipt(receipt)
+            .await
+            .expect("receipt info");
+        assert_eq!(about.receipt_for.as_deref(), Some("8402@fake.test"));
+        assert_eq!(about.request, None);
+        assert_eq!(bed.sender.attempts(), 0, "still nothing sent");
+    }
 }

@@ -26,13 +26,18 @@ import { MESSAGE_DRAG_TYPE } from "../../stores/drag";
 import { useLayoutStore } from "../../stores/layout";
 import { useListSelectAnswer, type ListSelectScope } from "../../stores/listSelect";
 import { isFirstSyncRunning } from "../accounts/selection";
+import type { RowMark } from "../comfort/RowMarks";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import { readListMetrics } from "./listMetrics";
 import type { MessageListSource } from "./listSource";
 import { MessageRowContent, useRowLabel, type RowDecoration } from "./MessageRow";
 import { useMessagePages } from "./queries";
-import { buildRows, dayBounds, firstDayOfWeek, formatMonthSection, type DayBounds, type ListRow, type Section } from "./rows";
+import { ListLayoutContext } from "./listLayout";
+import { buildRows, dayBounds, firstDayOfWeek, formatFullDate, formatMonthSection, type DayBounds, type ListRow, type Section } from "./rows";
 import { useToday } from "./useToday";
+
+/** Marks a row in the priority card leaves out: the card stands for them. */
+const PRIORITY_CARD_MARKS: readonly RowMark[] = ["important"];
 
 /** Rows rendered beyond the visible ones in each direction; keeps fast scrolling free of gaps. */
 const OVERSCAN = 12;
@@ -110,9 +115,14 @@ interface MessageListProps {
   onSelectedById?: (messageId: MessageId) => void;
 }
 
-/** DOM id of a row's preview text, which describes the row's option. */
-function previewDomId(optionId: string): string {
-  return `${optionId}-preview`;
+/** DOM id of the option of a drawn row with an action (bundle, "Show all"). */
+function actionDomId(prefix: string, key: string): string {
+  return `${prefix}-x-${key}`;
+}
+
+/** DOM id of a row's full date, which describes the row's option. */
+function dateDomId(optionId: string): string {
+  return `${optionId}-date`;
 }
 
 /** A message by id, with its position as fallback when it disappears (deleted elsewhere). */
@@ -127,12 +137,31 @@ interface SelectionState {
   selected: ReadonlySet<MessageId>;
   /** Where a Shift range starts: the last row clicked or moved to without Shift. */
   anchor: Cursor | null;
+  /**
+   * Key of a drawn row with an action (bundle, "Show all") that holds the keyboard cursor
+   * instead of a message; absent while the cursor is on a message. Selection stays as it was.
+   */
+  action?: string | null;
 }
 
 const EMPTY_STATE: SelectionState = { cursor: null, selected: new Set(), anchor: null };
 
 function only(cursor: Cursor): SelectionState {
   return { cursor, selected: new Set([cursor.id]), anchor: cursor };
+}
+
+/**
+ * Where a row sits in its card (decision 0031): the first and last segment close the card, a
+ * single row is a card of its own. Undefined for rows outside a card.
+ */
+function cardEdge(rows: readonly ListRow[], index: number): "start" | "middle" | "end" | "both" | undefined {
+  const cardOf = (row: ListRow | undefined) => (row && row.kind !== "section" ? row.card : undefined);
+  const card = cardOf(rows[index]);
+  if (!card) return undefined;
+  const same = (other: ListRow | undefined) => cardOf(other) === card;
+  const first = !same(rows[index - 1]);
+  const last = !same(rows[index + 1]);
+  return first && last ? "both" : first ? "start" : last ? "end" : "middle";
 }
 
 function SectionLabel({ section, bounds }: { section: Section; bounds: DayBounds }) {
@@ -144,18 +173,32 @@ function SectionLabel({ section, bounds }: { section: Section; bounds: DayBounds
 type MessageOptionProps = ComponentPropsWithRef<"div"> & {
   item: MessageListItem;
   showRecipients: boolean;
-  /** Id of the preview text, which describes the option (read after its name). */
-  previewId: string | undefined;
+  /** Id of the full date, which describes the option (read after its name). */
+  dateId: string;
+  bounds: DayBounds;
   /** Stage 7: conversation size and search highlights of the row. */
   decoration?: RowDecoration | undefined;
   "data-index": number;
 };
 
-/** The `option` element of a message row, named for screen readers by `useRowLabel`. */
-function MessageOption({ item, showRecipients, previewId, decoration, children, ...rest }: MessageOptionProps) {
-  const label = useRowLabel(item, showRecipients, decoration);
+/**
+ * The `option` element of a message row. Its accessible name comes from its content (WCAG 2.5.3,
+ * axe `label-content-name-mismatch`): a visually hidden text in reading order that contains every
+ * visible word of the row (sender, subject, preview, time) plus the states the row only shows as
+ * symbols (`useRowLabel`); the drawn row is hidden from screen readers. The full date describes it.
+ */
+function MessageOption({ item, showRecipients, dateId, bounds, decoration, children, ...rest }: MessageOptionProps) {
+  const { i18n } = useTranslation();
+  const label = useRowLabel(item, showRecipients, decoration, bounds);
   return (
-    <div role="option" aria-label={label} aria-describedby={previewId} {...rest}>
+    <div role="option" aria-describedby={dateId} {...rest}>
+      <span className="sr-only" data-testid="row-name">
+        {label}
+      </span>
+      {/* Hidden: not part of the name, but `aria-describedby` still reads it. */}
+      <span id={dateId} hidden>
+        {formatFullDate(item.date, i18n.language)}
+      </span>
       {children}
     </div>
   );
@@ -163,16 +206,16 @@ function MessageOption({ item, showRecipients, previewId, decoration, children, 
 
 function SkeletonRows({ label }: { label: string }) {
   return (
-    <div className="flex flex-col px-2 pt-2" data-testid="list-skeleton">
+    <div className="flex min-h-0 flex-1 flex-col bg-surface-list px-2 pt-2" data-testid="list-skeleton">
       <p role="status" className="sr-only">
         {label}
       </p>
       {Array.from({ length: 8 }, (_, i) => (
         <div key={i} aria-hidden className="flex h-(--ui-row-height) items-center gap-3 px-3">
           <span className="w-4" />
-          <span className="size-(--ui-avatar) shrink-0 rounded-full bg-hover" />
-          <span className="h-3 w-(--ui-list-sender-width) shrink-0 rounded-control bg-hover" />
-          <span className="h-3 flex-1 rounded-control bg-hover" />
+          <span className="size-(--ui-avatar) shrink-0 rounded-full bg-badge" />
+          <span className="h-3 w-(--ui-list-sender-width) shrink-0 rounded-full bg-badge" />
+          <span className="h-3 flex-1 rounded-full bg-hover" />
         </div>
       ))}
     </div>
@@ -251,6 +294,13 @@ export function MessageList({
   const rows = useMemo(() => build(items, bounds), [build, items, bounds]);
   /** Row index of every message, by position. */
   const messageRows = useMemo(() => rows.flatMap((row, index) => (row.kind === "message" ? [index] : [])), [rows]);
+  /** Row index of every option (messages and drawn rows with an action), in list order. */
+  const entryRows = useMemo(
+    () => rows.flatMap((row, index) => (row.kind === "message" || (row.kind === "extra" && row.action) ? [index] : [])),
+    [rows],
+  );
+  /** Place of each option among all options, by row index, for `aria-posinset`. */
+  const entryPosition = useMemo(() => new Map(entryRows.map((rowIndex, position) => [rowIndex, position])), [entryRows]);
   const rowById = useMemo(() => {
     const map = new Map<MessageId, number>();
     rows.forEach((row, index) => {
@@ -277,6 +327,10 @@ export function MessageList({
   const cursorItem = cursorEntry?.kind === "message" ? cursorEntry.item : null;
   const cursorPosition = cursorEntry?.kind === "message" ? cursorEntry.position : -1;
   const cursorGone = state.cursor !== null && !rowById.has(state.cursor.id);
+  // A drawn row with an action that holds the cursor; gone (-1) once its row is.
+  const actionIndex = state.action ? rows.findIndex((row) => row.kind === "extra" && row.key === state.action && row.action) : -1;
+  const actionRow = actionIndex >= 0 ? rows[actionIndex] : undefined;
+  const activeAction = actionRow?.kind === "extra" ? actionRow : undefined;
 
   // Selected messages still in the list. If the selection disappeared together with the cursor
   // (deleted elsewhere), the message that took the cursor's place is selected instead.
@@ -304,18 +358,22 @@ export function MessageList({
     (index: number) => {
       const row = rows[index];
       if (row?.kind === "section" || (row?.kind === "extra" && row.size === "section")) return metrics.section;
-      return row?.kind === "extra" ? metrics.row : rowSize;
+      // Drawn rows of row size (bundles) take the narrow layout's height too: their chips wrap.
+      return rowSize;
     },
-    [rows, metrics.section, metrics.row, rowSize],
+    [rows, metrics.section, rowSize],
   );
   const getItemKey = useCallback((index: number) => rows[index]?.key ?? "more", [rows]);
   const rangeExtractor = useCallback(
     (range: Range) => {
       const indexes = defaultRangeExtractor(range);
-      if (cursorRow === undefined || indexes.includes(cursorRow)) return indexes;
-      return [...indexes, cursorRow].sort((a, b) => a - b);
+      // The rows `aria-activedescendant` may point at stay rendered.
+      const kept = [cursorRow, actionIndex >= 0 ? actionIndex : undefined].filter(
+        (index): index is number => index !== undefined && !indexes.includes(index),
+      );
+      return kept.length === 0 ? indexes : [...indexes, ...kept].sort((a, b) => a - b);
     },
-    [cursorRow],
+    [cursorRow, actionIndex],
   );
 
   // TanStack Virtual's instance is mutable by design; this app does not use the React Compiler.
@@ -466,7 +524,7 @@ export function MessageList({
       },
       toggleCursor: () => {
         const item = cursorItem;
-        if (!item) return;
+        if (!item || activeAction) return;
         setState((current) => {
           const selected = new Set(selectedIds);
           if (!selected.delete(item.id)) selected.add(item.id);
@@ -526,6 +584,28 @@ export function MessageList({
 
   const isMod = (event: MouseEvent | KeyboardEvent) => (platform === "macos" ? event.metaKey : event.ctrlKey);
 
+  /**
+   * Arrow keys and j/k step over every option, drawn rows with an action included: onto one the
+   * cursor moves without changing the selection; onto a message it selects it as before. False:
+   * no cursor yet, the message moves apply.
+   */
+  const step = (direction: 1 | -1): boolean => {
+    const from = actionIndex >= 0 ? actionIndex : cursorRow;
+    if (from === undefined) return false;
+    const next = direction > 0 ? entryRows.find((index) => index > from) : [...entryRows].reverse().find((index) => index < from);
+    if (next === undefined) return actionIndex >= 0;
+    const row = rows[next];
+    if (row?.kind === "message") {
+      moveTo(row.position, direction, false);
+      return true;
+    }
+    if (row?.kind !== "extra") return false;
+    setState((current) => ({ ...current, action: row.key }));
+    const target = direction < 0 && rows[next - 1]?.kind === "section" ? next - 1 : next;
+    virtualizer.scrollToIndex(target, { align: "auto" });
+    return true;
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const page = Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? 0) / rowSize) - 1);
     const moves: Record<string, [number, 1 | -1]> = {
@@ -540,12 +620,25 @@ export function MessageList({
       k: [Math.max(0, cursorPosition - 1), -1],
     };
     if (event.altKey || event.metaKey || event.ctrlKey) return;
+    if (activeAction?.action && (event.key === "Enter" || event.key === " ")) {
+      // The window's shortcuts (Space selects) do not see it: the key belongs to this row.
+      event.preventDefault();
+      event.stopPropagation();
+      activeAction.action.activate();
+      return;
+    }
+    if (!event.shiftKey && (event.key === "ArrowDown" || event.key === "j" || event.key === "ArrowUp" || event.key === "k")) {
+      if (step(event.key === "ArrowDown" || event.key === "j" ? 1 : -1)) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (event.key === "Enter" && cursorItem) {
       event.preventDefault();
       onOpen?.(cursorItem.id);
       return;
     }
-    if (event.key === "Escape" && (state.cursor || state.selected.size > 0)) {
+    if (event.key === "Escape" && (state.cursor || state.selected.size > 0 || activeAction)) {
       // Closes the reading pane; the list keeps the focus.
       event.preventDefault();
       setState(EMPTY_STATE);
@@ -623,12 +716,18 @@ export function MessageList({
   }
 
   // Stage 9: a source's rows can hold messages that are no options (members of a closed bundle).
+  // Options are messages and drawn rows with an action (only sources have those).
+  const actionCount = entryRows.length - messageRows.length;
   const total = hasMore
-    ? Math.max(source?.total ?? mailbox?.total ?? 0, items.length)
+    ? Math.max(source?.total ?? mailbox?.total ?? 0, items.length) + actionCount
     : source
-      ? messageRows.length
+      ? entryRows.length
       : items.length;
-  const activeId = cursorItem ? `${optionPrefix}-${String(cursorItem.id)}` : undefined;
+  const activeId = activeAction
+    ? actionDomId(optionPrefix, activeAction.key)
+    : cursorItem
+      ? `${optionPrefix}-${String(cursorItem.id)}`
+      : undefined;
 
   return (
     <>
@@ -668,123 +767,163 @@ export function MessageList({
         onScroll={rememberAnchor}
         data-testid="message-list"
         className={cx(
-          "group/list min-h-0 flex-1 overflow-y-auto px-2",
+          "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list px-2",
           // The cursor row shows the focus ring; without one (nothing loaded yet) the list does.
           activeId ? "outline-none" : "focus-visible:-outline-offset-2",
         )}
       >
-        <div ref={virtualizer.containerRef} role="presentation" className="relative w-full">
-          {virtualItems.map((virtualItem) => {
-            const row = rows[virtualItem.index];
-            const common = {
-              ref: virtualizer.measureElement,
-              "data-index": virtualItem.index,
-            };
-            if (!row) {
+        <ListLayoutContext value={twoLine}>
+          <div ref={virtualizer.containerRef} role="presentation" className="relative w-full">
+            {virtualItems.map((virtualItem) => {
+              const row = rows[virtualItem.index];
+              const common = {
+                ref: virtualizer.measureElement,
+                "data-index": virtualItem.index,
+              };
+              if (!row) {
+                return (
+                  <div
+                    key={virtualItem.key}
+                    {...common}
+                    role="presentation"
+                    className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-3 px-3"
+                  >
+                    <span aria-hidden className="w-4" />
+                    <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
+                    <span className="text-13 text-tertiary">{t("list.loadingMore")}</span>
+                  </div>
+                );
+              }
+              const edge = cardEdge(rows, virtualItem.index);
+              if (row.kind === "extra") {
+                const action = row.action;
+                const active = action !== undefined && virtualItem.index === actionIndex;
+                return (
+                  <div
+                    key={virtualItem.key}
+                    {...common}
+                    {...(action
+                      ? {
+                          role: "option",
+                          id: actionDomId(optionPrefix, row.key),
+                          "aria-posinset": (entryPosition.get(virtualItem.index) ?? 0) + 1,
+                          "aria-setsize": total,
+                          onMouseDown: () => {
+                            pointerPress.current = true;
+                          },
+                          onClick: () => {
+                            pointerPress.current = false;
+                            setState((current) => ({ ...current, action: row.key }));
+                            scrollRef.current?.focus({ preventScroll: true });
+                            action.activate();
+                          },
+                        }
+                      : { role: "presentation" })}
+                    data-testid="list-extra"
+                    data-card={edge && row.card}
+                    data-card-edge={edge}
+                    className={cx(
+                      "group/row absolute top-0 left-0 w-full",
+                      row.size === "section"
+                        ? "h-(--ui-section-height)"
+                        : twoLine
+                          ? "h-(--ui-row-height-two-line)"
+                          : "h-(--ui-row-height)",
+                      edge && "list-card px-1",
+                      action && "cursor-pointer",
+                    )}
+                  >
+                    <div
+                      className={cx(
+                        "h-full rounded-row",
+                        active && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
+                      )}
+                    >
+                      {row.render()}
+                    </div>
+                  </div>
+                );
+              }
+              if (row.kind === "section") {
+                return (
+                  <div
+                    key={virtualItem.key}
+                    {...common}
+                    role="presentation"
+                    aria-hidden
+                    data-testid="list-section"
+                    className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-end px-3 pb-1 text-12 font-semibold text-tertiary"
+                  >
+                    <SectionLabel section={row.section} bounds={bounds} />
+                  </div>
+                );
+              }
+              const selected = selectedIds.has(row.item.id);
+              const isCursor = virtualItem.index === cursorRow;
+              const optionId = `${optionPrefix}-${String(row.item.id)}`;
+              const accountName = source?.accountName?.(row.item);
+              const decorated = source?.decorate?.(row.item);
+              const decoration = accountName ? { ...decorated, account: accountName } : decorated;
               return (
-                <div
+                <MessageOption
                   key={virtualItem.key}
                   {...common}
-                  role="presentation"
-                  className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-3 px-3"
-                >
-                  <span aria-hidden className="w-4" />
-                  <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
-                  <span className="text-13 text-tertiary">{t("list.loadingMore")}</span>
-                </div>
-              );
-            }
-            if (row.kind === "extra") {
-              return (
-                <div
-                  key={virtualItem.key}
-                  {...common}
-                  role="presentation"
-                  data-testid="list-extra"
+                  id={optionId}
+                  item={row.item}
+                  showRecipients={showRecipients}
+                  dateId={dateDomId(optionId)}
+                  bounds={bounds}
+                  decoration={decoration}
+                  aria-selected={selected}
+                  aria-setsize={total}
+                  aria-posinset={(entryPosition.get(virtualItem.index) ?? row.position) + 1}
+                  draggable={onDragRows ? true : undefined}
+                  onMouseDown={() => {
+                    // The press focuses the list; its click selects this row, not the focus handler.
+                    pointerPress.current = true;
+                  }}
+                  onClick={(event) => {
+                    onRowClick(event, row);
+                  }}
+                  onDoubleClick={() => {
+                    setState(only({ id: row.item.id, position: row.position }));
+                    onOpen?.(row.item.id);
+                  }}
+                  onDragStart={(event) => {
+                    onRowDragStart(event, row);
+                  }}
+                  onDragEnd={() => {
+                    pointerPress.current = false;
+                    onDragEnd?.();
+                  }}
+                  data-testid="message-row"
+                  data-card={edge && row.card}
+                  data-card-edge={edge}
                   className={cx(
-                    "absolute top-0 left-0 w-full",
-                    row.size === "section" ? "h-(--ui-section-height)" : "h-(--ui-row-height)",
+                    "group/row absolute top-0 left-0 w-full",
+                    twoLine ? "h-(--ui-row-height-two-line)" : "h-(--ui-row-height)",
+                    edge && "list-card px-1",
                   )}
                 >
-                  {row.render()}
-                </div>
+                  <MessageRowContent
+                    item={row.item}
+                    accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
+                    bounds={bounds}
+                    showRecipients={showRecipients}
+                    twoLine={twoLine}
+                    selected={selected}
+                    cursor={isCursor && !activeAction}
+                    multiSelect={multiSelect}
+                    decoration={decoration}
+                    // In the priority card the card says "important" already.
+                    omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
+                    actions={renderQuickActions?.(row.item, selected)}
+                  />
+                </MessageOption>
               );
-            }
-            if (row.kind === "section") {
-              return (
-                <div
-                  key={virtualItem.key}
-                  {...common}
-                  role="presentation"
-                  aria-hidden
-                  data-testid="list-section"
-                  className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-end px-3 pb-1 text-12 font-semibold text-secondary"
-                >
-                  <SectionLabel section={row.section} bounds={bounds} />
-                </div>
-              );
-            }
-            const selected = selectedIds.has(row.item.id);
-            const isCursor = virtualItem.index === cursorRow;
-            const optionId = `${optionPrefix}-${String(row.item.id)}`;
-            const previewId = row.item.preview?.trim() ? previewDomId(optionId) : undefined;
-            const accountName = source?.accountName?.(row.item);
-            const decorated = source?.decorate?.(row.item);
-            const decoration = accountName ? { ...decorated, account: accountName } : decorated;
-            return (
-              <MessageOption
-                key={virtualItem.key}
-                {...common}
-                id={optionId}
-                item={row.item}
-                showRecipients={showRecipients}
-                previewId={previewId}
-                decoration={decoration}
-                aria-selected={selected}
-                aria-setsize={total}
-                aria-posinset={row.position + 1}
-                draggable={onDragRows ? true : undefined}
-                onMouseDown={() => {
-                  // The press focuses the list; its click selects this row, not the focus handler.
-                  pointerPress.current = true;
-                }}
-                onClick={(event) => {
-                  onRowClick(event, row);
-                }}
-                onDoubleClick={() => {
-                  setState(only({ id: row.item.id, position: row.position }));
-                  onOpen?.(row.item.id);
-                }}
-                onDragStart={(event) => {
-                  onRowDragStart(event, row);
-                }}
-                onDragEnd={() => {
-                  pointerPress.current = false;
-                  onDragEnd?.();
-                }}
-                data-testid="message-row"
-                className={cx(
-                  "group/row absolute top-0 left-0 w-full",
-                  twoLine ? "h-(--ui-row-height-two-line)" : "h-(--ui-row-height)",
-                )}
-              >
-                <MessageRowContent
-                  item={row.item}
-                  accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
-                  bounds={bounds}
-                  showRecipients={showRecipients}
-                  twoLine={twoLine}
-                  selected={selected}
-                  cursor={isCursor}
-                  multiSelect={multiSelect}
-                  previewId={previewId}
-                  decoration={decoration}
-                  actions={renderQuickActions?.(row.item, selected)}
-                />
-              </MessageOption>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        </ListLayoutContext>
       </div>
       {/* Drag image for several rows: off screen, its text set when a drag starts. */}
       <div

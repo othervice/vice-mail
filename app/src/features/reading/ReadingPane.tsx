@@ -1,4 +1,4 @@
-import { CloudOff, FileX, LoaderCircle, X } from "lucide-react";
+import { AppWindow, CloudOff, FileX, Forward, LoaderCircle, Paperclip, Reply, ReplyAll, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -6,15 +6,26 @@ import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { Notice } from "../../components/Notice";
+import { Tooltip } from "../../components/Tooltip";
 import type { Account, BodyFormat, MessageId, MessageView } from "../../services/ipc";
+import { openComposer } from "../../stores/composer";
+import { useBoundShortcuts } from "../../stores/shortcuts";
 import { useUiStore } from "../../stores/ui";
+import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
+import type { ActionId } from "../actions/registry";
+import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
+import { AskBar, QuickReplies } from "../ai/ReadingAi";
+import { useAppInfo } from "../app-info/queries";
+import { openMessageInWindow } from "../windows/open";
 import { Attachments } from "./Attachments";
 import { LinkCard } from "./LinkCard";
 import { CategoryPanel } from "../comfort/CategoryPanel";
 import { OpenReplyHintBar } from "../ai/OpenReplyHints";
 import { MessageExtras } from "../extras/MessageExtras";
 import { MessageTools } from "../extras/MessageTools";
-import { MessageHeader } from "./MessageHeader";
+import { GmailLabels } from "./GmailLabels";
+import { addressName } from "./format";
+import { MessageHeader, SubjectTitle } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
@@ -76,7 +87,8 @@ export function FormatToggle({ shown, onChange }: FormatToggleProps) {
     <div
       role="group"
       aria-label={t("reading.format.label")}
-      className="inline-flex gap-1 rounded-card border border-border-strong bg-canvas p-1"
+      className="inline-flex shrink-0 gap-1 rounded-card bg-hover p-1"
+      data-testid="format-toggle"
     >
       {options.map((option) => (
         <button
@@ -87,7 +99,7 @@ export function FormatToggle({ shown, onChange }: FormatToggleProps) {
             onChange(option.value);
           }}
           data-testid={`format-${option.value}`}
-          className="h-6 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:bg-hover hover:text-primary aria-pressed:bg-accent aria-pressed:text-on-accent"
+          className="h-6 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
         >
           {option.label}
         </button>
@@ -214,6 +226,75 @@ export function Problems({ view }: { view: Pick<MessageView, "problems"> }) {
   );
 }
 
+interface ReplyRowProps {
+  messageId: MessageId;
+  /** Who a reply goes to, for the button's name ("Reply to Grace Hopper"). */
+  sender: string;
+}
+
+/**
+ * The quiet row under an open message: reply, reply all, forward. The same as the toolbar's
+ * actions (and their shortcuts), close to where the reading ends. Replies are local drafts, so they
+ * work on read-only accounts too.
+ */
+function ReplyRow({ messageId, sender }: ReplyRowProps) {
+  const { t } = useTranslation();
+  const platform = shortcutPlatform(useAppInfo().data?.platform);
+  const shortcutsOf = useBoundShortcuts(platform);
+  const hint = (id: ActionId, label: string) => {
+    const first = shortcutsOf(id)[0];
+    return first ? t("actions.withShortcut", { label, shortcut: formatShortcut(first, platform) }) : label;
+  };
+  const buttons = [
+    { id: "reply", icon: Reply, name: t("reading.replyRow.reply", { name: sender }), label: t("actions.labels.reply"), kind: "reply" },
+    { id: "replyAll", icon: ReplyAll, name: t("reading.replyRow.replyAll"), label: t("actions.labels.replyAll"), kind: "reply_all" },
+    { id: "forward", icon: Forward, name: t("reading.replyRow.forward"), label: t("actions.labels.forward"), kind: "forward" },
+  ] as const;
+  return (
+    <div role="group" aria-label={t("reading.replyRow.label")} className="flex items-center gap-1" data-testid="reply-row">
+      {buttons.map((button) => (
+        <Tooltip key={button.id} label={hint(button.id, button.label)}>
+          <button
+            type="button"
+            aria-label={button.name}
+            onClick={() => {
+              openComposer({ kind: button.kind, messageId });
+            }}
+            className="flex size-8 items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary"
+            data-testid={`reply-row-${button.id}`}
+          >
+            <button.icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
+interface CardMenuProps {
+  account: Account;
+  messageId: MessageId;
+  inWindow: boolean;
+  draft: boolean;
+}
+
+/** The "…" of a message card: what else can be done with this one message. */
+function CardMenu({ account, messageId, inWindow, draft }: CardMenuProps) {
+  const { t } = useTranslation();
+  const items: OverflowItem[] = [
+    ...(draft
+      ? []
+      : [
+          { id: "replyAll", label: t("actions.labels.replyAll"), icon: ReplyAll, onSelect: () => { openComposer({ kind: "reply_all", messageId }); } },
+          { id: "forwardAsAttachment", label: t("actions.labels.forwardAsAttachment"), icon: Paperclip, onSelect: () => { openComposer({ kind: "forward_as_attachment", messageId }); } },
+        ]),
+    ...(inWindow
+      ? []
+      : [{ id: "openInWindow", label: t("actions.labels.openInWindow"), icon: AppWindow, onSelect: () => { openMessageInWindow(account.id, messageId); } }]),
+  ].map((item) => ({ ...item, "data-testid": `card-menu-${item.id}` }));
+  return <OverflowMenu label={t("reading.card.menu")} items={items} data-testid="card-menu" />;
+}
+
 interface ReadingPaneProps {
   account: Account;
   messageId: MessageId;
@@ -224,24 +305,54 @@ interface ReadingPaneProps {
   onEscape: () => void;
   /** Closes the pane (the list gives up its selection). */
   onClose: () => void;
+  /**
+   * Stage 7: the conversation around the open message. Gets the open message's card and places
+   * it among the folded others; the pane keeps its title, scrolling and top bar.
+   */
+  conversation?: (card: ReactNode) => ReactNode;
+  /** The title while the message itself is still loading (the conversation's subject). */
+  title?: string;
+  /** A draft: nothing to reply to or forward. */
+  draft?: boolean;
+  /** In a message window of its own: no AI (the panel is in the main window), no "open in window". */
+  inWindow?: boolean;
 }
 
 /**
  * The reading pane next to the list (docs/DESIGN.md, "Lesebereich"). Shows the message the list
- * selected: head, notes about damaged or partly stored mail, attachments, blocked external
- * content and the body, and below it the check of a clicked link. The top bar holds the mail
- * actions (stage 4); marking as read on open is the mail view's job (it knows the setting).
+ * selected as a card under its subject: head, notes about damaged or partly stored mail,
+ * attachments, blocked external content, the body, and a quiet row to reply (with the AI chips
+ * where AI may work on it). Below it the check of a clicked link; at the bottom, while the AI panel
+ * is folded, the ask bar. The top bar holds the mail actions (stage 4); marking as read on open
+ * is the mail view's job (it knows the setting).
  */
-export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscape, onClose }: ReadingPaneProps) {
+export function ReadingPane({
+  account,
+  messageId,
+  focusRequest,
+  toolbar,
+  onEscape,
+  onClose,
+  conversation,
+  title,
+  draft = false,
+  inWindow = false,
+}: ReadingPaneProps) {
   const { t } = useTranslation();
-  const [format, setFormat] = useState<BodyFormat>("auto");
+  // The chosen format belongs to its message: another message of the conversation starts on "auto".
+  const [chosenFormat, setChosenFormat] = useState<{ messageId: MessageId; format: BodyFormat } | null>(null);
+  const format: BodyFormat = chosenFormat?.messageId === messageId ? chosenFormat.format : "auto";
+  const setFormat = (next: BodyFormat) => {
+    setChosenFormat({ messageId, format: next });
+  };
   const query = useMessageView(account.id, messageId, format);
   const linkRequest = useUiStore((state) => state.linkRequest);
   const articleRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const subjectId = useId();
   const handledFocus = useRef<number | null>(null);
-  const view = query.data;
+  const view = query.data?.id === messageId ? query.data : undefined;
   const skeleton = useDelayed(query.isPending, SKELETON_DELAY_MS);
 
   useEffect(() => {
@@ -249,6 +360,18 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
     handledFocus.current = focusRequest.seq;
     articleRef.current?.focus();
   }, [focusRequest, messageId]);
+
+  // In a conversation the open card comes into view when it is far down (or above).
+  const loadedId = view?.id ?? null;
+  const inConversation = conversation !== undefined;
+  useEffect(() => {
+    if (!inConversation || loadedId === null) return;
+    const scroller = scrollerRef.current;
+    const card = cardRef.current;
+    if (!scroller || !card) return;
+    const delta = card.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    if (delta < 0 || delta > scroller.clientHeight * 0.6) scroller.scrollTop += delta - 12;
+  }, [inConversation, loadedId]);
 
   // Not on this computer and the account was offline: ask again once it is connected.
   const { refetch } = query;
@@ -263,6 +386,7 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
   const shownFormat = body?.kind === "html" || body?.kind === "text" ? body.kind : null;
   const canToggle = view !== undefined && view.formats.includes("html") && view.formats.includes("text");
   const link = linkRequest && renderToken !== null && linkRequest.renderToken === renderToken ? linkRequest : null;
+  const sender = view?.header.from.find((address) => address.email.trim() || address.name?.trim());
 
   const retry = () => {
     void refetch();
@@ -276,62 +400,95 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
     onEscape();
   };
 
-  let content;
+  let card;
   if (query.isError) {
-    content = (
-      <ErrorNotice context={t("reading.loadFailed")} error={query.error} onRetry={retry} data-testid="reading-error" />
-    );
+    card = <ErrorNotice context={t("reading.loadFailed")} error={query.error} onRetry={retry} data-testid="reading-error" />;
   } else if (!view) {
-    content = <Skeleton label={t("reading.loading")} visible={skeleton} />;
-  } else {
-    content = (
-      <>
-        <MessageHeader header={view.header} account={account} subjectId={subjectId} />
-        {/* Stage 9: "Why here?" and "always as …" (not printed); unsubscribing and invitations. */}
-        <div className="contents" data-print-hide>
-          <CategoryPanel messageId={view.id} />
+    card = (
+      <div ref={cardRef} className={CARD}>
+        <div className="px-5 py-5">
+          <Skeleton label={t("reading.loading")} visible={skeleton} />
         </div>
-        <MessageExtras accountId={account.id} messageId={view.id} />
-        {/* Stage 13: "maybe still open" (rules in the core, no AI). */}
-        <OpenReplyHintBar messageId={view.id} />
-        <Problems view={view} />
-        <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
-        <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />
-      </>
+      </div>
+    );
+  } else {
+    card = (
+      <div ref={cardRef} className={CARD} data-testid="message-card">
+        <div className="flex flex-col gap-4 px-4 pt-4 pb-2 min-[72rem]:px-5">
+          <div className="flex flex-col gap-3">
+            <MessageHeader
+              header={view.header}
+              account={account}
+              subjectId={subjectId}
+              showSubject={false}
+              menu={<CardMenu account={account} messageId={view.id} inWindow={inWindow} draft={draft} />}
+              collapsible
+            />
+            {/* Stage 9: "Why here?" and "always as …" (not printed), as a quiet chip under the head. */}
+            <div className="contents" data-print-hide>
+              <CategoryPanel messageId={view.id} />
+            </div>
+          </div>
+          {/* Stage 14 (decision 0034): Gmail labels; nothing for other servers. */}
+          <GmailLabels account={account} messageId={view.id} />
+          <MessageExtras accountId={account.id} messageId={view.id} />
+          {/* Stage 13: "maybe still open" (rules in the core, no AI). */}
+          <OpenReplyHintBar messageId={view.id} />
+          <Problems view={view} />
+          <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
+          {/* HTML or plain text: a small switch at the body it changes, not in the toolbar. */}
+          {canToggle && shownFormat && (
+            <div className="-mb-2 flex justify-end" data-print-hide>
+              <FormatToggle shown={shownFormat} onChange={setFormat} />
+            </div>
+          )}
+          <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3" data-print-hide>
+          {draft ? <span /> : <ReplyRow messageId={view.id} sender={(sender && addressName(sender)) ?? t("list.unknownSender")} />}
+          {!inWindow && <QuickReplies account={account} messageId={view.id} />}
+        </div>
+      </div>
     );
   }
+  const subject = view?.header.subject ?? title;
 
   return (
     <section
       aria-label={t("reading.region")}
       onKeyDown={onKeyDown}
       data-testid="reading-pane"
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
     >
-      <div className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-border px-4">
-        <div className="me-auto flex min-w-0 items-center">{toolbar}</div>
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border-subtle ps-3 pe-2">
+        <div className="flex min-w-0 flex-1 items-center">{toolbar}</div>
         {query.isFetching && view && (
-          <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
+          <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
         )}
-        {canToggle && shownFormat && <FormatToggle shown={shownFormat} onChange={setFormat} />}
         {/* Stage 9: save as .eml, print (the print styles show only the article below). */}
         {view && <MessageTools key={view.id} messageId={view.id} />}
+        <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
         <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
       </div>
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto" data-testid="reading-scroller">
         <article
           ref={articleRef}
           tabIndex={-1}
-          aria-labelledby={view ? subjectId : undefined}
-          aria-label={view ? undefined : t("reading.region")}
+          aria-labelledby={subject !== undefined ? subjectId : undefined}
+          aria-label={subject !== undefined ? undefined : t("reading.region")}
           aria-busy={query.isPending || body?.kind === "loading"}
           data-print-root
-          className="flex flex-col gap-4 px-6 py-6 focus-visible:-outline-offset-2"
+          className="mx-auto flex w-full max-w-(--ui-reading-column) flex-col gap-4 px-4 pt-5 pb-(--ui-reading-ask-room) focus-visible:-outline-offset-2 min-[72rem]:px-6 min-[72rem]:pt-6"
         >
-          {content}
+          {subject !== undefined && <SubjectTitle subject={subject} subjectId={subjectId} />}
+          {conversation ? conversation(card) : card}
         </article>
       </div>
       {link && <LinkCard key={link.seq} request={link} onClosed={backToMessage} onReload={retry} />}
+      {!inWindow && <AskBar account={account} />}
     </section>
   );
 }
+
+/** A message as a card on the reading surface: raised, rounded, a soft shadow instead of a frame. */
+const CARD = "flex flex-col rounded-card border border-border-subtle bg-surface-raised shadow-card";

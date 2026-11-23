@@ -28,6 +28,10 @@ pub struct Capabilities {
     pub literal_plus: bool,
     /// RFC 4731, compact `UID SEARCH` results.
     pub esearch: bool,
+    /// Stage 14 (decision 0034): `X-GM-EXT-1`, the Gmail extensions. Labels instead of
+    /// folders: `X-GM-MSGID` identifies one message across all its labels, `X-GM-LABELS`
+    /// lists and changes them; the server files sent mail itself.
+    pub gmail: bool,
     /// Every announced capability, upper case, sorted, without duplicates.
     pub names: Vec<String>,
 }
@@ -60,6 +64,7 @@ impl Capabilities {
             list_status: has("LIST-STATUS"),
             literal_plus: has("LITERAL+"),
             esearch: has("ESEARCH"),
+            gmail: has("X-GM-EXT-1"),
             names,
         }
     }
@@ -91,7 +96,7 @@ mod tests {
         ]);
         assert!(caps.imap4rev1 && caps.idle && caps.condstore && caps.move_ && caps.uidplus);
         assert!(caps.special_use && caps.list_status && caps.literal_plus);
-        assert!(!caps.qresync && !caps.enable && !caps.esearch);
+        assert!(!caps.qresync && !caps.enable && !caps.esearch && !caps.gmail);
         assert!(caps.has("auth=plain"));
         assert_eq!(caps.names.iter().filter(|n| *n == "IDLE").count(), 1);
         assert!(caps.names.windows(2).all(|w| w[0] < w[1]));
@@ -102,6 +107,22 @@ mod tests {
         let caps = Capabilities::from_names(["IMAP4REV1", "QRESYNC"]);
         assert!(caps.qresync && caps.condstore);
         assert!(!Capabilities::from_names(["IMAP4REV1"]).condstore);
+    }
+
+    #[test]
+    fn gmail_is_recognised_by_its_extension() {
+        // Gmail's CAPABILITY after login (recorded 2026, abridged).
+        let caps = Capabilities::from_names(
+            "IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 UIDPLUS \
+             COMPRESS=DEFLATE ENABLE MOVE CONDSTORE ESEARCH UTF8=ACCEPT LIST-EXTENDED \
+             LIST-STATUS LITERAL- SPECIAL-USE APPENDLIMIT=35651584"
+                .split_ascii_whitespace(),
+        );
+        assert!(caps.gmail && caps.condstore && caps.move_ && caps.special_use);
+        assert!(!caps.qresync);
+        assert!(!Capabilities::from_names(["IMAP4rev1", "X-GM-EXT-2"]).gmail);
+        let json = serde_json::to_value(&caps).expect("serialize");
+        assert_eq!(json["gmail"], true);
     }
 
     #[test]

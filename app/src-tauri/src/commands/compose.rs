@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use mail_engine::AppCore;
 use mail_model::{
     AccountId, AccountSendSettings, ComposeIdentity, ComposeSettings, ContactSuggestion, CoreError,
-    Draft, DraftId, DraftSummary, DraftUpdate, IdentityId, IpcError, MessageId, NewDraft,
-    OperationId, OutgoingMail, SentCopyMode, UnclearDecision,
+    Draft, DraftId, DraftSendOptions, DraftSummary, DraftUpdate, IdentityId, IpcError, MessageId,
+    NewDraft, OperationId, OutgoingMail, QuoteLanguage, ReadReceiptInfo, SentCopyMode,
+    UnclearDecision,
 };
 use tauri::{Runtime, State, WebviewWindow};
 
@@ -288,4 +289,62 @@ async fn ask_open_paths<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Vec<Pa
     Err(CoreError::Internal(
         "attaching files needs the system dialog of macOS or Windows".into(),
     ))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 16 (decision 0033): send options of a draft, read receipts (RFC 8098)
+
+/// "Senden und archivieren" and the read-receipt request of a draft. `send_in_progress` while
+/// the draft is frozen.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_draft_send_options(
+    core: State<'_, AppCore>,
+    draft_id: DraftId,
+    options: DraftSendOptions,
+) -> Result<Draft, IpcError> {
+    core.set_draft_send_options(draft_id, options)
+        .await
+        .map_err(to_ipc("set_draft_send_options"))
+}
+
+/// Read receipts of a message: the request of an incoming one and the user's answer, whether
+/// a sent one asked for a receipt, and the receipts that came back for it.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_read_receipt(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+) -> Result<ReadReceiptInfo, IpcError> {
+    core.get_read_receipt(message_id)
+        .await
+        .map_err(to_ipc("get_read_receipt"))
+}
+
+/// The user's explicit "send" to a read-receipt request; the only way one is sent.
+/// `requestId` is a UUID per press.
+#[tauri::command]
+#[specta::specta]
+pub async fn send_read_receipt(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+    language: QuoteLanguage,
+    request_id: String,
+) -> Result<OutgoingMail, IpcError> {
+    core.send_read_receipt(message_id, language, request_id)
+        .await
+        .map_err(to_ipc("send_read_receipt"))
+}
+
+/// The user's "do not send" to a read-receipt request.
+#[tauri::command]
+#[specta::specta]
+pub async fn decline_read_receipt(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+    request_id: String,
+) -> Result<ReadReceiptInfo, IpcError> {
+    core.decline_read_receipt(message_id, request_id)
+        .await
+        .map_err(to_ipc("decline_read_receipt"))
 }

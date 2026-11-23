@@ -27,6 +27,7 @@ export const NOTIFICATION_DEFAULTS: Full = {
   hideContent: false,
   mutedAccounts: [],
   badge: "inboxUnread",
+  sound: { enabled: true, macos: "Default", windows: "Default", silentAccounts: [] },
 };
 
 export function withNotificationDefaults(settings: Settings | undefined): Full {

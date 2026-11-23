@@ -32,7 +32,9 @@ const active = () =>
       testId: element?.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
       role: element?.getAttribute("role") ?? null,
       label: element?.getAttribute("aria-label") ?? null,
-      activeOption: document.getElementById(element?.getAttribute("aria-activedescendant") ?? "")?.getAttribute("aria-label") ?? null,
+      // Decision 0031: options are named by their content (one visually hidden text), not aria-label.
+      activeOption:
+        document.getElementById(element?.getAttribute("aria-activedescendant") ?? "")?.querySelector('[data-testid="row-name"]')?.textContent ?? null,
     };
   });
 

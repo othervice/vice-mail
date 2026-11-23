@@ -328,6 +328,8 @@ fn account_of(
         RecordKind::Snooze
         | RecordKind::Pin
         | RecordKind::Task
+        | RecordKind::ReadingList
+        | RecordKind::MailboxPref
         | RecordKind::RemoteContent
         | RecordKind::Setting => key.id().split_once('/').and_then(|(a, _)| a.parse().ok()),
         RecordKind::Identity => identity_account(record?),
@@ -959,8 +961,20 @@ impl<C: Connector> AppCore<C> {
         if any(&["snooze"]) {
             self.comfort().wake_snoozes();
         }
-        if any(&["senderRule", "snooze", "pin", "task", "rule"]) {
+        if any(&[
+            "senderRule",
+            "snooze",
+            "pin",
+            "task",
+            "rule",
+            "readingList",
+            "blockedSender",
+        ]) {
             self.emit_event(CoreEvent::InboxChanged { account_id: None });
+        }
+        // Stage 16: favourites and colours are part of the folder list.
+        if any(&["mailboxPref"]) {
+            self.mailbox_prefs_changed().await;
         }
         for (kind, id, reason) in &outcome.skipped {
             tracing::debug!(%kind, ?reason, record = %id.len(), "settings sync record not applied now");

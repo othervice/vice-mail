@@ -148,7 +148,7 @@ function SavedSearchRow({ search }: { search: SavedSearch }) {
   const showSavedSearch = useUiStore((state) => state.showSavedSearch);
   const { buttons, extra, rename } = useEntryActions(search);
   return (
-    <li className="flex flex-col gap-2 border-b border-border px-4 py-3" data-testid="saved-search-row">
+    <li className="flex flex-col gap-2 border-b border-border-subtle px-4 py-3" data-testid="saved-search-row">
       {rename ?? (
         <div className="flex items-center gap-3">
           <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
@@ -184,7 +184,7 @@ function SavedSearchResults({ search, accounts, platform }: { search: SavedSearc
   const results = useSearchPages(input);
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="saved-search-open">
-      <div className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border-subtle px-4 py-3">
         <div>
           <Button variant="quiet" onClick={back}>
             <ArrowLeft aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />

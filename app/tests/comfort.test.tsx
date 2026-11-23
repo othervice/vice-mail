@@ -5,6 +5,8 @@ import { inboxSection, SNOOZE_TIMES } from "./support/comfort";
 import { ipcError, makeAccount, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { toolbarAction } from "./support/reading";
+import { optionName } from "./support/names";
 
 /** Read-only on purpose: pins, snoozes and tasks are local and must work without writes. */
 const ADA = makeAccount({ writesEnabled: false });
@@ -34,7 +36,7 @@ async function list(name = /^Messages in/) {
 function row(listbox: HTMLElement, subject: string): HTMLElement {
   const option = within(listbox)
     .getAllByRole("option")
-    .find((o) => (o.getAttribute("aria-label") ?? "").includes(`, ${subject},`));
+    .find((o) => optionName(o).includes(`, ${subject},`));
   if (!option) throw new Error(`no row ${subject}`);
   return option;
 }
@@ -90,38 +92,71 @@ describe("the sorted inbox", () => {
     // The returned snooze carries its mark, also in the row's name.
     const backRow = row(listbox, "Back one");
     expect(within(backRow).getByTestId("row-mark-returned").textContent).toBe("Back");
-    expect(backRow.getAttribute("aria-label")).toContain("Back from Later");
-    expect(row(listbox, "Pinned one").getAttribute("aria-label")).toContain("Pinned");
-    expect(row(listbox, "From the boss").getAttribute("aria-label")).toContain("Important sender");
+    expect(optionName(backRow)).toContain("Back from Later");
+    expect(optionName(row(listbox, "Pinned one"))).toContain("Pinned");
+    expect(optionName(row(listbox, "From the boss"))).toContain("Important sender");
     // The boss stands once (priority block), the bundle is one row until unfolded.
     const subjects = within(listbox)
       .getAllByRole("option")
-      .map((o) => o.getAttribute("aria-label") ?? "");
+      .map((o) => optionName(o));
     expect(subjects.filter((label) => label.includes("From the boss"))).toHaveLength(1);
     expect(subjects.some((label) => label.includes("CI failed"))).toBe(false);
-    // Screen readers hear "n of m" over the rows they can reach, not over closed bundles.
+    // Screen readers hear "n of m" over the entries they can reach (messages, the bundle and
+    // "Show all"), not over the members of closed bundles.
     expect(within(listbox).getAllByRole("option")[0]?.getAttribute("aria-setsize")).toBe(String(subjects.length));
+    expect(within(listbox).getAllByRole("option").map((o) => o.getAttribute("aria-posinset"))).toEqual(
+      subjects.map((_, i) => String(i + 1)),
+    );
 
-    const bundle = within(listbox).getByTestId("bundle-row");
-    expect(bundle.getAttribute("aria-expanded")).toBe("false");
-    expect(bundle.getAttribute("aria-label")).toBe("Notifications, 2 messages, 1 unread, from GitHub");
-    expect(within(bundle).getAllByTestId("bundle-chip").map((chip) => chip.textContent)).toEqual(["GitHub2"]);
+    // Decision 0031 (axe aria-required-children): the bundle is an entry of the list, no button,
+    // named by what it shows plus its folded state (WCAG 2.5.3).
+    const bundle = within(listbox).getByRole("option", { name: "Notifications, 2 · 1 new, GitHub 2, collapsed" });
+    expect(within(listbox).queryAllByRole("button")).toEqual([]);
+    expect(bundle.hasAttribute("aria-label")).toBe(false);
+    expect(within(bundle).getAllByTestId("bundle-chip-name").map((chip) => chip.textContent)).toEqual(["GitHub"]);
     expect(within(bundle).getByTestId("bundle-count").textContent).toBe("2 · 1 new");
+    expect(within(listbox).getByRole("option", { name: "Show all (4, 1 unread)" })).toBeTruthy();
+  });
+
+  it("the arrow keys reach the bundle and “Show all” like messages; Space runs them, the selection stays", async () => {
+    const { user } = setup(all, { comfort: { inboxPages: { 1: [page] }, priority: { 1: [vip] } } });
+    const listbox = await list();
+    const active = () => document.getElementById(listbox.getAttribute("aria-activedescendant") ?? "");
+
+    await user.click(row(listbox, "From the boss"));
+    await user.keyboard("{ArrowDown}");
+    expect(optionName(active())).toBe("Show all (4, 1 unread)");
+    // On "Show all" nothing new is selected: the message stays selected and open.
+    expect(row(listbox, "From the boss").getAttribute("aria-selected")).toBe("true");
+    await user.keyboard("{ArrowDown}");
+    expect(optionName(active())).toContain(", Lunch?,");
+    expect(row(listbox, "Lunch?").getAttribute("aria-selected")).toBe("true");
+    await user.keyboard("j");
+    expect(optionName(active())).toBe("Notifications, 2 · 1 new, GitHub 2, collapsed");
+    await user.keyboard(" ");
+    expect(optionName(active())).toBe("Notifications, 2 · 1 new, GitHub 2, expanded");
+    expect(row(listbox, "Lunch?").getAttribute("aria-selected")).toBe("true");
+    expect(row(listbox, "CI failed").getAttribute("aria-selected")).toBe("false");
+    await user.keyboard("{ArrowDown}");
+    expect(optionName(active())).toContain(", CI failed,");
+    await user.keyboard("{ArrowUp}{ArrowUp}");
+    expect(optionName(active())).toContain(", Lunch?,");
   });
 
   it("a click or Enter unfolds a bundle in place, without opening or selecting anything", async () => {
     const { core, user } = setup(all, { comfort: { inboxPages: { 1: [page] } } });
     const listbox = await list();
-    const bundle = within(listbox).getByTestId("bundle-row");
+    const bundle = () => within(listbox).getByRole("option", { name: /^Notifications/ });
 
-    await user.click(bundle);
-    expect(within(listbox).getByTestId("bundle-row").getAttribute("aria-expanded")).toBe("true");
+    await user.click(within(listbox).getByTestId("bundle-row"));
+    expect(optionName(bundle())).toMatch(/, expanded$/);
     expect(row(listbox, "CI failed")).toBeTruthy();
     expect(row(listbox, "CI passed")).toBeTruthy();
 
-    within(listbox).getByTestId("bundle-row").focus();
+    // The click put the list's cursor on the bundle: Enter folds it again.
+    expect(listbox.getAttribute("aria-activedescendant")).toBe(bundle().id);
     await user.keyboard("{Enter}");
-    expect(within(listbox).getByTestId("bundle-row").getAttribute("aria-expanded")).toBe("false");
+    expect(optionName(bundle())).toMatch(/, collapsed$/);
     expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
     expect(core.callsOf("get_message")).toHaveLength(0);
   });
@@ -139,7 +174,8 @@ describe("the sorted inbox", () => {
     });
     const filtered = await list();
     await waitFor(() => {
-      expect(within(filtered).getAllByRole("option")).toHaveLength(1);
+      // The way back is an entry of the list too, then the one message.
+      expect(within(filtered).getAllByRole("option").map((o) => optionName(o).split(", ")[0])).toEqual(["Priority", "Grace Hopper"]);
     });
     await user.click(within(filtered).getByTestId("priority-back"));
     expect(await within(await list()).findByTestId("bundle-row")).toBeTruthy();
@@ -167,7 +203,7 @@ describe("snooze", () => {
     const { core, user } = setup(items);
     const pane = await open(user, "Message 1");
 
-    await user.click(within(within(pane).getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Snooze" }));
+    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Snooze"));
 
     const picker = await screen.findByTestId("snooze-picker");
     expect(within(picker).getByRole("heading").textContent).toBe("Snooze message");
@@ -268,8 +304,8 @@ describe("pins and tasks", () => {
     const pane = await open(user, "Invoice");
     const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
 
-    await user.click(within(toolbar).getByRole("button", { name: "Unpin" }));
-    await user.click(within(toolbar).getByRole("button", { name: "Mark task as done" }));
+    await user.click(await toolbarAction(user, toolbar, "Unpin"));
+    await user.click(await toolbarAction(user, toolbar, "Mark task as done"));
 
     await waitFor(() => {
       expect(core.callsOf("set_pinned")).toEqual([{ messageIds: [50], pinned: false }]);
@@ -302,7 +338,7 @@ describe("Later, Pinned and Tasks", () => {
     await waitFor(() => {
       expect(within(later).getAllByRole("option")).toHaveLength(1);
     });
-    expect(row(later, "Waiting").getAttribute("aria-label")).toContain("Snoozed");
+    expect(optionName(row(later, "Waiting"))).toContain("Snoozed");
     expect(core.callsOf("list_snoozed")).toEqual([{ scope: { kind: "account", accountId: ADA.id } }]);
 
     await user.click(screen.getByRole("button", { name: "Pinned" }));
@@ -320,7 +356,7 @@ describe("Later, Pinned and Tasks", () => {
     expect(core.callsOf("list_tasks")).toEqual([{ scope: { kind: "account", accountId: ADA.id }, filter: "open" }]);
     await user.click(row(tasks, "Pay the bill"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(within(pane).getByRole("button", { name: "Mark task as done" }));
+    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Mark task as done"));
     await waitFor(() => {
       expect(core.callsOf("set_task")).toEqual([{ messageIds: [10], mark: { done: true } }]);
     });
@@ -331,7 +367,7 @@ describe("Later, Pinned and Tasks", () => {
     await user.click(within(filter).getByRole("button", { name: "Done" }));
     const done = await list(/^Messages in Tasks/);
     await waitFor(() => {
-      expect(row(done, "Pay the bill").getAttribute("aria-label")).toContain("Task done");
+      expect(optionName(row(done, "Pay the bill"))).toContain("Task done");
     });
     expect(core.callsOf("list_tasks").at(-1)).toEqual({ scope: { kind: "account", accountId: ADA.id }, filter: "done" });
   });

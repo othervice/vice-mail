@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadListItem, ThreadView } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 const ACCOUNT = makeAccount({ writesEnabled: true });
 const now = Date.now();
@@ -59,9 +60,9 @@ describe("conversation view", () => {
     const list = await conversations(user);
     expect(core.callsOf("list_threads")).toEqual([{ mailboxId: 5, cursor: null, limit: 200 }]);
     const [thread, single] = within(list).getAllByRole("option");
-    expect(thread?.getAttribute("aria-label")).toContain("conversation with 3 messages");
+    expect(optionName(thread)).toContain("conversation with 3 messages");
     expect(within(thread as HTMLElement).getByTestId("row-thread-count").textContent).toBe("3");
-    expect(single?.getAttribute("aria-label")).not.toContain("conversation");
+    expect(optionName(single)).not.toContain("conversation");
     expect(within(single as HTMLElement).queryByTestId("row-thread-count")).toBeNull();
 
     // Off again: single messages.

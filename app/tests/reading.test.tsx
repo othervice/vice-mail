@@ -18,6 +18,7 @@ import {
 } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { showHeaderDetails } from "./support/reading";
 
 const ACCOUNT = makeAccount();
 
@@ -92,6 +93,8 @@ const READING_COMMANDS = new Set([
   // Stage 13: whether AI is usable (the panel stays hidden) and the open-reply hints (local rules).
   "get_ai_availability",
   "list_open_reply_hints",
+  // Stage 14: the Gmail labels of the open message (null off Gmail; read-only).
+  "get_message_labels",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);
@@ -108,6 +111,13 @@ describe("reading pane", () => {
     expect(within(pane).getByRole("heading", { level: 2, name: "Compiler notes" })).toBeTruthy();
     expect(within(pane).getByRole("article", { name: "Compiler notes" })).toBeTruthy();
     expect(within(pane).getByTestId("reading-from").textContent).toBe("From: Grace Hopper grace@example.org");
+    // Recipients and account are one folded line ("to you"); it unfolds to the full list.
+    const summary = within(pane).getByTestId("reading-recipients");
+    expect(summary.textContent).toContain("to you");
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
+    expect(within(pane).queryByTestId("reading-account")).toBeNull();
+    await showHeaderDetails(user, pane);
+    expect(summary.getAttribute("aria-expanded")).toBe("true");
     expect(within(pane).getByText("Ada Lovelace")).toBeTruthy();
     expect(within(pane).getByTestId("reading-date").textContent).toBe(formatFullDate(message.date, "en"));
     // The account: its colour together with its name.
@@ -776,6 +786,8 @@ describe("keyboard and focus", () => {
     inbox([message], { [message.id]: makeView(message, { header: { ...makeView(message).header, to } }) });
     const { user } = renderApp();
     const pane = await openMessage(user);
+    expect(within(pane).getByTestId("reading-recipients").textContent).toContain("to Person 1, Person 2 +4");
+    await showHeaderDetails(user, pane);
 
     const more = within(pane).getByRole("button", { name: "and 3 more" });
     expect(more.getAttribute("aria-expanded")).toBe("false");

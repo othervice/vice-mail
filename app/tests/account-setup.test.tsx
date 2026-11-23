@@ -78,6 +78,8 @@ describe("account setup: known provider", () => {
     expect(screen.getByText("imap.gmail.com, port 993, TLS")).toBeTruthy();
     const hint = screen.getByTestId("provider-hint");
     expect(hint.textContent).toContain("Gmail needs an app password");
+    // Stage 14: and that IMAP must be allowed (Google Workspace).
+    expect(hint.textContent).toContain("Google Workspace account your administrator must allow IMAP");
     expect(hint.textContent).toContain("Your normal Google password does not work here.");
     expect(screen.getByTestId("read-only-note").textContent).toContain("changes nothing on the server");
     // Known provider: nothing is offered or fetched from the network.

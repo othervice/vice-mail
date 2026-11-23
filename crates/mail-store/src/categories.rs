@@ -327,6 +327,7 @@ pub(crate) fn backfill_step(
                 precedence: r.get(13)?,
                 has_attachments: r.get(16)?,
                 category_headers: Vec::new(),
+                gmail: None,
             };
             Ok((r.get(0)?, r.get(1)?, header))
         })?

@@ -15,6 +15,7 @@ import { makeDraft, makeIdentity, makeOutgoing, type ComposeFakeOptions } from "
 import { ipcError, makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 const ADA = makeAccount({ writesEnabled: true });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -378,7 +379,7 @@ describe("composer: replying and forwarding", () => {
     const listbox = await screen.findByRole("listbox", { name: /^Messages in/ });
     const row = within(listbox)
       .getAllByRole("option")
-      .find((o) => (o.getAttribute("aria-label") ?? "").includes(first.subject));
+      .find((o) => optionName(o).includes(first.subject));
     if (!row) throw new Error("no row");
     await user.click(row);
     await user.click(await screen.findByRole("button", { name: "Reply" }));

@@ -79,6 +79,17 @@ export const commands = {
 	 *  than `MAX_MESSAGES_BY_IDS` ids is `invalid_argument`.
 	 */
 	getMessagesByIds: (messageIds: MessageId[], options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("get_messages_by_ids", { messageIds }, options)),
+	/**
+	 *  Stage 14 (decision 0034): the Gmail labels of a message (`\Inbox`, `\Important`, user
+	 *  labels by their folder path); null for messages of other servers. They change through
+	 *  `apply_action` with `addLabel` / `removeLabel`.
+	 */
+	getMessageLabels: (messageId: MessageId, options?: InvokeOptions) => typedError<string[] | null, IpcError>(__TAURI_INVOKE("get_message_labels", { messageId }, options)),
+	/**
+	 *  Stage 14: adds (`add`) or removes a Gmail label of one message through the outbox; the core
+	 *  picks the folder the change is sent from. `requestId` is a fresh UUID per user action.
+	 */
+	setMessageLabel: (messageId: MessageId, label: string, add: boolean, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("set_message_label", { messageId, label, add, requestId }, options)),
 	/**  The reading pane's data. Served locally when the body is stored, else `loading` and a fetch starts. */
 	getMessage: (messageId: MessageId, format: BodyFormat, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("get_message", { messageId, format }, options)),
 	/**  Renders again with the external images loaded by the core; `sender` also allows them for the sender. */
@@ -216,6 +227,23 @@ export const commands = {
 	/**  Autocomplete from addresses of earlier mail. `limit` 1..50. */
 	searchContacts: (query: string, limit: number, options?: InvokeOptions) => typedError<ContactSuggestion[], IpcError>(__TAURI_INVOKE("search_contacts", { query, limit }, options)),
 	/**
+	 *  "Senden und archivieren" and the read-receipt request of a draft. `send_in_progress` while
+	 *  the draft is frozen.
+	 */
+	setDraftSendOptions: (draftId: DraftId, options: DraftSendOptions, _options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("set_draft_send_options", { draftId, options }, _options)),
+	/**
+	 *  Read receipts of a message: the request of an incoming one and the user's answer, whether
+	 *  a sent one asked for a receipt, and the receipts that came back for it.
+	 */
+	getReadReceipt: (messageId: MessageId, options?: InvokeOptions) => typedError<ReadReceiptInfo, IpcError>(__TAURI_INVOKE("get_read_receipt", { messageId }, options)),
+	/**
+	 *  The user's explicit "send" to a read-receipt request; the only way one is sent.
+	 *  `requestId` is a UUID per press.
+	 */
+	sendReadReceipt: (messageId: MessageId, language: QuoteLanguage, requestId: string, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("send_read_receipt", { messageId, language, requestId }, options)),
+	/**  The user's "do not send" to a read-receipt request. */
+	declineReadReceipt: (messageId: MessageId, requestId: string, options?: InvokeOptions) => typedError<ReadReceiptInfo, IpcError>(__TAURI_INVOKE("decline_read_receipt", { messageId, requestId }, options)),
+	/**
 	 *  "Send later": queues the draft for `when.sendAt` (Unix ms). The message goes out only if the app
 	 *  runs and is online at that time. `requestId` is a UUID per press of the button.
 	 */
@@ -334,6 +362,44 @@ export const commands = {
 	listPinned: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_pinned", { scope }, options)),
 	/**  "Aufgaben": open, done or all tasks, the newest first. */
 	listTasks: (scope: MarkScope, filter: TaskFilter, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_tasks", { scope, filter }, options)),
+	/**
+	 *  Puts messages on the reading list ("Zum Lesen", `on`) or takes them off. Local only;
+	 *  emits `inboxChanged`.
+	 */
+	setReadingList: (messageIds: MessageId[], on: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_reading_list", { messageIds, on }, options)),
+	/**  "Zum Lesen": the reading list, the most recently added first. */
+	listReadingList: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_reading_list", { scope }, options)),
+	/**  "Ungelesene oben": unread messages of the scope first, then the read ones. `limit` 1..500. */
+	listUnreadFirst: (scope: InboxScope, cursor: UnreadFirstCursor | null, limit: number, options?: InvokeOptions) => typedError<UnreadFirstPage, IpcError>(__TAURI_INVOKE("list_unread_first", { scope, cursor, limit }, options)),
+	/**  The list views (keys the UI chooses) that group unread messages on top. Device setting. */
+	getUnreadFirstViews: (options?: InvokeOptions) => typedError<string[], IpcError>(__TAURI_INVOKE("get_unread_first_views", undefined, options)),
+	/**  Groups unread messages on top in `view` or not; returns all such views. */
+	setUnreadFirstView: (view: string, enabled: boolean, options?: InvokeOptions) => typedError<string[], IpcError>(__TAURI_INVOKE("set_unread_first_view", { view, enabled }, options)),
+	/**  Makes a folder a favourite (at the end) or not; emits `mailboxesChanged`. */
+	setMailboxFavorite: (mailboxId: MailboxId, favorite: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_mailbox_favorite", { mailboxId, favorite }, options)),
+	/**
+	 *  Gives a folder a colour of the account palette (0–7) or none (null); emits
+	 *  `mailboxesChanged`.
+	 */
+	setMailboxColor: (mailboxId: MailboxId, color: AccountColor | null, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_mailbox_color", { mailboxId, color }, options)),
+	/**  Puts the favourites in this order (the others after them); returns them in order. */
+	reorderFavoriteMailboxes: (mailboxIds: MailboxId[], options?: InvokeOptions) => typedError<Mailbox[], IpcError>(__TAURI_INVOKE("reorder_favorite_mailboxes", { mailboxIds }, options)),
+	/**  The favourite folders of every account, in their order. */
+	listFavoriteMailboxes: (options?: InvokeOptions) => typedError<Mailbox[], IpcError>(__TAURI_INVOKE("list_favorite_mailboxes", undefined, options)),
+	/**
+	 *  Blocks a sender (new mail goes to junk, or is hidden on a read-only account); returns all
+	 *  blocked senders.
+	 */
+	blockSender: (address: string, options?: InvokeOptions) => typedError<BlockedSender[], IpcError>(__TAURI_INVOKE("block_sender", { address }, options)),
+	/**  Unblocks a sender; returns all blocked senders. */
+	unblockSender: (address: string, options?: InvokeOptions) => typedError<BlockedSender[], IpcError>(__TAURI_INVOKE("unblock_sender", { address }, options)),
+	listBlockedSenders: (options?: InvokeOptions) => typedError<BlockedSender[], IpcError>(__TAURI_INVOKE("list_blocked_senders", undefined, options)),
+	/**
+	 *  Copies or moves messages to a folder of another account through the outbox. A move removes
+	 *  the source only after the copy was confirmed in the target. `requestId` is a UUID per user
+	 *  action.
+	 */
+	transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("transfer_messages", { messages, targetMailboxId, mode, requestId }, options)),
 	listRules: (options?: InvokeOptions) => typedError<MailRule[], IpcError>(__TAURI_INVOKE("list_rules", undefined, options)),
 	createRule: (input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("create_rule", { input }, options)),
 	updateRule: (id: RuleId, input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("update_rule", { id, input }, options)),
@@ -348,6 +414,11 @@ export const commands = {
 	 *  change).
 	 */
 	setNotificationTexts: (texts: NotificationTexts, options?: InvokeOptions) => __TAURI_INVOKE<void>("set_notification_texts", { texts }, options),
+	/**
+	 *  Stage 16: the notification sounds this platform offers (`Default` first), for
+	 *  `NotificationSettings.sound`.
+	 */
+	getNotificationSoundChoices: (options?: InvokeOptions) => __TAURI_INVOKE<NotificationSoundChoices>("get_notification_sound_choices", undefined, options),
 	/**  "Why here?", unsubscribe options and calendar invitations of a message. */
 	getMessageExtras: (messageId: MessageId, options?: InvokeOptions) => typedError<MessageExtras, IpcError>(__TAURI_INVOKE("get_message_extras", { messageId }, options)),
 	/**
@@ -631,6 +702,11 @@ export type AccountSendSettings = {
 	sentCopy: SentCopyMode,
 	/**  What `sentCopy: auto` amounts to for this account: the server files sent mail itself. */
 	serverSavesSent: boolean,
+	/**
+	 *  Stage 14 (decision 0034): the account is Gmail (IMAP host, or `X-GM-EXT-1` at the last
+	 *  login), which files sent mail itself; the account settings say so.
+	 */
+	gmail: boolean,
 };
 
 /**
@@ -686,7 +762,14 @@ export type ActionKind = "mark_read" | "mark_unread" | "flag" | "unflag" | "add_
 /**  Stage 5: a new version of a draft in the Drafts folder (the old one removed). */
 "save_draft" | 
 /**  Stage 5: the server copy of a discarded draft removed. */
-"delete_draft";
+"delete_draft" | 
+/**  Stage 14: a Gmail label added or removed (decision 0034). */
+"add_label" | "remove_label" | 
+/**
+ *  Stage 16: a message copied to another account (decision 0033). A move between
+ *  accounts is recorded as `move`.
+ */
+"copy";
 
 /**  Result of applying an action. */
 export type ActionResult = {
@@ -1029,6 +1112,21 @@ export type AppInfo = {
 	platform: Platform,
 };
 
+/**  Stage 16 (decision 0033): what "send and archive" did with the original. */
+export type ArchiveAfterSend = 
+/**  The message is not accepted yet; nothing is archived if it fails or is cancelled. */
+"waiting" | 
+/**
+ *  Accepted: the original's move to the archive is queued in the outbox (or it lay there
+ *  already, or is no longer stored locally).
+ */
+"queued" | 
+/**
+ *  Accepted, but the account has no archive mailbox: the original stayed where it was.
+ *  The UI can offer to choose one (`setMailboxRole`).
+ */
+"no_archive_mailbox";
+
 /**  One attachment in the reading pane. */
 export type AttachmentInfo = {
 	/**  Position for `saveAttachment`/`openAttachment`; stable for the message. */
@@ -1066,6 +1164,14 @@ export type BadgeMode = "off" |
 
 /**  The operations of one action (one call, possibly many messages). Undo works on a batch. */
 export type BatchId = number;
+
+/**  A sender whose new mail goes to the junk folder (or is hidden on read-only accounts). */
+export type BlockedSender = {
+	/**  Normalised address (lower case, IDNA domain). */
+	address: string,
+	/**  Unix milliseconds. */
+	createdAt: number,
+};
 
 /**  Which rendering of the body the UI asks `getMessage` for. */
 export type BodyFormat = 
@@ -1300,6 +1406,12 @@ export type Capabilities = {
 	literalPlus: boolean,
 	/**  RFC 4731, compact `UID SEARCH` results. */
 	esearch: boolean,
+	/**
+	 *  Stage 14 (decision 0034): `X-GM-EXT-1`, the Gmail extensions. Labels instead of
+	 *  folders: `X-GM-MSGID` identifies one message across all its labels, `X-GM-LABELS`
+	 *  lists and changes them; the server files sent mail itself.
+	 */
+	gmail: boolean,
 	/**  Every announced capability, upper case, sorted, without duplicates. */
 	names: string[],
 };
@@ -1431,6 +1543,13 @@ export type ComposeSettings = {
 	 *  default.
 	 */
 	defaultQuotePosition?: QuotePosition,
+	/**
+	 *  Stage 16 (decision 0033): new replies (and replies to all) start with
+	 *  [`Draft::archive_original`] on. Off by default; synced.
+	 */
+	archiveOnReply?: boolean,
+	/**  Stage 16: how read-receipt requests of incoming mail are handled. Synced. */
+	readReceipts?: ReadReceiptPolicy,
 };
 
 /**
@@ -1724,6 +1843,18 @@ export type Draft = {
 	server: DraftServerState,
 	/**  The send operation while `state` is `sending`. */
 	outgoing: OperationId | null,
+	/**
+	 *  Stage 16 (decision 0033), "Senden und archivieren": once the server accepted the
+	 *  message, the answered or forwarded original is archived (through the outbox). Without an
+	 *  original it does nothing. Set with `setDraftSendOptions`; a new reply starts with
+	 *  [`ComposeSettings::archive_on_reply`].
+	 */
+	archiveOriginal: boolean,
+	/**
+	 *  Stage 16: the message asks for a read receipt (`Disposition-Notification-To` with the
+	 *  sending identity's address, RFC 8098). The recipient decides whether to send one.
+	 */
+	requestReadReceipt: boolean,
 	/**  Unix milliseconds. */
 	createdAt: number,
 	updatedAt: number,
@@ -1753,6 +1884,14 @@ export type DraftId = string;
 
 /**  What a draft was started as. */
 export type DraftKind = "new" | "reply" | "reply_all" | "forward";
+
+/**  Stage 16 (decision 0033): the per-draft send options (`setDraftSendOptions`). */
+export type DraftSendOptions = {
+	/**  See [`Draft::archive_original`]. */
+	archiveOriginal: boolean,
+	/**  See [`Draft::request_read_receipt`]. */
+	requestReadReceipt: boolean,
+};
 
 /**  Where the draft's copy in the server's Drafts folder stands. */
 export type DraftServerState = 
@@ -2013,6 +2152,11 @@ export type EventStatus = "tentative" | "confirmed" | "cancelled";
 /**
  *  A template filled for a draft: the composer puts `html` where the cursor is and takes the
  *  subject if its own is empty (the draft itself is not changed).
+ * 
+ *  Stage 16: `to`, `cc` and `bcc` are the draft's recipients with the template's added (the
+ *  composer sets them as they are): the draft's stay first and unchanged; a template address
+ *  that is already in any field of the draft is not added again; at most `MAX_RECIPIENTS`
+ *  together. `recipientsAdded` counts the addresses the template added.
  */
 export type FilledTemplateInfo = {
 	subject: string,
@@ -2020,6 +2164,10 @@ export type FilledTemplateInfo = {
 	html: string,
 	text: string,
 	problems: TemplateFillProblem[],
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+	recipientsAdded: number,
 };
 
 /**
@@ -2069,7 +2217,9 @@ export type InboxFilter =
 /**  Messages of one category (after the user's sender rules). */
 { kind: "category"; category: MessageCategory } | 
 /**  Messages of important senders. */
-{ kind: "priority" };
+{ kind: "priority" } | 
+/**  Stage 16: unread messages only ("Nur ungelesene"), newest first. */
+{ kind: "unread" };
 
 /**  One page of the inbox. */
 export type InboxPage = {
@@ -2210,7 +2360,16 @@ export type ListCursor = number;
 /**  What the user asks for. One action on many messages is one batch ([`BatchId`]). */
 export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type: "flag" } | { type: "unflag" } | { type: "addKeyword"; keyword: string } | { type: "removeKeyword"; keyword: string } | 
 /**
- *  Moves to the mailbox with the role `archive`. Without one the action fails with
+ *  Stage 14 (decision 0034): adds a Gmail label (`STORE +X-GM-LABELS`). Only on Gmail
+ *  accounts ([`ActionError::LabelsUnsupported`] elsewhere); the name is checked with
+ *  [`crate::is_valid_label`] ([`ActionError::InvalidLabel`]).
+ */
+{ type: "addLabel"; label: string } | 
+/**  Stage 14: removes a Gmail label (`STORE -X-GM-LABELS`). */
+{ type: "removeLabel"; label: string } | 
+/**
+ *  Moves to the mailbox with the role `archive`. On Gmail (decision 0034) it removes the
+ *  inbox label instead (`STORE -X-GM-LABELS (\Inbox)`), with no archive folder needed. Without one the action fails with
  *  [`ActionError::MissingMailbox`], so the UI can ask which mailbox to use (then
  *  `setMailboxRole`) or whether to create one (an operation of its own).
  */
@@ -2267,6 +2426,16 @@ export type Mailbox = {
 	unread: number,
 	/**  Messages stored locally (grows during the first sync). */
 	total: number,
+	/**
+	 *  Stage 16: a favourite (on top of the sidebar and in the palette), with its position
+	 *  among the favourites (ascending). Absent when not a favourite.
+	 */
+	favoritePosition?: number | null,
+	/**
+	 *  Stage 16: the colour the user gave the folder (index into the account colour palette;
+	 *  always shown with the name). Absent when none.
+	 */
+	color?: AccountColor | null,
 };
 
 /**  Local row id of a mailbox (`mailbox.id`). Not stable across devices. */
@@ -2703,6 +2872,8 @@ export type MessageListItem = {
 	snooze?: SnoozeMark | null,
 	/**  Stage 9: marked as a task. Absent when not. */
 	task?: TaskMark | null,
+	/**  Stage 16: on the reading list ("Zum Lesen"). Absent when not. */
+	readingList?: boolean,
 };
 
 /**  One page of a message list, newest first. */
@@ -2822,6 +2993,31 @@ export type NotificationSettings = {
 	/**  Accounts whose new mail is never announced. */
 	mutedAccounts?: AccountId[],
 	badge?: BadgeMode,
+	/**  Stage 16: the sound notifications make (settings stored before have the default). */
+	sound?: NotificationSound,
+};
+
+/**
+ *  Stage 16: the sound of notifications. One setting for all devices (it is part of the synced
+ *  `notifications.settings`), with a choice per platform since the systems have different
+ *  sounds. Quiet hours drop the notification and with it the sound.
+ */
+export type NotificationSound = {
+	/**  Off: every notification is silent. */
+	enabled?: boolean,
+	/**  One of [`MACOS_SOUNDS`]; an unknown name plays `Default`. */
+	macos?: string,
+	/**  One of [`WINDOWS_SOUNDS`]; an unknown name plays `Default`. */
+	windows?: string,
+	/**  Accounts whose notifications show without a sound. */
+	silentAccounts?: AccountId[],
+};
+
+/**  The notification sounds of this platform, for the settings page. */
+export type NotificationSoundChoices = {
+	platform: SoundPlatform,
+	/**  The names to offer, `Default` first; empty on other platforms. */
+	sounds: string[],
 };
 
 /**
@@ -3014,6 +3210,13 @@ export type OutgoingMail = {
 	attempts: number,
 	/**  `noSentCopy` when no copy went into Sent (no Sent folder). */
 	notice: OperationNotice | null,
+	/**  Stage 16: "Senden und archivieren" was asked for; null otherwise. */
+	archive: ArchiveAfterSend | null,
+	/**
+	 *  Stage 16: this is a read receipt (RFC 8098) the user chose to send, not a message of a
+	 *  draft (`draftId` names no draft; there is nothing to edit).
+	 */
+	readReceipt: boolean,
 	createdAt: number,
 	updatedAt: number,
 };
@@ -3124,6 +3327,61 @@ export type QuotePosition =
 /**  The quote first, then the answer and the signature. */
 "below";
 
+/**  Where the user's answer to a read-receipt request stands. */
+export type ReadReceiptAnswer = 
+/**  Not answered: the reading pane may ask (send or decline). */
+"ask" | 
+/**  The receipt is in the outbox (see the outbox view for its state). */
+"queued" | 
+/**  The server accepted the receipt. */
+"sent" | 
+/**  The user declined; nothing is sent. */
+"declined" | 
+/**
+ *  Answered elsewhere: the message carries the `$MDNSent` keyword (RFC 3503) another
+ *  program or device set. Nothing is offered.
+ */
+"answered_elsewhere" | 
+/**  Read receipts are set to `never`: nothing is offered. */
+"off";
+
+/**
+ *  Read receipts of one message (`getReadReceipt`): an incoming request and the receipts that
+ *  came back for it. Read from the stored message; empty while its body is not stored.
+ */
+export type ReadReceiptInfo = {
+	/**
+	 *  The message asks for a read receipt; null otherwise (also for the user's own mail and
+	 *  for read receipts themselves).
+	 */
+	request: ReadReceiptRequest | null,
+	/**  The message (one the user sent) asked for a read receipt. */
+	requested: boolean,
+	/**  Receipts that came back for this message, newest first. */
+	received: ReceivedReadReceipt[],
+	/**  The message is itself a read receipt (for the message with this Message-ID). */
+	receiptFor: string | null,
+};
+
+/**
+ *  How the app answers read-receipt requests of incoming mail. It never sends one by itself:
+ *  with `ask` the reading pane offers to send one (`sendReadReceipt`) or to decline; with
+ *  `never` it offers nothing and `sendReadReceipt` is refused.
+ */
+export type ReadReceiptPolicy = "ask" | "never";
+
+/**  An incoming message asks for a read receipt. */
+export type ReadReceiptRequest = {
+	/**  Where the receipt would go (`Disposition-Notification-To`). */
+	to: string,
+	/**
+	 *  That address is not the message's `Return-Path` (or there is none): RFC 8098 asks to
+	 *  confirm with the user, the UI says so in its question.
+	 */
+	returnPathDiffers: boolean,
+	answer: ReadReceiptAnswer,
+};
+
 /**  Where a window shows the opened message. */
 export type ReadingPanePosition = 
 /**  Right of the list (the default). */
@@ -3139,6 +3397,31 @@ export type ReadingPanePosition =
  */
 export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
+};
+
+/**
+ *  What the recipient's program reported in a read receipt (`Disposition` field, RFC 8098
+ *  3.2.6).
+ */
+export type ReceiptDisposition = 
+/**  Shown to the recipient (not proof that it was read). */
+"displayed" | 
+/**  Deleted without being shown. */
+"deleted" | 
+/**  Sent somewhere else (printed, faxed, forwarded) without being shown. */
+"dispatched" | 
+/**  Processed by a program without being shown. */
+"processed" | 
+/**  Anything else. */
+"other";
+
+/**  A read receipt that came back for a message the user sent. */
+export type ReceivedReadReceipt = {
+	/**  The recipient it reports on (`Final-Recipient`), if given. */
+	recipient: string | null,
+	disposition: ReceiptDisposition,
+	/**  When the receipt arrived (its sort date), Unix milliseconds. */
+	receivedAt: number,
 };
 
 /**  A search of this device's history. */
@@ -3705,6 +3988,11 @@ export type SnoozeTimes = {
 	nextWeek: number,
 };
 
+/**  The platform a list of notification sounds is for. */
+export type SoundPlatform = "macos" | "windows" | 
+/**  Neither: the system's notification sound, no choice. */
+"other";
+
 /**  A device that takes part (each one writes a small record). */
 export type SyncDevice = {
 	/**  Random id of the device in the sync (not tied to the hardware). */
@@ -3776,6 +4064,13 @@ export type TemplateInfo = {
 	/**  Known placeholders the template uses (`first_name`, `date`, …) and unknown ones. */
 	placeholders: string[],
 	unknownPlaceholders: string[],
+	/**
+	 *  Stage 16: recipients the template prefills (empty for older templates). Each address
+	 *  is in one field only; at most [`MAX_TEMPLATE_RECIPIENTS`] together.
+	 */
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
 	updatedAt: number,
 };
 
@@ -3785,6 +4080,13 @@ export type TemplateInput = {
 	name: string,
 	subject: string,
 	html: string,
+	/**
+	 *  Stage 16: recipients to prefill; left out = none. Every address must be valid
+	 *  (`invalid_address` otherwise); an address given twice is kept once, in the first field.
+	 */
+	to?: Address[],
+	cc?: Address[],
+	bcc?: Address[],
 };
 
 /**  How a text condition compares (case and accents ignored). */
@@ -3854,6 +4156,13 @@ export type ThreadView = {
 	total: number,
 };
 
+/**  Copy or move to a mailbox of another account. */
+export type TransferMode = 
+/**  The original stays. */
+"copy" | 
+/**  The original is removed from the source once the copy is confirmed in the target. */
+"move";
+
 /**
  *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
  *  synchronised between devices; the recent commands and the AI panel's state stay on this
@@ -3885,6 +4194,30 @@ export type UnifiedView =
 { kind: "all" } | 
 /**  The inboxes of the group's visible accounts. */
 { kind: "group"; groupId: AccountGroupId };
+
+/**  Where an "unread first" list continues. */
+export type UnreadFirstCursor = {
+	phase: UnreadPhase,
+	/**  Within the phase: messages with a smaller id. Null: the phase starts from the top. */
+	before: ListCursor | null,
+};
+
+/**
+ *  One page of an "unread first" list: the unread rows come before the read ones (each row's
+ *  `unread` tells where the group ends).
+ */
+export type UnreadFirstPage = {
+	items: MessageListItem[],
+	/**  Null on the last page. */
+	nextCursor: UnreadFirstCursor | null,
+};
+
+/**  Which part of an "unread first" list a page or cursor is in. */
+export type UnreadPhase = 
+/**  The unread messages, newest first. */
+"unread" | 
+/**  Then the read ones, newest first. */
+"read";
 
 /**  How the user chose to unsubscribe. */
 export type UnsubscribeMethod = "oneClick" | "mailto" | "web";

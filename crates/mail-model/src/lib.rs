@@ -20,6 +20,7 @@ mod compose;
 mod contacts;
 mod eml;
 mod error;
+mod gmail;
 mod ids;
 mod inbox;
 mod ipc;
@@ -28,6 +29,7 @@ mod mailto;
 mod mcp;
 mod message;
 mod outbox;
+mod parity;
 mod reading;
 mod role;
 mod saved_search;
@@ -79,15 +81,17 @@ pub use category::{
     CategoryCorrection, CategoryDecision, CategoryReason, MessageCategory, SenderKey, SenderKeyKind,
 };
 pub use compose::{
-    AccountSendSettings, CleanedPaste, ComposeFormat, ComposeIdentity, ComposeSettings,
-    ContactNameRecord, ContactSuggestion, DEFAULT_SEND_DELAY_SECS, Draft, DraftAttachment,
-    DraftError, DraftFile, DraftId, DraftKind, DraftServerState, DraftSizeCheck, DraftState,
-    DraftSummary, DraftUpdate, InlineImagesAdded, LARGE_ATTACHMENT_WARNING_BYTES,
-    MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS, MAX_DRAFT_BODY_BYTES,
-    MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SCHEDULE_AHEAD_MS, MAX_SEND_DELAY_SECS,
-    MAX_SUBJECT_CHARS, MAX_TEXT_SIGNATURE_BYTES, MISSED_SEND_GRACE_MS, MissedSendDecision,
-    NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition, SendJob, SendLater,
-    SendPhase, SendState, SentCopyMode, ServerCopy, UnclearDecision,
+    AccountSendSettings, ArchiveAfterSend, CleanedPaste, ComposeFormat, ComposeIdentity,
+    ComposeSettings, ContactNameRecord, ContactSuggestion, DEFAULT_SEND_DELAY_SECS, Draft,
+    DraftAttachment, DraftError, DraftFile, DraftId, DraftKind, DraftSendOptions, DraftServerState,
+    DraftSizeCheck, DraftState, DraftSummary, DraftUpdate, InlineImagesAdded,
+    LARGE_ATTACHMENT_WARNING_BYTES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
+    MAX_DRAFT_BODY_BYTES, MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SCHEDULE_AHEAD_MS,
+    MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS, MAX_TEXT_SIGNATURE_BYTES, MISSED_SEND_GRACE_MS,
+    MissedSendDecision, NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition,
+    ReadReceiptAnswer, ReadReceiptInfo, ReadReceiptPolicy, ReadReceiptRequest, ReceiptDisposition,
+    ReceivedReadReceipt, SendJob, SendLater, SendPhase, SendState, SentCopyMode, ServerCopy,
+    UnclearDecision,
 };
 pub use contacts::{
     ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactPage,
@@ -98,16 +102,21 @@ pub use eml::{
     OpenEmlFileResult,
 };
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
+pub use gmail::{
+    GmailInfo, INBOX_LABEL, MAX_LABEL_LEN, SYSTEM_LABELS, is_gmail_host, is_system_folder,
+    is_valid_label, label_of_mailbox, normalize_labels, system_label,
+};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
 pub use inbox::{
     BadgeMode, CalendarInviteInfo, DateSection, DateSectionKind, DefaultMailApp,
     DefaultMailAppOutcome, InboxCursor, InboxFilter, InboxPage, InboxRow, InboxScope,
-    InboxSettings, InboxTop, MAX_RULE_PARTS, MAX_RULE_TEXT, MAX_RULES, MAX_TOP_PINNED,
-    MAX_TOP_RETURNED, MailRule, MarkScope, MessageCategoryInfo, MessageExtras,
-    NotificationSettings, NotificationTexts, NotifyCategories, PRIORITY_PREVIEW, QuietHours,
-    RuleAction, RuleCondition, RuleId, RuleInput, RuleSkipReason, SenderRule, SnoozeChoice,
-    SnoozeMark, SnoozeResult, SnoozeTimes, TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod,
-    UnsubscribeOptions, UnsubscribeOutcome,
+    InboxSettings, InboxTop, MACOS_SOUNDS, MAX_RULE_PARTS, MAX_RULE_TEXT, MAX_RULES,
+    MAX_TOP_PINNED, MAX_TOP_RETURNED, MailRule, MarkScope, MessageCategoryInfo, MessageExtras,
+    NotificationSettings, NotificationSound, NotificationSoundChoices, NotificationTexts,
+    NotifyCategories, PRIORITY_PREVIEW, QuietHours, RuleAction, RuleCondition, RuleId, RuleInput,
+    RuleSkipReason, SenderRule, SnoozeChoice, SnoozeMark, SnoozeResult, SnoozeTimes, SoundPlatform,
+    TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome,
+    WINDOWS_SOUNDS,
 };
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
@@ -135,6 +144,11 @@ pub use outbox::{
     PlanLocation, PlanMailbox, SourceLocation, TargetMailbox, TargetMark, is_valid_keyword,
     plan_action,
 };
+pub use parity::{
+    BlockedSender, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
+    MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
+    UnreadPhase,
+};
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
     LinkWarning, MessageBody, MessageProblem, MessageView, MessageViewHeader, OpenAttachmentResult,
@@ -160,8 +174,8 @@ pub use settings_sync::{
 };
 pub use snippets::{
     FilledTemplateInfo, IdentitySignatureDefaults, MAX_SIGNATURE_IMAGE_BYTES, MAX_SIGNATURE_IMAGES,
-    MAX_SIGNATURE_IMAGES_BYTES, MAX_SIGNATURES, MAX_SNIPPET_NAME_CHARS, MAX_TEMPLATES,
-    SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
+    MAX_SIGNATURE_IMAGES_BYTES, MAX_SIGNATURES, MAX_SNIPPET_NAME_CHARS, MAX_TEMPLATE_RECIPIENTS,
+    MAX_TEMPLATES, SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
 };

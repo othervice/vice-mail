@@ -130,6 +130,8 @@ fn outgoing() -> OutgoingMessage {
         // 2026-11-23 13:05:00 UTC
         date: 1_795_439_100,
         user_agent: None,
+        disposition_notification_to: None,
+        report: None,
     }
 }
 

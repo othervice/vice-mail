@@ -32,7 +32,7 @@ pub struct CategoryStep {
     pub done: bool,
 }
 
-fn resolve(
+pub(crate) fn resolve(
     conn: &rusqlite::Connection,
     scope: &InboxMailboxes,
 ) -> Result<Vec<(MailboxId, AccountId)>, StoreError> {

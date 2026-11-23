@@ -11,6 +11,7 @@ import { INBOX_PAGE_SIZE } from "../src/features/comfort/listSources";
 import { IDLE, makeAccount, makeMailbox, makeMessage, makeMessages, mockCore, standardMailboxes } from "./support/core";
 import { emitCore, emitCoreBurst } from "./support/events";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 const ACCOUNT = makeAccount();
 /** Stage 9: the inbox is the sorted inbox (`listInbox`), paged like a folder. */
@@ -175,8 +176,12 @@ describe("message list", () => {
 
     const [first, second] = await screen.findAllByRole("option");
     const full = new Intl.DateTimeFormat("en", { dateStyle: "full", timeStyle: "short" }).format(today);
-    // Screen readers hear what the row shows, in reading order, with the full date.
-    expect(first?.getAttribute("aria-label")).toBe(`Unread, Grace Hopper, Compiler notes, Has attachment, Flagged, ${full}`);
+    // Screen readers hear what the row shows, in reading order (decision 0031: the name comes from
+    // the content and holds every visible word, WCAG 2.5.3), the full date as its description.
+    expect(first?.hasAttribute("aria-label")).toBe(false);
+    expect(optionName(first)).toBe("Unread, Grace Hopper, Compiler notes, Has attachment, Flagged, 9:05 AM");
+    expect(screen.getByRole("option", { name: "Unread, Grace Hopper, Compiler notes, Has attachment, Flagged, 9:05 AM" })).toBe(first);
+    expect(document.getElementById(first?.getAttribute("aria-describedby") ?? "")?.textContent).toBe(full);
     expect(within(first as HTMLElement).getByText("Grace Hopper").className).toContain("font-semibold");
     expect(within(first as HTMLElement).getByText("Compiler notes")).toBeTruthy();
     expect(within(first as HTMLElement).getByText("9:05 AM").tagName).toBe("TIME");
@@ -184,11 +189,11 @@ describe("message list", () => {
     expect(first?.querySelector(".lucide-flag")).toBeTruthy();
     expect(second?.textContent).toContain("(Unknown sender)");
     expect(second?.textContent).toContain("(No subject)");
-    expect(second?.getAttribute("aria-label")).not.toContain("Unread");
-    expect(within(second as HTMLElement).getByText("(Unknown sender)").className).toContain("font-regular");
+    expect(optionName(second)).not.toContain("Unread");
+    expect(within(second as HTMLElement).getByText("(Unknown sender)").className).toContain("font-medium");
   });
 
-  it("shows the preview muted after the subject and lets it describe the row", async () => {
+  it("shows the preview muted after the subject and names the row with it", async () => {
     withViewport();
     mockCore({
       accounts: [ACCOUNT],
@@ -207,11 +212,12 @@ describe("message list", () => {
     expect(preview.textContent).toBe("Shall we meet on Friday at noon?");
     expect(preview.className).toContain("text-tertiary");
     expect(preview.className).toContain("truncate");
-    expect(first?.getAttribute("aria-describedby")).toBe(preview.id);
-    // The name stays short; the preview is read after it.
-    expect(first?.getAttribute("aria-label")).not.toContain("Friday");
+    // The preview is visible text of the row, so it is part of its name, before the time
+    // (decision 0031, WCAG 2.5.3); the full date describes the row.
+    expect(optionName(first)).toMatch(/, Shall we meet on Friday at noon\?, \d/);
+    expect(first?.getAttribute("aria-describedby")).not.toBe(preview.id);
     expect(within(second as HTMLElement).queryByTestId("row-preview")).toBeNull();
-    expect(second?.hasAttribute("aria-describedby")).toBe(false);
+    expect(optionName(second)).not.toContain("Friday");
   });
 
   it("Sent shows the recipients instead of the sender", async () => {

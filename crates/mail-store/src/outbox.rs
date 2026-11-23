@@ -323,7 +323,7 @@ fn of_batch(conn: &Connection, batch: BatchId) -> Result<Vec<StoredOperation>, S
 
 /// A location read for planning, with its account row.
 pub(crate) struct Planned {
-    account_row: i64,
+    pub(crate) account_row: i64,
     pub(crate) location: PlanLocation,
 }
 
@@ -463,6 +463,10 @@ fn set_local_flag(
     flag: &Flag,
     value: bool,
 ) -> Result<bool, StoreError> {
+    // Stage 14: a Gmail label belongs to the message, not to the location (decision 0034).
+    if let Flag::Label(label) = flag {
+        return crate::gmail::set_local_label(conn, source, label, value);
+    }
     let Some(mut flags) = same_location(conn, source)? else {
         return Ok(false);
     };
@@ -476,7 +480,10 @@ fn set_local_flag(
 
 /// Puts the location of a move or delete back, with the flags it had. Only into the same
 /// generation of the mailbox, and only if neither the message nor the UID is there already.
-fn reinsert_location(conn: &Connection, source: &SourceLocation) -> Result<bool, StoreError> {
+pub(crate) fn reinsert_location(
+    conn: &Connection,
+    source: &SourceLocation,
+) -> Result<bool, StoreError> {
     if generation(conn, source.mailbox_id)? != Some(source.uid_validity) {
         return Ok(false);
     }
@@ -831,7 +838,10 @@ impl<'a> Recorder<'a> {
             return Ok(());
         };
         source = current;
-        let before = flag.is_set(&source.flags);
+        let before = match &flag {
+            Flag::Label(label) => crate::gmail::label_state(self.conn, &source, label)?,
+            _ => flag.is_set(&source.flags),
+        };
         if before == value {
             return Ok(());
         }
@@ -866,7 +876,10 @@ pub(crate) fn require_writes(conn: &Connection, account_row: i64) -> Result<Acco
     Ok(account)
 }
 
-fn plan_mailboxes(conn: &Connection, account_row: i64) -> Result<Vec<PlanMailbox>, StoreError> {
+pub(crate) fn plan_mailboxes(
+    conn: &Connection,
+    account_row: i64,
+) -> Result<Vec<PlanMailbox>, StoreError> {
     let mut boxes = conn
         .prepare_cached(PLAN_MAILBOXES)?
         .query_map([account_row], |r| {
@@ -933,7 +946,11 @@ pub(crate) fn enqueue_action(
         return Ok(change);
     }
     let mailboxes = plan_mailboxes(conn, account_row)?;
-    let payloads = plan_action(action, &locations, &mailboxes).map_err(StoreError::Action)?;
+    // Stage 14: labels and archive on Gmail (decision 0034).
+    let payloads = match crate::gmail::plan(conn, account_row, action, &locations, &mailboxes)? {
+        Some(payloads) => payloads,
+        None => plan_action(action, &locations, &mailboxes).map_err(StoreError::Action)?,
+    };
 
     let mut recorder = Recorder::new(conn, account_row, account, action.kind(), request, now);
     for payload in payloads {
@@ -1102,6 +1119,12 @@ pub(crate) fn finish(
             OperationResult::Appended { copy } => {
                 let extra = extra.get_or_insert_with(|| OutboxChange::new(op.account));
                 crate::compose::appended(conn, &op, copy.as_ref(), now, extra)?;
+                // Stage 16: a move between accounts removes its source now.
+                if let Some(other) =
+                    crate::parity::transfer_appended(conn, &op, copy.as_ref(), now)?
+                {
+                    extra.others.push(other);
+                }
                 (OperationState::Confirmed, None, None, None)
             }
             OperationResult::Later { .. } => continue,
@@ -1152,6 +1175,7 @@ pub(crate) fn finish(
         change.removed.extend(extra.removed);
         change.drafts.extend(extra.drafts);
         change.drafts_removed.extend(extra.drafts_removed);
+        change.others.extend(extra.others);
     }
     change.mailboxes = touched.into_iter().collect();
     Ok(Some(change))
@@ -1202,8 +1226,11 @@ pub(crate) fn undo(
                 },
             ) => {
                 if value != before {
+                    // Stage 14: undoing a Gmail archive goes through "All Mail".
+                    let source = crate::gmail::inverse_source(conn, source, flag, *value)?
+                        .unwrap_or_else(|| source.clone());
                     steps.push(Step::Inverse(OperationPayload::SetFlag {
-                        source: source.clone(),
+                        source,
                         flag: flag.clone(),
                         value: *before,
                         before: *value,
@@ -1349,7 +1376,10 @@ pub(crate) fn retry(
             if unclear {
                 return Err(StoreError::Draft(mail_model::DraftError::NeedsDecision(id)));
             }
-            crate::compose::require_frozen(conn, &job.draft)?;
+            // Stage 16: a read receipt has no draft.
+            if job.receipt_for.is_none() {
+                crate::compose::require_frozen(conn, &job.draft)?;
+            }
             job.phase = mail_model::SendPhase::Submit;
             job.checks = 0;
             OperationPayload::Send(job)
@@ -1367,7 +1397,8 @@ pub(crate) fn retry(
                     draft,
                     revision: None,
                 },
-                file @ mail_model::AppendSource::File { .. } => file,
+                file @ (mail_model::AppendSource::File { .. }
+                | mail_model::AppendSource::Transfer { .. }) => file,
             },
             message_id_header,
             draft_flag,

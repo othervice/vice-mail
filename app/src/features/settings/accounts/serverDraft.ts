@@ -93,3 +93,9 @@ export function toSettings(email: string, displayName: string, servers: ServersD
   if (!isEmail(email) || !imap || !smtp) return null;
   return { email: email.trim(), displayName: displayName.trim(), imap, smtp };
 }
+
+/** Stage 14 (decision 0034): Gmail's servers (also for Google Workspace domains), as the core's `is_gmail_host`. */
+export function isGmailHost(host: string): boolean {
+  const name = host.trim().replace(/\.$/, "").toLowerCase();
+  return ["gmail.com", "googlemail.com"].some((domain) => name === domain || name.endsWith(`.${domain}`));
+}

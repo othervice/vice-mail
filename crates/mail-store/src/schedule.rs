@@ -292,6 +292,9 @@ mod tests {
             phase: SendPhase::Submit,
             checks: 0,
             scheduled,
+            archive_original: false,
+            archive_missing: false,
+            receipt_for: None,
         };
         let change = f
             .store

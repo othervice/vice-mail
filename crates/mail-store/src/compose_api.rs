@@ -57,6 +57,10 @@ pub struct StoredDraft {
     pub saving: bool,
     /// The signature the composer switched to (stage 10); `None` = the identity's default.
     pub signature: Option<mail_model::SignatureId>,
+    /// Stage 16: archive the original once the send is accepted.
+    pub archive_original: bool,
+    /// Stage 16: ask for a read receipt.
+    pub request_receipt: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -101,6 +105,16 @@ pub struct NewDraftRow {
     pub server_copy: Option<ServerCopy>,
     /// Unix ms.
     pub now: i64,
+}
+
+/// Stage 16: a read receipt found in a stored body (`BodyText::receipt`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceivedReceipt {
+    /// The Message-ID it reports on, without angle brackets.
+    pub original_message_id: String,
+    /// `Final-Recipient`, the address only.
+    pub recipient: Option<String>,
+    pub disposition: mail_model::ReceiptDisposition,
 }
 
 /// One address of the contact directory as stored (decision 0016).
@@ -197,6 +211,21 @@ impl Store {
             .await
     }
 
+    /// Stage 16: the send options of a draft ("send and archive", read receipt); raises the
+    /// revision when they change. `Sending` while frozen.
+    pub async fn set_draft_send_options(
+        &self,
+        id: DraftId,
+        archive_original: bool,
+        request_receipt: bool,
+    ) -> Result<StoredDraft, StoreError> {
+        let now = now_millis();
+        self.write(move |tx| {
+            compose::set_send_options(tx, &id, archive_original, request_receipt, now)
+        })
+        .await
+    }
+
     /// Replaces the attachment list and raises the revision. `Sending` while frozen.
     pub async fn set_draft_attachments(
         &self,
@@ -245,6 +274,56 @@ impl Store {
     ) -> Result<OutboxChange, StoreError> {
         let now = now_millis();
         self.write(move |tx| compose::enqueue_send(tx, &id, job, not_before, &request, now))
+            .await
+    }
+
+    /// Stage 16: records the `send` of a read receipt (`job.receipt_for` names the original)
+    /// and the answer `queued`. `ReadOnly` without writes; the same request twice changes
+    /// nothing.
+    pub async fn enqueue_receipt(
+        &self,
+        account: AccountId,
+        job: SendJob,
+        request: String,
+    ) -> Result<OutboxChange, StoreError> {
+        let now = now_millis();
+        self.write(move |tx| compose::enqueue_receipt(tx, account, job, &request, now))
+            .await
+    }
+
+    /// Stage 16: the user declined the read receipt of the account's message with this
+    /// Message-ID; `$MDNSent` goes on it where the account may write.
+    pub async fn decline_receipt(
+        &self,
+        account: AccountId,
+        message_id_header: String,
+        request: String,
+    ) -> Result<OutboxChange, StoreError> {
+        let now = now_millis();
+        self.write(move |tx| {
+            compose::decline_receipt(tx, account, &message_id_header, &request, now)
+        })
+        .await
+    }
+
+    /// Stage 16: the user's answer to the read-receipt request of this message, if any.
+    pub async fn receipt_answer(
+        &self,
+        account: AccountId,
+        message_id_header: String,
+    ) -> Result<Option<compose::StoredReceiptAnswer>, StoreError> {
+        self.read(move |conn| compose::receipt_answer(conn, account, &message_id_header))
+            .await
+    }
+
+    /// Stage 16: read receipts that came back for the account's message with this Message-ID,
+    /// newest first (at most 100).
+    pub async fn received_receipts(
+        &self,
+        account: AccountId,
+        message_id_header: String,
+    ) -> Result<Vec<mail_model::ReceivedReadReceipt>, StoreError> {
+        self.read(move |conn| compose::received_receipts(conn, account, &message_id_header))
             .await
     }
 

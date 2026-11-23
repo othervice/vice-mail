@@ -50,6 +50,12 @@ pub enum RecordKind {
     RemoteContent,
     /// The name the user gave a contact, by its normalised address.
     Contact,
+    /// A message on the reading list ("Zum Lesen"), by account and Message-ID (stage 16).
+    ReadingList,
+    /// Favourite and colour of a mailbox, by account and decoded path (stage 16).
+    MailboxPref,
+    /// A blocked sender, by its normalised address (stage 16).
+    BlockedSender,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, Einstellungs-Sync).
@@ -79,6 +85,9 @@ pub enum IdShape {
     AccountAddress,
     /// A normalised address (contacts).
     Address,
+    /// `<account uuid>/<decoded mailbox path>` (mailbox preferences, stage 16): the path may
+    /// hold spaces, never controls.
+    AccountPath,
 }
 
 /// What a winning tombstone does to a live local record.
@@ -108,7 +117,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 16] = [
+pub const REGISTRY: [KindSpec; 19] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -257,6 +266,35 @@ pub const REGISTRY: [KindSpec; 16] = [
         Removal::Apply,
         4 * KIB,
     ),
+    // Stage 16 (decision 0033): the reading list like tasks, mailbox favourites and colours by
+    // decoded path (as local rules name a mailbox), blocked senders by normalised address.
+    spec(
+        RecordKind::ReadingList,
+        "readingList",
+        "reading_list",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::MailboxPref,
+        "mailboxPref",
+        "mailbox_pref",
+        MergeRule::NewerWins,
+        IdShape::AccountPath,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::BlockedSender,
+        "blockedSender",
+        "blocked_sender",
+        MergeRule::NewerWins,
+        IdShape::Address,
+        Removal::Apply,
+        KIB,
+    ),
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -297,6 +335,9 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.shortcuts.macos",
     "ui.shortcuts.windows",
     "ui.text_size",
+    // Stage 16 (decision 0033): "send and archive" for new replies, the read-receipt answer.
+    "compose.archive_on_reply",
+    "compose.read_receipts",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the
@@ -306,7 +347,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 19] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -323,6 +364,9 @@ impl RecordKind {
         Self::AccountGroup,
         Self::RemoteContent,
         Self::Contact,
+        Self::ReadingList,
+        Self::MailboxPref,
+        Self::BlockedSender,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -453,6 +497,18 @@ impl RecordKey {
             IdShape::Address => {
                 if !is_token(id) {
                     return Err(invalid("address is empty, too long or holds whitespace"));
+                }
+            }
+            IdShape::AccountPath => {
+                let (account, path) = id.split_once('/').ok_or_else(|| invalid("no account"))?;
+                if !is_canonical_uuid(account) {
+                    return Err(invalid("account is not a lowercase hyphenated UUID"));
+                }
+                if path.trim().is_empty()
+                    || path.len() > MAX_MESSAGE_ID_BYTES
+                    || path.chars().any(char::is_control)
+                {
+                    return Err(invalid("the path is empty, too long or holds controls"));
                 }
             }
         }
@@ -691,6 +747,27 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::Task => {
             TaskInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
+        RecordKind::ReadingList => {
+            ReadingListInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::MailboxPref => {
+            let pref =
+                MailboxPrefContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if pref
+                .color
+                .is_some_and(|c| AccountColor::new(c.index()).is_none())
+            {
+                return Err(invalid("not a colour of the palette".into()));
+            }
+            if pref.favorite_position.is_none() && pref.color.is_none() {
+                return Err(invalid(
+                    "a mailbox preference sets a favourite or a colour (delete it instead)".into(),
+                ));
+            }
+        }
+        RecordKind::BlockedSender => {
+            EmptyContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
         RecordKind::Signature => {
             let signature =
                 SignatureContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
@@ -699,7 +776,9 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
             }
         }
         RecordKind::Template => {
-            TemplateContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            let template =
+                TemplateContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            template.check_recipients().map_err(invalid)?;
         }
         RecordKind::Identity => {
             IdentityContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
@@ -878,6 +957,24 @@ pub struct TaskInfo {
     pub done_at_ms: Option<i64>,
 }
 
+/// Content of a reading list record (stage 16): when it was added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadingListInfo {
+    pub added_at_ms: i64,
+}
+
+/// Content of a mailbox preference record (stage 16): favourite position and colour, at least
+/// one of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailboxPrefContent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favorite_position: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<AccountColor>,
+}
+
 /// Content of a signature record: a signature of the pool (stage 10, decision 0023). `html` is
 /// the allowlisted editor HTML (absent for a stage 5 text signature), `images` the pictures it
 /// shows as `cid:<contentId>`. A record of stage 11 (`{text}` only) still reads.
@@ -905,13 +1002,37 @@ pub struct SignatureImageContent {
     pub data_base64: String,
 }
 
-/// Content of a template record (stage 10).
+/// Content of a template record (stage 10). Stage 16: the recipients it prefills, each field
+/// left out when empty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TemplateContent {
     pub name: String,
     pub subject: String,
     pub html: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub to: Vec<mail_model::Address>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cc: Vec<mail_model::Address>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bcc: Vec<mail_model::Address>,
+}
+
+impl TemplateContent {
+    /// At most [`mail_model::MAX_TEMPLATE_RECIPIENTS`] valid addresses together.
+    fn check_recipients(&self) -> Result<(), String> {
+        let all = || self.to.iter().chain(&self.cc).chain(&self.bcc);
+        if all().count() > mail_model::MAX_TEMPLATE_RECIPIENTS {
+            return Err(format!(
+                "more than {} template recipients",
+                mail_model::MAX_TEMPLATE_RECIPIENTS
+            ));
+        }
+        match all().find(|a| mail_content::normalize_email(&a.email).is_err()) {
+            Some(bad) => Err(format!("template recipient {:?} is not valid", bad.email)),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Content of an identity record (the signatures are records of their own; the identity names
@@ -1155,6 +1276,52 @@ mod tests {
     }
 
     #[test]
+    fn stage_16_records_check_their_ids_and_content() {
+        let account = account_id();
+        let key = RecordKey::mail(RecordKind::ReadingList, account, "<read-1@x>").expect("mail");
+        assert_eq!(key.id(), format!("{account}/read-1@x"));
+        // A folder by decoded path: spaces and slashes allowed, controls and no path not.
+        assert!(
+            RecordKey::parse(RecordKind::MailboxPref, &format!("{account}/Sent Items")).is_ok()
+        );
+        assert!(RecordKey::parse(RecordKind::MailboxPref, &format!("{account}/A/B ü")).is_ok());
+        for bad in [
+            format!("{account}/"),
+            format!("{account}/ "),
+            format!("{account}/a\u{7}b"),
+            "INBOX".to_owned(),
+            "not-a-uuid/INBOX".to_owned(),
+        ] {
+            assert!(
+                RecordKey::parse(RecordKind::MailboxPref, &bad).is_err(),
+                "{bad:?}"
+            );
+        }
+        assert!(RecordKey::parse(RecordKind::BlockedSender, "spam@x.example").is_ok());
+        assert!(RecordKey::parse(RecordKind::BlockedSender, "two words@x").is_err());
+
+        assert!(SyncContent::new(RecordKind::ReadingList, json!({ "addedAtMs": 1 })).is_ok());
+        assert!(SyncContent::new(RecordKind::ReadingList, json!({})).is_err());
+        assert!(SyncContent::new(RecordKind::MailboxPref, json!({ "color": 7 })).is_ok());
+        assert!(
+            SyncContent::new(RecordKind::MailboxPref, json!({ "favoritePosition": 3 })).is_ok()
+        );
+        for bad in [
+            json!({}),
+            json!({ "color": 8 }),
+            json!({ "color": "green" }),
+            json!({ "favoritePosition": 1, "extra": true }),
+        ] {
+            assert!(
+                SyncContent::new(RecordKind::MailboxPref, bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+        assert!(SyncContent::new(RecordKind::BlockedSender, json!({})).is_ok());
+        assert!(SyncContent::new(RecordKind::BlockedSender, json!({ "x": 1 })).is_err());
+    }
+
+    #[test]
     fn content_refuses_secret_fields_and_key_material() {
         for (kind, value) in [
             (
@@ -1290,6 +1457,40 @@ mod tests {
     }
 
     /// Stage 7 (decision 0026): saved searches have a strict shape, checked like a local save.
+    #[test]
+    fn template_records_carry_checked_recipients() {
+        let base = || json!({ "name": "T", "subject": "S", "html": "<p>T</p>" });
+        assert!(
+            SyncContent::new(RecordKind::Template, base()).is_ok(),
+            "stage 10 shape"
+        );
+        let mut with = base();
+        with["to"] = json!([{ "name": "Bob", "email": "bob@example.org" }]);
+        with["bcc"] = json!([{ "name": null, "email": "archive@example.org" }]);
+        let content = SyncContent::new(RecordKind::Template, with.clone()).expect("recipients");
+        let decoded: TemplateContent = content.decode().expect("decode");
+        assert_eq!(decoded.to.len(), 1);
+        assert!(decoded.cc.is_empty());
+        assert_eq!(
+            serde_json::to_value(&decoded).expect("json"),
+            with,
+            "empty cc left out"
+        );
+        let mut bad = base();
+        bad["cc"] = json!([{ "name": null, "email": "no address" }]);
+        assert!(SyncContent::new(RecordKind::Template, bad).is_err());
+        let mut many = base();
+        many["to"] = json!(
+            (0..=mail_model::MAX_TEMPLATE_RECIPIENTS)
+                .map(|i| json!({ "name": null, "email": format!("p{i}@example.org") }))
+                .collect::<Vec<_>>()
+        );
+        assert!(SyncContent::new(RecordKind::Template, many).is_err());
+        let mut unknown = base();
+        unknown["replyTo"] = json!([]);
+        assert!(SyncContent::new(RecordKind::Template, unknown).is_err());
+    }
+
     #[test]
     fn saved_views_are_shaped_like_saved_searches() {
         let ok =

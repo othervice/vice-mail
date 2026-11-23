@@ -59,11 +59,14 @@
      (tests/extras-tools.test.tsx keeps these equal to the light values in tokens.css). */
   :root[data-theme="dark"] {
     color-scheme: light;
-    --ui-canvas: #f7f6f3;
+    --ui-canvas: #f4f2ee;
     --ui-surface: #fdfcfa;
     --ui-surface-raised: #ffffff;
+    --ui-surface-list: #f8f7f4;
+    --ui-badge: #ebe8e2;
     --ui-border: #e3e0da;
-    --ui-border-strong: #8a847b;
+    --ui-border-subtle: #ebe8e2;
+    --ui-border-strong: #847e75;
     --ui-text-primary: #1e1c19;
     --ui-text-secondary: #514d47;
     --ui-text-tertiary: #67625a;

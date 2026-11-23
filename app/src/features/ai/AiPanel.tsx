@@ -455,6 +455,12 @@ function AnswerCard({ answer, leftOut }: { answer: AiAnswer; leftOut: number }) 
   );
 }
 
+/** The question the ask bar handed over with the command that unfolded the panel, else "". */
+function handedOverQuestion(): string {
+  const command = useAiPanelStore.getState().command;
+  return command?.kind === "ask" ? (command.question ?? "") : "";
+}
+
 /** "Ask about your mail": the question becomes a search; the answer only cites what it found. */
 function AskBox({ account, settings }: { account: Account | null; settings: AiSettingsInfo | undefined }) {
   const { t } = useTranslation();
@@ -463,7 +469,7 @@ function AskBox({ account, settings }: { account: Account | null; settings: AiSe
   const accounts = useAccounts().data ?? [];
   const unified = useUiStore((state) => state.unifiedInbox !== null);
   const [scope, setScope] = useState<AskScope>(unified || !account ? "all" : "account");
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(handedOverQuestion);
   const [leftOut, setLeftOut] = useState(0);
   const ask = useAiRun<AiAnswer>("search");
   const profile = profileFor(settings, "search");
@@ -483,15 +489,31 @@ function AskBox({ account, settings }: { account: Account | null; settings: AiSe
     field.current?.focus();
   }, [command, clearCommand]);
 
-  const submit = (event?: FormEvent) => {
-    event?.preventDefault();
-    if (!text || tooLong || blocked || !settings) return;
+  const askNow = (value: string) => {
+    if (!value || [...value].length > AI_LIMITS.questionChars || blocked || !settings) return;
     // A cloud provider only gets candidates of accounts with cloud permission: the UI asks for
     // those alone and says how many it left out.
     const accountIds = cloud ? allowed : scope === "account" && account ? [account.id] : null;
     setLeftOut(cloud ? inScope.length - allowed.length : 0);
-    ask.run((requestId) => aiIpc.ask(requestId, text, accountIds), { function: "search", question: text });
+    // `run` shows the consent step first where the profile needs it: nothing is sent before.
+    ask.run((requestId) => aiIpc.ask(requestId, value, accountIds), { function: "search", question: value });
   };
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault();
+    askNow(text);
+  };
+  // The reading pane's ask bar hands a question over: it unfolds the panel (this box starts with
+  // the question in its field) and the question is asked here, once the settings are known.
+  const [handedOver] = useState(handedOverQuestion);
+  const askedHandOver = useRef(false);
+  const settingsKnown = settings !== undefined;
+  useEffect(() => {
+    if (askedHandOver.current || handedOver === "" || !settingsKnown) return;
+    askedHandOver.current = true;
+    askNow(handedOver.trim());
+    // Only the hand-over (once the settings are there) asks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handedOver, settingsKnown]);
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();

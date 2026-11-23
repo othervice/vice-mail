@@ -20,7 +20,8 @@ use crate::bodies::{
 };
 use crate::command::{Conn, Response, TaggedStatus, Transport, permit, quote};
 use crate::convert::{
-    FlagCollector, HeaderCollector, capability_names, header_items, name_attribute, uid_of,
+    FlagCollector, GMAIL_FLAG_ITEMS, GMAIL_HEADER_ITEMS, HeaderCollector, capability_names,
+    header_items, name_attribute, uid_of,
 };
 use crate::error::{from_imap, short, status_text};
 use crate::mutf7;
@@ -598,7 +599,13 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
         } else {
             ""
         };
-        let line = format!("UID FETCH {uids} ({}{modseq})", header_items());
+        // Stage 14 (decision 0034): on Gmail also the message id across labels and the labels.
+        let gmail = if self.caps.gmail {
+            format!(" {GMAIL_HEADER_ITEMS}")
+        } else {
+            String::new()
+        };
+        let line = format!("UID FETCH {uids} ({}{modseq}{gmail})", header_items());
         let mut collector = HeaderCollector::new(uids);
         self.conn
             .run(&line, |resp| collector.take(resp))
@@ -634,7 +641,12 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
         let since = changed_since
             .map(|m| format!(" (CHANGEDSINCE {m})"))
             .unwrap_or_default();
-        let line = format!("UID FETCH {uids} (UID FLAGS{modseq}){since}");
+        let gmail = if self.caps.gmail {
+            format!(" {GMAIL_FLAG_ITEMS}")
+        } else {
+            String::new()
+        };
+        let line = format!("UID FETCH {uids} (UID FLAGS{modseq}{gmail}){since}");
         let mut collector = FlagCollector::new(uids);
         self.conn
             .run(&line, |resp| collector.take(resp))

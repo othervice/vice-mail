@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
 use mail_model::{
-    AccountId, BackendError, ConflictReason, CoreError, ExpungeOutcome, FlagUpdate, IpcError,
+    AccountId, BackendError, ConflictReason, CoreError, ExpungeOutcome, Flag, FlagUpdate, IpcError,
     MailWriter, MailboxId, MessageHeader, ModSeq, MoveMethod, OperationId, OperationNotice,
     OperationPayload, OperationState, SelectedMailbox, SourceLocation, StoreMode, TargetMailbox,
     TargetMark, Uid, UidSet, UidValidity,
@@ -101,6 +101,12 @@ pub(crate) fn next_group(pending: &[StoredOperation]) -> Vec<StoredOperation> {
     let key = |op: &StoredOperation| -> Option<String> {
         let source = op.payload.source()?;
         let params = match &op.payload {
+            // Stage 14: Gmail labels exactly as named; flags and keywords ignoring case.
+            OperationPayload::SetFlag {
+                flag: Flag::Label(label),
+                value,
+                ..
+            } => format!("label:{label}={value}"),
             OperationPayload::SetFlag { flag, value, .. } => {
                 format!("{}={value}", flag.imap().to_ascii_lowercase())
             }
@@ -382,6 +388,10 @@ impl<W: MailWriter> Step<'_, W> {
         let Some(mailbox) = self.open_source(&ops, &source).await? else {
             return Ok(());
         };
+        // Stage 14 (decision 0034): a Gmail label is always stored (idempotent, and Gmail may
+        // leave the selected folder's own label out of X-GM-LABELS), without UNCHANGEDSINCE,
+        // and confirmed without flags: its local effect is on the message, not the location.
+        let label = matches!(flag, Flag::Label(_));
         let current = self.current_flags(&mailbox, &uids_of(&ops)).await?;
         let mut todo = Vec::new();
         for op in ops {
@@ -390,7 +400,7 @@ impl<W: MailWriter> Step<'_, W> {
             };
             match current.get(&uid) {
                 None => self.conflict(&op, ConflictReason::Gone, None),
-                Some(now) if flag.is_set(&now.flags) == value => {
+                Some(now) if !label && flag.is_set(&now.flags) == value => {
                     self.confirm(&op, Some(now.clone()), None, None);
                 }
                 Some(_) => todo.push(op),
@@ -400,7 +410,7 @@ impl<W: MailWriter> Step<'_, W> {
 
         // One STORE per known MODSEQ: UNCHANGEDSINCE must not be newer than what the app saw
         // of each message.
-        let condstore = mailbox.highest_modseq.is_some();
+        let condstore = mailbox.highest_modseq.is_some() && !label;
         let mut by_modseq: BTreeMap<Option<ModSeq>, Vec<StoredOperation>> = BTreeMap::new();
         for op in todo {
             let known = source_of(&op)
@@ -454,7 +464,7 @@ impl<W: MailWriter> Step<'_, W> {
                         after
                     })
                 });
-                self.confirm(&op, flags, None, None);
+                self.confirm(&op, flags.filter(|_| !label), None, None);
             }
             if recheck.is_empty() {
                 continue;

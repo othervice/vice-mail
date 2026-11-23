@@ -34,6 +34,8 @@ mod worker;
 mod server_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transfer_server_tests;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
@@ -172,7 +174,12 @@ pub(crate) struct Emitter {
     /// Held while compose files are written before their operation is recorded, so the sweep
     /// never removes them in between.
     pub(crate) files_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Stage 16: wakes the worker of another account that a change recorded operations for
+    /// (the source of a move between accounts).
+    waker: RwLock<Option<AccountWaker>>,
 }
+
+type AccountWaker = Arc<dyn Fn(AccountId) + Send + Sync>;
 
 impl Emitter {
     fn new(store: Store) -> Self {
@@ -182,6 +189,7 @@ impl Emitter {
             core: RwLock::new(None),
             store,
             files_lock: Arc::new(tokio::sync::Mutex::new(())),
+            waker: RwLock::new(None),
         }
     }
 
@@ -247,6 +255,19 @@ impl Emitter {
     /// Sends the events of a store change: per operation on the outbox stream, coalesced on
     /// the core's.
     pub(crate) fn change(&self, change: &OutboxChange) {
+        for other in &change.others {
+            self.change(other);
+            let waker = self
+                .waker
+                .read()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            if let Some(wake) = waker
+                && !other.operations.is_empty()
+            {
+                wake(other.account);
+            }
+        }
         emit_change(&self.events, change);
         let core = self.core();
         let send = |event| {
@@ -406,7 +427,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         clock: Arc<dyn Clock>,
     ) -> Self {
         let store_for_emitter = store.clone();
-        Self {
+        let outbox = Self {
             shared: Arc::new(Shared {
                 store,
                 connector,
@@ -417,7 +438,22 @@ impl<C: WriteConnector + 'static> Outbox<C> {
                 hook: RwLock::new(Arc::new(NoSyncHook)),
             }),
             workers: Arc::new(Mutex::new(HashMap::new())),
-        }
+        };
+        // Weak, so the waker never keeps the outbox alive.
+        let shared = Arc::downgrade(&outbox.shared);
+        let workers = Arc::downgrade(&outbox.workers);
+        let waker: AccountWaker = Arc::new(move |account| {
+            if let (Some(shared), Some(workers)) = (shared.upgrade(), workers.upgrade()) {
+                Self { shared, workers }.kick(account);
+            }
+        });
+        *outbox
+            .shared
+            .emitter
+            .waker
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Some(waker);
+        outbox
     }
 
     /// Also sends every change into the core's event stream, coalesced (see the module docs).
@@ -670,6 +706,12 @@ impl<C: WriteConnector + 'static> Outbox<C> {
     /// Held while compose files are written ahead of their operation.
     pub(crate) fn files_lock(&self) -> Arc<tokio::sync::Mutex<()>> {
         Arc::clone(&self.shared.emitter.files_lock)
+    }
+
+    /// Stage 16: a change recorded elsewhere (a transfer between accounts): emits its events,
+    /// wakes the account's worker and returns the result for the UI.
+    pub(crate) fn recorded_result(&self, change: &OutboxChange) -> ActionResult {
+        self.recorded(change)
     }
 
     fn recorded(&self, change: &OutboxChange) -> ActionResult {

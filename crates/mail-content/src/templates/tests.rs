@@ -481,6 +481,8 @@ fn the_sent_message_carries_the_signature_in_both_parts() {
         references: prepared.references.clone(),
         date: 1_795_000_000,
         user_agent: None,
+        disposition_notification_to: None,
+        report: None,
     })
     .expect("built");
     let message = parse(&built.for_sending);

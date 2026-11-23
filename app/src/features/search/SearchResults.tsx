@@ -115,7 +115,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
       {single && account && layout.paneShown(open) && (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {hitById.get(single.id)?.bodyLocal === false && (
-            <p className="shrink-0 border-b border-border px-4 py-2 text-12 text-secondary" data-testid="search-headers-only">
+            <p className="shrink-0 border-b border-border-subtle px-4 py-2 text-12 text-secondary" data-testid="search-headers-only">
               {t("search.results.headersOnly")}
             </p>
           )}
@@ -137,7 +137,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
 function ServerButton({ onClick }: { onClick: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-4 py-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border-subtle px-4 py-2">
       <Button variant="secondary" onClick={onClick} data-testid="search-server">
         <Server aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         {t("search.server.action")}

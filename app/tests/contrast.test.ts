@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import tokensCss from "../src/styles/tokens.css?raw";
-import { contrast, deltaE } from "./support/color";
+import { contrast, deltaE, luminance } from "./support/color";
 
 // Contrast rules from docs/SPEC.md (Barrierefreiheit): text >= 4.5:1, controls and other
 // meaningful graphics >= 3:1, in both themes. The pairs below are the ones the UI uses.
@@ -26,8 +26,11 @@ const light = colourTokens(block(/:root\s*\{([^}]*)\}/));
 const dark = { ...light, ...colourTokens(block(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)) };
 const themes = { light, dark };
 
-const SURFACES = ["canvas", "surface", "surface-raised", "rail", "priority-tint", "selected", "hover"];
+// Decision 0031: `surface-list` is the list column's own tinted surface.
+const SURFACES = ["canvas", "surface", "surface-list", "surface-raised", "rail", "priority-tint", "selected", "hover"];
 const ACCOUNTS = Array.from({ length: 8 }, (_, i) => `account-${i + 1}`);
+/** Decision 0031: avatar tints, initials (`-text`) on their fill (`-bg`). */
+const AVATAR_TINTS = Array.from({ length: 8 }, (_, i): [string, string] => [`avatar-${i + 1}-text`, `avatar-${i + 1}-bg`]);
 
 const TEXT_PAIRS: [string, string][] = [
   ...["text-primary", "text-secondary", "text-tertiary"].flatMap((fg) => SURFACES.map((bg): [string, string] => [fg, bg])),
@@ -56,6 +59,17 @@ const TEXT_PAIRS: [string, string][] = [
   ["text-on-accent", "danger"],
   ["text-secondary", "rail"],
   ["danger", "canvas"],
+  // Decision 0031 (Feinschliff). Initials on every avatar tint; the conversation size on its pill;
+  // hovered entries of the sidebar on the rail's hover tone; "Show all" and the way back in the
+  // accent on the priority card.
+  ...AVATAR_TINTS,
+  ["text-secondary", "badge"],
+  ["text-primary", "badge"],
+  ["text-primary", "rail-hover"],
+  ["text-secondary", "rail-hover"],
+  ["text-tertiary", "rail-hover"],
+  ["accent", "priority-tint"],
+  ["accent", "surface-list"],
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -90,6 +104,17 @@ const CONTROL_PAIRS: [string, string][] = [
   ),
   ["text-secondary", "surface-raised"],
   ["border-strong", "rail"],
+  // Decision 0031. Account rings, unread dot and flag on the tinted list column; the priority
+  // symbol on the card; icons and the active bar on the rail's hover tone; the tile icons of the
+  // bundles on their tint.
+  ...ACCOUNTS.map((account): [string, string] => [account, "surface-list"]),
+  ...["accent", "warning", "danger", "text-tertiary"].map((fg): [string, string] => [fg, "surface-list"]),
+  ["warning", "priority-tint"],
+  ["text-secondary", "rail-hover"],
+  ["accent", "rail-hover"],
+  ["focus-ring", "rail-hover"],
+  ["avatar-1-text", "avatar-1-bg"],
+  ["avatar-5-text", "avatar-5-bg"],
   ["accent", "accent-soft"],
   ["accent", "surface"],
   ["surface-raised", "accent"],
@@ -120,6 +145,12 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       "warning",
       ...ACCOUNTS,
       "mail-canvas",
+      // Decision 0031
+      "rail-hover",
+      "badge",
+      "border-subtle",
+      "priority-border",
+      ...AVATAR_TINTS.flat(),
     ];
     for (const name of expected) expect(tokens, name).toHaveProperty(name);
   });
@@ -148,7 +179,25 @@ it("HTML mail keeps its own white canvas in the dark theme (DESIGN.md: never rec
 });
 
 it("dark theme has its own surface steps instead of reusing light ones", () => {
-  for (const name of SURFACES) expect(dark[name], name).not.toBe(light[name]);
+  for (const name of [...SURFACES, "rail-hover", "badge", ...AVATAR_TINTS.flat()]) expect(dark[name], name).not.toBe(light[name]);
+});
+
+it("orders the surfaces as decision 0031 says: rail darkest, list column tinted, reading pane brightest", () => {
+  // Light: lower luminance is darker. Dark: the rail is the darkest step too.
+  expect(luminance(light["rail"] ?? "")).toBeLessThan(luminance(light["surface-list"] ?? ""));
+  expect(luminance(light["surface-list"] ?? "")).toBeLessThan(luminance(light["surface"] ?? ""));
+  expect(luminance(dark["rail"] ?? "")).toBeLessThan(luminance(dark["surface-list"] ?? ""));
+  expect(luminance(dark["surface-list"] ?? "")).toBeLessThan(luminance(dark["surface"] ?? ""));
+});
+
+it("keeps the eight avatar tints apart from each other in both themes", () => {
+  for (const tokens of [light, dark]) {
+    for (const [i, [, a]] of AVATAR_TINTS.entries()) {
+      for (const [, b] of AVATAR_TINTS.slice(i + 1)) {
+        expect(deltaE(tokens[a] ?? "", tokens[b] ?? ""), `${a} vs ${b}`).toBeGreaterThan(5);
+      }
+    }
+  }
 });
 
 it("the contrast check itself is calibrated (black on white is 21:1)", () => {

@@ -17,6 +17,7 @@
 mod address;
 mod build;
 mod html;
+mod mdn;
 mod paste;
 mod reply;
 
@@ -31,6 +32,10 @@ pub use build::{
 pub use html::{
     MAX_CONTENT_ID_CHARS, editor_html, inline_image_ids, is_valid_content_id, mail_html,
     text_to_editor_html,
+};
+pub use mdn::{
+    DispositionReport, ReceiptRequest, ReceivedReport, is_receipt, parse_report, receipt_request,
+    receipt_subject, receipt_text,
 };
 pub use paste::{PastedHtml, clean_pasted_html};
 // The document model of mail HTML, for signatures and templates (`crate::templates`).

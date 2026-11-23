@@ -400,3 +400,27 @@ async fn real_network_smoke() {
         .expect("discover");
     assert_eq!(found.source, DiscoverySource::Srv, "{found:?}");
 }
+
+/// Stage 14 (decision 0034): a Google Workspace domain publishes Gmail's servers; the setup
+/// shows the Gmail hint (app password, IMAP allowed by the administrator).
+#[tokio::test]
+async fn workspace_domains_get_the_gmail_hint_from_their_servers() {
+    let dns = FakeDns::default()
+        .with("_imaps._tcp.example.org.", 993, "imap.gmail.com")
+        .with("_submissions._tcp.example.org.", 465, "smtp.gmail.com");
+    let discovery = OnlineDiscovery::new(dns, FakeWeb::default());
+    let found = discovery
+        .discover("alice@example.org")
+        .await
+        .expect("discover");
+    assert_eq!(found.provider_hint, Some(ProviderHint::Gmail));
+    // Other servers get none.
+    let dns = FakeDns::default()
+        .with("_imaps._tcp.example.org.", 993, "imap.example.org")
+        .with("_submissions._tcp.example.org.", 465, "smtp.example.org");
+    let found = OnlineDiscovery::new(dns, FakeWeb::default())
+        .discover("alice@example.org")
+        .await
+        .expect("discover");
+    assert_eq!(found.provider_hint, None);
+}

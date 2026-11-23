@@ -115,6 +115,9 @@ pub struct MessageHeader {
     /// category rules read (`mail_content::CLASSIFY_HEADER_FIELDS`, decision 0016); empty if
     /// not fetched. The store hands it to its classifier and does not keep it.
     pub category_headers: Vec<u8>,
+    /// Stage 14 (decision 0034): `X-GM-MSGID` and `X-GM-LABELS` from Gmail servers
+    /// (`X-GM-EXT-1`); `None` for every other server.
+    pub gmail: Option<crate::GmailInfo>,
 }
 
 impl MessageHeader {
@@ -141,6 +144,9 @@ pub struct FlagUpdate {
     pub uid: Uid,
     pub flags: Flags,
     pub modseq: Option<ModSeq>,
+    /// Stage 14 (decision 0034): `X-GM-LABELS` read with the flags on Gmail servers; `None`
+    /// elsewhere (and when not asked for).
+    pub gmail_labels: Option<Vec<String>>,
 }
 
 /// Most ids one `getMessagesByIds` asks for (stage 13, decision 0027: the sources of an AI
@@ -193,6 +199,10 @@ pub struct MessageListItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub task: Option<crate::TaskMark>,
+    /// Stage 16: on the reading list ("Zum Lesen"). Absent when not.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[specta(optional)]
+    pub reading_list: bool,
 }
 
 /// Outbox state of a message as its list row shows it (stage 4). If several operations touch

@@ -111,6 +111,16 @@ pub struct Mailbox {
     pub unread: u32,
     /// Messages stored locally (grows during the first sync).
     pub total: u32,
+    /// Stage 16: a favourite (on top of the sidebar and in the palette), with its position
+    /// among the favourites (ascending). Absent when not a favourite.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional, type = Option<specta_typescript::Number>)]
+    pub favorite_position: Option<i64>,
+    /// Stage 16: the colour the user gave the folder (index into the account colour palette;
+    /// always shown with the name). Absent when none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub color: Option<crate::AccountColor>,
 }
 
 /// One entry of the server's folder list, as the adapter returns it. Internal, not exported.

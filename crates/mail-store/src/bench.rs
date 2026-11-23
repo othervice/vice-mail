@@ -238,6 +238,7 @@ async fn bench_100k_headers_and_list_pages() {
                     ..mail_model::Flags::default()
                 },
                 modseq: None,
+                gmail_labels: None,
             })
             .collect();
         async move {

@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use mail_model::{DraftKind, SignatureId, TemplateId};
+use mail_model::{Address, DraftKind, SignatureId, TemplateId};
 use serde_json::{Value, json};
 
 use crate::migrations::MIGRATIONS;
@@ -306,6 +306,9 @@ async fn templates_are_stored_captured_and_applied() {
             name: "Thanks".into(),
             subject: "Thanks, {{first_name}}".into(),
             html: "<p>Hi {{first_name}}</p>".into(),
+            to: Vec::new(),
+            cc: Vec::new(),
+            bcc: Vec::new(),
         })
         .await
         .expect("template");
@@ -384,5 +387,154 @@ async fn templates_are_stored_captured_and_applied() {
             .expect("row")
             .version,
         "1764000000000-00000000-x"
+    );
+}
+
+fn address(name: Option<&str>, email: &str) -> Address {
+    Address {
+        name: name.map(str::to_owned),
+        email: email.into(),
+    }
+}
+
+/// Stage 16: a template stored before migration 0013 prefills no recipients, and its sync
+/// record keeps the stage 10 shape.
+#[tokio::test]
+async fn templates_of_stage_10_migrate_to_no_recipients() {
+    let dir = tempfile::TempDir::new().expect("dir");
+    let path = db_path(&dir);
+    let stage10 = Schema::from_vec(MIGRATIONS[..12].to_vec());
+    let store = Store::open_with(&path, StoreOptions::default(), &stage10).expect("stage 10");
+    let id = TemplateId::from_random(21);
+    let uuid = id.as_str().to_owned();
+    store
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at)
+                 VALUES (?1, 'Old', 'S', '<p>Old</p>', 0, 1, 1)",
+                [&uuid],
+            )?;
+            Ok(())
+        })
+        .await
+        .expect("stage 10 template");
+    drop(store);
+
+    let store = Store::open(&path, StoreOptions::default()).expect("migrated");
+    store.set_sync_capture(Arc::new(Recorder::default()) as Arc<dyn SyncCapture>);
+    let migrated = store
+        .template(id.clone())
+        .await
+        .expect("read")
+        .expect("template");
+    assert_eq!(migrated.name, "Old");
+    assert!(migrated.to.is_empty() && migrated.cc.is_empty() && migrated.bcc.is_empty());
+    // A change of the old template is captured without recipient fields.
+    store
+        .put_template(TemplateRow {
+            id: id.clone(),
+            name: "Old".into(),
+            subject: "S2".into(),
+            html: "<p>Old</p>".into(),
+            to: Vec::new(),
+            cc: Vec::new(),
+            bcc: Vec::new(),
+        })
+        .await
+        .expect("change");
+    let record = store
+        .sync_record("template", id.as_str())
+        .await
+        .expect("read")
+        .expect("captured");
+    assert_eq!(
+        record.content,
+        Some(json!({ "name": "Old", "subject": "S2", "html": "<p>Old</p>" }))
+    );
+}
+
+/// Stage 16: recipients are stored, captured (empty fields left out) and applied from another
+/// device; a malformed field is refused.
+#[tokio::test]
+async fn template_recipients_are_stored_captured_and_applied() {
+    let dir = tempfile::TempDir::new().expect("dir");
+    let store = Store::open(&db_path(&dir), StoreOptions::default()).expect("open");
+    store.set_sync_capture(Arc::new(Recorder::default()) as Arc<dyn SyncCapture>);
+    let id = TemplateId::from_random(31);
+    let stored = store
+        .put_template(TemplateRow {
+            id: id.clone(),
+            name: "Report".into(),
+            subject: "Weekly report".into(),
+            html: "<p>Hi</p>".into(),
+            to: vec![address(Some("Team"), "team@example.org")],
+            cc: Vec::new(),
+            bcc: vec![address(None, "archive@example.org")],
+        })
+        .await
+        .expect("template");
+    assert_eq!(stored.to, vec![address(Some("Team"), "team@example.org")]);
+    assert_eq!(stored.bcc, vec![address(None, "archive@example.org")]);
+    assert_eq!(
+        store.template(id.clone()).await.expect("read"),
+        Some(stored.clone())
+    );
+    let record = store
+        .sync_record("template", id.as_str())
+        .await
+        .expect("read")
+        .expect("captured");
+    assert_eq!(
+        record.content,
+        Some(json!({
+            "name": "Report", "subject": "Weekly report", "html": "<p>Hi</p>",
+            "to": [{ "name": "Team", "email": "team@example.org" }],
+            "bcc": [{ "name": null, "email": "archive@example.org" }],
+        }))
+    );
+
+    let other = TemplateId::from_random(32);
+    let bad = TemplateId::from_random(33);
+    let put = |id: &str, value: Value| SyncApply {
+        kind: "template".into(),
+        id: id.into(),
+        expected: None,
+        row: Some(SyncRecordRow {
+            kind: "template".into(),
+            id: id.into(),
+            version: "1764000000000-00000000-x".into(),
+            synced_version: Some("1764000000000-00000000-x".into()),
+            content: Some(value.clone()),
+            deleted_version: None,
+        }),
+        table: TableWrite::Put(value),
+        rekey_from: None,
+    };
+    let outcome = store
+        .apply_sync(
+            vec![
+                put(
+                    other.as_str(),
+                    json!({ "name": "B", "subject": "S", "html": "<p>B</p>",
+                            "cc": [{ "name": "Carol", "email": "carol@example.org" }] }),
+                ),
+                put(
+                    bad.as_str(),
+                    json!({ "name": "C", "subject": "S", "html": "<p>C</p>", "to": "x" }),
+                ),
+            ],
+            None,
+        )
+        .await
+        .expect("apply");
+    let applied = store.template(other).await.expect("read").expect("applied");
+    assert!(applied.to.is_empty() && applied.bcc.is_empty());
+    assert_eq!(
+        applied.cc,
+        vec![address(Some("Carol"), "carol@example.org")]
+    );
+    assert!(
+        store.template(bad).await.expect("read").is_none(),
+        "{outcome:?}"
     );
 }

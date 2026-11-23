@@ -7,12 +7,14 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use specta_typescript::Number;
 
-use crate::IdentityId;
+use crate::{Address, IdentityId};
 
 /// Most signatures in the pool.
 pub const MAX_SIGNATURES: usize = 200;
 /// Most templates.
 pub const MAX_TEMPLATES: usize = 500;
+/// Most recipients a template prefills (To, Cc and Bcc together, stage 16).
+pub const MAX_TEMPLATE_RECIPIENTS: usize = 100;
 /// Longest name of a signature or template, in characters.
 pub const MAX_SNIPPET_NAME_CHARS: usize = 100;
 /// Most images of one signature.
@@ -182,6 +184,11 @@ pub struct TemplateInfo {
     /// Known placeholders the template uses (`first_name`, `date`, …) and unknown ones.
     pub placeholders: Vec<String>,
     pub unknown_placeholders: Vec<String>,
+    /// Stage 16: recipients the template prefills (empty for older templates). Each address
+    /// is in one field only; at most [`MAX_TEMPLATE_RECIPIENTS`] together.
+    pub to: Vec<Address>,
+    pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
     #[specta(type = Number)]
     pub updated_at: i64,
 }
@@ -194,6 +201,14 @@ pub struct TemplateInput {
     pub name: String,
     pub subject: String,
     pub html: String,
+    /// Stage 16: recipients to prefill; left out = none. Every address must be valid
+    /// (`invalid_address` otherwise); an address given twice is kept once, in the first field.
+    #[serde(default)]
+    pub to: Vec<Address>,
+    #[serde(default)]
+    pub cc: Vec<Address>,
+    #[serde(default)]
+    pub bcc: Vec<Address>,
 }
 
 /// A saved template and what sanitising changed.
@@ -220,6 +235,11 @@ pub enum TemplateFillProblem {
 
 /// A template filled for a draft: the composer puts `html` where the cursor is and takes the
 /// subject if its own is empty (the draft itself is not changed).
+///
+/// Stage 16: `to`, `cc` and `bcc` are the draft's recipients with the template's added (the
+/// composer sets them as they are): the draft's stay first and unchanged; a template address
+/// that is already in any field of the draft is not added again; at most `MAX_RECIPIENTS`
+/// together. `recipientsAdded` counts the addresses the template added.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FilledTemplateInfo {
@@ -228,6 +248,10 @@ pub struct FilledTemplateInfo {
     pub html: String,
     pub text: String,
     pub problems: Vec<TemplateFillProblem>,
+    pub to: Vec<Address>,
+    pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
+    pub recipients_added: u32,
 }
 
 #[cfg(test)]

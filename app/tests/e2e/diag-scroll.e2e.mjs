@@ -154,7 +154,7 @@ async function walk(unfold) {
   for (let i = 0; i < 6000; i += 1) {
     const state = await browser.execute((open) => {
       const list = document.querySelector('[data-testid="message-list"]');
-      const closed = open ? [...list.querySelectorAll('[data-testid="bundle-row"][aria-expanded="false"]')] : [];
+      const closed = open ? [...list.querySelectorAll('[data-testid="bundle-row"][data-expanded="false"]')] : [];
       for (const bundle of closed) bundle.click();
       const options = list.querySelectorAll('[role="option"]');
       const last = options[options.length - 1];

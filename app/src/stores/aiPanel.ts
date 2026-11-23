@@ -13,6 +13,11 @@ export interface AiSourceRequest {
 export interface AiPanelCommand {
   kind: "summarize" | "suggestReply" | "ask";
   seq: number;
+  /**
+   * "ask" from the reading pane's ask bar: the question the panel asks through its own flow
+   * (consent first where needed). Without one the panel only focuses its question field.
+   */
+  question?: string;
 }
 
 interface AiPanelState {
@@ -32,7 +37,7 @@ interface AiPanelState {
   shownSources: readonly MessageId[];
   setShownSources: (ids: readonly MessageId[]) => void;
   command: AiPanelCommand | null;
-  request: (kind: AiPanelCommand["kind"]) => void;
+  request: (kind: AiPanelCommand["kind"], question?: string) => void;
   /** The panel took the command. */
   clearCommand: () => void;
 }
@@ -73,9 +78,12 @@ export const useAiPanelStore = create<AiPanelState>()((set, get) => ({
     set({ shownSources: ids });
   },
   command: null,
-  request: (kind) => {
+  request: (kind, question) => {
     const wasOpen = get().open;
-    set((state) => ({ open: true, command: { kind, seq: (state.command?.seq ?? 0) + 1 } }));
+    set((state) => ({
+      open: true,
+      command: { kind, seq: (state.command?.seq ?? 0) + 1, ...(question !== undefined && { question }) },
+    }));
     if (!wasOpen) persist(true);
   },
   clearCommand: () => {

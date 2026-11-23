@@ -10,7 +10,7 @@ export interface ListMetrics {
 }
 
 /** The token values at the default text size; used where no stylesheet is loaded (tests). */
-const DEFAULTS: ListMetrics = { row: 44, twoLineRow: 60, section: 32, twoLineBelow: 720, padding: 8 };
+const DEFAULTS: ListMetrics = { row: 44, twoLineRow: 76, section: 32, twoLineBelow: 720, padding: 8 };
 
 function toPixels(value: string, rootPixels: number): number | null {
   const number = Number.parseFloat(value);

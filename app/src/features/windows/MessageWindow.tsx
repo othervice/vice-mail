@@ -94,6 +94,9 @@ function MessageWindowPane({ account, mailbox, item, onClose }: PaneProps) {
         toolbar={<ActionToolbar ids={MESSAGE_WINDOW_ACTIONS} ctx={ctx} host={controller.host} platform={platform} label={t("actions.toolbar")} />}
         onEscape={article}
         onClose={onClose}
+        draft={item.draft}
+        // The AI panel and "open in a window" belong to the main window.
+        inWindow
       />
       {overlay?.kind === "confirmDelete" && (
         <ConfirmDialog

@@ -79,7 +79,7 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
             onClick={() => {
               toggleMailbox(mailbox.id);
             }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-control text-tertiary hover:bg-hover hover:text-primary"
+            className="flex size-6 shrink-0 items-center justify-center rounded-control text-tertiary hover:bg-rail-hover hover:text-primary"
           >
             {collapsed ? (
               <ChevronRight aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
@@ -102,7 +102,7 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
             data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
             className={cx(
               "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-13 transition-colors",
-              current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-hover hover:text-primary",
+              current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
               drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
             )}
           >

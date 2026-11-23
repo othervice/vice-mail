@@ -138,6 +138,55 @@ impl<S: Transport> ImapWriter<S> {
         Ok(ExpungeOutcome::Expunged)
     }
 
+    /// Stage 14 (decision 0034): `UID STORE uids ±X-GM-LABELS (labels)` on Gmail. System
+    /// labels go as atoms (`\Inbox`), user labels as quoted strings in modified UTF-7, like
+    /// mailbox names. Labels cannot be mixed with flags in one call and take no
+    /// `UNCHANGEDSINCE` (Gmail does not document it); both fail with
+    /// [`BackendError::InvalidState`] before anything is sent, as does an invalid label. A
+    /// server without `X-GM-EXT-1` gets [`BackendError::Unsupported`]. The FETCH responses
+    /// Gmail sends back (the new label list) are taken as part of the answer.
+    async fn store_labels(
+        &mut self,
+        uids: &UidSet,
+        mode: StoreMode,
+        flags: &[Flag],
+        unchanged_since: Option<ModSeq>,
+    ) -> Result<StoreOutcome, BackendError> {
+        if !self.backend.caps.gmail {
+            return Err(BackendError::Unsupported(
+                "labels (X-GM-EXT-1, Gmail only)".into(),
+            ));
+        }
+        if unchanged_since.is_some() {
+            return Err(BackendError::InvalidState(
+                "labels are stored without UNCHANGEDSINCE".into(),
+            ));
+        }
+        let mut list = Vec::with_capacity(flags.len());
+        for flag in flags {
+            let Flag::Label(label) = flag else {
+                return Err(BackendError::InvalidState(
+                    "labels and flags in one STORE".into(),
+                ));
+            };
+            list.push(label_argument(label)?);
+        }
+        let sign = match mode {
+            StoreMode::Add => '+',
+            StoreMode::Remove => '-',
+        };
+        let line = format!("UID STORE {uids} {sign}X-GM-LABELS ({})", list.join(" "));
+        self.backend
+            .conn
+            .run(&line, |resp| match resp {
+                Response::Fetch(_, attrs) => uid_of(attrs).is_some_and(|uid| uids.contains(uid)),
+                _ => false,
+            })
+            .await?
+            .check("UID STORE")?;
+        Ok(StoreOutcome::default())
+    }
+
     /// Whether LIST knows a mailbox with exactly this wire name.
     async fn exists(&mut self, name: &str) -> Result<bool, BackendError> {
         let mut found = false;
@@ -156,6 +205,21 @@ impl<S: Transport> ImapWriter<S> {
             .check("LIST")?;
         Ok(found)
     }
+}
+
+/// A label as `X-GM-LABELS` takes it: a system label as an atom, a user label encoded like a
+/// mailbox name and quoted. Invalid names fail with [`BackendError::InvalidState`].
+pub(crate) fn label_argument(label: &str) -> Result<String, BackendError> {
+    if !mail_model::is_valid_label(label) {
+        return Err(BackendError::InvalidState(format!(
+            "{} is not a valid label",
+            short(label)
+        )));
+    }
+    if let Some(system) = mail_model::system_label(label) {
+        return Ok(system.to_owned());
+    }
+    quote(&mutf7::encode(label))
 }
 
 /// SPECIAL-USE attribute for CREATE (RFC 6154, section 3).
@@ -287,7 +351,10 @@ impl<S: Transport> MailWriter for ImapWriter<S> {
                 "APPEND of an empty message or one with NUL bytes".into(),
             ));
         }
-        if let Some(keyword) = flags.iter().find(|f| matches!(f, Flag::Keyword(_))) {
+        if let Some(keyword) = flags
+            .iter()
+            .find(|f| matches!(f, Flag::Keyword(_) | Flag::Label(_)))
+        {
             return Err(BackendError::InvalidState(format!(
                 "APPEND with the keyword {}",
                 short(keyword.imap())
@@ -365,6 +432,9 @@ impl<S: Transport> MailWriter for ImapWriter<S> {
         self.backend.ensure_open(mailbox)?;
         if uids.is_empty() || flags.is_empty() {
             return Ok(StoreOutcome::default());
+        }
+        if flags.iter().any(|f| matches!(f, Flag::Label(_))) {
+            return self.store_labels(uids, mode, flags, unchanged_since).await;
         }
         if let Some(Flag::Keyword(bad)) = flags
             .iter()

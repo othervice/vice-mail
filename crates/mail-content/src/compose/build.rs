@@ -65,6 +65,13 @@ pub struct OutgoingMessage {
     pub date: i64,
     /// A `User-Agent` header, only if the user turned it on. `None` by default.
     pub user_agent: Option<String>,
+    /// Stage 16: ask for a read receipt to this address (`Disposition-Notification-To`,
+    /// RFC 8098). Checked like the other addresses.
+    pub disposition_notification_to: Option<String>,
+    /// Stage 16: the message is a read receipt: the body is `multipart/report` with the human
+    /// readable text ([`OutgoingMessage::text`]) and the machine readable report. Attachments,
+    /// HTML and inline images are ignored.
+    pub report: Option<super::mdn::DispositionReport>,
 }
 
 /// A file attached to an outgoing message.
@@ -183,6 +190,10 @@ fn build(message: &OutgoingMessage, draft: bool) -> Result<BuiltMessage, Compose
     let cc = recipients(&valid(&message.cc), &mut seen)?;
     let bcc = recipients(&valid(&message.bcc), &mut seen)?;
     let reply_to = mailboxes(&valid(&message.reply_to))?;
+    let receipt_to = match message.disposition_notification_to.as_deref() {
+        Some(address) => Some(normalize_email(address)?),
+        None => None,
+    };
     if !draft && to.is_empty() && cc.is_empty() && bcc.is_empty() {
         return Err(ComposeError::NoRecipients);
     }
@@ -263,6 +274,13 @@ fn build(message: &OutgoingMessage, draft: bool) -> Result<BuiltMessage, Compose
     if !references.is_empty() {
         write_header(&mut head, "References", &MessageId::from(references).into());
     }
+    if let Some(address) = receipt_to {
+        write_header(
+            &mut head,
+            "Disposition-Notification-To",
+            &MbAddress::new_address(None::<String>, address).into(),
+        );
+    }
     if let Some(agent) = message.user_agent.as_deref().map(clean_header_text)
         && !agent.is_empty()
     {
@@ -270,7 +288,10 @@ fn build(message: &OutgoingMessage, draft: bool) -> Result<BuiltMessage, Compose
     }
     head.extend_from_slice(b"MIME-Version: 1.0\r\n");
 
-    let body = body(message, message_id);
+    let body = match &message.report {
+        Some(report) => super::mdn::report_body(report, message.text.as_deref(), message_id),
+        None => body(message, message_id),
+    };
 
     let mut for_sending = Vec::with_capacity(head.len() + body.len());
     for_sending.extend_from_slice(&head);
@@ -331,14 +352,14 @@ fn address_header(list: &[Mailbox]) -> HeaderType<'static> {
     MbAddress::new_list(items).into()
 }
 
-fn write_header(out: &mut Vec<u8>, name: &str, value: &HeaderType<'_>) {
+pub(super) fn write_header(out: &mut Vec<u8>, name: &str, value: &HeaderType<'_>) {
     out.extend_from_slice(name.as_bytes());
     out.extend_from_slice(b": ");
     value.write_header(out, name.len() + 2);
 }
 
 /// Line ends as CRLF.
-fn crlf(text: &str) -> String {
+pub(super) fn crlf(text: &str) -> String {
     let unix = text.replace("\r\n", "\n").replace('\r', "\n");
     let mut out = unix.replace('\n', "\r\n");
     if !out.ends_with("\r\n") {
@@ -388,7 +409,7 @@ fn is_7bit_clean(bytes: &[u8]) -> bool {
 }
 
 /// FNV-1a, for boundaries that only need to be stable and distinct.
-fn fnv1a(bytes: &[u8]) -> u64 {
+pub(super) fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in bytes {
         hash ^= u64::from(*byte);

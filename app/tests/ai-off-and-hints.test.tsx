@@ -11,6 +11,7 @@ import {
 } from "./support/ai";
 import { makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 const ADA = makeAccount();
 const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
@@ -108,7 +109,7 @@ describe("cloud permission per account", () => {
     });
 
     // Ada's mail: no permission, so the panel refuses before anything happens.
-    const adaRow = within(list).getAllByRole("option").find((o) => o.getAttribute("aria-label")?.includes("Privat"));
+    const adaRow = within(list).getAllByRole("option").find((o) => optionName(o).includes("Privat"));
     await user.click(adaRow as HTMLElement);
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
     await within(panel).findByText("About: Privat");
@@ -125,7 +126,7 @@ describe("cloud permission per account", () => {
     expect(core.callsOf("ai_suggest_reply")).toEqual([]);
 
     // Work's mail: permitted, so the summary may go out.
-    const workRow = within(list).getAllByRole("option").find((o) => o.getAttribute("aria-label")?.includes("Projekt"));
+    const workRow = within(list).getAllByRole("option").find((o) => optionName(o).includes("Projekt"));
     await user.click(workRow as HTMLElement);
     await within(panel).findByText("About: Projekt");
     await user.click(within(panel).getByRole("button", { name: "Summarise" }));

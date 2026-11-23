@@ -249,7 +249,7 @@ function renderedRows() {
       posinset: Number(el.getAttribute("aria-posinset")),
       setsize: Number(el.getAttribute("aria-setsize")),
       selected: el.getAttribute("aria-selected") === "true",
-      label: el.getAttribute("aria-label"),
+      label: el.querySelector('[data-testid="row-name"]')?.textContent ?? null,
       top: el.getBoundingClientRect().top,
     })),
   );
@@ -269,7 +269,7 @@ async function unfoldEveryBundle() {
   for (let i = 0; i < 6000; i += 1) {
     const state = await browser.execute(() => {
       const list = document.querySelector('[data-testid="message-list"]');
-      const closed = [...list.querySelectorAll('[data-testid="bundle-row"][aria-expanded="false"]')];
+      const closed = [...list.querySelectorAll('[data-testid="bundle-row"][data-expanded="false"]')];
       for (const bundle of closed) bundle.click();
       const options = list.querySelectorAll('[role="option"]');
       const last = options[options.length - 1];
@@ -309,7 +309,7 @@ async function collectRows() {
     const state = await browser.execute(() => {
       const list = document.querySelector('[data-testid="message-list"]');
       const rows = [...list.querySelectorAll('[role="option"]')].map((o) => [Number(o.getAttribute("aria-posinset")), o.id]);
-      const closed = list.querySelectorAll('[data-testid="bundle-row"][aria-expanded="false"]').length;
+      const closed = list.querySelectorAll('[data-testid="bundle-row"][data-expanded="false"]').length;
       const atEnd = list.scrollTop + list.clientHeight >= list.scrollHeight - 2;
       if (!atEnd) {
         list.scrollTop += Math.max(1, Math.floor(list.clientHeight * 0.8));
@@ -694,10 +694,10 @@ describe("account and read-only sync (stage 2)", function () {
       window.__e2eArrival = null;
       const observer = new MutationObserver(() => {
         const row = [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')].find((el) =>
-          el.getAttribute("aria-label")?.includes(wanted),
+          el.querySelector('[data-testid="row-name"]')?.textContent?.includes(wanted),
         );
         if (row) {
-          window.__e2eArrival = { wall: Date.now(), posinset: Number(row.getAttribute("aria-posinset")), label: row.getAttribute("aria-label") };
+          window.__e2eArrival = { wall: Date.now(), posinset: Number(row.getAttribute("aria-posinset")), label: row.querySelector('[data-testid="row-name"]')?.textContent ?? null };
           observer.disconnect();
         }
       });

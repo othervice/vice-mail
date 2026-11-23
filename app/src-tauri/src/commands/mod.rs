@@ -13,6 +13,7 @@ pub mod eml;
 pub mod groups;
 pub mod mail;
 pub mod mcp;
+pub mod parity;
 pub mod preferences;
 pub mod reading;
 pub mod search;

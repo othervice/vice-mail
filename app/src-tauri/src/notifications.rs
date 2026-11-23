@@ -7,6 +7,9 @@
 //!   screen): the app comes to the front and the core asks the UI to open the message.
 //! - **The counter** follows the core's events (debounced): `set_badge_count` on macOS, an
 //!   overlay icon with the number on the taskbar button on Windows. No `unsafe` here.
+//! - **Sound** (stage 16): the core chooses it per notification (or none); [`plugin_sound`]
+//!   turns the name into what the plugin hands the system. Without a name a notification is
+//!   silent on both systems (macOS: no `soundName`; Windows: `<audio silent="true"/>`).
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -93,9 +96,33 @@ impl<R: Runtime> NotificationSink for NativeNotifications<R> {
         if !notification.body.is_empty() {
             builder = builder.body(notification.body);
         }
+        if let Some(sound) = notification.sound.as_deref() {
+            builder = builder.sound(plugin_sound(sound));
+        }
         if let Err(err) = builder.show() {
             tracing::warn!(%err, kind = ?notification.kind, "notification not shown");
         }
+    }
+}
+
+/// The sound name the plugin passes on (`notify-rust` `sound_name`) for a name of the core's
+/// list (`mail_model::MACOS_SOUNDS`, `WINDOWS_SOUNDS`):
+/// - macOS (`NSUserNotification.soundName`): an alert sound of `/System/Library/Sounds` by
+///   name; `Default` is `NSUserNotificationDefaultSoundName`, the system's sound.
+/// - Windows (toast `<audio>`): `Default`, `IM`, `Mail`, `Reminder`, `SMS` as they are
+///   (`ms-winsoundevent:Notification.*`); an unknown name would be silent.
+/// - Elsewhere (freedesktop `sound-name` hint): the theme's new-mail sound.
+fn plugin_sound(name: &str) -> String {
+    if cfg!(target_os = "macos") {
+        if name == "Default" {
+            "NSUserNotificationDefaultSoundName".to_owned()
+        } else {
+            name.to_owned()
+        }
+    } else if cfg!(windows) {
+        name.to_owned()
+    } else {
+        "message-new-email".to_owned()
     }
 }
 
@@ -272,6 +299,32 @@ pub(crate) mod overlay {
                 assert!(white > 20, "{count}: digits drawn");
             }
             assert_eq!(badge(1_000), badge(99), "capped at 99");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sounds_map_to_the_plugin_names_of_the_platform() {
+        let platform = mail_model::SoundPlatform::current();
+        for name in platform.sounds() {
+            let mapped = plugin_sound(name);
+            assert!(!mapped.is_empty());
+            if cfg!(target_os = "macos") && *name != "Default" {
+                assert_eq!(&mapped, name, "an alert sound by its own name");
+            }
+        }
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                plugin_sound("Default"),
+                "NSUserNotificationDefaultSoundName"
+            );
+            assert_eq!(plugin_sound("Glass"), "Glass");
+        } else if cfg!(windows) {
+            assert_eq!(plugin_sound("Mail"), "Mail");
         }
     }
 }

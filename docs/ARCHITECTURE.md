@@ -33,7 +33,7 @@ wenn er groß genug ist.
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
 | Bausteine | Radix UI (`radix-ui`), Lucide-Icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen. Achtung CSP: Radix Dialog, Popover, Select und ScrollArea fügen `<style>`-Elemente ein; vor ihrer Verwendung im Release-Build prüfen |
-| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2). Stufe 8: die Schnellaktionen in den Zeilen sind reine Mausziele ohne Rolle und Fokus (eine `option` darf keine Bedienelemente enthalten, axe `nested-interactive`); Tastatur und Screenreader haben dieselben Aktionen als Kürzel, in der Symbolleiste und in der Befehlspalette |
+| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2). Stufe 8: die Schnellaktionen in den Zeilen sind reine Mausziele ohne Rolle und Fokus (eine `option` darf keine Bedienelemente enthalten, axe `nested-interactive`); Tastatur und Screenreader haben dieselben Aktionen als Kürzel, in der Symbolleiste und in der Befehlspalette. Entscheidung 0031: Bündel, „Alle anzeigen“ und „Zurück zum Posteingang“ sind selbst `option`s (Pfeiltasten, Enter, Leertaste; axe `aria-required-children`), und jede `option` wird über ihren Inhalt benannt statt über `aria-label` (WCAG 2.5.3) |
 | Daten im Frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
 | Sprachen | i18next, react-i18next | 27.2 / 18.0 | Standard, Englisch und Deutsch; Textliterale in Komponenten verbietet `eslint-plugin-i18next` (`no-literal-string`) |
@@ -113,7 +113,8 @@ vice-mail/
 - Ereignisse empfängt die Oberfläche über die Capability `core:event:default`; weitere Capabilities nur mit Begründung.
 
 `MailBackend` meldet über eine `Capabilities`-Struktur, was der Server kann (IDLE, CONDSTORE, MOVE,
-UIDPLUS, SPECIAL-USE, eigene Schlagwörter). Die Engine und die Oberfläche fragen danach. Was ein
+UIDPLUS, SPECIAL-USE, eigene Schlagwörter, ab Stufe 14 Gmail mit `X-GM-EXT-1`). Die Engine und die
+Oberfläche fragen danach. Was ein
 Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem klaren Hinweis versehen.
 
 ## Datenmodell
@@ -125,6 +126,8 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
 | `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
 | `message_location` | Nachricht, Postfach, UID, Flags, Schlagwörter, MODSEQ | Cache |
+| `message.gm_msgid`, `message.gm_labels` | Stufe 14 (0034): Gmails `X-GM-MSGID` (eine Mail über alle Labels) und `X-GM-LABELS` (JSON, dekodiert, ergänzt um das Label des gelesenen Ordners); NULL bei anderen Servern | Cache |
+| `account_server` | Stufe 14 (0034): was die letzte Anmeldung über den Server sagte, `gmail` = `X-GM-EXT-1`; nicht an `account`, dessen Trigger den Sync füttert | Gerät |
 | `thread` | Konto, normalisierter Betreff, letzte Nachricht, Anzahl, ungelesen | Cache |
 | `attachment` | Nachricht, MIME-Teil, Dateiname, Typ, Größe, Content-ID | Cache |
 | `message_body`, `message_body_part` | Verweis auf die komprimierte Body-Datei (ganze Mail oder einzelne Teile großer Mails), Größe, Prüfsumme | Cache |
@@ -135,13 +138,17 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter, `contact_group` für zusammengeführte Kontakte (0016, 0018, 0023) | Cache; Name und Zusammenführung sync |
 | `contact_dismissed` | abgelehnte Dubletten-Paare (Stufe 10, 0023) | Gerät |
 | `signature` | Pool aller Signaturen: Name, Editor-HTML, Text, kleine Bilder (Base64, als `cid:` versendet) (Stufe 10, 0023) | sync |
-| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge); `saved_view` sind die gespeicherten Suchen der Leiste: UUID, Name, Anfrage in der Suchsprache (sucht in allen Konten), Position (Stufe 7, 0026) | sync |
+| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023), ab Stufe 16 mit An/CC/BCC zum Vorbelegen (0033); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge); `saved_view` sind die gespeicherten Suchen der Leiste: UUID, Name, Anfrage in der Suchsprache (sucht in allen Konten), Position (Stufe 7, 0026) | sync |
 | `recent_search` | letzte Suchen dieses Geräts: Anfrage, zuletzt benutzt; höchstens 10 (Stufe 7, 0026) | Gerät |
 | `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
+| `reading_list` | Lese-Liste „Zum Lesen“: Konto-UUID, Message-ID, hinzugefügt; kein Schlagwort auf dem Server (Stufe 16, 0033) | sync |
+| `mailbox_pref` | Lieblingsordner (Position) und Ordnerfarbe (Index 0–7 der Kontofarben) je Konto-UUID und dekodiertem Pfad; nur solange eins gesetzt ist (Stufe 16, 0033) | sync |
+| `blocked_sender`, `blocked_hidden` | blockierte Absender (normalisierte Adresse); ausgeblendete Mails blockierter Absender auf Konten ohne Schreibzugriff oder ohne Spam-Ordner (Konto-UUID, Message-ID, Absender) (Stufe 16, 0033) | sync bzw. Gerät |
+| `receipt_answer`, `receipt_received` | Lesebestätigungen (RFC 8098): Antwort des Nutzers auf eine eingehende Anforderung (`queued`, `sent`, `declined`) je Konto-UUID und Message-ID; zurückgekommene Bestätigungen je gemeldeter Message-ID und Empfänger, erkannt beim Speichern des Bodys (Stufe 16, 0033) | Gerät bzw. Cache |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
-| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung) | sync bzw. Gerät |
+| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät | sync bzw. Gerät |
 | `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
 | `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
@@ -153,7 +160,8 @@ Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt au
 **sync** wandert über den Einstellungs-Sync. Eine Tabelle wird nur abgeglichen, wenn sie
 ausdrücklich als synchronisierbar registriert ist.
 
-Die gleiche Mail in zwei Ordnern ist eine Zeile in `message` und zwei in `message_location`.
+Die gleiche Mail in zwei Ordnern ist eine Zeile in `message` und zwei in `message_location`. Auf
+Gmail führt `X-GM-MSGID` die Orte zusammen statt der Message-ID (Stufe 14, 0034).
 Flags gehören zum Ort, wie bei IMAP. Datensätze, die zwischen Geräten wandern, verweisen auf Mails
 nie über lokale IDs oder UIDs, sondern über Konto-UUID und Message-ID-Kopfzeile.
 
@@ -205,6 +213,11 @@ einer klaren Meldung abgelehnt.
   Snooze, Pins und Aufgaben verweisen über Konto-UUID und Message-ID; die Posteingangsliste lässt
   sie je Zeile über den eindeutigen Index weg. Gemessen: Einordnen kostet je Fenster von 500
   Kopfdaten 2,5 ms; Listenseiten bleiben unter 0,3 ms.
+- Aus Stufe 16 (`docs/decisions/0033-funktionsabgleich-kern.md`): „Nur ungelesene“ ist ein
+  Bereich von `loc_unseen`, „Ungelesene oben“ dieser Bereich und danach die gelesenen Orte über
+  den Primärschlüssel (`seen = 1` als Filter, kein eigener Index). Die Posteingangslisten lassen
+  ausgeblendete Mails blockierter Absender je Zeile über den Primärschlüssel von
+  `blocked_hidden` weg; Lese-Liste und Ordnereinstellungen sind je eine Indexsuche.
 - Aus der Nachmessung Stufe 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): Abfragen auf
   einen Teilindex, der nach einem Nachholauf leer wird (`message_category_todo`,
   `message_contacts_todo`), nennen ihn per `INDEXED BY`. `PRAGMA optimize` beim Schließen hält
@@ -248,6 +261,20 @@ einer klaren Meldung abgelehnt.
 - Operationen sind idempotent formuliert: „Flag setzen“ statt „Flag umschalten“; ein Verschieben
   prüft vor der Wiederholung, ob die Mail schon am Ziel liegt.
 - Nach einem Absturz werden `in_flight`-Operationen erst gegen den Server geprüft, dann wiederholt.
+- Ab Stufe 16 (0033), **Senden und archivieren:** `SendJob.archive_original` (je Entwurf, für
+  Antworten per Einstellung `compose.archive_on_reply`) plant erst in der Transaktion, die die
+  Annahme bestätigt, die Aktion `archive` für die Orte des Originals im Batch des Sendens; ohne
+  Archivordner bleibt das Original, das Senden gilt trotzdem. **Lesebestätigungen** gehen nur auf
+  den ausdrücklichen Befehl `send_read_receipt` hinaus, als `send` ohne Entwurf und ohne Kopie in
+  „Gesendet“; danach `$MDNSent` am Original. Eingehende Anforderungen werden beim Lesen erkannt,
+  nie beim Eintreffen (Mitschnitt-Test gegen Stalwart in `crates/mail-engine/tests/compose.rs`).
+- Ab Stufe 16 (0033), **zwischen Konten:** Kopieren und Verschieben in ein anderes Konto ist ein
+  `append` in der Outbox des Zielkontos (`AppendSource::Transfer`, eingefrorene Bytes, Flags der
+  Quelle ohne Schlagwörter). Beide Konten brauchen Schreibzugriff (beim Kopieren nur das Ziel),
+  die Mail eine Message-ID. Erst wenn die Kopie im Ziel bestätigt und über die Message-ID
+  oberhalb der Marke gefunden ist, zeichnet dieselbe Transaktion im Quellkonto ein `expunge`
+  auf; nach einem Absturz wird das `append` geprüft, nicht wiederholt (nie zwei Kopien, nie
+  verloren). Servertest mit Fehlerinjektion in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
 - Schlägt etwas fehl, wird der lokale Zustand zurückgenommen und der Fehler angezeigt. Bei einem
   Konflikt gilt der Serverzustand, und der Nutzer erfährt es.
 
@@ -260,7 +287,8 @@ einer klaren Meldung abgelehnt.
   übertragen“ (sicher zu wiederholen) von „unklar“ (Verbindung nach der Endmarke weg).
 - Die erzeugte Nachricht verrät das Programm nicht (kein `User-Agent`/`X-Mailer`, EHLO mit
   `[127.0.0.1]`); `Date` in UTC; derselbe Entwurf ergibt byte-gleiche Nachrichten.
-- Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst.
+- Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst
+  (Einstellung `auto`: Gmail, erkannt am Servernamen oder an `X-GM-EXT-1`, 0034).
 - Ab Stufe 5 (0018): Senden ist die Outbox-Operation `send`. Die Bytes werden beim Klick einmal
   gebaut und eingefroren, der Entwurf ist bis zum Ergebnis gesperrt; `not_before` hält die
   Verzögerung zum Rückgängigmachen (Abbrechen löscht die Operation, nichts geht ins Netz).
@@ -298,6 +326,10 @@ einer klaren Meldung abgelehnt.
 - Auch bei freigeschaltetem Schreibzugriff verbinden sich Abgleich, IDLE, Lesebereich und
   Verbindungstest immer nur lesend (EXAMINE, PEEK); geschrieben wird ausschließlich über die eigene
   Verbindung der Outbox (Mitschnitt-Test in `crates/mail-engine/tests/actions.rs`).
+- Gmail (Stufe 14, 0034): `X-GM-MSGID` und `X-GM-LABELS` sind FETCH-Datenelemente und laufen mit
+  EXAMINE über die Allowlist; Labels ändert nur die Outbox-Verbindung (`UID STORE ±X-GM-LABELS`,
+  `Access::ReadWrite`), die Nur-Lese- und die Sync-Verbindung lehnen es ab (Tests in
+  `crates/mail-imap/src/tests/gmail.rs`).
 - Ausnahme, nur nach „Sync einschalten“ (Stufe 11, 0014, 0022): Die Verbindung des
   Einstellungs-Syncs darf in genau einen Ordner schreiben, den Sync-Ordner; jede andere
   schreibende Zeile lehnt der Adapter mit `read_only` ab, bevor sie gesendet wird
@@ -317,6 +349,17 @@ einer klaren Meldung abgelehnt.
 **Threads**
 - Je Konto, über Message-ID, In-Reply-To und References. Rückfall auf den Betreff nur vorsichtig:
   gleicher normalisierter Betreff, gemeinsame Teilnehmer, enges Zeitfenster.
+
+**Gmail über IMAP (Stufe 14, Block A, 0034)**
+- Erkannt an `X-GM-EXT-1` bei jeder Anmeldung (vermerkt in `account_server`), für Gesendet und
+  Hinweise auch am Servernamen (`imap.gmail.com`). Anbieter im Überblick: `docs/PROVIDERS.md`.
+- Kopfdaten und Flag-Abgleich holen auf Gmail `X-GM-MSGID`/`X-GM-LABELS` in derselben FETCH-Zeile.
+  Eine Mail über alle Labels und „Alle Nachrichten“ ist eine `message`-Zeile; `newMail` zählt auf
+  Gmail nur neue Zeilen. Datensätze des Sync-Ordners (dort ein Label) bleiben aus „Alle Nachrichten“.
+- Labels ändern ist `SetFlag` mit `Flag::Label` (Aktionen `addLabel`/`removeLabel`), lokale
+  Wirkung an der Mail, immer gesendet, ohne `UNCHANGEDSINCE`.
+- Archivieren entfernt `\Inbox` vom Ort im Posteingang (kein Archiv-Ordner nötig), Rückgängig über
+  „Alle Nachrichten“; Verschieben aus „Alle Nachrichten“ setzt nur das Ziel-Label (kein EXPUNGE dort).
 
 ## Sicherheitsgrenzen
 
@@ -477,7 +520,8 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 |---|---|
 | Einstellungen | je Schlüssel gewinnt die neuere Version |
 | Signaturen, Vorlagen, Regeln, Ansichten | je Datensatz gewinnt die neuere Version; Bearbeiten schlägt gleichzeitiges Löschen |
-| Snooze, Pins, Aufgaben | je Mail gewinnt die neuere Version |
+| Snooze, Pins, Aufgaben, Lese-Liste | je Mail gewinnt die neuere Version |
+| Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
 | Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
 | Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
 | Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt |
@@ -621,6 +665,7 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
 | KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
+| Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
 | Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |
 | Lizenz GPL-3.0-or-later (vom Menschen bestätigt am 22.11.2026) | Abwandlungen bleiben offen; alle gewählten Bibliotheken sind kompatibel | vor der Veröffentlichung änderbar |

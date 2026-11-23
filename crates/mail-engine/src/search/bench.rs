@@ -258,6 +258,7 @@ fn account_messages(
             precedence: None,
             has_attachments: rng.chance(15),
             category_headers: Vec::new(),
+            gmail: None,
         };
         if FOLDERS[folder].0 == "Sent" {
             header.from = vec![Address {

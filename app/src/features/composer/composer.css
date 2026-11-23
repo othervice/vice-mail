@@ -3,6 +3,7 @@
  * `<style>` elements at runtime), so the rules ProseMirror needs are here, with tokens only.
  */
 .composer-prose {
+  line-height: var(--ui-reading-line-height);
   white-space: pre-wrap;
   word-wrap: break-word;
   font-variant-ligatures: none;

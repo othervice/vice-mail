@@ -146,6 +146,8 @@ pub enum InboxFilter {
     Category { category: MessageCategory },
     /// Messages of important senders.
     Priority,
+    /// Stage 16: unread messages only ("Nur ungelesene"), newest first.
+    Unread,
 }
 
 /// The inbox settings (stage 9). Device settings, stored in the `setting` table.
@@ -527,6 +529,8 @@ pub struct NotificationSettings {
     /// Accounts whose new mail is never announced.
     pub muted_accounts: Vec<AccountId>,
     pub badge: BadgeMode,
+    /// Stage 16: the sound notifications make (settings stored before have the default).
+    pub sound: NotificationSound,
 }
 
 impl Default for NotificationSettings {
@@ -541,8 +545,130 @@ impl Default for NotificationSettings {
             hide_content: false,
             muted_accounts: Vec::new(),
             badge: BadgeMode::default(),
+            sound: NotificationSound::default(),
         }
     }
+}
+
+/// System sounds a notification may play on macOS: the alert sounds of
+/// `/System/Library/Sounds`, and `Default` (the system's notification sound).
+pub const MACOS_SOUNDS: &[&str] = &[
+    "Default",
+    "Basso",
+    "Blow",
+    "Bottle",
+    "Frog",
+    "Funk",
+    "Glass",
+    "Hero",
+    "Morse",
+    "Ping",
+    "Pop",
+    "Purr",
+    "Sosumi",
+    "Submarine",
+    "Tink",
+];
+
+/// Sounds a notification may play on Windows: the toast sounds `Default`, `IM`, `Mail`,
+/// `Reminder` and `SMS` (`ms-winsoundevent:Notification.*`).
+pub const WINDOWS_SOUNDS: &[&str] = &["Default", "IM", "Mail", "Reminder", "SMS"];
+
+/// The platform a list of notification sounds is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SoundPlatform {
+    Macos,
+    Windows,
+    /// Neither: the system's notification sound, no choice.
+    Other,
+}
+
+impl SoundPlatform {
+    /// The platform this build runs on.
+    pub const fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Macos
+        } else if cfg!(windows) {
+            Self::Windows
+        } else {
+            Self::Other
+        }
+    }
+
+    /// The sounds to choose from (empty for [`SoundPlatform::Other`]).
+    pub const fn sounds(self) -> &'static [&'static str] {
+        match self {
+            Self::Macos => MACOS_SOUNDS,
+            Self::Windows => WINDOWS_SOUNDS,
+            Self::Other => &[],
+        }
+    }
+}
+
+/// Stage 16: the sound of notifications. One setting for all devices (it is part of the synced
+/// `notifications.settings`), with a choice per platform since the systems have different
+/// sounds. Quiet hours drop the notification and with it the sound.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotificationSound {
+    /// Off: every notification is silent.
+    pub enabled: bool,
+    /// One of [`MACOS_SOUNDS`]; an unknown name plays `Default`.
+    pub macos: String,
+    /// One of [`WINDOWS_SOUNDS`]; an unknown name plays `Default`.
+    pub windows: String,
+    /// Accounts whose notifications show without a sound.
+    pub silent_accounts: Vec<AccountId>,
+}
+
+impl Default for NotificationSound {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            macos: "Default".into(),
+            windows: "Default".into(),
+            silent_accounts: Vec::new(),
+        }
+    }
+}
+
+impl NotificationSound {
+    /// The sound a notification about `account` plays on `platform`: `None` when sounds are
+    /// off or the account is silent; an unknown name (a newer version's choice) plays
+    /// `Default`.
+    pub fn for_account(&self, account: AccountId, platform: SoundPlatform) -> Option<String> {
+        if !self.enabled || self.silent_accounts.contains(&account) {
+            return None;
+        }
+        let chosen = match platform {
+            SoundPlatform::Macos => self.macos.as_str(),
+            SoundPlatform::Windows => self.windows.as_str(),
+            SoundPlatform::Other => "Default",
+        };
+        let known = platform.sounds().contains(&chosen);
+        Some(if known { chosen } else { "Default" }.to_owned())
+    }
+
+    /// The first name that is not in its platform's list, if any.
+    pub fn unknown_name(&self) -> Option<&str> {
+        [
+            (self.macos.as_str(), MACOS_SOUNDS),
+            (self.windows.as_str(), WINDOWS_SOUNDS),
+        ]
+        .into_iter()
+        .find(|(name, list)| !list.contains(name))
+        .map(|(name, _)| name)
+    }
+}
+
+/// The notification sounds of this platform, for the settings page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationSoundChoices {
+    pub platform: SoundPlatform,
+    /// The names to offer, `Default` first; empty on other platforms.
+    pub sounds: Vec<String>,
 }
 
 /// The texts of system notifications, in the UI's language. The UI sends them from
@@ -670,4 +796,64 @@ pub enum DefaultMailAppOutcome {
     /// It did not work (for example a build that is not installed as an app); the UI explains
     /// the system's own way (macOS: Mail, Settings, General, "Default email reader").
     Manual,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn account(n: u8) -> AccountId {
+        format!("00000000-0000-4000-8000-0000000000{n:02}")
+            .parse()
+            .expect("uuid")
+    }
+
+    /// Stage 16: settings stored before have the default sound; the stored shape is camelCase.
+    #[test]
+    fn notification_settings_of_stage_9_get_the_default_sound() {
+        let old: NotificationSettings =
+            serde_json::from_value(json!({ "enabled": true, "hideContent": true }))
+                .expect("stage 9 settings");
+        assert!(old.hide_content);
+        assert_eq!(old.sound, NotificationSound::default());
+        let value = serde_json::to_value(NotificationSettings::default()).expect("json");
+        assert_eq!(
+            value["sound"],
+            json!({ "enabled": true, "macos": "Default", "windows": "Default",
+                    "silentAccounts": [] })
+        );
+    }
+
+    #[test]
+    fn the_sound_depends_on_switch_account_and_platform() {
+        let mut sound = NotificationSound {
+            macos: "Glass".into(),
+            windows: "Mail".into(),
+            ..NotificationSound::default()
+        };
+        assert_eq!(sound.unknown_name(), None);
+        let at = |s: &NotificationSound, p| s.for_account(account(1), p);
+        assert_eq!(at(&sound, SoundPlatform::Macos).as_deref(), Some("Glass"));
+        assert_eq!(at(&sound, SoundPlatform::Windows).as_deref(), Some("Mail"));
+        assert_eq!(at(&sound, SoundPlatform::Other).as_deref(), Some("Default"));
+        sound.silent_accounts = vec![account(1)];
+        assert_eq!(at(&sound, SoundPlatform::Macos), None, "silent account");
+        assert_eq!(
+            sound
+                .for_account(account(2), SoundPlatform::Macos)
+                .as_deref(),
+            Some("Glass")
+        );
+        sound.silent_accounts.clear();
+        sound.enabled = false;
+        assert_eq!(at(&sound, SoundPlatform::Windows), None, "sounds off");
+        // A name from elsewhere (a newer version, the other platform's list) plays the default.
+        sound.enabled = true;
+        sound.macos = "Mail".into();
+        assert_eq!(sound.unknown_name(), Some("Mail"));
+        assert_eq!(at(&sound, SoundPlatform::Macos).as_deref(), Some("Default"));
+        assert!(MACOS_SOUNDS[0] == "Default" && WINDOWS_SOUNDS[0] == "Default");
+    }
 }

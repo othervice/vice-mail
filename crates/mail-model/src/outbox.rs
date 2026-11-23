@@ -55,7 +55,18 @@ pub enum MailAction {
     RemoveKeyword {
         keyword: String,
     },
-    /// Moves to the mailbox with the role `archive`. Without one the action fails with
+    /// Stage 14 (decision 0034): adds a Gmail label (`STORE +X-GM-LABELS`). Only on Gmail
+    /// accounts ([`ActionError::LabelsUnsupported`] elsewhere); the name is checked with
+    /// [`crate::is_valid_label`] ([`ActionError::InvalidLabel`]).
+    AddLabel {
+        label: String,
+    },
+    /// Stage 14: removes a Gmail label (`STORE -X-GM-LABELS`).
+    RemoveLabel {
+        label: String,
+    },
+    /// Moves to the mailbox with the role `archive`. On Gmail (decision 0034) it removes the
+    /// inbox label instead (`STORE -X-GM-LABELS (\Inbox)`), with no archive folder needed. Without one the action fails with
     /// [`ActionError::MissingMailbox`], so the UI can ask which mailbox to use (then
     /// `setMailboxRole`) or whether to create one (an operation of its own).
     Archive,
@@ -85,6 +96,8 @@ impl MailAction {
             Self::Unflag => ActionKind::Unflag,
             Self::AddKeyword { .. } => ActionKind::AddKeyword,
             Self::RemoveKeyword { .. } => ActionKind::RemoveKeyword,
+            Self::AddLabel { .. } => ActionKind::AddLabel,
+            Self::RemoveLabel { .. } => ActionKind::RemoveLabel,
             Self::Archive => ActionKind::Archive,
             Self::Delete => ActionKind::Delete,
             Self::DeletePermanently => ActionKind::DeletePermanently,
@@ -121,10 +134,16 @@ pub enum ActionKind {
     SaveDraft,
     /// Stage 5: the server copy of a discarded draft removed.
     DeleteDraft,
+    /// Stage 14: a Gmail label added or removed (decision 0034).
+    AddLabel,
+    RemoveLabel,
+    /// Stage 16: a message copied to another account (decision 0033). A move between
+    /// accounts is recorded as `move`.
+    Copy,
 }
 
 impl ActionKind {
-    const ALL: [Self; 17] = [
+    const ALL: [Self; 20] = [
         Self::MarkRead,
         Self::MarkUnread,
         Self::Flag,
@@ -142,6 +161,9 @@ impl ActionKind {
         Self::Send,
         Self::SaveDraft,
         Self::DeleteDraft,
+        Self::AddLabel,
+        Self::RemoveLabel,
+        Self::Copy,
     ];
 
     /// Text in the database, same as on the wire.
@@ -164,6 +186,9 @@ impl ActionKind {
             Self::Send => "send",
             Self::SaveDraft => "save_draft",
             Self::DeleteDraft => "delete_draft",
+            Self::AddLabel => "add_label",
+            Self::RemoveLabel => "remove_label",
+            Self::Copy => "copy",
         }
     }
 
@@ -183,6 +208,10 @@ pub enum Flag {
     Deleted,
     /// A keyword (`$Forwarded`, `$Junk`, a user label). Build it with [`Flag::keyword`].
     Keyword(String),
+    /// Stage 14 (decision 0034): a Gmail label, decoded (`\Inbox`, `Work/Projects`); sent as
+    /// `X-GM-LABELS`, never as a flag. Kept with the message, not in [`Flags`]. Build it with
+    /// [`Flag::label`].
+    Label(String),
 }
 
 impl Flag {
@@ -195,7 +224,18 @@ impl Flag {
         }
     }
 
-    /// The flag as written in a STORE command.
+    /// A Gmail label, if `name` is a valid one (see [`crate::is_valid_label`]); system labels
+    /// in Gmail's spelling.
+    pub fn label(name: &str) -> Result<Self, ActionError> {
+        if !crate::is_valid_label(name) {
+            return Err(ActionError::InvalidLabel(name.to_owned()));
+        }
+        Ok(Self::Label(
+            crate::system_label(name).map_or_else(|| name.to_owned(), str::to_owned),
+        ))
+    }
+
+    /// The flag as written in a STORE command (a label: its decoded name).
     pub fn imap(&self) -> &str {
         match self {
             Self::Seen => "\\Seen",
@@ -203,11 +243,12 @@ impl Flag {
             Self::Flagged => "\\Flagged",
             Self::Draft => "\\Draft",
             Self::Deleted => "\\Deleted",
-            Self::Keyword(name) => name,
+            Self::Keyword(name) | Self::Label(name) => name,
         }
     }
 
-    /// Whether the flag is set in `flags` (keywords ignoring ASCII case).
+    /// Whether the flag is set in `flags` (keywords ignoring ASCII case). Labels are not in
+    /// `flags`: always `false`; the store reads them from the message.
     pub fn is_set(&self, flags: &Flags) -> bool {
         match self {
             Self::Seen => flags.seen,
@@ -216,10 +257,12 @@ impl Flag {
             Self::Draft => flags.draft,
             Self::Deleted => flags.deleted,
             Self::Keyword(name) => flags.has_keyword(name),
+            Self::Label(_) => false,
         }
     }
 
-    /// Sets or clears the flag in `flags`; keywords stay normalised.
+    /// Sets or clears the flag in `flags`; keywords stay normalised. Labels leave `flags`
+    /// alone (the store keeps them with the message).
     pub fn apply(&self, flags: &mut Flags, value: bool) {
         match self {
             Self::Seen => flags.seen = value,
@@ -234,10 +277,12 @@ impl Flag {
                 }
                 flags.normalize_keywords();
             }
+            Self::Label(_) => {}
         }
     }
 
-    /// Same flag (keywords compared ignoring ASCII case, as servers do).
+    /// Same flag (keywords compared ignoring ASCII case, as servers do; labels exactly, as
+    /// Gmail does for user labels).
     pub fn same(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Keyword(a), Self::Keyword(b)) => a.eq_ignore_ascii_case(b),
@@ -653,6 +698,16 @@ pub enum AppendSource {
     },
     /// Frozen bytes (the Sent copy of a sent message), relative to the compose directory.
     File { file: String },
+    /// Stage 16 (decision 0033): a message copied or moved from another account: its frozen
+    /// bytes (relative to the compose directory), appended with the source's flags. For a
+    /// move, `remove` is the source location; it is removed (an `expunge` in the source
+    /// account) only once the copy was confirmed in the target by its Message-ID.
+    Transfer {
+        file: String,
+        flags: crate::Flags,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remove: Option<Box<SourceLocation>>,
+    },
 }
 
 impl OperationPayload {
@@ -780,6 +835,8 @@ pub fn plan_action(
         MailAction::Unflag => set_flag(Flag::Flagged, false),
         MailAction::AddKeyword { keyword } => set_flag(Flag::keyword(keyword)?, true),
         MailAction::RemoveKeyword { keyword } => set_flag(Flag::keyword(keyword)?, false),
+        MailAction::AddLabel { label } => set_flag(Flag::label(label)?, true),
+        MailAction::RemoveLabel { label } => set_flag(Flag::label(label)?, false),
         MailAction::Archive => move_to(by_role(MailboxRole::Archive)?, &none),
         MailAction::Spam => move_to(by_role(MailboxRole::Junk)?, &none),
         MailAction::NotSpam => {
@@ -855,6 +912,13 @@ pub enum ActionError {
 
     #[error("cannot be undone: {0}")]
     NotUndoable(String),
+
+    /// Stage 14: labels exist only on Gmail accounts (`X-GM-EXT-1`, decision 0034).
+    #[error("the account has no labels (only Gmail has them)")]
+    LabelsUnsupported,
+
+    #[error("{0:?} is not a valid label")]
+    InvalidLabel(String),
 }
 
 impl ActionError {
@@ -869,7 +933,9 @@ impl ActionError {
             Self::NotUndoable(_) => ErrorCode::NotUndoable,
             Self::InvalidKeyword(_) => ErrorCode::InvalidKeyword,
             Self::MessageNotFound(_) | Self::OperationNotFound(_) => ErrorCode::NotFound,
-            Self::InvalidTarget(_)
+            Self::LabelsUnsupported => ErrorCode::UnsupportedServer,
+            Self::InvalidLabel(_)
+            | Self::InvalidTarget(_)
             | Self::MixedAccounts
             | Self::NoMessages
             | Self::WrongState(..) => ErrorCode::InvalidArgument,
@@ -893,6 +959,8 @@ impl ActionError {
             Self::OperationNotFound(_) => "The action no longer exists.",
             Self::WrongState(..) => "The action cannot be changed in its current state.",
             Self::NotUndoable(_) => "This action cannot be undone.",
+            Self::LabelsUnsupported => "Only Gmail accounts have labels.",
+            Self::InvalidLabel(_) => "This label name cannot be used.",
         }
     }
 

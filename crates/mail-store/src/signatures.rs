@@ -10,8 +10,10 @@
 //! as the default it was).
 
 use mail_model::{
-    AccountId, DraftKind, IdentityId, MAX_SIGNATURES, MAX_TEMPLATES, SignatureId, TemplateId,
+    AccountId, Address, DraftKind, IdentityId, MAX_SIGNATURES, MAX_TEMPLATES, SignatureId,
+    TemplateId,
 };
+use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
@@ -100,6 +102,10 @@ pub struct StoredTemplate {
     pub name: String,
     pub subject: String,
     pub html: String,
+    /// Stage 16: recipients the template prefills (checked by the engine).
+    pub to: Vec<Address>,
+    pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
     pub position: i64,
     pub created_at: i64,
     pub updated_at: i64,
@@ -112,6 +118,10 @@ pub struct TemplateRow {
     pub name: String,
     pub subject: String,
     pub html: String,
+    /// Stage 16: recipients to prefill.
+    pub to: Vec<Address>,
+    pub cc: Vec<Address>,
+    pub bcc: Vec<Address>,
 }
 
 /// The default signatures of an identity, as stored (they may name a signature that is gone).
@@ -137,15 +147,18 @@ const UPSERT_SIGNATURE: &str = "
       name = excluded.name, html = excluded.html, text = excluded.text,
       images = excluded.images, updated_at = excluded.updated_at";
 
-const TEMPLATE_COLUMNS: &str =
-    "SELECT uuid, name, subject, html, position, created_at, updated_at FROM template";
+const TEMPLATE_COLUMNS: &str = "SELECT uuid, name, subject, html, position, created_at, updated_at,
+           to_addrs, cc_addrs, bcc_addrs FROM template";
 
 const UPSERT_TEMPLATE: &str = "
-    INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at)
-    VALUES (?1, ?2, ?3, ?4, (SELECT coalesce(max(position), -1) + 1 FROM template), ?5, ?5)
+    INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at,
+                          to_addrs, cc_addrs, bcc_addrs)
+    VALUES (?1, ?2, ?3, ?4, (SELECT coalesce(max(position), -1) + 1 FROM template), ?5, ?5,
+            ?6, ?7, ?8)
     ON CONFLICT (uuid) DO UPDATE SET
       name = excluded.name, subject = excluded.subject, html = excluded.html,
-      updated_at = excluded.updated_at";
+      to_addrs = excluded.to_addrs, cc_addrs = excluded.cc_addrs,
+      bcc_addrs = excluded.bcc_addrs, updated_at = excluded.updated_at";
 
 /// The signature a draft of `kind` from `identity` uses when the composer chose `chosen`
 /// (resolved in one statement: the choice if it exists, else the identity's default).
@@ -181,6 +194,17 @@ fn signature_from_row(r: &Row<'_>) -> rusqlite::Result<StoredSignature> {
     })
 }
 
+/// Recipients stored as `[{"name", "email"}]` (stage 16).
+fn addresses_at(r: &Row<'_>, idx: usize) -> rusqlite::Result<Vec<Address>> {
+    let text: String = r.get(idx)?;
+    serde_json::from_str(&text)
+        .map_err(|err| rusqlite::Error::FromSqlConversionFailure(idx, Type::Text, Box::new(err)))
+}
+
+pub(crate) fn addresses_text(list: &[Address]) -> Result<String, StoreError> {
+    serde_json::to_string(list).map_err(crate::outbox::json_error("encode template addresses"))
+}
+
 fn template_from_row(r: &Row<'_>) -> rusqlite::Result<StoredTemplate> {
     Ok(StoredTemplate {
         id: id_at(r, 0, TemplateId::parse)?,
@@ -190,6 +214,9 @@ fn template_from_row(r: &Row<'_>) -> rusqlite::Result<StoredTemplate> {
         position: r.get(4)?,
         created_at: r.get(5)?,
         updated_at: r.get(6)?,
+        to: addresses_at(r, 7)?,
+        cc: addresses_at(r, 8)?,
+        bcc: addresses_at(r, 9)?,
     })
 }
 
@@ -420,7 +447,10 @@ pub(crate) fn put_template(
             row.name,
             row.subject,
             row.html,
-            now
+            now,
+            addresses_text(&row.to)?,
+            addresses_text(&row.cc)?,
+            addresses_text(&row.bcc)?,
         ])
         .map_err(StoreError::sqlite("store template"))?;
     template(conn, &row.id)?.ok_or_else(|| StoreError::NotFound(format!("template {}", row.id)))

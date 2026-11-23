@@ -29,6 +29,12 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0011_ai.sql")),
     // Stage 7: saved searches (synced) and recent searches (device) (decision 0026).
     M::up(include_str!("../migrations/0012_saved_searches.sql")),
+    // Stage 16: reading list, mailbox favourites and colours, blocked senders, templates with
+    // recipients, read receipts (decision 0033).
+    M::up(include_str!("../migrations/0013_feature_parity.sql")),
+    // Stage 14: Gmail over IMAP: message id and labels per message, Gmail seen at login
+    // (decision 0034).
+    M::up(include_str!("../migrations/0014_gmail.sql")),
 ];
 
 /// All migrations this build knows.

@@ -47,11 +47,11 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
   const drop = useDropTarget(dropMailbox);
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
   const className = cx(
-    "relative flex items-center rounded-card transition-colors",
+    "relative flex items-center rounded-row transition-colors",
     expanded ? "h-8 w-full gap-3 px-3 text-13" : "size-(--ui-rail-item) justify-center",
     active
       ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent"
-      : "text-secondary hover:bg-hover hover:text-primary",
+      : "text-secondary hover:bg-rail-hover hover:text-primary",
     drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
   );
   const button = (
@@ -216,8 +216,8 @@ function AccountSwitcher({ accounts, selected }: { accounts: readonly Account[];
                 // Which account the views show, not which view is open: a fill, no active bar.
                 // With a single account there is nothing to tell apart.
                 className={cx(
-                  "relative flex size-(--ui-rail-item) items-center justify-center rounded-card transition-colors",
-                  current && accounts.length > 1 ? "bg-selected" : "hover:bg-hover",
+                  "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
+                  current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
                 )}
               >
                 <span className="relative flex">
@@ -258,7 +258,7 @@ function AccountFolders({ account, selected }: { account: Account; selected: boo
         }}
         className={cx(
           "flex h-8 items-center gap-2 rounded-control px-2 text-12 font-semibold transition-colors",
-          selected ? "text-primary" : "text-secondary hover:bg-hover hover:text-primary",
+          selected ? "text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
         )}
       >
         <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
@@ -304,7 +304,8 @@ export function IconRail() {
     <nav
       aria-label={t("nav.label")}
       className={cx(
-        "flex h-full shrink-0 flex-col border-r border-border bg-rail",
+        // Decision 0031: the darkest tonal step of the frame, a hairline to the list.
+        "flex h-full shrink-0 flex-col border-r border-border-subtle bg-rail",
         expanded ? "w-(--ui-sidebar-width)" : "w-(--ui-rail-width) items-center",
       )}
     >
@@ -341,7 +342,7 @@ export function IconRail() {
           ))}
         </ul>
         {expanded && (
-          <div id={foldersId} className="flex flex-col gap-4 border-t border-border pt-4">
+          <div id={foldersId} className="flex flex-col gap-4 border-t border-border-subtle pt-4">
             <UnifiedTree accountCount={accountList.length} />
             {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
             {accounts.isSuccess && accountList.length === 0 && (
@@ -357,7 +358,8 @@ export function IconRail() {
           </div>
         )}
       </div>
-      <div className={cx("flex shrink-0 flex-col gap-2 py-3", expanded ? "px-3" : "items-center")}>
+      {/* A hairline above the bottom group: where the views scroll under it in a low window. */}
+      <div className={cx("flex shrink-0 flex-col gap-2 border-t border-border-subtle py-3", expanded ? "px-3" : "items-center")}>
         {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
         {expanded ? null : <AccountSwitcher accounts={accountList} selected={selected} />}
         <ActivityButton accounts={accountList} expanded={expanded} active={view.kind === "activity"} />

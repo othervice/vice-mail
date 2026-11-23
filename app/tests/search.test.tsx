@@ -6,6 +6,8 @@ import type { MessageListItem, SearchRequest, SearchTermInfo } from "../src/serv
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { makeHit, searchPage } from "./support/search";
 import { renderApp } from "./support/render";
+import { showHeaderDetails } from "./support/reading";
+import { optionName } from "./support/names";
 
 const ACCOUNT = makeAccount();
 const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
@@ -92,7 +94,7 @@ describe("search field", () => {
     // Both accounts' invoices, each in its account's colour; the lunch is not a hit.
     const options = await within(results).findAllByRole("option");
     expect(options).toHaveLength(2);
-    expect(options.map((o) => o.getAttribute("aria-label"))).toEqual([
+    expect(options.map((o) => optionName(o))).toEqual([
       expect.stringContaining("Rechnung März"),
       expect.stringContaining("Rechnung Firma"),
     ]);
@@ -129,6 +131,7 @@ describe("search field", () => {
     const results = await screen.findByRole("listbox", { name: "Messages in the search results for “firma”" });
     await user.click(await within(results).findByRole("option"));
     const pane = await screen.findByRole("region", { name: "Message" });
+    await showHeaderDetails(user, pane);
     expect(within(pane).getByTestId("reading-account").textContent).toBe("Work (work@example.com)");
     expect(core.callsOf("get_message")).toEqual([{ messageId: WORK_INVOICE.id, format: "auto" }]);
     // The actions of the hit's own account and folder (read-only here: shown, but disabled).

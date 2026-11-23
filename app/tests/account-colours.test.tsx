@@ -6,6 +6,8 @@ import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { makeOutgoing } from "./support/compose";
 import { renderApp } from "./support/render";
+import { showHeaderDetails } from "./support/reading";
+import { optionName } from "./support/names";
 
 /*
  * Stage 8, "Kontofarben immer mit Namen" (docs/SPEC.md: no information by colour alone). Every
@@ -105,10 +107,14 @@ describe("account colours", () => {
     });
     const options = within(list).getAllByRole("option");
     expect(options.map((option) => within(option).getByTestId("row-account").textContent)).toEqual(["Ada Lovelace", "Work", "Club"]);
-    expect(options[1]?.getAttribute("aria-label")).toContain("Projekt, Account: Work");
+    expect(optionName(options[1])).toContain("Projekt, Account: Work");
     expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);
     // The opened message names its account in the header, next to the dot.
     await user.click(options[1] as HTMLElement);
+    // Folded, the head names the account next to its dot; unfolded, in the account line.
+    expect((await screen.findByTestId("reading-recipients")).textContent).toContain("Work");
+    expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);
+    await showHeaderDetails(user);
     await screen.findByTestId("reading-account");
     expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);
   });
@@ -126,6 +132,7 @@ describe("account colours", () => {
     expect(within(list).queryByTestId("row-account")).toBeNull();
     expect(unnamedColours([ADA])).toEqual([]);
     await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    await showHeaderDetails(user);
     await screen.findByTestId("reading-account");
     expect(unnamedColours([ADA])).toEqual([]);
   });
@@ -140,7 +147,7 @@ describe("account colours", () => {
     expect(options.length).toBeGreaterThan(0);
     for (const option of options) {
       expect(within(option).getByTestId("row-account").textContent).toMatch(/^(Ada Lovelace|Work|Club)$/);
-      expect(option.getAttribute("aria-label")).toMatch(/Account: (Ada Lovelace|Work|Club)/);
+      expect(optionName(option)).toMatch(/Account: (Ada Lovelace|Work|Club)/);
     }
     expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);
   });

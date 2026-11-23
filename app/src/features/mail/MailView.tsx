@@ -394,6 +394,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           key={single.id}
           account={account}
           messageId={single.id}
+          draft={single.draft}
           focusRequest={focusRequest}
           toolbar={
             <ActionToolbar

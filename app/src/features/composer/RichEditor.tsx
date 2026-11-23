@@ -345,11 +345,13 @@ export function RichEditor({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // At least the height of a few paragraphs: in a low window the composer scrolls as a whole
+    // instead of squeezing the editor to one line.
+    <div className="flex min-h-(--ui-picker-list-height) flex-1 flex-col">
       <div
         role="toolbar"
         aria-label={t("composer.format.toolbar")}
-        className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 py-1"
+        className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border-subtle px-3 py-1"
         data-testid="composer-format-toolbar"
       >
         <FormatButton
@@ -457,7 +459,7 @@ export function RichEditor({
         )}
       </div>
       {linkOpen && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2" data-testid="composer-link-editor">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border-subtle px-4 py-2" data-testid="composer-link-editor">
           <label htmlFor={linkId} className="text-13 text-secondary">
             {t("composer.format.linkAddress")}
           </label>

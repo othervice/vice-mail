@@ -24,6 +24,7 @@ pub(crate) mod contacts;
 pub mod files;
 mod inline;
 pub(crate) mod outgoing;
+mod receipts;
 mod schedule;
 pub(crate) mod snippets;
 mod stage10;
@@ -62,6 +63,10 @@ use crate::reading::Reading;
 const SEND_DELAY_KEY: &str = "compose.send_delay_seconds";
 /// Stage 8 (decision 0025): the position of the answer in new replies and forwards.
 const QUOTE_POSITION_KEY: &str = "compose.default_quote_position";
+/// Stage 16 (decision 0033): new replies start with "send and archive" on.
+const ARCHIVE_ON_REPLY_KEY: &str = "compose.archive_on_reply";
+/// Stage 16: how read-receipt requests are handled (`ask` or `never`).
+const READ_RECEIPTS_KEY: &str = "compose.read_receipts";
 /// Longest request id of a send (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
 /// How long creating a reply waits for the original's body to be fetched.
@@ -91,10 +96,7 @@ async fn blocking<T: Send + 'static>(
 
 /// Whether the account's server files sent mail itself when the user did not choose: Gmail.
 pub(crate) fn files_sent_itself(imap_host: &str) -> bool {
-    let host = imap_host.trim().trim_end_matches('.').to_ascii_lowercase();
-    ["gmail.com", "googlemail.com"]
-        .iter()
-        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+    mail_model::is_gmail_host(imap_host)
 }
 
 fn valid_request_id(request: &str) -> Result<(), CoreError> {
@@ -536,6 +538,8 @@ impl<C: Connector> Compose<C> {
             state: draft.state,
             server,
             outgoing: draft.outgoing,
+            archive_original: draft.archive_original,
+            request_read_receipt: draft.request_receipt,
             created_at: draft.created_at,
             updated_at: draft.updated_at,
         })
@@ -633,6 +637,18 @@ impl<C: Connector> Compose<C> {
                 self.create_from_request(account_id, identity_id, request)
                     .await?
             }
+        };
+        // Stage 16: "send and archive" as the compose setting says, for replies.
+        let draft = if matches!(draft.kind, DraftKind::Reply | DraftKind::ReplyAll)
+            && draft.original_message_id_header.is_some()
+            && self.compose_settings().await?.archive_on_reply
+        {
+            self.inner
+                .store
+                .set_draft_send_options(draft.id.clone(), true, draft.request_receipt)
+                .await?
+        } else {
+            draft
         };
         tracing::info!(account = %draft.account, kind = draft.kind.as_str(), "draft created");
         self.drafts_changed(draft.account, vec![draft.id.clone()], Vec::new());
@@ -1423,7 +1439,11 @@ impl<C: Connector> Compose<C> {
         let server_saves_sent = match mode {
             SentCopyMode::Server => true,
             SentCopyMode::App => false,
-            SentCopyMode::Auto => files_sent_itself(&account.imap.host),
+            // Stage 14 (decision 0034): Gmail by host name or by X-GM-EXT-1 at the last login.
+            SentCopyMode::Auto => {
+                files_sent_itself(&account.imap.host)
+                    || store.account_is_gmail(draft.account).await?
+            }
         };
         let delay = self.send_delay().await?;
         let now = self.now();
@@ -1462,6 +1482,7 @@ impl<C: Connector> Compose<C> {
             }),
             _ => None,
         };
+        let archive_original = draft.archive_original && original.is_some();
         let job = SendJob {
             draft: id.clone(),
             message_id_header: draft.message_id_header.clone(),
@@ -1477,6 +1498,9 @@ impl<C: Connector> Compose<C> {
             phase: SendPhase::Submit,
             checks: 0,
             scheduled: at.is_some(),
+            archive_original,
+            archive_missing: false,
+            receipt_for: None,
         };
         let not_before = match at {
             Some(at) => Some(at),
@@ -1601,6 +1625,20 @@ impl<C: Connector> Compose<C> {
                 Err(err) => tracing::warn!(%err, "stored quote position unreadable; default used"),
             }
         }
+        if let Some(stored) = settings.iter().find(|s| s.key == ARCHIVE_ON_REPLY_KEY) {
+            match serde_json::from_str::<bool>(&stored.value) {
+                Ok(on) => out.archive_on_reply = on,
+                Err(err) => tracing::warn!(%err, "stored archive setting unreadable; default used"),
+            }
+        }
+        if let Some(stored) = settings.iter().find(|s| s.key == READ_RECEIPTS_KEY) {
+            match serde_json::from_str::<mail_model::ReadReceiptPolicy>(&stored.value) {
+                Ok(policy) => out.read_receipts = policy,
+                Err(err) => {
+                    tracing::warn!(%err, "stored read receipt setting unreadable; default used");
+                }
+            }
+        }
         Ok(out)
     }
 
@@ -1626,6 +1664,14 @@ impl<C: Connector> Compose<C> {
                         QUOTE_POSITION_KEY.to_owned(),
                         format!("\"{}\"", settings.default_quote_position.as_str()),
                     ),
+                    (
+                        ARCHIVE_ON_REPLY_KEY.to_owned(),
+                        settings.archive_on_reply.to_string(),
+                    ),
+                    (
+                        READ_RECEIPTS_KEY.to_owned(),
+                        format!("\"{}\"", settings.read_receipts.as_str()),
+                    ),
                 ],
             )
             .await?;
@@ -1642,14 +1688,16 @@ impl<C: Connector> Compose<C> {
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {account}")))?;
         let mode = store.sent_copy_mode(account).await?;
+        let gmail = files_sent_itself(&stored.imap.host) || store.account_is_gmail(account).await?;
         Ok(AccountSendSettings {
             account_id: account,
             sent_copy: mode,
             server_saves_sent: match mode {
                 SentCopyMode::Server => true,
                 SentCopyMode::App => false,
-                SentCopyMode::Auto => files_sent_itself(&stored.imap.host),
+                SentCopyMode::Auto => gmail,
             },
+            gmail,
         })
     }
 

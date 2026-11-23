@@ -68,6 +68,8 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     state: "editing",
     server: "local_only",
     outgoing: null,
+    archiveOriginal: false,
+    requestReadReceipt: false,
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     ...overrides,
@@ -88,6 +90,8 @@ export function makeOutgoing(overrides: Partial<OutgoingMail> = {}): OutgoingMai
     error: null,
     attempts: 0,
     notice: null,
+    archive: null,
+    readReceipt: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -218,6 +222,8 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       error: null,
       attempts: 0,
       notice: null,
+      archive: null,
+      readReceipt: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -449,6 +455,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
           accountId,
           sentCopy: mode,
           serverSavesSent: mode === "server" || (mode === "auto" && Boolean(options.serverSavesSent)),
+          gmail: Boolean(options.serverSavesSent),
         };
         return result;
       }

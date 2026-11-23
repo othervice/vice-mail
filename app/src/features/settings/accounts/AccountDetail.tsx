@@ -11,6 +11,7 @@ import { useUiStore } from "../../../stores/ui";
 import { Avatar } from "../../accounts/Avatar";
 import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
 import { useSetWritesEnabled } from "../../actions/queries";
+import { useSendSettings } from "../../composer/queries";
 import { SpecialFolders } from "./SpecialFolders";
 import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
 import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
@@ -234,6 +235,22 @@ function RemoveAccount({ account }: { account: Account }) {
 }
 
 /** One account: status, read-only note and the switch for changes, servers, password, special folders, removal. */
+/**
+ * Stage 14 (decision 0034): what is different on Gmail (labels, archive, Sent copies), shown
+ * once the core knows the account is Gmail (by host, or `X-GM-EXT-1` at the last login).
+ */
+function GmailNote({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const send = useSendSettings(account.id);
+  if (!send.data?.gmail) return null;
+  return (
+    <Notice title={t("settings.accounts.detail.gmail.title")} data-testid="gmail-account">
+      <p>{t("settings.accounts.detail.gmail.body")}</p>
+      {send.data.sentCopy === "app" && <p>{t("settings.accounts.detail.gmail.customCopy")}</p>}
+    </Notice>
+  );
+}
+
 export function AccountDetail({ accountId }: { accountId: string }) {
   const { t } = useTranslation();
   const accounts = useAccounts();
@@ -303,6 +320,7 @@ export function AccountDetail({ accountId }: { accountId: string }) {
           <ServerRow label={t("settings.accounts.setup.outgoing")} server={account.smtp} />
         </dl>
       </Block>
+      <GmailNote account={account} />
       <PasswordChange account={account} />
       {/* Stage 7: sender addresses, and whether the account shows in the unified inbox. */}
       <Block title={t("identities.title")} description={t("identities.description")}>

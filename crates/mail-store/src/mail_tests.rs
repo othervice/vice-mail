@@ -507,7 +507,8 @@ async fn storing_the_same_window_twice_creates_no_duplicates() {
         StoreReport {
             inserted: 50,
             merged: 0,
-            updated: 0
+            updated: 0,
+            new_unread: 50,
         }
     );
     let ids = all_ids(&f.store, f.inbox, 500).await;
@@ -522,7 +523,8 @@ async fn storing_the_same_window_twice_creates_no_duplicates() {
         StoreReport {
             inserted: 0,
             merged: 0,
-            updated: 50
+            updated: 50,
+            new_unread: 0,
         }
     );
     assert_eq!(all_ids(&f.store, f.inbox, 500).await, ids);
@@ -558,7 +560,8 @@ async fn the_same_mail_in_two_mailboxes_is_one_message_with_two_locations() {
         StoreReport {
             inserted: 0,
             merged: 1,
-            updated: 0
+            updated: 0,
+            new_unread: 0,
         }
     );
 
@@ -627,7 +630,8 @@ async fn a_duplicate_message_id_within_one_mailbox_gets_its_own_row() {
         StoreReport {
             inserted: 1,
             merged: 2,
-            updated: 0
+            updated: 0,
+            new_unread: 1,
         }
     );
     assert_eq!(count(&f.store, "SELECT count(*) FROM message").await, 3);
@@ -806,24 +810,28 @@ async fn flag_updates_count_real_changes_only() {
             uid: 1,
             flags: flags(true, &[]),
             modseq: Some(ModSeq(10)),
+            gmail_labels: None,
         },
         // same flags, new MODSEQ: stored, not counted
         FlagUpdate {
             uid: 2,
             flags: flags(false, &[]),
             modseq: Some(ModSeq(11)),
+            gmail_labels: None,
         },
         // keyword in other case (Stalwart lower-cases): no change, stored spelling kept
         FlagUpdate {
             uid: 3,
             flags: flags(false, &["$forwarded"]),
             modseq: None,
+            gmail_labels: None,
         },
         // not stored: ignored
         FlagUpdate {
             uid: 99,
             flags: flags(true, &[]),
             modseq: None,
+            gmail_labels: None,
         },
     ];
     let changed = f
@@ -855,6 +863,7 @@ async fn flag_updates_count_real_changes_only() {
                     ..Flags::default()
                 },
                 modseq: Some(ModSeq(12)),
+                gmail_labels: None,
             }],
         )
         .await
@@ -1032,6 +1041,7 @@ async fn a_uidvalidity_change_resets_the_mailbox_and_voids_stale_writes() {
                     uid: 1,
                     flags: flags(true, &[]),
                     modseq: None,
+                    gmail_labels: None,
                 }],
             )
             .await
@@ -1126,7 +1136,8 @@ async fn a_uidvalidity_change_resets_the_mailbox_and_voids_stale_writes() {
         StoreReport {
             inserted: 1,
             merged: 3,
-            updated: 0
+            updated: 0,
+            new_unread: 1,
         }
     );
     let ids_after = all_ids(&f.store, f.inbox, 10).await;
@@ -1457,16 +1468,19 @@ async fn unread_counts_follow_the_flags() {
                     uid: 3,
                     flags: flags(true, &[]),
                     modseq: None,
+                    gmail_labels: None,
                 },
                 FlagUpdate {
                     uid: 1,
                     flags: flags(false, &[]),
                     modseq: None,
+                    gmail_labels: None,
                 },
                 FlagUpdate {
                     uid: 4,
                     flags: flags(true, &[]),
                     modseq: None,
+                    gmail_labels: None,
                 },
             ],
         )

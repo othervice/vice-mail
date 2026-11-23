@@ -8,6 +8,7 @@ import { ipcError, makeAccount, makeMailbox, makeMessages, makeView, mockCore, s
 import { makeDraft } from "./support/compose";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { toolbarAction } from "./support/reading";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -121,12 +122,13 @@ describe("the message window", () => {
     list.focus();
     await user.keyboard("{Enter}");
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(within(pane).getByRole("button", { name: "Open in new window" }));
+    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    await user.click(await toolbarAction(user, toolbar, "Open in new window"));
     expect(core.ui.messageWindows).toEqual([`${ACCOUNT.id}/${String(items[0]?.id)}`]);
 
     // The message vanished meanwhile: the core opens nothing, a notice says why.
     core.setMessages(1, items.slice(1));
-    await user.click(within(pane).getByRole("button", { name: "Open in new window" }));
+    await user.click(await toolbarAction(user, toolbar, "Open in new window"));
     expect(await screen.findByText("The message could not be opened in a new window.")).toBeTruthy();
     expect(core.ui.messageWindows).toHaveLength(1);
   });

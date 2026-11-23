@@ -357,7 +357,14 @@ async fn worker<C: MailConnector>(
 ) -> Result<(), CoreError> {
     let mut backend = env.connector.connect(&connect).await?;
     let idle = backend.capabilities().idle;
-    tracing::info!(account = %reporter.account(), idle, "connected");
+    // Stage 14 (decision 0034): the planner and the sent copy setting need to know Gmail
+    // offline too.
+    let gmail = backend.capabilities().gmail;
+    env.store
+        .set_account_gmail(reporter.account(), gmail)
+        .await
+        .map_err(CoreError::from)?;
+    tracing::info!(account = %reporter.account(), idle, gmail, "connected");
     reporter.send(SessionEvent::Connected { idle });
     loop {
         let request = tokio::select! {

@@ -292,11 +292,31 @@ pub struct Draft {
     pub server: DraftServerState,
     /// The send operation while `state` is `sending`.
     pub outgoing: Option<OperationId>,
+    /// Stage 16 (decision 0033), "Senden und archivieren": once the server accepted the
+    /// message, the answered or forwarded original is archived (through the outbox). Without an
+    /// original it does nothing. Set with `setDraftSendOptions`; a new reply starts with
+    /// [`ComposeSettings::archive_on_reply`].
+    pub archive_original: bool,
+    /// Stage 16: the message asks for a read receipt (`Disposition-Notification-To` with the
+    /// sending identity's address, RFC 8098). The recipient decides whether to send one.
+    pub request_read_receipt: bool,
     /// Unix milliseconds.
     #[specta(type = Number)]
     pub created_at: i64,
     #[specta(type = Number)]
     pub updated_at: i64,
+}
+
+/// Stage 16 (decision 0033): the per-draft send options (`setDraftSendOptions`).
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftSendOptions {
+    /// See [`Draft::archive_original`].
+    pub archive_original: bool,
+    /// See [`Draft::request_read_receipt`].
+    pub request_read_receipt: bool,
 }
 
 /// A draft in a list (restoring drafts after a crash, the local drafts of an account).
@@ -438,10 +458,29 @@ pub struct OutgoingMail {
     pub attempts: u32,
     /// `noSentCopy` when no copy went into Sent (no Sent folder).
     pub notice: Option<OperationNotice>,
+    /// Stage 16: "Senden und archivieren" was asked for; null otherwise.
+    pub archive: Option<ArchiveAfterSend>,
+    /// Stage 16: this is a read receipt (RFC 8098) the user chose to send, not a message of a
+    /// draft (`draftId` names no draft; there is nothing to edit).
+    pub read_receipt: bool,
     #[specta(type = Number)]
     pub created_at: i64,
     #[specta(type = Number)]
     pub updated_at: i64,
+}
+
+/// Stage 16 (decision 0033): what "send and archive" did with the original.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveAfterSend {
+    /// The message is not accepted yet; nothing is archived if it fails or is cancelled.
+    Waiting,
+    /// Accepted: the original's move to the archive is queued in the outbox (or it lay there
+    /// already, or is no longer stored locally).
+    Queued,
+    /// Accepted, but the account has no archive mailbox: the original stayed where it was.
+    /// The UI can offer to choose one (`setMailboxRole`).
+    NoArchiveMailbox,
 }
 
 /// The user's answer to an unclear send.
@@ -543,6 +582,13 @@ pub struct ComposeSettings {
     /// default.
     #[serde(default)]
     pub default_quote_position: QuotePosition,
+    /// Stage 16 (decision 0033): new replies (and replies to all) start with
+    /// [`Draft::archive_original`] on. Off by default; synced.
+    #[serde(default)]
+    pub archive_on_reply: bool,
+    /// Stage 16: how read-receipt requests of incoming mail are handled. Synced.
+    #[serde(default)]
+    pub read_receipts: ReadReceiptPolicy,
 }
 
 impl Default for ComposeSettings {
@@ -550,8 +596,141 @@ impl Default for ComposeSettings {
         Self {
             send_delay_seconds: DEFAULT_SEND_DELAY_SECS,
             default_quote_position: QuotePosition::default(),
+            archive_on_reply: false,
+            read_receipts: ReadReceiptPolicy::default(),
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Read receipts (stage 16, decision 0033; RFC 8098)
+
+/// How the app answers read-receipt requests of incoming mail. It never sends one by itself:
+/// with `ask` the reading pane offers to send one (`sendReadReceipt`) or to decline; with
+/// `never` it offers nothing and `sendReadReceipt` is refused.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadReceiptPolicy {
+    #[default]
+    Ask,
+    Never,
+}
+
+impl ReadReceiptPolicy {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Never => "never",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [Self::Ask, Self::Never]
+            .into_iter()
+            .find(|p| p.as_str() == s)
+    }
+}
+
+/// What the recipient's program reported in a read receipt (`Disposition` field, RFC 8098
+/// 3.2.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ReceiptDisposition {
+    /// Shown to the recipient (not proof that it was read).
+    Displayed,
+    /// Deleted without being shown.
+    Deleted,
+    /// Sent somewhere else (printed, faxed, forwarded) without being shown.
+    Dispatched,
+    /// Processed by a program without being shown.
+    Processed,
+    /// Anything else.
+    Other,
+}
+
+impl ReceiptDisposition {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Displayed => "displayed",
+            Self::Deleted => "deleted",
+            Self::Dispatched => "dispatched",
+            Self::Processed => "processed",
+            Self::Other => "other",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [
+            Self::Displayed,
+            Self::Deleted,
+            Self::Dispatched,
+            Self::Processed,
+            Self::Other,
+        ]
+        .into_iter()
+        .find(|d| d.as_str() == s)
+    }
+}
+
+/// Where the user's answer to a read-receipt request stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadReceiptAnswer {
+    /// Not answered: the reading pane may ask (send or decline).
+    Ask,
+    /// The receipt is in the outbox (see the outbox view for its state).
+    Queued,
+    /// The server accepted the receipt.
+    Sent,
+    /// The user declined; nothing is sent.
+    Declined,
+    /// Answered elsewhere: the message carries the `$MDNSent` keyword (RFC 3503) another
+    /// program or device set. Nothing is offered.
+    AnsweredElsewhere,
+    /// Read receipts are set to `never`: nothing is offered.
+    Off,
+}
+
+/// An incoming message asks for a read receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadReceiptRequest {
+    /// Where the receipt would go (`Disposition-Notification-To`).
+    pub to: String,
+    /// That address is not the message's `Return-Path` (or there is none): RFC 8098 asks to
+    /// confirm with the user, the UI says so in its question.
+    pub return_path_differs: bool,
+    pub answer: ReadReceiptAnswer,
+}
+
+/// A read receipt that came back for a message the user sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceivedReadReceipt {
+    /// The recipient it reports on (`Final-Recipient`), if given.
+    pub recipient: Option<String>,
+    pub disposition: ReceiptDisposition,
+    /// When the receipt arrived (its sort date), Unix milliseconds.
+    #[specta(type = Number)]
+    pub received_at: i64,
+}
+
+/// Read receipts of one message (`getReadReceipt`): an incoming request and the receipts that
+/// came back for it. Read from the stored message; empty while its body is not stored.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadReceiptInfo {
+    /// The message asks for a read receipt; null otherwise (also for the user's own mail and
+    /// for read receipts themselves).
+    pub request: Option<ReadReceiptRequest>,
+    /// The message (one the user sent) asked for a read receipt.
+    pub requested: bool,
+    /// Receipts that came back for this message, newest first.
+    pub received: Vec<ReceivedReadReceipt>,
+    /// The message is itself a read receipt (for the message with this Message-ID).
+    pub receipt_for: Option<String>,
 }
 
 /// Who puts the copy of a sent message into the Sent folder.
@@ -593,6 +772,9 @@ pub struct AccountSendSettings {
     pub sent_copy: SentCopyMode,
     /// What `sentCopy: auto` amounts to for this account: the server files sent mail itself.
     pub server_saves_sent: bool,
+    /// Stage 14 (decision 0034): the account is Gmail (IMAP host, or `X-GM-EXT-1` at the last
+    /// login), which files sent mail itself; the account settings say so.
+    pub gmail: bool,
 }
 
 /// An identity for the composer: the sender choice and its text signature.
@@ -777,6 +959,16 @@ pub struct SendJob {
     /// but asked about.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub scheduled: bool,
+    /// Stage 16: archive the original once the send is accepted ("send and archive").
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub archive_original: bool,
+    /// Stage 16: set when the send was accepted but the account had no archive mailbox.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub archive_missing: bool,
+    /// Stage 16: a read receipt for the message with this Message-ID (no draft, no copy in
+    /// Sent; `$MDNSent` on the original once accepted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_for: Option<String>,
 }
 
 /// An attachment of a draft as stored (`draft.attachments`): the core's own copy of the bytes.
@@ -869,7 +1061,12 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(ComposeSettings::default()).expect("settings"),
-            json!({ "sendDelaySeconds": 10, "defaultQuotePosition": "above" })
+            json!({
+                "sendDelaySeconds": 10,
+                "defaultQuotePosition": "above",
+                "archiveOnReply": false,
+                "readReceipts": "ask"
+            })
         );
         // An older caller that does not know the quote position yet gets the default.
         assert_eq!(
@@ -878,6 +1075,8 @@ mod tests {
             ComposeSettings {
                 send_delay_seconds: 3,
                 default_quote_position: QuotePosition::Above,
+                archive_on_reply: false,
+                read_receipts: ReadReceiptPolicy::Ask,
             }
         );
         assert_eq!(

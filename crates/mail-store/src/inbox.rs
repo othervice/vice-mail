@@ -8,6 +8,9 @@
 //!   category list is a range of `loc_category`, the important list of `loc_important`.
 //! - The snooze and pin checks are one probe per row of the unique index on account UUID and
 //!   Message-ID; the account of a branch is a parameter of its own.
+//! - Stage 16 (decision 0033): every list leaves out mail of blocked senders hidden on a
+//!   read-only account (`blocked_hidden`, one probe per row); "only unread" is a range of
+//!   `loc_unseen`, "unread first" that range followed by the read rows.
 
 use std::collections::HashMap;
 
@@ -29,6 +32,12 @@ pub enum InboxListKind {
     Category(MessageCategory),
     /// Important senders, without waiting snoozes.
     Important,
+    /// Stage 16: unread messages (`loc_unseen`), without waiting snoozes.
+    Unread,
+    /// Stage 16: read messages, without waiting snoozes: the second part of "unread first".
+    /// A range of the location key; the unread rows in between are skipped in the key's own
+    /// b-tree (no lookup per skipped row).
+    Read,
 }
 
 /// One branch: mailbox `?{p}`, its account UUID `?{p + 1}`; cursor `?1`, limit `?2`, category
@@ -57,7 +66,23 @@ fn branch(kind: InboxListKind, p: usize) -> String {
             format!("l.mailbox_id = ?{p} AND l.important = 1 AND l.message_id < ?1"),
             waiting_snooze(a),
         ),
+        InboxListKind::Unread => (
+            "INDEXED BY loc_unseen",
+            format!("l.mailbox_id = ?{p} AND l.seen = 0 AND l.message_id < ?1"),
+            waiting_snooze(a),
+        ),
+        InboxListKind::Read => (
+            "",
+            format!("l.mailbox_id = ?{p} AND l.message_id < ?1 AND l.seen = 1"),
+            waiting_snooze(a),
+        ),
     };
+    // Stage 16: mail of blocked senders that could not go to the junk folder.
+    let exclude = format!(
+        "{exclude}
+                 AND NOT EXISTS (SELECT 1 FROM blocked_hidden h
+                                 WHERE h.account_uuid = ?{a} AND h.message_id_hdr = m.message_id_hdr)"
+    );
     format!(
         "SELECT * FROM (SELECT {cols}, l.mailbox_id
            FROM message_location l {index} CROSS JOIN message m ON m.id = l.message_id

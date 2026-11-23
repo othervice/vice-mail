@@ -123,6 +123,12 @@ impl Store {
                     }
                 }
                 let indexed: Vec<(i64, BodyText)> = indexed.into_iter().collect();
+                // Stage 16: read receipts that came back (decision 0033).
+                for (message, text) in &indexed {
+                    if let Some(receipt) = &text.receipt {
+                        crate::compose::record_received(tx, MessageId(*message), receipt)?;
+                    }
+                }
                 fts::index_bodies(tx, &indexed)?;
                 // A pack whose messages all vanished meanwhile.
                 unreferenced.extend(bodies::unreferenced(

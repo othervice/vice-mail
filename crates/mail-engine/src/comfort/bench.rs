@@ -80,6 +80,7 @@ fn headers() -> Vec<MessageHeader> {
                 precedence: None,
                 has_attachments: false,
                 category_headers: block.into_bytes(),
+                gmail: None,
             }
         })
         .collect()

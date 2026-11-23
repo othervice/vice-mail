@@ -33,6 +33,25 @@ use crate::compose::{build, files};
 use crate::credentials::CredentialRef;
 use crate::outbox::Shared;
 
+/// Stage 16: the flags a message copied from another account keeps: the system flags, never
+/// `\Deleted`. Keywords stay behind (the adapter appends without keywords).
+fn transfer_flags(flags: &mail_model::Flags) -> Vec<Flag> {
+    let mut out = Vec::new();
+    if flags.seen {
+        out.push(Flag::Seen);
+    }
+    if flags.answered {
+        out.push(Flag::Answered);
+    }
+    if flags.flagged {
+        out.push(Flag::Flagged);
+    }
+    if flags.draft {
+        out.push(Flag::Draft);
+    }
+    out
+}
+
 fn unclear(detail: &str) -> IpcError {
     IpcError::from(CoreError::Mail(BackendError::SendUnclear(
         detail.to_owned(),
@@ -339,7 +358,7 @@ impl<W: MailWriter> Step<'_, W> {
     ) -> Result<Option<(Vec<u8>, AppendSource, Option<ServerCopy>)>, StepError> {
         let root = files::compose_dir(self.store);
         match source {
-            AppendSource::File { file } => {
+            AppendSource::File { file } | AppendSource::Transfer { file, .. } => {
                 let file = file.clone();
                 let read = tokio::task::spawn_blocking(move || files::read(&root, &file)).await;
                 match read {
@@ -446,6 +465,12 @@ impl<W: MailWriter> Step<'_, W> {
         let Some(op) = self.within_attempts(vec![op]).pop() else {
             return Ok(());
         };
+        // Stage 16: a message from another account keeps its flags.
+        let flags: Vec<Flag> = match &source {
+            AppendSource::Transfer { flags: kept, .. } => transfer_flags(kept),
+            _ if draft_flag => vec![Flag::Seen, Flag::Draft],
+            _ => vec![Flag::Seen],
+        };
         let Some((bytes, source, replace)) = self.append_bytes(&op, &source).await? else {
             return Ok(());
         };
@@ -469,12 +494,7 @@ impl<W: MailWriter> Step<'_, W> {
         let Some(op) = self.begin(vec![planned]).await?.pop() else {
             return Ok(());
         };
-        let flags: &[Flag] = if draft_flag {
-            &[Flag::Seen, Flag::Draft]
-        } else {
-            &[Flag::Seen]
-        };
-        match self.conn.writer.append(&target.name, flags, &bytes).await {
+        match self.conn.writer.append(&target.name, &flags, &bytes).await {
             Ok(appended) => {
                 let uid = match appended {
                     Some(at) if at.uid_validity == mark.uid_validity => Some(at.uid),

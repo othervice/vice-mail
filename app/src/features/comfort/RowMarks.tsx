@@ -33,9 +33,9 @@ export function useRowMarkLabels(): (item: MessageListItem) => string[] {
  * Small symbols next to the flag: important sender, pinned, snoozed ("back" in the accent when it
  * returned), task. Hidden from screen readers; the row's name says the same.
  */
-export function RowMarks({ item }: { item: MessageListItem }) {
+export function RowMarks({ item, omit }: { item: MessageListItem; omit?: readonly RowMark[] | undefined }) {
   const { t } = useTranslation();
-  const marks = rowMarks(item);
+  const marks = rowMarks(item).filter((mark) => !omit?.includes(mark));
   if (marks.length === 0) return null;
   return (
     <>
@@ -47,7 +47,7 @@ export function RowMarks({ item }: { item: MessageListItem }) {
               key={mark}
               title={t("comfort.marks.returned")}
               data-testid="row-mark-returned"
-              className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-1.5 text-12 font-semibold text-accent"
+              className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 text-12 font-semibold text-accent"
             >
               <Icon aria-hidden className="size-3" strokeWidth={2} />
               <span aria-hidden>{t("comfort.marks.back")}</span>

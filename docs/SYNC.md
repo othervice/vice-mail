@@ -152,7 +152,7 @@ that set "always as newsletter" for the same sender change the same record.
 | `setting` | the setting's JSON value (not null) |
 | `signature` | `{name?, text?, html?, images?}`, text or html at least (stage 10: a signature of the pool; `images` are `[{id, contentId, fileName, mime, dataBase64}]`, PNG/JPEG/GIF/WebP, at most 8 and 128 KiB; a stage 11 record `{text}` still reads) |
 | `identity` | `{account, email, name, replyTo, isDefault, signatureNew?, signatureReply?}` (signatures are records of their own; the identity names its defaults by signature UUID, absent when none is set; a name that points nowhere means none) |
-| `template` | `{name, subject, html}` (stage 10) |
+| `template` | `{name, subject, html, to?, cc?, bcc?}` (stage 10; stage 16: the recipients it prefills as `[{name, email}]`, each field left out when empty, at most 100 valid addresses together; a stage 10 record still reads) |
 | `rule` | `{name, position, enabled, definition: {matchAll, conditions, actions, stop}}` |
 | `snooze` | `{untilMs}`; whether it came back is each device's own (every device's timer brings it back) |
 | `pin` | `{pinnedAtMs}` |

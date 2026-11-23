@@ -2,7 +2,7 @@
 //! text, and the attachment names, parsed the same way the pane parses (`view::Content`).
 
 use mail_model::{FetchedSection, MessageStructure};
-use mail_store::{BodyText, BodyTextSource};
+use mail_store::{BodyText, BodyTextSource, ReceivedReceipt};
 
 use super::view::Content;
 
@@ -12,7 +12,14 @@ pub struct ContentText;
 
 impl BodyTextSource for ContentText {
     fn complete(&self, raw: &[u8]) -> BodyText {
-        text_of(&Content::complete(raw))
+        let mut text = text_of(&Content::complete(raw));
+        // Stage 16 (decision 0033): a read receipt is recorded for the message it reports on.
+        text.receipt = mail_content::parse_report(raw).map(|report| ReceivedReceipt {
+            original_message_id: report.original_message_id,
+            recipient: report.final_recipient,
+            disposition: report.disposition,
+        });
+        text
     }
 
     fn partial(&self, structure: &MessageStructure, sections: &[FetchedSection]) -> BodyText {
@@ -28,6 +35,7 @@ fn text_of(content: &Content) -> BodyText {
             .iter()
             .map(|a| a.info.name.clone())
             .collect(),
+        receipt: None,
     }
 }
 

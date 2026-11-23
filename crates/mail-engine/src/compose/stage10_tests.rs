@@ -973,6 +973,7 @@ Date: Mon, 23 Nov 2026 08:00:00 +0000\r\nContent-Type: text/plain\r\n\r\nOrigina
         .set_compose_settings(ComposeSettings {
             send_delay_seconds: 0,
             default_quote_position: QuotePosition::Below,
+            ..ComposeSettings::default()
         })
         .await
         .expect("store");
@@ -1006,6 +1007,7 @@ Date: Mon, 23 Nov 2026 08:00:00 +0000\r\nContent-Type: text/plain\r\n\r\nOrigina
         ComposeSettings {
             send_delay_seconds: 0,
             default_quote_position: QuotePosition::Below,
+            ..ComposeSettings::default()
         }
     );
 }

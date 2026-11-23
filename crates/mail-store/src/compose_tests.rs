@@ -100,6 +100,9 @@ fn job(draft: &DraftId, server_saves_sent: bool) -> SendJob {
         phase: SendPhase::Submit,
         checks: 0,
         scheduled: false,
+        archive_original: false,
+        archive_missing: false,
+        receipt_for: None,
     }
 }
 
@@ -997,6 +1000,30 @@ fn expected() -> Vec<(
             "locations of a message",
             compose::LOCATIONS_OF_MESSAGE.to_owned(),
             vec!["SEARCH message_location USING COVERING INDEX loc_message (message_id=?)"],
+            None,
+        ),
+        // Stage 16 (decision 0033).
+        (
+            "draft send options",
+            compose::SET_DRAFT_SEND_OPTIONS.to_owned(),
+            vec!["SEARCH draft USING INTEGER PRIMARY KEY (rowid=?)"],
+            None,
+        ),
+        (
+            "read receipt answer",
+            compose::RECEIPT_ANSWER.to_owned(),
+            vec![
+                "SEARCH a USING PRIMARY KEY (account_uuid=? AND message_id_hdr=?)",
+                "SEARCH o USING INTEGER PRIMARY KEY (rowid=?)",
+            ],
+            None,
+        ),
+        (
+            "read receipts received",
+            compose::RECEIPTS_RECEIVED.to_owned(),
+            vec![
+                "SEARCH receipt_received USING PRIMARY KEY (account_uuid=? AND original_msgid_hdr=?)",
+            ],
             None,
         ),
         (

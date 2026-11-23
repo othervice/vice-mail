@@ -7,7 +7,9 @@
 //!   the user picked in the system dialog or dropped on the window, kept in the signature (base64)
 //!   so they sync with it, and sent as `multipart/related` parts the HTML shows as `cid:`.
 //! - **Templates**: subject and HTML with placeholders, filled for a draft with its first To
-//!   recipient, its identity and today's date (`mail_content::fill_template`).
+//!   recipient, its identity and today's date (`mail_content::fill_template`). Stage 16: a
+//!   template may prefill To, Cc and Bcc ([`merge_recipients`]: the draft's recipients stay,
+//!   the template's are added unless the address is in the draft already).
 //! - The stage 5 text signature (`setIdentitySignature`) is a signature with the identity's
 //!   UUID that both defaults name.
 
@@ -16,10 +18,11 @@ use std::path::PathBuf;
 use mail_content::{InlineImage, LocalDate, Signature, Template, TemplateProblem, TemplateValues};
 use mail_model::{
     Address, CoreError, CoreEvent, DraftError, DraftId, FilledTemplateInfo, IdentityId,
-    IdentitySignatureDefaults, MAX_SIGNATURE_IMAGE_BYTES, MAX_SIGNATURE_IMAGES,
-    MAX_SIGNATURE_IMAGES_BYTES, MAX_SNIPPET_NAME_CHARS, QuoteLanguage, SanitizeReport,
-    SavedSignature, SavedTemplate, SignatureId, SignatureImageData, SignatureImageInfo,
-    SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId, TemplateInfo, TemplateInput,
+    IdentitySignatureDefaults, MAX_RECIPIENTS, MAX_SIGNATURE_IMAGE_BYTES, MAX_SIGNATURE_IMAGES,
+    MAX_SIGNATURE_IMAGES_BYTES, MAX_SNIPPET_NAME_CHARS, MAX_TEMPLATE_RECIPIENTS, QuoteLanguage,
+    SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
+    SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
+    TemplateInfo, TemplateInput,
 };
 use mail_store::{
     SignatureRow, Store, StoreError, StoredDraft, StoredSignature, StoredSignatureImage,
@@ -221,8 +224,87 @@ fn template_info(stored: &StoredTemplate) -> TemplateInfo {
         html: stored.html.clone(),
         placeholders: known.iter().map(|p| p.name().to_owned()).collect(),
         unknown_placeholders: unknown,
+        to: stored.to.clone(),
+        cc: stored.cc.clone(),
+        bcc: stored.bcc.clone(),
         updated_at: stored.updated_at,
     }
+}
+
+/// The key two spellings of one address share (case of the local part, IDNA).
+fn address_key(email: &str) -> String {
+    mail_content::normalize_address(email)
+        .map(|a| a.key)
+        .unwrap_or_else(|| email.trim().to_lowercase())
+}
+
+/// Stage 16: a template's recipients as saved: trimmed, empty ones dropped, every address
+/// valid (`invalid_address`), each address once (the first field wins), at most
+/// [`MAX_TEMPLATE_RECIPIENTS`] together (`invalid_argument`).
+pub(crate) fn template_recipients(
+    to: &[Address],
+    cc: &[Address],
+    bcc: &[Address],
+) -> Result<[Vec<Address>; 3], CoreError> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: [Vec<Address>; 3] = Default::default();
+    for (field, list) in [to, cc, bcc].into_iter().enumerate() {
+        for address in list {
+            let email = address.email.trim();
+            if email.is_empty() {
+                continue;
+            }
+            let email = mail_content::normalize_email(email)
+                .map_err(|_| CoreError::Draft(DraftError::InvalidAddress(email.to_owned())))?;
+            if !seen.insert(address_key(&email)) {
+                continue;
+            }
+            let name = address
+                .name
+                .as_deref()
+                .map(|n| n.chars().filter(|c| !c.is_control()).collect::<String>())
+                .map(|n| n.trim().to_owned())
+                .filter(|n| !n.is_empty());
+            out[field].push(Address { name, email });
+        }
+    }
+    let total: usize = out.iter().map(Vec::len).sum();
+    if total > MAX_TEMPLATE_RECIPIENTS {
+        return Err(CoreError::InvalidArgument(format!(
+            "a template prefills at most {MAX_TEMPLATE_RECIPIENTS} recipients"
+        )));
+    }
+    Ok(out)
+}
+
+/// Stage 16: the draft's recipients with the template's added. The draft's stay first and as
+/// they are; a template address already in any field of the draft (or added before) is left
+/// out; nothing beyond [`MAX_RECIPIENTS`] together. Returns the fields and how many were added.
+pub(crate) fn merge_recipients(
+    draft: [&[Address]; 3],
+    template: [&[Address]; 3],
+) -> ([Vec<Address>; 3], u32) {
+    let mut seen: std::collections::HashSet<String> = draft
+        .iter()
+        .flat_map(|list| list.iter())
+        .map(|a| address_key(&a.email))
+        .collect();
+    let mut out: [Vec<Address>; 3] = [draft[0].to_vec(), draft[1].to_vec(), draft[2].to_vec()];
+    let mut total: usize = out.iter().map(Vec::len).sum();
+    let mut added = 0u32;
+    for (field, list) in template.into_iter().enumerate() {
+        for address in list {
+            if total >= MAX_RECIPIENTS {
+                return (out, added);
+            }
+            if seen.insert(address_key(&address.email)) {
+                out[field].push(address.clone());
+                total += 1;
+                added += 1;
+            }
+        }
+    }
+    (out, added)
 }
 
 fn defaults_info(defaults: mail_store::SignatureDefaults) -> IdentitySignatureDefaults {
@@ -535,6 +617,7 @@ impl<C: Connector> AppCore<C> {
                 "a template has no images; add them in the composer".into(),
             ));
         }
+        let [to, cc, bcc] = template_recipients(&input.to, &input.cc, &input.bcc)?;
         let id = input
             .id
             .unwrap_or_else(|| TemplateId::from_random(uuid::Uuid::new_v4().as_u128()));
@@ -544,6 +627,9 @@ impl<C: Connector> AppCore<C> {
                 name,
                 subject: template.subject,
                 html: template.html,
+                to,
+                cc,
+                bcc,
             })
             .await?;
         self.emit_event(CoreEvent::TemplatesChanged);
@@ -561,8 +647,10 @@ impl<C: Connector> AppCore<C> {
         Ok(())
     }
 
-    /// The template filled for the draft: its first To recipient, its identity and today's date
-    /// in the system's time zone. The draft is not changed.
+    /// The template filled for the draft: its first To recipient (after the template's
+    /// recipients were added), its identity and today's date in the system's time zone, and
+    /// the draft's recipients with the template's ([`merge_recipients`]). The draft is not
+    /// changed: the composer takes the result.
     pub async fn fill_template(
         &self,
         template: TemplateId,
@@ -590,13 +678,17 @@ impl<C: Connector> AppCore<C> {
                 }),
             None => None,
         };
+        let ([to, cc, bcc], recipients_added) = merge_recipients(
+            [&draft.to, &draft.cc, &draft.bcc],
+            [&stored.to, &stored.cc, &stored.bcc],
+        );
         let filled = mail_content::fill_template(
             &Template {
                 subject: stored.subject.clone(),
                 html: stored.html.clone(),
             },
             &TemplateValues {
-                recipient: draft.to.first(),
+                recipient: to.first(),
                 sender: sender.as_ref(),
                 date: Some(local_date()),
                 language: content_language(language),
@@ -616,6 +708,10 @@ impl<C: Connector> AppCore<C> {
                     },
                 })
                 .collect(),
+            to,
+            cc,
+            bcc,
+            recipients_added,
         })
     }
 }
@@ -899,6 +995,9 @@ mod tests {
                 html: "<p>Hallo {{first_name}}, <script>x()</script>{{greeting}}</p>\
                        <p>{{my_email}}</p>"
                     .into(),
+                to: Vec::new(),
+                cc: Vec::new(),
+                bcc: Vec::new(),
             })
             .await
             .expect("template");
@@ -947,10 +1046,139 @@ mod tests {
                 name: " ".into(),
                 subject: String::new(),
                 html: String::new(),
+                to: Vec::new(),
+                cc: Vec::new(),
+                bcc: Vec::new(),
             })
             .await,
             Err(CoreError::InvalidArgument(_))
         ));
         core.shutdown().await;
+    }
+
+    fn addr(name: Option<&str>, email: &str) -> Address {
+        Address {
+            name: name.map(str::to_owned),
+            email: email.into(),
+        }
+    }
+
+    /// Stage 16: a template's recipients are checked and cleaned when saved, and filling adds
+    /// them to the draft's without duplicates (the draft's stay first; the draft itself is not
+    /// changed). The first To recipient fills the placeholders.
+    #[tokio::test]
+    async fn template_recipients_are_checked_and_prefill_the_draft() {
+        let dir = TempDir::new().expect("dir");
+        let (core, account) = core(&dir).await;
+        let input = |to: Vec<Address>, cc: Vec<Address>, bcc: Vec<Address>| TemplateInput {
+            id: None,
+            name: "Report".into(),
+            subject: "Report for {{first_name}}".into(),
+            html: "<p>Hi {{first_name}}</p>".into(),
+            to,
+            cc,
+            bcc,
+        };
+        assert!(matches!(
+            core.save_template(input(vec![addr(None, "not an address")], vec![], vec![]))
+                .await,
+            Err(CoreError::Draft(DraftError::InvalidAddress(_)))
+        ));
+        let many: Vec<Address> = (0..=MAX_TEMPLATE_RECIPIENTS)
+            .map(|i| addr(None, &format!("p{i}@example.org")))
+            .collect();
+        assert!(matches!(
+            core.save_template(input(many, vec![], vec![])).await,
+            Err(CoreError::InvalidArgument(_))
+        ));
+        let saved = core
+            .save_template(input(
+                vec![
+                    addr(Some(" Carol\u{7} Chef "), " Carol@Example.org "),
+                    addr(None, ""),
+                ],
+                vec![
+                    addr(None, "carol@example.org"),
+                    addr(None, "dave@example.org"),
+                ],
+                vec![addr(None, "bob@example.org")],
+            ))
+            .await
+            .expect("template")
+            .template;
+        assert_eq!(saved.to, [addr(Some("Carol Chef"), "Carol@example.org")]);
+        assert_eq!(
+            saved.cc,
+            [addr(None, "dave@example.org")],
+            "the first field wins"
+        );
+        assert_eq!(saved.bcc, [addr(None, "bob@example.org")]);
+        assert_eq!(core.list_templates().await.expect("list")[0].to, saved.to);
+
+        // A draft that has Bob in To already: Bob is not added to Bcc again.
+        let draft = core
+            .create_draft(NewDraft::New {
+                account_id: account,
+                identity_id: None,
+                to: vec![addr(Some("Bob Builder"), "BOB@example.org")],
+            })
+            .await
+            .expect("draft");
+        let filled = core
+            .fill_template(saved.id.clone(), draft.id.clone(), QuoteLanguage::En)
+            .await
+            .expect("filled");
+        assert_eq!(
+            filled.to,
+            [
+                addr(Some("Bob Builder"), "BOB@example.org"),
+                addr(Some("Carol Chef"), "Carol@example.org")
+            ]
+        );
+        assert_eq!(filled.cc, [addr(None, "dave@example.org")]);
+        assert!(filled.bcc.is_empty());
+        assert_eq!(filled.recipients_added, 2);
+        assert_eq!(
+            filled.subject, "Report for Bob",
+            "the draft's first To fills it"
+        );
+
+        // An empty draft: the template's first To fills the placeholders.
+        let empty = core
+            .create_draft(NewDraft::New {
+                account_id: account,
+                identity_id: None,
+                to: Vec::new(),
+            })
+            .await
+            .expect("draft");
+        let filled = core
+            .fill_template(saved.id.clone(), empty.id.clone(), QuoteLanguage::En)
+            .await
+            .expect("filled");
+        assert_eq!(filled.subject, "Report for Carol");
+        assert_eq!(filled.recipients_added, 3);
+        assert_eq!(filled.bcc, [addr(None, "bob@example.org")]);
+        core.shutdown().await;
+    }
+
+    #[test]
+    fn merging_recipients_keeps_the_draft_and_the_limit() {
+        let draft: Vec<Address> = (0..MAX_RECIPIENTS - 1)
+            .map(|i| addr(None, &format!("d{i}@example.org")))
+            .collect();
+        let template = [
+            vec![addr(None, "D0@example.org"), addr(None, "new1@example.org")],
+            vec![addr(None, "new2@example.org")],
+            Vec::new(),
+        ];
+        let ([to, cc, bcc], added) = merge_recipients(
+            [&draft, &[], &[]],
+            [&template[0], &template[1], &template[2]],
+        );
+        assert_eq!(added, 1, "only room for one more");
+        assert_eq!(to.len(), MAX_RECIPIENTS);
+        assert_eq!(to.last(), Some(&addr(None, "new1@example.org")));
+        assert!(cc.is_empty() && bcc.is_empty());
     }
 }

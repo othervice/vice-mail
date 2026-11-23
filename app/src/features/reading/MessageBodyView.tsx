@@ -28,7 +28,9 @@ export function HtmlBody({ srcdoc, title, scrollerRef }: HtmlBodyProps) {
     // Stage 8: the frame's own focus ring would be cut off by the rounded clip, so the card shows
     // it while the focus is in the mail (`:focus-within` reaches into the frame, `:focus-visible`
     // of the frame element is not the same in WebKit and WebView2).
-    <div className="overflow-hidden rounded-card border border-border bg-mail-canvas focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
+    // No frame of its own: in the light theme the mail's white canvas is the card's surface; in
+    // the dark theme it is a white sheet inside the card.
+    <div className="overflow-hidden rounded-card bg-mail-canvas focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
       <iframe
         ref={frameRef}
         sandbox={MAIL_FRAME_SANDBOX}
@@ -64,7 +66,7 @@ export function TextBody({ segments, renderToken, label }: TextBodyProps) {
       role="document"
       aria-label={label}
       data-testid="text-body"
-      className="max-w-(--ui-reading-max-width) text-14 break-words whitespace-pre-wrap text-primary select-text"
+      className="max-w-(--ui-reading-max-width) text-14 leading-(--ui-reading-line-height) break-words whitespace-pre-wrap text-primary select-text"
     >
       {segments.map((segment, i) =>
         segment.kind === "text" ? (

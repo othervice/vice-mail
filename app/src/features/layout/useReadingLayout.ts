@@ -57,7 +57,8 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
     setOpened(false);
   };
 
-  const column = "flex min-h-0 min-w-0 flex-col";
+  // Decision 0031: the list column on its own slightly tinted surface, a hairline to the pane.
+  const column = "flex min-h-0 min-w-0 flex-col bg-surface-list";
   return {
     position,
     container: cx("flex min-h-0 flex-1", position === "bottom" && "flex-col", replace && "relative"),
@@ -69,8 +70,8 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
       return {
         className:
           position === "bottom"
-            ? cx(column, "h-(--ui-list-height-reading) min-h-(--ui-list-min-height-reading) shrink-0 border-b border-border")
-            : cx(column, "w-(--ui-list-width-reading) max-w-(--ui-list-max-width-reading) shrink-0 border-e border-border"),
+            ? cx(column, "h-(--ui-list-height-reading) min-h-(--ui-list-min-height-reading) shrink-0 border-b border-border-subtle")
+            : cx(column, "w-(--ui-list-width-reading) max-w-(--ui-list-max-width-reading) shrink-0 border-e border-border-subtle"),
       };
     },
     paneShown: (open) => (replace ? opened && open : open),

@@ -28,7 +28,7 @@ async function onlyAccount() {
 
 function optionLabels() {
   return browser.execute(() =>
-    [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')].map((el) => el.getAttribute("aria-label") ?? ""),
+    [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')].map((el) => el.querySelector('[data-testid="row-name"]')?.textContent ?? ""),
   );
 }
 
@@ -36,7 +36,7 @@ async function focusFirstRow() {
   const first = await $('[data-testid="message-list"] [role="option"]');
   await first.click();
   await browser.waitUntil(async () => (await $('[data-testid="reading-pane"]')).isExisting(), { timeoutMsg: "no reading pane" });
-  return first.getAttribute("aria-label");
+  return browser.execute((el) => el.querySelector('[data-testid="row-name"]')?.textContent ?? "", first);
 }
 
 describe("stage 9: inbox comfort", () => {
@@ -76,7 +76,7 @@ describe("stage 9: inbox comfort", () => {
     report.steps.bundles = bundles.length;
     assert.ok(bundles.length > 0, "no bundle row in the sorted inbox (the seed has newsletters and notifications)");
     const bundle = bundles[0];
-    assert.equal(await bundle.getAttribute("aria-expanded"), "false");
+    assert.equal(await bundle.getAttribute("data-expanded"), "false");
     // The list is virtualized: the number of rendered rows stays about the same when a bundle
     // unfolds. What changes is the row right below the bundle (now its first member, a message
     // that had no row before) and the height of the list.
@@ -107,7 +107,7 @@ describe("stage 9: inbox comfort", () => {
         const brief = (state) => state && { ...state, ids: state.ids.length };
         throw new Error(`${e.message}: ${JSON.stringify({ before: brief(before), after: brief(after) })}`);
       });
-    assert.equal(await bundle.getAttribute("aria-expanded"), "true");
+    assert.equal(await bundle.getAttribute("data-expanded"), "true");
     report.steps.unfolded = { bundle: before.bundle, firstMember: after.next, heightBefore: before.height, heightAfter: after.height };
   });
 

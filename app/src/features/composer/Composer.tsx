@@ -255,7 +255,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
       )}
       data-testid="composer"
     >
-      <header className="flex h-(--ui-header-height) shrink-0 items-center gap-3 border-b border-border px-4">
+      <header className="flex h-(--ui-header-height) shrink-0 items-center gap-3 border-b border-border-subtle px-4">
         <h2 id={titleId} className="min-w-0 flex-1 truncate text-16 font-semibold text-primary">
           {title}
         </h2>
@@ -760,7 +760,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const recipients = (list: readonly Address[]) => [...list];
   const quoteBlock =
     hasQuote && fields.includeQuote ? (
-      <div className="mx-4 mb-3 rounded-card border border-border bg-canvas p-3" data-testid="composer-quote">
+      <div className="mx-4 mb-3 rounded-card border border-border-subtle bg-canvas p-3" data-testid="composer-quote">
         {draft.quoteText !== null ? (
           <pre className="max-h-(--ui-picker-list-height) overflow-y-auto font-sans text-13 whitespace-pre-wrap text-secondary">
             {draft.quoteText}
@@ -810,8 +810,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </div>
         )}
         {identityList.length > 1 && (
-          <div className="flex items-center gap-2 border-b border-border px-4 py-1">
-            <label htmlFor={identityId} className="w-12 shrink-0 text-13 text-secondary">
+          <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-1">
+            <label htmlFor={identityId} className="w-12 shrink-0 text-13 text-tertiary">
               {t("composer.from")}
             </label>
             <select
@@ -835,7 +835,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         )}
         {/* Stage 8: without the identities there is no From line; say why, at its place. */}
         {identities.isError && (
-          <div className="border-b border-border px-4 py-2">
+          <div className="border-b border-border-subtle px-4 py-2">
             <ErrorNotice
               context={t("presentation.composer.identitiesFailed")}
               error={identities.error}
@@ -847,8 +847,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </div>
         )}
         {identityList.length === 1 && identity && (
-          <p className="flex items-center gap-2 border-b border-border px-4 py-2 text-13" data-testid="composer-identity-single">
-            <span className="w-12 shrink-0 text-secondary">{t("composer.from")}</span>
+          <p className="flex items-center gap-2 border-b border-border-subtle px-4 py-2 text-13" data-testid="composer-identity-single">
+            <span className="w-12 shrink-0 text-tertiary">{t("composer.from")}</span>
             <span className="truncate text-primary">
               {identity.name ? t("composer.identity", { name: identity.name, email: identity.email }) : identity.email}
             </span>
@@ -922,8 +922,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             data-testid="composer-bcc"
           />
         )}
-        <div className={cx("flex items-center gap-2 border-b border-border px-4 py-1", FIELD_ROW_FOCUS)}>
-          <label htmlFor={subjectId} className="w-12 shrink-0 text-13 text-secondary">
+        <div className={cx("flex items-center gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)}>
+          <label htmlFor={subjectId} className="w-12 shrink-0 text-13 text-tertiary">
             {t("composer.subject")}
           </label>
           <input
@@ -944,24 +944,26 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           className="flex shrink-0 items-center gap-1 px-3 pt-2"
           data-testid="composer-format"
         >
-          {FORMATS.map((format) => (
-            <button
-              key={format}
-              type="button"
-              aria-pressed={fields.format === format}
-              disabled={frozen}
-              onClick={() => {
-                switchFormat(format);
-              }}
-              className={cx(
-                "rounded-control px-2 py-1 text-12 font-medium",
-                fields.format === format ? "bg-selected text-primary" : "text-secondary hover:bg-hover",
-              )}
-              data-testid={`composer-format-${format}`}
-            >
-              {t(`composer.format.${format}`)}
-            </button>
-          ))}
+          <span className="inline-flex gap-1 rounded-card bg-hover p-1">
+            {FORMATS.map((format) => (
+              <button
+                key={format}
+                type="button"
+                aria-pressed={fields.format === format}
+                disabled={frozen}
+                onClick={() => {
+                  switchFormat(format);
+                }}
+                className={cx(
+                  "h-6 rounded-control px-2 text-12 font-medium transition-colors",
+                  fields.format === format ? "bg-surface-raised text-primary shadow-row" : "text-secondary hover:text-primary",
+                )}
+                data-testid={`composer-format-${format}`}
+              >
+                {t(`composer.format.${format}`)}
+              </button>
+            ))}
+          </span>
           <span className="flex-1" />
           <Button
             variant="quiet"
@@ -1201,7 +1203,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           void removeAttachment(attachment);
         }}
       />
-      <div className="flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-2 border-t border-border-subtle px-4 py-3">
         {sendError && (
           <ErrorNotice
             context={t("composer.errors.send")}
@@ -1280,7 +1282,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             <Send aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
             {sending ? t("composer.sendingButton") : t("composer.sendButton")}
           </Button>
-          <kbd aria-hidden className="rounded-control border border-border px-1 font-sans text-12 text-secondary">
+          <kbd aria-hidden className="rounded-control border border-border-subtle bg-canvas px-1 font-sans text-12 text-tertiary">
             {sendShortcut}
           </kbd>
           <Button

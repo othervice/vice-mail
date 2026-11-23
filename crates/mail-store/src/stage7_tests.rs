@@ -36,6 +36,7 @@ impl BodyTextSource for TestText {
                 .filter_map(|l| l.strip_prefix("X-Attachment: "))
                 .map(str::to_owned)
                 .collect(),
+            receipt: None,
         }
     }
 
@@ -57,6 +58,7 @@ impl BodyTextSource for TestText {
                 .iter()
                 .filter_map(|p| p.file_name.clone())
                 .collect(),
+            receipt: None,
         }
     }
 }
@@ -457,7 +459,8 @@ async fn existing_messages_are_indexed_and_threaded_after_the_migration() {
         .sync_mailboxes(account, vec![remote("INBOX", &[])])
         .await
         .expect("mailboxes");
-    let inbox = store.mailboxes(account).await.expect("mailboxes")[0].id;
+    // The folder list of today's schema needs stage 16's tables; the sync state does not.
+    let inbox = store.mailbox_sync_states(account).await.expect("mailboxes")[0].mailbox_id;
     store
         .reset_mailbox(
             inbox,

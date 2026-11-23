@@ -52,6 +52,7 @@ fn header(uid: u32, date: i64, subject: &str, from: (&str, &str), to: &str) -> M
         precedence: None,
         has_attachments: false,
         category_headers: Vec::new(),
+        gmail: None,
     }
 }
 

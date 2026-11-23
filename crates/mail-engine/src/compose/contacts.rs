@@ -136,6 +136,7 @@ fn category_of(source: &ContactSource, own: &[String]) -> MessageCategory {
         precedence: source.precedence.clone(),
         has_attachments: false,
         category_headers: Vec::new(),
+        gmail: None,
     };
     let headers = ClassifyHeaders::from_message_header(&header);
     classify_automatic(

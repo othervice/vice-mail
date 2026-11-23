@@ -766,6 +766,7 @@ async fn prefetch_candidates_cover_inbox_sent_and_flagged_mail_without_body() {
                         ..Flags::default()
                     },
                     modseq: None,
+                    gmail_labels: None,
                 }],
             )
             .await
@@ -1024,7 +1025,8 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
         .sync_mailboxes(account, vec![remote("INBOX", &[])])
         .await
         .expect("mailboxes");
-    let inbox = store.mailboxes(account).await.expect("mailboxes")[0].id;
+    // The folder list of today's schema needs stage 16's tables; the sync state does not.
+    let inbox = store.mailbox_sync_states(account).await.expect("mailboxes")[0].mailbox_id;
     store
         .reset_mailbox(
             inbox,

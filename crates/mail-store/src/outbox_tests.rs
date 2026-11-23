@@ -246,6 +246,7 @@ async fn sync_writes_keep_pending_flags_until_the_server_confirms() {
             ..Flags::default()
         },
         modseq: Some(ModSeq(modseq)),
+        gmail_labels: None,
     };
     f.store
         .update_flags(f.inbox, UV, vec![server(false, 20)])
@@ -301,6 +302,7 @@ async fn sync_writes_keep_pending_flags_until_the_server_confirms() {
                     uid: 2,
                     flags: Flags::from_imap(["$L"]),
                     modseq: Some(ModSeq(40)),
+                    gmail_labels: None,
                 }),
                 moved_to: None,
                 notice: None,
@@ -332,6 +334,7 @@ async fn sync_writes_keep_pending_flags_until_the_server_confirms() {
                     uid: 1,
                     flags: Flags::from_imap(["\\Seen", "$Other"]),
                     modseq: Some(ModSeq(30)),
+                    gmail_labels: None,
                 }),
             },
         )])

@@ -305,7 +305,9 @@ pub(crate) const ROW_MARKS: &str = "
            (SELECT s.returned_at IS NOT NULL FROM snooze s
             WHERE s.account_uuid = ?2 AND s.message_id_hdr = m.message_id_hdr),
            (SELECT t.done_at IS NOT NULL FROM task t
-            WHERE t.account_uuid = ?2 AND t.message_id_hdr = m.message_id_hdr)
+            WHERE t.account_uuid = ?2 AND t.message_id_hdr = m.message_id_hdr),
+           EXISTS (SELECT 1 FROM reading_list r
+                   WHERE r.account_uuid = ?2 AND r.message_id_hdr = m.message_id_hdr)
     FROM message m WHERE m.id = ?1";
 
 /// Fills the stage-9 marks of list rows: category, important, pinned, snooze, task.
@@ -324,10 +326,11 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
                     r.get::<_, Option<i64>>(3)?,
                     r.get::<_, Option<bool>>(4)?,
                     r.get::<_, Option<bool>>(5)?,
+                    r.get::<_, bool>(6)?,
                 ))
             })
             .optional()?;
-        let Some((category, important, pinned, until, returned, done)) = marks else {
+        let Some((category, important, pinned, until, returned, done, reading)) = marks else {
             continue;
         };
         item.category = category.and_then(mail_model::MessageCategory::from_code);
@@ -338,6 +341,7 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
             returned: returned.unwrap_or(false),
         });
         item.task = done.map(|done| TaskMark { done });
+        item.reading_list = reading;
     }
     Ok(())
 }
@@ -354,6 +358,8 @@ pub enum MarkView {
     Pinned,
     /// Tasks (open, done or both), the newest first.
     Tasks(mail_model::TaskFilter),
+    /// Stage 16: the reading list, the most recently added first.
+    ReadingList,
 }
 
 pub(crate) fn view_sql(view: MarkView, accounts: usize) -> String {
@@ -367,6 +373,10 @@ pub(crate) fn view_sql(view: MarkView, accounts: usize) -> String {
         MarkView::Pinned => format!(
             "SELECT account_uuid, message_id_hdr FROM pin
              WHERE account_uuid IN ({accounts}) ORDER BY pinned_at DESC, id DESC LIMIT ?1"
+        ),
+        MarkView::ReadingList => format!(
+            "SELECT account_uuid, message_id_hdr FROM reading_list
+             WHERE account_uuid IN ({accounts}) ORDER BY added_at DESC, id DESC LIMIT ?1"
         ),
         MarkView::Tasks(filter) => {
             let state = match filter {

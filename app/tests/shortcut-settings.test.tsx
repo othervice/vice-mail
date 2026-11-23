@@ -4,6 +4,7 @@ import { useShortcutStore } from "../src/stores/shortcuts";
 import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
+import { optionName } from "./support/names";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -184,7 +185,7 @@ describe("changeable shortcuts", () => {
     await waitFor(() => {
       expect(within(list).getAllByRole("option")).toHaveLength(3);
     });
-    const row = within(list).getAllByRole("option").find((o) => (o.getAttribute("aria-label") ?? "").includes("Projekt"));
+    const row = within(list).getAllByRole("option").find((o) => optionName(o).includes("Projekt"));
     if (!row) throw new Error("no row");
     await user.click(row);
     await screen.findByRole("region", { name: "Message" });

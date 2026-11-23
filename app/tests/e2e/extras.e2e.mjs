@@ -45,7 +45,7 @@ async function openBySearch(query, subject) {
   await browser.waitUntil(
     async () => {
       id = await browser.execute(
-        (wanted) => [...document.querySelectorAll('[role="option"]')].find((el) => (el.getAttribute("aria-label") ?? "").includes(wanted))?.id ?? null,
+        (wanted) => [...document.querySelectorAll('[role="option"]')].find((el) => (el.querySelector('[data-testid="row-name"]')?.textContent ?? "").includes(wanted))?.id ?? null,
         subject,
       );
       return Boolean(id);

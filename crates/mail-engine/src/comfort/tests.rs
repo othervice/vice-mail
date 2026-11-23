@@ -604,6 +604,7 @@ async fn unclassified_store(path: &std::path::Path) -> (mail_store::Store, mail_
         precedence: None,
         has_attachments: false,
         category_headers: Vec::new(),
+        gmail: None,
     };
     store
         .store_headers(
@@ -1166,6 +1167,38 @@ async fn notifications_follow_the_settings() {
     })
     .await;
 
+    // Stage 16: notifications play the default sound unless the account is silent; a sound
+    // name outside the platform's list is refused.
+    assert!(
+        h.sink
+            .shown()
+            .iter()
+            .all(|n| n.sound.as_deref() == Some("Default"))
+    );
+    let mut silent = NotificationSettings::default();
+    silent.sound.windows = "Ping".into();
+    assert!(matches!(
+        h.core.set_notification_settings(silent.clone()).await,
+        Err(mail_model::CoreError::InvalidArgument(_))
+    ));
+    silent.sound.windows = "Mail".into();
+    silent.sound.silent_accounts = vec![h.account];
+    h.core
+        .set_notification_settings(silent)
+        .await
+        .expect("silent account");
+    let before = h.sink.shown().len();
+    h.deliver(b"From: Eve <eve@x.example>\r\nSubject: Quietly\r\n\r\nx\r\n")
+        .await;
+    eventually("silent notification", || async {
+        h.sink
+            .shown()
+            .iter()
+            .skip(before)
+            .any(|n| n.body == "Quietly" && n.sound.is_none())
+    })
+    .await;
+
     // Quiet hours around now (UTC in these tests): dropped.
     let minute = super::time::minute_of_day(h.clock.now_ms(), &jiff::tz::TimeZone::UTC);
     h.core
@@ -1223,6 +1256,8 @@ async fn failed_sends_are_announced_once() {
         error: None,
         attempts: 1,
         notice: None,
+        archive: None,
+        read_receipt: false,
         created_at: 0,
         updated_at: 0,
     };
@@ -1654,6 +1689,7 @@ async fn notifications_wait_for_the_shell_s_sink() {
         account_id: account,
         mailbox_id: None,
         message_id: Some(MessageId(n)),
+        sound: None,
     };
     core.notify(note(1));
     core.notify(note(2));
@@ -1665,3 +1701,7 @@ async fn notifications_wait_for_the_shell_s_sink() {
     assert_eq!(titles, ["t1", "t2", "t3"]);
     core.shutdown().await;
 }
+
+// Stage 16 (decision 0033): a child module, so it shares the harness.
+#[path = "parity_tests.rs"]
+mod parity;

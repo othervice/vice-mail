@@ -71,6 +71,8 @@ fn message(env: &TestEnv, subject: &str) -> OutgoingMessage {
             .map(|d| i64::try_from(d.as_secs()).unwrap_or(0))
             .unwrap_or(0),
         user_agent: None,
+        disposition_notification_to: None,
+        report: None,
     }
 }
 

@@ -158,6 +158,12 @@ impl FolderScope {
         })
     }
 
+    /// [`FolderScope::check`] for tests outside this module (stage 14: Gmail label STOREs).
+    #[cfg(test)]
+    pub(crate) fn check_line(&self, line: &str) -> Result<(), String> {
+        self.check(line)
+    }
+
     fn check(&self, line: &str) -> Result<(), String> {
         if read_only_check(line).is_ok() {
             return Ok(());

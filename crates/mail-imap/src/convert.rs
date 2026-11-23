@@ -11,7 +11,7 @@ use async_imap::imap_proto::{
     self, AttributeValue, BodyContentCommon, BodyParams, BodyStructure, Capability, Envelope,
     MessageSection, NameAttribute, Response, SectionPath,
 };
-use mail_model::{Address, FlagUpdate, Flags, MessageHeader, ModSeq, Uid, UidSet};
+use mail_model::{Address, FlagUpdate, Flags, GmailInfo, MessageHeader, ModSeq, Uid, UidSet};
 use mail_parser::{DateTime, HeaderForm, MessageParser};
 
 /// Header fields fetched with every message besides the ENVELOPE (stage 2 task list).
@@ -89,6 +89,24 @@ pub(crate) fn header_items() -> String {
     )
 }
 
+/// Stage 14 (decision 0034): the FETCH items Gmail (`X-GM-EXT-1`) adds to header and flag
+/// fetches. Both are plain data items, allowed on a read-only (EXAMINE) connection.
+pub(crate) const GMAIL_HEADER_ITEMS: &str = "X-GM-MSGID X-GM-LABELS";
+pub(crate) const GMAIL_FLAG_ITEMS: &str = "X-GM-LABELS";
+
+/// `X-GM-LABELS` decoded: modified UTF-7 like mailbox names (Gmail's documentation), system
+/// labels in Gmail's spelling, sorted and without duplicates. A name that is not valid
+/// modified UTF-7 is kept as sent rather than dropped.
+pub(crate) fn gmail_labels(labels: &[std::borrow::Cow<'_, str>]) -> Vec<String> {
+    mail_model::normalize_labels(labels.iter().map(|label| {
+        if label.starts_with('\\') {
+            label.to_string()
+        } else {
+            crate::mutf7::decode(label).unwrap_or_else(|_| label.to_string())
+        }
+    }))
+}
+
 /// Longest raw header block kept for the category rules; a larger one is cut at a line end.
 const MAX_CATEGORY_BLOCK: usize = 16 * 1024;
 
@@ -109,6 +127,9 @@ struct Partial {
     fields: Option<HeaderFields>,
     /// The raw `HEADER.FIELDS` block (stage 9).
     raw_fields: Option<Vec<u8>>,
+    /// Stage 14: `X-GM-MSGID` and `X-GM-LABELS` (Gmail only).
+    gmail_msgid: Option<u64>,
+    gmail_labels: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default)]
@@ -192,6 +213,10 @@ impl<'a> HeaderCollector<'a> {
                     partial.fields = Some(header_fields(block));
                     partial.raw_fields = Some(category_block(block));
                 }
+                AttributeValue::GmailMsgId(id) => partial.gmail_msgid = Some(*id),
+                AttributeValue::GmailLabels(labels) => {
+                    partial.gmail_labels = Some(gmail_labels(labels));
+                }
                 _ => {}
             }
         }
@@ -229,6 +254,10 @@ impl<'a> HeaderCollector<'a> {
                 precedence: fields.precedence,
                 has_attachments: p.has_attachments.unwrap_or(false),
                 category_headers: p.raw_fields.unwrap_or_default(),
+                gmail: p.gmail_msgid.map(|msgid| GmailInfo {
+                    msgid,
+                    labels: p.gmail_labels.unwrap_or_default(),
+                }),
             });
         }
         (out, flags_only)
@@ -260,17 +289,26 @@ impl<'a> FlagCollector<'a> {
         };
         let mut flags = None;
         let mut modseq = None;
+        let mut gmail_labels = None;
         for attr in attrs {
             match attr {
                 AttributeValue::Flags(f) => flags = Some(Flags::from_imap(f)),
                 AttributeValue::ModSeq(m) => modseq = Some(ModSeq(*m)),
+                AttributeValue::GmailLabels(labels) => {
+                    gmail_labels = Some(self::gmail_labels(labels));
+                }
                 _ => {}
             }
         }
         let Some(flags) = flags else {
             return false;
         };
-        let update = FlagUpdate { uid, flags, modseq };
+        let update = FlagUpdate {
+            uid,
+            flags,
+            modseq,
+            gmail_labels,
+        };
         match self.index.get(&uid).and_then(|i| self.updates.get_mut(*i)) {
             Some(existing) => *existing = update,
             None => {

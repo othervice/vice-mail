@@ -68,6 +68,7 @@ pub(crate) fn item_at(
         pinned: false,
         snooze: None,
         task: None,
+        reading_list: false,
     })
 }
 
@@ -441,6 +442,7 @@ pub(crate) fn entry(
             pinned: false,
             snooze: None,
             task: None,
+            reading_list: false,
         },
         mailbox_ids,
         body_complete: head.complete == Some(true),

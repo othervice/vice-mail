@@ -129,6 +129,13 @@ impl Found {
             .as_ref()
             .or(self.smtp.as_ref())
             .map_or(DiscoverySource::None, |(source, _)| *source);
+        // Stage 14 (decision 0034): a Google Workspace domain is Gmail too; its servers say so.
+        let hint = hint.or_else(|| {
+            self.imap
+                .as_ref()
+                .filter(|(_, s)| mail_model::is_gmail_host(&s.host))
+                .map(|_| ProviderHint::Gmail)
+        });
         DiscoveryResult {
             source,
             imap: self.imap.map(|(_, s)| s),

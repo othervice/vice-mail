@@ -1106,6 +1106,11 @@ impl<C: Connector> AppCore<C> {
         self.reading()
     }
 
+    /// Stage 16 (`crate::parity`): transfers between accounts record through the outbox.
+    pub(crate) fn outbox_ref(&self) -> Result<&Outbox<C>, CoreError> {
+        self.outbox()
+    }
+
     pub(crate) fn now_ms(&self) -> i64 {
         self.inner.clock.now_ms()
     }

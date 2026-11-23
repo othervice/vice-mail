@@ -353,14 +353,27 @@ pub(crate) fn content_of(
                 }))
             })
             .optional()?,
+        // Stage 16: the recipients it prefills, each field left out when empty (records of
+        // templates without recipients stay as they were).
         "template" => conn
-            .prepare_cached("SELECT name, subject, html FROM template WHERE uuid = ?1")?
+            .prepare_cached(
+                "SELECT name, subject, html, to_addrs, cc_addrs, bcc_addrs FROM template
+                 WHERE uuid = ?1",
+            )?
             .query_row([id], |r| {
-                Ok(json!({
+                let mut value = json!({
                     "name": r.get::<_, String>(0)?,
                     "subject": r.get::<_, String>(1)?,
                     "html": r.get::<_, String>(2)?,
-                }))
+                });
+                for (i, field) in [(3_usize, "to"), (4, "cc"), (5, "bcc")] {
+                    let list: Value =
+                        serde_json::from_str(&r.get::<_, String>(i)?).unwrap_or(Value::Null);
+                    if list.as_array().is_some_and(|a| !a.is_empty()) {
+                        value[field] = list;
+                    }
+                }
+                Ok(value)
             })
             .optional()?,
         "senderRule" => {
@@ -441,6 +454,10 @@ pub(crate) fn content_of(
         }
         // Stage 10: the name the user gave and the merge (decision 0023).
         "contact" => crate::contacts_dir::synced_content(conn, id)?,
+        // Stage 16 (decision 0033).
+        "readingList" | "mailboxPref" | "blockedSender" => {
+            crate::parity::synced_content(conn, kind, id)?
+        }
         "device" => conn
             .prepare_cached(
                 "SELECT name, system, last_seen_ms FROM sync_device WHERE device_id = ?1",
@@ -508,6 +525,20 @@ fn text<'a>(value: &'a Value, field: &str) -> Result<&'a str, ApplyError> {
         .get(field)
         .and_then(Value::as_str)
         .ok_or_else(|| refused(format!("field {field} missing")))
+}
+
+/// Stage 16: a template's recipient field as stored (`[{"name", "email"}]`); left out = none.
+/// The engine checked the record's shape and addresses before it got here.
+fn template_addresses(value: &Value, field: &str) -> Result<String, ApplyError> {
+    let list: Vec<mail_model::Address> = match value.get(field) {
+        None | Some(Value::Null) => Vec::new(),
+        Some(list) => serde_json::from_value(list.clone())
+            .map_err(|err| refused(format!("field {field}: {err}")))?,
+    };
+    if list.len() > mail_model::MAX_TEMPLATE_RECIPIENTS {
+        return Err(refused(format!("field {field}: too many recipients")));
+    }
+    serde_json::to_string(&list).map_err(|err| refused(format!("field {field}: {err}")))
 }
 
 fn opt_text<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
@@ -694,19 +725,24 @@ fn put_table(
         }
         "template" => {
             conn.prepare_cached(
-                "INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at)
+                "INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at,
+                                       to_addrs, cc_addrs, bcc_addrs)
                  VALUES (?1, ?2, ?3, ?4, (SELECT coalesce(max(position), -1) + 1 FROM template),
-                         ?5, ?5)
+                         ?5, ?5, ?6, ?7, ?8)
                  ON CONFLICT (uuid) DO UPDATE SET name = excluded.name,
                    subject = excluded.subject, html = excluded.html,
-                   updated_at = excluded.updated_at",
+                   to_addrs = excluded.to_addrs, cc_addrs = excluded.cc_addrs,
+                   bcc_addrs = excluded.bcc_addrs, updated_at = excluded.updated_at",
             )?
             .execute(params![
                 id,
                 text(value, "name")?,
                 text(value, "subject")?,
                 text(value, "html")?,
-                now
+                now,
+                template_addresses(value, "to")?,
+                template_addresses(value, "cc")?,
+                template_addresses(value, "bcc")?,
             ])?;
         }
         "senderRule" => {
@@ -835,6 +871,20 @@ fn put_table(
                 .execute(params![group, account])?;
             }
         }
+        "readingList" | "mailboxPref" | "blockedSender" => {
+            if let Some((account, _)) = split_scoped(id)
+                && item.kind != "blockedSender"
+                && account_row(conn, account)?.is_none()
+            {
+                return Err(missing(format!("account {account}")));
+            }
+            crate::parity::apply_synced(conn, &item.kind, id, Some(value), now).map_err(|err| {
+                match err {
+                    StoreError::InvalidArgument(what) => refused(what),
+                    other => ApplyError::Store(other),
+                }
+            })?;
+        }
         "contact" => {
             // The name the user gave and the merge; a contact this device never saw has nothing
             // to name: the record waits in `sync_record` until the address appears.
@@ -923,6 +973,12 @@ fn delete_table(
             .prepare_cached("DELETE FROM account_group WHERE uuid = ?1")?
             .execute([id])?,
         "contact" => crate::contacts_dir::apply_synced(conn, id, None, None)?,
+        "readingList" | "mailboxPref" | "blockedSender" => {
+            crate::parity::apply_synced(conn, &item.kind, id, None, 0).map_err(|err| match err {
+                StoreError::InvalidArgument(what) => refused(what),
+                other => ApplyError::Store(other),
+            })?
+        }
         "device" => conn
             .prepare_cached("DELETE FROM sync_device WHERE device_id = ?1")?
             .execute([id])?,
@@ -950,6 +1006,9 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
         "snooze",
         "pin",
         "task",
+        "reading_list",
+        "mailbox_pref",
+        "blocked_hidden",
         "remote_content_sender",
         "account_group_member",
         "account_hidden",
@@ -973,7 +1032,8 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
     conn.execute("UPDATE setting SET scope = ?2 WHERE scope = ?1", [from, to])?;
     conn.execute(
         "DELETE FROM sync_record WHERE (kind = 'account' AND id = ?1)
-           OR (kind IN ('snooze', 'pin', 'task', 'remoteContent', 'setting')
+           OR (kind IN ('snooze', 'pin', 'task', 'readingList', 'mailboxPref', 'remoteContent',
+                        'setting')
                AND substr(id, 1, length(?1) + 1) = ?1 || '/')",
         [from],
     )?;

@@ -245,12 +245,21 @@ async fn sync_mailbox<B: MailBackend>(
     if selected.uid_next > stored_next {
         let mut rest = within(&server, stored_next, selected.uid_next - 1);
         let mut unread = 0u32;
+        // Stage 14 (decision 0034): on Gmail one message lies in several folders (inbox,
+        // labels, All Mail); only the new rows count, so it is announced once.
+        let gmail = backend.capabilities().gmail;
         while !rest.is_empty() {
             let (window, more) = rest.split_highest(u64::from(config.window));
-            let headers = backend.fetch_headers(&selected, &window).await?;
+            let mut headers = backend.fetch_headers(&selected, &window).await?;
+            without_sync_records(&mut headers);
             fetched_new += headers.len();
-            unread = unread.saturating_add(count_unread(&headers));
-            store.store_headers(id, uv, headers, None).await?;
+            let in_window = count_unread(&headers);
+            let report = store.store_headers(id, uv, headers, None).await?;
+            unread = unread.saturating_add(if gmail {
+                saturate(report.new_unread as u64)
+            } else {
+                in_window
+            });
             reporter.messages_changed(id);
             if !first_sync {
                 // Stage 9: local rules and notifications for this window.
@@ -279,7 +288,8 @@ async fn sync_mailbox<B: MailBackend>(
         while !remaining.is_empty() {
             let (window, rest) = remaining.split_highest(u64::from(size.max(1)));
             size = config.window;
-            let headers = backend.fetch_headers(&selected, &window).await?;
+            let mut headers = backend.fetch_headers(&selected, &window).await?;
+            without_sync_records(&mut headers);
             let new_low = if rest.is_empty() {
                 1
             } else {
@@ -340,6 +350,20 @@ async fn sync_flags<B: MailBackend>(
         > 0)
 }
 
+/// Stage 14 (decision 0034): on Gmail the records of the settings sync folder are also in "All
+/// Mail" (a folder is a label there). They are no mail and stay out of the store; Gmail names
+/// the folder in their `X-GM-LABELS`.
+fn without_sync_records(headers: &mut Vec<MessageHeader>) {
+    headers.retain(|h| {
+        !h.gmail.as_ref().is_some_and(|gmail| {
+            gmail
+                .labels
+                .iter()
+                .any(|label| mail_model::is_settings_sync_folder(label, Some('/')))
+        })
+    });
+}
+
 fn count_unread(headers: &[MessageHeader]) -> u32 {
     saturate(
         headers
@@ -368,6 +392,46 @@ fn within(set: &UidSet, first: Uid, last: Uid) -> UidSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gmail_settings_sync_records_stay_out_of_all_mail() {
+        let header = |uid: Uid, labels: &[&str]| MessageHeader {
+            uid,
+            modseq: None,
+            flags: mail_model::Flags::default(),
+            size: 1,
+            internal_date: 0,
+            date: None,
+            subject: String::new(),
+            from: Vec::new(),
+            to: Vec::new(),
+            cc: Vec::new(),
+            message_id: None,
+            in_reply_to: None,
+            references: Vec::new(),
+            list_id: None,
+            list_unsubscribe: None,
+            auto_submitted: None,
+            precedence: None,
+            has_attachments: false,
+            category_headers: Vec::new(),
+            gmail: Some(mail_model::GmailInfo {
+                msgid: u64::from(uid),
+                labels: labels.iter().map(|l| (*l).to_owned()).collect(),
+            }),
+        };
+        let mut headers = vec![
+            header(1, &["\\Inbox"]),
+            header(2, &[mail_model::SETTINGS_SYNC_FOLDER]),
+            header(3, &[]),
+        ];
+        let mut plain = header(4, &[]);
+        plain.gmail = None;
+        headers.push(plain);
+        without_sync_records(&mut headers);
+        let uids: Vec<Uid> = headers.iter().map(|h| h.uid).collect();
+        assert_eq!(uids, [1, 3, 4]);
+    }
 
     #[test]
     fn within_cuts_both_ends() {

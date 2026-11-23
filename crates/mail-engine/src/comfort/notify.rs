@@ -11,11 +11,15 @@
 //!   preview itself is the system's choice (macOS: "Show previews"; Windows: notifications on
 //!   the lock screen); the app cannot tell the system which notification is private.
 //! - Quiet hours drop notifications (they are not delivered later).
+//! - **Sound** (stage 16): each notification carries the sound the settings choose for its
+//!   account on this platform (`NotificationSound::for_account`), or none (sounds off, a
+//!   silent account). No notification, no sound: quiet hours and muted accounts drop both.
 
 use std::sync::{Mutex, PoisonError};
 
 use mail_model::{
     AccountId, MailboxId, MessageCategory, MessageId, NotificationSettings, NotificationTexts,
+    SoundPlatform,
 };
 use mail_store::ArrivedMessage;
 
@@ -38,6 +42,16 @@ pub struct Notification {
     /// What a click opens ([`crate::AppCore::notification_clicked`]).
     pub mailbox_id: Option<MailboxId>,
     pub message_id: Option<MessageId>,
+    /// Stage 16: the sound to play, a name of this platform's list (`MACOS_SOUNDS`,
+    /// `WINDOWS_SOUNDS`; `Default` is the system's notification sound); `None` = silent.
+    pub sound: Option<String>,
+}
+
+/// The sound of a notification about `account` on this platform.
+fn sound(settings: &NotificationSettings, account: AccountId) -> Option<String> {
+    settings
+        .sound
+        .for_account(account, SoundPlatform::current())
 }
 
 /// Shows notifications. The shell's implementation posts native ones; it must not block.
@@ -151,6 +165,7 @@ pub(crate) fn new_mail(
         account_id: newest.account_id,
         mailbox_id: Some(newest.mailbox_id),
         message_id: Some(newest.id),
+        sound: sound(settings, newest.account_id),
     })
 }
 
@@ -181,6 +196,7 @@ pub(crate) fn send_failed(
         account_id: account,
         mailbox_id: None,
         message_id: None,
+        sound: sound(settings, account),
     })
 }
 
@@ -208,6 +224,7 @@ pub(crate) fn snooze_due(
         account_id: account,
         mailbox_id: mailbox,
         message_id: Some(message),
+        sound: sound(settings, account),
     })
 }
 
@@ -332,6 +349,74 @@ mod tests {
         settings.enabled = false;
         assert!(new_mail(&settings, &texts, NOON, &batch).is_none());
         assert!(send_failed(&settings, &texts, NOON, account(1), "x").is_none());
+    }
+
+    /// Stage 16: every notification carries its sound; off, a silent account or quiet hours
+    /// mean none (quiet hours: no notification at all).
+    #[test]
+    fn notifications_carry_the_sound_of_their_account() {
+        let mut settings = NotificationSettings::default();
+        settings.sound.macos = "Glass".into();
+        settings.sound.windows = "Mail".into();
+        let texts = NotificationTexts::default();
+        let expected = match SoundPlatform::current() {
+            SoundPlatform::Macos => "Glass",
+            SoundPlatform::Windows => "Mail",
+            SoundPlatform::Other => "Default",
+        };
+        let batch = [(arrived(1, Some(MessageCategory::Person), false), None)];
+        let mail = new_mail(&settings, &texts, NOON, &batch).expect("mail");
+        assert_eq!(mail.sound.as_deref(), Some(expected));
+        let failed = send_failed(&settings, &texts, NOON, account(1), "x").expect("failed");
+        assert_eq!(failed.sound.as_deref(), Some(expected));
+        let due =
+            snooze_due(&settings, &texts, NOON, account(1), None, MessageId(1), "x").expect("due");
+        assert_eq!(due.sound.as_deref(), Some(expected));
+
+        // A silent account still notifies, without sound; another account keeps its sound.
+        settings.sound.silent_accounts = vec![account(1)];
+        let mail = new_mail(&settings, &texts, NOON, &batch).expect("silent");
+        assert_eq!(mail.sound, None);
+        assert_eq!(
+            send_failed(&settings, &texts, NOON, account(2), "x")
+                .expect("other")
+                .sound
+                .as_deref(),
+            Some(expected)
+        );
+        settings.sound.silent_accounts.clear();
+
+        // An unknown name (from a newer version) plays the default sound.
+        settings.sound.macos = "Fanfare".into();
+        settings.sound.windows = "Fanfare".into();
+        assert_eq!(
+            new_mail(&settings, &texts, NOON, &batch)
+                .expect("mail")
+                .sound
+                .as_deref(),
+            Some("Default")
+        );
+
+        // Sounds off: silent notifications.
+        settings.sound.enabled = false;
+        assert_eq!(
+            new_mail(&settings, &texts, NOON, &batch)
+                .expect("mail")
+                .sound,
+            None
+        );
+
+        // Quiet hours and muted accounts: no notification, so no sound.
+        settings.sound.enabled = true;
+        settings.quiet_hours = QuietHours {
+            enabled: true,
+            start_minute: 22 * 60,
+            end_minute: 7 * 60,
+        };
+        assert!(new_mail(&settings, &texts, 23 * 60, &batch).is_none());
+        settings.quiet_hours.enabled = false;
+        settings.muted_accounts = vec![account(1)];
+        assert!(new_mail(&settings, &texts, NOON, &batch).is_none());
     }
 
     #[test]

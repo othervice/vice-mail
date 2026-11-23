@@ -1727,3 +1727,138 @@ async fn a_draft_of_another_program_opens_and_its_server_copy_is_replaced() {
     bed.core.shutdown().await;
     clean_server(env).await;
 }
+
+/// Stage 16 (decision 0033, acceptance): a read-receipt request never leads to an SMTP
+/// submission without the user's answer. bob asks alice for a receipt; alice's core receives
+/// and shows the message, opens it again, and the SMTP wire tap sees no new `MAIL FROM`. Only
+/// `sendReadReceipt` submits one: a disposition report the server accepts, which arrives at bob
+/// and shows at his sent message.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_read_receipt_goes_out_only_on_the_users_answer_smtp_capture() {
+    let _serial = SERVER.lock().await;
+    let tap = WireTap::new();
+    let bed = Bed::new(SmtpSender::new().with_wire_tap(tap.clone()), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Lesebestätigung {}", run_id());
+    let submissions = |tap: &WireTap| {
+        tap.lines()
+            .iter()
+            .filter(|l| l.to_ascii_uppercase().starts_with("MAIL FROM:"))
+            .count()
+    };
+
+    // bob asks for a read receipt.
+    let draft = bed.new_draft(bed.bob).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Alice", &env.alice.address)],
+            Vec::new(),
+            &subject,
+            "<p>Bitte bestätigen.</p>",
+        )
+        .await;
+    bed.core
+        .set_draft_send_options(
+            draft.id.clone(),
+            mail_model::DraftSendOptions {
+                archive_original: false,
+                request_read_receipt: true,
+            },
+        )
+        .await
+        .expect("ask for a receipt");
+    let mail = bed
+        .core
+        .send_draft(draft.id.clone(), "req-mdn-server-1".into())
+        .await
+        .expect("send");
+    bed.sent(bed.bob, mail.operation_id).await;
+    bed.settled(bed.bob).await;
+    assert_eq!(submissions(&tap), 1, "bob's message");
+
+    // alice gets it and opens it: the request shows, nothing is submitted.
+    let at_alice = bed.arrived(bed.alice, MailboxRole::Inbox, &subject).await;
+    opened(&bed.core, at_alice.id).await;
+    let info = bed
+        .core
+        .get_read_receipt(at_alice.id)
+        .await
+        .expect("receipt info");
+    let request = info.request.expect("alice sees the request");
+    assert_eq!(request.to, env.bob.address.to_ascii_lowercase());
+    assert_eq!(request.answer, mail_model::ReadReceiptAnswer::Ask);
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    opened(&bed.core, at_alice.id).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(
+        submissions(&tap),
+        1,
+        "no SMTP submission without the user's answer"
+    );
+
+    // alice answers "send".
+    let receipt = bed
+        .core
+        .send_read_receipt(at_alice.id, QuoteLanguage::De, "req-mdn-server-2".into())
+        .await
+        .expect("send the receipt");
+    assert!(receipt.read_receipt);
+    bed.sent(bed.alice, receipt.operation_id).await;
+    bed.settled(bed.alice).await;
+    assert_eq!(submissions(&tap), 2, "exactly one receipt");
+    let wire = String::from_utf8_lossy(&tap.bytes()).into_owned();
+    assert!(wire.contains("multipart/report"), "a disposition report");
+    assert!(wire.contains("message/disposition-notification"));
+
+    // It arrives at bob and shows at his sent message.
+    let receipt_subject = format!("Gelesen: {subject}");
+    let at_bob = bed
+        .arrived(bed.bob, MailboxRole::Inbox, &receipt_subject)
+        .await;
+    opened(&bed.core, at_bob.id).await;
+    let sent = bed.arrived(bed.bob, MailboxRole::Sent, &subject).await;
+    opened(&bed.core, sent.id).await;
+    let info = until("the receipt at bob's message", || async {
+        let info = bed.core.get_read_receipt(sent.id).await.ok()?;
+        (!info.received.is_empty()).then_some(info)
+    })
+    .await;
+    assert!(info.requested);
+    assert_eq!(
+        info.received[0].disposition,
+        mail_model::ReceiptDisposition::Displayed
+    );
+    assert_eq!(
+        info.received[0].recipient.as_deref(),
+        Some(env.alice.address.to_ascii_lowercase().as_str())
+    );
+    let answered = bed
+        .core
+        .get_read_receipt(at_alice.id)
+        .await
+        .expect("alice's answer");
+    assert_eq!(
+        answered.request.map(|r| r.answer),
+        Some(mail_model::ReadReceiptAnswer::Sent)
+    );
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}
+
+/// Opens the message in the reading pane until its body is stored.
+async fn opened(core: &AppCore, id: mail_model::MessageId) {
+    until("the body", || async {
+        let view = core
+            .get_message(id, mail_model::BodyFormat::Text)
+            .await
+            .ok()?;
+        (!matches!(
+            view.body,
+            mail_model::MessageBody::Loading | mail_model::MessageBody::Unavailable { .. }
+        ))
+        .then_some(())
+    })
+    .await;
+}

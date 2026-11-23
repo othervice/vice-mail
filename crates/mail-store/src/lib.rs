@@ -42,6 +42,7 @@ mod contacts;
 mod contacts_dir;
 mod error;
 mod fts;
+mod gmail;
 mod groups;
 mod inbox;
 mod lists;
@@ -53,6 +54,7 @@ mod messages;
 mod migrations;
 mod outbox;
 mod outbox_api;
+mod parity;
 mod reading;
 mod rules;
 mod saved_searches;
@@ -75,8 +77,10 @@ pub use categories::{
     SenderRuleChange, StoredCategory,
 };
 pub use comfort_api::{CategoryStep, InboxMailboxes};
+pub use compose::{MDN_SENT_KEYWORD, StoredReceiptAnswer};
 pub use compose_api::{
-    ContactSource, DraftContent, MAX_DRAFTS_PAGE, NewDraftRow, StoredContact, StoredDraft,
+    ContactSource, DraftContent, MAX_DRAFTS_PAGE, NewDraftRow, ReceivedReceipt, StoredContact,
+    StoredDraft,
 };
 pub use contacts::MAX_SEARCH_WORDS;
 pub use contacts_dir::{
@@ -95,6 +99,7 @@ pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooz
 pub use mcp::{NewMcpAccess, StoredMcpClient, StoredMcpState};
 pub use migrations::SCHEMA_VERSION;
 pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
+pub use parity::{TransferItem, TransferPlan};
 pub use reading::{
     MAX_PREFETCH_BATCH, MAX_PREVIEW_CHARS, MessageLocation, PrefetchCandidate, StoredMessage,
 };
@@ -124,6 +129,8 @@ mod compose_tests;
 #[cfg(test)]
 mod contacts_dir_tests;
 #[cfg(test)]
+mod gmail_tests;
+#[cfg(test)]
 mod mail_tests;
 #[cfg(test)]
 mod outbox_tests;
@@ -133,6 +140,8 @@ mod plan_tests;
 mod settings_sync_tests;
 #[cfg(test)]
 mod signature_tests;
+#[cfg(test)]
+mod stage16_tests;
 #[cfg(test)]
 mod stage7_plan_tests;
 #[cfg(test)]

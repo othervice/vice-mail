@@ -1,6 +1,9 @@
 //! The outbox view of a `send` operation ([`OutgoingMail`]).
 
-use mail_model::{ErrorCode, OperationPayload, OperationState, OutgoingMail, SendPhase, SendState};
+use mail_model::{
+    ArchiveAfterSend, ErrorCode, OperationPayload, OperationState, OutgoingMail, SendPhase,
+    SendState,
+};
 use mail_store::StoredOperation;
 
 /// The state the UI shows for a send operation at `now` (Unix ms).
@@ -42,7 +45,9 @@ pub(crate) fn outgoing_mail(op: &StoredOperation, now: i64) -> Option<OutgoingMa
     Some(OutgoingMail {
         operation_id: op.id,
         account_id: op.account,
-        draft_id: (state != SendState::Sent).then(|| job.draft.clone()),
+        // A read receipt (stage 16) has no draft.
+        draft_id: (state != SendState::Sent && job.receipt_for.is_none())
+            .then(|| job.draft.clone()),
         subject: job.subject.clone(),
         to: job.to.clone(),
         recipient_count: job.recipient_count,
@@ -52,6 +57,12 @@ pub(crate) fn outgoing_mail(op: &StoredOperation, now: i64) -> Option<OutgoingMa
         error: op.last_error.clone(),
         attempts: op.attempts,
         notice: op.notice,
+        archive: job.archive_original.then_some(match state {
+            SendState::Sent if job.archive_missing => ArchiveAfterSend::NoArchiveMailbox,
+            SendState::Sent => ArchiveAfterSend::Queued,
+            _ => ArchiveAfterSend::Waiting,
+        }),
+        read_receipt: job.receipt_for.is_some(),
         created_at: op.created_at,
         updated_at: op.updated_at,
     })

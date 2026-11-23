@@ -124,6 +124,9 @@ pub struct StoreReport {
     pub merged: usize,
     /// Locations that existed already; only flags and MODSEQ were refreshed.
     pub updated: usize,
+    /// Stage 14 (decision 0034): unread, not deleted messages among the new rows. A Gmail
+    /// message in the inbox and "All Mail" counts once.
+    pub new_unread: usize,
 }
 
 impl Store {

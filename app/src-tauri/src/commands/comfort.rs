@@ -305,6 +305,16 @@ pub fn set_notification_texts(core: State<'_, AppCore>, texts: NotificationTexts
     core.set_notification_texts(texts);
 }
 
+/// Stage 16: the notification sounds this platform offers (`Default` first), for
+/// `NotificationSettings.sound`.
+#[tauri::command]
+#[specta::specta]
+pub fn get_notification_sound_choices(
+    core: State<'_, AppCore>,
+) -> mail_model::NotificationSoundChoices {
+    core.notification_sound_choices()
+}
+
 // ---------------------------------------------------------------------------------------------
 // Reading pane extras, unsubscribing, invitations, export, printing
 
