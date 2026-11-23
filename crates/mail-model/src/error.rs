@@ -137,6 +137,8 @@ pub enum ErrorCode {
     UpdateInstallFailed,
     /// Stage 15 (decision 0037): no update is available or ready for this step.
     UpdateNotReady,
+    /// Stage 15: the diagnostics file could not be written where the user chose.
+    DiagnosticsWriteFailed,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -386,6 +388,10 @@ pub enum CoreError {
     /// An update step failed (stage 15, decision 0037).
     #[error(transparent)]
     Update(#[from] crate::UpdateError),
+
+    /// The diagnostics file could not be written (stage 15).
+    #[error(transparent)]
+    Diagnostics(#[from] crate::DiagnosticsError),
 }
 
 impl CoreError {
@@ -408,6 +414,7 @@ impl CoreError {
             Self::SavedSearch(err) => err.code(),
             Self::Preview(err) => err.code(),
             Self::Update(err) => err.code(),
+            Self::Diagnostics(err) => err.code(),
         }
     }
 
@@ -443,6 +450,7 @@ impl CoreError {
             Self::SavedSearch(err) => err.message(),
             Self::Preview(err) => err.message(),
             Self::Update(err) => err.message(),
+            Self::Diagnostics(err) => err.message(),
         }
     }
 
@@ -468,6 +476,7 @@ impl CoreError {
             Self::SavedSearch(err) => err.detail(),
             Self::Preview(err) => err.detail(),
             Self::Update(err) => err.detail(),
+            Self::Diagnostics(err) => err.detail(),
         }
     }
 }
@@ -592,6 +601,10 @@ mod tests {
             ),
             (ErrorCode::UpdateInstallFailed, "update_install_failed"),
             (ErrorCode::UpdateNotReady, "update_not_ready"),
+            (
+                ErrorCode::DiagnosticsWriteFailed,
+                "diagnostics_write_failed",
+            ),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

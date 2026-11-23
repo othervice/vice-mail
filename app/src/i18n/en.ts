@@ -3165,6 +3165,11 @@ export const en = {
         title: "There is no update ready for this step.",
         hint: "Check for updates first. If you just did, wait until the download has finished.",
       },
+      // Stage 15: "Export diagnostics…".
+      diagnostics_write_failed: {
+        title: "The diagnostics file could not be saved.",
+        hint: "Choose another folder, for example Downloads, and check that the disk has free space.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

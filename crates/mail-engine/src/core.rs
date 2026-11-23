@@ -129,6 +129,8 @@ impl<C: Connector> Clone for AppCore<C> {
 
 struct Inner<C: Connector> {
     info: AppInfo,
+    /// The app's data directory (database, bodies, backups); stage 15 reports its size.
+    data_dir: PathBuf,
     /// The store, or the error that kept it from opening (for example a database written by a
     /// newer app version). Storage-backed calls return that error, so the UI can explain it.
     store: Result<Store, CoreError>,
@@ -323,6 +325,7 @@ impl<C: Connector> AppCore<C> {
                     build_date: config.build.build_date,
                     platform: Platform::current(),
                 },
+                data_dir: config.data_dir.clone(),
                 store: opened,
                 events,
                 connector,
@@ -1141,6 +1144,11 @@ impl<C: Connector> AppCore<C> {
     /// Stage 16 (`crate::parity`): transfers between accounts record through the outbox.
     pub(crate) fn outbox_ref(&self) -> Result<&Outbox<C>, CoreError> {
         self.outbox()
+    }
+
+    /// Stage 15: the data directory the core was started with.
+    pub(crate) fn data_dir(&self) -> &std::path::Path {
+        &self.inner.data_dir
     }
 
     pub(crate) fn now_ms(&self) -> i64 {

@@ -27,6 +27,8 @@
 //!   (decision 0022).
 //! - Stage 12 (`mcp`): AI access over MCP: the switch, shared accounts, registered clients
 //!   (keys in the keychain) and the access log with its retention (decision 0021).
+//! - Stage 15 (`diagnostics`): row counts and page statistics for the diagnostics export,
+//!   numbers and schema names only.
 
 mod accounts;
 mod ai;
@@ -42,6 +44,7 @@ mod compose_api;
 mod contacts;
 mod contacts_dir;
 mod conversations;
+mod diagnostics;
 mod error;
 mod fts;
 mod gmail;
@@ -90,6 +93,7 @@ pub use contacts_dir::{
     ContactCursor, MAX_CONTACT_ROWS, MergeOutcome, SeparateOutcome, StoredContactGroup,
     StoredContactPage,
 };
+pub use diagnostics::{AccountStats, DatabaseStats};
 pub use error::StoreError;
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;

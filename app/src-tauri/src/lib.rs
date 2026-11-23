@@ -34,6 +34,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
     Builder::<R>::new()
         .commands(collect_commands![
             commands::app::get_app_info,
+            // Stage 15: "Export diagnostics…" (system save dialog, then the core writes).
+            commands::app::export_diagnostics::<tauri::Wry>,
             commands::preferences::get_preferences,
             commands::preferences::set_preferences,
             commands::preferences::get_reading_preferences,

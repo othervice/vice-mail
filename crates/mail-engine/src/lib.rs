@@ -7,6 +7,7 @@ pub mod comfort;
 pub mod compose;
 mod core;
 pub mod credentials;
+mod diagnostics;
 pub mod discovery;
 mod gmail;
 pub mod logging;
@@ -23,6 +24,7 @@ pub mod updates;
 
 pub use crate::clock::{Clock, SystemClock};
 pub use crate::core::{AppCore, BuildInfo, Connector, CoreConfig, CoreServices, DATABASE_FILE};
+pub use crate::diagnostics::DiagnosticsEnv;
 pub use crate::outbox::{ComposeConfig, OutboxConfig, SenderHandle};
 pub use crate::reading::{
     DesktopOpener, ReadingServices, RecordingOpener, RemoteConfig, SystemOpener,

@@ -3162,6 +3162,11 @@ export const de: Translation = {
         title: "Für diesen Schritt liegt kein Update bereit.",
         hint: "Suche zuerst nach Updates. Wenn du das gerade getan hast, warte, bis der Download fertig ist.",
       },
+      // Stufe 15: „Diagnose exportieren …“.
+      diagnostics_write_failed: {
+        title: "Die Diagnosedatei konnte nicht gespeichert werden.",
+        hint: "Wähle einen anderen Ordner, zum Beispiel Downloads, und prüfe, ob auf dem Datenträger Platz frei ist.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

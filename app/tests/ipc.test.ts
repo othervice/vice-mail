@@ -214,6 +214,8 @@ describe("error codes", () => {
     "update_signature_invalid",
     "update_install_failed",
     "update_not_ready",
+    // Stage 15: "Export diagnostics…".
+    "diagnostics_write_failed",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

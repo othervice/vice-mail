@@ -11,6 +11,14 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 export const commands = {
 	/**  Version, commit, build date and platform of the running app. */
 	getAppInfo: (options?: InvokeOptions) => typedError<AppInfo, IpcError>(__TAURI_INVOKE("get_app_info", undefined, options)),
+	/**
+	 *  Stage 15, "Export diagnostics…": the system's save dialog (Downloads, a dated name), then the
+	 *  core collects, redacts and writes the file. The shell only adds what the core cannot know:
+	 *  the product name, the app identifier, the log directory and the web view's version.
+	 *  `locale` is the web view's language. `cancelled` when the dialog is closed;
+	 *  `diagnostics_write_failed` when the file cannot be written.
+	 */
+	exportDiagnostics: (locale: string, options?: InvokeOptions) => typedError<DiagnosticsExportResult, IpcError>(__TAURI_INVOKE("export_diagnostics", { locale }, options)),
 	/**  Stored theme and language preferences, defaults when nothing is stored. */
 	getPreferences: (options?: InvokeOptions) => typedError<Preferences, IpcError>(__TAURI_INVOKE("get_preferences", undefined, options)),
 	/**  Stores the preferences and emits `preferencesChanged` to all windows. */
@@ -1932,6 +1940,13 @@ export type DefaultMailAppOutcome =
 /**  Row height of the list: comfortable (default) or compact. */
 export type Density = "comfortable" | "compact";
 
+/**  Result of `exportDiagnostics`. */
+export type DiagnosticsExportResult = 
+/**  Written to the path the user chose in the system dialog. */
+{ kind: "saved"; path: string } | 
+/**  The user closed the dialog; nothing was written. */
+{ kind: "cancelled" };
+
 /**  Result of server discovery for an email address. Either server may be unknown. */
 export type DiscoveryResult = {
 	source: DiscoverySource,
@@ -2315,7 +2330,9 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 15 (decision 0037): installing failed; the installed version is unchanged. */
 "update_install_failed" | 
 /**  Stage 15 (decision 0037): no update is available or ready for this step. */
-"update_not_ready";
+"update_not_ready" | 
+/**  Stage 15: the diagnostics file could not be written where the user chose. */
+"diagnostics_write_failed";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";

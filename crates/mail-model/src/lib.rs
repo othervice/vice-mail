@@ -19,6 +19,7 @@ mod capabilities;
 mod category;
 mod compose;
 mod contacts;
+mod diagnostics;
 mod eml;
 mod error;
 mod gmail;
@@ -104,6 +105,7 @@ pub use contacts::{
     ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactPage,
     ContactRequestError, DuplicateReason, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN,
 };
+pub use diagnostics::{DiagnosticsError, DiagnosticsExportResult};
 pub use eml::{
     EmlError, EmlFile, EmlFileId, EmlMessageView, MAX_EML_FILE_BYTES, MAX_OPEN_EML_FILES,
     OpenEmlFileResult,

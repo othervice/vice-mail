@@ -212,6 +212,8 @@ export const ERROR_CODES = [
   "update_signature_invalid",
   "update_install_failed",
   "update_not_ready",
+  // Stage 15: "Export diagnostics…".
+  "diagnostics_write_failed",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1642,6 +1644,21 @@ export const updateIpc = {
   download: (): Promise<UpdateInfo> => call(() => updateCommands.downloadUpdate()),
   /** "Restart to install": the app closes, updates itself and starts again. */
   install: (): Promise<UpdateInfo> => call(() => updateCommands.installUpdate()),
+};
+
+// ---- Stage 15: "Export diagnostics…" ----
+import { commands as diagnosticsCommands, type DiagnosticsExportResult } from "../generated/bindings";
+
+export type { DiagnosticsExportResult };
+
+/**
+ * "Export diagnostics…": the core shows the system's save dialog and writes a plain-text file
+ * with versions, counts, states and the redacted end of the logs, never secrets or mail content.
+ */
+export const diagnosticsIpc = {
+  /** `locale` is the web view's language (`navigator.language`), reported as the system's. */
+  export: (locale: string): Promise<DiagnosticsExportResult> =>
+    call(() => diagnosticsCommands.exportDiagnostics(locale)),
 };
 
 // ---- Decision 0039: the sorted inbox as conversations ----
