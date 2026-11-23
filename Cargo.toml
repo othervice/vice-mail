@@ -164,6 +164,10 @@ codegen-units = 1
 lto = true
 strip = true
 
-# Keep `target/` small: no debug info for dependencies, full debug info for our own crates.
+# Keep `target/` small (the Mac mini's disk is shared with other sessions): line tables only for
+# our own crates (backtraces keep file and line numbers), no debug info for dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 debug = false
