@@ -44,11 +44,16 @@ fn crc32(bytes: &[u8]) -> u32 {
 
 /// A PNG header that claims 20000×20000 pixels (no image data needed to refuse it).
 fn huge_png_header() -> Vec<u8> {
+    png_header(20_000, 20_000, 8, 6)
+}
+
+/// A PNG header of `width`×`height` with `depth` bits and colour type `colour` (6: RGBA, 2: RGB).
+fn png_header(width: u32, height: u32, depth: u8, colour: u8) -> Vec<u8> {
     let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
     let mut chunk = b"IHDR".to_vec();
-    chunk.extend_from_slice(&20_000u32.to_be_bytes());
-    chunk.extend_from_slice(&20_000u32.to_be_bytes());
-    chunk.extend_from_slice(&[8, 6, 0, 0, 0]);
+    chunk.extend_from_slice(&width.to_be_bytes());
+    chunk.extend_from_slice(&height.to_be_bytes());
+    chunk.extend_from_slice(&[depth, colour, 0, 0, 0]);
     out.extend_from_slice(&13u32.to_be_bytes());
     out.extend_from_slice(&chunk);
     out.extend_from_slice(&crc32(&chunk).to_be_bytes());
@@ -196,6 +201,23 @@ fn large_images_are_scaled_and_huge_ones_refused() {
 
     let huge = render_preview(PreviewKind::Image, &huge_png_header(), 0);
     assert!(matches!(huge, Err(PreviewError::TooLarge(_))), "{huge:?}");
+    // C-9: within the pixel limit, but too much memory once decoded: refused from the header.
+    // 8000×8000 RGBA (256 MB) and 6000×6000 at 16 bits per channel (288 MB).
+    for (width, height, depth, colour) in [(8000, 8000, 8, 6), (6000, 6000, 16, 6)] {
+        let header = png_header(width, height, depth, colour);
+        let refused = render_preview(PreviewKind::Image, &header, 0);
+        assert!(
+            matches!(&refused, Err(PreviewError::TooLarge(reason)) if reason.contains("decoded")),
+            "{width}×{height}: {refused:?}"
+        );
+    }
+    // 8-bit RGB of the same 7000×7000 (147 MB) passes the check and fails later on the
+    // missing image data: the budget is not the reason.
+    let rgb = render_preview(PreviewKind::Image, &png_header(7000, 7000, 8, 2), 0);
+    assert!(
+        !matches!(&rgb, Err(PreviewError::TooLarge(reason)) if reason.contains("decoded")),
+        "{rgb:?}"
+    );
     let too_many_bytes = vec![0u8; usize::try_from(MAX_PREVIEW_INPUT_BYTES).expect("usize") + 1];
     assert!(matches!(
         render_preview(PreviewKind::Text, &too_many_bytes, 0),

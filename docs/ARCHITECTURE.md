@@ -491,7 +491,7 @@ einer klaren Meldung abgelehnt.
 
 **Anhangsvorschau (Stufe 16, 0036)**
 - Der Kern dekodiert, die WebView zeigt nur, was der Kern selbst erzeugt hat: Bilder (PNG, JPEG,
-  GIF, WebP, an den Bytes erkannt) in Rust dekodiert (höchstens 64 Megapixel), verkleinert auf
+  GIF, WebP, an den Bytes erkannt) in Rust dekodiert (höchstens 64 Megapixel und, schon am Kopf geprüft, höchstens 192 MiB dekodiert, Sicherheitsprüfung C-9), verkleinert auf
   2048 px und neu kodiert (PNG mit Transparenz, sonst JPEG), PDF-Seiten mit hayro einzeln zu PNG
   gerastert (höchstens 200 Seiten), Text dekodiert und auf 512 KiB gekürzt, als Text angezeigt.
   Höchstens 32 MiB Eingabe. HTML, XHTML, XML und SVG nie, auch wenn nur Typ oder Name es sagt.

@@ -30,6 +30,13 @@ use crate::image::{ImageType, base64_encode_into, sniff_image};
 /// JPEG quality of re-encoded photos.
 const JPEG_QUALITY: u8 = 85;
 
+/// Most memory the decoded picture may take, counted twice (the decoded image and the copy that
+/// turning it upright or converting it for the encoder makes): finding C-9 of the stage 15
+/// review. Checked from the header before anything is decoded, so a 64-megapixel RGBA or a
+/// 16-bit image is refused instead of using over a gigabyte; it also stays below the 512 MiB
+/// the preview process may use (C-2). An 8-bit RGB photo of 64 megapixels still fits.
+pub const MAX_PREVIEW_DECODE_BYTES: u64 = 384 * 1024 * 1024;
+
 /// PDF pages are rendered at twice their size in points at most (sharp on Retina screens).
 const MAX_PDF_SCALE: f32 = 2.0;
 
@@ -164,6 +171,16 @@ fn image_preview(bytes: &[u8]) -> Result<AttachmentPreview, PreviewError> {
     if u64::from(width) * u64::from(height) > MAX_PREVIEW_PIXELS {
         return Err(PreviewError::TooLarge(format!(
             "{width}×{height} pixels, at most {MAX_PREVIEW_PIXELS}"
+        )));
+    }
+    // C-9: the decoded size from the header (pixels × bytes per pixel of its colour type).
+    let decoded = decoder.total_bytes();
+    if decoded.saturating_mul(2) > MAX_PREVIEW_DECODE_BYTES {
+        return Err(PreviewError::TooLarge(format!(
+            "{width}×{height} pixels of {:?} need {} MiB decoded, at most {} MiB",
+            decoder.color_type(),
+            decoded / (1024 * 1024),
+            MAX_PREVIEW_DECODE_BYTES / 2 / (1024 * 1024)
         )));
     }
     let orientation = decoder.orientation().map_err(image_error)?;
