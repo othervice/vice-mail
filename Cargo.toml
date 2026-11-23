@@ -114,6 +114,13 @@ age = "0.11.5"
 hmac = "0.13.0"
 sha2 = "0.11.1"
 
+# MCP server (stage 12, decision 0015). The helper `mail-mcp` and the host in the app speak MCP
+# (JSON-RPC lines) themselves; the client handshake is HMAC-SHA-256 (hmac/sha2 above) over random
+# nonces from getrandom 0.4 (already in the tree through uuid). rmcp, the official Rust SDK, only
+# as the MCP client of the contract tests (both protocol eras), never in the shipped binary.
+getrandom = "0.4.3"
+rmcp = { version = "3.11.0", default-features = false, features = ["client", "transport-async-rw"] }
+
 # Tests
 tempfile = "3.27.0"
 # Test certificates generated at test time (no key material in the repository).
