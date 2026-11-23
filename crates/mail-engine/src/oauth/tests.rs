@@ -434,3 +434,60 @@ async fn revoking_sends_the_refresh_token_where_the_provider_offers_it() {
     super::revoke(&credentials, &ms_key).await;
     assert_eq!(mock.state().revoked.len(), 1);
 }
+
+#[test]
+fn provider_profiles_use_the_documented_endpoints_scopes_and_servers() {
+    let ms = ProviderProfile::microsoft(" client-ms ");
+    assert_eq!(ms.client_id, "client-ms");
+    assert_eq!(
+        ms.authorize_url.as_str(),
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    );
+    assert_eq!(
+        ms.token_url.as_str(),
+        "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    );
+    assert!(ms.revoke_url.is_none(), "no revocation for public clients");
+    assert!(ms.client_secret.is_none());
+    assert_eq!(ms.redirect_host, RedirectHost::Localhost);
+    assert_eq!(
+        ms.scopes,
+        [
+            "https://outlook.office.com/IMAP.AccessAsUser.All",
+            "https://outlook.office.com/SMTP.Send",
+            "offline_access",
+        ]
+    );
+    assert!(ms.allows_host("Outlook.Office365.com.", true));
+    assert!(ms.allows_host("smtp-mail.outlook.com", false));
+    assert!(ms.allows_host("smtp.office365.com", false));
+    assert!(
+        !ms.allows_host("smtp.office365.com", true),
+        "IMAP list only"
+    );
+    assert!(!ms.allows_host("outlook.office365.com.evil.example", true));
+
+    let google = ProviderProfile::google("id.apps.googleusercontent.com", Some(" GOCSPX-x "));
+    assert_eq!(
+        google.authorize_url.as_str(),
+        "https://accounts.google.com/o/oauth2/v2/auth"
+    );
+    assert_eq!(
+        google.token_url.as_str(),
+        "https://oauth2.googleapis.com/token"
+    );
+    assert_eq!(
+        google.revoke_url.as_ref().map(url::Url::as_str),
+        Some("https://oauth2.googleapis.com/revoke")
+    );
+    assert_eq!(google.client_secret.as_deref(), Some("GOCSPX-x"));
+    assert_eq!(google.scopes, ["https://mail.google.com/"]);
+    assert_eq!(google.redirect_host, RedirectHost::Loopback);
+    assert!(google.allows_host("imap.gmail.com", true));
+    assert!(google.allows_host("smtp.gmail.com", false));
+    assert!(!google.allows_host("imap.googlemail.com.example", true));
+    // Product profiles never talk plain HTTP, not even to loopback.
+    assert!(!ms.allow_http_loopback && !google.allow_http_loopback);
+    let loopback = url::Url::parse("http://127.0.0.1:1/token").expect("url");
+    assert!(!ms.allows_endpoint(&loopback));
+}

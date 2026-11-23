@@ -119,7 +119,7 @@ impl std::fmt::Debug for ProviderProfile {
 }
 
 fn url(text: &str) -> Url {
-    // The constants above are valid URLs; a test proves it.
+    // The constants above are valid URLs (`tests::provider_profiles_use_the_documented_…`).
     Url::parse(text).unwrap_or_else(|_| Url::parse("https://invalid.invalid/").expect("valid"))
 }
 
