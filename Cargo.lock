@@ -2944,7 +2944,6 @@ version = "0.1.0"
 dependencies = [
  "mail-engine",
  "mail-model",
- "mail-store",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
