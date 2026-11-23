@@ -888,3 +888,134 @@ async fn the_size_limit_is_read_from_ehlo_and_nothing_is_sent() {
         );
     }
 }
+
+// Stage 14 (decision 0042): accounts that sign in with Microsoft or Google.
+
+fn bearer_config(server: &Server) -> ConnectConfig {
+    let mut config = server.config(Security::Tls);
+    config.password = Secret::new("tok-ya29".to_owned());
+    config.auth = mail_model::LoginAuth::Bearer;
+    config
+}
+
+#[tokio::test]
+async fn bearer_tokens_log_in_with_xoauth2_and_never_with_plain() {
+    // XOAUTH2 offered (Microsoft, Google): the token goes as the initial response.
+    let server = Server::start(
+        true,
+        vec![
+            Send("220 test.example ESMTP\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH PLAIN LOGIN XOAUTH2\r\n"),
+            Expect("AUTH XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlLm9yZwFhdXRoPUJlYXJlciB0b2steWEyOQEB"),
+            Send("235 2.7.0 Accepted\r\n"),
+            Expect("QUIT"),
+            Send("221 bye\r\n"),
+        ],
+    )
+    .await;
+    SmtpSender::new()
+        .verify(&bearer_config(&server))
+        .await
+        .expect("login with the token");
+    let seen = server.seen().await;
+    assert!(
+        seen.lines.iter().all(|l| !l.starts_with("AUTH PLAIN")),
+        "{:?}",
+        seen.lines
+    );
+
+    // A rejected token: the server's error challenge is answered with an empty line, then its
+    // final reply is AuthFailed (so the engine refreshes the token once).
+    let server = Server::start(
+        true,
+        vec![
+            Send("220 test.example ESMTP\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH XOAUTH2\r\n"),
+            Expect("AUTH XOAUTH2 "),
+            Send("334 eyJzdGF0dXMiOiI0MDEiLCJzY2hlbWVzIjoiYmVhcmVyIn0=\r\n"),
+            Expect(""),
+            Send("535 5.7.3 Authentication unsuccessful\r\n"),
+            Close,
+        ],
+    )
+    .await;
+    let err = SmtpSender::new()
+        .verify(&bearer_config(&server))
+        .await
+        .expect_err("token rejected");
+    assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+    assert!(!format!("{err:?} {err}").contains("tok-ya29"));
+    let seen = server.seen().await;
+    assert_eq!(
+        seen.lines.get(2).map(String::as_str),
+        Some(""),
+        "{:?}",
+        seen.lines
+    );
+
+    // Only PLAIN: a token is never sent as a password.
+    let server = Server::start(
+        true,
+        vec![
+            Send("220 test.example ESMTP\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH PLAIN LOGIN\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH PLAIN LOGIN\r\n"),
+            Close,
+        ],
+    )
+    .await;
+    let err = SmtpSender::new()
+        .verify(&bearer_config(&server))
+        .await
+        .expect_err("no bearer mechanism");
+    assert!(matches!(err, BackendError::Unsupported(_)), "{err:?}");
+    let seen = server.seen().await;
+    assert!(
+        seen.lines.iter().all(|l| !l.starts_with("AUTH")),
+        "{:?}",
+        seen.lines
+    );
+}
+
+#[tokio::test]
+async fn bearer_tokens_use_oauthbearer_where_only_that_is_offered() {
+    // OAUTHBEARER is not in lettre's list: a second EHLO finds it.
+    let server = Server::start(
+        true,
+        vec![
+            Send("220 test.example ESMTP\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH OAUTHBEARER\r\n"),
+            Expect("EHLO"),
+            Send("250-test.example\r\n250 AUTH OAUTHBEARER\r\n"),
+            Expect("AUTH OAUTHBEARER "),
+            Send("334 eyJzdGF0dXMiOiI0MDEiLCJzY2hlbWVzIjoiYmVhcmVyIn0=\r\n"),
+            Expect("AQ=="),
+            Send("535 5.7.8 invalid token\r\n"),
+            Close,
+        ],
+    )
+    .await;
+    let config = bearer_config(&server);
+    let port = config.port;
+    let err = SmtpSender::new()
+        .verify(&config)
+        .await
+        .expect_err("token rejected");
+    assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+    let seen = server.seen().await;
+    let auth = seen
+        .lines
+        .iter()
+        .find_map(|l| l.strip_prefix("AUTH OAUTHBEARER "))
+        .expect("AUTH line");
+    let want = crate::sasl::base64(
+        format!("n,a=alice@example.org,\x01host=127.0.0.1\x01port={port}\x01auth=Bearer tok-ya29\x01\x01")
+            .as_bytes(),
+    );
+    assert_eq!(auth, want);
+}

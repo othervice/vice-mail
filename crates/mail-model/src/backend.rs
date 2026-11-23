@@ -24,7 +24,7 @@ use std::future::Future;
 use std::time::Duration;
 
 use crate::{
-    BackendError, BodySection, Capabilities, FetchedSection, FlagUpdate, MessageHeader,
+    BackendError, BodySection, Capabilities, FetchedSection, FlagUpdate, LoginAuth, MessageHeader,
     MessageStructure, ModSeq, RawMessage, RemoteMailbox, Secret, Security, ServerSettings, Uid,
     UidSet, UidValidity,
 };
@@ -92,7 +92,10 @@ pub struct ConnectConfig {
     pub port: u16,
     pub security: Security,
     pub username: String,
+    /// The password, or the OAuth 2.0 access token when `auth` is [`LoginAuth::Bearer`].
     pub password: Secret<String>,
+    /// Stage 14 (decision 0042): how `password` is used to log in.
+    pub auth: LoginAuth,
     pub access: Access,
     pub timeouts: Timeouts,
     /// `None` in the product. Set only by tests (the engine's test configuration).
@@ -108,6 +111,7 @@ impl ConnectConfig {
             security: server.security,
             username: server.username.clone(),
             password,
+            auth: LoginAuth::Password,
             access,
             timeouts: Timeouts::default(),
             extra_root_ca: None,

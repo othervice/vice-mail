@@ -15,6 +15,8 @@
 //! - **Privacy:** EHLO sends the address literal `[127.0.0.1]`, not the computer's name.
 //!   lettre's `tracing` feature stays off (it would log AUTH lines and message data); this
 //!   module logs reply codes and sizes only.
+//! - **Accounts that sign in with Microsoft or Google** (stage 14, decision 0042) log in with
+//!   `AUTH XOAUTH2`, or `AUTH OAUTHBEARER` where only that is offered; see [`bearer_auth`].
 //! - **Read-only accounts** cannot send: [`SmtpSender::send`] refuses a configuration with
 //!   [`Access::ReadOnly`] before connecting.
 
@@ -35,8 +37,8 @@ use lettre::transport::smtp::commands::{Data, Ehlo, Mail, Rcpt};
 use lettre::transport::smtp::extension::{ClientId, Extension, MailBodyParameter, MailParameter};
 use lettre::transport::smtp::response::{Response, Severity};
 use mail_model::{
-    Access, BackendError, ConnectConfig, Envelope, RecipientRefusal, Security, SendOutcome,
-    SendRejection, SmtpLimits, SmtpReply, SmtpStep,
+    Access, BackendError, ConnectConfig, Envelope, LoginAuth, RecipientRefusal, Secret, Security,
+    SendOutcome, SendRejection, SmtpLimits, SmtpReply, SmtpStep,
 };
 use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
@@ -243,6 +245,10 @@ impl SmtpSender {
                 }
                 None => from_lettre(&err),
             })?;
+        if config.auth == LoginAuth::Bearer {
+            bearer_auth(&mut conn, config).await?;
+            return Ok(Session { conn, probe });
+        }
         let credentials = Credentials::new(
             config.username.clone(),
             config.password.expose_secret().clone(),
@@ -258,6 +264,84 @@ impl SmtpSender {
                 None => from_lettre(&err),
             })?;
         Ok(Session { conn, probe })
+    }
+}
+
+/// One SASL line of the bearer login. `Debug` leaves the line out (it holds the token).
+struct SaslLine(Secret<String>);
+
+impl std::fmt::Display for SaslLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.expose_secret())?;
+        f.write_str("\r\n")
+    }
+}
+
+/// Stage 14 (decision 0042): logs in with the OAuth 2.0 access token in `config.password`.
+/// `XOAUTH2` when the server announces it (Microsoft, Google), otherwise `OAUTHBEARER`
+/// (RFC 7628) if a second EHLO shows it (lettre does not parse that name). The token is sent
+/// as the initial response; a `334` is the server's error challenge, answered as the
+/// mechanism prescribes, after which the server's final reply is the error.
+async fn bearer_auth(
+    conn: &mut AsyncSmtpConnection,
+    config: &ConnectConfig,
+) -> Result<(), BackendError> {
+    use crate::sasl::Bearer;
+    let mechanism = if conn
+        .server_info()
+        .supports_auth_mechanism(Mechanism::Xoauth2)
+    {
+        Bearer::XOauth2
+    } else {
+        let reply = conn
+            .command(Ehlo::new(HELLO))
+            .await
+            .map_err(|err| match reply_of(&err) {
+                Some(reply) => BackendError::Rejected(format!("EHLO: {reply}")),
+                None => from_lettre(&err),
+            })?;
+        let offers_oauthbearer = reply.message().any(|line| {
+            let mut words = line.split_ascii_whitespace();
+            words
+                .next()
+                .is_some_and(|first| first.eq_ignore_ascii_case("AUTH"))
+                && words.any(|word| word.eq_ignore_ascii_case("OAUTHBEARER"))
+        });
+        if !offers_oauthbearer {
+            return Err(BackendError::Unsupported(
+                "AUTH XOAUTH2 or OAUTHBEARER".into(),
+            ));
+        }
+        Bearer::OAuthBearer
+    };
+    let message = mechanism.message(
+        &config.username,
+        &config.host,
+        config.port,
+        &config.password,
+    );
+    let line = SaslLine(Secret::new(format!(
+        "AUTH {} {}",
+        mechanism.name(),
+        crate::sasl::base64(message.expose_secret())
+    )));
+    let refused = |err: lettre::transport::smtp::Error| match reply_of(&err) {
+        Some(reply) if reply.is_permanent() => BackendError::AuthFailed(reply.to_string()),
+        Some(reply) => BackendError::Rejected(format!("login: {reply}")),
+        None => from_lettre(&err),
+    };
+    let response = conn.command(line).await.map_err(refused)?;
+    if !response.has_code(334) {
+        return Ok(());
+    }
+    // The error challenge (a base64 JSON status, nothing secret); the final reply follows.
+    let ack = SaslLine(Secret::new(crate::sasl::base64(mechanism.error_ack())));
+    match conn.command(ack).await {
+        Err(err) => Err(refused(err)),
+        Ok(response) => Err(BackendError::AuthFailed(format!(
+            "the server rejected the access token ({})",
+            u16::from(response.code())
+        ))),
     }
 }
 

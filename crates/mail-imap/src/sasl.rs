@@ -1,4 +1,6 @@
-//! SASL PLAIN (RFC 4616) for logins with non-ASCII credentials.
+//! SASL PLAIN (RFC 4616) for logins with non-ASCII credentials, and since stage 14 the two
+//! bearer-token mechanisms for accounts that sign in with Microsoft or Google (decision 0042):
+//! `XOAUTH2` (what both providers document) and `OAUTHBEARER` (RFC 7628).
 //!
 //! IMAP `LOGIN` takes its arguments as strings, and async-imap sends them as quoted strings,
 //! which RFC 3501 limits to 7-bit characters; what a server does with UTF-8 there is up to the
@@ -42,6 +44,87 @@ impl async_imap::Authenticator for PlainAuthenticator {
 
     fn process(&mut self, _challenge: &[u8]) -> Self::Response {
         self.message.expose_secret().clone()
+    }
+}
+
+/// A SASL mechanism that carries an OAuth 2.0 access token instead of a password.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Bearer {
+    /// Google's and Microsoft's `XOAUTH2`: `user=<user>^Aauth=Bearer <token>^A^A`.
+    XOauth2,
+    /// RFC 7628: GS2 header with the user, then `host`, `port` and `auth` key-value pairs.
+    OAuthBearer,
+}
+
+impl Bearer {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::XOauth2 => "XOAUTH2",
+            Self::OAuthBearer => "OAUTHBEARER",
+        }
+    }
+
+    /// The client's answer to the server's error challenge (a base64 JSON status), after which
+    /// the server ends the exchange with a failure: empty for XOAUTH2, `^A` for OAUTHBEARER
+    /// (RFC 7628, section 3.2.3).
+    pub(crate) const fn error_ack(self) -> &'static [u8] {
+        match self {
+            Self::XOauth2 => b"",
+            Self::OAuthBearer => b"\x01",
+        }
+    }
+
+    /// The initial client response with the token. `host` and `port` only go into
+    /// OAUTHBEARER, which defines them.
+    pub(crate) fn message(
+        self,
+        username: &str,
+        host: &str,
+        port: u16,
+        token: &Secret<String>,
+    ) -> Secret<Vec<u8>> {
+        let token = token.expose_secret();
+        let text = match self {
+            Self::XOauth2 => format!("user={username}\x01auth=Bearer {token}\x01\x01"),
+            Self::OAuthBearer => {
+                // RFC 5801: `,` and `=` in the authorization identity are escaped.
+                let user = username.replace('=', "=3D").replace(',', "=2C");
+                format!("n,a={user},\x01host={host}\x01port={port}\x01auth=Bearer {token}\x01\x01")
+            }
+        };
+        Secret::new(text.into_bytes())
+    }
+}
+
+/// async-imap's authenticator for the bearer mechanisms: the first continuation gets the token
+/// (unless it already went on the command line with SASL-IR), any later one is the server's
+/// error challenge and gets [`Bearer::error_ack`], so the server answers with its NO.
+pub(crate) struct BearerAuthenticator {
+    mechanism: Bearer,
+    message: Secret<Vec<u8>>,
+    sent: bool,
+}
+
+impl BearerAuthenticator {
+    pub(crate) fn new(mechanism: Bearer, message: Secret<Vec<u8>>, sent: bool) -> Self {
+        Self {
+            mechanism,
+            message,
+            sent,
+        }
+    }
+}
+
+impl async_imap::Authenticator for BearerAuthenticator {
+    type Response = Vec<u8>;
+
+    fn process(&mut self, _challenge: &[u8]) -> Self::Response {
+        if self.sent {
+            self.mechanism.error_ack().to_vec()
+        } else {
+            self.sent = true;
+            self.message.expose_secret().clone()
+        }
     }
 }
 
@@ -98,5 +181,27 @@ mod tests {
         );
         let mut auth = PlainAuthenticator::new("alice", &password);
         assert_eq!(auth.process(b""), "\0alice\0Grüße€".as_bytes());
+    }
+
+    #[test]
+    fn bearer_messages_follow_their_specifications() {
+        let token = Secret::new("ya29.token".to_owned());
+        let x = Bearer::XOauth2.message("alice@example.org", "imap.example.org", 993, &token);
+        assert_eq!(
+            x.expose_secret().as_slice(),
+            b"user=alice@example.org\x01auth=Bearer ya29.token\x01\x01"
+        );
+        // RFC 7628, section 4.1 (with the user's `,` and `=` escaped as RFC 5801 says).
+        let o = Bearer::OAuthBearer.message("a,b=c@example.org", "server.example.com", 143, &token);
+        assert_eq!(
+            o.expose_secret().as_slice(),
+            b"n,a=a=2Cb=3Dc@example.org,\x01host=server.example.com\x01port=143\x01auth=Bearer ya29.token\x01\x01"
+        );
+        // The first continuation gets the token, the error challenge the acknowledgement.
+        let mut auth = BearerAuthenticator::new(Bearer::OAuthBearer, o.clone(), false);
+        assert_eq!(auth.process(b""), o.expose_secret().clone());
+        assert_eq!(auth.process(b"{\"status\":\"invalid_token\"}"), b"\x01");
+        let mut auth = BearerAuthenticator::new(Bearer::XOauth2, x, true);
+        assert_eq!(auth.process(b"{\"status\":\"401\"}"), b"");
     }
 }

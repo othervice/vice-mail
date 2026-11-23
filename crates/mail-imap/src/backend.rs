@@ -8,8 +8,8 @@ use async_imap::Client;
 use async_imap::imap_proto::{MailboxDatum, ResponseCode, StatusAttribute};
 use mail_model::{
     Access, BackendError, BodySection, Capabilities, ConnectConfig, FetchedSection, FlagUpdate,
-    IdleOutcome, MailBackend, MailboxStatus, MessageHeader, MessageStructure, ModSeq, RawMessage,
-    RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet, UidValidity,
+    IdleOutcome, LoginAuth, MailBackend, MailboxStatus, MessageHeader, MessageStructure, ModSeq,
+    RawMessage, RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet, UidValidity,
 };
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
@@ -329,15 +329,36 @@ enum LoginMethod {
     Plain,
     /// `AUTHENTICATE PLAIN <initial response>` in one line (SASL-IR).
     PlainInitialResponse,
+    /// Stage 14 (decision 0042): an OAuth 2.0 access token with `XOAUTH2` or `OAUTHBEARER`,
+    /// on the command line when the server announced SASL-IR.
+    Bearer {
+        mechanism: crate::sasl::Bearer,
+        initial_response: bool,
+    },
 }
 
 fn login_method(config: &ConnectConfig, known_caps: Option<&[String]>) -> LoginMethod {
-    if config.username.is_ascii() && config.password.expose_secret().is_ascii() {
-        return LoginMethod::Login;
-    }
     let has = |name: &str| {
         known_caps.is_some_and(|caps| caps.iter().any(|c| c.trim().eq_ignore_ascii_case(name)))
     };
+    if config.auth == LoginAuth::Bearer {
+        // XOAUTH2 is what Microsoft and Google document (Microsoft offers nothing else);
+        // OAUTHBEARER when a server offers only that. Unknown capabilities (STARTTLS): XOAUTH2.
+        // A token never goes into LOGIN or PLAIN.
+        use crate::sasl::Bearer;
+        let mechanism = if known_caps.is_some() && !has("AUTH=XOAUTH2") && has("AUTH=OAUTHBEARER") {
+            Bearer::OAuthBearer
+        } else {
+            Bearer::XOauth2
+        };
+        return LoginMethod::Bearer {
+            mechanism,
+            initial_response: has("SASL-IR"),
+        };
+    }
+    if config.username.is_ascii() && config.password.expose_secret().is_ascii() {
+        return LoginMethod::Login;
+    }
     match known_caps {
         // Unknown capabilities: every IMAP4rev1 server must implement AUTH=PLAIN.
         None => LoginMethod::Plain,
@@ -387,6 +408,33 @@ async fn login<S: Transport>(
             // A server that still sends a continuation gets the same message again.
             let auth = crate::sasl::PlainAuthenticator::new(&config.username, &config.password);
             let line = Secret::new(format!("PLAIN {}", response.expose_secret()));
+            let session = client
+                .authenticate(line.expose_secret(), auth)
+                .await
+                .map_err(|(err, _client)| login_error(err))?;
+            Ok((session, None))
+        }
+        LoginMethod::Bearer {
+            mechanism,
+            initial_response,
+        } => {
+            permit(config.access, "AUTHENTICATE")?;
+            let message = mechanism.message(
+                &config.username,
+                &config.host,
+                config.port,
+                &config.password,
+            );
+            let line = if initial_response {
+                Secret::new(format!(
+                    "{} {}",
+                    mechanism.name(),
+                    crate::sasl::base64(message.expose_secret())
+                ))
+            } else {
+                Secret::new(mechanism.name().to_owned())
+            };
+            let auth = crate::sasl::BearerAuthenticator::new(mechanism, message, initial_response);
             let session = client
                 .authenticate(line.expose_secret(), auth)
                 .await

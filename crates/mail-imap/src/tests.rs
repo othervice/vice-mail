@@ -1252,3 +1252,87 @@ mod writer {
 
 // Stage 14, block A: Gmail over IMAP (recorded responses).
 mod gmail;
+
+// Stage 14 (decision 0042): accounts that sign in with Microsoft or Google.
+
+fn bearer_config() -> ConnectConfig {
+    let mut config = config(Access::ReadOnly);
+    config.password = Secret::new("tok-ya29".into());
+    config.auth = mail_model::LoginAuth::Bearer;
+    config
+}
+
+/// `user=alice^Aauth=Bearer tok-ya29^A^A`, base64.
+const XOAUTH2: &str = "dXNlcj1hbGljZQFhdXRoPUJlYXJlciB0b2steWEyOQEB";
+
+#[tokio::test]
+async fn bearer_tokens_log_in_with_xoauth2_and_never_with_login() {
+    // SASL-IR announced (Gmail, Microsoft): one line.
+    let (backend, handle) = connect_with(
+        bearer_config(),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=PLAIN AUTH=XOAUTH2 AUTH=OAUTHBEARER] ready\r\n"),
+            Expect("AUTHENTICATE XOAUTH2 dXNlcj1hbGljZQFhdXRoPUJlYXJlciB0b2steWEyOQEB"),
+            Send("{tag} OK [CAPABILITY IMAP4rev1 IDLE] authenticated\r\n"),
+            Expect("CAPABILITY"),
+            Send("* CAPABILITY IMAP4rev1 IDLE\r\n{tag} OK done\r\n"),
+        ],
+    )
+    .await;
+    let backend = backend.expect("authenticated");
+    let lines = finish(backend, handle).await;
+    assert!(lines.iter().all(|l| !l.contains("LOGIN")), "{lines:?}");
+
+    // Capabilities unknown (STARTTLS): XOAUTH2 after the continuation, never LOGIN.
+    let (backend, handle) = connect_with(
+        bearer_config(),
+        vec![
+            Send("* OK ready\r\n"),
+            Expect("AUTHENTICATE XOAUTH2"),
+            Send("+ \r\n"),
+            Expect(XOAUTH2),
+            Send("{tag} OK authenticated\r\n"),
+            Expect("CAPABILITY"),
+            Send("* CAPABILITY IMAP4rev1\r\n{tag} OK done\r\n"),
+        ],
+    )
+    .await;
+    drop(finish(backend.expect("authenticated"), handle).await);
+
+    // A rejected token: the error challenge gets an empty answer, the NO is AuthFailed (the
+    // engine then refreshes the token once), and the token is in no error text.
+    let (backend, handle) = connect_with(
+        bearer_config(),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=XOAUTH2] ready\r\n"),
+            Expect("AUTHENTICATE XOAUTH2 "),
+            Send("+ eyJzdGF0dXMiOiJpbnZhbGlkX3Rva2VuIn0=\r\n"),
+            Expect(""),
+            Send("{tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n"),
+        ],
+    )
+    .await;
+    let err = backend.expect_err("token rejected");
+    assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+    assert!(!format!("{err:?} {err}").contains("tok-ya29"));
+    let lines = handle.await.expect("server");
+    assert_eq!(lines.get(1).map(String::as_str), Some(""), "{lines:?}");
+}
+
+#[tokio::test]
+async fn bearer_tokens_use_oauthbearer_where_only_that_is_offered() {
+    let (backend, handle) = connect_with(
+        bearer_config(),
+        vec![
+            Send("* OK [CAPABILITY IMAP4rev1 SASL-IR AUTH=OAUTHBEARER] ready\r\n"),
+            Expect("AUTHENTICATE OAUTHBEARER bixhPWFsaWNlLAFob3N0PWZha2UudGVzdAFwb3J0PTk5MwFhdXRoPUJlYXJlciB0b2steWEyOQEB"),
+            Send("+ eyJzdGF0dXMiOiJpbnZhbGlkX3Rva2VuIn0=\r\n"),
+            Expect("AQ=="),
+            Send("{tag} NO [AUTHENTICATIONFAILED] Invalid token\r\n"),
+        ],
+    )
+    .await;
+    let err = backend.expect_err("token rejected");
+    assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+    drop(handle.await.expect("server"));
+}

@@ -134,6 +134,20 @@ impl MailConnector for ImapConnector {
                 (Client::new(self.stream(tls, &timeouts)), None)
             }
         };
+        // Masked capabilities count before the login too, so a test can make the adapter pick
+        // another login mechanism (stage 14: OAUTHBEARER instead of XOAUTH2).
+        #[cfg(feature = "test-support")]
+        let known_caps = known_caps.map(|caps| {
+            caps.into_iter()
+                .filter(|cap| {
+                    !self
+                        .hooks
+                        .masked_capabilities
+                        .iter()
+                        .any(|masked| masked.eq_ignore_ascii_case(cap))
+                })
+                .collect::<Vec<_>>()
+        });
         #[cfg_attr(not(feature = "test-support"), allow(unused_mut))]
         let mut backend =
             ImapBackend::establish(client, timeouts, config, known_caps.as_deref()).await?;
