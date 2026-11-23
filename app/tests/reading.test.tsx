@@ -74,6 +74,13 @@ const READING_COMMANDS = new Set([
   "list_mailboxes",
   "list_messages",
   "get_message",
+  // Stage 9: the sorted inbox, "Why here?", and the texts of system notifications (no mail changes).
+  "list_inbox",
+  "get_message_category",
+  "set_notification_texts",
+  // Stage 5: drafts left from the last session and the outbox count in the rail (both read-only).
+  "list_drafts",
+  "list_outgoing",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);
@@ -355,13 +362,14 @@ describe("reading pane", () => {
     const core = inbox([message], { [message.id]: makeView(message) });
     const { user } = renderApp();
     await openMessage(user);
-    const before = core.callsOf("list_messages").length;
+    // Stage 9: the inbox is the sorted inbox (`listInbox`).
+    const before = core.callsOf("list_inbox").length;
 
     await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 });
     await emitCore({ type: "messageBodyAvailable", accountId: ACCOUNT.id, messageId: message.id });
 
     await waitFor(() => {
-      expect(core.callsOf("list_messages").length).toBeGreaterThan(before);
+      expect(core.callsOf("list_inbox").length).toBeGreaterThan(before);
     });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(core.callsOf("get_message")).toHaveLength(1);

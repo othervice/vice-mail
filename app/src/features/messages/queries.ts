@@ -13,9 +13,11 @@ export const messagesQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
  * core event reloads the pages already shown one after another, each from the fresh cursor of
  * the page before, so new or removed messages never leave a gap between pages.
  */
-export function useMessagePages(accountId: AccountId, mailboxId: MailboxId) {
+export function useMessagePages(accountId: AccountId, mailboxId: MailboxId, enabled = true) {
   return useInfiniteQuery({
     queryKey: messagesQueryKey(accountId, mailboxId),
+    // Off while the list shows rows of another source (stage 9: the sorted inbox, Later, …).
+    enabled,
     queryFn: ({ pageParam }) => ipc.listMessages(mailboxId, pageParam, MESSAGE_PAGE_SIZE),
     initialPageParam: null as ListCursor | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,

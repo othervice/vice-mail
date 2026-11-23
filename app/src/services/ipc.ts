@@ -340,3 +340,523 @@ export const ipc = {
     }
   },
 };
+
+// ---- Stage 12 (AI over MCP) and stage 11 (settings sync): commands, types, constants ----
+import {
+  commands as mcpSyncCommands,
+  MAX_MCP_ACCESS_PAGE,
+  MAX_MCP_CLIENT_NAME_CHARS,
+  MAX_MCP_CLIENTS,
+  MCP_ACCESS_MAX_ENTRIES,
+  MCP_ACCESS_RETENTION_DAYS,
+  MIN_SYNC_PASSPHRASE_CHARS,
+  SETTINGS_SYNC_FOLDER,
+  type McpAccessEntry,
+  type McpAccessId,
+  type McpAccessOutcome,
+  type McpAccessPage,
+  type McpAccountAccess,
+  type McpAccountShare,
+  type McpClientConfig,
+  type McpClientCreated,
+  type McpClientInfo,
+  type McpClientKind,
+  type McpConnectionTest,
+  type McpHelperInfo,
+  type McpHostState,
+  type McpRefusal,
+  type McpSettingsInfo,
+  type McpSetup,
+  type McpStatus,
+  type McpTestProblem,
+  type McpTool,
+  type SettingsSyncPreview,
+  type SettingsSyncState,
+  type SettingsSyncStatus,
+  type SyncDevice,
+  type SyncKindCount,
+  type SyncQuestion,
+} from "../generated/bindings";
+
+export {
+  MAX_MCP_ACCESS_PAGE,
+  MAX_MCP_CLIENT_NAME_CHARS,
+  MAX_MCP_CLIENTS,
+  MCP_ACCESS_MAX_ENTRIES,
+  MCP_ACCESS_RETENTION_DAYS,
+  MIN_SYNC_PASSPHRASE_CHARS,
+  SETTINGS_SYNC_FOLDER,
+};
+
+export type {
+  McpAccessEntry,
+  McpAccessId,
+  McpAccessOutcome,
+  McpAccessPage,
+  McpAccountAccess,
+  McpAccountShare,
+  McpClientConfig,
+  McpClientCreated,
+  McpClientInfo,
+  McpClientKind,
+  McpConnectionTest,
+  McpHelperInfo,
+  McpHostState,
+  McpRefusal,
+  McpSettingsInfo,
+  McpSetup,
+  McpStatus,
+  McpTestProblem,
+  McpTool,
+  SettingsSyncPreview,
+  SettingsSyncState,
+  SettingsSyncStatus,
+  SyncDevice,
+  SyncKindCount,
+  SyncQuestion,
+};
+
+/** Commands that cannot fail on the Rust side still reject on framework errors (no runtime, ACL). */
+async function infallible<T>(start: () => Promise<T>): Promise<T> {
+  try {
+    return await start();
+  } catch (e) {
+    throw toCoreError(e);
+  }
+}
+
+/** Stage 12: the local MCP server for AI clients. Off until the user turns it on. */
+export const mcpIpc = {
+  getSettings: (): Promise<McpSettingsInfo> => call(() => mcpSyncCommands.getMcpSettings()),
+  /** `false` is the emergency stop: the endpoint goes, every open connection closes at once. */
+  setEnabled: (enabled: boolean): Promise<McpSettingsInfo> => call(() => mcpSyncCommands.setMcpEnabled(enabled)),
+  setAccountAccess: (accountId: AccountId, access: McpAccountAccess): Promise<McpSettingsInfo> =>
+    call(() => mcpSyncCommands.setMcpAccountAccess(accountId, access)),
+  /** The token and the filled-in configurations come only here, once. Never log or keep them. */
+  createClient: (name: string): Promise<McpClientCreated> => call(() => mcpSyncCommands.createMcpClient(name)),
+  revokeClient: (clientId: string): Promise<McpSettingsInfo> => call(() => mcpSyncCommands.revokeMcpClient(clientId)),
+  listClients: (): Promise<McpClientInfo[]> => call(() => mcpSyncCommands.listMcpClients()),
+  /** The configurations with the placeholder `<token>`. */
+  getSetup: (): Promise<McpSetup> => infallible(() => mcpSyncCommands.getMcpSetup()),
+  /** Access log, newest first, keyset-paged by `nextCursor`. `limit` 1..`MAX_MCP_ACCESS_PAGE`. */
+  listAccess: (before: McpAccessId | null, limit: number): Promise<McpAccessPage> =>
+    call(() => mcpSyncCommands.listMcpAccess(before, limit)),
+  getStatus: (): Promise<McpStatus> => infallible(() => mcpSyncCommands.getMcpStatus()),
+  /** Starts the helper with a temporary client; takes about a second, at most 20 s. */
+  testConnection: (): Promise<McpConnectionTest> => call(() => mcpSyncCommands.testMcpConnection()),
+};
+
+/** Stage 11: settings sync through an encrypted folder in one of the user's mailboxes. */
+export const settingsSyncIpc = {
+  getStatus: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.getSettingsSyncStatus()),
+  /** First device. `sync_already_set_up` means: join instead. */
+  enable: (accountId: AccountId, passphrase: string): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.enableSettingsSync(accountId, passphrase)),
+  /** Checks the passphrase and plans the merge; writes nothing. The key waits for `join`. */
+  previewJoin: (accountId: AccountId, passphrase: string): Promise<SettingsSyncPreview> =>
+    call(() => mcpSyncCommands.previewSettingsSyncJoin(accountId, passphrase)),
+  join: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.joinSettingsSync()),
+  syncNow: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.syncSettingsNow()),
+  resolveQuestion: (accountId: AccountId, remove: boolean): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.resolveSyncQuestion(accountId, remove)),
+  changePassphrase: (passphrase: string): Promise<void> =>
+    done(call(() => mcpSyncCommands.changeSettingsSyncPassphrase(passphrase))),
+  /** New key from this device; the other devices need the new passphrase. */
+  reset: (passphrase: string): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.resetSettingsSync(passphrase)),
+  disable: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.disableSettingsSync()),
+  setDeviceName: (name: string): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.setSyncDeviceName(name)),
+};
+
+// ---- Stage 7 (search, threads, unified inbox, account groups, identities) ----
+import {
+  commands as searchCommands,
+  MAX_SEARCH_PAGE,
+  MAX_THREAD_MESSAGES,
+  type AccountGroup,
+  type AccountGroupId,
+  type IdentityId,
+  type IdentityInfo,
+  type IdentityInput,
+  type SearchHighlights,
+  type SearchHit,
+  type SearchIndexState,
+  type SearchIndexStatus,
+  type SearchPage,
+  type SearchProblem,
+  type SearchProblemCode,
+  type SearchRequest,
+  type SearchScope,
+  type SearchTermInfo,
+  type SearchTermKind,
+  type ServerSearchResult,
+  type TextRange,
+  type ThreadEntry,
+  type ThreadListItem,
+  type ThreadPage,
+  type ThreadView,
+  type UnifiedView,
+} from "../generated/bindings";
+
+export { MAX_SEARCH_PAGE, MAX_THREAD_MESSAGES };
+
+export type {
+  AccountGroup,
+  AccountGroupId,
+  IdentityId,
+  IdentityInfo,
+  IdentityInput,
+  SearchHighlights,
+  SearchHit,
+  SearchIndexState,
+  SearchIndexStatus,
+  SearchPage,
+  SearchProblem,
+  SearchProblemCode,
+  SearchRequest,
+  SearchScope,
+  SearchTermInfo,
+  SearchTermKind,
+  ServerSearchResult,
+  TextRange,
+  ThreadEntry,
+  ThreadListItem,
+  ThreadPage,
+  ThreadView,
+  UnifiedView,
+};
+
+/** Stage 7: full-text search, conversations, the unified inbox, account groups and identities. */
+export const searchIpc = {
+  /** Local full-text search. Problems of the query come back in the page, not as an error. */
+  search: (request: SearchRequest): Promise<SearchPage> => call(() => searchCommands.search(request)),
+  /** IMAP SEARCH over the read-only connection, for messages whose body is not stored locally. */
+  searchOnServer: (request: SearchRequest): Promise<ServerSearchResult> =>
+    call(() => searchCommands.searchOnServer(request)),
+  getSearchIndexStatus: (): Promise<SearchIndexStatus> => call(() => searchCommands.getSearchIndexStatus()),
+  rebuildSearchIndex: (): Promise<SearchIndexStatus> => call(() => searchCommands.rebuildSearchIndex()),
+
+  /** Conversations of one folder, newest first. `limit` 1..500. */
+  listThreads: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number): Promise<ThreadPage> =>
+    call(() => searchCommands.listThreads(mailboxId, cursor, limit)),
+  listUnifiedThreads: (view: UnifiedView, cursor: ListCursor | null, limit: number): Promise<ThreadPage> =>
+    call(() => searchCommands.listUnifiedThreads(view, cursor, limit)),
+  /** Open a thread by one of its messages, never by a stored thread id (ids change on merges). */
+  getThread: (messageId: MessageId, mailboxId: MailboxId | null): Promise<ThreadView> =>
+    call(() => searchCommands.getThread(messageId, mailboxId)),
+  /** The inboxes of every visible account (or of a group), mixed by date. */
+  listUnifiedInbox: (view: UnifiedView, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
+    call(() => searchCommands.listUnifiedInbox(view, cursor, limit)),
+
+  listAccountGroups: (): Promise<AccountGroup[]> => call(() => searchCommands.listAccountGroups()),
+  createAccountGroup: (name: string, accountIds: AccountId[]): Promise<AccountGroup> =>
+    call(() => searchCommands.createAccountGroup(name, accountIds)),
+  /** Replaces name and members. */
+  updateAccountGroup: (groupId: AccountGroupId, name: string, accountIds: AccountId[]): Promise<AccountGroup> =>
+    call(() => searchCommands.updateAccountGroup(groupId, name, accountIds)),
+  deleteAccountGroup: (groupId: AccountGroupId): Promise<void> =>
+    done(call(() => searchCommands.deleteAccountGroup(groupId))),
+  /** On this device only; the account keeps syncing. */
+  listHiddenAccounts: (): Promise<AccountId[]> => call(() => searchCommands.listHiddenAccounts()),
+  setAccountHidden: (accountId: AccountId, hidden: boolean): Promise<void> =>
+    done(call(() => searchCommands.setAccountHidden(accountId, hidden))),
+
+  /** The default first. */
+  listIdentities: (accountId: AccountId): Promise<IdentityInfo[]> => call(() => searchCommands.listIdentities(accountId)),
+  addIdentity: (accountId: AccountId, identity: IdentityInput): Promise<IdentityInfo> =>
+    call(() => searchCommands.addIdentity(accountId, identity)),
+  updateIdentity: (identityId: IdentityId, identity: IdentityInput): Promise<IdentityInfo> =>
+    call(() => searchCommands.updateIdentity(identityId, identity)),
+  /** Answers with all identities of the account, the new default first. */
+  setDefaultIdentity: (identityId: IdentityId): Promise<IdentityInfo[]> =>
+    call(() => searchCommands.setDefaultIdentity(identityId)),
+  /** The default identity cannot be deleted (`invalid_argument`). */
+  deleteIdentity: (identityId: IdentityId): Promise<void> => done(call(() => searchCommands.deleteIdentity(identityId))),
+  getReplyIdentity: (messageId: MessageId): Promise<IdentityInfo> => call(() => searchCommands.getReplyIdentity(messageId)),
+};
+
+// ---- Stage 5 (composer, drafts, sending, outbox view, compose settings) ----
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import {
+  commands as composeCommands,
+  DEFAULT_SEND_DELAY_SECS,
+  LARGE_ATTACHMENT_WARNING_BYTES,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_CONTACT_SUGGESTIONS,
+  MAX_SEND_DELAY_SECS,
+  type AccountSendSettings,
+  type ComposeFormat,
+  type ComposeIdentity,
+  type ComposeSettings,
+  type ContactSuggestion,
+  type Draft,
+  type DraftAttachment,
+  type DraftId,
+  type DraftKind,
+  type DraftServerState,
+  type DraftState,
+  type DraftSummary,
+  type DraftUpdate,
+  type NewDraft,
+  type OutgoingMail,
+  type QuoteLanguage,
+  type QuotePosition,
+  type SendState,
+  type SentCopyMode,
+  type UnclearDecision,
+} from "../generated/bindings";
+
+export {
+  DEFAULT_SEND_DELAY_SECS,
+  LARGE_ATTACHMENT_WARNING_BYTES,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_CONTACT_SUGGESTIONS,
+  MAX_SEND_DELAY_SECS,
+};
+
+export type {
+  AccountSendSettings,
+  ComposeFormat,
+  ComposeIdentity,
+  ComposeSettings,
+  ContactSuggestion,
+  Draft,
+  DraftAttachment,
+  DraftId,
+  DraftKind,
+  DraftServerState,
+  DraftState,
+  DraftSummary,
+  DraftUpdate,
+  NewDraft,
+  OutgoingMail,
+  QuoteLanguage,
+  QuotePosition,
+  SendState,
+  SentCopyMode,
+  UnclearDecision,
+};
+
+/** Files dragged over the window, as the shell reports them (paths only on `enter` and `drop`). */
+export type FileDragEvent = { type: "enter"; paths: string[] } | { type: "over" } | { type: "drop"; paths: string[] } | { type: "leave" };
+
+/**
+ * Drafts and sending (docs/decisions/0018). Drafts are saved by the composer (`saveDraft`
+ * debounced); the core sends the server copy itself. Sending goes through the outbox and waits
+ * for the undo delay first.
+ */
+export const composeIpc = {
+  /** A new, reply, reply-all or forward draft (recipients, identity, quote prepared by the core). */
+  createDraft: (request: NewDraft): Promise<Draft> => call(() => composeCommands.createDraft(request)),
+  getDraft: (draftId: DraftId): Promise<Draft> => call(() => composeCommands.getDraft(draftId)),
+  /** Local save; call it debounced while typing and on blur. `send_in_progress` while frozen. */
+  saveDraft: (draftId: DraftId, update: DraftUpdate): Promise<Draft> =>
+    call(() => composeCommands.saveDraft(draftId, update)),
+  /** The composer closed: the server copy follows now. Call after a final `saveDraft`. */
+  closeDraft: (draftId: DraftId): Promise<Draft> => call(() => composeCommands.closeDraft(draftId)),
+  /** Discards the draft, its files and its server copy. */
+  deleteDraft: (draftId: DraftId): Promise<void> => done(call(() => composeCommands.deleteDraft(draftId))),
+  listDrafts: (accountId: AccountId | null): Promise<DraftSummary[]> => call(() => composeCommands.listDrafts(accountId)),
+  /** A message of the Drafts folder as a local draft (also one of another program). */
+  openDraftFromMessage: (messageId: MessageId): Promise<Draft> =>
+    call(() => composeCommands.openDraftFromMessage(messageId)),
+  /** The system file dialog (in Rust); cancelling answers the unchanged draft. */
+  pickAttachments: (draftId: DraftId): Promise<Draft> => call(() => composeCommands.pickAttachments(draftId)),
+  /** Only paths of a drop the shell saw itself (`onFileDrop`), shortly before. */
+  addDroppedAttachments: (draftId: DraftId, paths: string[]): Promise<Draft> =>
+    call(() => composeCommands.addDroppedAttachments(draftId, paths)),
+  removeDraftAttachment: (draftId: DraftId, attachmentId: string): Promise<Draft> =>
+    call(() => composeCommands.removeDraftAttachment(draftId, attachmentId)),
+  /** `requestId`: a fresh UUID per press of "Send" (the same id twice sends once). */
+  sendDraft: (draftId: DraftId, requestId: string): Promise<OutgoingMail> =>
+    call(() => composeCommands.sendDraft(draftId, requestId)),
+  /** Undo within the delay, or "Edit" of a failed or unclear send: the draft is editable again. */
+  cancelSend: (draftId: DraftId): Promise<Draft> => call(() => composeCommands.cancelSend(draftId)),
+  /** The outbox view of an account, newest first, keyset-paged by `operationId`. `limit` 1..500. */
+  listOutgoing: (accountId: AccountId, before: OperationId | null, limit: number): Promise<OutgoingMail[]> =>
+    call(() => composeCommands.listOutgoing(accountId, before, limit)),
+  /** The user's answer to `sendNeedsDecision`; `send_again` only after an explicit confirmation. */
+  resolveUnclearSend: (operationId: OperationId, decision: UnclearDecision): Promise<OutgoingMail> =>
+    call(() => composeCommands.resolveUnclearSend(operationId, decision)),
+  getComposeSettings: (): Promise<ComposeSettings> => call(() => composeCommands.getComposeSettings()),
+  setComposeSettings: (settings: ComposeSettings): Promise<ComposeSettings> =>
+    call(() => composeCommands.setComposeSettings(settings)),
+  getSendSettings: (accountId: AccountId): Promise<AccountSendSettings> => call(() => composeCommands.getSendSettings(accountId)),
+  setSentCopyMode: (accountId: AccountId, mode: SentCopyMode): Promise<AccountSendSettings> =>
+    call(() => composeCommands.setSentCopyMode(accountId, mode)),
+  listComposeIdentities: (accountId: AccountId): Promise<ComposeIdentity[]> =>
+    call(() => composeCommands.listComposeIdentities(accountId)),
+  /** Plain text without "-- "; null or blank removes it. */
+  setIdentitySignature: (identityId: IdentityId, signature: string | null): Promise<ComposeIdentity> =>
+    call(() => composeCommands.setIdentitySignature(identityId, signature)),
+  /** Autocomplete from addresses of earlier mail. `limit` 1..`MAX_CONTACT_SUGGESTIONS`. */
+  searchContacts: (query: string, limit: number): Promise<ContactSuggestion[]> =>
+    call(() => composeCommands.searchContacts(query, limit)),
+  /**
+   * Files dragged onto the window, from the shell's own drag-and-drop event (the page cannot fake
+   * the paths the core accepts). Without a Tauri window (tests) nothing is reported.
+   */
+  onFileDrop: async (handler: (event: FileDragEvent) => void): Promise<Unsubscribe> => {
+    try {
+      return await getCurrentWebview().onDragDropEvent((e) => {
+        const payload = e.payload;
+        if (payload.type === "enter" || payload.type === "drop") handler({ type: payload.type, paths: payload.paths });
+        else handler({ type: payload.type });
+      });
+    } catch {
+      return () => undefined;
+    }
+  },
+};
+
+// ---- Stage 9 (inbox comfort: categories, bundles, snooze, pins, tasks, rules, notifications) ----
+import {
+  commands as comfortCommands,
+  type BadgeMode,
+  type BundleKey,
+  type BundleSummary,
+  type CategoryDecision,
+  type CategoryReason,
+  type DateSection,
+  type DateSectionKind,
+  type InboxCursor,
+  type InboxFilter,
+  type InboxPage,
+  type InboxRow,
+  type InboxScope,
+  type InboxSettings,
+  type InboxTop,
+  type MailRule,
+  type MarkScope,
+  type MessageCategory,
+  type MessageCategoryInfo,
+  type NotificationSettings,
+  type NotificationTexts,
+  type NotifyCategories,
+  type QuietHours,
+  type RuleAction,
+  type RuleCondition,
+  type RuleId,
+  type RuleInput,
+  type RuleSkipReason,
+  type SenderChip,
+  type SenderKey,
+  type SenderKeyKind,
+  type SenderRule,
+  type SnoozeChoice,
+  type SnoozeMark,
+  type SnoozeResult,
+  type SnoozeTimes,
+  type TaskFilter,
+  type TaskMark,
+  type TextMatchOp,
+} from "../generated/bindings";
+
+export type {
+  BadgeMode,
+  BundleKey,
+  BundleSummary,
+  CategoryDecision,
+  CategoryReason,
+  DateSection,
+  DateSectionKind,
+  InboxCursor,
+  InboxFilter,
+  InboxPage,
+  InboxRow,
+  InboxScope,
+  InboxSettings,
+  InboxTop,
+  MailRule,
+  MarkScope,
+  MessageCategory,
+  MessageCategoryInfo,
+  NotificationSettings,
+  NotificationTexts,
+  NotifyCategories,
+  QuietHours,
+  RuleAction,
+  RuleCondition,
+  RuleId,
+  RuleInput,
+  RuleSkipReason,
+  SenderChip,
+  SenderKey,
+  SenderKeyKind,
+  SenderRule,
+  SnoozeChoice,
+  SnoozeMark,
+  SnoozeResult,
+  SnoozeTimes,
+  TaskFilter,
+  TaskMark,
+  TextMatchOp,
+};
+
+/** Stage 9 commands without a typed error on the Rust side still reject on framework errors. */
+async function comfortPlain<T>(start: () => Promise<T>): Promise<T> {
+  try {
+    return await start();
+  } catch (e) {
+    throw toCoreError(e);
+  }
+}
+
+/** Stage 9: the sorted inbox, snooze, pins, tasks, sender and local rules, notifications. */
+export const comfortIpc = {
+  /** One page of rows (messages, bundles, continued bundles); `top` only without a cursor. `limit` counts messages. */
+  listInbox: (scope: InboxScope, cursor: InboxCursor | null, limit: number): Promise<InboxPage> =>
+    call(() => comfortCommands.listInbox(scope, cursor, limit)),
+  /** One category of the inbox, or the important senders ("Show all"). */
+  listInboxFiltered: (scope: InboxScope, filter: InboxFilter, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
+    call(() => comfortCommands.listInboxFiltered(scope, filter, cursor, limit)),
+  getInboxSettings: (): Promise<InboxSettings> => call(() => comfortCommands.getInboxSettings()),
+  /** `inboxChanged` follows. */
+  setInboxSettings: (settings: InboxSettings): Promise<InboxSettings> =>
+    call(() => comfortCommands.setInboxSettings(settings)),
+
+  /** "Why here?" and the keys "always as …" can use. */
+  getMessageCategory: (messageId: MessageId): Promise<MessageCategoryInfo> =>
+    call(() => comfortCommands.getMessageCategory(messageId)),
+  /** `null` removes the correction. Applied to every message in the background, then `inboxChanged`. */
+  setSenderCategory: (key: SenderKey, category: MessageCategory | null): Promise<SenderRule | null> =>
+    call(() => comfortCommands.setSenderCategory(key, category)),
+  setSenderImportant: (key: SenderKey, important: boolean): Promise<SenderRule | null> =>
+    call(() => comfortCommands.setSenderImportant(key, important)),
+  listSenderRules: (): Promise<SenderRule[]> => call(() => comfortCommands.listSenderRules()),
+  deleteSenderRule: (id: string): Promise<void> => done(call(() => comfortCommands.deleteSenderRule(id))),
+
+  /** The times the snooze menu offers now (system time zone). */
+  getSnoozeTimes: (): Promise<SnoozeTimes> => comfortPlain(() => comfortCommands.getSnoozeTimes()),
+  /** Local, plus a `$Snoozed` keyword through the outbox where writes are on. Never moves mail. */
+  snoozeMessages: (messageIds: MessageId[], choice: SnoozeChoice): Promise<SnoozeResult> =>
+    call(() => comfortCommands.snoozeMessages(messageIds, choice)),
+  /** Waiting ones come back now; returned ones lose their mark. */
+  unsnoozeMessages: (messageIds: MessageId[]): Promise<void> =>
+    done(call(() => comfortCommands.unsnoozeMessages(messageIds))),
+  /** Local only, no keyword on the server. */
+  setPinned: (messageIds: MessageId[], pinned: boolean): Promise<void> =>
+    done(call(() => comfortCommands.setPinned(messageIds, pinned))),
+  /** A task, done, or no task (`null`). */
+  setTask: (messageIds: MessageId[], mark: TaskMark | null): Promise<void> =>
+    done(call(() => comfortCommands.setTask(messageIds, mark))),
+  listSnoozed: (scope: MarkScope): Promise<MessageListItem[]> => call(() => comfortCommands.listSnoozed(scope)),
+  listPinned: (scope: MarkScope): Promise<MessageListItem[]> => call(() => comfortCommands.listPinned(scope)),
+  listTasks: (scope: MarkScope, filter: TaskFilter): Promise<MessageListItem[]> =>
+    call(() => comfortCommands.listTasks(scope, filter)),
+
+  /** Local rules, by position. They run only while the app runs. */
+  listRules: (): Promise<MailRule[]> => call(() => comfortCommands.listRules()),
+  createRule: (input: RuleInput): Promise<MailRule> => call(() => comfortCommands.createRule(input)),
+  updateRule: (id: RuleId, input: RuleInput): Promise<MailRule> => call(() => comfortCommands.updateRule(id, input)),
+  deleteRule: (id: RuleId): Promise<void> => done(call(() => comfortCommands.deleteRule(id))),
+  reorderRules: (ids: RuleId[]): Promise<MailRule[]> => call(() => comfortCommands.reorderRules(ids)),
+
+  getNotificationSettings: (): Promise<NotificationSettings> => call(() => comfortCommands.getNotificationSettings()),
+  setNotificationSettings: (settings: NotificationSettings): Promise<NotificationSettings> =>
+    call(() => comfortCommands.setNotificationSettings(settings)),
+  /** The texts of system notifications in the UI's language: at start and on every language change. */
+  setNotificationTexts: (texts: NotificationTexts): Promise<void> =>
+    comfortPlain(() => comfortCommands.setNotificationTexts(texts)),
+};

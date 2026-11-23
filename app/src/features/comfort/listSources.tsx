@@ -1,0 +1,253 @@
+import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import { Clock, Inbox, ListTodo, Pin, Zap } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { cx } from "../../components/cx";
+import {
+  comfortIpc,
+  type Account,
+  type InboxCursor,
+  type InboxPage,
+  type InboxScope,
+  type ListCursor,
+  type Mailbox,
+  type MarkScope,
+  type MessageListItem,
+  type TaskFilter,
+} from "../../services/ipc";
+import type { MessageListSource } from "../messages/listSource";
+import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
+import { buildInboxRows, inboxPageItems, type InboxListRow, type InboxViewPage } from "./inboxRows";
+import { BlockHeading, BundleRow, ShowAllRow } from "./InboxListRows";
+import { inboxQueryKey, markListQueryKey, priorityQueryKey, type MarkListKind } from "./queries";
+
+/** Messages per `listInbox` page; the contract allows 1..500 and counts messages, not rows. */
+export const INBOX_PAGE_SIZE = 200;
+
+/** What a list shows (stage 9): a folder's pages, the sorted inbox, or one of the mark views. */
+export type ListKind = "folder" | "inbox" | MarkListKind;
+
+interface ListRowsOptions {
+  expanded: ReadonlySet<string>;
+  toggle: (key: string) => void;
+  showAll: () => void;
+}
+
+/** The inbox rows as list rows: headings and bundles are drawn rows, messages are options. */
+export function toListRows(rows: readonly InboxListRow[], options: ListRowsOptions): ListRow[] {
+  let position = 0;
+  return rows.map((row): ListRow => {
+    switch (row.kind) {
+      case "section":
+        return row;
+      case "message":
+        return { kind: "message", key: row.key, item: row.item, position: position++ };
+      case "block":
+        return { kind: "extra", key: row.key, size: "section", render: () => <BlockHeading block={row.block} /> };
+      case "showAll":
+        return {
+          kind: "extra",
+          key: row.key,
+          size: "section",
+          render: () => <ShowAllRow total={row.total} unread={row.unread} onShow={options.showAll} />,
+        };
+      case "bundle":
+        return {
+          kind: "extra",
+          key: row.key,
+          size: "row",
+          render: () => (
+            <BundleRow
+              bundle={row.bundle}
+              expanded={row.expanded}
+              onToggle={() => {
+                options.toggle(row.bundle.key);
+              }}
+            />
+          ),
+        };
+    }
+  });
+}
+
+/** The inbox pages as the list reads them (stable function: TanStack keeps the result stable too). */
+function selectInboxPages(data: InfiniteData<InboxPage, InboxCursor | null>) {
+  return {
+    pages: data.pages.map((page): InboxViewPage => ({ items: inboxPageItems(page), page })),
+    pageParams: data.pageParams,
+  };
+}
+
+function mailboxScope(mailbox: Mailbox): InboxScope {
+  return { kind: "mailbox", mailboxId: mailbox.id };
+}
+
+/**
+ * The rows of a list by kind. `folder` gives none (the list reads the folder's pages itself).
+ * Every query runs only for its own kind, so a folder view asks the core nothing extra.
+ */
+export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox): MessageListSource | undefined {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [priorityOnly, setPriorityOnly] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("open");
+  const scope = mailboxScope(mailbox);
+  const markScope: MarkScope = { kind: "account", accountId: account.id };
+
+  const inbox = useInfiniteQuery({
+    queryKey: inboxQueryKey(account.id, mailbox.id),
+    queryFn: ({ pageParam }) => comfortIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE),
+    initialPageParam: null as InboxCursor | null,
+    getNextPageParam: (last) => last.nextCursor,
+    select: selectInboxPages,
+    enabled: kind === "inbox" && !priorityOnly,
+  });
+
+  const priority = useInfiniteQuery({
+    queryKey: priorityQueryKey(account.id, mailbox.id),
+    queryFn: ({ pageParam }) => comfortIpc.listInboxFiltered(scope, { kind: "priority" }, pageParam, INBOX_PAGE_SIZE),
+    initialPageParam: null as ListCursor | null,
+    getNextPageParam: (last) => last.nextCursor,
+    enabled: kind === "inbox" && priorityOnly,
+  });
+
+  const markKind: MarkListKind = kind === "later" || kind === "pinned" || kind === "tasks" ? kind : "later";
+  const marks = useInfiniteQuery({
+    queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
+    queryFn: async (): Promise<{ items: MessageListItem[] }> => {
+      // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
+      if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
+      if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
+      return { items: await comfortIpc.listTasks(markScope, taskFilter) };
+    },
+    initialPageParam: null,
+    getNextPageParam: () => null,
+    enabled: kind === markKind,
+  });
+
+  const toggle = useCallback((key: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
+  const showAll = useCallback(() => {
+    setPriorityOnly(true);
+  }, []);
+  const back = useCallback(() => {
+    setPriorityOnly(false);
+  }, []);
+
+  const inboxPages = inbox.data?.pages;
+  const inboxRows = useCallback(
+    (items: readonly MessageListItem[]) => {
+      const visible = new Set(items.map((item) => item.id));
+      const rows = buildInboxRows(inboxPages?.map((entry) => entry.page) ?? [], expanded, visible);
+      return toListRows(rows, { expanded, toggle, showAll });
+    },
+    [inboxPages, expanded, toggle, showAll],
+  );
+  const priorityRows = useCallback(
+    (items: readonly MessageListItem[], bounds: DayBounds): ListRow[] => [
+      {
+        kind: "extra",
+        key: "priority-back",
+        size: "section",
+        render: () => <PriorityBack onBack={back} />,
+      },
+      ...buildRows(items, bounds),
+    ],
+    [back],
+  );
+  const plainRows = useCallback((items: readonly MessageListItem[], bounds: DayBounds) => buildRows(items, bounds), []);
+
+  return useMemo((): MessageListSource | undefined => {
+    switch (kind) {
+      case "folder":
+        return undefined;
+      case "inbox":
+        if (priorityOnly) {
+          return {
+            query: priority,
+            buildRows: priorityRows,
+            empty: { icon: Zap, title: t("comfort.priority.empty.title"), body: t("comfort.priority.empty.body") },
+          };
+        }
+        return { query: inbox, buildRows: inboxRows };
+      case "later":
+      case "pinned":
+      case "tasks": {
+        const icon = kind === "later" ? Clock : kind === "pinned" ? Pin : ListTodo;
+        const empty =
+          kind === "tasks" && taskFilter !== "open"
+            ? { icon, title: t(`comfort.tasks.empty.${taskFilter}`), body: t("comfort.views.tasks.emptyBody") }
+            : { icon, title: t(`comfort.views.${kind}.emptyTitle`), body: t(`comfort.views.${kind}.emptyBody`) };
+        return {
+          query: marks,
+          buildRows: plainRows,
+          total: marks.data?.pages[0]?.items.length ?? 0,
+          empty,
+          ...(kind === "tasks" && { controls: <TaskFilterBar value={taskFilter} onChange={setTaskFilter} /> }),
+        };
+      }
+    }
+  }, [kind, priorityOnly, priority, priorityRows, inbox, inboxRows, marks, plainRows, taskFilter, t]);
+}
+
+const TASK_FILTERS: readonly TaskFilter[] = ["open", "done", "all"];
+
+/** Above the Tasks list: open ones (the default), done ones, or all. */
+function TaskFilterBar({ value, onChange }: { value: TaskFilter; onChange: (filter: TaskFilter) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="group"
+      aria-label={t("comfort.tasks.filter")}
+      className="flex shrink-0 items-center gap-1 border-b border-border px-4 py-2"
+      data-testid="task-filter"
+    >
+      {TASK_FILTERS.map((filter) => (
+        <button
+          key={filter}
+          type="button"
+          aria-pressed={value === filter}
+          onClick={() => {
+            onChange(filter);
+          }}
+          className={cx(
+            "rounded-control px-2 py-1 text-13 focus-visible:outline-2 focus-visible:outline-focus-ring",
+            value === filter ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-hover",
+          )}
+        >
+          {t(`comfort.tasks.filters.${filter}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** First row of the "Priority" list: its name and the way back to the whole inbox. */
+function PriorityBack({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-full items-end justify-between gap-2 rounded-card bg-priority-tint px-3 pb-1">
+      <span className="flex items-center gap-2 text-12 font-semibold text-primary">
+        <Zap aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {t("comfort.blocks.priority")}
+      </span>
+      <button
+        type="button"
+        onClick={onBack}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+        }}
+        data-testid="priority-back"
+        className="flex items-center gap-1 rounded-control px-1 text-12 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-focus-ring"
+      >
+        <Inbox aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {t("comfort.priority.back")}
+      </button>
+    </div>
+  );
+}

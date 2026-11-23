@@ -12,6 +12,8 @@ import { Avatar } from "../../accounts/Avatar";
 import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
 import { useSetWritesEnabled } from "../../actions/queries";
 import { SpecialFolders } from "./SpecialFolders";
+import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
+import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
 
 function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -302,6 +304,13 @@ export function AccountDetail({ accountId }: { accountId: string }) {
         </dl>
       </Block>
       <PasswordChange account={account} />
+      {/* Stage 7: sender addresses, and whether the account shows in the unified inbox. */}
+      <Block title={t("identities.title")} description={t("identities.description")}>
+        <IdentitiesBlock account={account} />
+      </Block>
+      <Block title={t("hiddenAccount.title")}>
+        <HiddenAccountBlock account={account} />
+      </Block>
       <Block
         title={t("settings.accounts.detail.folders.title")}
         description={t("settings.accounts.detail.folders.description")}

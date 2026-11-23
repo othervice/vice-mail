@@ -1,4 +1,4 @@
-import { CircleExclamationPoint, CloudOff, History, Settings, type LucideIcon } from "lucide-react";
+import { CircleExclamationPoint, CloudOff, History, SendHorizontal, Settings, type LucideIcon } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
@@ -7,8 +7,10 @@ import { accountFill } from "../features/accounts/accountColor";
 import { Avatar } from "../features/accounts/Avatar";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
+import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
+import { UnifiedTree } from "../features/unified/UnifiedTree";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
 import { useDropTarget } from "../features/mailboxes/useDropTarget";
@@ -132,6 +134,41 @@ function ActivityButton({ accounts, expanded, active }: { accounts: readonly Acc
   );
 }
 
+/** Stage 5: the outbox ("Ausgang"); red count while sends failed or need an answer. */
+function OutboxButton({ accounts, expanded, active }: { accounts: readonly Account[]; expanded: boolean; active: boolean }) {
+  const { t, i18n } = useTranslation();
+  const showOutbox = useUiStore((state) => state.showOutbox);
+  const mails = useOutgoing(accounts).flatMap((result) => result.data ?? []);
+  const attention = mails.filter((m) => m.state === "failed" || m.state === "unclear").length;
+  const pending = mails.filter((m) => m.state !== "sent" && m.state !== "failed" && m.state !== "unclear").length;
+  const shown = attention > 0 ? attention : pending;
+  const badge =
+    shown > 0 ? (
+      <span
+        aria-hidden
+        data-testid="outbox-badge"
+        data-attention={attention > 0 || undefined}
+        className={cx(
+          "absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
+          attention > 0 ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
+        )}
+      >
+        {new Intl.NumberFormat(i18n.language).format(shown)}
+      </span>
+    ) : null;
+  return (
+    <RailButton
+      icon={SendHorizontal}
+      label={shown > 0 ? t("composer.outbox.badge", { attention, pending }) : t("composer.outbox.nav")}
+      expanded={expanded}
+      active={active}
+      onClick={showOutbox}
+      badge={badge}
+      data-testid="rail-outbox"
+    />
+  );
+}
+
 function useAccountLabel() {
   const { t } = useTranslation();
   return (account: Account) =>
@@ -192,7 +229,9 @@ function AccountFolders({ account, selected }: { account: Account; selected: boo
 
   let current: MailboxId | null = null;
   if (view.kind === "mailbox" && view.accountId === account.id) current = view.mailboxId;
-  if (view.kind === "mail" && selected && isRoleView(view.mailView)) {
+  // Stage 7: while the unified inbox is shown, no account's own inbox is the current folder.
+  const unified = useUiStore((state) => state.unifiedInbox !== null);
+  if (view.kind === "mail" && selected && isRoleView(view.mailView) && !(unified && view.mailView === "inbox")) {
     current = mailboxWithRole(mailboxes.data ?? [], view.mailView)?.id ?? null;
   }
 
@@ -281,6 +320,7 @@ export function IconRail() {
         </ul>
         {expanded && (
           <div id={foldersId} className="flex flex-col gap-4 border-t border-border pt-4">
+            <UnifiedTree accountCount={accountList.length} />
             {accountList.map((account) => (
               <AccountFolders key={account.id} account={account} selected={account.id === selected?.id} />
             ))}
@@ -291,6 +331,7 @@ export function IconRail() {
         {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
         {expanded ? null : <AccountSwitcher accounts={accountList} selected={selected} />}
         <ActivityButton accounts={accountList} expanded={expanded} active={view.kind === "activity"} />
+        <OutboxButton accounts={accountList} expanded={expanded} active={view.kind === "outbox"} />
         <RailButton
           icon={Settings}
           label={t("nav.settings")}

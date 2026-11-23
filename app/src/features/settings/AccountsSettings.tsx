@@ -8,8 +8,10 @@ import type { Account } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
 import { Avatar } from "../accounts/Avatar";
 import { useAccounts } from "../accounts/queries";
+import { SyncDetectedHint } from "../settings-sync/SyncDetectedHint";
 import { AccountDetail } from "./accounts/AccountDetail";
 import { AddAccount } from "./accounts/AddAccount";
+import { AccountGroupsSection } from "../unified/AccountGroupsSection";
 
 function AccountRow({ account }: { account: Account }) {
   const { t } = useTranslation();
@@ -54,6 +56,8 @@ function AccountList() {
   };
   return (
     <SettingsSection title={t("settings.accounts.title")}>
+      {/* Stage 11: a settings sync found in an account on this (second) device. */}
+      <SyncDetectedHint />
       {accounts.isError && (
         <ErrorNotice
           context={t("settings.accounts.loadFailed")}
@@ -83,6 +87,8 @@ function AccountList() {
           <div>
             <Button onClick={add}>{t("settings.accounts.add")}</Button>
           </div>
+          {/* Stage 7: groups for the unified inbox. */}
+          <AccountGroupsSection accounts={accounts.data} />
         </>
       )}
     </SettingsSection>

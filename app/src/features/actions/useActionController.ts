@@ -15,6 +15,7 @@ import {
 } from "../../services/ipc";
 import { useNoticeStore } from "../../stores/notices";
 import { accountsQueryKey } from "../accounts/queries";
+import { useComfortActions } from "../comfort/useComfortActions";
 import { mailboxesQueryKey } from "../mailboxes/queries";
 import type { MessageListHandle } from "../messages/MessageList";
 import { messagesQueryKey } from "../messages/queries";
@@ -103,6 +104,8 @@ export function useActionController({ account, mailbox, list }: ControllerOption
   const [overlay, setOverlay] = useState<ActionOverlay | null>(null);
   const [missing, setMissing] = useState<MissingMailbox | null>(null);
   const waiting = useRef<AbortController | null>(null);
+  // Stage 9: pins, snoozes and tasks (local marks, their own menu).
+  const comfort = useComfortActions(account);
 
   // A folder creation still waited for belongs to this view only.
   useEffect(
@@ -207,7 +210,8 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     if (leaves) {
       // The core changed its local state before it answered: the reloaded list no longer has
       // the rows (or has them back after a failure), so hiding them is not needed any more.
-      await queryClient.invalidateQueries({ queryKey: messagesQueryKey(account.id, mailbox.id), exact: true });
+      // Not exact: the folder's other lists (stage 9: sorted inbox, Later, Pinned, Tasks) too.
+      await queryClient.invalidateQueries({ queryKey: messagesQueryKey(account.id, mailbox.id) });
       hide(ids, false);
     }
     return failure ? { ok: false, error: failure } : { ok: true };
@@ -239,6 +243,7 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     selectAll: () => {
       list.current?.selectAll();
     },
+    ...comfort.host,
   };
 
   /** The answer to `missing_mailbox`: this folder has the role from now on; then the action runs. */
@@ -297,6 +302,7 @@ export function useActionController({ account, mailbox, list }: ControllerOption
     createFolderForRole,
     cancelMissing,
     canUndo: lastUndo !== null,
+    comfort,
   };
 }
 

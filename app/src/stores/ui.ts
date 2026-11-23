@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AccountId, MailboxId, RenderToken } from "../services/ipc";
+import type { AccountId, MailboxId, RenderToken, UnifiedView } from "../services/ipc";
 
 /** Mail views of the icon rail, top to bottom (docs/DESIGN.md). Ids double as i18n keys in `nav`. */
 export const MAIL_VIEW_IDS = [
@@ -17,7 +17,20 @@ export const MAIL_VIEW_IDS = [
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];
 
-export const SETTINGS_SECTION_IDS = ["general", "accounts", "reading", "appearance", "about"] as const;
+export const SETTINGS_SECTION_IDS = [
+  "general",
+  "accounts",
+  "reading",
+  // Stage 5: undo delay, sent copies, signatures.
+  "compose",
+  // Stage 9: categories, bundles and sender rules; notifications.
+  "inbox",
+  "notifications",
+  "appearance",
+  "sync",
+  "mcp",
+  "about",
+] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
@@ -30,7 +43,9 @@ export type View =
   | { kind: "mailbox"; accountId: AccountId; mailboxId: MailboxId }
   | { kind: "settings"; section: SettingsSectionId }
   /** Changes waiting for the server, failed or changed elsewhere, of every account (stage 4). */
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** Stage 5: sends of every account ("Ausgang"): waiting, failed, unclear. */
+  | { kind: "outbox" };
 
 /**
  * A link the user activated in the reading pane: a click in an HTML mail (the core's navigation
@@ -50,6 +65,11 @@ interface UiState {
    * "the first account"; a removed account falls back to that as well.
    */
   selectedAccountId: AccountId | null;
+  /**
+   * Stage 7: the Inbox view shows the unified inbox of every visible account or of a group
+   * instead of the selected account's inbox. Picking an account or a folder ends it.
+   */
+  unifiedInbox: UnifiedView | null;
   /** The rail is unfolded into the labelled sidebar with the folder tree. */
   sidebarExpanded: boolean;
   /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
@@ -59,9 +79,11 @@ interface UiState {
   showMailView: (mailView: MailViewId) => void;
   showMailbox: (accountId: AccountId, mailboxId: MailboxId) => void;
   selectAccount: (accountId: AccountId) => void;
+  showUnifiedInbox: (view: UnifiedView) => void;
   showSettings: (section?: SettingsSectionId) => void;
   showAccountsPage: (page: AccountsPage) => void;
   showActivity: () => void;
+  showOutbox: () => void;
   toggleSidebar: () => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
   requestLink: (renderToken: RenderToken, index: number) => void;
@@ -72,6 +94,7 @@ interface UiState {
 export const useUiStore = create<UiState>()((set) => ({
   view: { kind: "mail", mailView: "inbox" },
   selectedAccountId: null,
+  unifiedInbox: null,
   sidebarExpanded: false,
   collapsedMailboxes: new Set<MailboxId>(),
   accountsPage: { kind: "list" },
@@ -80,14 +103,18 @@ export const useUiStore = create<UiState>()((set) => ({
     set({ view: { kind: "mail", mailView } });
   },
   showMailbox: (accountId, mailboxId) => {
-    set({ view: { kind: "mailbox", accountId, mailboxId }, selectedAccountId: accountId });
+    set({ view: { kind: "mailbox", accountId, mailboxId }, selectedAccountId: accountId, unifiedInbox: null });
   },
   selectAccount: (accountId) => {
     // A folder of another account makes no sense for the new one: back to its inbox.
     set((state) => ({
       selectedAccountId: accountId,
+      unifiedInbox: null,
       view: state.view.kind === "mailbox" ? { kind: "mail", mailView: "inbox" } : state.view,
     }));
+  },
+  showUnifiedInbox: (unifiedInbox) => {
+    set({ unifiedInbox, view: { kind: "mail", mailView: "inbox" } });
   },
   showSettings: (section = "general") => {
     set({ view: { kind: "settings", section }, ...(section === "accounts" && { accountsPage: { kind: "list" } }) });
@@ -97,6 +124,9 @@ export const useUiStore = create<UiState>()((set) => ({
   },
   showActivity: () => {
     set({ view: { kind: "activity" } });
+  },
+  showOutbox: () => {
+    set({ view: { kind: "outbox" } });
   },
   toggleSidebar: () => {
     set((state) => ({ sidebarExpanded: !state.sidebarExpanded }));

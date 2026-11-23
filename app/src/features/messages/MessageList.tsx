@@ -26,7 +26,8 @@ import { MESSAGE_DRAG_TYPE } from "../../stores/drag";
 import { isFirstSyncRunning } from "../accounts/selection";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import { readListMetrics } from "./listMetrics";
-import { MessageRowContent, useRowLabel } from "./MessageRow";
+import type { MessageListSource } from "./listSource";
+import { MessageRowContent, useRowLabel, type RowDecoration } from "./MessageRow";
 import { useMessagePages } from "./queries";
 import { buildRows, dayBounds, firstDayOfWeek, formatMonthSection, type DayBounds, type ListRow, type Section } from "./rows";
 import { useToday } from "./useToday";
@@ -71,8 +72,9 @@ export interface ListSelection {
 export const NO_SELECTION: ListSelection = { cursor: null, items: [], loaded: 0, hasMore: false };
 
 interface MessageListProps {
-  account: Account;
-  mailbox: Mailbox;
+  /** The folder's account and the folder; absent for lists that mix accounts (stage 7). */
+  account?: Account | undefined;
+  mailbox?: Mailbox | undefined;
   /** Name of the folder as shown in the header, for the list's accessible name. */
   folderName: string;
   showRecipients: boolean;
@@ -89,6 +91,8 @@ interface MessageListProps {
   onDragRows?: (items: readonly MessageListItem[]) => void;
   onDragEnd?: () => void;
   handle?: Ref<MessageListHandle>;
+  /** Stage 9: rows from another source than the folder's pages (sorted inbox, Later, Pinned, Tasks). */
+  source?: MessageListSource | undefined;
 }
 
 /** DOM id of a row's preview text, which describes the row's option. */
@@ -127,12 +131,14 @@ type MessageOptionProps = ComponentPropsWithRef<"div"> & {
   showRecipients: boolean;
   /** Id of the preview text, which describes the option (read after its name). */
   previewId: string | undefined;
+  /** Stage 7: conversation size and search highlights of the row. */
+  decoration?: RowDecoration | undefined;
   "data-index": number;
 };
 
 /** The `option` element of a message row, named for screen readers by `useRowLabel`. */
-function MessageOption({ item, showRecipients, previewId, children, ...rest }: MessageOptionProps) {
-  const label = useRowLabel(item, showRecipients);
+function MessageOption({ item, showRecipients, previewId, decoration, children, ...rest }: MessageOptionProps) {
+  const label = useRowLabel(item, showRecipients, decoration);
   return (
     <div role="option" aria-label={label} aria-describedby={previewId} {...rest}>
       {children}
@@ -192,9 +198,12 @@ export function MessageList({
   onDragRows,
   onDragEnd,
   handle,
+  source,
 }: MessageListProps) {
   const { t, i18n } = useTranslation();
-  const query = useMessagePages(account.id, mailbox.id);
+  const folderQuery = useMessagePages(account?.id ?? "", mailbox?.id ?? 0, source === undefined && account !== undefined && mailbox !== undefined);
+  const query = source?.query ?? folderQuery;
+  const build = source?.buildRows ?? buildRows;
   const today = useToday();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   /** The same element as state, so effects that observe it run once it is mounted. */
@@ -214,7 +223,7 @@ export function MessageList({
     return hiddenIds && hiddenIds.size > 0 ? all.filter((item) => !hiddenIds.has(item.id)) : all;
   }, [query.data, hiddenIds]);
   const bounds = useMemo(() => dayBounds(today, firstDayOfWeek(i18n.language)), [today, i18n.language]);
-  const rows = useMemo(() => buildRows(items, bounds), [items, bounds]);
+  const rows = useMemo(() => build(items, bounds), [build, items, bounds]);
   /** Row index of every message, by position. */
   const messageRows = useMemo(() => rows.flatMap((row, index) => (row.kind === "message" ? [index] : [])), [rows]);
   const rowById = useMemo(() => {
@@ -267,8 +276,12 @@ export function MessageList({
   const count = rows.length + (hasMore ? 1 : 0);
 
   const estimateSize = useCallback(
-    (index: number) => (rows[index]?.kind === "section" ? metrics.section : rowSize),
-    [rows, metrics.section, rowSize],
+    (index: number) => {
+      const row = rows[index];
+      if (row?.kind === "section" || (row?.kind === "extra" && row.size === "section")) return metrics.section;
+      return row?.kind === "extra" ? metrics.row : rowSize;
+    },
+    [rows, metrics.section, metrics.row, rowSize],
   );
   const getItemKey = useCallback((index: number) => rows[index]?.key ?? "more", [rows]);
   const rangeExtractor = useCallback(
@@ -553,7 +566,7 @@ export function MessageList({
   }
 
   if (items.length === 0) {
-    if (isFirstSyncRunning(account.status)) {
+    if (account && isFirstSyncRunning(account.status)) {
       return (
         <div className="flex min-h-0 flex-1 flex-col">
           <EmptyState
@@ -564,10 +577,16 @@ export function MessageList({
         </div>
       );
     }
+    if (source?.empty) return <EmptyState icon={source.empty.icon} title={source.empty.title} body={source.empty.body} />;
     return <EmptyState icon={Inbox} title={t("list.empty.title")} body={t("list.empty.body")} />;
   }
 
-  const total = hasMore ? Math.max(mailbox.total, items.length) : items.length;
+  // Stage 9: a source's rows can hold messages that are no options (members of a closed bundle).
+  const total = hasMore
+    ? Math.max(source?.total ?? mailbox?.total ?? 0, items.length)
+    : source
+      ? messageRows.length
+      : items.length;
   const activeId = cursorItem ? `${optionPrefix}-${String(cursorItem.id)}` : undefined;
 
   return (
@@ -630,6 +649,22 @@ export function MessageList({
                 </div>
               );
             }
+            if (row.kind === "extra") {
+              return (
+                <div
+                  key={virtualItem.key}
+                  {...common}
+                  role="presentation"
+                  data-testid="list-extra"
+                  className={cx(
+                    "absolute top-0 left-0 w-full",
+                    row.size === "section" ? "h-(--ui-section-height)" : "h-(--ui-row-height)",
+                  )}
+                >
+                  {row.render()}
+                </div>
+              );
+            }
             if (row.kind === "section") {
               return (
                 <div
@@ -648,6 +683,7 @@ export function MessageList({
             const isCursor = virtualItem.index === cursorRow;
             const optionId = `${optionPrefix}-${String(row.item.id)}`;
             const previewId = row.item.preview?.trim() ? previewDomId(optionId) : undefined;
+            const decoration = source?.decorate?.(row.item);
             return (
               <MessageOption
                 key={virtualItem.key}
@@ -656,6 +692,7 @@ export function MessageList({
                 item={row.item}
                 showRecipients={showRecipients}
                 previewId={previewId}
+                decoration={decoration}
                 aria-selected={selected}
                 aria-setsize={total}
                 aria-posinset={row.position + 1}
@@ -686,7 +723,7 @@ export function MessageList({
               >
                 <MessageRowContent
                   item={row.item}
-                  accountColor={account.color}
+                  accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
                   bounds={bounds}
                   showRecipients={showRecipients}
                   twoLine={twoLine}
@@ -694,6 +731,7 @@ export function MessageList({
                   cursor={isCursor}
                   multiSelect={multiSelect}
                   previewId={previewId}
+                  decoration={decoration}
                   actions={renderQuickActions?.(row.item, selected)}
                 />
               </MessageOption>

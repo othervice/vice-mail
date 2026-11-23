@@ -2,8 +2,10 @@ import { Check, Clock, Flag, Paperclip, TriangleExclamationPoint } from "lucide-
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
-import type { AccountColor, Address, MessageActivity, MessageListItem } from "../../services/ipc";
+import { HighlightedText } from "../../components/HighlightedText";
+import type { AccountColor, Address, MessageActivity, MessageListItem, SearchHighlights } from "../../services/ipc";
 import { Avatar } from "../accounts/Avatar";
+import { RowMarks, useRowMarkLabels } from "../comfort/RowMarks";
 import { formatFullDate, formatListDate, type DayBounds } from "./rows";
 
 interface MessageRowContentProps {
@@ -23,6 +25,21 @@ interface MessageRowContentProps {
   previewId?: string | undefined;
   /** Quick actions, shown on hover and on the keyboard cursor (mouse shortcuts, see MessageList). */
   actions?: ReactNode;
+  /** Stage 7: conversation size and search highlights. */
+  decoration?: RowDecoration | undefined;
+}
+
+/** Stage 7: what a row of a conversation list or of search results adds to the message. */
+export interface RowDecoration {
+  /** Messages in the conversation; shown after the subject when more than one. */
+  threadCount?: number;
+  /** Found places (UTF-16 ranges) in subject, sender and preview. */
+  highlights?: SearchHighlights;
+}
+
+/** Where `trimmed` starts in `raw`, so ranges into `raw` still fit after trimming. */
+function leadingSpace(raw: string): number {
+  return raw.length - raw.trimStart().length;
 }
 
 function addressName(address: Address): string {
@@ -48,17 +65,22 @@ export function rowActivity(item: MessageListItem): MessageActivity | null {
  * failed change, full date. Explicit, because a name computed from the row's parts would run words
  * together.
  */
-export function useRowLabel(item: MessageListItem, showRecipients: boolean): string {
+export function useRowLabel(item: MessageListItem, showRecipients: boolean, decoration?: RowDecoration): string {
   const { t, i18n } = useTranslation();
   const who = useWho(item, showRecipients);
   const activity = rowActivity(item);
+  const threadCount = decoration?.threadCount ?? 1;
+  const comfortMarks = useRowMarkLabels();
   return [
     item.unread && t("list.unread"),
     who,
     item.subject.trim() || t("list.noSubject"),
+    threadCount > 1 && t("threads.rowLabel", { count: threadCount }),
     item.hasAttachments && t("list.attachment"),
     item.flagged && t("list.flagged"),
     activity && t(`list.activity.${activity}`),
+    // Stage 9: important, pinned, snoozed or back, task.
+    ...comfortMarks(item),
     formatFullDate(item.date, i18n.language),
   ]
     .filter(Boolean)
@@ -133,6 +155,7 @@ export function MessageRowContent({
   multiSelect,
   previewId,
   actions,
+  decoration,
 }: MessageRowContentProps) {
   const { t, i18n } = useTranslation();
   const person = showRecipients ? item.to[0] : item.from;
@@ -140,6 +163,7 @@ export function MessageRowContent({
   const subject = item.subject.trim() || t("list.noSubject");
   const time = formatListDate(item.date, bounds, i18n.language);
   const activity = rowActivity(item);
+  const highlights = decoration?.highlights;
 
   const sender = (
     <span
@@ -151,22 +175,44 @@ export function MessageRowContent({
         twoLine && "min-w-0 flex-1",
       )}
     >
-      {who}
+      {highlights && !showRecipients && item.from ? (
+        <HighlightedText text={who} ranges={highlights.from} offset={item.from.name?.trim() ? leadingSpace(item.from.name) : 0} />
+      ) : (
+        who
+      )}
     </span>
   );
   const preview = item.preview?.trim();
+  const threadCount = decoration?.threadCount ?? 1;
   // The subject comes first; the preview takes what is left of the line (basis 0), down to nothing.
   const subjectLine = (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       <span title={subject} className={cx("min-w-0 truncate text-14", item.subject.trim() ? "text-primary" : "text-tertiary")}>
-        {subject}
+        {highlights && item.subject.trim() ? (
+          <HighlightedText text={subject} ranges={highlights.subject} offset={leadingSpace(item.subject)} />
+        ) : (
+          subject
+        )}
       </span>
+      {threadCount > 1 && (
+        <span
+          aria-hidden
+          className="shrink-0 rounded-control border border-border px-1 text-12 text-secondary tabular-nums"
+          data-testid="row-thread-count"
+        >
+          {new Intl.NumberFormat(i18n.language).format(threadCount)}
+        </span>
+      )}
       {item.hasAttachments && (
         <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
       )}
       {preview && (
         <span id={previewId} className="min-w-0 flex-1 basis-0 truncate text-13 text-tertiary" data-testid="row-preview">
-          {preview}
+          {highlights ? (
+            <HighlightedText text={preview} ranges={highlights.preview} offset={leadingSpace(item.preview ?? "")} />
+          ) : (
+            preview
+          )}
         </span>
       )}
     </span>
@@ -177,6 +223,7 @@ export function MessageRowContent({
         <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />
       )}
       {activity && <ActivityIcon activity={activity} />}
+      <RowMarks item={item} />
     </>
   );
   const timeElement = (

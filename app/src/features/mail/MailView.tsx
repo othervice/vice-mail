@@ -9,7 +9,6 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
 import {
-  MARK_READ_DELAY_MS,
   MAX_ACTION_MESSAGES,
   type Account,
   type Mailbox,
@@ -18,6 +17,8 @@ import {
 } from "../../services/ipc";
 import { useDragStore } from "../../stores/drag";
 import { useNoticeStore } from "../../stores/notices";
+import { openComposer } from "../../stores/composer";
+import { useSearchStore } from "../../stores/search";
 import { useUiStore, type View } from "../../stores/ui";
 import { accountFill } from "../accounts/accountColor";
 import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
@@ -25,7 +26,6 @@ import { isFirstSyncRunning, useSelectedAccount } from "../accounts/selection";
 import { ActionToolbar, QuickActions } from "../actions/ActionButtons";
 import { MissingMailboxPrompt } from "../actions/MissingMailboxPrompt";
 import { MovePicker, TagEditor } from "../actions/Pickers";
-import { useReadingPreferences } from "../actions/queries";
 import {
   ACTION_IDS,
   ACTIONS,
@@ -36,13 +36,23 @@ import {
 } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
 import { useActionController, type ActionController } from "../actions/useActionController";
+import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { useAppInfo } from "../app-info/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
+import { useListSource, type ListKind } from "../comfort/listSources";
+import { SnoozePicker } from "../comfort/SnoozePicker";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
+import { SearchArea } from "../search/SearchArea";
+import { useSearchShortcut } from "../search/shortcut";
+import { ConversationToggle } from "../threads/ConversationToggle";
+import { useThreadSource } from "../threads/source";
+import { ThreadPane } from "../threads/ThreadPane";
+import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
+import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
 
 export type MailViewState = Extract<View, { kind: "mail" } | { kind: "mailbox" }>;
 
@@ -69,48 +79,8 @@ interface MailboxPanesProps {
   account: Account;
   mailbox: Mailbox;
   folderName: string;
-}
-
-/**
- * "Mark as read when opened" (Settings, Reading): right away, after `MARK_READ_DELAY_MS` of the
- * message staying open (a change of selection before cancels it), or never. Only for accounts
- * with writes on, and once per opening: a message the user marks unread while it is open stays
- * unread. An ordinary `markRead` action, without an undo notice.
- */
-function useMarkReadOnOpen(account: Account, item: MessageListItem | null, controller: ActionController) {
-  const preferences = useReadingPreferences();
-  const mode = preferences.data?.markReadOnOpen;
-  const handled = useRef<MessageId | null>(null);
-  const id = item?.id ?? null;
-  const unread = item?.unread ?? false;
-  const writes = account.writesEnabled;
-  const markRead = useEffectEvent(() => {
-    if (item) void controller.apply({ type: "markRead" }, [item], { silent: true, errorContext: "markRead" });
-  });
-  useEffect(() => {
-    if (id === null) {
-      handled.current = null;
-      return undefined;
-    }
-    if (handled.current === id) return undefined;
-    if (!unread) {
-      handled.current = id;
-      return undefined;
-    }
-    if (!mode || mode === "never" || !writes) return undefined;
-    if (mode === "immediately") {
-      handled.current = id;
-      markRead();
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      handled.current = id;
-      markRead();
-    }, MARK_READ_DELAY_MS);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [id, unread, mode, writes]);
+  /** Stage 9: the sorted inbox, Later, Pinned or Tasks instead of the folder's pages. */
+  kind?: ListKind;
 }
 
 interface SelectionBarProps {
@@ -227,11 +197,16 @@ function SelectionSummary({ count, platform }: { count: number; platform: Shortc
  * bar, drag and drop onto folders and the keyboard shortcuts all come from the action directory
  * (`actions/registry.ts`) and run through one action controller.
  */
-function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
+function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: MailboxPanesProps) {
   const { t } = useTranslation();
+  // Stage 7: conversation view for folders and the inbox (Later, Pinned, Tasks stay single messages).
+  const conversations = useSearchStore((state) => state.conversations) && (kind === "folder" || kind === "inbox");
+  const threadSource = useThreadSource(account.id, mailbox.id, conversations);
+  const comfortSource = useListSource(conversations ? "folder" : kind, account, mailbox);
+  const source = threadSource ?? comfortSource;
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const mailboxes = useMailboxes(account.id).data;
-  const pages = useMessagePages(account.id, mailbox.id);
+  const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations);
   const label = useMailboxLabel();
   const push = useNoticeStore((state) => state.push);
   const startDrag = useDragStore((state) => state.start);
@@ -256,7 +231,7 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || isEditableTarget(event.target)) return;
-    if (controller.overlay) return;
+    if (controller.overlay || controller.comfort.snoozeItems) return;
     const ctx = ctxFor(targets);
     for (const id of ACTION_IDS) {
       const definition = ACTIONS[id];
@@ -281,7 +256,7 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
     };
   }, []);
 
-  const loaded = pages.data?.pages.flatMap((page) => page.items) ?? [];
+  const loaded = (source?.query.data ?? pages.data)?.pages.flatMap((page) => page.items) ?? [];
   const byId = new Map(loaded.map((item) => [item.id, item]));
   const fresh = (ids: readonly MessageId[]) => ids.flatMap((id) => byId.get(id) ?? []);
   const { overlay } = controller;
@@ -321,6 +296,7 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
             list={list}
           />
         )}
+        {source?.controls}
         <MessageList
           account={account}
           mailbox={mailbox}
@@ -328,6 +304,7 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
           showRecipients={mailbox.role === "sent" || mailbox.role === "drafts"}
           platform={platform}
           hiddenIds={controller.hiddenIds}
+          source={source}
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
@@ -336,6 +313,11 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
             setFocusRequest((request) => (request && request.messageId === only ? request : null));
           }}
           onOpen={(id) => {
+            // Stage 5: a draft opens in the composer (also one written by another program).
+            if (byId.get(id)?.draft && mailbox.role === "drafts") {
+              openComposer({ kind: "message", messageId: id });
+              return;
+            }
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
           renderQuickActions={(item) => (
@@ -354,7 +336,31 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
           onDragEnd={endDrag}
         />
       </div>
-      {single ? (
+      {single && conversations ? (
+        <ThreadPane
+          key={single.id}
+          account={account}
+          item={single}
+          mailboxId={mailbox.id}
+          focusRequest={focusRequest}
+          // Actions only for messages of this folder; the controller works per folder.
+          toolbarFor={(message) =>
+            message.mailboxId === mailbox.id && (
+              <ActionToolbar
+                ids={TOOLBAR_ACTIONS}
+                ctx={ctxFor([message])}
+                host={controller.host}
+                platform={platform}
+                label={t("actions.toolbar")}
+              />
+            )
+          }
+          onEscape={focusList}
+          onClose={() => {
+            list.current?.clearSelection();
+          }}
+        />
+      ) : single ? (
         <ReadingPane
           key={single.id}
           account={account}
@@ -391,6 +397,16 @@ function MailboxPanes({ account, mailbox, folderName }: MailboxPanesProps) {
           onCancel={controller.closeOverlay}
           focusAfterConfirm={focusList}
           data-testid="confirm-delete"
+        />
+      )}
+      {controller.comfort.snoozeItems && (
+        <SnoozePicker
+          count={controller.comfort.snoozeItems.length}
+          onChoose={(choice) => {
+            void controller.comfort.snooze(choice);
+          }}
+          onClose={controller.comfort.closeSnooze}
+          restoreFocus={focusList}
         />
       )}
       {overlay?.kind === "move" && (
@@ -446,7 +462,12 @@ function MailBody({ view, account }: MailBodyProps) {
   const accountName = account.displayName || account.email;
 
   const roleView = view.kind === "mail" && isRoleView(view.mailView) ? view.mailView : null;
-  if (view.kind === "mail" && !roleView) {
+  // Stage 9: Later, Pinned and Tasks show the marked messages of the account's inbox.
+  const markView =
+    view.kind === "mail" && (view.mailView === "later" || view.mailView === "pinned" || view.mailView === "tasks")
+      ? view.mailView
+      : null;
+  if (view.kind === "mail" && !roleView && !markView) {
     // Views without a function yet (Later, Tasks, Pinned, Saved views) say so honestly.
     const name = t(`nav.${view.mailView}`);
     return <EmptyState icon={Hourglass} title={t("mail.notYet.title")} body={t("mail.notYet.body", { view: name })} />;
@@ -469,7 +490,9 @@ function MailBody({ view, account }: MailBodyProps) {
   const mailbox =
     view.kind === "mailbox"
       ? mailboxes.data.find((m) => m.id === view.mailboxId)
-      : roleView && mailboxWithRole(mailboxes.data, roleView);
+      : markView
+        ? mailboxWithRole(mailboxes.data, "inbox")
+        : roleView && mailboxWithRole(mailboxes.data, roleView);
 
   if (!mailbox) {
     if (mailboxes.data.length === 0 && isFirstSyncRunning(account.status)) {
@@ -481,10 +504,10 @@ function MailBody({ view, account }: MailBodyProps) {
         />
       );
     }
-    if (!roleView) {
+    if (!roleView && !markView) {
       return <EmptyState icon={FolderX} title={t("mail.folderGone.title")} body={t("mail.folderGone.body")} />;
     }
-    const role = t(`roles.${roleView}`);
+    const role = t(`roles.${roleView ?? "inbox"}`);
     return (
       <EmptyState
         icon={FolderX}
@@ -500,7 +523,16 @@ function MailBody({ view, account }: MailBodyProps) {
     );
   }
 
-  return <MailboxPanes key={mailbox.id} account={account} mailbox={mailbox} folderName={label(mailbox)} />;
+  const kind: ListKind = markView ?? (mailbox.role === "inbox" ? "inbox" : "folder");
+  return (
+    <MailboxPanes
+      key={`${String(mailbox.id)}-${kind}`}
+      account={account}
+      mailbox={mailbox}
+      folderName={markView ? t(`nav.${markView}`) : label(mailbox)}
+      kind={kind}
+    />
+  );
 }
 
 interface MailViewProps {
@@ -518,9 +550,35 @@ export function MailView({ view }: MailViewProps) {
   const { accounts, account } = useSelectedAccount();
   const mailboxes = useMailboxes(view.kind === "mailbox" ? view.accountId : null);
   const label = useMailboxLabel();
+  // Stage 7: search, the unified inbox and its switcher in the header.
+  const platform = shortcutPlatform(useAppInfo().data?.platform);
+  useSearchShortcut(platform);
+  const openSearch = useSearchStore((state) => state.openSearch);
+  const unified = useUiStore((state) => state.unifiedInbox);
+  const accountList = accounts.data ?? [];
+  const inboxView = view.kind === "mail" && view.mailView === "inbox";
+  const unifiedView = inboxView && account ? unified : null;
+  const unifiedName = useUnifiedName(unifiedView ?? { kind: "all" });
+  const roleMailboxes = useMailboxes(unifiedView ? null : account?.id).data ?? [];
+  const searchContext = {
+    accountId: unifiedView ? null : (account?.id ?? null),
+    mailboxId:
+      view.kind === "mailbox"
+        ? view.mailboxId
+        : !unifiedView && isRoleView(view.mailView)
+          ? (mailboxWithRole(roleMailboxes, view.mailView)?.id ?? null)
+          : null,
+    groupId: unifiedView?.kind === "group" ? unifiedView.groupId : null,
+  };
 
   const folder = view.kind === "mailbox" ? mailboxes.data?.find((m) => m.id === view.mailboxId) : undefined;
-  const title = view.kind === "mail" ? t(`nav.${view.mailView}`) : folder ? label(folder) : t("nav.folders");
+  const title = unifiedView
+    ? unifiedName
+    : view.kind === "mail"
+      ? t(`nav.${view.mailView}`)
+      : folder
+        ? label(folder)
+        : t("nav.folders");
 
   let body;
   if (accounts.isPending) {
@@ -551,23 +609,43 @@ export function MailView({ view }: MailViewProps) {
         }}
       />
     );
+  } else if (unifiedView) {
+    body = (
+      <SearchArea context={searchContext} platform={platform}>
+        <UnifiedInbox view={unifiedView} accounts={accountList} platform={platform} />
+      </SearchArea>
+    );
   } else {
     body = (
-      <>
+      <SearchArea context={searchContext} platform={platform}>
         <AccountErrorBanner account={account} />
         <MailBody view={view} account={account} />
-      </>
+      </SearchArea>
     );
   }
+  const subtitle =
+    inboxView && account && (accountList.length > 1 || unifiedView) ? (
+      <InboxScopeSwitcher accounts={accountList} account={account} />
+    ) : (
+      account && <AccountLine account={account} />
+    );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewHeader title={title} subtitle={account && <AccountLine account={account} />} dragRegion={dragRegion}>
+      <ViewHeader title={title} subtitle={subtitle} dragRegion={dragRegion}>
         <div className="flex min-w-0 items-center gap-3">
           {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
           <div className="flex shrink-0 items-center gap-1">
-            <IconButton icon={Search} label={t("mail.search")} disabled />
-            <IconButton icon={SquarePen} label={t("mail.compose")} disabled />
+            {account && <ConversationToggle />}
+            <IconButton icon={Search} label={t("search.open")} disabled={!account} onClick={openSearch} />
+            <IconButton
+              icon={SquarePen}
+              label={t("mail.compose")}
+              disabled={!account}
+              onClick={() => {
+                if (account) openComposer({ kind: "new", accountId: account.id });
+              }}
+            />
           </div>
         </div>
       </ViewHeader>

@@ -10,6 +10,7 @@ import type { Account, BodyFormat, MessageId, MessageView } from "../../services
 import { useUiStore } from "../../stores/ui";
 import { Attachments } from "./Attachments";
 import { LinkCard } from "./LinkCard";
+import { CategoryPanel } from "../comfort/CategoryPanel";
 import { MessageHeader } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
@@ -280,6 +281,8 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
     content = (
       <>
         <MessageHeader header={view.header} account={account} subjectId={subjectId} />
+        {/* Stage 9: "Why here?" and "always as …". */}
+        <CategoryPanel messageId={view.id} />
         <Problems view={view} />
         <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
         <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />

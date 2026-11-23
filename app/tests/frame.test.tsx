@@ -40,6 +40,7 @@ describe("app frame without an account", () => {
       "Folders",
       "Saved views",
       "Activity",
+      "Outbox",
       "Settings",
     ]);
     expect(within(rail).getByRole("list", { name: "Accounts" }).children).toHaveLength(0);
@@ -96,7 +97,12 @@ describe("app frame without an account", () => {
       "General",
       "Accounts",
       "Reading",
+      "Writing",
+      "Inbox",
+      "Notifications",
       "Appearance",
+      "Settings sync",
+      "AI over MCP",
       "About",
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();

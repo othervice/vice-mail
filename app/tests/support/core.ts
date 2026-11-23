@@ -1,5 +1,9 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { isValidKeyword } from "../../src/features/actions/keywords";
+import { createComposeFake, type ComposeFakeOptions, type ComposeFakeState } from "./compose";
+import { createSearchFake, type SearchFakeOptions, type SearchFakeState } from "./search";
+import { createMcpSyncFake, type McpSyncFakeOptions, type McpSyncFakeState } from "./mcpSync";
+import { createComfortFake, type ComfortFake, type ComfortFakeOptions } from "./comfort";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -260,6 +264,14 @@ interface FakeCoreOptions {
   readingPreferences?: ReadingPreferences;
   /** Operations already in the outbox (activity view), newest first. */
   operations?: OperationInfo[];
+  /** Stage 5: drafts, sending, outbox view, compose settings. */
+  compose?: ComposeFakeOptions;
+  /** Stage 7: search, conversations, unified inbox, groups, hidden accounts, identities. */
+  search?: SearchFakeOptions;
+  /** Stages 12 and 11: AI over MCP and the settings sync. */
+  mcpSync?: McpSyncFakeOptions;
+  /** Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings. */
+  comfort?: ComfortFakeOptions;
 }
 
 export interface FakeCore {
@@ -286,6 +298,14 @@ export interface FakeCore {
   /** The server created the folders `createMailbox` asked for (the test then emits `mailboxesChanged`). */
   completeMailboxCreations: () => void;
   readonly readingPreferences: ReadingPreferences;
+  /** Stage 5: drafts and sends as the fake core holds them now. */
+  readonly compose: ComposeFakeState;
+  /** Stage 7: groups, hidden accounts and identities as the fake core holds them now. */
+  readonly search: SearchFakeState;
+  /** Stages 12 and 11: MCP switch, shares, clients and the sync status as the fake holds them now. */
+  readonly mcpSync: McpSyncFakeState;
+  /** Stage 9: marks, settings and rules as the fake core holds them now. */
+  readonly comfort: ComfortFake;
 }
 
 /**
@@ -604,6 +624,25 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     }
   }
 
+  const searchFake = createSearchFake(options.search ?? {}, {
+    accounts: () => accounts,
+    mailboxes: () => mailboxes,
+    messages: (mailboxId) => messages.get(mailboxId) ?? [],
+  });
+
+  // Stages 12 and 11: AI over MCP and the settings sync.
+  const mcpSyncFake = createMcpSyncFake(options.mcpSync ?? {}, { accounts: () => accounts, calls: () => calls });
+
+  // Stage 5: drafts, sending, outbox view, compose settings.
+  const composeFake = createComposeFake(options.compose ?? {}, { accounts: () => accounts });
+
+  // Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings.
+  const comfortFake = createComfortFake(options.comfort ?? {}, {
+    messagesIn: (mailboxId) => messages.get(mailboxId) ?? [],
+    listMessages,
+    reject: (code) => reject(code),
+  });
+
   mockIPC(
     (cmd, rawArgs) => {
       calls.push({ cmd, args: rawArgs });
@@ -725,8 +764,20 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         case "get_prefetch_status":
           return options.prefetchStatus?.[args["accountId"] as string] ?? PREFETCH_IDLE;
         default: {
+          // Stage 5 first: it answers `retry_operation` for sends only.
+          const composeAnswer = composeFake.handle(cmd, args);
+          if (composeAnswer !== undefined) return composeAnswer;
           const answer = handleOutbox(cmd, args);
           if (answer !== undefined) return answer;
+          // Stage 7: search, conversations, unified inbox, groups, identities.
+          const searchAnswer = searchFake.handle(cmd, args);
+          if (searchAnswer !== undefined) return searchAnswer;
+          // Stages 12 and 11: AI over MCP and the settings sync.
+          const mcpSyncAnswer = mcpSyncFake.handle(cmd, args);
+          if (mcpSyncAnswer !== undefined) return mcpSyncAnswer;
+          // Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings.
+          const comfortAnswer = comfortFake.handle(cmd, args);
+          if (comfortAnswer !== undefined) return comfortAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -792,5 +843,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     get readingPreferences() {
       return readingPreferences;
     },
+    compose: composeFake.state,
+    search: searchFake.state,
+    mcpSync: mcpSyncFake.state,
+    comfort: comfortFake,
   };
 }

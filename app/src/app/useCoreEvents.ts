@@ -1,11 +1,16 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { applyAccountStatus, invalidateAccountData } from "../features/accounts/queries";
+import { handleComfortEvent } from "../features/comfort/events";
+import { handleComposeEvent } from "../features/composer/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
+import { handleMcpEvent } from "../features/mcp/events";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
 import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
+import { handleSettingsSyncEvent } from "../features/settings-sync/events";
+import { handleSearchEvent } from "../features/search/events";
 import { ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
 import { reportOwnFailures } from "../stores/notices";
 import { useUiStore } from "../stores/ui";
@@ -17,6 +22,15 @@ import { refreshQuery } from "./refreshQuery";
  * default); the rest are marked stale and reload when they are shown next.
  */
 export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): void {
+  // Stage 5: drafts, send states and the question after an unclear send.
+  handleComposeEvent(queryClient, event);
+  // Stages 12 and 11: AI access over MCP and the settings sync.
+  handleMcpEvent(queryClient, event);
+  handleSettingsSyncEvent(queryClient, event);
+  // Stage 7: search results, conversations, unified inbox, groups and identities.
+  handleSearchEvent(queryClient, event);
+  // Stage 9: sorted inbox, Later, Pinned, Tasks, skipped local rules, notification clicks.
+  handleComfortEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

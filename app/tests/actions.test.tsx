@@ -172,11 +172,15 @@ describe("actions from the toolbar and the rows", () => {
     const names = within(toolbar)
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    expect(names).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
+    // Stage 5: reply, reply all and forward come first.
+    expect(names.slice(0, 3)).toEqual(["Reply", "Reply all", "Forward"]);
+    expect(names.slice(3, 10)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
     const archive = within(toolbar).getByRole("button", { name: "Archive" });
     expect(archive.getAttribute("aria-keyshortcuts")).toBe("E");
-    // One tab stop; arrows move along.
-    expect(archive.tabIndex).toBe(0);
+    // One tab stop (the first button, Reply since stage 5); arrows move along.
+    const reply = within(toolbar).getByRole("button", { name: "Reply" });
+    expect(reply.tabIndex).toBe(0);
+    expect(archive.tabIndex).toBe(-1);
     archive.focus();
     await user.keyboard("{ArrowRight}");
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Delete");
@@ -441,7 +445,11 @@ describe("read-only accounts", () => {
     const { pane } = await openFirst(user);
 
     const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    // Stage 9: pins, snoozes and tasks are local marks and stay available on read-only accounts.
+    // Stage 5: replying and forwarding write local drafts; sending explains read-only itself.
+    const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward"]);
     for (const button of within(toolbar).getAllByRole("button")) {
+      if (local.has(button.getAttribute("aria-label") ?? "")) continue;
       expect(button.getAttribute("aria-disabled")).toBe("true");
     }
     const note = within(pane).getByTestId("read-only-actions");
@@ -630,7 +638,8 @@ describe("multi-selection", () => {
     await waitFor(() => {
       expect(within(bar).getByTestId("selection-count").textContent).toBe("250 selected");
     });
-    expect(core.callsOf("list_messages").length).toBeGreaterThanOrEqual(2);
+    // Stage 9: the inbox is the sorted inbox, paged by `listInbox`.
+    expect(core.callsOf("list_inbox").length).toBeGreaterThanOrEqual(2);
     expect(within(bar).queryByTestId("selection-not-loaded")).toBeNull();
   });
 

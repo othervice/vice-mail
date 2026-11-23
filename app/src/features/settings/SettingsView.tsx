@@ -4,6 +4,11 @@ import { useTranslation } from "react-i18next";
 import { ViewHeader } from "../../components/ViewHeader";
 import { SETTINGS_SECTION_IDS, useUiStore, type SettingsSectionId } from "../../stores/ui";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
+import { InboxSettings } from "../comfort/InboxSettings";
+import { ComposeSettings } from "../composer/ComposeSettings";
+import { NotificationSettings } from "../comfort/NotificationSettings";
+import { McpSettings } from "../mcp/McpSettings";
+import { SettingsSyncSettings } from "../settings-sync/SettingsSyncSettings";
 import { AboutSettings } from "./AboutSettings";
 import { AccountsSettings } from "./AccountsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -14,7 +19,12 @@ const SECTIONS: Record<SettingsSectionId, ComponentType> = {
   general: GeneralSettings,
   accounts: AccountsSettings,
   reading: ReadingSettings,
+  compose: ComposeSettings,
+  inbox: InboxSettings,
+  notifications: NotificationSettings,
   appearance: AppearanceSettings,
+  sync: SettingsSyncSettings,
+  mcp: McpSettings,
   about: AboutSettings,
 };
 

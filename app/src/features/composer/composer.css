@@ -1,0 +1,62 @@
+/*
+ * The rich text body of the composer. TipTap's injected stylesheet is off (the CSP allows no
+ * `<style>` elements at runtime), so the rules ProseMirror needs are here, with tokens only.
+ */
+.composer-prose {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+
+.composer-prose:focus-visible {
+  outline: none;
+}
+
+.composer-prose p {
+  margin: 0 0 var(--ui-space-2);
+}
+
+.composer-prose ul,
+.composer-prose ol {
+  margin: 0 0 var(--ui-space-2);
+  padding-inline-start: var(--ui-space-6);
+}
+
+.composer-prose ul {
+  list-style: disc;
+}
+
+.composer-prose ol {
+  list-style: decimal;
+}
+
+.composer-prose blockquote {
+  margin: 0 0 var(--ui-space-2);
+  padding-inline-start: var(--ui-space-3);
+  border-inline-start: 2px solid var(--ui-border-strong);
+  color: var(--ui-text-secondary);
+}
+
+.composer-prose a {
+  color: var(--ui-accent);
+  text-decoration: underline;
+}
+
+.composer-prose .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+
+.composer-prose.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+.composer-prose .ProseMirror-selectednode {
+  outline: 2px solid var(--ui-focus-ring);
+}
+
+.composer-prose {
+  min-height: 12rem;
+}

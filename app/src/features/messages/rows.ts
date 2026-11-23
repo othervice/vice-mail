@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { MessageListItem } from "../../services/ipc";
 
 /**
@@ -13,7 +14,15 @@ export type Section =
 export type ListRow =
   | { kind: "section"; key: string; section: Section }
   /** `position` counts messages only (0-based), for `aria-posinset` and keyboard moves. */
-  | { kind: "message"; key: string; item: MessageListItem; position: number };
+  | { kind: "message"; key: string; item: MessageListItem; position: number }
+  /**
+   * Stage 9: a row the list only draws (block heading, bundle, "Show all"), with the height of a
+   * section heading or of a message row. Not an option: the arrow keys skip it like a heading.
+   */
+  | { kind: "extra"; key: string; size: "section" | "row"; render: () => ReactNode };
+
+/** The rows of one folder's pages: headings and messages, never drawn-only rows. */
+export type FolderRow = Exclude<ListRow, { kind: "extra" }>;
 
 /** Local day boundaries in Unix milliseconds, computed once per day. */
 export interface DayBounds {
@@ -83,8 +92,8 @@ function sectionKey(section: Section): string {
  * Flattens the messages (newest first) into list rows with a section row before each new
  * section. Duplicate ids (never expected from keyset pages) are dropped, so row keys stay unique.
  */
-export function buildRows(items: readonly MessageListItem[], bounds: DayBounds): ListRow[] {
-  const rows: ListRow[] = [];
+export function buildRows(items: readonly MessageListItem[], bounds: DayBounds): FolderRow[] {
+  const rows: FolderRow[] = [];
   const seen = new Set<number>();
   let current = "";
   let position = 0;

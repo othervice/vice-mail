@@ -1,10 +1,19 @@
 import {
+  AlarmClockOff,
   Archive,
+  Clock,
+  ListTodo,
+  ListX,
+  Pin,
+  PinOff,
+  RotateCcw,
   SquareCheck,
+  SquareCheckBig,
   Flag,
   FlagOff,
   FolderInput,
   ListChecks,
+  Search,
   Mail,
   MailOpen,
   ShieldAlert,
@@ -16,6 +25,8 @@ import {
 } from "lucide-react";
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
+import { FilePen, Forward, Reply, ReplyAll, SquarePen } from "lucide-react";
+import { openComposer } from "../../stores/composer";
 
 /**
  * The action directory (Aktionsverzeichnis, docs/stages/08): every mail action the UI offers,
@@ -40,12 +51,30 @@ export const ACTION_IDS = [
   "undo",
   "toggleSelect",
   "selectAll",
+  // Stage 9: local marks (no message moves on the server).
+  "togglePin",
+  "pin",
+  "unpin",
+  "snooze",
+  "unsnooze",
+  "toggleTask",
+  "addTask",
+  "removeTask",
+  "toggleTaskDone",
+  "completeTask",
+  "reopenTask",
+  // Stage 5: writing. Drafts are local, so these also work on read-only accounts.
+  "reply",
+  "replyAll",
+  "forward",
+  "editDraft",
+  "compose",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
 
 /** Labels in `actions.labels` (i18n). Toggles take the label of what they would do now. */
-export type ActionLabel = Exclude<ActionId, "toggleRead" | "toggleFlag">;
+export type ActionLabel = Exclude<ActionId, "toggleRead" | "toggleFlag" | "togglePin" | "toggleTask" | "toggleTaskDone">;
 
 /** What an action looks at: the account and folder of the view and the messages it acts on. */
 export interface ActionContext {
@@ -66,6 +95,11 @@ export interface ActionHost {
   undo: () => void;
   toggleSelect: () => void;
   selectAll: () => void;
+  /** Stage 9: pins, snoozes and tasks are local (keywords follow through the outbox where allowed). */
+  setPinned: (items: readonly MessageListItem[], pinned: boolean) => void;
+  openSnooze: (items: readonly MessageListItem[]) => void;
+  unsnooze: (items: readonly MessageListItem[]) => void;
+  setTask: (items: readonly MessageListItem[], mark: { done: boolean } | null) => void;
 }
 
 export interface ActionDefinition {
@@ -95,7 +129,15 @@ const someUnread = (ctx: ActionContext) => ctx.items.some((item) => item.unread)
 const someRead = (ctx: ActionContext) => ctx.items.some((item) => !item.unread);
 const someFlagged = (ctx: ActionContext) => ctx.items.some((item) => item.flagged);
 const someUnflagged = (ctx: ActionContext) => ctx.items.some((item) => !item.flagged);
+const someUnpinned = (ctx: ActionContext) => ctx.items.some((item) => !item.pinned);
+const somePinned = (ctx: ActionContext) => ctx.items.some((item) => item.pinned);
+const someSnoozed = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.snooze));
+const someNoTask = (ctx: ActionContext) => ctx.items.some((item) => !item.task);
+const someTask = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.task));
+const someOpenTask = (ctx: ActionContext) => ctx.items.some((item) => item.task?.done === false);
+const someDoneTask = (ctx: ActionContext) => ctx.items.some((item) => item.task?.done === true);
 const always = () => true;
+const oneMail = (ctx: ActionContext) => ctx.items.length === 1;
 
 /** Delete: "#" everywhere; the Delete key, and on macOS also ⌫ (the key labelled "delete"). */
 const DELETE_SHORTCUTS: Record<ShortcutPlatform, readonly Shortcut[]> = {
@@ -299,13 +341,242 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
       host.selectAll();
     },
   },
+  // ---- Stage 9: pins, snoozes and tasks. Local, so they also work on read-only accounts. ----
+  togglePin: {
+    id: "togglePin",
+    label: (ctx) => (someUnpinned(ctx) ? "pin" : "unpin"),
+    icon: (ctx) => (someUnpinned(ctx) ? Pin : PinOff),
+    shortcuts: both({ key: "p" }),
+    writes: false,
+    needsMessages: true,
+    available: always,
+    run: (ctx, host) => {
+      host.setPinned(ctx.items, someUnpinned(ctx));
+    },
+  },
+  pin: {
+    id: "pin",
+    label: () => "pin",
+    icon: () => Pin,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someUnpinned,
+    run: (ctx, host) => {
+      host.setPinned(ctx.items, true);
+    },
+  },
+  unpin: {
+    id: "unpin",
+    label: () => "unpin",
+    icon: () => PinOff,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: somePinned,
+    run: (ctx, host) => {
+      host.setPinned(ctx.items, false);
+    },
+  },
+  snooze: {
+    id: "snooze",
+    label: () => "snooze",
+    icon: () => Clock,
+    shortcuts: both({ key: "b" }),
+    writes: false,
+    needsMessages: true,
+    available: always,
+    run: (ctx, host) => {
+      host.openSnooze(ctx.items);
+    },
+  },
+  unsnooze: {
+    id: "unsnooze",
+    label: () => "unsnooze",
+    icon: () => AlarmClockOff,
+    shortcuts: both({ key: "B", shift: true }),
+    writes: false,
+    needsMessages: true,
+    available: someSnoozed,
+    run: (ctx, host) => {
+      host.unsnooze(ctx.items.filter((item) => item.snooze));
+    },
+  },
+  toggleTask: {
+    id: "toggleTask",
+    label: (ctx) => (someNoTask(ctx) ? "addTask" : "removeTask"),
+    icon: (ctx) => (someNoTask(ctx) ? ListTodo : ListX),
+    shortcuts: both({ key: "t" }),
+    writes: false,
+    needsMessages: true,
+    available: always,
+    run: (ctx, host) => {
+      if (someNoTask(ctx)) host.setTask(ctx.items.filter((item) => !item.task), { done: false });
+      else host.setTask(ctx.items, null);
+    },
+  },
+  addTask: {
+    id: "addTask",
+    label: () => "addTask",
+    icon: () => ListTodo,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someNoTask,
+    run: (ctx, host) => {
+      host.setTask(
+        ctx.items.filter((item) => !item.task),
+        { done: false },
+      );
+    },
+  },
+  removeTask: {
+    id: "removeTask",
+    label: () => "removeTask",
+    icon: () => ListX,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someTask,
+    run: (ctx, host) => {
+      host.setTask(
+        ctx.items.filter((item) => item.task),
+        null,
+      );
+    },
+  },
+  toggleTaskDone: {
+    id: "toggleTaskDone",
+    label: (ctx) => (someOpenTask(ctx) ? "completeTask" : "reopenTask"),
+    icon: (ctx) => (someOpenTask(ctx) ? SquareCheckBig : RotateCcw),
+    shortcuts: both({ key: "T", shift: true }),
+    writes: false,
+    needsMessages: true,
+    available: someTask,
+    run: (ctx, host) => {
+      const done = someOpenTask(ctx);
+      host.setTask(
+        ctx.items.filter((item) => item.task && item.task.done !== done),
+        { done },
+      );
+    },
+  },
+  completeTask: {
+    id: "completeTask",
+    label: () => "completeTask",
+    icon: () => SquareCheckBig,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someOpenTask,
+    run: (ctx, host) => {
+      host.setTask(
+        ctx.items.filter((item) => item.task?.done === false),
+        { done: true },
+      );
+    },
+  },
+  reopenTask: {
+    id: "reopenTask",
+    label: () => "reopenTask",
+    icon: () => RotateCcw,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someDoneTask,
+    run: (ctx, host) => {
+      host.setTask(
+        ctx.items.filter((item) => item.task?.done === true),
+        { done: false },
+      );
+    },
+  },
+  // ---- Stage 5: reply, forward, drafts and new messages open the composer. ----
+  reply: {
+    id: "reply",
+    label: () => "reply",
+    icon: () => Reply,
+    shortcuts: both({ key: "r" }),
+    writes: false,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && !ctx.items[0]?.draft,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "reply", messageId: item.id });
+    },
+  },
+  replyAll: {
+    id: "replyAll",
+    label: () => "replyAll",
+    icon: () => ReplyAll,
+    shortcuts: both({ key: "a" }),
+    writes: false,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && !ctx.items[0]?.draft,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "reply_all", messageId: item.id });
+    },
+  },
+  forward: {
+    id: "forward",
+    label: () => "forward",
+    icon: () => Forward,
+    shortcuts: both({ key: "f" }),
+    writes: false,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && !ctx.items[0]?.draft,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "forward", messageId: item.id });
+    },
+  },
+  // A message of the Drafts folder (also one of another program) opens as a draft.
+  editDraft: {
+    id: "editDraft",
+    label: () => "editDraft",
+    icon: () => FilePen,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && Boolean(ctx.items[0]?.draft),
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "message", messageId: item.id });
+    },
+  },
+  compose: {
+    id: "compose",
+    label: () => "compose",
+    icon: () => SquarePen,
+    shortcuts: both({ key: "c" }, { key: "n", mod: true }),
+    writes: false,
+    needsMessages: false,
+    available: always,
+    run: (ctx) => {
+      openComposer({ kind: "new", accountId: ctx.account.id });
+    },
+  },
 };
 
-/** Quick actions of a row, in the order of docs/DESIGN.md (pin and snooze follow in stage 9). */
-export const QUICK_ACTIONS: readonly ActionId[] = ["delete", "deletePermanently", "archive", "toggleRead", "toggleFlag", "move"];
+/** Quick actions of a row, in the order of docs/DESIGN.md. */
+export const QUICK_ACTIONS: readonly ActionId[] = [
+  "delete",
+  "deletePermanently",
+  "archive",
+  "toggleRead",
+  "toggleFlag",
+  "togglePin",
+  "move",
+  "snooze",
+];
 
 /** The toolbar of the reading pane and of the selection bar. */
 export const TOOLBAR_ACTIONS: readonly ActionId[] = [
+  "reply",
+  "replyAll",
+  "forward",
+  "editDraft",
   "archive",
   "delete",
   "deletePermanently",
@@ -315,6 +586,11 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   "tags",
   "spam",
   "notSpam",
+  "togglePin",
+  "snooze",
+  "unsnooze",
+  "toggleTask",
+  "toggleTaskDone",
 ];
 
 export type ActionState = { kind: "enabled" } | { kind: "readOnly" } | { kind: "unavailable" };
@@ -389,3 +665,26 @@ export function leavesFolder(action: MailAction, mailbox: Mailbox): boolean {
       return false;
   }
 }
+
+// ---- Stage 7: commands that do not act on messages ----
+
+/** Ids of commands of the whole mail view; labels in `search` (i18n). Stage 8's palette lists them. */
+export const APP_COMMAND_IDS = ["search"] as const;
+
+export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
+
+export interface AppCommandDefinition {
+  id: AppCommandId;
+  icon: LucideIcon;
+  /** Provisional shortcuts per platform; the first one is shown in tooltips. */
+  shortcuts: Record<ShortcutPlatform, readonly Shortcut[]>;
+}
+
+export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
+  search: {
+    id: "search",
+    icon: Search,
+    // Cmd/Ctrl+F like every app, "/" like Gmail and Outlook on the web.
+    shortcuts: both({ key: "f", mod: true }, { key: "/" }),
+  },
+};

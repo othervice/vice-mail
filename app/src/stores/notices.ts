@@ -5,7 +5,9 @@ import type {
   BatchId,
   ConflictReason,
   IpcError,
+  MessageId,
   OperationInfo,
+  RuleSkipReason,
 } from "../services/ipc";
 
 /** What an undo notice can take back: the batches of one user action (several if it was split). */
@@ -43,7 +45,16 @@ export type NoticeContent =
       count: number;
       error: IpcError | null;
       conflict: ConflictReason | null;
-    };
+    }
+  /** Stage 9: pins, snoozes, tasks and skipped local rules (texts: `features/comfort/notices.ts`). */
+  | { kind: "comfort"; notice: ComfortNotice };
+
+/** Stage 9 notices, as data like the others. `messageIds` lets the undo take a mark back. */
+export type ComfortNotice =
+  | { type: "pinned" | "unpinned" | "unsnoozed" | "taskAdded" | "taskRemoved" | "taskDone" | "taskReopened"; count: number }
+  | { type: "snoozed"; count: number; until: number; messageIds: readonly MessageId[] }
+  | { type: "failed"; what: "pin" | "snooze" | "unsnooze" | "task"; error: IpcError }
+  | { type: "ruleSkipped"; ruleName: string; reason: RuleSkipReason; count: number };
 
 export interface Notice {
   id: number;

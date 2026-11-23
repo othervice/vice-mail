@@ -24,7 +24,7 @@ interface FloatingPanelProps {
  * no dialog for everyday things (docs/DESIGN.md): it closes as soon as the user turns elsewhere,
  * and gives the focus back to where it came from.
  */
-function FloatingPanel({ title, onClose, restoreFocus, children, ...rest }: FloatingPanelProps) {
+export function FloatingPanel({ title, onClose, restoreFocus, children, ...rest }: FloatingPanelProps) {
   const { t } = useTranslation();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);

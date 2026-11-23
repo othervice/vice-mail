@@ -7,12 +7,15 @@ import {
   formatListDate,
   sectionOf,
 } from "../src/features/messages/rows";
-import { MESSAGE_PAGE_SIZE } from "../src/features/messages/queries";
+import { INBOX_PAGE_SIZE } from "../src/features/comfort/listSources";
 import { IDLE, makeAccount, makeMailbox, makeMessage, makeMessages, mockCore, standardMailboxes } from "./support/core";
 import { emitCore, emitCoreBurst } from "./support/events";
 import { renderApp } from "./support/render";
 
 const ACCOUNT = makeAccount();
+/** Stage 9: the inbox is the sorted inbox (`listInbox`), paged like a folder. */
+const INBOX_SCOPE = { kind: "mailbox", mailboxId: 1 } as const;
+const PAGE = INBOX_PAGE_SIZE;
 /** Height of the list's viewport in these tests (jsdom has no layout). */
 const VIEWPORT = 600;
 
@@ -48,7 +51,7 @@ describe("message list", () => {
     expect(options[0]?.getAttribute("aria-setsize")).toBe("10000");
     expect(options[0]?.getAttribute("aria-posinset")).toBe("1");
     // One page was asked for, from the start.
-    expect(core.callsOf("list_messages")).toEqual([{ mailboxId: 1, cursor: null, limit: MESSAGE_PAGE_SIZE }]);
+    expect(core.callsOf("list_inbox")).toEqual([{ scope: INBOX_SCOPE, cursor: null, limit: PAGE }]);
   });
 
   it("loads the next page with the cursor of the last one when scrolling near the end", async () => {
@@ -60,19 +63,19 @@ describe("message list", () => {
     renderApp();
     const list = await screen.findByRole("listbox");
 
-    await scrollTo(list, MESSAGE_PAGE_SIZE * 44 - VIEWPORT);
+    await scrollTo(list, PAGE * 44 - VIEWPORT);
 
     await waitFor(() => {
-      expect(core.callsOf("list_messages")).toHaveLength(2);
+      expect(core.callsOf("list_inbox")).toHaveLength(2);
     });
-    const lastOfFirstPage = messages[MESSAGE_PAGE_SIZE - 1];
-    expect(core.callsOf("list_messages")[1]).toEqual({
-      mailboxId: 1,
-      cursor: lastOfFirstPage?.id,
-      limit: MESSAGE_PAGE_SIZE,
+    const lastOfFirstPage = messages[PAGE - 1];
+    expect(core.callsOf("list_inbox")[1]).toEqual({
+      scope: INBOX_SCOPE,
+      cursor: { before: lastOfFirstPage?.id, bundles: null },
+      limit: PAGE,
     });
     // Message 201 is now part of the list (rendered once scrolled to).
-    await scrollTo(list, MESSAGE_PAGE_SIZE * 44);
+    await scrollTo(list, PAGE * 44);
     expect(await within(list).findByText("Message 201")).toBeTruthy();
   });
 
@@ -81,16 +84,16 @@ describe("message list", () => {
     const core = mockCore(bigInbox(50));
     renderApp();
     await screen.findByText("Message 1");
-    const before = core.callsOf("list_messages").length;
+    const before = core.callsOf("list_inbox").length;
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(core.callsOf("list_messages")).toHaveLength(before);
+    expect(core.callsOf("list_inbox")).toHaveLength(before);
 
     core.setMessages(1, [makeMessage({ subject: "Fresh from the server", unread: true }), ...makeMessages(50)]);
     await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 });
 
     expect(await screen.findByText("Fresh from the server")).toBeTruthy();
-    expect(core.callsOf("list_messages").at(-1)).toEqual({ mailboxId: 1, cursor: null, limit: MESSAGE_PAGE_SIZE });
+    expect(core.callsOf("list_inbox").at(-1)).toEqual({ scope: INBOX_SCOPE, cursor: null, limit: PAGE });
   });
 
   it("merges a burst of events into one reload", async () => {
@@ -98,7 +101,7 @@ describe("message list", () => {
     const core = mockCore(bigInbox(50));
     renderApp();
     await screen.findByText("Message 1");
-    const before = core.callsOf("list_messages").length;
+    const before = core.callsOf("list_inbox").length;
 
     await emitCoreBurst([
       { type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 1 },
@@ -107,10 +110,10 @@ describe("message list", () => {
     ]);
 
     await waitFor(() => {
-      expect(core.callsOf("list_messages").length).toBeGreaterThan(before);
+      expect(core.callsOf("list_inbox").length).toBeGreaterThan(before);
     });
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(core.callsOf("list_messages").length - before).toBe(1);
+    expect(core.callsOf("list_inbox").length - before).toBe(1);
   });
 
   it("ignores events for other folders", async () => {
@@ -118,12 +121,12 @@ describe("message list", () => {
     const core = mockCore(bigInbox(10));
     renderApp();
     await screen.findByText("Message 1");
-    const before = core.callsOf("list_messages").length;
+    const before = core.callsOf("list_inbox").length;
 
     await emitCore({ type: "messagesChanged", accountId: ACCOUNT.id, mailboxId: 5 });
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    expect(core.callsOf("list_messages")).toHaveLength(before);
+    expect(core.callsOf("list_inbox")).toHaveLength(before);
   });
 
   it("keeps the visible rows in place when new mail arrives above them", async () => {
@@ -269,7 +272,7 @@ describe("message list", () => {
   });
 
   it("shows a skeleton only while the first page loads", async () => {
-    mockCore({ ...bigInbox(10), hang: ["list_messages"] });
+    mockCore({ ...bigInbox(10), hang: ["list_inbox"] });
     renderApp();
 
     const skeleton = await screen.findByTestId("list-skeleton");
@@ -293,7 +296,7 @@ describe("message list", () => {
   });
 
   it("a failed load shows the error with a way to retry", async () => {
-    mockCore({ ...bigInbox(10), failures: { list_messages: { code: "database", message: "x", detail: "SQLITE_BUSY" } } });
+    mockCore({ ...bigInbox(10), failures: { list_inbox: { code: "database", message: "x", detail: "SQLITE_BUSY" } } });
     renderApp();
 
     const alert = await screen.findByRole("alert");
@@ -418,10 +421,11 @@ describe("folders in the list header", () => {
     mockCore({ accounts: [ACCOUNT], mailboxes: standardMailboxes() });
     const { user } = renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "Later" }));
+    // Stage 9 gave Later, Tasks and Pinned their lists; saved views are still to come.
+    await user.click(await screen.findByRole("button", { name: "Saved views" }));
 
     expect(screen.getByRole("heading", { name: "Not available yet" })).toBeTruthy();
-    expect(screen.getByText("“Later” arrives in a later version of the app.")).toBeTruthy();
+    expect(screen.getByText("“Saved views” arrives in a later version of the app.")).toBeTruthy();
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

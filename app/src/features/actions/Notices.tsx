@@ -6,6 +6,7 @@ import { cx } from "../../components/cx";
 import { useNoticeStore, type Notice } from "../../stores/notices";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
+import { comfortNoticeText } from "../comfort/notices";
 import { ACTIONS } from "./registry";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "./shortcuts";
 import { undoAction } from "./undo";
@@ -15,11 +16,13 @@ export const NOTICE_MS = 6000;
 const ERROR_NOTICE_MS = 10_000;
 
 function isError(notice: Notice): boolean {
-  return notice.content.kind === "error" || notice.content.kind === "operationFailed";
+  const { content } = notice;
+  if (content.kind === "comfort") return content.notice.type === "failed" || content.notice.type === "ruleSkipped";
+  return content.kind === "error" || content.kind === "operationFailed";
 }
 
 function NoticeItem({ notice }: { notice: Notice }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const dismiss = useNoticeStore((state) => state.dismiss);
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
@@ -90,6 +93,24 @@ function NoticeItem({ notice }: { notice: Notice }) {
       text = t(`actions.failed.${content.context}`);
       detail = t(`errors.codes.${content.error.code}.title`);
       break;
+    case "comfort": {
+      // Stage 9: pins, snoozes, tasks, skipped local rules.
+      const comfort = comfortNoticeText(t, i18n.language, content.notice);
+      text = comfort.text;
+      detail = comfort.detail;
+      const undo = comfort.undo;
+      if (undo) {
+        action = {
+          label: t("actions.undo"),
+          run: () => {
+            dismiss(notice.id);
+            undo(queryClient);
+          },
+          testId: "notice-undo",
+        };
+      }
+      break;
+    }
     case "operationFailed": {
       const name = t(`activity.actions.${content.action}`);
       text = content.conflict

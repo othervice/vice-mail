@@ -1,0 +1,175 @@
+import { EyeOff, FolderX, Inbox } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { cx } from "../../components/cx";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorNotice } from "../../components/ErrorNotice";
+import type { Account, AccountColor, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
+import { useSearchStore } from "../../stores/search";
+import { useUiStore } from "../../stores/ui";
+import type { ShortcutPlatform } from "../actions/shortcuts";
+import type { MessageListSource } from "../messages/listSource";
+import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
+import { buildRows } from "../messages/rows";
+import { useUnifiedThreadSource } from "../threads/source";
+import { MixedReading } from "./MixedReading";
+import type { FocusRequest } from "../reading/ReadingPane";
+import { useAccountGroups, useHiddenAccounts, useUnifiedPages } from "./queries";
+
+/** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
+export function visibleAccounts(
+  accounts: readonly Account[],
+  hidden: readonly string[],
+  memberIds: readonly string[] | null,
+): Account[] {
+  return accounts.filter((account) => !hidden.includes(account.id) && (memberIds === null || memberIds.includes(account.id)));
+}
+
+interface PanesProps {
+  view: UnifiedView;
+  accounts: readonly Account[];
+  name: string;
+  platform: ShortcutPlatform;
+}
+
+/**
+ * The list of a unified view and the reading pane: rows of every shown account mixed by time,
+ * each in its account's colour (the avatar ring), opened with the account it belongs to.
+ */
+function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
+  const { t } = useTranslation();
+  const conversations = useSearchStore((state) => state.conversations);
+  const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const list = useRef<MessageListHandle>(null);
+  const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
+  const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
+  const messages = useUnifiedPages(view, !conversations);
+  const threadSource = useUnifiedThreadSource(view, conversations, accountColor);
+  const source: MessageListSource = threadSource ?? { query: messages, buildRows, accountColor };
+  const query = source.query;
+  const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
+  const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
+
+  if (query.isError && !query.data) {
+    return (
+      <div className="px-6 py-4">
+        <ErrorNotice
+          context={t("unified.loadFailed")}
+          error={query.error}
+          onRetry={() => {
+            void query.refetch();
+          }}
+        />
+      </div>
+    );
+  }
+  if (query.isSuccess && query.data.pages.every((page) => page.items.length === 0)) {
+    return <EmptyState icon={Inbox} title={t("unified.empty.title")} body={t("unified.empty.body")} />;
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1" data-testid="unified-inbox">
+      <div
+        className={cx(
+          "flex min-h-0 min-w-0 flex-col",
+          single && account ? "w-(--ui-list-width-reading) shrink-0 border-e border-border" : "flex-1",
+        )}
+      >
+        <MessageList
+          source={source}
+          folderName={name}
+          showRecipients={false}
+          platform={platform}
+          handle={list}
+          onSelectionChange={(next) => {
+            setSelection(next);
+            const only = next.items.length === 1 ? next.items[0]?.id : undefined;
+            setFocusRequest((request) => (request && request.messageId === only ? request : null));
+          }}
+          onOpen={(id: MessageId) => {
+            setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
+          }}
+        />
+      </div>
+      {single && account && (
+        <MixedReading
+          key={single.id}
+          account={account}
+          item={single}
+          conversations={conversations}
+          focusRequest={focusRequest}
+          platform={platform}
+          list={list}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The name a unified view has in headers and lists: "All inboxes" or the group's name. */
+export function useUnifiedName(view: UnifiedView): string {
+  const { t } = useTranslation();
+  const groups = useAccountGroups(view.kind === "group");
+  if (view.kind === "all") return t("unified.title");
+  return groups.data?.find((group) => group.id === view.groupId)?.name ?? t("unified.title");
+}
+
+interface UnifiedInboxProps {
+  view: UnifiedView;
+  accounts: readonly Account[];
+  platform: ShortcutPlatform;
+}
+
+/**
+ * The unified inbox (stage 7): the inboxes of every visible account, or of a group's visible
+ * accounts, mixed by time. Hidden accounts are left out by the core; the view says so when
+ * nothing is left to show.
+ */
+export function UnifiedInbox({ view, accounts, platform }: UnifiedInboxProps) {
+  const { t } = useTranslation();
+  const groups = useAccountGroups();
+  const hidden = useHiddenAccounts();
+  const showAccountsPage = useUiStore((state) => state.showAccountsPage);
+  const name = useUnifiedName(view);
+
+  if (groups.isPending || hidden.isPending) return null;
+  if (groups.isError || hidden.isError) {
+    const error = groups.error ?? hidden.error;
+    return (
+      <div className="px-6 py-4">
+        {error && (
+          <ErrorNotice
+            context={t("unified.groupsFailed")}
+            error={error}
+            onRetry={() => {
+              void groups.refetch();
+              void hidden.refetch();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+  const group = view.kind === "group" ? groups.data.find((g) => g.id === view.groupId) : undefined;
+  if (view.kind === "group" && !group) {
+    return <EmptyState icon={FolderX} title={t("unified.groupGone.title")} body={t("unified.groupGone.body")} />;
+  }
+  const shown = visibleAccounts(accounts, hidden.data, group ? group.accountIds : null);
+  if (shown.length === 0) {
+    return (
+      <EmptyState
+        icon={EyeOff}
+        title={t("unified.allHidden.title")}
+        body={t("unified.allHidden.body")}
+        action={{
+          label: t("unified.allHidden.action"),
+          onClick: () => {
+            showAccountsPage({ kind: "list" });
+          },
+        }}
+      />
+    );
+  }
+  return <UnifiedPanes key={JSON.stringify(view)} view={view} accounts={accounts} name={name} platform={platform} />;
+}
