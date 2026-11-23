@@ -7,7 +7,7 @@ nichts senden, löschen oder verschieben.
 
 **Voraussetzung:** Stufen 05 (Entwürfe) und 07 (Suche) fertig. `docs/decisions/0010-ki-ueber-mcp.md`
 und Abschnitt „KI“ in `docs/ARCHITECTURE.md` gelesen. Aktuelle MCP-Spezifikation und das offizielle
-Rust-SDK (`rmcp`) prüfen; Abhängigkeitsregel beachten.
+Rust-SDK (`rmcp`) prüfen; Abhängigkeitsregel beachten. Der Unterbau ist vorgezogen fertig: `crates/mail-mcp` (Hilfsprogramm, Werkzeuge, IPC, Freigaben, Tests), Transport-Entscheidung `docs/decisions/0015-mcp-transport.md`. Offen ist die Verdrahtung (`MailAccess` über `AppCore`, Einstellungen, Ansicht „Zugriffe“, Hilfsprogramm im Installer mitliefern).
 
 ## Aufgaben
 
@@ -25,7 +25,7 @@ Rust-SDK (`rmcp`) prüfen; Abhängigkeitsregel beachten.
 - [ ] Test: Ein nicht freigegebenes Konto ist über kein Werkzeug sichtbar, auch nicht über die Suche
 - [ ] Test: Die Werkzeugliste enthält nur die vorgesehenen Werkzeuge; „Entwurf anlegen“ fehlt, solange es nicht freigegeben ist
 - [ ] Test: Kein Werkzeugaufruf, auch nicht mit präparierten Argumenten, verändert Flags, Ordner oder Mails auf dem Server oder sendet etwas (Mitschnitt der IMAP- und SMTP-Befehle)
-- [ ] Test: ohne gültiges Token bzw. von einer anderen Adresse als `127.0.0.1` keine Antwort
+- [ ] Test: ohne gültigen Client-Schlüssel keine Antwort; nur derselbe Benutzer erreicht den Endpunkt (Socket 0600 im Verzeichnis 0700 mit Prüfung der Peer-UID, unter Windows Named Pipe nur für den Benutzer), kein TCP
 - [ ] Vertragstests mit einem MCP-Client im Test: Initialisierung, Werkzeugliste, Aufrufe, Fehler, Grenzen
 - [ ] Test: Jeder Zugriff erscheint in der Ansicht „Zugriffe“; Widerruf eines Clients wirkt sofort
 - [ ] mit einem echten Client (z. B. Claude Code) von Hand geprüft und vermerkt: Suche, Thread lesen, Entwurf anlegen

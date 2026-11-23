@@ -14,7 +14,8 @@ mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Rege
    ├── mail-store        SQLite, Migrationen, FTS5, Abfragen
    ├── mail-imap         IMAP- und SMTP-Adapter, implementiert MailBackend
    ├── mail-content      Parsen, HTML-Bereinigung, Link-Prüfung, Dateinamen (rein, ohne IO)
-   └── webview2-guard    nur Windows: Navigationen im Mail-Frame abfangen (einzige Crate mit `unsafe`, 0011)
+   ├── webview2-guard    nur Windows: Navigationen im Mail-Frame abfangen (einzige Crate mit `unsafe`, 0011)
+   └── mail-mcp          MCP-Server: Hilfsprogramm und Werkzeuge gegen `MailAccess` (0015)
    └── mail-model        Typen, Fehler, Capabilities, MailBackend-Trait, ohne IO
 ```
 
@@ -393,7 +394,10 @@ Zwei Wege, beide aus, bis der Nutzer sie einschaltet (`docs/decisions/0010-ki-ue
 **MCP-Server (Stufe 12, Hauptweg).** Die App bietet einen lokalen MCP-Server an. Jeder MCP-fähige
 KI-Client (Claude Desktop, Claude Code, Cursor, LM Studio …) kann freigegebene Konten durchsuchen,
 Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und keinen Schlüssel.
-- Nur lokal: stdio über ein Hilfsprogramm oder HTTP auf `127.0.0.1` mit Token je Client; nie im Netz.
+- Nur lokal (0015): Der Client startet das mitgelieferte Hilfsprogramm `mail-mcp` über stdio; es spricht
+  mit der laufenden App über einen Unix-Socket (0600, Verzeichnis 0700, Prüfung der Peer-UID) bzw. eine
+  Windows-Named-Pipe nur für den Benutzer, mit HMAC-Challenge-Response je Client. Nie TCP (kein
+  DNS-Rebinding, kein Zugriff anderer lokaler Prozesse über einen Port).
 - Je Konto: unsichtbar, lesen, lesen und Entwürfe. Standard: unsichtbar.
 - Kein Werkzeug sendet, löscht, verschiebt, markiert oder ändert Einstellungen.
 - Werkzeuge liefern bereinigten Text (kein rohes HTML, keine externen Bilder, Anhänge nur mit Namen),
