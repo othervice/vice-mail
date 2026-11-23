@@ -27,22 +27,34 @@ async function fill(id, value) {
   });
 }
 
-/** Clicks the button (or radio) with exactly this text inside `scope`. */
+/** Clicks the button (or radio) with exactly this text inside `scope`, once it is there. */
 async function click(text, scope = "main") {
-  const found = await browser.execute(
-    (label, within) => {
-      const root = document.querySelector(within);
-      const target = [...(root?.querySelectorAll('button, [role="radio"]') ?? [])].find(
-        (b) => b.textContent.trim() === label,
-      );
-      if (!target || target.disabled) return false;
-      target.click();
-      return true;
-    },
-    text,
-    scope,
-  );
-  assert.ok(found, `no enabled "${text}" in ${scope}`);
+  const attempt = () =>
+    browser.execute(
+      (label, within) => {
+        const root = document.querySelector(within);
+        const target = [...(root?.querySelectorAll('button, [role="radio"]') ?? [])].find(
+          (b) => b.textContent.trim() === label,
+        );
+        if (!target || target.disabled) return false;
+        target.click();
+        return true;
+      },
+      text,
+      scope,
+    );
+  try {
+    await browser.waitUntil(attempt, { timeout: 10000, interval: 100 });
+  } catch {
+    const seen = await browser.execute(
+      (within) =>
+        [...(document.querySelector(within)?.querySelectorAll('button, [role="radio"]') ?? [])].map((b) =>
+          b.textContent.trim(),
+        ),
+      scope,
+    );
+    throw new Error(`no enabled "${text}" in ${scope}; buttons there: ${JSON.stringify(seen)}`);
+  }
 }
 
 const mainText = () => browser.execute(() => document.querySelector("main")?.textContent ?? "");
@@ -60,6 +72,12 @@ describe("a JMAP account (stage 14, block D)", function () {
 
   before(async () => {
     await attach();
+    // The texts below are the English ones; the system language may be another.
+    const preferences = await coreCall("get_preferences", {});
+    await coreCall("set_preferences", { preferences: { ...preferences, language: "en" } });
+    await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.lang)) === "en", {
+      timeoutMsg: "the app did not switch to English",
+    });
   });
 
   after(async () => {
