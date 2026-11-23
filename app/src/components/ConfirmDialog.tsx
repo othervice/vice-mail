@@ -44,8 +44,10 @@ export function ConfirmDialog({
   const [host] = useState(() => document.createElement("div"));
   const confirmed = useRef(false);
   const afterConfirm = useRef(focusAfterConfirm);
+  const cancel = useRef(onCancel);
   useLayoutEffect(() => {
     afterConfirm.current = focusAfterConfirm;
+    cancel.current = onCancel;
   });
 
   useLayoutEffect(() => {
@@ -62,7 +64,23 @@ export function ConfirmDialog({
       element.setAttribute("aria-hidden", "true");
     }
     cancelRef.current?.focus();
+    // Escape cancels and the focus stays inside even when the focus was lost to the page (a
+    // re-render, the window losing and regaining focus): the dialog's own handler only sees keys
+    // pressed inside it.
+    const onDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || (event.target instanceof Node && host.contains(event.target))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancel.current();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Node && !host.contains(event.target)) cancelRef.current?.focus();
+    };
+    document.addEventListener("keydown", onDocumentKeyDown, true);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
+      document.removeEventListener("focusin", onFocusIn);
       others.forEach((element, i) => {
         const was = before[i];
         if (!was?.inert) element.removeAttribute("inert");

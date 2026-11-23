@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! scripts/testmail.sh lock sync && scripts/testmail.sh start
-//! cargo test -p mail-engine --test settings_sync -- --include-ignored --test-threads=1 --nocapture
+//! cargo test -p mail-engine --test settings_sync -- --include-ignored --nocapture
 //! scripts/testmail.sh stop && scripts/testmail.sh unlock sync
 //! ```
 
@@ -28,6 +28,9 @@ use mail_model::{
     SettingsSyncStatus, SyncFolder, SyncFolderConnector, ThemePreference, UidSet, WriteConnector,
 };
 use tempfile::TempDir;
+
+/// The tests share alice's account and the server's connection limit: one at a time.
+static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 use tokio::sync::broadcast;
 use tokio::time::Instant;
 
@@ -472,6 +475,7 @@ fn code(err: &mail_model::CoreError) -> ErrorCode {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn different_settings_on_two_devices_both_stay() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -517,6 +521,7 @@ async fn different_settings_on_two_devices_both_stay() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn the_same_setting_on_two_devices_ends_equal() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -546,6 +551,7 @@ async fn the_same_setting_on_two_devices_ends_equal() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_deleted_signature_edited_elsewhere_keeps_the_edit() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -577,6 +583,7 @@ async fn a_deleted_signature_edited_elsewhere_keeps_the_edit() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_device_back_after_long_offline_keeps_newer_states_and_applies_tombstones() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let start = -10 * DAY_MS;
@@ -625,6 +632,7 @@ async fn a_device_back_after_long_offline_keeps_newer_states_and_applies_tombsto
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn expired_tombstones_do_not_bring_deleted_records_back() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let start = -200 * DAY_MS;
@@ -698,6 +706,7 @@ fn message(id: &str, version: &str, body: &[u8]) -> Vec<u8> {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_modified_entry_is_rejected_and_reported_while_the_rest_syncs() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -770,6 +779,7 @@ async fn a_modified_entry_is_rejected_and_reported_while_the_rest_syncs() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn an_old_version_played_back_is_ignored() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -805,6 +815,7 @@ async fn an_old_version_played_back_is_ignored() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn an_interruption_between_append_and_delete_is_cleaned_up_next_time() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let upstream: SocketAddr = format!("{}:{}", env.host, env.imaps_port)
@@ -855,6 +866,7 @@ async fn an_interruption_between_append_and_delete_is_cleaned_up_next_time() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_wrong_passphrase_is_reported_and_changes_nothing() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -900,6 +912,7 @@ async fn a_wrong_passphrase_is_reported_and_changes_nothing() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_thousand_records_first_pass_is_measured() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::start(&env, |_| {}).await;
@@ -942,6 +955,7 @@ async fn a_thousand_records_first_pass_is_measured() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn an_outage_of_the_sync_account_leaves_reading_and_sending_alone() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let upstream: SocketAddr = format!("{}:{}", env.host, env.imaps_port)
@@ -1058,6 +1072,7 @@ async fn an_outage_of_the_sync_account_leaves_reading_and_sending_alone() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn an_account_removed_on_one_device_is_asked_about_on_the_other() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let mut a = Device::first(&env).await;
@@ -1148,6 +1163,7 @@ async fn an_account_removed_on_one_device_is_asked_about_on_the_other() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn the_second_device_follows_without_being_asked() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -1180,6 +1196,7 @@ async fn the_second_device_follows_without_being_asked() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn passphrase_change_and_reset() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;
@@ -1230,6 +1247,7 @@ async fn passphrase_change_and_reset() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn after_a_restart_the_sync_goes_on_with_the_stored_key_and_clock() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     clean(&env).await;
     let a = Device::first(&env).await;

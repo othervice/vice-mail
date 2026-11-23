@@ -2,7 +2,7 @@
 // server wdio.conf.mjs seeded (10,000 messages for alice); the account is added through the core
 // (the setup form is stage 2's test). Before that, the spec puts two folders on the server:
 //
-// - "Hostile": the 19 files of testmail/corpus/hostile/ unchanged (IMAP APPEND), plus a control
+// - "Hostile": the 25 files of testmail/corpus/hostile/ unchanged (IMAP APPEND), plus a control
 //   mail of another sender with external images. All their external references point at the
 //   counter server (support/counter-server.mjs), which counts every TCP connection.
 // - "Broken": server-side copies of every seed message with `X-Vicemail-Seed: broken/…`.
@@ -529,9 +529,9 @@ describe("reading mail (stage 3)", function () {
     const controlFile = path.join(controls, "other-sender.eml");
     fs.writeFileSync(controlFile, CONTROL_MAIL);
     const files = fs.readdirSync(CORPUS_DIR).filter((f) => f.endsWith(".eml")).sort();
-    assert.equal(files.length, 19, "the hostile corpus has 19 files");
+    assert.equal(files.length, 25, "the hostile corpus has 25 files");
     const appended = await appendMessages(HOSTILE, [...files.map((f) => path.join(CORPUS_DIR, f)), controlFile]);
-    assert.equal(appended.messages, 20);
+    assert.equal(appended.messages, 26);
     const copied = await copySeedMessages("broken/", BROKEN);
     report.brokenSeed = copied.copied.map((c) => `${c.key} (${c.folder})`);
     assert.equal(copied.copied.length, 26, "the seed has 26 broken/* messages");
@@ -550,7 +550,7 @@ describe("reading mail (stage 3)", function () {
         const a = await onlyAccount();
         if (a.status.state !== "idle" || a.status.lastSyncAt === null) return false;
         const boxes = await mailboxes();
-        return boxes.find((m) => m.path === HOSTILE)?.total === 20 && boxes.find((m) => m.path === BROKEN)?.total === 26;
+        return boxes.find((m) => m.path === HOSTILE)?.total === 26 && boxes.find((m) => m.path === BROKEN)?.total === 26;
       },
       { timeout: 120000, interval: 200, timeoutMsg: "the account did not sync the test folders" },
     );

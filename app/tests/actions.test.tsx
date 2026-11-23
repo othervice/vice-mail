@@ -943,6 +943,27 @@ describe("deleting for good", () => {
     expect(actionCalls(core)).toHaveLength(0);
   });
 
+  it("Escape still cancels and the focus comes back when the dialog lost the focus", async () => {
+    const { core, user } = trashSetup();
+    await user.click(await screen.findByRole("button", { name: "Trash" }));
+    const { pane } = await openFirst(user);
+    await user.click(within(within(pane).getByRole("toolbar")).getByRole("button", { name: "Delete permanently" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+
+    // Focus moved out of the dialog (e.g. a re-render): it is pulled back in.
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.body.focus();
+    screen.getByTestId("message-list").dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(document.activeElement).toBe(cancel);
+
+    // A key pressed while the page has the focus still reaches the dialog.
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(actionCalls(core)).toHaveLength(0);
+  });
+
   it("confirming deletes for good, without undo, and moves on to the next mail", async () => {
     const { core, user, trashed } = trashSetup();
     await user.click(await screen.findByRole("button", { name: "Trash" }));
