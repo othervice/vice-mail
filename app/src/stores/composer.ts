@@ -1,10 +1,22 @@
 import { create } from "zustand";
-import type { AccountId, Address, Draft, DraftId, IpcError, MessageId, OperationId, OutgoingMail } from "../services/ipc";
+import type { AccountId, Address, Draft, DraftId, IpcError, MailtoNotice, MessageId, OperationId, OutgoingMail } from "../services/ipc";
+
+/** Stage 9: the other fields of a `mailto:` link a new draft starts with, and the link's hints. */
+export interface ComposePrefill {
+  cc: readonly Address[];
+  bcc: readonly Address[];
+  subject: string | null;
+  /** Plain text with `\n` line breaks. */
+  body: string | null;
+  /** The message the link answers; a new draft cannot carry it, so the composer says so. */
+  inReplyTo: string | null;
+  notices: readonly MailtoNotice[];
+}
 
 /** What the composer opens with. The composer asks the core for the draft itself. */
 export type ComposerSource =
-  /** An empty message from the account, optionally to someone already. */
-  | { kind: "new"; accountId: AccountId; to?: readonly Address[] }
+  /** An empty message from the account, optionally to someone already (or filled from a link). */
+  | { kind: "new"; accountId: AccountId; to?: readonly Address[]; prefill?: ComposePrefill }
   | { kind: "reply" | "reply_all" | "forward"; messageId: MessageId }
   /** A local draft again: after "Undo" of a send, "Edit" of a failed one, or a restored draft. */
   | { kind: "draft"; draftId: DraftId; draft?: Draft }

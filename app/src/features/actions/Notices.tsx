@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { useNoticeStore, type Notice } from "../../stores/notices";
+import { boundShortcuts } from "../../stores/shortcuts";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { comfortNoticeText } from "../comfort/notices";
-import { ACTIONS } from "./registry";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "./shortcuts";
 import { undoAction } from "./undo";
 
@@ -52,7 +52,7 @@ function NoticeItem({ notice }: { notice: Notice }) {
     case "done": {
       text = t(`actions.done.${content.action}`, { count: content.count, detail: content.detail ?? "" });
       const undo = content.undo;
-      const shortcut = ACTIONS.undo.shortcuts[platform][0];
+      const shortcut = boundShortcuts("undo", platform)[0];
       if (undo) {
         action = {
           label: t("actions.undo"),

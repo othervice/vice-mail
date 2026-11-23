@@ -19,6 +19,8 @@ import { useDragStore } from "../../stores/drag";
 import { useNoticeStore } from "../../stores/notices";
 import { openComposer } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
+import { boundShortcuts } from "../../stores/shortcuts";
+import { useActionTarget } from "../../stores/actionTarget";
 import { useUiStore, type View } from "../../stores/ui";
 import { accountFill } from "../accounts/accountColor";
 import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
@@ -41,6 +43,7 @@ import { useAppInfo } from "../app-info/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import { SnoozePicker } from "../comfort/SnoozePicker";
+import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
@@ -218,6 +221,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const controller = useActionController({ account, mailbox, list });
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const open = selection.items.length > 0;
+  // Stage 8: the reading pane right, below or in place of the list.
+  const layout = useReadingLayout(list);
 
   useMarkReadOnOpen(account, single, controller);
 
@@ -229,6 +234,9 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   });
   // What a shortcut acts on: the selection, else the row with the cursor.
   const targets = selection.items.length > 0 ? selection.items : selection.cursor ? [selection.cursor] : [];
+  // Stage 8: the command palette runs the same actions on the same messages.
+  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems);
+  useActionTarget({ ctx: pickerOpen ? null : ctxFor(targets), host: controller.host });
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || isEditableTarget(event.target)) return;
@@ -236,7 +244,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
     const ctx = ctxFor(targets);
     for (const id of ACTION_IDS) {
       const definition = ACTIONS[id];
-      if (!definition.shortcuts[platform].some((shortcut) => matchesShortcut(event, shortcut, platform))) continue;
+      // Stage 8: the user's assignment, read at the key press so a change works at once.
+      if (!boundShortcuts(id, platform).some((shortcut) => matchesShortcut(event, shortcut, platform))) continue;
       if (definition.listOnly && !list.current?.contains(event.target instanceof Node ? event.target : null)) continue;
       const state = actionState(definition, ctx);
       if (state.kind === "unavailable") continue;
@@ -266,13 +275,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   };
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div
-        className={cx(
-          "flex min-h-0 min-w-0 flex-col",
-          open ? "w-(--ui-list-width-reading) shrink-0 border-e border-border" : "flex-1",
-        )}
-      >
+    <div className={layout.container} data-reading-pane={layout.position}>
+      <div className={layout.listColumn(open)} hidden={layout.listHidden(open)}>
         {controller.missing && (
           <MissingMailboxPrompt
             key={`${controller.missing.role}-${String(controller.missing.items.length)}`}
@@ -309,6 +313,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
+            layout.onSelectionChange(next);
             // A request to focus belongs to the message it was made for.
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
             setFocusRequest((request) => (request && request.messageId === only ? request : null));
@@ -319,6 +324,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               openComposer({ kind: "message", messageId: id });
               return;
             }
+            layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
           renderQuickActions={(item) => (
@@ -337,7 +343,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           onDragEnd={endDrag}
         />
       </div>
-      {single && conversations ? (
+      {!layout.paneShown(open) ? null : single && conversations ? (
         <ThreadPane
           key={single.id}
           account={account}
@@ -356,9 +362,11 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               />
             )
           }
-          onEscape={focusList}
+          onEscape={() => {
+            layout.backToList(focusList);
+          }}
           onClose={() => {
-            list.current?.clearSelection();
+            layout.close(() => list.current?.clearSelection());
           }}
         />
       ) : single ? (
@@ -376,9 +384,11 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               label={t("actions.toolbar")}
             />
           }
-          onEscape={focusList}
+          onEscape={() => {
+            layout.backToList(focusList);
+          }}
           onClose={() => {
-            list.current?.clearSelection();
+            layout.close(() => list.current?.clearSelection());
           }}
         />
       ) : (

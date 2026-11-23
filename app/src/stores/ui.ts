@@ -27,6 +27,8 @@ export const SETTINGS_SECTION_IDS = [
   "inbox",
   "notifications",
   "appearance",
+  // Stage 8: shortcuts.
+  "keyboard",
   "sync",
   "mcp",
   "about",

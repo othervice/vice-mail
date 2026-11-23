@@ -42,8 +42,9 @@ export function matchesShortcut(
   return event.key === shortcut.key;
 }
 
-const MAC_KEYS: Record<string, string> = { Backspace: "⌫", Delete: "⌦", " ": "Space", Escape: "Esc" };
-const OTHER_KEYS: Record<string, string> = { Backspace: "Backspace", Delete: "Del", " ": "Space", Escape: "Esc" };
+const ARROWS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
+const MAC_KEYS: Record<string, string> = { Backspace: "⌫", Delete: "⌦", " ": "Space", Escape: "Esc", Enter: "↩", Tab: "⇥", ...ARROWS };
+const OTHER_KEYS: Record<string, string> = { Backspace: "Backspace", Delete: "Del", " ": "Space", Escape: "Esc", ...ARROWS };
 
 /** How a shortcut is written: "⌘A", "⇧I" on macOS; "Ctrl+A", "Shift+I" elsewhere. */
 export function formatShortcut(shortcut: Shortcut, platform: ShortcutPlatform): string {

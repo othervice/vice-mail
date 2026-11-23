@@ -4,6 +4,7 @@ import { createComposeFake, type ComposeFakeOptions, type ComposeFakeState } fro
 import { createSearchFake, type SearchFakeOptions, type SearchFakeState } from "./search";
 import { createMcpSyncFake, type McpSyncFakeOptions, type McpSyncFakeState } from "./mcpSync";
 import { createComfortFake, type ComfortFake, type ComfortFakeOptions } from "./comfort";
+import { createExtrasFake, type ExtrasFake, type ExtrasFakeOptions } from "./extras";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -272,6 +273,8 @@ interface FakeCoreOptions {
   mcpSync?: McpSyncFakeOptions;
   /** Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings. */
   comfort?: ComfortFakeOptions;
+  /** Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, launch links. */
+  extras?: ExtrasFakeOptions;
 }
 
 export interface FakeCore {
@@ -306,6 +309,8 @@ export interface FakeCore {
   readonly mcpSync: McpSyncFakeState;
   /** Stage 9: marks, settings and rules as the fake core holds them now. */
   readonly comfort: ComfortFake;
+  /** Stage 9 part B: unsubscribe requests, opened invitations, exports, prints, default mail app. */
+  readonly extras: ExtrasFake;
 }
 
 /**
@@ -643,6 +648,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     reject: (code) => reject(code),
   });
 
+  // Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, mailto.
+  const extrasFake = createExtrasFake(options.extras ?? {});
+
   mockIPC(
     (cmd, rawArgs) => {
       calls.push({ cmd, args: rawArgs });
@@ -778,6 +786,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings.
           const comfortAnswer = comfortFake.handle(cmd, args);
           if (comfortAnswer !== undefined) return comfortAnswer;
+          // Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, mailto.
+          const extrasAnswer = extrasFake.handle(cmd, args);
+          if (extrasAnswer !== undefined) return extrasAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -847,5 +858,6 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     search: searchFake.state,
     mcpSync: mcpSyncFake.state,
     comfort: comfortFake,
+    extras: extrasFake,
   };
 }

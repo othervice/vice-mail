@@ -23,6 +23,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { MAX_ACTION_MESSAGES, type Account, type Mailbox, type MessageId, type MessageListItem } from "../../services/ipc";
 import { MESSAGE_DRAG_TYPE } from "../../stores/drag";
+import { useLayoutStore } from "../../stores/layout";
 import { isFirstSyncRunning } from "../accounts/selection";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import { readListMetrics } from "./listMetrics";
@@ -210,7 +211,15 @@ export function MessageList({
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const optionPrefix = useId();
-  const [metrics] = useState(readListMetrics);
+  // Stage 8: compact or comfortable rows and the text size; the layout store sets the tokens
+  // before it changes, so the heights are read again for a new value.
+  const metricsKey = useLayoutStore((state) => `${state.density}/${String(state.textSize)}`);
+  const [metrics, setMetrics] = useState(readListMetrics);
+  const [readFor, setReadFor] = useState(metricsKey);
+  if (readFor !== metricsKey) {
+    setReadFor(metricsKey);
+    setMetrics(readListMetrics());
+  }
   const [twoLine, setTwoLine] = useState(false);
   const [state, setState] = useState<SelectionState>(EMPTY_STATE);
   /** A pointer press is about to focus the list: its click selects, not the focus handler. */
@@ -497,6 +506,9 @@ export function MessageList({
       End: [messageRows.length - 1, 1],
       PageDown: [cursorPosition + page, 1],
       PageUp: [Math.max(0, cursorPosition - page), -1],
+      // Stage 8: j/k like most mail apps (by character, so on every layout).
+      j: [cursorPosition + 1, 1],
+      k: [Math.max(0, cursorPosition - 1), -1],
     };
     if (event.altKey || event.metaKey || event.ctrlKey) return;
     if (event.key === "Enter" && cursorItem) {

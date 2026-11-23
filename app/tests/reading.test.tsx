@@ -78,6 +78,9 @@ const READING_COMMANDS = new Set([
   "list_inbox",
   "get_message_category",
   "set_notification_texts",
+  // Stage 9 part B: unsubscribe options and invitations (local, nothing sent), launch links (local).
+  "get_message_extras",
+  "take_launch_links",
   // Stage 5: drafts left from the last session and the outbox count in the rail (both read-only).
   "list_drafts",
   "list_outgoing",

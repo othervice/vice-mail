@@ -218,9 +218,11 @@ describe("actions from the toolbar and the rows", () => {
     const first = row(listbox, "Message 1");
     const actions = within(first).getByTestId("row-actions");
     expect(actions.getAttribute("aria-hidden")).toBe("true");
-    for (const button of within(actions).getAllByRole("button", { hidden: true })) {
-      expect(button.tabIndex).toBe(-1);
-    }
+    // Stage 8 (axe "nested-interactive"): no controls inside the option at all, only mouse targets.
+    expect(within(actions).queryAllByRole("button", { hidden: true })).toEqual([]);
+    const targets = [...actions.querySelectorAll<HTMLElement>("[data-testid^='quick-']")];
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) expect(target.tabIndex).toBe(-1);
     expect(within(actions).getByTestId("quick-archive").getAttribute("title")).toBe("Archive (E)");
     void user;
   });

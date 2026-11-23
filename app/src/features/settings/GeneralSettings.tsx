@@ -3,6 +3,7 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import type { LanguagePreference } from "../../services/ipc";
+import { DefaultMailAppSettings } from "../extras/DefaultMailAppSettings";
 import { DEFAULT_PREFERENCES, usePreferences, useSetPreferences } from "../preferences/queries";
 
 export function GeneralSettings() {
@@ -39,6 +40,8 @@ export function GeneralSettings() {
         }}
       />
       {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
+      {/* Stage 9: mailto: links open this app. */}
+      <DefaultMailAppSettings />
     </SettingsSection>
   );
 }

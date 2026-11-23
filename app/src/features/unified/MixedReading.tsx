@@ -9,6 +9,7 @@ import { useActionController } from "../actions/useActionController";
 import { useActionShortcuts } from "../actions/useActionShortcuts";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { useMailboxes } from "../mailboxes/queries";
+import type { ReadingLayout } from "../layout/useReadingLayout";
 import type { MessageListHandle } from "../messages/MessageList";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 
@@ -26,10 +27,33 @@ interface ReadingProps {
   focusRequest: FocusRequest | null;
   platform: ShortcutPlatform;
   list: RefObject<MessageListHandle | null>;
+  /** Stage 8: where the pane sits; Escape and closing go through it (in place of the list). */
+  layout?: Pick<ReadingLayout, "backToList" | "close">;
+}
+
+/** Escape and the close button of the pane, by the layout of the list it belongs to. */
+function paneExits(list: ReadingProps["list"], layout: ReadingProps["layout"]) {
+  const focusList = () => {
+    list.current?.focus();
+  };
+  const clearSelection = () => {
+    list.current?.clearSelection();
+  };
+  return {
+    focusList,
+    onEscape: () => {
+      if (layout) layout.backToList(focusList);
+      else focusList();
+    },
+    onClose: () => {
+      if (layout) layout.close(clearSelection);
+      else clearSelection();
+    },
+  };
 }
 
 /** The open row with the actions of its own account and folder (one action controller each). */
-function ReadingWithActions({ account, mailbox, item, focusRequest, platform, list }: ReadingProps & { mailbox: Mailbox }) {
+function ReadingWithActions({ account, mailbox, item, focusRequest, platform, list, layout }: ReadingProps & { mailbox: Mailbox }) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id).data ?? [];
   const controller = useActionController({ account, mailbox, list });
@@ -43,12 +67,7 @@ function ReadingWithActions({ account, mailbox, item, focusRequest, platform, li
     blocked: controller.missing !== null || controller.overlay !== null,
     inList: (node) => list.current?.contains(node) ?? false,
   });
-  const focusList = () => {
-    list.current?.focus();
-  };
-  const closePane = () => {
-    list.current?.clearSelection();
-  };
+  const { focusList, onEscape, onClose } = paneExits(list, layout);
   const toolbar = (
     <ActionToolbar
       ids={UNIFIED_TOOLBAR}
@@ -79,8 +98,8 @@ function ReadingWithActions({ account, mailbox, item, focusRequest, platform, li
         messageId={item.id}
         focusRequest={focusRequest}
         toolbar={toolbar}
-        onEscape={focusList}
-        onClose={closePane}
+        onEscape={onEscape}
+        onClose={onClose}
       />
     </div>
   );
@@ -93,20 +112,15 @@ function ReadingWithActions({ account, mailbox, item, focusRequest, platform, li
 export function MixedReading(props: ReadingProps) {
   const mailbox = useMailboxes(props.account.id).data?.find((m) => m.id === props.item.mailboxId);
   if (mailbox) return <ReadingWithActions key={`${String(mailbox.id)}-${String(props.item.id)}`} {...props} mailbox={mailbox} />;
-  const focusList = () => {
-    props.list.current?.focus();
-  };
-  const closePane = () => {
-    props.list.current?.clearSelection();
-  };
+  const { onEscape, onClose } = paneExits(props.list, props.layout);
   return (
     <ReadingPane
       key={props.item.id}
       account={props.account}
       messageId={props.item.id}
       focusRequest={props.focusRequest}
-      onEscape={focusList}
-      onClose={closePane}
+      onEscape={onEscape}
+      onClose={onClose}
     />
   );
 }

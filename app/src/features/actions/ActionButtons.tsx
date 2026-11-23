@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { Tooltip } from "../../components/Tooltip";
 import { useNoticeStore } from "../../stores/notices";
+import { useBoundShortcuts } from "../../stores/shortcuts";
 import { useUiStore } from "../../stores/ui";
 import { ACTIONS, actionState, type ActionContext, type ActionDefinition, type ActionHost, type ActionId } from "./registry";
 import { ariaShortcut, formatShortcut, type ShortcutPlatform } from "./shortcuts";
@@ -26,12 +27,13 @@ interface Entry {
 
 function useEntries({ ids, ctx, platform }: Omit<ActionSurfaceProps, "host">): Entry[] {
   const { t } = useTranslation();
+  const shortcutsOf = useBoundShortcuts(platform);
   return ids.flatMap((id) => {
     const definition = ACTIONS[id];
     const state = actionState(definition, ctx);
     if (state.kind === "unavailable") return [];
     const label = t(`actions.labels.${definition.label(ctx)}`);
-    const first = definition.shortcuts[platform][0];
+    const first = shortcutsOf(id)[0];
     const readOnly = state.kind === "readOnly";
     const hint = readOnly
       ? t("actions.readOnly.tooltip", { label })
@@ -155,13 +157,13 @@ export function QuickActions(props: ActionSurfaceProps) {
   const run = useRun(props.ctx, props.host);
   return entries.map((entry) => {
     const Icon = entry.definition.icon(props.ctx);
+    // Stage 8 (axe "nested-interactive"): an option of the list may not contain controls, so
+    // these are mouse targets, not buttons. Keyboard and screen reader users reach the same
+    // actions through the shortcuts, the toolbar of the reading pane and the command palette.
     return (
-      <button
+      <span
         key={entry.definition.id}
-        type="button"
-        tabIndex={-1}
         title={entry.hint}
-        aria-label={entry.label}
         aria-disabled={entry.readOnly || undefined}
         // Neither focus nor selection change: the action is for this row, wherever the cursor is.
         onMouseDown={(event) => {
@@ -182,7 +184,7 @@ export function QuickActions(props: ActionSurfaceProps) {
         )}
       >
         <Icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-      </button>
+      </span>
     );
   });
 }

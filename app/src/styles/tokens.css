@@ -123,6 +123,9 @@
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
      lines), the line length of plain-text mail and the width of an attachment card. */
   --ui-list-width-reading: 24rem;
+  /* Stage 8: with the reading pane below, the list keeps 40 % of the height, at least 10 rem. */
+  --ui-list-height-reading: 40%;
+  --ui-list-min-height-reading: 10rem;
   --ui-reading-max-width: 46rem;
   --ui-attachment-width: 16rem;
   /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)
@@ -130,6 +133,9 @@
   --ui-dialog-width: 28rem;
   --ui-picker-width: 24rem;
   --ui-picker-list-height: 18rem;
+  /* Stage 8: the command palette and the shortcut overview. */
+  --ui-palette-width: 36rem;
+  --ui-overview-width: 48rem;
   --ui-notice-width: 28rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the
      platform draws its window buttons over the web view (macOS, see app.css). */
@@ -191,4 +197,30 @@
     --ui-duration-base: 0ms;
     --ui-duration-slow: 0ms;
   }
+}
+
+/* Stage 8: compact rows (docs/DESIGN.md, "Zeile": 34 px instead of 44 px). The list reads the
+   heights from here, so only the tokens change. */
+:root[data-density="compact"] {
+  --ui-row-height: 2.125rem;
+  --ui-row-height-two-line: 3.25rem;
+  --ui-section-height: 1.75rem;
+}
+
+/* Stage 8: text size 80 to 150 percent. Every size, space and row height is in rem, so the whole
+   UI follows the root font size; the message list reads its heights again when it changes. */
+:root[data-text-size="80"] {
+  font-size: 80%;
+}
+:root[data-text-size="90"] {
+  font-size: 90%;
+}
+:root[data-text-size="115"] {
+  font-size: 115%;
+}
+:root[data-text-size="130"] {
+  font-size: 130%;
+}
+:root[data-text-size="150"] {
+  font-size: 150%;
 }

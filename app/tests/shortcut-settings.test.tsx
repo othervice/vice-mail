@@ -1,0 +1,169 @@
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useShortcutStore, loadStoredOverrides } from "../src/stores/shortcuts";
+import { useUiStore } from "../src/stores/ui";
+import { makeAccount, makeMailbox, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
+import { renderApp } from "./support/render";
+
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+});
+
+type User = ReturnType<typeof renderApp>["user"];
+
+function setup() {
+  const items = makeMessages(6);
+  const core = mockCore({
+    accounts: [makeAccount({ writesEnabled: true })],
+    mailboxes: [...standardMailboxes(), makeMailbox({ id: 7, path: "Archive", role: "archive", roleSource: "server" })],
+    messages: { 1: items },
+    views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
+    readingPreferences: { markReadOnOpen: "never" },
+  });
+  return { core, items };
+}
+
+async function openKeyboardSettings() {
+  act(() => {
+    useUiStore.getState().showSettings("keyboard");
+  });
+  return screen.findByRole("heading", { name: "Keyboard shortcuts" });
+}
+
+const row = (id: string) => screen.getByTestId(`shortcut-row-${id}`);
+const chips = (id: string) =>
+  within(within(row(id)).getByRole("list", { name: "Shortcuts" }))
+    .queryAllByRole("listitem")
+    .map((item) => item.querySelector("kbd")?.textContent);
+
+/** Settings → Keyboard: "Add" for a command, then the key press. */
+async function record(user: User, label: string, keys: string) {
+  await user.click(screen.getByRole("button", { name: `Add shortcut for ${label}` }));
+  const recorder = await screen.findByTestId("shortcut-recorder");
+  expect(document.activeElement).toBe(recorder);
+  await user.keyboard(keys);
+}
+
+/** The inbox with its first message open and the focus in the list. */
+async function openInbox(user: User) {
+  act(() => {
+    useUiStore.getState().showMailView("inbox");
+  });
+  const list = await screen.findByRole("listbox", { name: /^Messages in/ });
+  const first = within(list).getAllByRole("option")[0];
+  if (!first) throw new Error("no rows");
+  await user.click(first);
+  await screen.findByRole("region", { name: "Message" });
+  list.focus();
+  return list;
+}
+
+describe("changeable shortcuts", () => {
+  it("a new shortcut works at once and the old one keeps working until it is removed", async () => {
+    const { core, items } = setup();
+    const { user } = renderApp();
+    await openKeyboardSettings();
+
+    await record(user, "Archive", "y");
+    expect(screen.getByTestId("shortcut-status").textContent).toBe("Y now runs Archive.");
+    expect(chips("archive")).toEqual(["E", "Y"]);
+    // The focus is back on "Add", where the recording started.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add shortcut for Archive" }));
+    expect(within(row("archive")).getByText("Changed")).toBeTruthy();
+
+    await openInbox(user);
+    await user.keyboard("y");
+    await waitFor(() => {
+      expect(core.callsOf("apply_action")).toHaveLength(1);
+    });
+    expect(core.callsOf("apply_action")[0]).toMatchObject({
+      action: { type: "archive" },
+      messages: [{ mailboxId: 1, messageId: items[0]?.id }],
+    });
+    // The tooltip of the toolbar names the new assignment's first shortcut.
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
+    expect(within(toolbar).getByRole("button", { name: "Archive" }).getAttribute("aria-keyshortcuts")).toBe("E");
+
+    // Removing "E" takes effect at once too.
+    await openKeyboardSettings();
+    await user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
+    expect(chips("archive")).toEqual(["Y"]);
+    const list = await openInbox(user);
+    await user.keyboard("e");
+    expect(core.callsOf("apply_action")).toHaveLength(1);
+    expect(document.activeElement).toBe(list);
+    expect(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Archive" }).getAttribute("aria-keyshortcuts")).toBe("Y");
+  });
+
+  it("keeps the change after a restart", async () => {
+    const { core } = setup();
+    const first = renderApp();
+    await openKeyboardSettings();
+    await record(first.user, "Archive", "y");
+    await first.user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
+    first.unmount();
+
+    // A restart: the stores start again from what is stored, the app renders anew.
+    useShortcutStore.setState({ ...useShortcutStore.getInitialState(), overrides: loadStoredOverrides() }, true);
+    useUiStore.setState(useUiStore.getInitialState(), true);
+    const second = renderApp();
+    await openKeyboardSettings();
+    expect(chips("archive")).toEqual(["Y"]);
+
+    await openInbox(second.user);
+    await second.user.keyboard("e");
+    expect(core.callsOf("apply_action")).toHaveLength(0);
+    await second.user.keyboard("y");
+    await waitFor(() => {
+      expect(core.callsOf("apply_action")).toHaveLength(1);
+    });
+    expect(core.callsOf("apply_action")[0]?.["action"]).toEqual({ type: "archive" });
+  });
+
+  it("refuses a shortcut another command has, system keys and the keys for moving around", async () => {
+    setup();
+    const { user } = renderApp();
+    await openKeyboardSettings();
+
+    await record(user, "Reply", "e");
+    const status = screen.getByTestId("shortcut-status");
+    expect(status.textContent).toBe("E is already assigned to “Archive”. Remove it there first.");
+    expect(status.getAttribute("role")).toBe("status");
+    // Still recording: the next key press is a new try. A system key is refused as well.
+    await user.keyboard("{Meta>}q{/Meta}");
+    expect(status.textContent).toBe("⌘Q belongs to the system or to text editing and cannot be assigned.");
+    await user.keyboard("{ArrowDown}");
+    expect(status.textContent).toBe("↓ is used for moving around in the app and cannot be assigned.");
+    await user.keyboard("{Alt>}r{/Alt}");
+    expect(status.textContent).toContain("Option and Alt combinations");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("shortcut-recorder")).toBeNull();
+    expect(chips("reply")).toEqual(["R"]);
+    expect(chips("archive")).toEqual(["E"]);
+    expect(within(row("reply")).queryByText("Changed")).toBeNull();
+
+    // After freeing "e" there, it can be assigned here.
+    await user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
+    await record(user, "Reply", "e");
+    expect(chips("reply")).toEqual(["R", "E"]);
+    // Reset all brings the standard back.
+    await user.click(screen.getByRole("button", { name: "Reset all shortcuts" }));
+    expect(chips("reply")).toEqual(["R"]);
+    expect(chips("archive")).toEqual(["E"]);
+    expect(screen.getByTestId("shortcut-status").textContent).toBe("All shortcuts are back to standard.");
+  });
+
+  it("changes the palette shortcut itself, which works at once", async () => {
+    mockCore();
+    const { user } = renderApp();
+    await openKeyboardSettings();
+    await record(user, "Command palette", "{Meta>}p{/Meta}");
+    expect(chips("palette")).toEqual(["⌘K", "⌘P"]);
+    await user.click(screen.getByRole("button", { name: "Remove ⌘K from Command palette" }));
+    screen.getByRole("button", { name: "Add shortcut for Archive" }).focus();
+    await user.keyboard("{Meta>}k{/Meta}");
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+    await user.keyboard("{Meta>}p{/Meta}");
+    expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeTruthy();
+  });
+});

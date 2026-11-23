@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
-import { FilePen, Forward, Reply, ReplyAll, SquarePen } from "lucide-react";
+import { Command, FilePen, Forward, Keyboard, Reply, ReplyAll, SquarePen } from "lucide-react";
 import { openComposer } from "../../stores/composer";
 
 /**
@@ -668,8 +668,12 @@ export function leavesFolder(action: MailAction, mailbox: Mailbox): boolean {
 
 // ---- Stage 7: commands that do not act on messages ----
 
-/** Ids of commands of the whole mail view; labels in `search` (i18n). Stage 8's palette lists them. */
-export const APP_COMMAND_IDS = ["search"] as const;
+/**
+ * Ids of commands of the whole app. Labels: `search.open` for the search, `keyboard.commands`
+ * (i18n) for the rest. Stage 8's palette lists them; their shortcuts are changeable like the
+ * actions' (`features/keyboard/bindings.ts`).
+ */
+export const APP_COMMAND_IDS = ["search", "palette", "shortcutHelp"] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
 
@@ -686,5 +690,16 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
     icon: Search,
     // Cmd/Ctrl+F like every app, "/" like Gmail and Outlook on the web.
     shortcuts: both({ key: "f", mod: true }, { key: "/" }),
+  },
+  // Stage 8: the command palette (Cmd/Ctrl+K like most apps) and the shortcut overview ("?").
+  palette: {
+    id: "palette",
+    icon: Command,
+    shortcuts: both({ key: "k", mod: true }),
+  },
+  shortcutHelp: {
+    id: "shortcutHelp",
+    icon: Keyboard,
+    shortcuts: both({ key: "?" }),
   },
 };

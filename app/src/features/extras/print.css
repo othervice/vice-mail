@@ -1,0 +1,73 @@
+/*
+ * Printing a message (stage 9, docs/decisions/0020: "Drucken"). `printWindow` opens the system's
+ * print dialog for the whole window; these rules leave only the reading pane's message
+ * (`[data-print-root]`): its head, attachments, invitations and the cleaned body as the core
+ * rendered it (the HTML frame keeps its own white canvas). Everything else is not printed:
+ * neither the frame, nor the list, nor controls inside the message (`[data-print-hide]`).
+ *
+ * The ancestors of the message lose their clipping and fixed heights, so a long message runs
+ * over several pages instead of being cut at the window's height.
+ */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+
+  /* Neither the message nor one of its ancestors: not printed. */
+  body *:not([data-print-root], [data-print-root] *, :has([data-print-root])) {
+    display: none !important;
+  }
+
+  /* The ancestors: plain blocks without clipping, scrolling, panes or shadows. */
+  body *:has([data-print-root]) {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+
+  [data-print-root] {
+    padding: 0 !important;
+    outline: none !important;
+  }
+
+  /* Controls inside the message: marked ones, and icon-only buttons (they carry their name in
+     `aria-label`, e.g. save and open of an attachment). Text buttons stay, as text. */
+  [data-print-root] [data-print-hide],
+  [data-print-root] button[aria-label] {
+    display: none !important;
+  }
+
+  /* Paper is white: the dark theme prints with the light theme's text and line colours
+     (tests/extras-tools.test.tsx keeps these equal to the light values in tokens.css). */
+  :root[data-theme="dark"] {
+    color-scheme: light;
+    --ui-canvas: #f7f6f3;
+    --ui-surface: #fdfcfa;
+    --ui-surface-raised: #ffffff;
+    --ui-border: #e3e0da;
+    --ui-border-strong: #8a847b;
+    --ui-text-primary: #1e1c19;
+    --ui-text-secondary: #514d47;
+    --ui-text-tertiary: #67625a;
+    --ui-accent: #0b746c;
+    --ui-accent-soft: #dceeeb;
+  }
+}

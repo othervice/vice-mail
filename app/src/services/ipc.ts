@@ -860,3 +860,89 @@ export const comfortIpc = {
   setNotificationTexts: (texts: NotificationTexts): Promise<void> =>
     comfortPlain(() => comfortCommands.setNotificationTexts(texts)),
 };
+
+// ---- Stage 9 part B (extras: unsubscribe, invitations, export, print, default mail app, mailto) ----
+import {
+  commands as extrasCommands,
+  type AttendeeRole,
+  type CalendarEvent,
+  type CalendarInvite,
+  type CalendarInviteInfo,
+  type CalendarPerson,
+  type CalendarProblem,
+  type CalendarProblemCode,
+  type CalendarRecurrence,
+  type CalendarTime,
+  type ComposeRequest,
+  type DefaultMailApp,
+  type DefaultMailAppOutcome,
+  type EventStatus,
+  type MailtoField,
+  type MailtoNotice,
+  type MessageExtras,
+  type ParticipationStatus,
+  type RecurrenceFrequency,
+  type UnsubscribeMethod,
+  type UnsubscribeOptions,
+  type UnsubscribeOutcome,
+} from "../generated/bindings";
+
+export type {
+  AttendeeRole,
+  CalendarEvent,
+  CalendarInvite,
+  CalendarInviteInfo,
+  CalendarPerson,
+  CalendarProblem,
+  CalendarProblemCode,
+  CalendarRecurrence,
+  CalendarTime,
+  ComposeRequest,
+  DefaultMailApp,
+  DefaultMailAppOutcome,
+  EventStatus,
+  MailtoField,
+  MailtoNotice,
+  MessageExtras,
+  ParticipationStatus,
+  RecurrenceFrequency,
+  UnsubscribeMethod,
+  UnsubscribeOptions,
+  UnsubscribeOutcome,
+};
+
+/** Stage 9 part B commands without a typed error on the Rust side still reject on framework errors. */
+async function extrasPlain<T>(start: () => Promise<T>): Promise<T> {
+  try {
+    return await start();
+  } catch (e) {
+    throw toCoreError(e);
+  }
+}
+
+/**
+ * Stage 9 part B: what the reading pane offers besides the body (unsubscribing, calendar
+ * invitations, `.eml` export, printing), the default mail app and `mailto:` links.
+ */
+export const extrasIpc = {
+  /** Unsubscribe options and invitations (these only once `bodyComplete`), plus the category. */
+  getMessageExtras: (messageId: MessageId): Promise<MessageExtras> =>
+    call(() => extrasCommands.getMessageExtras(messageId)),
+  /**
+   * Only after the user's click: `oneClick` POSTs (RFC 8058), `mailto` answers the composer's
+   * fields (nothing is sent), `web` opens the page in the system browser after the UI asked.
+   */
+  unsubscribe: (messageId: MessageId, method: UnsubscribeMethod): Promise<UnsubscribeOutcome> =>
+    call(() => extrasCommands.unsubscribe(messageId, method)),
+  /** Hands the calendar part to the system's calendar app (a read-only `.ics`). */
+  openInvite: (messageId: MessageId, partId: number): Promise<void> =>
+    done(call(() => extrasCommands.openInvite(messageId, partId))),
+  /** The system's save dialog, then the raw message as `.eml`; null when the user cancelled. */
+  exportMessage: (messageId: MessageId): Promise<string | null> => call(() => extrasCommands.exportMessage(messageId)),
+  /** The system's print dialog for the window ("Save as PDF" is there); print styles pick the message. */
+  printWindow: (): Promise<void> => done(call(() => extrasCommands.printWindow())),
+  getDefaultMailApp: (): Promise<DefaultMailApp> => extrasPlain(() => extrasCommands.getDefaultMailApp()),
+  setDefaultMailApp: (): Promise<DefaultMailAppOutcome> => extrasPlain(() => extrasCommands.setDefaultMailApp()),
+  /** The `mailto:` links the app was started with; once at start, later ones come as `composeRequested`. */
+  takeLaunchLinks: (): Promise<ComposeRequest[]> => extrasPlain(() => extrasCommands.takeLaunchLinks()),
+};

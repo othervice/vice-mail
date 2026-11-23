@@ -101,6 +101,7 @@ describe("app frame without an account", () => {
       "Inbox",
       "Notifications",
       "Appearance",
+      "Keyboard",
       "Settings sync",
       "AI over MCP",
       "About",

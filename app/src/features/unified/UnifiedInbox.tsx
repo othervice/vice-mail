@@ -1,7 +1,6 @@
 import { EyeOff, FolderX, Inbox } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import type { Account, AccountColor, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
@@ -10,6 +9,7 @@ import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { useUnifiedInboxSource } from "../comfort/listSources";
+import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useAccountGroups, useHiddenAccounts } from "./queries";
@@ -52,6 +52,9 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const query = source.query;
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
+  // Stage 8: the reading pane right, below or in place of the list.
+  const layout = useReadingLayout(list);
+  const open = Boolean(single && account);
 
   if (query.isError && !query.data) {
     return (
@@ -68,13 +71,8 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1" data-testid="unified-inbox">
-      <div
-        className={cx(
-          "flex min-h-0 min-w-0 flex-col",
-          single && account ? "w-(--ui-list-width-reading) shrink-0 border-e border-border" : "flex-1",
-        )}
-      >
+    <div className={layout.container} data-testid="unified-inbox" data-reading-pane={layout.position}>
+      <div className={layout.listColumn(open)} hidden={layout.listHidden(open)}>
         <MessageList
           source={source}
           folderName={name}
@@ -83,15 +81,17 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
+            layout.onSelectionChange(next);
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
             setFocusRequest((request) => (request && request.messageId === only ? request : null));
           }}
           onOpen={(id: MessageId) => {
+            layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
         />
       </div>
-      {single && account && (
+      {single && account && layout.paneShown(open) && (
         <MixedReading
           key={single.id}
           account={account}
@@ -99,6 +99,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           focusRequest={focusRequest}
           platform={platform}
           list={list}
+          layout={layout}
         />
       )}
     </div>

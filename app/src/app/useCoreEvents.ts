@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { applyAccountStatus, invalidateAccountData } from "../features/accounts/queries";
 import { handleComfortEvent } from "../features/comfort/events";
 import { handleComposeEvent } from "../features/composer/queries";
+import { handleExtrasEvent } from "../features/extras/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
 import { handleMcpEvent } from "../features/mcp/events";
@@ -31,6 +32,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleSearchEvent(queryClient, event);
   // Stage 9: sorted inbox, Later, Pinned, Tasks, skipped local rules, notification clicks.
   handleComfortEvent(queryClient, event);
+  // Stage 9 part B: mailto: links for the composer, invitations once a body arrived.
+  handleExtrasEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

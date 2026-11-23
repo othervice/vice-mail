@@ -11,6 +11,8 @@ import { useUiStore } from "../../stores/ui";
 import { Attachments } from "./Attachments";
 import { LinkCard } from "./LinkCard";
 import { CategoryPanel } from "../comfort/CategoryPanel";
+import { MessageExtras } from "../extras/MessageExtras";
+import { MessageTools } from "../extras/MessageTools";
 import { MessageHeader } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
@@ -115,15 +117,18 @@ function Body({ view, account, format, scrollerRef, onRetry }: BodyProps) {
       return (
         <>
           {body.blockedRemote > 0 && !body.remoteLoaded && (
-            <RemoteContentBar
-              blocked={body.blockedRemote}
-              sender={sender}
-              pending={remote.isPending ? (remote.variables ?? null) : null}
-              error={remote.isError ? remote.error : null}
-              onLoad={(scope) => {
-                remote.mutate(scope);
-              }}
-            />
+            // Stage 9: a control, not part of the printed message.
+            <div data-print-hide>
+              <RemoteContentBar
+                blocked={body.blockedRemote}
+                sender={sender}
+                pending={remote.isPending ? (remote.variables ?? null) : null}
+                error={remote.isError ? remote.error : null}
+                onLoad={(scope) => {
+                  remote.mutate(scope);
+                }}
+              />
+            </div>
           )}
           <HtmlBody
             srcdoc={body.srcdoc}
@@ -281,8 +286,11 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
     content = (
       <>
         <MessageHeader header={view.header} account={account} subjectId={subjectId} />
-        {/* Stage 9: "Why here?" and "always as …". */}
-        <CategoryPanel messageId={view.id} />
+        {/* Stage 9: "Why here?" and "always as …" (not printed); unsubscribing and invitations. */}
+        <div className="contents" data-print-hide>
+          <CategoryPanel messageId={view.id} />
+        </div>
+        <MessageExtras accountId={account.id} messageId={view.id} />
         <Problems view={view} />
         <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
         <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />
@@ -303,6 +311,8 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
           <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
         )}
         {canToggle && shownFormat && <FormatToggle shown={shownFormat} onChange={setFormat} />}
+        {/* Stage 9: save as .eml, print (the print styles show only the article below). */}
+        {view && <MessageTools key={view.id} messageId={view.id} />}
         <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
       </div>
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto" data-testid="reading-scroller">
@@ -312,6 +322,7 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
           aria-labelledby={view ? subjectId : undefined}
           aria-label={view ? undefined : t("reading.region")}
           aria-busy={query.isPending || body?.kind === "loading"}
+          data-print-root
           className="flex flex-col gap-4 px-6 py-6 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
         >
           {content}

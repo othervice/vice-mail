@@ -6,7 +6,9 @@ import { ActivityView } from "../features/activity/ActivityView";
 import { ComposerHost } from "../features/composer/Composer";
 import { OutboxView } from "../features/composer/OutboxView";
 import { SendNotices } from "../features/composer/SendNotices";
+import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
+import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { SettingsView } from "../features/settings/SettingsView";
 import type { CoreError } from "../services/ipc";
 import { useUiStore } from "../stores/ui";
@@ -48,6 +50,10 @@ export function AppShell({ eventsError }: AppShellProps) {
       </main>
       <Notices />
       <SendNotices />
+      {/* Stage 9: mailto: links from the system open the composer. */}
+      <MailtoHost />
+      {/* Stage 8: command palette, shortcut overview, layout of the window. */}
+      <KeyboardLayer />
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { ArrowLeft, SearchX, Server } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
-import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { Notice } from "../../components/Notice";
@@ -13,6 +12,7 @@ import type { ListPage, MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { buildRows } from "../messages/rows";
 import type { FocusRequest } from "../reading/ReadingPane";
+import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
 
@@ -66,15 +66,12 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
   const open = Boolean(single && account);
+  // Stage 8: the reading pane right, below or in place of the list.
+  const layout = useReadingLayout(list);
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div
-        className={cx(
-          "flex min-h-0 min-w-0 flex-col",
-          open ? "w-(--ui-list-width-reading) shrink-0 border-e border-border" : "flex-1",
-        )}
-      >
+    <div className={layout.container} data-reading-pane={layout.position}>
+      <div className={layout.listColumn(open)} hidden={layout.listHidden(open)}>
         {header}
         <MessageList
           source={source}
@@ -84,16 +81,18 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
           handle={list}
           onSelectionChange={(next) => {
             setSelection(next);
+            layout.onSelectionChange(next);
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
             setFocusRequest((request) => (request && request.messageId === only ? request : null));
           }}
           onOpen={(id: MessageId) => {
+            layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
         />
         {footer}
       </div>
-      {single && account && (
+      {single && account && layout.paneShown(open) && (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {hitById.get(single.id)?.bodyLocal === false && (
             <p className="shrink-0 border-b border-border px-4 py-2 text-12 text-secondary" data-testid="search-headers-only">
@@ -107,6 +106,7 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
           focusRequest={focusRequest}
           platform={platform}
           list={list}
+          layout={layout}
           />
         </div>
       )}

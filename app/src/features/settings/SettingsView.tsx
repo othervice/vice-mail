@@ -5,6 +5,7 @@ import { ViewHeader } from "../../components/ViewHeader";
 import { SETTINGS_SECTION_IDS, useUiStore, type SettingsSectionId } from "../../stores/ui";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { InboxSettings } from "../comfort/InboxSettings";
+import { KeyboardSettings } from "../keyboard/KeyboardSettings";
 import { ComposeSettings } from "../composer/ComposeSettings";
 import { NotificationSettings } from "../comfort/NotificationSettings";
 import { McpSettings } from "../mcp/McpSettings";
@@ -23,6 +24,7 @@ const SECTIONS: Record<SettingsSectionId, ComponentType> = {
   inbox: InboxSettings,
   notifications: NotificationSettings,
   appearance: AppearanceSettings,
+  keyboard: KeyboardSettings,
   sync: SettingsSyncSettings,
   mcp: McpSettings,
   about: AboutSettings,

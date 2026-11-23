@@ -17,12 +17,13 @@ import {
   type DraftUpdate,
   type QuoteLanguage,
 } from "../../services/ipc";
-import { takeReturnFocus, useComposerStore, type ComposerSource } from "../../stores/composer";
+import { takeReturnFocus, useComposerStore, type ComposePrefill, type ComposerSource } from "../../stores/composer";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
 import { htmlToText, invalidAddressIn, textToHtml } from "./addresses";
 import { ComposerAttachments } from "./ComposerAttachments";
+import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { RecipientField } from "./RecipientField";
 
@@ -57,10 +58,30 @@ function quoteLanguage(language: string): QuoteLanguage {
   return language.toLowerCase().startsWith("de") ? "de" : "en";
 }
 
+/**
+ * Stage 9: a `mailto:` link fills more than the recipients the core's new draft takes. The rest
+ * goes in with the first save, before the form shows the draft.
+ */
+export async function prefillDraft(draft: Draft, prefill: ComposePrefill): Promise<Draft> {
+  const { cc, bcc, subject, body } = prefill;
+  if (cc.length === 0 && bcc.length === 0 && !subject && !body) return draft;
+  const text = body ? (draft.format === "text" ? { bodyText: body } : { bodyHtml: textToHtml(body) }) : {};
+  try {
+    return await composeIpc.saveDraft(draft.id, { ...updateOf(draft), cc: [...cc], bcc: [...bcc], subject: subject ?? draft.subject, ...text });
+  } catch (e) {
+    // "Try again" starts over with a new draft; this half-filled one must not stay behind.
+    await composeIpc.deleteDraft(draft.id).catch(() => undefined);
+    throw e;
+  }
+}
+
 function loadDraft(source: ComposerSource, language: QuoteLanguage): Promise<Draft> {
   switch (source.kind) {
-    case "new":
-      return composeIpc.createDraft({ kind: "new", accountId: source.accountId, identityId: null, to: [...(source.to ?? [])] });
+    case "new": {
+      const { prefill } = source;
+      const created = composeIpc.createDraft({ kind: "new", accountId: source.accountId, identityId: null, to: [...(source.to ?? [])] });
+      return prefill ? created.then((draft) => prefillDraft(draft, prefill)) : created;
+    }
     case "reply":
     case "reply_all":
     case "forward":
@@ -131,7 +152,7 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
-  if (draft) return <ComposerForm seq={seq} initial={draft} />;
+  if (draft) return <ComposerForm seq={seq} initial={draft} prefill={source.kind === "new" ? source.prefill : undefined} />;
   return (
     <ComposerFrame title={t(`composer.title.${source.kind === "draft" || source.kind === "message" ? "draft" : source.kind}`)} onClose={close}>
       {error ? (
@@ -220,7 +241,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-function ComposerForm({ seq, initial }: { seq: number; initial: Draft }) {
+function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; prefill?: ComposePrefill | undefined }) {
   const { t } = useTranslation();
   const close = useComposerStore((state) => state.close);
   const track = useComposerStore((state) => state.track);
@@ -506,6 +527,8 @@ function ComposerForm({ seq, initial }: { seq: number; initial: Draft }) {
       dropping={dropping}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* Stage 9: hints about the mailto: link this draft came from (blind copies first). */}
+        {prefill && <MailtoNotices notices={prefill.notices} inReplyTo={prefill.inReplyTo !== null} />}
         {frozen && (
           <div className="p-4">
             <Notice tone="info" title={t("composer.frozen.title")} data-testid="composer-frozen">

@@ -3,6 +3,7 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import type { ThemePreference } from "../../services/ipc";
+import { LayoutSettings } from "../layout/LayoutSettings";
 import { DEFAULT_PREFERENCES, usePreferences, useSetPreferences } from "../preferences/queries";
 
 export function AppearanceSettings() {
@@ -38,6 +39,8 @@ export function AppearanceSettings() {
         }}
       />
       {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
+      {/* Stage 8: layout of this window. */}
+      <LayoutSettings />
     </SettingsSection>
   );
 }

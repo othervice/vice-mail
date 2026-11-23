@@ -5,7 +5,7 @@ import { cx } from "../../components/cx";
 import { splitHighlights } from "../../components/HighlightedText";
 import type { SearchPage, SearchProblemCode, SearchTermInfo } from "../../services/ipc";
 import { useSearchStore, type SearchScopeChoice } from "../../stores/search";
-import { APP_COMMANDS } from "../actions/registry";
+import { useBoundShortcuts } from "../../stores/shortcuts";
 import { ariaShortcut, type ShortcutPlatform } from "../actions/shortcuts";
 import { chipTerms, hasValue, rangeText, removeTerm, sortedProblems } from "./terms";
 
@@ -106,7 +106,7 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
   const problems = current ? sortedProblems(current.problems) : [];
   const chips = current ? chipTerms(current.terms) : [];
   const index = current?.index;
-  const shortcut = APP_COMMANDS.search.shortcuts[platform][0];
+  const shortcut = useBoundShortcuts(platform)("search")[0];
 
   return (
     <form
