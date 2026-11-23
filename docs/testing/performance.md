@@ -399,3 +399,43 @@ cargo test -p mail-engine --release --lib search::bench -- --ignored --nocapture
   Speicher im Leerlauf (26–27 MB).
 - Der automatische Test `search::bench::small_data_meets_generous_thresholds` (3.000 Mails, Debug)
   prüft jetzt auch den Posteingang als Konversationen (Grenze 200 ms) und vereint (300 ms).
+
+## Inline-Bilder neu kodieren (Sicherheitsprüfung C-4) – 23.11.2026
+
+**Frage:** Was kostet es, die eingebetteten (`cid:`) und freigegebenen externen Bilder einer Mail
+durch die Pipeline der Anhangsvorschau zu schicken (in Rust dekodieren, aufrichten, auf höchstens
+2048 px skalieren, PNG/JPEG neu kodieren), statt ihre Bytes an die Bilddecoder der WebView zu geben?
+
+**Umgebung:** Mac mini, Apple M4 (10 Kerne), andere Sitzungen bauten gleichzeitig (Load 6–8), die
+Werte sind also Obergrenzen. Ein Kern, nacheinander, bester von fünf Durchläufen.
+
+**Wie gemessen:** `crates/mail-content/tests/inline_reencode_cost.rs`
+
+```text
+cargo test -p mail-content --test inline_reencode_cost -- --ignored --nocapture
+cargo test -p mail-content --test inline_reencode_cost --release -- --ignored --nocapture
+```
+
+Ein typischer HTML-Newsletter, im Test erzeugt: 32 Bilder, 7,1 Megapixel, 1.215 KiB. Ein
+Titelbild 1200×600 und vier Artikelbilder 1200×800 (2x für Retina), sechs Produktfotos 600×600,
+zwei Banner 600×200 (alle JPEG, Qualität 82, fotoähnlicher Inhalt), ein Logo 400×120 und zehn
+Symbole 96×96 als PNG mit Transparenz, sechs Social-Symbole 64×64, zwei 1×1-GIFs.
+
+| Build | heute (erkennen, Base64) | neu kodiert | langsamstes Bild |
+|---|---|---|---|
+| Debug (Abhängigkeiten nicht optimiert) | 20 ms | 1.683 ms | 234 ms (Artikelbild 1200×800) |
+| Release | 1,2 ms | 68–69 ms | 9,5 ms (Artikelbild 1200×800) |
+
+- Neu kodiert sind die `data:`-URLs etwa gleich groß (1.647 statt 1.621 KiB).
+- Die Kosten wachsen mit den Pixeln: rund 9,5 ms je Megapixel-Foto (Release, M4), auf einem
+  langsameren Windows-Laptop eher das Drei- bis Fünffache. Sie fielen beim ersten Öffnen jeder
+  bildreichen Mail auf dem Weg zur Anzeige an, ohne Cache bei jedem Öffnen.
+- Die Pipeline dekodiert nur das erste Bild: Animierte GIFs und WebP würden still stehen. Sie zu
+  erhalten hieße, jedes Einzelbild neu zu kodieren (Kosten mal Bildzahl), animiertes WebP kann
+  der `image`-Encoder nicht schreiben.
+
+**Ergebnis:** nicht umgesetzt. 70 ms je Newsletter auf dem M4 (ein Mehrfaches auf langsamer
+Hardware, 1,7 s im Debug-Build) auf dem Weg zum Öffnen einer Mail, dazu ein neuer Cache und der
+Verlust von Animationen, sind nicht eindeutig vertretbar. Umgesetzt ist nur der kleine Teil:
+BMP, AVIF und ICO werden nicht mehr angezeigt. Wie es weitergehen kann, steht in
+`docs/SECURITY_MODEL.md` (C-4).

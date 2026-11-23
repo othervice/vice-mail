@@ -1,6 +1,11 @@
 //! Images in sanitised HTML. Only raster formats recognised by their magic bytes are shown, and
 //! only as base64 `data:` URIs built here, so every image URL in the output has one strict form.
 //! SVG is never accepted: it is a document format, not a picture.
+//!
+//! The bytes go to the web view's own image decoders (finding C-4 of the stage 15 review), so
+//! only the four formats every mail client shows are accepted: PNG, JPEG, GIF and WebP. BMP, AVIF
+//! and ICO (rare in mail, decoders with a history of vulnerabilities, AVIF a large new one) are
+//! refused and shown like any other image that cannot be shown.
 
 use std::sync::Arc;
 
@@ -19,9 +24,6 @@ pub enum ImageType {
     Jpeg,
     Gif,
     Webp,
-    Bmp,
-    Avif,
-    Ico,
 }
 
 impl ImageType {
@@ -32,14 +34,12 @@ impl ImageType {
             Self::Jpeg => "image/jpeg",
             Self::Gif => "image/gif",
             Self::Webp => "image/webp",
-            Self::Bmp => "image/bmp",
-            Self::Avif => "image/avif",
-            Self::Ico => "image/x-icon",
         }
     }
 }
 
 /// Recognises an image by its first bytes. The declared MIME type of a part is never trusted.
+/// Anything but PNG, JPEG, GIF and WebP is `None` (C-4: BMP, AVIF and ICO are not shown).
 pub fn sniff_image(bytes: &[u8]) -> Option<ImageType> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some(ImageType::Png)
@@ -49,15 +49,6 @@ pub fn sniff_image(bytes: &[u8]) -> Option<ImageType> {
         Some(ImageType::Gif)
     } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
         Some(ImageType::Webp)
-    } else if bytes.len() >= 12
-        && bytes.get(4..8) == Some(b"ftyp")
-        && matches!(bytes.get(8..12), Some(b"avif" | b"avis"))
-    {
-        Some(ImageType::Avif)
-    } else if bytes.starts_with(b"BM") && bytes.len() >= 26 {
-        Some(ImageType::Bmp)
-    } else if bytes.starts_with(&[0, 0, 1, 0]) && bytes.len() >= 22 {
-        Some(ImageType::Ico)
     } else {
         None
     }
@@ -275,10 +266,14 @@ mod tests {
         assert_eq!(sniff_image(b"\x89PNG\r\n\x1a\nrest"), Some(ImageType::Png));
         assert_eq!(sniff_image(b"\xFF\xD8\xFF\xE0"), Some(ImageType::Jpeg));
         assert_eq!(sniff_image(b"RIFF\0\0\0\0WEBPVP8 "), Some(ImageType::Webp));
-        assert_eq!(
-            sniff_image(b"\0\0\0\x1cftypavif\0\0"),
-            Some(ImageType::Avif)
-        );
+        // C-4: formats the web view would decode but mail clients rarely need are refused.
+        assert_eq!(sniff_image(b"\0\0\0\x1cftypavif\0\0"), None);
+        assert_eq!(sniff_image(b"\0\0\0\x1cftypavis\0\0"), None);
+        let bmp = [b"BM".as_slice(), &[0; 60]].concat();
+        assert_eq!(sniff_image(&bmp), None);
+        assert_eq!(image_data_uri(&bmp), None);
+        let ico = [[0, 0, 1, 0].as_slice(), &[1, 0, 16, 16], &[0; 40]].concat();
+        assert_eq!(sniff_image(&ico), None);
         assert_eq!(
             sniff_image(b"<svg xmlns='http://www.w3.org/2000/svg'/>"),
             None

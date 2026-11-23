@@ -1137,6 +1137,48 @@ mod tests {
         assert!(!r.srcdoc.contains("svg"));
     }
 
+    /// Finding C-4: BMP, AVIF and ICO never reach the web view's decoders, whether inline,
+    /// allowed remote or written as `data:` URLs into the HTML.
+    #[test]
+    fn bmp_avif_and_ico_images_are_not_shown() {
+        let bmp: ImageBytes = [b"BM".as_slice(), &[0; 60]].concat().into();
+        let avif: ImageBytes = b"\0\0\0\x1cftypavif\0\0\0\0mif1".to_vec().into();
+        let ico: ImageBytes = [[0, 0, 1, 0].as_slice(), &[1, 0, 16, 16], &[0; 40]]
+            .concat()
+            .into();
+        let mut inline = InlineImages::new();
+        inline.insert("bmp@seed", bmp.clone());
+        inline.insert("avif@seed", avif);
+        let mut allowed = HashMap::new();
+        allowed.insert("https://img.example/favicon.ico".to_owned(), ico);
+        let options = RenderOptions {
+            remote: RemotePolicy::Allow(allowed),
+            inline,
+            ..options()
+        };
+        let mut data_bmp = String::from("data:image/bmp;base64,");
+        image::base64_encode_into(&bmp, &mut data_bmp);
+        let r = render_html(
+            &format!(
+                "<img src='cid:bmp@seed'><img src='cid:avif@seed'>\
+                 <img src='https://img.example/favicon.ico'><img src='{data_bmp}'>"
+            ),
+            &options,
+        );
+        // Like any image that cannot be shown: the element stays, without a source.
+        assert!(
+            r.srcdoc
+                .ends_with("<body><img><img><img><img></body></html>"),
+            "{}",
+            r.srcdoc
+        );
+        assert_eq!(r.omitted_images, 4);
+        assert!(r.inline_used.is_empty());
+        for mime in ["image/bmp", "image/avif", "image/x-icon"] {
+            assert!(!r.srcdoc.contains(mime), "{mime}");
+        }
+    }
+
     #[test]
     fn style_blocks_and_body_attributes_survive_sanitised() {
         let r = render(

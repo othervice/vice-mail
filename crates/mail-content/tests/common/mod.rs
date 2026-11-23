@@ -400,13 +400,12 @@ pub fn is_image_data_uri(value: &str) -> bool {
     let Some((kind, payload)) = rest.split_once(";base64,") else {
         return false;
     };
-    matches!(
-        kind,
-        "png" | "jpeg" | "gif" | "webp" | "bmp" | "avif" | "x-icon"
-    ) && payload
-        .trim_end_matches('=')
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
+    // C-4: the four formats the sniffer accepts; BMP, AVIF and ICO never reach the web view.
+    matches!(kind, "png" | "jpeg" | "gif" | "webp")
+        && payload
+            .trim_end_matches('=')
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
 }
 
 /// Functions that load something, read the document or run code (IE).

@@ -405,7 +405,7 @@ einer klaren Meldung abgelehnt.
    `allow-scripts` (mit beidem zusammen erreichte ein Script in Spike D `parent.__TAURI_INTERNALS__`).
    Jedes `srcdoc` beginnt mit der Pflicht-Meta-CSP `default-src 'none'; img-src data:; style-src
    'unsafe-inline'; base-uri 'none'; form-action 'none'` und `<meta name="referrer"
-   content="no-referrer">`. Bilder nur als `data:` mit vom Kern erkannten Rasterformaten, nie SVG. Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
+   content="no-referrer">`. Bilder nur als `data:` mit vom Kern erkannten Rasterformaten (PNG, JPEG, GIF, WebP; BMP, AVIF und ICO seit der Sicherheitsprüfung C-4 nicht mehr), nie SVG. Ihre Bytes dekodiert die WebView selbst; Neukodieren in Rust ist gemessen und offen (`docs/testing/performance.md`, C-4). Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
    `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
    Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005). Die Höhe des Frames
    misst das Elternfenster: `contentDocument` ist lesbar (same-origin), ein `ResizeObserver` des
