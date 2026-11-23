@@ -22,7 +22,10 @@ import {
   type QuoteLanguage,
   type TemplateFillProblem,
   type TemplateId,
+  uiIpc,
 } from "../../services/ipc";
+// Stage 8: the composer in a window of its own.
+import { OpenComposerWindowButton, useComposerInWindow } from "../windows/composerPlacement";
 import { takeReturnFocus, useComposerStore, type ComposePrefill, type ComposerSource } from "../../stores/composer";
 import { useComposerBridge } from "../../stores/composerBridge";
 import { boundShortcuts } from "../../stores/shortcuts";
@@ -227,6 +230,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
   const { t } = useTranslation();
   const titleId = useId();
   const platform = shortcutPlatform(useAppInfo().data?.platform);
+  const inWindow = useComposerInWindow();
   return (
     <section
       aria-labelledby={titleId}
@@ -244,7 +248,9 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
         if (!palette) event.stopPropagation();
       }}
       className={cx(
-        "absolute inset-y-0 end-0 z-20 flex w-full max-w-(--ui-reading-max-width) flex-col border-s border-border bg-surface shadow-panel",
+        inWindow
+          ? "absolute inset-0 z-20 flex flex-col bg-surface"
+          : "absolute inset-y-0 end-0 z-20 flex w-full max-w-(--ui-reading-max-width) flex-col border-s border-border bg-surface shadow-panel",
         dropping && "outline-2 -outline-offset-2 outline-focus-ring",
       )}
       data-testid="composer"
@@ -281,7 +287,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-type ActionErrorContext = "attach" | "discard" | "unfreeze" | "images" | "template" | "size";
+type ActionErrorContext = "attach" | "discard" | "unfreeze" | "images" | "template" | "size" | "window";
 
 const ACTION_ERROR_TEXT = {
   attach: "composer.errors.attach",
@@ -290,6 +296,7 @@ const ACTION_ERROR_TEXT = {
   images: "writing.images.failed",
   template: "writing.templates.failed",
   size: "writing.size.checkFailed",
+  window: "windows.composer.openFailed",
 } as const satisfies Record<ActionErrorContext, string>;
 
 /** The value of the signature choice: the draft kind's default, one of the pool, or none. */
@@ -534,6 +541,25 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     close();
   };
 
+  // Stage 8: this draft in a window of its own. The panel here closes without handing the draft
+  // to the server copy; the composer of the new window does that when it closes.
+  const [openingWindow, setOpeningWindow] = useState(false);
+  const openInWindow = async () => {
+    finished.current = true;
+    window.clearTimeout(timer.current);
+    setOpeningWindow(true);
+    try {
+      await flush();
+      await uiIpc.openComposerWindow(draftId);
+      close();
+    } catch (e) {
+      finished.current = false;
+      setActionError({ context: "window", error: toCoreError(e) });
+    } finally {
+      if (mounted.current) setOpeningWindow(false);
+    }
+  };
+
   const discard = async () => {
     setConfirmDiscard(false);
     finished.current = true;
@@ -752,7 +778,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         void closeComposer();
       }}
       status={status}
-      actions={discardButton}
+      actions={
+        <>
+          <OpenComposerWindowButton disabled={frozen} busy={openingWindow} onOpen={() => void openInWindow()} />
+          {discardButton}
+        </>
+      }
       onKeyDown={onKeyDown}
       dropping={dropping}
       dropDetail={fields.format === "html" ? t("writing.images.dropHint") : undefined}
@@ -976,7 +1007,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         {pasteNote && <PasteNote result={pasteNote} onDismiss={() => {
           setPasteNote(null);
         }} />}
-        {fields.quotePosition === "above" && quoteBlock}
+        {/* `quotePosition` is where the answer goes (core: `QuotePosition`): "below" puts the quote first. */}
+        {fields.quotePosition === "below" && quoteBlock}
         {fields.format === "html" ? (
           <Suspense
             fallback={
@@ -1038,7 +1070,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             {signatureText}
           </pre>
         )}
-        {fields.quotePosition === "below" && quoteBlock}
+        {fields.quotePosition === "above" && quoteBlock}
         {(signature || hasQuote || pool.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 text-13 text-secondary">
             {pool.length > 0 && (

@@ -736,7 +736,10 @@ async fn passwords_tokens_and_api_keys_appear_in_no_record() {
             json!({ "name": "t", "subject": "Hi", "html": "<p>Hello</p>" }),
         ),
         (RecordKind::Rule, rule_content("x@example.org", 0)),
-        (RecordKind::SavedView, json!({ "query": "is:unread" })),
+        (
+            RecordKind::SavedView,
+            json!({ "name": "Ungelesen", "query": "is:unread", "position": 0 }),
+        ),
         (
             RecordKind::Identity,
             json!({ "account": account_id(1).to_string(), "email": "ann@example.org",

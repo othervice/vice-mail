@@ -66,7 +66,7 @@ interface FormatToggleProps {
 }
 
 /** HTML or plain text, for mails that have both. Two toggle buttons; the shown one is pressed. */
-function FormatToggle({ shown, onChange }: FormatToggleProps) {
+export function FormatToggle({ shown, onChange }: FormatToggleProps) {
   const { t } = useTranslation();
   const options = [
     { value: "html", label: t("reading.format.html") },
@@ -200,7 +200,7 @@ function Unavailable({ icon, title, body, onRetry }: UnavailableProps) {
   );
 }
 
-function Problems({ view }: { view: MessageView }) {
+export function Problems({ view }: { view: Pick<MessageView, "problems"> }) {
   const { t } = useTranslation();
   if (view.problems.length === 0) return null;
   return (

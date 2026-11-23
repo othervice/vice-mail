@@ -28,7 +28,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, dataDir, invoke, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, dataDir, invoke, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { counter, startCounter } from "./support/counter-server.mjs";
 import { ALICE, REPO, SERVER, appendMessages, attachmentDigests, copySeedMessages, testmail } from "./support/testmail.mjs";
 
@@ -80,9 +80,16 @@ const EXPECTED_TARGETS = {
 };
 /** Links that are opened through "Open" and must reach the opener exactly like this. */
 const OPEN_THROUGH_OPENER = {
-  "link-attributes.eml": ["http://127.0.0.1:18999/v/link-plain/a", "mailto:someone@example.test?subject=spike"],
+  "link-attributes.eml": ["http://127.0.0.1:18999/v/link-plain/a"],
   "deceptive-links.eml": ["https://evil.example/login"],
   "text-plain-markup.eml": ["https://example.com/ok"],
+};
+/**
+ * Links whose "Open" starts a draft in the app's own composer (stage 9 part B / 10: a `mailto:`
+ * link of a mail never goes to the system), with the recipient and subject the composer shows.
+ */
+const OPEN_IN_COMPOSER = {
+  "link-attributes.eml": { "mailto:someone@example.test?subject=spike": { to: "someone@example.test", subject: "spike" } },
 };
 /** Vectors of tracking-pixels.eml whose images the core may load once the sender is allowed. */
 const TRACKING_IMAGE_VECTORS = ["body-background", "img-src", "img-srcset", "picture-source", "table-background", "td-background", "protocol-relative"];
@@ -481,15 +488,15 @@ async function showInbox() {
   await testId("message-list").waitForExist();
 }
 
-/** Opens a folder through the unfolded sidebar's tree, then folds the sidebar again. */
+/** Opens a folder through the unfolded sidebar's tree, then leaves the sidebar as it was. */
 async function showMailbox(mailbox) {
-  await testId("rail-folders").click();
+  const wasExpanded = await setSidebar(true);
   await testId(`mailbox-${mailbox.id}`).waitForExist();
   await testId(`mailbox-${mailbox.id}`).click();
   await browser.waitUntil(async () => (await browser.execute(() => document.querySelector("main header h1")?.textContent)) === mailbox.name, {
     timeoutMsg: `folder ${mailbox.path} did not open`,
   });
-  await testId("rail-folders").click();
+  await setSidebar(wasExpanded);
   await testId("message-list").waitForExist();
 }
 
@@ -804,6 +811,47 @@ describe("reading mail (stage 3)", function () {
             const openHits = await counter.hits();
             if (openHits.connections.length || openHits.requests.length) fail(where, `link ${i}: "Open" connected: ${JSON.stringify(openHits)}`);
             if (await browser.execute(() => document.querySelector('[data-testid="link-card"]') !== null)) fail(where, `link ${i}: the card stayed open after "Open"`);
+          }
+        }
+        // "Open" on a mailto link: a draft in the app's composer, nothing to the system opener.
+        const draft = OPEN_IN_COMPOSER[file]?.[click.card.target];
+        if (draft) {
+          const before = (await opened()).length;
+          if (!click.card.open) fail(where, `link ${i}: no open button for ${click.card.target}`);
+          else {
+            await counter.reset();
+            await browser.execute(() => document.querySelector('[data-testid="link-open"]').click());
+            const composer = await browser
+              .waitUntil(
+                () =>
+                  browser.execute(() => {
+                    const subject = document.querySelector('[data-testid="composer-subject"]');
+                    if (!subject) return false;
+                    return {
+                      subject: subject.value,
+                      to: [...document.querySelectorAll('[data-testid="composer-to"] [data-testid="recipient-chip"]')].map((c) => c.textContent),
+                    };
+                  }),
+                { timeout: 5000, timeoutMsg: "no composer" },
+              )
+              .catch(() => null);
+            await browser.pause(CLICK_SETTLE_MS);
+            line.openedInComposer = composer;
+            if (!composer) fail(where, `link ${i}: "Open" on ${click.card.target} opened no composer`);
+            else {
+              if (composer.subject !== draft.subject) fail(where, `link ${i}: the draft's subject is ${JSON.stringify(composer.subject)}, expected ${draft.subject}`);
+              if (!composer.to.some((chip) => chip.includes(draft.to))) fail(where, `link ${i}: the draft is to ${JSON.stringify(composer.to)}, expected ${draft.to}`);
+            }
+            const handed = (await opened()).slice(before);
+            if (handed.length) fail(where, `link ${i}: a mailto link went to the system opener: ${JSON.stringify(handed)}`);
+            const openHits = await counter.hits();
+            if (openHits.connections.length || openHits.requests.length) fail(where, `link ${i}: "Open" connected: ${JSON.stringify(openHits)}`);
+            if (composer) {
+              // Discard the draft: the read-only account keeps nothing of it.
+              await testId("composer-discard").click();
+              await testId("composer-confirm-discard").$("button=Discard").click();
+              await testId("composer").waitForExist({ reverse: true });
+            }
           }
         }
         r.clicks.push(line);

@@ -69,6 +69,9 @@ const READING_COMMANDS = new Set([
   "get_app_info",
   "get_preferences",
   "get_reading_preferences",
+  // Stage 8: UI preferences and the layout of the window (nothing about mail).
+  "get_ui_preferences",
+  "get_window_layout",
   "get_outbox_counts",
   "list_accounts",
   "list_mailboxes",

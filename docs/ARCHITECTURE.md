@@ -135,7 +135,8 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter, `contact_group` für zusammengeführte Kontakte (0016, 0018, 0023) | Cache; Name und Zusammenführung sync |
 | `contact_dismissed` | abgelehnte Dubletten-Paare (Stufe 10, 0023) | Gerät |
 | `signature` | Pool aller Signaturen: Name, Editor-HTML, Text, kleine Bilder (Base64, als `cid:` versendet) (Stufe 10, 0023) | sync |
-| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge) | sync |
+| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge); `saved_view` sind die gespeicherten Suchen der Leiste: UUID, Name, Anfrage in der Suchsprache (sucht in allen Konten), Position (Stufe 7, 0026) | sync |
+| `recent_search` | letzte Suchen dieses Geräts: Anfrage, zuletzt benutzt; höchstens 10 (Stufe 7, 0026) | Gerät |
 | `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
@@ -376,6 +377,12 @@ einer klaren Meldung abgelehnt.
   `composer-*`, also hat jedes dieser Fenster genau die Rechte des Hauptfensters; andere Labels
   haben keine. Welches Fenster ein Command aufruft (Layout je
   Fenster), entnimmt die Shell dem aufrufenden `WebviewWindow`, nie einem Argument.
+- `.eml`-Dateien (Stufe 9, 0027) erscheinen in Mail-Fenstern mit dem Label `message-file-<ID>`
+  (`index.html?window=eml&fileId=<ID>`, ID 128 Bit zufällig): dieselben Rechte und Schutzregeln
+  wie jedes Mail-Fenster. Die App meldet sich für `.eml` an (`bundle.fileAssociations`; macOS mit
+  Rang „Alternate“, Mail bleibt Standard; unter Windows trägt der Installer die Zuordnung ein).
+  Dateien kommen über `RunEvent::Opened` (macOS), Startargumente und den zweiten Start
+  (`tauri-plugin-single-instance`, Windows) oder den Öffnen-Dialog des Kerns.
 
 **Geheimnisse**
 - Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
@@ -386,6 +393,13 @@ einer klaren Meldung abgelehnt.
 - Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
   keine Steuerzeichen, keine Richtungsumkehr-Zeichen. Geschrieben wird nur an den Ort, den der
   Nutzer im Systemdialog wählt.
+- `.eml`-Dateien (0027) liest nur der Kern, nur vom Pfad, den das System übergibt oder der Nutzer
+  im Öffnen-Dialog wählt, höchstens `MAX_EML_FILE_BYTES` (64 MiB, vor und beim Lesen geprüft);
+  typisierte Fehler `eml_too_large`, `eml_invalid`, `eml_unreadable`. Sie werden nicht
+  importiert: kein Konto, keine Datenbankzeile, kein Suchindex; die Bytes liegen im Speicher,
+  solange ihr Fenster offen ist (höchstens 16 Dateien). Angezeigt werden sie über dieselbe
+  Pipeline wie HTML aus Mails (Bereinigung, Pflicht-CSP, Sandbox-Frame, Link-Platzhalter mit
+  eigenem Render-Token, Anhänge über den Kern).
 
 **Erlaubte Netzverbindungen**
 - Mailserver, die der Nutzer eingerichtet hat, auch für Bodies und Anhänge (Stufe 3): je Konto eine
@@ -398,7 +412,8 @@ einer klaren Meldung abgelehnt.
   dieselbe Domain oder ihre Subdomains, höchstens drei, ohne Cookies, Referrer und Proxy, 128 KiB
   höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
   Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft).
-- Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“).
+- Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“;
+  bei einer geöffneten `.eml`-Datei nur „einmal laden“, 0027).
   Der Kern lädt sie selbst (`mail-engine/src/reading/remote.rs`): reqwest über rustls mit der
   Zertifikatsprüfung des Systems, HTTP/1.1, ohne Cookies, Referrer, Proxy und Wiederholungen, mit
   neutraler Kennung (`Mozilla/5.0`), nur `http`/`https`, Weiterleitungen von Hand (höchstens drei,
@@ -527,7 +542,9 @@ Bytes, Konten, Host, Modell), dann Fortschritt und Ende; abbrechbar über die An
 Protokoll hält nur Metadaten. Ergebnisse sind geprüfte Daten: Aussagen nur mit Verweisen auf
 gesendete Mails, Antwortvorschläge und Schreibhilfe als Text. Ein Antwortvorschlag wird erst auf
 Klick des Nutzers zu einem normalen Entwurf (Stufe 5). Hinweise auf offene Antworten sind Regeln
-ohne KI.
+ohne KI. Jede gespeicherte Änderung der Einstellungen meldet `aiSettingsChanged` mit der
+Verfügbarkeit danach an alle Fenster (0027). Quellen einer Antwort benennt und öffnet die
+Oberfläche über `getMessagesByIds` (höchstens 200 IDs, unbekannte fehlen).
 
 ## Tastaturkürzel
 

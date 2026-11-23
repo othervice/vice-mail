@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadLayout, useLayoutStore } from "../src/stores/layout";
+import { useLayoutStore } from "../src/stores/layout";
+import type { UiPreferences } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
@@ -11,16 +12,17 @@ beforeEach(() => {
 
 type User = ReturnType<typeof renderApp>["user"];
 
-function setup() {
+function setup(ui: { preferences?: UiPreferences } = {}) {
   const items = makeMessages(6);
-  mockCore({
+  const core = mockCore({
+    ui,
     accounts: [makeAccount({ writesEnabled: true })],
     mailboxes: standardMailboxes(),
     messages: { 1: items },
     views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
     readingPreferences: { markReadOnOpen: "never" },
   });
-  return { items, ...renderApp() };
+  return { items, core, ...renderApp() };
 }
 
 async function chooseInAppearance(user: User, group: string, option: string) {
@@ -39,9 +41,12 @@ const cursorRow = (list: HTMLElement) => document.getElementById(list.getAttribu
 
 describe("layouts", () => {
   it("puts the reading pane below the list and stores the choice for the window", async () => {
-    const { user } = setup();
+    const { user, core } = setup();
     await chooseInAppearance(user, "Reading pane", "Below");
-    expect(loadLayout("main").readingPane).toBe("bottom");
+    await waitFor(() => {
+      expect(core.ui.layout.readingPane).toBe("bottom");
+    });
+    expect(core.callsOf("set_window_layout").at(-1)).toEqual({ layout: { readingPane: "bottom", density: "comfortable", sidebarExpanded: false } });
 
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });
     list.focus();
@@ -147,27 +152,36 @@ describe("layouts", () => {
   });
 
   it("switches to compact rows at once and keeps them", async () => {
-    const { user } = setup();
+    const { user, core } = setup();
     expect(document.documentElement.dataset["density"]).not.toBe("compact");
     await chooseInAppearance(user, "Density", "Compact");
     expect(document.documentElement.dataset["density"]).toBe("compact");
-    expect(loadLayout("main").density).toBe("compact");
+    await waitFor(() => {
+      expect(core.ui.layout.density).toBe("compact");
+    });
     expect(await screen.findByRole("listbox", { name: /^Messages in/ })).toBeTruthy();
   });
 
   it("sets the text size from 80 to 150 percent and keeps it", async () => {
-    const { user } = setup();
+    const { user, core } = setup();
     expect(document.documentElement.dataset["textSize"]).toBeUndefined();
     await chooseInAppearance(user, "Text size", "150%");
     expect(document.documentElement.dataset["textSize"]).toBe("150");
-    expect(loadLayout("main").textSize).toBe(150);
+    // The text size belongs to the UI preferences (every window), not to the window layout.
+    await waitFor(() => {
+      expect(core.ui.preferences.textSize).toBe(150);
+    });
+    expect(core.callsOf("set_window_layout")).toHaveLength(0);
     await chooseInAppearance(user, "Text size", "80%");
     expect(document.documentElement.dataset["textSize"]).toBe("80");
     await chooseInAppearance(user, "Text size", "100%");
     expect(document.documentElement.dataset["textSize"]).toBeUndefined();
-    // Stored values are checked: an unknown size falls back to 100.
-    window.localStorage.setItem("vice-mail.ui.layout.main", JSON.stringify({ textSize: 400, readingPane: "left" }));
-    expect(loadLayout("main")).toMatchObject({ textSize: 100, readingPane: "right" });
+  });
+
+  it("shows a text size the UI does not offer at the nearest one it does", async () => {
+    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [] } });
+    await screen.findByRole("navigation", { name: "Views" });
+    expect(document.documentElement.dataset["textSize"]).toBe("115");
   });
 
   it("j and k move through the list like the arrow keys", async () => {
@@ -221,11 +235,14 @@ describe("layouts", () => {
     const first = setup();
     await first.user.click(await screen.findByTestId("rail-folders"));
     expect(useUiStore.getState().sidebarExpanded).toBe(true);
-    expect(loadLayout("main").sidebarExpanded).toBe(true);
+    await waitFor(() => {
+      expect(first.core.ui.layout.sidebarExpanded).toBe(true);
+    });
     first.unmount();
 
+    // A restart: the stores start from their defaults and the window asks the core again.
     useUiStore.setState(useUiStore.getInitialState(), true);
-    useLayoutStore.setState({ ...useLayoutStore.getInitialState(), ...loadLayout("main") }, true);
+    useLayoutStore.setState(useLayoutStore.getInitialState(), true);
     renderApp();
     await screen.findByRole("navigation", { name: "Views" });
     expect(useUiStore.getState().sidebarExpanded).toBe(true);

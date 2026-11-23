@@ -1017,3 +1017,97 @@ fn ai_settings_are_a_device_setting_the_settings_sync_refuses() {
     assert!(RecordKey::setting(SettingScope::Global, "ai.settings").is_err());
     assert!(RecordKey::setting(SettingScope::Global, "ui.theme").is_ok());
 }
+
+/// Decision 0027: the `aiSettingsChanged` events since the last call, drained.
+async fn settings_events(h: &mut Harness) -> Vec<mail_model::AiAvailability> {
+    let mut out = Vec::new();
+    while let Ok(Ok(event)) =
+        tokio::time::timeout(Duration::from_millis(150), h.events.recv()).await
+    {
+        if let CoreEvent::AiSettingsChanged { availability } = event {
+            out.push(availability);
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn every_settings_change_is_announced_with_what_is_usable() {
+    let mut h = Harness::new().await;
+    settings_events(&mut h).await;
+
+    // A profile and the four functions: five changes; AI is still off.
+    let profile = h.profile(&h.mock.url()).await;
+    let events = settings_events(&mut h).await;
+    assert_eq!(events.len(), 1 + AiFunction::ALL.len(), "{events:?}");
+    assert!(events.iter().all(|a| !a.enabled && !a.summary));
+
+    h.core.set_ai_enabled(true).await.expect("on");
+    let events = settings_events(&mut h).await;
+    assert_eq!(events.len(), 1);
+    assert!(events[0].enabled && events[0].summary && events[0].search);
+
+    // Reading and refused changes announce nothing.
+    h.core.get_ai_settings().await.expect("settings");
+    h.core.get_ai_availability().await.expect("availability");
+    let refused = h
+        .core
+        .set_open_reply_settings(mail_model::OpenReplySettings {
+            enabled: true,
+            days: 0,
+        })
+        .await;
+    assert_eq!(code(refused), ErrorCode::InvalidArgument);
+    assert!(settings_events(&mut h).await.is_empty());
+
+    h.core
+        .set_ai_account_cloud(h.account, true)
+        .await
+        .expect("cloud");
+    h.core
+        .set_ai_function(AiFunction::Summary, None)
+        .await
+        .expect("summary off");
+    let events = settings_events(&mut h).await;
+    assert_eq!(events.len(), 2);
+    assert!(!events[1].summary && events[1].search);
+
+    h.core.delete_ai_profile(profile).await.expect("deleted");
+    let events = settings_events(&mut h).await;
+    assert_eq!(events.len(), 1);
+    assert!(events[0].enabled && !events[0].search);
+}
+
+#[tokio::test]
+async fn sources_are_named_by_id_in_the_order_asked_and_bounded() {
+    let h = Harness::new().await;
+    let first = h.message("Offer for the garden").await;
+    let second = h.message("Invoice").await;
+    let items = h
+        .core
+        .get_messages_by_ids(vec![second, first, second, MessageId(987_654)])
+        .await
+        .expect("items");
+    let ids: Vec<MessageId> = items.iter().map(|i| i.id).collect();
+    assert_eq!(
+        ids,
+        [second, first],
+        "order kept, repeats once, unknown left out"
+    );
+    assert_eq!(items[1].subject, "Offer for the garden");
+    assert_eq!(items[1].account_id, h.account);
+    assert!(
+        h.core
+            .get_messages_by_ids(Vec::new())
+            .await
+            .expect("none")
+            .is_empty()
+    );
+    let too_many = (0..=mail_model::MAX_MESSAGES_BY_IDS)
+        .map(|i| MessageId(i64::from(i)))
+        .collect();
+    assert_eq!(
+        code(h.core.get_messages_by_ids(too_many).await),
+        ErrorCode::InvalidArgument
+    );
+}

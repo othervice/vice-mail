@@ -6,6 +6,7 @@ mod default_app;
 pub mod drops;
 #[cfg(feature = "e2e")]
 mod e2e;
+mod eml_files;
 mod events;
 pub mod links;
 mod navigation;
@@ -54,6 +55,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::mail::list_mailboxes,
             commands::mail::set_mailbox_role,
             commands::mail::list_messages,
+            commands::mail::get_messages_by_ids,
             commands::reading::get_message,
             commands::reading::load_remote_content,
             commands::reading::list_remote_content_senders,
@@ -79,6 +81,14 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::search::search_on_server,
             commands::search::get_search_index_status,
             commands::search::rebuild_search_index,
+            // Stage 7: saved searches (synced) and recent searches (device), decision 0026.
+            commands::search::list_saved_searches,
+            commands::search::save_search,
+            commands::search::rename_saved_search,
+            commands::search::delete_saved_search,
+            commands::search::list_recent_searches,
+            commands::search::add_recent_search,
+            commands::search::clear_recent_searches,
             commands::threads::list_threads,
             commands::threads::list_unified_threads,
             commands::threads::get_thread,
@@ -182,6 +192,12 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::comfort::get_default_mail_app::<tauri::Wry>,
             commands::comfort::set_default_mail_app::<tauri::Wry>,
             commands::comfort::take_launch_links,
+            // Stage 9: .eml files, read-only in a window of their own (decision 0027).
+            commands::eml::open_eml_file::<tauri::Wry>,
+            commands::eml::get_eml_message,
+            commands::eml::load_eml_remote_content,
+            commands::eml::save_eml_attachment::<tauri::Wry>,
+            commands::eml::open_eml_attachment,
             // Stage 12: AI access over MCP (decisions 0015, 0021).
             commands::mcp::get_mcp_settings,
             commands::mcp::set_mcp_enabled,
@@ -238,6 +254,19 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)
         .constant("MAX_THREAD_MESSAGES", mail_model::MAX_THREAD_MESSAGES)
+        // Stage 7 (decision 0026): saved and recent searches.
+        .constant(
+            "MAX_SAVED_SEARCHES",
+            u32::try_from(mail_model::MAX_SAVED_SEARCHES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_SAVED_SEARCH_NAME_CHARS",
+            u32::try_from(mail_model::MAX_SAVED_SEARCH_NAME_CHARS).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_RECENT_SEARCHES",
+            u32::try_from(mail_model::MAX_RECENT_SEARCHES).unwrap_or(u32::MAX),
+        )
         // Stage 5: the undo delay's range and default, and the attachment limits (bytes).
         .constant("MAX_SEND_DELAY_SECS", mail_model::MAX_SEND_DELAY_SECS)
         .constant(
@@ -328,6 +357,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             "MAX_RECENT_COMMAND_CHARS",
             u32::try_from(mail_model::MAX_RECENT_COMMAND_CHARS).unwrap_or(u32::MAX),
         )
+        // Stage 9 and 13 (decision 0027): the largest `.eml` file the app opens, and the most
+        // ids one `getMessagesByIds` takes.
+        .constant("MAX_EML_FILE_BYTES", mail_model::MAX_EML_FILE_BYTES)
+        .constant("MAX_MESSAGES_BY_IDS", mail_model::MAX_MESSAGES_BY_IDS)
 }
 
 /// An `i64` constant below 2^53 (milliseconds), exported as a plain TypeScript number.
@@ -389,6 +422,12 @@ pub fn run() {
             attach_core(app.handle(), &specta, core);
             let window = open_main_window(app.handle(), theme)?;
             window_theme::follow(window, theme_events);
+            // Stage 9: `.eml` files of the start (Windows passes them as arguments).
+            let cwd = std::env::current_dir().ok();
+            eml_files::open_files(
+                app.handle(),
+                eml_files::eml_arguments(std::env::args().skip(1), cwd.as_deref()),
+            );
             Ok(())
         })
         .build(context());
@@ -402,12 +441,14 @@ pub fn run() {
         }
     };
     app.run(|handle, event| {
-        // Stage 9: macOS hands `mailto:` links (the app as default mail app) to the app.
+        // Stage 9: macOS hands `mailto:` links (the app as default mail app) and `.eml` files
+        // (decision 0027) to the app.
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls } = &event {
-            for url in urls {
+            for url in urls.iter().filter(|url| url.scheme() != "file") {
                 links::opened(handle, url.as_str());
             }
+            eml_files::open_files(handle, eml_files::eml_urls(urls));
         }
         if let RunEvent::Exit = event {
             tracing::info!("exiting");
@@ -433,9 +474,13 @@ pub fn run() {
 /// while the app runs) hands its arguments to this process and ends.
 fn with_system_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     #[cfg(windows)]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-        let urls = default_app::mailto_arguments(argv.into_iter().skip(1));
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        let urls = default_app::mailto_arguments(argv.iter().skip(1).cloned());
+        // Decision 0027: an `.eml` file double-clicked while the app runs.
+        let files =
+            eml_files::eml_arguments(argv.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
         if urls.is_empty()
+            && files.is_empty()
             && let Some(window) = app.get_webview_window(MAIN_WINDOW)
         {
             let _ = window.unminimize();
@@ -445,6 +490,7 @@ fn with_system_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder
         for url in urls {
             links::opened(app, &url);
         }
+        eml_files::open_files(app, files);
     }));
     builder.plugin(tauri_plugin_notification::init())
 }

@@ -1,9 +1,9 @@
 // Stage 8 in the real app: the whole round without the mouse (docs/stages/08, "Desktop-Test").
-// NOT RUN YET (written by the keyboard UI session, which may not run the desktop tests). It is not
-// in `specs` of wdio.conf.mjs; add it before actions.e2e.mjs to run it (it archives one message
-// it delivered itself, so the seeded inbox stays as the later specs expect).
+// In `specs` of wdio.conf.mjs before actions.e2e.mjs (it archives one message it delivered
+// itself, so the seeded inbox stays as the later specs expect).
 //
-// Only `browser.keys` drives the UI; `coreCall` sets up the account and reads the results back.
+// Only keys drive the UI (`browser.keys`, and `pressTab` for Tab, whose focus move the embedded
+// WebDriver does not perform); `coreCall` sets up the account and reads the results back.
 // 1. A message from bob arrives. Tab reaches the message list, Home and Enter open the newest
 //    message (the delivered one) in the reading pane.
 // 2. "r" opens the reply with the focus in the text, typing writes the answer, Cmd+Enter sends it.
@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, deliverMail, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -36,12 +36,28 @@ const active = () =>
     };
   });
 
-/** Presses Tab until the message list has the focus (at most `limit` times). */
+/**
+ * A screenshot without losing the focus: `screenshot` blurs the focused element (no focus ring in
+ * the picture), which would send the next keys to the page body instead of where the user is.
+ */
+async function shot(name) {
+  await browser.execute(() => {
+    window.__e2eFocus = document.activeElement;
+  });
+  const file = await screenshot(name);
+  await browser.execute(() => window.__e2eFocus?.focus());
+  return file;
+}
+
+/**
+ * Presses Tab until the message list has the focus (at most `limit` times). `pressTab` moves the
+ * focus as the browser would: the embedded WebDriver sends Tab's key events only.
+ */
 async function tabToList(limit = 40) {
   for (let i = 0; i < limit; i += 1) {
     const now = await active();
     if (now.role === "listbox" && now.testId === "message-list") return now;
-    await browser.keys("Tab");
+    await pressTab();
   }
   throw new Error("Tab never reached the message list");
 }
@@ -62,6 +78,8 @@ async function subjectsIn(role) {
 describe("stage 8: open, reply, send, archive without the mouse", () => {
   before(async () => {
     await attach();
+    // The steps use the English names (palette commands, labels); an earlier spec may have left German.
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     account = await coreCall("add_account", {
       settings: {
         email: ALICE.email,
@@ -104,27 +122,64 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
     assert.ok(listFocus.activeOption?.includes(SUBJECT), `cursor on ${listFocus.activeOption}`);
     await browser.keys("Enter");
     await browser.waitUntil(async () => (await active()).testId !== "message-list", { timeoutMsg: "Enter did not move the focus" });
-    const pane = await browser.execute(() => document.querySelector('[role="region"][aria-label="Message"]')?.textContent ?? "");
+    const pane = await browser.execute(() => document.querySelector('[data-testid="reading-pane"]')?.textContent ?? "");
     assert.ok(pane.includes(SUBJECT), "the reading pane does not show the message");
     report.steps.open = { focus: await active() };
-    report.screenshots.push(await screenshot("keyboard-open"));
+    report.screenshots.push(await shot("keyboard-open"));
   });
 
   it("r replies, typing writes the answer, Cmd/Ctrl+Enter sends it", async () => {
     const before = await serverFolders();
     await browser.keys("r");
     await testId("composer").waitForExist({ timeout: 20000 });
-    await browser.waitUntil(async () => (await active()).testId?.startsWith("composer") ?? false, {
-      timeoutMsg: "the composer did not take the focus",
-    });
+    let focus;
+    await browser
+      .waitUntil(
+        async () => {
+          focus = await active();
+          return focus.testId?.startsWith("composer") ?? false;
+        },
+        { timeoutMsg: "the composer did not take the focus" },
+      )
+      .catch(async (e) => {
+        const page = await browser.execute(() => ({
+          visibility: document.visibilityState,
+          hasFocus: document.hasFocus(),
+          active: document.activeElement?.tagName ?? null,
+          textBody: Boolean(document.querySelector('[data-testid="composer-text-body"]')),
+          richBody: Boolean(document.querySelector('[data-testid="composer-rich-body"]')),
+          loading: Boolean(document.querySelector('[data-testid="composer-loading"]')),
+        }));
+        throw new Error(`${e.message}: ${JSON.stringify({ focus, page })}`);
+      });
     // The reply opens with the focus in the text; the recipient and subject are filled in.
     await browser.keys([..."Danke, angekommen."]);
-    report.screenshots.push(await screenshot("keyboard-reply"));
+    report.screenshots.push(await shot("keyboard-reply"));
+    await browser.execute(() => {
+      window.__e2eKeys = [];
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          window.__e2eKeys.push({ key: event.key, meta: event.metaKey, ctrl: event.ctrlKey, target: event.target?.getAttribute?.("data-testid") ?? event.target?.tagName });
+        },
+        true,
+      );
+    });
     await browser.keys([MOD, "Enter"]);
-    await browser.waitUntil(
-      () => browser.execute(() => document.querySelector('[data-testid="send-notice"]')?.getAttribute("data-send-state") === "sent"),
-      { timeout: 60000, interval: 500, timeoutMsg: "the reply was never sent" },
-    );
+    await browser
+      .waitUntil(
+        () => browser.execute(() => document.querySelector('[data-testid="send-notice"]')?.getAttribute("data-send-state") === "sent"),
+        { timeout: 60000, interval: 500, timeoutMsg: "the reply was never sent" },
+      )
+      .catch(async (e) => {
+        const page = await browser.execute(() => ({
+          keys: window.__e2eKeys,
+          composer: Boolean(document.querySelector('[data-testid="composer"]')),
+          notices: [...document.querySelectorAll('[data-testid="send-notice"]')].map((n) => n.getAttribute("data-send-state")),
+          errors: [...document.querySelectorAll('[data-testid="composer"] [role="alert"]')].map((n) => n.textContent),
+        }));
+        throw new Error(`${e.message}: ${JSON.stringify(page)}`);
+      });
     await browser.waitUntil(async () => ((await serverFolders()).Sent?.messages ?? 0) === (before.Sent?.messages ?? 0) + 1, {
       timeout: 60000,
       interval: 500,
@@ -151,7 +206,7 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
       timeoutMsg: "the message is not in the archive",
     });
     report.steps.archive = { next: after.activeOption };
-    report.screenshots.push(await screenshot("keyboard-archived"));
+    report.screenshots.push(await shot("keyboard-archived"));
   });
 
   it("the command palette goes to the archive, where the message is", async () => {
@@ -163,6 +218,6 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
     await tabToList();
     const list = await browser.execute(() => document.querySelector('[data-testid="message-list"]')?.textContent ?? "");
     assert.ok(list.includes(SUBJECT), "the archive view does not list the message");
-    report.screenshots.push(await screenshot("keyboard-archive-view"));
+    report.screenshots.push(await shot("keyboard-archive-view"));
   });
 });

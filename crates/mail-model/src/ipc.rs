@@ -140,12 +140,16 @@ pub struct ReadingPreferences {
 ///   failed.
 /// - `signaturesChanged`, `templatesChanged` (stage 10): reload the signature pool or the
 ///   templates.
+/// - `aiSettingsChanged` (stage 13, decision 0027): the AI settings changed (any window, or an
+///   account came or went); carries what is usable now. Reload `getAiSettings`.
 /// - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
 ///   questions or detected folders changed. Data a pass took over from another device comes
 ///   with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
 /// - `uiPreferencesChanged` (stage 8): the UI preferences (shortcuts, text size, recent palette
 ///   commands) were stored, here in any window or by the settings sync; carries the stored
 ///   values. Every window applies them.
+/// - `savedSearchesChanged` (stage 7, decision 0026): saved searches were created, renamed or
+///   deleted (here or by the settings sync). Reload `listSavedSearches`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -241,6 +245,10 @@ pub enum CoreEvent {
         request_id: String,
         phase: crate::AiRequestPhase,
     },
+    /// Stage 13 (decision 0027): the AI settings or what is usable changed.
+    AiSettingsChanged {
+        availability: crate::AiAvailability,
+    },
     /// Stage 10: the signature pool changed (here or from another device); identity defaults
     /// come with `accountsChanged`.
     SignaturesChanged,
@@ -250,6 +258,8 @@ pub enum CoreEvent {
     UiPreferencesChanged {
         preferences: crate::UiPreferences,
     },
+    /// Stage 7 (decision 0026): the saved searches changed (here or from another device).
+    SavedSearchesChanged,
 }
 
 #[cfg(test)]

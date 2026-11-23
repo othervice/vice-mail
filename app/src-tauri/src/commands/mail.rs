@@ -1,7 +1,10 @@
 //! Mailbox and message list commands.
 
 use mail_engine::AppCore;
-use mail_model::{AccountId, IpcError, ListCursor, Mailbox, MailboxId, MailboxRole, MessagePage};
+use mail_model::{
+    AccountId, IpcError, ListCursor, Mailbox, MailboxId, MailboxRole, MessageId, MessageListItem,
+    MessagePage,
+};
 use tauri::State;
 
 use super::to_ipc;
@@ -43,4 +46,18 @@ pub async fn list_messages(
     core.list_messages(mailbox_id, cursor, limit)
         .await
         .map_err(to_ipc("list_messages"))
+}
+
+/// Stage 13 (decision 0027): the list rows of these messages in the order asked, each in its
+/// first folder, to name and open the sources of an AI answer. Unknown ids are left out; more
+/// than `MAX_MESSAGES_BY_IDS` ids is `invalid_argument`.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_messages_by_ids(
+    core: State<'_, AppCore>,
+    message_ids: Vec<MessageId>,
+) -> Result<Vec<MessageListItem>, IpcError> {
+    core.get_messages_by_ids(message_ids)
+        .await
+        .map_err(to_ipc("get_messages_by_ids"))
 }

@@ -147,7 +147,9 @@ export function useDismissOpenReplyHint() {
 
 /**
  * Stage 13 events: `aiRequest` feeds the progress store (what is sent, to whom) and, once a
- * request ended, reloads the request log. Mail changes may answer or create open-reply hints.
+ * request ended, reloads the request log. `aiSettingsChanged` (decision 0027) carries what is
+ * usable now and reloads the settings, so every window (and the panel) follows a change made
+ * anywhere. Mail changes may answer or create open-reply hints; the settings list the accounts.
  */
 export function handleAiEvent(queryClient: QueryClient, event: CoreEvent): void {
   switch (event.type) {
@@ -155,9 +157,17 @@ export function handleAiEvent(queryClient: QueryClient, event: CoreEvent): void 
       useAiRequestStore.getState().apply(event.requestId, event.phase);
       if (event.phase.phase === "finished") void queryClient.invalidateQueries({ queryKey: aiRequestLogQueryKey });
       break;
+    case "aiSettingsChanged":
+      queryClient.setQueryData(aiAvailabilityQueryKey, event.availability);
+      void queryClient.invalidateQueries({ queryKey: aiSettingsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: openReplyHintsQueryKey });
+      break;
     case "messagesChanged":
+      void queryClient.invalidateQueries({ queryKey: openReplyHintsQueryKey });
+      break;
     case "accountsChanged":
       void queryClient.invalidateQueries({ queryKey: openReplyHintsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: aiSettingsQueryKey });
       break;
     default:
       break;

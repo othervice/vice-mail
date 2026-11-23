@@ -8,6 +8,8 @@ import { makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from
 import { makeContact } from "./support/contacts";
 import { makeDraft, makeOutgoing } from "./support/compose";
 import { makeSignature, makeTemplate } from "./support/snippets";
+// Stage 7: saved searches.
+import { makeSavedSearch } from "./support/search";
 import { renderApp } from "./support/render";
 // Stage 13: AI in the app.
 import { makeAiProfile, makeCloudProfile, makeHint, makeRequestEntry, makeTransfer } from "./support/ai";
@@ -77,6 +79,47 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     const { user } = setup(theme);
     await user.click(await screen.findByRole("button", { name: "New message" }));
     await screen.findByLabelText("Subject");
+    expect(await seriousFindings()).toEqual([]);
+  });
+
+  // Stage 8 (decision 0025): the reduced shells of a message window and a composer window.
+  it("finds nothing serious in a message window", async () => {
+    const items = makeMessages(2);
+    const account = makeAccount({ writesEnabled: true });
+    window.history.replaceState(null, "", `/?window=message&accountId=${account.id}&messageId=${String(items[0]?.id)}`);
+    mockCore({
+      preferences: { theme, language: "system" },
+      accounts: [account],
+      mailboxes: standardMailboxes(),
+      messages: { 1: items },
+      views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
+      readingPreferences: { markReadOnOpen: "never" },
+    });
+    renderApp();
+    await screen.findByRole("toolbar", { name: "Message actions" });
+    await waitFor(() => {
+      expect(document.documentElement.dataset["theme"]).toBe(theme);
+    });
+    expect(await seriousFindings()).toEqual([]);
+  });
+
+  it("finds nothing serious in a composer window, while editing and once done", async () => {
+    const draftId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    window.history.replaceState(null, "", `/?window=composer&draftId=${draftId}`);
+    mockCore({
+      preferences: { theme, language: "system" },
+      accounts: [makeAccount({ writesEnabled: true })],
+      compose: { drafts: [makeDraft({ id: draftId, subject: "Plan" })] },
+    });
+    const { user } = renderApp();
+    await screen.findByLabelText("Subject");
+    await waitFor(() => {
+      expect(document.documentElement.dataset["theme"]).toBe(theme);
+    });
+    expect(await seriousFindings()).toEqual([]);
+    await user.click(screen.getByTestId("composer-close"));
+    await screen.findByRole("heading", { name: "Done" });
+    await screen.findByTestId("window-close-failed");
     expect(await seriousFindings()).toEqual([]);
   });
 
@@ -277,6 +320,42 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await user.keyboard("{Escape}");
     await user.keyboard("?");
     await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    expect(await seriousFindings()).toEqual([]);
+  });
+
+  // Stage 7: the recent searches under the field, "Save search", saved searches as views.
+  it("finds nothing serious in the recent searches, the save form and the saved searches", async () => {
+    const items = makeMessages(3);
+    mockCore({
+      preferences: { theme, language: "system" },
+      accounts: [makeAccount({ writesEnabled: true })],
+      mailboxes: standardMailboxes(),
+      messages: { 1: items },
+      search: {
+        recentSearches: [{ query: "from:anna", usedAt: Date.now() }, { query: "rechnung", usedAt: Date.now() - 1000 }],
+        savedSearches: [makeSavedSearch({ name: "Invoices", query: "rechnung" })],
+      },
+    });
+    const { user } = renderApp();
+    await screen.findByRole("listbox", { name: /^Messages in/ });
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByRole("listbox", { name: "Recent searches" });
+    await user.keyboard("{ArrowDown}");
+    expect(await seriousFindings()).toEqual([]);
+    await user.type(screen.getByRole("searchbox", { name: "Search mail" }), "rechnung");
+    await user.click(screen.getByRole("button", { name: "Save search" }));
+    await screen.findByRole("group", { name: "Save this search" });
+    expect(await seriousFindings()).toEqual([]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close search" }));
+    await user.click(screen.getByTestId("rail-folders"));
+    await screen.findByRole("region", { name: "Saved searches" });
+    await user.click(screen.getByRole("button", { name: /^Saved views/ }));
+    await user.click(await screen.findByRole("button", { name: "Rename “Invoices”" }));
+    expect(await seriousFindings()).toEqual([]);
+    await user.keyboard("{Escape}");
+    await user.click(within(screen.getByRole("region", { name: "Saved searches" })).getByRole("button", { name: "Invoices" }));
+    await screen.findByRole("heading", { name: "Invoices" });
     expect(await seriousFindings()).toEqual([]);
   });
 });

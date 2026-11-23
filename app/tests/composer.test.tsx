@@ -390,6 +390,42 @@ describe("composer: replying and forwarding", () => {
     expect(screen.queryByTestId("composer-quote")).toBeNull();
   });
 
+  it("places the answer where quotePosition says (core: the position of the answer)", async () => {
+    const items = makeMessages(1);
+    const first = items[0];
+    if (!first) throw new Error("no message");
+    const { user } = setup({
+      items,
+      compose: {
+        replies: {
+          [first.id]: { accountId: ADA.id, subject: `Re: ${first.subject}`, to: [], quoteText: "> Hello", quoteHtml: null },
+        },
+      },
+    });
+    const listbox = await screen.findByRole("listbox", { name: /^Messages in/ });
+    const row = within(listbox).getAllByRole("option")[0];
+    if (!row) throw new Error("no row");
+    await user.click(row);
+    await user.click(await screen.findByRole("button", { name: "Reply" }));
+    await screen.findByTestId("composer-quote");
+    const subject = screen.getByLabelText("Subject");
+    const quoteFollows = () =>
+      Boolean(subject.compareDocumentPosition(screen.getByTestId("composer-quote")) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const position = screen.getByTestId("composer-quote-position");
+    // "above": the answer above the quote, so the quote comes last.
+    await user.selectOptions(position, "above");
+    const quote = screen.getByTestId("composer-quote");
+    const body = screen.getByTestId("composer").querySelector("textarea, [contenteditable]");
+    if (!body) throw new Error("no body");
+    expect(quoteFollows()).toBe(true);
+    expect(body.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("option", { name: "above the quote" })).toBeTruthy();
+    // "below": the quote first, then the answer.
+    await user.selectOptions(position, "below");
+    const moved = screen.getByTestId("composer-quote");
+    expect(body.compareDocumentPosition(moved) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
   it("an error while preparing the reply is shown with a way to try again", async () => {
     const items = makeMessages(1);
     const { user } = setup({ items, compose: { replies: {} } });
@@ -613,7 +649,8 @@ describe("writing settings", () => {
     });
     await user.selectOptions(delay, "30");
     await waitFor(() => {
-      expect(core.callsOf("set_compose_settings")).toEqual([{ settings: { sendDelaySeconds: 30 } }]);
+      // Stage 8: the default quote position goes along, so saving the delay keeps it.
+      expect(core.callsOf("set_compose_settings")).toEqual([{ settings: { sendDelaySeconds: 30, defaultQuotePosition: "above" } }]);
     });
     // Stage 10: the plain text signature per address became a choice from the signature pool
     // (tests/snippets-settings.test.tsx covers it).

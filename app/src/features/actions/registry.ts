@@ -26,7 +26,9 @@ import {
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
 import { Command, FilePen, Forward, Keyboard, Paperclip, Reply, ReplyAll, SquarePen } from "lucide-react";
+import { AppWindow } from "lucide-react";
 import { openComposer } from "../../stores/composer";
+import { openMessageInWindow } from "../windows/open";
 import type { MailViewId } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 
@@ -73,6 +75,8 @@ export const ACTION_IDS = [
   "forwardAsAttachment",
   "editDraft",
   "compose",
+  // Stage 8: the message in a window of its own.
+  "openInWindow",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
@@ -574,6 +578,21 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
       openComposer({ kind: "new", accountId: ctx.account.id });
     },
   },
+  // ---- Stage 8: the reading pane in a window of its own (docs/SPEC.md). No default shortcut:
+  // neither DESIGN nor the stage names one; it can be assigned in Settings → Keyboard. ----
+  openInWindow: {
+    id: "openInWindow",
+    label: () => "openInWindow",
+    icon: () => AppWindow,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: oneMail,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openMessageInWindow(ctx.account.id, item.id);
+    },
+  },
 };
 
 /** Quick actions of a row, in the order of docs/DESIGN.md. */
@@ -609,6 +628,8 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   "unsnooze",
   "toggleTask",
   "toggleTaskDone",
+  // Stage 8: last, so the mail actions keep their places.
+  "openInWindow",
 ];
 
 export type ActionState = { kind: "enabled" } | { kind: "readOnly" } | { kind: "unavailable" };

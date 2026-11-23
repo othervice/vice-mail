@@ -241,6 +241,13 @@ export function RichEditor({
         return types.includes("Files") || types.includes("text/html");
       },
     },
+    onCreate: ({ editor: e }) => {
+      // TipTap's autofocus moves the focus on the next animation frame, synchronously only in
+      // Safari, which it detects by the user agent. The app's WKWebView does not name Safari, so
+      // a window without frames (hidden or in the background) would get no focus in the text.
+      // Focus it right away, as TipTap does for Safari (the selection is already at the start).
+      if (autoFocus) e.view.dom.focus({ preventScroll: true });
+    },
     onUpdate: ({ editor: e }) => {
       change.current(e.isEmpty ? "" : e.getHTML());
     },

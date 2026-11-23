@@ -50,6 +50,7 @@ import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
+import { SavedSearchesView } from "../search/SavedSearchesView";
 import { SearchArea } from "../search/SearchArea";
 import { useSearchShortcut } from "../search/shortcut";
 import { ConversationToggle } from "../threads/ConversationToggle";
@@ -631,6 +632,13 @@ export function MailView({ view }: MailViewProps) {
           },
         }}
       />
+    );
+  } else if (view.kind === "mail" && view.mailView === "savedViews") {
+    // Stage 7: the saved searches, or the results of one of them over all accounts.
+    body = (
+      <SearchArea context={searchContext} platform={platform}>
+        <SavedSearchesView savedSearchId={view.savedSearchId ?? null} accounts={accountList} platform={platform} />
+      </SearchArea>
     );
   } else if (unifiedView) {
     body = (

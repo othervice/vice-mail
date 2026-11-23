@@ -1,5 +1,7 @@
 // Stage 10: the fake core's signature pool, identity defaults and templates, with the command
 // names and argument shapes of the stage 10 IPC contract (decision 0023).
+// At most this many images per signature: the core's constant (decision 0025).
+import { MAX_SIGNATURE_IMAGES } from "../../src/services/ipc";
 import type {
   Draft,
   FilledTemplateInfo,
@@ -24,8 +26,6 @@ export function snippetsError(code: IpcError["code"], detail: string | null = nu
 /** The placeholders the core knows (decision 0023). */
 const KNOWN = ["first_name", "last_name", "name", "email", "date", "my_name", "my_first_name", "my_email"];
 
-/** At most this many images per signature (contract section 4). */
-const MAX_SIGNATURE_IMAGES = 8;
 
 export function makeSignature(overrides: Partial<SignatureInfo> = {}): SignatureInfo {
   const html = overrides.html ?? "<p>Ada Lovelace</p>";

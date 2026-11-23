@@ -89,7 +89,10 @@ function sameAddresses(a: readonly Address[], b: readonly Address[]): boolean {
 
 interface MessageHeaderProps {
   header: MessageViewHeader;
-  account: Account;
+  /** The account the message belongs to; absent for an opened `.eml` file (stage 9, decision 0027). */
+  account?: Account;
+  /** Stage 9: the name of the opened `.eml` file, shown where the account would be. */
+  fileName?: string;
   subjectId: string;
 }
 
@@ -97,15 +100,17 @@ interface MessageHeaderProps {
  * Head of the reading pane (docs/DESIGN.md): subject, sender with name and address, recipients
  * (long lists folded), date and time, and the account with its colour and name.
  */
-export function MessageHeader({ header, account, subjectId }: MessageHeaderProps) {
+export function MessageHeader({ header, account, fileName, subjectId }: MessageHeaderProps) {
   const { t, i18n } = useTranslation();
   const subject = header.subject.trim();
   const sender = header.from[0];
   const senderName = sender ? addressName(sender) : null;
   const showReplyTo = header.replyTo.length > 0 && !sameAddresses(header.replyTo, header.from);
-  const accountName = account.displayName
-    ? t("nav.account", { name: account.displayName, email: account.email })
-    : account.email;
+  const accountName = !account
+    ? null
+    : account.displayName
+      ? t("nav.account", { name: account.displayName, email: account.email })
+      : account.email;
 
   return (
     <header className="flex flex-col gap-4">
@@ -116,7 +121,7 @@ export function MessageHeader({ header, account, subjectId }: MessageHeaderProps
         {subject || t("list.noSubject")}
       </h2>
       <div className="flex items-start gap-3">
-        <Avatar name={sender?.name} email={sender?.email ?? ""} accountColor={account.color} />
+        <Avatar name={sender?.name} email={sender?.email ?? ""} accountColor={account?.color ?? 0} />
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <p className="min-w-0 break-words select-text" data-testid="reading-from">
@@ -135,24 +140,39 @@ export function MessageHeader({ header, account, subjectId }: MessageHeaderProps
                 ))
               )}
             </p>
-            <time
-              dateTime={new Date(header.date).toISOString()}
-              className="shrink-0 text-13 text-secondary tabular-nums select-text"
-              data-testid="reading-date"
-            >
-              {formatFullDate(header.date, i18n.language)}
-            </time>
+            {/* An opened file without a readable Date has none (0): nothing is made up. */}
+            {(account || header.date > 0) && (
+              <time
+                dateTime={new Date(header.date).toISOString()}
+                className="shrink-0 text-13 text-secondary tabular-nums select-text"
+                data-testid="reading-date"
+              >
+                {formatFullDate(header.date, i18n.language)}
+              </time>
+            )}
           </div>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-13">
             <AddressField label={t("reading.header.to")} addresses={header.to} />
             <AddressField label={t("reading.header.cc")} addresses={header.cc} />
             <AddressField label={t("reading.header.bcc")} addresses={header.bcc} />
             {showReplyTo && <AddressField label={t("reading.header.replyTo")} addresses={header.replyTo} />}
-            <dt className="text-secondary">{t("reading.header.account")}</dt>
-            <dd className="flex min-w-0 items-center gap-2" data-testid="reading-account">
-              <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
-              <span className="truncate text-primary">{accountName}</span>
-            </dd>
+            {account && (
+              <>
+                <dt className="text-secondary">{t("reading.header.account")}</dt>
+                <dd className="flex min-w-0 items-center gap-2" data-testid="reading-account">
+                  <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
+                  <span className="truncate text-primary">{accountName}</span>
+                </dd>
+              </>
+            )}
+            {fileName !== undefined && (
+              <>
+                <dt className="text-secondary">{t("eml.header.file")}</dt>
+                <dd className="min-w-0 truncate text-primary select-text" data-testid="reading-file">
+                  {fileName}
+                </dd>
+              </>
+            )}
           </dl>
         </div>
       </div>

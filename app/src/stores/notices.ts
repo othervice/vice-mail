@@ -37,7 +37,7 @@ export type NoticeContent =
   /** The list was out of date (`not_found`) and was reloaded. */
   | { kind: "outdated" }
   /** A command of the core failed right away. */
-  | { kind: "error"; context: "action" | "undo" | "markRead"; error: IpcError }
+  | { kind: "error"; context: "action" | "undo" | "markRead" | "window" | "emlFile"; error: IpcError }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */
   | {
       kind: "operationFailed";

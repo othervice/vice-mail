@@ -66,6 +66,62 @@ export async function coreCall(command, args) {
 
 export const testId = (id) => $(`[data-testid="${id}"]`);
 
+/**
+ * Tab as the browser does it. The embedded WebDriver dispatches the key events of Tab but does
+ * not perform its default action, moving the focus (tauri-plugin-wdio-webdriver,
+ * `build_special_key_script`: default actions only for Backspace, Delete, arrows on radios and
+ * Enter). So this dispatches the keydown to the focused element like the driver does and, unless
+ * a handler cancels it, moves the focus to the next element in sequential focus order: elements
+ * with a positive tabindex first, then tabindex 0 in document order; disabled, inert and
+ * unrendered elements are left out. Returns the test id or tag of the element that has the focus.
+ */
+export function pressTab({ shift = false } = {}) {
+  return browser.execute((back) => {
+    const init = { key: "Tab", code: "Tab", keyCode: 9, shiftKey: back, bubbles: true, cancelable: true, composed: true };
+    const from = document.activeElement ?? document.body;
+    if (from.dispatchEvent(new KeyboardEvent("keydown", init))) {
+      const focusable = [
+        ...document.querySelectorAll('a[href], area[href], button, input, select, textarea, iframe, summary, [tabindex], [contenteditable=""], [contenteditable="true"]'),
+      ].filter((el) => {
+        if (el.tabIndex < 0 || el.disabled || el.closest("[inert]")) return false;
+        if (el instanceof HTMLInputElement && el.type === "hidden") return false;
+        const style = getComputedStyle(el);
+        return style.visibility !== "hidden" && el.getClientRects().length > 0;
+      });
+      const order = [...focusable.filter((el) => el.tabIndex > 0).sort((a, b) => a.tabIndex - b.tabIndex), ...focusable.filter((el) => el.tabIndex === 0)];
+      let index = order.indexOf(from);
+      if (index === -1) {
+        // The focus is on something outside the order (the body): start next to it in the document.
+        const following = order.findIndex((el) => from === document.body || Boolean(from.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+        index = following === -1 ? order.length : following;
+        index = back ? index : index - 1;
+      }
+      const next = order[(index + (back ? -1 : 1) + order.length) % order.length];
+      next?.focus();
+    }
+    const now = document.activeElement ?? document.body;
+    now.dispatchEvent(new KeyboardEvent("keyup", init));
+    return now.closest("[data-testid]")?.getAttribute("data-testid") ?? now.tagName;
+  }, shift);
+}
+
+/**
+ * Folds or unfolds the sidebar (the "Folders" rail button) unless it already is so, and returns
+ * the state it had. Since stage 8 the app remembers the state across restarts, so a spec cannot
+ * assume the folded rail it would see on a first start.
+ */
+export async function setSidebar(expanded) {
+  const button = testId("rail-folders");
+  const was = (await button.getAttribute("aria-expanded")) === "true";
+  if (was !== expanded) {
+    await button.click();
+    await browser.waitUntil(async () => ((await button.getAttribute("aria-expanded")) === "true") === expanded, {
+      timeoutMsg: `the sidebar did not ${expanded ? "unfold" : "fold"}`,
+    });
+  }
+  return was;
+}
+
 export async function openSettings(section) {
   await testId("rail-settings").click();
   const tab = testId(`settings-tab-${section}`);

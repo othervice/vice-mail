@@ -197,6 +197,13 @@ describe("error codes", () => {
     "ai_busy",
     "ai_refused",
     "ai_failed",
+    // Stage 9 (decision 0027): opening `.eml` files.
+    "eml_too_large",
+    "eml_invalid",
+    "eml_unreadable",
+    // Stage 7: saved searches.
+    "saved_search_exists",
+    "saved_search_limit",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

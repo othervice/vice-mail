@@ -110,6 +110,16 @@ pub enum ErrorCode {
     AiRefused,
     /// Stage 13: any other failure of an AI request (address, model, size, unreadable answer).
     AiFailed,
+    /// Stage 9 (decision 0027): the `.eml` file is larger than the app opens.
+    EmlTooLarge,
+    /// Stage 9 (decision 0027): the file is empty or has no readable mail header.
+    EmlInvalid,
+    /// Stage 9 (decision 0027): the file is missing, a folder, or could not be read.
+    EmlUnreadable,
+    /// Stage 7 (decision 0026): another saved search has this name.
+    SavedSearchExists,
+    /// Stage 7 (decision 0026): the most saved searches are stored already.
+    SavedSearchLimit,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -343,6 +353,14 @@ pub enum CoreError {
     /// An AI request failed or was refused (stage 13).
     #[error(transparent)]
     Ai(#[from] crate::AiFailure),
+
+    /// An `.eml` file could not be opened (stage 9, decision 0027); nothing changed.
+    #[error(transparent)]
+    Eml(#[from] crate::EmlError),
+
+    /// A saved search was refused (stage 7, decision 0026); nothing changed.
+    #[error(transparent)]
+    SavedSearch(#[from] crate::SavedSearchError),
 }
 
 impl CoreError {
@@ -361,6 +379,8 @@ impl CoreError {
             Self::SettingsSync(err) => err.code(),
             Self::Contact(err) => err.code(),
             Self::Ai(err) => err.code(),
+            Self::Eml(err) => err.code(),
+            Self::SavedSearch(err) => err.code(),
         }
     }
 
@@ -392,6 +412,8 @@ impl CoreError {
             Self::SettingsSync(err) => err.message(),
             Self::Contact(err) => err.message(),
             Self::Ai(err) => err.message(),
+            Self::Eml(err) => err.message(),
+            Self::SavedSearch(err) => err.message(),
         }
     }
 
@@ -413,6 +435,8 @@ impl CoreError {
             Self::SettingsSync(err) => err.detail(),
             Self::Contact(err) => err.detail(),
             Self::Ai(err) => err.detail(),
+            Self::Eml(err) => err.detail(),
+            Self::SavedSearch(err) => err.detail(),
         }
     }
 }
@@ -521,6 +545,11 @@ mod tests {
             (ErrorCode::AiBusy, "ai_busy"),
             (ErrorCode::AiRefused, "ai_refused"),
             (ErrorCode::AiFailed, "ai_failed"),
+            (ErrorCode::EmlTooLarge, "eml_too_large"),
+            (ErrorCode::EmlInvalid, "eml_invalid"),
+            (ErrorCode::EmlUnreadable, "eml_unreadable"),
+            (ErrorCode::SavedSearchExists, "saved_search_exists"),
+            (ErrorCode::SavedSearchLimit, "saved_search_limit"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

@@ -27,6 +27,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0010_composer.sql")),
     // Stage 13: AI request log and dismissed open-reply hints (decision 0024).
     M::up(include_str!("../migrations/0011_ai.sql")),
+    // Stage 7: saved searches (synced) and recent searches (device) (decision 0026).
+    M::up(include_str!("../migrations/0012_saved_searches.sql")),
 ];
 
 /// All migrations this build knows.

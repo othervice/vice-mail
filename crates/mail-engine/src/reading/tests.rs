@@ -43,16 +43,16 @@ fn sync_config() -> SyncConfig {
     }
 }
 
-struct Harness {
+pub(super) struct Harness {
     _dir: TempDir,
-    core: AppCore<FakeConnector>,
+    pub(super) core: AppCore<FakeConnector>,
     events: broadcast::Receiver<CoreEvent>,
-    opener: Arc<RecordingOpener>,
-    open_dir: PathBuf,
+    pub(super) opener: Arc<RecordingOpener>,
+    pub(super) open_dir: PathBuf,
 }
 
 impl Harness {
-    async fn new(server: &Arc<FakeServer>, remote: RemoteConfig) -> Self {
+    pub(super) async fn new(server: &Arc<FakeServer>, remote: RemoteConfig) -> Self {
         let dir = TempDir::new().expect("temp dir");
         let opener = Arc::new(RecordingOpener::default());
         let open_dir = dir.path().join("cache/attachments");
@@ -784,7 +784,7 @@ async fn links_are_checked_and_opened_only_through_the_core() {
 }
 
 /// Counts TCP connections and answers every request with a PNG.
-async fn counting_image_server() -> (u16, Arc<AtomicUsize>) {
+pub(super) async fn counting_image_server() -> (u16, Arc<AtomicUsize>) {
     const PNG: &[u8] = &[
         0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I', b'H', b'D', b'R', 0,
         0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89, 0, 0, 0, 0x0d, b'I', b'D',
@@ -954,7 +954,7 @@ async fn without_the_test_switch_loopback_images_never_load() {
 }
 
 /// 300 bytes that are not valid UTF-8, as base64 lines.
-fn binary_attachment() -> (Vec<u8>, String) {
+pub(super) fn binary_attachment() -> (Vec<u8>, String) {
     let bytes: Vec<u8> = (0..300_u32)
         .map(|i| u8::try_from((i * 7 + 3) % 256).expect("byte"))
         .collect();

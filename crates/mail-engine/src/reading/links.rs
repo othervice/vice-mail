@@ -10,16 +10,25 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use mail_content::{LinkCheck, LinkTarget, LinkWarning as ContentWarning};
-use mail_model::{AccountId, CoreError, LinkInfo, LinkWarning, MessageId, RenderToken};
+use mail_model::{AccountId, CoreError, EmlFileId, LinkInfo, LinkWarning, MessageId, RenderToken};
 
 /// Renderings whose links stay known.
 pub const RENDERINGS: usize = 32;
 
+/// What a rendering shows: a stored message, or an opened `.eml` file (decision 0027).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RenderOwner {
+    Message {
+        account: AccountId,
+        message: MessageId,
+    },
+    File(EmlFileId),
+}
+
 /// One rendering and its links.
 #[derive(Debug)]
 pub(crate) struct Rendering {
-    pub account: AccountId,
-    pub message: MessageId,
+    pub owner: RenderOwner,
     pub links: Vec<LinkTarget>,
 }
 
@@ -69,7 +78,15 @@ impl Renderings {
 
     /// Forgets the renderings of an account (removed).
     pub fn forget_account(&self, account: AccountId) {
-        self.lock().retain(|(_, r)| r.account != account);
+        self.lock().retain(
+            |(_, r)| !matches!(r.owner, RenderOwner::Message { account: a, .. } if a == account),
+        );
+    }
+
+    /// Forgets the renderings of an opened file (its window closed).
+    pub fn forget_file(&self, file: &EmlFileId) {
+        self.lock()
+            .retain(|(_, r)| !matches!(&r.owner, RenderOwner::File(f) if f == file));
     }
 
     /// Link `index` of the rendering `token`, checked.
@@ -148,8 +165,10 @@ mod tests {
 
     fn rendering(links: &[(&str, &str)]) -> Rendering {
         Rendering {
-            account: "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id"),
-            message: MessageId(1),
+            owner: RenderOwner::Message {
+                account: "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id"),
+                message: MessageId(1),
+            },
             links: links
                 .iter()
                 .enumerate()

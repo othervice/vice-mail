@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { ChoiceGroup } from "../../components/ChoiceGroup";
-import { Notice } from "../../components/Notice";
+import { ErrorNotice } from "../../components/ErrorNotice";
 import { DENSITIES, READING_PANE_POSITIONS, TEXT_SIZES, useLayoutStore, type TextSize } from "../../stores/layout";
+import { useWindowLayoutLoad } from "../keyboard/useUiPreferencesSync";
 
 /** Settings → Appearance (stage 8): reading pane position and density of this window. */
 export function LayoutSettings() {
@@ -9,7 +10,8 @@ export function LayoutSettings() {
   const readingPane = useLayoutStore((state) => state.readingPane);
   const density = useLayoutStore((state) => state.density);
   const textSize = useLayoutStore((state) => state.textSize);
-  const saveFailed = useLayoutStore((state) => state.saveFailed);
+  const saveError = useLayoutStore((state) => state.saveError);
+  const load = useWindowLayoutLoad();
   const setLayout = useLayoutStore((state) => state.setLayout);
   return (
     <>
@@ -41,7 +43,10 @@ export function LayoutSettings() {
           if (size) setLayout({ textSize: size satisfies TextSize });
         }}
       />
-      {saveFailed && <Notice tone="warning" title={t("layout.saveFailed")} />}
+      {load.isError && (
+        <ErrorNotice context={t("layout.loadFailed")} error={load.error} onRetry={() => void load.refetch()} data-testid="layout-load-error" />
+      )}
+      {saveError && <ErrorNotice context={t("layout.saveFailed")} error={saveError} data-testid="layout-save-error" />}
     </>
   );
 }

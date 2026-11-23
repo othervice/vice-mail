@@ -49,6 +49,8 @@ interface HitListProps {
   header?: ReactNode;
   /** Below the list (the button for the server search). */
   footer?: ReactNode;
+  /** Stage 7: a hit was selected or opened (the search counts as a recent one). */
+  onUse?: (() => void) | undefined;
 }
 
 /**
@@ -57,7 +59,7 @@ interface HitListProps {
  * rows and the list shortcuts stay with the folder view: a page of hits mixes folders and
  * accounts, and the action controller works per folder.
  */
-function HitList({ query, accounts, label, platform, header, footer }: HitListProps) {
+function HitList({ query, accounts, label, platform, header, footer, onUse }: HitListProps) {
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
@@ -83,6 +85,7 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
             setSelection(next);
             const focusPane = layout.onSelectionChange(next);
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
+            if (only !== undefined) onUse?.();
             setFocusRequest((request) =>
               request && request.messageId === only
                 ? request
@@ -92,6 +95,7 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
             );
           }}
           onOpen={(id: MessageId) => {
+            onUse?.();
             layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
@@ -198,6 +202,8 @@ interface SearchResultsProps {
   input: SearchInput;
   accounts: readonly Account[];
   platform: ShortcutPlatform;
+  /** Stage 7: a hit was selected or opened. */
+  onUse?: () => void;
 }
 
 /**
@@ -205,7 +211,7 @@ interface SearchResultsProps {
  * clear empty states (nothing found, or the query cannot find anything), errors at the place,
  * and the way to search on the server for mail whose content is not stored here.
  */
-export function SearchResults({ query, input, accounts, platform }: SearchResultsProps) {
+export function SearchResults({ query, input, accounts, platform, onUse }: SearchResultsProps) {
   const { t } = useTranslation();
   const [server, setServer] = useState<SearchInput | null>(null);
   const first = query.data?.pages[0];
@@ -247,6 +253,7 @@ export function SearchResults({ query, input, accounts, platform }: SearchResult
       accounts={accounts}
       label={label}
       platform={platform}
+      onUse={onUse}
       // Once the last page is there: the server is for what the local results do not have.
       footer={query.isSuccess && !query.hasNextPage && !query.isPlaceholderData ? <ServerButton onClick={searchServer} /> : null}
     />

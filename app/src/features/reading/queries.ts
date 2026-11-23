@@ -1,8 +1,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import {
+  emlIpc,
   ipc,
   type AccountId,
   type BodyFormat,
+  type EmlFileId,
   type IpcError,
   type MessageId,
   type MessageView,
@@ -136,13 +138,21 @@ export function useOpenLink() {
   });
 }
 
-export function useSaveAttachment(messageId: MessageId, index: number) {
-  return useMutation({ mutationFn: () => ipc.saveAttachment(messageId, index) });
+/** Whose attachments: a stored message, or (stage 9, decision 0027) an opened `.eml` file. */
+export type AttachmentOwner = { messageId: MessageId } | { fileId: EmlFileId };
+
+export function useSaveAttachment(owner: AttachmentOwner, index: number) {
+  return useMutation({
+    mutationFn: () => ("fileId" in owner ? emlIpc.saveAttachment(owner.fileId, index) : ipc.saveAttachment(owner.messageId, index)),
+  });
 }
 
-export function useOpenAttachment(messageId: MessageId, index: number) {
+export function useOpenAttachment(owner: AttachmentOwner, index: number) {
   return useMutation({
-    mutationFn: (confirmedExecutable: boolean) => ipc.openAttachment(messageId, index, confirmedExecutable),
+    mutationFn: (confirmedExecutable: boolean) =>
+      "fileId" in owner
+        ? emlIpc.openAttachment(owner.fileId, index, confirmedExecutable)
+        : ipc.openAttachment(owner.messageId, index, confirmedExecutable),
   });
 }
 

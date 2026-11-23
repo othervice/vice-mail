@@ -73,6 +73,12 @@ export const commands = {
 	setMailboxRole: (mailboxId: MailboxId, role: MailboxRole, options?: InvokeOptions) => typedError<Mailbox[], IpcError>(__TAURI_INVOKE("set_mailbox_role", { mailboxId, role }, options)),
 	/**  One keyset page of a mailbox, newest first. `limit` 1..500. */
 	listMessages: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_messages", { mailboxId, cursor, limit }, options)),
+	/**
+	 *  Stage 13 (decision 0027): the list rows of these messages in the order asked, each in its
+	 *  first folder, to name and open the sources of an AI answer. Unknown ids are left out; more
+	 *  than `MAX_MESSAGES_BY_IDS` ids is `invalid_argument`.
+	 */
+	getMessagesByIds: (messageIds: MessageId[], options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("get_messages_by_ids", { messageIds }, options)),
 	/**  The reading pane's data. Served locally when the body is stored, else `loading` and a fetch starts. */
 	getMessage: (messageId: MessageId, format: BodyFormat, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("get_message", { messageId, format }, options)),
 	/**  Renders again with the external images loaded by the core; `sender` also allows them for the sender. */
@@ -122,6 +128,21 @@ export const commands = {
 	getSearchIndexStatus: (options?: InvokeOptions) => typedError<SearchIndexStatus, IpcError>(__TAURI_INVOKE("get_search_index_status", undefined, options)),
 	/**  Rebuilds the full-text index in the background; search keeps working meanwhile. */
 	rebuildSearchIndex: (options?: InvokeOptions) => typedError<SearchIndexStatus, IpcError>(__TAURI_INVOKE("rebuild_search_index", undefined, options)),
+	/**  Every saved search, in the sidebar's order. */
+	listSavedSearches: (options?: InvokeOptions) => typedError<SavedSearch[], IpcError>(__TAURI_INVOKE("list_saved_searches", undefined, options)),
+	/**
+	 *  Saves a search (it searches all accounts) after the others; `saved_search_exists`,
+	 *  `saved_search_limit`, `invalid_argument`.
+	 */
+	saveSearch: (name: string, query: string, options?: InvokeOptions) => typedError<SavedSearch, IpcError>(__TAURI_INVOKE("save_search", { name, query }, options)),
+	/**  Renames a saved search; its query and place stay. */
+	renameSavedSearch: (savedSearchId: SavedSearchId, name: string, options?: InvokeOptions) => typedError<SavedSearch, IpcError>(__TAURI_INVOKE("rename_saved_search", { savedSearchId, name }, options)),
+	deleteSavedSearch: (savedSearchId: SavedSearchId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_saved_search", { savedSearchId }, options)),
+	/**  This device's recent searches, newest first. */
+	listRecentSearches: (options?: InvokeOptions) => typedError<RecentSearch[], IpcError>(__TAURI_INVOKE("list_recent_searches", undefined, options)),
+	/**  Puts a search on top of this device's history; returns the history. */
+	addRecentSearch: (query: string, options?: InvokeOptions) => typedError<RecentSearch[], IpcError>(__TAURI_INVOKE("add_recent_search", { query }, options)),
+	clearRecentSearches: (options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("clear_recent_searches", undefined, options)),
 	/**  Threads of a mailbox, newest first. `limit` 1..500. */
 	listThreads: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<ThreadPage, IpcError>(__TAURI_INVOKE("list_threads", { mailboxId, cursor, limit }, options)),
 	/**  Threads of the unified inbox or of a group's inboxes. `limit` 1..500. */
@@ -358,6 +379,28 @@ export const commands = {
 	 *  fields. Call once at start; later links arrive as `composeRequested`.
 	 */
 	takeLaunchLinks: (options?: InvokeOptions) => __TAURI_INVOKE<ComposeRequest[]>("take_launch_links", undefined, options),
+	/**
+	 *  "Open .eml file…": the system's open dialog (only `.eml`), then the core reads and checks the
+	 *  file and it opens in a window of its own. `cancelled` when the user closes the dialog;
+	 *  `eml_too_large`, `eml_invalid`, `eml_unreadable` when the file cannot be shown (no window
+	 *  opens then).
+	 */
+	openEmlFile: (options?: InvokeOptions) => typedError<OpenEmlFileResult, IpcError>(__TAURI_INVOKE("open_eml_file", undefined, options)),
+	/**
+	 *  The opened file as the reading pane shows it (sanitised HTML in the sandboxed frame, or
+	 *  text). The typed error the file was refused with, if the system handed over a file that is
+	 *  no mail; `not_found` once the file was closed.
+	 */
+	getEmlMessage: (fileId: EmlFileId, format: BodyFormat, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("get_eml_message", { fileId, format }, options)),
+	/**
+	 *  Renders the file again with its external images, loaded by the core, for this rendering
+	 *  only (there is no sender list without an account).
+	 */
+	loadEmlRemoteContent: (fileId: EmlFileId, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("load_eml_remote_content", { fileId }, options)),
+	/**  Saves an attachment of the file where the user picks in the system dialog. */
+	saveEmlAttachment: (fileId: EmlFileId, index: number, options?: InvokeOptions) => typedError<SaveAttachmentResult, IpcError>(__TAURI_INVOKE("save_eml_attachment", { fileId, index }, options)),
+	/**  Opens a read-only copy of an attachment of the file; executables need `confirmedExecutable`. */
+	openEmlAttachment: (fileId: EmlFileId, index: number, confirmedExecutable: boolean, options?: InvokeOptions) => typedError<OpenAttachmentResult, IpcError>(__TAURI_INVOKE("open_eml_attachment", { fileId, index, confirmedExecutable }, options)),
 	/**  Switch, accounts with their access level, clients and the endpoint's state. */
 	getMcpSettings: (options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("get_mcp_settings", undefined, options)),
 	/**  On or off. Off is the emergency stop: every open AI connection closes at once. */
@@ -482,6 +525,8 @@ export const MAX_COMMAND_ID_CHARS = 64 as const;
 
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 
+export const MAX_EML_FILE_BYTES = 67108864 as const;
+
 export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
@@ -490,9 +535,17 @@ export const MAX_MCP_CLIENTS = 50 as const;
 
 export const MAX_MCP_CLIENT_NAME_CHARS = 100 as const;
 
+export const MAX_MESSAGES_BY_IDS = 200 as const;
+
 export const MAX_RECENT_COMMANDS = 5 as const;
 
 export const MAX_RECENT_COMMAND_CHARS = 200 as const;
+
+export const MAX_RECENT_SEARCHES = 10 as const;
+
+export const MAX_SAVED_SEARCHES = 100 as const;
+
+export const MAX_SAVED_SEARCH_NAME_CHARS = 100 as const;
 
 export const MAX_SCHEDULE_AHEAD_MS = 31622400000 as const;
 
@@ -1492,12 +1545,16 @@ export type ContactSuggestion = {
  *    failed.
  *  - `signaturesChanged`, `templatesChanged` (stage 10): reload the signature pool or the
  *    templates.
+ *  - `aiSettingsChanged` (stage 13, decision 0027): the AI settings changed (any window, or an
+ *    account came or went); carries what is usable now. Reload `getAiSettings`.
  *  - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
  *    questions or detected folders changed. Data a pass took over from another device comes
  *    with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
  *  - `uiPreferencesChanged` (stage 8): the UI preferences (shortcuts, text size, recent palette
  *    commands) were stored, here in any window or by the settings sync; carries the stored
  *    values. Every window applies them.
+ *  - `savedSearchesChanged` (stage 7, decision 0026): saved searches were created, renamed or
+ *    deleted (here or by the settings sync). Reload `listSavedSearches`.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
@@ -1505,6 +1562,8 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  *  provider request, the characters received, the end.
  */
 { type: "aiRequest"; requestId: string; phase: AiRequestPhase } | 
+/**  Stage 13 (decision 0027): the AI settings or what is usable changed. */
+{ type: "aiSettingsChanged"; availability: AiAvailability } | 
 /**
  *  Stage 10: the signature pool changed (here or from another device); identity defaults
  *  come with `accountsChanged`.
@@ -1513,7 +1572,9 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
 /**  Stage 10: the templates changed (here or from another device). */
 { type: "templatesChanged" } | 
 /**  Stage 8: the UI preferences were stored (any window, or another device). */
-{ type: "uiPreferencesChanged"; preferences: UiPreferences };
+{ type: "uiPreferencesChanged"; preferences: UiPreferences } | 
+/**  Stage 7 (decision 0026): the saved searches changed (here or from another device). */
+{ type: "savedSearchesChanged" };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -1744,6 +1805,33 @@ export type DuplicateReason =
  */
 "names_differ";
 
+/**  What opening a file answers: its id and its name (sanitised, for the window title). */
+export type EmlFile = {
+	id: EmlFileId,
+	name: string,
+};
+
+/**
+ *  An opened `.eml` file: 32 lowercase hex digits from the operating system's random source,
+ *  so one window cannot name another window's file by guessing.
+ */
+export type EmlFileId = string;
+
+/**
+ *  The view of an opened file, like `MessageView` without account and message id: the same
+ *  header, body (sanitised HTML with a fresh render token, or text), formats, attachments and
+ *  problems. `header.date` is `0` when the file has no readable `Date`.
+ */
+export type EmlMessageView = {
+	fileId: EmlFileId,
+	fileName: string,
+	header: MessageViewHeader,
+	body: MessageBody,
+	formats: BodyFormat[],
+	attachments: AttachmentInfo[],
+	problems: MessageProblem[],
+};
+
 /**
  *  Stable, machine-readable error kinds. The UI picks its (translated) text by this code.
  * 
@@ -1866,7 +1954,17 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 13: the model declined the request. */
 "ai_refused" | 
 /**  Stage 13: any other failure of an AI request (address, model, size, unreadable answer). */
-"ai_failed";
+"ai_failed" | 
+/**  Stage 9 (decision 0027): the `.eml` file is larger than the app opens. */
+"eml_too_large" | 
+/**  Stage 9 (decision 0027): the file is empty or has no readable mail header. */
+"eml_invalid" | 
+/**  Stage 9 (decision 0027): the file is missing, a folder, or could not be read. */
+"eml_unreadable" | 
+/**  Stage 7 (decision 0026): another saved search has this name. */
+"saved_search_exists" | 
+/**  Stage 7 (decision 0026): the most saved searches are stored already. */
+"saved_search_limit";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -2725,6 +2823,9 @@ export type OpenAttachmentResult =
  */
 { kind: "needsConfirmation" };
 
+/**  "Open .eml file…": the user cancelled the dialog, or the file opened in its own window. */
+export type OpenEmlFileResult = { kind: "cancelled" } | { kind: "opened"; file: EmlFile };
+
 /**  A dismissable suggestion, never a claim: "maybe still open". */
 export type OpenReplyHint = {
 	messageId: MessageId,
@@ -2999,6 +3100,13 @@ export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
 };
 
+/**  A search of this device's history. */
+export type RecentSearch = {
+	query: string,
+	/**  Unix milliseconds of the last use. */
+	usedAt: number,
+};
+
 /**  `FREQ` of a recurrence rule. */
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly" | 
 /**  `SECONDLY`, `MINUTELY` or `HOURLY`: shown from `rule`. */
@@ -3091,6 +3199,21 @@ export type SaveAttachmentResult =
 { kind: "saved"; path: string } | 
 /**  The user closed the dialog. */
 { kind: "cancelled" };
+
+/**  A saved search, as the sidebar shows it. */
+export type SavedSearch = {
+	id: SavedSearchId,
+	name: string,
+	/**  The search as the user typed it. */
+	query: string,
+	/**  Order in the sidebar; new ones come last. */
+	position: number,
+	/**  Unix milliseconds. */
+	updatedAt: number,
+};
+
+/**  Id of a saved search: a UUID, the same on every device (the sync record id). */
+export type SavedSearchId = string;
 
 /**  A saved signature and what sanitising changed. */
 export type SavedSignature = {

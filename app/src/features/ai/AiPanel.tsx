@@ -31,12 +31,12 @@ import { openComposer } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
 import { useUiStore } from "../../stores/ui";
 import { useAccounts } from "../accounts/queries";
-import { formatFullDate } from "../messages/rows";
 import { threadQueryKey } from "../threads/queries";
 import { AiProgress, isLocal, TransferSummary } from "./AiTransfer";
 import { ConsentStep } from "./ConsentStep";
 import { OpenReplyHintList } from "./OpenReplyHints";
 import { useAiAvailability, useAiSettings } from "./queries";
+import { openSource, sourceLabel, useSourceItems } from "./sources";
 import { profileFor, useAiRun, type AiRun } from "./useAiRun";
 
 /** Some function of the panel is usable now (docs/DESIGN.md: without AI the panel is not there). */
@@ -90,11 +90,7 @@ function useSourceLabels(account: Account, messageId: MessageId, enabled: boolea
     enabled,
   });
   const labels = new Map<MessageId, string>();
-  for (const entry of thread.data?.messages ?? []) {
-    const from = entry.message.from;
-    const name = from ? from.name || from.email : t("list.unknownSender");
-    labels.set(entry.message.id, t("ai.sources.label", { name, date: formatFullDate(entry.message.date, i18n.language) }));
-  }
+  for (const entry of thread.data?.messages ?? []) labels.set(entry.message.id, sourceLabel(t, i18n.language, entry.message));
   return labels;
 }
 
@@ -105,10 +101,12 @@ export function numberSources(claims: readonly AiClaim[]): Map<MessageId, number
   return numbers;
 }
 
-/** The mails a statement rests on, as buttons that show the mail in the thread. */
+/**
+ * The mails a statement rests on, as buttons that show the mail in the thread, or (decision 0027)
+ * in a window of its own when the thread pane does not have it.
+ */
 function Sources({ sources, labels, numbers }: { sources: readonly MessageId[]; labels: Map<MessageId, string>; numbers: Map<MessageId, number> }) {
   const { t } = useTranslation();
-  const showSource = useAiPanelStore((state) => state.showSource);
   return (
     <span className="mt-1 flex flex-wrap gap-1" aria-label={t("ai.sources.title")} role="group">
       {sources.map((id) => {
@@ -118,7 +116,7 @@ function Sources({ sources, labels, numbers }: { sources: readonly MessageId[]; 
             key={id}
             type="button"
             onClick={() => {
-              showSource(id);
+              void openSource(id);
             }}
             aria-label={t("ai.sources.show", { label })}
             className="rounded-control border border-border px-2 text-12 text-secondary hover:bg-hover hover:text-primary"
@@ -369,11 +367,14 @@ function ThreadTools({ item, account, availability, settings }: { item: MessageL
 type AskScope = "account" | "all";
 
 function AnswerCard({ answer, leftOut }: { answer: AiAnswer; leftOut: number }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const openSearch = useSearchStore((state) => state.openSearch);
   const setQuery = useSearchStore((state) => state.setQuery);
   const numbers = numberSources(answer.statements);
+  // Decision 0027: the sources come from anywhere; the core names them by id.
+  const items = useSourceItems([...numbers.keys()]);
   const labels = new Map<MessageId, string>();
+  for (const [id, item] of items) labels.set(id, sourceLabel(t, i18n.language, item));
   return (
     <Card title={t("ai.ask.answerTitle")} data-testid="ai-answer">
       {answer.found ? (

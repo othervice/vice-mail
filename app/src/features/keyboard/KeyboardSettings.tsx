@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
-import { Notice } from "../../components/Notice";
+import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Tooltip } from "../../components/Tooltip";
 import { useBoundShortcuts, useShortcutStore } from "../../stores/shortcuts";
@@ -19,6 +19,7 @@ import {
   type ShortcutProblem,
 } from "./bindings";
 import { useCommandLabel } from "./labels";
+import { useUiPreferencesLoad } from "./useUiPreferencesSync";
 
 type Status = { tone: "ok" | "problem"; text: string } | null;
 
@@ -193,7 +194,8 @@ export function KeyboardSettings() {
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const [recording, setRecording] = useState<CommandId | null>(null);
   const [status, setStatus] = useState<Status>(null);
-  const saveFailed = useShortcutStore((state) => state.saveFailed);
+  const saveError = useShortcutStore((state) => state.saveError);
+  const load = useUiPreferencesLoad();
   const resetAll = useShortcutStore((state) => state.resetAll);
   const anyChanged = useShortcutStore((state) => Object.keys(state.overrides[platform]).length > 0);
   const descriptionId = useId();
@@ -226,7 +228,10 @@ export function KeyboardSettings() {
       >
         {status?.text}
       </p>
-      {saveFailed && <Notice tone="warning" title={t("keyboard.settings.saveFailed")} />}
+      {load.isError && (
+        <ErrorNotice context={t("keyboard.settings.loadFailed")} error={load.error} onRetry={() => void load.refetch()} data-testid="shortcut-load-error" />
+      )}
+      {saveError && <ErrorNotice context={t("keyboard.settings.saveFailed")} error={saveError} data-testid="shortcut-save-error" />}
       {groups.map((group) => (
         <section key={group.id} aria-labelledby={`${descriptionId}-${group.id}`} className="flex flex-col">
           <h3 id={`${descriptionId}-${group.id}`} className="text-14 font-semibold text-primary">

@@ -62,7 +62,7 @@ function contextFor(id: ActionId): ActionContext {
 }
 
 /** What running the action must have done (the same as its shortcut or button). */
-function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionContext) {
+function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionContext, core: ReturnType<typeof mockCore>) {
   const apply = (type: MailAction["type"]) => {
     expect(host.apply).toHaveBeenCalledWith({ type }, ctx.items);
   };
@@ -135,6 +135,10 @@ function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionC
     compose: () => {
       composer("new");
     },
+    // Stage 8: the shell opens the window (the fake records the call even if it refuses).
+    openInWindow: () => {
+      expect(core.callsOf("open_message_window").at(-1)).toEqual({ accountId: ctx.account.id, messageId: 4242 });
+    },
   };
   checks[id]();
 }
@@ -174,7 +178,7 @@ async function chooseByKeyboard(user: User, query: string, label: string) {
 
 describe("command palette", () => {
   it("every action of the directory can be found and run from the keyboard", async () => {
-    mockCore();
+    const core = mockCore();
     const { user } = renderApp();
     await screen.findByRole("navigation", { name: "Views" });
     for (const id of ACTION_IDS) {
@@ -190,7 +194,7 @@ describe("command palette", () => {
       await openPalette(user);
       await chooseByKeyboard(user, label, label);
       expect(screen.queryByRole("dialog", { name: "Command palette" }), id).toBeNull();
-      expectRan(id, host, ctx);
+      expectRan(id, host, ctx, core);
     }
     // 33 rounds through the palette: more than the default 5 s on a busy machine.
   }, 30_000);

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AccountId, MailboxId, RenderToken, UnifiedView } from "../services/ipc";
+import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } from "../services/ipc";
 
 /** Mail views of the icon rail, top to bottom (docs/DESIGN.md). Ids double as i18n keys in `nav`. */
 export const MAIL_VIEW_IDS = [
@@ -44,7 +44,8 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export type AccountsPage = { kind: "list" } | { kind: "add" } | { kind: "account"; accountId: AccountId };
 
 export type View =
-  | { kind: "mail"; mailView: MailViewId }
+  /** Stage 7: `savedSearchId` with `savedViews`: one saved search's results instead of the list. */
+  | { kind: "mail"; mailView: MailViewId; savedSearchId?: SavedSearchId }
   /** A folder picked in the folder tree that has no view of its own in the rail. */
   | { kind: "mailbox"; accountId: AccountId; mailboxId: MailboxId }
   | { kind: "settings"; section: SettingsSectionId }
@@ -84,6 +85,8 @@ interface UiState {
   linkRequest: LinkRequest | null;
   showMailView: (mailView: MailViewId) => void;
   showMailbox: (accountId: AccountId, mailboxId: MailboxId) => void;
+  /** Stage 7: the results of a saved search (a view of the sidebar). */
+  showSavedSearch: (savedSearchId: SavedSearchId) => void;
   selectAccount: (accountId: AccountId) => void;
   showUnifiedInbox: (view: UnifiedView) => void;
   showSettings: (section?: SettingsSectionId) => void;
@@ -107,6 +110,9 @@ export const useUiStore = create<UiState>()((set) => ({
   linkRequest: null,
   showMailView: (mailView) => {
     set({ view: { kind: "mail", mailView } });
+  },
+  showSavedSearch: (savedSearchId) => {
+    set({ view: { kind: "mail", mailView: "savedViews", savedSearchId } });
   },
   showMailbox: (accountId, mailboxId) => {
     set({ view: { kind: "mailbox", accountId, mailboxId }, selectedAccountId: accountId, unifiedInbox: null });

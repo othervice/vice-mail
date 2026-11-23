@@ -14,6 +14,8 @@ import { useLayoutStore } from "../src/stores/layout";
 import { usePaletteStore } from "../src/stores/palette";
 import { useShortcutStore } from "../src/stores/shortcuts";
 import { installSystemFakes, resetSystem } from "./support/system";
+import { resetUiPreferencesForTests } from "../src/features/keyboard/uiPreferences";
+import { resetMigrationForTests } from "../src/features/keyboard/useUiPreferencesSync";
 
 beforeEach(() => {
   installSystemFakes();
@@ -31,8 +33,12 @@ afterEach(() => {
   useComposerStore.setState(useComposerStore.getInitialState(), true);
   // Stage 9: mailto: links waiting for the composer.
   useMailtoStore.setState(useMailtoStore.getInitialState(), true);
-  // Stage 8: shortcuts, layout and recent palette commands are stored locally (fallback).
+  // Stage 8: shortcuts, layout and recent palette commands come from the core (decision 0025);
+  // the web view's storage only holds old values to migrate and per-device UI flags.
   window.localStorage.clear();
+  resetUiPreferencesForTests();
+  resetMigrationForTests();
+  window.history.replaceState(null, "", "/");
   useShortcutStore.setState(useShortcutStore.getInitialState(), true);
   useLayoutStore.setState(useLayoutStore.getInitialState(), true);
   usePaletteStore.setState(usePaletteStore.getInitialState(), true);

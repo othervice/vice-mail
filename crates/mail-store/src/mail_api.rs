@@ -17,9 +17,9 @@
 //! Unknown ids fail with [`StoreError::NotFound`].
 
 use mail_model::{
-    Account, AccountColor, AccountId, AccountStatus, FlagUpdate, Identity, ListCursor, Mailbox,
-    MailboxId, MailboxRole, MessageHeader, MessagePage, ModSeq, RemoteMailbox, ServerSettings, Uid,
-    UidSet, UidValidity,
+    Account, AccountColor, AccountId, AccountStatus, FlagUpdate, Identity, ListCursor,
+    MAX_MESSAGES_BY_IDS, Mailbox, MailboxId, MailboxRole, MessageHeader, MessageId,
+    MessageListItem, MessagePage, ModSeq, RemoteMailbox, ServerSettings, Uid, UidSet, UidValidity,
 };
 
 use crate::{Store, StoreError, accounts, mailboxes, messages, outbox};
@@ -357,6 +357,34 @@ impl Store {
     ) -> Result<MessagePage, StoreError> {
         self.read(move |conn| messages::list(conn, mailbox, cursor, limit))
             .await
+    }
+
+    /// Stage 13 (decision 0027): the list rows of `ids` in the order asked, each in its first
+    /// folder. Messages that do not exist (or lie in no folder) are left out, repeated ids
+    /// answered once. More than [`MAX_MESSAGES_BY_IDS`] ids is [`StoreError::InvalidArgument`].
+    pub async fn message_items(
+        &self,
+        ids: Vec<MessageId>,
+    ) -> Result<Vec<MessageListItem>, StoreError> {
+        if ids.len() > MAX_MESSAGES_BY_IDS as usize {
+            return Err(StoreError::InvalidArgument(format!(
+                "at most {MAX_MESSAGES_BY_IDS} messages at once, not {}",
+                ids.len()
+            )));
+        }
+        self.read(move |conn| {
+            let mut seen = std::collections::HashSet::new();
+            let mut items = Vec::with_capacity(ids.len());
+            for id in ids {
+                if seen.insert(id)
+                    && let Some(entry) = crate::lists::entry(conn, id, &[])?
+                {
+                    items.push(entry.item);
+                }
+            }
+            Ok(items)
+        })
+        .await
     }
 
     /// Unread count per mailbox of the account (`loc_unseen`), mailboxes without unread

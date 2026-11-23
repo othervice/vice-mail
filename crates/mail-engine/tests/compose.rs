@@ -1533,3 +1533,197 @@ async fn an_inline_image_arrives_and_is_shown_at_the_second_account() {
     );
     clean_server(env).await;
 }
+
+/// Base64 in lines of 76 characters, as mail programs write attachments.
+fn base64_lines(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | (u32::from(*b) << (16 - 8 * i)));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(char::from(ALPHABET[((n >> (18 - 6 * i)) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out.as_bytes()
+        .chunks(76)
+        .map(|line| String::from_utf8_lossy(line).into_owned())
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+/// Entwürfe anderer Programme aus dem Entwürfe-Ordner öffnen: a draft that another program
+/// (here: as Thunderbird writes it) put into bob's Drafts folder opens as a local draft, with
+/// the HTML through the allowlist and the attachment byte for byte. Edited and closed, it
+/// replaces the foreign copy (same Message-ID, exactly one copy, the new content, the
+/// attachment kept); discarding it removes the copy.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_draft_of_another_program_opens_and_its_server_copy_is_replaced() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let run = run_id();
+    let subject = format!("{MARK}Fremder Entwurf {run}");
+    let edited = format!("{MARK}Fremder Entwurf {run} bearbeitet");
+    let message_id = format!("foreign-{run}@other.example");
+    let agenda: Vec<u8> = (0..20_000u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 11) as u8)
+        .collect();
+    let encoded = base64_lines(&agenda);
+    let raw = format!(
+        "From: Bob <{bob}>\r\n\
+         To: Alice <{alice}>\r\n\
+         Cc: Admin <{admin}>\r\n\
+         Subject: {subject}\r\n\
+         Message-ID: <{message_id}>\r\n\
+         Date: Mon, 23 Nov 2026 07:00:00 +0100\r\n\
+         User-Agent: Mozilla Thunderbird\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=\"mixed\"\r\n\
+         \r\n\
+         --mixed\r\n\
+         Content-Type: multipart/alternative; boundary=\"alt\"\r\n\
+         \r\n\
+         --alt\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         \r\n\
+         Hallo Alice, die Tagesordnung f\u{fc}r Montag.\r\n\
+         --alt\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\
+         \r\n\
+         <p onclick=\"steal()\">Hallo <b>Alice</b>, die Tagesordnung f\u{fc}r Montag.</p>\
+         <script>alert(1)</script>\r\n\
+         --alt--\r\n\
+         --mixed\r\n\
+         Content-Type: application/pdf; name=\"Tagesordnung.pdf\"\r\n\
+         Content-Disposition: attachment; filename=\"Tagesordnung.pdf\"\r\n\
+         Content-Transfer-Encoding: base64\r\n\
+         \r\n\
+         {encoded}\r\n\
+         --mixed--\r\n",
+        bob = env.bob.address,
+        alice = env.alice.address,
+        admin = env.admin.address,
+    );
+    let mut imap = admin_session(env, &env.bob).await;
+    let reply = imap
+        .raw_command(
+            &format!(
+                "APPEND \"Drafts\" (\\Draft \\Seen) {{{}+}}\r\n{raw}",
+                raw.len()
+            ),
+            |_| false,
+        )
+        .await
+        .expect("append the foreign draft");
+    assert!(reply.ok, "{}", reply.text);
+    imap.logout().await.ok();
+    assert_eq!(copies(env, &env.bob, "Drafts", &message_id).await.len(), 1);
+
+    let item = bed.arrived(bed.bob, MailboxRole::Drafts, &subject).await;
+    let draft = bed
+        .core
+        .open_draft_from_message(item.id)
+        .await
+        .expect("open the foreign draft");
+    assert_eq!(draft.account_id, bed.bob);
+    assert_eq!(draft.subject, subject);
+    assert_eq!(draft.to, vec![person("Alice", &env.alice.address)]);
+    assert_eq!(draft.cc, vec![person("Admin", &env.admin.address)]);
+    assert_eq!(draft.format, ComposeFormat::Html);
+    assert!(
+        draft.body_html.contains("Tagesordnung für Montag"),
+        "{}",
+        draft.body_html
+    );
+    for hostile in ["script", "alert", "onclick", "steal"] {
+        assert!(
+            !draft.body_html.contains(hostile),
+            "{hostile} left in {}",
+            draft.body_html
+        );
+    }
+    assert_eq!(draft.attachments.len(), 1);
+    assert_eq!(draft.attachments[0].file_name, "Tagesordnung.pdf");
+    assert_eq!(draft.attachments[0].size, 20_000);
+    assert_eq!(
+        draft.server,
+        DraftServerState::Saved,
+        "the foreign copy counts as the first version"
+    );
+    // Opened again: the same draft.
+    let again = bed
+        .core
+        .open_draft_from_message(item.id)
+        .await
+        .expect("open again");
+    assert_eq!(again.id, draft.id);
+
+    // Edited and closed: the new version replaces the foreign copy.
+    let saved = bed
+        .write(
+            &draft,
+            vec![person("Alice", &env.alice.address)],
+            Vec::new(),
+            &edited,
+            "<p>Hallo Alice, die neue Tagesordnung.</p>",
+        )
+        .await;
+    assert!(saved.revision > draft.revision);
+    bed.core.close_draft(draft.id.clone()).await.expect("close");
+    until("only the edited version in Drafts", || async {
+        let found = copies(env, &env.bob, "Drafts", &message_id).await;
+        let subjects: Vec<String> = found
+            .iter()
+            .filter_map(|(_, raw)| mail_content::parse(raw).headers.subject)
+            .collect();
+        (subjects == vec![edited.clone()]).then_some(())
+    })
+    .await;
+    bed.settled(bed.bob).await;
+    let found = copies(env, &env.bob, "Drafts", &message_id).await;
+    assert_eq!(found.len(), 1, "exactly one copy");
+    let parsed = mail_content::parse(&found[0].1);
+    assert_eq!(
+        parsed.headers.message_id.as_deref(),
+        Some(message_id.as_str())
+    );
+    assert!(
+        parsed
+            .html
+            .as_deref()
+            .is_some_and(|h| h.contains("die neue Tagesordnung") && !h.contains("script")),
+        "{:?}",
+        parsed.html
+    );
+    assert_eq!(parsed.attachments.len(), 1);
+    assert_eq!(parsed.attachments[0].file_name, "Tagesordnung.pdf");
+    let bytes = mail_content::attachment_bytes(&found[0].1, parsed.attachments[0].part_id)
+        .expect("attachment bytes");
+    assert_eq!(sha256(&bytes), sha256(&agenda), "the attachment is kept");
+    let info = bed.core.get_draft(draft.id.clone()).await.expect("draft");
+    assert_eq!(info.server, DraftServerState::Saved);
+
+    // Discarding removes the copy.
+    bed.core
+        .delete_draft(draft.id.clone())
+        .await
+        .expect("discard");
+    bed.settled(bed.bob).await;
+    until("no copy in Drafts", || async {
+        copies(env, &env.bob, "Drafts", &message_id)
+            .await
+            .is_empty()
+            .then_some(())
+    })
+    .await;
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}

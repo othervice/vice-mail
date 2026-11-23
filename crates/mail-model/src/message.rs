@@ -143,6 +143,10 @@ pub struct FlagUpdate {
     pub modseq: Option<ModSeq>,
 }
 
+/// Most ids one `getMessagesByIds` asks for (stage 13, decision 0027: the sources of an AI
+/// answer, at most a few dozen).
+pub const MAX_MESSAGES_BY_IDS: u32 = 200;
+
 /// One row of the message list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

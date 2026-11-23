@@ -55,6 +55,7 @@ mod outbox;
 mod outbox_api;
 mod reading;
 mod rules;
+mod saved_searches;
 mod schedule;
 mod search;
 mod search_api;
@@ -97,6 +98,7 @@ pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredO
 pub use reading::{
     MAX_PREFETCH_BATCH, MAX_PREVIEW_CHARS, MessageLocation, PrefetchCandidate, StoredMessage,
 };
+pub use saved_searches::{SavedSearchWrite, StoredRecentSearch, StoredSavedSearch};
 pub use schedule::{Reschedule, is_missed, is_waiting_schedule};
 pub use search::{MAX_SEARCH_LIMIT, SearchFilter, StoredHit, StoredHitPage};
 pub use search_api::{INDEX_BATCH, IndexStep};

@@ -36,6 +36,17 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["eml"],
+        "contentTypes": ["com.apple.mail.email"],
+        "name": "Email Message",
+        "description": "Email Message",
+        "mimeType": "message/rfc822",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

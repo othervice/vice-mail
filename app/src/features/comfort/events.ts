@@ -2,15 +2,20 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { comfortIpc, type CoreEvent, type NotificationTexts } from "../../services/ipc";
+import { useAiPanelStore } from "../../stores/aiPanel";
 import { useNoticeStore } from "../../stores/notices";
 import { useUiStore } from "../../stores/ui";
+import { openMessageInWindow } from "../windows/open";
+import { currentWindowRoute } from "../windows/route";
 import { handleInboxChanged, refreshComfortListsOf } from "./queries";
 
 /**
  * Stage 9 events: `inboxChanged` (pins, snoozes, tasks or categories changed, a snooze came
  * back) and `messagesChanged` reload the sorted inbox and the mark views; `ruleSkipped` says
  * which local rule could not act and why; a click on a system notification
- * (`openMessageRequested`) brings its folder to the front.
+ * (`openMessageRequested`) brings its folder to the front and opens the mail (decision 0027):
+ * in the thread pane when it shows the mail already, else in a window of its own (the list
+ * cannot select a message it may not have loaded).
  */
 export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): void {
   switch (event.type) {
@@ -27,12 +32,19 @@ export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): 
       });
       break;
     case "openMessageRequested": {
+      // Every window hears the event; the main window answers it.
+      if (currentWindowRoute().kind !== "main") break;
       const ui = useUiStore.getState();
+      const view = ui.view;
+      const sameFolder = view.kind === "mailbox" && event.mailboxId !== null && view.mailboxId === event.mailboxId;
       if (event.mailboxId !== null) ui.showMailbox(event.accountId, event.mailboxId);
       else {
         ui.selectAccount(event.accountId);
         ui.showMailView("inbox");
       }
+      const panel = useAiPanelStore.getState();
+      if (sameFolder && panel.shownSources.includes(event.messageId)) panel.showSource(event.messageId);
+      else openMessageInWindow(event.accountId, event.messageId);
       break;
     }
     default:

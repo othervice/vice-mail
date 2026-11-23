@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { matchesShortcut } from "../src/features/actions/shortcuts";
 import {
   checkShortcut,
@@ -12,7 +12,8 @@ import {
 import { arrangeEntries } from "../src/features/palette/arrange";
 import type { PaletteEntry } from "../src/features/palette/entries";
 import { foldText, fuzzyScore } from "../src/features/palette/fuzzy";
-import { boundShortcuts, loadStoredOverrides, useShortcutStore } from "../src/stores/shortcuts";
+import { boundShortcuts, useShortcutStore } from "../src/stores/shortcuts";
+import { mockCore } from "./support/core";
 import { Archive } from "lucide-react";
 
 const key = (k: string, mods: Partial<Record<"shiftKey" | "metaKey" | "ctrlKey" | "altKey", boolean>> = {}) => ({
@@ -110,19 +111,26 @@ describe("shortcut assignment", () => {
     ).toEqual({ archive: [{ key: "y" }, { key: "k", mod: true }] });
   });
 
-  it("a change in the store applies to the next key press and is written to the local fallback", () => {
+  it("a change in the store applies to the next key press and is saved in the core", async () => {
+    const core = mockCore();
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "e" }]);
     expect(useShortcutStore.getState().addShortcut("macos", "archive", { key: "y" })).toBeNull();
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "e" }, { key: "y" }]);
     // Windows keeps its own assignment.
     expect(boundShortcuts("archive", "windows")).toEqual([{ key: "e" }]);
-    expect(loadStoredOverrides().macos).toEqual({ archive: [{ key: "e" }, { key: "y" }] });
+    await vi.waitFor(() => {
+      expect(core.ui.preferences.shortcuts.macos).toEqual([
+        { command: "archive", shortcuts: [{ key: "e", shift: false, mod: false }, { key: "y", shift: false, mod: false }] },
+      ]);
+    });
     useShortcutStore.getState().removeShortcut("macos", "archive", { key: "E" });
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "y" }]);
     expect(useShortcutStore.getState().addShortcut("macos", "reply", { key: "y" })).toEqual({ kind: "conflict", other: "archive" });
     useShortcutStore.getState().resetCommand("macos", "archive");
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "e" }]);
-    expect(loadStoredOverrides().macos).toEqual({});
+    await vi.waitFor(() => {
+      expect(core.ui.preferences.shortcuts.macos).toEqual([]);
+    });
   });
 });
 

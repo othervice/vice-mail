@@ -40,6 +40,7 @@ import {
 import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useAiPaletteEntries } from "../ai/palette";
+import { useEmlPaletteEntries } from "../eml/palette";
 import { useMailboxes } from "../mailboxes/queries";
 import { useTemplates } from "../snippets/queries";
 
@@ -260,6 +261,8 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
 
   // Stage 13: the AI commands of the panel (none while AI is off).
   entries.push(...useAiPaletteEntries());
+  // Stage 9 (decision 0027): "Open .eml file…".
+  entries.push(...useEmlPaletteEntries());
 
   for (const id of MAIL_VIEW_IDS) {
     const command = VIEW_COMMAND_OF.get(id);

@@ -27,6 +27,7 @@
 //!
 //! **Prefetch** ([`prefetch`]) runs per account after each completed sync pass.
 
+mod eml;
 mod export;
 mod fetch;
 mod files;
@@ -67,7 +68,7 @@ pub use opener::{DesktopOpener, RecordingOpener, SystemOpener};
 pub use remote::RemoteConfig;
 
 use fetch::{Connections, Fetched};
-use links::{Rendering, Renderings};
+use links::{RenderOwner, Rendering, Renderings};
 use prefetch::Prefetcher;
 use view::{Attachment, AttachmentSource, Content};
 
@@ -115,6 +116,8 @@ pub(crate) struct Reading<C: MailConnector> {
     fetching: Mutex<HashSet<MessageId>>,
     pub(crate) prefetch: Prefetcher,
     listener: Mutex<Option<JoinHandle<()>>>,
+    /// Stage 9: `.eml` files opened read-only (decision 0027).
+    eml: eml::EmlFiles,
 }
 
 impl<C: MailConnector> Drop for Reading<C> {
@@ -167,6 +170,7 @@ impl<C: MailConnector + 'static> Reading<C> {
             fetching: Mutex::default(),
             prefetch: Prefetcher::default(),
             listener: Mutex::default(),
+            eml: eml::EmlFiles::default(),
         });
         reading.sweep_later();
         let listener = reading.spawn_listener();
@@ -352,25 +356,50 @@ impl<C: MailConnector + 'static> Reading<C> {
         let own_mail = locations
             .iter()
             .any(|l| matches!(l.role, MailboxRole::Sent | MailboxRole::Drafts));
-        let token = Renderings::new_token();
         let header = content.header(&summary, own_mail);
         let formats = content.formats();
         let problems = content.problems();
         let attachments = content.attachments.iter().map(|a| a.info.clone()).collect();
         let partial = content.partial;
+        let load = match remote {
+            Remote::Load => true,
+            Remote::IfAllowed => match &summary.from {
+                Some(from) if content.shows_html(format) => {
+                    self.store
+                        .remote_content_allowed(summary.account_id, &from.email)
+                        .await?
+                }
+                _ => false,
+            },
+        };
+        let owner = RenderOwner::Message {
+            account: summary.account_id,
+            message: summary.id,
+        };
+        let body = self.render_body(&content, format, load, owner).await?;
+        Ok(MessageView {
+            id: summary.id,
+            account_id: summary.account_id,
+            header,
+            body,
+            formats,
+            attachments,
+            partial,
+            problems,
+        })
+    }
 
+    /// The body of `content` in `format`: sanitised HTML (external images loaded by the core
+    /// when `load`) or text, under a new render token whose links are remembered for `owner`.
+    async fn render_body(
+        &self,
+        content: &Content,
+        format: BodyFormat,
+        load: bool,
+        owner: RenderOwner,
+    ) -> Result<MessageBody, CoreError> {
+        let token = Renderings::new_token();
         let (body, links) = if content.shows_html(format) {
-            let load = match remote {
-                Remote::Load => true,
-                Remote::IfAllowed => match &summary.from {
-                    Some(from) => {
-                        self.store
-                            .remote_content_allowed(summary.account_id, &from.email)
-                            .await?
-                    }
-                    None => false,
-                },
-            };
             let html = content.parsed.html.clone().unwrap_or_default();
             let mut options = RenderOptions::new(token.clone());
             options.inline = content.parsed.inline_images();
@@ -415,24 +444,8 @@ impl<C: MailConnector + 'static> Reading<C> {
                 rendered.links,
             )
         };
-        self.renderings.insert(
-            token,
-            Rendering {
-                account: summary.account_id,
-                message: summary.id,
-                links,
-            },
-        );
-        Ok(MessageView {
-            id: summary.id,
-            account_id: summary.account_id,
-            header,
-            body,
-            formats,
-            attachments,
-            partial,
-            problems,
-        })
+        self.renderings.insert(token, Rendering { owner, links });
+        Ok(body)
     }
 
     /// A body stored without a list preview (for example by an older version) gets one.
@@ -691,7 +704,12 @@ impl<C: MailConnector + 'static> Reading<C> {
             tracing::warn!(index, "click on a link of an unknown rendering ignored");
             return false;
         };
-        tracing::debug!(message = rendering.message.0, index, "link clicked");
+        match &rendering.owner {
+            RenderOwner::Message { message, .. } => {
+                tracing::debug!(message = message.0, index, "link clicked");
+            }
+            RenderOwner::File(_) => tracing::debug!(index, "link of an opened file clicked"),
+        }
         self.emit(CoreEvent::LinkActivated {
             render_token: token,
             index,

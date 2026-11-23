@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use mail_model::{AccountId, CoreError, DraftId, MessageId};
+use mail_model::{AccountId, CoreError, DraftId, EmlFile, EmlFileId, MessageId};
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -23,6 +23,11 @@ pub(crate) const MESSAGE_WINDOW_PREFIX: &str = "message-";
 
 /// Labels of composer windows start with this (and match `composer-*` in the capability).
 pub(crate) const COMPOSER_WINDOW_PREFIX: &str = "composer-";
+
+/// Stage 9 (decision 0027): windows of opened `.eml` files are message windows
+/// (`message-file-<id>`): the same capability, guards and layout, and no label of a stored
+/// message can look like one (those continue with a UUID without hyphens and a number).
+pub(crate) const EML_WINDOW_PREFIX: &str = "message-file-";
 
 /// Initial and smallest size of a message or composer window (logical pixels).
 const MESSAGE_WINDOW_SIZE: (f64, f64) = (900.0, 760.0);
@@ -46,6 +51,51 @@ pub fn message_window_path(account: AccountId, message: MessageId) -> String {
         account.as_uuid().hyphenated(),
         message.0
     )
+}
+
+/// The label of the window of an opened `.eml` file: `message-file-<file id>`.
+pub fn eml_window_label(file: &EmlFileId) -> String {
+    format!("{EML_WINDOW_PREFIX}{}", file.as_str())
+}
+
+/// The page of an `.eml` window: the app's own entry with `window=eml&fileId=<id>`.
+pub fn eml_window_path(file: &EmlFileId) -> String {
+    format!("index.html?window=eml&fileId={}", file.as_str())
+}
+
+/// Opens the window of an opened `.eml` file, titled with the file's name. The core forgets
+/// the file (bytes and renderings) when the window is gone.
+pub fn open_eml_window<R: Runtime>(
+    app: &AppHandle<R>,
+    file: &EmlFile,
+    theme: Option<Theme>,
+) -> tauri::Result<WebviewWindow<R>> {
+    let window = open_window(
+        app,
+        &eml_window_label(&file.id),
+        &eml_window_path(&file.id),
+        &file.name,
+        theme,
+        MESSAGE_WINDOW_SIZE,
+    )?;
+    let closing = app.clone();
+    let id = file.id.clone();
+    window.on_window_event(move |event| {
+        forget_eml_file(&closing, &id, event);
+    });
+    Ok(window)
+}
+
+/// The window of an opened file is gone: the core forgets the file. `true` if it did.
+pub(crate) fn forget_eml_file<R: Runtime>(
+    app: &AppHandle<R>,
+    file: &EmlFileId,
+    event: &tauri::WindowEvent,
+) -> bool {
+    matches!(event, tauri::WindowEvent::Destroyed)
+        && app
+            .try_state::<mail_engine::AppCore>()
+            .is_some_and(|core| core.close_eml_file(file))
 }
 
 /// The label of the composer window of one draft: `composer-<draft uuid>`.
@@ -258,6 +308,24 @@ mod tests {
             .parse()
             .expect("account id");
         (account, MessageId(42))
+    }
+
+    #[test]
+    fn eml_windows_are_message_windows_with_their_own_query() {
+        let file = EmlFileId::from_random(0xfeed);
+        let label = eml_window_label(&file);
+        assert_eq!(label, "message-file-0000000000000000000000000000feed");
+        assert!(
+            label.starts_with(MESSAGE_WINDOW_PREFIX),
+            "the message windows' capability"
+        );
+        assert_eq!(layout_slot(&label).expect("slot"), "message");
+        let (account, message) = ids();
+        assert!(!message_window_label(account, message).starts_with(EML_WINDOW_PREFIX));
+        assert_eq!(
+            eml_window_path(&file),
+            "index.html?window=eml&fileId=0000000000000000000000000000feed"
+        );
     }
 
     #[test]

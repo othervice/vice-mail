@@ -18,6 +18,7 @@ mod capabilities;
 mod category;
 mod compose;
 mod contacts;
+mod eml;
 mod error;
 mod ids;
 mod inbox;
@@ -29,6 +30,7 @@ mod message;
 mod outbox;
 mod reading;
 mod role;
+mod saved_search;
 pub mod search;
 mod secret;
 mod send;
@@ -91,6 +93,10 @@ pub use contacts::{
     ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactPage,
     ContactRequestError, DuplicateReason, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN,
 };
+pub use eml::{
+    EmlError, EmlFile, EmlFileId, EmlMessageView, MAX_EML_FILE_BYTES, MAX_OPEN_EML_FILES,
+    OpenEmlFileResult,
+};
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
 pub use inbox::{
@@ -119,8 +125,8 @@ pub use mcp::{
     McpSetup, McpStatus, McpTestProblem, McpTool,
 };
 pub use message::{
-    Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageActivity,
-    MessageHeader, MessageListItem, MessagePage, sort_date,
+    Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_MESSAGES_BY_IDS, MAX_SORT_DATE,
+    MessageActivity, MessageHeader, MessageListItem, MessagePage, sort_date,
 };
 pub use outbox::{
     ActionError, ActionKind, ActionResult, AppendSource, BatchId, ConflictReason, Flag,
@@ -137,6 +143,10 @@ pub use reading::{
     parse_link_placeholder,
 };
 pub use role::{RoleAssignment, RoleInput, assign_roles};
+pub use saved_search::{
+    MAX_RECENT_SEARCHES, MAX_SAVED_SEARCH_NAME_CHARS, MAX_SAVED_SEARCHES, RecentSearch,
+    SavedSearch, SavedSearchError, SavedSearchId, clean_saved_search_name, clean_search_query,
+};
 pub use secret::Secret;
 pub use send::{
     Envelope, MailSender, RecipientRefusal, SendFuture, SendOutcome, SendRejection, SmtpLimits,

@@ -51,7 +51,8 @@ fn fill(device: &mut Device) {
             .expect("view");
         device.put(
             &key,
-            json!({ "query": format!("from:x{n}@example.org is:unread") }),
+            json!({ "name": format!("View {n}"), "query": format!("from:x{n}@example.org is:unread"),
+                    "position": n }),
         );
     }
     assert_eq!(device.state.records().len(), 1000);

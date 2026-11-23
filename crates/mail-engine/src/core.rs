@@ -692,6 +692,16 @@ impl<C: Connector> AppCore<C> {
         Ok(self.store()?.list_messages(mailbox, cursor, limit).await?)
     }
 
+    /// Stage 13 (decision 0027): the list rows of `ids` in the order asked (the AI panel names
+    /// and opens the sources of an answer). Unknown ids are left out; at most
+    /// [`mail_model::MAX_MESSAGES_BY_IDS`] ids, else `invalid_argument`.
+    pub async fn get_messages_by_ids(
+        &self,
+        ids: Vec<MessageId>,
+    ) -> Result<Vec<mail_model::MessageListItem>, CoreError> {
+        Ok(self.store()?.message_items(ids).await?)
+    }
+
     // -----------------------------------------------------------------------------------------
     // Actions and the outbox (stage 4, see `crate::outbox`)
     // -----------------------------------------------------------------------------------------

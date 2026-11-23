@@ -449,7 +449,8 @@ describe("read-only accounts", () => {
     const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
     // Stage 9: pins, snoozes and tasks are local marks and stay available on read-only accounts.
     // Stage 5: replying and forwarding write local drafts; sending explains read-only itself.
-    const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward", "Forward as attachment"]);
+    // Stage 8: opening the message in a window of its own changes nothing either.
+    const local = new Set(["Pin", "Snooze", "Mark as task", "Reply", "Reply all", "Forward", "Forward as attachment", "Open in new window"]);
     for (const button of within(toolbar).getAllByRole("button")) {
       if (local.has(button.getAttribute("aria-label") ?? "")) continue;
       expect(button.getAttribute("aria-disabled")).toBe("true");

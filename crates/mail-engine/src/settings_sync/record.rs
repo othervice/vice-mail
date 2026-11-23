@@ -743,8 +743,19 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
                 ));
             }
         }
-        // No local table yet (saved views, AI settings): any object, kept as it is.
-        RecordKind::SavedView | RecordKind::AiSettings => {
+        // Stage 7 (decision 0026): a saved search, checked like one saved here.
+        RecordKind::SavedView => {
+            let view =
+                SavedViewContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if mail_model::clean_saved_search_name(&view.name).as_deref() != Some(&view.name) {
+                return Err(invalid("not a usable name for a saved search".into()));
+            }
+            if mail_model::clean_search_query(&view.query).as_deref() != Some(&view.query) {
+                return Err(invalid("not a usable query for a saved search".into()));
+            }
+        }
+        // No local table yet (AI settings): any object, kept as it is.
+        RecordKind::AiSettings => {
             if !value.is_object() {
                 return Err(invalid("content is not a JSON object".into()));
             }
@@ -937,6 +948,16 @@ pub struct RuleContent {
 pub struct SenderRuleContent {
     pub category: Option<mail_model::MessageCategory>,
     pub important: bool,
+}
+
+/// Content of a saved search (stage 7, decision 0026): name and query as stored (cleaned), and
+/// its place in the sidebar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SavedViewContent {
+    pub name: String,
+    pub query: String,
+    pub position: i64,
 }
 
 /// Content of an account group.
@@ -1192,8 +1213,13 @@ mod tests {
         )
         .expect("maxTokens");
         SyncContent::new(
-            RecordKind::SavedView,
+            RecordKind::AiSettings,
             json!({ "keyword": "passport", "passive": true }),
+        )
+        .expect("passport");
+        SyncContent::new(
+            RecordKind::SavedView,
+            json!({ "name": "Reisepass", "query": "passport", "position": 0 }),
         )
         .expect("passport");
     }
@@ -1261,5 +1287,28 @@ mod tests {
             SyncRecord::content(key, v1, content).is_err(),
             "kind mismatch"
         );
+    }
+
+    /// Stage 7 (decision 0026): saved searches have a strict shape, checked like a local save.
+    #[test]
+    fn saved_views_are_shaped_like_saved_searches() {
+        let ok =
+            json!({ "name": "Rechnungen", "query": "from:bank has:attachment", "position": 3 });
+        assert!(SyncContent::new(RecordKind::SavedView, ok).is_ok());
+        for bad in [
+            json!({ "query": "is:unread" }),
+            json!({ "name": "x", "query": "y", "position": 0, "scope": "all" }),
+            json!({ "name": "", "query": "y", "position": 0 }),
+            json!({ "name": " padded ", "query": "y", "position": 0 }),
+            json!({ "name": "x", "query": "  ", "position": 0 }),
+            json!({ "name": "x", "query": "a".repeat(2049), "position": 0 }),
+            json!({ "name": "x".repeat(101), "query": "y", "position": 0 }),
+            json!({ "name": "x", "query": "y", "position": "first" }),
+        ] {
+            assert!(
+                SyncContent::new(RecordKind::SavedView, bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
     }
 }

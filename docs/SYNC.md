@@ -128,7 +128,7 @@ history) and `ui.layout.<slot>` (window layouts) stay local.
 | `signature` | signature UUID (a stage 5 text signature kept its identity's UUID) | newer wins, edit beats delete | applied | 256 KiB | `signature` |
 | `template` | UUID | newer wins, edit beats delete | applied | 256 KiB | `template` |
 | `rule` | UUID | newer wins, edit beats delete | applied | 16 KiB | `rule` |
-| `savedView` | UUID | newer wins, edit beats delete | applied | 16 KiB | none yet |
+| `savedView` | UUID | newer wins, edit beats delete | applied | 16 KiB | `saved_view` |
 | `snooze` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `snooze` |
 | `pin` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `pin` |
 | `account` | account UUID | per field | **user is asked** | 16 KiB | `account` |
@@ -163,7 +163,8 @@ that set "always as newsletter" for the same sender change the same record.
 | `contact` | `{userName?, mergedInto?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions stay on the device |
 | `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
 | `device` | `{name, system, lastSeenMs}` |
-| `savedView`, `aiSettings` | any object (no local data yet; kept as they are) |
+| `savedView` | `{name, query, position}`: a saved search of the sidebar (stage 7, decision 0026), checked like a local save (name 1 to 100 characters, query 1 to 2048 bytes, both trimmed, no control characters). Names are unique per device only where they are typed; records from other devices are taken over even with a name in use. Recent searches stay on the device |
+| `aiSettings` | any object (no local data yet; kept as they are) |
 
 ### No secrets
 

@@ -11,6 +11,7 @@ import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { UnifiedTree } from "../features/unified/UnifiedTree";
+import { SavedSearchNav } from "../features/search/SavedSearchNav";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
 import { useDropTarget } from "../features/mailboxes/useDropTarget";
@@ -342,6 +343,8 @@ export function IconRail() {
         {expanded && (
           <div id={foldersId} className="flex flex-col gap-4 border-t border-border pt-4">
             <UnifiedTree accountCount={accountList.length} />
+            {/* Stage 7: saved searches as views. */}
+            <SavedSearchNav />
             {accountList.map((account) => (
               <AccountFolders key={account.id} account={account} selected={account.id === selected?.id} />
             ))}

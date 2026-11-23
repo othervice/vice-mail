@@ -1,12 +1,11 @@
 import { create } from "zustand";
-import { readLocal, writeLocal } from "../features/keyboard/localFallback";
+import { cleanRecent, saveUiPreferences } from "../features/keyboard/uiPreferences";
+import type { CoreError } from "../services/ipc";
 
-const MAX_RECENT = 5;
-
-function loadRecent(): string[] {
-  const raw = readLocal("paletteRecent");
+/** Recent palette commands as the local fallback of an earlier version stored them (migration only). */
+export function parseStoredRecent(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((entry): entry is string => typeof entry === "string" && entry.length < 200).slice(0, MAX_RECENT);
+  return cleanRecent(raw.filter((entry): entry is string => typeof entry === "string"));
 }
 
 interface PaletteState {
@@ -21,13 +20,21 @@ interface PaletteState {
   openOverview: () => void;
   closeOverview: () => void;
   noteUsed: (key: string) => void;
+  /** The core could not store the recent list; the previous list applies again. */
+  saveError: CoreError | null;
+  /** What the core holds (load, another window). */
+  applyStored: (recent: readonly string[]) => void;
 }
 
 /** Stage 8: command palette and shortcut overview. */
-export const usePaletteStore = create<PaletteState>()((set) => ({
+export const usePaletteStore = create<PaletteState>()((set, get) => ({
   open: false,
   overview: false,
-  recent: loadRecent(),
+  recent: [],
+  saveError: null,
+  applyStored: (recent) => {
+    set({ recent });
+  },
   openPalette: () => {
     set({ open: true, overview: false });
   },
@@ -41,14 +48,10 @@ export const usePaletteStore = create<PaletteState>()((set) => ({
     set({ overview: false });
   },
   noteUsed: (key) => {
-    set((state) => {
-      const recent = [key, ...state.recent.filter((entry) => entry !== key)].slice(0, MAX_RECENT);
-      writeLocal("paletteRecent", recent);
-      return { recent };
+    const recent = cleanRecent([key, ...get().recent.filter((entry) => entry !== key)]);
+    set({ recent, saveError: null });
+    saveUiPreferences({ recentCommands: recent }).catch((error: unknown) => {
+      set({ saveError: error as CoreError });
     });
   },
 }));
-
-export function reloadPaletteRecent(): void {
-  usePaletteStore.setState({ recent: loadRecent() });
-}

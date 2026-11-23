@@ -230,6 +230,13 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.create_account_group("Work".into(), vec![account])
         .await
         .expect("group");
+    // Stage 7 (decision 0026): a saved search is a record; a recent search is not.
+    core.save_search("Unread".into(), "is:unread".into())
+        .await
+        .expect("saved search");
+    core.add_recent_search("from:bob".into())
+        .await
+        .expect("recent search");
     let store = core.store_for_tests();
     store
         .allow_remote_content(account, "bob@friends.example")
@@ -267,7 +274,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     let mcp_key = mcp.token.rsplit('_').next().expect("key part").to_owned();
 
     let captured = kinds(&core).await;
-    let without_table = [RecordKind::SavedView, RecordKind::AiSettings];
+    let without_table = [RecordKind::AiSettings];
     for kind in RecordKind::ALL {
         if without_table.contains(&kind) {
             continue;
@@ -315,6 +322,11 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         assert!(
             !text.contains("writesEnabled"),
             "{}: writesEnabled",
+            row.kind
+        );
+        assert!(
+            !text.contains("from:bob"),
+            "{}: a recent search (device only) in a record",
             row.kind
         );
         assert!(
@@ -460,6 +472,11 @@ fn captured_content_of_every_table_passes_its_kind() {
             "accountGroup",
             account,
             serde_json::json!({ "name": "g", "position": 0, "accounts": [account] }),
+        ),
+        (
+            "savedView",
+            account,
+            serde_json::json!({ "name": "Unread", "query": "is:unread", "position": 0 }),
         ),
         (
             "remoteContent",

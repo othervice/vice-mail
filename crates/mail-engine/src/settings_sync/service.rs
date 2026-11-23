@@ -949,6 +949,10 @@ impl<C: Connector> AppCore<C> {
         if any(&["template"]) {
             self.emit_event(CoreEvent::TemplatesChanged);
         }
+        // Stage 7 (decision 0026): saved searches from another device.
+        if any(&["savedView"]) {
+            self.emit_event(CoreEvent::SavedSearchesChanged);
+        }
         if any(&["senderRule"]) {
             self.comfort().kick_categories();
         }

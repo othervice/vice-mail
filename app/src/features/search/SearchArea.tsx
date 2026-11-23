@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
-import type { AccountGroupId, AccountId, MailboxId, SearchScope } from "../../services/ipc";
+import { useRef, useState, type ReactNode } from "react";
+import { toCoreError, type AccountGroupId, type AccountId, type MailboxId, type SearchScope } from "../../services/ipc";
 import { useSearchStore, type SearchScopeChoice } from "../../stores/search";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import { useAccounts } from "../accounts/queries";
 import { useSearchPages, type SearchInput } from "./queries";
+import { useAddRecentSearch } from "./savedQueries";
 import { SearchBar } from "./SearchBar";
 import { SearchResults } from "./SearchResults";
 import { monthFirstFor } from "./terms";
@@ -72,6 +73,19 @@ export function SearchArea({ context, platform, children }: SearchAreaProps) {
     open && searched.trim() ? { query: searched, scope: scopeOf(effective, context), typing: !submitted, monthFirst } : null;
   const results = useSearchPages(input);
   const page = results.isPlaceholderData ? undefined : results.data?.pages[0];
+  // Stage 7: a search counts as used (a recent search) on Enter, a picked recent search, or
+  // when one of its hits is opened. The core moves a repeated one to the top.
+  const addRecent = useAddRecentSearch();
+  const recorded = useRef<string | null>(null);
+  const record = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    recorded.current = trimmed;
+    addRecent.mutate(trimmed);
+  };
+  const recordUse = () => {
+    if (input && input.query.trim() !== recorded.current) record(input.query);
+  };
 
   return (
     <>
@@ -86,9 +100,11 @@ export function SearchArea({ context, platform, children }: SearchAreaProps) {
             closeSearch();
             focusList();
           }}
+          onRecord={record}
+          recordError={addRecent.isError ? toCoreError(addRecent.error) : null}
         />
       )}
-      {open && input ? <SearchResults query={results} input={input} accounts={accounts} platform={platform} /> : children}
+      {open && input ? <SearchResults query={results} input={input} accounts={accounts} platform={platform} onUse={recordUse} /> : children}
     </>
   );
 }

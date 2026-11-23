@@ -5,9 +5,9 @@ import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
-import type { AttachmentInfo, IpcError, MessageId } from "../../services/ipc";
+import type { AttachmentInfo, EmlFileId, IpcError, MessageId } from "../../services/ipc";
 import { ATTACHMENT_ICONS, attachmentKind, fileType, formatSize } from "./format";
-import { useOpenAttachment, useSaveAttachment } from "./queries";
+import { useOpenAttachment, useSaveAttachment, type AttachmentOwner } from "./queries";
 
 /** What the last action on an attachment left to say, shown under the list in full width. */
 type Feedback =
@@ -15,7 +15,7 @@ type Feedback =
   | { kind: "error"; context: string; error: IpcError };
 
 interface AttachmentItemProps {
-  messageId: MessageId;
+  owner: AttachmentOwner;
   attachment: AttachmentInfo;
   /** Opening it needs the warning first (the list marked it, or the core asked). */
   onNeedsConfirmation: (attachment: AttachmentInfo) => void;
@@ -24,10 +24,10 @@ interface AttachmentItemProps {
 }
 
 /** One attachment in one line: type symbol, name, type and size, Save and Open. */
-function AttachmentItem({ messageId, attachment, onNeedsConfirmation, onFeedback, confirming }: AttachmentItemProps) {
+function AttachmentItem({ owner, attachment, onNeedsConfirmation, onFeedback, confirming }: AttachmentItemProps) {
   const { t, i18n } = useTranslation();
-  const save = useSaveAttachment(messageId, attachment.index);
-  const open = useOpenAttachment(messageId, attachment.index);
+  const save = useSaveAttachment(owner, attachment.index);
+  const open = useOpenAttachment(owner, attachment.index);
   const Icon = ATTACHMENT_ICONS[attachmentKind(attachment.mimeType, attachment.executable)];
   const size = formatSize(attachment.size, i18n.language);
   const details = t("reading.attachments.details", {
@@ -117,7 +117,7 @@ function AttachmentItem({ messageId, attachment, onNeedsConfirmation, onFeedback
 }
 
 interface ExecutableWarningProps {
-  messageId: MessageId;
+  owner: AttachmentOwner;
   attachment: AttachmentInfo;
   onDone: () => void;
   onFeedback: (feedback: Feedback | null) => void;
@@ -127,9 +127,9 @@ interface ExecutableWarningProps {
  * The warning before a file that can run code is opened (programs, scripts, documents with
  * macros). Opening needs this second, explicit click; the core gets `confirmedExecutable`.
  */
-function ExecutableWarning({ messageId, attachment, onDone, onFeedback }: ExecutableWarningProps) {
+function ExecutableWarning({ owner, attachment, onDone, onFeedback }: ExecutableWarningProps) {
   const { t } = useTranslation();
-  const open = useOpenAttachment(messageId, attachment.index);
+  const open = useOpenAttachment(owner, attachment.index);
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -181,16 +181,20 @@ function ExecutableWarning({ messageId, attachment, onDone, onFeedback }: Execut
   );
 }
 
-interface AttachmentsProps {
-  messageId: MessageId;
+type AttachmentsProps = (
+  | { messageId: MessageId; fileId?: undefined }
+  /** Stage 9 (decision 0027): the attachments of an opened `.eml` file, saved and opened by the core too. */
+  | { fileId: EmlFileId; messageId?: undefined }
+) & {
   attachments: readonly AttachmentInfo[];
   /** Only the text parts of this message are stored; the attachments come on demand. */
   partial: boolean;
-}
+};
 
 /** The attachments under the head: one line each; warning, result and errors below the list. */
-export function Attachments({ messageId, attachments, partial }: AttachmentsProps) {
+export function Attachments({ messageId, fileId, attachments, partial }: AttachmentsProps) {
   const { t } = useTranslation();
+  const owner: AttachmentOwner = fileId !== undefined ? { fileId } : { messageId };
   const [confirm, setConfirm] = useState<AttachmentInfo | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const partialNote = partial && (
@@ -212,7 +216,7 @@ export function Attachments({ messageId, attachments, partial }: AttachmentsProp
         {attachments.map((attachment) => (
           <AttachmentItem
             key={attachment.index}
-            messageId={messageId}
+            owner={owner}
             attachment={attachment}
             confirming={confirm?.index === attachment.index}
             onNeedsConfirmation={setConfirm}
@@ -223,7 +227,7 @@ export function Attachments({ messageId, attachments, partial }: AttachmentsProp
       {confirm && (
         <ExecutableWarning
           key={confirm.index}
-          messageId={messageId}
+          owner={owner}
           attachment={confirm}
           onFeedback={setFeedback}
           onDone={() => {

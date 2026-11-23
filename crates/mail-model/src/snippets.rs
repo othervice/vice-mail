@@ -23,7 +23,7 @@ pub const MAX_SIGNATURE_IMAGE_BYTES: u64 = 64 * 1024;
 pub const MAX_SIGNATURE_IMAGES_BYTES: u64 = 128 * 1024;
 
 /// A lower-case hyphenated UUID, shared by [`SignatureId`] and [`TemplateId`].
-fn parse_uuid(text: &str) -> Option<String> {
+pub(crate) fn parse_uuid(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let shaped = bytes.len() == 36
         && bytes.iter().enumerate().all(|(i, b)| match i {
@@ -33,7 +33,7 @@ fn parse_uuid(text: &str) -> Option<String> {
     shaped.then(|| text.to_ascii_lowercase())
 }
 
-fn uuid_from_random(bits: u128) -> String {
+pub(crate) fn uuid_from_random(bits: u128) -> String {
     let bits = (bits & !(0xf << 76) & !(0x3 << 62)) | (0x4 << 76) | (0x2 << 62);
     let hex = format!("{bits:032x}");
     format!(
@@ -59,12 +59,12 @@ macro_rules! uuid_id {
         impl $name {
             /// `None` unless `text` is a hyphenated UUID (any case; kept in lower case).
             pub fn parse(text: &str) -> Option<Self> {
-                parse_uuid(text).map(Self)
+                $crate::snippets::parse_uuid(text).map(Self)
             }
 
             /// From 128 random bits (the engine draws them), as a UUID v4.
             pub fn from_random(bits: u128) -> Self {
-                Self(uuid_from_random(bits))
+                Self($crate::snippets::uuid_from_random(bits))
             }
 
             pub fn as_str(&self) -> &str {
@@ -79,6 +79,8 @@ macro_rules! uuid_id {
         }
     };
 }
+/// Also used for the ids of saved searches (stage 7, decision 0026).
+pub(crate) use uuid_id;
 
 uuid_id!(
     /// Id of a signature: a UUID, the same on every device (the sync record id). A signature

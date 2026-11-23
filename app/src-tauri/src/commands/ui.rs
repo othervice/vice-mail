@@ -117,7 +117,7 @@ pub async fn open_composer_window<R: Runtime>(
 }
 
 /// The window frame's theme for a new window, from the stored preferences.
-async fn theme(core: &AppCore) -> Option<tauri::Theme> {
+pub(crate) async fn theme(core: &AppCore) -> Option<tauri::Theme> {
     match core.get_preferences().await {
         Ok(preferences) => crate::window_theme::window_theme(preferences.theme),
         Err(_) => None,

@@ -921,10 +921,16 @@ fn message_window_opens_once_with_the_main_windows_permissions() {
     };
     let main = app.get_webview_window("main").expect("main window");
     let close_main = invoke_from(&main, "plugin:window|close", json!({ "label": "main" }));
-    assert!(not_allowed(&close_main), "the main window must not close itself: {close_main:?}");
+    assert!(
+        not_allowed(&close_main),
+        "the main window must not close itself: {close_main:?}"
+    );
     let label = window.label().to_owned();
     let close_message = invoke_from(&window, "plugin:window|close", json!({ "label": label }));
-    assert!(!not_allowed(&close_message), "a message window may close itself: {close_message:?}");
+    assert!(
+        !not_allowed(&close_message),
+        "a message window may close itself: {close_message:?}"
+    );
     // A window outside the capability's labels has no permission at all.
     let stranger = WebviewWindowBuilder::new(&app, "stranger", Default::default())
         .build()
@@ -988,4 +994,227 @@ fn message_window_opens_once_with_the_main_windows_permissions() {
     );
     assert!(!decide(&placeholder.parse().expect("url")));
     assert!(!decide(&"https://example.com/".parse().expect("url")));
+}
+
+/// Stage 7 (decision 0026): saved and recent searches through the real command handler, with
+/// the typed error codes on the wire.
+#[test]
+fn saved_and_recent_searches_cross_the_bridge() {
+    let h = harness(|_| {});
+    let saved = invoke(
+        &h,
+        "save_search",
+        json!({ "name": " Unread ", "query": "is:unread" }),
+    )
+    .expect("save_search");
+    assert_eq!(saved["name"], "Unread");
+    assert_eq!(saved["query"], "is:unread");
+    let id = saved["id"].as_str().expect("id").to_owned();
+    let err =
+        invoke(&h, "save_search", json!({ "name": "unread", "query": "x" })).expect_err("taken");
+    assert_eq!(err["code"], "saved_search_exists", "{err}");
+    let renamed = invoke(
+        &h,
+        "rename_saved_search",
+        json!({ "savedSearchId": id, "name": "Neu" }),
+    )
+    .expect("rename");
+    assert_eq!(renamed["name"], "Neu");
+    let list = invoke(&h, "list_saved_searches", json!({})).expect("list");
+    assert_eq!(list.as_array().map(Vec::len), Some(1));
+    invoke(&h, "delete_saved_search", json!({ "savedSearchId": id })).expect("delete");
+    let err = invoke(&h, "delete_saved_search", json!({ "savedSearchId": id })).expect_err("gone");
+    assert_eq!(err["code"], "not_found");
+
+    let recent = invoke(&h, "add_recent_search", json!({ "query": "from:bob" })).expect("add");
+    assert_eq!(recent[0]["query"], "from:bob");
+    assert!(recent[0]["usedAt"].is_number());
+    invoke(&h, "clear_recent_searches", json!({})).expect("clear");
+    let recent = invoke(&h, "list_recent_searches", json!({})).expect("list");
+    assert_eq!(recent, json!([]));
+}
+
+/// Stage 9 (decision 0027): an `.eml` file the system hands over opens read-only in a message
+/// window of its own (the main window's permissions), is served by the core through the reading
+/// pipeline, keeps a refusal for its window, and is forgotten when the window closes. Stage 13:
+/// `get_messages_by_ids` names stored messages and leaves unknown ones out.
+#[test]
+fn eml_files_open_in_message_windows_and_messages_come_by_id() {
+    let dir = TempDir::new().expect("temp dir");
+    seed_account(dir.path());
+    let specta = specta_builder::<MockRuntime>();
+    let app = mock_builder()
+        .invoke_handler(specta.invoke_handler())
+        .build(context())
+        .expect("mock app with the real config");
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
+    attach_core(app.handle(), &specta, core);
+    let main = open_main_window(app.handle(), None).expect("open main window");
+
+    let files = TempDir::new().expect("files");
+    let good = files.path().join("Letter.eml");
+    fs::write(
+        &good,
+        "From: Grace <grace@example.org>\r\nSubject: From a file\r\nContent-Type: text/html\r\n\r\n\
+         <p>Hi <img src=\"https://tracker.example/p.png\"><script>x()</script></p>\r\n",
+    )
+    .expect("write");
+    let bad = files.path().join("notes.eml");
+    fs::write(&bad, "no mail here").expect("write");
+    let paths = eml_files::eml_arguments(
+        vec![
+            good.display().to_string(),
+            "mailto:bob@example.org".into(),
+            bad.display().to_string(),
+        ],
+        None,
+    );
+    assert_eq!(paths, [good.clone(), bad.clone()]);
+    eml_files::open_files(app.handle(), paths);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let eml_windows = || {
+        app.webview_windows()
+            .into_values()
+            .filter(|w| w.label().starts_with("message-file-"))
+            .collect::<Vec<_>>()
+    };
+    while eml_windows().len() < 2 {
+        assert!(std::time::Instant::now() < deadline, "no eml windows");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let file_id = |w: &WebviewWindow<MockRuntime>| {
+        let url = w.url().expect("url");
+        assert_eq!(url.path(), "/index.html");
+        url.query_pairs()
+            .find(|(k, _)| k == "fileId")
+            .map(|(_, v)| v.into_owned())
+            .expect("fileId")
+    };
+    // The window of the readable file is the one the core serves; the other keeps its error.
+    let (served, refused): (Vec<_>, Vec<_>) = eml_windows().into_iter().partition(|w| {
+        invoke_from(
+            w,
+            "get_eml_message",
+            json!({ "fileId": file_id(w), "format": "auto" }),
+        )
+        .is_ok()
+    });
+    assert_eq!((served.len(), refused.len()), (1, 1));
+    let (letter, notes) = (&served[0], &refused[0]);
+    let letter_id = file_id(letter);
+    assert_eq!(
+        letter.url().expect("url").query(),
+        Some(format!("window=eml&fileId={letter_id}").as_str())
+    );
+
+    let view = invoke_from(
+        letter,
+        "get_eml_message",
+        json!({ "fileId": letter_id, "format": "auto" }),
+    )
+    .expect("view");
+    assert_eq!(view["fileName"], "Letter.eml");
+    assert_eq!(view["header"]["subject"], "From a file");
+    assert_eq!(view["body"]["kind"], "html");
+    assert_eq!(view["body"]["blockedRemote"], 1);
+    let srcdoc = view["body"]["srcdoc"].as_str().expect("srcdoc");
+    assert!(!srcdoc.contains("<script") && !srcdoc.contains("tracker.example"));
+    let err = invoke_from(
+        notes,
+        "get_eml_message",
+        json!({ "fileId": file_id(notes), "format": "auto" }),
+    )
+    .expect_err("not a mail");
+    assert_eq!(code_of(&err), Some("eml_invalid"), "{err}");
+    let err = invoke_from(
+        letter,
+        "get_eml_message",
+        json!({ "fileId": "../../etc/passwd", "format": "auto" }),
+    )
+    .expect_err("not an id");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    let err = invoke_from(
+        letter,
+        "open_eml_attachment",
+        json!({ "fileId": letter_id, "index": 0, "confirmedExecutable": false }),
+    )
+    .expect_err("no attachment");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    // A message window: it may listen to core events, and its layout is the message windows'.
+    assert!(
+        invoke_from(
+            letter,
+            "plugin:event|listen",
+            json!({ "event": CORE_EVENT_NAME, "target": { "kind": "Any" }, "handler": 7 }),
+        )
+        .is_ok()
+    );
+    assert!(invoke_from(letter, "get_window_layout", json!({})).is_ok());
+
+    // Closing the window forgets the file (the mock runtime sends no window events, so the
+    // hook the window is built with is called as Tauri calls it).
+    let id = mail_model::EmlFileId::parse(&letter_id).expect("id");
+    assert!(!windows::forget_eml_file(
+        app.handle(),
+        &id,
+        &tauri::WindowEvent::Focused(false)
+    ));
+    assert!(windows::forget_eml_file(
+        app.handle(),
+        &id,
+        &tauri::WindowEvent::Destroyed
+    ));
+    let err = invoke_from(
+        &main,
+        "get_eml_message",
+        json!({ "fileId": letter_id, "format": "auto" }),
+    )
+    .expect_err("forgotten");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+
+    // Stage 13: messages by id, in the order asked; unknown ones left out; bounded.
+    let mailboxes = invoke_from(
+        &main,
+        "list_mailboxes",
+        json!({ "accountId": SEEDED_ACCOUNT }),
+    )
+    .expect("mailboxes");
+    let inbox = mailboxes
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["path"] == "INBOX")
+        .map(|m| m["id"].clone())
+        .expect("inbox");
+    let page = invoke_from(
+        &main,
+        "list_messages",
+        json!({ "mailboxId": inbox, "cursor": null, "limit": 10 }),
+    )
+    .expect("list");
+    let first = page["items"][0]["id"].as_i64().expect("message id");
+    let items = invoke_from(
+        &main,
+        "get_messages_by_ids",
+        json!({ "messageIds": [999_999, first] }),
+    )
+    .expect("by ids");
+    let items = items.as_array().expect("array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], first);
+    assert_eq!(items[0]["accountId"], SEEDED_ACCOUNT);
+    let too_many: Vec<i64> = (1..=i64::from(mail_model::MAX_MESSAGES_BY_IDS) + 1).collect();
+    let err = invoke_from(
+        &main,
+        "get_messages_by_ids",
+        json!({ "messageIds": too_many }),
+    )
+    .expect_err("too many");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
 }

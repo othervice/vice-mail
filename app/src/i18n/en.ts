@@ -139,9 +139,9 @@ export const en = {
     quote: {
       include: "Quote the original message",
       includeForward: "Include the forwarded message",
-      position: "Place it",
-      below: "below my text",
-      above: "above my text",
+      position: "My text goes",
+      below: "below the quote",
+      above: "above the quote",
       formattedOnly: "The original message is included as formatted text.",
     },
     attachments: {
@@ -627,6 +627,8 @@ export const en = {
       forwardAsAttachment: "Forward as attachment",
       compose: "New message",
       editDraft: "Edit draft",
+      // Stage 8
+      openInWindow: "Open in new window",
     },
     readOnly: {
       label: "Read-only",
@@ -680,6 +682,8 @@ export const en = {
       action: "The action could not be carried out.",
       undo: "The action could not be undone.",
       markRead: "The message could not be marked as read.",
+      window: "The message could not be opened in a new window.",
+      emlFile: "The file could not be opened.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",
     operationFailed_other: "{{count, number}} changes could not be made on the server: {{action}}",
@@ -1436,6 +1440,7 @@ export const en = {
     results_one: "{{count}} command",
     results_other: "{{count}} commands",
     refused: "{{label}}: {{reason}}",
+    recentFailed: "The recently used commands could not be saved.",
     goTo: "Go to {{name}}",
     openFolder: "Open folder {{name}}",
     switchAccount: "Switch to {{name}}",
@@ -1515,7 +1520,8 @@ export const en = {
       removed: "{{shortcut}} removed from {{label}}.",
       resetDone: "{{label}} uses its standard shortcuts again.",
       resetAllDone: "All shortcuts are back to standard.",
-      saveFailed: "The change could not be stored on this computer. It works until the app quits.",
+      saveFailed: "The change could not be saved. The previous shortcuts apply again.",
+      loadFailed: "Your shortcuts could not be loaded. The standard shortcuts apply for now.",
       problems: {
         system: "{{shortcut}} belongs to the system or to text editing and cannot be assigned.",
         fixed: "{{shortcut}} is used for moving around in the app and cannot be assigned.",
@@ -1566,7 +1572,8 @@ export const en = {
       expand: "Show the sidebar with folders",
       collapse: "Show only the icon rail",
     },
-    saveFailed: "The layout could not be stored on this computer. It applies until the app quits.",
+    saveFailed: "The layout could not be saved. The previous layout applies again.",
+    loadFailed: "The layout of this window could not be loaded. The standard layout applies for now.",
   },
   languages: {
     en: "English",
@@ -1709,6 +1716,54 @@ export const en = {
     groupGone: {
       title: "This group no longer exists",
       body: "It was deleted, perhaps on another device.",
+    },
+  },
+  // Stage 7: recent and saved searches.
+  savedSearches: {
+    recent: {
+      label: "Recent searches",
+      clear: "Clear recent searches",
+      recordFailed: "Could not remember this search",
+      clearFailed: "Could not clear the recent searches",
+    },
+    save: {
+      action: "Save search",
+      formLabel: "Save this search",
+      name: "Name",
+      submit: "Save",
+      cancel: "Cancel",
+      scopeNote: "A saved search looks in all accounts. Narrow it with account: or in:.",
+      saved: "Saved as “{{name}}”. You find it under Saved views.",
+      failed: "Could not save the search",
+    },
+    view: {
+      listLabel: "Saved searches",
+      sidebarLabel: "Saved searches",
+      loadFailed: "Could not load the saved searches",
+      empty: {
+        title: "No saved searches yet",
+        body: "Search for something and choose “Save search”. It then shows up here and in the sidebar.",
+      },
+      query: "Searches for: {{query}}",
+      open: "Show results",
+      back: "All saved searches",
+      gone: {
+        title: "This saved search no longer exists",
+        body: "It was deleted, perhaps on another device.",
+      },
+      rename: "Rename",
+      renameLabel: "Rename “{{name}}”",
+      renameField: "New name for “{{name}}”",
+      renameSave: "Save name",
+      renameCancel: "Cancel",
+      renameFailed: "Could not rename the saved search",
+      delete: "Delete",
+      deleteLabel: "Delete “{{name}}”",
+      deleteTitle: "Delete the saved search “{{name}}”?",
+      deleteBody: "It disappears from the sidebar, with the settings sync also on your other devices. Your mails stay where they are.",
+      deleteConfirm: "Delete",
+      deleteCancel: "Cancel",
+      deleteFailed: "Could not delete the saved search",
     },
   },
   groups: {
@@ -2880,6 +2935,84 @@ export const en = {
         title: "The AI request failed.",
         hint: "Check the provider's address and model in the settings. If it keeps happening, try another model.",
       },
+      // Stage 9 (decision 0027): opening `.eml` files.
+      eml_too_large: {
+        title: "The file is too large to open.",
+        hint: "Open it in another mail program, or save the attachments you need from there.",
+      },
+      eml_invalid: {
+        title: "The file is not an email message.",
+        hint: "Check that you picked an .eml file. An empty file or one without mail headers cannot be shown.",
+      },
+      eml_unreadable: {
+        title: "The file could not be read.",
+        hint: "Check that the file still exists and that you may open it, then try again.",
+      },
+      saved_search_exists: {
+        title: "A saved search with this name exists already.",
+        hint: "Choose another name, or rename or delete the other saved search first.",
+      },
+      saved_search_limit: {
+        title: "You have saved as many searches as possible.",
+        hint: "Delete a saved search you no longer need, then save this one.",
+      },
+    },
+  },
+  // Stage 9 (decision 0027): `.eml` files opened read-only in a window of their own.
+  eml: {
+    region: "Email file",
+    open: "Open .eml file…",
+    keyword: "file",
+    close: "Close window",
+    loadFailed: "The file could not be shown.",
+    readOnly: {
+      title: "Opened from a file",
+      body: "This message is shown read-only. It is not part of any account, so it cannot be answered, moved or deleted here.",
+    },
+    header: {
+      file: "File",
+    },
+    gone: {
+      title: "This file is no longer open",
+      body: "Open it again by double-clicking it, or with “Open .eml file…” in the command palette.",
+    },
+  },
+  // Stage 8 (decision 0025): message and composer windows of their own.
+  windows: {
+    invalid: {
+      title: "This window has nothing to show",
+      body: "It was opened without a message or draft. Close it and open the message again from the main window.",
+    },
+    closeFailed: "The window could not close itself. Close it with its close button.",
+    message: {
+      region: "Message",
+      loadFailed: "The message could not be loaded.",
+      gone: {
+        title: "This message is no longer here",
+        body: "It was deleted or its account was removed. You can close this window.",
+      },
+    },
+    composer: {
+      region: "Composer",
+      open: "Open in own window",
+      openFailed: "The draft could not be opened in its own window.",
+      waiting: {
+        title: "Sending",
+        body: "The window closes once the message can no longer be taken back.",
+      },
+      done: {
+        title: "Done",
+        body: "The draft is saved, sent or discarded. You can close this window.",
+      },
+    },
+  },
+  // Stage 8 (decision 0025): defaults for new replies and forwards (Settings → Writing).
+  writingDefaults: {
+    quotePosition: {
+      label: "Answer in replies and forwards",
+      hint: "Where your text goes in a new reply or forward. You can still change it in each draft.",
+      above: "Above the quoted message",
+      below: "Below the quoted message",
     },
   },
 } as const;

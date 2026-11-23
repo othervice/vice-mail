@@ -1,6 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { refreshQuery } from "../../app/refreshQuery";
 import type { CoreEvent } from "../../services/ipc";
+import { savedSearchesQueryKey } from "./savedQueries";
 
 /** Reloads every cached query under `prefix` that is on screen (each coalesced on its own). */
 function refreshAll(queryClient: QueryClient, prefix: QueryKey): void {
@@ -38,6 +39,10 @@ export function handleSearchEvent(queryClient: QueryClient, event: CoreEvent): v
       for (const prefix of [["accountGroups"], ["hiddenAccounts"], ["identities"], ["threads"], ["thread"], ...MIXED_LISTS]) {
         void queryClient.invalidateQueries({ queryKey: prefix });
       }
+      break;
+    case "savedSearchesChanged":
+      // Saved here, in another window or applied by the settings sync from another device.
+      void queryClient.invalidateQueries({ queryKey: savedSearchesQueryKey });
       break;
     default:
       break;

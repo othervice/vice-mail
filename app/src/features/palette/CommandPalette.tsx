@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
+import { ErrorNotice } from "../../components/ErrorNotice";
 import { usePaletteStore } from "../../stores/palette";
 import { ariaShortcut, formatShortcut, type ShortcutPlatform } from "../actions/shortcuts";
 import { arrangeEntries } from "./arrange";
@@ -39,6 +40,8 @@ function PalettePanel({ platform }: CommandPaletteProps) {
   const id = useId();
   const close = usePaletteStore((state) => state.closePalette);
   const recent = usePaletteStore((state) => state.recent);
+  // Stage 8: the core refused the recent list (it is shown as it was before).
+  const recentError = usePaletteStore((state) => state.saveError);
   const noteUsed = usePaletteStore((state) => state.noteUsed);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -160,6 +163,11 @@ function PalettePanel({ platform }: CommandPaletteProps) {
       <p id={`${id}-status`} aria-live="polite" className={cx("px-4 text-12", refused ? "py-2 text-danger" : "sr-only")}>
         {refused ?? (query.trim() ? t("palette.results", { count }) : "")}
       </p>
+      {recentError && (
+        <div className="shrink-0 border-b border-border p-2">
+          <ErrorNotice context={t("palette.recentFailed")} error={recentError} data-testid="palette-recent-error" />
+        </div>
+      )}
       <div id={listId} role="listbox" aria-label={t("palette.list")} className="min-h-0 flex-1 overflow-y-auto p-2">
         {flat.length === 0 && <p className="px-2 py-3 text-13 text-secondary">{t("palette.empty")}</p>}
         {sections.map((section) => (

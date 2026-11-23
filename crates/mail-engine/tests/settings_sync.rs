@@ -1344,3 +1344,72 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
     b.shutdown().await;
     clean(&env).await;
 }
+
+/// Stage 7 (decision 0026): a saved search reaches the other device (with
+/// `savedSearchesChanged`), a rename and a delete follow; recent searches stay on the device
+/// where they were typed.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn saved_searches_reach_the_other_device_recent_ones_stay() {
+    let _serial = SERVER.lock().await;
+    let env = TestEnv::require();
+    clean(&env).await;
+    let a = Device::first(&env).await;
+    let mut b = Device::second(&env).await;
+    let saved = a
+        .core
+        .save_search("Rechnungen".into(), "rechnung has:attachment".into())
+        .await
+        .expect("save");
+    a.core
+        .add_recent_search("from:alice".into())
+        .await
+        .expect("recent");
+    b.events = b.core.subscribe();
+    a.pass().await;
+    b.pass().await;
+    let on_b = b.core.list_saved_searches().await.expect("list");
+    assert_eq!(on_b.len(), 1, "{on_b:?}");
+    assert_eq!(on_b[0].id, saved.id);
+    assert_eq!(on_b[0].name, "Rechnungen");
+    assert_eq!(on_b[0].query, "rechnung has:attachment");
+    let deadline = Instant::now() + WAIT;
+    loop {
+        match tokio::time::timeout_at(deadline, b.events.recv()).await {
+            Ok(Ok(CoreEvent::SavedSearchesChanged)) => break,
+            Ok(Ok(_) | Err(broadcast::error::RecvError::Lagged(_))) => {}
+            Ok(Err(err)) => panic!("events: {err}"),
+            Err(_) => panic!("no savedSearchesChanged on B"),
+        }
+    }
+    assert!(
+        b.core
+            .list_recent_searches()
+            .await
+            .expect("recent")
+            .is_empty(),
+        "recent searches stay on the device"
+    );
+
+    // Renamed on B, deleted on A after seeing the rename.
+    b.core
+        .rename_saved_search(saved.id.clone(), "Belege".into())
+        .await
+        .expect("rename");
+    b.pass().await;
+    a.pass().await;
+    let on_a = a.core.list_saved_searches().await.expect("list");
+    assert_eq!(on_a.len(), 1);
+    assert_eq!(on_a[0].name, "Belege");
+    a.core
+        .delete_saved_search(saved.id.clone())
+        .await
+        .expect("delete");
+    a.pass().await;
+    b.pass().await;
+    assert!(b.core.list_saved_searches().await.expect("list").is_empty());
+    assert!(per_record(&env).await.values().all(|n| *n == 1));
+    a.shutdown().await;
+    b.shutdown().await;
+    clean(&env).await;
+}

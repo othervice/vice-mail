@@ -1,12 +1,17 @@
-import { Search, X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { BookmarkPlus, Search, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
+import { ErrorNotice } from "../../components/ErrorNotice";
 import { splitHighlights } from "../../components/HighlightedText";
-import type { SearchPage, SearchProblemCode, SearchTermInfo } from "../../services/ipc";
+import { IconButton } from "../../components/IconButton";
+import { toCoreError, type IpcError, type SearchPage, type SearchProblemCode, type SearchTermInfo } from "../../services/ipc";
 import { useSearchStore, type SearchScopeChoice } from "../../stores/search";
 import { useBoundShortcuts } from "../../stores/shortcuts";
 import { ariaShortcut, type ShortcutPlatform } from "../actions/shortcuts";
+import { RecentSearches } from "./RecentSearches";
+import { SaveSearchForm } from "./SaveSearchForm";
+import { useClearRecentSearches, useRecentSearches } from "./savedQueries";
 import { chipTerms, hasValue, rangeText, removeTerm, sortedProblems } from "./terms";
 
 interface SearchBarProps {
@@ -19,6 +24,10 @@ interface SearchBarProps {
   platform: ShortcutPlatform;
   /** Escape on an empty field: the search closes and the focus goes back to the list. */
   onClose: () => void;
+  /** Stage 7: remembers a search the user ran (Enter, a recent search picked). */
+  onRecord: (query: string) => void;
+  /** Remembering the last search failed. */
+  recordError: IpcError | null;
 }
 
 /** One problem: the place in the query that it is about, and what is wrong there. */
@@ -83,7 +92,7 @@ function Chip({ term, query, onRemove }: { term: SearchTermInfo; query: string; 
  * the query at their place (underlined in a copy of the text and explained below it), the
  * filters as chips that can be removed, and the state of the index while it is being built.
  */
-export function SearchBar({ scopes, scope, page, searched, platform, onClose }: SearchBarProps) {
+export function SearchBar({ scopes, scope, page, searched, platform, onClose, onRecord, recordError }: SearchBarProps) {
   const { t } = useTranslation();
   const query = useSearchStore((state) => state.query);
   const focusSeq = useSearchStore((state) => state.focusSeq);
@@ -94,6 +103,31 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
   const problemsId = useId();
   const hintId = useId();
   const scopeId = useId();
+  // Stage 7: the recent searches under the empty field, and "Save search".
+  const recentId = useId();
+  const recent = useRecentSearches();
+  const clearRecent = useClearRecentSearches();
+  const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [saving, setSaving] = useState(false);
+  const [savedFor, setSavedFor] = useState<{ name: string; query: string } | null>(null);
+  const saveButton = useRef<HTMLDivElement>(null);
+  const recents = recent.data ?? [];
+  const showRecent = focused && !dismissed && query === "" && recents.length > 0;
+  const activeIndex = showRecent && active < recents.length ? active : -1;
+  const optionId = (index: number) => `${recentId}-${String(index)}`;
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    setDismissed(false);
+    setActive(-1);
+  };
+  const pick = (picked: string) => {
+    setQuery(picked);
+    submit();
+    onRecord(picked);
+    setActive(-1);
+  };
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -116,10 +150,22 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
       onSubmit={(event) => {
         event.preventDefault();
         submit();
+        onRecord(query);
       }}
       data-testid="search-bar"
     >
       <div className="flex items-center gap-2">
+        <div
+          className="relative flex min-w-0 flex-1"
+          onFocus={() => {
+            setFocused(true);
+          }}
+          onBlur={(event) => {
+            if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+            setFocused(false);
+            setActive(-1);
+          }}
+        >
         <div
           className={cx(
             "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control border bg-surface-raised px-2",
@@ -132,14 +178,32 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
             type="search"
             value={query}
             onChange={(event) => {
-              setQuery(event.target.value);
+              changeQuery(event.target.value);
             }}
             onKeyDown={(event) => {
+              if (showRecent && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                event.preventDefault();
+                const count = recents.length;
+                setActive(event.key === "ArrowDown" ? (activeIndex + 1) % count : activeIndex <= 0 ? count - 1 : activeIndex - 1);
+                return;
+              }
+              const chosen = recents[activeIndex];
+              if (event.key === "Enter" && chosen) {
+                event.preventDefault();
+                pick(chosen.query);
+                return;
+              }
               if (event.key !== "Escape") return;
               event.preventDefault();
-              if (query) setQuery("");
+              if (showRecent) {
+                // First Escape closes the list of recent searches, the next one the search.
+                setDismissed(true);
+                setActive(-1);
+              } else if (query) changeQuery("");
               else onClose();
             }}
+            aria-controls={showRecent ? recentId : undefined}
+            aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
             aria-label={t("search.field")}
             aria-invalid={problems.length > 0 ? true : undefined}
             aria-describedby={[problems.length > 0 ? problemsId : null, query ? null : hintId].filter(Boolean).join(" ") || undefined}
@@ -157,7 +221,7 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
               type="button"
               aria-label={t("search.clear")}
               onClick={() => {
-                setQuery("");
+                changeQuery("");
                 inputRef.current?.focus();
               }}
               className="flex size-6 shrink-0 items-center justify-center rounded-control text-tertiary hover:bg-hover hover:text-primary"
@@ -166,6 +230,32 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
             </button>
           )}
         </div>
+        {showRecent && (
+          <RecentSearches
+            id={recentId}
+            items={recents}
+            active={activeIndex}
+            optionId={optionId}
+            onPick={pick}
+            onClear={() => {
+              clearRecent.mutate();
+              inputRef.current?.focus();
+            }}
+            clearing={clearRecent.isPending}
+          />
+        )}
+        </div>
+        {query.trim() && (
+          <div ref={saveButton} className="shrink-0">
+            <IconButton
+              icon={BookmarkPlus}
+              label={t("savedSearches.save.action")}
+              onClick={() => {
+                setSaving(true);
+              }}
+            />
+          </div>
+        )}
         <label htmlFor={scopeId} className="sr-only">
           {t("search.scope.label")}
         </label>
@@ -194,6 +284,27 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
           <X aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
         </button>
       </div>
+      {saving && query.trim() && (
+        <SaveSearchForm
+          query={query}
+          onSaved={(saved) => {
+            setSaving(false);
+            setSavedFor({ name: saved.name, query });
+            inputRef.current?.focus();
+          }}
+          onCancel={() => {
+            setSaving(false);
+            saveButton.current?.querySelector("button")?.focus();
+          }}
+        />
+      )}
+      {savedFor && savedFor.query === query && (
+        <p role="status" className="text-12 text-secondary" data-testid="search-saved">
+          {t("savedSearches.save.saved", { name: savedFor.name })}
+        </p>
+      )}
+      {recordError && <ErrorNotice context={t("savedSearches.recent.recordFailed")} error={recordError} />}
+      {clearRecent.isError && <ErrorNotice context={t("savedSearches.recent.clearFailed")} error={toCoreError(clearRecent.error)} />}
       {!query && (
         <p id={hintId} className="text-12 text-secondary">
           {t("search.hint.body")}
@@ -229,7 +340,7 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose }: 
               term={term}
               query={query}
               onRemove={() => {
-                setQuery(removeTerm(query, term.range));
+                changeQuery(removeTerm(query, term.range));
                 inputRef.current?.focus();
               }}
             />

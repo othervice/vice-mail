@@ -9,6 +9,7 @@ import {
   type UnsubscribeMethod,
 } from "../../services/ipc";
 import { useMailtoStore } from "../../stores/mailto";
+import { currentWindowRoute } from "../windows/route";
 
 /** Keyed by account first, like the message views, so events of one account can address them. */
 export const messageExtrasQueryKey = (accountId: AccountId, messageId: MessageId) =>
@@ -65,7 +66,8 @@ export function useSetDefaultMailApp() {
 export function handleExtrasEvent(queryClient: QueryClient, event: CoreEvent): void {
   switch (event.type) {
     case "composeRequested":
-      useMailtoStore.getState().enqueue([event.request]);
+      // Every window hears it; a link from the system opens in the main window (decision 0027).
+      if (currentWindowRoute().kind === "main") useMailtoStore.getState().enqueue([event.request]);
       break;
     case "messageBodyAvailable": {
       const key = messageExtrasQueryKey(event.accountId, event.messageId);

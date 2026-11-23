@@ -1,6 +1,6 @@
-// Stage 9 part B in the real app (written by the extras UI session, NOT RUN yet; add it to `specs`
-// in wdio.conf.mjs before actions.e2e.mjs, which changes the inbox on the server). Against the
-// local test server with alice's seed; the account is added through the core and stays read-only.
+// Stage 9 part B in the real app (in `specs` of wdio.conf.mjs before actions.e2e.mjs, which
+// changes the inbox on the server). Against the local test server with alice's seed; the account
+// is added through the core and stays read-only.
 //
 // 1. The seed's calendar invitation (mime/calendar-invite, "Kick-off") shows as a card in the
 //    reading pane: title, a time, the organizer, "Open in calendar" (not clicked: it would start
@@ -64,6 +64,8 @@ async function closeSearch() {
 describe("stage 9 part B: unsubscribe, invitations, print, default mail app", () => {
   before(async () => {
     await attach();
+    // The steps use the English names (palette commands, labels); an earlier spec may have left German.
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     await coreCall("add_account", {
       settings: {
         email: ALICE.email,
@@ -111,7 +113,9 @@ describe("stage 9 part B: unsubscribe, invitations, print, default mail app", ()
 
   it("offers unsubscribing for a newsletter and sends nothing without the click", async () => {
     const before = await coreCall("get_outbox_counts", { accountId: account.id });
-    await openBySearch("Example News", "Example News: issue #1");
+    // The subject as a phrase: "Example News" alone matches thousands of mails (every address
+    // has "example" in it), and the hit would not be among the rendered rows.
+    await openBySearch('subject:"Example News: issue #1"', "Example News: issue #1");
     await testId("unsubscribe-bar").waitForExist({ timeout: 10000 });
     await testId("unsubscribe-open").click();
     await testId("unsubscribe-ask").waitForExist({ timeout: 5000 });
@@ -147,7 +151,9 @@ describe("stage 9 part B: unsubscribe, invitations, print, default mail app", ()
     });
     report.steps.printRules = rules;
     assert.ok(rules.some((selector) => selector.includes(":has([data-print-root])")), "the print rules are missing from the build");
-    assert.ok(await $("article[data-print-root]").isExisting(), "no print root in the reading pane");
+    // The search (and its reading pane) is closed: open the newest message of the inbox.
+    await (await $('[data-testid="message-list"] [role="option"]')).click();
+    await $("article[data-print-root]").waitForExist({ timeout: 10000, timeoutMsg: "no print root in the reading pane" });
   });
 
   it("shows the default mail app state in the settings", async () => {

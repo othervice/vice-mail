@@ -493,7 +493,17 @@ impl<C: Connector> AppCore<C> {
             change(&mut stored)?;
             settings::save(store, &stored).await?;
         }
+        self.ai_settings_changed().await;
         self.get_ai_settings().await
+    }
+
+    /// Decision 0027: every window hears that the AI settings changed (`aiSettingsChanged`,
+    /// with what is usable now), so a second window or the panel needs no reload of its own.
+    async fn ai_settings_changed(&self) {
+        match self.get_ai_availability().await {
+            Ok(availability) => self.emit_event(CoreEvent::AiSettingsChanged { availability }),
+            Err(err) => tracing::warn!(error = %err, "AI availability unreadable after a change"),
+        }
     }
 
     /// The master switch. Off: no request leaves the device, running requests are cancelled.
@@ -539,6 +549,7 @@ impl<C: Connector> AppCore<C> {
         settings::save(store, &stored).await?;
         drop(_admin);
         tracing::info!(profile = %profile.id, "AI profile saved");
+        self.ai_settings_changed().await;
         self.get_ai_settings().await
     }
 

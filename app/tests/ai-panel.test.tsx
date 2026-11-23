@@ -303,7 +303,11 @@ describe("AI panel", () => {
     const answer = await within(panel).findByRole("article", { name: "Answer" });
     expect(core.callsOf("ai_ask")).toEqual([{ requestId: expect.any(String) as string, question: "When is the meeting?", accountIds: null }]);
     expect(answer.textContent).toContain("The meeting is on Monday at 10.");
-    expect(within(answer).getAllByTestId("ai-source").map((b) => b.textContent)).toEqual(["Mail 1", "Mail 2"]);
+    // Decision 0027: the core names the sources it has (`getMessagesByIds`); the others are numbered.
+    await waitFor(() => {
+      expect(within(answer).getAllByTestId("ai-source").map((b) => b.textContent)).toEqual([expect.stringMatching(/^Grace Hopper, /), "Mail 2"]);
+    });
+    expect(core.callsOf("get_messages_by_ids")).toEqual([{ messageIds: [5001, 4000] }]);
     expect(within(answer).getByText("Based on 4 mails the search found.")).toBeTruthy();
     expect(within(answer).getByTestId("ai-transfer-summary").textContent).toContain("of text, no mail, to localhost:11434");
 

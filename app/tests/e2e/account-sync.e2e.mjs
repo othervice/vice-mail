@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openSettings, screenshot, SCREENSHOT_DIR, setPreference, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSettings, screenshot, SCREENSHOT_DIR, setPreference, setSidebar, testId } from "./support/app.mjs";
 import { measureScroll } from "./support/scroll.mjs";
 import {
   ALICE,
@@ -486,7 +486,7 @@ describe("account and read-only sync (stage 2)", function () {
 
   it("adds the account: folders and all 10,000 messages appear as on the server", async () => {
     // The unfolded sidebar shows the folder tree as soon as there is one.
-    await testId("rail-folders").click();
+    await setSidebar(true);
     await startTimeline();
     await mark("add", '[data-testid="setup-submit"]');
     await waitForSynced(expected);
@@ -790,11 +790,11 @@ describe("account and read-only sync (stage 2)", function () {
     await scrollListTo(0);
     await shootBothThemes("offline");
     // The folded rail: the account button names the state.
-    await testId("rail-folders").click();
+    await setSidebar(false);
     report.offline.railLabel = await testId(`account-switch-${account.id}`).getAttribute("aria-label");
     assert.match(report.offline.railLabel, /, offline$/);
     await shootBothThemes("offline-rail");
-    await testId("rail-folders").click();
+    await setSidebar(true);
     assert.deepEqual(await newCspViolations(), [], "CSP violations in the mail views");
   });
 

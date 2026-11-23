@@ -141,9 +141,9 @@ export const de: Translation = {
     quote: {
       include: "Ursprüngliche Nachricht zitieren",
       includeForward: "Weitergeleitete Nachricht einfügen",
-      position: "Platzieren",
-      below: "unter meinem Text",
-      above: "über meinem Text",
+      position: "Mein Text steht",
+      below: "unter dem Zitat",
+      above: "über dem Zitat",
       formattedOnly: "Die ursprüngliche Nachricht wird als formatierter Text eingefügt.",
     },
     attachments: {
@@ -629,6 +629,8 @@ export const de: Translation = {
       forwardAsAttachment: "Als Anhang weiterleiten",
       compose: "Neue Nachricht",
       editDraft: "Entwurf bearbeiten",
+      // Stage 8
+      openInWindow: "In neuem Fenster öffnen",
     },
     readOnly: {
       label: "Nur lesend",
@@ -682,6 +684,8 @@ export const de: Translation = {
       action: "Die Aktion konnte nicht ausgeführt werden.",
       undo: "Die Aktion konnte nicht rückgängig gemacht werden.",
       markRead: "Die Mail konnte nicht als gelesen markiert werden.",
+      window: "Die Mail ließ sich nicht in einem neuen Fenster öffnen.",
+      emlFile: "Die Datei ließ sich nicht öffnen.",
     },
     operationFailed_one: "Eine Änderung ließ sich auf dem Server nicht ausführen: {{action}}",
     operationFailed_other: "{{count, number}} Änderungen ließen sich auf dem Server nicht ausführen: {{action}}",
@@ -1439,6 +1443,7 @@ export const de: Translation = {
     results_one: "{{count}} Befehl",
     results_other: "{{count}} Befehle",
     refused: "{{label}}: {{reason}}",
+    recentFailed: "Die zuletzt benutzten Befehle ließen sich nicht speichern.",
     goTo: "Gehe zu {{name}}",
     openFolder: "Ordner {{name}} öffnen",
     switchAccount: "Wechseln zu {{name}}",
@@ -1518,7 +1523,8 @@ export const de: Translation = {
       removed: "{{shortcut}} von {{label}} entfernt.",
       resetDone: "{{label}} hat wieder die Standardkürzel.",
       resetAllDone: "Alle Kürzel sind wieder Standard.",
-      saveFailed: "Die Änderung ließ sich auf diesem Computer nicht speichern. Sie gilt, bis die App beendet wird.",
+      saveFailed: "Die Änderung ließ sich nicht speichern. Es gelten wieder die vorherigen Kürzel.",
+      loadFailed: "Deine Kürzel ließen sich nicht laden. Vorerst gelten die Standardkürzel.",
       problems: {
         system: "{{shortcut}} gehört dem System oder der Textbearbeitung und lässt sich nicht belegen.",
         fixed: "{{shortcut}} dient zum Bewegen in der App und lässt sich nicht belegen.",
@@ -1569,7 +1575,8 @@ export const de: Translation = {
       expand: "Seitenleiste mit Ordnern anzeigen",
       collapse: "Nur die Icon-Leiste anzeigen",
     },
-    saveFailed: "Das Layout ließ sich auf diesem Computer nicht speichern. Es gilt, bis die App beendet wird.",
+    saveFailed: "Das Layout ließ sich nicht speichern. Es gilt wieder das vorherige Layout.",
+    loadFailed: "Das Layout dieses Fensters ließ sich nicht laden. Vorerst gilt das Standardlayout.",
   },
   languages: {
     en: "English",
@@ -1712,6 +1719,54 @@ export const de: Translation = {
     groupGone: {
       title: "Diese Gruppe gibt es nicht mehr",
       body: "Sie wurde gelöscht, vielleicht auf einem anderen Gerät.",
+    },
+  },
+  // Stufe 7: letzte und gespeicherte Suchen.
+  savedSearches: {
+    recent: {
+      label: "Letzte Suchen",
+      clear: "Letzte Suchen löschen",
+      recordFailed: "Diese Suche konnte nicht gemerkt werden",
+      clearFailed: "Die letzten Suchen konnten nicht gelöscht werden",
+    },
+    save: {
+      action: "Suche speichern",
+      formLabel: "Diese Suche speichern",
+      name: "Name",
+      submit: "Speichern",
+      cancel: "Abbrechen",
+      scopeNote: "Eine gespeicherte Suche sucht in allen Konten. Mit account: oder in: grenzt du sie ein.",
+      saved: "Gespeichert als „{{name}}“. Du findest sie unter Gespeicherte Ansichten.",
+      failed: "Die Suche konnte nicht gespeichert werden",
+    },
+    view: {
+      listLabel: "Gespeicherte Suchen",
+      sidebarLabel: "Gespeicherte Suchen",
+      loadFailed: "Die gespeicherten Suchen konnten nicht geladen werden",
+      empty: {
+        title: "Noch keine gespeicherten Suchen",
+        body: "Suche nach etwas und wähle „Suche speichern“. Dann erscheint sie hier und in der Seitenleiste.",
+      },
+      query: "Sucht nach: {{query}}",
+      open: "Treffer zeigen",
+      back: "Alle gespeicherten Suchen",
+      gone: {
+        title: "Diese gespeicherte Suche gibt es nicht mehr",
+        body: "Sie wurde gelöscht, vielleicht auf einem anderen Gerät.",
+      },
+      rename: "Umbenennen",
+      renameLabel: "„{{name}}“ umbenennen",
+      renameField: "Neuer Name für „{{name}}“",
+      renameSave: "Namen speichern",
+      renameCancel: "Abbrechen",
+      renameFailed: "Die gespeicherte Suche konnte nicht umbenannt werden",
+      delete: "Löschen",
+      deleteLabel: "„{{name}}“ löschen",
+      deleteTitle: "Gespeicherte Suche „{{name}}“ löschen?",
+      deleteBody: "Sie verschwindet aus der Seitenleiste, mit dem Einstellungs-Sync auch auf deinen anderen Geräten. Deine Mails bleiben, wo sie sind.",
+      deleteConfirm: "Löschen",
+      deleteCancel: "Abbrechen",
+      deleteFailed: "Die gespeicherte Suche konnte nicht gelöscht werden",
     },
   },
   groups: {
@@ -2883,6 +2938,84 @@ export const de: Translation = {
         title: "Die KI-Anfrage ist fehlgeschlagen.",
         hint: "Prüfe Adresse und Modell des Anbieters in den Einstellungen. Passiert es wieder, versuche ein anderes Modell.",
       },
+      // Stage 9 (decision 0027): opening `.eml` files.
+      eml_too_large: {
+        title: "Die Datei ist zu groß zum Öffnen.",
+        hint: "Öffne sie in einem anderen Mailprogramm oder speichere dort die Anhänge, die du brauchst.",
+      },
+      eml_invalid: {
+        title: "Die Datei ist keine E-Mail.",
+        hint: "Prüfe, ob du eine .eml-Datei gewählt hast. Eine leere Datei oder eine ohne Mail-Kopfzeilen lässt sich nicht anzeigen.",
+      },
+      eml_unreadable: {
+        title: "Die Datei konnte nicht gelesen werden.",
+        hint: "Prüfe, ob die Datei noch da ist und du sie öffnen darfst, und versuche es erneut.",
+      },
+      saved_search_exists: {
+        title: "Es gibt schon eine gespeicherte Suche mit diesem Namen.",
+        hint: "Wähle einen anderen Namen oder benenne die andere gespeicherte Suche zuerst um oder lösche sie.",
+      },
+      saved_search_limit: {
+        title: "Du hast so viele Suchen gespeichert, wie möglich sind.",
+        hint: "Lösche eine gespeicherte Suche, die du nicht mehr brauchst, und speichere diese dann.",
+      },
+    },
+  },
+  // Stage 9 (decision 0027): `.eml` files opened read-only in a window of their own.
+  eml: {
+    region: "E-Mail-Datei",
+    open: ".eml-Datei öffnen …",
+    keyword: "Datei",
+    close: "Fenster schließen",
+    loadFailed: "Die Datei lässt sich nicht anzeigen.",
+    readOnly: {
+      title: "Aus einer Datei geöffnet",
+      body: "Diese Mail wird nur angezeigt. Sie gehört zu keinem Konto und lässt sich hier weder beantworten noch verschieben oder löschen.",
+    },
+    header: {
+      file: "Datei",
+    },
+    gone: {
+      title: "Diese Datei ist nicht mehr geöffnet",
+      body: "Öffne sie erneut per Doppelklick oder mit „.eml-Datei öffnen …“ in der Befehlspalette.",
+    },
+  },
+  // Stage 8 (decision 0025): message and composer windows of their own.
+  windows: {
+    invalid: {
+      title: "Dieses Fenster hat nichts anzuzeigen",
+      body: "Es wurde ohne Mail oder Entwurf geöffnet. Schließ es und öffne die Mail noch einmal im Hauptfenster.",
+    },
+    closeFailed: "Das Fenster konnte sich nicht selbst schließen. Schließ es mit seinem Schließen-Knopf.",
+    message: {
+      region: "Mail",
+      loadFailed: "Die Mail ließ sich nicht laden.",
+      gone: {
+        title: "Diese Mail ist nicht mehr da",
+        body: "Sie wurde gelöscht oder ihr Konto entfernt. Du kannst dieses Fenster schließen.",
+      },
+    },
+    composer: {
+      region: "Verfassen",
+      open: "In eigenem Fenster öffnen",
+      openFailed: "Der Entwurf ließ sich nicht in einem eigenen Fenster öffnen.",
+      waiting: {
+        title: "Wird gesendet",
+        body: "Das Fenster schließt sich, sobald sich die Nachricht nicht mehr zurückholen lässt.",
+      },
+      done: {
+        title: "Erledigt",
+        body: "Der Entwurf ist gespeichert, gesendet oder verworfen. Du kannst dieses Fenster schließen.",
+      },
+    },
+  },
+  // Stage 8 (decision 0025): defaults for new replies and forwards (Settings → Writing).
+  writingDefaults: {
+    quotePosition: {
+      label: "Antwort bei Antworten und Weiterleitungen",
+      hint: "Wo dein Text in einer neuen Antwort oder Weiterleitung steht. Im einzelnen Entwurf kannst du es weiter ändern.",
+      above: "Über der zitierten Nachricht",
+      below: "Unter der zitierten Nachricht",
     },
   },
 };

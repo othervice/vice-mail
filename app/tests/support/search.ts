@@ -12,6 +12,8 @@ import type {
   IpcError,
   Mailbox,
   MessageListItem,
+  RecentSearch,
+  SavedSearch,
   SearchHit,
   SearchIndexStatus,
   SearchPage,
@@ -37,12 +39,35 @@ export interface SearchFakeOptions {
   /** Identities of every account; the default of each account first. */
   identities?: IdentityInfo[];
   index?: SearchIndexStatus;
+  /** Stage 7: saved searches (in position order) and this device's recent searches (newest first). */
+  savedSearches?: SavedSearch[];
+  recentSearches?: RecentSearch[];
 }
 
 export interface SearchFakeState {
   readonly groups: AccountGroup[];
   readonly hidden: string[];
   readonly identities: IdentityInfo[];
+  /** Stage 7: as the fake core holds them now. */
+  readonly savedSearches: SavedSearch[];
+  readonly recentSearches: RecentSearch[];
+}
+
+/** The contract's limits for saved and recent searches. */
+const MAX_RECENT = 10;
+const MAX_SAVED = 100;
+const MAX_NAME_CHARS = 100;
+const MAX_QUERY_BYTES = 2048;
+
+export function makeSavedSearch(overrides: Partial<SavedSearch> = {}): SavedSearch {
+  return {
+    id: "5a5a5a5a-0000-4000-8000-000000000001",
+    name: "Unread invoices",
+    query: "rechnung is:unread",
+    position: 0,
+    updatedAt: Date.now() - 60_000,
+    ...overrides,
+  };
 }
 
 interface CoreData {
@@ -103,6 +128,9 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
   const hidden: string[] = [...(options.hidden ?? [])];
   const identities: IdentityInfo[] = [...(options.identities ?? [])];
   let nextGroup = 1;
+  const savedSearches: SavedSearch[] = [...(options.savedSearches ?? [])];
+  const recentSearches: RecentSearch[] = [...(options.recentSearches ?? [])];
+  let nextSaved = savedSearches.length + 100;
   let nextIdentity = Math.max(0, ...identities.map((i) => i.id)) + 1;
 
   const visibleAccounts = (view: UnifiedView): Account[] => {
@@ -149,8 +177,63 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
     /^[^@\s]+@[^@\s]+$/.test(input.email) &&
     !identities.some((i) => i.accountId === accountId && i.id !== except && i.email.toLowerCase() === input.email.toLowerCase());
 
+  const validName = (name: string) => name.length > 0 && [...name].length <= MAX_NAME_CHARS && ![...name].some((c) => c.charCodeAt(0) < 0x20);
+  const validQuery = (query: string) => query.length > 0 && new TextEncoder().encode(query).length <= MAX_QUERY_BYTES;
+  const nameTaken = (name: string, except: string | null) =>
+    savedSearches.some((s) => s.id !== except && s.name.toLowerCase() === name.toLowerCase());
+
   function handle(cmd: string, args: Record<string, unknown>): unknown {
     switch (cmd) {
+      // ---- Stage 7: saved and recent searches ----
+      case "list_saved_searches":
+        return savedSearches.map((s) => ({ ...s }));
+      case "save_search": {
+        const name = (args["name"] as string).trim();
+        const query = (args["query"] as string).trim();
+        if (!validName(name) || !validQuery(query)) return error("invalid_argument");
+        if (nameTaken(name, null)) return error("saved_search_exists");
+        if (savedSearches.length >= MAX_SAVED) return error("saved_search_limit");
+        const saved: SavedSearch = {
+          id: `5a5a5a5a-0000-4000-8000-${String(nextSaved++).padStart(12, "0")}`,
+          name,
+          query,
+          position: Math.max(-1, ...savedSearches.map((s) => s.position)) + 1,
+          updatedAt: Date.now(),
+        };
+        savedSearches.push(saved);
+        return { ...saved };
+      }
+      case "rename_saved_search": {
+        const index = savedSearches.findIndex((s) => s.id === args["savedSearchId"]);
+        const current = savedSearches[index];
+        if (!current) return error("not_found");
+        const name = (args["name"] as string).trim();
+        if (!validName(name)) return error("invalid_argument");
+        if (nameTaken(name, current.id)) return error("saved_search_exists");
+        const next = { ...current, name, updatedAt: Date.now() };
+        savedSearches[index] = next;
+        return { ...next };
+      }
+      case "delete_saved_search": {
+        const index = savedSearches.findIndex((s) => s.id === args["savedSearchId"]);
+        if (index < 0) return error("not_found");
+        savedSearches.splice(index, 1);
+        return null;
+      }
+      case "list_recent_searches":
+        return recentSearches.map((r) => ({ ...r }));
+      case "add_recent_search": {
+        const query = (args["query"] as string).trim();
+        if (!validQuery(query)) return error("invalid_argument");
+        const at = recentSearches.findIndex((r) => r.query === query);
+        if (at >= 0) recentSearches.splice(at, 1);
+        recentSearches.unshift({ query, usedAt: Date.now() });
+        recentSearches.splice(MAX_RECENT);
+        return recentSearches.map((r) => ({ ...r }));
+      }
+      case "clear_recent_searches":
+        recentSearches.splice(0);
+        return null;
       case "search":
         return (options.search ?? defaultSearch)(args["request"] as SearchRequest);
       case "search_on_server":
@@ -328,6 +411,6 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
     }
   }
 
-  const state: SearchFakeState = { groups, hidden, identities };
+  const state: SearchFakeState = { groups, hidden, identities, savedSearches, recentSearches };
   return { handle, state };
 }

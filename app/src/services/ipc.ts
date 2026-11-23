@@ -195,6 +195,13 @@ export const ERROR_CODES = [
   "ai_busy",
   "ai_refused",
   "ai_failed",
+  // Stage 9 (decision 0027): opening `.eml` files.
+  "eml_too_large",
+  "eml_invalid",
+  "eml_unreadable",
+  // Stage 7: saved searches.
+  "saved_search_exists",
+  "saved_search_limit",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1021,12 +1028,19 @@ export type {
   TemplateInput,
 };
 
-/** Stage 10 limits of the core that the bindings do not export (decision 0023). */
-export const MISSED_SEND_GRACE_MS = 3_600_000;
-/** "Send later" at most this far ahead (366 days). */
-export const MAX_SCHEDULE_AHEAD_MS = 366 * 24 * 3_600_000;
-/** One inline image (8 MiB). */
-export const MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024;
+/**
+ * Stage 10 limits of the core, exported by the bindings since decision 0025: a missed send is
+ * one more than this past its time, "send later" at most this far ahead (366 days), one inline
+ * image at most this big, signature images per signature, each and together.
+ */
+export {
+  MAX_INLINE_IMAGE_BYTES,
+  MAX_SCHEDULE_AHEAD_MS,
+  MAX_SIGNATURE_IMAGE_BYTES,
+  MAX_SIGNATURE_IMAGES,
+  MAX_SIGNATURE_IMAGES_BYTES,
+  MISSED_SEND_GRACE_MS,
+} from "../generated/bindings";
 /** Pasted HTML above this goes in as plain text (the core refuses it with `invalid_argument`). */
 export const MAX_PASTE_BYTES = 2 * 1024 * 1024;
 /** `listContacts` takes 1..200 per page. */
@@ -1252,4 +1266,153 @@ export const aiIpc = {
   /** A dismissed hint never comes back. */
   dismissOpenReplyHint: (messageId: MessageId): Promise<void> =>
     done(call(() => aiCommands.dismissOpenReplyHint(messageId))),
+};
+
+// ---- Stage 7 gap: recent and saved searches ----
+import {
+  commands as savedSearchCommands,
+  MAX_RECENT_SEARCHES,
+  MAX_SAVED_SEARCH_NAME_CHARS,
+  MAX_SAVED_SEARCHES,
+  type RecentSearch,
+  type SavedSearch,
+  type SavedSearchId,
+} from "../generated/bindings";
+
+export { MAX_RECENT_SEARCHES, MAX_SAVED_SEARCH_NAME_CHARS, MAX_SAVED_SEARCHES };
+export type { RecentSearch, SavedSearch, SavedSearchId };
+
+/**
+ * Stage 7: saved searches (synced between devices, shown as views of the sidebar; they search
+ * all accounts, the query narrows with `account:` and `in:`) and the recent searches of this
+ * device (newest first, at most `MAX_RECENT_SEARCHES`, not synced).
+ */
+export const savedSearchIpc = {
+  /** In the order of the sidebar. */
+  list: (): Promise<SavedSearch[]> => call(() => savedSearchCommands.listSavedSearches()),
+  /** `saved_search_exists` (the name is taken, case-insensitive), `saved_search_limit`, `invalid_argument`. */
+  save: (name: string, query: string): Promise<SavedSearch> => call(() => savedSearchCommands.saveSearch(name, query)),
+  rename: (savedSearchId: SavedSearchId, name: string): Promise<SavedSearch> =>
+    call(() => savedSearchCommands.renameSavedSearch(savedSearchId, name)),
+  delete: (savedSearchId: SavedSearchId): Promise<void> =>
+    done(call(() => savedSearchCommands.deleteSavedSearch(savedSearchId))),
+  listRecent: (): Promise<RecentSearch[]> => call(() => savedSearchCommands.listRecentSearches()),
+  /** Puts the query on top (the same query again moves up); answers with the new list. */
+  addRecent: (query: string): Promise<RecentSearch[]> => call(() => savedSearchCommands.addRecentSearch(query)),
+  clearRecent: (): Promise<void> => done(call(() => savedSearchCommands.clearRecentSearches())),
+};
+
+// ---- Stage 8 (decision 0025): UI preferences, window layouts, message and composer windows ----
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  commands as stage8Commands,
+  DEFAULT_TEXT_SIZE,
+  MAX_COMMAND_ID_CHARS,
+  MAX_RECENT_COMMAND_CHARS,
+  MAX_RECENT_COMMANDS,
+  MAX_SHORTCUT_KEY_CHARS,
+  MAX_SHORTCUT_OVERRIDES,
+  MAX_SHORTCUTS_PER_COMMAND,
+  MAX_TEXT_SIZE,
+  MIN_TEXT_SIZE,
+  type Density as CoreDensity,
+  type PlatformShortcuts,
+  type ReadingPanePosition as CoreReadingPanePosition,
+  type Shortcut as CoreShortcut,
+  type ShortcutOverride,
+  type UiPreferences,
+  type WindowLayout as CoreWindowLayout,
+} from "../generated/bindings";
+
+export {
+  DEFAULT_TEXT_SIZE,
+  MAX_COMMAND_ID_CHARS,
+  MAX_RECENT_COMMAND_CHARS,
+  MAX_RECENT_COMMANDS,
+  MAX_SHORTCUT_KEY_CHARS,
+  MAX_SHORTCUT_OVERRIDES,
+  MAX_SHORTCUTS_PER_COMMAND,
+  MAX_TEXT_SIZE,
+  MIN_TEXT_SIZE,
+};
+
+export type {
+  CoreDensity,
+  CoreReadingPanePosition,
+  CoreShortcut,
+  CoreWindowLayout,
+  PlatformShortcuts,
+  ShortcutOverride,
+  UiPreferences,
+};
+
+/**
+ * Stage 8: what the UI used to keep in the web view's storage. Shortcut changes and the text
+ * size are synced between devices; the recent palette commands and the layouts stay on the
+ * device. The layout belongs to the calling window (the shell knows which one asks).
+ */
+export const uiIpc = {
+  getUiPreferences: (): Promise<UiPreferences> => call(() => stage8Commands.getUiPreferences()),
+  /** Always the whole object; the answer is what is stored (each platform's list sorted by command). */
+  setUiPreferences: (preferences: UiPreferences): Promise<UiPreferences> =>
+    call(() => stage8Commands.setUiPreferences(preferences)),
+  getWindowLayout: (): Promise<CoreWindowLayout> => call(() => stage8Commands.getWindowLayout()),
+  setWindowLayout: (layout: CoreWindowLayout): Promise<CoreWindowLayout> =>
+    call(() => stage8Commands.setWindowLayout(layout)),
+  /** One message in a window of its own; an open one comes to the front. `not_found` opens nothing. */
+  openMessageWindow: (accountId: AccountId, messageId: MessageId): Promise<void> =>
+    done(call(() => stage8Commands.openMessageWindow(accountId, messageId))),
+  /** The composer of one draft in a window of its own; an open one comes to the front. */
+  openComposerWindow: (draftId: DraftId): Promise<void> => done(call(() => stage8Commands.openComposerWindow(draftId))),
+  /**
+   * Closes this window (a message or composer window whose work is done). Rejects when the shell
+   * does not allow it; the window then says it can be closed.
+   */
+  closeThisWindow: async (): Promise<void> => {
+    try {
+      await getCurrentWindow().close();
+    } catch (e) {
+      throw toCoreError(e);
+    }
+  },
+};
+
+// ---- Stage 9 and 13 gaps (decision 0027): `.eml` files, messages by id ----
+import {
+  commands as emlCommands,
+  MAX_EML_FILE_BYTES,
+  MAX_MESSAGES_BY_IDS,
+  type EmlFile,
+  type EmlFileId,
+  type EmlMessageView,
+  type OpenEmlFileResult,
+} from "../generated/bindings";
+
+export { MAX_EML_FILE_BYTES, MAX_MESSAGES_BY_IDS };
+export type { EmlFile, EmlFileId, EmlMessageView, OpenEmlFileResult };
+
+/**
+ * Stage 9: `.eml` files shown read-only in a window of their own, outside every account. The
+ * core reads and checks the file (the UI never sees a path) and renders it through the reading
+ * pipeline: sanitised HTML for the sandboxed frame, external content blocked, links checked by
+ * the core, attachments saved or opened by the core.
+ */
+export const emlIpc = {
+  /** The system's open dialog; the file opens in its own window. `eml_too_large`, `eml_invalid`, `eml_unreadable`. */
+  openFile: (): Promise<OpenEmlFileResult> => call(() => emlCommands.openEmlFile()),
+  /** The view of this window's file; the error it was refused with; `not_found` once it was closed. */
+  getMessage: (fileId: EmlFileId, format: BodyFormat): Promise<EmlMessageView> =>
+    call(() => emlCommands.getEmlMessage(fileId, format)),
+  /** The HTML again with its external images, loaded by the core for this rendering only. */
+  loadRemoteContent: (fileId: EmlFileId): Promise<EmlMessageView> => call(() => emlCommands.loadEmlRemoteContent(fileId)),
+  saveAttachment: (fileId: EmlFileId, index: number): Promise<SaveAttachmentResult> =>
+    call(() => emlCommands.saveEmlAttachment(fileId, index)),
+  openAttachment: (fileId: EmlFileId, index: number, confirmedExecutable: boolean): Promise<OpenAttachmentResult> =>
+    call(() => emlCommands.openEmlAttachment(fileId, index, confirmedExecutable)),
+  /**
+   * Stage 13: list rows of these messages in the order asked (unknown ones left out), to name and
+   * open the sources of an AI answer. At most `MAX_MESSAGES_BY_IDS` ids.
+   */
+  getMessagesByIds: (messageIds: MessageId[]): Promise<MessageListItem[]> =>
+    call(() => emlCommands.getMessagesByIds(messageIds)),
 };

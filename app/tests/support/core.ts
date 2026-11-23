@@ -10,6 +10,10 @@ import { createSnippetsFake, type SnippetsFakeOptions, type SnippetsFakeState } 
 import { createContactsFake, type ContactsFakeOptions, type ContactsFakeState } from "./contacts";
 // Stage 13: AI in the app.
 import { createAiFake, type AiFakeOptions, type AiFakeState } from "./ai";
+// Stage 8: UI preferences, window layouts, message and composer windows.
+import { createUiFake, type UiFakeOptions, type UiFakeState } from "./uiPrefs";
+// Stage 9 and 13 gaps (decision 0027): `.eml` files and messages by id.
+import { createEmlFake, type EmlFakeOptions, type EmlFakeState } from "./eml";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -286,6 +290,10 @@ interface FakeCoreOptions {
   contacts?: ContactsFakeOptions;
   /** Stage 13: AI in the app (off unless a test turns it on) and the open-reply hints. */
   ai?: AiFakeOptions;
+  /** Stage 8: UI preferences, the layout of this window and the windows of their own. */
+  ui?: UiFakeOptions;
+  /** Decision 0027: opened `.eml` files and the open dialog. */
+  eml?: EmlFakeOptions;
 }
 
 export interface FakeCore {
@@ -328,6 +336,10 @@ export interface FakeCore {
   readonly contacts: ContactsFakeState;
   /** Stage 13: AI settings, calls that would reach a provider, keys received, dismissed hints. */
   readonly ai: AiFakeState;
+  /** Stage 8: UI preferences, layout and opened windows as the fake core holds them now. */
+  readonly ui: UiFakeState;
+  /** Decision 0027: dialogs shown, attachments saved or opened, `getMessagesByIds` calls. */
+  readonly eml: EmlFakeState;
 }
 
 /**
@@ -679,6 +691,19 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     createReply: (messageId) => composeFake.handle("create_draft", { request: { kind: "reply", messageId, language: "en" } }),
   });
 
+  // Stage 8: UI preferences, window layouts, message and composer windows.
+  // Decision 0027: `.eml` files and messages by id.
+  const emlFake = createEmlFake(options.eml ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
+  const uiFake = createUiFake(options.ui ?? {}, {
+    accountOfMessage: (messageId) => [...messages.values()].flat().find((m) => m.id === messageId)?.accountId ?? null,
+    hasDraft: (draftId) => composeFake.state.drafts.has(draftId),
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
   mockIPC(
     (cmd, rawArgs) => {
       calls.push({ cmd, args: rawArgs });
@@ -825,6 +850,12 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 13: AI in the app.
           const aiAnswer = aiFake.handle(cmd, args);
           if (aiAnswer !== undefined) return aiAnswer;
+          // Stage 8: UI preferences, window layouts, message and composer windows.
+          const uiAnswer = uiFake.handle(cmd, args);
+          if (uiAnswer !== undefined) return uiAnswer;
+          // Decision 0027: `.eml` files and messages by id.
+          const emlAnswer = emlFake.handle(cmd, args);
+          if (emlAnswer !== undefined) return emlAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -898,5 +929,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     snippets: snippetsFake.state,
     contacts: contactsFake.state,
     ai: aiFake.state,
+    ui: uiFake.state,
+    eml: emlFake.state,
   };
 }

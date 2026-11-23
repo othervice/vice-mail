@@ -342,6 +342,17 @@ pub(crate) fn content_of(
                 Ok(value)
             })
             .optional()?,
+        // Stage 7 (decision 0026): a saved search.
+        "savedView" => conn
+            .prepare_cached("SELECT name, query, position FROM saved_view WHERE uuid = ?1")?
+            .query_row([id], |r| {
+                Ok(json!({
+                    "name": r.get::<_, String>(0)?,
+                    "query": r.get::<_, String>(1)?,
+                    "position": r.get::<_, i64>(2)?,
+                }))
+            })
+            .optional()?,
         "template" => conn
             .prepare_cached("SELECT name, subject, html FROM template WHERE uuid = ?1")?
             .query_row([id], |r| {
@@ -665,6 +676,22 @@ fn put_table(
                 now
             ])?;
         }
+        "savedView" => {
+            conn.prepare_cached(
+                "INSERT INTO saved_view (uuid, name, query, position, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                 ON CONFLICT (uuid) DO UPDATE SET name = excluded.name,
+                   query = excluded.query, position = excluded.position,
+                   updated_at = excluded.updated_at",
+            )?
+            .execute(params![
+                id,
+                text(value, "name")?,
+                text(value, "query")?,
+                int(value, "position")?,
+                now
+            ])?;
+        }
         "template" => {
             conn.prepare_cached(
                 "INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at)
@@ -863,6 +890,9 @@ fn delete_table(
             .execute([id])?,
         "template" => conn
             .prepare_cached("DELETE FROM template WHERE uuid = ?1")?
+            .execute([id])?,
+        "savedView" => conn
+            .prepare_cached("DELETE FROM saved_view WHERE uuid = ?1")?
             .execute([id])?,
         "senderRule" => {
             let (key_kind, key_value) = id

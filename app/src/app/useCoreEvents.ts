@@ -13,6 +13,7 @@ import { preferencesQueryKey } from "../features/preferences/queries";
 import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
 import { handleSettingsSyncEvent } from "../features/settings-sync/events";
 import { handleSearchEvent } from "../features/search/events";
+import { handleUiPreferencesEvent } from "../features/keyboard/useUiPreferencesSync";
 import { ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
 import { reportOwnFailures } from "../stores/notices";
 import { useUiStore } from "../stores/ui";
@@ -37,6 +38,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleExtrasEvent(queryClient, event);
   // Stage 13: progress of AI requests, the request log and the open-reply hints.
   handleAiEvent(queryClient, event);
+  // Stage 8: UI preferences saved in another window or taken over from another device.
+  handleUiPreferencesEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

@@ -22,6 +22,9 @@ interface AiPanelState {
   /** The thread pane shows this message of the thread when it has it. */
   sourceRequest: AiSourceRequest | null;
   showSource: (messageId: MessageId) => void;
+  /** Decision 0027: the messages the thread pane shows now; a source among them is shown there. */
+  shownSources: readonly MessageId[];
+  setShownSources: (ids: readonly MessageId[]) => void;
   command: AiPanelCommand | null;
   request: (kind: AiPanelCommand["kind"]) => void;
   /** The panel took the command. */
@@ -51,6 +54,10 @@ export const useAiPanelStore = create<AiPanelState>()((set) => ({
   sourceRequest: null,
   showSource: (messageId) => {
     set((state) => ({ sourceRequest: { messageId, seq: (state.sourceRequest?.seq ?? 0) + 1 } }));
+  },
+  shownSources: [],
+  setShownSources: (ids) => {
+    set({ shownSources: ids });
   },
   command: null,
   request: (kind) => {

@@ -1,10 +1,10 @@
 /**
- * LOCAL FALLBACK, stage 8 (to be replaced): the core has no command yet for the user's shortcut
- * changes, the layout per window and the recently used palette commands. Until it has one
- * (requested in the stage 8 result: `get_ui_preferences` / `set_ui_preferences`), these few UI
- * values live in the web view's local storage of this device. Nothing secret and no mail data
- * goes here, and everything read back is validated, because the storage is outside the app's
- * control. When the commands exist, only this module changes.
+ * The web view's local storage of this device. Stage 8 kept shortcut changes, the layout and the
+ * recent palette commands here until the core could store them (decision 0025); since then they
+ * live in the core and this module only serves the one-time migration of those old values
+ * (`features/keyboard/migrateLocal.ts`) and small per-device UI flags of other features (the AI
+ * panel's open state). Nothing secret and no mail data goes here, and everything read back is
+ * validated, because the storage is outside the app's control.
  */
 const PREFIX = "vice-mail.ui.";
 

@@ -10,15 +10,18 @@ import {
   type ShortcutOverrides,
   type ShortcutProblem,
 } from "../features/keyboard/bindings";
-import { readLocal, writeLocal } from "../features/keyboard/localFallback";
+import { saveUiPreferences, type PlatformOverrides } from "../features/keyboard/uiPreferences";
+import type { CoreError } from "../services/ipc";
 
-type Overrides = Record<ShortcutPlatform, ShortcutOverrides>;
+type Overrides = PlatformOverrides;
 
 interface ShortcutState {
-  /** The user's changes per platform (a synced setting would carry both). */
+  /** The user's changes per platform (the core syncs both between devices). */
   overrides: Overrides;
-  /** The last change could not be stored: it lasts until the app quits. */
-  saveFailed: boolean;
+  /** The core refused the last change; the previous assignment applies again. */
+  saveError: CoreError | null;
+  /** What the core holds now (load, save, another window or device): replaces the assignment. */
+  applyStored: (overrides: Overrides) => void;
   /** Adds a shortcut, unless it is taken: then nothing changes and the problem comes back. */
   addShortcut: (platform: ShortcutPlatform, id: CommandId, shortcut: Shortcut) => ShortcutProblem | null;
   removeShortcut: (platform: ShortcutPlatform, id: CommandId, shortcut: Shortcut) => void;
@@ -27,27 +30,36 @@ interface ShortcutState {
   resetAll: (platform: ShortcutPlatform) => void;
 }
 
-/** What is stored (stage 8: local fallback until the core has a command for it). */
-export function loadStoredOverrides(): Overrides {
-  const raw = readLocal("shortcuts");
+/** Shortcut changes as the local fallback of an earlier version stored them (migration only). */
+export function parseStoredOverrides(raw: unknown): Overrides {
   const value = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
   return { macos: parseOverrides(value["macos"]), windows: parseOverrides(value["windows"]) };
 }
+
+const NO_OVERRIDES: Overrides = { macos: {}, windows: {} };
 
 /**
  * The user's shortcut assignment (Settings → Keyboard). Every dispatcher reads it at the moment
  * of the key press (`boundShortcuts`), so a change takes effect at once.
  */
 export const useShortcutStore = create<ShortcutState>()((set, get) => {
+  // At once in this window (a key press uses it right away), then in the core. A refusal puts
+  // the core's value back (through `applyStored`) and keeps the error for the settings.
   const store = (overrides: Overrides) => {
-    set({ overrides, saveFailed: !writeLocal("shortcuts", overrides) });
+    set({ overrides, saveError: null });
+    saveUiPreferences({ overrides }).catch((error: unknown) => {
+      set({ saveError: error as CoreError });
+    });
   };
   const change = (platform: ShortcutPlatform, next: ShortcutOverrides) => {
     store({ ...get().overrides, [platform]: next });
   };
   return {
-    overrides: loadStoredOverrides(),
-    saveFailed: false,
+    overrides: NO_OVERRIDES,
+    saveError: null,
+    applyStored: (overrides) => {
+      set({ overrides });
+    },
     addShortcut: (platform, id, shortcut) => {
       const current = get().overrides[platform];
       const problem = checkShortcut(id, shortcut, platform, current);

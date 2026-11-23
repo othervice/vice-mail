@@ -1,9 +1,9 @@
 // Stage 8 in the real app: every layout is usable at 900×600 and at 2560×1440 (docs/stages/08,
 // acceptance "Bildschirmfotos im Ergebnis").
-// NOT RUN YET (written by the keyboard UI session, which may not run the desktop tests). It is not
-// in `specs` of wdio.conf.mjs; add it anywhere after account-sync.e2e.mjs to run it. It only
-// reads mail. A window of 2560×1440 needs a display at least that large; macOS shrinks a bigger
-// window to the screen, which the report then shows as the size actually reached.
+// Last in `specs` of wdio.conf.mjs: it only reads mail, but it changes the stored layout of the
+// window (restored at its end). A window of 2560×1440 needs a display at least that large: on a
+// smaller screen (macOS would shrink the window to it) those cases are skipped, with the screen
+// size in the report, and have to be checked on a large display.
 //
 // For each window size, reading pane position (right, below, in place of the list), density
 // (comfortable, compact) and text size (100 and 150 percent at the small size): open the newest
@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const SIZES = [
@@ -46,20 +46,36 @@ const DENSITY_COMMANDS = { comfortable: "Use comfortable rows", compact: "Use co
 /** Where the main parts are, relative to the window. */
 const measure = () =>
   browser.execute(() => {
+    // Not shown: missing, hidden, or laid out but invisible and inert (the list while a message
+    // is shown in its place keeps its layout for the scroll position, stage 8).
     const rect = (selector) => {
       const element = document.querySelector(selector);
-      if (!element || element.closest("[hidden]")) return null;
+      if (!element || element.closest("[hidden], [inert]") || getComputedStyle(element).visibility === "hidden") return null;
       const r = element.getBoundingClientRect();
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
     };
     const toolbar = document.querySelector('[role="toolbar"][aria-label="Message actions"]');
     const toolbarRect = toolbar?.getBoundingClientRect();
     const buttons = toolbar ? [...toolbar.querySelectorAll("button")] : [];
+    const why = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return "missing";
+      return {
+        inert: Boolean(element.closest("[inert]")),
+        hidden: Boolean(element.closest("[hidden]")),
+        visibility: getComputedStyle(element).visibility,
+        box: element.getBoundingClientRect().toJSON(),
+      };
+    };
     return {
       window: { width: window.innerWidth, height: window.innerHeight },
+      focus: document.activeElement?.closest("[data-testid]")?.getAttribute("data-testid") ?? document.activeElement?.tagName ?? null,
+      title: document.querySelector("main header h1")?.textContent ?? null,
+      listState: why('[data-testid="message-list"]'),
+      paneState: why('[data-testid="reading-pane"]'),
       scrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       list: rect('[data-testid="message-list"]'),
-      pane: rect('[role="region"][aria-label="Message"]'),
+      pane: rect('[data-testid="reading-pane"]'),
       buttonsOutsideToolbar: toolbarRect
         ? buttons.filter((b) => {
             const r = b.getBoundingClientRect();
@@ -74,6 +90,8 @@ const inside = (box, win) => box && box.left >= 0 && box.top >= 0 && box.right <
 describe("stage 8: layouts at 900×600 and 2560×1440", () => {
   before(async () => {
     await attach();
+    // The steps use the English names (palette commands, labels); an earlier spec may have left German.
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     const [existing] = await coreCall("list_accounts");
     if (!existing) {
       await coreCall("add_account", {
@@ -99,6 +117,9 @@ describe("stage 8: layouts at 900×600 and 2560×1440", () => {
   after(async () => {
     await paletteCommand(PANE_COMMANDS.right).catch(() => undefined);
     await paletteCommand(DENSITY_COMMANDS.comfortable).catch(() => undefined);
+    // No account (and so no keychain entry) is left for the next run.
+    const left = await coreCall("list_accounts").catch(() => []);
+    for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
     fs.writeFileSync(path.join(SCREENSHOT_DIR, "layouts-report.json"), JSON.stringify(report, null, 2));
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
@@ -107,32 +128,54 @@ describe("stage 8: layouts at 900×600 and 2560×1440", () => {
   for (const size of SIZES) {
     for (const pane of PANES) {
       for (const density of DENSITIES) {
-        it(`${String(size.width)}×${String(size.height)}, pane ${pane}, ${density}`, async () => {
+        it(`${String(size.width)}×${String(size.height)}, pane ${pane}, ${density}`, async function () {
+          const screenSize = await browser.execute(() => ({ width: screen.width, height: screen.height }));
+          report.screen = screenSize;
+          if (size.width > screenSize.width || size.height > screenSize.height) {
+            report.skipped = [...(report.skipped ?? []), `${String(size.width)}×${String(size.height)} ${pane} ${density}`];
+            this.skip();
+          }
           await browser.setWindowSize(size.width, size.height);
           await paletteCommand(PANE_COMMANDS[pane]);
           await paletteCommand(DENSITY_COMMANDS[density]);
           await paletteCommand("Go to Inbox");
           // Into the list with Tab, the newest message open with Home and Enter.
-          for (let i = 0; i < 40; i += 1) {
-            const inList = await browser.execute(() => document.activeElement?.getAttribute("data-testid") === "message-list");
-            if (inList) break;
-            await browser.keys("Tab");
+          let inList = false;
+          for (let i = 0; i < 40 && !inList; i += 1) {
+            inList = await browser.execute(() => document.activeElement?.getAttribute("data-testid") === "message-list");
+            // The embedded WebDriver sends Tab's key events but does not move the focus.
+            if (!inList) await pressTab();
           }
+          assert.ok(inList, "Tab never reached the message list");
           await browser.keys(["Home", "Enter"]);
-          await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector('[role="region"][aria-label="Message"]'))), {
+          await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector('[data-testid="reading-pane"]'))), {
             timeoutMsg: "no reading pane",
           });
           await browser.pause(300);
           const facts = await measure();
           const name = `layout-${String(size.width)}x${String(size.height)}-${pane}-${density}`;
           report.layouts.push({ name, ...facts });
+          // The screenshot takes the focus away (no focus ring in the picture); it goes back after.
+          await browser.execute(() => {
+            window.__e2eFocus = document.activeElement;
+          });
           report.screenshots.push(await screenshot(name));
+          await browser.execute(() => window.__e2eFocus?.focus());
           assert.equal(facts.scrollsSideways, false, `${name}: the window scrolls sideways`);
           assert.ok(inside(facts.pane, facts.window), `${name}: the pane is not inside the window`);
           if (pane === "replace") assert.equal(facts.list, null, `${name}: the list is still shown`);
           else assert.ok(inside(facts.list, facts.window), `${name}: the list is not inside the window`);
           assert.equal(facts.buttonsOutsideToolbar, 0, `${name}: toolbar buttons are cut off`);
+          // Escape from the message goes back to the list (in place of the list: the list returns).
           await browser.keys("Escape");
+          await browser.waitUntil(
+            () =>
+              browser.execute(() => {
+                const list = document.querySelector('[data-testid="message-list"]');
+                return Boolean(list && !list.closest("[inert]") && getComputedStyle(list).visibility !== "hidden");
+              }),
+            { timeout: 5000, timeoutMsg: `${name}: Escape did not bring the list back` },
+          );
         });
       }
     }

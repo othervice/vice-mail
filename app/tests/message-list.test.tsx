@@ -417,15 +417,15 @@ describe("folders in the list header", () => {
     expect(await screen.findByTestId("account-detail")).toBeTruthy();
   });
 
-  it("views without a function yet say so instead of showing anything made up", async () => {
+  it("saved views without saved searches say how to make one instead of showing anything made up", async () => {
     mockCore({ accounts: [ACCOUNT], mailboxes: standardMailboxes() });
     const { user } = renderApp();
 
-    // Stage 9 gave Later, Tasks and Pinned their lists; saved views are still to come.
+    // Stage 9 gave Later, Tasks and Pinned their lists; stage 7 gave saved views theirs.
     await user.click(await screen.findByRole("button", { name: "Saved views" }));
 
-    expect(screen.getByRole("heading", { name: "Not available yet" })).toBeTruthy();
-    expect(screen.getByText("“Saved views” arrives in a later version of the app.")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "No saved searches yet" })).toBeTruthy();
+    expect(screen.getByText(/choose “Save search”/)).toBeTruthy();
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useShortcutStore, loadStoredOverrides } from "../src/stores/shortcuts";
+import { useShortcutStore } from "../src/stores/shortcuts";
 import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
@@ -103,8 +103,11 @@ describe("changeable shortcuts", () => {
     await first.user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
     first.unmount();
 
-    // A restart: the stores start again from what is stored, the app renders anew.
-    useShortcutStore.setState({ ...useShortcutStore.getInitialState(), overrides: loadStoredOverrides() }, true);
+    // A restart: the stores start empty, the app loads what the core stored and renders anew.
+    await waitFor(() => {
+      expect(core.ui.preferences.shortcuts.macos).toEqual([{ command: "archive", shortcuts: [{ key: "y", shift: false, mod: false }] }]);
+    });
+    useShortcutStore.setState(useShortcutStore.getInitialState(), true);
     useUiStore.setState(useUiStore.getInitialState(), true);
     const second = renderApp();
     await openKeyboardSettings();
