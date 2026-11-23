@@ -120,3 +120,11 @@ Schalter aus genügt, um jede Verbindung zu vermeiden. Ohne Updater: Plugin und 
 entfernen, die Oberfläche zeigt dann „Dieser Build aktualisiert sich nicht selbst“. Ein neuer
 Schlüssel ist ein Wechsel mit Übergangsversion (`docs/RELEASING.md`). Zurück auf eine ältere
 Version geht nur von Hand; die Datenbank-Sicherungen aus Stufe 1 bleiben der Weg zurück.
+
+## Nachtrag 23.11.2026 (0044)
+
+Die einmalige Frage steht jetzt im Schritt „Optional“ des geführten ersten Starts, als Schalter
+(aus); sie gilt als beantwortet, sobald der Schritt nach vorn verlassen oder von dort übersprungen
+wird, auch ohne Konto. Die Karte nach dem ersten Konto bleibt als Rückfall für alle, die diesen
+Schritt nie gesehen haben (vorher übersprungen, Installationen von vor dem ersten Start). Beide
+Stellen setzen dieselbe Antwort, gefragt wird also nie zweimal. Begründung in 0044.

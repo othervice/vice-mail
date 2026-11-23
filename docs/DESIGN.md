@@ -238,9 +238,10 @@ Inline-SVG (nur Attribute, kein `<style>`, kein Netz; die IDs der Verläufe beko
 Präfix). „Vice“ der Wortmarke nimmt `brand-ink` (hell Ink `#1a1619`, dunkel Weiß), alles Orange
 bleibt unverändert. Der Name kommt immer aus `config/product.ts`.
 
-- **Erster Start** (noch kein Konto): Wortmarke (48 px hoch), „Noch kein Konto“, Hauptknopf
-  „Konto hinzufügen“, darunter eine Karte mit drei Zusagen, die ab dem ersten Konto stimmen (zuerst
-  nur lesend, kein Cloud-Dienst dazwischen, Passwort im Schlüsselbund).
+- **Ohne Konto** (nach dem geführten ersten Start ohne Konto oder nach „Einrichtung überspringen“,
+  siehe „Erster Start“): Wortmarke (48 px hoch), „Noch kein Konto“, Hauptknopf „Konto
+  hinzufügen“, darunter eine Karte mit vier Zusagen, die ab dem ersten Konto stimmen (zuerst nur
+  lesend, kein Cloud-Dienst dazwischen, keine Telemetrie, Passwort im Schlüsselbund).
 - **Über**: Karte mit App-Symbol (72 px) und dem Schriftzug der Wortmarke (das Zeichen ist
   weggeschnitten, damit das V nicht zweimal neben dem Symbol steht; die Umrisse sind dieselben),
   darunter die Kurzbeschreibung; dann Version, Commit, Build-Datum, Plattform, Lizenz und die
@@ -451,6 +452,51 @@ gelesen markieren“) die ganze Konversation als gelesen, wie „Gelesen“ an d
 zeigen“/„Konversationen zeigen“ im Menü „Listenoptionen“ und in der Befehlspalette (Gruppe
 Layout), Einstellungen → Lesen → „Konversationen“. Lehnt der Kern die Änderung ab, gilt der alte
 Wert wieder und Lesen nennt den Grund.
+
+## Erster Start (Stufe 15, Entscheidung 0044)
+
+Eine neue Installation (kein Konto, erster Start nie beendet) zeigt statt des Rahmens eine
+geführte Einrichtung. Ruhig und kurz: eine Karte, fünf Schritte, jeder überspringbar.
+
+**Aufbau.** Fläche `canvas`; oben ein Band so hoch wie der Kopf der Liste (unter macOS liegen dort
+die Fensterknöpfe, das Band verschiebt das Fenster), rechts darin der leise Knopf „Einrichtung
+überspringen“ (nicht auf dem letzten Schritt). Darunter mittig eine Karte (`surface-raised`,
+Rundung 16, `shadow-panel`, höchstens 40 rem breit und `first-start-height` 44 rem hoch, in
+niedrigen Fenstern so hoch wie der Platz): oben die Schrittleiste, in der Mitte der Schritt (scrollt
+allein), unten die Fußzeile mit „Zurück“ links und dem Hauptknopf rechts. Die Karte hat auf jedem
+Schritt dieselbe Höhe, damit die Schrittleiste nicht springt. Linien in der Karte in `border`
+(nicht `border-subtle`, das auf `surface-raised` im dunklen Modus verschwindet).
+
+**Schrittleiste.** Fünf gleich breite Segmente (Willkommen, Konto, Darstellung, Optional, Fertig):
+ein 4-px-Balken (erledigt und aktuell `accent-fill`, offen `track`) und der Name darunter (12 px;
+aktuell halbfett in Primärfarbe, erledigt sekundär, offen tertiär). Als Liste in einer `nav`
+„Schritte der Einrichtung“; der aktuelle Schritt hat `aria-current="step"`, erledigte tragen
+„, erledigt“ für Screenreader. Die Leiste ist keine Navigation zum Anklicken: Vor und zurück
+geht es über die Fußzeile.
+
+**Schritte.**
+
+| Schritt | Inhalt | Fußzeile |
+|---|---|---|
+| Willkommen | Wortmarke, „Willkommen“, ein Satz, was die App ist, ein Satz zum Ablauf, die vier Zusagen als Gruppe mit Haarlinien; mittig | „Los geht’s“ |
+| Konto | „Dein erstes Konto hinzufügen“ und ein Satz; das Formular der Kontoeinrichtung ohne eigenen Titel, „Zurück zu den Konten“ und „Abbrechen“. Nach dem Hinzufügen ersetzt eine Erfolgsmeldung das Formular („… ist eingerichtet“, liest vorerst nur), der Fokus liegt darauf | Zurück, „Später einrichten“ (Zweitknopf); nach dem Konto „Weiter“ |
+| Darstellung | Thema als drei Kacheln mit Symbol (System, Hell, Dunkel) wie die Akzent-Kacheln darunter (`AccentPicker` unverändert); beides gilt sofort | Zurück, Weiter |
+| Optional | Eine Gruppe mit drei Zeilen (Symbolkachel, Titel, ein Satz): Einstellungs-Sync mit „Jetzt einrichten“ (ohne Konto nur der Hinweis, dass er eins braucht; eingeschaltet „An“ mit Haken), KI nur als Satz, wo man sie einschaltet (zuerst MCP), Updates als Schalter „Automatisch nach Updates suchen“ (aus, Text wie unter Über; fehlt in Builds ohne Updater). „Jetzt einrichten“ zeigt die Seite des Einstellungs-Sync im Schritt; der erste Knopf der Fußzeile heißt dann „Zurück zur Einrichtung“ | Zurück, Weiter |
+| Fertig | Haken in einem Kreis (`accent-soft`), „Alles bereit“, ein Hinweis: das Konto liest nur, Änderungen erlaubt man unter Einstellungen → Konten → Konto → „Änderungen erlauben“ (ohne Konto: wo man eins hinzufügt); „Alles … später in den Einstellungen“; mittig | Zurück, „Posteingang öffnen“ bzw. „… verwenden“ |
+
+**Verhalten.** Der Fokus geht bei jedem Schritt auf dessen Überschrift (`h1`, nicht in der
+Tab-Reihenfolge, ohne Ring, weil sie kein Bedienelement ist); der Schritt beginnt oben. Besuchte
+Schritte bleiben verborgen erhalten, so behält das Formular bei Zurück und Weiter seine Eingaben.
+Escape tut nichts. Die Update-Frage gilt als beantwortet, sobald der Schritt „Optional“ nach vorn
+verlassen oder von dort übersprungen wird; danach kommt die Karte nach dem ersten Konto nicht mehr.
+Wer vorher überspringt, bekommt sie wie bisher nach dem ersten Konto (0037). Keine Bewegung außer
+den Farbübergängen der Bedienelemente; „Bewegung reduzieren“ des Systems schaltet auch die ab
+(0030). Kann das Ende nicht gespeichert werden, steht der Fehler über der Fußzeile, und der
+Schritt bleibt.
+
+**Geprüft** in Hell und Dunkel bei 1200 × 800 (Standardfenster der Desktop-Tests) und 900 × 600:
+nichts scrollt seitwärts, die Karte bleibt im Fenster, Fußzeile und „Einrichtung überspringen“
+bleiben sichtbar; bei 900 × 600 scrollen Willkommen, Konto und Optional in der Karte.
 
 ## Regeln für Interaktion
 

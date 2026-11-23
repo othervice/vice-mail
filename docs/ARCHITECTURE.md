@@ -548,8 +548,9 @@ einer klaren Meldung abgelehnt.
   Link-Local-Adressen), keine Weiterleitungen, 5 s Aufbau, 15 s gesamt. Eine `mailto:`-Abmeldung ist
   ein Entwurf, den der Nutzer sendet; eine Web-Abmeldung öffnet nur der System-Browser
 - Update-Prüfung (Stufe 15, 0037), **nur mit Zustimmung**: automatisch nur, wenn der Nutzer
-  „Automatisch nach Updates suchen“ eingeschaltet hat (Standard aus; einmal gefragt nach dem ersten
-  Konto), höchstens einmal am Tag; sonst nur nach Klick auf „Jetzt suchen“. Ziel ist allein der
+  „Automatisch nach Updates suchen“ eingeschaltet hat (Standard aus; einmal gefragt, im Schritt
+  „Optional“ des ersten Starts oder, wer ihn vorher übersprungen hat, nach dem ersten Konto, 0044),
+  höchstens einmal am Tag; sonst nur nach Klick auf „Jetzt suchen“. Ziel ist allein der
   Endpunkt aus `tauri.conf.json` (`plugins.updater.endpoints`,
   `https://github.com/othervice/vice-mail/releases/latest/download/latest.json`), dazu für die
   Weiterleitung und den Download GitHubs Dateihosts `objects.githubusercontent.com` und
@@ -748,5 +749,6 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | tauri-specta statt ts-rs (0004) | typisierte Commands und Events, erzwungene Entscheidung bei 64-Bit-Zahlen | ts-rs erzeugt dieselben Typen; nur `ipc.ts` müsste neu geschrieben werden |
 | Stalwart als Testserver (0001) | ein Binary, alle nötigen Fähigkeiten, kein Docker | Dovecot über Homebrew mit eigenem MTA |
 | FTS5 mit `unicode61` statt `trigram` (0003) | trigram ist 5,2-mal so groß und halb so schnell beim Einfügen | Tokenizer per Migration wechselbar, Index ist Cache |
+| Geführter erster Start (0044): Geräte-Einstellung `first_start`, `getFirstStart`/`finishFirstStart`; Installationen mit Konto gelten als eingerichtet | eine neue Installation wird durch Konto, Darstellung und die optionalen Extras geführt, ohne dass bestehende Installationen etwas davon sehen | `FirstStartGate` entfernen, dann wieder der leere Zustand |
 | Updates nur mit Zustimmung über den Tauri-Updater (0037) | einzige Verbindung zu einem Server, den der Nutzer nicht eingerichtet hat; signierte Dateien, Schlüssel nur im Schlüsselbund | Schalter aus; ohne Updater installiert man von Hand |
 | rusqlite 0.41 statt 0.43 (0006) | `rusqlite_migration` 2.7 verlangt ^0.41; gleiches SQLite 3.54.1 | eigener Migrations-Runner, dann rusqlite 0.43 |
