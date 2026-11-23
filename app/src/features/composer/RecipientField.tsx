@@ -116,12 +116,14 @@ export function RecipientField({
     commit(text + pasted);
   };
 
+  // The first line is 32 px high like the subject's field and the "Cc"/"Bcc" buttons at the end:
+  // label, chips and buttons share its middle; further lines of chips go below.
   return (
     <div className={cx("relative flex min-w-0 items-start gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)} data-testid={rest["data-testid"]}>
-      <label htmlFor={inputId} className="w-12 shrink-0 py-1 text-13 text-tertiary">
+      <label htmlFor={inputId} className="flex h-8 w-12 shrink-0 items-center text-13 text-tertiary">
         {label}
       </label>
-      <ul aria-label={label} className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+      <ul aria-label={label} className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
         {addresses.map((address) => {
           const bad = invalid.includes(address);
           return (
