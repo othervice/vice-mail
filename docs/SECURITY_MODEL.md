@@ -292,7 +292,8 @@ party, which is advisable before wide distribution.
   separate process with a time and memory limit) would remove the dependency on the model;
   this is the recommended next step.
 - **Decoders without their own resource limits.** hayro (PDF) decompresses streams without a size
-  cap (finding C-2, reproduced: 1.1 KB of PDF became 578 MB of memory): a crafted PDF can exhaust
+  cap (finding C-2, reproduced: 1.1 KB of PDF became 578 MB of memory, 2.2 KB became 1.1 GB in
+  0.4 s; decision 0043): a crafted PDF can exhaust
   memory when the user opens its preview, which ends the app (an out-of-memory abort is not a
   panic and cannot be contained). Image previews can use about 1.3 GB at their limits (C-9).
   Neither runs without a click.
@@ -356,7 +357,7 @@ unlikely preconditions; **info** = hardening or documentation.
 
 | ID | Area | Severity | Finding | Impact | Proposed fix | Why not now |
 |---|---|---|---|---|---|---|
-| C-2 | c | medium | hayro decompresses PDF streams without a size cap (`read_to_end`), and the preview has no time limit (runs on the blocking pool, cannot be cancelled). | A small PDF can exhaust memory when its preview is opened; out of memory aborts the app. A slow PDF keeps a CPU busy. One click needed. | Render previews in a separate process (the app binary in a preview mode) with memory and time limits; interim: patch hayro to cap decoded stream sizes and image dimensions. | Process isolation is a larger change; patching a dependency needs a decision. Reproduced: a 1,121-byte PDF (a content stream behind two `FlateDecode` filters, 256 MiB decoded) made the optimised preview reach 578 MB resident in 0.3 s (`replay_preview_file` in `tests/fuzz.rs`); more nesting or a larger stream reaches any size. |
+| C-2 | c | medium | hayro decompresses PDF streams without a size cap, and the preview has no time limit (runs on the blocking pool, cannot be cancelled). | A small PDF can exhaust memory when its preview is opened; out of memory aborts the app. A slow PDF keeps a CPU busy. One click needed. | Decision 0043: render previews in a child process (`mail-mcp` in a preview mode) with a wall-clock limit and a memory watchdog in the core; ask upstream for limits on decoded streams and image area (hayro added such limits for JBIG2, CCITT and JPEG 2000 on `main`). | Measured (decision 0043, release build, M4): 1,016 bytes decoding to 256 MiB peak at 310 MB, 2,253 bytes decoding to 1 GiB at 1,115 MB in 0.37 s; memory grows linearly with the decoded size. hayro 0.9.0 is the newest release and `main` has no stream limit either. A patched `hayro-syntax` (`[patch.crates-io]`) would bring its `unsafe` block (`page.rs`, `transmute`) into the repository, against the rule that only `webview2-guard` has `unsafe`, and would not limit time; the child process needs a new dependency for the memory watchdog (macOS does not enforce memory rlimits) and Windows work that cannot be tested here. |
 | C-4 | c | medium (defence in depth) | `cid:` images and allowed remote images are sniffed and passed unchanged as `data:` URIs to the WebView, whose system decoders (ImageIO/WebKit, WebView2) parse them. BMP, AVIF and ICO are no longer accepted (7.1); PNG, JPEG, GIF and WebP still go to the system decoders. | A decoder vulnerability in the OS is reachable by a received mail without a click (inline images show by default). | Re-encode inline and remote images with the attachment-preview pipeline (PNG/JPEG out), in parallel and cached per message part; keep animation by re-encoding GIF frames (animated WebP has no encoder in `image`). Or decode in a separate process (as for C-2). | Measured (`docs/testing/performance.md`, `tests/inline_reencode_cost.rs`): a typical newsletter with 32 images (7.1 MP) costs 68–69 ms re-encoded in a release build on the M4 (1.2 ms today), 1.7 s in a debug build; about 9.5 ms per megapixel photo, several times that on slower hardware, on the path to showing the mail, plus a new cache, and animated GIF/WebP would stand still. Not clearly acceptable; open. |
 | N-1 | d | low | async-imap allocates the announced literal size (up to 512 MiB) before data arrives; mail-imap adds no cap. | A malicious server can make each connection hold up to 512 MiB until the 30 s timeout. | Check `RFC822.SIZE` before `BODY.PEEK[]`, fetch large bodies in parts, get a configurable maximum into async-imap. | Needs a library change. |
 | F2 | e | low | Sync-folder entries are fetched whole, without a size or count limit; the 1 MiB ciphertext limit applies only after download and dearmoring. | A malicious server can make every device allocate large amounts on each sync pass. | Skip entries whose `RFC822.SIZE` exceeds about 2 MiB before reading; cap entries and bytes per pass. | How the sync service treats skipped entries needs care (no deletion of records). |
@@ -458,8 +459,10 @@ MAIL_CONTENT_FUZZ_SEED=20261123 MAIL_CONTENT_FUZZ_SECONDS=1200 cargo test -p mai
 
 **Why not `cargo fuzz`:** libFuzzer through `cargo fuzz` needs a nightly toolchain (sanitizer
 and coverage flags); this machine has only stable Rust, and an instrumented build of the whole
-dependency tree would have cost more of the short time box than it returns. All code under test
-is safe Rust (`forbid(unsafe_code)` in our crates and in hayro), so AddressSanitizer would add
+dependency tree would have cost more of the short time box than it returns. The code under test
+is safe Rust (`forbid(unsafe_code)` in our crates and in `hayro`) apart from one block in
+`hayro-syntax` (a `transmute` for its self-referencing page list, decision 0043), so
+AddressSanitizer would add
 little; the bugs to expect are panics, hangs, memory blow-ups and policy violations, which the
 oracles above check directly. The cost is that the generators are not coverage-guided: deep
 states are reached by vocabulary and seeds, not systematically. Coverage-guided targets for
