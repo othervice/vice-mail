@@ -1,4 +1,4 @@
-//! Stage 15 (decision 0041): whether the guided first start still has to be shown.
+//! Stage 15 (decision 0044): whether the guided first start still has to be shown.
 //!
 //! One device setting, `first_start` (not in `SYNCED_SETTINGS`: a second device gets its own
 //! first start), holding how it ended: `{"outcome":"completed"}`, `"skipped"` or `"notNeeded"`.
@@ -39,7 +39,7 @@ fn encode(outcome: FirstStartOutcome) -> Result<String, CoreError> {
 }
 
 impl<C: Connector> AppCore<C> {
-    /// Whether the main window shows the guided first start (decision 0041).
+    /// Whether the main window shows the guided first start (decision 0044).
     pub async fn get_first_start(&self) -> Result<FirstStart, CoreError> {
         let _guard = LOCK.lock().await;
         if let Some(outcome) = self.stored_first_start().await? {

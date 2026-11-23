@@ -1,4 +1,4 @@
-//! Stage 15 (decision 0041): the guided first start. The core answers whether the main window
+//! Stage 15 (decision 0044): the guided first start. The core answers whether the main window
 //! shows it and records how it ended; the steps use the commands they always use.
 
 use mail_engine::AppCore;

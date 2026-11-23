@@ -1,4 +1,4 @@
-//! Stage 15 (decision 0041): the guided first start (welcome, account, appearance, optional
+//! Stage 15 (decision 0044): the guided first start (welcome, account, appearance, optional
 //! extras, done). The core only remembers whether it still has to be shown; the steps
 //! themselves use the commands they always use (accounts, preferences, updates, settings sync).
 

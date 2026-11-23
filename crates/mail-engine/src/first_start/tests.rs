@@ -1,4 +1,4 @@
-//! Decision 0041: the guided first start shows once on a new installation, never on one that
+//! Decision 0044: the guided first start shows once on a new installation, never on one that
 //! already had an account, and its end survives a restart and the removal of every account.
 
 use mail_model::{Security, ServerSettings};
