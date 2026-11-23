@@ -22,11 +22,11 @@ Kein Test-Server verfügbar: Verhalten über aufgezeichnete Antworten testen und
 
 Vorher vom Menschen: eine App-Registrierung bei Microsoft Entra (kostenlos) mit der Client-ID.
 
-- [ ] Anmeldung über den System-Browser mit PKCE und lokaler Rückleitung; Prüfung des `state`-Werts gegen untergeschobene Antworten
-- [ ] Tokens im System-Schlüsselbund, Erneuerung, klare Meldung bei abgelaufener Freigabe, Widerruf beim Entfernen des Kontos
-- [ ] Erster Schritt: IMAP und SMTP mit OAuth (XOAUTH2). Das nutzt den vorhandenen Adapter.
-- [ ] Nur wenn IMAP nicht reicht oder im Mandanten gesperrt ist: eigener Adapter für Microsoft Graph mit Delta-Abgleich, unveränderlichen IDs, Drosselung und Wiederholung
-- [ ] Die Client-ID ist kein Geheimnis und wird nicht so behandelt; ein Client-Secret wird nicht verwendet
+- [x] Anmeldung über den System-Browser mit PKCE und lokaler Rückleitung; Prüfung des `state`-Werts gegen untergeschobene Antworten (0042; gegen Stalwart und eine Attrappe getestet, nicht gegen Microsoft)
+- [x] Tokens im System-Schlüsselbund, Erneuerung, klare Meldung bei abgelaufener Freigabe, Widerruf beim Entfernen des Kontos (Microsoft bietet öffentlichen Clients keinen Widerruf: dort nur lokales Löschen)
+- [x] Erster Schritt: IMAP und SMTP mit OAuth (XOAUTH2). Das nutzt den vorhandenen Adapter. (Dazu OAUTHBEARER, wo ein Server nur das anbietet.)
+- [ ] Nur wenn IMAP nicht reicht oder im Mandanten gesperrt ist: eigener Adapter für Microsoft Graph mit Delta-Abgleich, unveränderlichen IDs, Drosselung und Wiederholung (nicht gebaut: bisher nicht nötig, 0042)
+- [x] Die Client-ID ist kein Geheimnis und wird nicht so behandelt; ein Client-Secret wird nicht verwendet
 
 Tests: Anmeldeablauf gegen eine Attrappe (gültig, abgelaufen, widerrufen, falscher `state`); Graph gegen aufgezeichnete Antworten; von Hand an einem echten Konto.
 
@@ -36,9 +36,9 @@ Nur wenn die Google-Verifizierung gewollt ist. Ohne sie gilt die Grenze von 100 
 Warnseite. Vorher vom Menschen: Projekt in der Google Cloud Console, später Verifizierung mit
 Domain, Datenschutzerklärung und Demo-Video.
 
-- [ ] Anmeldung wie in Block B
-- [ ] Entscheiden: IMAP mit OAuth (kleiner Schritt) oder Gmail-API mit Abgleich über die History
-- [ ] Ablauf und Anforderungen der Verifizierung in `docs/PROVIDERS.md` festhalten
+- [x] Anmeldung wie in Block B
+- [x] Entscheiden: IMAP mit OAuth (kleiner Schritt) oder Gmail-API mit Abgleich über die History (IMAP mit OAuth, 0042)
+- [x] Ablauf und Anforderungen der Verifizierung in `docs/PROVIDERS.md` festhalten
 
 ## Block D — JMAP
 
@@ -151,3 +151,93 @@ Windows) enthalten Block A.
   `prototype-2026-11-23-3` (macOS) bzw. `prototype-2026-11-23-3.1` (Windows).
 - Mensch: für Block B eine App-Registrierung bei Microsoft Entra mit Client-ID, für Block C ein
   Projekt in der Google Cloud Console, sobald diese Konten gebraucht werden.
+
+### Blöcke B und C — Anmeldung mit Microsoft und Google
+
+**Stand vom 23.11.2026, abends: gebaut und lokal getestet, ohne die App-Registrierungen des
+Menschen; nicht gegen Microsoft oder Google geprüft.** Entscheidung: 0042 (OAuth 2.0 mit PKCE im
+System-Browser, IMAP und SMTP mit Token, für Block C IMAP mit OAuth statt Gmail-API). Commits:
+a996289 (Adapter: `XOAUTH2`/`OAUTHBEARER`), 7051ce8 (Kern, Shell, Oberfläche, Tests), dd36247
+(Ende-zu-Ende-Test gegen Stalwart, `testmail/provision.py`), 844d082 (Dokumentation), 3045eab
+(Test der Profile), 404d18b (Einstellungs-Sync). Die Client-IDs sind Build-Konfiguration
+(`MAIL_APP_OAUTH_MICROSOFT_CLIENT_ID`, `MAIL_APP_OAUTH_GOOGLE_CLIENT_ID`,
+`MAIL_APP_OAUTH_GOOGLE_CLIENT_SECRET`); ohne sie sagt die Einrichtung bei Microsoft, dass dieser
+Build sich dort nicht anmelden kann, und bei Gmail bleibt das App-Passwort. Heutige Builds haben
+keine.
+
+**Nachgewiesen**
+- Gegen den lokalen Stalwart 1.1.1 (er ist selbst ein OAuth-Server: PKCE nur S256, Rotation der
+  Refresh-Tokens, Widerruf nach RFC 7009, offene Client-Registrierung):
+  `crates/mail-engine/tests/oauth_server.rs` (2 Tests, mit `--include-ignored` und der Sperre
+  `oauth`): Registrierung, Anmeldung über Stalwarts Login-API als „Browser“ mit einer
+  untergeschobenen Antwort davor (400, danach die echte 200), Konto über `AppCore` mit dem echten
+  IMAP-Adapter, Abgleich bis „aktuell“, Erneuern nach Ablauf (Uhr zwei Stunden vor) mit gespeicherter
+  Rotation, `XOAUTH2` über STARTTLS und `OAUTHBEARER` über TLS (Mitschnitt), falsches Token
+  `auth_failed`, SMTP-Anmeldung und Senden mit `XOAUTH2`, Widerruf beim Entfernen (das alte
+  Refresh-Token ist danach tot), Stalwart verlangt den PKCE-Verifier. Grün vor dem Einchecken
+  (Worktree auf 9ad59f0 mit diesen Änderungen) und erneut auf 7f5fc8c (alle Commits eingecheckt).
+- Attrappe eines Autorisierungsservers im Testprozess mit Browser-Skript (`oauth::tests`, 12
+  Tests): Microsoft- und Google-Profil, PKCE am Token-Endpunkt geprüft, Secret nur bei Google,
+  untergeschobener `state` zuerst, nur falscher `state`, falscher Pfad, falscher Port (Zeitlimit),
+  Zeitlimit, Abbrechen, Ablehnung (`oauth_denied`), nicht verfügbare Anbieter öffnen keinen Browser,
+  Erneuern vor Ablauf und nach Ablehnung, Rotation, `invalid_grant` → `oauth_sign_in_required`,
+  Netzfehler vorübergehend, Token nur für die Server des Anbieters und nie als Passwort, Widerruf
+  (Google ja, Microsoft nichts), Endpunkte und Scopes der Profile.
+- `AppCore` mit dem Fake-IMAP-Server (`oauth::tests::core`, 5 Tests): Anmeldung, jeder Login als
+  Bearer, nur das Refresh-Token im Schlüsselbund, **nur lesend** (Aktionen `read_only`, keine
+  Schreibverbindung), kein Passwortwechsel, fremde Server vor dem Browser abgelehnt,
+  Abbrechen/Ablehnen fügt nichts hinzu, abgelaufene Freigabe stoppt den Abgleich nach genau einer
+  Erneuerung, „Erneut anmelden“ heilt, Entfernen widerruft und löscht alle Stücke.
+- Unit: PKCE (RFC-7636-Vektor), Loopback-Parser, Token-Antworten, Schlüsselbund in Stücken
+  (Windows-Grenze), Fehlercodes (`mail-model`), `XOAUTH2`/`OAUTHBEARER` gegen geskriptete IMAP- und
+  SMTP-Server (`mail-imap`, 5 Tests), Diagnose ohne Token (`diagnostics::tests`, erweitert),
+  Einstellungs-Sync (Datensatz nennt nur den Anbieter, Übernahme als
+  `oauth:<Anbieter>:synced:<zufällig>`).
+- Oberfläche (`app/tests/oauth-sign-in.test.tsx`, 10 Tests): Microsoft ohne Passwortfeld, Warten
+  mit Abbrechen, Fehler mit Grund, nicht verfügbar; Google neben dem App-Passwort oder verborgen;
+  Erkennung am Server; „Erneut anmelden“; deutsche Texte. Neue Fehlercodes in `ERROR_CODES` und
+  `app/tests/ipc.test.ts`.
+- `scripts/check.sh` im Worktree (HEAD 9ad59f0 plus diese Änderungen vor dem Einchecken): grün,
+  1.207 Rust-Tests (93 ignoriert), 3.956 Vitest-Tests in 83 Dateien, Clippy auch für Windows, cargo
+  deny, pnpm audit, Lizenzliste. Im Hauptverzeichnis nach dem
+  Einchecken (alle Commits bis 404d18b, dazu die nicht eingecheckten Änderungen der anderen
+  Sitzungen): grün, 1.267 Rust-Tests (96 ignoriert), 3.961 Vitest-Tests in 84 Dateien.
+
+**Abweichungen und Annahmen**
+- Microsoft leitet an `http://localhost:<port>` zurück (so lässt sich `http://localhost` im
+  Entra-Portal registrieren), alle anderen an `http://127.0.0.1:<port>/`; der Kern lauscht auf
+  `127.0.0.1` und, wo möglich, auf `::1`.
+- Nur das Refresh-Token liegt im Schlüsselbund, das Access-Token im Speicher (eine Erneuerung je
+  App-Start und Konto). Lange Refresh-Tokens werden geteilt (Windows nimmt 2.560 Byte je Eintrag).
+- Ohne ID-Token: meldet sich jemand mit einem anderen Konto an als eingegeben, scheitert die
+  IMAP-Anmeldung mit `auth_failed`; `login_hint` macht das unwahrscheinlich.
+- Microsoft Graph und die Gmail-API sind nicht gebaut (0042).
+- Kein Desktop-Test des Anmeldewegs: der Test-Build öffnet nichts (Aufzeichner statt Browser);
+  der Weg über Stalwarts Login-API ist im Rust-Test Ende zu Ende abgedeckt, die Zustände der
+  Oberfläche in Vitest.
+- `testmail/provision.py` bietet `XOAUTH2`/`OAUTHBEARER` jetzt auch für SMTP an; die laufende
+  Testserver-Datenbank wurde dafür über die Management-API angepasst.
+
+**Ungeprüft / offen**
+- Alles mit echten Konten bei Microsoft (Outlook.com, Microsoft 365) und Google.
+- Windows zur Laufzeit (Schlüsselbund-Grenze, `::1`-Listener, Öffnen des Browsers).
+- Zwei echte Geräte über den Einstellungs-Sync mit einem Anmelde-Konto.
+- Abnahme der Stufe: offen bis zur Handprüfung.
+
+**Wartet auf**
+- Mensch: App-Registrierung bei **Microsoft Entra** (kostenlos): Kontotypen „beliebiges
+  Organisationsverzeichnis und persönliche Microsoft-Konten“, Plattform „Mobile und
+  Desktopanwendungen“ mit Umleitungs-URI `http://localhost` (Typ öffentlicher Client, „Öffentliche
+  Clientflows zulassen“ = Ja), delegierte Berechtigungen `IMAP.AccessAsUser.All`, `SMTP.Send`,
+  `offline_access`, kein Client-Secret; die Anwendungs-ID als `MAIL_APP_OAUTH_MICROSOFT_CLIENT_ID`
+  beim Bauen setzen. Für fremde Mandanten Herausgeberprüfung empfohlen.
+- Mensch: **Google-Cloud-Projekt** mit OAuth-Zustimmungsbildschirm „Extern“ (App-Name,
+  Support-Adresse, Scope `https://mail.google.com/`), Status „Testing“ mit eingetragenen Testnutzern
+  (höchstens 100; deren Refresh-Tokens verfallen nach 7 Tagen), OAuth-Client vom Typ
+  **„Desktop-App“**; Client-ID und Client-Secret als `MAIL_APP_OAUTH_GOOGLE_CLIENT_ID` und
+  `MAIL_APP_OAUTH_GOOGLE_CLIENT_SECRET`. Für alle Nutzer später die Verifizierung (Domain,
+  Datenschutzerklärung, Demo-Video, Sicherheitsbewertung; `docs/PROVIDERS.md`).
+- Mensch: Handprüfung mit einem Outlook.com-, einem Microsoft-365- und einem Gmail-Konto
+  (Testnutzer): Anmeldung, Abgleich, Senden nach Freischalten, Erneuern nach über einer Stunde,
+  „Erneut anmelden“ nach Widerruf beim Anbieter, Entfernen (bei Google danach unter
+  myaccount.google.com/permissions verschwunden), eins davon als Sync-Konto.
