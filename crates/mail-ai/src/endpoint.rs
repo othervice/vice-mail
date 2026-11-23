@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn own_network() {
         for url in [
-            "http://192.168.10.251:11434/v1",
+            "http://192.168.1.20:11434/v1",
             "http://10.0.0.5/v1",
             "http://172.16.0.1/v1",
             "http://172.31.255.254/v1",
@@ -238,7 +238,7 @@ mod tests {
             "http://[fe80::1]/v1",
             "http://[fd12:3456::1]/v1",
             "http://[::ffff:192.168.1.10]/v1",
-            "http://macmini.local:1234/v1",
+            "http://workstation.local:1234/v1",
             "http://llm.home.arpa/v1",
             "http://gpu.internal/v1",
             "http://router.lan/v1",

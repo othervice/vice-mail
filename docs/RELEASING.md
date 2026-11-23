@@ -272,7 +272,7 @@ To register again (for example after a new Gitea), take a token from the reposit
 
 ```sh
 gitea-runner -c /opt/homebrew/etc/gitea-runner/config.yaml register --no-interactive \
-  --instance <gitea URL> --token <token> --name macmini-host
+  --instance <gitea URL> --token <token> --name <runner name>
 brew services restart gitea-runner
 ```
 

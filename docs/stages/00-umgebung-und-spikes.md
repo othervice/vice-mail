@@ -70,7 +70,7 @@ Alle Zahlen stammen vom Mac mini M4 (16 GB), meist unter Last paralleler Builds.
   Hauptsitzung: Exit 0.
 - Windows-Installer: `spikes/tauri-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Vice Mail Spike_0.1.0_x64-setup.exe`
   (SHA-256 `b9c59323…c81b9`), hochgeladen als Vorab-Release
-  http://192.168.30.175:3000/othervice/vice-mail/releases/tag/spike-c-0.1.0
+  `spike-c-0.1.0` im privaten Gitea
 - `docs/ARCHITECTURE.md` (Stack, Schema und Abfragen, Brücke, Verbindungen, Sicherheitsgrenzen,
   Entscheidungen) und die Stufen 01 bis 07 sind an die Ergebnisse angepasst.
 
