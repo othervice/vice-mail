@@ -50,6 +50,7 @@ fn mail(id: i64, account_no: u8, subject: &str, text: &str) -> MailInput {
         date: Some(1_795_000_000 + id * 3600),
         subject: subject.into(),
         text: text.into(),
+        hidden_text_chars: 0,
         attachments: vec!["Angebot.pdf".into()],
     }
 }

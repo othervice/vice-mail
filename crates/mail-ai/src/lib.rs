@@ -56,7 +56,7 @@ pub use http::{HttpLimits, NEUTRAL_USER_AGENT};
 pub use openai::OpenAiCompatible;
 pub use policy::CloudPolicy;
 pub use prepare::{
-    Budget, MAX_ATTACHMENT_NAMES, MAX_RECIPIENTS, MailInput, TransferInfo, Trimming, visible_text,
+    Budget, MAX_ATTACHMENT_NAMES, MAX_RECIPIENTS, MailInput, TransferInfo, Trimming,
 };
 pub use profile::{PRESETS, Preset, ProviderConfig, build_provider};
 pub use prompt::{ANSWER_TASK, AnswerLanguage, DATA_RULES, QUERY_SYSTEM, SUMMARY_TASK};

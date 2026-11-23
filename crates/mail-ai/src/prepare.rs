@@ -38,7 +38,8 @@ const SHINGLE_WORDS: usize = 5;
 const KNOWN_PERCENT: usize = 80;
 
 /// One message as the engine hands it over. Plain text only: the visible text of the HTML
-/// body, or the text body when there is no HTML ([`visible_text`]), never HTML.
+/// body, or the text body when there is no HTML (`mail_content::ParsedMessage::visible_text`),
+/// never HTML.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MailInput {
     pub id: MessageId,
@@ -50,6 +51,8 @@ pub struct MailInput {
     pub date: Option<i64>,
     pub subject: String,
     pub text: String,
+    /// Characters of HTML text hidden from the reader (CSS, attributes) that `text` leaves out.
+    pub hidden_text_chars: usize,
     /// Sanitised attachment file names (`mail_content::AttachmentPart::file_name`).
     pub attachments: Vec<String>,
 }
@@ -65,6 +68,7 @@ impl MailInput {
         parsed: &mail_content::ParsedMessage,
     ) -> Self {
         let headers = &parsed.headers;
+        let visible = parsed.visible_text();
         Self {
             id,
             account,
@@ -73,7 +77,8 @@ impl MailInput {
             cc: headers.cc.clone(),
             date: headers.date,
             subject: headers.subject.clone().unwrap_or_default(),
-            text: visible_text(parsed),
+            text: visible.text,
+            hidden_text_chars: visible.hidden_chars,
             attachments: parsed
                 .attachments
                 .iter()
@@ -81,22 +86,6 @@ impl MailInput {
                 .collect(),
         }
     }
-}
-
-/// The text of what the reading pane shows (stage 12, the same for MCP and the built-in AI):
-/// the HTML body through `mail_content::html_to_visible_text` (scripts, styles, comments and
-/// text hidden by CSS or attributes left out; links as text, no images) when there is HTML,
-/// otherwise the text body. A `text/plain` alternative is not preferred: it can say something
-/// else than what the user sees, and a sender can hide instructions in it.
-pub fn visible_text(parsed: &mail_content::ParsedMessage) -> String {
-    if let Some(html) = parsed
-        .html
-        .as_deref()
-        .filter(|html| !html.trim().is_empty())
-    {
-        return mail_content::html_to_visible_text(html).text;
-    }
-    parsed.text.clone().unwrap_or_default()
 }
 
 /// How much message text one request may carry, in characters.
@@ -160,6 +149,8 @@ pub struct TransferInfo {
     pub quotes_removed: u32,
     /// Invisible characters removed from message text.
     pub hidden_chars_removed: u32,
+    /// Characters of HTML text hidden from the reader (CSS, attributes) that were not sent.
+    pub hidden_text_chars_omitted: u32,
     pub trimming: Trimming,
 }
 
@@ -205,6 +196,9 @@ pub(crate) fn prepare_mails(
         info.hidden_chars_removed = info
             .hidden_chars_removed
             .saturating_add(u32::try_from(cleaned.hidden_removed).unwrap_or(u32::MAX));
+        info.hidden_text_chars_omitted = info
+            .hidden_text_chars_omitted
+            .saturating_add(u32::try_from(mail.hidden_text_chars).unwrap_or(u32::MAX));
         if dedupe {
             let (text, removed) = remove_known_quotes(&cleaned.text, &known);
             info.quotes_removed += removed;
@@ -551,6 +545,7 @@ mod tests {
             date: Some(1_795_000_000 + id),
             subject: "Budget 2027".into(),
             text: text.into(),
+            hidden_text_chars: 0,
             attachments: Vec::new(),
         }
     }
@@ -813,10 +808,13 @@ We need them for the board meeting on Monday.\n\nThanks, Anna";
             input.text
         );
         assert!(!input.text.contains("hidden order"), "{}", input.text);
+        assert!(input.hidden_text_chars > 0, "{}", input.hidden_text_chars);
 
         let plain =
             mail_content::parse(b"From: a@example.org\r\nSubject: Plain\r\n\r\nJust text\r\n");
-        assert_eq!(visible_text(&plain).trim(), "Just text");
+        let plain = MailInput::from_parsed(MessageId(2), account(), &plain);
+        assert_eq!(plain.text.trim(), "Just text");
+        assert_eq!(plain.hidden_text_chars, 0);
     }
 
     #[test]

@@ -5,8 +5,8 @@ Subject: Your weekly deals
 Message-ID: <injection.hidden-html@corpus.vicemail.test>
 MIME-Version: 1.0
 X-Corpus-Vector: hidden-text display-none white-on-white font-size-0 preheader html-comment
-X-Corpus-Expect: Text hidden by CSS is text like any other, inside the data block; comments,
- scripts and styles never appear; image addresses never appear.
+X-Corpus-Expect: Text hidden by CSS is left out and counted; comments, scripts and styles
+ never appear; image addresses never appear.
 Content-Type: text/html; charset=utf-8
 Content-Transfer-Encoding: 8bit
 

@@ -4,7 +4,7 @@
 //! human but are read by a model (`mail_content::strip_hidden_chars`: Unicode tag characters,
 //! bidi overrides, zero-width spaces, variation selectors outside emoji sequences, …), so an
 //! instruction cannot hide from the user in plain text. Text hidden by CSS in HTML bodies never
-//! gets here (`crate::visible_text`: the visible HTML text, else the text body).
+//! gets here (`mail_content::ParsedMessage::visible_text`: the visible HTML text, else the text body).
 //!
 //! Out of the model: [`clean_output`] makes one plain line of every text the model returns: no
 //! control or hidden characters, Markdown image embeds reduced to their alt text (so a later

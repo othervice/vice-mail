@@ -176,16 +176,17 @@ impl ParsedMessage {
         }
     }
 
-    /// Text for a model (MCP server, built-in AI): the text body as it is, else the text of the
-    /// HTML body without the text a reader does not see ([`crate::html_to_visible_text`]).
+    /// Text for a model (MCP server, built-in AI): what the reading pane shows. The HTML body
+    /// without the text a reader does not see ([`crate::html_to_visible_text`]) when there is
+    /// HTML, otherwise the text body. A `text/plain` alternative is not preferred: it can say
+    /// something else than what the user sees, and a sender can hide instructions in it.
     pub fn visible_text(&self) -> VisibleText {
-        match (&self.text, &self.html) {
-            (Some(text), _) => VisibleText {
-                text: text.clone(),
-                hidden_chars: 0,
-            },
-            (None, Some(html)) => html_to_visible_text(html),
-            (None, None) => VisibleText::default(),
+        if let Some(html) = self.html.as_deref().filter(|html| !html.trim().is_empty()) {
+            return html_to_visible_text(html);
+        }
+        VisibleText {
+            text: self.text.clone().unwrap_or_default(),
+            hidden_chars: 0,
         }
     }
 
