@@ -291,7 +291,9 @@ async fn qa_set_with_a_real_model() {
         std::env::var("VICE_MAIL_QA_BASE_URL"),
         std::env::var("VICE_MAIL_QA_MODEL"),
     ) else {
-        panic!("set VICE_MAIL_QA_BASE_URL and VICE_MAIL_QA_MODEL");
+        // `--include-ignored` runs every server test; without a model there is nothing to measure.
+        eprintln!("skipped: set VICE_MAIL_QA_BASE_URL and VICE_MAIL_QA_MODEL to run the QA set");
+        return;
     };
     let qa = qa(Some((url, model))).await;
     let mut total = Score::default();
