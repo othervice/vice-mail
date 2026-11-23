@@ -1,8 +1,8 @@
 // Stage 8 (decision 0025) in the real app: a message and a draft in windows of their own, and the
 // UI preferences in the core instead of the web view's storage.
-// NOT RUN YET (written by the stage 8 UI session, which may not run the desktop tests). It is not
-// in `specs` of wdio.conf.mjs; add it after account-sync.e2e.mjs (it needs a synced inbox). It
-// only reads mail and writes one local draft, which it discards at the end.
+// In `specs` of wdio.conf.mjs before actions.e2e.mjs. It adds alice's account read-only (the
+// inbox as seeded), only reads mail, writes two local drafts, which it discards, and removes the
+// account at the end.
 //
 // - "Open in new window" from the reading pane opens a second window whose page has the query
 //   `?window=message&accountId=…&messageId=…`, shows the message with its toolbar and no rail.
@@ -15,6 +15,7 @@
 import assert from "node:assert/strict";
 import { $, browser } from "@wdio/globals";
 import { attach, coreCall, screenshot, testId } from "./support/app.mjs";
+import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 
@@ -38,6 +39,37 @@ describe("stage 8: message and composer windows", () => {
   before(async () => {
     await attach();
     main = await browser.getWindowHandle();
+    // The steps use the English names (labels, palette commands).
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
+    await coreCall("add_account", {
+      settings: {
+        email: ALICE.email,
+        displayName: "Alice Archer",
+        imap: { host: SERVER.host, port: SERVER.imapsPort, security: "tls", username: ALICE.email },
+        smtp: { host: SERVER.host, port: SERVER.smtpsPort, security: "tls", username: ALICE.email },
+      },
+      password: ALICE.password,
+    });
+    await browser.waitUntil(
+      async () => {
+        const [a] = await coreCall("list_accounts");
+        return a?.status.state === "idle" && a.status.lastSyncAt !== null;
+      },
+      { timeout: 240000, interval: 500, timeoutMsg: "the first sync did not finish" },
+    );
+    await coreCall("set_reading_preferences", { preferences: { markReadOnOpen: "never" } });
+  });
+
+  after(async () => {
+    // The message window (and any composer window left by a failure) closes with the spec.
+    for (const handle of await browser.getWindowHandles().catch(() => [])) {
+      if (handle === main) continue;
+      await browser.switchToWindow(handle).catch(() => undefined);
+      await browser.closeWindow().catch(() => undefined);
+    }
+    await browser.switchToWindow(main).catch(() => undefined);
+    const left = await coreCall("list_accounts").catch(() => []);
+    for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
   });
 
   afterEach(async () => {
@@ -74,12 +106,24 @@ describe("stage 8: message and composer windows", () => {
       await testId("composer-open-window").click();
       await testId("composer").waitForExist({ reverse: true, timeout: 10000 });
     }
-    const handles = [];
-    for (const handle of await browser.getWindowHandles()) {
-      await browser.switchToWindow(handle);
-      const search = await browser.execute(() => window.location.search);
-      if (new URLSearchParams(search).get("window") === "composer") handles.push(handle);
-    }
+    // A new window loads its page after it appears: look again until both have theirs.
+    let handles = [];
+    await browser
+      .waitUntil(
+        async () => {
+          handles = [];
+          for (const handle of await browser.getWindowHandles()) {
+            await browser.switchToWindow(handle);
+            const search = await browser.execute(() => window.location.search);
+            if (new URLSearchParams(search).get("window") === "composer") handles.push(handle);
+          }
+          return handles.length >= 2;
+        },
+        { timeout: 15000, interval: 500, timeoutMsg: "one window per draft" },
+      )
+      .catch(async (e) => {
+        throw new Error(`${e.message}: windows ${JSON.stringify(await browser.getWindowHandles())}, composer windows ${JSON.stringify(handles)}`);
+      });
     assert.equal(handles.length, 2, "one window per draft");
     await screenshot("window-composer");
     for (const handle of handles) {
@@ -100,10 +144,12 @@ describe("stage 8: message and composer windows", () => {
     await browser.switchToWindow(main);
     await browser.keys([MOD, "k"]);
     await testId("command-palette").waitForExist();
-    await browser.keys([..."Keyboard"]);
+    await browser.keys([..."Settings: Keyboard"]);
     await browser.keys("Enter");
     await testId("shortcut-row-archive").waitForExist({ timeout: 10000 });
-    await testId("shortcut-row-archive").$("button*=Add shortcut").click();
+    // The button shows "Add"; its accessible name says for which command.
+    await testId("shortcut-row-archive").$('button[aria-label^="Add shortcut"]').click();
+    await testId("shortcut-recorder").waitForExist();
     await browser.keys("y");
     await browser.pause(500);
     const preferences = await coreCall("get_ui_preferences", {});
@@ -115,6 +161,6 @@ describe("stage 8: message and composer windows", () => {
     const local = await browser.execute(() => window.localStorage.getItem("vice-mail.ui.shortcuts"));
     assert.equal(local, null);
     // Back to the standard assignment for the specs after this one.
-    await testId("shortcut-row-archive").$("button*=Reset").click();
+    await testId("shortcut-row-archive").$('button[aria-label^="Reset"]').click();
   });
 });

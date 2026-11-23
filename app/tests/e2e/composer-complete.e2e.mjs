@@ -1,5 +1,5 @@
 // Stage 10 in the real app: the composer's new editing features against the local test server
-// (not yet in `specs` of wdio.conf.mjs; written by the composer-complete UI session and NOT RUN).
+// (in `specs` of wdio.conf.mjs after compose.e2e.mjs; the account stays read-only, drafts are local).
 //
 // 1. Rich text: a heading, centred, and struck-through text are saved as the HTML the core keeps
 //    (`<h2 style="text-align: …">`, `<s>`), without CSP violations.
@@ -23,6 +23,25 @@ import { ALICE, SERVER } from "./support/testmail.mjs";
 const report = { screenshots: [], steps: {} };
 const RUN = Date.now().toString(36);
 let account;
+
+/**
+ * Puts the focus back into the text after a click on the format bar. A real mouse press leaves it
+ * in the editor (the buttons cancel mouse down); the embedded WebDriver's click focuses the button
+ * it clicks, and TipTap moves the focus back only on the next animation frame, which a hidden
+ * window does not run.
+ */
+const backToText = () => browser.execute(() => document.querySelector('[data-testid="composer-rich-body"]')?.focus());
+
+/**
+ * Picks a block style in the native select as a choice in its menu does (value, then `change`):
+ * the driver's click on an `<option>` does not select it.
+ */
+const pickBlockStyle = (value) =>
+  browser.execute((v) => {
+    const select = document.querySelector('[data-testid="format-block"]');
+    select.value = v;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
 
 async function openRichComposer(subject) {
   await $('button[aria-label="New message"]').click();
@@ -52,6 +71,8 @@ async function savedDraft(subject) {
 describe("stage 10: the composer complete", () => {
   before(async () => {
     await attach();
+    // The steps use the English names (labels such as "New message").
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     account = await coreCall("add_account", {
       settings: {
         email: ALICE.email,
@@ -85,12 +106,15 @@ describe("stage 10: the composer complete", () => {
     await openRichComposer(subject);
     const editor = await testId("composer-rich-body");
     await editor.click();
-    await browser.keys("Plan");
-    await testId("format-block").selectByAttribute("value", "heading2");
+    await browser.keys([..."Plan"]);
+    await pickBlockStyle("heading2");
+    await backToText();
     await testId("format-align-center").click();
+    await backToText();
     await browser.keys("Enter");
     await testId("format-strike").click();
-    await browser.keys("alt");
+    await backToText();
+    await browser.keys([..."alt"]);
     report.screenshots.push(await screenshot("composer-complete-format"));
     await testId("composer-close").click();
     await testId("composer").waitForExist({ reverse: true });
@@ -138,7 +162,9 @@ describe("stage 10: the composer complete", () => {
     report.screenshots.push(await screenshot("composer-complete-template"));
     await testId("composer-discard").click();
     await testId("composer-confirm-discard").waitForExist();
-    await $('[data-testid="composer-confirm-discard"] button=Discard').click();
+    // A CSS selector cannot hold WebdriverIO's text selector: the button by its text within the dialog.
+    await testId("composer-confirm-discard").$("button=Discard").click();
+    await testId("composer").waitForExist({ reverse: true });
   });
 
   it("forwards a message as an .eml attachment from the reading pane", async () => {

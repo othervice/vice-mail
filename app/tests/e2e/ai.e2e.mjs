@@ -1,7 +1,6 @@
-// Stage 13 in the real app (UNRUN: written by the UI session, to be added to `specs` of
-// wdio.conf.mjs by the main session after mcp-sync.e2e.mjs). Uses the counting server of
-// reading.e2e.mjs (support/counter-server.mjs) as the "provider": every connection to it is
-// recorded, so "nothing leaves the device" is measured, not assumed.
+// Stage 13 in the real app (in `specs` of wdio.conf.mjs after mcp-sync.e2e.mjs). Uses the counting
+// server of reading.e2e.mjs (support/counter-server.mjs, started here) as the "provider": every
+// connection to it is recorded, so "nothing leaves the device" is measured, not assumed.
 //
 // 1. AI is off after setup: the panel and the writing help are absent, and with a profile that
 //    points at the counter, the model list fails with `ai_off` and the counter sees nothing.
@@ -10,16 +9,18 @@
 import assert from "node:assert/strict";
 import { $, browser } from "@wdio/globals";
 import { attach, coreCall, cspViolations, invoke, openSettings, testId } from "./support/app.mjs";
-import { counter } from "./support/counter-server.mjs";
+import { counter, startCounter } from "./support/counter-server.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const PROVIDER = "http://127.0.0.1:18999/v1";
 let account;
 let profileId;
+let counterServer = null;
 
 describe("stage 13: AI in the app", () => {
   before(async () => {
     await attach();
+    counterServer = await startCounter();
     await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     account = await coreCall("add_account", {
       settings: {
@@ -52,6 +53,7 @@ describe("stage 13: AI in the app", () => {
     await coreCall("set_ai_enabled", { enabled: false }).catch(() => undefined);
     if (profileId) await coreCall("delete_ai_profile", { profileId }).catch(() => undefined);
     if (account) await coreCall("remove_account", { accountId: account.id }).catch(() => undefined);
+    await counterServer?.stop();
   });
 
   it("is off: no panel, no writing help, and nothing reaches the provider", async () => {

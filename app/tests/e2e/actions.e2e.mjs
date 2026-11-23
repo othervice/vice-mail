@@ -29,7 +29,20 @@ let boxes;
 /** Toolbar actions that change mail on the server (`writes: true` in src/features/actions/registry.ts). */
 const SERVER_ACTIONS = new Set(["archive", "delete", "deletePermanently", "toggleRead", "toggleFlag", "move", "tags", "spam", "notSpam"]);
 /** Toolbar actions that change nothing on the server: they work on read-only accounts too. */
-const LOCAL_ACTIONS = new Set(["reply", "replyAll", "forward", "editDraft", "togglePin", "snooze", "unsnooze", "toggleTask", "toggleTaskDone"]);
+const LOCAL_ACTIONS = new Set([
+  "reply",
+  "replyAll",
+  "forward",
+  // Stage 10: a local draft with the message attached; stage 8: the message in its own window.
+  "forwardAsAttachment",
+  "openInWindow",
+  "editDraft",
+  "togglePin",
+  "snooze",
+  "unsnooze",
+  "toggleTask",
+  "toggleTaskDone",
+]);
 
 async function onlyAccount() {
   const accounts = await coreCall("list_accounts");

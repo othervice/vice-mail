@@ -28,8 +28,24 @@ export async function quitApp() {
     throw e;
   }
   if (!session) throw new Error("the embedded WebDriver refused a session for quitting the app");
-  // Closing the last window quits the app, so this request may not get an answer.
-  await fetch(`${base}/session/${session}/window`, { method: "DELETE", signal: AbortSignal.timeout(5000) }).catch(() => {});
+  // Message and composer windows (stage 8) keep the app running when only the main window
+  // closes: close them first, the main window last.
+  const handles = await fetch(`${base}/session/${session}/window/handles`, { signal: AbortSignal.timeout(5000) })
+    .then(async (res) => (await res.json()).value ?? [])
+    .catch(() => []);
+  const ordered = [...handles.filter((h) => h !== "main"), ...handles.filter((h) => h === "main")];
+  for (const handle of ordered.length ? ordered : [null]) {
+    if (handle !== null) {
+      await fetch(`${base}/session/${session}/window`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ handle }),
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => {});
+    }
+    // Closing the last window quits the app, so this request may not get an answer.
+    await fetch(`${base}/session/${session}/window`, { method: "DELETE", signal: AbortSignal.timeout(5000) }).catch(() => {});
+  }
   await waitForAppExit();
 }
 

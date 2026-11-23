@@ -1,5 +1,5 @@
-// Stage 10 in the real app: "send later" against the local test server (not yet in `specs` of
-// wdio.conf.mjs; written by the composer-complete UI session and NOT RUN yet).
+// Stage 10 in the real app: "send later" against the local test server (in `specs` of
+// wdio.conf.mjs after composer-complete.e2e.mjs; it sends two messages to alice's inbox).
 //
 // 1. A message planned a little more than a minute ahead shows in the outbox as "Planned" with
 //    its time and the rule (sent only while the app runs and is online); nothing arrives before.
@@ -63,6 +63,8 @@ async function outboxRow(subject) {
 describe("stage 10: send later", () => {
   before(async () => {
     await attach();
+    // The steps use the English names ("Planned").
+    await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
     account = await coreCall("add_account", {
       settings: {
         email: ALICE.email,
