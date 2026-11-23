@@ -177,16 +177,25 @@ pub(crate) fn remove_file(root: &Path, relative: &str) {
 
 /// Removes the draft's directory of attachments.
 pub(crate) fn remove_draft_dir(root: &Path, draft: &DraftId) {
-    remove_dir(&root.join(DRAFTS).join(draft.as_str()));
+    remove_dir(root, &format!("{DRAFTS}/{}", draft.as_str()));
 }
 
 /// Removes the frozen bytes of a send.
 pub(crate) fn remove_outgoing_dir(root: &Path, draft: &DraftId) {
-    remove_dir(&root.join(OUTGOING).join(draft.as_str()));
+    remove_dir(root, &format!("{OUTGOING}/{}", draft.as_str()));
 }
 
-fn remove_dir(path: &Path) {
-    if let Err(err) = fs::remove_dir_all(path)
+/// Through [`resolve`] like every other compose path: a draft id that came from the UI without
+/// being checked (`"../.."`) never removes anything outside (stage 15 review, V-08).
+fn remove_dir(root: &Path, relative: &str) {
+    let path = match resolve(root, relative) {
+        Ok(path) => path,
+        Err(err) => {
+            tracing::warn!(error = %err, "refused to remove a compose directory");
+            return;
+        }
+    };
+    if let Err(err) = fs::remove_dir_all(&path)
         && err.kind() != io::ErrorKind::NotFound
     {
         tracing::warn!(error = %err, "removing a compose directory failed");
@@ -261,6 +270,28 @@ pub(crate) async fn sweep(store: &Store) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn draft_directories_are_removed_only_inside_the_compose_directory() {
+        let dir = tempfile::TempDir::new().expect("temp");
+        let root = dir.path().join("compose");
+        let victim = dir.path().join("victim");
+        fs::create_dir_all(&victim).expect("victim");
+        fs::write(victim.join("keep.txt"), b"keep").expect("file");
+        // A draft id as the UI could send it, never checked by `DraftId::parse`.
+        for hostile in ["../../victim", "..", "../..", "/tmp"] {
+            let draft: DraftId =
+                serde_json::from_value(serde_json::Value::String(hostile.into())).expect("id");
+            remove_draft_dir(&root, &draft);
+            remove_outgoing_dir(&root, &draft);
+        }
+        assert!(victim.join("keep.txt").exists());
+        let draft = DraftId::from_random(9);
+        let own = root.join(DRAFTS).join(draft.as_str());
+        fs::create_dir_all(&own).expect("own");
+        remove_draft_dir(&root, &draft);
+        assert!(!own.exists());
+    }
 
     #[test]
     fn paths_stay_inside_the_compose_directory() {

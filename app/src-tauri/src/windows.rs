@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 use mail_model::{AccountId, CoreError, DraftId, EmlFile, EmlFileId, MessageId};
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Manager, Runtime, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::{MAIN_WINDOW, drops, navigation};
@@ -160,6 +160,22 @@ pub(crate) fn guard<'a, R: Runtime, M: Manager<R>>(
             );
             NewWindowResponse::Deny
         })
+        // Downloads the web view would start itself (context menu "Download Linked File" or
+        // "Save Image As", WebView2's download of a link) are refused: the app saves files only
+        // in the core, after the system's save dialog (stage 15 review).
+        .on_download(|_webview, event| refuse_download(&event))
+}
+
+/// The download handler of every window: never lets the web view download anything.
+fn refuse_download(event: &DownloadEvent<'_>) -> bool {
+    if let DownloadEvent::Requested { url, .. } = event {
+        tracing::warn!(
+            scheme = url.scheme(),
+            host = url.host_str(),
+            "refused a download in the web view"
+        );
+    }
+    false
 }
 
 /// What every window gets after it is built: dropped files are remembered (stage 5; the
@@ -422,5 +438,22 @@ mod tests {
         );
         assert!(layout_slot("other").is_err());
         assert!(layout_slot("").is_err());
+    }
+
+    #[test]
+    fn the_web_view_never_downloads() {
+        let mut destination = PathBuf::from("/tmp/x");
+        let requested = DownloadEvent::Requested {
+            url: "https://link.invalid/0123456789abcdeffedcba9876543210/0"
+                .parse()
+                .expect("url"),
+            destination: &mut destination,
+        };
+        assert!(!refuse_download(&requested));
+        let image = DownloadEvent::Requested {
+            url: "data:image/png;base64,iVBORw0KGgo=".parse().expect("url"),
+            destination: &mut destination,
+        };
+        assert!(!refuse_download(&image));
     }
 }

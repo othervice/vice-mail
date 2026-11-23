@@ -8,6 +8,12 @@
 //! - Windows: every written file gets the mark of the web (`Zone.Identifier` stream, zone 3 =
 //!   internet), so Windows and Office treat it as downloaded (SmartScreen, Protected View).
 //!   Written with `std::fs` into the alternate data stream, no `unsafe`.
+//! - macOS (stage 15 review): every written file gets the quarantine attribute
+//!   (`com.apple.quarantine`) like a browser download or an Apple Mail attachment, so Gatekeeper
+//!   checks an app or installer before it runs, also one unpacked from an attached archive.
+//!   Written with `/usr/bin/xattr` and fixed arguments, no `unsafe`, no extra dependency.
+//! - The mark is set while the file is still writable: neither system lets the owner add it to
+//!   a read-only file.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -121,8 +127,8 @@ pub(crate) fn write_for_opening(
     let mut permissions = file.metadata().map_err(io)?.permissions();
     permissions.set_readonly(true);
     drop(file);
-    std::fs::set_permissions(&path, permissions).map_err(io)?;
     mark_as_downloaded(&path);
+    std::fs::set_permissions(&path, permissions).map_err(io)?;
     Ok(path)
 }
 
@@ -169,8 +175,8 @@ fn make_writable(path: &Path) {
     }
 }
 
-/// The mark of the web on Windows; nothing elsewhere (macOS has no equivalent for files an app
-/// writes itself without the quarantine API).
+/// The mark of the web on Windows, the quarantine attribute on macOS. A failure is logged; the
+/// file stays usable (and opening an executable type still asks first).
 #[cfg(windows)]
 fn mark_as_downloaded(path: &Path) {
     let mut stream = path.as_os_str().to_owned();
@@ -181,7 +187,39 @@ fn mark_as_downloaded(path: &Path) {
     }
 }
 
-#[cfg(not(windows))]
+/// The value Gatekeeper reads: flags (0x0081: downloaded, as browsers and Mail set it), the time
+/// in hexadecimal Unix seconds, the agent's name.
+#[cfg(target_os = "macos")]
+fn quarantine_value(now: std::time::SystemTime) -> String {
+    let secs = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    format!("0081;{secs:08x};Vice Mail;")
+}
+
+#[cfg(target_os = "macos")]
+fn mark_as_downloaded(path: &Path) {
+    let result = std::process::Command::new("/usr/bin/xattr")
+        .arg("-w")
+        .arg("com.apple.quarantine")
+        .arg(quarantine_value(std::time::SystemTime::now()))
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match result {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            tracing::warn!(path = %path.display(), %status, "quarantine attribute could not be written")
+        }
+        Err(err) => {
+            tracing::warn!(path = %path.display(), %err, "quarantine attribute could not be written")
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn mark_as_downloaded(_path: &Path) {}
 
 #[cfg(test)]
@@ -223,5 +261,37 @@ mod tests {
         clear_open_dir(dir.path());
         assert_eq!(std::fs::read_dir(dir.path()).expect("dir").count(), 0);
         clear_open_dir(&dir.path().join("missing"));
+    }
+
+    /// Stage 15 review: on macOS every file the app writes from an attachment is quarantined,
+    /// so Gatekeeper checks apps and installers in it (also unpacked from an archive).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn written_attachments_are_quarantined_on_macos() {
+        let quarantine = |path: &Path| {
+            let out = std::process::Command::new("/usr/bin/xattr")
+                .args(["-p", "com.apple.quarantine"])
+                .arg(path)
+                .output()
+                .expect("xattr");
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
+        };
+        let dir = tempfile::TempDir::new().expect("temp");
+        let saved = save_atomically(&dir.path().join("Invoice.zip"), b"PK").expect("save");
+        let numbered = save_new_in(dir.path(), "Invoice.zip", b"PK").expect("save all");
+        let opened = write_for_opening(dir.path(), "abc", "Setup.pkg", b"xar!").expect("open");
+        for path in [&saved, &numbered, &opened] {
+            let value = quarantine(path);
+            assert!(
+                value.starts_with("0081;") && value.ends_with(";Vice Mail;"),
+                "{}: {value:?}",
+                path.display()
+            );
+        }
+        assert_eq!(
+            quarantine_value(std::time::UNIX_EPOCH + std::time::Duration::from_secs(0x6560_0000)),
+            "0081;65600000;Vice Mail;"
+        );
+        clear_open_dir(dir.path());
     }
 }

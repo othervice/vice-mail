@@ -31,6 +31,10 @@ const READ_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateHosts {
     hosts: Vec<String>,
+    /// On `github.com`: the endpoint's release path (`/<owner>/<repo>/releases/`). Every
+    /// address there must lie under it, so a changed manifest cannot point to another
+    /// repository's files (stage 15 review). GitHub's file hosts are reached only by redirect.
+    github_releases: Option<String>,
     /// Plain HTTP to a loopback address: only when the endpoint itself is one (the local update
     /// server of tests and desktop tests). The shipped endpoint is HTTPS.
     insecure_loopback: bool,
@@ -53,11 +57,18 @@ impl UpdateHosts {
             }
         };
         let mut hosts = vec![host.clone()];
+        let mut github_releases = None;
         if host == "github.com" {
             hosts.extend(GITHUB_FILE_HOSTS.iter().map(|h| (*h).to_owned()));
+            let path = endpoint.path();
+            github_releases = path
+                .find("/releases/")
+                .map(|end| path[..end + "/releases/".len()].to_owned())
+                .filter(|prefix| prefix.split('/').filter(|s| !s.is_empty()).count() == 3);
         }
         Ok(Self {
             hosts,
+            github_releases,
             insecure_loopback,
         })
     }
@@ -70,10 +81,17 @@ impl UpdateHosts {
             "http" => self.insecure_loopback && is_loopback(url),
             _ => false,
         };
-        scheme_ok
-            && url
-                .host_str()
-                .is_some_and(|host| self.hosts.iter().any(|h| h.eq_ignore_ascii_case(host)))
+        let Some(host) = url.host_str() else {
+            return false;
+        };
+        let path_ok = match &self.github_releases {
+            Some(prefix) if host.eq_ignore_ascii_case("github.com") => url
+                .path()
+                .get(..prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(prefix)),
+            _ => true,
+        };
+        scheme_ok && path_ok && self.hosts.iter().any(|h| h.eq_ignore_ascii_case(host))
     }
 
     pub fn hosts(&self) -> &[String] {
@@ -150,6 +168,21 @@ mod tests {
             !hosts.permits(&url("http://127.0.0.1/a")),
             "no loopback for a real endpoint"
         );
+        // Stage 15 review: on github.com only this repository's releases.
+        assert!(hosts.permits(&url(
+            "https://github.com/othervice/vice-mail/releases/latest/download/latest.json"
+        )));
+        assert!(hosts.permits(&url(
+            "https://github.com/OtherVice/Vice-Mail/releases/download/v0.2.0/x.tar.gz"
+        )));
+        for other in [
+            "https://github.com/someone/else/releases/download/v9/x.tar.gz",
+            "https://github.com/othervice/vice-mail-fork/releases/download/v9/x.tar.gz",
+            "https://github.com/othervice/vice-mail/archive/x.tar.gz",
+            "https://github.com/a",
+        ] {
+            assert!(!hosts.permits(&url(other)), "{other}");
+        }
     }
 
     #[test]

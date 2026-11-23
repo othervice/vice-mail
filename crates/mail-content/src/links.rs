@@ -184,6 +184,17 @@ const NOT_DOMAINS: &[&str] = &[
 /// The first domain the link text names: in a URL, after `www.`, in an e-mail address, or the
 /// whole text when it is a bare domain.
 fn domain_in_text(text: &str) -> Option<String> {
+    // What the reader sees: invisible characters (`paypal\u{200B}.com`) do not hide the
+    // domain, and look-alike full stops count as dots (stage 15 review).
+    let text: String = crate::strip_hidden_chars(text)
+        .text
+        .chars()
+        .map(|c| match c {
+            '\u{2024}' | '\u{FE52}' | '\u{FF0E}' | '\u{3002}' | '\u{FF61}' => '.',
+            c => c,
+        })
+        .collect();
+    let text = text.as_str();
     let trim = |s: &str| {
         s.trim_matches(|c: char| {
             matches!(
@@ -476,6 +487,25 @@ mod tests {
             text_domain: "bank.example".into(),
             target_domain: "evil.example".into(),
         }));
+        // Stage 15 review: invisible characters and look-alike dots in the text.
+        for text in [
+            "paypal\u{200B}.com",
+            "pay\u{2060}pal.com",
+            "paypal\u{FF0E}com",
+            "paypal\u{3002}com",
+            "www.paypal\u{2024}com",
+        ] {
+            let check = check_link(text, "https://evil.example/");
+            assert!(
+                check.warnings.iter().any(|w| matches!(
+                    w,
+                    LinkWarning::TextNamesOtherDomain { text_domain, target_domain }
+                        if text_domain.ends_with("paypal.com") && target_domain == "evil.example"
+                )),
+                "{text:?}: {:?}",
+                check.warnings
+            );
+        }
         // Same site, subdomains and www. are fine.
         for (text, href) in [
             ("www.example.com", "https://example.com/x"),

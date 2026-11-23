@@ -322,12 +322,22 @@ fn public_v6(ip: Ipv6Addr) -> bool {
     match s {
         // IPv4-compatible (deprecated) and other addresses in ::/96.
         [0, 0, 0, 0, 0, 0, _, _] => false,
+        // IPv4-translated (SIIT, ::ffff:0:0/96): the IPv4 address decides.
+        [0, 0, 0, 0, 0xffff, 0, hi, lo] => public_v4(embedded(hi, lo)),
         // NAT64: the IPv4 address decides.
         [0x64, 0xff9b, 0, 0, 0, 0, hi, lo] => public_v4(embedded(hi, lo)),
+        // Local-use NAT64 (64:ff9b:1::/48): translators inside a network, never a public host.
+        [0x64, 0xff9b, 1, ..] => false,
+        // Discard-only (100::/64).
+        [0x0100, 0, 0, 0, ..] => false,
         // 6to4: the embedded IPv4 address decides.
         [0x2002, hi, lo, ..] => public_v4(embedded(hi, lo)),
-        // Documentation.
+        // IETF protocol assignments (2001::/23): Teredo (2001::/32, tunnels to an obfuscated
+        // IPv4 address), benchmarking (2001:2::/48), ORCHID and others; no image host lives here.
+        [0x2001, second, ..] if second < 0x0200 => false,
+        // Documentation (2001:db8::/32, 3fff::/20).
         [0x2001, 0x0db8, ..] => false,
+        [0x3fff, second, ..] if second & 0xf000 == 0 => false,
         // Unique local (fc00::/7), link-local (fe80::/10), site-local (fec0::/10, deprecated).
         [first, ..]
             if first & 0xfe00 == 0xfc00 || first & 0xffc0 == 0xfe80 || first & 0xffc0 == 0xfec0 =>
@@ -354,6 +364,10 @@ mod tests {
             "2606:4700::1111",
             "::ffff:8.8.8.8",
             "2002:0808:0808::1",
+            "::ffff:0:808:808",
+            "2001:200::1",
+            "2a00:1450:4001::1",
+            "3fff:1000::1",
         ] {
             assert!(target_allowed(ip(public), false), "{public}");
         }
@@ -362,7 +376,7 @@ mod tests {
             "127.8.9.10",
             "10.0.0.1",
             "172.16.5.4",
-            "192.168.10.251",
+            "192.168.1.20",
             "169.254.169.254",
             "0.0.0.0",
             "255.255.255.255",
@@ -384,6 +398,18 @@ mod tests {
             "64:ff9b::10.0.0.1",
             "2002:c0a8:0101::1",
             "2001:db8::1",
+            // Stage 15 review: IPv4-translated, local-use NAT64, discard, Teredo, benchmarking,
+            // the newer documentation range.
+            "::ffff:0:c0a8:101",
+            "::ffff:0:7f00:1",
+            "64:ff9b:1::c0a8:101",
+            "64:ff9b:1::808:808",
+            "100::1",
+            "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+            "2001:2::1",
+            "2001:1ff::1",
+            "3fff::1",
+            "3fff:fff::1",
         ] {
             assert!(!target_allowed(ip(private), false), "{private}");
         }
@@ -412,7 +438,7 @@ mod tests {
         assert!(check("http://93.184.216.34/a.png").is_ok());
         assert!(check("http://127.0.0.1:18999/a.png").is_err());
         assert!(check("http://[::1]/a.png").is_err());
-        assert!(check("http://192.168.10.1/a.png").is_err());
+        assert!(check("http://192.168.1.1/a.png").is_err());
         assert!(check("ftp://example.org/a.png").is_err());
         assert!(check("file:///etc/passwd").is_err());
     }

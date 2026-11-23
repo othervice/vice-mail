@@ -302,6 +302,42 @@ const EXECUTABLE_EXTENSIONS: &[&str] = &[
     "ppam",
     "sldm",
     "chm",
+    // Stage 15 review: further types that run code or are used for it in phishing (remote
+    // desktop connections, OneNote, Excel web queries and symbolic links, ClickOnce and Office
+    // add-ins, provisioning packages, sandbox configurations, themes, troubleshooting packs,
+    // search connectors, Access databases, Python zip apps, update packages, internet
+    // shortcuts, certificates, macOS shortcuts)
+    "rdp",
+    "one",
+    "onepkg",
+    "iqy",
+    "slk",
+    "appref-ms",
+    "vsto",
+    "ppkg",
+    "wsb",
+    "theme",
+    "themepack",
+    "deskthemepack",
+    "diagcab",
+    "searchconnector-ms",
+    "xla",
+    "xlm",
+    "ade",
+    "adp",
+    "accda",
+    "accde",
+    "mda",
+    "mdb",
+    "mde",
+    "pyz",
+    "pyzw",
+    "msu",
+    "website",
+    "cer",
+    "crt",
+    "der",
+    "shortcut",
     // local web documents
     "html",
     "htm",
@@ -349,6 +385,12 @@ const EXECUTABLE_MIME_TYPES: &[&str] = &[
     "application/xhtml+xml",
     "image/svg+xml",
     "application/x-mimearchive",
+    "application/x-rdp",
+    "application/onenote",
+    "application/msonenote",
+    "application/x-ms-application",
+    "application/vnd.ms-excel.addin.macroenabled.12",
+    "application/x-x509-ca-cert",
 ];
 
 /// Whether opening the file can run code (see [`EXECUTABLE_EXTENSIONS`] for the reasons). The
@@ -471,6 +513,17 @@ mod tests {
             "app.jar",
             "link.lnk",
             "x.sh",
+            // Stage 15 review.
+            "Remote.rdp",
+            "Notes.one",
+            "query.iqy",
+            "Setup.appref-ms",
+            "dark.theme",
+            "fix.diagcab",
+            "data.accde",
+            "tool.pyz",
+            "root.cer",
+            "Run.shortcut",
         ] {
             assert!(
                 is_executable_type(name, "application/octet-stream"),
@@ -491,6 +544,7 @@ mod tests {
         }
         assert!(is_executable_type("noext", "application/x-msdownload"));
         assert!(is_executable_type("noext", "Text/HTML; charset=utf-8"));
+        assert!(is_executable_type("noext", "application/x-rdp"));
         assert!(!is_executable_type("noext", "application/pdf"));
     }
 }
