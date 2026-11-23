@@ -3,6 +3,10 @@
 //! fault injection (refused or failing connects, a connection cut after some fetches, slow
 //! fetches, a panic like imap-proto's on `INTERNALDATE NIL`). The test server tests in
 //! `tests/server.rs` cover the real adapter.
+//!
+//! Stage 4: the same connector opens writer connections ([`WriteConnector`]) for the outbox:
+//! STORE (with `UNCHANGEDSINCE`), MOVE (COPYUID with `UIDPLUS`), EXPUNGE, CREATE and STATUS on
+//! the same in-memory server, counted apart from the read-only connections.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -11,10 +15,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use mail_model::{
-    Access, Address, BackendError, BodySection, Capabilities, ConnectConfig, FetchedSection,
-    FlagUpdate, Flags, IdleOutcome, MailBackend, MailConnector, MailboxStatus, MessageHeader,
-    MessageStructure, MimePart, ModSeq, RawMessage, RemoteMailbox, SelectedMailbox, Uid, UidSet,
-    UidValidity,
+    Access, Address, BackendError, BodySection, Capabilities, ConnectConfig, CopyUid,
+    ExpungeOutcome, FetchedSection, Flag, FlagUpdate, Flags, IdleOutcome, MailBackend,
+    MailConnector, MailWriter, MailboxRole, MailboxStatus, MessageHeader, MessageStructure,
+    MimePart, ModSeq, MoveMethod, MoveOutcome, RawMessage, RemoteMailbox, SelectedMailbox,
+    StoreMode, StoreOutcome, Uid, UidSet, UidValidity, WriteConnector,
 };
 use tokio::sync::watch;
 
@@ -55,6 +60,10 @@ pub(crate) struct Faults {
     pub bodies: Option<BackendError>,
     /// Each body fetch takes this long.
     pub body_delay: Duration,
+    /// Every writer connect fails with this (the read-only connections are unaffected).
+    pub writer_connect: Option<BackendError>,
+    /// Every writing command (STORE, MOVE, EXPUNGE, CREATE) is refused with this.
+    pub writes: Option<BackendError>,
 }
 
 #[derive(Debug)]
@@ -67,8 +76,15 @@ pub(crate) struct ServerState {
     pub logins: usize,
     /// UIDs returned by `fetch_headers`, in total.
     pub fetched: usize,
-    /// Access mode of every connect attempt.
+    /// Access mode of every read connect attempt (sync, IDLE, reading, login check).
     pub access: Vec<Access>,
+    /// Writer connections tried and opened (the outbox), and the writing commands they sent,
+    /// in order.
+    pub writer_attempts: usize,
+    pub writer_logins: usize,
+    pub writes: Vec<&'static str>,
+    /// Mailboxes opened by read-only connections (EXAMINE), in order.
+    pub examined: Vec<String>,
     /// Body fetch commands (`fetch_structure`, `fetch_messages`, `fetch_sections`), and the
     /// UIDs whose whole body or sections were returned.
     pub body_fetches: usize,
@@ -105,6 +121,10 @@ impl FakeServer {
             logins: 0,
             fetched: 0,
             access: Vec::new(),
+            writer_attempts: 0,
+            writer_logins: 0,
+            writes: Vec::new(),
+            examined: Vec::new(),
             body_fetches: 0,
             bodies_sent: Vec::new(),
             next_validity: 100,
@@ -224,6 +244,26 @@ impl FakeServer {
         });
     }
 
+    /// Where the message with this serial lies: (mailbox, UID, flags).
+    pub(crate) fn find(&self, serial: u64) -> Vec<(String, Uid, Flags)> {
+        self.read(|s| {
+            s.mailboxes
+                .iter()
+                .flat_map(|(name, mb)| {
+                    mb.messages
+                        .iter()
+                        .filter(|(_, m)| m.serial == serial)
+                        .map(move |(uid, m)| (name.clone(), *uid, m.flags.clone()))
+                })
+                .collect()
+        })
+    }
+
+    /// The serial of the message at `uid` (its Message-ID is `<serial>@fake.test`).
+    pub(crate) fn serial_of(&self, mailbox: &str, uid: Uid) -> u64 {
+        self.read(|s| s.mailboxes[mailbox].messages[&uid].serial)
+    }
+
     pub(crate) fn expunge(&self, mailbox: &str, uid: Uid) {
         self.with(|s| {
             let mb = s.mailbox(mailbox);
@@ -320,22 +360,32 @@ fn raw_header(raw: &[u8], name: &str) -> Option<String> {
 #[derive(Debug, Clone)]
 pub(crate) struct FakeConnector(pub Arc<FakeServer>);
 
-impl MailConnector for FakeConnector {
-    type Backend = FakeBackend;
-
-    async fn connect(&self, config: &ConnectConfig) -> Result<FakeBackend, BackendError> {
+impl FakeConnector {
+    /// Logs in; `writer` for the outbox's connections (counted apart, own fault).
+    fn open(&self, config: &ConnectConfig, writer: bool) -> Result<FakeBackend, BackendError> {
         let server = Arc::clone(&self.0);
         let capabilities = server.with(|s| {
-            s.access.push(config.access);
-            if let Some(err) = &s.faults.connect {
-                return Err(err.clone());
+            if writer {
+                s.writer_attempts += 1;
+                if let Some(err) = s.faults.writer_connect.clone().or(s.faults.connect.clone()) {
+                    return Err(err);
+                }
+            } else {
+                s.access.push(config.access);
+                if let Some(err) = &s.faults.connect {
+                    return Err(err.clone());
+                }
             }
             if config.password.expose_secret() != &s.password {
                 return Err(BackendError::AuthFailed(
                     "[AUTHENTICATIONFAILED] Authentication failed.".into(),
                 ));
             }
-            s.logins += 1;
+            if writer {
+                s.writer_logins += 1;
+            } else {
+                s.logins += 1;
+            }
             Ok(Capabilities::from_names(s.capabilities.iter().copied()))
         })?;
         server.open.fetch_add(1, Ordering::SeqCst);
@@ -347,6 +397,25 @@ impl MailConnector for FakeConnector {
             idle_seen: 0,
             poisoned: false,
         })
+    }
+}
+
+impl MailConnector for FakeConnector {
+    type Backend = FakeBackend;
+
+    async fn connect(&self, config: &ConnectConfig) -> Result<FakeBackend, BackendError> {
+        self.open(config, false)
+    }
+}
+
+impl WriteConnector for FakeConnector {
+    type Writer = FakeBackend;
+
+    async fn connect_writer(&self, config: &ConnectConfig) -> Result<FakeBackend, BackendError> {
+        if config.access != Access::ReadWrite {
+            return Err(BackendError::ReadOnly("connect_writer".into()));
+        }
+        self.open(config, true)
     }
 }
 
@@ -425,6 +494,200 @@ impl FakeBackend {
     fn condstore(&self) -> bool {
         self.capabilities.condstore
     }
+
+    /// Before a writing command: an open writer connection, the injected refusal, logged.
+    fn write(
+        &self,
+        mailbox: Option<&SelectedMailbox>,
+        verb: &'static str,
+    ) -> Result<(), BackendError> {
+        match mailbox {
+            Some(mailbox) => self.check(mailbox)?,
+            None => self.usable()?,
+        }
+        if self.access != Access::ReadWrite {
+            return Err(BackendError::ReadOnly(verb.into()));
+        }
+        self.server.with(|s| {
+            s.writes.push(verb);
+            s.faults.writes.clone().map_or(Ok(()), Err)
+        })
+    }
+}
+
+/// The SPECIAL-USE attribute of a role.
+fn role_attribute(role: MailboxRole) -> Option<&'static str> {
+    match role {
+        MailboxRole::Archive => Some("\\Archive"),
+        MailboxRole::Trash => Some("\\Trash"),
+        MailboxRole::Junk => Some("\\Junk"),
+        MailboxRole::Sent => Some("\\Sent"),
+        MailboxRole::Drafts => Some("\\Drafts"),
+        _ => None,
+    }
+}
+
+impl MailWriter for FakeBackend {
+    async fn mailbox_status(&mut self, name: &str) -> Result<MailboxStatus, BackendError> {
+        self.usable()?;
+        let condstore = self.condstore();
+        self.server
+            .read(|s| {
+                s.mailboxes.get(name).map(|mb| MailboxStatus {
+                    messages: u32::try_from(mb.messages.len()).unwrap_or(u32::MAX),
+                    unseen: Some(
+                        u32::try_from(mb.messages.values().filter(|m| !m.flags.seen).count())
+                            .unwrap_or(u32::MAX),
+                    ),
+                    uid_next: Some(mb.uid_next),
+                    uid_validity: Some(UidValidity(mb.uid_validity)),
+                    highest_modseq: condstore.then_some(ModSeq(mb.modseq)),
+                })
+            })
+            .ok_or_else(|| BackendError::MailboxNotFound(name.to_owned()))
+    }
+
+    async fn store_flags(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+        mode: StoreMode,
+        flags: &[Flag],
+        unchanged_since: Option<ModSeq>,
+    ) -> Result<StoreOutcome, BackendError> {
+        self.write(Some(mailbox), "STORE")?;
+        if unchanged_since.is_some() && mailbox.highest_modseq.is_none() {
+            return Err(BackendError::Unsupported("CONDSTORE".into()));
+        }
+        Ok(self.server.with(|s| {
+            let mut outcome = StoreOutcome::default();
+            let mut modified = Vec::new();
+            let mb = s.mailbox(&mailbox.name);
+            for uid in uids.iter() {
+                let Some(message) = mb.messages.get(&uid) else {
+                    continue;
+                };
+                if unchanged_since.is_some_and(|since| message.modseq > since.0) {
+                    modified.push(uid);
+                    continue;
+                }
+                mb.modseq += 1;
+                mb.changes += 1;
+                let modseq = mb.modseq;
+                if let Some(message) = mb.messages.get_mut(&uid) {
+                    for flag in flags {
+                        flag.apply(&mut message.flags, mode == StoreMode::Add);
+                    }
+                    message.modseq = modseq;
+                    outcome.updates.push(FlagUpdate {
+                        uid,
+                        flags: message.flags.clone(),
+                        modseq: Some(ModSeq(modseq)),
+                    });
+                }
+            }
+            outcome.modified = UidSet::from_uids(modified);
+            outcome
+        }))
+    }
+
+    async fn move_messages(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+        target: &str,
+    ) -> Result<MoveOutcome, BackendError> {
+        self.write(Some(mailbox), "MOVE")?;
+        let uidplus = self.capabilities.uidplus;
+        let method = if self.capabilities.move_ {
+            MoveMethod::Move
+        } else {
+            MoveMethod::CopyExpunge
+        };
+        self.server.with(|s| {
+            let Some(validity) = s.mailboxes.get(target).map(|mb| mb.uid_validity) else {
+                return Err(BackendError::Rejected(format!(
+                    "[TRYCREATE] no mailbox {target}"
+                )));
+            };
+            let source = s.mailbox(&mailbox.name);
+            let moving: Vec<(Uid, FakeMessage)> = uids
+                .iter()
+                .filter_map(|uid| source.messages.remove(&uid).map(|m| (uid, m)))
+                .collect();
+            if !moving.is_empty() {
+                source.modseq += 1;
+                source.changes += 1;
+            }
+            let into = s.mailbox(target);
+            let mut pairs = Vec::new();
+            for (uid, mut message) in moving {
+                into.modseq += 1;
+                message.modseq = into.modseq;
+                let new = into.uid_next;
+                into.uid_next += 1;
+                into.messages.insert(new, message);
+                pairs.push((uid, new));
+            }
+            into.changes += 1;
+            Ok(MoveOutcome {
+                method,
+                copy_uid: uidplus.then_some(CopyUid {
+                    uid_validity: UidValidity(validity),
+                    pairs,
+                }),
+            })
+        })
+    }
+
+    async fn expunge_messages(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        uids: &UidSet,
+    ) -> Result<ExpungeOutcome, BackendError> {
+        self.write(Some(mailbox), "EXPUNGE")?;
+        self.server.with(|s| {
+            let mb = s.mailbox(&mailbox.name);
+            for uid in uids.iter() {
+                mb.messages.remove(&uid);
+            }
+            mb.modseq += 1;
+            mb.changes += 1;
+        });
+        Ok(ExpungeOutcome::Expunged)
+    }
+
+    async fn create_mailbox(
+        &mut self,
+        path: &str,
+        role: Option<MailboxRole>,
+    ) -> Result<String, BackendError> {
+        self.write(None, "CREATE")?;
+        let special_use = self.capabilities.has("CREATE-SPECIAL-USE");
+        self.server.with(|s| {
+            if !s.mailboxes.contains_key(path) {
+                s.next_validity += 1;
+                let attributes = role
+                    .filter(|_| special_use)
+                    .and_then(role_attribute)
+                    .map(str::to_owned)
+                    .into_iter()
+                    .collect();
+                s.mailboxes.insert(
+                    path.to_owned(),
+                    FakeMailbox {
+                        uid_validity: s.next_validity,
+                        uid_next: 1,
+                        modseq: 1,
+                        attributes,
+                        messages: BTreeMap::new(),
+                        changes: 0,
+                    },
+                );
+            }
+        });
+        Ok(path.to_owned())
+    }
 }
 
 impl MailBackend for FakeBackend {
@@ -474,8 +737,8 @@ impl MailBackend for FakeBackend {
                             uid_next: mb.uid_next,
                             exists: u32::try_from(mb.messages.len()).unwrap_or(u32::MAX),
                             highest_modseq: condstore.then_some(ModSeq(mb.modseq)),
-                            read_only: true,
-                            keywords_allowed: false,
+                            read_only: self.access == Access::ReadOnly,
+                            keywords_allowed: self.access == Access::ReadWrite,
                         },
                         mb.changes,
                     )
@@ -484,6 +747,9 @@ impl MailBackend for FakeBackend {
             .ok_or_else(|| BackendError::MailboxNotFound(name.to_owned()))?;
         self.idle_seen = changes;
         self.selected = Some(selected.clone());
+        if self.access == Access::ReadOnly {
+            self.server.with(|s| s.examined.push(name.to_owned()));
+        }
         Ok(selected)
     }
 

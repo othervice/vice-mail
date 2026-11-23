@@ -43,6 +43,9 @@ zstd = { version = "0.14.4", default-features = false }
 
 # Account ids (UUID v4). mail-model only parses and formats; mail-engine adds the `v4` feature.
 uuid = { version = "1.29.3", default-features = false, features = ["std", "serde"] }
+# The user's time zone for search dates (stage 7): the system zone and the system's tzdb
+# (bundled on Windows, which has none in TZif form). MIT OR Unlicense.
+jiff = { version = "1.0.2", default-features = false, features = ["std", "tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 
 # IPC types (decision 0004): exact pins, release candidates.
 specta = { version = "=2.0.0-rc.28", features = ["derive"] }

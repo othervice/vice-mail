@@ -72,6 +72,8 @@ struct Inner {
     path: PathBuf,
     bodies: PathBuf,
     report: OpenReport,
+    /// Makes index text from stored bodies (stage 7); set by the engine after opening.
+    body_text: std::sync::RwLock<Option<Arc<dyn crate::BodyTextSource>>>,
 }
 
 /// A set of migrations and the schema version they lead to.
@@ -173,6 +175,7 @@ impl Store {
                     version,
                     backup,
                 },
+                body_text: std::sync::RwLock::new(None),
             }),
         })
     }
@@ -189,6 +192,25 @@ impl Store {
 
     pub fn open_report(&self) -> &OpenReport {
         &self.inner.report
+    }
+
+    /// Sets what makes the full-text index's body text from stored bodies (stage 7). Without
+    /// one, bodies are stored but only their headers are indexed. The engine sets it right
+    /// after opening, before anything stores a body.
+    pub fn set_body_text_source(&self, source: Arc<dyn crate::BodyTextSource>) {
+        *self
+            .inner
+            .body_text
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(source);
+    }
+
+    pub(crate) fn body_text_source(&self) -> Option<Arc<dyn crate::BodyTextSource>> {
+        self.inner
+            .body_text
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Runs `f` in a `BEGIN IMMEDIATE` transaction on the writer thread.

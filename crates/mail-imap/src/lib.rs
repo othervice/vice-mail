@@ -33,6 +33,7 @@ mod convert;
 mod error;
 pub mod mutf7;
 mod sasl;
+mod search;
 mod smtp;
 mod timeout_io;
 mod tls;

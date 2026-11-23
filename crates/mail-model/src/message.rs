@@ -165,6 +165,25 @@ pub struct MessageListItem {
     /// Start of the text, white space collapsed, at most 256 characters; null until the body
     /// was parsed (opened or prefetched).
     pub preview: Option<String>,
+    /// Outbox state of a change to this message, for a small symbol in the row. Absent when
+    /// nothing is pending or needs the user (most rows), so pages stay small.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub activity: Option<MessageActivity>,
+}
+
+/// Outbox state of a message as its list row shows it (stage 4). If several operations touch
+/// the message, the one that needs the user wins: `failed`, then `conflict`, then `pending`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageActivity {
+    /// A change waits for the server (`queued` or `in_flight`); the row already shows it.
+    Pending,
+    /// A change failed and was reverted locally. The activity view offers retry and discard.
+    Failed,
+    /// The message was changed elsewhere meanwhile and the server's state was kept. The
+    /// activity view explains it.
+    Conflict,
 }
 
 /// One page of a message list, newest first.

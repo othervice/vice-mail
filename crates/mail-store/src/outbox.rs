@@ -22,8 +22,8 @@ use std::collections::BTreeSet;
 use mail_model::{
     AccountId, ActionError, ActionKind, BatchId, ConflictReason, CoreError, Flag, FlagUpdate,
     Flags, IpcError, MailAction, MailboxId, MailboxRole, MessageId, MessageRef, ModSeq,
-    OperationId, OperationNotice, OperationPayload, OperationState, PlanLocation, PlanMailbox,
-    SourceLocation, TargetMailbox, Uid, UidValidity, plan_action,
+    OperationId, OperationNotice, OperationPayload, OperationState, OutboxCounts, PlanLocation,
+    PlanMailbox, SourceLocation, TargetMailbox, Uid, UidValidity, plan_action,
 };
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -141,6 +141,14 @@ pub(crate) const FINISH_OPERATION: &str = "
 pub(crate) const DELETE_OPERATION: &str = "DELETE FROM operation WHERE id = ?1";
 
 pub(crate) const SET_PAYLOAD: &str = "UPDATE operation SET payload = ?2 WHERE id = ?1";
+
+/// Counts of the account's unfinished operations (status badge, stage 4). Reads the account's
+/// rows through `operation_account`; confirmed ones are purged after a day, so they are few.
+pub(crate) const OUTBOX_COUNTS: &str = "
+    SELECT count(*) FILTER (WHERE state IN ('queued', 'in_flight')),
+           count(*) FILTER (WHERE state = 'failed'),
+           count(*) FILTER (WHERE state = 'conflict')
+    FROM operation WHERE account_id = ?1";
 
 pub(crate) const PURGE_CONFIRMED: &str = "
     DELETE FROM operation WHERE account_id = ?1 AND state = 'confirmed' AND updated_at < ?2";
@@ -267,6 +275,23 @@ pub(crate) fn of_account(
         .prepare_cached(OPERATIONS_OF_ACCOUNT)?
         .query_map(params![row, before, limit], operation_from_row)?
         .collect::<Result<Vec<_>, _>>()?)
+}
+
+/// See [`crate::Store::outbox_counts`].
+pub(crate) fn counts(conn: &Connection, account: AccountId) -> Result<OutboxCounts, StoreError> {
+    let row = accounts::row_id(conn, account)?;
+    let count = |r: &Row<'_>, idx: usize| -> rusqlite::Result<u32> {
+        let n: i64 = r.get(idx)?;
+        Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    };
+    Ok(conn.prepare_cached(OUTBOX_COUNTS)?.query_row([row], |r| {
+        Ok(OutboxCounts {
+            account_id: account,
+            pending: count(r, 0)?,
+            failed: count(r, 1)?,
+            conflict: count(r, 2)?,
+        })
+    })?)
 }
 
 fn of_batch(conn: &Connection, batch: BatchId) -> Result<Vec<StoredOperation>, StoreError> {

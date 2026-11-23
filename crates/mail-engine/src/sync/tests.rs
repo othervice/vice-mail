@@ -85,6 +85,7 @@ impl Harness {
             clock: Arc::clone(&clock) as Arc<dyn Clock>,
             sync: config,
             reading: crate::ReadingServices::default(),
+            outbox: None,
         };
         let core = AppCore::start(
             CoreConfig {

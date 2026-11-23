@@ -79,6 +79,8 @@ e2e = [
 webview2-frame-guard = ["dep:webview2-guard"]
 
 [dev-dependencies]
+# Seeds a database for the command tests of stage 4 (an account with a message, no server).
+mail-store.workspace = true
 serde_json.workspace = true
 tauri = { workspace = true, features = ["test"] }
 tempfile.workspace = true

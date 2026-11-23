@@ -66,6 +66,7 @@ impl Harness {
                 remote,
                 open_dir: Some(open_dir.clone()),
             },
+            outbox: None,
         };
         let core = AppCore::start(
             CoreConfig {

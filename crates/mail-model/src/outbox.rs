@@ -10,9 +10,11 @@
 //! happened. The planner here is pure logic; the store runs it inside its transaction on
 //! freshly read locations, so the plan never works on stale data.
 //!
-//! IPC-ready types ([`MailAction`], [`MessageRef`], [`OperationInfo`], [`OutboxEvent`], ...)
-//! derive `specta::Type` but are not part of the exported bindings yet; the integration of
-//! stage 4 registers them. [`OperationPayload`] and the planner inputs are internal.
+//! IPC types ([`MailAction`], [`MessageRef`], [`ActionResult`], [`OperationInfo`],
+//! [`OutboxCounts`], ...) are exported through the stage 4 commands; the UI gets operation
+//! states as `CoreEvent::OperationsChanged`. [`OutboxEvent`] is the outbox's own (per
+//! operation) stream inside the engine. [`OperationPayload`] and the planner inputs are
+//! internal.
 
 use std::fmt;
 
@@ -432,6 +434,24 @@ pub struct OperationInfo {
     pub updated_at: i64,
 }
 
+/// Most messages one action may cover (one call, one batch). The UI splits larger selections
+/// into several actions; each is undone on its own.
+pub const MAX_ACTION_MESSAGES: usize = 10_000;
+
+/// How many operations of an account wait for the server or need the user (status badge,
+/// activity view). Confirmed ones are not counted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OutboxCounts {
+    pub account_id: AccountId,
+    /// `queued` or `in_flight`.
+    pub pending: u32,
+    /// `failed`: refused or given up, local change reverted. Retry or discard.
+    pub failed: u32,
+    /// `conflict`: changed elsewhere meanwhile, the server's state was kept. Discard.
+    pub conflict: u32,
+}
+
 /// Result of applying an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -750,22 +770,21 @@ pub enum ActionError {
 }
 
 impl ActionError {
-    /// Code for the UI. The integration of stage 4 adds dedicated codes for
-    /// `MissingMailbox` and `ConfirmationRequired` (with their texts in `app/src/i18n/`); until
-    /// then they map to the closest existing code and the variant is in `detail`.
+    /// Code for the UI. The UI acts on `missing_mailbox` (ask for a folder or create one),
+    /// `confirmation_required` (ask, then `DeletePermanently`), `not_undoable` and
+    /// `invalid_keyword`; the rest map to general codes, with the variant in `detail`.
     pub fn code(&self) -> ErrorCode {
         match self {
             Self::ReadOnly(_) => ErrorCode::ReadOnly,
-            Self::MissingMailbox(_) | Self::MessageNotFound(_) | Self::OperationNotFound(_) => {
-                ErrorCode::NotFound
-            }
-            Self::ConfirmationRequired
-            | Self::InvalidKeyword(_)
-            | Self::InvalidTarget(_)
+            Self::MissingMailbox(_) => ErrorCode::MissingMailbox,
+            Self::ConfirmationRequired => ErrorCode::ConfirmationRequired,
+            Self::NotUndoable(_) => ErrorCode::NotUndoable,
+            Self::InvalidKeyword(_) => ErrorCode::InvalidKeyword,
+            Self::MessageNotFound(_) | Self::OperationNotFound(_) => ErrorCode::NotFound,
+            Self::InvalidTarget(_)
             | Self::MixedAccounts
             | Self::NoMessages
-            | Self::WrongState(..)
-            | Self::NotUndoable(_) => ErrorCode::InvalidArgument,
+            | Self::WrongState(..) => ErrorCode::InvalidArgument,
         }
     }
 
@@ -1003,6 +1022,26 @@ mod tests {
         );
         assert_eq!(
             ActionError::MissingMailbox(MailboxRole::Archive).code(),
+            ErrorCode::MissingMailbox
+        );
+        assert_eq!(
+            ActionError::ConfirmationRequired.code(),
+            ErrorCode::ConfirmationRequired
+        );
+        assert_eq!(
+            ActionError::NotUndoable("x".into()).code(),
+            ErrorCode::NotUndoable
+        );
+        assert_eq!(
+            ActionError::InvalidKeyword("a b".into()).code(),
+            ErrorCode::InvalidKeyword
+        );
+        assert_eq!(
+            ActionError::MessageNotFound(MessageRef {
+                mailbox_id: MailboxId(1),
+                message_id: MessageId(2)
+            })
+            .code(),
             ErrorCode::NotFound
         );
         let account: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");

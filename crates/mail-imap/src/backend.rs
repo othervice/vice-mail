@@ -553,6 +553,27 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
         Ok(UidSet::from_uids(uids))
     }
 
+    async fn search_text(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        criteria: &[mail_model::search::ServerCriterion],
+    ) -> Result<UidSet, BackendError> {
+        self.ensure_open(mailbox)?;
+        let line = crate::search::search_line(criteria);
+        let mut uids = Vec::new();
+        self.conn
+            .run(&line, |resp| match resp {
+                Response::MailboxData(MailboxDatum::Search(found)) => {
+                    uids.extend_from_slice(found);
+                    true
+                }
+                _ => false,
+            })
+            .await?
+            .check("UID SEARCH")?;
+        Ok(UidSet::from_uids(uids))
+    }
+
     async fn fetch_headers(
         &mut self,
         mailbox: &SelectedMailbox,

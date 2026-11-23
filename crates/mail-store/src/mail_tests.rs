@@ -64,10 +64,12 @@ async fn migrates_a_stage_1_database_and_backs_it_up() {
     drop(store);
     assert_eq!(inspect(&path).0, 1);
 
-    let store = Store::open(&path, StoreOptions::default()).expect("migrate to stage 4");
+    let store = Store::open(&path, StoreOptions::default()).expect("migrate to the newest");
     let report = store.open_report().clone();
-    assert_eq!(SCHEMA_VERSION, 4);
-    assert_eq!((report.previous_version, report.version), (1, 4));
+    assert_eq!(
+        (report.previous_version, report.version),
+        (1, SCHEMA_VERSION)
+    );
 
     // The backup is the stage 1 database, with its data and without the new tables.
     let copy = report.backup.expect("backup before migration");
@@ -92,7 +94,7 @@ async fn migrates_a_stage_1_database_and_backs_it_up() {
     drop(store);
 
     let (version, names) = inspect(&path);
-    assert_eq!(version, 4);
+    assert_eq!(version, SCHEMA_VERSION);
     assert!(
         names.contains(&"operation".to_owned()),
         "outbox table missing"
@@ -136,6 +138,19 @@ async fn creates_the_mail_schema_in_an_empty_database() {
         "body_part_file",
         "loc_flagged",
         "remote_content_sender",
+        // Stage 7
+        "message_fts",
+        "message_subject",
+        "search_index_job",
+        "thread",
+        "thread_account",
+        "thread_ref",
+        "thread_ref_thread",
+        "account_group",
+        "account_group_member",
+        "account_hidden",
+        "identity_uuid",
+        "identity_email",
     ];
     for name in expected {
         assert!(
@@ -144,8 +159,10 @@ async fn creates_the_mail_schema_in_an_empty_database() {
         );
     }
     assert!(
-        !names.iter().any(|n| n.contains("fts")),
-        "no FTS before stage 7"
+        !names
+            .iter()
+            .any(|n| n == "message_fts_new" || n == "message_fts_old"),
+        "no rebuild table in a new database"
     );
 }
 

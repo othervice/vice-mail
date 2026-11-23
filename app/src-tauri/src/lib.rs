@@ -30,6 +30,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::app::get_app_info,
             commands::preferences::get_preferences,
             commands::preferences::set_preferences,
+            commands::preferences::get_reading_preferences,
+            commands::preferences::set_reading_preferences,
             commands::accounts::list_accounts,
             commands::accounts::discover_known_provider,
             commands::accounts::discover_online,
@@ -53,12 +55,49 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::reading::get_prefetch_settings,
             commands::reading::set_prefetch_settings,
             commands::reading::get_prefetch_status,
+            commands::actions::apply_action,
+            commands::actions::undo_action,
+            commands::actions::create_mailbox,
+            commands::actions::list_operations,
+            commands::actions::retry_operation,
+            commands::actions::discard_operation,
+            commands::actions::get_outbox_counts,
+            commands::actions::set_writes_enabled,
+            // Stage 7: search, threads, unified inbox, groups, hidden accounts, identities.
+            commands::search::search,
+            commands::search::search_on_server,
+            commands::search::get_search_index_status,
+            commands::search::rebuild_search_index,
+            commands::threads::list_threads,
+            commands::threads::list_unified_threads,
+            commands::threads::get_thread,
+            commands::threads::list_unified_inbox,
+            commands::groups::list_account_groups,
+            commands::groups::create_account_group,
+            commands::groups::update_account_group,
+            commands::groups::delete_account_group,
+            commands::groups::list_hidden_accounts,
+            commands::groups::set_account_hidden,
+            commands::groups::list_identities,
+            commands::groups::add_identity,
+            commands::groups::update_identity,
+            commands::groups::set_default_identity,
+            commands::groups::delete_identity,
+            commands::groups::get_reply_identity,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
         // IPC types are one-way (arguments in, results and events out): one alias per type.
         .disable_serde_phases()
         .constant("CORE_EVENT_NAME", CORE_EVENT_NAME)
+        // Stage 4: the delay of `markReadOnOpen: "afterDelay"`, and the most messages one
+        // `applyAction` may cover (larger selections are split by the UI).
+        .constant("MARK_READ_DELAY_MS", mail_model::MARK_READ_DELAY_MS)
+        .constant("MAX_ACTION_MESSAGES", mail_model::MAX_ACTION_MESSAGES)
+        // Stage 7: the largest search, thread and unified page, and the most messages of a
+        // thread view.
+        .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)
+        .constant("MAX_THREAD_MESSAGES", mail_model::MAX_THREAD_MESSAGES)
 }
 
 /// TypeScript exporter settings, shared by the freshness test and `UPDATE_BINDINGS=1`.

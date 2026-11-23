@@ -17,16 +17,20 @@
 
 mod compile;
 mod date;
+mod highlight;
 mod parse;
+mod server;
 #[cfg(test)]
 mod tests;
 
 pub use compile::{CompileOptions, CompiledQuery, FtsColumn, RowidRange, TextMatch};
 pub use date::{Age, AgeUnit, CivilDate, FixedOffset, TimeZone};
+pub use highlight::{HighlightField, HighlightTerm, fold, highlight};
 pub use parse::{
     Clause, Filter, MailboxSpec, ParsedQuery, SearchError, SearchErrorKind, Status, Term,
     TextField, TextTerm, parse,
 };
+pub use server::{ServerCriterion, ServerQuery};
 
 /// Longest input in bytes; the rest is ignored and reported ([`SearchErrorKind::TooLong`]).
 pub const MAX_QUERY_BYTES: usize = 2048;

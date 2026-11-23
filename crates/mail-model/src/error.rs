@@ -45,6 +45,18 @@ pub enum ErrorCode {
     Keychain,
     /// An account with this email address is already set up.
     AccountExists,
+    /// The account has no folder for this action: archive (`archive`), trash (`delete`), junk
+    /// (`spam`) or inbox (`notSpam`). The UI asks which folder to use (`setMailboxRole`) or
+    /// offers to create one (`createMailbox`).
+    MissingMailbox,
+    /// The messages lie in the trash, where deleting removes them for good. The UI asks and
+    /// then sends the action `deletePermanently`.
+    ConfirmationRequired,
+    /// The action cannot be undone (a permanent delete, a created folder, a move still on its
+    /// way or not yet visible in its target folder). Nothing was changed.
+    NotUndoable,
+    /// A tag contains spaces or characters IMAP does not allow in keywords.
+    InvalidKeyword,
     /// The SMTP server refused the message or a recipient; nothing was delivered.
     /// Not exported to TypeScript yet (`specta(skip)`): stage 5's UI adds its texts.
     #[specta(skip)]
@@ -411,6 +423,10 @@ mod tests {
             (ErrorCode::UnsupportedServer, "unsupported_server"),
             (ErrorCode::Keychain, "keychain"),
             (ErrorCode::AccountExists, "account_exists"),
+            (ErrorCode::MissingMailbox, "missing_mailbox"),
+            (ErrorCode::ConfirmationRequired, "confirmation_required"),
+            (ErrorCode::NotUndoable, "not_undoable"),
+            (ErrorCode::InvalidKeyword, "invalid_keyword"),
             (ErrorCode::SendRejected, "send_rejected"),
             (ErrorCode::SendUnclear, "send_unclear"),
         ];

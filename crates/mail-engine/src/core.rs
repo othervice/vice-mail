@@ -1,13 +1,14 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use mail_imap::ImapConnector;
 use mail_model::{
-    Account, AccountId, AccountSettings, AccountStatus, AppInfo, BodyFormat, Capabilities,
-    ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, LinkInfo, ListCursor, MailBackend,
-    MailConnector, Mailbox, MailboxId, MailboxRole, MessageId, MessagePage, MessageView,
-    OpenAttachmentResult, Platform, Preferences, PrefetchSettings, PrefetchStatus,
-    RemoteContentScope, RenderToken, Secret, ServerSettings,
+    Account, AccountId, AccountSettings, AccountStatus, ActionResult, AppInfo, BatchId, BodyFormat,
+    Capabilities, ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, LinkInfo,
+    ListCursor, MailAction, MailBackend, MailConnector, Mailbox, MailboxId, MailboxRole, MessageId,
+    MessagePage, MessageRef, MessageView, OpenAttachmentResult, OperationId, OperationInfo,
+    OutboxCounts, Platform, Preferences, PrefetchSettings, PrefetchStatus, ReadingPreferences,
+    RemoteContentScope, RenderToken, Secret, ServerSettings, WriteConnector,
 };
 use mail_store::{GLOBAL_SCOPE, NewAccount, Store, StoreOptions, StoredAccount};
 use serde::Serialize;
@@ -18,15 +19,20 @@ use tokio::task::JoinHandle;
 use crate::clock::{Clock, SystemClock};
 use crate::credentials::{CredentialRef, Credentials};
 use crate::discovery;
+use crate::outbox::{Outbox, OutboxConfig, SyncHook};
 use crate::reading::{Reading, ReadingServices};
 use crate::sync::account::{self, Control, Registry};
-use crate::sync::{Env, SyncConfig, emit, wake};
+use crate::sync::{Env, OnConnected, SyncConfig, emit, wake};
 
 /// File name of the database inside the app's data directory.
 pub const DATABASE_FILE: &str = "mail.sqlite3";
 
 const THEME_KEY: &str = "ui.theme";
 const LANGUAGE_KEY: &str = "ui.language";
+const MARK_READ_KEY: &str = "reading.mark_read_on_open";
+
+/// Longest request id of an action (the UI sends a UUID).
+const MAX_REQUEST_ID: usize = 64;
 
 /// Events buffered per subscriber before a slow subscriber starts missing events.
 const EVENT_CAPACITY: usize = 1024;
@@ -46,6 +52,12 @@ pub struct CoreConfig {
     pub build: BuildInfo,
 }
 
+/// What the core needs from the mail adapter: read-only connections for the sync, IDLE and
+/// reading ([`MailConnector`]) and writer connections for the outbox ([`WriteConnector`]).
+pub trait Connector: MailConnector + WriteConnector + 'static {}
+
+impl<T: MailConnector + WriteConnector + 'static> Connector for T {}
+
 /// What the core is given instead of reaching for it: the keychain, the mail connector, the
 /// clock and the sync tunables. Tests inject an in-memory keychain, a fake or instrumented
 /// connector, a movable clock and short intervals.
@@ -57,6 +69,9 @@ pub struct CoreServices<C: MailConnector = ImapConnector> {
     /// Opening links and attachments, external images, the directory for opened attachments
     /// (stage 3). Tests record instead of opening.
     pub reading: ReadingServices,
+    /// Tunables of the outbox (stage 4); `None` derives them from `sync`
+    /// ([`OutboxConfig::from_sync`]), as the product does.
+    pub outbox: Option<OutboxConfig>,
 }
 
 impl CoreServices<ImapConnector> {
@@ -74,17 +89,18 @@ impl<C: MailConnector> CoreServices<C> {
             clock: Arc::new(SystemClock),
             sync: SyncConfig::default(),
             reading: ReadingServices::default(),
+            outbox: None,
         }
     }
 }
 
 /// Facade of the core. The shell forwards every command here; everything is testable without
 /// a WebView. Cheap to clone. Generic over the mail connector so tests can use a fake server.
-pub struct AppCore<C: MailConnector + 'static = ImapConnector> {
+pub struct AppCore<C: Connector = ImapConnector> {
     inner: Arc<Inner<C>>,
 }
 
-impl<C: MailConnector + 'static> Clone for AppCore<C> {
+impl<C: Connector> Clone for AppCore<C> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -92,7 +108,7 @@ impl<C: MailConnector + 'static> Clone for AppCore<C> {
     }
 }
 
-struct Inner<C: MailConnector> {
+struct Inner<C: Connector> {
     info: AppInfo,
     /// The store, or the error that kept it from opening (for example a database written by a
     /// newer app version). Storage-backed calls return that error, so the UI can explain it.
@@ -109,20 +125,46 @@ struct Inner<C: MailConnector> {
     wake_detector: Option<JoinHandle<()>>,
     /// Reading messages (stage 3); `None` if the store did not open.
     reading: Option<Arc<Reading<C>>>,
+    /// Writing actions (stage 4); `None` if the store did not open.
+    outbox: Option<Outbox<C>>,
+    /// Handed to every sync task: wakes the account's outbox when the sync connected.
+    on_connected: OnConnected,
+    /// Stage 7: the index job and the threading of old messages in the background.
+    search: crate::search::SearchState,
 }
 
-impl<C: MailConnector> Drop for Inner<C> {
-    /// Without an orderly [`AppCore::shutdown`] the sync tasks are aborted: connections close
-    /// without LOGOUT, stored data is consistent anyway (one transaction per window).
+impl<C: Connector> Drop for Inner<C> {
+    /// Without an orderly [`AppCore::shutdown`] the sync and outbox tasks are aborted:
+    /// connections close without LOGOUT, stored data is consistent anyway (one transaction per
+    /// window; in-flight operations are checked at the next start).
     fn drop(&mut self) {
         if let Some(task) = &self.wake_detector {
             task.abort();
         }
         self.accounts.abort_all();
+        if let Some(outbox) = &self.outbox {
+            outbox.abort_all();
+        }
     }
 }
 
-impl<C: MailConnector + 'static> Inner<C> {
+/// The outbox's [`SyncHook`]: asks the account's sync for a pass over the mailboxes the outbox
+/// just changed on the server, so the sync confirms the change at once.
+struct CoreSyncHook {
+    accounts: Weak<Registry>,
+}
+
+impl SyncHook for CoreSyncHook {
+    fn sync_requested(&self, account: AccountId, mailboxes: &[MailboxId]) {
+        if let Some(accounts) = self.accounts.upgrade()
+            && !accounts.send(account, Control::SyncMailboxes(mailboxes.to_vec()))
+        {
+            tracing::debug!(%account, "sync requested for an account without a sync task");
+        }
+    }
+}
+
+impl<C: Connector> Inner<C> {
     fn stop_reading(&self) {
         if let Some(reading) = &self.reading {
             reading.shutdown();
@@ -130,7 +172,7 @@ impl<C: MailConnector + 'static> Inner<C> {
     }
 }
 
-impl<C: MailConnector + 'static> AppCore<C> {
+impl<C: Connector> AppCore<C> {
     /// Opens the database in `config.data_dir`, starts the core and the sync of every stored
     /// account.
     ///
@@ -176,12 +218,36 @@ impl<C: MailConnector + 'static> AppCore<C> {
                 &config.data_dir,
             )
         });
+        let outbox = opened.as_ref().ok().map(|store| {
+            let config = services
+                .outbox
+                .unwrap_or_else(|| OutboxConfig::from_sync(&sync));
+            let outbox = Outbox::new(
+                store.clone(),
+                Arc::clone(&connector),
+                services.credentials.clone(),
+                config,
+            );
+            outbox.forward_to(events.clone());
+            outbox.set_sync_hook(Arc::new(CoreSyncHook {
+                accounts: Arc::downgrade(&accounts),
+            }));
+            outbox
+        });
+        let on_connected: OnConnected = match &outbox {
+            Some(outbox) => {
+                let outbox = outbox.clone();
+                Arc::new(move |account| outbox.wake(account))
+            }
+            None => Arc::new(|_| {}),
+        };
         let wake_detector = Some(wake::spawn(
             Arc::downgrade(&accounts),
             Arc::clone(&services.clock),
             sync.wake_check,
             sync.wake_threshold,
         ));
+        let search = crate::search::SearchState::start(opened.as_ref().ok()).await;
         let core = Self {
             inner: Arc::new(Inner {
                 info: AppInfo {
@@ -200,12 +266,21 @@ impl<C: MailConnector + 'static> AppCore<C> {
                 admin: tokio::sync::Mutex::new(()),
                 wake_detector,
                 reading,
+                outbox,
+                on_connected,
+                search,
             }),
         };
         if let Some(reading) = &core.inner.reading {
             reading.clear_open_dir().await;
         }
         core.start_stored_accounts().await;
+        if let Some(outbox) = &core.inner.outbox
+            && let Err(err) = outbox.start().await
+        {
+            // The queue stays stored; the next action or wake starts the worker.
+            tracing::error!(code = ?err.code(), error = %err, "the outbox could not resume");
+        }
         core
     }
 
@@ -266,6 +341,33 @@ impl<C: MailConnector + 'static> AppCore<C> {
         self.store()?.put_settings(GLOBAL_SCOPE, entries).await?;
         tracing::info!(theme = ?preferences.theme, language = ?preferences.language, "preferences stored");
         self.emit(CoreEvent::PreferencesChanged { preferences });
+        Ok(preferences)
+    }
+
+    /// Reading preferences (stage 4): when an opened message is marked as read. Defaults when
+    /// nothing is stored.
+    pub async fn get_reading_preferences(&self) -> Result<ReadingPreferences, CoreError> {
+        let settings = self.store()?.settings(GLOBAL_SCOPE).await?;
+        let mut prefs = ReadingPreferences::default();
+        for setting in settings {
+            if setting.key == MARK_READ_KEY {
+                prefs.mark_read_on_open = decode(&setting.key, &setting.value);
+            }
+        }
+        Ok(prefs)
+    }
+
+    /// Stores the reading preferences and returns them.
+    pub async fn set_reading_preferences(
+        &self,
+        preferences: ReadingPreferences,
+    ) -> Result<ReadingPreferences, CoreError> {
+        let entries = vec![(
+            MARK_READ_KEY.to_owned(),
+            encode(&preferences.mark_read_on_open)?,
+        )];
+        self.store()?.put_settings(GLOBAL_SCOPE, entries).await?;
+        tracing::info!(mark_read_on_open = ?preferences.mark_read_on_open, "reading preferences stored");
         Ok(preferences)
     }
 
@@ -366,6 +468,10 @@ impl<C: MailConnector + 'static> AppCore<C> {
         if let Some(handle) = self.inner.accounts.remove(id) {
             handle.stop(self.inner.sync.shutdown_grace).await;
         }
+        if let Some(outbox) = &self.inner.outbox {
+            // Unfinished operations go with the account's rows; nothing is sent any more.
+            outbox.stop_account(id).await;
+        }
         if let Some(reading) = &self.inner.reading {
             reading.forget_account(id);
         }
@@ -419,8 +525,33 @@ impl<C: MailConnector + 'static> AppCore<C> {
         {
             self.spawn_sync(account, Some(password));
         }
+        if let Some(outbox) = &self.inner.outbox {
+            // It reads the new password from the keychain on its next connect.
+            outbox.wake(id);
+        }
         tracing::info!(account = %id, "password replaced");
         Ok(())
+    }
+
+    /// Turns writing on or off for the account (the user's switch in the settings; new
+    /// accounts start off). Off fails the queued operations with `read_only` and reverts them.
+    /// The sync stays read-only either way. Emits `accountsChanged` and returns the account.
+    pub async fn set_writes_enabled(
+        &self,
+        id: AccountId,
+        enabled: bool,
+    ) -> Result<Account, CoreError> {
+        let store = self.store()?;
+        if store.account(id).await?.is_none() {
+            return Err(CoreError::NotFound(format!("account {id}")));
+        }
+        self.outbox()?.set_writes_enabled(id, enabled).await?;
+        let account = store
+            .account(id)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {id}")))?;
+        self.emit(CoreEvent::AccountsChanged);
+        Ok(account.into_account(self.status_of(id)))
     }
 
     // -----------------------------------------------------------------------------------------
@@ -460,6 +591,86 @@ impl<C: MailConnector + 'static> AppCore<C> {
         limit: u32,
     ) -> Result<MessagePage, CoreError> {
         Ok(self.store()?.list_messages(mailbox, cursor, limit).await?)
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Actions and the outbox (stage 4, see `crate::outbox`)
+    // -----------------------------------------------------------------------------------------
+
+    /// Applies `action` to the messages (one account, at most
+    /// [`mail_model::MAX_ACTION_MESSAGES`]): the local state changes at once, the operations
+    /// are recorded and sent to the server in order. `request_id` names this user action (a
+    /// UUID): the same id twice changes nothing. Returns the batch for
+    /// [`AppCore::undo_action`]. Events: `operationsChanged`, `messagesChanged`,
+    /// `mailboxesChanged`; later the operations' new states.
+    ///
+    /// Refused before anything changes: `read_only` (writes off for the account),
+    /// `missing_mailbox` (no archive, trash or junk folder), `confirmation_required` (delete in
+    /// the trash: send `DeletePermanently`), `invalid_keyword`, `not_found` (the list was out
+    /// of date), `invalid_argument`.
+    pub async fn apply_action(
+        &self,
+        action: MailAction,
+        messages: Vec<MessageRef>,
+        request_id: String,
+    ) -> Result<ActionResult, CoreError> {
+        let outbox = self.outbox()?;
+        if request_id.is_empty()
+            || request_id.len() > MAX_REQUEST_ID
+            || !request_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
+            return Err(CoreError::InvalidArgument(
+                "the request id must be 1 to 64 letters, digits, '-' or '_'".into(),
+            ));
+        }
+        outbox.apply_request(action, messages, request_id).await
+    }
+
+    /// Undoes a batch (the notice's "Undo"): cancels what is still queued, sends
+    /// counter-operations for the rest. `not_undoable` if a part cannot be undone; then
+    /// nothing changes.
+    pub async fn undo_action(&self, batch: BatchId) -> Result<ActionResult, CoreError> {
+        self.outbox()?.undo(batch).await
+    }
+
+    /// Queues the creation of a folder (decoded path, the server's delimiter) that gets `role`,
+    /// for example `archive` after `missing_mailbox`. It appears in the folder list once the
+    /// server created it (`mailboxesChanged`).
+    pub async fn create_mailbox(
+        &self,
+        account: AccountId,
+        path: String,
+        role: Option<MailboxRole>,
+    ) -> Result<ActionResult, CoreError> {
+        self.outbox()?.create_mailbox(account, path, role).await
+    }
+
+    /// The account's operations, newest first (activity view), keyset-paged below `before`.
+    /// `limit` 1..=500.
+    pub async fn list_operations(
+        &self,
+        account: AccountId,
+        before: Option<OperationId>,
+        limit: u32,
+    ) -> Result<Vec<OperationInfo>, CoreError> {
+        self.outbox()?.operations(account, before, limit).await
+    }
+
+    /// Queues a failed or conflicting operation again (activity view, "Retry").
+    pub async fn retry_operation(&self, id: OperationId) -> Result<ActionResult, CoreError> {
+        self.outbox()?.retry(id).await
+    }
+
+    /// Removes a finished operation from the activity view ("Discard").
+    pub async fn discard_operation(&self, id: OperationId) -> Result<(), CoreError> {
+        self.outbox()?.discard(id).await
+    }
+
+    /// How many of the account's operations are pending, failed or in conflict.
+    pub async fn outbox_counts(&self, account: AccountId) -> Result<OutboxCounts, CoreError> {
+        self.outbox()?.counts(account).await
     }
 
     // -----------------------------------------------------------------------------------------
@@ -597,6 +808,7 @@ impl<C: MailConnector + 'static> AppCore<C> {
     pub fn network_changed(&self) {
         tracing::info!("network changed; reconnecting all accounts");
         self.inner.accounts.wake_all();
+        self.wake_outbox();
     }
 
     /// The computer woke from sleep: like [`AppCore::network_changed`]. The core also notices
@@ -604,9 +816,11 @@ impl<C: MailConnector + 'static> AppCore<C> {
     pub fn resume(&self) {
         tracing::info!("resumed; reconnecting all accounts");
         self.inner.accounts.wake_all();
+        self.wake_outbox();
     }
 
-    /// Stops every sync task; connections get a moment to log out. Call when the app quits.
+    /// Stops every sync task and the outbox; connections get a moment to log out. Call when the
+    /// app quits. Operations still in flight are checked against the server at the next start.
     pub async fn shutdown(&self) {
         let grace = self.inner.sync.shutdown_grace;
         let handles = self.inner.accounts.take_all();
@@ -614,11 +828,15 @@ impl<C: MailConnector + 'static> AppCore<C> {
         for handle in handles {
             stopping.spawn(handle.stop(grace));
         }
+        if let Some(outbox) = self.inner.outbox.clone() {
+            stopping.spawn(async move { outbox.shutdown().await });
+        }
         while stopping.join_next().await.is_some() {}
         if let Some(task) = &self.inner.wake_detector {
             task.abort();
         }
         self.inner.stop_reading();
+        self.inner.search.stop();
         tracing::info!("sync stopped");
     }
 
@@ -631,6 +849,13 @@ impl<C: MailConnector + 'static> AppCore<C> {
             .unwrap_or_else(AccountStatus::connecting)
     }
 
+    /// The outbox of every account retries now (the network may be back).
+    fn wake_outbox(&self) {
+        if let Some(outbox) = &self.inner.outbox {
+            outbox.wake_all();
+        }
+    }
+
     fn spawn_sync(&self, account: StoredAccount, password: Option<Secret<String>>) {
         let Ok(store) = self.store() else { return };
         let env = Env {
@@ -640,6 +865,7 @@ impl<C: MailConnector + 'static> AppCore<C> {
             clock: Arc::clone(&self.inner.clock),
             config: Arc::clone(&self.inner.sync),
             events: self.inner.events.clone(),
+            on_connected: Arc::clone(&self.inner.on_connected),
         };
         let id = account.id;
         let handle = account::spawn(env, account, password);
@@ -654,7 +880,7 @@ impl<C: MailConnector + 'static> AppCore<C> {
         password: Secret<String>,
     ) -> Result<Capabilities, CoreError> {
         // Always read-only, whatever the account allows later.
-        let config = self.inner.sync.connect_config(server, password, false);
+        let config = self.inner.sync.connect_config(server, password);
         let connector = Arc::clone(&self.inner.connector);
         let task = tokio::spawn(async move {
             let backend = connector.connect(&config).await?;
@@ -676,6 +902,14 @@ impl<C: MailConnector + 'static> AppCore<C> {
         self.inner.store.as_ref().map_err(Clone::clone)
     }
 
+    fn outbox(&self) -> Result<&Outbox<C>, CoreError> {
+        self.store()?;
+        self.inner
+            .outbox
+            .as_ref()
+            .ok_or_else(|| CoreError::Internal("the outbox is not available".into()))
+    }
+
     fn reading(&self) -> Result<&Arc<Reading<C>>, CoreError> {
         self.store()?;
         self.inner
@@ -692,6 +926,28 @@ impl<C: MailConnector + 'static> AppCore<C> {
 
     fn emit(&self, event: CoreEvent) {
         emit(&self.inner.events, event);
+    }
+
+    // Stage 7 (`crate::search`) works through these.
+
+    pub(crate) fn store_ref(&self) -> Result<&Store, CoreError> {
+        self.store()
+    }
+
+    pub(crate) fn reading_ref(&self) -> Result<&Arc<Reading<C>>, CoreError> {
+        self.reading()
+    }
+
+    pub(crate) fn now_ms(&self) -> i64 {
+        self.inner.clock.now_ms()
+    }
+
+    pub(crate) fn emit_event(&self, event: CoreEvent) {
+        self.emit(event);
+    }
+
+    pub(crate) fn search_state(&self) -> &crate::search::SearchState {
+        &self.inner.search
     }
 }
 

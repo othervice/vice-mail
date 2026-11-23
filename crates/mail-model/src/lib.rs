@@ -25,6 +25,7 @@ mod secret;
 mod send;
 pub mod threading;
 mod uid_set;
+mod views;
 mod writer;
 
 pub use account::{
@@ -43,19 +44,22 @@ pub use body::{
 pub use capabilities::Capabilities;
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
-pub use ipc::{AppInfo, CoreEvent, LanguagePreference, Platform, Preferences, ThemePreference};
+pub use ipc::{
+    AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
+    Preferences, ReadingPreferences, ThemePreference,
+};
 pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
 pub use message::{
-    Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageHeader,
-    MessageListItem, MessagePage, sort_date,
+    Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageActivity,
+    MessageHeader, MessageListItem, MessagePage, sort_date,
 };
 pub use outbox::{
-    ActionError, ActionKind, ActionResult, BatchId, ConflictReason, Flag, MAX_KEYWORD_LEN,
-    MailAction, MessageRef, OperationId, OperationInfo, OperationKind, OperationNotice,
-    OperationPayload, OperationState, OutboxEvent, PlanLocation, PlanMailbox, SourceLocation,
-    TargetMailbox, TargetMark, is_valid_keyword, plan_action,
+    ActionError, ActionKind, ActionResult, BatchId, ConflictReason, Flag, MAX_ACTION_MESSAGES,
+    MAX_KEYWORD_LEN, MailAction, MessageRef, OperationId, OperationInfo, OperationKind,
+    OperationNotice, OperationPayload, OperationState, OutboxCounts, OutboxEvent, PlanLocation,
+    PlanMailbox, SourceLocation, TargetMailbox, TargetMark, is_valid_keyword, plan_action,
 };
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
@@ -68,6 +72,13 @@ pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use secret::Secret;
 pub use send::{Envelope, RecipientRefusal, SendOutcome, SendRejection, SmtpReply, SmtpStep};
 pub use uid_set::UidSet;
+pub use views::{
+    AccountGroup, AccountGroupId, IdentityInfo, IdentityInput, MAX_GROUP_NAME_CHARS,
+    MAX_SEARCH_PAGE, MAX_THREAD_MESSAGES, SearchHighlights, SearchHit, SearchIndexState,
+    SearchIndexStatus, SearchPage, SearchProblem, SearchProblemCode, SearchRequest, SearchScope,
+    SearchTermInfo, SearchTermKind, ServerSearchResult, TextRange, ThreadEntry, ThreadListItem,
+    ThreadPage, ThreadView, UnifiedView, utf16_range,
+};
 pub use writer::{
     CopyUid, ExpungeOutcome, MailWriter, MoveMethod, MoveOutcome, StoreMode, StoreOutcome,
     WriteConnector,

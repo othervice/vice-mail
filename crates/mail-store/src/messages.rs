@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use mail_model::{
-    AccountId, Address, FlagUpdate, Flags, ListCursor, MailboxId, MessageHeader, MessageId,
-    MessageListItem, MessagePage, ModSeq, Uid, UidSet, UidValidity,
+    AccountId, Address, FlagUpdate, Flags, ListCursor, MailboxId, MessageActivity, MessageHeader,
+    MessageId, MessageListItem, MessagePage, ModSeq, Uid, UidSet, UidValidity,
 };
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -16,9 +16,18 @@ use crate::mailboxes::{self, modseq_param};
 
 /// One page of a mailbox, newest first. `CROSS JOIN` fixes the join order (decision 0003): the
 /// page is a contiguous range of the location key, each message a rowid lookup.
+///
+/// The last column is the outbox state of the row (stage 4): the operations on this location
+/// that are not confirmed, `failed` (3) before `conflict` (2) before pending (1), NULL if none.
+/// One probe of `operation_location` per row; `+o.message_id` keeps the planner on that index
+/// (the message id only guards against a UID reused after a UIDVALIDITY change).
 pub(crate) const LIST_PAGE: &str = "
     SELECT l.message_id, l.seen, l.flagged, l.answered, l.draft, l.keywords,
-           m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview
+           m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview,
+           (SELECT max(CASE o.state WHEN 'failed' THEN 3 WHEN 'conflict' THEN 2 ELSE 1 END)
+            FROM operation o
+            WHERE o.mailbox_id = l.mailbox_id AND o.uid = l.uid
+              AND +o.message_id = l.message_id AND o.state <> 'confirmed')
     FROM message_location l CROSS JOIN message m ON m.id = l.message_id
     WHERE l.mailbox_id = ?1 AND l.message_id < ?2
     ORDER BY l.message_id DESC LIMIT ?3";
@@ -53,8 +62,9 @@ pub(crate) const IDS_FROM: &str = "SELECT id FROM message WHERE id >= ?1 ORDER B
 pub(crate) const INSERT_MESSAGE: &str = "
     INSERT INTO message (id, account_id, message_id_hdr, date, subject, from_name, from_addr,
                          to_addrs, cc_addrs, in_reply_to, references_hdr, list_id,
-                         list_unsubscribe, auto_submitted, precedence, size, has_attachments)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)";
+                         list_unsubscribe, auto_submitted, precedence, size, has_attachments,
+                         thread_id, subject_key)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)";
 
 pub(crate) const INSERT_LOCATION: &str = "
     INSERT INTO message_location (mailbox_id, message_id, uid, seen, flagged, answered, draft,
@@ -94,6 +104,9 @@ pub(crate) fn store_headers(
 
     let mut report = StoreReport::default();
     let mut ids = IdAllocator::default();
+    // Stage 7: each new message is threaded and indexed (headers) in this transaction.
+    let mut threader = crate::threads::Threader::default();
+    let mut fts_rows = Vec::new();
     for header in &headers {
         let flags = clean_flags(mailbox, header.uid, &header.flags);
         if apply_flags(conn, mailbox, header.uid, &flags, header.modseq)?.is_some() {
@@ -115,9 +128,14 @@ pub(crate) fn store_headers(
         }
 
         let id = ids.allocate(conn, header.sort_date())?;
-        insert_message(conn, id, account_row, message_id, header)?;
+        let thread = threader.assign_new(conn, account_row, id, header)?;
+        insert_message(conn, id, account_row, message_id, header, thread)?;
         insert_location(conn, mailbox, id, header.uid, &flags, header.modseq)?;
+        fts_rows.push((id, crate::fts::Row::from_header(header)));
         report.inserted += 1;
+    }
+    if !fts_rows.is_empty() {
+        crate::fts::write(conn, &crate::fts::targets(conn)?, &mut fts_rows)?;
     }
 
     if let Some(low) = sync_low_uid {
@@ -239,6 +257,12 @@ pub(crate) fn list(
                 has_attachments: r.get(11)?,
                 keywords: keywords_from(r.get::<_, Option<String>>(5)?.as_deref()),
                 preview: r.get(12)?,
+                activity: match r.get::<_, Option<i64>>(13)? {
+                    None => None,
+                    Some(3) => Some(MessageActivity::Failed),
+                    Some(2) => Some(MessageActivity::Conflict),
+                    Some(_) => Some(MessageActivity::Pending),
+                },
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -418,6 +442,7 @@ fn insert_message(
     account_row: i64,
     message_id: Option<&str>,
     h: &MessageHeader,
+    (thread, subject_key): (i64, Option<String>),
 ) -> Result<(), StoreError> {
     let from = h.from.first();
     let references = (!h.references.is_empty()).then(|| h.references.join(" "));
@@ -440,6 +465,8 @@ fn insert_message(
             h.precedence,
             h.size,
             h.has_attachments,
+            thread,
+            subject_key,
         ])
         .map_err(StoreError::sqlite("insert message"))?;
     Ok(())
@@ -449,7 +476,7 @@ fn keywords_text(keywords: &[String]) -> Option<String> {
     (!keywords.is_empty()).then(|| keywords.join(" "))
 }
 
-fn keywords_from(text: Option<&str>) -> Vec<String> {
+pub(crate) fn keywords_from(text: Option<&str>) -> Vec<String> {
     text.map(|t| t.split_whitespace().map(str::to_owned).collect())
         .unwrap_or_default()
 }
@@ -476,7 +503,7 @@ fn addresses_json(addresses: &[Address]) -> Result<Option<String>, StoreError> {
         .map_err(|err| StoreError::InvalidArgument(format!("addresses: {err}")))
 }
 
-fn addresses_at(r: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<Vec<Address>> {
+pub(crate) fn addresses_at(r: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<Vec<Address>> {
     let Some(json) = r.get::<_, Option<String>>(idx)? else {
         return Ok(Vec::new());
     };

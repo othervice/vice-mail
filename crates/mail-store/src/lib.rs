@@ -12,6 +12,10 @@
 //!   and the remote-content allowlist.
 //! - The outbox after decision 0012: operations with their local effects in one transaction,
 //!   their states, undo, retry and discard (`outbox_api`).
+//! - Stage 7 (`search_api`): the contentless FTS5 index kept with every message and body, its
+//!   background fill and rebuild with a swap at the end, search with filters, threads kept when
+//!   messages are stored, thread lists, the unified inbox, account groups, hidden accounts and
+//!   identities.
 
 mod accounts;
 pub mod backup;
@@ -19,6 +23,9 @@ mod bodies;
 mod body_api;
 mod body_files;
 mod error;
+mod fts;
+mod groups;
+mod lists;
 mod mail_api;
 mod mailboxes;
 mod messages;
@@ -26,14 +33,19 @@ mod migrations;
 mod outbox;
 mod outbox_api;
 mod reading;
+mod search;
+mod search_api;
 mod settings;
 mod store;
+mod threads;
 mod workers;
 
 pub use bodies::BodyInfo;
 pub use body_api::{BODY_PACK_LIMIT, SWEEP_MIN_AGE};
 pub use body_files::SweepReport;
 pub use error::StoreError;
+pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
+pub use groups::MailboxName;
 pub use mail_api::{
     MAX_PAGE_SIZE, MailboxBaseline, MailboxListReport, MailboxSyncState, NewAccount, StoreReport,
     StoredAccount,
@@ -43,6 +55,8 @@ pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredO
 pub use reading::{
     MAX_PREFETCH_BATCH, MAX_PREVIEW_CHARS, MessageLocation, PrefetchCandidate, StoredMessage,
 };
+pub use search::{MAX_SEARCH_LIMIT, SearchFilter, StoredHit, StoredHitPage};
+pub use search_api::{INDEX_BATCH, IndexStep};
 pub use settings::{GLOBAL_SCOPE, Setting};
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 
@@ -58,6 +72,10 @@ mod mail_tests;
 mod outbox_tests;
 #[cfg(test)]
 mod plan_tests;
+#[cfg(test)]
+mod stage7_plan_tests;
+#[cfg(test)]
+mod stage7_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

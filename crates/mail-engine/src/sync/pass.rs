@@ -17,6 +17,8 @@
 //! A full pass lists the mailboxes first (one LIST-STATUS round trip) and deletes orphaned
 //! messages at the end, unless a mailbox was in its first sync or skipped.
 
+use std::collections::BTreeSet;
+
 use mail_model::{
     BackendError, CoreError, MailBackend, MailboxId, MailboxRole, MessageHeader, ModSeq,
     SelectedMailbox, SyncProgress, Uid, UidSet,
@@ -27,12 +29,28 @@ use super::SyncConfig;
 use super::session::Reporter;
 
 /// Which mailboxes a pass covers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Scope {
     /// LIST, every selectable mailbox, orphan clean-up.
     Full,
-    /// Only the inbox (IDLE reported a change). Falls back to `Full` before the first LIST.
-    Inbox,
+    /// The inbox if `inbox` (IDLE reported a change) and the stored `mailboxes` (the outbox
+    /// changed them on the server), without LIST. Falls back to `Full` if none of them is
+    /// known yet (before the first LIST).
+    Partial {
+        inbox: bool,
+        mailboxes: BTreeSet<MailboxId>,
+    },
+}
+
+#[cfg(test)]
+impl Scope {
+    /// Only the inbox.
+    pub(crate) fn inbox() -> Self {
+        Self::Partial {
+            inbox: true,
+            mailboxes: BTreeSet::new(),
+        }
+    }
 }
 
 /// Why a pass failed.
@@ -93,12 +111,12 @@ pub(crate) async fn run<B: MailBackend>(
     let account = reporter.account();
     let mut scope = scope;
     let mut states = Vec::new();
-    if scope == Scope::Inbox {
+    if let Scope::Partial { inbox, mailboxes } = &scope {
         states = store
             .mailbox_sync_states(account)
             .await?
             .into_iter()
-            .filter(is_inbox)
+            .filter(|s| (*inbox && is_inbox(s)) || mailboxes.contains(&s.mailbox_id))
             .collect();
         if states.is_empty() {
             scope = Scope::Full;

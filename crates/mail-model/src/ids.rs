@@ -63,9 +63,13 @@ pub struct MailboxId(#[specta(type = Number)] pub i64);
 #[serde(transparent)]
 pub struct MessageId(#[specta(type = Number)] pub i64);
 
-/// Local row id of an identity (`identity.id`). Not exported in stage 2.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct IdentityId(pub i64);
+/// Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
+/// uses the identity's UUID). Exported since stage 7 (identities in the settings).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(transparent)]
+pub struct IdentityId(#[specta(type = Number)] pub i64);
 
 /// Keyset cursor of a message list: pass `nextCursor` of one page back to get the next page.
 /// Opaque to the UI; today it is the [`MessageId`] of the last item of the page.

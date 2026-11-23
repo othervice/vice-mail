@@ -95,7 +95,7 @@ impl<C: MailConnector> Connections<C> {
         if guard.backend.is_none() {
             let password = self.password(account).await?;
             // Always read-only, whatever the account allows.
-            let config = self.config.connect_config(&account.imap, password, false);
+            let config = self.config.connect_config(&account.imap, password);
             let backend = self.connector.connect(&config).await?;
             tracing::debug!(account = %account.id, "reading connection open");
             guard.backend = Some(backend);
@@ -210,6 +210,16 @@ impl<B: MailBackend> Held<B> {
         sections: &[BodySection],
     ) -> Result<Option<Vec<FetchedSection>>, BackendError> {
         let result = self.backend()?.fetch_sections(mailbox, uid, sections).await;
+        self.checked(result)
+    }
+
+    /// `UID SEARCH` with criteria in the open mailbox (stage 7, search on the server).
+    pub async fn search(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        criteria: &[mail_model::search::ServerCriterion],
+    ) -> Result<UidSet, BackendError> {
+        let result = self.backend()?.search_text(mailbox, criteria).await;
         self.checked(result)
     }
 }

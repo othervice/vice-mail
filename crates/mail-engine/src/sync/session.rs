@@ -2,8 +2,9 @@
 //! connection, and the poller, each in its own Tokio task (see the parent module).
 
 use std::any::Any;
-use std::sync::Arc;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use mail_model::{
@@ -97,11 +98,13 @@ impl Reporter {
     }
 }
 
-/// Mailboxes that need a pass, set by the IDLE watcher and the poller, taken by the worker.
+/// Mailboxes that need a pass, set by the IDLE watcher, the poller and the outbox (through the
+/// supervisor), taken by the worker.
 #[derive(Debug)]
 struct Dirty {
     full: AtomicBool,
     inbox: AtomicBool,
+    mailboxes: Mutex<BTreeSet<MailboxId>>,
 }
 
 impl Dirty {
@@ -110,20 +113,35 @@ impl Dirty {
         Self {
             full: AtomicBool::new(true),
             inbox: AtomicBool::new(false),
+            mailboxes: Mutex::new(BTreeSet::new()),
         }
     }
 
-    fn mark(&self, scope: Scope) {
-        match scope {
-            Scope::Full => self.full.store(true, Ordering::SeqCst),
-            Scope::Inbox => self.inbox.store(true, Ordering::SeqCst),
-        }
+    fn mark_full(&self) {
+        self.full.store(true, Ordering::SeqCst);
+    }
+
+    fn mark_inbox(&self) {
+        self.inbox.store(true, Ordering::SeqCst);
+    }
+
+    fn mark_mailboxes(&self, ids: &[MailboxId]) {
+        self.mailboxes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(ids.iter().copied());
     }
 
     fn take(&self) -> Scope {
         let full = self.full.swap(false, Ordering::SeqCst);
         let inbox = self.inbox.swap(false, Ordering::SeqCst);
-        if full || !inbox {
+        let mailboxes = std::mem::take(
+            &mut *self
+                .mailboxes
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        if full || (!inbox && mailboxes.is_empty()) {
             // Nothing marked cannot happen (every `Changed` marks something); a full pass is
             // the safe answer anyway.
             if !full {
@@ -131,7 +149,7 @@ impl Dirty {
             }
             Scope::Full
         } else {
-            Scope::Inbox
+            Scope::Partial { inbox, mailboxes }
         }
     }
 }
@@ -210,6 +228,12 @@ impl Session {
             inbox_poll,
             self.shutdown.subscribe(),
         ));
+    }
+
+    /// Marks mailboxes for the next pass (the outbox changed them on the server). The pass
+    /// itself is asked for by the supervisor, through the state machine.
+    pub(crate) fn mark_mailboxes(&self, ids: &[MailboxId]) {
+        self.dirty.mark_mailboxes(ids);
     }
 
     /// Asks the worker for a pass over what is marked dirty.
@@ -321,7 +345,7 @@ async fn worker<C: MailConnector>(
             biased;
             // Dropping the pass mid-command leaves the connection unusable: no LOGOUT.
             _ = shutdown.wait_for(|stop| *stop) => return Ok(()),
-            outcome = pass::run(&mut backend, &env.store, &env.config, &reporter, scope) => outcome,
+            outcome = pass::run(&mut backend, &env.store, &env.config, &reporter, scope.clone()) => outcome,
         }
         .map_err(CoreError::from)?;
         tracing::debug!(
@@ -347,7 +371,7 @@ async fn idle_watcher<C: MailConnector>(
     let inbox = backend.open_mailbox("INBOX").await?;
     // Mail that arrived after the worker last looked at the inbox but before this EXAMINE
     // would not wake IDLE: look once more.
-    dirty.mark(Scope::Inbox);
+    dirty.mark_inbox();
     reporter.send(SessionEvent::Changed);
     loop {
         let mut stop_rx = shutdown.clone();
@@ -356,7 +380,7 @@ async fn idle_watcher<C: MailConnector>(
         };
         match backend.idle(&inbox, env.config.idle_section, stop).await? {
             IdleOutcome::Changed => {
-                dirty.mark(Scope::Inbox);
+                dirty.mark_inbox();
                 reporter.send(SessionEvent::Changed);
             }
             IdleOutcome::TimedOut => {}
@@ -385,17 +409,16 @@ async fn poller(
     let mut full_tick = ticker(full);
     let mut inbox_tick = inbox.map(ticker);
     loop {
-        let scope = tokio::select! {
+        tokio::select! {
             _ = shutdown.wait_for(|stop| *stop) => return Ok(()),
-            _ = full_tick.tick() => Scope::Full,
+            _ = full_tick.tick() => dirty.mark_full(),
             _ = async {
                 match inbox_tick.as_mut() {
                     Some(tick) => { tick.tick().await; }
                     None => std::future::pending::<()>().await,
                 }
-            } => Scope::Inbox,
-        };
-        dirty.mark(scope);
+            } => dirty.mark_inbox(),
+        }
         reporter.send(SessionEvent::Changed);
     }
 }
@@ -412,11 +435,35 @@ mod tests {
             Scope::Full,
             "a new session starts with a full pass"
         );
-        dirty.mark(Scope::Inbox);
-        assert_eq!(dirty.take(), Scope::Inbox);
-        dirty.mark(Scope::Inbox);
-        dirty.mark(Scope::Full);
+        dirty.mark_inbox();
+        assert_eq!(dirty.take(), Scope::inbox());
+        dirty.mark_inbox();
+        dirty.mark_full();
         assert_eq!(dirty.take(), Scope::Full);
         assert_eq!(dirty.take(), Scope::Full);
+
+        // The outbox's mailboxes add up until the next pass takes them; a full pass covers them.
+        dirty.mark_mailboxes(&[MailboxId(4), MailboxId(2)]);
+        dirty.mark_mailboxes(&[MailboxId(4)]);
+        dirty.mark_inbox();
+        assert_eq!(
+            dirty.take(),
+            Scope::Partial {
+                inbox: true,
+                mailboxes: BTreeSet::from([MailboxId(2), MailboxId(4)]),
+            }
+        );
+        dirty.mark_mailboxes(&[MailboxId(7)]);
+        assert_eq!(
+            dirty.take(),
+            Scope::Partial {
+                inbox: false,
+                mailboxes: BTreeSet::from([MailboxId(7)]),
+            }
+        );
+        dirty.mark_mailboxes(&[MailboxId(7)]);
+        dirty.mark_full();
+        assert_eq!(dirty.take(), Scope::Full);
+        assert_eq!(dirty.take(), Scope::Full, "nothing left over");
     }
 }

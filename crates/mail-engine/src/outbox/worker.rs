@@ -10,14 +10,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mail_model::{
-    Access, AccountId, BackendError, ConnectConfig, CoreError, MailWriter, OutboxEvent,
-    WriteConnector,
+    Access, AccountId, BackendError, ConnectConfig, CoreError, MailWriter, WriteConnector,
 };
 use mail_store::{StoreError, StoredAccount};
 use tokio::sync::{Notify, watch};
 
+use super::Shared;
 use super::exec::{self, Connection, StepError};
-use super::{Shared, emit_change};
 use crate::credentials::CredentialRef;
 use crate::sync_state::{Jitter, SplitMix64};
 
@@ -106,7 +105,7 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
             // Queued operations fail (`read_only`) and are reverted; in-flight ones wait until
             // writes are on again and are then checked against the server.
             match shared.store.set_writes_enabled(account, false).await {
-                Ok(change) => emit_change(&shared.events, &change),
+                Ok(change) => shared.emitter.change(&change),
                 Err(err) => tracing::error!(%account, error = %err, "failing queued operations"),
             }
             if let Some(open) = conn.take() {
@@ -152,12 +151,10 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
                 failures = 0;
                 conn = Some(open);
                 if let Some(change) = &outcome.change {
-                    emit_change(&shared.events, change);
+                    shared.emitter.change(change);
                 }
                 if outcome.list_changed {
-                    let _ = shared.events.send(OutboxEvent::MailboxesChanged {
-                        account_id: account,
-                    });
+                    shared.emitter.mailboxes_changed(account);
                 }
                 if !outcome.server_mailboxes.is_empty() {
                     shared

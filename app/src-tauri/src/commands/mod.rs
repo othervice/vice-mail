@@ -2,10 +2,14 @@
 //! [`CoreError`] into the typed [`IpcError`]. No logic lives here.
 
 pub mod accounts;
+pub mod actions;
 pub mod app;
+pub mod groups;
 pub mod mail;
 pub mod preferences;
 pub mod reading;
+pub mod search;
+pub mod threads;
 
 use mail_model::{CoreError, IpcError};
 

@@ -30,6 +30,8 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
         &[
             "SEARCH l USING PRIMARY KEY (mailbox_id=? AND message_id<?)",
             "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            "CORRELATED SCALAR SUBQUERY 1",
+            "SEARCH o USING INDEX operation_location (mailbox_id=? AND uid=?)",
         ],
     ),
     (
@@ -328,6 +330,11 @@ const EXPECTED: &[(&str, &str, &[&str])] = &[
         "delete an operation",
         outbox::DELETE_OPERATION,
         &["SEARCH operation USING INTEGER PRIMARY KEY (rowid=?)"],
+    ),
+    (
+        "outbox counts of an account",
+        outbox::OUTBOX_COUNTS,
+        &["SEARCH operation USING INDEX operation_account (account_id=?)"],
     ),
     (
         "purge confirmed operations",

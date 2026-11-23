@@ -21,6 +21,7 @@ use mail_model::{
 
 use crate::bodies::{self, BodyInfo, NewPart, Placement};
 use crate::body_files::{self, SweepReport};
+use crate::fts::{self, BodyText};
 use crate::reading::{self, MessageLocation, PrefetchCandidate, StoredMessage};
 use crate::settings::now_millis;
 use crate::{GLOBAL_SCOPE, Store, StoreError};
@@ -78,9 +79,26 @@ impl Store {
             return Ok(Vec::new());
         }
         let root = self.bodies_dir().to_owned();
-        let written = {
+        let source = self.body_text_source();
+        let (written, texts) = {
             let root = root.clone();
-            blocking(move || packs.into_iter().map(|p| write_pack(&root, p)).collect()).await?
+            blocking(move || {
+                // Stage 7: the text for the full-text index, made before the bytes are packed.
+                let texts: Vec<(MessageId, BodyText)> = match &source {
+                    Some(source) => packs
+                        .iter()
+                        .flat_map(|p| p.entries.iter())
+                        .map(|(id, raw)| (*id, source.complete(raw)))
+                        .collect(),
+                    None => Vec::new(),
+                };
+                let written = packs
+                    .into_iter()
+                    .map(|p| write_pack(&root, p))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((written, texts))
+            })
+            .await?
         };
         let written: Vec<WrittenPack> = written;
         let files: Vec<String> = written.iter().map(|p| p.file.clone()).collect();
@@ -96,6 +114,16 @@ impl Store {
                         unreferenced.extend(recorded.unreferenced);
                     }
                 }
+                let stored: HashSet<MessageId> =
+                    infos.iter().map(|i: &BodyInfo| i.message).collect();
+                let mut indexed: BTreeMap<i64, BodyText> = BTreeMap::new();
+                for (message, text) in texts {
+                    if stored.contains(&message) {
+                        indexed.insert(message.0, text);
+                    }
+                }
+                let indexed: Vec<(i64, BodyText)> = indexed.into_iter().collect();
+                fts::index_bodies(tx, &indexed)?;
                 // A pack whose messages all vanished meanwhile.
                 unreferenced.extend(bodies::unreferenced(
                     tx,
@@ -133,9 +161,13 @@ impl Store {
         let now = now_millis();
         let file = body_files::new_file_name(&account, message, now);
         let root = self.bodies_dir().to_owned();
-        let (file, parts) = {
+        let source = self.body_text_source();
+        let text_structure = structure.clone();
+        let (file, parts, text) = {
             let root = root.clone();
             blocking(move || {
+                // Stage 7: index text from the sections of this call (the text parts).
+                let text = source.map(|s| s.partial(&text_structure, &sections));
                 let names: Vec<BodySection> = sections.iter().map(|s| s.section.clone()).collect();
                 let pieces: Vec<Vec<u8>> = sections.into_iter().map(|s| s.data).collect();
                 let written = write_file(&root, file, &pieces)?;
@@ -144,14 +176,25 @@ impl Store {
                     .zip(written.placements)
                     .map(|(section, placement)| NewPart { section, placement })
                     .collect::<Vec<_>>();
-                Ok((written.file, parts))
+                Ok((written.file, parts, text))
             })
             .await?
         };
         let recorded = {
             let file = file.clone();
             self.write(move |tx| {
-                bodies::record_sections(tx, message, &structure, &file, &parts, now)
+                let first = bodies::info(tx, message)?.is_none();
+                let recorded =
+                    bodies::record_sections(tx, message, &structure, &file, &parts, now)?;
+                // Sections without text (an attachment fetched on request) keep the indexed
+                // text of the earlier call; the first call always indexes (attachment names).
+                if recorded.info.as_ref().is_some_and(|i| !i.complete)
+                    && let Some(text) = text
+                    && (first || !text.body.trim().is_empty())
+                {
+                    fts::index_bodies(tx, &[(message.0, text)])?;
+                }
+                Ok(recorded)
             })
             .await
         };

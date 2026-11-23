@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccountId, AccountStatus, IpcError, MailboxId, MessageId, PrefetchStatus, RenderToken,
+    AccountId, AccountStatus, IpcError, MailboxId, MessageId, OperationId, OperationInfo,
+    PrefetchStatus, RenderToken,
 };
 
 /// Operating system the app runs on.
@@ -64,6 +65,33 @@ pub struct Preferences {
     pub language: LanguagePreference,
 }
 
+/// When the reading pane marks an opened message as read (stage 4). The UI does the marking
+/// (an ordinary `markRead` action), and only for accounts with `writesEnabled`; read-only
+/// accounts mark nothing.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum MarkReadOnOpen {
+    /// As soon as the message is shown.
+    Immediately,
+    /// After it was shown for [`MARK_READ_DELAY_MS`] without the selection changing.
+    #[default]
+    AfterDelay,
+    Never,
+}
+
+/// The delay of [`MarkReadOnOpen::AfterDelay`]: two seconds.
+pub const MARK_READ_DELAY_MS: u32 = 2_000;
+
+/// Reading preferences stored in the `setting` table (stage 4). Separate from [`Preferences`],
+/// so the appearance settings keep their shape.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingPreferences {
+    pub mark_read_on_open: MarkReadOnOpen,
+}
+
 /// The one event stream from the core to the UI. Internally tagged by `type`.
 ///
 /// The UI never polls: it re-queries what an event says has changed. The engine coalesces
@@ -83,6 +111,12 @@ pub struct Preferences {
 /// - `messageBodyFailed`: that fetch failed.
 /// - `prefetchProgress`: progress of the background prefetch of an account (about once a second).
 /// - `linkActivated`: the user clicked link `index` of the rendering `renderToken`.
+/// - `operationsChanged`: outbox operations of an account were recorded, changed state or were
+///   removed (cancelled, discarded, replaced by a retry). One event per change of the outbox,
+///   so an action on many messages is one event: `operations` carries their complete new
+///   states, `removed` the ids that are gone. Re-query `getOutboxCounts` and a visible
+///   activity page; show a notice for `failed`/`conflict` states of the user's own batches.
+///   The messages' rows change with `messagesChanged`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -126,6 +160,11 @@ pub enum CoreEvent {
     LinkActivated {
         render_token: RenderToken,
         index: u32,
+    },
+    OperationsChanged {
+        account_id: AccountId,
+        operations: Vec<OperationInfo>,
+        removed: Vec<OperationId>,
     },
 }
 
@@ -275,6 +314,67 @@ mod tests {
             assert_eq!(serde_json::to_value(&event).expect("serialize"), wire);
             let back: CoreEvent = serde_json::from_value(wire).expect("deserialize");
             assert_eq!(back, event);
+        }
+    }
+
+    #[test]
+    fn stage_4_wire_format() {
+        let account: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+        let operation = OperationInfo {
+            id: OperationId(12),
+            batch: crate::BatchId(11),
+            account_id: account,
+            action: crate::ActionKind::Archive,
+            kind: crate::OperationKind::Move,
+            state: crate::OperationState::Failed,
+            mailbox_id: Some(MailboxId(1)),
+            message_id: Some(MessageId(1_764_000_000)),
+            target_mailbox_id: Some(MailboxId(2)),
+            attempts: 1,
+            error: Some(IpcError {
+                code: crate::ErrorCode::ServerRejected,
+                message: "The server refused the request.".into(),
+                detail: Some("NO [TRYCREATE]".into()),
+            }),
+            conflict: None,
+            notice: None,
+            created_at: 1_764_000_000_000,
+            updated_at: 1_764_000_001_000,
+        };
+        let event = CoreEvent::OperationsChanged {
+            account_id: account,
+            operations: vec![operation],
+            removed: vec![OperationId(10)],
+        };
+        let wire = json!({
+            "type": "operationsChanged",
+            "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+            "operations": [{
+                "id": 12, "batch": 11, "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
+                "action": "archive", "kind": "move", "state": "failed",
+                "mailboxId": 1, "messageId": 1_764_000_000, "targetMailboxId": 2,
+                "attempts": 1,
+                "error": { "code": "server_rejected", "message": "The server refused the request.",
+                           "detail": "NO [TRYCREATE]" },
+                "conflict": null, "notice": null,
+                "createdAt": 1_764_000_000_000_i64, "updatedAt": 1_764_000_001_000_i64
+            }],
+            "removed": [10]
+        });
+        assert_eq!(serde_json::to_value(&event).expect("serialize"), wire);
+        let back: CoreEvent = serde_json::from_value(wire).expect("deserialize");
+        assert_eq!(back, event);
+
+        assert_eq!(
+            serde_json::to_value(ReadingPreferences::default()).expect("serialize"),
+            json!({ "markReadOnOpen": "afterDelay" })
+        );
+        for (value, wire) in [
+            (MarkReadOnOpen::Immediately, "immediately"),
+            (MarkReadOnOpen::AfterDelay, "afterDelay"),
+            (MarkReadOnOpen::Never, "never"),
+        ] {
+            assert_eq!(serde_json::to_value(value).expect("serialize"), wire);
         }
     }
 

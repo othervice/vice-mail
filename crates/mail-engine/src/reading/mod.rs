@@ -29,6 +29,7 @@
 
 mod fetch;
 mod files;
+pub mod index_text;
 mod links;
 pub mod opener;
 mod prefetch;

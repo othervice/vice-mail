@@ -387,3 +387,272 @@ fn account_and_mail_commands_are_wired_with_typed_errors() {
     .expect_err("invalid");
     assert_eq!(err["code"], "invalid_argument");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 4 commands: typed answers of actions on a seeded database (no server; the outbox
+// cannot connect, so operations stay queued and undo cancels them)
+// ---------------------------------------------------------------------------------------------
+
+const SEEDED_ACCOUNT: &str = "0b5e8f43-6c1f-4a51-9a51-0c4f5b3f6a01";
+
+/// One account (writes off, its server unreachable, no password stored) with an INBOX and a
+/// trash folder, each holding one unread message.
+fn seed_account(data_dir: &std::path::Path) {
+    use mail_engine::credentials::CredentialRef;
+    use mail_model::{
+        AccountId, Address, Flags, MessageHeader, RemoteMailbox, Security, ServerSettings,
+        UidValidity,
+    };
+    use mail_store::{MailboxBaseline, NewAccount, Store, StoreOptions};
+
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = closed.local_addr().expect("addr").port();
+    drop(closed);
+    tauri::async_runtime::block_on(async {
+        let store =
+            Store::open(&data_dir.join(DATABASE_FILE), StoreOptions::default()).expect("store");
+        let id: AccountId = SEEDED_ACCOUNT.parse().expect("id");
+        let server = ServerSettings {
+            host: "127.0.0.1".into(),
+            port,
+            security: Security::Tls,
+            username: "a@example.org".into(),
+        };
+        store
+            .insert_account(NewAccount {
+                id,
+                email: "a@example.org".into(),
+                display_name: "A".into(),
+                imap: server.clone(),
+                smtp: server,
+                credential_ref: CredentialRef::for_account(id).to_string(),
+            })
+            .await
+            .expect("account");
+        let remote = |name: &str, attributes: &[&str]| RemoteMailbox {
+            name: name.into(),
+            path: name.into(),
+            delimiter: Some('/'),
+            attributes: attributes.iter().map(|a| (*a).to_owned()).collect(),
+            status: None,
+        };
+        store
+            .sync_mailboxes(
+                id,
+                vec![remote("INBOX", &[]), remote("Trash", &["\\Trash"])],
+            )
+            .await
+            .expect("mailboxes");
+        let uv = UidValidity(1);
+        for (n, mailbox) in store
+            .mailboxes(id)
+            .await
+            .expect("list")
+            .into_iter()
+            .enumerate()
+        {
+            let n = i64::try_from(n).expect("small");
+            store
+                .reset_mailbox(
+                    mailbox.id,
+                    MailboxBaseline {
+                        uid_validity: uv,
+                        uid_next: 2,
+                        highest_modseq: None,
+                    },
+                )
+                .await
+                .expect("baseline");
+            let header = MessageHeader {
+                uid: 1,
+                modseq: None,
+                flags: Flags::default(),
+                size: 100,
+                internal_date: 1_764_000_000 + n,
+                date: Some(1_764_000_000 + n),
+                subject: format!("Message {n}"),
+                from: vec![Address {
+                    name: None,
+                    email: "b@example.org".into(),
+                }],
+                to: Vec::new(),
+                cc: Vec::new(),
+                message_id: Some(format!("{n}@commands.test")),
+                in_reply_to: None,
+                references: Vec::new(),
+                list_id: None,
+                list_unsubscribe: None,
+                auto_submitted: None,
+                precedence: None,
+                has_attachments: false,
+            };
+            store
+                .store_headers(mailbox.id, uv, vec![header], None)
+                .await
+                .expect("headers");
+        }
+    });
+}
+
+#[test]
+fn action_commands_answer_typed_results() {
+    let h = harness(seed_account);
+    let (tx, rx) = mpsc::channel::<String>();
+    h.app.listen_any(CORE_EVENT_NAME, move |event| {
+        let _ = tx.send(event.payload().to_owned());
+    });
+
+    let mailboxes =
+        invoke(&h, "list_mailboxes", json!({ "accountId": SEEDED_ACCOUNT })).expect("mailboxes");
+    let id_of = |path: &str| {
+        mailboxes
+            .as_array()
+            .expect("array")
+            .iter()
+            .find(|m| m["path"] == path)
+            .map(|m| m["id"].clone())
+            .unwrap_or_else(|| panic!("no {path}"))
+    };
+    let (inbox, trash) = (id_of("INBOX"), id_of("Trash"));
+    let first = |mailbox: &Value| {
+        invoke(
+            &h,
+            "list_messages",
+            json!({ "mailboxId": mailbox, "cursor": null, "limit": 50 }),
+        )
+        .expect("list")["items"][0]
+            .clone()
+    };
+    let row = first(&inbox);
+    assert_eq!(row["unread"], true);
+    assert!(
+        row.get("activity").is_none(),
+        "absent when nothing is pending: {row}"
+    );
+    let at = json!([{ "mailboxId": inbox, "messageId": row["id"] }]);
+    let apply = |action: Value, messages: &Value, request: &str| {
+        invoke(
+            &h,
+            "apply_action",
+            json!({ "action": action, "messages": messages, "requestId": request }),
+        )
+    };
+
+    // New accounts are read-only: refused with its own code.
+    let err = apply(json!({ "type": "markRead" }), &at, "req-1").expect_err("read-only");
+    assert_eq!(err["code"], "read_only", "{err}");
+    assert_eq!(first(&inbox)["unread"], true);
+
+    let account = invoke(
+        &h,
+        "set_writes_enabled",
+        json!({ "accountId": SEEDED_ACCOUNT, "enabled": true }),
+    )
+    .expect("writes on");
+    assert_eq!(account["writesEnabled"], true);
+    assert_eq!(account["id"], SEEDED_ACCOUNT);
+
+    let result = apply(json!({ "type": "markRead" }), &at, "req-2").expect("mark read");
+    let batch = result["batch"].clone();
+    assert!(batch.is_number(), "{result}");
+    assert_eq!(
+        result,
+        json!({ "batch": batch, "queued": 1, "cancelled": 0 })
+    );
+    let row = first(&inbox);
+    assert_eq!(row["unread"], false, "local at once");
+    assert_eq!(row["activity"], "pending");
+    assert_eq!(
+        invoke(
+            &h,
+            "get_outbox_counts",
+            json!({ "accountId": SEEDED_ACCOUNT })
+        )
+        .expect("counts"),
+        json!({ "accountId": SEEDED_ACCOUNT, "pending": 1, "failed": 0, "conflict": 0 })
+    );
+    let ops = invoke(
+        &h,
+        "list_operations",
+        json!({ "accountId": SEEDED_ACCOUNT, "before": null, "limit": 10 }),
+    )
+    .expect("operations");
+    assert_eq!(ops[0]["batch"], batch);
+    assert_eq!(ops[0]["action"], "mark_read");
+    assert_eq!(ops[0]["kind"], "set_flag");
+    assert_eq!(ops[0]["state"], "queued");
+    assert_eq!(ops[0]["accountId"], SEEDED_ACCOUNT);
+
+    // The operation reached the UI as one typed event.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let operations_changed = loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let payload = rx.recv_timeout(left).expect("operationsChanged within 5 s");
+        let event: Value = serde_json::from_str(&payload).expect("JSON payload");
+        if event["type"] == "operationsChanged" {
+            break event;
+        }
+    };
+    assert_eq!(operations_changed["accountId"], SEEDED_ACCOUNT);
+    assert_eq!(operations_changed["operations"][0]["batch"], batch);
+    assert_eq!(operations_changed["removed"], json!([]));
+
+    // The codes the UI acts on.
+    let err = apply(json!({ "type": "archive" }), &at, "req-3").expect_err("no archive");
+    assert_eq!(err["code"], "missing_mailbox", "{err}");
+    let in_trash = json!([{ "mailboxId": trash, "messageId": first(&trash)["id"] }]);
+    let err = apply(json!({ "type": "delete" }), &in_trash, "req-4").expect_err("in the trash");
+    assert_eq!(err["code"], "confirmation_required", "{err}");
+    let err = apply(
+        json!({ "type": "addKeyword", "keyword": "a b" }),
+        &at,
+        "req-5",
+    )
+    .expect_err("bad tag");
+    assert_eq!(err["code"], "invalid_keyword", "{err}");
+    let err = apply(json!({ "type": "markRead" }), &at, "").expect_err("no request id");
+    assert_eq!(err["code"], "invalid_argument", "{err}");
+    let err = apply(json!({ "type": "explode" }), &at, "req-6").expect_err("unknown action");
+    assert!(err.is_string(), "framework error: {err}");
+
+    // Undo cancels the queued operation and restores the row.
+    let undone = invoke(&h, "undo_action", json!({ "batch": batch })).expect("undo");
+    assert_eq!(undone["cancelled"], 1, "{undone}");
+    assert_eq!(undone["queued"], 0, "{undone}");
+    let row = first(&inbox);
+    assert_eq!(row["unread"], true);
+    assert!(row.get("activity").is_none(), "{row}");
+    assert_eq!(
+        invoke(
+            &h,
+            "get_outbox_counts",
+            json!({ "accountId": SEEDED_ACCOUNT })
+        )
+        .expect("counts")["pending"],
+        0
+    );
+    let err = invoke(&h, "retry_operation", json!({ "operationId": 999_999 })).expect_err("gone");
+    assert_eq!(err["code"], "not_found", "{err}");
+    let err = invoke(&h, "discard_operation", json!({ "operationId": 999_999 })).expect_err("gone");
+    assert_eq!(err["code"], "not_found", "{err}");
+
+    // Reading preferences.
+    assert_eq!(
+        invoke(&h, "get_reading_preferences", json!({})).expect("reading prefs"),
+        json!({ "markReadOnOpen": "afterDelay" })
+    );
+    let never = json!({ "markReadOnOpen": "never" });
+    assert_eq!(
+        invoke(
+            &h,
+            "set_reading_preferences",
+            json!({ "preferences": never })
+        )
+        .expect("set"),
+        never
+    );
+    assert_eq!(
+        invoke(&h, "get_reading_preferences", json!({})).expect("reading prefs"),
+        never
+    );
+}

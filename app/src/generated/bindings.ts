@@ -15,6 +15,10 @@ export const commands = {
 	getPreferences: (options?: InvokeOptions) => typedError<Preferences, IpcError>(__TAURI_INVOKE("get_preferences", undefined, options)),
 	/**  Stores the preferences and emits `preferencesChanged` to all windows. */
 	setPreferences: (preferences: Preferences, options?: InvokeOptions) => typedError<Preferences, IpcError>(__TAURI_INVOKE("set_preferences", { preferences }, options)),
+	/**  Reading preferences: when an opened message is marked as read. Defaults when nothing is stored. */
+	getReadingPreferences: (options?: InvokeOptions) => typedError<ReadingPreferences, IpcError>(__TAURI_INVOKE("get_reading_preferences", undefined, options)),
+	/**  Stores the reading preferences and returns them. */
+	setReadingPreferences: (preferences: ReadingPreferences, options?: InvokeOptions) => typedError<ReadingPreferences, IpcError>(__TAURI_INVOKE("set_reading_preferences", { preferences }, options)),
 	/**  All accounts, oldest first, with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
@@ -59,6 +63,61 @@ export const commands = {
 	setPrefetchSettings: (settings: PrefetchSettings, options?: InvokeOptions) => typedError<PrefetchSettings, IpcError>(__TAURI_INVOKE("set_prefetch_settings", { settings }, options)),
 	/**  Prefetch state of an account; `prefetchProgress` follows. */
 	getPrefetchStatus: (accountId: AccountId, options?: InvokeOptions) => typedError<PrefetchStatus, IpcError>(__TAURI_INVOKE("get_prefetch_status", { accountId }, options)),
+	/**  Applies an action to messages of one account: local at once, then sent to the server. `requestId` is a UUID per user action. */
+	applyAction: (action: MailAction, messages: MessageRef[], requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("apply_action", { action, messages, requestId }, options)),
+	/**  Undoes the batch of an earlier action (the notice's "Undo"). */
+	undoAction: (batch: BatchId, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("undo_action", { batch }, options)),
+	/**  Queues the creation of a folder (for example the archive after `missing_mailbox`). */
+	createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_mailbox", { accountId, path, role }, options)),
+	/**  The account's operations, newest first, below `before` (activity view). `limit` 1..500. */
+	listOperations: (accountId: AccountId, before: OperationId | null, limit: number, options?: InvokeOptions) => typedError<OperationInfo[], IpcError>(__TAURI_INVOKE("list_operations", { accountId, before, limit }, options)),
+	/**  Queues a failed or conflicting operation again. */
+	retryOperation: (operationId: OperationId, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("retry_operation", { operationId }, options)),
+	/**  Removes a finished operation from the activity view. */
+	discardOperation: (operationId: OperationId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("discard_operation", { operationId }, options)),
+	/**  Pending, failed and conflicting operations of an account. */
+	getOutboxCounts: (accountId: AccountId, options?: InvokeOptions) => typedError<OutboxCounts, IpcError>(__TAURI_INVOKE("get_outbox_counts", { accountId }, options)),
+	/**  Turns writing on or off for an account (the user's switch); returns the account. */
+	setWritesEnabled: (accountId: AccountId, enabled: boolean, options?: InvokeOptions) => typedError<Account, IpcError>(__TAURI_INVOKE("set_writes_enabled", { accountId, enabled }, options)),
+	/**  Searches the local messages: hits newest first with highlights, problems and chips. */
+	search: (request: SearchRequest, options?: InvokeOptions) => typedError<SearchPage, IpcError>(__TAURI_INVOKE("search", { request }, options)),
+	/**  Searches on the server (IMAP SEARCH, read-only) for messages whose body is not local. */
+	searchOnServer: (request: SearchRequest, options?: InvokeOptions) => typedError<ServerSearchResult, IpcError>(__TAURI_INVOKE("search_on_server", { request }, options)),
+	/**  Whether the full-text index is complete or being built. */
+	getSearchIndexStatus: (options?: InvokeOptions) => typedError<SearchIndexStatus, IpcError>(__TAURI_INVOKE("get_search_index_status", undefined, options)),
+	/**  Rebuilds the full-text index in the background; search keeps working meanwhile. */
+	rebuildSearchIndex: (options?: InvokeOptions) => typedError<SearchIndexStatus, IpcError>(__TAURI_INVOKE("rebuild_search_index", undefined, options)),
+	/**  Threads of a mailbox, newest first. `limit` 1..500. */
+	listThreads: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<ThreadPage, IpcError>(__TAURI_INVOKE("list_threads", { mailboxId, cursor, limit }, options)),
+	/**  Threads of the unified inbox or of a group's inboxes. `limit` 1..500. */
+	listUnifiedThreads: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<ThreadPage, IpcError>(__TAURI_INVOKE("list_unified_threads", { view, cursor, limit }, options)),
+	/**
+	 *  The thread of a message over all folders of its account, oldest first. `mailboxId` is the
+	 *  folder it was opened from.
+	 */
+	getThread: (messageId: MessageId, mailboxId: MailboxId | null, options?: InvokeOptions) => typedError<ThreadView, IpcError>(__TAURI_INVOKE("get_thread", { messageId, mailboxId }, options)),
+	/**  The unified inbox (or a group's), newest first. `limit` 1..500. */
+	listUnifiedInbox: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_unified_inbox", { view, cursor, limit }, options)),
+	/**  All account groups in sidebar order. */
+	listAccountGroups: (options?: InvokeOptions) => typedError<AccountGroup[], IpcError>(__TAURI_INVOKE("list_account_groups", undefined, options)),
+	createAccountGroup: (name: string, accountIds: AccountId[], options?: InvokeOptions) => typedError<AccountGroup, IpcError>(__TAURI_INVOKE("create_account_group", { name, accountIds }, options)),
+	/**  Renames a group and replaces its members. */
+	updateAccountGroup: (groupId: AccountGroupId, name: string, accountIds: AccountId[], options?: InvokeOptions) => typedError<AccountGroup, IpcError>(__TAURI_INVOKE("update_account_group", { groupId, name, accountIds }, options)),
+	deleteAccountGroup: (groupId: AccountGroupId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_account_group", { groupId }, options)),
+	/**  Accounts hidden on this device. */
+	listHiddenAccounts: (options?: InvokeOptions) => typedError<AccountId[], IpcError>(__TAURI_INVOKE("list_hidden_accounts", undefined, options)),
+	/**  Hides an account from the unified views and "search everywhere", or shows it again. */
+	setAccountHidden: (accountId: AccountId, hidden: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_account_hidden", { accountId, hidden }, options)),
+	/**  Identities of an account, the default first. */
+	listIdentities: (accountId: AccountId, options?: InvokeOptions) => typedError<IdentityInfo[], IpcError>(__TAURI_INVOKE("list_identities", { accountId }, options)),
+	addIdentity: (accountId: AccountId, identity: IdentityInput, options?: InvokeOptions) => typedError<IdentityInfo, IpcError>(__TAURI_INVOKE("add_identity", { accountId, identity }, options)),
+	updateIdentity: (identityId: IdentityId, identity: IdentityInput, options?: InvokeOptions) => typedError<IdentityInfo, IpcError>(__TAURI_INVOKE("update_identity", { identityId, identity }, options)),
+	/**  Makes an identity the default of its account; returns the account's identities. */
+	setDefaultIdentity: (identityId: IdentityId, options?: InvokeOptions) => typedError<IdentityInfo[], IpcError>(__TAURI_INVOKE("set_default_identity", { identityId }, options)),
+	/**  Deletes an identity (not the default one). */
+	deleteIdentity: (identityId: IdentityId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_identity", { identityId }, options)),
+	/**  The identity a reply to the message is sent from. */
+	getReplyIdentity: (messageId: MessageId, options?: InvokeOptions) => typedError<IdentityInfo, IpcError>(__TAURI_INVOKE("get_reply_identity", { messageId }, options)),
 };
 
 /** Events */
@@ -68,6 +127,14 @@ export const events = {
 
 /* Constants */
 export const CORE_EVENT_NAME = "core-event" as const;
+
+export const MARK_READ_DELAY_MS = 2000 as const;
+
+export const MAX_ACTION_MESSAGES = 10000 as const;
+
+export const MAX_SEARCH_PAGE = 200 as const;
+
+export const MAX_THREAD_MESSAGES = 1000 as const;
 
 /* Types */
 /**  A configured account as the UI sees it. */
@@ -88,6 +155,19 @@ export type Account = {
 
 /**  Index 0–7 into the eight account color tokens (`docs/DESIGN.md`). */
 export type AccountColor = number;
+
+/**  A user-defined group of accounts ("Arbeit", "Privat"). */
+export type AccountGroup = {
+	id: AccountGroupId,
+	name: string,
+	/**  Members in account order (oldest account first). */
+	accountIds: AccountId[],
+	/**  Order in the sidebar, ascending. */
+	position: number,
+};
+
+/**  Stable id of an account group (UUID v4, lowercase hyphenated); synced like accounts. */
+export type AccountGroupId = string;
 
 /**
  *  Stable account id (UUID v4, lowercase hyphenated on the wire). It is the same on every
@@ -136,6 +216,24 @@ export type AccountStatus = {
 	lastSyncAt: number | null,
 };
 
+/**  What an operation was recorded for, for the activity view. */
+export type ActionKind = "mark_read" | "mark_unread" | "flag" | "unflag" | "add_keyword" | "remove_keyword" | "archive" | "delete" | "delete_permanently" | "move" | "spam" | "not_spam" | "create_mailbox" | 
+/**  Counter-operations of an undone batch. */
+"undo";
+
+/**  Result of applying an action. */
+export type ActionResult = {
+	/**  For undo; null if nothing was recorded (no-op, or every change cancelled a queued one). */
+	batch: BatchId | null,
+	/**  Operations recorded. */
+	queued: number,
+	/**
+	 *  Queued operations that this action cancelled out (for example "read" after a still
+	 *  queued "unread").
+	 */
+	cancelled: number,
+};
+
 /**  A mailbox address. `email` may be empty for broken headers; groups are flattened. */
 export type Address = {
 	/**  Decoded display name (RFC 2047), null if none. */
@@ -171,6 +269,9 @@ export type AttachmentInfo = {
 	/**  The content is stored locally (false for attachments of a partial message). */
 	local: boolean,
 };
+
+/**  The operations of one action (one call, possibly many messages). Undo works on a batch. */
+export type BatchId = number;
 
 /**  Which rendering of the body the UI asks `getMessage` for. */
 export type BodyFormat = 
@@ -214,6 +315,23 @@ export type Capabilities = {
 	names: string[],
 };
 
+/**
+ *  Why an operation ended in [`OperationState::Conflict`]. In every case the server state is
+ *  kept and shown.
+ */
+export type ConflictReason = 
+/**  The message is no longer in the mailbox: moved or deleted by another client. */
+"gone" | 
+/**
+ *  The message was changed on the server after the app last saw it (CONDSTORE
+ *  `UNCHANGEDSINCE`), and the server's state differs from what was asked.
+ */
+"modified" | 
+/**  The mailbox was recreated on the server (new UIDVALIDITY); its old UIDs are void. */
+"mailbox_reset" | 
+/**  The mailbox no longer exists on the server. */
+"mailbox_gone";
+
 /**  A successful connection test. Failures arrive as `IpcError` with a specific code. */
 export type ConnectionTestResult = {
 	/**
@@ -243,8 +361,14 @@ export type ConnectionTestResult = {
  *  - `messageBodyFailed`: that fetch failed.
  *  - `prefetchProgress`: progress of the background prefetch of an account (about once a second).
  *  - `linkActivated`: the user clicked link `index` of the rendering `renderToken`.
+ *  - `operationsChanged`: outbox operations of an account were recorded, changed state or were
+ *    removed (cancelled, discarded, replaced by a retry). One event per change of the outbox,
+ *    so an action on many messages is one event: `operations` carries their complete new
+ *    states, `removed` the ids that are gone. Re-query `getOutboxCounts` and a visible
+ *    activity page; show a notice for `failed`/`conflict` states of the user's own batches.
+ *    The messages' rows change with `messagesChanged`.
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] };
 
 /**  Result of server discovery for an email address. Either server may be unknown. */
 export type DiscoveryResult = {
@@ -304,7 +428,48 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  The system keychain refused to store, read or delete the password. */
 "keychain" | 
 /**  An account with this email address is already set up. */
-"account_exists";
+"account_exists" | 
+/**
+ *  The account has no folder for this action: archive (`archive`), trash (`delete`), junk
+ *  (`spam`) or inbox (`notSpam`). The UI asks which folder to use (`setMailboxRole`) or
+ *  offers to create one (`createMailbox`).
+ */
+"missing_mailbox" | 
+/**
+ *  The messages lie in the trash, where deleting removes them for good. The UI asks and
+ *  then sends the action `deletePermanently`.
+ */
+"confirmation_required" | 
+/**
+ *  The action cannot be undone (a permanent delete, a created folder, a move still on its
+ *  way or not yet visible in its target folder). Nothing was changed.
+ */
+"not_undoable" | 
+/**  A tag contains spaces or characters IMAP does not allow in keywords. */
+"invalid_keyword";
+
+/**
+ *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
+ *  uses the identity's UUID). Exported since stage 7 (identities in the settings).
+ */
+export type IdentityId = number;
+
+/**  A sender identity of an account over IPC. */
+export type IdentityInfo = {
+	id: IdentityId,
+	accountId: AccountId,
+	email: string,
+	name: string,
+	replyTo: string | null,
+	isDefault: boolean,
+};
+
+/**  Fields of a new or changed identity. */
+export type IdentityInput = {
+	email: string,
+	name: string,
+	replyTo: string | null,
+};
 
 /**  The error as it crosses the IPC bridge: `{ code, message, detail }`. */
 export type IpcError = {
@@ -354,6 +519,32 @@ export type LinkWarning =
  */
 export type ListCursor = number;
 
+/**  What the user asks for. One action on many messages is one batch ([`BatchId`]). */
+export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type: "flag" } | { type: "unflag" } | { type: "addKeyword"; keyword: string } | { type: "removeKeyword"; keyword: string } | 
+/**
+ *  Moves to the mailbox with the role `archive`. Without one the action fails with
+ *  [`ActionError::MissingMailbox`], so the UI can ask which mailbox to use (then
+ *  `setMailboxRole`) or whether to create one (an operation of its own).
+ */
+{ type: "archive" } | 
+/**
+ *  Moves to the trash. Messages that already lie in the trash are only deleted with
+ *  [`MailAction::DeletePermanently`]; `Delete` on them fails with
+ *  [`ActionError::ConfirmationRequired`].
+ */
+{ type: "delete" } | 
+/**
+ *  Deletes for good (EXPUNGE). The UI asks before sending it; this action is the explicit
+ *  confirmation the core requires.
+ */
+{ type: "deletePermanently" } | 
+/**  Moves to another mailbox of the same account. */
+{ type: "move"; target: MailboxId } | 
+/**  Moves to the mailbox with the role `junk`. */
+{ type: "spam" } | 
+/**  Moves messages from the junk mailbox to the inbox; others are left alone. */
+{ type: "notSpam" };
+
 /**  A mailbox as the UI sees it (sidebar, folder tree). */
 export type Mailbox = {
 	id: MailboxId,
@@ -386,6 +577,32 @@ export type MailboxRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "j
 "flagged" | 
 /**  An ordinary folder. */
 "custom";
+
+/**
+ *  When the reading pane marks an opened message as read (stage 4). The UI does the marking
+ *  (an ordinary `markRead` action), and only for accounts with `writesEnabled`; read-only
+ *  accounts mark nothing.
+ */
+export type MarkReadOnOpen = 
+/**  As soon as the message is shown. */
+"immediately" | 
+/**  After it was shown for [`MARK_READ_DELAY_MS`] without the selection changing. */
+"afterDelay" | "never";
+
+/**
+ *  Outbox state of a message as its list row shows it (stage 4). If several operations touch
+ *  the message, the one that needs the user wins: `failed`, then `conflict`, then `pending`.
+ */
+export type MessageActivity = 
+/**  A change waits for the server (`queued` or `in_flight`); the row already shows it. */
+"pending" | 
+/**  A change failed and was reverted locally. The activity view offers retry and discard. */
+"failed" | 
+/**
+ *  The message was changed elsewhere meanwhile and the server's state was kept. The
+ *  activity view explains it.
+ */
+"conflict";
 
 /**  The body as the UI shows it. */
 export type MessageBody = 
@@ -443,6 +660,11 @@ export type MessageListItem = {
 	 *  was parsed (opened or prefetched).
 	 */
 	preview: string | null,
+	/**
+	 *  Outbox state of a change to this message, for a small symbol in the row. Absent when
+	 *  nothing is pending or needs the user (most rows), so pages stay small.
+	 */
+	activity?: MessageActivity | null,
 };
 
 /**  One page of a message list, newest first. */
@@ -464,6 +686,12 @@ export type MessageProblem =
 "noContent" | 
 /**  The message could not be parsed at all and is shown as raw text. */
 "rawFallback";
+
+/**  A message in one mailbox, as the list shows it (`MessageListItem::mailbox_id` and `id`). */
+export type MessageRef = {
+	mailboxId: MailboxId,
+	messageId: MessageId,
+};
 
 /**  What `getMessage` returns: everything the reading pane shows. */
 export type MessageView = {
@@ -511,6 +739,87 @@ export type OpenAttachmentResult =
  *  `confirmedExecutable: true`. Nothing was written or opened.
  */
 { kind: "needsConfirmation" };
+
+/**  Id of one operation (`operation.id`). Never reused; also the order of execution. */
+export type OperationId = number;
+
+/**  One operation as the activity view shows it. */
+export type OperationInfo = {
+	id: OperationId,
+	batch: BatchId,
+	accountId: AccountId,
+	action: ActionKind,
+	kind: OperationKind,
+	state: OperationState,
+	/**
+	 *  Source mailbox and message; null for `create_mailbox`, or when they were deleted
+	 *  locally since.
+	 */
+	mailboxId: MailboxId | null,
+	messageId: MessageId | null,
+	/**  Target of a move. */
+	targetMailboxId: MailboxId | null,
+	/**  Times the command was sent. */
+	attempts: number,
+	/**  Why it failed (`failed`), or the last transient error. */
+	error: IpcError | null,
+	conflict: ConflictReason | null,
+	notice: OperationNotice | null,
+	/**  Unix milliseconds. */
+	createdAt: number,
+	updatedAt: number,
+};
+
+/**  What an operation does on the server. */
+export type OperationKind = "set_flag" | "move" | "expunge" | "create_mailbox";
+
+/**  Something the user should know about a confirmed operation. */
+export type OperationNotice = 
+/**
+ *  The server has no UIDPLUS and other messages in the source mailbox were marked deleted,
+ *  so a plain EXPUNGE would have removed them too. The message was copied but its original
+ *  stays in the source, marked deleted, until the mailbox is expunged.
+ */
+"left_marked_deleted";
+
+/**
+ *  Where an operation stands.
+ * 
+ *  `queued` → `in_flight` (the command is about to be sent) → `confirmed` | `failed` |
+ *  `conflict`. After a crash or a lost connection, `in_flight` operations are checked against
+ *  the server before anything is repeated.
+ */
+export type OperationState = 
+/**  Recorded, local change applied, waiting for the server. */
+"queued" | 
+/**  Sent or about to be sent; the outcome is not known yet. */
+"in_flight" | 
+/**  The server did it. */
+"confirmed" | 
+/**
+ *  The server refused or the outbox gave up; the local change was reverted. The user can
+ *  retry or discard it.
+ */
+"failed" | 
+/**
+ *  The server state changed meanwhile (the message was moved, deleted or modified
+ *  elsewhere); the server wins and the user is told ([`ConflictReason`]).
+ */
+"conflict";
+
+/**
+ *  How many operations of an account wait for the server or need the user (status badge,
+ *  activity view). Confirmed ones are not counted.
+ */
+export type OutboxCounts = {
+	accountId: AccountId,
+	/**  `queued` or `in_flight`. */
+	pending: number,
+	/**  `failed`: refused or given up, local change reverted. Retry or discard. */
+	failed: number,
+	/**  `conflict`: changed elsewhere meanwhile, the server's state was kept. Discard. */
+	conflict: number,
+};
 
 /**  Operating system the app runs on. */
 export type Platform = "macos" | "windows" | "linux";
@@ -583,6 +892,14 @@ export type ProviderHint =
  */
 "tonline";
 
+/**
+ *  Reading preferences stored in the `setting` table (stage 4). Separate from [`Preferences`],
+ *  so the appearance settings keep their shape.
+ */
+export type ReadingPreferences = {
+	markReadOnOpen: MarkReadOnOpen,
+};
+
 /**  Scope of `loadRemoteContent`. */
 export type RemoteContentScope = 
 /**  This rendering only; nothing is stored. */
@@ -617,6 +934,135 @@ export type SaveAttachmentResult =
 { kind: "cancelled" };
 
 /**
+ *  Where the query's words occur in the fields the list shows. Computed from the stored text
+ *  (the index holds no text, decision 0003); a match deep in the body has no range here.
+ */
+export type SearchHighlights = {
+	subject: TextRange[],
+	/**  In the sender's display name, or in the address when there is no name. */
+	from: TextRange[],
+	preview: TextRange[],
+};
+
+/**
+ *  One result: the message as a list row (one of its locations), every mailbox it lies in, and
+ *  the highlighted ranges.
+ */
+export type SearchHit = {
+	message: MessageListItem,
+	/**  All locations, ascending; `message.mailboxId` is one of them. */
+	mailboxIds: MailboxId[],
+	highlights: SearchHighlights,
+	/**
+	 *  The whole message is stored locally, so its text was searched. Otherwise only headers
+	 *  (and the text parts of a large message) were: "search on the server" can find more.
+	 */
+	bodyLocal: boolean,
+};
+
+/**  State of the full-text index. */
+export type SearchIndexState = 
+/**  Every stored message is indexed. */
+"ready" | 
+/**
+ *  Existing messages are being indexed (after the update to stage 7); results may be
+ *  missing older messages until it is done.
+ */
+"building" | 
+/**  A new index is being built in the background; searches use the old one meanwhile. */
+"rebuilding";
+
+export type SearchIndexStatus = {
+	state: SearchIndexState,
+	/**  0..=100, by message dates (the index is built from old to new). */
+	percent: number,
+};
+
+/**  One page of results, newest first. */
+export type SearchPage = {
+	hits: SearchHit[],
+	/**  Null on the last page. A page can be shorter than the limit and still have a next one. */
+	nextCursor: ListCursor | null,
+	/**  Parser errors, contradictions and unknown accounts or mailboxes, sorted by position. */
+	problems: SearchProblem[],
+	/**  Every term of the query, for chips. */
+	terms: SearchTermInfo[],
+	/**
+	 *  The query cannot match anything (a contradiction, an unknown account or mailbox, an
+	 *  empty date range); `hits` is empty.
+	 */
+	matchesNothing: boolean,
+	index: SearchIndexStatus,
+};
+
+/**  A problem at a place in the query; the UI marks the range and shows a text for the code. */
+export type SearchProblem = {
+	code: SearchProblemCode,
+	range: TextRange,
+};
+
+/**  What a problem in the query is. The parser's error kinds plus what only the engine knows. */
+export type SearchProblemCode = "unclosed_quote" | "missing_value" | "unknown_filter" | "unknown_value" | "invalid_date" | "invalid_age" | "nothing_to_search" | "prefix_too_short" | "missing_term" | "misplaced_or" | "or_needs_text" | "or_with_exclusion" | "too_long" | "too_many_terms" | 
+/**  The term contradicts another one (`is:unread is:read`); the query finds nothing. */
+"conflict" | 
+/**  `account:` names no account (address, name or id). */
+"unknown_account" | 
+/**  `in:` names no mailbox of the accounts searched. */
+"unknown_mailbox" | 
+/**
+ *  The server cannot search for this term (`has:attachment`, `is:snoozed`); it is applied
+ *  to the local data of the results only (server search).
+ */
+"not_on_server";
+
+/**  One search call. */
+export type SearchRequest = {
+	/**  As typed, at most 2048 bytes are read. */
+	query: string,
+	scope: SearchScope,
+	/**  `nextCursor` of the previous page; null for the first page. */
+	cursor: ListCursor | null,
+	/**  1..=200. */
+	limit: number,
+	/**
+	 *  Search as you type: the word the input ends in matches as a prefix (`rech` finds
+	 *  "Rechnung"). Off for a submitted search.
+	 */
+	typing: boolean,
+	/**
+	 *  The user's region writes `01/02/2026` month first (United States). Dates with dots,
+	 *  ISO dates and month names do not depend on it.
+	 */
+	monthFirst?: boolean,
+};
+
+/**
+ *  Where a search looks. Hidden accounts are left out of `all` and `group` (as from the
+ *  unified inbox); searching one account or mailbox explicitly always works.
+ */
+export type SearchScope = 
+/**  Every visible account. */
+{ kind: "all" } | { kind: "account"; accountId: AccountId } | { kind: "mailbox"; mailboxId: MailboxId } | 
+/**  The visible accounts of a group. */
+{ kind: "group"; groupId: AccountGroupId };
+
+/**
+ *  One term as typed, for a chip: kind, whether it was excluded with `-`, the whole term and
+ *  its value (without key and quotes).
+ */
+export type SearchTermInfo = {
+	kind: SearchTermKind,
+	negated: boolean,
+	range: TextRange,
+	valueRange: TextRange,
+	/**  Part of an `OR` group (`a OR b`). */
+	alternative: boolean,
+};
+
+/**  What a term of the query is, for chips. */
+export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than";
+
+/**
  *  Transport security of a server connection. There is deliberately no plaintext option: a
  *  password never travels unencrypted, and the test server offers TLS and STARTTLS as well.
  */
@@ -628,6 +1074,28 @@ export type Security =
  *  does not offer STARTTLS, the connection fails; it never continues unencrypted.
  */
 "starttls";
+
+/**
+ *  Result of searching on the server (IMAP SEARCH over the read-only connection) for messages
+ *  whose content is not stored locally.
+ */
+export type ServerSearchResult = {
+	/**
+	 *  Messages the server found whose whole body is not stored locally, newest first, at most
+	 *  the request's limit. Every hit is a stored message (headers are always local).
+	 */
+	hits: SearchHit[],
+	/**  More hits than returned. */
+	truncated: boolean,
+	/**  Mailboxes searched. */
+	searched: MailboxId[],
+	/**  Mailboxes whose search failed (offline, refused); the rest still counts. */
+	failed: MailboxId[],
+	/**  Server hits not stored locally yet (first sync still running). */
+	notSynced: number,
+	/**  Problems of the query, including terms the server cannot search (`notOnServer`). */
+	problems: SearchProblem[],
+};
 
 /**  Where and how to reach one server (IMAP or SMTP). No password: that lives in the keychain. */
 export type ServerSettings = {
@@ -646,12 +1114,72 @@ export type SyncProgress = {
 	total: number,
 };
 
+/**  A range of UTF-16 code units (`start..end`). */
+export type TextRange = {
+	start: number,
+	end: number,
+};
+
 /**  A piece of a text body. */
 export type TextSegment = { kind: "text"; text: string } | 
 /**  A URL or address found in the text; `index` for `describeLink`/`openLink`. */
 { kind: "link"; text: string; index: number };
 
 export type ThemePreference = "system" | "light" | "dark";
+
+/**  One message of an open thread. */
+export type ThreadEntry = {
+	/**  As a list row of one of its locations (the requested mailbox if it lies there). */
+	message: MessageListItem,
+	/**  All locations, ascending. */
+	mailboxIds: MailboxId[],
+};
+
+/**
+ *  One conversation in a list: the newest of its messages in the listed mailbox, how many it
+ *  has (in all mailboxes of the account) and how many of those are unread.
+ */
+export type ThreadListItem = {
+	/**  The newest message of the thread in this mailbox; the row shows it. */
+	message: MessageListItem,
+	/**
+	 *  Local thread id; null while the message is not threaded yet (right after the update to
+	 *  stage 7). Changes when threads merge: open a thread by `message.id` (`getThread`).
+	 */
+	threadId: number | null,
+	messageCount: number,
+	/**  Messages of the thread unread in at least one mailbox. */
+	unreadCount: number,
+	/**
+	 *  Sort date of the thread's newest message anywhere (Unix milliseconds), for example a
+	 *  reply in Sent.
+	 */
+	lastActivity: number,
+};
+
+export type ThreadPage = {
+	items: ThreadListItem[],
+	/**  Null on the last page. */
+	nextCursor: ListCursor | null,
+};
+
+/**  Every message of a thread over all mailboxes of its account, oldest first. */
+export type ThreadView = {
+	threadId: number | null,
+	messages: ThreadEntry[],
+	/**
+	 *  Messages in the thread; more than `messages.length` if the thread was cut to the newest
+	 *  [`MAX_THREAD_MESSAGES`].
+	 */
+	total: number,
+};
+
+/**  Which inboxes a unified view mixes. */
+export type UnifiedView = 
+/**  The inboxes of every visible account. */
+{ kind: "all" } | 
+/**  The inboxes of the group's visible accounts. */
+{ kind: "group"; groupId: AccountGroupId };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

@@ -2,13 +2,20 @@
 //! Mail-Engine", and decision 0002).
 //!
 //! One supervisor task per account ([`account`]) owns the account's [`SyncMachine`] and reacts
-//! to what it says. A connected account has a session ([`session`]) of up to three tasks:
+//! to what it says. The sync never writes: every connection it opens is read-only (EXAMINE,
+//! the adapter's allowlist), also for accounts with `writes_enabled`; the outbox writes on a
+//! connection of its own. A connected account has a session ([`session`]) of up to three
+//! tasks:
 //!
 //! - the **worker** holds the main connection and runs sync passes ([`pass`]) when told to;
 //! - the **IDLE watcher** holds a second connection, idles on the inbox in sections of
 //!   [`IDLE_SECTION`] and reports changes at once (servers with IDLE);
 //! - the **poller** asks for a full pass every [`POLL_INTERVAL`] (other folders, and the inbox
 //!   every [`INBOX_POLL_WITHOUT_IDLE`] on servers without IDLE).
+//!
+//! Right after each step the outbox asks for a pass over the mailboxes it changed on the
+//! server (its `SyncHook`, `Control::SyncMailboxes`), so the sync confirms the change at once
+//! instead of at the next poll.
 //!
 //! Every session task runs in its own Tokio task, so a panic (imap-proto can panic on exotic
 //! server responses) ends only that session: the supervisor turns it into a `protocol` error
@@ -38,7 +45,9 @@ mod tests;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mail_model::{Access, ConnectConfig, CoreEvent, ExtraRootCa, Secret, ServerSettings, Timeouts};
+use mail_model::{
+    Access, AccountId, ConnectConfig, CoreEvent, ExtraRootCa, Secret, ServerSettings, Timeouts,
+};
 use mail_store::Store;
 use tokio::sync::broadcast;
 
@@ -116,25 +125,25 @@ impl Default for SyncConfig {
 }
 
 impl SyncConfig {
-    /// Connection settings for `server`: the configured limits and extra root, the access mode
-    /// from the account's `writes_enabled` (always read-only in stage 2).
+    /// Connection settings for `server`, with the configured limits and extra root. Always
+    /// read-only (EXAMINE and the adapter's allowlist), whatever the account allows: the sync,
+    /// IDLE, the reading pane and the login check never write. Only the outbox opens a
+    /// read-write connection of its own (stage 4, decision 0012).
     pub(crate) fn connect_config(
         &self,
         server: &ServerSettings,
         password: Secret<String>,
-        writes_enabled: bool,
     ) -> ConnectConfig {
-        let access = if writes_enabled {
-            Access::ReadWrite
-        } else {
-            Access::ReadOnly
-        };
-        let mut config = ConnectConfig::new(server, password, access);
+        let mut config = ConnectConfig::new(server, password, Access::ReadOnly);
         config.timeouts = self.timeouts;
         config.extra_root_ca = self.extra_root_ca.clone();
         config
     }
 }
+
+/// Told when an account's sync connected: the outbox retries at once instead of waiting out
+/// its backoff (stage 4). Must not block.
+pub(crate) type OnConnected = Arc<dyn Fn(AccountId) + Send + Sync>;
 
 /// What the sync tasks of all accounts share. Cheap to clone.
 pub(crate) struct Env<C> {
@@ -144,6 +153,7 @@ pub(crate) struct Env<C> {
     pub clock: Arc<dyn Clock>,
     pub config: Arc<SyncConfig>,
     pub events: broadcast::Sender<CoreEvent>,
+    pub on_connected: OnConnected,
 }
 
 impl<C> Clone for Env<C> {
@@ -155,6 +165,7 @@ impl<C> Clone for Env<C> {
             clock: Arc::clone(&self.clock),
             config: Arc::clone(&self.config),
             events: self.events.clone(),
+            on_connected: Arc::clone(&self.on_connected),
         }
     }
 }

@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use mail_model::{AccountId, AccountStatus, CoreError, CoreEvent, MailConnector, Secret};
+use mail_model::{
+    AccountId, AccountStatus, CoreError, CoreEvent, MailConnector, MailboxId, Secret,
+};
 use mail_store::StoredAccount;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
@@ -24,6 +26,9 @@ pub(crate) enum Control {
     Wake,
     /// A new password was stored; use it and reconnect.
     CredentialsChanged(Secret<String>),
+    /// The outbox changed these mailboxes on the server: sync them now (its `SyncHook`).
+    /// Ignored while not connected; the next session starts with a full pass anyway.
+    SyncMailboxes(Vec<MailboxId>),
     /// The account is removed or the app quits.
     Stop,
 }
@@ -168,11 +173,9 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                     drop(session.take());
                     match self.password().await {
                         Ok(password) => {
-                            let config = self.env.config.connect_config(
-                                &self.account.imap,
-                                password,
-                                self.account.writes_enabled,
-                            );
+                            // Read-only also when writes are on: the outbox writes.
+                            let config =
+                                self.env.config.connect_config(&self.account.imap, password);
                             session = Some(Session::start(&self.env, id, config));
                         }
                         Err(err) => {
@@ -211,6 +214,14 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                         self.password = Some(password);
                         SyncEvent::CredentialsChanged
                     }
+                    Some(Control::SyncMailboxes(mailboxes)) => {
+                        if let Some(session) = &session {
+                            session.mark_mailboxes(&mailboxes);
+                        }
+                        // Idle: a pass now; syncing: one more pass afterwards; not
+                        // connected: ignored by the machine.
+                        SyncEvent::Changed
+                    }
                     Some(Control::Stop) | None => {
                         if let Some(session) = session.take() {
                             session.shutdown(self.env.config.shutdown_grace).await;
@@ -225,6 +236,9 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                         if let Some(session) = session.as_mut() {
                             session.start_watchers(&self.env, idle);
                         }
+                        // The server is reachable again: the outbox need not wait out its
+                        // backoff.
+                        (self.env.on_connected)(id);
                         SyncEvent::Connected
                     }
                     SessionOutput::Event(SessionEvent::Progress(progress)) => {

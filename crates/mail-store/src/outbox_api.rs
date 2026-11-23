@@ -10,7 +10,7 @@
 use mail_model::{
     AccountId, ActionError, ActionKind, BatchId, ConflictReason, FlagUpdate, IpcError, MailAction,
     MailboxId, MailboxRole, MessageId, MessageRef, ModSeq, OperationId, OperationInfo,
-    OperationNotice, OperationPayload, OperationState, Uid, UidValidity,
+    OperationNotice, OperationPayload, OperationState, OutboxCounts, Uid, UidValidity,
 };
 
 use crate::settings::now_millis;
@@ -206,6 +206,12 @@ impl Store {
         }
         self.read(move |conn| outbox::of_account(conn, account, before, limit))
             .await
+    }
+
+    /// How many of the account's operations are pending, failed or in conflict (stage 4,
+    /// status badge). `NotFound` for an unknown account.
+    pub async fn outbox_counts(&self, account: AccountId) -> Result<OutboxCounts, StoreError> {
+        self.read(move |conn| outbox::counts(conn, account)).await
     }
 
     /// Undoes a batch: queued operations are cancelled (local change reverted, row removed),

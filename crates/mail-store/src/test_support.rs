@@ -194,3 +194,40 @@ pub(crate) fn inspect(path: &std::path::Path) -> (usize, Vec<String>) {
         .expect("names");
     (usize::try_from(version).expect("non-negative"), names)
 }
+
+/// Stores new headers with the SQL of stage 2 (no threads, no full-text index), for tests that
+/// build a database of an older schema version. Ids are the sort dates (no collisions).
+pub(crate) fn stage2_store_headers(
+    conn: &rusqlite::Connection,
+    mailbox: MailboxId,
+    headers: &[MessageHeader],
+) -> Result<(), crate::StoreError> {
+    let account: i64 = conn.query_row(
+        "SELECT account_id FROM mailbox WHERE id = ?1",
+        [mailbox.0],
+        |r| r.get(0),
+    )?;
+    for h in headers {
+        let from = h.from.first();
+        conn.execute(
+            "INSERT INTO message (id, account_id, message_id_hdr, date, subject, from_name,
+                                  from_addr, size, has_attachments)
+             VALUES (?1, ?2, ?3, ?1, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                h.sort_date(),
+                account,
+                h.message_id,
+                h.subject,
+                from.and_then(|a| a.name.as_deref()),
+                from.map(|a| a.email.as_str()),
+                h.size,
+                h.has_attachments
+            ],
+        )?;
+        conn.execute(
+            "INSERT INTO message_location (mailbox_id, message_id, uid, seen) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![mailbox.0, h.sort_date(), h.uid, h.flags.seen],
+        )?;
+    }
+    Ok(())
+}

@@ -268,6 +268,22 @@ pub trait MailBackend: Send {
         )))
     }
 
+    /// UIDs of the open mailbox matching all `criteria` (`UID SEARCH`, stage 7: "search on the
+    /// server"). Read-only (SEARCH is on the allowlist). Strings go as quoted strings, with
+    /// `CHARSET UTF-8` when one is not ASCII.
+    ///
+    /// The default fails with [`BackendError::Unsupported`].
+    fn search_text(
+        &mut self,
+        mailbox: &SelectedMailbox,
+        criteria: &[crate::search::ServerCriterion],
+    ) -> impl Future<Output = Result<UidSet, BackendError>> + Send {
+        let _ = (mailbox, criteria);
+        std::future::ready(Err(BackendError::Unsupported(
+            "searching on the server".into(),
+        )))
+    }
+
     /// NOOP: checks that the connection is alive and collects pending server notices.
     fn noop(&mut self) -> impl Future<Output = Result<(), BackendError>> + Send;
 

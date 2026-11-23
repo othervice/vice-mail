@@ -52,6 +52,7 @@ wenn er groß genug ist.
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
 | Sync-Verschlüsselung | age (X25519, scrypt), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014) |
+| Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017) |
 | Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
 | Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
 | Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
@@ -173,6 +174,15 @@ einer klaren Meldung abgelehnt.
 - Schreib-Verbindung: WAL, `synchronous=NORMAL`, `foreign_keys=ON`, 64 MB Cache, `mmap_size` 256 MB,
   `journal_size_limit` 64 MB, `temp_store=MEMORY`. Lese-Verbindungen (2 bis 4): `query_only`,
   8 MB Cache, `mmap`. Abgleich in Fenstern von 500 Mails mit `BEGIN IMMEDIATE`.
+- Aus Stufe 7 (`docs/decisions/0017-suche-threads-integration.md`): Index und Thread werden in der
+  Transaktion geschrieben, die Nachricht bzw. Body speichert (Body-Text über eine `BodyTextSource` der
+  Engine, höchstens 256 KiB je Mail); Bestandsmails und ein Neuaufbau laufen als Auftrag im
+  Hintergrund, der Neuaufbau mit Tausch am Ende. `thread` hält Anzahl und neueste Nachricht, die
+  Ungelesenen zählt die Thread-Liste beim Lesen; die Thread-Liste eines Postfachs zeigt je Thread die
+  neueste Mail in diesem Postfach. Hervorhebungen rechnet Rust (contentless Index). Kontogruppen
+  (sync, über Konto-UUID) und ausgeblendete Konten (Gerät) in eigenen Tabellen. Gemessen in
+  `docs/testing/performance.md`: erste Suchtreffer bei 500.000 Mails 0,3–17 ms, Thread-Liste 0,3 ms;
+  ein Abgleichsfenster kostet 4,7 ms mehr als in Stufe 2.
 
 ## Regeln der Mail-Engine
 

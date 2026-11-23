@@ -1042,10 +1042,32 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
     // The SQL of stage 2 directly: `Store::store_headers` also re-applies outbox operations
     // (stage 4), whose table a stage 2 database does not have.
     store
-        .write(move |tx| crate::messages::store_headers(tx, inbox, UV, headers, None))
+        .write(move |tx| crate::test_support::stage2_store_headers(tx, inbox, &headers))
         .await
         .expect("headers");
-    let before = store.list_messages(inbox, None, 100).await.expect("list");
+    // The rows as stage 2 listed them (the current list query also reads the outbox table of
+    // stage 4, which a stage 2 database does not have).
+    let rows = |c: &rusqlite::Connection, mailbox: i64| {
+        c.prepare(
+            "SELECT l.message_id, l.seen, m.subject, m.preview
+             FROM message_location l CROSS JOIN message m ON m.id = l.message_id
+             WHERE l.mailbox_id = ?1 ORDER BY l.message_id DESC",
+        )?
+        .query_map([mailbox], |r| {
+            Ok((
+                MessageId(r.get(0)?),
+                r.get::<_, bool>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, Option<String>>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()
+    };
+    let before = store
+        .read(move |c| Ok(rows(c, inbox.0)?))
+        .await
+        .expect("stage 2 rows");
+    assert_eq!(before.len(), 20);
     drop(store);
 
     let store = Store::open(&path, StoreOptions::default()).expect("migrate");
@@ -1055,10 +1077,16 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
         (2, crate::SCHEMA_VERSION)
     );
     assert!(report.backup.is_some());
+    let after = store.list_messages(inbox, None, 100).await.expect("list");
     assert_eq!(
-        store.list_messages(inbox, None, 100).await.expect("list"),
+        after
+            .items
+            .iter()
+            .map(|i| (i.id, !i.unread, i.subject.clone(), i.preview.clone()))
+            .collect::<Vec<_>>(),
         before
     );
+    assert!(after.items.iter().all(|i| i.activity.is_none()));
     let columns: BTreeSet<String> = store
         .read(|c| {
             Ok(c.prepare("SELECT name FROM pragma_table_info('message')")?
@@ -1071,7 +1099,7 @@ async fn a_stage_2_database_with_mail_migrates_and_keeps_it() {
         columns.contains("preview") && !columns.contains("body_ref"),
         "{columns:?}"
     );
-    let id = before.items[0].id;
+    let id = before[0].0;
     store
         .store_body(id, raw("migrated", 500))
         .await

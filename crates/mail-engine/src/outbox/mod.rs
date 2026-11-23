@@ -21,9 +21,11 @@
 //! - **Undo** ([`Outbox::undo`]) cancels what is still queued and sends counter-operations for
 //!   the rest.
 //!
-//! Events: [`OutboxEvent`] on [`Outbox::subscribe`]. The integration of stage 4 forwards the
-//! list events with [`OutboxEvent::to_core_event`] and adds `CoreEvent` variants for the
-//! operation states.
+//! Events: [`OutboxEvent`] (one per operation) on [`Outbox::subscribe`]. For the UI,
+//! [`Outbox::forward_to`] sends each change of the outbox straight into the core's stream as
+//! one `CoreEvent::OperationsChanged` (all operations of the change), then one
+//! `messagesChanged` per mailbox and one `mailboxesChanged`: an action on thousands of messages
+//! is a handful of events, never a flood that could overrun a subscriber.
 
 mod exec;
 mod worker;
@@ -39,8 +41,9 @@ use std::time::Duration;
 
 use mail_imap::ImapConnector;
 use mail_model::{
-    AccountId, ActionResult, BatchId, CoreError, ExtraRootCa, MailAction, MailboxId, MailboxRole,
-    MessageRef, OperationId, OperationInfo, OutboxEvent, Timeouts, WriteConnector,
+    AccountId, ActionResult, BatchId, CoreError, CoreEvent, ExtraRootCa, MAX_ACTION_MESSAGES,
+    MailAction, MailboxId, MailboxRole, MessageRef, OperationId, OperationInfo, OutboxCounts,
+    OutboxEvent, Timeouts, WriteConnector,
 };
 use mail_store::{OutboxChange, Store};
 use tokio::sync::{Notify, broadcast, watch};
@@ -109,6 +112,76 @@ impl SyncHook for NoSyncHook {
     fn sync_requested(&self, _account: AccountId, _mailboxes: &[MailboxId]) {}
 }
 
+/// Where the outbox's events go: its own per-operation stream, and the core's stream if
+/// [`Outbox::forward_to`] was called.
+pub(crate) struct Emitter {
+    pub(crate) events: broadcast::Sender<OutboxEvent>,
+    core: RwLock<Option<broadcast::Sender<CoreEvent>>>,
+}
+
+impl Emitter {
+    fn new() -> Self {
+        let (events, _) = broadcast::channel(EVENT_CAPACITY);
+        Self {
+            events,
+            core: RwLock::new(None),
+        }
+    }
+
+    fn core(&self) -> Option<broadcast::Sender<CoreEvent>> {
+        self.core
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Sends the events of a store change: per operation on the outbox stream, coalesced on
+    /// the core's.
+    pub(crate) fn change(&self, change: &OutboxChange) {
+        emit_change(&self.events, change);
+        let Some(core) = self.core() else { return };
+        let send = |event| {
+            if core.send(event).is_err() {
+                tracing::trace!("core event dropped: no subscribers");
+            }
+        };
+        if !change.operations.is_empty() || !change.removed.is_empty() {
+            send(CoreEvent::OperationsChanged {
+                account_id: change.account,
+                operations: change.operations.iter().map(|op| op.info()).collect(),
+                removed: change.removed.clone(),
+            });
+        }
+        for mailbox in &change.mailboxes {
+            send(CoreEvent::MessagesChanged {
+                account_id: change.account,
+                mailbox_id: *mailbox,
+            });
+        }
+        if !change.mailboxes.is_empty() {
+            send(CoreEvent::MailboxesChanged {
+                account_id: change.account,
+            });
+        }
+    }
+
+    /// The folder list of the account changed (a mailbox was created).
+    pub(crate) fn mailboxes_changed(&self, account: AccountId) {
+        let event = OutboxEvent::MailboxesChanged {
+            account_id: account,
+        };
+        if let Some(core) = self.core()
+            && let Some(core_event) = event.to_core_event()
+            && core.send(core_event).is_err()
+        {
+            tracing::trace!("core event dropped: no subscribers");
+        }
+        if self.events.send(event).is_err() {
+            tracing::trace!("outbox event dropped: no subscribers");
+        }
+    }
+}
+
 /// What the workers share.
 pub(crate) struct Shared<C> {
     pub(crate) store: Store,
@@ -116,7 +189,7 @@ pub(crate) struct Shared<C> {
     pub(crate) credentials: Credentials,
     pub(crate) config: OutboxConfig,
     pub(crate) clock: Arc<dyn Clock>,
-    pub(crate) events: broadcast::Sender<OutboxEvent>,
+    pub(crate) emitter: Emitter,
     hook: RwLock<Arc<dyn SyncHook>>,
 }
 
@@ -148,8 +221,8 @@ impl<C: WriteConnector + 'static> Clone for Outbox<C> {
     }
 }
 
-/// Sends the events of a store change.
-pub(crate) fn emit_change(events: &broadcast::Sender<OutboxEvent>, change: &OutboxChange) {
+/// Sends the per-operation events of a store change on the outbox stream.
+fn emit_change(events: &broadcast::Sender<OutboxEvent>, change: &OutboxChange) {
     let send = |event| {
         if events.send(event).is_err() {
             tracing::trace!("outbox event dropped: no subscribers");
@@ -205,7 +278,6 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         credentials: Credentials,
         config: OutboxConfig,
     ) -> Self {
-        let (events, _) = broadcast::channel(EVENT_CAPACITY);
         Self {
             shared: Arc::new(Shared {
                 store,
@@ -213,11 +285,21 @@ impl<C: WriteConnector + 'static> Outbox<C> {
                 credentials,
                 config,
                 clock: Arc::new(SystemClock),
-                events,
+                emitter: Emitter::new(),
                 hook: RwLock::new(Arc::new(NoSyncHook)),
             }),
             workers: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Also sends every change into the core's event stream, coalesced (see the module docs).
+    pub fn forward_to(&self, core: broadcast::Sender<CoreEvent>) {
+        *self
+            .shared
+            .emitter
+            .core
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Some(core);
     }
 
     /// Replaces the hook called after operations changed mailboxes on the server.
@@ -231,7 +313,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
 
     /// Subscribes to the outbox events. Events sent before subscribing are not replayed.
     pub fn subscribe(&self) -> broadcast::Receiver<OutboxEvent> {
-        self.shared.events.subscribe()
+        self.shared.emitter.events.subscribe()
     }
 
     /// Starts a worker for every account with queued or in-flight operations. In-flight ones
@@ -262,13 +344,20 @@ impl<C: WriteConnector + 'static> Outbox<C> {
     }
 
     /// Like [`Outbox::apply`] with the caller's request id (a UUID per user action): repeating
-    /// the call with the same id changes nothing (an IPC call sent twice).
+    /// the call with the same id changes nothing (an IPC call sent twice). At most
+    /// [`MAX_ACTION_MESSAGES`] messages (`invalid_argument` otherwise).
     pub async fn apply_request(
         &self,
         action: MailAction,
         messages: Vec<MessageRef>,
         request: String,
     ) -> Result<ActionResult, CoreError> {
+        if messages.len() > MAX_ACTION_MESSAGES {
+            return Err(CoreError::InvalidArgument(format!(
+                "{} messages in one action; at most {MAX_ACTION_MESSAGES}",
+                messages.len()
+            )));
+        }
         let kind = action.kind();
         let change = self
             .shared
@@ -314,8 +403,13 @@ impl<C: WriteConnector + 'static> Outbox<C> {
     /// Removes a finished operation from the activity view ("discard").
     pub async fn discard(&self, id: OperationId) -> Result<(), CoreError> {
         let change = self.shared.store.discard_operation(id).await?;
-        emit_change(&self.shared.events, &change);
+        self.shared.emitter.change(&change);
         Ok(())
+    }
+
+    /// How many of the account's operations are pending, failed or in conflict.
+    pub async fn counts(&self, account: AccountId) -> Result<OutboxCounts, CoreError> {
+        Ok(self.shared.store.outbox_counts(account).await?)
     }
 
     /// The account's operations, newest first (activity view), keyset-paged below `before`.
@@ -348,7 +442,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
             .store
             .set_writes_enabled(account, enabled)
             .await?;
-        emit_change(&self.shared.events, &change);
+        self.shared.emitter.change(&change);
         if enabled {
             // In-flight operations left from before can be checked now.
             self.kick(account);
@@ -372,6 +466,30 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         }
     }
 
+    /// Stops the account's worker (the account is being removed); its connection gets a moment
+    /// to log out. A later action starts a new one.
+    pub async fn stop_account(&self, account: AccountId) {
+        let worker = self.lock().remove(&account);
+        if let Some(worker) = worker {
+            let _ = worker.stop.send(true);
+            let mut task = worker.task;
+            if tokio::time::timeout(Duration::from_secs(3), &mut task)
+                .await
+                .is_err()
+            {
+                task.abort();
+            }
+        }
+    }
+
+    /// Aborts every worker at once (the core is dropped without [`Outbox::shutdown`]):
+    /// connections close without LOGOUT; in-flight operations are checked at the next start.
+    pub(crate) fn abort_all(&self) {
+        for worker in self.lock().values() {
+            worker.task.abort();
+        }
+    }
+
     /// Stops every worker; open connections get a moment to log out.
     pub async fn shutdown(&self) {
         let workers: Vec<WorkerHandle> = self.lock().drain().map(|(_, w)| w).collect();
@@ -390,7 +508,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
     }
 
     fn recorded(&self, change: &OutboxChange) -> ActionResult {
-        emit_change(&self.shared.events, change);
+        self.shared.emitter.change(change);
         if !change.operations.is_empty() {
             self.kick(change.account);
         }

@@ -34,6 +34,8 @@ rustls-platform-verifier.workspace = true
 url.workspace = true
 # Opening links and attachments with the system's default apps (stage 3).
 open.workspace = true
+# Local time zone for search dates (stage 7, search/).
+jiff.workspace = true
 # Settings sync (settings_sync/): encryption, opaque record ids, typed errors.
 age.workspace = true
 hmac.workspace = true

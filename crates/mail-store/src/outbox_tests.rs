@@ -2,9 +2,9 @@
 //! retry, write access. Against the real store in a temporary directory.
 
 use mail_model::{
-    ActionError, ConflictReason, ErrorCode, Flag, FlagUpdate, Flags, IpcError, MailAction,
-    MailboxId, MailboxRole, MessageId, MessageRef, ModSeq, OperationPayload, OperationState,
-    UidValidity,
+    AccountId, ActionError, ConflictReason, ErrorCode, Flag, FlagUpdate, Flags, IpcError,
+    MailAction, MailboxId, MailboxRole, MessageActivity, MessageId, MessageRef, ModSeq,
+    OperationPayload, OperationState, OutboxCounts, UidValidity,
 };
 
 use crate::test_support::{Fixture, UV, count, fixture, header};
@@ -683,6 +683,125 @@ async fn failed_operations_can_be_retried_or_discarded() {
     let discarded = f.store.discard_operation(id).await.expect("discard");
     assert_eq!(discarded.removed, [id]);
     assert!(f.store.operation(id).await.expect("read").is_none());
+}
+
+async fn activity_of(f: &Fixture, at: MessageRef) -> Option<MessageActivity> {
+    f.store
+        .list_messages(at.mailbox_id, None, 500)
+        .await
+        .expect("list")
+        .items
+        .into_iter()
+        .find(|i| i.id == at.message_id)
+        .expect("listed")
+        .activity
+}
+
+/// The list row shows what the outbox still does with the message (stage 4: a small symbol),
+/// and the account's counts follow.
+#[tokio::test]
+async fn list_rows_and_counts_show_unfinished_operations() {
+    let (f, at) = writable(3).await;
+    let counts = |pending, failed, conflict| OutboxCounts {
+        account_id: f.account,
+        pending,
+        failed,
+        conflict,
+    };
+    assert_eq!(
+        f.store.outbox_counts(f.account).await.expect("counts"),
+        counts(0, 0, 0)
+    );
+    assert!(activity_of(&f, at[0]).await.is_none());
+
+    // Two operations on the first message, one on the second.
+    let flag = act(&f, MailAction::Flag, &at[..2], "a1").await;
+    let read = act(&f, MailAction::MarkRead, &at[..1], "a2").await;
+    assert_eq!(activity_of(&f, at[0]).await, Some(MessageActivity::Pending));
+    assert_eq!(activity_of(&f, at[1]).await, Some(MessageActivity::Pending));
+    assert!(activity_of(&f, at[2]).await.is_none());
+    assert_eq!(
+        f.store.outbox_counts(f.account).await.expect("counts"),
+        counts(3, 0, 0)
+    );
+
+    // Failed wins over pending on the same row; confirmed operations show nothing.
+    let error = IpcError {
+        code: ErrorCode::ServerRejected,
+        message: "x".into(),
+        detail: None,
+    };
+    let first_flag = flag.operations[0].id;
+    let second_flag = flag.operations[1].id;
+    f.store
+        .finish_operations(vec![
+            (first_flag, OperationResult::Failed { error }),
+            (second_flag, confirmed()),
+        ])
+        .await
+        .expect("finish");
+    assert_eq!(activity_of(&f, at[0]).await, Some(MessageActivity::Failed));
+    assert!(activity_of(&f, at[1]).await.is_none(), "confirmed");
+    assert_eq!(
+        f.store.outbox_counts(f.account).await.expect("counts"),
+        counts(1, 1, 0)
+    );
+
+    f.store
+        .finish_operations(vec![(
+            read.operations[0].id,
+            OperationResult::Conflict {
+                reason: ConflictReason::Modified,
+                flags: None,
+            },
+        )])
+        .await
+        .expect("conflict");
+    assert_eq!(activity_of(&f, at[0]).await, Some(MessageActivity::Failed));
+    assert_eq!(
+        f.store.outbox_counts(f.account).await.expect("counts"),
+        counts(0, 1, 1)
+    );
+    f.store
+        .discard_operation(first_flag)
+        .await
+        .expect("discard");
+    assert_eq!(
+        activity_of(&f, at[0]).await,
+        Some(MessageActivity::Conflict)
+    );
+    f.store
+        .discard_operation(read.operations[0].id)
+        .await
+        .expect("discard");
+    assert!(activity_of(&f, at[0]).await.is_none());
+    assert_eq!(
+        f.store.outbox_counts(f.account).await.expect("counts"),
+        counts(0, 0, 0)
+    );
+
+    // A failed move puts the row back, with the symbol.
+    let archive = act(&f, MailAction::Archive, &at[2..], "a3").await;
+    assert!(flags_of(&f, at[2]).await.is_none(), "moved away locally");
+    let error = IpcError {
+        code: ErrorCode::ServerRejected,
+        message: "x".into(),
+        detail: None,
+    };
+    f.store
+        .finish_operations(vec![(
+            archive.operations[0].id,
+            OperationResult::Failed { error },
+        )])
+        .await
+        .expect("fail");
+    assert_eq!(activity_of(&f, at[2]).await, Some(MessageActivity::Failed));
+
+    let other: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+    assert!(matches!(
+        f.store.outbox_counts(other).await,
+        Err(StoreError::NotFound(_))
+    ));
 }
 
 #[tokio::test]
