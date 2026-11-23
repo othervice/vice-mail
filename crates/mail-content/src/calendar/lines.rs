@@ -216,11 +216,12 @@ pub(super) fn unescape_text(value: &str) -> String {
     out
 }
 
-/// One line of display text: control characters (line breaks too) become spaces, trimmed, cut
-/// to `max` bytes. `None` when empty.
+/// One line of display text: control characters (line breaks too) become spaces, bidirectional
+/// controls go (C-8), trimmed, cut to `max` bytes. `None` when empty.
 pub(super) fn clean_line(text: &str, max: usize) -> Option<String> {
     let mapped: String = text
         .chars()
+        .filter(|c| !mail_model::is_bidi_control(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
     let trimmed = mapped.trim();
@@ -322,6 +323,12 @@ mod tests {
         );
         assert_eq!(clean_line(" a\tb\nc ", 100).as_deref(), Some("a b c"));
         assert_eq!(clean_line("  ", 100), None);
+        // C-8: titles and names of invitations lose bidirectional controls.
+        assert_eq!(
+            clean_line("Call\u{202E}exe.pdf\u{2066}", 100).as_deref(),
+            Some("Callexe.pdf")
+        );
+        assert_eq!(clean_line("\u{200E}", 100), None);
         assert_eq!(clean_line("äöü", 3).as_deref(), Some("ä"));
         assert_eq!(clean_block("a\r\n\u{7}b", 100).as_deref(), Some("a\nb"));
         assert_eq!(clean_block("abcdef", 3).as_deref(), Some("abc…"));

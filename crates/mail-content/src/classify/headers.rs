@@ -246,10 +246,12 @@ fn addresses(list: Option<AddressList<'_>>) -> Vec<Address> {
         .collect()
 }
 
-/// Control characters (folding included) become spaces; trimmed.
+/// Control characters (folding included) become spaces, bidirectional controls go (C-8: rules
+/// see the subject and names as the reader does); trimmed.
 fn clean_text(text: &str) -> String {
     let mapped: String = text
         .chars()
+        .filter(|c| !mail_model::is_bidi_control(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
     mapped.trim().to_owned()

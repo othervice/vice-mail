@@ -9,13 +9,15 @@ use super::fold::fold;
 pub const MAX_NAME_CHARS: usize = 128;
 
 /// A display name worth keeping for `email`: in NFC, quotes and surrounding space removed, white
-/// space collapsed, control characters dropped. `None` for empty names, names without a letter, and
-/// names that are an address (contain `@`, or equal the address's local part).
+/// space collapsed, control characters and bidirectional controls (C-8) dropped. `None` for
+/// empty names, names without a letter, and names that are an address (contain `@`, or equal
+/// the address's local part).
 pub fn clean_display_name(name: &str, email: &str) -> Option<String> {
     let mut cleaned = String::with_capacity(name.len());
     for word in ComposingNormalizerBorrowed::new_nfc()
         .normalize(name)
         .chars()
+        .filter(|c| !mail_model::is_bidi_control(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect::<String>()
         .split_whitespace()
@@ -139,6 +141,15 @@ mod tests {
         assert_eq!(clean("   "), None);
         assert_eq!(clean("123 456"), None, "no letter");
         assert_eq!(clean("Hans\u{0}Müller").as_deref(), Some("Hans Müller"));
+        // C-8: no bidirectional controls in names.
+        assert_eq!(
+            clean("Hans\u{202E}rellüM\u{202C}").as_deref(),
+            Some("HansrellüM")
+        );
+        assert_eq!(
+            clean("\u{2067}\u{200F}Bank\u{2069}").as_deref(),
+            Some("Bank")
+        );
         assert_eq!(
             clean("Hans Mu\u{308}ller").as_deref(),
             Some("Hans Müller"),

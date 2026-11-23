@@ -40,6 +40,7 @@ mod secret;
 mod send;
 mod settings_sync;
 mod snippets;
+mod text;
 pub mod threading;
 mod ui;
 mod uid_set;
@@ -188,6 +189,7 @@ pub use snippets::{
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
 };
+pub use text::{is_bidi_control, strip_bidi_controls};
 pub use ui::{
     AccentTheme, AiPanelState, DEFAULT_SIDEBAR_WIDTH, DEFAULT_TEXT_SIZE, Density,
     MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS, MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS,

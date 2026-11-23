@@ -339,8 +339,19 @@ fn envelope(env: &Envelope<'_>) -> EnvelopeData {
     }
 }
 
-/// Decodes unstructured header text: RFC 2047 encoded words in any charset, raw UTF-8.
+/// Decodes unstructured header text: RFC 2047 encoded words in any charset, raw UTF-8. Subjects
+/// and names lose bidirectional controls (finding C-8: `Invoice\u{202E}fdp.exe` would show as
+/// `Invoiceexe.pdf`); the encoding cannot bring them back.
 pub(crate) fn decode_text(raw: &[u8]) -> String {
+    let text = decode_header_text(raw);
+    if text.chars().any(mail_model::is_bidi_control) {
+        mail_model::strip_bidi_controls(&text).trim().to_owned()
+    } else {
+        text
+    }
+}
+
+fn decode_header_text(raw: &[u8]) -> String {
     // A header value never contains line breaks after unfolding; a literal might.
     let cleaned: Vec<u8> = raw
         .iter()
@@ -681,6 +692,44 @@ mod tests {
         ] {
             assert_eq!(parse_internal_date(bad), None, "{bad:?}");
         }
+    }
+
+    /// Finding C-8: subjects and names lose bidirectional controls, raw or encoded.
+    #[test]
+    fn subjects_and_names_lose_bidi_controls() {
+        assert_eq!(
+            decode_text("Invoice\u{202E}fdp.exe".as_bytes()),
+            "Invoicefdp.exe"
+        );
+        assert_eq!(
+            decode_text(b"=?utf-8?q?Invoice=E2=80=AEfdp.exe?="),
+            "Invoicefdp.exe"
+        );
+        assert_eq!(
+            decode_text(b"=?utf-8?b?4oGnUGF5UGFs4oGp?= \xe2\x80\x8e"),
+            "PayPal"
+        );
+        for control in [
+            "\u{202A}", "\u{202D}", "\u{2066}", "\u{2069}", "\u{200F}", "\u{061C}",
+        ] {
+            let raw = format!("a{control}b");
+            assert_eq!(decode_text(raw.as_bytes()), "ab", "{control:?}");
+        }
+        // Right-to-left text itself stays.
+        assert_eq!(decode_text("שלום".as_bytes()), "שלום");
+        // The envelope as a server sends it (raw UTF-8 and an encoded word).
+        let line = "* 1 FETCH (UID 7 FLAGS () RFC822.SIZE 10 INTERNALDATE \"01-Sep-2026 12:00:00 +0000\" \
+ENVELOPE (NIL \"Re: \u{202E}gpj.exe\" ((\"=?utf-8?q?Bank=E2=81=A7_Support?=\" NIL \"x\" \"evil.example\")) \
+NIL NIL NIL NIL NIL NIL NIL))\r\n";
+        let wanted = UidSet::range(1, 10);
+        let mut collector = HeaderCollector::new(&wanted);
+        assert!(collector.take(&parse(line.as_bytes())));
+        let (headers, _) = collector.finish();
+        let [h] = headers.as_slice() else {
+            panic!("one header: {headers:?}");
+        };
+        assert_eq!(h.subject, "Re: gpj.exe");
+        assert_eq!(h.from[0].name.as_deref(), Some("Bank Support"));
     }
 
     #[test]

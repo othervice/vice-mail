@@ -361,10 +361,12 @@ fn addresses(list: Option<AddressList<'_>>) -> Vec<Address> {
         .collect()
 }
 
-/// Control characters (line breaks of folded headers included) become spaces; trimmed.
+/// Control characters (line breaks of folded headers included) become spaces, bidirectional
+/// controls go (finding C-8: they can reorder a subject or a sender name); trimmed.
 fn clean_text(text: &str) -> String {
     let mapped: String = text
         .chars()
+        .filter(|c| !mail_model::is_bidi_control(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
     mapped.trim().to_owned()
@@ -797,6 +799,18 @@ fn split_params(raw: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Finding C-8: subjects and display names lose bidirectional controls, raw or encoded.
+    #[test]
+    fn subjects_and_names_lose_bidi_controls() {
+        let raw = "From: \"Bank\u{2067} Support\u{2069}\" <x@evil.example>\r\n\
+                   To: =?utf-8?q?Ada=E2=80=AE?= <a@example.com>\r\n\
+                   Subject: =?utf-8?q?Invoice=E2=80=AEfdp.exe?= \u{200F}due\r\n\r\nHi\r\n";
+        let m = parse(raw.as_bytes());
+        assert_eq!(m.headers.subject.as_deref(), Some("Invoicefdp.exe due"));
+        assert_eq!(m.headers.from[0].name.as_deref(), Some("Bank Support"));
+        assert_eq!(m.headers.to[0].name.as_deref(), Some("Ada"));
+    }
 
     #[test]
     fn simple_message() {

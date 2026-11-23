@@ -475,6 +475,11 @@ einer klaren Meldung abgelehnt.
 - Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
   keine Steuerzeichen, keine Richtungsumkehr-Zeichen. Geschrieben wird nur an den Ort, den der
   Nutzer im Systemdialog wählt.
+- Betreffs und Anzeigenamen (Kopfzeilen über IMAP in `mail-imap`, ganze Mails, Kontakte,
+  Einladungen und Regelprüfung in `mail-content`) verlieren dieselben Richtungszeichen
+  (U+202A–202E, U+2066–2069, U+200E, U+200F, U+061C; `mail_model::is_bidi_control`), damit
+  `Rechnung\u{202E}fdp.exe` nicht als `Rechnungexe.pdf` erscheint (Sicherheitsprüfung C-8).
+  Schon gespeicherte Kopfzeilen behalten sie, bis der lokale Stand neu aufgebaut wird (neue UIDVALIDITY, Konto neu eingerichtet); veröffentlicht war noch keine Version.
 - Jede Datei, die die App aus einem Anhang schreibt (Öffnen, Speichern, Alle speichern), trägt
   die Herkunftsmarke des Systems: unter Windows den `Zone.Identifier` (Zone 3), unter macOS
   `com.apple.quarantine` (Stufe 15, über `/usr/bin/xattr` mit festen Argumenten), gesetzt,

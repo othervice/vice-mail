@@ -41,7 +41,7 @@ pub fn sanitize_filename(name: &str) -> String {
             '\t' | '\n' | '\r' => Some(' '),
             c if c.is_control() => None,
             '\u{200C}' | '\u{200D}' => Some(ch),
-            c if is_bidi_control(c) => None,
+            c if mail_model::is_bidi_control(c) => None,
             c if category.get(c) == GeneralCategory::Format => None,
             '<' | '>' | ':' | '"' | '|' | '?' | '*' | '/' | '\\' => Some('_'),
             c if c.is_whitespace() => Some(' '),
@@ -105,13 +105,6 @@ fn last_component(name: &str) -> &str {
         .find(|part| !part.trim().is_empty())
         .filter(|part| !matches!(part.trim(), "." | ".."))
         .unwrap_or("")
-}
-
-fn is_bidi_control(c: char) -> bool {
-    matches!(
-        c,
-        '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{061C}'
-    )
 }
 
 /// Cuts the name to [`MAX_NAME_BYTES`] on a character boundary and keeps a short extension.
