@@ -54,10 +54,21 @@ pub(crate) fn create(
             source: err,
         });
     }
-    fs::File::open(&partial)
-        .and_then(|f| f.sync_all())
-        .map_err(StoreError::io("flush backup"))?;
-    fs::rename(&partial, &target).map_err(StoreError::io("finish backup"))?;
+    // Opened for writing: Windows flushes (`FlushFileBuffers`) only handles with write access and
+    // answers a read-only handle with "access denied" (os error 5).
+    let flushed = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&partial)
+        .and_then(|f| f.sync_all());
+    if let Err(err) = flushed {
+        let _ = fs::remove_file(&partial);
+        return Err(StoreError::io("flush backup")(err));
+    }
+    if let Err(err) = fs::rename(&partial, &target) {
+        let _ = fs::remove_file(&partial);
+        return Err(StoreError::io("finish backup")(err));
+    }
 
     prune(&dir, &stem);
     Ok(target)
@@ -89,6 +100,7 @@ fn list_in(dir: &Path, stem: &str) -> Vec<PathBuf> {
 /// Deletes all but the newest [`BACKUPS_KEPT`] backups. A failure here must not stop the app
 /// from opening, so it is logged instead of returned.
 fn prune(dir: &Path, stem: &str) {
+    remove_partials(dir, stem);
     let backups = list_in(dir, stem);
     let excess = backups.len().saturating_sub(BACKUPS_KEPT);
     for old in &backups[..excess] {
@@ -97,6 +109,27 @@ fn prune(dir: &Path, stem: &str) {
             Err(err) => {
                 tracing::warn!(path = %old.display(), %err, "could not remove old database backup");
             }
+        }
+    }
+}
+
+/// Removes `.partial` files that an interrupted or failed backup left behind; they are never
+/// complete and would otherwise pile up.
+fn remove_partials(dir: &Path, stem: &str) {
+    let prefix = format!("{stem}-");
+    for entry in fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+    {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if name.starts_with(&prefix)
+            && name.ends_with(".sqlite3.partial")
+            && let Err(err) = fs::remove_file(entry.path())
+        {
+            tracing::warn!(path = %entry.path().display(), %err, "could not remove partial backup");
         }
     }
 }

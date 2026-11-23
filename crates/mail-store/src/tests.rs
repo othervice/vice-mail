@@ -195,6 +195,43 @@ async fn backs_up_before_each_migration_and_keeps_three() {
 }
 
 #[tokio::test]
+async fn partial_backups_left_behind_are_removed_and_never_listed() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = db_path(&dir);
+    drop(Store::open_with(&path, StoreOptions::default(), &test_schema(1)).expect("v1"));
+    // What an interrupted or failed backup leaves behind (e.g. the flush that Windows refused
+    // for a read-only handle before 23.11.2026).
+    let backups = backup::backup_dir(&path);
+    fs::create_dir_all(&backups).expect("backup dir");
+    let stem = path
+        .file_stem()
+        .expect("stem")
+        .to_string_lossy()
+        .into_owned();
+    let leftover = backups.join(format!("{stem}-000000000000001-v1.sqlite3.partial"));
+    fs::write(&leftover, b"half a database").expect("leftover");
+    let foreign = backups.join("other-000000000000001-v1.sqlite3.partial");
+    fs::write(&foreign, b"another database's leftover").expect("foreign");
+
+    let store = Store::open_with(&path, StoreOptions::default(), &test_schema(2)).expect("v2");
+    let backup = store
+        .open_report()
+        .backup
+        .clone()
+        .expect("backup before migration");
+    drop(store);
+
+    assert!(!leftover.exists(), "the leftover partial is removed");
+    assert!(foreign.exists(), "another database's files stay");
+    assert_eq!(
+        backup::list(&path),
+        vec![backup.clone()],
+        "only complete backups are listed"
+    );
+    assert_eq!(user_version(&backup), 1);
+}
+
+#[tokio::test]
 async fn failed_backup_stops_the_migration() {
     let dir = TempDir::new().expect("temp dir");
     let path = db_path(&dir);
