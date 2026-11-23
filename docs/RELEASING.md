@@ -242,6 +242,43 @@ On a new build Mac: import the `.p12` with Keychain Access (or `security import 
 may have leaked, revoke the certificate in the portal (Certificates → the certificate → *Revoke*)
 after reading Apple's notes there: a revocation can also stop published builds from opening.
 
+## CI
+
+`.gitea/workflows/ci.yml` runs on the private Gitea until the move to GitHub (decision 0035):
+
+- every push to `main` and every pull request: `scripts/check.sh`;
+- a tag `v*` or a manual start ("Run workflow"): also both installers, unsigned, without update
+  signature and without the macOS start test, kept as the run's artifact `installers` for 14 days.
+  Publishing stays the manual step below.
+
+The runner is the build Mac itself, in host mode (no containers), so a job sees the same tools as
+`docs/SETUP.md` installs:
+
+| What | Where |
+|---|---|
+| Runner | Homebrew `gitea-runner`, started at login by `brew services start gitea-runner` |
+| Configuration | `/opt/homebrew/etc/gitea-runner/config.yaml` (label `macos-arm64:host`, one job at a time; `config.reference.yaml` next to it lists every option) |
+| Registration | `/opt/homebrew/var/lib/gitea-runner/.runner`, for this repository only |
+| Logs | `/opt/homebrew/var/log/gitea-runner.{log,err}`, job logs in `gitea-runner-jobs/` next to them (14 days) |
+| Build cache | `~/.cache/vice-mail-ci/target` (`CARGO_TARGET_DIR`) and `~/.cache/vice-mail-ci/xwin` (`XWIN_CACHE_DIR`) |
+
+Jobs run as the logged-in user and can reach that user's keychain. That is acceptable only
+because the repository is private and only its owner pushes to it. On GitHub, pull requests from
+others must never run on this machine: there, hosted macOS and Windows runners take over (stage
+15), and this runner is unregistered.
+
+To register again (for example after a new Gitea), take a token from the repository's settings
+(Actions → Runners → Create new runner) and run, in `/opt/homebrew/var/lib/gitea-runner`:
+
+```sh
+gitea-runner -c /opt/homebrew/etc/gitea-runner/config.yaml register --no-interactive \
+  --instance <gitea URL> --token <token> --name macmini-host
+brew services restart gitea-runner
+```
+
+If the disk runs low, `~/.cache/vice-mail-ci/target` can be deleted at any time; the next run
+rebuilds it.
+
 ## Building a release
 
 On the build Mac (Apple silicon), from a clean checkout of the release commit:

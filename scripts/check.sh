@@ -89,7 +89,7 @@ step "Clippy (feature e2e)" cargo clippy -p mail-app --all-targets --locked --fe
 # cross tools are missing; the Windows build itself needs them anyway.
 clippy_windows() {
   local llvm_bin="${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}"
-  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 XWIN_CACHE_DIR="$PWD/.xwin-cache" XWIN_ARCH=x86_64 \
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 XWIN_CACHE_DIR="${XWIN_CACHE_DIR:-$PWD/.xwin-cache}" XWIN_ARCH=x86_64 \
     PATH="$llvm_bin:$PATH" cargo xwin clippy --target x86_64-pc-windows-msvc --workspace \
     --all-targets --locked -- -D warnings
 }

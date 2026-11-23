@@ -46,8 +46,9 @@ target="x86_64-pc-windows-msvc"
 # makensis 3.13 aborts with std::bad_alloc under the C locale (docs/SETUP.md).
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
-# Windows SDK and CRT for cargo-xwin: in the repository (ignored by git), x86_64 only.
-export XWIN_CACHE_DIR="$repo/.xwin-cache"
+# Windows SDK and CRT for cargo-xwin: in the repository (ignored by git), x86_64 only. CI keeps
+# them outside its fresh checkouts and sets XWIN_CACHE_DIR.
+export XWIN_CACHE_DIR="${XWIN_CACHE_DIR:-$repo/.xwin-cache}"
 export XWIN_ARCH=x86_64
 
 # --- Preconditions ---------------------------------------------------------------------------
