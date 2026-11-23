@@ -47,11 +47,12 @@ pub use account::{
 pub use ai::{
     AI_REQUEST_MAX_ENTRIES, AI_REQUEST_RETENTION_DAYS, AiAccountCloud, AiAnswer, AiAvailability,
     AiClaim, AiConnectionTest, AiDeadline, AiFailure, AiFunction, AiFunctionChoice, AiKeyChange,
-    AiLocality, AiModel, AiPreset, AiProfileInfo, AiProfileInput, AiProviderKind, AiReplySuggestion,
-    AiRequestEntry, AiRequestOutcome, AiRequestPage, AiRequestPhase, AiSettingsInfo, AiSummary,
-    AiTargetLanguage, AiTone, AiTransfer, AiTrimming, AiWritingResult, AiWritingTask,
-    MAX_AI_PASSAGE_CHARS, MAX_AI_PROFILE_NAME_CHARS, MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS,
-    MAX_AI_REQUEST_ID_CHARS, MAX_AI_REQUEST_PAGE, OpenReplyHint, OpenReplyKind, OpenReplySettings,
+    AiLocality, AiModel, AiPreset, AiProfileInfo, AiProfileInput, AiProviderKind,
+    AiReplySuggestion, AiRequestEntry, AiRequestId, AiRequestOutcome, AiRequestPage,
+    AiRequestPhase, AiSettingsInfo, AiSummary, AiTargetLanguage, AiTone, AiTransfer, AiTrimming,
+    AiWritingResult, AiWritingTask, MAX_AI_PASSAGE_CHARS, MAX_AI_PROFILE_NAME_CHARS,
+    MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS, MAX_AI_REQUEST_ID_CHARS, MAX_AI_REQUEST_PAGE,
+    OpenReplyHint, OpenReplyKind, OpenReplySettings,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,

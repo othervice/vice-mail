@@ -160,6 +160,8 @@ struct Inner<C: Connector> {
     mcp: crate::mcp::McpState<C>,
     /// Stage 11: the settings sync (capture hook, clock, worker, folder connection).
     settings_sync: crate::settings_sync::service::SettingsSync<C>,
+    /// Stage 13: AI in the app (running requests, settings changes).
+    ai: crate::ai::AiState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -180,6 +182,7 @@ impl<C: Connector> Drop for Inner<C> {
         self.comfort.stop();
         self.mcp.abort();
         self.settings_sync.stop();
+        self.ai.cancel_all();
     }
 }
 
@@ -335,6 +338,7 @@ impl<C: Connector> AppCore<C> {
                 comfort,
                 mcp: crate::mcp::McpState::new(config.data_dir.clone()),
                 settings_sync,
+                ai: crate::ai::AiState::default(),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -926,6 +930,7 @@ impl<C: Connector> AppCore<C> {
     pub async fn shutdown(&self) {
         // First the MCP host: no AI client may start a tool call while the rest stops.
         crate::mcp::shutdown(&self.inner.mcp).await;
+        self.inner.ai.cancel_all();
         let grace = self.inner.sync.shutdown_grace;
         let handles = self.inner.accounts.take_all();
         let mut stopping = tokio::task::JoinSet::new();
@@ -1098,6 +1103,10 @@ impl<C: Connector> AppCore<C> {
     }
 
     // Stage 12 (`crate::mcp`) works through these.
+
+    pub(crate) fn ai(&self) -> &crate::ai::AiState {
+        &self.inner.ai
+    }
 
     pub(crate) fn mcp(&self) -> &crate::mcp::McpState<C> {
         &self.inner.mcp

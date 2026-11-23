@@ -346,6 +346,46 @@ export const commands = {
 	getMcpStatus: (options?: InvokeOptions) => __TAURI_INVOKE<McpStatus>("get_mcp_status", undefined, options),
 	/**  Starts the helper like an AI client would and runs the handshake through it. */
 	testMcpConnection: (options?: InvokeOptions) => typedError<McpConnectionTest, IpcError>(__TAURI_INVOKE("test_mcp_connection", undefined, options)),
+	/**  Switch, profiles, functions, accounts, presets, open-reply settings. */
+	getAiSettings: (options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("get_ai_settings", undefined, options)),
+	/**  Which functions are usable now (the AI panel is hidden without any). */
+	getAiAvailability: (options?: InvokeOptions) => typedError<AiAvailability, IpcError>(__TAURI_INVOKE("get_ai_availability", undefined, options)),
+	/**  The master switch. Off: no request leaves the device; running requests are cancelled. */
+	setAiEnabled: (enabled: boolean, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("set_ai_enabled", { enabled }, options)),
+	/**  Creates (`id` null) or changes a profile; the key goes to the keychain. */
+	saveAiProfile: (profile: AiProfileInput, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("save_ai_profile", { profile }, options)),
+	/**  Deletes a profile and its key; functions that used it are off. */
+	deleteAiProfile: (profileId: string, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("delete_ai_profile", { profileId }, options)),
+	/**  The profile of a function, or off (`null`). */
+	setAiFunction: (aiFunction: AiFunction, profileId: string | null, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("set_ai_function", { aiFunction, profileId }, options)),
+	/**  Whether cloud providers may see an account's mail. */
+	setAiAccountCloud: (accountId: AccountId, allowed: boolean, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("set_ai_account_cloud", { accountId, allowed }, options)),
+	/**  Records (`granted`) or withdraws the consent for a cloud profile. */
+	setAiConsent: (profileId: string, granted: boolean, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("set_ai_consent", { profileId, granted }, options)),
+	/**  Open-reply hints on or off and after how many days. */
+	setOpenReplySettings: (settings: OpenReplySettings, options?: InvokeOptions) => typedError<AiSettingsInfo, IpcError>(__TAURI_INVOKE("set_open_reply_settings", { settings }, options)),
+	/**  The models of a profile (needs AI on; sends no mail). */
+	listAiModels: (profileId: string, options?: InvokeOptions) => typedError<AiModel[], IpcError>(__TAURI_INVOKE("list_ai_models", { profileId }, options)),
+	/**  Model list and a short request without mail content. */
+	testAiConnection: (profileId: string, options?: InvokeOptions) => typedError<AiConnectionTest, IpcError>(__TAURI_INVOKE("test_ai_connection", { profileId }, options)),
+	/**  The request log, newest first (metadata only). */
+	listAiRequests: (before: AiRequestId | null, limit: number, options?: InvokeOptions) => typedError<AiRequestPage, IpcError>(__TAURI_INVOKE("list_ai_requests", { before, limit }, options)),
+	/**  Cancels a running request; `false` if none runs under this id. */
+	cancelAiRequest: (requestId: string, options?: InvokeOptions) => __TAURI_INVOKE<boolean>("cancel_ai_request", { requestId }, options),
+	/**  Summarises the thread of a message; progress as `aiRequest` events under `requestId`. */
+	aiSummarizeThread: (requestId: string, messageId: MessageId, options?: InvokeOptions) => typedError<AiSummary, IpcError>(__TAURI_INVOKE("ai_summarize_thread", { requestId, messageId }, options)),
+	/**  A reply suggestion to a message, as text for a card. */
+	aiSuggestReply: (requestId: string, messageId: MessageId, options?: InvokeOptions) => typedError<AiReplySuggestion, IpcError>(__TAURI_INVOKE("ai_suggest_reply", { requestId, messageId }, options)),
+	/**  "Open draft": a reply draft to the message with the (edited) suggestion as its body. */
+	aiOpenReplyDraft: (messageId: MessageId, text: string, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("ai_open_reply_draft", { messageId, text }, options)),
+	/**  The writing help on a passage; returns a preview. */
+	aiWritingHelp: (requestId: string, passage: string, task: AiWritingTask, options?: InvokeOptions) => typedError<AiWritingResult, IpcError>(__TAURI_INVOKE("ai_writing_help", { requestId, passage, task }, options)),
+	/**  A question in natural language over the given accounts (`null`: all). */
+	aiAsk: (requestId: string, question: string, accountIds: AccountId[] | null, options?: InvokeOptions) => typedError<AiAnswer, IpcError>(__TAURI_INVOKE("ai_ask", { requestId, question, accountIds }, options)),
+	/**  Open-reply hints over every account (no AI). */
+	listOpenReplyHints: (options?: InvokeOptions) => typedError<OpenReplyHint[], IpcError>(__TAURI_INVOKE("list_open_reply_hints", undefined, options)),
+	/**  Dismisses the hint of a message for good. */
+	dismissOpenReplyHint: (messageId: MessageId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("dismiss_open_reply_hint", { messageId }, options)),
 	/**
 	 *  State, sync account and folder, last pass, devices, open questions, accounts that still
 	 *  need their password, accounts whose mailbox holds a sync folder (while off).
@@ -548,11 +588,92 @@ export type Address = {
 	email: string,
 };
 
+/**  Whether cloud providers may see an account's mail. Every account starts without. */
+export type AiAccountCloud = {
+	accountId: AccountId,
+	cloudAllowed: boolean,
+};
+
+/**  The answer to a question in natural language. */
+export type AiAnswer = {
+	/**
+	 *  `false`: honestly nothing found (no candidates, or nothing in them answers it);
+	 *  `statements` is empty then.
+	 */
+	found: boolean,
+	statements: AiClaim[],
+	/**  The search the question became (stage 7 language; the UI can offer it). */
+	query: string,
+	/**  Messages the search found. */
+	candidates: number,
+	/**  Candidates not sent because their account has no cloud permission. */
+	excluded: number,
+	/**  Statements dropped for lack of a valid reference. */
+	dropped: number,
+	/**  One per request sent. */
+	transfers: AiTransfer[],
+};
+
+/**
+ *  Which functions are usable right now (for showing the AI panel and buttons): AI is on and
+ *  the function has a profile with a model.
+ */
+export type AiAvailability = {
+	enabled: boolean,
+	summary: boolean,
+	replySuggestion: boolean,
+	writingHelp: boolean,
+	search: boolean,
+};
+
+/**  A statement with the messages it is based on (each one exists and was sent). */
+export type AiClaim = {
+	text: string,
+	sources: MessageId[],
+};
+
+/**  Result of "test connection" (no mail content is sent). */
+export type AiConnectionTest = {
+	/**  Models the provider lists. */
+	models: number,
+	/**  The profile's model is among them (`null`: no model chosen). */
+	modelListed: boolean | null,
+	/**  A short test request with the profile's model answered (`null`: no model chosen). */
+	chatOk: boolean | null,
+	/**  Why the test request failed. */
+	chatError: ErrorCode | null,
+};
+
+export type AiDeadline = {
+	text: string,
+	/**  As the message states it ("Friday", "30.11."). */
+	due: string,
+	sources: MessageId[],
+};
+
 /**
  *  The functions that can use a provider. The open-reply hints are not one of them: they work
  *  without AI (decision 0024).
  */
 export type AiFunction = "summary" | "reply_suggestion" | "writing_help" | "search";
+
+/**  Which profile a function uses; `null` is off. */
+export type AiFunctionChoice = {
+	function: AiFunction,
+	profileId: string | null,
+};
+
+/**
+ *  How a profile's key changes when it is saved. Only ever sent from the UI to the core; the
+ *  core wraps the key in a [`crate::Secret`] at once. `Debug` never shows it.
+ */
+export type AiKeyChange = 
+/**  Keep the stored key (or none). */
+{ type: "keep" } | 
+/**  Delete the stored key. */
+{ type: "remove" } | 
+/**  Store this key in the keychain (an empty key is `remove`). */
+{ type: "set"; key: string };
 
 /**
  *  Where a profile's base URL points. `thisDevice` and `localNetwork` are shown as "local":
@@ -562,8 +683,107 @@ export type AiLocality = "this_device" | "local_network" |
 /**  A cloud provider: consent first, and only accounts with cloud permission. */
 "internet";
 
+/**  A model of a provider. */
+export type AiModel = {
+	id: string,
+	displayName: string | null,
+};
+
+/**  A known endpoint for "new profile". */
+export type AiPreset = {
+	name: string,
+	kind: AiProviderKind,
+	baseUrl: string,
+	needsKey: boolean,
+	locality: AiLocality,
+};
+
+/**  A provider profile as the settings show it. The key is in the system keychain. */
+export type AiProfileInfo = {
+	/**  32 lowercase hex digits. */
+	id: string,
+	name: string,
+	kind: AiProviderKind,
+	baseUrl: string,
+	/**  Empty until the user picks one. */
+	model: string,
+	/**  Ask for the JSON schema of the answer; off for servers or models that reject it. */
+	structuredOutput: boolean,
+	maxOutputTokens: number | null,
+	/**  A key is stored in the keychain (never shown). */
+	hasKey: boolean,
+	/**  Host and port of the base URL ("an wen"). */
+	host: string,
+	locality: AiLocality,
+	/**
+	 *  When the user agreed to send data to this provider (Unix ms). Always `null` for local
+	 *  profiles, which need no consent. Changing the base URL's host withdraws it.
+	 */
+	consentAt: number | null,
+	/**  A cloud profile without consent: the first request fails with `ai_consent_required`. */
+	needsConsent: boolean,
+};
+
+/**  A profile to create (`id` null) or change. */
+export type AiProfileInput = {
+	id: string | null,
+	name: string,
+	kind: AiProviderKind,
+	baseUrl: string,
+	model: string,
+	structuredOutput: boolean,
+	maxOutputTokens: number | null,
+	key: AiKeyChange,
+};
+
+/**  Wire protocol of a profile (decision 0019). */
+export type AiProviderKind = 
+/**
+ *  `POST {base}/chat/completions`: Ollama, LM Studio, llama.cpp server, OpenRouter,
+ *  OpenAI. The base URL includes `/v1`.
+ */
+"openai_compatible" | 
+/**  Anthropic Messages API (`POST {base}/v1/messages`). */
+"anthropic";
+
+/**  A reply suggestion; "open draft" (`aiOpenReplyDraft`) turns it into an editable draft. */
+export type AiReplySuggestion = {
+	text: string,
+	/**  The message the reply answers. */
+	inReplyTo: MessageId,
+	transfer: AiTransfer,
+};
+
+/**  One entry of the request log: metadata only, never content or keys. */
+export type AiRequestEntry = {
+	id: AiRequestId,
+	/**  Unix ms. */
+	at: number,
+	function: AiFunction,
+	profileName: string,
+	host: string,
+	locality: AiLocality,
+	model: string,
+	mails: number,
+	bytes: number,
+	outcome: AiRequestOutcome,
+	/**  For `failed`: the error code. */
+	error: ErrorCode | null,
+	durationMs: number,
+};
+
+/**  Id of a request log entry; grows with every entry. The cursor of `listAiRequests`. */
+export type AiRequestId = number;
+
 /**  How a request ended. */
 export type AiRequestOutcome = "ok" | "cancelled" | "failed";
+
+/**  A page of the request log, newest first. */
+export type AiRequestPage = {
+	entries: AiRequestEntry[],
+	/**  Pass as `before` for the next page; `null` at the end. */
+	nextBefore: AiRequestId | null,
+};
 
 /**  Progress of a running request, as `aiRequest` events. */
 export type AiRequestPhase = 
@@ -573,6 +793,34 @@ export type AiRequestPhase =
 { phase: "receiving"; chars: number } | 
 /**  Done (the command returns the result or the error). */
 { phase: "finished"; outcome: AiRequestOutcome };
+
+/**  The settings page "AI in the app". */
+export type AiSettingsInfo = {
+	/**  Master switch; off until the user turns it on. Off: no request leaves the device. */
+	enabled: boolean,
+	profiles: AiProfileInfo[],
+	/**  One entry per [`AiFunction`], in that order. */
+	functions: AiFunctionChoice[],
+	/**  One entry per account. */
+	accounts: AiAccountCloud[],
+	presets: AiPreset[],
+	openReplies: OpenReplySettings,
+};
+
+/**  A thread summary. */
+export type AiSummary = {
+	keyPoints: AiClaim[],
+	openQuestions: AiClaim[],
+	deadlines: AiDeadline[],
+	/**  Statements dropped because they named no message that was sent. */
+	dropped: number,
+	transfer: AiTransfer,
+};
+
+/**  Target languages of "translate". */
+export type AiTargetLanguage = "en" | "de" | "fr" | "es" | "it" | "nl" | "pt" | "pl";
+
+export type AiTone = "formal" | "friendly" | "neutral" | "direct";
 
 /**  What one request sends and to whom, shown before and while it runs. */
 export type AiTransfer = {
@@ -602,6 +850,18 @@ export type AiTrimming = {
 	mailsShortened: number,
 	charsRemoved: number,
 };
+
+/**
+ *  The rewritten passage, for the preview. Nothing in the draft changes until the UI applies
+ *  it.
+ */
+export type AiWritingResult = {
+	text: string,
+	transfer: AiTransfer,
+};
+
+/**  What the writing help does with the passage. */
+export type AiWritingTask = { type: "improve" } | { type: "shorten" } | { type: "rephrase" } | { type: "tone"; tone: AiTone } | { type: "translate"; language: AiTargetLanguage };
 
 /**  Version information shown under Settings, About. */
 export type AppInfo = {
@@ -2387,6 +2647,34 @@ export type OpenAttachmentResult =
  *  `confirmedExecutable: true`. Nothing was written or opened.
  */
 { kind: "needsConfirmation" };
+
+/**  A dismissable suggestion, never a claim: "maybe still open". */
+export type OpenReplyHint = {
+	messageId: MessageId,
+	accountId: AccountId,
+	kind: OpenReplyKind,
+	subject: string,
+	/**  Awaiting: the first recipient; unanswered: the sender. */
+	counterpart: Address | null,
+	/**  Unix seconds. */
+	date: number,
+	/**  Whole days since `date`. */
+	days: number,
+};
+
+/**  Why an open-reply hint is shown. */
+export type OpenReplyKind = 
+/**  The user asked a question and no answer came for some days. */
+"awaiting_reply" | 
+/**  Someone asked the user directly and the user has not answered. */
+"unanswered_question";
+
+/**  Settings of the open-reply hints (no AI involved). */
+export type OpenReplySettings = {
+	enabled: boolean,
+	/**  A sent question counts as unanswered after this many days (1..=30). */
+	days: number,
+};
 
 /**  Id of one operation (`operation.id`). Never reused; also the order of execution. */
 export type OperationId = number;

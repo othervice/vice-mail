@@ -9,9 +9,7 @@
 use serde_json::json;
 
 use crate::prepare::TransferInfo;
-use crate::prompt::{
-    WRITING_RULES, block, check_model, nonce, writing_schema, writing_system_text,
-};
+use crate::prompt::{block, check_model, nonce, writing_schema, writing_system_text};
 use crate::provider::{AiProvider, ChatRequest, Finish, OutputSchema, collect};
 use crate::text::{clean_output_text, clean_text, extract_json_object};
 use crate::{AiError, CancelToken};
@@ -196,6 +194,7 @@ pub(crate) fn parse_writing(text: &str, finish: Finish) -> Result<WritingResult,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prompt::WRITING_RULES;
     use crate::provider::{StopReason, Usage};
 
     fn finish() -> Finish {

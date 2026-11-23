@@ -139,7 +139,9 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
-| `ai_profile` | Anbieter, Basis-URL, Modell, Freigaben | sync (ohne Schlüssel) |
+| `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
+| `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
+| `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
 | `sync_record` | je synchronisierbarem Datensatz die aktuelle Version (Inhalt oder Grabstein, bei Konten mit Feldversionen) und die zuletzt abgeglichene; `sync_dirty` hält die in einer Transaktion geänderten bis zum Commit (Stufe 11, 0022) | Gerät |
 | `sync_state`, `sync_adopted` | Geräte-ID im Sync, höchste Version der Uhr, an/aus, Sync-Konto und Ordner, letzter Durchlauf und letzte Vollprüfung, Ordnerstand; übernommene Konten ohne Passwort | Gerät |
@@ -400,7 +402,10 @@ einer klaren Meldung abgelehnt.
   bekommt seine Zählpixel geladen, mehr nicht
 - Links und Anhänge öffnet nicht die App, sondern das System (Browser, Mail-Programm, Standard-App),
   erst nach Klick und Prüfung, Links nur `http`, `https`, `mailto`
-- KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13)
+- KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13, 0024): nur die Basis-URL
+  eines Profils, nur bei eingeschalteter KI, an einen Cloud-Anbieter erst nach Zustimmung und nur mit
+  Mails aus Konten mit Cloud-Freigabe; `http` nur zu lokalen Adressen, keine Weiterleitungen,
+  Proxies oder Wiederholungen
 - Der MCP-Server nimmt nur lokale Verbindungen an (Hilfsprogramm über stdio, zur App über einen
   Unix-Socket bzw. eine Named Pipe, nie TCP; 0015) und baut selbst keine auf
 - Abmelden (Stufe 9, 0020), nur nach Klick: Ein-Klick nach RFC 8058 als HTTPS-POST
@@ -505,6 +510,15 @@ die kompatible Schnittstelle sind Ablehnungen nicht erkennbar (0019). Crate `mai
 - Gesendet wird nur, was die Anfrage braucht: der aktuelle Thread ohne doppelte Zitate und ohne
   Anhänge. Nie das ganze Postfach ohne ausdrückliche Bestätigung mit Mengenangabe.
 
+Verdrahtung (0024): `AppCore` (Modul `mail-engine/src/ai/`) prüft vor jeder Anfrage Schalter,
+Profil der Funktion, Zustimmung (Cloud) und Cloud-Freigabe des Kontos, liest den Schlüssel aus dem
+Schlüsselbund und meldet jede Anfrage an den Anbieter vorher als Ereignis `aiRequest` (Mails,
+Bytes, Konten, Host, Modell), dann Fortschritt und Ende; abbrechbar über die Anfrage-ID. Ein
+Protokoll hält nur Metadaten. Ergebnisse sind geprüfte Daten: Aussagen nur mit Verweisen auf
+gesendete Mails, Antwortvorschläge und Schreibhilfe als Text. Ein Antwortvorschlag wird erst auf
+Klick des Nutzers zu einem normalen Entwurf (Stufe 5). Hinweise auf offene Antworten sind Regeln
+ohne KI.
+
 ## Tastaturkürzel
 
 Stufe 8. Alle Kürzel kommen aus dem Aktionsverzeichnis (`app/src/features/actions/registry.ts`,
@@ -520,8 +534,9 @@ die aktuelle Belegung, eine Änderung wirkt also sofort. Regeln (`app/src/featur
 - **Sondertasten:** `mod` ist Cmd auf macOS und Strg auf Windows. Wahl-/Alt-Kombinationen sind nicht
   belegbar (sie erzeugen auf vielen Layouts Zeichen, AltGr meldet Strg+Alt).
 - **Nicht belegbar:** was das System oder jedes Textfeld beansprucht (macOS Cmd+Q/W/H/M/,/Leertaste/`/Tab,
-  überall Kopieren, Einfügen, Ausschneiden; Windows Strg+Esc, Strg+Tab) und die festen Tasten zum
-  Bewegen (Pfeile, j/k, Pos1/Ende, Bild auf/ab, Eingabe, Esc, Tab).
+  überall Kopieren, Einfügen, Ausschneiden; Windows Strg+Esc, Strg+Tab), die festen Tasten zum
+  Bewegen (Pfeile, j/k, Pos1/Ende, Bild auf/ab, Eingabe, Esc, Tab, auch mit Umschalt) und die
+  Kürzel außerhalb des Verzeichnisses (Cmd/Strg+P druckt, Cmd/Strg+Eingabe sendet).
 - **Doppelbelegung:** wird abgelehnt und nennt den Befehl, der das Kürzel hat. Ausnahme sind Befehle,
   die nie gleichzeitig verfügbar sind (Löschen/Endgültig löschen, Junk/Kein Junk).
 - **Standard:** e archiviert, # löscht, r/a/f antworten und leiten weiter, c schreibt neu, / und

@@ -27,6 +27,9 @@ const MAX_REF_LEN: usize = 256;
 /// Prefix of the keychain entries of AI clients (stage 12).
 const MCP_CLIENT_PREFIX: &str = "mcp-client:";
 
+/// Prefix of the keychain entries of AI provider keys (stage 13).
+const AI_PROFILE_PREFIX: &str = "ai-profile:";
+
 /// Name of the keychain entry with the settings sync key (stage 11).
 const SETTINGS_SYNC_KEY: &str = "settings-sync:key";
 
@@ -45,6 +48,12 @@ impl CredentialRef {
     /// prefix keeps it apart from account entries (UUIDs) under the same service.
     pub fn for_mcp_client(id: &mail_mcp::ClientId) -> Self {
         Self(format!("{MCP_CLIENT_PREFIX}{id}"))
+    }
+
+    /// Stage 13: the entry that holds the API key of an AI provider profile,
+    /// `ai-profile:<id>`.
+    pub fn for_ai_profile(id: &str) -> Self {
+        Self(format!("{AI_PROFILE_PREFIX}{id}"))
     }
 
     /// Stage 11: the entry that holds the settings sync key (`AGE-SECRET-KEY-1…`, never the

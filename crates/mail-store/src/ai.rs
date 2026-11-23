@@ -5,7 +5,8 @@
 
 use mail_model::{
     AI_REQUEST_MAX_ENTRIES, AI_REQUEST_RETENTION_DAYS, AccountId, Address, AiFunction, AiLocality,
-    AiRequestEntry, AiRequestOutcome, AiRequestPage, ErrorCode, MAX_AI_REQUEST_PAGE, MessageId,
+    AiRequestEntry, AiRequestId, AiRequestOutcome, AiRequestPage, ErrorCode, MAX_AI_REQUEST_PAGE,
+    MessageId,
 };
 use rusqlite::{Connection, Row, params};
 
@@ -106,8 +107,7 @@ fn error_of(text: &str) -> Option<ErrorCode> {
     serde_json::from_value(serde_json::Value::String(text.to_owned())).ok()
 }
 
-const ENTRY_COLUMNS: &str =
-    "id, at, function, profile_name, host, locality, model, mails, bytes, outcome, error, duration_ms";
+const ENTRY_COLUMNS: &str = "id, at, function, profile_name, host, locality, model, mails, bytes, outcome, error, duration_ms";
 
 fn entry_at(r: &Row<'_>) -> rusqlite::Result<AiRequestEntry> {
     let function: String = r.get(2)?;
@@ -118,7 +118,7 @@ fn entry_at(r: &Row<'_>) -> rusqlite::Result<AiRequestEntry> {
     let error: Option<String> = r.get(10)?;
     let duration: i64 = r.get(11)?;
     Ok(AiRequestEntry {
-        id: r.get(0)?,
+        id: AiRequestId(r.get(0)?),
         at: r.get(1)?,
         // The CHECK allows only known names.
         function: AiFunction::parse(&function).unwrap_or(AiFunction::Summary),
@@ -167,7 +167,7 @@ fn record(conn: &Connection, entry: &NewAiRequest, now: i64) -> Result<AiRequest
     )
     .map_err(StoreError::sqlite("prune AI request log"))?;
     Ok(AiRequestEntry {
-        id,
+        id: AiRequestId(id),
         at: entry.at,
         function: entry.function,
         profile_name: entry.profile_name.clone(),
@@ -252,7 +252,7 @@ impl Store {
     /// The request log, newest first, entries with an id below `before`. `limit` 1..=500.
     pub async fn ai_requests(
         &self,
-        before: Option<i64>,
+        before: Option<AiRequestId>,
         limit: u32,
     ) -> Result<AiRequestPage, StoreError> {
         if limit == 0 || limit > MAX_AI_REQUEST_PAGE {
@@ -267,7 +267,7 @@ impl Store {
                      ORDER BY id DESC LIMIT ?2"
                 ))?
                 .query_map(
-                    params![before.unwrap_or(i64::MAX), i64::from(limit) + 1],
+                    params![before.map_or(i64::MAX, |id| id.0), i64::from(limit) + 1],
                     entry_at,
                 )?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -300,7 +300,9 @@ impl Store {
 
     /// The addresses of every account: its own address and those of its identities, lower
     /// case.
-    pub async fn own_addresses_by_account(&self) -> Result<Vec<(AccountId, Vec<String>)>, StoreError> {
+    pub async fn own_addresses_by_account(
+        &self,
+    ) -> Result<Vec<(AccountId, Vec<String>)>, StoreError> {
         self.read(|conn| {
             let rows = conn
                 .prepare_cached(
@@ -324,7 +326,11 @@ impl Store {
     }
 
     /// Dismisses the open-reply hint of `message`. `false`: the message does not exist.
-    pub async fn dismiss_open_reply(&self, message: MessageId, now: i64) -> Result<bool, StoreError> {
+    pub async fn dismiss_open_reply(
+        &self,
+        message: MessageId,
+        now: i64,
+    ) -> Result<bool, StoreError> {
         self.write(move |tx| {
             let exists: bool = tx
                 .prepare_cached("SELECT EXISTS (SELECT 1 FROM message WHERE id = ?1)")?
@@ -369,12 +375,115 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn open_reply_rows_carry_what_the_rules_need() {
+        use crate::test_support::{UV, fixture, header};
+        let f = fixture().await;
+        const D: i64 = 1_795_000_000;
+        let mut asked = header(1, D, Some("q1@x"));
+        asked.subject = "Lunch on Monday?".into();
+        asked.from = vec![Address {
+            name: Some("Bob".into()),
+            email: "bob@example.org".into(),
+        }];
+        asked.to = vec![Address {
+            name: None,
+            email: "alice@example.org".into(),
+        }];
+        asked.flags.answered = true;
+        let mut list = header(2, D + 60, Some("l1@x"));
+        list.list_id = Some("news.example".into());
+        list.auto_submitted = Some("auto-generated".into());
+        list.precedence = Some("bulk".into());
+        f.store
+            .store_headers(f.inbox, UV, vec![asked, list], None)
+            .await
+            .expect("inbox");
+        let mut reply = header(1, D + 120, Some("r1@x"));
+        reply.in_reply_to = Some("q1@x".into());
+        reply.references = vec!["q1@x".into()];
+        reply.from = vec![Address {
+            name: None,
+            email: "alice@example.org".into(),
+        }];
+        f.store
+            .store_headers(f.sent, UV, vec![reply], None)
+            .await
+            .expect("sent");
+        // Older than `since`: left out.
+        let rows = f.store.open_reply_rows(D, 100).await.expect("rows");
+        assert_eq!(rows.len(), 3);
+        let by_hdr = |id: &str| {
+            rows.iter()
+                .find(|r| r.message_id_hdr.as_deref() == Some(id))
+                .expect("row")
+        };
+        let asked = by_hdr("q1@x");
+        assert!(asked.in_inbox && !asked.in_sent && asked.answered && !asked.only_trash);
+        assert_eq!(asked.to[0].email, "alice@example.org");
+        assert_eq!(
+            asked.from.as_ref().map(|a| a.email.as_str()),
+            Some("bob@example.org")
+        );
+        assert!(!asked.list && !asked.dismissed);
+        let list = by_hdr("l1@x");
+        assert!(list.list);
+        assert_eq!(list.auto_submitted.as_deref(), Some("auto-generated"));
+        assert_eq!(list.precedence.as_deref(), Some("bulk"));
+        let reply = by_hdr("r1@x");
+        assert!(reply.in_sent && !reply.in_inbox);
+        assert_eq!(reply.in_reply_to.as_deref(), Some("q1@x"));
+        assert_eq!(reply.references, vec!["q1@x".to_owned()]);
+        // Newest first.
+        assert_eq!(rows[0].message_id_hdr.as_deref(), Some("r1@x"));
+        assert_eq!(
+            f.store
+                .open_reply_rows(D + 61, 100)
+                .await
+                .expect("rows")
+                .len(),
+            1
+        );
+
+        assert!(
+            f.store
+                .dismiss_open_reply(asked.id, 5)
+                .await
+                .expect("dismiss")
+        );
+        assert!(
+            f.store
+                .dismiss_open_reply(asked.id, 6)
+                .await
+                .expect("again")
+        );
+        assert!(
+            !f.store
+                .dismiss_open_reply(MessageId(999_999), 7)
+                .await
+                .expect("missing")
+        );
+        let rows = f.store.open_reply_rows(D, 100).await.expect("rows");
+        assert!(
+            rows.iter()
+                .find(|r| r.id == asked.id)
+                .expect("row")
+                .dismissed
+        );
+
+        let own = f.store.own_addresses_by_account().await.expect("own");
+        assert_eq!(own, vec![(f.account, vec!["alice@example.org".to_owned()])]);
+    }
+
+    #[tokio::test]
     async fn the_request_log_pages_and_prunes() {
         let dir = TempDir::new().expect("temp dir");
         let store = Store::open(&db_path(&dir), StoreOptions::default()).expect("store");
         let now = 100 * DAY_MS;
         store
-            .record_ai_request(entry(now - 31 * DAY_MS, AiRequestOutcome::Ok), now - 31 * DAY_MS)
+            .record_ai_request(
+                entry(now - 31 * DAY_MS, AiRequestOutcome::Ok),
+                now - 31 * DAY_MS,
+            )
             .await
             .expect("old");
         for i in 0..3 {
@@ -388,10 +497,7 @@ mod tests {
         assert_eq!(first.entries[0].error, Some(ErrorCode::AiUnreachable));
         assert_eq!(first.entries[0].outcome, AiRequestOutcome::Failed);
         assert_eq!(first.entries[0].host, "localhost:11434");
-        let second = store
-            .ai_requests(first.next_before, 2)
-            .await
-            .expect("page");
+        let second = store.ai_requests(first.next_before, 2).await.expect("page");
         // The 31 days old entry is gone.
         assert_eq!(second.entries.len(), 1);
         assert_eq!(second.next_before, None);

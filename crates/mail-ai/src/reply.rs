@@ -128,7 +128,9 @@ pub(crate) fn parse_reply(
         .map(|reply| clean_output_text(reply, MAX_REPLY_CHARS))
         .unwrap_or_default();
     if reply.is_empty() {
-        return Err(AiError::InvalidOutput("the answer has no reply text".into()));
+        return Err(AiError::InvalidOutput(
+            "the answer has no reply text".into(),
+        ));
     }
     Ok(ReplySuggestion {
         text: reply,
@@ -221,7 +223,10 @@ mod tests {
         let user = prepared.request().user();
         assert!(user.contains("<<<REPLY_CONTEXT nonce="), "{user}");
         assert!(user.contains("bob@example.org"));
-        assert!(!user.contains("<admin>"), "angle brackets are escaped: {user}");
+        assert!(
+            !user.contains("<admin>"),
+            "angle brackets are escaped: {user}"
+        );
         assert!(prepared.request().system().contains("Task: write a reply"));
         assert_eq!(prepared.transfer().mails, 1);
         assert_eq!(prepared.transfer().bytes, prepared.request().text_bytes());

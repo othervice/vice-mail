@@ -120,7 +120,11 @@ pub struct AiProfileInfo {
 /// How a profile's key changes when it is saved. Only ever sent from the UI to the core; the
 /// core wraps the key in a [`crate::Secret`] at once. `Debug` never shows it.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AiKeyChange {
     /// Keep the stored key (or none).
     Keep,
@@ -268,12 +272,18 @@ pub enum AiRequestOutcome {
     Failed,
 }
 
+/// Id of a request log entry; grows with every entry. The cursor of `listAiRequests`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(transparent)]
+pub struct AiRequestId(#[specta(type = Number)] pub i64);
+
 /// One entry of the request log: metadata only, never content or keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiRequestEntry {
-    #[specta(type = Number)]
-    pub id: i64,
+    pub id: AiRequestId,
     /// Unix ms.
     #[specta(type = Number)]
     pub at: i64,
@@ -296,8 +306,7 @@ pub struct AiRequestEntry {
 pub struct AiRequestPage {
     pub entries: Vec<AiRequestEntry>,
     /// Pass as `before` for the next page; `null` at the end.
-    #[specta(type = Option<Number>)]
-    pub next_before: Option<i64>,
+    pub next_before: Option<AiRequestId>,
 }
 
 /// A statement with the messages it is based on (each one exists and was sent).
@@ -364,7 +373,11 @@ pub enum AiTargetLanguage {
 
 /// What the writing help does with the passage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AiWritingTask {
     Improve,
     Shorten,
@@ -426,7 +439,11 @@ pub struct AiConnectionTest {
 
 /// Progress of a running request, as `aiRequest` events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(tag = "phase", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "phase",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AiRequestPhase {
     /// About to send this (one per provider request; a question has up to two).
     Sending { transfer: AiTransfer },
