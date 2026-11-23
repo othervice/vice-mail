@@ -16,6 +16,12 @@ environment variables, both shown in the app's settings under AI access:
 Options: --help, --version. Log messages go to stderr (more with MAIL_MCP_LOG=debug).";
 
 fn main() -> ExitCode {
+    // Finding C-2 (decision 0043): the app renders attachment previews in this program, so a
+    // decoder that runs out of memory or time ends this process, not the app.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some(mail_mcp::preview::PREVIEW_ARG) {
+        return mail_mcp::preview::run_child(&args[2..]);
+    }
     if let Some(arg) = std::env::args().nth(1) {
         return match arg.as_str() {
             "--version" | "-V" => {

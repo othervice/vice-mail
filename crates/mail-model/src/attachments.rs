@@ -47,7 +47,8 @@ pub enum PreviewKind {
 
 /// `previewAttachment`: what the preview pane shows. Images are `data:` URIs of bytes the core
 /// encoded itself; text is shown as text, never as markup.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+// `Deserialize`: the preview helper sends it back to the app (decision 0043).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",

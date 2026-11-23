@@ -618,10 +618,32 @@ fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, Box<dyn std:
     let keychain = SystemKeychain::new(&app.config().identifier)?;
     let mut services = CoreServices::new(Credentials::new(keychain));
     services.reading.open_dir = Some(cache_dir(app)?.join("attachments"));
+    // Finding C-2 (decision 0043): image and PDF previews render in the `mail-mcp` helper.
+    services.reading.preview_helper = preview_helper();
     // Desktop-test build: may trust the local test server's CA (decision 0007).
     #[cfg(feature = "e2e")]
     let services = e2e::with_test_ca(services)?;
     Ok(services)
+}
+
+/// The `mail-mcp` helper next to the executable, which renders image and PDF previews in a child
+/// process (decision 0043). Shipped in both installers; a release build without it refuses those
+/// previews. A development build without it (`cargo build -p mail-mcp` adds it) renders them in
+/// the app.
+fn preview_helper() -> Option<std::path::PathBuf> {
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(err) => {
+            tracing::warn!(error = %err, "own path unknown; previews render in the app");
+            return None;
+        }
+    };
+    let helper = exe.with_file_name(if cfg!(windows) {
+        "mail-mcp.exe"
+    } else {
+        "mail-mcp"
+    });
+    (!cfg!(debug_assertions) || helper.is_file()).then_some(helper)
 }
 
 /// The app's data directory (database, backups, message bodies): the local, non-roaming one.

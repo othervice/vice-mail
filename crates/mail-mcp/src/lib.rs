@@ -30,6 +30,7 @@ pub mod limits;
 pub mod mcp;
 pub mod output;
 pub mod permissions;
+pub mod preview;
 pub mod tools;
 
 pub use access::{

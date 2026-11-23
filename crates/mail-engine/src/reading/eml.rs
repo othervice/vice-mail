@@ -303,7 +303,7 @@ impl<C: MailConnector + 'static> Reading<C> {
             .ok_or_else(|| CoreError::NotFound(format!("attachment {index} of the file")))?;
         let kind = super::preview_kind_of(&info)?;
         let (_, bytes) = self.eml_attachment(id, index).await?;
-        super::render_preview(kind, bytes, page).await
+        self.render_preview(kind, bytes, page).await
     }
 
     /// Stage 16 (decision 0036): every attachment of an opened file into `folder`.

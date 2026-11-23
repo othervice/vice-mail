@@ -84,6 +84,11 @@ pub struct ReadingServices {
     /// Directory for the copies of opened attachments, emptied at every start. `None`:
     /// `<data dir>/open-attachments`. The shell passes its cache directory.
     pub open_dir: Option<PathBuf>,
+    /// Finding C-2 (decision 0043): the `mail-mcp` helper that renders image and PDF previews
+    /// in a child process within a time limit and a memory budget. `None`: they render in this
+    /// process (tests and tools). The app passes the helper next to its executable; when that
+    /// file is missing, those previews are refused rather than rendered here.
+    pub preview_helper: Option<PathBuf>,
 }
 
 impl Default for ReadingServices {
@@ -92,6 +97,7 @@ impl Default for ReadingServices {
             opener: Arc::new(DesktopOpener),
             remote: RemoteConfig::default(),
             open_dir: None,
+            preview_helper: None,
         }
     }
 }
@@ -114,6 +120,7 @@ pub(crate) struct Reading<C: MailConnector> {
     remote: remote::RemoteImages,
     opener: Arc<dyn SystemOpener>,
     open_dir: PathBuf,
+    preview_helper: Option<PathBuf>,
     fetching: Mutex<HashSet<MessageId>>,
     pub(crate) prefetch: Prefetcher,
     listener: Mutex<Option<JoinHandle<()>>>,
@@ -168,6 +175,7 @@ impl<C: MailConnector + 'static> Reading<C> {
             remote: remote::RemoteImages::new(&services.remote),
             opener: services.opener,
             open_dir,
+            preview_helper: services.preview_helper,
             fetching: Mutex::default(),
             prefetch: Prefetcher::default(),
             listener: Mutex::default(),
@@ -876,7 +884,7 @@ impl<C: MailConnector + 'static> Reading<C> {
         let attachment = self.attachment(message, index).await?;
         let kind = preview_kind_of(&attachment.info)?;
         let bytes = self.attachment_bytes(message, &attachment).await?;
-        let preview = render_preview(kind, bytes, page).await?;
+        let preview = self.render_preview(kind, bytes, page).await?;
         tracing::debug!(message = message.0, index, ?kind, "attachment previewed");
         Ok(preview)
     }
@@ -980,13 +988,29 @@ pub(crate) fn preview_kind_of(
     Ok(kind)
 }
 
-/// Decodes and encodes a preview on the blocking pool.
-pub(crate) async fn render_preview(
-    kind: mail_model::PreviewKind,
-    bytes: Vec<u8>,
-    page: u32,
-) -> Result<mail_model::AttachmentPreview, CoreError> {
-    Ok(blocking(move || mail_content::render_preview(kind, &bytes, page)).await??)
+impl<C: MailConnector + 'static> Reading<C> {
+    /// Decodes and encodes a preview: images and PDF in the helper process when there is one
+    /// (finding C-2, decision 0043), text and everything without a helper on the blocking pool.
+    pub(crate) async fn render_preview(
+        &self,
+        kind: mail_model::PreviewKind,
+        bytes: Vec<u8>,
+        page: u32,
+    ) -> Result<mail_model::AttachmentPreview, CoreError> {
+        match (&self.preview_helper, kind) {
+            (Some(helper), mail_model::PreviewKind::Image | mail_model::PreviewKind::Pdf) => {
+                Ok(mail_mcp::preview::render_isolated(
+                    helper,
+                    kind,
+                    bytes,
+                    page,
+                    mail_mcp::preview::PreviewLimits::default(),
+                )
+                .await?)
+            }
+            _ => Ok(blocking(move || mail_content::render_preview(kind, &bytes, page)).await??),
+        }
+    }
 }
 
 /// Writes one file of "save all"; whether it got another name than `name`.

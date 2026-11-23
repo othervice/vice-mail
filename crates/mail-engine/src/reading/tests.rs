@@ -65,6 +65,7 @@ impl Harness {
                 opener: Arc::clone(&opener) as Arc<dyn super::SystemOpener>,
                 remote,
                 open_dir: Some(open_dir.clone()),
+                preview_helper: None,
             },
             outbox: None,
         };

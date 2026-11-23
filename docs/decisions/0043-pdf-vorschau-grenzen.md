@@ -102,3 +102,37 @@ Empfohlen, in dieser Reihenfolge:
    das Neukodieren der Inline-Bilder (C-4) absichern.
 2. **(d) parallel anstoßen:** eine Grenze für entpackte Streams und Bildflächen bei hayro
    vorschlagen; sobald eine Version sie hat, die Grenzen in `pdf_preview` setzen.
+
+## Nachtrag 23.11.2026: Variante (a) umgesetzt
+
+Auf Wunsch des Projekts noch am selben Tag umgesetzt, ohne neue Abhängigkeit und ohne `unsafe`.
+
+- **Kind:** `mail-mcp --render-preview <image|pdf|text> <Seite>` (`crates/mail-mcp/src/preview.rs`,
+  `run_child`). Liest die Datei von stdin (höchstens `MAX_PREVIEW_INPUT_BYTES`), rendert mit
+  `mail_content::render_preview` und schreibt eine JSON-Zeile nach stdout: die Vorschau (PNG oder
+  JPEG als Data-URL) oder den Grund ohne Vorschau. `mail-mcp` liegt in beiden Installern schon
+  neben der App.
+- **Eltern:** `render_isolated` startet das Kind je Vorschau, schreibt die Bytes, liest die
+  Antwort (höchstens 96 MiB) und schaut alle 50 ms nach: nach 20 s wird das Kind beendet, ebenso
+  über 512 MiB residentem Speicher. Den Speicher liest es mit `/bin/ps -o rss= -p <pid>` (macOS,
+  Linux) bzw. `tasklist /FI "PID eq <pid>" /FO CSV /NH` (Windows). Zwischen zwei Blicken kann ein
+  schnell wachsendes Kind das Budget um das überschreiten, was es in der Zeit anlegt.
+- **Fehler:** Zeit oder Speicher überschritten: `preview_too_large` mit dem Grund im Detail. Kind
+  abgestürzt, ohne Speicher beendet oder unlesbare Antwort: `preview_damaged`. Helfer fehlt oder
+  startet nicht: `preview_unsupported`. Die App läuft weiter; keine neuen Fehlercodes.
+- **Im Kern:** `ReadingServices::preview_helper`. Bild- und PDF-Vorschauen (auch aus `.eml`-Dateien)
+  laufen im Helfer, Text weiter im Kern. Die Shell setzt den Helfer neben der ausführbaren Datei;
+  ein Release-Build ohne ihn lehnt diese Vorschauen ab, statt sie im Prozess zu rendern. Ein
+  Entwicklungs-Build ohne `mail-mcp` (`cargo build -p mail-mcp`) rendert sie wie bisher in der App;
+  Tests im Kern ebenso.
+- **Gemessen** (`crates/mail-mcp/tests/preview_isolation.rs`, M4): die Probe von 2.253 Byte
+  (1 GiB entpackt) endet im Release-Build nach 0,35 s als `preview_too_large`, im Debug-Build nach
+  1,9 s; der Speicher des Elternprozesses bleibt gleich (2,9 bzw. 3,7 MB vorher wie nachher). Eine
+  einseitige PDF braucht über den Helfer 92–102 ms (Release) bzw. 0,45 s (Debug), darin Start des
+  Prozesses und Laden von hayro.
+- **Nur unter Windows und dort ungetestet:** `tasklist` als Speicherquelle (Ausgabe je nach
+  Sprache mit `.` oder `,` als Tausendertrenner, beides wird gelesen) und `mail-mcp.exe` als Kind.
+  Der Parser für die `tasklist`-Ausgabe ist getestet, der Aufruf nicht.
+- Bleibt: die Rechenzeit eines Kinds bis zur Zeitgrenze (20 s, ein Kern), und das Kind läuft mit
+  den Rechten des Nutzers (keine Sandbox). (b), (c) und (d) entfallen; (d) bleibt als Wunsch an
+  hayro sinnvoll.

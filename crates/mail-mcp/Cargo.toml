@@ -17,7 +17,8 @@ mail-content.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt", "macros", "io-util", "io-std", "net", "sync", "time"] }
+# `process`: attachment previews run in a child (`preview`, finding C-2, decision 0043).
+tokio = { workspace = true, features = ["rt", "macros", "io-util", "io-std", "net", "sync", "time", "process"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 hmac.workspace = true
