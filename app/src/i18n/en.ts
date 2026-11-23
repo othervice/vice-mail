@@ -20,6 +20,9 @@ export const en = {
     accounts: "Accounts",
     settings: "Settings",
     account: "{{name}} ({{email}})",
+    // Stage 8, keyboard: the rail's two groups, each one Tab stop with the arrow keys inside.
+    viewGroup: "Mail views",
+    statusGroup: "Activity and settings",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "connecting",

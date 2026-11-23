@@ -87,17 +87,17 @@ describe("folder tree", () => {
     const { user } = renderApp();
     await openFolders(user);
 
-    const ada = await screen.findByRole("list", { name: "Folders of Ada Lovelace" });
+    const ada = await screen.findByRole("tree", { name: "Folders of Ada Lovelace" });
     const names = within(ada)
       .getAllByTestId(/^mailbox-/)
       .map((button) => button.querySelector(".truncate")?.textContent);
     expect(names).toEqual(["Inbox", "Sent", "Drafts", "Trash", "Projekte", "2026"]);
     // The counter is read as "3 unread", not as a bare number.
-    expect(within(ada).getByRole("button", { name: "Inbox, 3 unread" })).toBeTruthy();
-    expect(within(ada).getByRole("button", { name: "Projekte, 2 unread" })).toBeTruthy();
-    expect(within(ada).getByRole("button", { name: "Sent" })).toBeTruthy();
-    const work = await screen.findByRole("list", { name: "Folders of Work" });
-    expect(within(work).getByRole("button", { name: "Inbox, 7 unread" })).toBeTruthy();
+    expect(within(ada).getByRole("treeitem", { name: "Inbox, 3 unread" })).toBeTruthy();
+    expect(within(ada).getByRole("treeitem", { name: "Projekte, 2 unread" })).toBeTruthy();
+    expect(within(ada).getByRole("treeitem", { name: "Sent" })).toBeTruthy();
+    const work = await screen.findByRole("tree", { name: "Folders of Work" });
+    expect(within(work).getByRole("treeitem", { name: "Inbox, 7 unread" })).toBeTruthy();
     // The account headers carry the name, never just the colour.
     expect(screen.getByRole("region", { name: "Work (work@example.com), up to date" })).toBeTruthy();
   });
@@ -108,10 +108,16 @@ describe("folder tree", () => {
     await openFolders(user);
     await screen.findByText("2026");
 
-    await user.click(screen.getByRole("button", { name: "Hide subfolders of Projekte" }));
+    // The arrow before the name is for the mouse (the keyboard uses Right and Left), named by its tooltip.
+    const toggle = screen.getByTestId("folder-toggle-5");
+    expect(toggle.getAttribute("title")).toBe("Hide subfolders of Projekte");
+    await user.click(toggle);
     expect(screen.queryByText("2026")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Show subfolders of Projekte" }));
+    expect(screen.getByTestId("mailbox-5").getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("title")).toBe("Show subfolders of Projekte");
+    await user.click(toggle);
     expect(screen.getByText("2026")).toBeTruthy();
+    expect(screen.getByTestId("mailbox-5").getAttribute("aria-expanded")).toBe("true");
   });
 
   it("opens an own folder with its messages; role folders open the rail view", async () => {
@@ -153,19 +159,19 @@ describe("folder tree", () => {
     mockCore({ accounts: [ACCOUNT], mailboxes: standardMailboxes().map((m) => (m.id === 1 ? { ...m, unread: 1296 } : m)) });
     const { user } = renderApp();
     await openFolders(user);
-    const button = await screen.findByTestId("mailbox-1");
-    expect(button.getAttribute("aria-label")).toBe("Inbox, 1,296 unread");
-    // Name and counter are two words in the button's text, both part of its name.
-    expect(button.textContent).toBe("Inbox 1,296");
-    const words = (button.textContent ?? "").split(" ");
-    for (const word of words) expect(button.getAttribute("aria-label")).toContain(word);
+    const item = await screen.findByTestId("mailbox-1");
+    expect(item.getAttribute("aria-label")).toBe("Inbox, 1,296 unread");
+    // Name and counter are two words in the row's text, both part of its name.
+    expect(item.textContent).toBe("Inbox 1,296");
+    const words = (item.textContent ?? "").split(" ");
+    for (const word of words) expect(item.getAttribute("aria-label")).toContain(word);
   });
 
   it("without an account the sidebar shows no folders", async () => {
     mockCore();
     const { user } = renderApp();
     await openFolders(user);
-    expect(screen.queryByRole("list", { name: /Folders of/ })).toBeNull();
+    expect(screen.queryByRole("tree", { name: /Folders of/ })).toBeNull();
     expect(screen.getByRole("navigation").textContent).not.toMatch(/\d/);
   });
 });

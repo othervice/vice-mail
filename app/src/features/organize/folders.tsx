@@ -1,8 +1,9 @@
 import { ArrowDown, ArrowUp, Folder, Palette, Star, StarOff, type LucideIcon } from "lucide-react";
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
+import { treeItemAria, useTreeNavigation, type TreeNavItem } from "../../components/useTreeNavigation";
 import type { Account, AccountColor, Mailbox, MailboxId } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
 import { accountFill } from "../accounts/accountColor";
@@ -104,10 +105,15 @@ interface FolderMenuProps {
   /** In the favourites list: its order, for "Move up" and "Move down". */
   order?: readonly MailboxId[];
   onColor: () => void;
+  /**
+   * The folder's row in its tree: the focus goes back there when the menu closes. The "…" button
+   * is then out of the Tab order (Shift+F10 or the context-menu key on the row opens the menu).
+   */
+  returnFocus?: () => void;
 }
 
 /** The "…" of a folder in the sidebar: favourite on or off, its place among the favourites, colour. */
-export function FolderMenu({ mailbox, order, onColor }: FolderMenuProps) {
+export function FolderMenu({ mailbox, order, onColor, returnFocus }: FolderMenuProps) {
   const { t } = useTranslation();
   const name = useFolderName()(mailbox);
   const change = useChangeFolder();
@@ -167,7 +173,31 @@ export function FolderMenu({ mailbox, order, onColor }: FolderMenuProps) {
     });
   }
   items.push({ id: "color", label: t("organize.favorites.color"), icon: Palette, onSelect: onColor, "data-testid": "folder-color-open" });
-  return <OverflowMenu label={t("organize.favorites.menu", { name })} items={items} data-testid={`folder-menu-${String(mailbox.id)}`} />;
+  return (
+    <OverflowMenu
+      label={t("organize.favorites.menu", { name })}
+      items={items}
+      {...(returnFocus && { tabIndex: -1, returnFocus })}
+      data-testid={`folder-menu-${String(mailbox.id)}`}
+    />
+  );
+}
+
+/**
+ * The "…" of a row in a sidebar tree: shown on hover, while the row has the keyboard focus and
+ * while its menu is open. Its clicks stay here, so they do not also open the folder.
+ */
+export function RowMenuSlot({ children }: { children: ReactNode }) {
+  return (
+    <div
+      onClick={(event) => {
+        event.stopPropagation();
+      }}
+      className="flex shrink-0 opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100"
+    >
+      {children}
+    </div>
+  );
 }
 
 function folderIcon(mailbox: Mailbox): LucideIcon {
@@ -179,14 +209,18 @@ function FolderGlyph({ icon: Icon }: { icon: LucideIcon }) {
 }
 
 interface FavoriteRowProps {
+  item: TreeNavItem;
   mailbox: Mailbox;
   order: readonly MailboxId[];
   accountName: string | undefined;
   current: boolean;
+  nav: ReturnType<typeof useTreeNavigation>;
   onColor: (mailbox: Mailbox) => void;
+  /** Announces a move made with Alt+arrow keys. */
+  onMoved: (text: string) => void;
 }
 
-function FavoriteRow({ mailbox, order, accountName, current, onColor }: FavoriteRowProps) {
+function FavoriteRow({ item, mailbox, order, accountName, current, nav, onColor, onMoved }: FavoriteRowProps) {
   const { t, i18n } = useTranslation();
   const name = useFolderName()(mailbox);
   const colorName = useColorName();
@@ -194,13 +228,13 @@ function FavoriteRow({ mailbox, order, accountName, current, onColor }: Favorite
   const change = useChangeFolder();
   const drop = useDropTarget(mailbox);
   const index = order.indexOf(mailbox.id);
-  const [moved, setMoved] = useState<string | null>(null);
   const shown = accountName ? t("organize.favorites.inAccount", { name, account: accountName }) : name;
   const named = mailbox.color === undefined || mailbox.color === null ? shown : t("organize.favorites.withColor", { name: shown, color: colorName(mailbox.color) });
   const label = mailbox.unread > 0 ? t("sidebar.folderUnread", { name: named, count: mailbox.unread }) : named;
 
-  // Alt+Arrow keys move the favourite (the menu offers the same).
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+  // Alt+Arrow keys move the favourite (the menu offers the same); the focus stays on it.
+  const onKeyDown = (event: KeyboardEvent<HTMLLIElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
     const step = event.key === "ArrowUp" ? -1 : 1;
     const target = index + step;
@@ -209,32 +243,34 @@ function FavoriteRow({ mailbox, order, accountName, current, onColor }: Favorite
     const next = [...order];
     next.splice(index, 1);
     next.splice(target, 0, mailbox.id);
+    nav.keepFocus(item.key);
     change.mutate({ kind: "reorder", mailbox, order: next });
-    setMoved(t("organize.favorites.moved", { name, position: target + 1, count: order.length }));
+    onMoved(t("organize.favorites.moved", { name, position: target + 1, count: order.length }));
   };
 
   return (
-    <li className="group/folder flex items-center gap-1">
-      <button
-        type="button"
-        aria-current={current ? "page" : undefined}
-        aria-label={label}
-        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-        title={mailbox.path}
-        disabled={!mailbox.selectable}
-        onClick={() => {
-          showMailbox(mailbox.accountId, mailbox.id);
-        }}
-        onKeyDown={onKeyDown}
-        {...drop.handlers}
-        data-testid={`favorite-${String(mailbox.id)}`}
-        data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
-        className={cx(
-          "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-13 transition-colors",
-          current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
-          drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
-        )}
-      >
+    <li
+      {...treeItemAria(item)}
+      {...nav.itemProps(item.key)}
+      aria-current={current ? "page" : undefined}
+      aria-label={label}
+      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+      aria-disabled={mailbox.selectable ? undefined : true}
+      title={mailbox.path}
+      onClick={() => {
+        if (mailbox.selectable) showMailbox(mailbox.accountId, mailbox.id);
+      }}
+      onKeyDown={onKeyDown}
+      {...drop.handlers}
+      data-testid={`favorite-${String(mailbox.id)}`}
+      data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
+      className={cx(
+        "group/folder flex h-8 min-w-0 items-center gap-1 rounded-control ps-2 pe-1 text-13 transition-colors",
+        current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-rail-hover hover:text-primary",
+        drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+      )}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-2">
         <FolderGlyph icon={folderIcon(mailbox)} />
         <span className="truncate">{name}</span>
         <FolderColorDot color={mailbox.color} />
@@ -244,20 +280,19 @@ function FavoriteRow({ mailbox, order, accountName, current, onColor }: Favorite
             {new Intl.NumberFormat(i18n.language).format(mailbox.unread)}
           </span>
         )}
-      </button>
-      {/* Shown on hover and while focused, as in the folder tree; always reachable with Tab. */}
-      <div className="flex opacity-0 group-hover/folder:opacity-100 focus-within:opacity-100">
+      </span>
+      <RowMenuSlot>
         <FolderMenu
           mailbox={mailbox}
           order={order}
           onColor={() => {
             onColor(mailbox);
           }}
+          returnFocus={() => {
+            nav.focus(item.key);
+          }}
         />
-      </div>
-      <span aria-live="polite" className="sr-only">
-        {moved}
-      </span>
+      </RowMenuSlot>
     </li>
   );
 }
@@ -270,9 +305,30 @@ function FavoriteRow({ mailbox, order, accountName, current, onColor }: Favorite
 export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
+  const showMailbox = useUiStore((state) => state.showMailbox);
   const favorites = useFavoriteMailboxes();
+  const folderName = useFolderName();
   const [coloring, setColoring] = useState<Mailbox | null>(null);
+  const [moved, setMoved] = useState<string | null>(null);
+  const headingId = useId();
   const names = accounts.length > 1 ? accountShortNames(accounts) : null;
+  const list = (favorites.data ?? []).filter((mailbox) => accounts.some((account) => account.id === mailbox.accountId));
+  const items: TreeNavItem[] = list.map((mailbox, index) => ({
+    key: String(mailbox.id),
+    level: 1,
+    posinset: index + 1,
+    setsize: list.length,
+    text: folderName(mailbox),
+  }));
+  const currentId = view.kind === "mailbox" ? view.mailboxId : null;
+  const nav = useTreeNavigation({
+    items,
+    currentKey: currentId === null ? null : String(currentId),
+    onOpen: (key) => {
+      const mailbox = list.find((entry) => String(entry.id) === key);
+      if (mailbox?.selectable) showMailbox(mailbox.accountId, mailbox.id);
+    },
+  });
   if (favorites.isError) {
     return (
       <ErrorNotice
@@ -284,32 +340,44 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
       />
     );
   }
-  const list = (favorites.data ?? []).filter((mailbox) => accounts.some((account) => account.id === mailbox.accountId));
   if (list.length === 0) return null;
   const order = list.map((mailbox) => mailbox.id);
-  const currentId = view.kind === "mailbox" ? view.mailboxId : null;
   return (
     <section aria-label={t("organize.favorites.title")} className="flex flex-col gap-1" data-testid="favorite-folders">
-      <h2 className="flex h-8 items-center px-2 text-12 font-semibold text-secondary">{t("organize.favorites.title")}</h2>
-      <ul className="flex flex-col">
-        {list.map((mailbox) => (
-          <FavoriteRow
-            key={mailbox.id}
-            mailbox={mailbox}
-            order={order}
-            accountName={names?.get(mailbox.accountId)}
-            current={mailbox.id === currentId}
-            onColor={setColoring}
-          />
-        ))}
+      <h2 id={headingId} className="flex h-8 items-center px-2 text-12 font-semibold text-secondary">
+        {t("organize.favorites.title")}
+      </h2>
+      <ul {...nav.treeProps} aria-labelledby={headingId} className="flex flex-col">
+        {list.map((mailbox, index) => {
+          const item = items[index];
+          if (!item) return null;
+          return (
+            <FavoriteRow
+              key={mailbox.id}
+              item={item}
+              mailbox={mailbox}
+              order={order}
+              accountName={names?.get(mailbox.accountId)}
+              current={mailbox.id === currentId}
+              nav={nav}
+              onColor={setColoring}
+              onMoved={setMoved}
+            />
+          );
+        })}
       </ul>
+      <span aria-live="polite" className="sr-only">
+        {moved}
+      </span>
       {coloring && (
         <FolderColorPicker
           mailbox={list.find((mailbox) => mailbox.id === coloring.id) ?? coloring}
           onClose={() => {
             setColoring(null);
           }}
-          restoreFocus={() => undefined}
+          restoreFocus={() => {
+            nav.focus(String(coloring.id));
+          }}
         />
       )}
     </section>

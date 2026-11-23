@@ -21,6 +21,8 @@ export const de: Translation = {
     accounts: "Konten",
     settings: "Einstellungen",
     account: "{{name}} ({{email}})",
+    viewGroup: "Mail-Ansichten",
+    statusGroup: "Aktivität und Einstellungen",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "verbindet",

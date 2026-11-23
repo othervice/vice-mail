@@ -257,7 +257,7 @@ als eckiger Kasten an den Rändern des Fensters; ein Klick irgendwo in die Fläc
 **Leiste in niedrigen Fenstern.** Die obere Gruppe der Leiste scrollt (nie seitwärts); ihre Ränder
 blenden innerhalb des 12-px-Abstands aus, sodass ein angeschnittener Eintrag als „mehr“ lesbar ist.
 Die schmale Leiste zeigt keinen Scrollbalken (unter Windows würde er die Symbole aus der Mitte
-schieben); Mausrad, Trackpad und Tab erreichen jeden Eintrag, und die aktive Ansicht wird in den
+schieben); Mausrad, Trackpad und die Pfeiltasten erreichen jeden Eintrag, und die aktive Ansicht wird in den
 sichtbaren Bereich gerückt, auch wenn ein Kürzel sie öffnet. Die aufgeklappte Seitenleiste behält
 einen schmalen Balken. Einträge in ein „Mehr“-Menü zu falten hätte eine Messung der Höhe gebraucht,
 die es in den Tests ohne Layout nicht gibt.
@@ -281,6 +281,62 @@ ohne Breakpoints), sind durch Rasterstufen ersetzt: Die Befehlspalette klebte am
 Knöpfe und Reiter hatten keine feste Höhe. Die .eml-Ansicht steht in derselben mittigen Spalte wie
 der Lesebereich. Das blaue Löschkreuz der Engine im Suchfeld ist ausgeblendet (die App hat ein
 eigenes).
+
+## Tastatur: Tab-Stopps, Bäume und Leiste
+
+Tab springt von Bereich zu Bereich, die Pfeiltasten bewegen innerhalb eines Bereichs (Roving
+Tabindex: genau ein Eintrag je Bereich hat `tabindex="0"`). Vorher war jeder Ordner mit seinem „…“
+ein eigener Tab-Stopp; bei aufgeklappter Seitenleiste brauchte die echte App 46 Tastendrücke bis zur
+Liste. Jetzt sind es mit einem Konto 9 vom Fensteranfang: Ansichten der Leiste, Kontoknopf,
+Ordnerbaum, untere Gruppe der Leiste, Kopf der Liste (Nur ungelesene, Listenoptionen, Suche, Neue
+Mail), Liste. Jeder weitere Baum kostet einen Stopp, jedes weitere Konto zwei (Knopf und Baum),
+egal wie viele Ordner es hat.
+
+**Bäume der Seitenleiste** (WAI-ARIA Tree View, Variante Navigation). Favoriten, Posteingänge
+(vereinter Posteingang und Kontogruppen), gespeicherte Suchen und die Ordner jedes Kontos sind je
+ein eigener Baum (`role="tree"`), kein gemeinsamer Baum mit Gruppen. Begründung: Jeder Abschnitt
+bleibt ein benannter Bereich mit Überschrift, den Screenreader über Bereiche und Überschriften
+direkt anspringen; Tab wird zum Sprung „nächster Abschnitt“, statt durch alle Favoriten und
+Posteingänge zu den Ordnern des zweiten Kontos zu pfeilen. Die Abschnitte bedeuten Verschiedenes
+(Ansichten, Favoriten mit eigener Reihenfolge, Ordner eines Kontos), und der Kontoknopf über einem
+Ordnerbaum bleibt ein Knopf mit `aria-pressed`, statt als Baumknoten zwei Aufgaben zu haben.
+
+| Taste | Wirkung im Baum |
+|---|---|
+| ↓ / ↑ | nächste / vorige sichtbare Zeile (kein Umlauf); öffnet nichts |
+| → | zugeklappten Ordner aufklappen; aufgeklappten: zum ersten Unterordner |
+| ← | aufgeklappten Ordner zuklappen; sonst zum übergeordneten Ordner |
+| Pos1 / Ende | erste / letzte sichtbare Zeile |
+| Buchstabe, Ziffer | nächste Zeile, deren Name so beginnt; schnell getippte Zeichen (500 ms) bilden ein Suchwort, findet es nichts, beginnt das Zeichen eine neue Suche; derselbe Buchstabe wiederholt geht weiter; Groß- und Kleinschreibung und Akzente zählen nicht |
+| Eingabe, Leertaste | Ordner bzw. Ansicht öffnen (ein Platzhalter ohne Mails klappt auf und zu) |
+| Umschalt+F10, Kontextmenütaste | Menü „…“ der Zeile, Fokus auf dem ersten Eintrag; Escape gibt den Fokus an die Zeile zurück; Rechtsklick öffnet dasselbe Menü |
+| Alt+↑ / Alt+↓ | nur Favoriten: Eintrag verschieben, der Fokus bleibt auf ihm |
+| Tab | verlässt den Baum; Tab hinein landet auf der gezeigten Zeile (`aria-current`), sonst auf der ersten |
+
+Buchstaben sind im Baum Typeahead und keine Kürzel (`c`, `r` usw. wirken dort nicht); Satzzeichen
+(`/` Suche, `?` Tastenübersicht) und Kürzel mit Cmd/Strg wirken weiter.
+
+Semantik: Die Zeilen sind flach im DOM (`li role="treeitem"` direkt im Baum), die Hierarchie steht
+in `aria-level`, `aria-posinset` und `aria-setsize` (wie FlatTree in Fluent UI); so umrahmt der
+Fokusring eine Zeile und nie den aufgeklappten Teilbaum. Ordner mit Unterordnern haben
+`aria-expanded`, die gezeigte Zeile `aria-current="page"`. Kein `aria-selected`: Im Navigationsbaum
+folgt das Öffnen nicht dem Fokus (ein Ordner lädt erst mit Eingabe, Leertaste oder Klick). Der Name
+der Zeile ist der sichtbare Text plus Zustände („Projekte, Farbe Grün, 2 ungelesen“). Der Pfeil vor
+dem Namen ist für die Maus (Tooltip „Unterordner … zeigen“); der „…“-Knopf erscheint beim
+Überfahren und solange die Zeile den Tastaturfokus hat und steht nicht in der Tab-Reihenfolge.
+Gezogene Mails werden auf der Zeile selbst abgelegt.
+
+**Leiste.** Die Ansichten oben und die Gruppe unten (in der schmalen Leiste die Konten, dazu
+Aktivität, Ausgang, Einstellungen) sind je eine senkrechte Symbolleiste (`role="toolbar"`,
+`aria-orientation="vertical"`, „Mail-Ansichten“ und „Aktivität und Einstellungen“): ↑/↓ und
+Pos1/Ende bewegen, Eingabe und Leertaste wirken wie bei jedem Knopf. Tab kommt auf der aktiven
+Ansicht an, unten ohne aktive Ansicht auf dem gewählten Konto. Cmd/Strg+1 bis 8 bleiben.
+
+**Geprüft, unverändert.** Die Abschnittsliste der Einstellungen ist schon ein Stopp (Reiter mit
+Pfeiltasten), danach kommt der Inhalt des Abschnitts. Im Lesebereich ist die Symbolleiste ein Stopp;
+bis zum Text der Mail folgen „Als .eml speichern“, „Drucken“, „Schließen“, Empfänger, „…“ der Karte,
+„Warum hier?“ und HTML/Text, zusammen 9 Tastendrücke. Das sind einzelne Bedienelemente eines
+Dokuments, keine Liste; Eingabe auf einer Zeile der Liste setzt den Fokus ohnehin in den Lesebereich.
 
 ## Regeln für Interaktion
 

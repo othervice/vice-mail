@@ -28,6 +28,13 @@ const ROVING_ROLES = new Set([
   "treeitem",
 ]);
 
+/**
+ * Composite widgets whose entries get the focus by arrow keys whatever their own role (native
+ * buttons of the rail and the reading toolbar). Not trees: their rows carry `treeitem`, and the
+ * "…" button inside a row is for the mouse (the keyboard opens that menu from the row).
+ */
+const ROVING_GROUPS = '[role="toolbar"], [role="tablist"], [role="radiogroup"], [role="menubar"]';
+
 const CANDIDATES = "a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable]";
 
 function hiddenByClass(element: Element): boolean {
@@ -51,7 +58,11 @@ export function keyboardFocusable(root: ParentNode = document.body): HTMLElement
     if (element.closest('[aria-hidden="true"]')) return false;
     // `tabindex="-1"`: reachable by arrow keys in a composite widget, or a focus target that
     // asks for a ring itself (a reading pane focused after opening a message).
-    return ROVING_ROLES.has(element.getAttribute("role") ?? "") || [...element.classList].some((name) => name.startsWith("focus-visible:"));
+    return (
+      ROVING_ROLES.has(element.getAttribute("role") ?? "") ||
+      element.closest(ROVING_GROUPS) !== null ||
+      [...element.classList].some((name) => name.startsWith("focus-visible:"))
+    );
   });
 }
 

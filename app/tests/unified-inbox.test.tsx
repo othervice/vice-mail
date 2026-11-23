@@ -179,9 +179,9 @@ describe("unified inbox", () => {
     // The unfolded sidebar lists the unified inbox and the groups.
     await user.click(screen.getByTestId("rail-folders"));
     const tree = await screen.findByRole("region", { name: "Inboxes" });
-    await user.click(within(tree).getByRole("button", { name: "All inboxes" }));
+    await user.click(within(tree).getByRole("treeitem", { name: "All inboxes" }));
     expect(await screen.findByRole("listbox", { name: "Messages in All inboxes" })).toBeTruthy();
-    expect(within(tree).getByRole("button", { name: "All inboxes" }).getAttribute("aria-current")).toBe("page");
+    expect(within(tree).getByRole("treeitem", { name: "All inboxes" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("stays a sorted inbox: the conversation view is not offered for inboxes", async () => {

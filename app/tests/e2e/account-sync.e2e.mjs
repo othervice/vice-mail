@@ -538,11 +538,8 @@ describe("account and read-only sync (stage 2)", function () {
         id: Number(b.dataset.testid.slice("mailbox-".length)),
         text: b.textContent,
         label: b.getAttribute("aria-label"),
-        depth: (() => {
-          let d = 0;
-          for (let li = b.closest("li")?.parentElement?.closest("li"); li; li = li.parentElement?.closest("li")) d += 1;
-          return d;
-        })(),
+        // The tree's rows are flat; the depth is their level (WAI-ARIA tree view).
+        depth: Number(b.getAttribute("aria-level")) - 1,
       })),
     );
     const rows = [];

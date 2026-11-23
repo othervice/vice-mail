@@ -4,8 +4,9 @@
 //
 // Only keys drive the UI (`browser.keys`, and `pressTab` for Tab, whose focus move the embedded
 // WebDriver does not perform); `coreCall` sets up the account and reads the results back.
-// 1. A message from bob arrives. Tab reaches the message list, Home and Enter open the newest
-//    message (the delivered one) in the reading pane.
+// 1. A message from bob arrives. With the sidebar unfolded, Tab reaches the message list from the
+//    start of the window in a handful of presses (each tree and each rail group is one Tab stop,
+//    arrow keys inside), Home and Enter open the newest message (the delivered one).
 // 2. "r" opens the reply with the focus in the text, typing writes the answer, Cmd+Enter sends it.
 // 3. Escape goes back to the list, "e" archives the message; the focus is on the next message.
 // 4. Cmd+K, "Go to Archive", Enter: the archived message is there. On the server the reply was
@@ -16,14 +17,25 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, pressTab, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, deliverMail, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
 const RUN = Date.now().toString(36);
 const SUBJECT = `Tastatur ${RUN}`;
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
+/**
+ * Most Tab presses from the start of the window to the message list with the sidebar unfolded:
+ * the rail's views (1), the account's button and its folder tree (2), the rail's bottom group (1),
+ * the list header (4) and the list itself make 9; trees another spec left behind (favourites,
+ * inboxes, saved searches: 1 each) and the header's account choice may add up to 4. Before the
+ * trees were single Tab stops it took 46.
+ */
+const TAB_LIMIT = 14;
+/** The presses for the path above without trees left by other specs. */
+const SHORT_PATH = 9;
 let account;
+let sidebarWas;
 
 const active = () =>
   browser.execute(() => {
@@ -52,21 +64,33 @@ async function shot(name) {
 }
 
 /**
- * Presses Tab until the message list has the focus (at most `limit` times). `pressTab` moves the
- * focus as the browser would: the embedded WebDriver sends Tab's key events only.
+ * Presses Tab from the start of the window until the message list has the focus (at most
+ * `limit` times) and records the presses and the stops on the way. `pressTab` moves the focus as
+ * the browser would: the embedded WebDriver sends Tab's key events only.
  */
-async function tabToList(limit = 120) {
-  // The unfolded sidebar (the app keeps it as the user left it) puts every folder before the list.
+async function tabToList(limit = TAB_LIMIT) {
+  await browser.execute(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  const stops = [];
   for (let i = 0; i < limit; i += 1) {
     const now = await active();
     if (now.role === "listbox" && now.testId === "message-list") {
       report.tabsToList = Math.max(report.tabsToList ?? 0, i);
-      return now;
+      report.tabStops = stops;
+      return { ...now, presses: i };
     }
+    if (i > 0) stops.push(`${now.role ?? "button"}: ${now.testId ?? now.label ?? "?"}`);
     await pressTab();
   }
-  throw new Error(`Tab never reached the message list (${String(limit)} presses)`);
+  throw new Error(`Tab never reached the message list (${String(limit)} presses): ${stops.join(" | ")}`);
 }
+
+/** Trees other than the accounts' folder trees (favourites, inboxes, saved searches) and the header's account choice. */
+const extraStops = () =>
+  browser.execute(
+    () => document.querySelectorAll('[role="tree"][aria-labelledby]').length + (document.querySelector('[data-testid="inbox-scope"]') ? 1 : 0),
+  );
 
 async function mailboxByRole(role) {
   const mailboxes = await coreCall("list_mailboxes", { accountId: account.id });
@@ -114,6 +138,7 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
   });
 
   after(async () => {
+    if (sidebarWas !== undefined) await setSidebar(sidebarWas).catch((e) => console.log(`sidebar not restored: ${e}`));
     const left = await coreCall("list_accounts").catch(() => []);
     for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -121,8 +146,17 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
   });
 
-  it("Tab reaches the list, Home and Enter open the newest message", async () => {
-    await tabToList();
+  it("Tab reaches the list in a handful of presses with the sidebar unfolded, Home and Enter open the newest message", async () => {
+    sidebarWas = await setSidebar(true);
+    await testId(`mailbox-${(await mailboxByRole("inbox")).id}`).waitForExist({ timeout: 20000 });
+    const reached = await tabToList();
+    const extra = await extraStops();
+    report.steps.tabPath = { presses: reached.presses, extra, stops: report.tabStops };
+    // Every folder tree is one stop: the path does not grow with the account's folders.
+    assert.ok(reached.presses <= SHORT_PATH + extra, `${String(reached.presses)} presses: ${report.tabStops.join(" | ")}`);
+    // One stop per tree, whatever it holds.
+    const trees = await browser.execute(() => document.querySelectorAll('[role="tree"]').length);
+    assert.equal(report.tabStops.filter((stop) => stop.startsWith("treeitem")).length, trees, report.tabStops.join(" | "));
     await browser.keys("Home");
     const listFocus = await active();
     assert.ok(listFocus.activeOption?.includes(SUBJECT), `cursor on ${listFocus.activeOption}`);

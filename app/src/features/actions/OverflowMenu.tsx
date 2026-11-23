@@ -26,6 +26,11 @@ interface OverflowMenuProps {
   onFocus?: () => void;
   /** Where the menu unfolds, under the button: from its end (default) or from its start. */
   align?: "end" | "start";
+  /**
+   * Where the focus goes back to when the menu closes, instead of the button: the row of a tree
+   * whose menu this is (the button itself is not in the Tab order there).
+   */
+  returnFocus?: () => void;
   "data-testid"?: string;
 }
 
@@ -35,7 +40,7 @@ interface OverflowMenuProps {
  * item, Arrow Up on the last; arrows, Home and End move, Escape and Tab close it, a click outside
  * too. Choosing an item closes the menu and gives the focus back to the button first.
  */
-export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", ...rest }: OverflowMenuProps) {
+export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, ...rest }: OverflowMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -64,7 +69,9 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", .
 
   const close = (refocus: boolean) => {
     setOpen(false);
-    if (refocus) button.current?.focus();
+    if (!refocus) return;
+    if (returnFocus) returnFocus();
+    else button.current?.focus();
   };
 
   const onButtonKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {

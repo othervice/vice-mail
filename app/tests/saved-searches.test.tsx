@@ -162,7 +162,7 @@ describe("saving a search", () => {
 
     await user.click(screen.getByTestId("rail-folders"));
     const nav = await screen.findByRole("region", { name: "Saved searches" });
-    expect(within(nav).getByRole("button", { name: "Invoices" })).toBeTruthy();
+    expect(within(nav).getByRole("treeitem", { name: "Invoices" })).toBeTruthy();
   });
 
   it("explains a name that is taken and keeps the form open", async () => {
@@ -214,10 +214,10 @@ describe("saved searches as views", () => {
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await user.click(screen.getByTestId("rail-folders"));
     const nav = await screen.findByRole("region", { name: "Saved searches" });
-    await user.click(within(nav).getByRole("button", { name: "Invoices" }));
+    await user.click(within(nav).getByRole("treeitem", { name: "Invoices" }));
 
     expect(await screen.findByRole("heading", { name: "Invoices" })).toBeTruthy();
-    expect(within(nav).getByRole("button", { name: "Invoices" }).getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getByRole("treeitem", { name: "Invoices" }).getAttribute("aria-current")).toBe("page");
     const results = await screen.findByRole("listbox", { name: "Messages in the search results for “rechnung”" });
     expect(await within(results).findAllByRole("option")).toHaveLength(2);
     expect(lastSearch(core)).toMatchObject({ query: "rechnung", scope: { kind: "all" }, typing: false });

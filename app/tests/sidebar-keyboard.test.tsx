@@ -1,0 +1,373 @@
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useUiStore } from "../src/stores/ui";
+import { makeAccount, makeMailbox, makeMessages, mockCore, standardMailboxes } from "./support/core";
+import { makeSavedSearch } from "./support/search";
+import { renderApp } from "./support/render";
+
+/*
+ * Stage 8, keyboard: every tree of the unfolded sidebar (favourites, inboxes, saved searches, the
+ * folders of each account) is one Tab stop with the WAI-ARIA tree view keys inside, and the rail's
+ * two groups are one Tab stop each. Tab goes rail, sidebar, list in a handful of presses.
+ */
+
+const ADA = makeAccount({ writesEnabled: true });
+const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
+const GROUP = { id: "55555555-5555-4555-8555-555555555555", name: "Freizeit", accountIds: [ADA.id, WORK.id], position: 0 };
+
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+});
+
+/** Inbox, Sent, Drafts, Trash, Dokumente, Projekte (with 2026 below it). */
+function setup(options: Parameters<typeof mockCore>[0] = {}) {
+  const core = mockCore({
+    accounts: [ADA],
+    mailboxes: [...standardMailboxes(), makeMailbox({ id: 7, path: "Dokumente" })],
+    messages: { 1: makeMessages(3), 5: makeMessages(2, { mailboxId: 5 }), 6: makeMessages(1, { mailboxId: 6 }) },
+    ...options,
+  });
+  return { core, ...renderApp() };
+}
+
+async function unfold(user: ReturnType<typeof renderApp>["user"]) {
+  await screen.findByRole("listbox", { name: /^Messages in/ });
+  await user.click(screen.getByTestId("rail-folders"));
+  return screen.findByRole("tree", { name: "Folders of Ada Lovelace" });
+}
+
+const focused = () => document.activeElement;
+const nameOf = (element: Element | null) => element?.getAttribute("aria-label") ?? element?.textContent ?? null;
+const heading = () => screen.getByRole("heading", { level: 1 }).textContent;
+
+/** The rows of a tree that Tab can reach: exactly one per tree. */
+function tabStops(tree: HTMLElement) {
+  return within(tree)
+    .getAllByRole("treeitem")
+    .filter((row) => row.tabIndex === 0)
+    .map(nameOf);
+}
+
+/** Presses Tab from the start of the window until the message list has the focus; the stops on the way. */
+async function tabToList(user: ReturnType<typeof renderApp>["user"]) {
+  act(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  const stops: string[] = [];
+  for (let i = 0; i < 60; i += 1) {
+    await user.tab();
+    const now = focused();
+    if (now?.getAttribute("role") === "listbox") return stops;
+    stops.push(`${now?.getAttribute("role") ?? now?.tagName.toLowerCase() ?? "?"}: ${nameOf(now) ?? ""}`);
+  }
+  throw new Error(`Tab never reached the list: ${stops.join(" | ")}`);
+}
+
+describe("folder tree: keyboard model", () => {
+  it("is a tree with levels, positions and open states; the current folder is its one Tab stop", async () => {
+    const { user } = setup();
+    const tree = await unfold(user);
+    const rows = within(tree).getAllByRole("treeitem");
+    expect(rows.map(nameOf)).toEqual(["Inbox, 3 unread", "Sent", "Drafts", "Trash", "Dokumente", "Projekte, 2 unread", "2026, 1 unread"]);
+    const inbox = screen.getByTestId("mailbox-1");
+    expect([inbox.getAttribute("aria-level"), inbox.getAttribute("aria-posinset"), inbox.getAttribute("aria-setsize")]).toEqual(["1", "1", "6"]);
+    expect(inbox.getAttribute("aria-current")).toBe("page");
+    expect(inbox.hasAttribute("aria-expanded")).toBe(false);
+    const projekte = screen.getByTestId("mailbox-5");
+    expect([projekte.getAttribute("aria-level"), projekte.getAttribute("aria-posinset"), projekte.getAttribute("aria-expanded")]).toEqual(["1", "6", "true"]);
+    const child = screen.getByTestId("mailbox-6");
+    expect([child.getAttribute("aria-level"), child.getAttribute("aria-posinset"), child.getAttribute("aria-setsize")]).toEqual(["2", "1", "1"]);
+    // Only the current folder is in the Tab order; the "…" of each row is not.
+    expect(tabStops(tree)).toEqual(["Inbox, 3 unread"]);
+    expect(screen.getByTestId("folder-menu-5").tabIndex).toBe(-1);
+  });
+
+  it("Up and Down move without opening; Tab leaves the tree and comes back in on the current folder", async () => {
+    const { user } = setup();
+    const tree = await unfold(user);
+    act(() => {
+      screen.getByTestId("mailbox-1").focus();
+    });
+    await user.keyboard("{ArrowUp}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-1"));
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-3"));
+    expect(tabStops(tree)).toEqual(["Drafts"]);
+    // Moving opens nothing: the list still shows the inbox.
+    expect(heading()).toBe("Inbox");
+    await user.tab();
+    expect(tree.contains(focused())).toBe(false);
+    expect(tabStops(tree)).toEqual(["Inbox, 3 unread"]);
+    await user.tab({ shift: true });
+    expect(focused()).toBe(screen.getByTestId("mailbox-1"));
+  });
+
+  it("Right opens a folder or goes to its first child, Left closes it or goes to the parent, Home and End", async () => {
+    const { user } = setup();
+    const tree = await unfold(user);
+    act(() => {
+      screen.getByTestId("mailbox-1").focus();
+    });
+    await user.keyboard("{End}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-6"));
+    // A folder without children: Right does nothing.
+    await user.keyboard("{ArrowRight}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-6"));
+    await user.keyboard("{ArrowLeft}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByTestId("mailbox-5").getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("mailbox-6")).toBeNull();
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    // Left on a closed top-level folder stays.
+    await user.keyboard("{ArrowLeft}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    await user.keyboard("{End}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByTestId("mailbox-5").getAttribute("aria-expanded")).toBe("true");
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    await user.keyboard("{ArrowRight}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-6"));
+    await user.keyboard("{Home}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-1"));
+    expect(tabStops(tree)).toEqual(["Inbox, 3 unread"]);
+  });
+
+  it("a letter goes to the next folder starting with it; letters are no app shortcuts there", async () => {
+    const { user } = setup();
+    await unfold(user);
+    act(() => {
+      screen.getByTestId("mailbox-1").focus();
+    });
+    await user.keyboard("s");
+    expect(focused()).toBe(screen.getByTestId("mailbox-2"));
+    // Typed right after: "sd" starts nothing, so "d" is a new search. The same letter again goes
+    // on to the next folder with it (Drafts, then Dokumente).
+    await user.keyboard("d");
+    expect(focused()).toBe(screen.getByTestId("mailbox-3"));
+    await user.keyboard("d");
+    expect(focused()).toBe(screen.getByTestId("mailbox-7"));
+    await user.keyboard("2");
+    expect(focused()).toBe(screen.getByTestId("mailbox-6"));
+    // From the end it starts over at the top; case and accents do not matter.
+    await user.keyboard("I");
+    expect(focused()).toBe(screen.getByTestId("mailbox-1"));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    // Letters typed quickly form one search.
+    await user.keyboard("dr");
+    expect(focused()).toBe(screen.getByTestId("mailbox-3"));
+    // "c" writes a new message elsewhere; in the tree it is type-ahead and opens nothing.
+    await user.keyboard("c");
+    expect(screen.queryByTestId("composer")).toBeNull();
+    expect(focused()).toBe(screen.getByTestId("mailbox-3"));
+  });
+
+  it("Enter and Space open the folder; a role folder opens its rail view; the opened one is the Tab stop", async () => {
+    const { user } = setup();
+    const tree = await unfold(user);
+    act(() => {
+      screen.getByTestId("mailbox-1").focus();
+    });
+    await user.keyboard("p");
+    await user.keyboard("{Enter}");
+    expect(heading()).toBe("Projekte");
+    expect(screen.getByTestId("mailbox-5").getAttribute("aria-current")).toBe("page");
+    expect(focused()).toBe(screen.getByTestId("mailbox-5"));
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard(" ");
+    expect(heading()).toBe("2026");
+    expect(await screen.findByRole("listbox", { name: "Messages in 2026" })).toBeTruthy();
+    expect(tabStops(tree)).toEqual(["2026, 1 unread"]);
+    await user.keyboard("{Home}{ArrowDown}{Enter}");
+    expect(heading()).toBe("Sent");
+    expect(screen.getByTestId("rail-sent").getAttribute("aria-current")).toBe("page");
+    await user.tab();
+    expect(tabStops(tree)).toEqual(["Sent"]);
+  });
+
+  it("Shift+F10, the context-menu key and a right click open the folder's menu; it closes back onto the row", async () => {
+    const { user } = setup();
+    await unfold(user);
+    const projekte = screen.getByTestId("mailbox-5");
+    act(() => {
+      projekte.focus();
+    });
+    await user.keyboard("{Shift>}{F10}{/Shift}");
+    const menu = await screen.findByRole("menu", { name: "Options for Projekte" });
+    expect(focused()).toBe(within(menu).getByRole("menuitem", { name: "Add to favourites" }));
+    // Keys inside the menu stay in the menu (Enter there does not open the folder).
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(focused()).toBe(projekte);
+
+    await user.keyboard("{ContextMenu}");
+    expect(await screen.findByRole("menu", { name: "Options for Projekte" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(focused()).toBe(projekte);
+
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByTestId("mailbox-2") });
+    const sent = await screen.findByRole("menu", { name: "Options for Sent" });
+    await user.click(within(sent).getByRole("menuitem", { name: "Folder colour…" }));
+    const picker = await screen.findByRole("dialog", { name: "Colour of Sent" });
+    expect(heading()).toBe("Inbox");
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(picker.isConnected).toBe(false);
+    });
+    // The colour picker gives the focus back to the folder's row.
+    expect(focused()).toBe(screen.getByTestId("mailbox-2"));
+  });
+});
+
+describe("the other sidebar trees", () => {
+  function many() {
+    const mailboxes = [
+      ...standardMailboxes().map((mailbox) =>
+        mailbox.id === 5 ? { ...mailbox, favoritePosition: 0 } : mailbox.id === 2 ? { ...mailbox, favoritePosition: 1 } : mailbox,
+      ),
+      makeMailbox({ id: 20, accountId: WORK.id, path: "INBOX", role: "inbox", roleSource: "server" }),
+    ];
+    return setup({
+      accounts: [ADA, WORK],
+      mailboxes,
+      messages: { 1: makeMessages(2), 5: makeMessages(1, { mailboxId: 5 }), 20: makeMessages(1, { mailboxId: 20 }) },
+      search: {
+        groups: [GROUP],
+        savedSearches: [makeSavedSearch({ id: "5a5a5a5a-0000-4000-8000-000000000001", name: "Invoices" }), makeSavedSearch({ id: "5a5a5a5a-0000-4000-8000-000000000002", name: "Lunch", position: 1 })],
+      },
+    });
+  }
+
+  it("favourites, inboxes and saved searches are trees of their own, one Tab stop each", async () => {
+    const { user } = many();
+    await unfold(user);
+    await screen.findByRole("tree", { name: "Favourites" });
+    await screen.findByRole("tree", { name: "Saved searches" });
+    const trees = screen.getAllByRole("tree");
+    expect(trees.map((tree) => tree.getAttribute("aria-label") ?? document.getElementById(tree.getAttribute("aria-labelledby") ?? "")?.textContent)).toEqual([
+      "Favourites",
+      "Inboxes",
+      "Saved searches",
+      "Folders of Ada Lovelace",
+      "Folders of Work",
+    ]);
+    for (const tree of trees) expect(tabStops(tree)).toHaveLength(1);
+    const favorites = screen.getByRole("tree", { name: "Favourites" });
+    const rows = within(favorites).getAllByRole("treeitem");
+    expect(rows.map((row) => [row.getAttribute("aria-level"), row.getAttribute("aria-posinset"), row.getAttribute("aria-setsize")])).toEqual([
+      ["1", "1", "2"],
+      ["1", "2", "2"],
+    ]);
+  });
+
+  it("each opens its entry with Enter after the arrow keys", async () => {
+    const { user } = many();
+    await unfold(user);
+    const favorites = await screen.findByRole("tree", { name: "Favourites" });
+    act(() => {
+      within(favorites).getByRole("treeitem", { name: /^Projekte/ }).focus();
+    });
+    await user.keyboard("{ArrowDown}");
+    expect(nameOf(focused())).toBe("Sent in Ada Lovelace");
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(heading()).toBe("Projekte");
+    expect(tabStops(favorites)).toEqual(["Projekte in Ada Lovelace, 2 unread"]);
+
+    const inboxes = screen.getByRole("tree", { name: "Inboxes" });
+    act(() => {
+      within(inboxes).getByRole("treeitem", { name: "All inboxes" }).focus();
+    });
+    await user.keyboard("{End}");
+    expect(nameOf(focused())).toBe("Freizeit");
+    await user.keyboard("{Home}{Enter}");
+    expect(await screen.findByRole("listbox", { name: "Messages in All inboxes" })).toBeTruthy();
+    expect(within(inboxes).getByRole("treeitem", { name: "All inboxes" }).getAttribute("aria-current")).toBe("page");
+
+    const saved = screen.getByRole("tree", { name: "Saved searches" });
+    act(() => {
+      within(saved).getByRole("treeitem", { name: "Invoices" }).focus();
+    });
+    await user.keyboard("l");
+    expect(nameOf(focused())).toBe("Lunch");
+    await user.keyboard("{Enter}");
+    expect(within(saved).getByRole("treeitem", { name: "Lunch" }).getAttribute("aria-current")).toBe("page");
+    expect(useUiStore.getState().view).toMatchObject({ kind: "mail", mailView: "savedViews", savedSearchId: "5a5a5a5a-0000-4000-8000-000000000002" });
+  });
+});
+
+describe("the rail", () => {
+  it("its views and its bottom group are one Tab stop each, with Up, Down, Home and End", async () => {
+    const { user } = setup();
+    await screen.findByRole("listbox", { name: /^Messages in/ });
+    const views = screen.getByRole("toolbar", { name: "Mail views" });
+    expect(views.getAttribute("aria-orientation")).toBe("vertical");
+    const reachable = (group: HTMLElement) => within(group).getAllByRole("button").filter((button) => button.tabIndex === 0);
+    expect(reachable(views)).toEqual([screen.getByTestId("rail-inbox")]);
+    act(() => {
+      screen.getByTestId("rail-inbox").focus();
+    });
+    await user.keyboard("{ArrowDown}");
+    expect(focused()).toBe(screen.getByTestId("rail-later"));
+    await user.keyboard("{End}");
+    expect(focused()).toBe(screen.getByTestId("rail-savedViews"));
+    await user.keyboard("{Home}{ArrowUp}");
+    expect(focused()).toBe(screen.getByTestId("rail-inbox"));
+    // Enter is the button's own: it opens the view, which becomes the tab stop.
+    await user.keyboard("{End}{ArrowUp}{ArrowUp}{Enter}");
+    expect(heading()).toBe("Trash");
+    expect(reachable(views)).toEqual([screen.getByTestId("rail-trash")]);
+
+    const bottom = screen.getByRole("toolbar", { name: "Activity and settings" });
+    // Folded, the account switcher is part of it; the selected account is the stop.
+    expect(reachable(bottom)).toEqual([screen.getByTestId(`account-switch-${ADA.id}`)]);
+    act(() => {
+      screen.getByTestId(`account-switch-${ADA.id}`).focus();
+    });
+    await user.keyboard("{End}");
+    expect(focused()).toBe(screen.getByTestId("rail-settings"));
+    await user.keyboard("{ArrowUp}");
+    expect(focused()).toBe(screen.getByTestId("rail-outbox"));
+  });
+});
+
+describe("the Tab path to the message list", () => {
+  it("is a handful of stops with the sidebar unfolded: rail, account, folder tree, rail, list header", async () => {
+    const { user } = setup();
+    await unfold(user);
+    const stops = await tabToList(user);
+    expect(stops).toEqual([
+      "button: Inbox",
+      "button: Ada Lovelace",
+      "treeitem: Inbox, 3 unread",
+      "button: Activity",
+      "switch: Unread only",
+      "button: List options",
+      "button: Search",
+      "button: New message",
+    ]);
+  });
+
+  it("stays short with two accounts, favourites, inboxes and saved searches", async () => {
+    const { user } = setup({
+      accounts: [ADA, WORK],
+      mailboxes: [
+        ...standardMailboxes().map((mailbox) => (mailbox.id === 5 ? { ...mailbox, favoritePosition: 0 } : mailbox)),
+        makeMailbox({ id: 20, accountId: WORK.id, path: "INBOX", role: "inbox", roleSource: "server" }),
+        makeMailbox({ id: 21, accountId: WORK.id, path: "Kunden" }),
+        makeMailbox({ id: 22, accountId: WORK.id, path: "Kunden/Nord", parentId: 21 }),
+      ],
+      search: { groups: [GROUP], savedSearches: [makeSavedSearch({ name: "Invoices" })] },
+    });
+    await unfold(user);
+    await screen.findByRole("tree", { name: "Saved searches" });
+    await screen.findByRole("tree", { name: "Folders of Work" });
+    const stops = await tabToList(user);
+    const sidebar = stops.slice(1, stops.indexOf("button: Activity"));
+    // One stop per tree, plus the button that picks each account.
+    expect(sidebar.filter((stop) => stop.startsWith("treeitem"))).toHaveLength(5);
+    expect(sidebar).toHaveLength(7);
+    // With two accounts the list header adds its account and group choice.
+    expect(stops).toHaveLength(14);
+  });
+});

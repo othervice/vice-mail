@@ -236,7 +236,7 @@ describe("favourite folders and folder colours", () => {
       expect(core.callsOf("set_mailbox_favorite")).toEqual([{ mailboxId: 5, favorite: true }]);
     });
     const favorites = await screen.findByRole("region", { name: "Favourites" });
-    expect(within(favorites).getByRole("button", { name: /^Projekte/ })).toBeTruthy();
+    expect(within(favorites).getByRole("treeitem", { name: /^Projekte/ })).toBeTruthy();
 
     await user.keyboard("{Meta>}k{/Meta}");
     const palette = await screen.findByRole("dialog", { name: "Command palette" });
@@ -252,9 +252,10 @@ describe("favourite folders and folder colours", () => {
     await list();
     await openFolders(user);
     const favorites = await screen.findByRole("region", { name: "Favourites" });
-    const names = () => within(favorites).getAllByRole("button", { name: /^(Projekte|Sent)/ }).map((b) => b.getAttribute("aria-label"));
+    const names = () => within(favorites).getAllByRole("treeitem").map((b) => b.getAttribute("aria-label"));
     expect(names()).toEqual(["Projekte, 2 unread", "Sent"]);
-    within(favorites).getByRole("button", { name: "Projekte, 2 unread" }).focus();
+    const projekte = within(favorites).getByRole("treeitem", { name: "Projekte, 2 unread" });
+    projekte.focus();
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     await waitFor(() => {
       expect(core.callsOf("reorder_favorite_mailboxes")).toEqual([{ mailboxIds: [2, 5] }]);
@@ -263,6 +264,8 @@ describe("favourite folders and folder colours", () => {
       expect(names()).toEqual(["Sent", "Projekte, 2 unread"]);
     });
     expect(within(favorites).getByText("Projekte moved to position 2 of 2")).toBeTruthy();
+    // The moved favourite keeps the focus, in its new place.
+    expect(document.activeElement).toBe(within(favorites).getByRole("treeitem", { name: "Projekte, 2 unread" }));
     await user.click(within(favorites).getByRole("button", { name: "Options for Projekte" }));
     await user.click(screen.getByRole("menuitem", { name: "Move up" }));
     await waitFor(() => {
@@ -284,7 +287,7 @@ describe("favourite folders and folder colours", () => {
       expect(core.callsOf("set_mailbox_color")).toEqual([{ mailboxId: 5, color: 5 }]);
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Projekte, colour Green, 2 unread" })).toBeTruthy();
+      expect(screen.getByRole("treeitem", { name: "Projekte, colour Green, 2 unread" })).toBeTruthy();
     });
     await user.click(within(group).getByRole("radio", { name: "No colour" }));
     await waitFor(() => {

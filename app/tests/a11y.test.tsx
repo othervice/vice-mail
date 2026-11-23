@@ -354,7 +354,7 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await user.click(await screen.findByRole("button", { name: "Rename “Invoices”" }));
     expect(await seriousFindings()).toEqual([]);
     await user.keyboard("{Escape}");
-    await user.click(within(screen.getByRole("region", { name: "Saved searches" })).getByRole("button", { name: "Invoices" }));
+    await user.click(within(screen.getByRole("region", { name: "Saved searches" })).getByRole("treeitem", { name: "Invoices" }));
     await screen.findByRole("heading", { name: "Invoices" });
     expect(await seriousFindings()).toEqual([]);
   });
