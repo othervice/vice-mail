@@ -29,6 +29,11 @@ export interface MessageListSource {
   controls?: ReactNode;
   /** Stage 7: the account colour of a row, for lists that mix accounts (unified inbox, search). */
   accountColor?: (item: MessageListItem) => AccountColor;
+  /**
+   * Stage 8: the account's name next to its colour, in lists that mix accounts (the colour is
+   * never the only sign of the account).
+   */
+  accountName?: (item: MessageListItem) => string | undefined;
   /** Stage 7: what a row adds, such as its conversation size or the search highlights. */
   decorate?: (item: MessageListItem) => RowDecoration | undefined;
 }

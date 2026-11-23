@@ -13,6 +13,7 @@ import { useAccounts } from "../accounts/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { outboxCountsQueryKey, operationsQueryKey, useDiscardOperations, useOperations, useRetryOperations } from "../actions/queries";
 import { useMailboxes } from "../mailboxes/queries";
+import { useUiStore } from "../../stores/ui";
 
 /** States in the order a batch line names them. */
 const STATE_ORDER: readonly OperationState[] = ["failed", "conflict", "queued", "in_flight", "confirmed"];
@@ -232,6 +233,7 @@ export function ActivityView() {
   const { t } = useTranslation();
   const dragRegion = useWindowDragRegion();
   const accounts = useAccounts();
+  const showAccountsPage = useUiStore((state) => state.showAccountsPage);
   const list = accounts.data ?? [];
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -247,7 +249,18 @@ export function ActivityView() {
           />
         )}
         {accounts.isSuccess && list.length === 0 ? (
-          <EmptyState icon={History} title={t("activity.empty.title")} body={t("activity.empty.body")} />
+          // Stage 8: without an account the next step is to add one.
+          <EmptyState
+            icon={History}
+            title={t("activity.empty.title")}
+            body={t("presentation.activity.noAccount")}
+            action={{
+              label: t("mail.noAccount.action"),
+              onClick: () => {
+                showAccountsPage({ kind: "add" });
+              },
+            }}
+          />
         ) : (
           <div className="flex max-w-(--ui-content-max-width) flex-col gap-8">
             {list.map((account) => (

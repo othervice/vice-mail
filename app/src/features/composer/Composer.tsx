@@ -40,7 +40,7 @@ import { formatSize, htmlToText, invalidAddressIn, textToHtml } from "./addresse
 import { ComposerAttachments } from "./ComposerAttachments";
 import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
-import { RecipientField } from "./RecipientField";
+import { FIELD_ROW_FOCUS, RecipientField } from "./RecipientField";
 import { WritingHelp } from "../ai/WritingHelp";
 
 // The editor (TipTap, ProseMirror) loads with the first rich text body, not with the app.
@@ -833,6 +833,19 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             </select>
           </div>
         )}
+        {/* Stage 8: without the identities there is no From line; say why, at its place. */}
+        {identities.isError && (
+          <div className="border-b border-border px-4 py-2">
+            <ErrorNotice
+              context={t("presentation.composer.identitiesFailed")}
+              error={identities.error}
+              onRetry={() => {
+                void identities.refetch();
+              }}
+              data-testid="composer-identity-error"
+            />
+          </div>
+        )}
         {identityList.length === 1 && identity && (
           <p className="flex items-center gap-2 border-b border-border px-4 py-2 text-13" data-testid="composer-identity-single">
             <span className="w-12 shrink-0 text-secondary">{t("composer.from")}</span>
@@ -909,7 +922,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             data-testid="composer-bcc"
           />
         )}
-        <div className="flex items-center gap-2 border-b border-border px-4 py-1">
+        <div className={cx("flex items-center gap-2 border-b border-border px-4 py-1", FIELD_ROW_FOCUS)}>
           <label htmlFor={subjectId} className="w-12 shrink-0 text-13 text-secondary">
             {t("composer.subject")}
           </label>
@@ -1054,7 +1067,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
                 change({ bodyText: e.target.value });
               }}
               onBlur={saveNow}
-              className="min-h-(--ui-picker-list-height) flex-1 resize-none bg-transparent px-4 py-3 font-sans text-14 text-primary outline-none"
+              className="min-h-(--ui-picker-list-height) flex-1 resize-none bg-transparent px-4 py-3 font-sans text-14 text-primary focus-visible:-outline-offset-2"
               data-testid="composer-text-body"
             />
           </>
@@ -1071,6 +1084,19 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </pre>
         )}
         {fields.quotePosition === "above" && quoteBlock}
+        {/* Stage 8: the signature choice is missing while the signatures cannot be loaded. */}
+        {signatures.isError && (
+          <div className="px-4 pb-3">
+            <ErrorNotice
+              context={t("presentation.composer.signaturesFailed")}
+              error={signatures.error}
+              onRetry={() => {
+                void signatures.refetch();
+              }}
+              data-testid="composer-signatures-error"
+            />
+          </div>
+        )}
         {(signature || hasQuote || pool.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 text-13 text-secondary">
             {pool.length > 0 && (

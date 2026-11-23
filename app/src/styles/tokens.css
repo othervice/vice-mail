@@ -120,6 +120,8 @@
   --ui-section-height: 2rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
+  /* Stage 8: the account's name in rows of lists that mix accounts (unified inbox, search). */
+  --ui-row-account-width: 8rem;
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
      lines), the line length of plain-text mail and the width of an attachment card. */
   --ui-list-width-reading: 24rem;

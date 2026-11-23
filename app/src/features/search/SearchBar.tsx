@@ -169,6 +169,8 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
         <div
           className={cx(
             "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control border bg-surface-raised px-2",
+            // The field has no ring of its own; the box shows it (stage 8).
+            "has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-1 has-[input:focus-visible]:outline-focus-ring",
             problems.length > 0 ? "border-danger" : "border-border-strong",
           )}
         >

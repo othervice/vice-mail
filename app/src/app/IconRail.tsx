@@ -343,6 +343,12 @@ export function IconRail() {
         {expanded && (
           <div id={foldersId} className="flex flex-col gap-4 border-t border-border pt-4">
             <UnifiedTree accountCount={accountList.length} />
+            {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
+            {accounts.isSuccess && accountList.length === 0 && (
+              <p className="px-2 text-12 text-tertiary" data-testid="sidebar-no-accounts">
+                {t("presentation.sidebar.noAccounts")}
+              </p>
+            )}
             {/* Stage 7: saved searches as views. */}
             <SavedSearchNav />
             {accountList.map((account) => (

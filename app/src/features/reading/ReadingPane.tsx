@@ -326,7 +326,7 @@ export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscap
           aria-label={view ? undefined : t("reading.region")}
           aria-busy={query.isPending || body?.kind === "loading"}
           data-print-root
-          className="flex flex-col gap-4 px-6 py-6 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
+          className="flex flex-col gap-4 px-6 py-6 focus-visible:-outline-offset-2"
         >
           {content}
         </article>

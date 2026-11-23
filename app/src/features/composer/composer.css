@@ -9,8 +9,10 @@
   font-feature-settings: "liga" 0;
 }
 
+/* Stage 8: the ring sits inside the editor's area, which fills the composer up to its edges. */
 .composer-prose:focus-visible {
-  outline: none;
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: -2px;
 }
 
 .composer-prose p {

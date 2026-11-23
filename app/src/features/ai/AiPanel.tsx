@@ -592,6 +592,17 @@ export function AiPanel() {
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         <p className="text-12 text-secondary">{t("ai.panel.untrusted")}</p>
+        {/* Stage 8: without its settings no request can start; say so instead of grey buttons. */}
+        {settings.isError && (
+          <ErrorNotice
+            context={t("presentation.ai.settingsFailed")}
+            error={settings.error}
+            onRetry={() => {
+              void settings.refetch();
+            }}
+            data-testid="ai-panel-settings-error"
+          />
+        )}
         {bound ? (
           <ThreadTools key={bound.item.id} item={bound.item} account={bound.account} availability={data} settings={settings.data} />
         ) : (

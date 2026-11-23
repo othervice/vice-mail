@@ -6,6 +6,13 @@ import type { Address, ContactSuggestion } from "../../services/ipc";
 import { addAddresses, addressFull, addressLabel, looksLikeAddress, parseAddressList, sameAddress } from "./addresses";
 import { useContactSuggestions } from "./queries";
 
+/**
+ * Stage 8: the composer's fields have no frame of their own, so their row shows the focus ring
+ * while the field in it has the keyboard focus (the chips' buttons keep their own ring).
+ */
+export const FIELD_ROW_FOCUS =
+  "has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-2 has-[input:focus-visible]:outline-focus-ring";
+
 interface RecipientFieldProps {
   /** "To", "Cc", "Bcc": the visible label and the field's name for screen readers. */
   label: string;
@@ -110,7 +117,7 @@ export function RecipientField({
   };
 
   return (
-    <div className="relative flex min-w-0 items-start gap-2 border-b border-border px-4 py-1" data-testid={rest["data-testid"]}>
+    <div className={cx("relative flex min-w-0 items-start gap-2 border-b border-border px-4 py-1", FIELD_ROW_FOCUS)} data-testid={rest["data-testid"]}>
       <label htmlFor={inputId} className="w-12 shrink-0 py-1 text-13 text-secondary">
         {label}
       </label>

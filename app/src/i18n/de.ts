@@ -3028,4 +3028,21 @@ export const de: Translation = {
       below: "Unter der zitierten Nachricht",
     },
   },
+  // Stage 8: presentation (account colours with names) and the states of the views.
+  presentation: {
+    rowAccount: "Konto: {{name}}",
+    ai: {
+      settingsFailed: "Die KI-Einstellungen konnten nicht geladen werden, deshalb kann der Assistent keine Anfrage starten.",
+    },
+    composer: {
+      identitiesFailed: "Die Absenderadressen konnten nicht geladen werden.",
+      signaturesFailed: "Die Signaturen konnten nicht geladen werden.",
+    },
+    activity: {
+      noAccount: "Füge ein E-Mail-Konto hinzu. Änderungen auf dem Weg zu seinem Server erscheinen dann hier.",
+    },
+    sidebar: {
+      noAccounts: "Noch kein Konto. Seine Ordner erscheinen hier, sobald du eins hinzufügst.",
+    },
+  },
 };

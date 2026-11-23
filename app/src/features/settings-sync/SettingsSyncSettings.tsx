@@ -639,7 +639,16 @@ export function SettingsSyncSettings() {
           }}
         />
       )}
-      {accounts.isError && <ErrorNotice context={t("settingsSync.accountsFailed")} error={accounts.error} />}
+      {accounts.isError && (
+        <ErrorNotice
+          context={t("settingsSync.accountsFailed")}
+          error={accounts.error}
+          // Stage 8: the section needs the accounts; a way out instead of a dead end.
+          onRetry={() => {
+            void accounts.refetch();
+          }}
+        />
+      )}
       {status.data &&
         accounts.data &&
         (status.data.state === "off" ? (

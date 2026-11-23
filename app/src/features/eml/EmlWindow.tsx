@@ -177,7 +177,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
               aria-label={view ? undefined : t("eml.region")}
               aria-busy={query.isPending}
               data-print-root
-              className="flex flex-col gap-4 px-6 py-6 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
+              className="flex flex-col gap-4 px-6 py-6 focus-visible:-outline-offset-2"
             >
               {content}
             </article>

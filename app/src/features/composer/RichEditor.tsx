@@ -209,7 +209,7 @@ export function RichEditor({
         role: "textbox",
         // The system's spell checker (WKWebView, WebView2), in the languages the system offers.
         spellcheck: "true",
-        class: "composer-prose px-4 py-3 text-14 text-primary outline-none",
+        class: "composer-prose px-4 py-3 text-14 text-primary",
         "data-testid": testId,
       },
       handlePaste: (view, event) => {

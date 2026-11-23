@@ -158,7 +158,7 @@ function PalettePanel({ platform }: CommandPaletteProps) {
           setRefused(null);
         }}
         onKeyDown={onKeyDown}
-        className="h-12 w-full shrink-0 border-b border-border bg-transparent px-4 text-16 text-primary select-text placeholder:text-tertiary"
+        className="h-12 w-full shrink-0 border-b border-border bg-transparent px-4 text-16 text-primary select-text placeholder:text-tertiary focus-visible:-outline-offset-2"
       />
       <p id={`${id}-status`} aria-live="polite" className={cx("px-4 text-12", refused ? "py-2 text-danger" : "sr-only")}>
         {refused ?? (query.trim() ? t("palette.results", { count }) : "")}

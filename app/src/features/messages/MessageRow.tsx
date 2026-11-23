@@ -35,6 +35,8 @@ export interface RowDecoration {
   threadCount?: number;
   /** Found places (UTF-16 ranges) in subject, sender and preview. */
   highlights?: SearchHighlights;
+  /** Stage 8: the account's name, in lists that mix accounts; shown with the colour. */
+  account?: string;
 }
 
 /** Where `trimmed` starts in `raw`, so ranges into `raw` still fit after trimming. */
@@ -61,9 +63,9 @@ export function rowActivity(item: MessageListItem): MessageActivity | null {
 }
 
 /**
- * The row's accessible name, in reading order: state, who, subject, attachment, flag, pending or
- * failed change, full date. Explicit, because a name computed from the row's parts would run words
- * together.
+ * The row's accessible name, in reading order: state, who, subject, account (lists that mix
+ * accounts), attachment, flag, pending or failed change, full date. Explicit, because a name
+ * computed from the row's parts would run words together.
  */
 export function useRowLabel(item: MessageListItem, showRecipients: boolean, decoration?: RowDecoration): string {
   const { t, i18n } = useTranslation();
@@ -75,6 +77,7 @@ export function useRowLabel(item: MessageListItem, showRecipients: boolean, deco
     item.unread && t("list.unread"),
     who,
     item.subject.trim() || t("list.noSubject"),
+    decoration?.account && t("presentation.rowAccount", { name: decoration.account }),
     threadCount > 1 && t("threads.rowLabel", { count: threadCount }),
     item.hasAttachments && t("list.attachment"),
     item.flagged && t("list.flagged"),
@@ -226,6 +229,16 @@ export function MessageRowContent({
       <RowMarks item={item} />
     </>
   );
+  // Stage 8: which account, in words, wherever the avatar ring's colour tells accounts apart.
+  const accountElement = decoration?.account ? (
+    <span
+      title={decoration.account}
+      className="max-w-(--ui-row-account-width) shrink-0 truncate text-12 text-secondary"
+      data-testid="row-account"
+    >
+      {decoration.account}
+    </span>
+  ) : null;
   const timeElement = (
     <time
       dateTime={new Date(item.date).toISOString()}
@@ -252,6 +265,7 @@ export function MessageRowContent({
           <span className="flex min-w-0 items-center gap-2">
             {sender}
             {marks}
+            {accountElement}
             {timeElement}
           </span>
           {subjectLine}
@@ -261,6 +275,7 @@ export function MessageRowContent({
           {sender}
           {subjectLine}
           {marks}
+          {accountElement}
           {timeElement}
         </>
       )}

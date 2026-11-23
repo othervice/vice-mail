@@ -667,7 +667,11 @@ export function MessageList({
         }}
         onScroll={rememberAnchor}
         data-testid="message-list"
-        className="group/list min-h-0 flex-1 overflow-y-auto px-2 outline-none"
+        className={cx(
+          "group/list min-h-0 flex-1 overflow-y-auto px-2",
+          // The cursor row shows the focus ring; without one (nothing loaded yet) the list does.
+          activeId ? "outline-none" : "focus-visible:-outline-offset-2",
+        )}
       >
         <div ref={virtualizer.containerRef} role="presentation" className="relative w-full">
           {virtualItems.map((virtualItem) => {
@@ -724,7 +728,9 @@ export function MessageList({
             const isCursor = virtualItem.index === cursorRow;
             const optionId = `${optionPrefix}-${String(row.item.id)}`;
             const previewId = row.item.preview?.trim() ? previewDomId(optionId) : undefined;
-            const decoration = source?.decorate?.(row.item);
+            const accountName = source?.accountName?.(row.item);
+            const decorated = source?.decorate?.(row.item);
+            const decoration = accountName ? { ...decorated, account: accountName } : decorated;
             return (
               <MessageOption
                 key={virtualItem.key}

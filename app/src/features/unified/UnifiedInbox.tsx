@@ -14,6 +14,7 @@ import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useAccountGroups, useHiddenAccounts } from "./queries";
+import { accountShortNames } from "../accounts/accountName";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -44,11 +45,14 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const list = useRef<MessageListHandle>(null);
   const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
   const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
+  // Stage 8: with more than one account, each row names its account next to the colour.
+  const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
   const sorted = useUnifiedInboxSource(view, true);
   const source: MessageListSource = {
     empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
     ...sorted,
     accountColor,
+    ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
   };
   const query = source.query;
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;

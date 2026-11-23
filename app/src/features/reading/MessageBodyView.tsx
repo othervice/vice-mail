@@ -25,7 +25,10 @@ export function HtmlBody({ srcdoc, title, scrollerRef }: HtmlBodyProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   useFrameHeight(frameRef, scrollerRef);
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-mail-canvas">
+    // Stage 8: the frame's own focus ring would be cut off by the rounded clip, so the card shows
+    // it while the focus is in the mail (`:focus-within` reaches into the frame, `:focus-visible`
+    // of the frame element is not the same in WebKit and WebView2).
+    <div className="overflow-hidden rounded-card border border-border bg-mail-canvas focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
       <iframe
         ref={frameRef}
         sandbox={MAIL_FRAME_SANDBOX}

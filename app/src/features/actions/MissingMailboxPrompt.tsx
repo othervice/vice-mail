@@ -76,7 +76,7 @@ export function MissingMailboxPrompt({ account, mailboxes, missing, onChoose, on
       ref={regionRef}
       tabIndex={-1}
       aria-labelledby={titleId}
-      className="mx-2 mt-2 flex flex-col gap-4 rounded-card border border-border-strong bg-canvas p-4 outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
+      className="mx-2 mt-2 flex flex-col gap-4 rounded-card border border-border-strong bg-canvas p-4"
       data-testid="missing-mailbox"
     >
       <div className="flex flex-col gap-1">

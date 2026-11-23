@@ -5,7 +5,7 @@ import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { Notice } from "../../components/Notice";
-import type { Account, MessageId, SearchHit } from "../../services/ipc";
+import type { Account, MessageId, MessageListItem, SearchHit } from "../../services/ipc";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { ListPage, MessageListSource } from "../messages/listSource";
@@ -16,6 +16,7 @@ import type { FocusRequest } from "../reading/ReadingPane";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
+import { accountShortNames } from "../accounts/accountName";
 
 /** What the result lists need of a search query: pages with hits and their rows. */
 type HitPage = ListPage & { hits: readonly SearchHit[]; matchesNothing?: boolean };
@@ -29,10 +30,13 @@ function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: 
     [pages],
   );
   const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
+  // Stage 8: with more than one account, each hit names its account next to the colour.
+  const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
   const source: MessageListSource = {
     query,
     buildRows,
     accountColor: (item) => colors.get(item.accountId) ?? 0,
+    ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
     decorate: (item) => {
       const hit = hitById.get(item.id);
       return hit ? { highlights: hit.highlights } : undefined;

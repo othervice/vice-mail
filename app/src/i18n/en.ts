@@ -3025,6 +3025,23 @@ export const en = {
       below: "Below the quoted message",
     },
   },
+  // Stage 8: presentation (account colours with names) and the states of the views.
+  presentation: {
+    rowAccount: "Account: {{name}}",
+    ai: {
+      settingsFailed: "The AI settings could not be loaded, so the assistant cannot start a request.",
+    },
+    composer: {
+      identitiesFailed: "The sender addresses could not be loaded.",
+      signaturesFailed: "The signatures could not be loaded.",
+    },
+    activity: {
+      noAccount: "Add an email account. Changes on their way to its server appear here.",
+    },
+    sidebar: {
+      noAccounts: "No account yet. Its folders appear here once you add one.",
+    },
+  },
 } as const;
 
 type DeepStrings<T> = { readonly [K in keyof T]: T[K] extends string ? string : DeepStrings<T[K]> };
