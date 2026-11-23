@@ -9,10 +9,11 @@
 #                            macOS 64 px and up, and the PNG files tauri.conf.json lists
 #    - source-macos-16.svg, source-macos-32.svg
 #                            simplified icon for the small macOS sizes (Finder lists, menus)
-#    - source-windows.svg    the master framed for Windows (body fills 94 %, no shadow): 60 px and up
-#    - source-16/24/32/48.svg
-#                            simplified icon, pixel-snapped per size: Windows title bar, taskbar,
-#                            Explorer up to 48 px; 20, 30, 36 and 40 px come from the nearest of them
+#    - source-windows.svg    the master framed for Windows (body fills 88 %, no shadow): 60 px and up
+#    - source-16/20/24/30/32/36/40/48.svg
+#                            simplified icon, each drawn on its own pixel grid and rendered only at
+#                            its own size: taskbar (24/30/36/48 at 100/125/150/200 %), title bar and
+#                            small icons (16/20/24/32), Start and the window icon (32/40/48/64)
 # 3. icon.icns is assembled with iconutil, icon.ico (PNG entries, Windows Vista and later) by the
 #    Python below.
 # Needs macOS (iconutil), pnpm with the app's node_modules installed, and python3 (standard library).
@@ -40,10 +41,9 @@ render source.svg mac 64,128,256,512,1024
 render source-macos-16.svg mac16 16
 render source-macos-32.svg mac32 32
 render source-windows.svg win 60,64,72,80,96,128,256
-render source-16.svg w16 16
-render source-24.svg w24 20,24
-render source-32.svg w32 30,32
-render source-48.svg w48 36,40,48
+for size in 16 20 24 30 32 36 40 48; do
+  render "source-$size.svg" "w$size" "$size"
+done
 
 # The PNG files tauri.conf.json bundles (Linux, default window icon outside Windows and macOS dev).
 cp "$tmp/w32/32x32.png" "$here/32x32.png"
@@ -66,15 +66,17 @@ cp "$tmp/mac/512x512.png" "$iconset/icon_512x512.png"
 cp "$tmp/mac/1024x1024.png" "$iconset/icon_512x512@2x.png"
 iconutil -c icns "$iconset" -o "$here/icon.icns"
 
-# icon.ico: every size Windows asks for at 100 to 250 % scaling, each from its own source.
+# icon.ico: every size Windows asks for at 100 to 250 % scaling, each from its own source. Windows
+# picks entries by size, not by position; Tauri embeds the whole file as the exe's icon resource and
+# loads the window icon from it at runtime (the 32/40/48/64 px entry, by display scale).
 python3 -I - "$tmp" "$here/icon.ico" <<'PY'
 import struct
 import sys
 from pathlib import Path
 
 tmp, out = Path(sys.argv[1]), Path(sys.argv[2])
-sources = {16: "w16", 20: "w24", 24: "w24", 30: "w32", 32: "w32", 36: "w48", 40: "w48", 48: "w48",
-           60: "win", 64: "win", 72: "win", 80: "win", 96: "win", 128: "win", 256: "win"}
+sources = {size: f"w{size}" for size in (16, 20, 24, 30, 32, 36, 40, 48)}
+sources.update({size: "win" for size in (60, 64, 72, 80, 96, 128, 256)})
 images = [(size, (tmp / name / f"{size}x{size}.png").read_bytes()) for size, name in sources.items()]
 # ICONDIR, then one ICONDIRENTRY (16 bytes) per image, then the PNG data. 256 is written as 0.
 data = struct.pack("<HHH", 0, 1, len(images))

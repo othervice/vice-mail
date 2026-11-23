@@ -151,6 +151,16 @@ version: once a newer version has upgraded the local database, an older one refu
 Run the installer of the new version; it replaces the installed one and keeps your data. As on
 macOS, do not go back to an older version.
 
+### Old icon after an update
+
+Windows caches app icons. After an update that changes the icon, a pinned taskbar button, the
+Start menu or a desktop shortcut can keep showing the old one. To refresh it, try these in order:
+
+1. Press **Win+R**, run `ie4uinit.exe -show` and wait a few seconds.
+2. Unpin Vice Mail (right-click its taskbar button → **Unpin from taskbar**, *Von Taskleiste
+   lösen*), start the app, then pin it again (**Pin to taskbar**, *An Taskleiste anheften*).
+3. Sign out of Windows and back in, or restart the PC.
+
 ## Where the app keeps its data
 
 The folders are named after the app's identifier, `org.vicemail.desktop`.

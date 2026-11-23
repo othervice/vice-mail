@@ -44,6 +44,12 @@ one-colour print or embroidery, use Vice orange alone.
   (`source-16.svg` to `source-48.svg`, and `source-macos-16.svg` and `source-macos-32.svg`). They
   have no glow, use thicker lines, and are aligned to the pixel grid. Use these whenever the icon
   is shown below 64 px.
+- **Windows sizes:** Windows picks the icon entry by display scale: the taskbar uses 24, 30, 36
+  and 48 px at 100, 125, 150 and 200 %, the title bar and small icons 16, 20, 24 and 32 px, and
+  Start and the window icon 32, 40, 48 and 64 px. Each of 16, 20, 24, 30, 32, 36, 40 and 48 px
+  has its own source drawn on that size's pixel grid; a frame scaled from a neighbouring size
+  looks blurry. The plate fills 87 to 92 % of the canvas (16 px: all of it), so the square sits
+  in the taskbar at the optical size of the Windows 11 icons around it.
 - **Mono glyph:** 16 px or more.
 
 ## Do
@@ -67,6 +73,6 @@ The artwork was redrawn on 23 Nov 2026 from the human's reference images, which 
 repository. Deliberate differences from those images:
 
 - The icon follows the macOS grid (an 824 px body in 1024 px, continuous corners, a soft shadow),
-  and the Windows icon fills 94 % of its canvas.
+  and the Windows icon fills 88 % of its canvas (94 % looked too heavy next to Windows 11 icons).
 - The glow is lighter, so the icon stays crisp.
 - The wordmark uses the app icon's mark, without the extra orange frame of the sketch.

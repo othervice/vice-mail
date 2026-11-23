@@ -5,8 +5,9 @@
 
 Outputs
   app/src-tauri/icons/source.svg            app icon master, macOS grid (824 body in 1024, shadow)
-  app/src-tauri/icons/source-windows.svg    same artwork, Windows framing (body fills 94 %, no shadow)
-  app/src-tauri/icons/source-{16,24,32,48}.svg       simplified icon, pixel-snapped, Windows framing
+  app/src-tauri/icons/source-windows.svg    same artwork, Windows framing (body fills 88 %, no shadow)
+  app/src-tauri/icons/source-{16,20,24,30,32,36,40,48}.svg
+                                            simplified icon, drawn on each size's own pixel grid, Windows framing
   app/src-tauri/icons/source-macos-{16,32}.svg       simplified icon, pixel-snapped, macOS margins
   docs/brand/icon.svg, mark.svg, glyph-mono.svg, wordmark-dark.svg, wordmark-light.svg
 
@@ -244,23 +245,32 @@ def icon_master(platform):
     content = f"<defs>\n{defs}\n{mark_defs('')}\n{filters('')}\n</defs>\n{shadow}{layers}\n{mark('')}"
     if platform == "macos":
         return svg((0, 0, 1024, 1024), content)
-    # Windows: the same artwork, cropped so the body fills 94 % of the canvas.
-    side = w / 0.94
+    # Windows: the same artwork, framed so the body fills 88 % of the canvas, like the small sizes
+    # (87 to 92 %) and the square icons of Windows 11 itself. 94 % looked too heavy in the taskbar.
+    side = w / 0.88
     o = 512 - side / 2
     return svg((o, o, side, side), content, size=(1024, 1024))
 
 
 # ---------------------------------------------------------------------------------------------
-# App icon, simplified (16 to 48 px): pixel-snapped, no filters, fewer edges.
-# Every value is in pixels of the target size; `m` is the transparent margin.
+# App icon, simplified (16 to 48 px): no filters, fewer edges, and every Windows size drawn on its own
+# pixel grid. Windows picks the exact size per display scale (taskbar 24/30/36/48 px at 100/125/150/
+# 200 %, title bar and small icons 16/20/24/32, Start and window icon 32/40/48/64), so none of them
+# is resampled from a neighbour: a 30 px frame scaled from the 32 px drawing is blurry.
+# Every value is in pixels of the target size; `m` is the transparent margin. The plate fills 87 to
+# 92 % of the canvas (16 px: all of it), the envelope and V the same share of the plate at every size.
 
 SMALL = {
     # name: size, margin, corner radius, rim, envelope box (x0, y0, x1, y1), outline width,
-    #       V: top, tip, notch, outer x (left, right), inner x (left, right)
+    #       V: top, tip, notch, outer x (left, right), inner x (left, right); flap: width of the flap edges
     "16": dict(N=16, m=0, r=3.5, rim=1, env=(2, 6, 14, 14), u=1.5, v=(3, 11.6, 7.9, 2, 14, 5.1, 10.9)),
-    "24": dict(N=24, m=1, r=4.75, rim=1, env=(4, 9, 20, 21), u=2, v=(5, 17, 11.5, 3.5, 20.5, 8, 16)),
-    "32": dict(N=32, m=1, r=6.5, rim=1.5, env=(5, 12, 27, 28), u=2.5, v=(7, 23.25, 15.5, 5, 27, 11, 21), flap=1),
-    "48": dict(N=48, m=2, r=9.5, rim=2, env=(8, 18, 40, 41), u=3, v=(11, 34.5, 23.5, 8, 40, 16.5, 31.5), flap=1.25),
+    "20": dict(N=20, m=1, r=3.75, rim=1, env=(4, 7, 16, 17), u=1.5, v=(4, 14, 9.25, 3.5, 16.5, 7, 13)),
+    "24": dict(N=24, m=1, r=4.5, rim=1, env=(4, 9, 20, 21), u=2, v=(5, 17.25, 11.5, 3.5, 20.5, 8, 16)),
+    "30": dict(N=30, m=2, r=5.5, rim=1, env=(5, 11, 25, 25), u=2, v=(6, 20.75, 13.75, 4.5, 25.5, 10.25, 19.75), flap=1),
+    "32": dict(N=32, m=2, r=6, rim=1, env=(5, 12, 27, 27), u=2, v=(7, 22.5, 15.25, 4.5, 27.5, 10.75, 21.25), flap=1),
+    "36": dict(N=36, m=2, r=6.75, rim=1.5, env=(6, 14, 30, 30), u=2.5, v=(8, 25, 17, 5.5, 30.5, 12.25, 23.75), flap=1),
+    "40": dict(N=40, m=2, r=7.5, rim=2, env=(7, 15, 33, 34), u=3, v=(9, 28.25, 19.25, 6.5, 33.5, 13.75, 26.25), flap=1.25),
+    "48": dict(N=48, m=3, r=8.75, rim=2, env=(9, 18, 39, 40), u=3, v=(11, 33.25, 23, 8.5, 39.5, 16.75, 31.25), flap=1.25),
     "macos-16": dict(N=16, m=1, r=3, rim=1, env=(3, 6, 13, 13.5), u=1.25, v=(4, 11, 7.9, 3, 13, 5.6, 10.4)),
     "macos-32": dict(N=32, m=3, r=5.75, rim=1, env=(6, 12, 26, 27), u=2, v=(8, 22.5, 15.5, 6, 26, 11, 21)),
 }
@@ -282,8 +292,8 @@ def icon_small(cfg):
     halo = max(1.0, N / 20)
     flap = ""
     if cfg.get("flap"):  # bottom flap edges, from the inner corners towards the V
-        ax = (m + 0.359 * B, N - m - 0.359 * B)
-        ay = m + 0.593 * B
+        ax = (ex0 + 0.3 * (ex1 - ex0), ex1 - 0.3 * (ex1 - ex0))
+        ay = ey0 + 0.45 * (ey1 - ey0)
         flap = (f'<path d="M{n(ex0 + u)} {n(ey1 - u)}L{n(ax[0])} {n(ay)}M{n(ex1 - u)} {n(ey1 - u)}L{n(ax[1])} {n(ay)}" '
                 f'stroke="#ff9214" stroke-width="{n(cfg["flap"])}" stroke-linecap="round"/>')
     defs = "\n".join([
