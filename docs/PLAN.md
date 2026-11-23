@@ -27,8 +27,8 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 08 | [Bedienung und Barrierefreiheit](stages/08-bedienung-und-barrierefreiheit.md) | offen | Layouts, Tastatur, Command Palette |
 | 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | in Arbeit | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
 | 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | in Arbeit | Signaturen, Vorlagen, Kontakte, Später senden |
-| 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | in Arbeit | **Geräte gleichen sich über das Postfach ab** |
-| 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | in Arbeit | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
+| 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | fertig | **Geräte gleichen sich über das Postfach ab** |
+| 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | fertig | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
 | 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | offen | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
 | 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | bei Bedarf | Microsoft, Gmail-Eigenheiten, JMAP |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen | öffentliches Repo, signierte Builds, Updates |

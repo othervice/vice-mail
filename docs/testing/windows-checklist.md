@@ -289,6 +289,68 @@ Das echte Konto ist nur lesend. Für diese Schritte ein Nebenkonto nehmen oder s
   Jeder Zugriff erscheint in der App unter „Zugriffe“. Not-Aus trennt den Client sofort.
 - **Ergebnis:**
 
+## 11. Schreiben und Senden (Stufe 5)
+
+Senden nur von einem Konto mit freigeschaltetem Schreibzugriff (Abschnitt 9.2), am besten an die
+eigene Adresse.
+
+**11.1 Neue Mail und Entwurf**
+- **Tun:** „Neue Nachricht“ (Strg+N), Empfänger, Betreff und Text eingeben, eine Datei anhängen
+  (Dialog und Ziehen aus dem Explorer), den Composer schließen.
+- **Erwartet:** Der Entwurf bleibt erhalten und liegt nach wenigen Sekunden genau einmal im
+  Entwürfe-Ordner des Servers. Wieder öffnen (Doppelklick oder Enter im Ordner „Entwürfe“) zeigt
+  denselben Stand.
+- **Ergebnis:**
+
+**11.2 Senden mit Verzögerung**
+- **Tun:** Senden (Strg+Enter), im Hinweis sofort „Rückgängig“; danach erneut senden und warten.
+- **Erwartet:** „Rückgängig“ öffnet den Entwurf wieder, nichts wird gesendet. Beim zweiten Mal kommt
+  die Mail genau einmal an, eine Kopie liegt in „Gesendet“. Umlaute und Emoji in Betreff und
+  Dateiname bleiben erhalten.
+- **Ergebnis:**
+
+**11.3 Antworten und Weiterleiten**
+- **Tun:** Auf die angekommene Mail antworten (R), allen antworten (A), weiterleiten (F).
+- **Erwartet:** Zitat und Empfänger stimmen, die Antwort erscheint im selben Gesprächsverlauf.
+  Die Ansicht „Ausgang“ zeigt laufende und fehlgeschlagene Sendungen.
+- **Ergebnis:**
+
+## 12. Suche und mehrere Konten (Stufe 7)
+
+**12.1 Suche**
+- **Tun:** Suche öffnen (Strg+F oder /), einen Begriff, dann `from:` und einen Zeitraum eingeben;
+  „Auf dem Server suchen“ ausprobieren.
+- **Erwartet:** Treffer erscheinen beim Tippen, Fundstellen sind markiert; Tippfehler in der
+  Suchsprache werden erklärt.
+- **Ergebnis:**
+
+**12.2 Gespräche und vereinter Posteingang (mit zwei Konten)**
+- **Tun:** In „Gesendet“ oder „Archiv“ die Gesprächsansicht einschalten; zweites Konto hinzufügen
+  und den vereinten Posteingang öffnen.
+- **Erwartet:** Zusammengehörige Mails stehen in einer Zeile mit Anzahl. Im vereinten Posteingang
+  trägt jede Zeile die Farbe ihres Kontos; ausgeblendete Konten fehlen.
+- **Ergebnis:**
+
+## 13. Sortierter Posteingang (Stufe 9, Teil A)
+
+- **Tun:** Posteingang ansehen; ein Bündel (Newsletter, Benachrichtigungen) aufklappen; eine Mail
+  anheften (P), auf später legen (B) und als Aufgabe markieren (T); „Warum hier?“ im Lesebereich.
+- **Erwartet:** Angeheftete und zurückgekehrte Mails stehen oben, Bündel klappen an Ort und Stelle
+  auf. Anheften, Später und Aufgabe ändern nichts auf dem Server (auch nicht bei nur lesendem
+  Konto). Die Ansichten „Später“, „Angeheftet“ und „Aufgaben“ zeigen die Mails.
+- **Ergebnis:**
+
+## 14. Einstellungs-Sync (Stufe 11, braucht zwei Geräte)
+
+Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` des gewählten Kontos.
+
+- **Tun:** Auf dem Mac oder Windows: Einstellungen → Einstellungs-Sync für ein Konto einschalten,
+  Passphrase vergeben. Auf dem zweiten Gerät dasselbe Konto einrichten, dem Sync beitreten.
+- **Erwartet:** Vorschau zeigt, was übernommen wird; danach gleichen Design, Sprache, Signaturen
+  und Kontengruppen ab. Passwörter werden nicht übertragen, das zweite Gerät fragt danach. Eine
+  falsche Passphrase ändert nichts.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._
