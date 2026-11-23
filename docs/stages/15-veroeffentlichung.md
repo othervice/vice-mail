@@ -23,7 +23,8 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   - *Vorbereitet am 23.11.2026 (0037, noch nicht abgehakt):* `tauri-plugin-updater` =2.14.1 nur aus Rust; Schalter „Automatisch nach Updates suchen“ (aus), einmalige Frage nach dem ersten Konto, Tagesdrossel, „Jetzt suchen“, Download und „Neu starten und installieren“ nur nach Klick, Windows `passive`; Endpunkt `https://github.com/othervice/vice-mail/releases/latest/download/latest.json` in `tauri.conf.json`; Schlüssel `org.vicemail.updater` im Schlüsselbund erzeugt, öffentlicher Schlüssel in `tauri.conf.json`; `VICEMAIL_UPDATER=1` für `scripts/build-macos.sh`, `build-windows.sh`, `release-local.sh` (signierte Artefakte, Signaturprüfung, `latest.json` über `scripts/updater-manifest.mjs`); Ablauf, Sicherung und Wechsel des Schlüssels in `docs/RELEASING.md`. Getestet gegen einen lokalen Update-Server (Rust) und in Vitest; der Desktop-Test `app/tests/e2e/updates.e2e.mjs` lief im Desktop-Lauf auf a7dd759 mit 4 von 4 grün (siehe Ergebnis).
   - *Offen bis zur Veröffentlichung:* erstes Release mit `latest.json` auf GitHub, dann Update von einer Version auf die nächste auf echtem macOS und Windows (Abnahmepunkt 2). **Der Mensch sichert den privaten Schlüssel und sein Passwort** (`docs/RELEASING.md`, „Back it up now“).
 - [ ] **Sicherheitsprüfung.** `/security-review` über den gesamten Code. Bedrohungsmodell als `docs/SECURITY_MODEL.md`: was geschützt ist, was nicht, welche Grenzen es gibt. Zeitlich begrenztes Fuzzing von MIME-Parser-Anbindung und HTML-Pipeline. Befunde beheben oder begründet offen lassen.
-- [ ] **Erster Start.** Geführte Einrichtung für neue Nutzer: Konto, Thema, optional Sync und KI.
+- [x] **Erster Start.** Geführte Einrichtung für neue Nutzer: Konto, Thema, optional Sync und KI.
+  - *Umgesetzt am 23.11.2026 (0044):* Eine neue Installation zeigt statt des Rahmens fünf Schritte auf einer Karte (Willkommen mit vier Zusagen, Konto mit dem vorhandenen Formular, Darstellung, Optional mit Einstellungs-Sync, KI und der Update-Frage aus 0037, Fertig mit dem Hinweis „liest nur“); „Einrichtung überspringen“ auf jedem Schritt; der Kern merkt sich das Ende je Gerät, Installationen mit Konto sehen ihn nie. Gestaltung in `docs/DESIGN.md` („Erster Start“), Prüfung siehe Ergebnis.
 - [x] **Diagnose.** „Diagnose exportieren“ packt Logs und Systemangaben in eine Datei; ein Test stellt sicher, dass keine Geheimnisse und keine Mail-Inhalte enthalten sind.
   - *Umgesetzt am 23.11.2026:* Einstellungen → Über → „Diagnose exportieren …“: Speichern-Dialog des Systems (Downloads, `<produkt>-diagnostics-JJJJ-MM-TT.txt`), dann sammelt, schwärzt und schreibt der Kern (`crates/mail-engine/src/diagnostics/`) eine reine Textdatei. Inhalt, Ausschlüsse und Schwärzung in `docs/PRIVACY.md` („Diagnostics“); Prüfung siehe Ergebnis.
 
@@ -165,7 +166,54 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   und der Installer nativ. **Ungeprüft:** der GitHub-Workflow ist noch nie gelaufen (erst nach dem
   ersten Push auf GitHub), damit auch noch kein Testlauf auf echtem Windows.
 
+- Erster Start (23.11., a8cd472, 143047d, d6e2ce5, af6d28b, fec0d33; Entscheidung 0044): fünf
+  Schritte auf einer Karte statt des Rahmens, Geräte-Einstellung `first_start` im Kern
+  (`getFirstStart`, `finishFirstStart`, keine Migration), Update-Frage aus 0037 im Schritt
+  „Optional“ (Nachtrag in 0037), vierte Zusage „Keine Telemetrie“ auch im leeren Zustand,
+  `attach()` der Desktop-Tests überspringt den ersten Start an einer Stelle
+  (`app/tests/e2e/support/app.mjs`). Die Nummern 0041 bis 0043 waren von anderer Arbeit belegt; der
+  erste Commit nannte noch 0041, 143047d berichtigt das.
+  **Ausgeführt und geprüft:** `mail-engine` 6 Tests `first_start::tests` (neue Installation bis
+  zum Ende und über einen Neustart, Überspringen ohne Konto, Installation mit Konto auch nach dem
+  Entfernen des Kontos, Konto während des Ablaufs, beschädigter Wert, nicht in `SYNCED_SETTINGS`),
+  `mail-model` Wire-Format, Bindings mit `--features e2e` erzeugt und frisch. Vitest
+  `tests/first-start.test.tsx` 22 Tests: ganzer Ablauf mit Konto im eingebetteten Formular, Thema
+  und Akzent sofort und im Kern, Update-Frage beim Verlassen von „Optional“ beantwortet und danach
+  keine Karte, Schalter an bleibt an, Überspringen auf jedem der vier ersten Schritte, nur einmal,
+  nie mit vorhandenem Konto, vorher übersprungen kommt die Karte einmal nach dem ersten Konto, von
+  „Optional“ übersprungen zählt als Antwort, kein Schalter ohne Updater, Escape und Zurück behalten
+  die Eingaben, nur Tastatur (Fokus auf jeder Überschrift), ohne Konto, Einstellungs-Sync im
+  Schritt einrichten und zurück, KI schaltet nichts ein, Fehler beim Beenden mit erneutem Versuch,
+  Rahmen wenn der Kern nicht antwortet, Deutsch vollständig, axe hell und dunkel auf jedem Schritt
+  ohne schwere Befunde. Desktop-Test `first-start.e2e.mjs` (läuft zuerst, auf dem frischen
+  Datenverzeichnis) 7 von 7 grün: statt des Rahmens der erste Schritt, Fokus auf jeder Überschrift,
+  keine CSP-Verletzung, Fensterknöpfe frei, Karte, Fußzeile und „Einrichtung überspringen“ im
+  Fenster und nichts scrollt seitwärts bei 1200 × 800 und 900 × 600, Escape behält die Adresse,
+  Thema und Akzent im Kern, Update-Schalter aus und nach „Weiter“ weiter aus, danach der Rahmen und
+  `{show: false, outcome: "completed"}`. Bildschirmfotos aller Schritte hell und dunkel, dazu
+  Willkommen, Konto und Optional bei 900 × 600: `app/tests/e2e/screenshots/first-start-*.png`
+  (nicht eingecheckt). **Voller Desktop-Lauf** auf fec0d33 über `scripts/e2e-gui.sh`:
+  „Spec Files: 21 passed, 1 failed, 22 total“ (123 Tests grün, 1 rot, 6 bei 2560 × 1440
+  übersprungen); rot war die Messung in `account-sync.e2e.mjs` „scrolls the list smoothly while the
+  first sync is running“ (längster Frame 55 ms statt höchstens 50 ms, Systemlast um 3, andere
+  Sitzungen bauten); dieselbe Spec allein danach auf demselben Build 15 von 15 grün.
+  `scripts/check.sh` im Haupt-Checkout: rot im ersten Schritt „Rust formatting“, nur in den noch
+  nicht fertigen Dateien der parallelen Stufe-14-Arbeit (OAuth, JMAP, u. a.
+  `crates/mail-engine/src/oauth/*`, `crates/mail-store/src/jmap.rs`, `crates/mail-imap/src/smtp/*`,
+  `app/src-tauri/src/commands/oauth.rs`), keine Datei dieser Aufgabe; danach bricht das Skript ab.
+  Deshalb zusätzlich im eigenen Worktree auf genau fec0d33: vollständig grün (332 s, Vitest 82
+  Dateien, 3940 Tests).
+  **Ungeprüft:** Windows (WebView2, native Titelleiste über dem Band, Layout), echte Screenreader
+  (VoiceOver, Narrator), ein Konto im Ablauf der echten App (der Desktop-Test fügt bewusst keins
+  hinzu, `account-sync.e2e.mjs` braucht das leere Datenverzeichnis; das eingebettete Formular ist
+  nur in Vitest gegen den Fake-Kern geprüft), „Jetzt einrichten“ des Einstellungs-Sync in der echten
+  App (nur Vitest), die Update-Frage in einem Release-Build mit echtem Endpunkt (der Desktop-Build
+  hat einen Testendpunkt; der Schalter erscheint dort und blieb aus).
+
 **Wartet auf**
+- Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows
+  (frische Installation, z. B. ein neues Benutzerkonto des Systems); er erscheint nur, solange es
+  kein Konto gibt und er nie beendet wurde.
 - Mensch: den privaten Update-Schlüssel und sein Passwort sichern (`docs/RELEASING.md`, „Back it up
   now“).
 - Mensch (macOS-Signatur, nach der Aktivierung der Apple-Mitgliedschaft): die Schritte 1 bis 6 in
