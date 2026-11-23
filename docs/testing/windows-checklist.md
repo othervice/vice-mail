@@ -351,6 +351,63 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   falsche Passphrase ändert nichts.
 - **Ergebnis:**
 
+## 15. Bedienung (Stufe 8, ab Prototyp 2)
+
+**15.1 Command Palette und Kürzel**
+- **Tun:** Strg+K, „arch“ tippen, Enter; danach Einstellungen → Tastatur ein Kürzel ändern und eine
+  schon belegte Taste ausprobieren; App neu starten.
+- **Erwartet:** Die Palette findet die Aktion und führt sie aus. Das geänderte Kürzel wirkt sofort und
+  nach dem Neustart; eine Doppelbelegung wird mit dem Namen des anderen Befehls abgelehnt. Windows-
+  Systemkürzel (Alt+F4, Win+…) lassen sich nicht belegen.
+- **Ergebnis:**
+
+**15.2 Layouts und eigene Fenster**
+- **Tun:** Einstellungen → Darstellung: Lesebereich rechts, unten, statt der Liste; kompakte Zeilen;
+  Textgröße 150 %. Eine Mail über die Palette „In neuem Fenster öffnen“, einen Entwurf „Im eigenen
+  Fenster“ öffnen; Fenster mit Windows+Pfeil andocken, Skalierung 150 % in Windows probieren.
+- **Erwartet:** Alles bleibt bedienbar, nichts wird abgeschnitten. Links in der Mail im eigenen
+  Fenster werden genauso geprüft wie im Hauptfenster. Der Composer im eigenen Fenster schließt sich
+  nach dem Senden.
+- **Ergebnis:**
+
+## 16. Posteingang-Komfort Teil B (Stufe 9, ab Prototyp 2)
+
+- **Tun:** Einen Newsletter mit „Abmelden“-Leiste öffnen und die Frage abbrechen; eine
+  Kalendereinladung öffnen; eine Mail „Als .eml speichern“ und die Datei im Explorer doppelklicken;
+  eine Mail drucken (Strg+P, auch „Als PDF“); Einstellungen → Allgemein: Standard-Mail-App;
+  im Browser einen `mailto:`-Link anklicken.
+- **Erwartet:** Ohne Klick geht keine Abmelde-Anfrage hinaus. Die Einladung zeigt Zeit und Ort
+  richtig (auch Sommerzeit). Die `.eml`-Datei öffnet sich nur lesend in einem eigenen Fenster. Der
+  Ausdruck zeigt nur die Mail, hell. Windows öffnet für die Standard-App die Systemeinstellungen; ist
+  die App Standard, öffnet der `mailto:`-Link einen Entwurf.
+- **Ergebnis:**
+
+## 17. Composer vollständig (Stufe 10, ab Prototyp 2, Nebenkonto mit Schreibzugriff)
+
+- **Tun:** Einstellungen → Schreiben: eine HTML-Signatur mit Bild anlegen, eine Vorlage mit
+  `{{firstName}}`-Platzhalter. Neue Mail: Überschrift, Aufzählung, durchgestrichen, ein Bild
+  einfügen (Dialog und Ziehen), Text aus Word oder einer Webseite einfügen, Vorlage einfügen,
+  Rechtschreibung prüfen (rote Wellenlinie, Sprache). „Später senden“ in zwei Minuten, App offen
+  lassen. Eine Mail „Als Anhang weiterleiten“.
+- **Erwartet:** Beim Empfänger (auch bei einem anderen Anbieter) sehen Formatierung, Bild und
+  Signatur richtig aus. Eingefügte Inhalte enthalten keine fremden Bilder oder Skripte. Die geplante
+  Mail geht pünktlich hinaus, solange die App läuft. Die Rechtschreibprüfung von WebView2 arbeitet
+  in der eingestellten Sprache.
+- **Ergebnis:**
+
+## 18. KI in der App (Stufe 13, ab Prototyp 2, optional)
+
+- **Tun:** Ollama installieren (`ollama pull llama3.2` o. ä.) oder einen API-Schlüssel in der App
+  eingeben (nie anderswo). Einstellungen → KI in der App: einschalten, Anbieter anlegen, Modelle
+  laden, Verbindung testen, Funktionen zuordnen. Ein Gespräch zusammenfassen, einen Antwortvorschlag
+  als Entwurf öffnen, die Schreibhilfe auf eine Auswahl anwenden, eine Frage zu den Mails stellen.
+  Bei einem Cloud-Anbieter: Zustimmung lesen.
+- **Erwartet:** Ohne Einschalten passiert nichts. Vor der ersten Cloud-Anfrage erscheint die
+  Zustimmung mit Größe und Ziel; jede Anfrage zeigt Mails, Größe und Ziel. Ohne Internet funktioniert
+  Ollama weiter. Aussagen verweisen auf ihre Mails; Links in Antworten werden vor dem Öffnen geprüft.
+  Der Schlüssel erscheint nirgends in der Oberfläche.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

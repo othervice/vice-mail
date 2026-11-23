@@ -18,7 +18,7 @@ zwei Sitzungen verteilt werden (A: Kategorien, Pins, Snooze, Aufgaben, Regeln. B
 ## Aufgaben B
 
 - [x] **Benachrichtigungen.** Native Meldungen für neue Mails (Standard: nur Personen und Priorität), fehlgeschlagene Sendungen, fällige Snoozes. Je Konto schaltbar, Ruhezeiten, Inhalt auf dem Sperrbildschirm ausblendbar. Klick öffnet die Mail. Zähler am Dock- bzw. Taskleisten-Symbol.
-- [ ] **Standard-Mail-App.** `mailto:` registrieren (Tauri-Deep-Link-Plugin), Einstellung „Als Standard festlegen“ mit dem Weg, den das jeweilige System vorsieht. Ein `mailto:`-Link öffnet einen Entwurf mit allen Feldern. `.eml`-Dateien öffnen.
+- [x] **Standard-Mail-App.** `mailto:` registrieren (Tauri-Deep-Link-Plugin), Einstellung „Als Standard festlegen“ mit dem Weg, den das jeweilige System vorsieht. Ein `mailto:`-Link öffnet einen Entwurf mit allen Feldern. `.eml`-Dateien öffnen.
 - [x] **Abmelden.** Bei Mails mit List-Unsubscribe eine Schaltfläche. Ein-Klick-Abmeldung per HTTPS-POST nach RFC 8058 oder ein vorbereiteter Entwurf bei `mailto:`. Immer nur nach Klick.
 - [x] **Kalendereinladungen.** `text/calendar` lesen und als Karte zeigen: Titel, Zeit in der eigenen Zeitzone, Ort, Veranstalter. „Im Kalender öffnen“ übergibt die Datei an das System.
 - [x] **Drucken und Export.** Bereinigte Mail drucken und als PDF sichern; als `.eml` exportieren.
@@ -49,15 +49,17 @@ zwei Sitzungen verteilt werden (A: Kategorien, Pins, Snooze, Aufgaben, Regeln. B
 ## Ergebnis
 
 Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten: Kern, Speicher und Shell für A und B in
-fab66da, Oberfläche A in 7acc55c, Oberfläche B in 2152c42). Geprüft von der Hauptsitzung in sauberen
-Worktrees: `scripts/check.sh` grün auf 5d40e88 (878 Rust-, 780 Vitest-Tests; ohne die Oberfläche von
-Teil B) und auf 255ce74 (947 Rust-, 909 Vitest-Tests in 41 Dateien, mit Teil B); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf f81ba9e (950
-Tests); auf 255ce74 1.021 von 1.022 grün, rot nur `ai::tests::qa::qa_set_with_a_real_model`, der ohne lokales Modell scheiterte (seit 66ea375 überspringt er sich ohne Modell); `pnpm --dir app test:e2e` grün auf 5d40e88 mit den
-Testständen aus 255ce74 (9 Spec-Dateien, 61 Tests, darunter `comfort.e2e.mjs`); auf 255ce74 58 von
-61 Tests grün, die Spec dieser Stufe eingeschlossen; rot sind dort drei Tests in `reading.e2e.mjs`
-(Stufe 3, Ursache offen). Entscheidungen: 0016 (Kategorien und Kontakte), 0020 (Kern, Speicher und
-Shell). Messung: `docs/testing/performance.md` (Stufe 9).
+fab66da, Oberfläche A in 7acc55c, Oberfläche B in 2152c42; `.eml`-Dateien und der Klick auf eine
+Meldung in 24ac670, Auswahl nach ID in e705d75). Geprüft von der Hauptsitzung in sauberen
+Worktrees: `scripts/check.sh` grün auf 24ac670 (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit
+Clippy für das Windows-Ziel, cargo deny und pnpm audit) und auf dem Arbeitsstand, der als e705d75
+committet wurde (1.006 Rust-, 1.127 Vitest-Tests in 57 Dateien); alle Servertests
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf 24ac670 (1.076
+Tests); `pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus ab594b7 (16
+Spec-Dateien, 89 Tests grün, 6 übersprungen, darunter `comfort.e2e.mjs` mit 4 von 4 und
+`extras.e2e.mjs` mit 5 von 5 Tests). Entscheidungen: 0016 (Kategorien und Kontakte), 0020 (Kern,
+Speicher und Shell), 0027 (`.eml`-Dateien, Klick auf eine Meldung), 0028 (Auswahl nach ID).
+Messung: `docs/testing/performance.md` (Stufe 9).
 
 **Nachgewiesen**
 - Einordnung: Trefferquote am Seed-Korpus über den echten IMAP-Weg 72 von 73 = 98,6 %
@@ -87,12 +89,15 @@ Shell). Messung: `docs/testing/performance.md` (Stufe 9).
   Entwurf mit allen Feldern
   `compose::stage10_tests::a_compose_request_fills_every_field_and_threads_the_reply`; Oberfläche
   `extras-mailto.test.tsx` (Link beim Start und während des Laufs, Warteschlange neben einem offenen
-  Entwurf, nichts wird gesendet).
+  Entwurf, nichts wird gesendet); in der App (`reading.e2e.mjs`) öffnet „Öffnen“ auf einem
+  `mailto:`-Link einer Mail einen Entwurf im eigenen Composer, nichts geht an das System.
 - Abmelden ohne Klick keine Anfrage:
   `comfort::tests::unsubscribe_requests_go_out_only_after_a_click` (HTTPS-Zähl-Server mit eigener
   Test-CA: 0 Verbindungen nach Abruf, Öffnen und Anzeigen der Wege, 1 nach dem Klick),
   `comfort::unsubscribe::tests::private_targets_are_refused_before_any_connection`,
-  `one_click_header`; Oberfläche `extras-unsubscribe.test.tsx`.
+  `one_click_header`; Oberfläche `extras-unsubscribe.test.tsx`; in der App (`extras.e2e.mjs`) zeigt
+  ein Newsletter des Seeds „Abmelden“ mit allen drei Wegen, Öffnen und Abbrechen der Frage erzeugt
+  kein Ergebnis und keine Operation.
 - Einladungen: ganztägig (`calendar::tests::all_day_single_day_without_end_lasts_one_day`,
   `all_day_over_several_days_has_an_exclusive_end`), wiederkehrend (`weekly_with_count`,
   `weekly_with_until`, `monthly_and_yearly_rules_and_local_until`), fremde Zeitzone
@@ -100,7 +105,8 @@ Shell). Messung: `docs/testing/performance.md` (Stufe 9).
   `unknown_zone_is_reported_and_read_as_floating`), kaputte Datei (`empty_and_garbage_files`,
   `broken_lines_and_bytes`, `truncated_files_still_show_their_events`,
   `mutated_invitations_never_panic`); Oberfläche `extras-invites.test.tsx`,
-  `extras-calendar.test.ts`.
+  `extras-calendar.test.ts`; in der App (`extras.e2e.mjs`) die Einladung des Seeds als Karte mit
+  Titel, Zeit, Veranstalter und „Im Kalender öffnen“ (nicht geklickt).
 - Bündel, Pins, Aufgaben, Ansichten: `comfort::tests::bundles_continue_across_pages`,
   `unified_scope_and_groups`; Oberfläche `comfort.test.tsx`, `comfort-logic.test.ts`; in der App
   (`comfort.e2e.mjs`) Bündel klappen an Ort und Stelle auf, „Warum hier?“ im Lesebereich, Sortierung
@@ -112,13 +118,36 @@ Shell). Messung: `docs/testing/performance.md` (Stufe 9).
   `notifications_wait_for_the_shell_s_sink`, `comfort::time::tests::quiet_minutes`; Zählersymbol
   unter Windows `notifications::overlay::tests::badges_have_the_size_and_white_digits`; Oberfläche
   (`comfort.test.tsx`): Einstellungen mit Kategorien, Ruhezeiten, verborgenem Inhalt, stummen Konten
-  und Zähler; Klick auf eine Meldung öffnet den Ordner der Mail.
+  und Zähler.
+- Klick auf eine Meldung öffnet die Mail (neu in 24ac670 und e705d75): Der Ordner der Mail wird
+  gezeigt und die Mail dort in der Liste ausgewählt, sobald die Liste geladen ist; zeigt der offene
+  Thread sie schon, bleibt sie dort; fehlt sie unter den geladenen Zeilen oder kommt die Liste
+  nicht binnen 5 s, öffnet sie sich in einem eigenen Fenster; nur das Hauptfenster antwortet
+  (`open-by-id.test.tsx`, `list-select.test.tsx`).
+- `.eml`-Dateien öffnen (neu in 24ac670, 0027): Kern
+  `reading::eml::tests::opened_files_go_through_the_reading_pipeline_and_never_into_the_store`,
+  `attachments_of_a_file_are_saved_exactly_and_opened_only_after_confirmation`,
+  `files_that_cannot_be_shown_are_refused_with_typed_errors` (leer, Text, binär, fehlt, Ordner,
+  ein Byte zu groß, genau die Grenze), `files_from_the_system_keep_their_error_for_their_window`,
+  `the_register_is_bounded_and_closing_forgets_the_file_and_its_links`, `names_and_the_mail_check`;
+  Modell `eml::tests::*`; Shell `tests::eml_files_open_in_message_windows_and_messages_come_by_id`
+  (Startargumente, Fenster mit Query und Rechten der Mail-Fenster, gemerkter Fehler, falsche ID,
+  Schließen vergisst die Datei), `eml_files::tests::eml_files_are_taken_from_the_arguments`,
+  `only_file_urls_of_eml_files_count`,
+  `windows::tests::eml_windows_are_message_windows_with_their_own_query`; Oberfläche
+  (`eml.test.tsx`): schreibgeschützt über die Lese-Pipeline im Sandbox-Frame, externe Inhalte
+  gesperrt, Anhänge über den Kern und ausführbare erst nach Warnung, Links über die Prüfung des
+  Kerns, Fehler einer Datei vom System im eigenen Fenster, „.eml-Datei öffnen …“ in der Palette.
+  Die Anmeldung für `.eml` steht in `bundle.fileAssociations` (`tauri.conf.json`).
 - Export und Drucken:
   `comfort::tests::export_writes_the_message_as_on_the_server_and_counts_the_badge`;
   `extras-tools.test.tsx` (Speichern als `.eml`, Druckdialog des Systems, Druck-Styles nur für die
-  Mail).
+  Mail); in der App (`extras.e2e.mjs`) überleben die Druck-Styles den Build: eine
+  `@media print`-Regel blendet alles außer der Mail aus (der Druckdialog wird nicht geöffnet).
 - Standard-Mail-App: `default_app::tests::identifiers_and_arguments`, `extras-default-app.test.tsx`
-  (macOS setzen oder Weg über Mail erklären, Windows öffnet die Systemeinstellungen).
+  (macOS setzen oder Weg über Mail erklären, Windows öffnet die Systemeinstellungen); in der App
+  (`extras.e2e.mjs`) zeigen die Einstellungen, ob die App Standard ist (der Knopf wird nicht
+  gedrückt). `extras.e2e.mjs` hatte keinen CSP-Verstoß.
 - Leistung (Stufe 9, Release-Build, nur Kern): die Einordnung kostet je Fenster von 500 rund 2,5 ms
   (100.000 Kopfdaten 2.703 ms ohne, 3.201 ms mit Einordnung); eine Absender-Regel auf 100.000 Mails
   27 ms; Posteingangsseiten 0,21–0,25 ms; Zähler am Symbol 2,3 ms.
@@ -136,22 +165,34 @@ Shell). Messung: `docs/testing/performance.md` (Stufe 9).
 - Standard-App unter macOS über `osascript` mit festem Skript (kein `unsafe`), unter Windows wählt
   der Nutzer in den Systemeinstellungen; der Installer trägt die App als `mailto`-Programm ein.
 - Benachrichtigungs-Einstellungen werden seit Stufe 11 abgeglichen (0022, Abweichung von 0020).
+- `.eml`-Dateien (0027) öffnen in einem eigenen Mail-Fenster, schreibgeschützt, und werden nie
+  importiert (kein Konto, kein Ordner, kein Suchindex, keine Datenbankzeile); höchstens 64 MiB je
+  Datei und 16 offene Dateien. Unter macOS meldet sich die App mit Rang „Alternate“ an, nimmt Mail
+  also nicht die Rolle des Standards weg. „Für diesen Absender immer laden“ gibt es für Dateien
+  nicht.
+- Die Liste wählt eine Mail nur unter den geladenen Zeilen aus (0028); eine nicht geladene Mail
+  oder ein Mitglied eines zugeklappten Bündels öffnet sich in einem eigenen Fenster.
 
 **Ungeprüft / offen**
-- `.eml`-Dateien öffnen ist nicht gebaut (die App meldet sich für `.eml` nicht an); die Aufgabe
-  „Standard-Mail-App“ ist deshalb offen.
-- Die Desktop-Spec `app/tests/e2e/extras.e2e.mjs` (Einladung als Karte, Abmelden ohne Anfrage vor
-  dem Klick, Druck-Styles, Standard-App) ist geschrieben, steht aber nicht in `specs` und ist nie
-  gelaufen.
-- Leistungswerte aus Stufe 7 nicht neu gemessen; die Stufe-9-Messung betrifft nur den Kern. Befund
-  aus dem Desktop-Test: Nachdem alle 9.959 Zeilen des Posteingangs (mit aufgeklappten Bündeln)
-  zweimal gerendert worden waren, wurde späteres Scrollen langsam (längster Frame rund 250 ms statt
-  25 ms); der Test misst das Scrollen jetzt vorher. Offen.
+- Leistungswerte aus Stufe 7: Nachmessung läuft (siehe `docs/testing/performance.md`); die
+  Stufe-9-Messung oben betrifft nur den Kern.
+- Befund aus dem Desktop-Test: Nachdem alle 9.959 Zeilen des Posteingangs (mit aufgeklappten
+  Bündeln) zweimal gerendert worden waren, wurde späteres Scrollen langsam (längster Frame rund
+  250 ms statt 25 ms); der Test misst das Scrollen vorher. Wird gerade untersucht.
+- `.eml` in der echten App: Doppelklick im Finder und im Explorer, „Öffnen mit“, der zweite Start
+  unter Windows mit einer Datei, das Schließen eines echten Fensters (der Mock der Shell sendet
+  keine Fensterereignisse), ob macOS die Zuordnung ohne neue Anmeldung bei Launch Services
+  übernimmt; einen Desktop-Test für `.eml` gibt es nicht.
+- Auswahl nach ID und Klick auf eine Meldung nur in Vitest geprüft; der Desktop-Lauf auf 24ac670
+  enthielt e705d75 noch nicht. Ein zugeklapptes Bündel bei der Auswahl nach ID ist nicht geprüft.
 - Native Meldungen, Klick auf eine Meldung, Zähler an Dock und Taskleiste, Ruhezeiten, Standard-App,
-  Drucken und „Als PDF sichern“ auf echten Systemen; ob macOS beim Setzen des Standards nachfragt.
+  ein `mailto:`-Link aus dem Browser, Drucken und „Als PDF sichern“ auf echten Systemen; ob macOS
+  beim Setzen des Standards nachfragt.
 
 **Wartet auf**
 - Mensch: Passt die Einordnung beim eigenen Posteingang, welche Absender landen falsch?
-  Benachrichtigungen, Ruhezeiten, Standard-Mail-App und `mailto:`-Links auf Mac und Windows von Hand
-  prüfen und hier vermerken. Der Prototyp `prototype-2026-11-23` enthält nur Teil A; Teil B braucht
-  einen neuen Build.
+  Benachrichtigungen, Ruhezeiten, Standard-Mail-App, `mailto:`-Links und `.eml`-Dateien
+  (Doppelklick, „Öffnen mit“) auf Mac und Windows von Hand prüfen und hier vermerken. Für Windows
+  enthält der Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus 24ac670) Teil A
+  und Teil B; die Windows-Checkliste hat einen Abschnitt nur für Teil A (Abschnitt 13), für Teil B
+  stehen die Schritte im Release-Hinweis.

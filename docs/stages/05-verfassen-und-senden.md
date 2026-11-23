@@ -42,15 +42,15 @@ keine Mail wird versehentlich zweimal verschickt. Danach ist die App auf dem Mac
 ## Ergebnis
 
 Ausgeführt am 22./23.11.2026 (Hauptsitzung mit Subagenten: Nachrichtenbau und SMTP im Adapter,
-Entwürfe und Senden in Store und Engine, Composer-Oberfläche, Desktop-Abnahme). Geprüft am 23.11.
-von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf 5d40e88 (878 Rust-, 780
-Vitest-Tests) und auf 255ce74 (947 Rust-, 909 Vitest-Tests in 41 Dateien, cargo deny, pnpm audit);
-alle Servertests (`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf
-f81ba9e (950 Tests); auf 255ce74 1.021 von 1.022 grün, rot nur
-`ai::tests::qa::qa_set_with_a_real_model`, der ohne lokales Modell scheiterte (seit 66ea375 überspringt er sich ohne Modell);
-`pnpm --dir app test:e2e` grün auf 5d40e88 mit den Testständen aus 255ce74 (9 Spec-Dateien, 61
-Tests, darunter `compose.e2e.mjs`); auf 255ce74 58 von 61 Tests grün, die Spec dieser Stufe
-eingeschlossen; rot sind dort drei Tests in `reading.e2e.mjs` (Stufe 3, Ursache offen).
+Entwürfe und Senden in Store und Engine, Composer-Oberfläche, Desktop-Abnahme; die beiden zuletzt
+fehlenden Tests in 24ac670). Geprüft am 23.11. von der Hauptsitzung in sauberen Worktrees:
+`scripts/check.sh` grün auf 24ac670 (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für
+das Windows-Ziel, cargo deny und pnpm audit); alle Servertests
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf 24ac670 (1.076
+Tests; `ai::tests::qa::qa_set_with_a_real_model` überspringt sich ohne lokales Modell);
+`pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus ab594b7 (16 Spec-Dateien, 89
+Tests grün, 6 übersprungen, darunter `compose.e2e.mjs` mit 4 von 4 Tests). Die drei Tests in
+`reading.e2e.mjs`, die auf 255ce74 rot waren, sind in den Läufen auf 66ea375 und 24ac670 grün.
 Entscheidung: 0018 (Entwürfe und Senden).
 
 **Nachgewiesen (Servertests in `crates/mail-engine/tests/compose.rs`, gegen Stalwart)**
@@ -76,6 +76,10 @@ Entscheidung: 0018 (Entwürfe und Senden).
   `bcc_recipient_gets_the_mail_and_stays_unnamed`.
 - `a_read_only_account_keeps_drafts_local_and_refuses_to_send`: Nur lesende Konten behalten Entwürfe
   lokal und senden nichts.
+- `a_draft_of_another_program_opens_and_its_server_copy_is_replaced` (neu in 24ac670): Ein Entwurf,
+  wie Thunderbird ihn in bobs Entwürfe-Ordner legt, öffnet als lokaler Entwurf (HTML über die
+  Allowlist, Anhang Byte für Byte). Bearbeitet und geschlossen ersetzt er die fremde Kopie: genau
+  eine Kopie mit derselben Message-ID, neuem Inhalt und dem Anhang; Verwerfen entfernt sie.
 - Erzeugtes HTML und Aufbau (`crates/mail-content`, in `check.sh`): Snapshots
   `compose::tests::mail_html_snapshots`, `reply_quotes_snapshots`,
   `mail_html_is_stable_when_converted_again`; dazu `structure_follows_the_content`,
@@ -91,14 +95,23 @@ Entscheidung: 0018 (Entwürfe und Senden).
   des Fensters (`drops::tests::only_recently_dropped_paths_are_accepted_once`); SMTP mit STARTTLS
   und TLS und Zertifikatsprüfung (`smtp::tests::accepted_over_tls_and_starttls`,
   `certificates_are_checked`).
-- Offline vorgemerkt und beim Verbinden gesendet: über dieselbe `send`-Operation im Test
-  `compose::stage10_tests::offline_at_the_scheduled_time_it_goes_out_once_online` (aus Stufe 10, in
-  `check.sh` auf 255ce74).
-- In der App (`compose.e2e.mjs`): „Rückgängig“ innerhalb der Verzögerung sendet nichts und bringt
-  den Entwurf zurück; eine gesendete Mail kommt genau einmal an, der Hinweis sagt es; ein
-  geschlossener Entwurf liegt einmal auf dem Server, auch nachdem er aus dem Entwürfe-Ordner erneut
-  bearbeitet wurde; „Ausgang“ listet die Sendung; der Rich-Text-Editor verursacht keinen
-  CSP-Verstoß.
+- Entwürfe anderer Programme (neu in 24ac670, in `check.sh`):
+  `compose::tests::with_core::a_draft_of_another_program_opens_cleaned_and_keeps_its_message_id`:
+  Felder, HTML über die Allowlist, Anhang kopiert; die Message-ID bleibt, die Kopie im Ordner wird
+  zur Serverkopie und beim ersten Sichern ersetzt; erneutes Öffnen ergibt denselben Entwurf. Ohne
+  Message-ID bekommt der Entwurf eine neue, die fremde Kopie bleibt liegen.
+- Offline (neu in 24ac670, in `check.sh`):
+  `compose::tests::with_core::sending_at_once_while_offline_waits_and_goes_out_once_online`:
+  Senden ohne Verzögerung im Offline-Zustand überträgt nichts, die Sendung bleibt mit dem
+  Verbindungsfehler vorgemerkt (auch über einen Neustart) und geht nach dem Verbinden genau einmal
+  hinaus. Derselbe Weg für eine geplante Sendung in
+  `compose::stage10_tests::offline_at_the_scheduled_time_it_goes_out_once_online`.
+- In der App (`compose.e2e.mjs`, grün auf 24ac670): „Rückgängig“ innerhalb der Verzögerung sendet
+  nichts und bringt den Entwurf zurück; eine gesendete Mail kommt genau einmal an, der Hinweis sagt
+  es; ein geschlossener Entwurf liegt einmal auf dem Server, auch nachdem er aus dem
+  Entwürfe-Ordner erneut bearbeitet wurde; „Ausgang“ listet die Sendung; der Rich-Text-Editor
+  verursacht keinen CSP-Verstoß. Dazu `keyboard.e2e.mjs` (Stufe 8): antworten, schreiben und mit
+  Cmd+Enter senden ohne Maus.
 - Oberfläche (Vitest, `composer.test.tsx`, `composer-units.test.ts`): Adressen als Chips mit
   Prüfung, Cc/Bcc, Autovervollständigung per Tastatur, Wechsel der Identität mit ihrer Signatur
   (abschaltbar), Anhänge über den Dialog des Kerns mit Größenwarnung und per Drop, Sichern nach der
@@ -121,27 +134,28 @@ Entscheidung: 0018 (Entwürfe und Senden).
 - Anhänge kopiert der Kern beim Hinzufügen; Pfade nimmt er nur aus dem Systemdialog (in Rust) und
   aus Drop-Ereignissen des Fensters. Grenzen 100 Anhänge und 100 MiB, Warnung ab 15 MiB.
 - Kontakte für die Autovervollständigung gelten über alle Konten; BCC-Empfänger eigener Mails werden
-  nicht gezählt. Das Zitat ist in Stufe 5 nur ein- und ausschaltbar.
+  nicht gezählt. Das Zitat ist in Stufe 5 nur ein- und ausschaltbar (Position seit Stufe 10).
+- Ein fremder Entwurf ohne Message-ID bekommt beim Öffnen eine neue; seine Kopie im Ordner bleibt,
+  weil sie nicht der App gehört.
 - Der eingebettete WebDriver der Desktop-Tests sendet kein `dblclick`; der Test löst es selbst aus.
-  Das war kein Fehler der App (im Release-Hinweis des Prototyps noch als möglicher Fehler genannt).
+  Das war kein Fehler der App (im Release-Hinweis des ersten Prototyps noch als möglicher Fehler
+  genannt).
 - Neue Konten bleiben nur lesend; Senden setzt den freigeschalteten Schreibzugriff voraus.
 
 **Ungeprüft / offen**
-- Windows zur Laufzeit (Systemdialog, Pfade aus Drag-and-drop, Strg+Eingabe). Der Prototyp enthält
-  Stufe 5; die Windows-Checkliste hat dafür noch keinen eigenen Abschnitt (nur Schritt 5 im
-  Release-Hinweis).
+- Windows zur Laufzeit (Systemdialog, Pfade aus Drag-and-drop, Strg+Eingabe). Beide Prototypen
+  enthalten Stufe 5; dafür gibt es Abschnitt 11 der Windows-Checkliste.
 - Echte Server außer Stalwart: die Ablage von Gmail ist nur nachgestellt, Dovecot ohne LITERAL+ und
   APPEND ohne UIDPLUS (Rückfall über die UIDNEXT-Marke ist gebaut, aber nicht gelaufen).
-- Entwürfe anderer Programme aus dem Entwürfe-Ordner öffnen (`openDraftFromMessage`): kein Test;
-  geprüft ist nur die Bereinigung ihres HTML. Eigene Entwürfe öffnet der Desktop-Test.
-- Sofortiges Senden im Offline-Zustand hat keinen eigenen Test; nachgewiesen ist derselbe Weg über
-  die geplante Sendung (siehe oben).
-- Antworten und Weiterleiten großer, nur teilweise gespeicherter Mails gegen den Server.
+- Entwürfe anderer Programme sind nur in der Form von Thunderbird nachgestellt (Stalwart) bzw. als
+  Attrappe im Kern; Entwürfe von Apple Mail oder Outlook sind nicht geprüft.
+- Antworten und Weiterleiten großer, nur teilweise gespeicherter Mails gegen den Server (die
+  Anhänge holt `forward_partial_attachments` über den Weg des Lesebereichs; kein Test dafür).
 
 **Wartet auf**
 - Mensch: vom echten Konto (nach Freischalten des Schreibzugriffs, Empfehlung Nebenkonto) an sich
   selbst und an eine Adresse bei einem anderen Anbieter senden: Wie sehen die Mails in einem anderen
   Programm aus? Ab hier die App im Alltag benutzen und Reibungspunkte sammeln.
-- Mensch (Windows): Prototyp `prototype-2026-11-23` (Gitea-Vorab-Release, gebaut aus 5d40e88),
-  Schritt 5 des Release-Hinweises: auf einem Nebenkonto Änderungen erlauben und eine Mail an sich
-  selbst senden.
+- Mensch (Windows): Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus 24ac670)
+  nach `docs/testing/windows-checklist.md`, Abschnitt 11 (Schreiben und Senden): auf einem
+  Nebenkonto Änderungen erlauben und eine Mail an sich selbst senden.

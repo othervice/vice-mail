@@ -12,16 +12,16 @@ Zusammenführungen noch ungenutzt), Autovervollständigung, Text-Signatur je Ide
 
 ## Aufgaben
 
-- [ ] **Formatierung.** Durchgestrichen, Überschriften, Code, Ausrichtung, Rückgängig/Wiederholen. Eingefügter Inhalt aus Word oder Webseiten wird bereinigt.
-- [ ] **Inline-Bilder.** Einfügen und Hineinziehen, als `cid:`-Teil in der Mail, Größe änderbar.
+- [x] **Formatierung.** Durchgestrichen, Überschriften, Code, Ausrichtung, Rückgängig/Wiederholen. Eingefügter Inhalt aus Word oder Webseiten wird bereinigt.
+- [x] **Inline-Bilder.** Einfügen und Hineinziehen, als `cid:`-Teil in der Mail, Größe änderbar.
 - [ ] **Rechtschreibprüfung.** Die des Systems. Verhalten und Sprachwahl in WKWebView und WebView2 prüfen und festhalten.
-- [ ] **Signaturen.** Mehrere, als HTML mit Bildern und Links. Standard je Identität, getrennt für neue Mails und Antworten. Im Composer wechselbar.
-- [ ] **Vorlagen.** Betreff und Text speichern, mit einfachen Platzhaltern (Vorname des Empfängers). Einfügen über die Command Palette.
-- [ ] **Kontakte.** Lokales Verzeichnis aus gesendeten und empfangenen Mails, sortiert nach Häufigkeit und Aktualität; Adressen ohne Antwortmöglichkeit ausgenommen. Namen bearbeiten. Dubletten erkennen (gleiche Adresse, verschiedene Namen; gleicher Name, ähnliche Adresse) und zusammenführen, nur auf Bestätigung.
-- [ ] **Später senden.** Lokal. Die Oberfläche sagt bei der Auswahl und in „Ausgang“ klar: Die Mail wird gesendet, wenn die App zu diesem Zeitpunkt läuft und online ist. War die App zum Zeitpunkt aus und ist mehr als eine Stunde vergangen, fragt sie beim nächsten Start: jetzt senden, neu planen oder als Entwurf behalten.
-- [ ] **Fenster.** Composer in eigenem Fenster; mehrere Entwürfe gleichzeitig.
-- [ ] **Größe.** Warnung, wenn Anhänge die Grenze des Servers überschreiten (SMTP-Erweiterung SIZE).
-- [ ] **Antworten und Weiterleiten.** Einstellung für die Position des Zitats. Weiterleiten als Anhang (`.eml`).
+- [x] **Signaturen.** Mehrere, als HTML mit Bildern und Links. Standard je Identität, getrennt für neue Mails und Antworten. Im Composer wechselbar.
+- [x] **Vorlagen.** Betreff und Text speichern, mit einfachen Platzhaltern (Vorname des Empfängers). Einfügen über die Command Palette.
+- [x] **Kontakte.** Lokales Verzeichnis aus gesendeten und empfangenen Mails, sortiert nach Häufigkeit und Aktualität; Adressen ohne Antwortmöglichkeit ausgenommen. Namen bearbeiten. Dubletten erkennen (gleiche Adresse, verschiedene Namen; gleicher Name, ähnliche Adresse) und zusammenführen, nur auf Bestätigung.
+- [x] **Später senden.** Lokal. Die Oberfläche sagt bei der Auswahl und in „Ausgang“ klar: Die Mail wird gesendet, wenn die App zu diesem Zeitpunkt läuft und online ist. War die App zum Zeitpunkt aus und ist mehr als eine Stunde vergangen, fragt sie beim nächsten Start: jetzt senden, neu planen oder als Entwurf behalten.
+- [x] **Fenster.** Composer in eigenem Fenster; mehrere Entwürfe gleichzeitig.
+- [x] **Größe.** Warnung, wenn Anhänge die Grenze des Servers überschreiten (SMTP-Erweiterung SIZE).
+- [x] **Antworten und Weiterleiten.** Einstellung für die Position des Zitats. Weiterleiten als Anhang (`.eml`).
 
 ## Abnahme
 
@@ -45,13 +45,16 @@ Zusammenführungen noch ungenutzt), Autovervollständigung, Text-Signatur je Ide
 
 ## Ergebnis
 
-**Zwischenstand vom 23.11.2026, Stufe in Arbeit.** Kern, Speicher und Shell sind fertig (b313c22,
-Entscheidung 0023, baut auf 0016 und 0018 auf); die Oberfläche entsteht gerade in einer eigenen
-Sitzung und ist noch nicht committet. Geprüft von der Hauptsitzung in einem sauberen Worktree:
-`scripts/check.sh` grün auf 255ce74 (947 Rust-, 909 Vitest-Tests in 41 Dateien); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) auf 255ce74: 1.021 von
-1.022 grün, rot nur `ai::tests::qa::qa_set_with_a_real_model`, der ohne lokales Modell absichtlich
-scheitert. Der Windows-Prototyp `prototype-2026-11-23` enthält Stufe 10 nicht.
+Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten): Kern, Speicher und Shell in b313c22
+(Entscheidung 0023, baut auf 0016 und 0018 auf), Oberfläche in 14e8dda, Composer im eigenen
+Fenster und Standard-Position des Zitats in e5e1519, 04e2a88 und 24ac670 (Entscheidung 0025).
+Geprüft von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf 24ac670 (998
+Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für das Windows-Ziel, cargo deny und pnpm
+audit); alle Servertests (`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart)
+grün auf 24ac670 (1.076 Tests); `pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus
+ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, darunter `composer-complete.e2e.mjs` mit 4
+von 4, `send-later.e2e.mjs` mit 3 von 3 und `windows.e2e.mjs` mit 3 von 3 Tests). Der
+Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10.
 
 **Nachgewiesen (Kern, in `check.sh` außer wo Stalwart genannt ist)**
 - Snapshot des erzeugten HTML mit Signatur, Inline-Bild und Zitat, Textteil lesbar:
@@ -60,7 +63,7 @@ scheitert. Der Windows-Prototyp `prototype-2026-11-23` enthält Stufe 10 nicht.
 - Inline-Bild beim zweiten Testkonto:
   `tests/compose.rs::an_inline_image_arrives_and_is_shown_at_the_second_account` (Stalwart: der Teil
   kommt unverändert an, der Lesebereich zeigt ihn als `data:`-Bild und nicht als Anhang), grün im
-  Serverlauf auf 255ce74; dazu
+  Serverlauf auf 24ac670; dazu
   `compose::stage10_tests::inline_images_are_copied_checked_and_sent_as_related_parts`,
   `compose::tests::inline_images_go_out_as_related_parts_and_resolve`,
   `inline_images_keep_their_size_and_only_cid_sources`.
@@ -89,10 +92,14 @@ scheitert. Der Windows-Prototyp `prototype-2026-11-23` enthält Stufe 10 nicht.
 - Größe (SMTP SIZE): `smtp::tests::the_size_limit_is_read_from_ehlo_and_nothing_is_sent`,
   `send::size_tests::size_extension_from_ehlo_lines`,
   `compose::stage10_tests::the_server_size_limit_warns_and_refuses_too_large_messages`; gegen
-  Stalwart `tests/smtp.rs::the_size_limit_of_the_server_is_read` (grün im Serverlauf auf 255ce74).
+  Stalwart `tests/smtp.rs::the_size_limit_of_the_server_is_read` (grün im Serverlauf auf 24ac670).
 - Weiterleiten als Anhang:
   `compose::tests::a_message_forwarded_as_attachment_goes_in_unencoded_when_it_can`,
   `compose::stage10_tests::a_message_is_forwarded_as_an_attachment`.
+- Position des Zitats:
+  `compose::stage10_tests::replies_and_forwards_start_with_the_default_quote_position` (neue
+  Antworten und Weiterleitungen übernehmen die gespeicherte Position, neue Mails nicht, der Wert
+  übersteht einen Neustart).
 - Signaturen und Vorlagen:
   `signature_tests::the_text_signature_of_stage_5_becomes_a_signature_with_the_identity_uuid`,
   `signatures_defaults_and_the_signature_of_a_draft`, `templates_are_stored_captured_and_applied`,
@@ -101,22 +108,63 @@ scheitert. Der Windows-Prototyp `prototype-2026-11-23` enthält Stufe 10 nicht.
   `templates::tests::templates_fill_placeholders_as_text`,
   `values_cannot_inject_html_or_placeholders`; Abgleich „Bearbeiten schlägt Löschen“
   `settings_sync::tests::scenarios::deleted_signature_edited_elsewhere_stays_edited`.
+- Composer-Fenster: Shell `tests::message_window_opens_once_with_the_main_windows_permissions`
+  (auch ein Composer-Fenster je Entwurf, falsche oder unbekannte Entwürfe abgelehnt, Mail- und
+  Composer-Fenster dürfen sich schließen, das Hauptfenster nicht; 04e2a88) und
+  `windows::tests::composer_windows_have_one_label_and_page_per_draft`.
 - `mailto:`-Links in Mails öffnen den eigenen Composer mit allen Feldern:
   `compose::stage10_tests::a_compose_request_fills_every_field_and_threads_the_reply`.
 
-**Offen**
-- Oberfläche aller Aufgaben: Formatierungsknöpfe (durchgestrichen, Überschriften, Code, Ausrichtung,
-  Rückgängig/Wiederholen) und Bereinigung beim Einfügen im Editor, Inline-Bilder einfügen,
-  hineinziehen und in der Größe ändern, mehrere HTML-Signaturen mit Standards je Identität und
-  Wechsel im Composer, Vorlagen über die Command Palette, Kontaktverzeichnis mit Namen und
-  Zusammenführen, „Später senden“ mit dem Hinweis in Auswahl und „Ausgang“ und der Frage beim Start,
-  Größenwarnung, Zitat-Position, Weiterleiten als Anhang. In Arbeit im Arbeitsverzeichnis, nicht
-  committet und von der Hauptsitzung nicht geprüft; dazu eine noch nicht gelaufene Desktop-Spec
-  `app/tests/e2e/send-later.e2e.mjs`.
-- Composer in eigenem Fenster, mehrere Entwürfe gleichzeitig: nicht gebaut.
-- Rechtschreibprüfung in WKWebView und WebView2: nicht geprüft und nicht festgehalten.
-- Nächster Schritt: Oberfläche fertigstellen und committen, Vitest und Desktop-Test dafür, Composer-
-  Fenster, dann die Handprüfung der Rechtschreibung.
+**Nachgewiesen (Oberfläche, Vitest)**
+- Formatierung (`composer-complete.test.tsx`): Rückgängig/Wiederholen, Überschriften,
+  durchgestrichen, Code und Ausrichtung; eine zentrierte Überschrift wird als das HTML gespeichert,
+  das der Kern behält; eingefügtes HTML geht vor dem Editor durch die Bereinigung des Kerns, reiner
+  Text nicht; ein abgelehntes Einfügen kommt als Text und wird gemeldet.
+- Inline-Bilder: aus dem Dialog des Kerns als `cid:`, angezeigt aus einer `data:`-URL, Größe über
+  ein Menü; ein wieder geöffneter Entwurf zeigt sie; abgelegte Bilder gehen in einen
+  Rich-Text-Entwurf, andere Dateien werden angehängt; Fehler an Ort und Stelle.
+- Größe: Warnung sofort, wenn die Mail größer ist, als der SMTP-Server annimmt; eine abgelehnte
+  Sendung sagt, was zu tun ist.
+- Signaturen (`snippets-settings.test.tsx`, `composer-complete.test.tsx`): anlegen mit Hinweis, was
+  die Bereinigung geändert hat, umbenennen, Bilder als `cid:` hinzufügen und entfernen (auch per
+  Drop), löschen nach Bestätigung, Standard je Adresse für neue Mails und für Antworten; der
+  Composer beginnt mit dem Standard der Art und wechselt die Signatur.
+- Vorlagen: anlegen mit Platzhaltern (unbekannte werden angemahnt), bearbeiten, löschen nach
+  Bestätigung; im Composer aus dem Menü für den ersten Empfänger gefüllt einfügen und über die
+  Command Palette in den offenen Composer.
+- Kontakte (`contacts.test.tsx`): Verzeichnis in der Rangfolge des Kerns mit Nutzung, Suche,
+  nächste Seite, Namen ändern und zurücksetzen, Adresse eines zusammengeführten Kontakts trennen;
+  Dubletten mit Grund, Zusammenführen nur nach Bestätigung im Dialog, Ablehnung des Kerns ändert
+  nichts, Vorschlag dauerhaft verwerfen; deutsche Texte.
+- Später senden (`send-later.test.tsx`): Vorschläge in Ortszeit, Prüfung von Vergangenheit und mehr
+  als einem Jahr wie im Kern, der Hinweis „nur wenn die App läuft und online ist“ in der Auswahl
+  (auch deutsch) und im Ausgang statt des Rückgängig-Countdowns; im Ausgang verschieben, jetzt
+  senden (nach der Rückgängig-Verzögerung) und abbrechen (zurück in den Composer); eine verpasste
+  Sendung fragt beim Start (auch vor jedem Ereignis) und während der Sitzung: jetzt senden, neu
+  planen oder als Entwurf behalten.
+- Weiterleiten als Anhang steht neben „Weiterleiten“; Position des Zitats: Standard in
+  Einstellungen → Schreiben (gespeichert zusammen mit der Sendeverzögerung), Vorschau und
+  Beschriftung im Composer folgen ihr (`composer.test.tsx`, `windows.test.tsx`).
+- Composer im eigenen Fenster (`windows.test.tsx`): ein Entwurf füllt das Fenster, mehrere
+  Entwürfe gleichzeitig in eigenen Fenstern, Schließen nach Senden oder Verwerfen, bleibt offen,
+  solange Rückgängig möglich ist, Rückgängig bringt den Entwurf ins selbe Fenster; scheitert das
+  Fenster, bleibt der Composer mit Grund.
+- axe ohne schwere Befunde im Composer der Stufe 10 (Symbolleiste, Inline-Bild, Signatur, Vorlagen,
+  Später senden, Größe), in den Kontakten mit offenem Namenseditor und Frage zum Zusammenführen, in
+  Einstellungen → Schreiben und im Ausgang mit geplanten und verpassten Sendungen, hell und dunkel
+  (`a11y.test.tsx`).
+
+**Nachgewiesen (echte App, Desktop-Tests auf 24ac670)**
+- `composer-complete.e2e.mjs`: eine zentrierte Überschrift und durchgestrichener Text werden als
+  das HTML gespeichert, das der Kern behält, ohne CSP-Verstoß; eingefügtes HTML mit Script und
+  externem Bild wird im Kern bereinigt, der Hinweis auf entfernte Bilder erscheint; eine Vorlage
+  wird aus dem Menü des Composers für den Empfänger gefüllt eingefügt; „Als Anhang weiterleiten“
+  im Lesebereich öffnet einen Entwurf mit der Mail als `.eml`.
+- `send-later.e2e.mjs`: eine geplante Mail wartet im Ausgang mit Zeit und Regel und kommt genau
+  einmal pünktlich an; „Jetzt senden“ im Ausgang sendet nach der Rückgängig-Verzögerung genau
+  einmal; Abbrechen öffnet sie als Entwurf und sendet nichts.
+- `windows.e2e.mjs`: zwei Entwürfe öffnen zwei Composer-Fenster; nach dem Verwerfen schließt sich
+  jedes Fenster oder meldet, dass es fertig ist (der Test lässt beides zu).
 
 **Abweichungen und Annahmen**
 - „Später senden“ ist eine `send`-Operation mit spätem `not_before`; die Nachricht wird beim Planen
@@ -133,13 +181,26 @@ scheitert. Der Windows-Prototyp `prototype-2026-11-23` enthält Stufe 10 nicht.
   als Base64 im Datensatz (höchstens 8, je 64 KiB), damit sie mit dem Einstellungs-Sync wandern. Die
   Text-Signatur aus Stufe 5 wird zu einer Signatur mit der UUID der Identität.
 - Abgelehnte Dubletten-Paare bleiben auf dem Gerät und werden nicht abgeglichen.
+- `QuotePosition` beschreibt, wo die Antwort steht; Standard ist `above` (Antwort über dem Zitat),
+  wie vorher (0025, Punkt 11). Der Standard gilt für neue Antworten und Weiterleitungen und wird
+  abgeglichen; der Composer kann ihn je Entwurf ändern.
+- Größe und Lage der Composer-Fenster werden nicht gespeichert (0025).
+- Rechtschreibprüfung: Der Editor setzt `spellcheck="true"` und nutzt die des Systems; Adress-,
+  Such- und Namensfelder schalten sie ab.
 
 **Ungeprüft**
+- Rechtschreibprüfung in WKWebView und WebView2 (Verhalten und Sprachwahl): nicht geprüft und nicht
+  festgehalten.
+- Inline-Bilder in der echten App: Der eingebettete WebDriver kann weder den Dateidialog des Systems
+  noch das Ablegen einer echten Datei steuern; geprüft in Vitest, im Kern und gegen Stalwart.
+  Signaturen und Kontakte haben keinen Desktop-Test.
 - Echte Server außer Stalwart (SIZE bei Gmail, Dovecot/Postfix, Exchange); Server, die SIZE erst
   nach STARTTLS nennen, gelten als „keine feste Grenze“. Windows.
 - Fremde Entwürfe mit `cid:`-Bildern verlieren beim Öffnen ihre Bilder.
 
 **Wartet auf**
-- Mensch: Rechtschreibprüfung auf beiden Systemen prüfen und vermerken; eigene Signaturen anlegen
-  und eine Mail an einen anderen Anbieter senden (sobald die Oberfläche da ist): Sieht die Signatur
-  dort richtig aus?
+- Mensch: Rechtschreibprüfung auf beiden Systemen prüfen und vermerken (Mac: die App; Windows:
+  Prototyp `prototype-2026-11-23-2`, Gitea-Vorab-Release, gebaut aus 24ac670; die
+  Windows-Checkliste hat für Stufe 10 noch keinen Abschnitt, die Schritte stehen im
+  Release-Hinweis); eigene Signaturen anlegen und eine Mail an einen anderen Anbieter senden: Sieht
+  die Signatur dort richtig aus?
