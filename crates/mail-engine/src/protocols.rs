@@ -57,13 +57,16 @@ impl AnyConnector {
     }
 }
 
-/// A connection of either adapter.
+/// A connection of either adapter. One per connection and long-lived, so the size difference
+/// of the variants does not matter.
+#[allow(clippy::large_enum_variant)]
 pub enum AnyBackend {
     Imap(ImapBackend),
     Jmap(JmapBackend),
 }
 
-/// A writer of either adapter.
+/// A writer of either adapter (see [`AnyBackend`] on the variants' sizes).
+#[allow(clippy::large_enum_variant)]
 pub enum AnyWriter {
     Imap(ImapWriter),
     Jmap(JmapWriter),
@@ -349,11 +352,12 @@ mod tests {
     async fn jmap_refuses_read_only_writers_and_the_settings_sync_before_connecting() {
         let connector = AnyConnector::new();
         for protocol in [Protocol::Imap, Protocol::Jmap] {
-            let err = connector
+            let Err(err) = connector
                 .connect_writer(&config(protocol, Access::ReadOnly))
                 .await
-                .err()
-                .expect("refused");
+            else {
+                panic!("{protocol:?}: a read-only writer was opened");
+            };
             assert!(
                 matches!(err, BackendError::ReadOnly(_)),
                 "{protocol:?}: {err:?}"
@@ -362,8 +366,7 @@ mod tests {
         let err = connector
             .connect_sync_folder(&config(Protocol::Jmap, Access::ReadOnly), "Settings-Sync")
             .await
-            .err()
-            .expect("refused");
+            .expect_err("refused");
         assert!(matches!(err, BackendError::Unsupported(_)), "{err:?}");
         let sender = AnySender::default();
         let envelope = Envelope {
