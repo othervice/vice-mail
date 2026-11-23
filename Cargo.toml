@@ -56,10 +56,12 @@ tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
 tauri = { version = "2.12.7", features = [] }
 tauri-build = { version = "2.7.6", features = [] }
 
-# TLS (decision 0002): rustls with the `ring` provider, certificates checked by the system.
-rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+# TLS (decision 0002): rustls with the `aws-lc-rs` provider (chosen in `mail_imap::tls`, nowhere
+# else), certificates checked by the system. aws-lc-sys builds with `cc` and, on Windows without
+# NASM, links the pre-assembled objects it ships (`prebuilt-nasm`): no CMake, NASM or Go.
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12", "logging"] }
 rustls-platform-verifier = "0.7.1"
-tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["aws_lc_rs", "tls12"] }
 
 # IMAP (decision 0002): async-imap on Tokio; mail-parser decodes RFC 2047 words, charsets and
 # dates of header data (stage 2) and whole messages (stage 3). mail-parser 1.0 needs Rust 1.98.
@@ -123,8 +125,9 @@ rmcp = { version = "3.11.0", default-features = false, features = ["client", "tr
 
 # Tests
 tempfile = "3.27.0"
-# Test certificates generated at test time (no key material in the repository).
-rcgen = "0.14.10"
+# Test certificates generated at test time (no key material in the repository), with the app's
+# crypto provider; rcgen's default would pull `ring` back in.
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
 # mail-content tests: the DOM html5ever's own conformance tests use, to re-parse sanitised
 # output independently of the crate's DOM (test-only, as its "+unofficial" version says).
 markup5ever_rcdom = "0.40.1"

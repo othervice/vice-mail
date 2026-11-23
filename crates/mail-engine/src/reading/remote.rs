@@ -118,17 +118,10 @@ impl RemoteImages {
 }
 
 fn build_client(allow_loopback: bool) -> Result<reqwest::Client, String> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let verifier = rustls_platform_verifier::Verifier::new(Arc::clone(&provider))
-        .map_err(|err| format!("certificate verifier: {err}"))?;
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|err| format!("TLS configuration: {err}"))?
-        .dangerous() // only to plug in the platform verifier; certificates are still checked
-        .with_custom_certificate_verifier(Arc::new(verifier))
-        .with_no_client_auth();
+    // The app's TLS setup: system trust store, the one crypto provider.
+    let tls = mail_imap::tls::client_config(None).map_err(|err| err.to_string())?;
     reqwest::Client::builder()
-        .tls_backend_preconfigured(tls)
+        .tls_backend_preconfigured(Arc::unwrap_or_clone(tls))
         .http1_only()
         .redirect(reqwest::redirect::Policy::none())
         .referer(false)

@@ -182,8 +182,8 @@ TLS-close_notify.
 
 ## TLS-Konzept
 
-- **Produkt:** `rustls::ClientConfig` mit dem Provider `ring` und
-  `rustls_platform_verifier::Verifier::new(provider)`. Geprüft wird gegen den Systemspeicher: auf
+- **Produkt:** `rustls::ClientConfig` mit dem Provider `ring` (seit 23.11.2026 `aws-lc-rs`, siehe
+  Nachtrag unten) und `rustls_platform_verifier::Verifier::new(provider)`. Geprüft wird gegen den Systemspeicher: auf
   macOS über Security.framework (`SecTrust`), auf Windows über CryptoAPI. Ein selbst signiertes
   Serverzertifikat geht, wenn der Nutzer ihm im System vertraut.
 - **Tests:** `Verifier::new_with_extra_roots(ca, provider)` mit der CA aus `TESTMAIL_CA_FILE`, geladen
@@ -209,6 +209,8 @@ TLS-close_notify.
   baut. Das ist einfacher für den Windows-Cross-Build. ring hatte sein letztes Release am 11.03.2025,
   das Repository hat Commits bis November 2026. Das verstößt formal gegen die 12-Monats-Regel, siehe
   „Ausnahme für `ring`“. Der Provider wird an einer Stelle gewählt; ein Wechsel ist ein Feature-Flag.
+  **Überholt am 23.11.2026:** Provider ist jetzt `aws-lc-rs`, gewählt in `mail_imap::tls::provider()`
+  (Nachtrag „Wechsel zu `aws-lc-rs`“).
 
 ## Folgen für Stufe 2
 
@@ -274,6 +276,9 @@ TLS-close_notify.
 - TCP-Keepalive, COMPRESS=DEFLATE, AUTHENTICATE (OAuth), Provider `aws-lc-rs`.
 
 ## Ausnahme für `ring` (Entscheidung der Hauptsitzung, 22.11.2026)
+
+**Aufgehoben am 23.11.2026:** Das Produkt nutzt `aws-lc-rs`; `ring` ist nicht mehr im
+Abhängigkeitsbaum (Nachtrag „Wechsel zu `aws-lc-rs`“ unten).
 
 `ring` 0.17.14 hatte kein Release in den letzten 12 Monaten und verstößt damit formal gegen die Regel
 für neue Abhängigkeiten. Es bekommt eine begründete Ausnahme:
@@ -361,6 +366,71 @@ Umstellung (nicht Teil dieser Prüfung, Entscheidung der Hauptsitzung):
 **Ungeprüft:** die Laufzeit unter Windows (Plattform-Verifier über CryptoAPI mit aws-lc-rs, die
 vorab assemblierten Objekte auf echter Hardware) und die Größe der echten App. Gemessen wurde nur
 am Wegwerf-Crate.
+
+### Nachtrag Reparatur-Sitzung (23.11.2026): Wechsel zu `aws-lc-rs`, Ausnahme für `ring` aufgehoben
+
+**Eine Stelle.** Provider und Client-Konfiguration entstehen nur noch in `crates/mail-imap/src/tls.rs`
+(jetzt öffentlich): `provider()` wählt den Provider, `client_config(Option<&ExtraRootCa>)` baut die
+Konfiguration mit Plattform-Verifier (Zusatz-CA nur in Tests), `client_config_with_roots(Vec<CertificateDer>)`
+dasselbe mit schon geparsten Wurzeln (Test der Autokonfiguration). Benutzt von IMAP und SMTP
+(`connector.rs`, `smtp/mod.rs`), von reqwest für externe Bilder (`reading/remote.rs`) und die
+Autokonfiguration (`discovery/autoconfig.rs`, über `tls_backend_preconfigured`), vom Zufall der
+Render-Tokens (`reading/links.rs`) und von den TLS-Servern der Tests (`smtp/tests.rs`,
+`discovery/autoconfig/tests.rs`). Vorher wurde der Provider an sieben Stellen gewählt.
+`mail-engine` hängt nicht mehr direkt an `rustls-platform-verifier`. Warum `mail-imap` und kein
+eigenes Crate: Es hält die TLS-Verbindungen und bildet ihre Fehler ab, `mail-engine` hängt ohnehin
+daran, `mail-model` bleibt ohne IO und ohne rustls; ein Crate für drei Funktionen zöge keine neue
+Grenze. Die KI-Schicht von Stufe 13 (`mail-ai`, in Arbeit) soll ihre Konfiguration laut ihrem
+Manifest ebenfalls von dort bekommen.
+
+**Umstellung** (Wurzel-`Cargo.toml`): `rustls` mit `aws_lc_rs` statt `ring` (weiter ohne
+Standard-Features: `std`, `tls12`, `logging`; also ohne Vorrang für Post-Quanten-Schlüsseltausch,
+X25519MLKEM768 wird aber angeboten), `tokio-rustls` ebenso. `reqwest` bleibt bei
+`rustls-no-provider` mit der Konfiguration von oben, `lettre` ohne eigenes TLS. Dazu `rcgen`
+(Testzertifikate) ohne Standard-Features mit `aws_lc_rs` und `pem`: Sein Standard-Feature `ring`
+hätte `ring` als Entwicklungsabhängigkeit behalten.
+
+**Nachweise** (macOS 27.2, Mac mini M4):
+
+- `cargo tree -i ring --workspace -e normal,build,dev` und dasselbe mit `--target all`,
+  `--target aarch64-apple-darwin` und `--target x86_64-pc-windows-msvc`: „nothing to print“.
+  `cargo tree -i openssl-sys`: „did not match any packages“. `Cargo.lock` führt `ring` 0.17.14
+  und `untrusted` 0.7.1 weiter als *optionale* Abhängigkeiten (hickory-proto: DNSSEC, rustls-webpki:
+  Feature `ring`, aws-lc-rs: `ring-io`), keine davon ist eingeschaltet; aws-lc-rs läuft mit
+  `aws-lc-sys` und `prebuilt-nasm` (`cargo tree -e features -i aws-lc-rs`). Gebaut wird `ring` nicht
+  (kein „Compiling ring“ im Release-Build).
+- aws-lc-sys meldet auf macOS „Building with: CC“ (`/usr/bin/clang` aus `~/.cargo/config.toml`);
+  CMake liegt zwar unter `/opt/homebrew/bin`, wird aber nicht aufgerufen. Neu im Lockfile: aws-lc-rs
+  1.19.0 und aws-lc-sys 0.47.0 (28.10.2026), cmake 0.1.58 (das Rust-Crate, 26.03.2026), fs_extra
+  1.3.0 (03.02.2023). fs_extra ist nur Build-Abhängigkeit von aws-lc-sys und verstößt wie
+  `stop-token` nur transitiv gegen die 12-Monats-Regel: beobachten.
+- `cargo deny check licenses advisories bans sources`: alle vier ok. Neue Lizenzen ISC, Apache-2.0,
+  MIT, BSD-3-Clause, MIT-0 (nur als Alternative), alle schon erlaubt; in `deny.toml` nur der
+  Kommentar zu ISC angepasst.
+- Tests mit `aws-lc-rs` gegen den Testserver: `cargo test -p mail-imap -- --include-ignored`
+  (`seed 1000`) grün: 72 Unit-Tests (auch SMTP über TLS/STARTTLS mit eigenem TLS-Server und die
+  Abbildung der Zertifikatsfehler), `server.rs` 11 (darunter `tls_and_starttls_with_the_test_ca`,
+  `certificate_and_login_errors_are_typed`), `smtp.rs` 6, `read_only.rs`, `bodies.rs`.
+  `cargo test -p mail-engine -- --include-ignored` (`seed 10000`, `VICEMAIL_RESTART_TEST=1`) grün:
+  206 Unit-Tests (Kontoerkennung über HTTPS mit eigenem Server, externe Bilder, Outbox-, Lese- und
+  Suchtests gegen den Testserver), `tests/server.rs` 8 von 8, `tests/actions.rs`. Die Lesetests
+  gegen den Testserver zusätzlich mit `seed 1000`: 4 von 4.
+- Builds mit `aws-lc-rs` aus einem sauberen Worktree von `a341d78` plus dieser Änderung (im
+  Checkout kompilierten halbfertige Änderungen anderer Sitzungen gerade nicht), Abhängigkeiten außer
+  dem TLS-Stapel schon übersetzt:
+  - macOS, `cargo build -p mail-app --release` (fat LTO): 18.494.224 B in 1:36 min; zum Vergleich
+    `ring` (Checkout um 02:04 vor der Umstellung, fast derselbe Code) 17.018.176 B in 1:43 min, also
+    +1,48 MB. aws-lc-sys war beim Messlauf schon übersetzt; kalt kostet AWS-LC laut Spike oben rund
+    8 s mehr.
+  - Windows, `scripts/build-windows.sh`: Installer in 117 s (aws-lc-sys kalt übersetzt),
+    `Vice Mail_0.1.0_x64-setup.exe` 7.296.549 B (der `ring`-Installer aus Stufe 6 hatte
+    6.893.788 B, also +0,4 MB), `mail-app.exe` 26.414.592 B (Stufe 6: 25.337.344 B; dazwischen liegt
+    auch neuer Code). aws-lc-sys baute mit `clang-cl` von cargo-xwin („Building with: CC“) und
+    meldete „NASM command not found“, nahm also die vorab assemblierten Objekte. Kein zusätzliches
+    Werkzeug.
+
+**Ungeprüft:** die Laufzeit unter Windows (Plattform-Verifier über CryptoAPI mit aws-lc-rs, die vorab
+assemblierten Objekte auf echter Hardware); öffentlich ausgestellte Zertifikate.
 
 ## Rückweg
 

@@ -275,8 +275,7 @@ fn pki(names: &[&str]) -> Pki {
     let key = KeyPair::generate().expect("key");
     let cert = params.signed_by(&key, &issuer).expect("cert");
 
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let server = rustls::ServerConfig::builder_with_provider(provider)
+    let server = rustls::ServerConfig::builder_with_provider(mail_imap::tls::provider())
         .with_safe_default_protocol_versions()
         .expect("versions")
         .with_no_client_auth()

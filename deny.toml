@@ -23,7 +23,8 @@ allow = [
     "MPL-2.0",      # cssparser, selectors, option-ext (via tauri); file-level copyleft, GPL compatible
     "Unicode-3.0",  # ICU data and unicode-ident (via url/idna)
     "Zlib",         # foldhash (via hashbrown)
-    "ISC",          # ring, rustls-webpki, untrusted (rustls stack); GPL-3.0 compatible, see decision 0002
+    "ISC",          # aws-lc-rs, aws-lc-sys, rustls-webpki, untrusted (rustls stack); GPL-3.0 compatible, see decision 0002
+    # aws-lc-sys also needs MIT, Apache-2.0, BSD-3-Clause (above); MIT-0 only as an alternative.
 ]
 confidence-threshold = 0.9
 exceptions = []

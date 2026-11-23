@@ -2,8 +2,9 @@
 //! `MailBackend` from `mail-model` (decision 0002). Knows neither database nor UI.
 //!
 //! - **Transport:** TCP, then TLS (port 993) or STARTTLS (port 143, never continues
-//!   unencrypted), certificates checked by the operating system (`tls`), read and write
-//!   limits on every connection (`timeout_io`).
+//!   unencrypted), certificates checked by the operating system ([`tls`], which also sets up
+//!   the HTTPS clients of `mail-engine`), read and write limits on every connection
+//!   (`timeout_io`).
 //! - **Library use:** async-imap provides the connection, buffer, parser and LOGIN. Everything
 //!   after LOGIN runs through the own command layer in `command`, which checks the tagged
 //!   status, keeps response codes, records unsolicited changes and enforces the read-only
@@ -36,7 +37,7 @@ mod sasl;
 mod search;
 mod smtp;
 mod timeout_io;
-mod tls;
+pub mod tls;
 mod writer;
 
 #[cfg(any(test, feature = "test-support"))]

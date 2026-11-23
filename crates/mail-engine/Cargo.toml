@@ -28,8 +28,8 @@ keyring-core.workspace = true
 hickory-resolver.workspace = true
 reqwest.workspace = true
 roxmltree.workspace = true
+# The TLS configuration itself comes from `mail_imap::tls` (one place for provider and verifier).
 rustls.workspace = true
-rustls-platform-verifier.workspace = true
 # Host checks of external images (stage 3).
 url.workspace = true
 # Opening links and attachments with the system's default apps (stage 3).

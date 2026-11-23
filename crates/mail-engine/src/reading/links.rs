@@ -34,8 +34,11 @@ impl Renderings {
     /// to the clock and a counter (unique, but guessable).
     pub fn new_token() -> RenderToken {
         let mut bytes = [0_u8; 16];
-        let provider = rustls::crypto::ring::default_provider();
-        if provider.secure_random.fill(&mut bytes).is_err() {
+        if mail_imap::tls::provider()
+            .secure_random
+            .fill(&mut bytes)
+            .is_err()
+        {
             tracing::error!("no OS randomness for a render token; using a predictable one");
             static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let nanos = std::time::SystemTime::now()

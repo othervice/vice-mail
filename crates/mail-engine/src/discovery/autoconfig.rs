@@ -6,8 +6,8 @@
 //!
 //! Never from a third-party directory such as Mozilla's ISPDB.
 //!
-//! The HTTP client ([`HttpsFetcher`]): rustls with the `ring` provider and the system's
-//! certificate check (decision 0002), HTTP/1.1, no cookies (no cookie store exists), no
+//! The HTTP client ([`HttpsFetcher`]): rustls with the app's TLS setup (`mail_imap::tls`: the
+//! system's certificate check, decision 0002), HTTP/1.1, no cookies (no cookie store exists), no
 //! `Referer`, no proxy, no compression, a neutral `User-Agent` without product name or
 //! version, 4 s to connect and 8 s per request, at most [`MAX_BODY`] bytes.
 //!
@@ -110,11 +110,8 @@ pub struct HttpsFetcher {
 impl HttpsFetcher {
     /// Certificates are checked against the system's trust store.
     pub fn new() -> Self {
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let verifier = rustls_platform_verifier::Verifier::new(Arc::clone(&provider))
-            .map_err(|err| LookupError(format!("certificate verifier: {err}")));
         Self {
-            client: verifier.and_then(|v| build_client(provider, v, &[], REQUEST_TIMEOUT)),
+            client: build_client(mail_imap::tls::client_config(None), &[], REQUEST_TIMEOUT),
         }
     }
 
@@ -126,14 +123,12 @@ impl HttpsFetcher {
         overrides: &[(&str, std::net::SocketAddr)],
         timeout: Duration,
     ) -> Self {
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots(
-            [extra_root],
-            Arc::clone(&provider),
-        )
-        .map_err(|err| LookupError(format!("certificate verifier: {err}")));
         Self {
-            client: verifier.and_then(|v| build_client(provider, v, overrides, timeout)),
+            client: build_client(
+                mail_imap::tls::client_config_with_roots(vec![extra_root]),
+                overrides,
+                timeout,
+            ),
         }
     }
 }
@@ -144,20 +139,16 @@ impl Default for HttpsFetcher {
     }
 }
 
+/// An HTTPS client over the app's TLS setup (`mail_imap::tls`: system trust store, the one
+/// crypto provider).
 fn build_client(
-    provider: Arc<rustls::crypto::CryptoProvider>,
-    verifier: rustls_platform_verifier::Verifier,
+    tls: Result<Arc<rustls::ClientConfig>, mail_model::BackendError>,
     overrides: &[(&str, std::net::SocketAddr)],
     timeout: Duration,
 ) -> Result<reqwest::Client, LookupError> {
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|err| LookupError(format!("TLS configuration: {err}")))?
-        .dangerous() // only to plug in the platform verifier; certificates are still checked
-        .with_custom_certificate_verifier(Arc::new(verifier))
-        .with_no_client_auth();
+    let tls = tls.map_err(|err| LookupError(err.to_string()))?;
     let mut builder = reqwest::Client::builder()
-        .tls_backend_preconfigured(tls)
+        .tls_backend_preconfigured(Arc::unwrap_or_clone(tls))
         .https_only(true)
         .http1_only()
         .redirect(reqwest::redirect::Policy::none())
