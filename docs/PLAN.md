@@ -96,3 +96,35 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 - Leistungsziele aus `docs/SPEC.md` werden ab Stufe 7 bei jeder Änderung an Liste oder Suche neu gemessen.
 - Der Windows-Build wird ab Stufe 6 am Ende jeder Stufe neu erzeugt, damit Plattformfehler früh auffallen.
 - Jede Stufe endet mit grünem `scripts/check.sh` und einem Push.
+
+## Letzter Lauf
+
+Nachtlauf 22./23.11.2026, Hauptsitzung mit bis zu vier Subagenten gleichzeitig. Zwischenstand
+23.11., 08:00 (der Lauf geht weiter; dieser Abschnitt wird am Ende ersetzt).
+
+**Fertig:** Stufen 00–04, 11, 12. Jeweils `scripts/check.sh` grün im sauberen Worktree, die
+Servertests gegen den lokalen Stalwart und die Desktop-Tests (WKWebView) grün; Einzelheiten unter
+„Ergebnis“ der Stufendateien.
+
+**Windows-Prototyp:** Gitea-Vorab-Release `prototype-2026-11-23` (Commit 5d40e88, Stufen 1–5, 7,
+9 Teil A, 11, 12 mit Oberfläche). Testanleitung: `docs/testing/windows-checklist.md`. Die macOS-.dmg
+folgt nach der Windows-Version.
+
+**In Arbeit** (Code und Tests weitgehend da, offen steht in der jeweiligen Stufendatei):
+- 05: zwei fehlende Tests (Entwurf aus einem anderen Programm, Sofortversand offline).
+- 06: braucht den Windows-Rechner (Installation, Laufzeitprüfungen, HTML-Sandbox unter WebView2).
+  `scripts/check.sh` übersetzt den Windows-Code jetzt mit (`cargo xwin clippy`).
+- 07: „Letzte Suchen“ und „Suchen speichern“ werden gebaut.
+- 08: Einstellungen und Layout ziehen vom Browser-Speicher in den Kern; Mail und Composer im
+  eigenen Fenster; Desktop-Tests für Tastatur und Layouts laufen noch nicht.
+- 09: `.eml`-Dateien öffnen fehlt; Handprüfung Benachrichtigungen und Standard-Mail-App.
+- 10: Oberfläche committet, Desktop-Tests und Rechtschreibprüfung offen.
+- 13: Oberfläche wird gebaut; Prüfsatz mit echtem Modell braucht Ollama.
+
+**Wartet auf den Menschen:** Windows-Prototyp testen; ein echtes Konto einrichten (bleibt nur
+lesend) und entscheiden, für welches Konto Schreibzugriff freigeschaltet wird; MCP mit einem echten
+Client prüfen; Einstellungs-Sync mit zwei Geräten; Ollama oder einen API-Schlüssel für Stufe 13
+(nur in der App eingeben); Screenreader-Checkliste (`docs/testing/screenreader-checklist.md`).
+
+**Offen aufgefallen:** Nach sehr vielen gerenderten Zeilen (alle 9.959 des Posteingangs zweimal)
+ruckelt das Scrollen in derselben Sitzung (längster Frame etwa 250 ms); wird untersucht.
