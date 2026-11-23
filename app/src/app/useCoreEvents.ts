@@ -1,11 +1,13 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { applyAccountStatus, invalidateAccountData } from "../features/accounts/queries";
+import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
 import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
 import { ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
+import { reportOwnFailures } from "../stores/notices";
 import { useUiStore } from "../stores/ui";
 import { refreshQuery } from "./refreshQuery";
 
@@ -55,6 +57,13 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       // Only a click in a mail gets here (the navigation hook in Rust). The reading pane that
       // shows this rendering asks the core for the target and lets the user confirm it.
       useUiStore.getState().requestLink(event.renderToken, event.index);
+      break;
+    case "operationsChanged":
+      // The status badge and, if it is open, the activity view. The rows themselves change
+      // with `messagesChanged`. Failures of the user's own actions get a notice.
+      refreshQuery(queryClient, outboxCountsQueryKey(event.accountId));
+      refreshQuery(queryClient, operationsQueryKey(event.accountId));
+      reportOwnFailures(event.operations);
       break;
   }
 }

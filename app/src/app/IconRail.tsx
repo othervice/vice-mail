@@ -1,17 +1,19 @@
-import { CircleExclamationPoint, CloudOff, Settings, type LucideIcon } from "lucide-react";
-import { useId } from "react";
+import { CircleExclamationPoint, CloudOff, History, Settings, type LucideIcon } from "lucide-react";
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { accountFill } from "../features/accounts/accountColor";
 import { Avatar } from "../features/accounts/Avatar";
 import { useSelectedAccount } from "../features/accounts/selection";
+import { useOutboxCounts } from "../features/actions/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
+import { useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
-import type { Account, MailboxId } from "../services/ipc";
+import type { Account, Mailbox, MailboxId } from "../services/ipc";
 import { MAIL_VIEW_IDS, useUiStore } from "../stores/ui";
 
 interface RailButtonProps {
@@ -23,11 +25,16 @@ interface RailButtonProps {
   onClick: () => void;
   /** For the Folders entry, which unfolds the sidebar instead of opening a view. */
   disclosure?: { expanded: boolean; controls?: string };
+  /** Small count or mark on the icon (activity). */
+  badge?: ReactNode;
+  /** Rows dragged out of the list can be dropped here: they move into this folder. */
+  dropMailbox?: Mailbox | undefined;
   /** Stable hook for the desktop tests (labels change with the language). */
   "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, ...rest }: RailButtonProps) {
+function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, dropMailbox, ...rest }: RailButtonProps) {
+  const drop = useDropTarget(dropMailbox);
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
   const className = cx(
     "relative flex items-center rounded-card transition-colors",
@@ -35,6 +42,7 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     active
       ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent"
       : "text-secondary hover:bg-hover hover:text-primary",
+    drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
   );
   const button = (
     <button
@@ -44,10 +52,15 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
       aria-expanded={disclosure?.expanded}
       aria-controls={disclosure?.controls}
       onClick={onClick}
+      {...(dropMailbox && drop.handlers)}
       className={className}
       data-testid={rest["data-testid"]}
+      data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
     >
-      <Icon aria-hidden className="size-(--ui-icon) shrink-0" strokeWidth={1.75} />
+      <span className="relative flex shrink-0">
+        <Icon aria-hidden className="size-(--ui-icon) shrink-0" strokeWidth={1.75} />
+        {badge}
+      </span>
       {expanded && (
         <span aria-hidden className="truncate">
           {label}
@@ -76,6 +89,46 @@ function StateBadge({ account }: { account: Account }) {
         strokeWidth={2}
       />
     </span>
+  );
+}
+
+/**
+ * The collected state of the outbox (docs/DESIGN.md: pending and failed actions visible but
+ * quiet): a count on the activity icon, in the danger colour once something needs the user.
+ */
+function ActivityButton({ accounts, expanded, active }: { accounts: readonly Account[]; expanded: boolean; active: boolean }) {
+  const { t, i18n } = useTranslation();
+  const showActivity = useUiStore((state) => state.showActivity);
+  const counts = useOutboxCounts(accounts);
+  const pending = counts.reduce((sum, c) => sum + c.pending, 0);
+  const attention = counts.reduce((sum, c) => sum + c.failed + c.conflict, 0);
+  const numbers = new Intl.NumberFormat(i18n.language);
+  const label = pending + attention > 0 ? t("activity.badge", { pending, attention }) : t("activity.nav");
+  const shown = attention > 0 ? attention : pending;
+  const badge =
+    shown > 0 ? (
+      <span
+        aria-hidden
+        data-testid="activity-badge"
+        data-attention={attention > 0 || undefined}
+        className={cx(
+          "absolute -top-2 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
+          attention > 0 ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
+        )}
+      >
+        {numbers.format(shown)}
+      </span>
+    ) : null;
+  return (
+    <RailButton
+      icon={History}
+      label={label}
+      expanded={expanded}
+      active={active}
+      onClick={showActivity}
+      badge={badge}
+      data-testid="rail-activity"
+    />
   );
 }
 
@@ -182,6 +235,10 @@ export function IconRail() {
   const { accounts, account: selected } = useSelectedAccount();
   const foldersId = useId();
   const accountList = accounts.data ?? [];
+  const mailboxes = useMailboxes(selected?.id).data ?? [];
+  /** Rail views that take dragged rows: they move into the folder the view shows. */
+  const dropFolder = (id: (typeof MAIL_VIEW_IDS)[number]) =>
+    id === "inbox" || id === "archive" || id === "trash" ? mailboxWithRole(mailboxes, id) : undefined;
 
   return (
     <nav
@@ -215,6 +272,7 @@ export function IconRail() {
                   onClick={() => {
                     showMailView(id);
                   }}
+                  dropMailbox={dropFolder(id)}
                   data-testid={`rail-${id}`}
                 />
               )}
@@ -232,6 +290,7 @@ export function IconRail() {
       <div className={cx("flex shrink-0 flex-col gap-2 py-3", expanded ? "px-3" : "items-center")}>
         {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
         {expanded ? null : <AccountSwitcher accounts={accountList} selected={selected} />}
+        <ActivityButton accounts={accountList} expanded={expanded} active={view.kind === "activity"} />
         <RailButton
           icon={Settings}
           label={t("nav.settings")}

@@ -1,5 +1,5 @@
 import { CloudOff, FileX, LoaderCircle, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
@@ -211,6 +211,8 @@ interface ReadingPaneProps {
   account: Account;
   messageId: MessageId;
   focusRequest: FocusRequest | null;
+  /** The mail actions for this message (archive, delete, …), left in the pane's top bar. */
+  toolbar?: ReactNode;
   /** Escape: back to the list, the message stays open. */
   onEscape: () => void;
   /** Closes the pane (the list gives up its selection). */
@@ -220,10 +222,10 @@ interface ReadingPaneProps {
 /**
  * The reading pane next to the list (docs/DESIGN.md, "Lesebereich"). Shows the message the list
  * selected: head, notes about damaged or partly stored mail, attachments, blocked external
- * content and the body, and below it the check of a clicked link. No mail actions yet (stage 4);
- * opening a message does not mark it as read either.
+ * content and the body, and below it the check of a clicked link. The top bar holds the mail
+ * actions (stage 4); marking as read on open is the mail view's job (it knows the setting).
  */
-export function ReadingPane({ account, messageId, focusRequest, onEscape, onClose }: ReadingPaneProps) {
+export function ReadingPane({ account, messageId, focusRequest, toolbar, onEscape, onClose }: ReadingPaneProps) {
   const { t } = useTranslation();
   const [format, setFormat] = useState<BodyFormat>("auto");
   const query = useMessageView(account.id, messageId, format);
@@ -293,6 +295,7 @@ export function ReadingPane({ account, messageId, focusRequest, onEscape, onClos
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
     >
       <div className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-border px-4">
+        <div className="me-auto flex min-w-0 items-center">{toolbar}</div>
         {query.isFetching && view && (
           <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
         )}

@@ -48,6 +48,14 @@ const TEXT_PAIRS: [string, string][] = [
   ["warning", "canvas"],
   ["success", "canvas"],
   ...["text-primary", "text-secondary"].map((fg): [string, string] => [fg, "surface-raised"]),
+  // Stage 4. Notices (raised surface): the Undo button, the check and error symbols. The
+  // selection bar on the soft accent: count, quiet buttons, toolbar symbols. The count on the
+  // activity badge (danger fill, or secondary on the rail). Failure texts in the activity view.
+  ...["accent", "success", "danger"].map((fg): [string, string] => [fg, "surface-raised"]),
+  ...["text-primary", "text-secondary", "accent"].map((fg): [string, string] => [fg, "accent-soft"]),
+  ["text-on-accent", "danger"],
+  ["text-secondary", "rail"],
+  ["danger", "canvas"],
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -72,6 +80,20 @@ const CONTROL_PAIRS: [string, string][] = [
   ["border-strong", "surface"],
   ["warning", "canvas"],
   ["warning", "surface-raised"],
+  // Stage 4, actions. Symbols for pending (tertiary), failed (danger) and conflicting (warning)
+  // changes in rows, plain, selected and hovered. The selection box: its border (secondary) and
+  // the checked fill (accent). The ring of the activity badge on the rail. Drop target outline on
+  // the soft accent. The write switch: track off (border-strong) and on (accent) on the surface,
+  // the knob on the accent and on the surface.
+  ...["text-tertiary", "danger", "warning", "text-secondary", "accent"].flatMap((fg) =>
+    ["surface", "selected", "hover"].map((bg): [string, string] => [fg, bg]),
+  ),
+  ["text-secondary", "surface-raised"],
+  ["border-strong", "rail"],
+  ["accent", "accent-soft"],
+  ["accent", "surface"],
+  ["surface-raised", "accent"],
+  ["text-secondary", "surface"],
 ];
 
 describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {

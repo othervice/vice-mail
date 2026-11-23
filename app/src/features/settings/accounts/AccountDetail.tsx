@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/Button";
 import { ErrorNotice } from "../../../components/ErrorNotice";
 import { Notice } from "../../../components/Notice";
+import { Switch } from "../../../components/Switch";
 import { TextField } from "../../../components/TextField";
 import type { Account, ServerSettings } from "../../../services/ipc";
 import { useUiStore } from "../../../stores/ui";
 import { Avatar } from "../../accounts/Avatar";
 import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
+import { useSetWritesEnabled } from "../../actions/queries";
 import { SpecialFolders } from "./SpecialFolders";
 
 function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
@@ -52,6 +54,36 @@ function StatusBlock({ account }: { account: Account }) {
         />
       )}
       {retry.isError && <ErrorNotice context={t("status.retryFailed")} error={retry.error} />}
+    </Block>
+  );
+}
+
+/**
+ * The per-account switch for changes on the server (stage 4). Off for every account until the
+ * user turns it on here; the explanation says what it allows and that it applies to this account.
+ */
+function WritesBlock({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const save = useSetWritesEnabled();
+  // While the core stores it, the switch shows the requested position.
+  const checked = save.isPending ? save.variables.enabled : account.writesEnabled;
+  return (
+    <Block title={t("settings.accounts.detail.writes.title")}>
+      <Switch
+        label={t("settings.accounts.detail.writes.label")}
+        description={t("settings.accounts.detail.writes.description")}
+        checked={checked}
+        disabled={save.isPending}
+        onChange={(enabled) => {
+          save.mutate({ accountId: account.id, enabled });
+        }}
+        data-testid="writes-switch"
+      />
+      <p role="status" className="text-13 text-secondary" data-testid="writes-state">
+        {checked ? t("settings.accounts.detail.writes.on") : t("settings.accounts.detail.writes.off")}
+      </p>
+      {checked && <p className="text-12 text-secondary">{t("settings.accounts.detail.writes.offNote")}</p>}
+      {save.isError && <ErrorNotice context={t("settings.accounts.detail.writes.failed")} error={save.error} />}
     </Block>
   );
 }
@@ -199,7 +231,7 @@ function RemoveAccount({ account }: { account: Account }) {
   );
 }
 
-/** One account: status, read-only note, servers, password, special folders, removal. */
+/** One account: status, read-only note and the switch for changes, servers, password, special folders, removal. */
 export function AccountDetail({ accountId }: { accountId: string }) {
   const { t } = useTranslation();
   const accounts = useAccounts();
@@ -257,11 +289,12 @@ export function AccountDetail({ accountId }: { accountId: string }) {
         )}
       </div>
       {!account.writesEnabled && (
-        <Notice title={t("settings.accounts.setup.readOnlyTitle")}>
-          <p>{t("settings.accounts.setup.readOnlyBody")}</p>
+        <Notice title={t("settings.accounts.setup.readOnlyAccountTitle")} data-testid="read-only-account">
+          <p>{t("settings.accounts.setup.readOnlyAccountBody")}</p>
         </Notice>
       )}
       <StatusBlock account={account} />
+      <WritesBlock account={account} />
       <Block title={t("settings.accounts.detail.servers")}>
         <dl className="flex flex-col gap-3">
           <ServerRow label={t("settings.accounts.setup.incoming")} server={account.imap} />

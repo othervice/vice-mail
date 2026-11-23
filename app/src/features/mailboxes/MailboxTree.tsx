@@ -8,6 +8,7 @@ import { useUiStore } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useMailboxes } from "./queries";
 import { buildMailboxTree, isRoleView, type MailboxNode } from "./tree";
+import { useDropTarget } from "./useDropTarget";
 
 interface MailboxTreeProps {
   account: Account;
@@ -46,6 +47,8 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
   const { mailbox, children } = node;
   const name = mailbox.role === "custom" ? mailbox.name : t(`roles.${mailbox.role}`);
   const current = mailbox.id === currentMailboxId;
+  // Rows dragged out of the list can be dropped here (a move of the dragged messages).
+  const drop = useDropTarget(mailbox);
 
   const open = () => {
     // Folders with a view in the rail open that view, so rail and tree agree on what is shown.
@@ -94,10 +97,13 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
             aria-label={mailbox.unread > 0 ? t("sidebar.folderUnread", { name, count: mailbox.unread }) : name}
             title={mailbox.path}
             onClick={open}
+            {...drop.handlers}
             data-testid={`mailbox-${String(mailbox.id)}`}
+            data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
             className={cx(
               "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-13 transition-colors",
               current ? "bg-selected font-medium text-primary" : "text-secondary hover:bg-hover hover:text-primary",
+              drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
             )}
           >
             {label}

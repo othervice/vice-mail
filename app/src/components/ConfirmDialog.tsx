@@ -1,0 +1,158 @@
+import { TriangleExclamationPoint } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { createPortal } from "react-dom";
+import { Button } from "./Button";
+
+interface ConfirmDialogProps {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  /** Escape, the cancel button or a click beside the dialog. */
+  onCancel: () => void;
+  /**
+   * Where the focus goes after a confirmation (e.g. the next message of the list): the element
+   * that opened the dialog may be gone by then. After a cancel it returns to that element.
+   */
+  focusAfterConfirm?: () => void;
+  "data-testid"?: string;
+}
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The one dialog of the app (docs/DESIGN.md: only for deleting for good). An `alertdialog`: the
+ * rest of the window is inert while it is open, Tab stays inside, Escape cancels, and the focus
+ * returns to where it was. The focus starts on Cancel, the harmless choice. Built by hand
+ * instead of Radix Dialog, which inserts a `<style>` element the app's CSP does not allow.
+ */
+export function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+  focusAfterConfirm,
+  ...rest
+}: ConfirmDialogProps) {
+  const titleId = useId();
+  const bodyId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const [host] = useState(() => document.createElement("div"));
+  const confirmed = useRef(false);
+  const afterConfirm = useRef(focusAfterConfirm);
+  useLayoutEffect(() => {
+    afterConfirm.current = focusAfterConfirm;
+  });
+
+  useLayoutEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.appendChild(host);
+    // Everything else becomes inert: no clicks, no focus, hidden from screen readers.
+    const others = [...document.body.children].filter(
+      (element): element is HTMLElement => element !== host && element instanceof HTMLElement,
+    );
+    // Attributes, not the `inert` property: they show in the DOM and work in every engine.
+    const before = others.map((element) => ({ inert: element.hasAttribute("inert"), hidden: element.getAttribute("aria-hidden") }));
+    for (const element of others) {
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+    cancelRef.current?.focus();
+    return () => {
+      others.forEach((element, i) => {
+        const was = before[i];
+        if (!was?.inert) element.removeAttribute("inert");
+        if (was?.hidden == null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", was.hidden);
+      });
+      host.remove();
+      if (confirmed.current && afterConfirm.current) afterConfirm.current();
+      else if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [host]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        onKeyDown={onKeyDown}
+        data-testid={rest["data-testid"]}
+        className="flex w-full max-w-(--ui-dialog-width) flex-col gap-4 rounded-panel border border-border bg-surface-raised p-6 shadow-panel"
+      >
+        <div className="flex gap-3">
+          <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
+          <div className="flex min-w-0 flex-col gap-2">
+            <h2 id={titleId} className="text-16 font-semibold text-primary">
+              {title}
+            </h2>
+            <p id={bodyId} className="text-14 text-secondary">
+              {body}
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <CancelButton ref={cancelRef} label={cancelLabel} onClick={onCancel} />
+          <Button
+            variant="danger"
+            onClick={() => {
+              confirmed.current = true;
+              onConfirm();
+            }}
+            data-testid="confirm-dialog-confirm"
+          >
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    host,
+  );
+}
+
+function CancelButton({ ref, label, onClick }: { ref: Ref<HTMLButtonElement>; label: string; onClick: () => void }) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      data-testid="confirm-dialog-cancel"
+      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-13 font-medium text-primary transition-colors hover:bg-hover"
+    >
+      {label}
+    </button>
+  );
+}

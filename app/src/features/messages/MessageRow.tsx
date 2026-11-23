@@ -1,7 +1,8 @@
-import { Flag, Paperclip } from "lucide-react";
+import { Check, Clock, Flag, Paperclip, TriangleExclamationPoint } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
-import type { AccountColor, Address, MessageListItem } from "../../services/ipc";
+import type { AccountColor, Address, MessageActivity, MessageListItem } from "../../services/ipc";
 import { Avatar } from "../accounts/Avatar";
 import { formatFullDate, formatListDate, type DayBounds } from "./rows";
 
@@ -12,9 +13,16 @@ interface MessageRowContentProps {
   /** Sent and drafts show the recipients where other folders show the sender. */
   showRecipients: boolean;
   twoLine: boolean;
+  /** Part of the selection. */
   selected: boolean;
+  /** The keyboard cursor (`aria-activedescendant`): shows the focus ring while the list has focus. */
+  cursor: boolean;
+  /** More than one message is selected: every row shows its selection box. */
+  multiSelect: boolean;
   /** Id for the preview text, so the option can point at it (`aria-describedby`). */
   previewId?: string | undefined;
+  /** Quick actions, shown on hover and on the keyboard cursor (mouse shortcuts, see MessageList). */
+  actions?: ReactNode;
 }
 
 function addressName(address: Address): string {
@@ -30,29 +38,89 @@ function useWho(item: MessageListItem, showRecipients: boolean): string {
   return item.from ? addressName(item.from) : t("list.unknownSender");
 }
 
+/** The row's activity, absent for most rows (the core leaves the field out). */
+export function rowActivity(item: MessageListItem): MessageActivity | null {
+  return item.activity ?? null;
+}
+
 /**
- * The row's accessible name, in reading order: state, who, subject, attachment, flag, full date.
- * Explicit, because a name computed from the row's parts would run words together.
+ * The row's accessible name, in reading order: state, who, subject, attachment, flag, pending or
+ * failed change, full date. Explicit, because a name computed from the row's parts would run words
+ * together.
  */
 export function useRowLabel(item: MessageListItem, showRecipients: boolean): string {
   const { t, i18n } = useTranslation();
   const who = useWho(item, showRecipients);
+  const activity = rowActivity(item);
   return [
     item.unread && t("list.unread"),
     who,
     item.subject.trim() || t("list.noSubject"),
     item.hasAttachments && t("list.attachment"),
     item.flagged && t("list.flagged"),
+    activity && t(`list.activity.${activity}`),
     formatFullDate(item.date, i18n.language),
   ]
     .filter(Boolean)
     .join(", ");
 }
 
+/** Small symbol for a change on its way (clock) or one that needs the user (warning). */
+function ActivityIcon({ activity }: { activity: MessageActivity }) {
+  const { t } = useTranslation();
+  const label = t(`list.activity.${activity}`);
+  const Icon = activity === "pending" ? Clock : TriangleExclamationPoint;
+  return (
+    <span title={label} className="flex shrink-0" data-testid={`row-activity-${activity}`}>
+      <Icon
+        aria-hidden
+        className={cx(
+          "size-(--ui-icon-small)",
+          activity === "pending" ? "text-tertiary" : activity === "failed" ? "text-danger" : "text-warning",
+        )}
+        strokeWidth={1.75}
+      />
+    </span>
+  );
+}
+
 /**
- * One message in the list (docs/DESIGN.md, "Zeile"): unread dot, avatar, sender, subject with
- * attachment symbol, preview, flag, time. The option around it carries the accessible name
- * (`useRowLabel`); the preview describes it. No quick actions yet (stage 4).
+ * The unread dot, which turns into a selection box on hover, on selected rows and while several
+ * messages are selected (docs/DESIGN.md, "Punkt links"). A mouse target only: the option's
+ * `aria-selected` says the same to screen readers, and Space or X toggles it from the keyboard.
+ */
+function SelectionMark({ unread, selected, multiSelect }: { unread: boolean; selected: boolean; multiSelect: boolean }) {
+  const boxShown = selected && multiSelect;
+  return (
+    <span aria-hidden data-row-check className="relative flex size-(--ui-icon-small) shrink-0 items-center justify-center">
+      {unread && (
+        <span
+          className={cx(
+            "size-(--ui-dot) rounded-full bg-accent",
+            boxShown || multiSelect ? "hidden" : "group-hover/row:hidden",
+          )}
+          data-testid="row-unread-dot"
+        />
+      )}
+      <span
+        className={cx(
+          "absolute inset-0 items-center justify-center rounded-control border",
+          selected ? "border-accent bg-accent text-on-accent" : "border-secondary bg-surface-raised",
+          boxShown || multiSelect ? "flex" : "hidden group-hover/row:flex",
+        )}
+        data-testid="row-check"
+      >
+        {selected && <Check className="size-3" strokeWidth={3} />}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One message in the list (docs/DESIGN.md, "Zeile"): unread dot (selection box on hover), avatar,
+ * sender, subject with attachment symbol, preview, flag, pending or failed change, time, and the
+ * quick actions on hover. The option around it carries the accessible name (`useRowLabel`); the
+ * preview describes it.
  */
 export function MessageRowContent({
   item,
@@ -61,19 +129,18 @@ export function MessageRowContent({
   showRecipients,
   twoLine,
   selected,
+  cursor,
+  multiSelect,
   previewId,
+  actions,
 }: MessageRowContentProps) {
   const { t, i18n } = useTranslation();
   const person = showRecipients ? item.to[0] : item.from;
   const who = useWho(item, showRecipients);
   const subject = item.subject.trim() || t("list.noSubject");
   const time = formatListDate(item.date, bounds, i18n.language);
+  const activity = rowActivity(item);
 
-  const dot = (
-    <span className="flex w-2 shrink-0 justify-center">
-      {item.unread && <span aria-hidden className="size-(--ui-dot) rounded-full bg-accent" />}
-    </span>
-  );
   const sender = (
     <span
       title={who}
@@ -104,8 +171,13 @@ export function MessageRowContent({
       )}
     </span>
   );
-  const flag = item.flagged && (
-    <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />
+  const marks = (
+    <>
+      {item.flagged && (
+        <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />
+      )}
+      {activity && <ActivityIcon activity={activity} />}
+    </>
   );
   const timeElement = (
     <time
@@ -120,19 +192,19 @@ export function MessageRowContent({
   return (
     <div
       className={cx(
-        "flex h-full items-center gap-3 rounded-card px-3",
+        "relative flex h-full items-center gap-3 rounded-card px-3",
         selected ? "bg-selected" : "group-hover/row:bg-hover",
-        // The list keeps focus (aria-activedescendant); the selected row shows it.
-        selected && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
+        // The list keeps focus (aria-activedescendant); the cursor row shows it.
+        cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
       )}
     >
-      {dot}
+      <SelectionMark unread={item.unread} selected={selected} multiSelect={multiSelect} />
       <Avatar name={person?.name} email={person?.email ?? ""} accountColor={accountColor} />
       {twoLine ? (
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-2">
             {sender}
-            {flag}
+            {marks}
             {timeElement}
           </span>
           {subjectLine}
@@ -141,9 +213,25 @@ export function MessageRowContent({
         <>
           {sender}
           {subjectLine}
-          {flag}
+          {marks}
           {timeElement}
         </>
+      )}
+      {actions && (
+        // Covers the time column while shown, on the row's own background.
+        <div
+          aria-hidden
+          className={cx(
+            "absolute end-2 flex items-center gap-1 rounded-control ps-2",
+            twoLine ? "top-1" : "inset-y-0",
+            selected ? "bg-selected" : "bg-hover",
+            "invisible group-hover/row:visible",
+            cursor && "group-focus-visible/list:visible",
+          )}
+          data-testid="row-actions"
+        >
+          {actions}
+        </div>
       )}
     </div>
   );

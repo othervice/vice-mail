@@ -39,6 +39,7 @@ describe("app frame without an account", () => {
       "Trash",
       "Folders",
       "Saved views",
+      "Activity",
       "Settings",
     ]);
     expect(within(rail).getByRole("list", { name: "Accounts" }).children).toHaveLength(0);

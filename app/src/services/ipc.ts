@@ -6,18 +6,24 @@
 import {
   commands,
   events,
+  MARK_READ_DELAY_MS,
+  MAX_ACTION_MESSAGES,
   type Account,
   type AccountColor,
   type AccountId,
   type AccountSettings,
   type AccountState,
   type AccountStatus,
+  type ActionKind,
+  type ActionResult,
   type Address,
   type AppInfo,
   type AttachmentInfo,
+  type BatchId,
   type BodyFormat,
   type BodyUnavailableReason,
   type Capabilities,
+  type ConflictReason,
   type ConnectionTestResult,
   type CoreEvent,
   type DiscoveryResult,
@@ -28,17 +34,27 @@ import {
   type LinkInfo,
   type LinkWarning,
   type ListCursor,
+  type MailAction,
   type Mailbox,
   type MailboxId,
   type MailboxRole,
+  type MarkReadOnOpen,
+  type MessageActivity,
   type MessageBody,
   type MessageId,
   type MessageListItem,
   type MessagePage,
   type MessageProblem,
+  type MessageRef,
   type MessageView,
   type MessageViewHeader,
   type OpenAttachmentResult,
+  type OperationId,
+  type OperationInfo,
+  type OperationKind,
+  type OperationNotice,
+  type OperationState,
+  type OutboxCounts,
   type Platform,
   type Preferences,
   type PrefetchPeriod,
@@ -46,6 +62,7 @@ import {
   type PrefetchState,
   type PrefetchStatus,
   type ProviderHint,
+  type ReadingPreferences,
   type RemoteContentScope,
   type RenderToken,
   type RoleSource,
@@ -57,6 +74,8 @@ import {
   type ThemePreference,
 } from "../generated/bindings";
 
+export { MARK_READ_DELAY_MS, MAX_ACTION_MESSAGES };
+
 export type {
   Account,
   AccountColor,
@@ -64,12 +83,16 @@ export type {
   AccountSettings,
   AccountState,
   AccountStatus,
+  ActionKind,
+  ActionResult,
   Address,
   AppInfo,
   AttachmentInfo,
+  BatchId,
   BodyFormat,
   BodyUnavailableReason,
   Capabilities,
+  ConflictReason,
   ConnectionTestResult,
   CoreEvent,
   DiscoveryResult,
@@ -80,17 +103,27 @@ export type {
   LinkInfo,
   LinkWarning,
   ListCursor,
+  MailAction,
   Mailbox,
   MailboxId,
   MailboxRole,
+  MarkReadOnOpen,
+  MessageActivity,
   MessageBody,
   MessageId,
   MessageListItem,
   MessagePage,
   MessageProblem,
+  MessageRef,
   MessageView,
   MessageViewHeader,
   OpenAttachmentResult,
+  OperationId,
+  OperationInfo,
+  OperationKind,
+  OperationNotice,
+  OperationState,
+  OutboxCounts,
   Platform,
   Preferences,
   PrefetchPeriod,
@@ -98,6 +131,7 @@ export type {
   PrefetchState,
   PrefetchStatus,
   ProviderHint,
+  ReadingPreferences,
   RemoteContentScope,
   RenderToken,
   RoleSource,
@@ -132,6 +166,22 @@ export const ERROR_CODES = [
   "unsupported_server",
   "keychain",
   "account_exists",
+  "missing_mailbox",
+  "confirmation_required",
+  "not_undoable",
+  "invalid_keyword",
+  "send_rejected",
+  "send_unclear",
+  "invalid_address",
+  "attachment_too_large",
+  "send_in_progress",
+  "sync_wrong_passphrase",
+  "sync_not_set_up",
+  "sync_already_set_up",
+  "sync_key_changed",
+  "sync_key_invalid",
+  "sync_off",
+  "sync_key_missing",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -252,6 +302,32 @@ export const ipc = {
   setPrefetchSettings: (settings: PrefetchSettings): Promise<PrefetchSettings> =>
     call(() => commands.setPrefetchSettings(settings)),
   getPrefetchStatus: (accountId: AccountId): Promise<PrefetchStatus> => call(() => commands.getPrefetchStatus(accountId)),
+
+  getReadingPreferences: (): Promise<ReadingPreferences> => call(() => commands.getReadingPreferences()),
+  setReadingPreferences: (preferences: ReadingPreferences): Promise<ReadingPreferences> =>
+    call(() => commands.setReadingPreferences(preferences)),
+
+  /**
+   * One user action on messages of one account (at most `MAX_ACTION_MESSAGES`). Local at once,
+   * then sent to the server. `requestId` is a fresh UUID per user action: the same id twice
+   * records nothing new.
+   */
+  applyAction: (action: MailAction, messages: MessageRef[], requestId: string): Promise<ActionResult> =>
+    call(() => commands.applyAction(action, messages, requestId)),
+  /** The "Undo" of the notice: cancels what is still queued, sends counter-operations for the rest. */
+  undoAction: (batch: BatchId): Promise<ActionResult> => call(() => commands.undoAction(batch)),
+  /** Queues the creation of a folder; it appears with `mailboxesChanged` once the server made it. */
+  createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null): Promise<ActionResult> =>
+    call(() => commands.createMailbox(accountId, path, role)),
+  /** Activity view, newest first, keyset-paged by the last `id`. `limit` 1..500. */
+  listOperations: (accountId: AccountId, before: OperationId | null, limit: number): Promise<OperationInfo[]> =>
+    call(() => commands.listOperations(accountId, before, limit)),
+  retryOperation: (operationId: OperationId): Promise<ActionResult> => call(() => commands.retryOperation(operationId)),
+  discardOperation: (operationId: OperationId): Promise<void> => done(call(() => commands.discardOperation(operationId))),
+  getOutboxCounts: (accountId: AccountId): Promise<OutboxCounts> => call(() => commands.getOutboxCounts(accountId)),
+  /** The user's per-account switch. Off: queued operations fail with `read_only` and are reverted. */
+  setWritesEnabled: (accountId: AccountId, enabled: boolean): Promise<Account> =>
+    call(() => commands.setWritesEnabled(accountId, enabled)),
 
   /** Subscribes to the typed event stream of the core. Resolves once the listener is registered. */
   onCoreEvent: async (handler: (event: CoreEvent) => void): Promise<Unsubscribe> => {

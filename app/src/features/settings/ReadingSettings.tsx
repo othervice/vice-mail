@@ -5,9 +5,10 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
-import type { Account, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
+import type { Account, MarkReadOnOpen, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
+import { useReadingPreferences, useSetReadingPreferences } from "../actions/queries";
 import { formatSize } from "../reading/format";
 import {
   usePrefetchSettings,
@@ -102,7 +103,7 @@ function PrefetchBlock({ accounts }: { accounts: readonly Account[] }) {
   };
 
   return (
-    <Block title={t("settings.reading.prefetch.title")} description={t("settings.reading.prefetch.description")}>
+    <>
       {settings.isError && (
         <ErrorNotice
           context={t("settings.reading.prefetch.loadFailed")}
@@ -142,6 +143,43 @@ function PrefetchBlock({ accounts }: { accounts: readonly Account[] }) {
           ))}
         </ul>
       )}
+    </>
+  );
+}
+
+const MARK_READ: readonly MarkReadOnOpen[] = ["immediately", "afterDelay", "never"];
+
+/** When an opened message counts as read (stage 4). Only accounts with writes on are marked. */
+function MarkReadBlock() {
+  const { t } = useTranslation();
+  const preferences = useReadingPreferences();
+  const save = useSetReadingPreferences();
+  const options: ChoiceOption<MarkReadOnOpen>[] = MARK_READ.map((value) => ({
+    value,
+    label: t(`settings.reading.markRead.${value}`),
+  }));
+  return (
+    <Block title={t("settings.reading.markRead.title")} description={t("settings.reading.markRead.description")}>
+      {preferences.isError && (
+        <ErrorNotice
+          context={t("settings.reading.markRead.loadFailed")}
+          error={preferences.error}
+          onRetry={() => {
+            void preferences.refetch();
+          }}
+        />
+      )}
+      {preferences.data && (
+        <ChoiceGroup
+          label={t("settings.reading.markRead.label")}
+          value={preferences.data.markReadOnOpen}
+          options={options}
+          onChange={(markReadOnOpen) => {
+            save.mutate({ ...preferences.data, markReadOnOpen });
+          }}
+        />
+      )}
+      {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
     </Block>
   );
 }
@@ -191,14 +229,17 @@ function SenderList({ account }: { account: Account }) {
   );
 }
 
-/** Settings → Reading: what is downloaded in advance, and whose external content loads. */
+/** Settings → Reading: the read status, what is downloaded in advance, and whose external content loads. */
 export function ReadingSettings() {
   const { t } = useTranslation();
   const accounts = useAccounts();
   const list = accounts.data ?? [];
   return (
     <SettingsSection title={t("settings.reading.title")}>
-      <PrefetchBlock accounts={list} />
+      <MarkReadBlock />
+      <Block divided title={t("settings.reading.prefetch.title")} description={t("settings.reading.prefetch.description")}>
+        <PrefetchBlock accounts={list} />
+      </Block>
       <Block divided title={t("settings.reading.remote.title")} description={t("settings.reading.remote.description")}>
         {accounts.isError && (
           <ErrorNotice

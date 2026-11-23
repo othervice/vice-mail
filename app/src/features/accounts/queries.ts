@@ -30,6 +30,8 @@ export async function invalidateAccountData(queryClient: QueryClient): Promise<v
     queryClient.invalidateQueries({ queryKey: accountsQueryKey }),
     queryClient.invalidateQueries({ queryKey: ["mailboxes"] }),
     queryClient.invalidateQueries({ queryKey: ["messages"] }),
+    queryClient.invalidateQueries({ queryKey: ["outboxCounts"] }),
+    queryClient.invalidateQueries({ queryKey: ["operations"] }),
   ]);
 }
 

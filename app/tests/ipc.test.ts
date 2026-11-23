@@ -170,6 +170,22 @@ describe("error codes", () => {
     "unsupported_server",
     "keychain",
     "account_exists",
+    "missing_mailbox",
+    "confirmation_required",
+    "not_undoable",
+    "invalid_keyword",
+    "send_rejected",
+    "send_unclear",
+    "invalid_address",
+    "attachment_too_large",
+    "send_in_progress",
+    "sync_wrong_passphrase",
+    "sync_not_set_up",
+    "sync_already_set_up",
+    "sync_key_changed",
+    "sync_key_invalid",
+    "sync_off",
+    "sync_key_missing",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

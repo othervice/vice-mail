@@ -28,7 +28,9 @@ export type View =
   | { kind: "mail"; mailView: MailViewId }
   /** A folder picked in the folder tree that has no view of its own in the rail. */
   | { kind: "mailbox"; accountId: AccountId; mailboxId: MailboxId }
-  | { kind: "settings"; section: SettingsSectionId };
+  | { kind: "settings"; section: SettingsSectionId }
+  /** Changes waiting for the server, failed or changed elsewhere, of every account (stage 4). */
+  | { kind: "activity" };
 
 /**
  * A link the user activated in the reading pane: a click in an HTML mail (the core's navigation
@@ -59,6 +61,7 @@ interface UiState {
   selectAccount: (accountId: AccountId) => void;
   showSettings: (section?: SettingsSectionId) => void;
   showAccountsPage: (page: AccountsPage) => void;
+  showActivity: () => void;
   toggleSidebar: () => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
   requestLink: (renderToken: RenderToken, index: number) => void;
@@ -91,6 +94,9 @@ export const useUiStore = create<UiState>()((set) => ({
   },
   showAccountsPage: (accountsPage) => {
     set({ view: { kind: "settings", section: "accounts" }, accountsPage });
+  },
+  showActivity: () => {
+    set({ view: { kind: "activity" } });
   },
   toggleSidebar: () => {
     set((state) => ({ sidebarExpanded: !state.sidebarExpanded }));

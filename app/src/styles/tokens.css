@@ -125,6 +125,12 @@
   --ui-list-width-reading: 24rem;
   --ui-reading-max-width: 46rem;
   --ui-attachment-width: 16rem;
+  /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)
+     and the height of their lists, the undo notices at the bottom. */
+  --ui-dialog-width: 28rem;
+  --ui-picker-width: 24rem;
+  --ui-picker-list-height: 18rem;
+  --ui-notice-width: 28rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the
      platform draws its window buttons over the web view (macOS, see app.css). */
   --ui-titlebar-inset: 0px;

@@ -61,10 +61,15 @@ function link(overrides: Partial<LinkInfo> = {}): LinkInfo {
   };
 }
 
-/** Commands that only read. Opening a message must not change anything (stage 4 marks read). */
+/**
+ * Commands that only read. Opening a message changes nothing on a read-only account (stage 4
+ * marks read only with writes on, see actions.test.tsx).
+ */
 const READING_COMMANDS = new Set([
   "get_app_info",
   "get_preferences",
+  "get_reading_preferences",
+  "get_outbox_counts",
   "list_accounts",
   "list_mailboxes",
   "list_messages",

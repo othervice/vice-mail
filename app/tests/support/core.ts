@@ -1,4 +1,16 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { isValidKeyword } from "../../src/features/actions/keywords";
+import {
+  MAX_ACTION_MESSAGES,
+  type ActionKind,
+  type ActionResult,
+  type MailAction,
+  type MessageRef,
+  type OperationInfo,
+  type OperationKind,
+  type OutboxCounts,
+  type ReadingPreferences,
+} from "../../src/services/ipc";
 import type {
   Account,
   AccountSettings,
@@ -105,6 +117,9 @@ export function makeMessage(overrides: Partial<MessageListItem> = {}): MessageLi
     hasAttachments: false,
     keywords: [],
     preview: null,
+    category: null,
+    important: false,
+    pinned: false,
     ...overrides,
   };
 }
@@ -242,6 +257,9 @@ interface FakeCoreOptions {
   prefetchStatus?: Record<string, PrefetchStatus>;
   /** Senders allowed to load external content, by account id. */
   remoteSenders?: Record<string, string[]>;
+  readingPreferences?: ReadingPreferences;
+  /** Operations already in the outbox (activity view), newest first. */
+  operations?: OperationInfo[];
 }
 
 export interface FakeCore {
@@ -258,6 +276,16 @@ export interface FakeCore {
   setView: (messageId: number, view: MessageView | ((format: BodyFormat) => MessageView)) => void;
   remoteSenders: (accountId: string) => string[];
   readonly prefetchSettings: PrefetchSettings;
+  // ---- Stage 4: actions and the outbox ----
+  /** Messages of a folder as the core holds them now (after actions). */
+  messagesIn: (mailboxId: number) => MessageListItem[];
+  /** The outbox, newest first. */
+  readonly operations: OperationInfo[];
+  /** The server's answer to queued operations: they end in `state` (the test then emits). */
+  settle: (ids: readonly number[], state: OperationInfo["state"], extra?: Partial<OperationInfo>) => OperationInfo[];
+  /** The server created the folders `createMailbox` asked for (the test then emits `mailboxesChanged`). */
+  completeMailboxCreations: () => void;
+  readonly readingPreferences: ReadingPreferences;
 }
 
 /**
@@ -313,6 +341,267 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       return m;
     });
     return mailboxes.filter((m) => m.accountId === target.accountId);
+  }
+
+  // ---- Stage 4: a small outbox with the contract's rules ----
+  let readingPreferences: ReadingPreferences = options.readingPreferences ?? { markReadOnOpen: "afterDelay" };
+  interface Recorded {
+    info: OperationInfo;
+    /** Takes the local change back (undo, failure). */
+    revert: () => void;
+  }
+  let operations: Recorded[] = (options.operations ?? []).map((info) => ({ info, revert: () => undefined }));
+  let nextOperation = Math.max(0, ...operations.map((o) => o.info.id)) + 1;
+  let nextBatch = Math.max(0, ...operations.map((o) => o.info.batch)) + 1;
+  const requests = new Map<string, ActionResult>();
+  const creations: { accountId: string; path: string; role: MailboxRole | null }[] = [];
+
+  const reject = (code: IpcError["code"], detail: string | null = null) =>
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    Promise.reject(ipcError(code, detail));
+
+  const accountOf = (id: string) => accounts.find((a) => a.id === id);
+  const mailboxOf = (id: number) => mailboxes.find((m) => m.id === id);
+  const roleMailbox = (accountId: string, role: MailboxRole) =>
+    mailboxes.find((m) => m.accountId === accountId && m.role === role);
+
+  const replaceItem = (mailboxId: number, id: number, change: (item: MessageListItem) => MessageListItem) => {
+    messages.set(
+      mailboxId,
+      (messages.get(mailboxId) ?? []).map((item) => (item.id === id ? change(item) : item)),
+    );
+  };
+  const moveItem = (from: number, to: number, id: number) => {
+    const item = (messages.get(from) ?? []).find((m) => m.id === id);
+    if (!item) return;
+    messages.set(from, (messages.get(from) ?? []).filter((m) => m.id !== id));
+    messages.set(to, [...(messages.get(to) ?? []), { ...item, mailboxId: to }].sort((a, b) => b.id - a.id));
+  };
+
+  const record = (
+    batch: number,
+    accountId: string,
+    action: ActionKind,
+    kind: OperationKind,
+    ref: { mailboxId: number | null; messageId: number | null; target?: number | null },
+    revert: () => void,
+  ) => {
+    const now = Date.now();
+    const info: OperationInfo = {
+      id: nextOperation++,
+      batch,
+      accountId,
+      action,
+      kind,
+      state: "queued",
+      mailboxId: ref.mailboxId,
+      messageId: ref.messageId,
+      targetMailboxId: ref.target ?? null,
+      attempts: 0,
+      error: null,
+      conflict: null,
+      notice: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    operations = [{ info, revert }, ...operations];
+  };
+
+  const ACTION_KINDS: Record<MailAction["type"], ActionKind> = {
+    markRead: "mark_read",
+    markUnread: "mark_unread",
+    flag: "flag",
+    unflag: "unflag",
+    addKeyword: "add_keyword",
+    removeKeyword: "remove_keyword",
+    archive: "archive",
+    delete: "delete",
+    deletePermanently: "delete_permanently",
+    move: "move",
+    spam: "spam",
+    notSpam: "not_spam",
+  };
+
+  function applyAction(action: MailAction, refs: MessageRef[], requestId: string): ActionResult | Promise<never> {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(requestId)) return reject("invalid_argument", "request id");
+    if (refs.length === 0 || refs.length > MAX_ACTION_MESSAGES) return reject("invalid_argument", "messages");
+    const accountIds = new Set(refs.map((ref) => mailboxOf(ref.mailboxId)?.accountId));
+    const [accountId] = [...accountIds];
+    if (accountIds.size !== 1 || !accountId) return reject("invalid_argument", "accounts");
+    const account = accountOf(accountId);
+    if (!account) return reject("not_found");
+    if (!account.writesEnabled) return reject("read_only");
+    const earlier = requests.get(requestId);
+    if (earlier) return { batch: earlier.batch, queued: 0, cancelled: 0 };
+    const found = refs.map((ref) => (messages.get(ref.mailboxId) ?? []).find((m) => m.id === ref.messageId));
+    if (found.some((item) => !item)) return reject("not_found");
+    const items = found as MessageListItem[];
+    const batch = nextBatch;
+    let queued = 0;
+    const kind = ACTION_KINDS[action.type];
+
+    const setFlag = (item: MessageListItem, field: "unread" | "flagged", value: boolean) => {
+      if (item[field] === value) return;
+      replaceItem(item.mailboxId, item.id, (m) => ({ ...m, [field]: value }));
+      record(batch, accountId, kind, "set_flag", { mailboxId: item.mailboxId, messageId: item.id }, () => {
+        replaceItem(item.mailboxId, item.id, (m) => ({ ...m, [field]: !value }));
+      });
+      queued += 1;
+    };
+    const moveTo = (item: MessageListItem, target: number, opKind: OperationKind = "move") => {
+      if (item.mailboxId === target) return;
+      moveItem(item.mailboxId, target, item.id);
+      record(batch, accountId, kind, opKind, { mailboxId: item.mailboxId, messageId: item.id, target }, () => {
+        moveItem(target, item.mailboxId, item.id);
+      });
+      queued += 1;
+    };
+    const roleTarget = (role: MailboxRole) => roleMailbox(accountId, role);
+
+    switch (action.type) {
+      case "markRead":
+      case "markUnread":
+        for (const item of items) setFlag(item, "unread", action.type === "markUnread");
+        break;
+      case "flag":
+      case "unflag":
+        for (const item of items) setFlag(item, "flagged", action.type === "flag");
+        break;
+      case "addKeyword":
+      case "removeKeyword": {
+        if (!isValidKeyword(action.keyword)) return reject("invalid_keyword");
+        const add = action.type === "addKeyword";
+        for (const item of items) {
+          const has = item.keywords.includes(action.keyword);
+          if (has === add) continue;
+          const change = (m: MessageListItem, on: boolean) => ({
+            ...m,
+            keywords: on ? [...m.keywords, action.keyword] : m.keywords.filter((k) => k !== action.keyword),
+          });
+          replaceItem(item.mailboxId, item.id, (m) => change(m, add));
+          record(batch, accountId, kind, "set_flag", { mailboxId: item.mailboxId, messageId: item.id }, () => {
+            replaceItem(item.mailboxId, item.id, (m) => change(m, !add));
+          });
+          queued += 1;
+        }
+        break;
+      }
+      case "archive":
+      case "spam": {
+        const target = roleTarget(action.type === "archive" ? "archive" : "junk");
+        if (!target) return reject("missing_mailbox");
+        for (const item of items) moveTo(item, target.id);
+        break;
+      }
+      case "delete": {
+        const trash = roleTarget("trash");
+        if (!trash) return reject("missing_mailbox");
+        if (items.some((item) => item.mailboxId === trash.id)) return reject("confirmation_required");
+        for (const item of items) moveTo(item, trash.id);
+        break;
+      }
+      case "notSpam": {
+        const junk = roleTarget("junk");
+        const inbox = roleTarget("inbox");
+        if (!inbox) return reject("missing_mailbox");
+        for (const item of items) if (item.mailboxId === junk?.id) moveTo(item, inbox.id);
+        break;
+      }
+      case "move": {
+        const target = mailboxOf(action.target);
+        if (!target || target.accountId !== accountId || !target.selectable) return reject("invalid_argument", "target");
+        for (const item of items) moveTo(item, target.id);
+        break;
+      }
+      case "deletePermanently":
+        for (const item of items) {
+          messages.set(item.mailboxId, (messages.get(item.mailboxId) ?? []).filter((m) => m.id !== item.id));
+          record(batch, accountId, kind, "expunge", { mailboxId: item.mailboxId, messageId: item.id }, () => undefined);
+          queued += 1;
+        }
+        break;
+    }
+    const result: ActionResult = { batch: queued > 0 ? batch : null, queued, cancelled: 0 };
+    if (queued > 0) nextBatch += 1;
+    requests.set(requestId, result);
+    return result;
+  }
+
+  function undoAction(batch: number): ActionResult | Promise<never> {
+    const ops = operations.filter((o) => o.info.batch === batch);
+    if (ops.length === 0) return reject("not_found");
+    if (ops.some((o) => o.info.kind === "expunge" || o.info.kind === "create_mailbox")) return reject("not_undoable");
+    for (const op of ops) op.revert();
+    operations = operations.filter((o) => o.info.batch !== batch);
+    return { batch: null, queued: 0, cancelled: ops.length };
+  }
+
+  function outboxCounts(accountId: string): OutboxCounts {
+    const of = operations.filter((o) => o.info.accountId === accountId).map((o) => o.info.state);
+    return {
+      accountId,
+      pending: of.filter((state) => state === "queued" || state === "in_flight").length,
+      failed: of.filter((state) => state === "failed").length,
+      conflict: of.filter((state) => state === "conflict").length,
+    };
+  }
+
+  function handleOutbox(cmd: string, args: Record<string, unknown>): unknown {
+    switch (cmd) {
+      case "get_reading_preferences":
+        return readingPreferences;
+      case "set_reading_preferences":
+        readingPreferences = args["preferences"] as ReadingPreferences;
+        return readingPreferences;
+      case "apply_action":
+        return applyAction(args["action"] as MailAction, args["messages"] as MessageRef[], args["requestId"] as string);
+      case "undo_action":
+        return undoAction(args["batch"] as number);
+      case "create_mailbox": {
+        const account = accountOf(args["accountId"] as string);
+        if (!account) return reject("not_found");
+        if (!account.writesEnabled) return reject("read_only");
+        const batch = nextBatch++;
+        record(batch, account.id, "create_mailbox", "create_mailbox", { mailboxId: null, messageId: null }, () => undefined);
+        creations.push({ accountId: account.id, path: args["path"] as string, role: args["role"] as MailboxRole | null });
+        return { batch, queued: 1, cancelled: 0 };
+      }
+      case "list_operations": {
+        const before = args["before"] as number | null;
+        return operations
+          .map((o) => o.info)
+          .filter((o) => o.accountId === args["accountId"] && (before === null || o.id < before))
+          .slice(0, args["limit"] as number);
+      }
+      case "retry_operation": {
+        const op = operations.find((o) => o.info.id === args["operationId"]);
+        if (!op) return reject("not_found");
+        if (op.info.state !== "failed" && op.info.state !== "conflict") return reject("invalid_argument");
+        const now = Date.now();
+        const fresh = { ...op.info, id: nextOperation++, state: "queued" as const, error: null, conflict: null, updatedAt: now };
+        operations = [{ info: fresh, revert: op.revert }, ...operations.filter((o) => o !== op)];
+        return { batch: op.info.batch, queued: 1, cancelled: 0 };
+      }
+      case "discard_operation": {
+        const op = operations.find((o) => o.info.id === args["operationId"]);
+        if (!op) return reject("not_found");
+        if (op.info.state === "queued" || op.info.state === "in_flight") return reject("invalid_argument");
+        operations = operations.filter((o) => o !== op);
+        return null;
+      }
+      case "get_outbox_counts":
+        return outboxCounts(args["accountId"] as string);
+      case "set_writes_enabled": {
+        const index = accounts.findIndex((a) => a.id === args["accountId"]);
+        const account = accounts[index];
+        if (!account) return reject("not_found");
+        const next = { ...account, writesEnabled: args["enabled"] as boolean };
+        accounts[index] = next;
+        return { ...next };
+      }
+      default:
+        return undefined;
+    }
   }
 
   mockIPC(
@@ -435,9 +724,12 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         }
         case "get_prefetch_status":
           return options.prefetchStatus?.[args["accountId"] as string] ?? PREFETCH_IDLE;
-        default:
+        default: {
+          const answer = handleOutbox(cmd, args);
+          if (answer !== undefined) return answer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
+        }
       }
     },
     { shouldMockEvents: options.mockEvents ?? true },
@@ -465,6 +757,40 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     remoteSenders: (accountId) => [...(senders.get(accountId) ?? [])],
     get prefetchSettings() {
       return prefetchSettings;
+    },
+    messagesIn: (mailboxId) => [...(messages.get(mailboxId) ?? [])],
+    get operations() {
+      return operations.map((o) => o.info);
+    },
+    settle: (ids, state, extra = {}) => {
+      const changed: OperationInfo[] = [];
+      operations = operations.map((o) => {
+        if (!ids.includes(o.info.id)) return o;
+        // A failure takes the local change back, as the core does.
+        if (state === "failed") o.revert();
+        const info = { ...o.info, state, ...extra, updatedAt: Date.now() };
+        changed.push(info);
+        return { ...o, info };
+      });
+      return changed;
+    },
+    completeMailboxCreations: () => {
+      for (const creation of creations.splice(0)) {
+        const id = Math.max(0, ...mailboxes.map((m) => m.id)) + 1;
+        mailboxes = [
+          ...mailboxes,
+          makeMailbox({
+            id,
+            accountId: creation.accountId,
+            path: creation.path,
+            role: creation.role ?? "custom",
+            roleSource: creation.role ? "user" : "none",
+          }),
+        ];
+      }
+    },
+    get readingPreferences() {
+      return readingPreferences;
     },
   };
 }

@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { Notices } from "../features/actions/Notices";
+import { ActivityView } from "../features/activity/ActivityView";
 import { MailView } from "../features/mail/MailView";
 import { SettingsView } from "../features/settings/SettingsView";
 import type { CoreError } from "../services/ipc";
@@ -26,8 +28,15 @@ export function AppShell({ eventsError }: AppShellProps) {
             <ErrorNotice context={t("errors.context.events")} error={eventsError} />
           </div>
         )}
-        {view.kind === "settings" ? <SettingsView section={view.section} /> : <MailView view={view} />}
+        {view.kind === "settings" ? (
+          <SettingsView section={view.section} />
+        ) : view.kind === "activity" ? (
+          <ActivityView />
+        ) : (
+          <MailView view={view} />
+        )}
       </main>
+      <Notices />
     </div>
   );
 }
