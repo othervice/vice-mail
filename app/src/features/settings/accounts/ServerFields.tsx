@@ -23,8 +23,8 @@ export function ServerFields({ kind, legend, draft, onChange, showErrors, note }
     { value: "starttls", label: t("settings.accounts.setup.securityOptions.starttls") },
   ];
   return (
-    <fieldset className="flex flex-col gap-4 rounded-card border border-border p-4" data-testid={`server-${kind}`}>
-      <legend className="px-1 text-14 font-semibold text-primary">{legend}</legend>
+    <fieldset className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid={`server-${kind}`}>
+      <legend className="float-left w-full text-14 font-semibold text-primary">{legend}</legend>
       {note && <p className="text-13 text-secondary">{note}</p>}
       <div className="flex gap-3">
         <TextField

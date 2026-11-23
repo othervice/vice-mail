@@ -50,7 +50,7 @@ export function SignatureSettings() {
   const edited = editing?.kind === "edit" ? (list.find((s) => s.id === editing.id) ?? null) : null;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border p-4" data-testid="signature-settings">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="signature-settings">
       <h3 id={headingId} className="text-14 font-semibold text-primary">
         {t("snippets.signatures.title")}
       </h3>

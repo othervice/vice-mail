@@ -44,7 +44,7 @@ export function TemplateSettings() {
   const edited = editing?.kind === "edit" ? (list.find((tpl) => tpl.id === editing.id) ?? null) : null;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border p-4" data-testid="template-settings">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="template-settings">
       <h3 id={headingId} className="text-14 font-semibold text-primary">
         {t("snippets.templates.title")}
       </h3>

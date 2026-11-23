@@ -808,6 +808,9 @@ export const APP_COMMAND_IDS = [
   "goTrash",
   // Stage 16: the reading list (Cmd/Ctrl+9, next to the views 1 to 8).
   "goReadingList",
+  // Stage 16 (decision 0036): pinned attachments; no shortcut of its own (Cmd/Ctrl+0 resets the
+  // zoom in web views), the user can give it one.
+  "goPinnedAttachments",
 ] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
@@ -823,6 +826,7 @@ export const VIEW_COMMANDS = {
   goArchive: "archive",
   goTrash: "trash",
   goReadingList: "readingList",
+  goPinnedAttachments: "pinnedAttachments",
 } as const satisfies Partial<Record<AppCommandId, MailViewId>>;
 
 export type ViewCommandId = keyof typeof VIEW_COMMANDS;
@@ -869,4 +873,5 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   goArchive: viewCommand("goArchive", 7),
   goTrash: viewCommand("goTrash", 8),
   goReadingList: viewCommand("goReadingList", 9),
+  goPinnedAttachments: { id: "goPinnedAttachments", icon: MAIL_VIEW_ICONS.pinnedAttachments, shortcuts: both() },
 };

@@ -1,4 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "identifier": "org.vicemail.desktop.e2e"
+  "identifier": "org.vicemail.desktop.e2e",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRBMjQ1OEEyODQwMEFDQzIKUldUQ3JBQ0VvbGdrU3UzOXN5c3VRbVRxOTlGM1JFSDNMRU43cW9hWDVDKzVwTGNwT3d1amVXTFIK"
+    }
+  }
 }

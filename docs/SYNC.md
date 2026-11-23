@@ -118,9 +118,13 @@ keys in `SYNCED_SETTINGS`: `ui.theme`, `ui.language`, `reading.mark_read_on_open
 `compose.send_delay_seconds`, `notifications.settings`, and since stage 8 (decision 0025)
 `compose.default_quote_position` (where new replies put the answer), `ui.shortcuts.macos`, `ui.shortcuts.windows` (the shortcut changes of one platform, a list of
 `{ command, shortcuts: [{ key, shift?, mod? }] }` ordered by command) and `ui.text_size`
-(80 to 150). Device settings such as `prefetch.*` (what this machine keeps offline),
-`inbox.settings` (categories and bundles on this screen), `ui.recent_commands` (the palette's
-history) and `ui.layout.<slot>` (window layouts) stay local.
+(80 to 150), since stage 16 (decision 0033) `compose.archive_on_reply` and
+`compose.read_receipts`, and (decision 0036) `ui.accent_theme` (one of `teal`, `blue`, `violet`,
+`rose`, `orange`, `green`; default `orange`, decision 0038; a value a device does not know reads
+as the default). Device settings such
+as `prefetch.*` (what this machine keeps offline), `inbox.settings` (categories and bundles on
+this screen), `ui.recent_commands` (the palette's history), `ui.layout.<slot>` (window layouts)
+and `ui.unread_first` (the views that group unread mail on top) stay local.
 
 | Kind (`kind`) | Id | Merge rule | Removed elsewhere | Max content | Local data |
 |---|---|---|---|---|---|
@@ -140,9 +144,14 @@ history) and `ui.layout.<slot>` (window layouts) stay local.
 | `accountGroup` | UUID | newer wins, edit beats delete | applied | 16 KiB | `account_group` |
 | `remoteContent` | `<account uuid>/<address>` | newer wins | applied | 1 KiB | `remote_content_sender` |
 | `contact` | normalised address | newer wins | applied | 4 KiB | `contact.user_name`, `contact.contact_group` |
+| `readingList` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `reading_list` (stage 16, decision 0033) |
+| `mailboxPref` | `<account uuid>/<decoded mailbox path>` | newer wins | applied | 1 KiB | `mailbox_pref` (stage 16, decision 0033) |
+| `blockedSender` | normalised address | newer wins | applied | 1 KiB | `blocked_sender` (stage 16, decision 0033) |
+| `attachmentPin` | `<account uuid>/<Message-ID>/<attachment index>` | newer wins | applied | 2 KiB | `attachment_pin` (stage 16, decision 0036) |
 
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
-ids or UIDs. Sender rules are referred to by their normalised key, not by a UUID: two devices
+ids or UIDs. A pinned attachment adds the attachment's index in the reading view as the last
+segment (a decimal number without leading zeros; the Message-ID itself may contain `/`). Sender rules are referred to by their normalised key, not by a UUID: two devices
 that set "always as newsletter" for the same sender change the same record.
 
 **Content per kind** (JSON, camelCase, unknown fields refused):
@@ -160,6 +169,10 @@ that set "always as newsletter" for the same sender change the same record.
 | `senderRule` | `{category, important}`: `person`, `notification`, `newsletter` or null; not both empty |
 | `accountGroup` | `{name, position, accounts: [account uuid, …]}` |
 | `remoteContent` | `{}` (that it exists is all) |
+| `readingList` | `{addedAtMs}` |
+| `mailboxPref` | `{favoritePosition?, color?}`, at least one (colour index 0 to 7 of the account palette) |
+| `blockedSender` | `{}` (that it exists is all) |
+| `attachmentPin` | `{pinnedAtMs, name, mimeType, size}`: the sanitised file name (not empty, no controls), the declared type and the size when it was pinned, so the list shows it without the body |
 | `contact` | `{userName?, mergedInto?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions stay on the device |
 | `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
 | `device` | `{name, system, lastSeenMs}` |

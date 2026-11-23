@@ -28,7 +28,7 @@ function DuplicateCard({ duplicate }: { duplicate: ContactDuplicate }) {
 
   return (
     <li
-      className="flex flex-col gap-3 rounded-card border border-border p-4"
+      className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
       data-testid="contact-duplicate"
       data-reason={duplicate.reason}
     >

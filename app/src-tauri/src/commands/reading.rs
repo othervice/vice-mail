@@ -6,9 +6,9 @@ use std::path::PathBuf;
 
 use mail_engine::AppCore;
 use mail_model::{
-    AccountId, BodyFormat, CoreError, IpcError, LinkInfo, MessageId, MessageView,
-    OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope, RenderToken,
-    SaveAttachmentResult,
+    AccountId, AttachmentPreview, BodyFormat, CoreError, IpcError, LinkInfo, MessageId,
+    MessageView, OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope,
+    RenderToken, SaveAllAttachmentsResult, SaveAttachmentResult,
 };
 use tauri::{Manager, Runtime, State, WebviewWindow};
 
@@ -133,6 +133,47 @@ pub async fn open_attachment(
         .map_err(to_ipc("open_attachment"))
 }
 
+/// Stage 16 (decision 0036): the preview of an attachment, page `page` of a PDF (0-based).
+/// Images, PDF pages and text come decoded by the core; nothing of the attachment runs.
+#[tauri::command]
+#[specta::specta]
+pub async fn preview_attachment(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+    index: u32,
+    page: u32,
+) -> Result<AttachmentPreview, IpcError> {
+    core.preview_attachment(message_id, index, page)
+        .await
+        .map_err(to_ipc("preview_attachment"))
+}
+
+/// Stage 16 (decision 0036): every attachment into the folder the user picks in the system
+/// dialog; taken names get a number, nothing is replaced.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_all_attachments<R: Runtime>(
+    window: WebviewWindow<R>,
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+) -> Result<SaveAllAttachmentsResult, IpcError> {
+    let Some(folder) = ask_folder(&window)
+        .await
+        .map_err(to_ipc("save_all_attachments"))?
+    else {
+        return Ok(SaveAllAttachmentsResult::Cancelled);
+    };
+    let (saved, renamed) = core
+        .save_all_attachments_to(message_id, folder.clone())
+        .await
+        .map_err(to_ipc("save_all_attachments"))?;
+    Ok(SaveAllAttachmentsResult::Saved {
+        folder: folder.display().to_string(),
+        saved,
+        renamed,
+    })
+}
+
 /// Prefetch period and size limit.
 #[tauri::command]
 #[specta::specta]
@@ -183,6 +224,31 @@ pub(crate) async fn ask_save_path<R: Runtime>(
         .save_file()
         .await
         .map(|file| file.path().to_path_buf()))
+}
+
+/// The system's folder dialog for "save all", as a sheet of the window, starting in the
+/// Downloads folder. `None` when the user cancels. Only the path comes back; the core writes.
+#[cfg(any(target_os = "macos", windows))]
+pub(crate) async fn ask_folder<R: Runtime>(
+    window: &WebviewWindow<R>,
+) -> Result<Option<PathBuf>, CoreError> {
+    let mut dialog = rfd::AsyncFileDialog::new().set_parent(window);
+    if let Ok(downloads) = window.path().download_dir() {
+        dialog = dialog.set_directory(downloads);
+    }
+    Ok(dialog
+        .pick_folder()
+        .await
+        .map(|folder| folder.path().to_path_buf()))
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub(crate) async fn ask_folder<R: Runtime>(
+    _window: &WebviewWindow<R>,
+) -> Result<Option<PathBuf>, CoreError> {
+    Err(CoreError::Internal(
+        "saving attachments needs the system dialog of macOS or Windows".into(),
+    ))
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]

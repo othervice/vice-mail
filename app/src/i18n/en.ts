@@ -8,6 +8,8 @@ export const en = {
     tasks: "Tasks",
     // Stage 16: the reading list (local, never on the server).
     readingList: "Reading list",
+    // Stage 16 (decision 0036): pinned attachments, next to the reading list.
+    pinnedAttachments: "Pinned attachments",
     pinned: "Pinned",
     sent: "Sent",
     drafts: "Drafts",
@@ -54,6 +56,12 @@ export const en = {
       title: "No account yet",
       body: "Add an email account to see your mail here.",
       action: "Add account",
+      // Design pass 23.11.2026: what the first start promises (all of it true from the first account on).
+      points: {
+        readOnly: "New accounts only read at first. Nothing changes on the server until you allow it.",
+        local: "Your mail goes straight between this computer and your provider. No cloud service in between.",
+        keychain: "Your password stays in the system keychain of this computer.",
+      },
     },
     notYet: {
       title: "Not available yet",
@@ -1180,6 +1188,12 @@ export const en = {
       platform: "Platform",
       license: "License",
       unknown: "Unknown",
+      // Design pass 23.11.2026: the head of the page and the project's address.
+      tagline: "An open-source mail client for macOS and Windows. Self-hosted, with no cloud service of its own and no telemetry.",
+      project: "Source code",
+      copy: "Copy address",
+      copied: "Address copied.",
+      copyFailed: "Could not copy. Select the address and copy it yourself.",
     },
   },
   // ---- Stage 12: AI over MCP ----
@@ -2842,6 +2856,12 @@ export const en = {
       preferences: "Your settings could not be loaded.",
       savePreferences: "Your change could not be saved.",
       appInfo: "App information could not be loaded.",
+      // Stage 15 (decision 0037).
+      updateInfo: "The update settings could not be loaded.",
+      updateCheck: "Checking for updates failed.",
+      updateStep: "Updating to version {{version}} failed.",
+      updateAction: "The update step could not start.",
+      updateSetting: "The update setting could not be saved.",
       events: "Live updates from the app core are not available.",
       messages: "The messages of this folder could not be loaded.",
       moreMessages: "More messages could not be loaded.",
@@ -3060,6 +3080,81 @@ export const en = {
         title: "You have saved as many searches as possible.",
         hint: "Delete a saved search you no longer need, then save this one.",
       },
+      // Stage 16 (decision 0036): attachment previews.
+      preview_unsupported: {
+        title: "There is no preview for this attachment.",
+        hint: "You can save it or open it with another app.",
+      },
+      preview_too_large: {
+        title: "The attachment is too large for a preview.",
+        hint: "You can save it or open it with another app.",
+      },
+      preview_damaged: {
+        title: "The attachment could not be read for a preview.",
+        hint: "The file may be damaged. You can still save it or open it with another app.",
+      },
+      // Stage 15 (decision 0037): in-app updates.
+      update_check_failed: {
+        title: "The app could not check for updates.",
+        hint: "Check your internet connection and try again later. Your installed version keeps working.",
+      },
+      update_download_failed: {
+        title: "The update could not be downloaded.",
+        hint: "Check your internet connection and try again. Nothing was installed.",
+      },
+      update_signature_invalid: {
+        title: "The update could not be verified and was discarded.",
+        hint: "Its signature does not match the project's update key, so it may have been changed on the way. Nothing was installed. Try again later, or install the next version by hand from the release page.",
+      },
+      update_install_failed: {
+        title: "The update could not be installed.",
+        hint: "Your installed version is unchanged. On a Mac, move the app to Applications and start it from there. Otherwise install the new version by hand from the release page.",
+      },
+      update_not_ready: {
+        title: "There is no update ready for this step.",
+        hint: "Check for updates first. If you just did, wait until the download has finished.",
+      },
+    },
+  },
+  // Stage 15 (decision 0037): in-app updates, opt-in.
+  updates: {
+    title: "Updates",
+    autoCheck: "Check for updates automatically",
+    autoCheckHint: "Once a day the app asks github.com, where it is published, whether there is a newer version. GitHub sees your IP address and the time of the request. The app sends no account data, no usage data and no identifier, and nothing is downloaded or installed without your click.",
+    manualHint: "Check now asks github.com once, even while automatic checks are off.",
+    unsupported: "This build does not update itself. Install newer versions by hand, as described in the installation guide.",
+    checkNow: "Check now",
+    checking: "Checking for updates…",
+    neverChecked: "Not checked yet.",
+    lastChecked: "Last checked {{time}}.",
+    upToDate: "You have the newest version.",
+    available: "Version {{version}} is available.",
+    published: "Published {{date}}.",
+    notes: "What's new",
+    download: "Download update",
+    downloading: "Downloading version {{version}}…",
+    downloadingPercent: "Downloading version {{version}}… {{percent}}%",
+    progress: "Download progress",
+    ready: "Version {{version}} is downloaded and its signature verified.",
+    restart: "Restart to install",
+    restartHint: {
+      macos: "The app closes, replaces itself with the new version and opens again. Your accounts and mail stay.",
+      windows: "The app closes, the installer runs without questions and opens the app again. Your accounts and mail stay.",
+    },
+    installing: "Installing version {{version}}…",
+    consent: {
+      title: "Check for updates automatically?",
+      body: "Once a day the app would ask github.com, where it is published, whether there is a newer version. GitHub sees your IP address and the time of the request. The app sends no account data, no usage data and no identifier.",
+      noInstall: "Nothing is downloaded or installed without your click. You can change this any time in Settings → About.",
+      yes: "Check automatically",
+      no: "No, thanks",
+    },
+    notice: {
+      region: "Update",
+      available: "Version {{version}} is available.",
+      ready: "Version {{version}} is ready to install.",
+      show: "Show",
+      dismiss: "Not now",
     },
   },
   // Stage 9 (decision 0027): `.eml` files opened read-only in a window of their own.
@@ -3298,8 +3393,8 @@ export const en = {
       orange: "Orange",
       green: "Green",
     },
-    deviceOnly: "Applies to this computer. It is not synced to your other devices yet.",
-    notStored: "The colour could not be stored on this computer. It applies until you quit the app.",
+    deviceOnly: "Synced to your other devices with the settings sync.",
+    notStored: "The accent colour could not be saved.",
   },
 
   sounds: {
@@ -3333,6 +3428,71 @@ export const en = {
     unblockLabel: "Unblock {{address}}",
     loadFailed: "The blocked senders could not be loaded.",
     unblockFailed: "The sender could not be unblocked.",
+  },
+
+  // ---- Stage 16 (decision 0036): attachment previews, "Save all", pinned attachments ----
+  attachments: {
+    preview: {
+      action: "Preview",
+      label: "Preview {{name}}",
+      cardHint: "Press Space to preview.",
+      title: "Preview of {{name}}",
+      close: "Close preview",
+      loading: "Loading the preview…",
+      failed: "The preview could not be shown.",
+      save: "Save",
+      open: "Open with another app",
+      scaled: "Shown smaller than the original.",
+      truncated: "Only the beginning is shown. Save the file to read all of it.",
+      page: "Page {{page}} of {{pages}}",
+      pageAlt: "{{name}}, page {{page}}",
+      previousPage: "Previous page",
+      nextPage: "Next page",
+      morePages: "The document has more pages than the preview shows. Save or open it to read the rest.",
+      pages: "Pages",
+    },
+    saveAll: {
+      action: "Save all",
+      label_one: "Save the attachment into a folder",
+      label_other: "Save all {{count}} attachments into a folder",
+      saving: "Saving…",
+      saved_one: "{{count}} file saved to {{folder}}",
+      saved_other: "{{count}} files saved to {{folder}}",
+      renamed_one: "{{count}} renamed because the name was taken.",
+      renamed_other: "{{count}} renamed because the names were taken.",
+      failed: "The attachments could not be saved.",
+      palette: "Save all attachments",
+      paletteDisabled: "The open message has no attachments.",
+    },
+    pin: {
+      pin: "Pin {{name}}",
+      unpin: "Unpin {{name}}",
+      pinned: "Pinned",
+      failed: "The pin could not be changed.",
+    },
+    pinned: {
+      listLabel: "Pinned attachments",
+      emptyTitle: "No pinned attachments",
+      emptyBody: "Pin an attachment in a message to find it here again. Pins stay in the app and are never written to the server.",
+      loadFailed: "The pinned attachments could not be loaded.",
+      from: "From {{sender}}, {{date}}",
+      noSubject: "(no subject)",
+      unknownSender: "unknown sender",
+      openMessage: "Open message",
+      openMessageLabel: "Open the message of {{name}}",
+      saveLabel: "Save {{name}}",
+      unpinLabel: "Unpin {{name}}",
+      count_one: "{{count}} pinned attachment",
+      count_other: "{{count}} pinned attachments",
+      saved: "{{name}} saved to {{path}}",
+      saveFailed: "The attachment could not be saved.",
+    },
+    blockedHidden: {
+      text_one: "{{count}} message from blocked senders hidden",
+      text_other: "{{count}} messages from blocked senders hidden",
+      manage: "Blocked senders",
+      manageLabel: "Show blocked senders in Settings",
+    },
   },
 
   // ---- Stage 16, reading: find in the open message ----

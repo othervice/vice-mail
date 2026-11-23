@@ -224,6 +224,7 @@ fn complete_attachments(parsed: &ParsedMessage) -> Vec<Attachment> {
                 size: u32::try_from(a.size).unwrap_or(u32::MAX),
                 executable: a.executable,
                 local: true,
+                preview: mail_content::preview_kind(&a.file_name, &a.mime),
             },
             source: AttachmentSource::Whole { part_id: a.part_id },
         })
@@ -277,6 +278,7 @@ fn partial_attachments(
         }
         let name = attachment_file_name(part.file_name.as_deref(), &part.mime_type);
         let executable = is_executable_type(&name, &part.mime_type);
+        let preview = mail_content::preview_kind(&name, &part.mime_type);
         let size = match part.encoding.as_str() {
             // 76 characters and CRLF per 57 bytes.
             "base64" => u32::try_from(u64::from(part.size) * 57 / 78).unwrap_or(u32::MAX),
@@ -290,6 +292,7 @@ fn partial_attachments(
                 size,
                 executable,
                 local: stored.contains(&BodySection::Part(path.clone())),
+                preview,
             },
             source: AttachmentSource::Section { path: path.clone() },
         });

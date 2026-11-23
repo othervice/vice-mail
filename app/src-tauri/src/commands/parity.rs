@@ -5,7 +5,8 @@
 use mail_engine::AppCore;
 use mail_model::{
     AccountColor, ActionResult, BlockedSender, InboxScope, IpcError, Mailbox, MailboxId, MarkScope,
-    MessageId, MessageListItem, MessageRef, TransferMode, UnreadFirstCursor, UnreadFirstPage,
+    MessageId, MessageListItem, MessageRef, PinnedAttachment, TransferMode, UnreadFirstCursor,
+    UnreadFirstPage,
 };
 use tauri::State;
 
@@ -35,6 +36,58 @@ pub async fn list_reading_list(
     core.list_reading_list(scope)
         .await
         .map_err(to_ipc("list_reading_list"))
+}
+
+/// Stage 16 (decision 0036): pins attachment `index` of a message or takes the pin off. Local
+/// only, synced; emits `inboxChanged`.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_attachment_pinned(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+    index: u32,
+    pinned: bool,
+) -> Result<(), IpcError> {
+    core.set_attachment_pinned(message_id, index, pinned)
+        .await
+        .map_err(to_ipc("set_attachment_pinned"))
+}
+
+/// The pinned attachment indexes of a message, for the reading pane.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_attachment_pins(
+    core: State<'_, AppCore>,
+    message_id: MessageId,
+) -> Result<Vec<u32>, IpcError> {
+    core.get_attachment_pins(message_id)
+        .await
+        .map_err(to_ipc("get_attachment_pins"))
+}
+
+/// "Angeheftete Anhänge": the pinned attachments of the scope, the newest pin first.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pinned_attachments(
+    core: State<'_, AppCore>,
+    scope: MarkScope,
+) -> Result<Vec<PinnedAttachment>, IpcError> {
+    core.list_pinned_attachments(scope)
+        .await
+        .map_err(to_ipc("list_pinned_attachments"))
+}
+
+/// Stage 16 (decision 0036): how many messages of blocked senders the inbox lists of the scope
+/// leave out, for the list's note.
+#[tauri::command]
+#[specta::specta]
+pub async fn count_blocked_hidden(
+    core: State<'_, AppCore>,
+    scope: InboxScope,
+) -> Result<u32, IpcError> {
+    core.count_blocked_hidden(scope)
+        .await
+        .map_err(to_ipc("count_blocked_hidden"))
 }
 
 /// "Ungelesene oben": unread messages of the scope first, then the read ones. `limit` 1..500.

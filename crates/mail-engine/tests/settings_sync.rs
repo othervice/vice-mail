@@ -1301,6 +1301,7 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         text_size: 130,
         recent_commands: vec!["action:archive".into()],
         ai_panel: mail_model::AiPanelState::Folded,
+        accent_theme: mail_model::AccentTheme::Orange,
     };
     a.core
         .set_ui_preferences(prefs.clone())
@@ -1321,6 +1322,8 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
     let taken = b.core.get_ui_preferences().await.expect("ui preferences");
     assert_eq!(taken.shortcuts, prefs.shortcuts);
     assert_eq!(taken.text_size, 130);
+    // Stage 16 (decision 0036): the accent theme goes along like the text size.
+    assert_eq!(taken.accent_theme, mail_model::AccentTheme::Orange);
     assert!(
         taken.recent_commands.is_empty(),
         "the palette history stays on its device"
@@ -1420,8 +1423,8 @@ async fn saved_searches_reach_the_other_device_recent_ones_stay() {
     clean(&env).await;
 }
 
-/// Stage 16 (decision 0033): the reading list, folder favourites and colours and blocked
-/// senders reach the other device, and their removal does too.
+/// Stage 16 (decisions 0033, 0036): the reading list, folder favourites and colours, blocked
+/// senders and pinned attachments reach the other device, and their removal does too.
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_device() {
@@ -1450,7 +1453,11 @@ async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_dev
         .expect("admin");
     let body = format!(
         "From: Reader <reader@stage16.test>\r\nTo: alice@vicemail.test\r\nSubject: {subject}\r\n\
-         Message-ID: <reading-{}@stage16.test>\r\n\r\nLater.\r\n",
+         Message-ID: <reading-{}@stage16.test>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n\
+         --b\r\nContent-Type: text/plain\r\n\r\nLater.\r\n\
+         --b\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"note.txt\"\r\n\r\n\
+         Keep this.\r\n--b--\r\n",
         std::process::id()
     );
     let reply = admin
@@ -1500,6 +1507,20 @@ async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_dev
         .block_sender("Offers@Spam.Example".into())
         .await
         .expect("block");
+    // Decision 0036: pinning needs the attachment list of the stored body.
+    until("the body on a", || async {
+        let view = a
+            .core
+            .get_message(message.id, mail_model::BodyFormat::Auto)
+            .await
+            .ok()?;
+        (!view.attachments.is_empty()).then_some(view)
+    })
+    .await;
+    a.core
+        .set_attachment_pinned(message.id, 0, true)
+        .await
+        .expect("pin the attachment");
     a.pass().await;
     b.pass().await;
 
@@ -1536,6 +1557,18 @@ async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_dev
     .await;
     assert_eq!(reading.len(), 1);
     assert_eq!(reading[0].subject, message.subject);
+    let pinned = b
+        .core
+        .list_pinned_attachments(mail_model::MarkScope::All)
+        .await
+        .expect("pinned attachments");
+    assert_eq!(pinned.len(), 1);
+    assert_eq!(
+        (pinned[0].name.as_str(), pinned[0].index, pinned[0].size > 0),
+        ("note.txt", 0, true),
+        "the pin keeps name and size, without the body on b"
+    );
+    assert_eq!(pinned[0].message.subject, message.subject);
 
     // Removed on b: gone on a.
     b.core
@@ -1550,8 +1583,19 @@ async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_dev
         .set_mailbox_color(inbox_b.id, None)
         .await
         .expect("no colour");
+    b.core
+        .set_attachment_pinned(pinned[0].message.id, 0, false)
+        .await
+        .expect("unpin");
     b.pass().await;
     a.pass().await;
+    assert!(
+        a.core
+            .list_pinned_attachments(mail_model::MarkScope::All)
+            .await
+            .expect("pinned attachments")
+            .is_empty()
+    );
     assert!(
         a.core
             .list_blocked_senders()

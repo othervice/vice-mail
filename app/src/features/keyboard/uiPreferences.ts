@@ -7,6 +7,7 @@ import {
   MIN_TEXT_SIZE,
   toCoreError,
   uiIpc,
+  type AccentTheme,
   type AiPanelState,
   type CoreWindowLayout,
   type PlatformShortcuts,
@@ -17,8 +18,8 @@ import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { isCommandId, parseOverrides, type ShortcutOverrides } from "./bindings";
 
 /**
- * Stage 8 (decision 0025): the UI preferences live in the core. Shortcut changes and the text
- * size are synced between devices, the recent palette commands stay on the device; the layout
+ * Stage 8 (decision 0025): the UI preferences live in the core. Shortcut changes, the text size
+ * and (stage 16) the accent theme are synced between devices, the recent palette commands stay on the device; the layout
  * belongs to the window. The stores (`stores/shortcuts.ts`, `palette.ts`, `layout.ts`) hold what
  * key handlers read at once; this module saves their changes through the query cache
  * (optimistic, rolled back when the core refuses) and `useUiPreferencesSync` applies what the
@@ -32,6 +33,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   textSize: DEFAULT_TEXT_SIZE,
   recentCommands: [],
   aiPanel: "open",
+  // Decision 0038: orange is the default accent.
+  accentTheme: "orange",
 };
 
 export type PlatformOverrides = Record<ShortcutPlatform, ShortcutOverrides>;
@@ -96,6 +99,8 @@ export interface UiPreferencesChange {
   recentCommands?: readonly string[];
   /** Stage 13 (decision 0028): the AI panel unfolded or folded in, on this device. */
   aiPanel?: AiPanelState;
+  /** Stage 16 (decision 0036): the accent colours, synced like the text size. */
+  accentTheme?: AccentTheme;
 }
 
 let saves: Promise<unknown> = Promise.resolve();
@@ -124,6 +129,7 @@ export function saveUiPreferences(change: UiPreferencesChange): Promise<UiPrefer
       textSize: change.textSize === undefined ? previous.textSize : clampTextSize(change.textSize),
       recentCommands: change.recentCommands ? cleanRecent(change.recentCommands) : previous.recentCommands,
       aiPanel: change.aiPanel ?? previous.aiPanel,
+      accentTheme: change.accentTheme ?? previous.accentTheme,
     };
     await queryClient?.cancelQueries({ queryKey: uiPreferencesQueryKey });
     queryClient?.setQueryData(uiPreferencesQueryKey, next);

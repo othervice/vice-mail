@@ -88,7 +88,7 @@ function SenderRules() {
   const rules = useSenderRules();
   const remove = useDeleteSenderRule();
   return (
-    <SettingsSection title={t("comfort.senderRules.title")}>
+    <SettingsSection sub title={t("comfort.senderRules.title")}>
       <p className="text-13 text-secondary">{t("comfort.senderRules.description")}</p>
       {rules.isError && (
         <ErrorNotice

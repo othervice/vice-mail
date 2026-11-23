@@ -133,7 +133,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
     event.preventDefault();
   };
   const running = run.state.kind === "running" || run.state.kind === "consent";
-  const toolClass = "h-7 rounded-control px-2 text-12 font-medium text-primary hover:bg-hover disabled:opacity-50";
+  const toolClass = "h-8 rounded-control px-2 text-12 font-medium text-primary hover:bg-hover disabled:opacity-50";
   const state = run.state;
 
   return (
@@ -147,7 +147,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
           onClick={() => {
             setOpen((value) => !value);
           }}
-          className="inline-flex h-7 items-center gap-2 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-2 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary disabled:opacity-50"
           data-testid="ai-writing-toggle"
         >
           <WandSparkles aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
@@ -185,7 +185,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
                   const next = TONES.find((value) => value === event.target.value);
                   if (next) setTone(next);
                 }}
-                className="h-7 rounded-control border border-border-strong bg-surface-raised px-1 text-12 text-primary"
+                className="h-8 rounded-control border border-border-strong bg-surface-raised px-1 text-12 text-primary"
                 data-testid="ai-writing-tone"
               >
                 {TONES.map((value) => (
@@ -219,7 +219,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
                   const next = TARGET_LANGUAGES.find((value) => value === event.target.value);
                   if (next) setLanguage(next);
                 }}
-                className="h-7 rounded-control border border-border-strong bg-surface-raised px-1 text-12 text-primary"
+                className="h-8 rounded-control border border-border-strong bg-surface-raised px-1 text-12 text-primary"
                 data-testid="ai-writing-language"
               >
                 {TARGET_LANGUAGES.map((value) => (
@@ -267,7 +267,7 @@ export function WritingHelp({ disabled = false }: { disabled?: boolean }) {
           {state.kind === "done" && target && (
             <section aria-label={t("ai.writing.preview")} className="flex flex-col gap-2 rounded-card border border-accent bg-canvas p-3" data-testid="ai-writing-preview">
               <h3 className="text-13 font-semibold text-primary">{t("ai.writing.preview")}</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
                 <div className="flex flex-col gap-1">
                   <p className="text-12 text-secondary">{t("ai.writing.before")}</p>
                   <p className="text-13 break-words whitespace-pre-wrap text-secondary" data-testid="ai-writing-before">

@@ -209,7 +209,7 @@ export function RichEditor({
         role: "textbox",
         // The system's spell checker (WKWebView, WebView2), in the languages the system offers.
         spellcheck: "true",
-        class: "composer-prose px-4 py-3 text-14 text-primary",
+        class: "composer-prose px-2 py-3 text-14 text-primary",
         "data-testid": testId,
       },
       handlePaste: (view, event) => {
@@ -490,7 +490,8 @@ export function RichEditor({
           )}
         </div>
       )}
-      <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto" />
+      {/* Inset by 8 px, so the text still lines up with the fields above (16 px). */}
+      <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" />
     </div>
   );
 }

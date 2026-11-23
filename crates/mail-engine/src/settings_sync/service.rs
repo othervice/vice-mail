@@ -329,6 +329,7 @@ fn account_of(
         | RecordKind::Pin
         | RecordKind::Task
         | RecordKind::ReadingList
+        | RecordKind::AttachmentPin
         | RecordKind::MailboxPref
         | RecordKind::RemoteContent
         | RecordKind::Setting => key.id().split_once('/').and_then(|(a, _)| a.parse().ok()),
@@ -969,6 +970,7 @@ impl<C: Connector> AppCore<C> {
             "rule",
             "readingList",
             "blockedSender",
+            "attachmentPin",
         ]) {
             self.emit_event(CoreEvent::InboxChanged { account_id: None });
         }

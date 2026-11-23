@@ -48,6 +48,56 @@ pub(crate) fn save_atomically(target: &Path, bytes: &[u8]) -> Result<PathBuf, Co
     Ok(target.to_path_buf())
 }
 
+/// Most names tried for one file of "save all" (`name (2).ext` … `name (999).ext`).
+const MAX_NAME_TRIES: u32 = 999;
+
+/// `name` with a number before its extension: `Report (2).pdf`, `notes (3)`.
+fn numbered(name: &str, n: u32) -> String {
+    if n <= 1 {
+        return name.to_owned();
+    }
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => format!("{stem} ({n}).{ext}"),
+        _ => format!("{name} ({n})"),
+    }
+}
+
+/// Stage 16 (decision 0036), "save all": writes `bytes` into `dir` under `name`, or under
+/// `name (2)`, `name (3)` … when the name is taken. An existing file is never replaced (the
+/// name is claimed with `create_new`, also against a file that appears meanwhile). A failed
+/// write removes what it started. Returns the path written.
+pub(crate) fn save_new_in(dir: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, CoreError> {
+    let io = |err: std::io::Error| CoreError::Internal(format!("save the attachment: {err}"));
+    if !dir.is_dir() {
+        return Err(CoreError::InvalidArgument(
+            "the chosen folder does not exist".into(),
+        ));
+    }
+    for n in 1..=MAX_NAME_TRIES {
+        let target = dir.join(numbered(name, n));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target);
+        let mut file = match file {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(io(err)),
+        };
+        if let Err(err) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(&target);
+            return Err(io(err));
+        }
+        drop(file);
+        mark_as_downloaded(&target);
+        return Ok(target);
+    }
+    Err(CoreError::InvalidArgument(format!(
+        "{MAX_NAME_TRIES} files named like {name:?} exist in the folder already"
+    )))
+}
+
 /// Writes a read-only copy for opening: `<dir>/<random hex>/<name>`.
 pub(crate) fn write_for_opening(
     dir: &Path,

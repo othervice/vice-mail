@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parityIpc, type BlockedSender } from "../../services/ipc";
+import { refreshBlockedHidden } from "../reading/attachmentQueries";
 
 /** Stage 16: blocked senders (synced between devices; `inboxChanged` follows every change). */
 export const blockedSendersQueryKey = ["parity", "blockedSenders"] as const;
@@ -16,6 +17,8 @@ export function useSetSenderBlocked() {
       blocked ? parityIpc.blockSender(address) : parityIpc.unblockSender(address),
     onSuccess: (list) => {
       queryClient.setQueryData(blockedSendersQueryKey, list);
+      // Stage 16 (decision 0036): hidden mail shows again or goes.
+      refreshBlockedHidden(queryClient);
     },
   });
 }

@@ -11,6 +11,7 @@ import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { SettingsView } from "../features/settings/SettingsView";
+import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
 import { useUiStore } from "../stores/ui";
 import { IconRail } from "./IconRail";
@@ -54,6 +55,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       <AiPanel />
       <Notices />
       <SendNotices />
+      {/* Stage 15 (decision 0037): the one-time update question, a quiet note when one is out. */}
+      <UpdateNotices />
       {/* Stage 9: mailto: links from the system open the composer. */}
       <MailtoHost />
       {/* Stage 8: command palette, shortcut overview, layout of the window. */}

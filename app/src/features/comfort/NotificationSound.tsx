@@ -78,7 +78,7 @@ export function NotificationSoundSettings({ sound, off, accounts, mutedAccounts,
             onChange={(event) => {
               onChange({ ...sound, [field]: event.target.value });
             }}
-            className="h-8 w-fit min-w-(--ui-list-sender-width) rounded-control border border-border-strong bg-surface px-2 text-13 text-primary disabled:opacity-50"
+            className="h-8 w-fit min-w-(--ui-list-sender-width) rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary disabled:opacity-50"
             data-testid="notify-sound-choice"
           >
             {sounds.map((name) => (

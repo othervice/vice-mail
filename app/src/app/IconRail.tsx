@@ -1,5 +1,5 @@
 import { CircleExclamationPoint, CloudOff, History, SendHorizontal, Settings, type LucideIcon } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
@@ -53,17 +53,30 @@ interface RailButtonProps {
 function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, text, trailing, dropMailbox, shortcut, ...rest }: RailButtonProps) {
   const { t } = useTranslation();
   const drop = useDropTarget(dropMailbox);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Design pass 23.11.2026: in a low window the upper group scrolls; the active view is scrolled
+  // into it (also when a shortcut opens a view further down). Only that group moves, nothing else.
+  useEffect(() => {
+    const button = buttonRef.current;
+    const scroller = button?.closest<HTMLElement>("[data-rail-scroll]");
+    if (!active || !button || !scroller) return;
+    const item = button.getBoundingClientRect();
+    const area = scroller.getBoundingClientRect();
+    if (item.top < area.top) scroller.scrollTop -= area.top - item.top;
+    else if (item.bottom > area.bottom) scroller.scrollTop += item.bottom - area.bottom;
+  }, [active]);
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
   const className = cx(
     "relative flex items-center rounded-row transition-colors",
     expanded ? "h-8 w-full gap-3 px-3 text-13" : "size-(--ui-rail-item) justify-center",
     active
-      ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent"
+      ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
       : "text-secondary hover:bg-rail-hover hover:text-primary",
     drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
   );
   const button = (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={label}
       aria-keyshortcuts={shortcut?.aria}
@@ -129,7 +142,7 @@ function RailCount({ value, attention, trailing = false, ...rest }: { value: str
       className={cx(
         "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
         trailing ? "ms-auto shrink-0" : "absolute -top-2 -right-2",
-        attention ? "bg-danger text-on-accent" : "bg-rail text-secondary ring-1 ring-border-strong",
+        attention ? "bg-danger text-on-danger" : "bg-rail text-secondary ring-1 ring-border-strong",
       )}
     >
       {value}
@@ -332,7 +345,18 @@ export function IconRail() {
     >
       {/* Room for the window buttons that macOS draws over this corner. */}
       <div aria-hidden data-tauri-drag-region={dragRegion ? "deep" : undefined} className="h-(--ui-titlebar-inset) w-full shrink-0" />
-      <div className={cx("flex min-h-0 w-full flex-1 flex-col overflow-y-auto py-3", expanded ? "gap-4 px-3" : "items-center")}>
+      {/* Design pass 23.11.2026: in a low window this group scrolls, never sideways. Its edges fade
+          within the 12 px padding, so an entry cut off at the edge reads as "more". The narrow rail
+          shows no scroll bar (on Windows it would push the icons off centre); wheel, trackpad and
+          Tab reach every entry, and the active view is scrolled into view. */}
+      <div
+        data-rail-scroll
+        className={cx(
+          "flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto py-3",
+          "[mask-image:linear-gradient(to_bottom,transparent,black_var(--ui-space-2),black_calc(100%-var(--ui-space-2)),transparent)]",
+          expanded ? "gap-4 px-3 [scrollbar-width:thin]" : "items-center [scrollbar-width:none]",
+        )}
+      >
         <ul className={cx("flex w-full flex-col gap-1", !expanded && "items-center")}>
           {MAIL_VIEW_IDS.map((id) => (
             <li key={id} className={cx(expanded && "w-full")}>

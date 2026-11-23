@@ -1,8 +1,10 @@
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import type { BlockedSender } from "../../services/ipc";
+import { useBlockedFocusStore } from "./focus";
 import { useBlockedSenders, useSetSenderBlocked } from "./queries";
 
 /**
@@ -15,8 +17,19 @@ export function BlockedSenders() {
   const list = useBlockedSenders();
   const unblock = useSetSenderBlocked();
   const dates = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" });
+  // Stage 16 (decision 0036): opened from the inbox's note on hidden mail: show and focus it.
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!useBlockedFocusStore.getState().take()) return;
+    const heading = anchor.current?.querySelector("h2");
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.scrollIntoView?.({ block: "start" });
+    heading.focus({ preventScroll: true });
+  }, []);
   return (
-    <SettingsSection title={t("blocked.title")}>
+    <div ref={anchor} data-testid="blocked-section">
+    <SettingsSection sub title={t("blocked.title")}>
       <p className="text-13 text-secondary">{t("blocked.description")}</p>
       {list.isError && (
         <ErrorNotice
@@ -56,6 +69,7 @@ export function BlockedSenders() {
         <ErrorNotice context={t("blocked.unblockFailed")} error={unblock.error} data-testid="blocked-unblock-error" />
       )}
     </SettingsSection>
+    </div>
   );
 }
 

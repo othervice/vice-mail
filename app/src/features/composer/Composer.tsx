@@ -1145,7 +1145,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
                 change({ bodyText: e.target.value });
               }}
               onBlur={saveNow}
-              className="min-h-(--ui-picker-list-height) flex-1 resize-none bg-transparent px-4 py-3 font-sans text-14 text-primary focus-visible:-outline-offset-2"
+              className="mx-2 mb-2 min-h-(--ui-picker-list-height) flex-1 resize-none rounded-card bg-transparent px-2 py-3 font-sans text-14 text-primary focus-visible:-outline-offset-2"
               data-testid="composer-text-body"
             />
           </>

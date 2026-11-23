@@ -30,6 +30,7 @@
 
 mod accounts;
 mod ai;
+mod attachment_pins;
 pub mod backup;
 mod bodies;
 mod body_api;
@@ -69,6 +70,7 @@ mod threads;
 mod workers;
 
 pub use ai::{NewAiRequest, OpenReplyRow};
+pub use attachment_pins::{AttachmentPinInput, PinnedAttachmentRow};
 pub use bodies::BodyInfo;
 pub use body_api::{BODY_PACK_LIMIT, SWEEP_MIN_AGE};
 pub use body_files::SweepReport;

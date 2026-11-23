@@ -315,6 +315,30 @@ pub(crate) fn hide(
         > 0)
 }
 
+/// Hidden rows of mailbox `?1` of account `?2` (see [`count_hidden`]). Each row once: a hidden
+/// entry has its own Message-ID, and a message lies in a mailbox at most once.
+pub(crate) const COUNT_HIDDEN: &str = "
+    SELECT count(*) FROM blocked_hidden h
+      CROSS JOIN message m
+        ON m.account_id = (SELECT id FROM account WHERE uuid = ?2)
+       AND m.message_id_hdr = h.message_id_hdr
+      CROSS JOIN message_location l ON l.message_id = m.id AND l.mailbox_id = ?1
+    WHERE h.account_uuid = ?2";
+
+/// Messages of blocked senders hidden from the inbox lists of the scope (stage 16, decision
+/// 0036): rows of the scope's inboxes whose message is in `blocked_hidden`. One probe of the
+/// message index per hidden entry of the account; there are few.
+pub(crate) fn count_hidden(conn: &Connection, scope: &InboxMailboxes) -> Result<u32, StoreError> {
+    let mut total: u32 = 0;
+    for (mailbox, account) in resolve(conn, scope)? {
+        let count: i64 = conn
+            .prepare_cached(COUNT_HIDDEN)?
+            .query_row(params![mailbox.0, account.to_string()], |r| r.get(0))?;
+        total = total.saturating_add(u32::try_from(count).unwrap_or(u32::MAX));
+    }
+    Ok(total)
+}
+
 // ---------------------------------------------------------------------------------------------
 // Sync content (`settings_sync`)
 
@@ -594,6 +618,11 @@ impl Store {
         sender: String,
     ) -> Result<bool, StoreError> {
         self.write(move |tx| hide(tx, message, &sender)).await
+    }
+
+    /// How many messages of blocked senders the inbox lists of the scope leave out.
+    pub async fn count_blocked_hidden(&self, scope: InboxMailboxes) -> Result<u32, StoreError> {
+        self.read(move |c| count_hidden(c, &scope)).await
     }
 
     /// One page of "unread first" over the scope.

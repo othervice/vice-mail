@@ -155,6 +155,8 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         text_size: 115,
         recent_commands: vec!["action:archive".into()],
         ai_panel: mail_model::AiPanelState::Folded,
+        // Stage 16 (decision 0036): the accent theme is synced like the text size.
+        accent_theme: mail_model::AccentTheme::Green,
     })
     .await
     .expect("ui preferences");
@@ -276,6 +278,22 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         .allow_remote_content(account, "bob@friends.example")
         .await
         .expect("remote content");
+    // Stage 16 (decision 0036): a pinned attachment is a record (through the store: the fake
+    // message has no stored body to list attachments from).
+    store
+        .set_attachment_pin(
+            message,
+            0,
+            Some(mail_store::AttachmentPinInput {
+                index: 0,
+                name: "Rechnung.pdf".into(),
+                mime_type: "application/pdf".into(),
+                size: 12_345,
+            }),
+            1,
+        )
+        .await
+        .expect("attachment pin");
     // A contact the user named (no command yet; the store path the composer will use).
     store
         .record_contacts(
@@ -518,6 +536,12 @@ fn captured_content_of_every_table_passes_its_kind() {
             serde_json::json!({}),
         ),
         ("contact", "a@b", serde_json::json!({ "userName": "A" })),
+        (
+            "attachmentPin",
+            &format!("{account}/m/x@y/2"),
+            serde_json::json!({ "pinnedAtMs": 5, "name": "a.pdf", "mimeType": "application/pdf",
+            "size": 3 }),
+        ),
         (
             "device",
             account,

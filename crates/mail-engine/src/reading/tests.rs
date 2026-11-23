@@ -1142,3 +1142,288 @@ async fn removing_the_account_stops_its_reading() {
         Err(ErrorCode::NotFound)
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 16 (decision 0036): preview, save all, pinned attachments
+
+/// A 1×1 PNG.
+const PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+fn part(mime: &str, name: &str, encoding: &str, body: &str) -> String {
+    format!(
+        "--m\r\nContent-Type: {mime}\r\nContent-Disposition: attachment; filename=\"{name}\"\r\n\
+         Content-Transfer-Encoding: {encoding}\r\n\r\n{body}\r\n"
+    )
+}
+
+fn with_parts(subject: &str, parts: &[String]) -> String {
+    format!(
+        "From: a@fake.test\r\nTo: alice@fake.test\r\nSubject: {subject}\r\n\
+         Message-ID: <{}@fake.test>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=\"m\"\r\n\r\n\
+         --m\r\nContent-Type: text/plain\r\n\r\nSee the files.\r\n{}--m--\r\n",
+        subject.replace(' ', "-"),
+        parts.concat()
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn attachments_are_previewed_by_the_core_and_html_or_svg_never() {
+    let raw = with_parts(
+        "Preview",
+        &[
+            part("image/png", "pixel.png", "base64", PIXEL_PNG),
+            part(
+                "text/plain; charset=utf-8",
+                "notes.txt",
+                "8bit",
+                "Grüße\r\nZeile 2",
+            ),
+            part(
+                "text/html",
+                "page.html",
+                "7bit",
+                "<script>alert(1)</script>",
+            ),
+            part(
+                "image/svg+xml",
+                "logo.svg",
+                "7bit",
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>",
+            ),
+            part(
+                "application/pdf",
+                "broken.pdf",
+                "7bit",
+                "%PDF-1.4 not really",
+            ),
+            // Claims to be an image, is HTML: refused by its bytes.
+            part(
+                "image/png",
+                "fake.png",
+                "7bit",
+                "<html><body>hi</body></html>",
+            ),
+        ],
+    );
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", raw.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    let view = h.open_fetched(message, BodyFormat::Auto).await;
+    let kinds: Vec<Option<mail_model::PreviewKind>> =
+        view.attachments.iter().map(|a| a.preview).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            Some(mail_model::PreviewKind::Image),
+            Some(mail_model::PreviewKind::Text),
+            None,
+            None,
+            Some(mail_model::PreviewKind::Pdf),
+            Some(mail_model::PreviewKind::Image),
+        ]
+    );
+
+    let image = h
+        .core
+        .preview_attachment(message, 0, 0)
+        .await
+        .expect("image");
+    let mail_model::AttachmentPreview::Image {
+        data_url,
+        width,
+        height,
+        scaled,
+    } = image
+    else {
+        panic!("{image:?}");
+    };
+    assert_eq!((width, height, scaled), (1, 1, false));
+    assert!(
+        data_url.starts_with("data:image/png;base64,")
+            || data_url.starts_with("data:image/jpeg;base64,"),
+        "encoded by the core"
+    );
+    assert_ne!(
+        data_url.trim_start_matches("data:image/png;base64,"),
+        PIXEL_PNG,
+        "never the attachment's own bytes"
+    );
+
+    assert_eq!(
+        h.core
+            .preview_attachment(message, 1, 0)
+            .await
+            .expect("text"),
+        mail_model::AttachmentPreview::Text {
+            text: "Grüße\nZeile 2".into(),
+            truncated: false,
+        }
+    );
+    for index in [2, 3] {
+        let err = h
+            .core
+            .preview_attachment(message, index, 0)
+            .await
+            .expect_err("active content");
+        assert_eq!(err.code(), ErrorCode::PreviewUnsupported, "{index}");
+    }
+    let err = h
+        .core
+        .preview_attachment(message, 4, 0)
+        .await
+        .expect_err("broken pdf");
+    assert_eq!(err.code(), ErrorCode::PreviewDamaged);
+    let err = h
+        .core
+        .preview_attachment(message, 5, 0)
+        .await
+        .expect_err("not an image");
+    assert_eq!(err.code(), ErrorCode::PreviewUnsupported);
+    let err = h
+        .core
+        .preview_attachment(message, 9, 0)
+        .await
+        .expect_err("index");
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    assert!(h.opener.opened().is_empty(), "a preview opens nothing");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn save_all_writes_every_attachment_and_never_replaces_a_file() {
+    let (bytes, base64) = binary_attachment();
+    let raw = with_parts(
+        "Save all",
+        &[
+            part("text/plain", "report.txt", "7bit", "first"),
+            part("text/plain", "report.txt", "7bit", "second"),
+            part("application/octet-stream", "../data.bin", "base64", &base64),
+        ],
+    );
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", raw.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    h.open_fetched(message, BodyFormat::Auto).await;
+
+    let dir = TempDir::new().expect("dir");
+    std::fs::write(dir.path().join("report.txt"), "mine").expect("existing file");
+    let (saved, renamed) = h
+        .core
+        .save_all_attachments_to(message, dir.path().to_path_buf())
+        .await
+        .expect("save all");
+    assert_eq!((saved, renamed), (3, 2));
+    let read = |name: &str| std::fs::read(dir.path().join(name)).expect(name);
+    assert_eq!(
+        read("report.txt"),
+        b"mine",
+        "an existing file is never replaced"
+    );
+    assert_eq!(read("report (2).txt"), b"first");
+    assert_eq!(read("report (3).txt"), b"second");
+    let names: Vec<String> = std::fs::read_dir(dir.path())
+        .expect("dir")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    let data = names
+        .iter()
+        .find(|n| n.ends_with("data.bin"))
+        .expect("the binary file, under a safe name");
+    assert!(!data.contains(['/', '\\']), "{data}");
+    assert_eq!(read(data), bytes);
+    assert_eq!(names.len(), 4, "{names:?}");
+
+    let missing = dir.path().join("gone");
+    let err = h
+        .core
+        .save_all_attachments_to(message, missing)
+        .await
+        .expect_err("no such folder");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn attachments_are_pinned_listed_and_unpinned() {
+    let raw = with_parts(
+        "Pins",
+        &[
+            part("application/pdf", "Rechnung.pdf", "7bit", "%PDF-1.4"),
+            part("text/plain", "notes.txt", "7bit", "hello"),
+        ],
+    );
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", raw.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    h.open_fetched(message, BodyFormat::Auto).await;
+    assert!(
+        h.core
+            .get_attachment_pins(message)
+            .await
+            .expect("pins")
+            .is_empty()
+    );
+
+    h.core
+        .set_attachment_pinned(message, 1, true)
+        .await
+        .expect("pin notes");
+    h.event(|e| matches!(e, CoreEvent::InboxChanged { .. }))
+        .await;
+    h.core
+        .set_attachment_pinned(message, 0, true)
+        .await
+        .expect("pin invoice");
+    // Pinning twice changes nothing.
+    h.core
+        .set_attachment_pinned(message, 0, true)
+        .await
+        .expect("again");
+    assert_eq!(
+        h.core.get_attachment_pins(message).await.expect("pins"),
+        vec![0, 1]
+    );
+    let pinned = h
+        .core
+        .list_pinned_attachments(mail_model::MarkScope::All)
+        .await
+        .expect("view");
+    assert_eq!(pinned.len(), 2);
+    let invoice = pinned.iter().find(|p| p.index == 0).expect("the invoice");
+    assert_eq!(invoice.name, "Rechnung.pdf");
+    assert_eq!(invoice.mime_type, "application/pdf");
+    assert_eq!(invoice.preview, Some(mail_model::PreviewKind::Pdf));
+    assert_eq!(invoice.message.id, message);
+    assert!(pinned.iter().all(|p| p.message.subject == "Pins"));
+
+    let err = h
+        .core
+        .set_attachment_pinned(message, 7, true)
+        .await
+        .expect_err("no such attachment");
+    assert_eq!(err.code(), ErrorCode::NotFound);
+
+    h.core
+        .set_attachment_pinned(message, 1, false)
+        .await
+        .expect("unpin");
+    assert_eq!(
+        h.core.get_attachment_pins(message).await.expect("pins"),
+        vec![0]
+    );
+    let scoped = h
+        .core
+        .list_pinned_attachments(mail_model::MarkScope::Account {
+            account_id: account,
+        })
+        .await
+        .expect("account view");
+    assert_eq!(scoped.len(), 1);
+    // Nothing went to the server.
+    assert_eq!(server.read(|s| s.writer_attempts), 0);
+}

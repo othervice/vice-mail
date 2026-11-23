@@ -48,7 +48,9 @@ wenn er groß genug ist.
 | HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
 | TLS | rustls mit Provider `aws-lc-rs`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7, aws-lc-rs 1.19 | kein OpenSSL; der Standard-Provider von rustls, regelmäßig veröffentlicht, baut auch für Windows ohne CMake und NASM (vorab assemblierte Objekte aus dem Crate, 0002). Provider und Client-Konfiguration entstehen an einer Stelle (`mail_imap::tls`), auch für reqwest und die TLS-Server der Tests. Selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver |
 | System öffnen, Dateidialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | Links und Anhänge im System öffnen, Speichern-Dialog; beide nur in Rust, hinter Traits testbar. Nicht `tauri-plugin-dialog` (spritzt ein Script ein und bringt `tauri-plugin-fs` mit) |
+| Anhangsvorschau | image (`png`, `jpeg`, `gif`, `webp`), hayro | 0.25.10 / 0.9.0 | Stufe 16 (0036): Bilder dekodiert und neu kodiert, PDF-Seiten gerastert, beides in Rust; die WebView sieht nur selbst erzeugte PNG/JPEG. hayro ist reines Rust (`forbid(unsafe_code)`), ohne Script-Engine und Netz, mit eingebetteten Standardschriften und CMaps. Beide Apache-2.0 OR MIT |
 | Benachrichtigungen, eine Instanz | tauri-plugin-notification, tauri-plugin-single-instance (nur Windows) | 2.8.1 / 2.5.5 | Stufe 9 (0020): native Mitteilungen nur aus Rust (keine Capability für die Oberfläche), Klicks über den Aktions-Handler des Plugins; auf Windows reicht ein zweiter Start (`mailto:`-Link) seine Argumente an die laufende App weiter. Beide Apache-2.0 OR MIT |
+| Updates in der App | tauri-plugin-updater | =2.14.1 | Stufe 15 (0037): Manifest, Signaturprüfung (minisign/Ed25519, `requireSignedVersion`), Austausch des App-Bundles (macOS) und NSIS-Installer im Modus `passive` (Windows); nur aus Rust, keine Capability für die Oberfläche. Ohne Default-Features (kein `ring`, kein System-Proxy, kein zip), TLS über unser reqwest/rustls per `configure_client`, deshalb exakt gepinnt. Release 28.10.2026, Apache-2.0 OR MIT. `tauri-plugin-process` nicht nötig (`AppHandle::request_restart`) |
 | WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
@@ -145,10 +147,11 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `reading_list` | Lese-Liste „Zum Lesen“: Konto-UUID, Message-ID, hinzugefügt; kein Schlagwort auf dem Server (Stufe 16, 0033) | sync |
 | `mailbox_pref` | Lieblingsordner (Position) und Ordnerfarbe (Index 0–7 der Kontofarben) je Konto-UUID und dekodiertem Pfad; nur solange eins gesetzt ist (Stufe 16, 0033) | sync |
 | `blocked_sender`, `blocked_hidden` | blockierte Absender (normalisierte Adresse); ausgeblendete Mails blockierter Absender auf Konten ohne Schreibzugriff oder ohne Spam-Ordner (Konto-UUID, Message-ID, Absender) (Stufe 16, 0033) | sync bzw. Gerät |
+| `attachment_pin` | angeheftete Anhänge: Konto-UUID, Message-ID, Index des Anhangs, dazu Name, Typ und Größe vom Anheften (die Ansicht „Angeheftete Anhänge“ braucht keinen Body); kein Schlagwort auf dem Server (Stufe 16, 0036) | sync |
 | `receipt_answer`, `receipt_received` | Lesebestätigungen (RFC 8098): Antwort des Nutzers auf eine eingehende Anforderung (`queued`, `sent`, `declined`) je Konto-UUID und Message-ID; zurückgekommene Bestätigungen je gemeldeter Message-ID und Empfänger, erkannt beim Speichern des Bodys (Stufe 16, 0033) | Gerät bzw. Cache |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
-| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät | sync bzw. Gerät |
+| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät, (0036) `ui.accent_theme` (Farbthema, eins von sechs, Standard Orange nach 0038) sync | sync bzw. Gerät |
 | `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
 | `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
@@ -413,7 +416,12 @@ einer klaren Meldung abgelehnt.
 - `devCsp` greift im Entwicklungsmodus nicht (die WebView lädt die `devUrl` direkt). CSP-Fehler zeigen sich erst im Release- oder e2e-Build; der Desktop-Test zeichnet CSP-Verstöße auf und scheitert daran.
 - Tauri-Capabilities minimal: keine Dateisystem-, Shell- oder HTTP-Plugins für das Frontend.
   Das Notification-Plugin (Stufe 9) benutzt nur die Shell; die Oberfläche hat keine Berechtigung
-  dafür. Den Standard für `mailto:` fragt und setzt die Shell auf macOS über `osascript` mit festem
+  dafür. Ebenso das Updater-Plugin (Stufe 15, 0037): keine Capability gewährt `updater:*`, die
+  Oberfläche nutzt die eigenen Commands `getUpdateInfo`, `setUpdateAutoCheck`, `checkForUpdates`,
+  `downloadUpdate`, `installUpdate`. Ob gefragt wird, entscheidet `mail-engine/src/updates.rs`
+  (Schalter, einmalige Frage, Tagesdrossel), die Shell setzt nur das Plugin als `UpdateSource`
+  ein. Der private Update-Schlüssel liegt nur im Schlüsselbund des Build-Macs
+  (`org.vicemail.updater`, `docs/RELEASING.md`), der öffentliche in `tauri.conf.json`. Den Standard für `mailto:` fragt und setzt die Shell auf macOS über `osascript` mit festem
   Skript (Launch Services ohne `unsafe`, 0020).
 - Strenge Content-Security-Policy für die App selbst, keine entfernten Quellen.
 - Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
@@ -447,6 +455,22 @@ einer klaren Meldung abgelehnt.
 - Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
   keine Steuerzeichen, keine Richtungsumkehr-Zeichen. Geschrieben wird nur an den Ort, den der
   Nutzer im Systemdialog wählt.
+- „Alle speichern“ (Stufe 16, 0036): ein Ordner aus dem Ordnerdialog des Systems; jede Datei unter
+  ihrem bereinigten Namen, mit `create_new` belegt: eine vorhandene Datei wird nie ersetzt, ein
+  vergebener Name wird `Name (2).ext` usw.; unter Windows mit Herkunftsmarke wie jedes Speichern.
+
+**Anhangsvorschau (Stufe 16, 0036)**
+- Der Kern dekodiert, die WebView zeigt nur, was der Kern selbst erzeugt hat: Bilder (PNG, JPEG,
+  GIF, WebP, an den Bytes erkannt) in Rust dekodiert (höchstens 64 Megapixel), verkleinert auf
+  2048 px und neu kodiert (PNG mit Transparenz, sonst JPEG), PDF-Seiten mit hayro einzeln zu PNG
+  gerastert (höchstens 200 Seiten), Text dekodiert und auf 512 KiB gekürzt, als Text angezeigt.
+  Höchstens 32 MiB Eingabe. HTML, XHTML, XML und SVG nie, auch wenn nur Typ oder Name es sagt.
+- Kein eigenes Fenster und keine Änderung an CSP, Capabilities oder Navigations-Hook: der Dialog
+  im Lesebereich zeigt `data:`-Bilder (von `img-src data:` gedeckt) und Text. Der PDF-Betrachter
+  der WebView wird nicht benutzt (er bräuchte `object-src`/`frame-src data:` und führt unter
+  WebView2 PDF-Skripte aus).
+- Typisierte Fehler `preview_unsupported`, `preview_too_large`, `preview_damaged`; eine Panik
+  eines Dekoders wird `preview_damaged`.
 - `.eml`-Dateien (0027) liest nur der Kern, nur vom Pfad, den das System übergibt oder der Nutzer
   im Öffnen-Dialog wählt, höchstens `MAX_EML_FILE_BYTES` (64 MiB, vor und beim Lesen geprüft);
   typisierte Fehler `eml_too_large`, `eml_invalid`, `eml_unreadable`. Sie werden nicht
@@ -493,7 +517,19 @@ einer klaren Meldung abgelehnt.
   ohne Cookies, Referrer, Proxy und Wiederholungen, neutrale Kennung, nie zu privaten, Loopback- oder
   Link-Local-Adressen), keine Weiterleitungen, 5 s Aufbau, 15 s gesamt. Eine `mailto:`-Abmeldung ist
   ein Entwurf, den der Nutzer sendet; eine Web-Abmeldung öffnet nur der System-Browser
-- Update-Prüfung ab Stufe 15, abschaltbar
+- Update-Prüfung (Stufe 15, 0037), **nur mit Zustimmung**: automatisch nur, wenn der Nutzer
+  „Automatisch nach Updates suchen“ eingeschaltet hat (Standard aus; einmal gefragt nach dem ersten
+  Konto), höchstens einmal am Tag; sonst nur nach Klick auf „Jetzt suchen“. Ziel ist allein der
+  Endpunkt aus `tauri.conf.json` (`plugins.updater.endpoints`,
+  `https://github.com/othervice/vice-mail/releases/latest/download/latest.json`), dazu für die
+  Weiterleitung und den Download GitHubs Dateihosts `objects.githubusercontent.com` und
+  `release-assets.githubusercontent.com`. Nur HTTPS, Weiterleitungen nur zu diesen Hosts (höchstens
+  fünf), eine Download-Adresse außerhalb wird vor jeder Verbindung abgelehnt. Client wie bei
+  externen Bildern: gemeinsame TLS-Konfiguration, ohne Cookies, Referrer, Proxy und Wiederholungen,
+  neutrale Kennung, keine App-Version und keine Kennung in der Anfrage. Heruntergeladen und
+  installiert wird nur nach Klick; die Datei muss mit dem Update-Schlüssel und für genau die
+  angekündigte Version signiert sein. Andere Endpunkte nur in Tests und im Desktop-Test-Build
+  (`MAIL_APP_E2E_UPDATE_ENDPOINT`), HTTP nur zu Loopback-Endpunkten
 - Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
   (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.
 
@@ -521,6 +557,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | Einstellungen | je Schlüssel gewinnt die neuere Version |
 | Signaturen, Vorlagen, Regeln, Ansichten | je Datensatz gewinnt die neuere Version; Bearbeiten schlägt gleichzeitiges Löschen |
 | Snooze, Pins, Aufgaben, Lese-Liste | je Mail gewinnt die neuere Version |
+| Angeheftete Anhänge | je Anhang (Konto-UUID, Message-ID, Index) gewinnt die neuere Version (Stufe 16, 0036) |
 | Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
 | Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
 | Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
@@ -665,6 +702,7 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
 | KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
 | IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
+| Anhangsvorschau im Kern statt im PDF-Betrachter der WebView (0036) | die WebView sieht nur neu kodierte Bilder und Text; keine CSP-Lockerung, keine PDF-Skripte | PDF-Vorschau abschalten (`preview_unsupported`), Öffnen im System bleibt |
 | Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
 | Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |
@@ -672,4 +710,5 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | tauri-specta statt ts-rs (0004) | typisierte Commands und Events, erzwungene Entscheidung bei 64-Bit-Zahlen | ts-rs erzeugt dieselben Typen; nur `ipc.ts` müsste neu geschrieben werden |
 | Stalwart als Testserver (0001) | ein Binary, alle nötigen Fähigkeiten, kein Docker | Dovecot über Homebrew mit eigenem MTA |
 | FTS5 mit `unicode61` statt `trigram` (0003) | trigram ist 5,2-mal so groß und halb so schnell beim Einfügen | Tokenizer per Migration wechselbar, Index ist Cache |
+| Updates nur mit Zustimmung über den Tauri-Updater (0037) | einzige Verbindung zu einem Server, den der Nutzer nicht eingerichtet hat; signierte Dateien, Schlüssel nur im Schlüsselbund | Schalter aus; ohne Updater installiert man von Hand |
 | rusqlite 0.41 statt 0.43 (0006) | `rusqlite_migration` 2.7 verlangt ^0.41; gleiches SQLite 3.54.1 | eigener Migrations-Runner, dann rusqlite 0.43 |

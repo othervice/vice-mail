@@ -139,7 +139,7 @@ function SelectionMark({ unread, selected, multiSelect }: { unread: boolean; sel
       <span
         className={cx(
           "absolute inset-0 items-center justify-center rounded-control border",
-          selected ? "border-accent bg-accent text-on-accent" : "border-secondary bg-surface-raised",
+          selected ? "border-accent bg-accent-fill text-on-accent" : "border-secondary bg-surface-raised",
           boxShown || multiSelect ? "flex" : "hidden group-hover/row:flex",
         )}
         data-testid="row-check"

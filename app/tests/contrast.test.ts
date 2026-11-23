@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import tokensCss from "../src/styles/tokens.css?raw";
 import { contrast, deltaE, luminance } from "./support/color";
-import { ACCENT_THEMES, DEFAULT_ACCENT } from "../src/features/preferences/accent";
+import { ACCENT_THEMES } from "../src/features/preferences/accent";
+
+/**
+ * The accent of the root values of tokens.css. Since decision 0038 the default theme (orange) is
+ * set on the root like every other one, so the root keeps teal's values and teal's block repeats them.
+ */
+const ROOT_ACCENT = "teal";
 
 // Contrast rules from docs/SPEC.md (Barrierefreiheit): text >= 4.5:1, controls and other
 // meaningful graphics >= 3:1, in both themes. The pairs below are the ones the UI uses.
@@ -27,7 +33,7 @@ const light = colourTokens(block(/:root\s*\{([^}]*)\}/));
 const dark = { ...light, ...colourTokens(block(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)) };
 
 // Stage 16: the accent themes. Each changes only the accent family, in light and in dark.
-const ACCENT_FAMILY = ["accent", "accent-soft", "selected", "focus-ring", "text-on-accent"];
+const ACCENT_FAMILY = ["accent", "accent-fill", "accent-soft", "selected", "focus-ring", "text-on-accent"];
 const accentLight = (accent: string) => colourTokens(block(new RegExp(`(?:^|\\n)\\[data-accent="${accent}"\\]\\s*\\{([^}]*)\\}`)));
 const accentDark = (accent: string) =>
   colourTokens(block(new RegExp(`:root\\[data-theme="dark"\\] \\[data-accent="${accent}"\\]\\s*\\{([^}]*)\\}`)));
@@ -49,13 +55,14 @@ const TEXT_PAIRS: [string, string][] = [
   ...["text-primary", "text-secondary", "text-tertiary"].flatMap((fg) => SURFACES.map((bg): [string, string] => [fg, bg])),
   ["text-primary", "accent-soft"],
   ["text-secondary", "accent-soft"],
-  ["text-on-accent", "accent"],
+  // Design pass 23.11.2026: the label of primary buttons and other fills sits on `accent-fill`.
+  ["text-on-accent", "accent-fill"],
   ...["canvas", "surface", "surface-raised", "rail", "selected", "accent-soft"].map((bg): [string, string] => ["accent", bg]),
   ...["danger", "success", "warning"].flatMap((fg) =>
     ["canvas", "surface", "surface-raised"].map((bg): [string, string] => [fg, bg]),
   ),
   // Stage 2: label of the danger button ("Remove"), quiet buttons on hover.
-  ["text-on-accent", "danger"],
+  ["text-on-danger", "danger"],
   ["accent", "hover"],
   // Stage 3, reading pane: link text in plain-text mail on the pane, the emphasised host of a
   // link target, the warning texts of attachments, the saved note, the link card's surface.
@@ -69,7 +76,7 @@ const TEXT_PAIRS: [string, string][] = [
   // activity badge (danger fill, or secondary on the rail). Failure texts in the activity view.
   ...["accent", "success", "danger"].map((fg): [string, string] => [fg, "surface-raised"]),
   ...["text-primary", "text-secondary", "accent"].map((fg): [string, string] => [fg, "accent-soft"]),
-  ["text-on-accent", "danger"],
+  ["text-on-danger", "danger"],
   ["text-secondary", "rail"],
   ["danger", "canvas"],
   // Decision 0031 (Feinschliff). Initials on every avatar tint; the conversation size on its pill;
@@ -87,6 +94,12 @@ const TEXT_PAIRS: [string, string][] = [
   // match with its own text colour.
   ["text-primary", "find-match"],
   ["find-current-text", "find-current"],
+  // Design pass 23.11.2026: state pills (outbox, activity) on the badge fill.
+  ...["text-secondary", "warning", "danger", "success"].map((fg): [string, string] => [fg, "badge"]),
+  // Labels of segmented controls on their track (the checked one sits on a raised thumb).
+  ["text-primary", "track"],
+  ["text-secondary", "track"],
+  ["text-primary", "surface-raised"],
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -136,6 +149,10 @@ const CONTROL_PAIRS: [string, string][] = [
   ["accent", "surface"],
   ["surface-raised", "accent"],
   ["text-secondary", "surface"],
+  // Design pass 23.11.2026: the accent ring of the checked segment on the track; the switch's
+  // off knob on the track.
+  ["accent", "track"],
+  ["text-secondary", "track"],
 ];
 
 describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
@@ -157,6 +174,10 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       "text-on-accent",
       "accent",
       "accent-soft",
+      // Design pass 23.11.2026
+      "accent-fill",
+      "text-on-danger",
+      "track",
       "danger",
       "success",
       "warning",
@@ -226,10 +247,10 @@ describe("accent themes (stage 16)", () => {
     }
   });
 
-  it("the default's block repeats the default values (the picker's swatch shows it)", () => {
+  it("the root's accent block repeats the root values (the picker's swatch shows it)", () => {
     for (const name of ACCENT_FAMILY) {
-      expect(accentLight(DEFAULT_ACCENT)[name], name).toBe(light[name]);
-      expect(accentDark(DEFAULT_ACCENT)[name], name).toBe(dark[name]);
+      expect(accentLight(ROOT_ACCENT)[name], name).toBe(light[name]);
+      expect(accentDark(ROOT_ACCENT)[name], name).toBe(dark[name]);
     }
   });
 

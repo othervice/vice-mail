@@ -229,8 +229,8 @@ export function UnreadControls({ viewKey }: { viewKey: string }) {
         <span
           aria-hidden
           className={cx(
-            "relative flex h-4 w-7 shrink-0 items-center rounded-full border p-px transition-colors",
-            only ? "justify-end border-accent bg-accent" : "justify-start border-border-strong bg-surface",
+            "relative flex h-4 w-8 shrink-0 items-center rounded-full border p-px transition-colors",
+            only ? "justify-end border-accent bg-accent" : "justify-start border-border-strong bg-track",
           )}
         >
           <span className={cx("size-3 rounded-full", only ? "bg-surface-raised" : "bg-secondary")} />

@@ -347,7 +347,7 @@ function QuestionRow({ question }: { question: SyncQuestion }) {
   const [confirming, setConfirming] = useState(false);
   const error = resolve.isError ? <ErrorNotice context={t("settingsSync.questions.failed")} error={resolve.error} /> : null;
   return (
-    <li className="flex flex-col gap-3 rounded-card border border-border bg-canvas p-4" data-testid={`sync-question-${question.accountId}`}>
+    <li className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid={`sync-question-${question.accountId}`}>
       <p className="text-14 text-primary">{t("settingsSync.questions.accountRemoved", { email: question.email })}</p>
       {confirming ? (
         <InlineConfirm

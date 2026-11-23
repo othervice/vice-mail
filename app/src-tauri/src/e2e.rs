@@ -40,6 +40,23 @@ pub const EXTRA_CA_ENV: &str = "MAIL_APP_E2E_EXTRA_CA";
 /// product build has no such switch at all.
 pub const LOOPBACK_IMAGES_ENV: &str = "MAIL_APP_E2E_LOOPBACK_IMAGES";
 
+/// Address of the update manifest for the desktop test's local update server (decision 0037),
+/// e.g. `http://127.0.0.1:<port>/latest.json`. Optional; without it the shipped endpoint from
+/// `tauri.conf.json` applies. Plain HTTP is accepted only for loopback addresses.
+pub const UPDATE_ENDPOINT_ENV: &str = "MAIL_APP_E2E_UPDATE_ENDPOINT";
+
+/// The overriding update endpoint ([`UPDATE_ENDPOINT_ENV`]), if set and a valid URL.
+pub fn update_endpoint() -> Option<tauri::Url> {
+    let value = std::env::var(UPDATE_ENDPOINT_ENV).ok()?;
+    match tauri::Url::parse(&value) {
+        Ok(url) => Some(url),
+        Err(err) => {
+            tracing::error!(%err, "{UPDATE_ENDPOINT_ENV} is not a URL; ignored");
+            None
+        }
+    }
+}
+
 /// Commands with this prefix go to the test handler; the app's own handler never sees them.
 const COMMAND_PREFIX: &str = "e2e_";
 

@@ -5,7 +5,8 @@ import { useAiPanelStore } from "../../stores/aiPanel";
 import { useLayoutStore } from "../../stores/layout";
 import { usePaletteStore } from "../../stores/palette";
 import { useShortcutStore } from "../../stores/shortcuts";
-import { migrateLocalFallback } from "./migrateLocal";
+import { useAccentStore } from "../preferences/accent";
+import { migrateLocalAccent, migrateLocalFallback } from "./migrateLocal";
 import { connectUiPreferences, overridesFromCore, uiPreferencesQueryKey, windowLayoutQueryKey } from "./uiPreferences";
 
 /** What the core holds goes into the stores the key handlers and components read. */
@@ -14,6 +15,8 @@ function applyUiPreferences(preferences: UiPreferences): void {
   usePaletteStore.getState().applyStored(preferences.recentCommands);
   useLayoutStore.getState().applyStoredTextSize(preferences.textSize);
   useAiPanelStore.getState().applyStored(preferences.aiPanel);
+  // Stage 16 (decision 0036): the accent theme of every window of the app.
+  useAccentStore.getState().applyStored(preferences.accentTheme);
 }
 
 /** `uiPreferencesChanged`: another window or (via the settings sync) another device saved them. */
@@ -91,6 +94,13 @@ export function useUiPreferencesSync(options: { migrate: boolean }): UiPreferenc
       // The local copy stays for the next start; the settings show why it did not move.
       useShortcutStore.setState({ saveError: error as CoreError });
     });
+    // Stage 16 (decision 0036): the accent of the per-device fallback, after the values above.
+    void migration.then(() =>
+      migrateLocalAccent(loadedPreferences).catch((error: unknown) => {
+        // The local copy stays for the next start; Appearance shows why it did not move.
+        useAccentStore.setState({ saveError: error as CoreError });
+      }),
+    );
   }, [options.migrate, loadedPreferences, loadedLayout]);
 
   return {

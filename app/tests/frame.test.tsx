@@ -34,6 +34,7 @@ describe("app frame without an account", () => {
       "Tasks",
       // Stage 16
       "Reading list",
+      "Pinned attachments",
       "Pinned",
       "Sent",
       "Drafts",

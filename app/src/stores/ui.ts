@@ -8,6 +8,8 @@ export const MAIL_VIEW_IDS = [
   "tasks",
   // Stage 16: the reading list ("Zum Lesen"), a local mark like Tasks.
   "readingList",
+  // Stage 16 (decision 0036): pinned attachments ("Angeheftete Anhänge"), next to it.
+  "pinnedAttachments",
   "pinned",
   "sent",
   "drafts",

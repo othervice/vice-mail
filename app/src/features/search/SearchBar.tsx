@@ -215,7 +215,8 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="h-full min-w-0 flex-1 bg-transparent text-14 text-primary outline-none select-text placeholder:text-tertiary"
+            // The app draws its own clear button; the engine's (blue in Chromium) stays hidden.
+            className="h-full min-w-0 flex-1 bg-transparent text-14 text-primary outline-none select-text placeholder:text-tertiary [&::-webkit-search-cancel-button]:appearance-none"
             data-testid="search-input"
           />
           {query && (

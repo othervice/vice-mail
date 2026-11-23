@@ -11,10 +11,13 @@
 # llvm-lib and llvm-rc; it goes onto PATH for this build only. CARGO_TARGET_DIR is honoured.
 # SOURCE_DATE_EPOCH, if set, is the build date shown in About; otherwise the commit time of a
 # clean tree or the current time of a dirty one.
+# VICEMAIL_UPDATER=1 also signs the installer as the update artifact (`<installer>.sig`, decision
+# 0037) with the signing key from the login keychain (docs/RELEASING.md) and checks the signature
+# against plugins.updater.pubkey; without it no key is needed.
 set -euo pipefail
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -70,6 +73,17 @@ command -v pnpm >/dev/null || fail "pnpm missing: brew install pnpm"
 [[ -x "$repo/app/node_modules/.bin/tauri" ]] ||
   fail "app dependencies missing: pnpm --dir app install"
 
+# Decision 0037: the update signature only on request; the key stays in the keychain and reaches
+# only this build's environment.
+updater=0
+if [[ "${VICEMAIL_UPDATER:-}" == 1 ]]; then
+  updater=1
+  command -v node >/dev/null || fail "node missing (checks the update signature): brew install node"
+  # shellcheck source=updater-signing.sh
+  . "$repo/scripts/updater-signing.sh"
+  updater_signing_env build-windows || fail "the update signing key is not available"
+fi
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -113,7 +127,9 @@ cp -f "$target_dir/$target/release/mail-mcp.exe" "$sidecar_dir/mail-mcp-$target.
 
 # The version and the sidecar go in through --config (as in build-macos.sh): no project file is
 # changed.
-config="\"bundle\":{\"externalBin\":[\"$sidecar_dir/mail-mcp\"]}"
+updater_config=""
+[[ $updater -eq 0 ]] || updater_config=",\"createUpdaterArtifacts\":true"
+config="\"bundle\":{\"externalBin\":[\"$sidecar_dir/mail-mcp\"]$updater_config}"
 if [[ -n "$version" ]]; then
   config="\"version\":\"$version\",$config"
 fi
@@ -146,6 +162,17 @@ nsi="$target_dir/$target/release/nsis/x64/installer.nsi"
 grep -q 'mail-mcp\.exe' "$nsi" || fail "the installer does not install mail-mcp.exe ($nsi)"
 helper_size="$(du -h "$target_dir/$target/release/mail-mcp.exe" | cut -f1)"
 
+# Decision 0037: the installer is also the update artifact (the updater runs it with /P /UPDATE).
+update_line="not signed (VICEMAIL_UPDATER=1 signs it)"
+if [[ $updater -eq 1 ]]; then
+  [[ -f "$installer.sig" && "$installer.sig" -nt "$tmp/started" ]] ||
+    fail "the installer has no new update signature: $installer.sig"
+  built_version="$(basename "$installer" | sed -E 's/^.*_([^_]+)_x64-setup\.exe$/\1/')"
+  node "$repo/scripts/updater-manifest.mjs" verify "$installer" "$built_version" >/dev/null ||
+    fail "the update signature of $installer does not verify"
+  update_line="$installer.sig, signature verified for $built_version"
+fi
+
 bytes=$(wc -c <"$installer" | tr -d ' ')
 sha256=$(shasum -a 256 "$installer" | cut -d' ' -f1)
 printf '%s  %s\n' "$sha256" "$(basename "$installer")" >"$installer.sha256"
@@ -156,3 +183,4 @@ printf '  path:    %s\n' "$installer"
 printf '  size:    %s bytes (%s MB)\n' "$bytes" "$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1048576 }')"
 printf '  sha256:  %s\n' "$sha256"
 printf '  (also in %s)\n' "$installer.sha256"
+printf '  update:  %s\n' "$update_line"

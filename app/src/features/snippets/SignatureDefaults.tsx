@@ -95,7 +95,7 @@ function DefaultSelect({ id, label, value, pool, disabled, onChange, "data-testi
         onChange={(e) => {
           onChange(e.target.value === "" ? null : e.target.value);
         }}
-        className="h-8 w-fit min-w-(--ui-list-sender-width) rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+        className="h-8 w-fit min-w-(--ui-list-sender-width) rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
         data-testid={testId}
       >
         <option value="">{t("snippets.defaults.none")}</option>

@@ -125,7 +125,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
@@ -193,7 +193,7 @@ function CancelButton({ ref, label, onClick }: { ref: Ref<HTMLButtonElement>; la
       type="button"
       onClick={onClick}
       data-testid="confirm-dialog-cancel"
-      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-13 font-medium text-primary transition-colors hover:bg-hover"
+      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border bg-surface-raised px-3 text-13 font-medium text-primary shadow-row transition-colors hover:bg-hover"
     >
       {label}
     </button>

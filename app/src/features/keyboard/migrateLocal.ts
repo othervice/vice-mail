@@ -2,6 +2,7 @@ import type { CoreWindowLayout, UiPreferences } from "../../services/ipc";
 import { DEFAULT_LAYOUT, parseStoredLayout } from "../../stores/layout";
 import { parseStoredRecent } from "../../stores/palette";
 import { parseStoredOverrides } from "../../stores/shortcuts";
+import { isAccentTheme } from "../preferences/accent";
 import { readLocal, removeLocal, type LocalKey } from "./localFallback";
 import { DEFAULT_UI_PREFERENCES, saveUiPreferences, saveWindowLayout, type UiPreferencesChange } from "./uiPreferences";
 
@@ -65,5 +66,19 @@ export async function migrateLocalFallback(preferences: UiPreferences, layout: C
   if (Object.keys(change).length > 0) await saveUiPreferences(change);
   if (layoutChange) await saveWindowLayout(layoutChange);
   for (const key of LEGACY_KEYS) removeLocal(key);
+  return true;
+}
+
+/**
+ * Stage 16, once per device (decision 0036): until the core stored the accent theme, the
+ * choice lived in the web view of this device. A valid theme there goes to the core (when it
+ * differs), then the local copy is removed; an invalid one is just removed. When writing fails,
+ * the local copy stays for the next start and the error comes back.
+ */
+export async function migrateLocalAccent(preferences: UiPreferences): Promise<boolean> {
+  const stored = readLocal("accentTheme");
+  if (stored === null) return false;
+  if (isAccentTheme(stored) && stored !== preferences.accentTheme) await saveUiPreferences({ accentTheme: stored });
+  removeLocal("accentTheme");
   return true;
 }

@@ -458,6 +458,8 @@ pub(crate) fn content_of(
         "readingList" | "mailboxPref" | "blockedSender" => {
             crate::parity::synced_content(conn, kind, id)?
         }
+        // Stage 16 (decision 0036).
+        "attachmentPin" => crate::attachment_pins::synced_content(conn, id)?,
         "device" => conn
             .prepare_cached(
                 "SELECT name, system, last_seen_ms FROM sync_device WHERE device_id = ?1",
@@ -871,6 +873,19 @@ fn put_table(
                 .execute(params![group, account])?;
             }
         }
+        "attachmentPin" => {
+            if let Some((account, _)) = split_scoped(id)
+                && account_row(conn, account)?.is_none()
+            {
+                return Err(missing(format!("account {account}")));
+            }
+            crate::attachment_pins::apply_synced(conn, id, Some(value)).map_err(
+                |err| match err {
+                    StoreError::InvalidArgument(what) => refused(what),
+                    other => ApplyError::Store(other),
+                },
+            )?;
+        }
         "readingList" | "mailboxPref" | "blockedSender" => {
             if let Some((account, _)) = split_scoped(id)
                 && item.kind != "blockedSender"
@@ -973,6 +988,12 @@ fn delete_table(
             .prepare_cached("DELETE FROM account_group WHERE uuid = ?1")?
             .execute([id])?,
         "contact" => crate::contacts_dir::apply_synced(conn, id, None, None)?,
+        "attachmentPin" => {
+            crate::attachment_pins::apply_synced(conn, id, None).map_err(|err| match err {
+                StoreError::InvalidArgument(what) => refused(what),
+                other => ApplyError::Store(other),
+            })?
+        }
         "readingList" | "mailboxPref" | "blockedSender" => {
             crate::parity::apply_synced(conn, &item.kind, id, None, 0).map_err(|err| match err {
                 StoreError::InvalidArgument(what) => refused(what),
@@ -1008,6 +1029,7 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
         "task",
         "reading_list",
         "mailbox_pref",
+        "attachment_pin",
         "blocked_hidden",
         "remote_content_sender",
         "account_group_member",
@@ -1033,7 +1055,7 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
     conn.execute(
         "DELETE FROM sync_record WHERE (kind = 'account' AND id = ?1)
            OR (kind IN ('snooze', 'pin', 'task', 'readingList', 'mailboxPref', 'remoteContent',
-                        'setting')
+                        'attachmentPin', 'setting')
                AND substr(id, 1, length(?1) + 1) = ?1 || '/')",
         [from],
     )?;

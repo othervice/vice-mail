@@ -39,7 +39,8 @@ steht im Abschnitt „Feinschliff 23.11.2026“ und in `docs/decisions/0031-fein
 └────┴──────────────────────────────────────────────┴───────────────┘
 ```
 
-**Icon-Leiste** (56 px). Von oben: vereinter Posteingang, Später, Aufgaben, Angepinnt, Gesendet,
+**Icon-Leiste** (56 px). Von oben: vereinter Posteingang, Später, Aufgaben, Zum Lesen und
+Angeheftete Anhänge (Stufe 16, 0033 und 0036), Angepinnt, Gesendet,
 Entwürfe, Archiv, Papierkorb, Ordner, gespeicherte Ansichten. Unten: Konten-Umschalter mit
 Kontofarben, Einstellungen. Jedes Icon hat einen Tooltip mit Name und Tastenkürzel. Die Leiste lässt
 sich zu einer beschrifteten Seitenleiste mit Ordnerbaum aufklappen.
@@ -88,7 +89,8 @@ feste Farben oder Abstände.
 | Flächen | `canvas`, `rail` (dunkelste Stufe), `rail-hover`, `surface-list` (Listenspalte), `surface` (Lesebereich), `surface-raised` (Karten), `priority-tint`, `selected`, `hover`, `badge` (Pillen) |
 | Linien | `border`, `border-subtle` (Haarlinien zwischen Bereichen), `border-strong`, `priority-border`, `focus-ring` |
 | Text | `text-primary`, `text-secondary`, `text-tertiary`, `text-on-accent` |
-| Akzent | `accent`, `accent-soft`, `danger`, `success`, `warning` |
+| Akzent | `accent` (Text, Symbole, Schalter), `accent-fill` (Füllung des Hauptknopfs und kleiner Marken, dazu `text-on-accent`), `accent-soft`, `danger` (mit `text-on-danger`), `success`, `warning` |
+| Bedienelemente | `track` (Spur von Segmentschaltern und Schaltern), `brand-ink` („Vice“ in der Wortmarke) |
 | Konten | acht unterscheidbare Kontofarben, in beiden Modi geprüft |
 | Avatare | acht Tönungen `avatar-n-bg` / `avatar-n-text`, Wahl per Hash der Absenderadresse, Schrift auf Fläche ≥ 4,5:1 |
 | Schrift | Systemschrift (SF Pro, Segoe UI Variable); Größen 12, 13, 14, 16, 20, 28 (9 nur für das Initial im Mini-Avatar); Gewichte 400, 500, 600 |
@@ -97,8 +99,8 @@ feste Farben oder Abstände.
 | Schatten | vier Stufen: Zeile (Haarbreite), Karte (Priorität, leere Zustände), schwebend (Menüs, Schnellaktionen), Panel |
 | Bewegung | 120, 180, 240 ms, weich auslaufend; bei „Bewegung reduzieren“ keine |
 
-Startwerte: neutrale, leicht warme Grautöne; ein einzelner Akzent in Blaugrün; die Prioritätsfläche
-in warmem Sand. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus ist kein
+Startwerte: neutrale, leicht warme Grautöne; ein einzelner Akzent, seit Entscheidung 0038 das Orange
+aus dem Logo (Blaugrün und die anderen Farbthemen bleiben wählbar); die Prioritätsfläche in warmem Sand. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus ist kein
 invertierter heller: eigene Flächenstufen, gedämpfter Akzent, Kontrast nach `docs/SPEC.md`.
 
 HTML-Mails werden auf ihrem eigenen Hintergrund gezeigt und im dunklen Modus nicht umgefärbt.
@@ -178,6 +180,74 @@ Kontos gibt es weder Chips noch Leiste.
 **Verfassen.** Felder mit Haarlinien und gedämpften Beschriftungen, Empfänger als runde Chips,
 Rich Text/Text als kleiner Segmentschalter, Editor mindestens einige Absätze hoch (in niedrigen
 Fenstern scrollt der Bereich als Ganzes), Senden als Akzentbutton mit leisem Kürzel daneben.
+
+## Gestaltungsdurchgang 23.11.2026 (Orange, alle Ansichten)
+
+Ziel: Jede Ansicht wirkt so fertig wie Liste und Lesebereich nach dem Feinschliff, im neuen
+Standard-Orange (Entscheidung 0038), hell und dunkel. Geprüft mit Bildschirmfotos bei 1440 × 900
+und 900 × 600 (Harness im Scratchpad, nicht im Repo).
+
+**Orange als Akzent.** Das Thema „orange“ hat jetzt zwei Stufen. `accent-fill` ist reines
+Markenorange `#ff7a00` in beiden Modi; darauf steht Schrift im Fast-Schwarz des Logos
+(`text-on-accent` `#1a1208`, 7:1). So sieht der Hauptknopf aus wie das App-Symbol: Orange auf Nacht.
+`accent` ist für Text, Links, Symbole, Schalter und Ränder: hell ein gebranntes Orange `#ad4700`
+(≥ 4,5:1 auf jeder Fläche, auch auf der Leiste), dunkel ein helles `#ff8f33`. Weiche Flächen:
+`accent-soft` `#fce8d5` / `#3a2716`, ausgewählte Zeile `selected` `#fbeadb` / `#33261a`, Fokusring
+`#cc5a00` / `#ff9a40` (≥ 3:1 auf allen Flächen). Reines Orange erscheint nur auf Hauptknopf,
+Auswahlkästchen, Senden-Knopf der KI-Leiste, Farbmuster und dem Balken der aktiven Ansicht; nie
+großflächig. Die anderen Themen haben `accent-fill` gleich `accent`. Der Danger-Knopf hat eine
+eigene Schriftfarbe `text-on-danger` (hell weiß, dunkel fast schwarz), weil `text-on-accent` jetzt
+vom Thema abhängt. `app/tests/contrast.test.ts` prüft alle neuen Paare in jedem Thema.
+
+**Bedienelemente.**
+
+| Element | Gestaltung |
+|---|---|
+| Hauptknopf | `accent-fill`, Schrift `text-on-accent`, Schatten `shadow-row`, 32 px hoch |
+| Zweitknopf | erhabene Fläche (`surface-raised`), Haarlinie `border`, `shadow-row` |
+| Leiser Knopf | Text im Akzent, Fläche nur beim Überfahren |
+| Gefahr | `danger` mit `text-on-danger` |
+| Segmentschalter | eingelassene Spur (`track`) ohne Rand; die gewählte Option ist ein erhabener Knopf mit Haarlinie im Akzent (≥ 3:1 zur Spur), Beschriftung in Primärfarbe. Ersetzt die volle Akzentfläche, die in jedem Einstellungsabschnitt zu laut war |
+| Schalter | 40 × 24 px, an: `accent`, aus: Spur mit Rand `border-strong`, Knopf mit Haarschatten |
+| Felder, Auswahllisten | 32 px, `surface-raised`, Rand `border-strong` (3:1), Fehler in `danger` |
+| Tastenkappen | `badge`-Fläche statt Rahmen (Befehlspalette, Tastenübersicht) |
+| Status-Pillen | runde Pillen auf `badge` (Ausgang, Aktivität), „wird gesendet“ auf `accent-soft` |
+
+**Flächen.** Datensätze (Aktivität, KI-Anbieter, MCP-Clients, Sync-Fragen, Identitäten,
+Kontogruppen, Signaturen, Vorlagen, Regeln, Serverangaben, Kontenliste) sind Karten wie im
+Lesebereich: `surface-raised`, Haarlinie `border-subtle`, `shadow-card`, Rundung 10. Hinweise
+(`Notice`, Erklärkästen) bleiben eingelassen auf `canvas` mit `border-subtle`. Die Kontenliste ist
+eine Karte mit Haarlinien zwischen den Zeilen.
+
+**Einstellungen.** Die Abschnittsliste liegt auf der Tönung der Listenspalte (`surface-list`, Breite
+14 rem), jeder Eintrag mit kleinem Symbol (dekorativ, der Name steht daneben); aktiv: `selected`,
+Balken im Akzent, Symbol im Akzent. Der Abschnittstitel ist 20 px halbfett, der Inhalt hat 40 px
+seitlichen Abstand. Die Legende der Serverangaben steht in der Karte statt auf ihrem Rand.
+
+**Befehlspalette und Tastenübersicht.** 12 % der Fensterhöhe vom oberen Rand (`palette-top`), Schatten
+`shadow-panel`, Zeilen 40 px mit Rundung 8; die Übersicht zweispaltig, sobald Platz für zwei Spalten
+mit je 18 rem ist.
+
+**Marke.** `components/Brand.tsx` enthält App-Symbol und Wortmarke aus `docs/brand/` als
+Inline-SVG (nur Attribute, kein `<style>`, kein Netz; die IDs der Verläufe bekommen je Instanz ein
+Präfix). „Vice“ der Wortmarke nimmt `brand-ink` (hell Ink `#1a1619`, dunkel Weiß), alles Orange
+bleibt unverändert. Der Name kommt immer aus `config/product.ts`.
+
+- **Erster Start** (noch kein Konto): Wortmarke (48 px hoch), „Noch kein Konto“, Hauptknopf
+  „Konto hinzufügen“, darunter eine Karte mit drei Zusagen, die ab dem ersten Konto stimmen (zuerst
+  nur lesend, kein Cloud-Dienst dazwischen, Passwort im Schlüsselbund).
+- **Über**: Karte mit App-Symbol (72 px) und dem Schriftzug der Wortmarke (das Zeichen ist
+  weggeschnitten, damit das V nicht zweimal neben dem Symbol steht; die Umrisse sind dieselben),
+  darunter die Kurzbeschreibung; dann Version, Commit, Build-Datum, Plattform, Lizenz und die
+  Adresse des Quellcodes (`PROJECT_URL`) mit „Adresse kopieren“. Die App öffnet keine Webseiten
+  selbst, deshalb ist die Adresse kein Link. Der Bereich „Updates“ (Stufe 15) folgt unverändert.
+
+**Korrigiert.** Klassen, die es im Token-Theme nicht gibt und die deshalb nichts bewirkten
+(`top-16`, `min-h-9`, `h-7`, `h-9`, `w-7`, `gap-1.5`, `py-1.5`, `px-1.5`, `mt-0.5`, `sm:` und `md:`
+ohne Breakpoints), sind durch Rasterstufen ersetzt: Die Befehlspalette klebte am oberen Rand, einige
+Knöpfe und Reiter hatten keine feste Höhe. Die .eml-Ansicht steht in derselben mittigen Spalte wie
+der Lesebereich. Das blaue Löschkreuz der Engine im Suchfeld ist ausgeblendet (die App hat ein
+eigenes).
 
 ## Regeln für Interaktion
 

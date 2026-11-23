@@ -73,13 +73,13 @@ export function ClientConfigs({ configs, label }: { configs: readonly McpClientC
       }}
       className="flex flex-col"
     >
-      <Tabs.List aria-label={label} className="inline-flex w-fit flex-wrap gap-1 rounded-card border border-border-strong bg-canvas p-1">
+      <Tabs.List aria-label={label} className="inline-flex w-fit flex-wrap gap-1 rounded-card bg-track p-1">
         {configs.map((config) => (
           <Tabs.Trigger
             key={config.kind}
             value={config.kind}
             data-testid={`mcp-config-tab-${config.kind}`}
-            className="h-8 rounded-control px-3 text-13 font-medium text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-accent data-[state=active]:text-on-accent"
+            className="h-8 rounded-control px-3 text-13 font-medium text-secondary transition-colors hover:bg-surface-raised/60 hover:text-primary data-[state=active]:bg-surface-raised data-[state=active]:text-primary data-[state=active]:shadow-row data-[state=active]:ring-1 data-[state=active]:ring-accent"
           >
             {t(`mcp.setup.kinds.${config.kind}`)}
           </Tabs.Trigger>

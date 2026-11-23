@@ -2,10 +2,12 @@ import { Check } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { ErrorNotice } from "../../components/ErrorNotice";
 import { ACCENT_THEMES, DEFAULT_ACCENT, useAccentStore } from "../preferences/accent";
 
 /**
- * Stage 16: the accent theme (Settings → Appearance). One radio per theme: a swatch drawn in that
+ * Stage 16: the accent theme (Settings → Appearance), a UI preference of the core synced between
+ * devices (decision 0036). One radio per theme: a swatch drawn in that
  * theme's own accent (its `data-accent` scopes the tokens to the swatch, in the current light or
  * dark mode) and always its name, so the colour is never the only cue. Arrow keys move between
  * themes, Space picks one, like every choice group of the settings.
@@ -15,7 +17,7 @@ export function AccentPicker() {
   const labelId = useId();
   const descriptionId = useId();
   const accent = useAccentStore((state) => state.accent);
-  const stored = useAccentStore((state) => state.stored);
+  const saveError = useAccentStore((state) => state.saveError);
   const setAccent = useAccentStore((state) => state.setAccent);
   return (
     <div className="flex flex-col gap-2">
@@ -48,7 +50,7 @@ export function AccentPicker() {
             <span
               aria-hidden
               data-accent={theme}
-              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-fill text-on-accent ring-1 ring-accent"
             >
               {theme === accent && <Check aria-hidden className="size-3" strokeWidth={2.5} />}
             </span>
@@ -61,11 +63,7 @@ export function AccentPicker() {
       <p className="text-12 text-tertiary" data-testid="accent-device-note">
         {t("themes.deviceOnly")}
       </p>
-      {!stored && (
-        <p role="status" className="text-12 text-warning" data-testid="accent-not-stored">
-          {t("themes.notStored")}
-        </p>
-      )}
+      {saveError && <ErrorNotice context={t("themes.notStored")} error={saveError} data-testid="accent-not-stored" />}
     </div>
   );
 }

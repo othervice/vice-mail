@@ -12,10 +12,13 @@
 # Environment: CARGO_TARGET_DIR is honoured. SOURCE_DATE_EPOCH, if set, is the build date shown in
 # About; otherwise the commit time of a clean tree or the current time of a dirty one.
 # SKIP_LAUNCH_CHECK=1 skips the start test (it needs a logged-in GUI session).
+# VICEMAIL_UPDATER=1 also builds the signed update artifact (`<app>.app.tar.gz` and `.sig`,
+# decision 0037) with the signing key from the login keychain (docs/RELEASING.md) and checks
+# its signature against plugins.updater.pubkey; without it no key is needed.
 set -euo pipefail
 
 usage() {
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -62,6 +65,17 @@ done
 command -v pnpm >/dev/null || fail "pnpm missing: brew install pnpm"
 [[ -x "$repo/app/node_modules/.bin/tauri" ]] ||
   fail "app dependencies missing: pnpm --dir app install"
+
+# Decision 0037: the signed update artifact only on request; the key stays in the keychain and
+# reaches only this build's environment.
+updater=0
+if [[ "${VICEMAIL_UPDATER:-}" == 1 ]]; then
+  updater=1
+  command -v node >/dev/null || fail "node missing (checks the update signature): brew install node"
+  # shellcheck source=updater-signing.sh
+  . "$repo/scripts/updater-signing.sh"
+  updater_signing_env build-macos || fail "the update signing key is not available"
+fi
 
 # Build date and the commit's -dirty mark come from app/src-tauri/build.rs, which cargo reruns
 # only when SOURCE_DATE_EPOCH (among a few others) changes. So every build sets it: the commit
@@ -113,7 +127,9 @@ cp -f "$target_dir/release/mail-mcp" "$sidecar_dir/mail-mcp-$triple"
 # Tauri's default leaves only the linker's signature on the binary: `codesign --verify` then
 # fails ("code has no resources but signature indicates they must be present"), and a downloaded
 # copy is reported as damaged. "-" seals the whole bundle ad hoc, without a developer identity.
-config="\"bundle\":{\"macOS\":{\"signingIdentity\":\"-\"},\"externalBin\":[\"$sidecar_dir/mail-mcp\"]}"
+updater_config=""
+[[ $updater -eq 0 ]] || updater_config=",\"createUpdaterArtifacts\":true"
+config="\"bundle\":{\"macOS\":{\"signingIdentity\":\"-\"},\"externalBin\":[\"$sidecar_dir/mail-mcp\"]$updater_config}"
 if [[ -n "$version" ]]; then
   config="\"version\":\"$version\",$config"
 fi
@@ -143,6 +159,17 @@ plist() { plutil -extract "$2" raw -o - "$1/Contents/Info.plist"; }
 built_version="$(plist "$app" CFBundleShortVersionString)"
 [[ -z "$version" || "$built_version" == "$version" ]] ||
   fail "the app reports version $built_version, expected $version"
+
+# Decision 0037: the update archive of this app, signed for this version with the key that
+# tauri.conf.json names.
+update_line="not built (VICEMAIL_UPDATER=1 builds it)"
+if [[ $updater -eq 1 ]]; then
+  update_archive="$(newest "$bundle_dir/macos" '*.app.tar.gz' f)"
+  [[ -f "$update_archive.sig" ]] || fail "the update archive has no signature: $update_archive.sig"
+  node "$repo/scripts/updater-manifest.mjs" verify "$update_archive" "$built_version" >/dev/null ||
+    fail "the update signature of $update_archive does not verify"
+  update_line="$update_archive (+ .sig), signature verified for $built_version"
+fi
 
 # --- Checks ----------------------------------------------------------------------------------
 
@@ -252,6 +279,7 @@ printf '  helper:    Contents/MacOS/mail-mcp (%s, %s), ad-hoc signed, in the dis
   "$helper_version" "$(du -h "$helper" | cut -f1)"
 printf '  spctl:     %s\n' "$(printf '%s' "$gatekeeper" | tr '\n' ' ' | sed 's/ *$//')"
 printf '  start:     %s\n' "$launch"
+printf '  update:    %s\n' "$update_line"
 printf '  path:      %s\n' "$dmg"
 printf '  size:      %s bytes (%s MB)\n' "$bytes" "$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1048576 }')"
 printf '  sha256:    %s\n' "$sha256"

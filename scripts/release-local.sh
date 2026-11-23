@@ -12,10 +12,19 @@
 #   dist/<version>/<Product-Name>-<version>-windows-x64-setup.exe
 #   dist/<version>/SHA256SUMS                   check with: shasum -a 256 -c SHA256SUMS
 # Both builds get the same SOURCE_DATE_EPOCH, so About shows the same build date on both systems.
+#
+# VICEMAIL_UPDATER=1 (decision 0037, docs/RELEASING.md) signs the update artifacts with the key
+# from the login keychain and adds them and the update manifest:
+#   dist/<version>/<Product-Name>-<version>-macos-arm64.app.tar.gz (+ .sig)
+#   dist/<version>/<Product-Name>-<version>-windows-x64-setup.exe.sig
+#   dist/<version>/latest.json                  upload all of them to the release v<version>
+# VICEMAIL_RELEASE_NOTES=<file> holds the notes (plain text); VICEMAIL_UPDATE_BASE_URL overrides
+# where the manifest says the files are (default: the release v<version> next to the endpoint in
+# tauri.conf.json).
 set -euo pipefail
 
 usage() {
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -160,6 +169,28 @@ built() { # directory, name pattern
 dmg="$(built "$target_dir/release/bundle/dmg" '*.dmg')"
 exe="$(built "$target_dir/x86_64-pc-windows-msvc/release/bundle/nsis" '*-setup.exe')"
 
+# Decision 0037: the signed update artifacts (the build scripts verified their signatures).
+updater="${VICEMAIL_UPDATER:-0}"
+if [[ "$updater" == 1 ]]; then
+  archives=()
+  while IFS= read -r -d '' file; do
+    archives+=("$file")
+  done < <(find "$target_dir/release/bundle/macos" -maxdepth 1 -type f -name '*.app.tar.gz' -newer "$marker" -print0 2>/dev/null)
+  [[ ${#archives[@]} -eq 1 ]] || fail "expected one new .app.tar.gz, found ${#archives[@]}"
+  update_archive="${archives[0]}"
+  [[ -f "$update_archive.sig" && -f "$exe.sig" ]] || fail "update signatures missing next to the builds"
+  endpoint="$(node -e '
+    const conf = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    process.stdout.write(conf.plugins?.updater?.endpoints?.[0] ?? "");
+  ' "$conf")" || fail "cannot read plugins.updater.endpoints from $conf"
+  base_url="${VICEMAIL_UPDATE_BASE_URL:-}"
+  if [[ -z "$base_url" ]]; then
+    [[ "$endpoint" == */releases/latest/download/latest.json ]] ||
+      fail "the endpoint '$endpoint' is not a GitHub 'latest' download; set VICEMAIL_UPDATE_BASE_URL"
+    base_url="${endpoint%/releases/latest/download/latest.json}/releases/download/v$version"
+  fi
+fi
+
 # --- Result ----------------------------------------------------------------------------------
 
 mkdir -p "$out"
@@ -167,7 +198,20 @@ mac_name="$file_product-$version-macos-arm64.dmg"
 win_name="$file_product-$version-windows-x64-setup.exe"
 cp "$dmg" "$out/$mac_name"
 cp "$exe" "$out/$win_name"
-(cd "$out" && shasum -a 256 "$mac_name" "$win_name" >SHA256SUMS && shasum -a 256 -c --quiet SHA256SUMS) ||
+sums=("$mac_name" "$win_name")
+if [[ "$updater" == 1 ]]; then
+  update_name="$file_product-$version-macos-arm64.app.tar.gz"
+  cp "$update_archive" "$out/$update_name"
+  cp "$update_archive.sig" "$out/$update_name.sig"
+  cp "$exe.sig" "$out/$win_name.sig"
+  notes_args=()
+  [[ -z "${VICEMAIL_RELEASE_NOTES:-}" ]] || notes_args=(--notes-file "$VICEMAIL_RELEASE_NOTES")
+  node "$repo/scripts/updater-manifest.mjs" manifest --version "$version" --base-url "$base_url" \
+    --out "$out/latest.json" --darwin-aarch64 "$out/$update_name" --windows-x86_64 "$out/$win_name" \
+    ${notes_args[@]+"${notes_args[@]}"} || fail "writing $out/latest.json failed"
+  sums+=("$update_name" "$update_name.sig" "$win_name.sig" latest.json)
+fi
+(cd "$out" && shasum -a 256 "${sums[@]}" >SHA256SUMS && shasum -a 256 -c --quiet SHA256SUMS) ||
   fail "writing or checking $out/SHA256SUMS failed"
 
 printf '\nRelease %s built in %d s\n' "$version" "$(($(date +%s) - started))"

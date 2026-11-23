@@ -9,6 +9,8 @@ export const de: Translation = {
     later: "Später",
     tasks: "Aufgaben",
     readingList: "Zum Lesen",
+    // Stage 16 (decision 0036): pinned attachments, next to the reading list.
+    pinnedAttachments: "Angeheftete Anhänge",
     pinned: "Angepinnt",
     sent: "Gesendet",
     drafts: "Entwürfe",
@@ -55,6 +57,12 @@ export const de: Translation = {
       title: "Noch kein Konto",
       body: "Füge ein E-Mail-Konto hinzu, um hier deine Mails zu sehen.",
       action: "Konto hinzufügen",
+      // Feinschliff 23.11.2026: was der erste Start verspricht (alles ab dem ersten Konto wahr).
+      points: {
+        readOnly: "Neue Konten lesen zuerst nur. Auf dem Server ändert sich nichts, bis du es erlaubst.",
+        local: "Deine Mails gehen direkt zwischen diesem Computer und deinem Anbieter hin und her. Kein Cloud-Dienst dazwischen.",
+        keychain: "Dein Passwort bleibt im Schlüsselbund dieses Computers.",
+      },
     },
     notYet: {
       title: "Noch nicht verfügbar",
@@ -1180,6 +1188,12 @@ export const de: Translation = {
       platform: "Plattform",
       license: "Lizenz",
       unknown: "Unbekannt",
+      // Feinschliff 23.11.2026: der Kopf der Seite und die Adresse des Projekts.
+      tagline: "Ein quelloffener E-Mail-Client für macOS und Windows. Selbst hostbar, ohne eigenen Cloud-Dienst und ohne Telemetrie.",
+      project: "Quellcode",
+      copy: "Adresse kopieren",
+      copied: "Adresse kopiert.",
+      copyFailed: "Kopieren ging nicht. Markiere die Adresse und kopiere sie selbst.",
     },
   },
   // ---- Stufe 12: KI über MCP ----
@@ -2842,6 +2856,12 @@ export const de: Translation = {
       preferences: "Deine Einstellungen konnten nicht geladen werden.",
       savePreferences: "Deine Änderung konnte nicht gespeichert werden.",
       appInfo: "Die App-Informationen konnten nicht geladen werden.",
+      // Stage 15 (decision 0037).
+      updateInfo: "Die Update-Einstellungen konnten nicht geladen werden.",
+      updateCheck: "Die Suche nach Updates ist fehlgeschlagen.",
+      updateStep: "Das Update auf Version {{version}} ist fehlgeschlagen.",
+      updateAction: "Der Update-Schritt konnte nicht starten.",
+      updateSetting: "Die Update-Einstellung konnte nicht gespeichert werden.",
       events: "Live-Aktualisierungen aus dem App-Kern sind nicht verfügbar.",
       messages: "Die Nachrichten dieses Ordners konnten nicht geladen werden.",
       moreMessages: "Weitere Nachrichten konnten nicht geladen werden.",
@@ -3060,6 +3080,81 @@ export const de: Translation = {
         title: "Du hast so viele Suchen gespeichert, wie möglich sind.",
         hint: "Lösche eine gespeicherte Suche, die du nicht mehr brauchst, und speichere diese dann.",
       },
+      // Stage 16 (decision 0036): attachment previews.
+      preview_unsupported: {
+        title: "Für diesen Anhang gibt es keine Vorschau.",
+        hint: "Du kannst ihn speichern oder mit einer anderen App öffnen.",
+      },
+      preview_too_large: {
+        title: "Der Anhang ist für eine Vorschau zu groß.",
+        hint: "Du kannst ihn speichern oder mit einer anderen App öffnen.",
+      },
+      preview_damaged: {
+        title: "Der Anhang konnte für die Vorschau nicht gelesen werden.",
+        hint: "Die Datei ist vielleicht beschädigt. Du kannst sie trotzdem speichern oder mit einer anderen App öffnen.",
+      },
+      // Stage 15 (decision 0037): in-app updates.
+      update_check_failed: {
+        title: "Die App konnte nicht nach Updates suchen.",
+        hint: "Prüfe deine Internetverbindung und versuche es später noch einmal. Deine installierte Version läuft weiter.",
+      },
+      update_download_failed: {
+        title: "Das Update ließ sich nicht herunterladen.",
+        hint: "Prüfe deine Internetverbindung und versuche es noch einmal. Installiert wurde nichts.",
+      },
+      update_signature_invalid: {
+        title: "Das Update ließ sich nicht prüfen und wurde verworfen.",
+        hint: "Seine Signatur passt nicht zum Update-Schlüssel des Projekts, es wurde also vielleicht unterwegs verändert. Installiert wurde nichts. Versuche es später noch einmal oder installiere die nächste Version von Hand von der Release-Seite.",
+      },
+      update_install_failed: {
+        title: "Das Update ließ sich nicht installieren.",
+        hint: "Deine installierte Version ist unverändert. Auf dem Mac: Verschiebe die App in den Ordner Programme und starte sie von dort. Sonst installiere die neue Version von Hand von der Release-Seite.",
+      },
+      update_not_ready: {
+        title: "Für diesen Schritt liegt kein Update bereit.",
+        hint: "Suche zuerst nach Updates. Wenn du das gerade getan hast, warte, bis der Download fertig ist.",
+      },
+    },
+  },
+  // Stage 15 (decision 0037): in-app updates, opt-in.
+  updates: {
+    title: "Updates",
+    autoCheck: "Automatisch nach Updates suchen",
+    autoCheckHint: "Einmal am Tag fragt die App bei github.com, wo sie veröffentlicht wird, ob es eine neuere Version gibt. GitHub sieht dabei deine IP-Adresse und den Zeitpunkt der Anfrage. Die App schickt keine Kontodaten, keine Nutzungsdaten und keine Kennung mit, und heruntergeladen oder installiert wird nur nach deinem Klick.",
+    manualHint: "„Jetzt suchen“ fragt einmal bei github.com nach, auch wenn die automatische Suche aus ist.",
+    unsupported: "Dieser Build aktualisiert sich nicht selbst. Installiere neuere Versionen von Hand, wie in der Installationsanleitung beschrieben.",
+    checkNow: "Jetzt suchen",
+    checking: "Suche nach Updates …",
+    neverChecked: "Noch nicht gesucht.",
+    lastChecked: "Zuletzt gesucht: {{time}}.",
+    upToDate: "Du hast die neueste Version.",
+    available: "Version {{version}} ist verfügbar.",
+    published: "Veröffentlicht am {{date}}.",
+    notes: "Neu in dieser Version",
+    download: "Update herunterladen",
+    downloading: "Version {{version}} wird heruntergeladen …",
+    downloadingPercent: "Version {{version}} wird heruntergeladen … {{percent}} %",
+    progress: "Fortschritt des Downloads",
+    ready: "Version {{version}} ist heruntergeladen und ihre Signatur geprüft.",
+    restart: "Neu starten und installieren",
+    restartHint: {
+      macos: "Die App schließt sich, ersetzt sich durch die neue Version und öffnet sich wieder. Deine Konten und Mails bleiben erhalten.",
+      windows: "Die App schließt sich, das Installationsprogramm läuft ohne Rückfragen und öffnet die App wieder. Deine Konten und Mails bleiben erhalten.",
+    },
+    installing: "Version {{version}} wird installiert …",
+    consent: {
+      title: "Automatisch nach Updates suchen?",
+      body: "Einmal am Tag würde die App bei github.com, wo sie veröffentlicht wird, nachfragen, ob es eine neuere Version gibt. GitHub sieht dabei deine IP-Adresse und den Zeitpunkt der Anfrage. Die App schickt keine Kontodaten, keine Nutzungsdaten und keine Kennung mit.",
+      noInstall: "Heruntergeladen oder installiert wird nur nach deinem Klick. Du kannst das jederzeit unter Einstellungen → Über ändern.",
+      yes: "Automatisch suchen",
+      no: "Nein, danke",
+    },
+    notice: {
+      region: "Update",
+      available: "Version {{version}} ist verfügbar.",
+      ready: "Version {{version}} ist bereit zur Installation.",
+      show: "Anzeigen",
+      dismiss: "Nicht jetzt",
     },
   },
   // Stage 9 (decision 0027): `.eml` files opened read-only in a window of their own.
@@ -3298,8 +3393,8 @@ export const de: Translation = {
       orange: "Orange",
       green: "Grün",
     },
-    deviceOnly: "Gilt für diesen Computer. Mit deinen anderen Geräten wird sie noch nicht abgeglichen.",
-    notStored: "Die Farbe konnte auf diesem Computer nicht gespeichert werden. Sie gilt, bis du die App beendest.",
+    deviceOnly: "Wird mit dem Einstellungsabgleich auf deine anderen Geräte übertragen.",
+    notStored: "Die Akzentfarbe konnte nicht gespeichert werden.",
   },
 
   sounds: {
@@ -3333,6 +3428,71 @@ export const de: Translation = {
     unblockLabel: "{{address}} freigeben",
     loadFailed: "Die blockierten Absender konnten nicht geladen werden.",
     unblockFailed: "Der Absender konnte nicht freigegeben werden.",
+  },
+
+  // ---- Stage 16 (decision 0036): attachment previews, "Save all", pinned attachments ----
+  attachments: {
+    preview: {
+      action: "Vorschau",
+      label: "Vorschau von {{name}}",
+      cardHint: "Leertaste für die Vorschau.",
+      title: "Vorschau von {{name}}",
+      close: "Vorschau schließen",
+      loading: "Vorschau wird geladen …",
+      failed: "Die Vorschau konnte nicht angezeigt werden.",
+      save: "Speichern",
+      open: "Mit anderer App öffnen",
+      scaled: "Kleiner als das Original angezeigt.",
+      truncated: "Nur der Anfang wird gezeigt. Speichere die Datei, um alles zu lesen.",
+      page: "Seite {{page}} von {{pages}}",
+      pageAlt: "{{name}}, Seite {{page}}",
+      previousPage: "Vorherige Seite",
+      nextPage: "Nächste Seite",
+      morePages: "Das Dokument hat mehr Seiten, als die Vorschau zeigt. Speichere oder öffne es, um den Rest zu lesen.",
+      pages: "Seiten",
+    },
+    saveAll: {
+      action: "Alle speichern",
+      label_one: "Den Anhang in einen Ordner speichern",
+      label_other: "Alle {{count}} Anhänge in einen Ordner speichern",
+      saving: "Wird gespeichert …",
+      saved_one: "{{count}} Datei in {{folder}} gespeichert",
+      saved_other: "{{count}} Dateien in {{folder}} gespeichert",
+      renamed_one: "{{count}} umbenannt, weil der Name schon vergeben war.",
+      renamed_other: "{{count}} umbenannt, weil die Namen schon vergeben waren.",
+      failed: "Die Anhänge konnten nicht gespeichert werden.",
+      palette: "Alle Anhänge speichern",
+      paletteDisabled: "Die geöffnete Nachricht hat keine Anhänge.",
+    },
+    pin: {
+      pin: "{{name}} anheften",
+      unpin: "{{name}} lösen",
+      pinned: "Angeheftet",
+      failed: "Das Anheften konnte nicht geändert werden.",
+    },
+    pinned: {
+      listLabel: "Angeheftete Anhänge",
+      emptyTitle: "Keine angehefteten Anhänge",
+      emptyBody: "Hefte einen Anhang in einer Nachricht an, um ihn hier wiederzufinden. Das bleibt in der App und wird nie auf den Server geschrieben.",
+      loadFailed: "Die angehefteten Anhänge konnten nicht geladen werden.",
+      from: "Von {{sender}}, {{date}}",
+      noSubject: "(kein Betreff)",
+      unknownSender: "unbekanntem Absender",
+      openMessage: "Nachricht öffnen",
+      openMessageLabel: "Die Nachricht von {{name}} öffnen",
+      saveLabel: "{{name}} speichern",
+      unpinLabel: "{{name}} lösen",
+      count_one: "{{count}} angehefteter Anhang",
+      count_other: "{{count}} angeheftete Anhänge",
+      saved: "{{name}} gespeichert unter {{path}}",
+      saveFailed: "Der Anhang konnte nicht gespeichert werden.",
+    },
+    blockedHidden: {
+      text_one: "{{count}} Nachricht von blockierten Absendern ausgeblendet",
+      text_other: "{{count}} Nachrichten von blockierten Absendern ausgeblendet",
+      manage: "Blockierte Absender",
+      manageLabel: "Blockierte Absender in den Einstellungen zeigen",
+    },
   },
 
   // ---- Stage 16, reading: find in the open message ----

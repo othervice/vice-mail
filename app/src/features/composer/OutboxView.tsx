@@ -20,15 +20,16 @@ import { SendLaterPicker } from "./SendLaterPicker";
 /** Stage 10: a send whose time the user chose, still waiting, or one the app missed. */
 const isPlanned = (mail: OutgoingMail) => (mail.state === "scheduled" && mail.scheduled) || mail.state === "missed";
 
+// Design pass 23.11.2026: the state is a small pill; the text says it, the colour only adds to it.
 const STATE_TONE: Record<SendState, string> = {
-  scheduled: "text-secondary",
-  queued: "text-secondary",
-  sending: "text-accent",
-  verifying: "text-warning",
-  unclear: "text-warning",
-  failed: "text-danger",
-  missed: "text-warning",
-  sent: "text-success",
+  scheduled: "bg-badge text-secondary",
+  queued: "bg-badge text-secondary",
+  sending: "bg-accent-soft text-accent",
+  verifying: "bg-badge text-warning",
+  unclear: "bg-badge text-warning",
+  failed: "bg-badge text-danger",
+  missed: "bg-badge text-warning",
+  sent: "bg-badge text-success",
 };
 
 function OutgoingRow({ mail, account, showAccount }: { mail: OutgoingMail; account: Account | undefined; showAccount: boolean }) {
@@ -78,13 +79,13 @@ function OutgoingRow({ mail, account, showAccount }: { mail: OutgoingMail; accou
       });
   };
   return (
-    <li className="flex flex-col gap-2 border-b border-border px-6 py-3" data-testid="outgoing-row" data-send-state={mail.state}>
+    <li className="flex flex-col gap-2 border-b border-border-subtle px-6 py-4" data-testid="outgoing-row" data-send-state={mail.state}>
       <div className="flex min-w-0 items-baseline gap-3">
         {showAccount && account && (
           <span aria-hidden className={cx("size-(--ui-dot) shrink-0 self-center rounded-full", accountFill(account.color))} />
         )}
         <p className="min-w-0 flex-1 truncate text-14 font-medium text-primary">{mail.readReceipt ? t("composer.send.receipt") : mail.subject.trim() || t("composer.noSubject")}</p>
-        <p className={cx("shrink-0 text-12 font-medium", STATE_TONE[mail.state])} data-testid="outgoing-state">
+        <p className={cx("shrink-0 rounded-full px-2 text-12 font-medium", STATE_TONE[mail.state])} data-testid="outgoing-state">
           {planned ? t("sendLater.outbox.state") : t(`composer.outbox.state.${mail.state}`)}
         </p>
         <p className="shrink-0 text-12 text-tertiary tabular-nums">{time}</p>
@@ -285,7 +286,7 @@ export function OutboxView() {
       <>
         {mails.some(isPlanned) && (
           <p className="flex shrink-0 items-start gap-2 border-b border-border bg-canvas px-6 py-2 text-13 text-secondary" data-testid="outbox-send-later-rule">
-            <CalendarClock aria-hidden className="mt-0.5 size-(--ui-icon-small) shrink-0 text-accent" strokeWidth={1.75} />
+            <CalendarClock aria-hidden className="size-(--ui-icon-small) shrink-0 text-accent" strokeWidth={1.75} />
             {t("sendLater.outbox.rule")}
           </p>
         )}

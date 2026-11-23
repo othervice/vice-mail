@@ -18,6 +18,9 @@ import { installSystemFakes, resetSystem } from "./support/system";
 import { resetUiPreferencesForTests } from "../src/features/keyboard/uiPreferences";
 import { resetMigrationForTests } from "../src/features/keyboard/useUiPreferencesSync";
 import { useOnlyUnreadStore } from "../src/features/organize/unread";
+import { useAccentStore } from "../src/features/preferences/accent";
+import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequest";
+import { useBlockedFocusStore } from "../src/features/blocked/focus";
 
 beforeEach(() => {
   installSystemFakes();
@@ -52,6 +55,12 @@ afterEach(() => {
   resetListSelectForTests();
   // Stage 16: "Unread only" is a filter of this session.
   useOnlyUnreadStore.setState(useOnlyUnreadStore.getInitialState(), true);
+  // Stage 16 (decision 0036): the accent from the core, "Save all" requests of the palette and
+  // the way from the inbox's note to the blocked senders.
+  useAccentStore.setState(useAccentStore.getInitialState(), true);
+  resetSaveAllRequestForTests();
+  useBlockedFocusStore.setState(useBlockedFocusStore.getInitialState(), true);
+  delete document.documentElement.dataset["accent"];
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];
   const root = document.documentElement;

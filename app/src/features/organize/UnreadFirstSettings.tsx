@@ -34,7 +34,7 @@ export function UnreadFirstSettings() {
   };
 
   return (
-    <SettingsSection title={t("organize.unread.settings.title")}>
+    <SettingsSection sub title={t("organize.unread.settings.title")}>
       <p className="text-13 text-secondary">{t("organize.unread.settings.hint")}</p>
       {views.isError && (
         <ErrorNotice

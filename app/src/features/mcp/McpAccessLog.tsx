@@ -65,7 +65,7 @@ export function McpAccessLog() {
         />
       )}
       {access.isSuccess && entries.length === 0 && (
-        <div className="flex rounded-card border border-border bg-canvas">
+        <div className="flex rounded-card border border-border-subtle bg-surface-raised shadow-card">
           <EmptyState icon={ShieldCheck} title={t("mcp.access.empty.title")} body={t("mcp.access.empty.body")} />
         </div>
       )}

@@ -88,9 +88,27 @@ pub enum AiPanelState {
     Folded,
 }
 
-/// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
-/// synchronised between devices; the recent commands and the AI panel's state stay on this
-/// device.
+/// Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
+/// passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
+/// (decision 0038). A value this version does not know (from a newer device) reads as the
+/// default.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum AccentTheme {
+    Teal,
+    Blue,
+    Violet,
+    Rose,
+    #[default]
+    Orange,
+    Green,
+}
+
+/// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size and (stage
+/// 16) the accent theme are synchronised between devices; the recent commands and the AI
+/// panel's state stay on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
@@ -101,6 +119,9 @@ pub struct UiPreferences {
     pub recent_commands: Vec<String>,
     /// The AI panel unfolded (default) or folded in; device only (decision 0028).
     pub ai_panel: AiPanelState,
+    /// Stage 16 (decision 0036): the accent colours; synced like the text size. Only the six
+    /// themes are accepted (anything else is refused when the value is read from the UI).
+    pub accent_theme: AccentTheme,
 }
 
 impl Default for UiPreferences {
@@ -110,6 +131,7 @@ impl Default for UiPreferences {
             text_size: DEFAULT_TEXT_SIZE,
             recent_commands: Vec::new(),
             ai_panel: AiPanelState::Open,
+            accent_theme: AccentTheme::Orange,
         }
     }
 }
@@ -378,6 +400,7 @@ mod tests {
             text_size: 115,
             recent_commands: vec!["action:archive".into()],
             ai_panel: AiPanelState::Folded,
+            accent_theme: AccentTheme::Rose,
         };
         let wire = json!({
             "shortcuts": {
@@ -386,7 +409,8 @@ mod tests {
             },
             "textSize": 115,
             "recentCommands": ["action:archive"],
-            "aiPanel": "folded"
+            "aiPanel": "folded",
+            "accentTheme": "rose"
         });
         assert_eq!(serde_json::to_value(&prefs).expect("json"), wire);
         assert_eq!(
@@ -422,7 +446,8 @@ mod tests {
                 "shortcuts": { "macos": [], "windows": [] },
                 "textSize": 100,
                 "recentCommands": [],
-                "aiPanel": panel
+                "aiPanel": panel,
+                "accentTheme": "orange"
             })
         };
         for (text, state) in [

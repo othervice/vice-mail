@@ -120,6 +120,23 @@ pub enum ErrorCode {
     SavedSearchExists,
     /// Stage 7 (decision 0026): the most saved searches are stored already.
     SavedSearchLimit,
+    /// Stage 16 (decision 0036): the core does not preview this attachment (type, or bytes
+    /// that are not what the type says); it can still be saved or opened in the system.
+    PreviewUnsupported,
+    /// Stage 16 (decision 0036): the attachment is larger than a preview decodes.
+    PreviewTooLarge,
+    /// Stage 16 (decision 0036): the image or PDF could not be decoded for a preview.
+    PreviewDamaged,
+    /// Stage 15 (decision 0037): the update manifest could not be fetched or read.
+    UpdateCheckFailed,
+    /// Stage 15 (decision 0037): the update file could not be downloaded.
+    UpdateDownloadFailed,
+    /// Stage 15 (decision 0037): the update's signature is not valid; it was discarded.
+    UpdateSignatureInvalid,
+    /// Stage 15 (decision 0037): installing failed; the installed version is unchanged.
+    UpdateInstallFailed,
+    /// Stage 15 (decision 0037): no update is available or ready for this step.
+    UpdateNotReady,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -361,6 +378,14 @@ pub enum CoreError {
     /// A saved search was refused (stage 7, decision 0026); nothing changed.
     #[error(transparent)]
     SavedSearch(#[from] crate::SavedSearchError),
+
+    /// An attachment could not be previewed (stage 16, decision 0036); nothing was shown.
+    #[error(transparent)]
+    Preview(#[from] crate::PreviewError),
+
+    /// An update step failed (stage 15, decision 0037).
+    #[error(transparent)]
+    Update(#[from] crate::UpdateError),
 }
 
 impl CoreError {
@@ -381,6 +406,8 @@ impl CoreError {
             Self::Ai(err) => err.code(),
             Self::Eml(err) => err.code(),
             Self::SavedSearch(err) => err.code(),
+            Self::Preview(err) => err.code(),
+            Self::Update(err) => err.code(),
         }
     }
 
@@ -414,6 +441,8 @@ impl CoreError {
             Self::Ai(err) => err.message(),
             Self::Eml(err) => err.message(),
             Self::SavedSearch(err) => err.message(),
+            Self::Preview(err) => err.message(),
+            Self::Update(err) => err.message(),
         }
     }
 
@@ -437,6 +466,8 @@ impl CoreError {
             Self::Ai(err) => err.detail(),
             Self::Eml(err) => err.detail(),
             Self::SavedSearch(err) => err.detail(),
+            Self::Preview(err) => err.detail(),
+            Self::Update(err) => err.detail(),
         }
     }
 }
@@ -550,6 +581,17 @@ mod tests {
             (ErrorCode::EmlUnreadable, "eml_unreadable"),
             (ErrorCode::SavedSearchExists, "saved_search_exists"),
             (ErrorCode::SavedSearchLimit, "saved_search_limit"),
+            (ErrorCode::PreviewUnsupported, "preview_unsupported"),
+            (ErrorCode::PreviewTooLarge, "preview_too_large"),
+            (ErrorCode::PreviewDamaged, "preview_damaged"),
+            (ErrorCode::UpdateCheckFailed, "update_check_failed"),
+            (ErrorCode::UpdateDownloadFailed, "update_download_failed"),
+            (
+                ErrorCode::UpdateSignatureInvalid,
+                "update_signature_invalid",
+            ),
+            (ErrorCode::UpdateInstallFailed, "update_install_failed"),
+            (ErrorCode::UpdateNotReady, "update_not_ready"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

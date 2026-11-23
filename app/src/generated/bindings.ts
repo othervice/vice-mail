@@ -109,6 +109,16 @@ export const commands = {
 	saveAttachment: (messageId: MessageId, index: number, options?: InvokeOptions) => typedError<SaveAttachmentResult, IpcError>(__TAURI_INVOKE("save_attachment", { messageId, index }, options)),
 	/**  Opens a copy of an attachment with the system's default app; executables need `confirmedExecutable`. */
 	openAttachment: (messageId: MessageId, index: number, confirmedExecutable: boolean, options?: InvokeOptions) => typedError<OpenAttachmentResult, IpcError>(__TAURI_INVOKE("open_attachment", { messageId, index, confirmedExecutable }, options)),
+	/**
+	 *  Stage 16 (decision 0036): the preview of an attachment, page `page` of a PDF (0-based).
+	 *  Images, PDF pages and text come decoded by the core; nothing of the attachment runs.
+	 */
+	previewAttachment: (messageId: MessageId, index: number, page: number, options?: InvokeOptions) => typedError<AttachmentPreview, IpcError>(__TAURI_INVOKE("preview_attachment", { messageId, index, page }, options)),
+	/**
+	 *  Stage 16 (decision 0036): every attachment into the folder the user picks in the system
+	 *  dialog; taken names get a number, nothing is replaced.
+	 */
+	saveAllAttachments: (messageId: MessageId, options?: InvokeOptions) => typedError<SaveAllAttachmentsResult, IpcError>(__TAURI_INVOKE("save_all_attachments", { messageId }, options)),
 	/**  Prefetch period and size limit. */
 	getPrefetchSettings: (options?: InvokeOptions) => typedError<PrefetchSettings, IpcError>(__TAURI_INVOKE("get_prefetch_settings", undefined, options)),
 	/**  Stores the prefetch settings and starts a new prefetch run. */
@@ -400,6 +410,20 @@ export const commands = {
 	 *  action.
 	 */
 	transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("transfer_messages", { messages, targetMailboxId, mode, requestId }, options)),
+	/**
+	 *  Stage 16 (decision 0036): pins attachment `index` of a message or takes the pin off. Local
+	 *  only, synced; emits `inboxChanged`.
+	 */
+	setAttachmentPinned: (messageId: MessageId, index: number, pinned: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_attachment_pinned", { messageId, index, pinned }, options)),
+	/**  The pinned attachment indexes of a message, for the reading pane. */
+	getAttachmentPins: (messageId: MessageId, options?: InvokeOptions) => typedError<number[], IpcError>(__TAURI_INVOKE("get_attachment_pins", { messageId }, options)),
+	/**  "Angeheftete Anhänge": the pinned attachments of the scope, the newest pin first. */
+	listPinnedAttachments: (scope: MarkScope, options?: InvokeOptions) => typedError<PinnedAttachment[], IpcError>(__TAURI_INVOKE("list_pinned_attachments", { scope }, options)),
+	/**
+	 *  Stage 16 (decision 0036): how many messages of blocked senders the inbox lists of the scope
+	 *  leave out, for the list's note.
+	 */
+	countBlockedHidden: (scope: InboxScope, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("count_blocked_hidden", { scope }, options)),
 	listRules: (options?: InvokeOptions) => typedError<MailRule[], IpcError>(__TAURI_INVOKE("list_rules", undefined, options)),
 	createRule: (input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("create_rule", { input }, options)),
 	updateRule: (id: RuleId, input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("update_rule", { id, input }, options)),
@@ -472,6 +496,10 @@ export const commands = {
 	saveEmlAttachment: (fileId: EmlFileId, index: number, options?: InvokeOptions) => typedError<SaveAttachmentResult, IpcError>(__TAURI_INVOKE("save_eml_attachment", { fileId, index }, options)),
 	/**  Opens a read-only copy of an attachment of the file; executables need `confirmedExecutable`. */
 	openEmlAttachment: (fileId: EmlFileId, index: number, confirmedExecutable: boolean, options?: InvokeOptions) => typedError<OpenAttachmentResult, IpcError>(__TAURI_INVOKE("open_eml_attachment", { fileId, index, confirmedExecutable }, options)),
+	/**  Stage 16 (decision 0036): the preview of an attachment of the file (page `page` of a PDF). */
+	previewEmlAttachment: (fileId: EmlFileId, index: number, page: number, options?: InvokeOptions) => typedError<AttachmentPreview, IpcError>(__TAURI_INVOKE("preview_eml_attachment", { fileId, index, page }, options)),
+	/**  Stage 16 (decision 0036): every attachment of the file into a folder the user picks. */
+	saveAllEmlAttachments: (fileId: EmlFileId, options?: InvokeOptions) => typedError<SaveAllAttachmentsResult, IpcError>(__TAURI_INVOKE("save_all_eml_attachments", { fileId }, options)),
 	/**  Switch, accounts with their access level, clients and the endpoint's state. */
 	getMcpSettings: (options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("get_mcp_settings", undefined, options)),
 	/**  On or off. Off is the emergency stop: every open AI connection closes at once. */
@@ -573,6 +601,16 @@ export const commands = {
 	disableSettingsSync: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("disable_settings_sync", undefined, options)),
 	/**  The name of this device in the device list (1 to 64 characters). */
 	setSyncDeviceName: (name: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("set_sync_device_name", { name }, options)),
+	/**  Version, the switch, whether to ask the one-time question, and the current state. */
+	getUpdateInfo: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("get_update_info", undefined, options)),
+	/**  "Check for updates automatically" on or off; either value answers the one-time question. */
+	setUpdateAutoCheck: (enabled: boolean, options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("set_update_auto_check", { enabled }, options)),
+	/**  "Check now", whatever the switch says. */
+	checkForUpdates: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("check_for_updates", undefined, options)),
+	/**  Starts the download of the update found; progress and the outcome follow as events. */
+	downloadUpdate: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("download_update", undefined, options)),
+	/**  "Restart to install": installs the downloaded, verified update and restarts the app. */
+	installUpdate: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("install_update", undefined, options)),
 };
 
 /** Events */
@@ -612,6 +650,14 @@ export const MAX_MCP_CLIENTS = 50 as const;
 export const MAX_MCP_CLIENT_NAME_CHARS = 100 as const;
 
 export const MAX_MESSAGES_BY_IDS = 200 as const;
+
+export const MAX_PINNED_ATTACHMENTS = 1000 as const;
+
+export const MAX_PREVIEW_INPUT_BYTES = 33554432 as const;
+
+export const MAX_PREVIEW_PDF_PAGES = 200 as const;
+
+export const MAX_PREVIEW_TEXT_BYTES = 524288 as const;
 
 export const MAX_RECENT_COMMANDS = 5 as const;
 
@@ -658,6 +704,14 @@ export const MISSED_SEND_GRACE_MS = 3600000 as const;
 export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
 /* Types */
+/**
+ *  Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
+ *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
+ *  (decision 0038). A value this version does not know (from a newer device) reads as the
+ *  default.
+ */
+export type AccentTheme = "teal" | "blue" | "violet" | "rose" | "orange" | "green";
+
 /**  A configured account as the UI sees it. */
 export type Account = {
 	id: AccountId,
@@ -1144,7 +1198,29 @@ export type AttachmentInfo = {
 	executable: boolean,
 	/**  The content is stored locally (false for attachments of a partial message). */
 	local: boolean,
+	/**  Stage 16 (decision 0036): what `previewAttachment` shows; null when it has no preview. */
+	preview: PreviewKind | null,
 };
+
+/**
+ *  `previewAttachment`: what the preview pane shows. Images are `data:` URIs of bytes the core
+ *  encoded itself; text is shown as text, never as markup.
+ */
+export type AttachmentPreview = { kind: "image"; 
+/**  `data:image/png;base64,…` or `data:image/jpeg;base64,…`, encoded by the core. */
+dataUrl: string; width: number; height: number; 
+/**  The image was scaled down to fit [`MAX_PREVIEW_EDGE`]. */
+scaled: boolean } | { kind: "pdf"; 
+/**  `data:image/png;base64,…` of the page, rasterised by the core. */
+dataUrl: string; width: number; height: number; 
+/**  0-based page shown. */
+page: number; 
+/**  Pages the preview can show (at most [`MAX_PREVIEW_PDF_PAGES`]). */
+pages: number; 
+/**  The document has more pages than the preview shows. */
+morePages: boolean } | { kind: "text"; text: string; 
+/**  Cut after [`MAX_PREVIEW_TEXT_BYTES`]. */
+truncated: boolean };
 
 /**  `ROLE` of an attendee. */
 export type AttendeeRole = "chair" | 
@@ -1154,6 +1230,15 @@ export type AttendeeRole = "chair" |
 "optional" | 
 /**  `NON-PARTICIPANT` (for information only). */
 "non_participant";
+
+/**  A newer version announced by the update manifest. */
+export type AvailableUpdate = {
+	version: string,
+	/**  Release notes as plain text (the UI never renders them as HTML or Markdown). */
+	notes: string | null,
+	/**  Publication date, RFC 3339, if the manifest has one. */
+	pubDate: string | null,
+};
 
 /**  What the Dock (macOS) or taskbar (Windows) icon counts. */
 export type BadgeMode = "off" | 
@@ -1715,6 +1800,9 @@ export type ContactSuggestion = {
  *    values. Every window applies them.
  *  - `savedSearchesChanged` (stage 7, decision 0026): saved searches were created, renamed or
  *    deleted (here or by the settings sync). Reload `listSavedSearches`.
+ *  - `updateStatusChanged` (stage 15, decision 0037): the update state changed (checking, up
+ *    to date, available, download progress, ready, installing, failed). The setting itself
+ *    comes back from the command that changed it; reload `getUpdateInfo` for the rest.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
@@ -1734,7 +1822,12 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
 /**  Stage 8: the UI preferences were stored (any window, or another device). */
 { type: "uiPreferencesChanged"; preferences: UiPreferences } | 
 /**  Stage 7 (decision 0026): the saved searches changed (here or from another device). */
-{ type: "savedSearchesChanged" };
+{ type: "savedSearchesChanged" } | 
+/**
+ *  Stage 15 (decision 0037): the update state changed (a check, the download's progress,
+ *  ready to install, a failure).
+ */
+{ type: "updateStatusChanged"; status: UpdateStatus };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -2144,7 +2237,26 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 7 (decision 0026): another saved search has this name. */
 "saved_search_exists" | 
 /**  Stage 7 (decision 0026): the most saved searches are stored already. */
-"saved_search_limit";
+"saved_search_limit" | 
+/**
+ *  Stage 16 (decision 0036): the core does not preview this attachment (type, or bytes
+ *  that are not what the type says); it can still be saved or opened in the system.
+ */
+"preview_unsupported" | 
+/**  Stage 16 (decision 0036): the attachment is larger than a preview decodes. */
+"preview_too_large" | 
+/**  Stage 16 (decision 0036): the image or PDF could not be decoded for a preview. */
+"preview_damaged" | 
+/**  Stage 15 (decision 0037): the update manifest could not be fetched or read. */
+"update_check_failed" | 
+/**  Stage 15 (decision 0037): the update file could not be downloaded. */
+"update_download_failed" | 
+/**  Stage 15 (decision 0037): the update's signature is not valid; it was discarded. */
+"update_signature_invalid" | 
+/**  Stage 15 (decision 0037): installing failed; the installed version is unchanged. */
+"update_install_failed" | 
+/**  Stage 15 (decision 0037): no update is available or ready for this step. */
+"update_not_ready";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -3224,6 +3336,22 @@ export type OutgoingMail = {
 /**  `PARTSTAT` of an attendee. */
 export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "tentative" | "delegated";
 
+/**  A row of "Pinned attachments": the attachment as it was pinned, and its message. */
+export type PinnedAttachment = {
+	/**  The message, as a list row (in its inbox where it lies there). */
+	message: MessageListItem,
+	/**  The attachment's position in the message (`AttachmentInfo.index`). */
+	index: number,
+	/**  Sanitised file name at pinning time. */
+	name: string,
+	mimeType: string,
+	size: number,
+	/**  What its preview shows; null when there is none. */
+	preview: PreviewKind | null,
+	/**  Unix milliseconds. */
+	pinnedAt: number,
+};
+
 /**  Operating system the app runs on. */
 export type Platform = "macos" | "windows" | "linux";
 
@@ -3270,6 +3398,15 @@ export type PrefetchStatus = {
 	/**  Bytes fetched in the current run (below 2^53). */
 	bytes: number,
 };
+
+/**  What the preview of an attachment shows. Null on an attachment the core does not preview. */
+export type PreviewKind = 
+/**  PNG, JPEG, GIF (first frame) or WebP, recognised by its bytes. */
+"image" | 
+/**  A PDF document, page by page. */
+"pdf" | 
+/**  Plain text (`text/plain`, CSV, Markdown, logs; never HTML or XML-based images). */
+"text";
 
 /**
  *  Provider-specific advice for the setup form. The UI shows one note per hint; the server
@@ -3516,6 +3653,15 @@ export type SanitizeReport = {
 	/**  Colours, fonts, sizes, alignment, tables or headings were simplified. */
 	formattingSimplified: boolean,
 };
+
+/**  `saveAllAttachments`: where the attachments went, or nothing when the dialog was cancelled. */
+export type SaveAllAttachmentsResult = { kind: "saved"; 
+/**  The folder the user chose. */
+folder: string; 
+/**  Files written. */
+saved: number; 
+/**  Of those, written under another name because the name was taken. */
+renamed: number } | { kind: "cancelled" };
 
 /**  Result of `saveAttachment`. */
 export type SaveAttachmentResult = 
@@ -4164,9 +4310,9 @@ export type TransferMode =
 "move";
 
 /**
- *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts and text size are
- *  synchronised between devices; the recent commands and the AI panel's state stay on this
- *  device.
+ *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size and (stage
+ *  16) the accent theme are synchronised between devices; the recent commands and the AI
+ *  panel's state stay on this device.
  */
 export type UiPreferences = {
 	shortcuts: PlatformShortcuts,
@@ -4176,6 +4322,11 @@ export type UiPreferences = {
 	recentCommands: string[],
 	/**  The AI panel unfolded (default) or folded in; device only (decision 0028). */
 	aiPanel: AiPanelState,
+	/**
+	 *  Stage 16 (decision 0036): the accent colours; synced like the text size. Only the six
+	 *  themes are accepted (anything else is refused when the value is read from the UI).
+	 */
+	accentTheme: AccentTheme,
 };
 
 /**  The user's answer to an unclear send. */
@@ -4243,6 +4394,42 @@ export type UnsubscribeOutcome =
 { kind: "compose"; request: ComposeRequest } | 
 /**  The page was handed to the system browser. */
 { kind: "opened" };
+
+/**  `getUpdateInfo` and the update commands: the setting, whether to ask, and the state. */
+export type UpdateInfo = {
+	/**  The running version. */
+	currentVersion: string,
+	/**
+	 *  This build can check for and install updates (false in development builds and builds
+	 *  without the updater, where the About page only shows the version).
+	 */
+	supported: boolean,
+	autoCheck: boolean,
+	/**  Show the one-time question now: not answered yet, and at least one account is set up. */
+	askConsent: boolean,
+	/**  Unix ms of the last check, if any. */
+	lastCheckMs: number | null,
+	status: UpdateStatus,
+};
+
+/**  Where the update is. Only ever changes on the core's side; the UI shows it. */
+export type UpdateStatus = 
+/**  No check since the app started. */
+{ state: "idle" } | 
+/**  A check is running. */
+{ state: "checking" } | 
+/**  The last check found no newer version. */
+{ state: "upToDate"; checkedAtMs: number } | 
+/**  A newer version is published; nothing was downloaded yet. */
+{ state: "available"; update: AvailableUpdate } | 
+/**  The download runs; `total` is unknown if the server does not say. */
+{ state: "downloading"; version: string; downloaded: number; total: number | null } | 
+/**  Downloaded and its signature checked; installs with the user's "Restart to install". */
+{ state: "ready"; version: string } | 
+/**  Installing; the app restarts (macOS) or the installer takes over (Windows). */
+{ state: "installing"; version: string } | 
+/**  The last step failed. `version` is the update it concerned, if one was found. */
+{ state: "failed"; version: string | null; error: IpcError };
 
 /**
  *  The layout of one window, stored per window on this device (not synchronised: the screens

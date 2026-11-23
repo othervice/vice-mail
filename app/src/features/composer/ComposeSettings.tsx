@@ -44,7 +44,7 @@ function AccountComposeSettings({ account }: { account: Account }) {
   const setMode = useSetSentCopyMode();
   const identities = useComposeIdentities(account.id);
   return (
-    <div className="flex flex-col gap-4 rounded-card border border-border p-4" data-testid="account-compose-settings">
+    <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="account-compose-settings">
       <h3 className="text-14 font-semibold text-primary">{account.displayName ? t("composer.identity", { name: account.displayName, email: account.email }) : account.email}</h3>
       {settings.isError && <ErrorNotice context={t("composer.settings.loadFailed")} error={settings.error} onRetry={() => void settings.refetch()} />}
       {settings.data && (
@@ -59,7 +59,7 @@ function AccountComposeSettings({ account }: { account: Account }) {
               const mode = SENT_COPY_MODES.find((m) => m === e.target.value);
               if (mode) setMode.mutate({ accountId: account.id, mode });
             }}
-            className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+            className="h-8 w-fit rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
             data-testid="sent-copy-mode"
           >
             {SENT_COPY_MODES.map((mode) => (
@@ -125,7 +125,7 @@ export function ComposeSettings() {
           onChange={(e) => {
             update({ sendDelaySeconds: Number(e.target.value) });
           }}
-          className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+          className="h-8 w-fit rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
           data-testid="send-delay"
         >
           {choices.map((seconds) => (
@@ -149,7 +149,7 @@ export function ComposeSettings() {
             const position = QUOTE_POSITIONS.find((p) => p === e.target.value);
             if (position) update({ defaultQuotePosition: position });
           }}
-          className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+          className="h-8 w-fit rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
           data-testid="default-quote-position"
         >
           {QUOTE_POSITIONS.map((position) => (
@@ -185,7 +185,7 @@ export function ComposeSettings() {
             const policy = RECEIPT_POLICIES.find((p) => p === e.target.value);
             if (policy) update({ readReceipts: policy });
           }}
-          className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+          className="h-8 w-fit rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
           data-testid="read-receipt-policy"
         >
           {RECEIPT_POLICIES.map((policy) => (

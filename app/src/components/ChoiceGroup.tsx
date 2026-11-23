@@ -41,13 +41,15 @@ export function ChoiceGroup<T extends string>({ label, description, value, optio
         orientation="horizontal"
         aria-labelledby={labelId}
         {...(description && { "aria-describedby": descriptionId })}
-        className="inline-flex w-fit gap-1 rounded-card border border-border-strong bg-canvas p-1"
+        // Design pass 23.11.2026: a recessed track; the checked option is a raised thumb with a
+        // hairline in the accent (3:1 on the track), its label in the primary text colour.
+        className="inline-flex w-fit flex-wrap gap-1 rounded-card bg-track p-1"
       >
         {options.map((option) => (
           <RadioGroup.Item
             key={option.value}
             value={option.value}
-            className="h-8 rounded-control px-3 text-13 font-medium text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=checked]:bg-accent data-[state=checked]:text-on-accent"
+            className="h-8 rounded-control px-3 text-13 font-medium text-secondary transition-colors hover:bg-surface-raised/60 hover:text-primary data-[state=checked]:bg-surface-raised data-[state=checked]:text-primary data-[state=checked]:shadow-row data-[state=checked]:ring-1 data-[state=checked]:ring-accent"
           >
             <span {...(option.lang && { lang: option.lang })}>{option.label}</span>
           </RadioGroup.Item>

@@ -46,6 +46,9 @@ import { useTemplates } from "../snippets/queries";
 // Stage 16: favourite folders of every account.
 import { Star } from "lucide-react";
 import { useFavoriteMailboxes } from "../organize/queries";
+// Stage 16 (decision 0036): "Save all attachments" of the open message.
+import { FolderDown } from "lucide-react";
+import { saveAllCandidate, useSaveAllRequestStore } from "../reading/saveAllRequest";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -269,6 +272,28 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   entries.push(...useAiPaletteEntries());
   // Stage 9 (decision 0027): "Open .eml file…".
   entries.push(...useEmlPaletteEntries());
+
+  // Stage 16 (decision 0036): every attachment of the open message into one folder; the
+  // attachment section of the reading pane runs it and shows the result.
+  const shownAttachments = useSaveAllRequestStore((state) => state.shown);
+  const requestSaveAll = useSaveAllRequestStore((state) => state.requestSaveAll);
+  const targetItems = target?.ctx?.items ?? [];
+  const candidate = saveAllCandidate(shownAttachments, targetItems.length === 1 ? (targetItems[0]?.id ?? null) : null);
+  const saveAllDisabled = !candidate
+    ? t("palette.disabled.noMessage")
+    : candidate.count < 1
+      ? t("attachments.saveAll.paletteDisabled")
+      : undefined;
+  entries.push({
+    key: "command:saveAllAttachments",
+    group: "commands",
+    label: t("attachments.saveAll.palette"),
+    icon: FolderDown,
+    ...(saveAllDisabled && { disabled: saveAllDisabled }),
+    run: () => {
+      if (candidate && candidate.count > 0) requestSaveAll(candidate.messageId);
+    },
+  });
 
   for (const id of MAIL_VIEW_IDS) {
     const command = VIEW_COMMAND_OF.get(id);

@@ -12,21 +12,12 @@ import { applyTheme, DARK_SCHEME_QUERY, resolveTheme } from "./theme";
 export function usePreferenceEffects(preferences: Preferences): void {
   const { theme, language } = preferences;
   const { i18n } = useTranslation();
-  // Stage 16: the accent theme (per device for now, see accent.ts), in every window of the app.
+  // Stage 16: the accent theme from the core's UI preferences (decision 0036), in every window.
   const accent = useAccentStore((state) => state.accent);
-  const reloadAccent = useAccentStore((state) => state.reload);
 
   useEffect(() => {
     applyAccent(accent);
   }, [accent]);
-
-  useEffect(() => {
-    // Windows share the web view's storage; a change in one reaches the others through this event.
-    window.addEventListener("storage", reloadAccent);
-    return () => {
-      window.removeEventListener("storage", reloadAccent);
-    };
-  }, [reloadAccent]);
 
   useEffect(() => {
     const media = window.matchMedia(DARK_SCHEME_QUERY);

@@ -180,7 +180,7 @@ export function AskBar({ account }: AskBarProps) {
             type="submit"
             aria-label={t("reading.ask.submit")}
             disabled={!text || tooLong}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent transition-colors disabled:bg-hover disabled:text-tertiary"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-fill text-on-accent transition-colors disabled:bg-hover disabled:text-tertiary"
             data-testid="ask-bar-submit"
           >
             <ArrowUp aria-hidden className="size-(--ui-icon-small)" strokeWidth={2} />

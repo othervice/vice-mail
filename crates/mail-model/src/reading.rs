@@ -195,6 +195,8 @@ pub struct AttachmentInfo {
     pub executable: bool,
     /// The content is stored locally (false for attachments of a partial message).
     pub local: bool,
+    /// Stage 16 (decision 0036): what `previewAttachment` shows; null when it has no preview.
+    pub preview: Option<crate::PreviewKind>,
 }
 
 /// Defects of a message that the reading pane mentions.
@@ -492,6 +494,7 @@ mod tests {
                 size: 12_345,
                 executable: false,
                 local: true,
+                preview: Some(crate::PreviewKind::Pdf),
             }],
             partial: false,
             problems: vec![MessageProblem::UnknownCharset],
@@ -511,7 +514,8 @@ mod tests {
                           "blockedRemote": 3, "remoteLoaded": false },
                 "formats": ["html", "text"],
                 "attachments": [{ "index": 0, "name": "Rechnung.pdf", "mimeType": "application/pdf",
-                                  "size": 12_345, "executable": false, "local": true }],
+                                  "size": 12_345, "executable": false, "local": true,
+                                  "preview": "pdf" }],
                 "partial": false,
                 "problems": ["unknownCharset"]
             })

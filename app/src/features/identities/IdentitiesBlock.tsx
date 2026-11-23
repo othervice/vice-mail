@@ -26,7 +26,7 @@ function IdentityForm({ account, identity, onDone }: FormProps) {
     <form
       // Own messages next to the fields instead of the browser's validation bubbles.
       noValidate
-      className="flex flex-col gap-3 rounded-card border border-border bg-canvas p-4"
+      className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
       onSubmit={(event) => {
         event.preventDefault();
         setTouched(true);

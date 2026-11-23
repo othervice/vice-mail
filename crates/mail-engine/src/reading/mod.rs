@@ -748,6 +748,15 @@ impl<C: MailConnector + 'static> Reading<C> {
             .ok_or_else(|| CoreError::NotFound(format!("attachment {index} of message {message}")))
     }
 
+    /// What the reading pane shows of attachment `index` (pinning keeps it).
+    pub(crate) async fn attachment_info(
+        &self,
+        message: MessageId,
+        index: u32,
+    ) -> Result<mail_model::AttachmentInfo, CoreError> {
+        Ok(self.attachment(message, index).await?.info)
+    }
+
     /// The sanitised name, for the save dialog.
     pub(crate) async fn attachment_name(
         &self,
@@ -855,6 +864,53 @@ impl<C: MailConnector + 'static> Reading<C> {
         Ok(saved)
     }
 
+    /// Stage 16 (decision 0036): the preview of attachment `index` (`page` of a PDF, 0-based).
+    /// Only kinds the core previews; the bytes are decoded and encoded again in Rust, fetched
+    /// first if only part of the message is stored.
+    pub(crate) async fn preview_attachment(
+        &self,
+        message: MessageId,
+        index: u32,
+        page: u32,
+    ) -> Result<mail_model::AttachmentPreview, CoreError> {
+        let attachment = self.attachment(message, index).await?;
+        let kind = preview_kind_of(&attachment.info)?;
+        let bytes = self.attachment_bytes(message, &attachment).await?;
+        let preview = render_preview(kind, bytes, page).await?;
+        tracing::debug!(message = message.0, index, ?kind, "attachment previewed");
+        Ok(preview)
+    }
+
+    /// Stage 16 (decision 0036), "save all": every attachment of the message into `folder`
+    /// (chosen by the user in the system dialog), sanitised names, taken names numbered.
+    /// Returns how many were written and how many of them under another name. A failure stops
+    /// there; what was written stays.
+    pub(crate) async fn save_all_attachments_to(
+        &self,
+        message: MessageId,
+        folder: PathBuf,
+    ) -> Result<(u32, u32), CoreError> {
+        let content = self.load_content(message).await?.ok_or_else(|| {
+            CoreError::NotFound(format!("the body of message {message} is not stored"))
+        })?;
+        if content.attachments.is_empty() {
+            return Err(CoreError::InvalidArgument(format!(
+                "message {message} has no attachments"
+            )));
+        }
+        let (mut saved, mut renamed) = (0u32, 0u32);
+        for attachment in &content.attachments {
+            let bytes = self.attachment_bytes(message, attachment).await?;
+            let name = mail_content::sanitize_filename(&attachment.info.name);
+            if save_into(&folder, name, bytes).await? {
+                renamed += 1;
+            }
+            saved += 1;
+        }
+        tracing::info!(message = message.0, saved, renamed, "all attachments saved");
+        Ok((saved, renamed))
+    }
+
     /// Opens a copy of attachment `index` with the system's default app; executable types only
     /// when `confirmed_executable`.
     pub(crate) async fn open_attachment(
@@ -902,6 +958,52 @@ impl<C: MailConnector + 'static> Reading<C> {
     pub(crate) fn prefetch_status(&self, account: AccountId) -> PrefetchStatus {
         self.prefetch.status(account)
     }
+}
+
+/// The kind of preview of an attachment, or `preview_unsupported`; refuses one that is
+/// certainly too large before its bytes are fetched.
+pub(crate) fn preview_kind_of(
+    info: &mail_model::AttachmentInfo,
+) -> Result<mail_model::PreviewKind, CoreError> {
+    let kind = info.preview.ok_or_else(|| {
+        mail_model::PreviewError::Unsupported(format!("{} ({})", info.name, info.mime_type))
+    })?;
+    // The size of a partial message's attachment is an estimate; the bytes are checked again.
+    if info.size > mail_model::MAX_PREVIEW_INPUT_BYTES {
+        return Err(mail_model::PreviewError::TooLarge(format!(
+            "{} bytes, at most {}",
+            info.size,
+            mail_model::MAX_PREVIEW_INPUT_BYTES
+        ))
+        .into());
+    }
+    Ok(kind)
+}
+
+/// Decodes and encodes a preview on the blocking pool.
+pub(crate) async fn render_preview(
+    kind: mail_model::PreviewKind,
+    bytes: Vec<u8>,
+    page: u32,
+) -> Result<mail_model::AttachmentPreview, CoreError> {
+    Ok(blocking(move || mail_content::render_preview(kind, &bytes, page)).await??)
+}
+
+/// Writes one file of "save all"; whether it got another name than `name`.
+pub(crate) async fn save_into(
+    folder: &Path,
+    name: String,
+    bytes: Vec<u8>,
+) -> Result<bool, CoreError> {
+    let folder = folder.to_path_buf();
+    let written = blocking(move || {
+        files::save_new_in(&folder, &name, &bytes).map(|path| {
+            path.file_name()
+                .is_some_and(|n| n.to_string_lossy() != name)
+        })
+    })
+    .await??;
+    Ok(written)
 }
 
 /// The lists that show `message` changed (its preview).

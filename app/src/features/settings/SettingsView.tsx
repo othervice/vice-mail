@@ -1,3 +1,19 @@
+import {
+  AtSign,
+  Bell,
+  BookOpen,
+  BookUser,
+  Cable,
+  Inbox,
+  Info,
+  Keyboard,
+  Palette,
+  PenLine,
+  RefreshCw,
+  Settings2,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { Tabs } from "radix-ui";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,6 +50,23 @@ const SECTIONS: Record<SettingsSectionId, ComponentType> = {
   about: AboutSettings,
 };
 
+// Design pass 23.11.2026: every section has a small symbol in the list (decorative; the name says it).
+const ICONS: Record<SettingsSectionId, LucideIcon> = {
+  general: Settings2,
+  accounts: AtSign,
+  reading: BookOpen,
+  compose: PenLine,
+  contacts: BookUser,
+  inbox: Inbox,
+  notifications: Bell,
+  appearance: Palette,
+  keyboard: Keyboard,
+  sync: RefreshCw,
+  ai: Sparkles,
+  mcp: Cable,
+  about: Info,
+};
+
 interface SettingsViewProps {
   section: SettingsSectionId;
 }
@@ -58,23 +91,32 @@ export function SettingsView({ section }: SettingsViewProps) {
       >
         <Tabs.List
           aria-label={t("settings.sections")}
-          className="flex w-(--ui-settings-nav-width) shrink-0 flex-col gap-1 border-r border-border px-3 py-4"
+          // Design pass 23.11.2026: the section list on the list column's tint, like the mail list.
+          className="flex w-(--ui-settings-nav-width) shrink-0 flex-col gap-1 overflow-y-auto border-r border-border-subtle bg-surface-list px-3 py-4"
         >
-          {SETTINGS_SECTION_IDS.map((id) => (
-            <Tabs.Trigger
-              key={id}
-              value={id}
-              data-testid={`settings-tab-${id}`}
-              className="relative flex h-8 items-center rounded-control px-3 text-left text-14 text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-selected data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-control data-[state=active]:before:bg-accent"
-            >
-              {t(`settings.${id}.title`)}
-            </Tabs.Trigger>
-          ))}
+          {SETTINGS_SECTION_IDS.map((id) => {
+            const Icon = ICONS[id];
+            return (
+              <Tabs.Trigger
+                key={id}
+                value={id}
+                data-testid={`settings-tab-${id}`}
+                className="group relative flex h-8 shrink-0 items-center gap-3 rounded-control px-3 text-left text-14 text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-selected data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-control data-[state=active]:before:bg-accent-fill"
+              >
+                <Icon
+                  aria-hidden
+                  className="size-(--ui-icon-small) shrink-0 text-tertiary group-hover:text-secondary group-data-[state=active]:text-accent"
+                  strokeWidth={1.75}
+                />
+                <span className="truncate">{t(`settings.${id}.title`)}</span>
+              </Tabs.Trigger>
+            );
+          })}
         </Tabs.List>
         {SETTINGS_SECTION_IDS.map((id) => {
           const Section = SECTIONS[id];
           return (
-            <Tabs.Content key={id} value={id} className="min-w-0 flex-1 overflow-y-auto px-8 py-6">
+            <Tabs.Content key={id} value={id} className="min-w-0 flex-1 overflow-y-auto px-10 py-8">
               <Section />
             </Tabs.Content>
           );

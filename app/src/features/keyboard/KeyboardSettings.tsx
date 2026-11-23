@@ -132,7 +132,7 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
           onBlur={() => {
             onRecord(null);
           }}
-          className="h-7 rounded-control border border-dashed border-accent px-2 text-12 text-accent"
+          className="h-8 rounded-control border border-dashed border-accent px-2 text-12 text-accent"
           data-testid="shortcut-recorder"
         >
           {t("keyboard.settings.recordingShort")}
@@ -147,7 +147,7 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
               onStatus(null);
               onRecord(id);
             }}
-            className="flex h-7 items-center gap-1 rounded-control px-2 text-12 font-medium text-accent hover:bg-hover"
+            className="flex h-8 items-center gap-1 rounded-control px-2 text-12 font-medium text-accent hover:bg-hover"
           >
             <Plus aria-hidden className="size-3.5" strokeWidth={2} />
             {t("keyboard.settings.addShort")}
@@ -177,7 +177,7 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
               }
               onStatus({ tone: "ok", text: t("keyboard.settings.resetDone", { label }) });
             }}
-            className="flex h-7 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary"
+            className="flex h-8 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary"
           >
             <RotateCcw aria-hidden className="size-3.5" strokeWidth={2} />
             {t("keyboard.settings.resetShort")}

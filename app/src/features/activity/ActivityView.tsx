@@ -98,7 +98,7 @@ function BatchRow({ account, batch, mailboxes }: { account: Account; batch: Batc
   });
 
   return (
-    <li className="flex gap-3 rounded-card border border-border bg-canvas p-4" data-testid={`activity-batch-${String(batch.id)}`}>
+    <li className="flex gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid={`activity-batch-${String(batch.id)}`}>
       <Icon aria-hidden className={cx("size-(--ui-icon) shrink-0", className)} strokeWidth={1.75} />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -115,9 +115,11 @@ function BatchRow({ account, batch, mailboxes }: { account: Account; batch: Batc
             {to.length > 0 ? t("activity.folders", { from: from.join(", "), to: to.join(", ") }) : from.join(", ")}
           </p>
         )}
-        <ul className="flex flex-wrap gap-x-3 text-13 text-primary" data-testid="activity-states">
+        <ul className="flex flex-wrap gap-2 text-12 font-medium text-secondary" data-testid="activity-states">
           {stateCounts.map((text) => (
-            <li key={text}>{text}</li>
+            <li key={text} className="rounded-full bg-badge px-2">
+              {text}
+            </li>
           ))}
         </ul>
         {errors.map((code) => (

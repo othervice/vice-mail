@@ -118,9 +118,17 @@ spctl --assess -vv "/Applications/Vice Mail.app"   # rejected: no Developer ID, 
 
 ### Updating
 
-There are no automatic updates. Quit the app, then drag the new version from its disk image onto
-Applications and replace the old one. Your accounts and mail stay. Do not go back to an older
-version: once a newer version has upgraded the local database, an older one refuses to open it.
+**In the app** (once the project is published on GitHub; see "Updates from the app" below):
+**Settings → About → Check now**, then **Download update** and **Restart to install**. The app
+replaces itself in Applications and opens again; your accounts and mail stay. This only works for
+the copy in Applications: an app started from the disk image, or one macOS still runs from a
+temporary place because it was never moved (App Translocation), cannot replace itself and says so.
+
+**By hand:** quit the app, then drag the new version from its disk image onto Applications and
+replace the old one. Your accounts and mail stay.
+
+Do not go back to an older version: once a newer version has upgraded the local database, an
+older one refuses to open it.
 
 ## Windows
 
@@ -148,8 +156,31 @@ version: once a newer version has upgraded the local database, an older one refu
 
 ### Updating
 
-Run the installer of the new version; it replaces the installed one and keeps your data. As on
-macOS, do not go back to an older version.
+**In the app** (once the project is published on GitHub; see "Updates from the app" below):
+**Settings → About → Check now**, then **Download update** and **Restart to install**. The app
+closes, the installer runs in passive mode (a progress bar, no questions, no "Already Installed"
+page) and starts the app again. Your accounts and mail stay.
+
+**By hand:** run the installer of the new version (SmartScreen asks again, as on the first
+install). Because a version is already installed, the installer shows the page **Already
+Installed** (*Bereits installiert*): "An older version of Vice Mail is installed on your system.
+It's recommended that you uninstall the current version before installing."
+
+1. Leave the preselected option **Uninstall before installing** (*Vor der Installation
+   deinstallieren*) and click **Next**. That does both in one go: the old version's uninstaller
+   opens, and after it the installer continues with the new version.
+2. In the uninstaller, leave **Delete the application data** (*Lösche die Anwendungsdaten*)
+   **unticked** and click **Uninstall**. Unticked, your accounts, stored mail and settings in
+   `%LOCALAPPDATA%\org.vicemail.desktop` stay, and the passwords in Credential Manager are never
+   touched by the uninstaller anyway. Ticked, the app starts empty and you set up your accounts
+   again.
+3. Finish the installer as on the first install.
+
+**Do not uninstall** (*Nicht deinstallieren*) also works: the new version is installed over the
+old one, with the same data.
+
+As on macOS, do not go back to an older version: the installer warns that a newer version is
+installed, and an older app refuses a database a newer one has upgraded.
 
 ### Old icon after an update
 
@@ -160,6 +191,24 @@ Start menu or a desktop shortcut can keep showing the old one. To refresh it, tr
 2. Unpin Vice Mail (right-click its taskbar button → **Unpin from taskbar**, *Von Taskleiste
    lösen*), start the app, then pin it again (**Pin to taskbar**, *An Taskleiste anheften*).
 3. Sign out of Windows and back in, or restart the PC.
+
+## Updates from the app
+
+The app can update itself, but it never checks on its own unless you allow it:
+
+- **Settings → About** shows the installed version and the switch **Check for updates
+  automatically**. It is **off** until you turn it on. After you set up your first account the app
+  asks once whether to turn it on; "No, thanks" leaves it off.
+- When it is on, the app asks `github.com`, where Vice Mail is published, at most once a day
+  whether there is a newer version. GitHub sees your IP address and the time of the request, and,
+  when you download an update, which file. The app sends no account data, no usage data and no
+  identifier. **Check now** asks once, also while the switch is off.
+- A newer version is only offered, never downloaded or installed by itself: **Download update**
+  fetches it, and the app checks that it is signed with the project's update key and for exactly
+  this version. A file that does not match is discarded ("The update could not be verified").
+  **Restart to install** installs it and opens the app again.
+- Until the project is public on GitHub there is nothing to find there yet, and **Check now**
+  reports that it could not check. Install new versions by hand until then.
 
 ## Where the app keeps its data
 
@@ -225,3 +274,8 @@ described, and the app starts from the disk image. **Not yet checked:** the Gate
 second Mac, everything on Windows (SmartScreen, Smart App Control, installer, WebView2 download,
 uninstaller). The Windows steps follow the installer's configuration and the manual test plan; they
 will be confirmed or corrected after the first test on a Windows PC.
+
+**In-app updates** are tested against a local update server only (signature check, a manipulated
+file refused, no connection without consent); the first real update from GitHub can only be tried
+once a public release exists. The two update paths on Windows above follow the installer's
+configuration and have not been seen on a Windows PC yet.

@@ -39,10 +39,22 @@
   --ui-text-tertiary: #67625a;
   --ui-text-on-accent: #ffffff;
 
-  /* Accent and status. The accent is the one line to change for another brand colour. */
+  /* Accent and status. The root holds teal's accent family; every accent theme (below) brings
+     its own, and the root always carries one (decision 0038). `accent` is for text, icons,
+     borders and small controls (>= 4.5:1 on every surface); `accent-fill` fills primary buttons
+     and other marks that carry `text-on-accent` (in the orange theme the pure brand orange). */
   --ui-accent: #0b746c;
+  --ui-accent-fill: #0b746c;
   --ui-accent-soft: #dceeeb;
   --ui-danger: #b3261e;
+  /* Label on the danger fill; not part of the accent family. */
+  --ui-text-on-danger: #ffffff;
+  /* Design pass 23.11.2026: the track of segmented controls and switches; the ink of "Vice" in
+     the wordmark (docs/brand/README.md: Ink on light, white on dark). */
+  --ui-track: #ebe8e2;
+  --ui-brand-ink: #1a1619;
+  /* Dims the window behind the command palette, the shortcut overview and dialogs. */
+  --ui-scrim: rgb(30 28 25 / 0.24);
   --ui-success: #1e7239;
   --ui-warning: #8f5300;
 
@@ -150,7 +162,7 @@
   --ui-icon: 1.25rem;
   --ui-icon-small: 1rem;
   --ui-header-height: 3.5rem;
-  --ui-settings-nav-width: 12rem;
+  --ui-settings-nav-width: 14rem;
   --ui-content-max-width: 40rem;
   --ui-form-max-width: 36rem;
   /* The rail unfolded into the labelled sidebar with the folder tree. */
@@ -169,6 +181,12 @@
   --ui-list-sender-width: 12rem;
   /* Stage 8: the account's name in rows of lists that mix accounts (unified inbox, search). */
   --ui-row-account-width: 8rem;
+  /* Design pass 23.11.2026: distance of the command palette from the top of the window; the
+     brand artwork on the first start and on the About page. */
+  --ui-palette-top: 12vh;
+  --ui-wordmark-height: 3rem;
+  --ui-lettering-height: 1.75rem;
+  --ui-app-icon: 4.5rem;
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
      lines), the line length of plain-text mail and the width of an attachment card. */
   --ui-list-width-reading: 24rem;
@@ -187,6 +205,9 @@
   /* Stage 8: the command palette and the shortcut overview. */
   --ui-palette-width: 36rem;
   --ui-overview-width: 48rem;
+  /* Stage 16 (decision 0036): the attachment preview dialog and the height of what it shows. */
+  --ui-preview-width: 56rem;
+  --ui-preview-max-height: 70vh;
   --ui-notice-width: 28rem;
   /* Stage 13: the AI panel on the right (docs/DESIGN.md: 380 px). */
   --ui-ai-panel-width: 23.75rem;
@@ -229,8 +250,13 @@
 
   /* Accent and status */
   --ui-accent: #5dbdb1;
+  --ui-accent-fill: #5dbdb1;
   --ui-accent-soft: #1e3a36;
   --ui-danger: #f2857a;
+  --ui-text-on-danger: #1f0c0a;
+  --ui-track: #121110;
+  --ui-brand-ink: #ffffff;
+  --ui-scrim: rgb(0 0 0 / 0.5);
   --ui-success: #72c78f;
   --ui-warning: #e3a851;
 
@@ -324,16 +350,18 @@
 }
 
 /* ---- Stage 16: accent themes (Settings → Appearance) ----
-   The accent family of each theme, light and dark: the accent itself, its soft fill, the
-   selected row, the focus ring and the text on the accent. Everything else stays as above.
-   "teal" is the default above; the root never carries it, but the swatches of the theme picker
-   do (each shows its own theme inside the current mode), so it repeats the default values.
-   tests/contrast.test.ts checks every theme in both modes with the same pairs as the default
-   and that the teal block equals the default. Orange is the logo's "Vice orange" (#ff7a00,
-   docs/brand/README.md): the dark theme uses it as it is, the light one a burnt tone of the same
-   hue, so text on it reaches 4.5:1. */
+   The accent family of each theme, light and dark: the accent itself, its fill, its soft fill,
+   the selected row, the focus ring and the text on the fill. Everything else stays as above.
+   The root values above are teal's; the root always carries the chosen theme (accent.ts), and
+   the swatches of the theme picker carry their own (each shows its theme inside the current
+   mode), so teal's block repeats the root values. tests/contrast.test.ts checks every theme in
+   both modes with the same pairs as the root and that the teal block equals it. Orange (the default since decision 0038) is the
+   logo's "Vice orange" (#ff7a00, docs/brand/README.md): `accent-fill` is the pure brand orange in
+   both modes, with the logo's near-black on it; `accent` (text, icons, switches) is a burnt tone
+   of the same hue in light, so it reaches 4.5:1 on every surface, and a lighter one in dark. */
 [data-accent="teal"] {
   --ui-accent: #0b746c;
+  --ui-accent-fill: #0b746c;
   --ui-accent-soft: #dceeeb;
   --ui-selected: #dfefec;
   --ui-focus-ring: #0b6e66;
@@ -341,6 +369,7 @@
 }
 :root[data-theme="dark"] [data-accent="teal"] {
   --ui-accent: #5dbdb1;
+  --ui-accent-fill: #5dbdb1;
   --ui-accent-soft: #1e3a36;
   --ui-selected: #1d3633;
   --ui-focus-ring: #63c7ba;
@@ -348,6 +377,7 @@
 }
 [data-accent="blue"] {
   --ui-accent: #2263bf;
+  --ui-accent-fill: #2263bf;
   --ui-accent-soft: #dae6f6;
   --ui-selected: #dae5f3;
   --ui-focus-ring: #2f76da;
@@ -356,6 +386,7 @@
 :root[data-theme="dark"][data-accent="blue"],
 :root[data-theme="dark"] [data-accent="blue"] {
   --ui-accent: #5a95e7;
+  --ui-accent-fill: #5a95e7;
   --ui-accent-soft: #1d2a3d;
   --ui-selected: #1c2838;
   --ui-focus-ring: #639be9;
@@ -363,6 +394,7 @@
 }
 [data-accent="violet"] {
   --ui-accent: #774bc3;
+  --ui-accent-fill: #774bc3;
   --ui-accent-soft: #e8e0f5;
   --ui-selected: #e8e0f5;
   --ui-focus-ring: #7d53c6;
@@ -371,6 +403,7 @@
 :root[data-theme="dark"][data-accent="violet"],
 :root[data-theme="dark"] [data-accent="violet"] {
   --ui-accent: #a27de3;
+  --ui-accent-fill: #a27de3;
   --ui-accent-soft: #281d3d;
   --ui-selected: #261c38;
   --ui-focus-ring: #a885e5;
@@ -378,6 +411,7 @@
 }
 [data-accent="rose"] {
   --ui-accent: #ba2c67;
+  --ui-accent-fill: #ba2c67;
   --ui-accent-soft: #f8e0ea;
   --ui-selected: #f5e0e9;
   --ui-focus-ring: #d23f7c;
@@ -386,28 +420,32 @@
 :root[data-theme="dark"][data-accent="rose"],
 :root[data-theme="dark"] [data-accent="rose"] {
   --ui-accent: #e4659a;
+  --ui-accent-fill: #e4659a;
   --ui-accent-soft: #3d1d2a;
   --ui-selected: #381c28;
   --ui-focus-ring: #e670a1;
   --ui-text-on-accent: #1d0c13;
 }
 [data-accent="orange"] {
-  --ui-accent: #a14d00;
-  --ui-accent-soft: #f3e0cd;
-  --ui-selected: #f0e0d0;
-  --ui-focus-ring: #bf5b00;
-  --ui-text-on-accent: #ffffff;
+  --ui-accent: #ad4700;
+  --ui-accent-fill: #ff7a00;
+  --ui-accent-soft: #fce8d5;
+  --ui-selected: #fbeadb;
+  --ui-focus-ring: #cc5a00;
+  --ui-text-on-accent: #1a1208;
 }
 :root[data-theme="dark"][data-accent="orange"],
 :root[data-theme="dark"] [data-accent="orange"] {
-  --ui-accent: #ff7a00;
-  --ui-accent-soft: #3d2c1d;
-  --ui-selected: #38291c;
-  --ui-focus-ring: #ff8a1f;
-  --ui-text-on-accent: #1d140c;
+  --ui-accent: #ff8f33;
+  --ui-accent-fill: #ff7a00;
+  --ui-accent-soft: #3a2716;
+  --ui-selected: #33261a;
+  --ui-focus-ring: #ff9a40;
+  --ui-text-on-accent: #1a1208;
 }
 [data-accent="green"] {
   --ui-accent: #21733c;
+  --ui-accent-fill: #21733c;
   --ui-accent-soft: #d8f0df;
   --ui-selected: #daf0e0;
   --ui-focus-ring: #288848;
@@ -416,6 +454,7 @@
 :root[data-theme="dark"][data-accent="green"],
 :root[data-theme="dark"] [data-accent="green"] {
   --ui-accent: #45b76b;
+  --ui-accent-fill: #45b76b;
   --ui-accent-soft: #1d3d27;
   --ui-selected: #1c3825;
   --ui-focus-ring: #4aba6f;

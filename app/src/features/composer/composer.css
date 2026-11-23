@@ -10,7 +10,13 @@
   font-feature-settings: "liga" 0;
 }
 
-/* Stage 8: the ring sits inside the editor's area, which fills the composer up to its edges. */
+/* Stage 8: the ring sits inside the editor's area. Design pass 23.11.2026: the area is inset from
+   the composer's edges and rounded like a card, so the ring reads as a writing area, not as a
+   frame around the window. */
+.composer-prose {
+  border-radius: var(--ui-radius-card);
+}
+
 .composer-prose:focus-visible {
   outline: 2px solid var(--ui-focus-ring);
   outline-offset: -2px;

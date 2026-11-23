@@ -29,15 +29,20 @@
   --color-border-strong: var(--ui-border-strong);
   --color-focus-ring: var(--ui-focus-ring);
 
-  /* Text: `text-primary`, `text-secondary`, `text-tertiary`, `text-on-accent` */
+  /* Text: `text-primary`, `text-secondary`, `text-tertiary`, `text-on-accent`, `text-on-danger` */
   --color-primary: var(--ui-text-primary);
   --color-secondary: var(--ui-text-secondary);
   --color-tertiary: var(--ui-text-tertiary);
   --color-on-accent: var(--ui-text-on-accent);
+  --color-on-danger: var(--ui-text-on-danger);
 
   /* Accent and status */
   --color-accent: var(--ui-accent);
+  --color-accent-fill: var(--ui-accent-fill);
   --color-accent-soft: var(--ui-accent-soft);
+  --color-track: var(--ui-track);
+  --color-brand-ink: var(--ui-brand-ink);
+  --color-scrim: var(--ui-scrim);
   --color-danger: var(--ui-danger);
   --color-success: var(--ui-success);
   --color-warning: var(--ui-warning);

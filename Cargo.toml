@@ -65,6 +65,12 @@ tauri-build = { version = "2.7.6", features = [] }
 # database).
 tauri-plugin-notification = "2.8.1"
 tauri-plugin-single-instance = "2.5.5"
+# Decision 0037: in-app updates, driven from Rust only (the UI has no updater permission). Exact
+# pin: the shell hands the plugin our reqwest/rustls setup through `configure_client`, which the
+# plugin documents as tied to its reqwest version. No default features: no `ring` provider
+# (rustls-tls), no system proxy, no zip (v1 artifacts); the TLS backend is the workspace's
+# reqwest with `rustls-no-provider` and our `aws-lc-rs` configuration.
+tauri-plugin-updater = { version = "=2.14.1", default-features = false }
 
 # TLS (decision 0002): rustls with the `aws-lc-rs` provider (chosen in `mail_imap::tls`, nowhere
 # else), certificates checked by the system. aws-lc-sys builds with `cc` and, on Windows without
@@ -87,6 +93,14 @@ cssparser = { version = "0.38.0", default-features = false }
 url = "2.5.9"
 icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+
+# Attachment preview (stage 16, decision 0036): images are decoded and re-encoded in Rust, PDF
+# pages rasterised in Rust; the web view only ever gets PNG/JPEG bytes and plain text. `image`
+# with the four mail raster formats only (no AVIF, no EXR, no native libraries); hayro is a pure
+# Rust PDF rasteriser without a script engine or network access (`forbid(unsafe_code)`), with
+# the standard fonts and CMaps embedded. Both Apache-2.0 OR MIT.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+hayro = "0.9.0"
 
 # Sending (stage 5). mail-builder writes the MIME message in mail-content; without default
 # features, so it never reads the host name (it would go into generated Message-IDs; we always

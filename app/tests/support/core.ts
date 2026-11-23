@@ -19,6 +19,10 @@ import { createParityFake, type ParityFakeOptions, type ParityFakeState } from "
 import { createParitySettingsFake, type ParitySettingsFakeOptions } from "./paritySettings";
 // Stage 16: read receipts (RFC 8098).
 import { createParityComposeFake, type ParityComposeFakeOptions, type ParityComposeFakeState } from "./parityCompose";
+// Stage 16 (decision 0036): attachment previews, "Save all", pinned attachments, hidden blocked mail.
+import { createAttachmentsFake, type AttachmentsFakeOptions, type AttachmentsFakeState } from "./attachments";
+// Stage 15 (decision 0037): in-app updates.
+import { createUpdatesFake, type UpdatesFakeOptions, type UpdatesFakeState } from "./updates";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -192,6 +196,8 @@ export function makeAttachment(overrides: Partial<AttachmentInfo> = {}): Attachm
     size: 1_258_291,
     executable: false,
     local: true,
+    // Stage 16 (decision 0036): no preview unless a test gives one.
+    preview: null,
     ...overrides,
   };
 }
@@ -311,6 +317,10 @@ interface FakeCoreOptions {
   paritySettings?: ParitySettingsFakeOptions;
   /** Stage 16: read receipts by message id. */
   receipts?: ParityComposeFakeOptions;
+  /** Stage 16 (decision 0036): previews, "Save all", pinned attachments, hidden blocked mail. */
+  attachments?: AttachmentsFakeOptions;
+  /** Stage 15 (decision 0037): the update setting and state (default: a build without updater). */
+  updates?: UpdatesFakeOptions;
 }
 
 export interface FakeCore {
@@ -361,6 +371,10 @@ export interface FakeCore {
   readonly parity: ParityFakeState;
   /** Stage 16: receipts the user sent or declined (only ever after a click). */
   readonly receipts: ParityComposeFakeState;
+  /** Stage 16 (decision 0036): pins, preview pages asked for and "Save all" calls. */
+  readonly attachments: AttachmentsFakeState;
+  /** Stage 15 (decision 0037): the update setting and state as the fake holds them now. */
+  readonly updates: UpdatesFakeState;
 }
 
 /**
@@ -763,6 +777,14 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     reject: (code, detail = null) => reject(code, detail),
   });
 
+  const attachmentsFake = createAttachmentsFake(options.attachments ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    attachmentsOf: (messageId) => viewOf(messageId, "auto")?.attachments ?? [],
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
+  const updatesFake = createUpdatesFake(options.updates ?? {}, { reject: (code) => reject(code) });
+
   // Stage 16: rows carry `readingList` wherever the fake core lists them (as the core does).
   const markReadingList = (answer: unknown): unknown => {
     const ids = parityFake.state.readingList;
@@ -923,6 +945,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 16 before stage 9: it answers `listInboxFiltered` with the unread filter.
           const parityAnswer = parityFake.handle(cmd, args);
           if (parityAnswer !== undefined) return parityAnswer;
+          // Stage 16 (decision 0036): previews, "Save all", pinned attachments, hidden blocked mail.
+          const attachmentsAnswer = attachmentsFake.handle(cmd, args);
+          if (attachmentsAnswer !== undefined) return attachmentsAnswer;
           const paritySettingsAnswer = paritySettingsFake.handle(cmd);
           if (paritySettingsAnswer !== undefined) return paritySettingsAnswer;
           const parityComposeAnswer = parityComposeFake.handle(cmd, args);
@@ -947,6 +972,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Decision 0027: `.eml` files and messages by id.
           const emlAnswer = emlFake.handle(cmd, args);
           if (emlAnswer !== undefined) return emlAnswer;
+          // Stage 15 (decision 0037): in-app updates.
+          const updatesAnswer = updatesFake.handle(cmd, args);
+          if (updatesAnswer !== undefined) return updatesAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -1023,5 +1051,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     eml: emlFake.state,
     parity: parityFake.state,
     receipts: parityComposeFake.state,
+    attachments: attachmentsFake.state,
+    updates: updatesFake.state,
   };
 }

@@ -7,6 +7,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   textSize: 100,
   recentCommands: [],
   aiPanel: "open",
+  accentTheme: "orange",
 };
 
 export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = { readingPane: "right", density: "comfortable", sidebarExpanded: false };
@@ -51,6 +52,10 @@ function problemOf(preferences: UiPreferences): string | null {
   // Decision 0028: serde refuses anything else (a missing field too).
   if ((preferences.aiPanel as unknown) !== "open" && (preferences.aiPanel as unknown) !== "folded") {
     return `aiPanel ${String(preferences.aiPanel)} is neither open nor folded`;
+  }
+  // Stage 16 (decision 0036): only the six accent themes.
+  if (!["teal", "blue", "violet", "rose", "orange", "green"].includes(preferences.accentTheme)) {
+    return `accentTheme ${String(preferences.accentTheme)} is not a theme`;
   }
   const recent = preferences.recentCommands;
   if (recent.length > 5) return "at most 5 recent commands";

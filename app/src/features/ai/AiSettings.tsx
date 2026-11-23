@@ -58,7 +58,7 @@ function Difference() {
   const { t } = useTranslation();
   const showSettings = useUiStore((state) => state.showSettings);
   return (
-    <div className="flex flex-col gap-2 rounded-card border border-border bg-canvas p-4 text-13 text-secondary" data-testid="ai-difference">
+    <div className="flex flex-col gap-2 rounded-card border border-border-subtle bg-canvas p-4 text-13 text-secondary" data-testid="ai-difference">
       <p>
         <span className="font-semibold text-primary">{t("ai.settings.difference.inAppTitle")}</span>{" "}
         {t("ai.settings.difference.inApp")}
@@ -515,7 +515,7 @@ function ProfileRow({ profile, onEdit }: { profile: AiProfileInfo; onEdit: () =>
   const remove = useDeleteAiProfile();
   const [confirming, setConfirming] = useState(false);
   return (
-    <li className="flex flex-col gap-3 rounded-card border border-border bg-canvas p-3" data-testid={`ai-profile-${profile.id}`}>
+    <li className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid={`ai-profile-${profile.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="flex flex-wrap items-center gap-2">
@@ -867,7 +867,7 @@ export function AiSettings() {
                 key={id}
                 value={id}
                 data-testid={`ai-page-${id}`}
-                className="-mb-px h-9 border-b-2 border-transparent px-3 text-14 text-secondary transition-colors hover:text-primary data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-primary"
+                className="-mb-px h-10 border-b-2 border-transparent px-3 text-14 text-secondary transition-colors hover:text-primary data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-primary"
               >
                 {t(`ai.settings.pages.${id}`)}
               </Tabs.Trigger>

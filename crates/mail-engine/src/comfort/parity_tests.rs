@@ -296,6 +296,23 @@ async fn blocked_senders_are_hidden_on_read_only_accounts_and_not_announced() {
         "blocked mail is not announced"
     );
     assert_eq!(h.server.read(|s| s.writer_attempts), 0);
+    // Decision 0036: the inbox list's note counts what it leaves out, per scope.
+    assert_eq!(
+        h.core
+            .count_blocked_hidden(h.scope(inbox))
+            .await
+            .expect("count"),
+        1
+    );
+    assert_eq!(
+        h.core
+            .count_blocked_hidden(InboxScope::Unified {
+                view: mail_model::UnifiedView::All
+            })
+            .await
+            .expect("count"),
+        1
+    );
 
     // Unblocked: it shows again.
     assert!(
@@ -311,6 +328,13 @@ async fn blocked_senders_are_hidden_on_read_only_accounts_and_not_announced() {
         .await
         .expect("inbox");
     assert_eq!(row_ids(&page.rows).len(), 2);
+    assert_eq!(
+        h.core
+            .count_blocked_hidden(h.scope(inbox))
+            .await
+            .expect("count"),
+        0
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

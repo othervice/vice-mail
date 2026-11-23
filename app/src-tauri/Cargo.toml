@@ -32,6 +32,11 @@ tracing.workspace = true
 tauri-plugin-wdio-webdriver = { workspace = true, optional = true }
 # Stage 9: native notifications, used from Rust only (decision 0020).
 tauri-plugin-notification.workspace = true
+# Decision 0037: in-app updates, from Rust only; checks only with the user's consent.
+tauri-plugin-updater.workspace = true
+# `tauri::generate_context!` embeds the `plugins` section of tauri.conf.json (the updater's
+# key and endpoint) as JSON values and names this crate in the generated code.
+serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Test builds only (feature `e2e`): reads the native window buttons for the desktop test and

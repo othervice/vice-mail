@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { refreshQuery } from "../../app/refreshQuery";
 import { blockedSendersQueryKey } from "../blocked/queries";
+import { refreshAttachmentPins } from "../reading/attachmentQueries";
 import {
   comfortIpc,
   type AccountId,
@@ -32,8 +33,19 @@ export const messageCategoryQueryKey = (messageId: MessageId) => ["comfort", "ca
 export const snoozeTimesQueryKey = ["comfort", "snoozeTimes"] as const;
 export const notificationSettingsQueryKey = ["comfort", "notificationSettings"] as const;
 
-// Stage 16: the reading list, and the "Unread only" and "Unread first" lists of a folder.
-const COMFORT_LIST_KINDS = new Set(["inbox", "priority", "later", "pinned", "tasks", "readingList", "unread", "unreadFirst"]);
+// Stage 16: the reading list, and the "Unread only" and "Unread first" lists of a folder; the
+// count of mail of blocked senders an inbox leaves out (decision 0036).
+const COMFORT_LIST_KINDS = new Set([
+  "inbox",
+  "priority",
+  "later",
+  "pinned",
+  "tasks",
+  "readingList",
+  "unread",
+  "unreadFirst",
+  "blockedHidden",
+]);
 
 /**
  * Reloads the stage 9 lists after `inboxChanged` (pins, snoozes, tasks or categories changed, a
@@ -72,6 +84,8 @@ export function handleInboxChanged(queryClient: QueryClient, accountId: AccountI
   refreshQuery(queryClient, senderRulesQueryKey);
   // Stage 16: a sender blocked or unblocked here or on another device (settings sync).
   refreshQuery(queryClient, blockedSendersQueryKey);
+  // Stage 16 (decision 0036): pins on attachments.
+  refreshAttachmentPins(queryClient);
 }
 
 export function useInboxSettings() {

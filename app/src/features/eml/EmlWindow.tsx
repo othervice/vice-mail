@@ -159,7 +159,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
           </div>
         )}
         <section aria-label={t("reading.region")} data-testid="eml-pane" className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-border px-4">
+          <div className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-border-subtle px-4">
             <p className="me-auto truncate text-13 text-secondary" data-testid="eml-file-name">
               {view?.fileName ?? ""}
             </p>
@@ -177,7 +177,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
               aria-label={view ? undefined : t("eml.region")}
               aria-busy={query.isPending}
               data-print-root
-              className="flex flex-col gap-4 px-6 py-6 focus-visible:-outline-offset-2"
+              className="mx-auto flex w-full max-w-(--ui-reading-column) flex-col gap-4 px-6 py-8 focus-visible:-outline-offset-2"
             >
               {content}
             </article>

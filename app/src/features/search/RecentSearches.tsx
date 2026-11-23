@@ -59,7 +59,7 @@ export function RecentSearches({ id, items, active, optionId, onPick, onClear, c
             event.preventDefault();
           }}
           onClick={onClear}
-          className="h-7 rounded-control px-2 text-12 text-accent hover:bg-hover disabled:opacity-50"
+          className="h-8 rounded-control px-2 text-12 text-accent hover:bg-hover disabled:opacity-50"
           data-testid="search-recent-clear"
         >
           {t("savedSearches.recent.clear")}

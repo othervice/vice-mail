@@ -1,56 +1,61 @@
 import { create } from "zustand";
-import { readLocal, writeLocal } from "../keyboard/localFallback";
+import { toCoreError, type AccentTheme as CoreAccentTheme, type CoreError } from "../../services/ipc";
+import { saveUiPreferences } from "../keyboard/uiPreferences";
 
 /**
  * Stage 16: accent themes (Settings → Appearance). Each one changes only the accent family of
  * tokens.css (accent, its soft fill, the selected row, the focus ring, text on the accent), in
- * light and dark; tests/contrast.test.ts checks all of them. "teal" is the app's own accent and
- * stays the default until the human decides otherwise.
+ * light and dark; tests/contrast.test.ts checks all of them. Decision 0038: "orange" is the
+ * default (the core reads a missing or unknown value as orange too).
+ *
+ * Decision 0036: the choice is a UI preference of the core (`UiPreferences.accentTheme`), synced
+ * between devices like the text size. The store holds what the documents of this window apply;
+ * `useUiPreferencesSync` fills it from the core (load, saves, `uiPreferencesChanged`).
  */
-export const ACCENT_THEMES = ["teal", "blue", "violet", "rose", "orange", "green"] as const;
+export const ACCENT_THEMES = ["teal", "blue", "violet", "rose", "orange", "green"] as const satisfies readonly CoreAccentTheme[];
 
 export type AccentTheme = (typeof ACCENT_THEMES)[number];
 
-export const DEFAULT_ACCENT: AccentTheme = "teal";
+// Fails to compile when the core gets a theme the UI does not offer.
+type MissingTheme = Exclude<CoreAccentTheme, AccentTheme>;
+const themesAreComplete: [MissingTheme] extends [never] ? true : never = true;
+void themesAreComplete;
+
+export const DEFAULT_ACCENT: AccentTheme = "orange";
 
 export function isAccentTheme(value: unknown): value is AccentTheme {
   return typeof value === "string" && (ACCENT_THEMES as readonly string[]).includes(value);
 }
 
-/** tokens.css switches the accent family on this attribute; the default has none. */
+/**
+ * tokens.css switches the accent family on this attribute. Always set, the default included:
+ * the root values of tokens.css are teal's, which is no longer the default (decision 0038).
+ */
 export function applyAccent(accent: AccentTheme): void {
-  if (accent === DEFAULT_ACCENT) delete document.documentElement.dataset["accent"];
-  else document.documentElement.dataset["accent"] = accent;
-}
-
-// ---- FALLBACK (stage 16): kept on this device only ----
-// The stage asks for a synced UI setting, but neither `Preferences` nor `UiPreferences` of the
-// core has a field for it yet (needed: `UiPreferences.accentTheme`, synced like the text size).
-// Until then the choice lives in the web view's storage of this device, validated on reading.
-// When the core field exists, this block goes and the store reads `uiPreferences` instead.
-
-/** The stored accent, or the default when nothing (valid) is stored or storage is off. */
-export function readStoredAccent(): AccentTheme {
-  const stored = readLocal("accentTheme");
-  return isAccentTheme(stored) ? stored : DEFAULT_ACCENT;
+  document.documentElement.dataset["accent"] = accent;
 }
 
 interface AccentState {
   accent: AccentTheme;
-  /** False when the browser storage refused it: the choice then lasts until the app quits. */
-  stored: boolean;
+  /** The core refused the last choice; the previous theme applies again. */
+  saveError: CoreError | null;
+  /** The user's choice: shown at once, saved to the core (rolled back if it refuses). */
   setAccent: (accent: AccentTheme) => void;
-  /** Another window of the app changed it (the `storage` event). */
-  reload: () => void;
+  /** What the core holds (anything unknown reads as the default). */
+  applyStored: (accent: unknown) => void;
 }
 
 export const useAccentStore = create<AccentState>()((set) => ({
-  accent: readStoredAccent(),
-  stored: true,
+  accent: DEFAULT_ACCENT,
+  saveError: null,
   setAccent: (accent) => {
-    set({ accent, stored: writeLocal("accentTheme", accent) });
+    set({ accent, saveError: null });
+    saveUiPreferences({ accentTheme: accent }).catch((error: unknown) => {
+      // The cache is back at the previous value; `applyStored` has put it on screen again.
+      set({ saveError: toCoreError(error) });
+    });
   },
-  reload: () => {
-    set({ accent: readStoredAccent() });
+  applyStored: (accent) => {
+    set({ accent: isAccentTheme(accent) ? accent : DEFAULT_ACCENT });
   },
 }));

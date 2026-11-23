@@ -70,7 +70,7 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
             : shortcuts.map((shortcut, index) => (
                 <span key={formatShortcut(shortcut, platform)}>
                   {index > 0 && ` ${t("keyboard.overview.or")} `}
-                  <kbd className="rounded-control border border-border px-1.5 font-sans text-primary">{formatShortcut(shortcut, platform)}</kbd>
+                  <kbd className="rounded-control bg-badge px-2 font-sans text-primary tabular-nums">{formatShortcut(shortcut, platform)}</kbd>
                 </span>
               ))}
         </dd>
@@ -79,89 +79,93 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
   };
 
   return (
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      data-testid="shortcut-overview"
-      // A click on the panel's background keeps the focus inside, so Escape still reaches it.
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        // A modal dialog: no key reaches the shortcuts of the view behind it ("e" must not archive).
-        event.stopPropagation();
-        if (event.key === "Escape") {
-          event.preventDefault();
-          close();
-          return;
-        }
-        trapTab(event);
-      }}
-      className="fixed top-12 left-1/2 z-50 flex max-h-[calc(100%-4rem)] w-(--ui-overview-width) max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 rounded-panel border border-border bg-surface-raised p-6 shadow-panel"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h2 id={titleId} className="text-16 font-semibold text-primary">
-          {t("keyboard.overview.title")}
-        </h2>
-        <button
-          ref={closeRef}
-          type="button"
-          aria-label={t("keyboard.overview.close")}
-          onClick={close}
-          className="flex size-8 items-center justify-center rounded-control text-secondary hover:bg-hover hover:text-primary"
-        >
-          <X aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
-        </button>
-      </div>
-      <div className="grid min-h-0 grid-cols-1 gap-x-8 gap-y-4 overflow-y-auto md:grid-cols-2">
-        <section aria-labelledby={`${titleId}-actions`}>
-          <h3 id={`${titleId}-actions`} className="pb-1 text-13 font-semibold text-secondary">
-            {t("keyboard.overview.groups.actions")}
-          </h3>
-          <dl>{COMMAND_IDS.filter(isActionId).map(row)}</dl>
-        </section>
-        <div className="flex flex-col gap-4">
-          <section aria-labelledby={`${titleId}-commands`}>
-            <h3 id={`${titleId}-commands`} className="pb-1 text-13 font-semibold text-secondary">
-              {t("keyboard.overview.groups.commands")}
+    <>
+      {/* Design pass 23.11.2026: the same dimmed backdrop as the command palette (no motion). */}
+      <div aria-hidden className="fixed inset-0 z-40 bg-scrim" data-testid="overview-backdrop" />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        data-testid="shortcut-overview"
+        // A click on the panel's background keeps the focus inside, so Escape still reaches it.
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          // A modal dialog: no key reaches the shortcuts of the view behind it ("e" must not archive).
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+            return;
+          }
+          trapTab(event);
+        }}
+        className="fixed top-(--ui-palette-top) left-1/2 z-50 flex max-h-[calc(100%-2*var(--ui-palette-top))] w-(--ui-overview-width) max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-4 rounded-panel border border-border bg-surface-raised p-6 shadow-panel"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h2 id={titleId} className="text-16 font-semibold text-primary">
+            {t("keyboard.overview.title")}
+          </h2>
+          <button
+            ref={closeRef}
+            type="button"
+            aria-label={t("keyboard.overview.close")}
+            onClick={close}
+            className="flex size-8 items-center justify-center rounded-control text-secondary hover:bg-hover hover:text-primary"
+          >
+            <X aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
+          </button>
+        </div>
+        <div className="grid min-h-0 grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-8 gap-y-4 overflow-y-auto">
+          <section aria-labelledby={`${titleId}-actions`}>
+            <h3 id={`${titleId}-actions`} className="pb-1 text-13 font-semibold text-secondary">
+              {t("keyboard.overview.groups.actions")}
             </h3>
-            <dl>{COMMAND_IDS.filter((id) => !isActionId(id)).map(row)}</dl>
+            <dl>{COMMAND_IDS.filter(isActionId).map(row)}</dl>
           </section>
-          <section aria-labelledby={`${titleId}-moving`}>
-            <h3 id={`${titleId}-moving`} className="pb-1 text-13 font-semibold text-secondary">
-              {t("keyboard.overview.groups.moving")}
-            </h3>
-            <dl>
-              {MOVING.map((id) => (
-                <div key={id} className="flex items-baseline justify-between gap-4 py-1">
-                  <dt className="min-w-0 text-13 text-primary">{t(`keyboard.overview.moving.${id}`)}</dt>
-                  <dd className="shrink-0 text-12 text-secondary">{t(`keyboard.overview.moving.${id}Keys`)}</dd>
+          <div className="flex flex-col gap-4">
+            <section aria-labelledby={`${titleId}-commands`}>
+              <h3 id={`${titleId}-commands`} className="pb-1 text-13 font-semibold text-secondary">
+                {t("keyboard.overview.groups.commands")}
+              </h3>
+              <dl>{COMMAND_IDS.filter((id) => !isActionId(id)).map(row)}</dl>
+            </section>
+            <section aria-labelledby={`${titleId}-moving`}>
+              <h3 id={`${titleId}-moving`} className="pb-1 text-13 font-semibold text-secondary">
+                {t("keyboard.overview.groups.moving")}
+              </h3>
+              <dl>
+                {MOVING.map((id) => (
+                  <div key={id} className="flex items-baseline justify-between gap-4 py-1">
+                    <dt className="min-w-0 text-13 text-primary">{t(`keyboard.overview.moving.${id}`)}</dt>
+                    <dd className="shrink-0 text-12 text-secondary">{t(`keyboard.overview.moving.${id}Keys`)}</dd>
+                  </div>
+                ))}
+                {/* The composer's own shortcut (the same in every composer, not changeable). */}
+                <div className="flex items-baseline justify-between gap-4 py-1">
+                  <dt className="min-w-0 text-13 text-primary">{t("keyboard.overview.moving.send")}</dt>
+                  <dd className="shrink-0 text-12 text-secondary">
+                    <kbd className="rounded-control bg-badge px-2 font-sans text-primary tabular-nums">
+                      {formatShortcut(SEND, platform)}
+                    </kbd>
+                  </dd>
                 </div>
-              ))}
-              {/* The composer's own shortcut (the same in every composer, not changeable). */}
-              <div className="flex items-baseline justify-between gap-4 py-1">
-                <dt className="min-w-0 text-13 text-primary">{t("keyboard.overview.moving.send")}</dt>
-                <dd className="shrink-0 text-12 text-secondary">
-                  <kbd className="rounded-control border border-border px-1.5 font-sans text-primary">
-                    {formatShortcut(SEND, platform)}
-                  </kbd>
-                </dd>
-              </div>
-            </dl>
-          </section>
+              </dl>
+            </section>
+          </div>
+        </div>
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              close();
+              showSettings("keyboard");
+            }}
+          >
+            {t("keyboard.overview.change")}
+          </Button>
         </div>
       </div>
-      <div>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            close();
-            showSettings("keyboard");
-          }}
-        >
-          {t("keyboard.overview.change")}
-        </Button>
-      </div>
-    </div>
+    </>
   );
 }

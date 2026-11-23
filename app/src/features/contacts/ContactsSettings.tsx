@@ -193,7 +193,7 @@ export function ContactsSettings() {
   } else if (contacts.length === 0) {
     body =
       query === "" ? (
-        <div className="flex flex-col gap-1 rounded-card border border-border p-4" data-testid="contacts-empty">
+        <div className="flex flex-col gap-1 rounded-card border border-border-subtle bg-canvas p-4" data-testid="contacts-empty">
           <p className="text-14 font-medium text-primary">{t("contacts.emptyTitle")}</p>
           <p className="text-13 text-secondary">{t("contacts.emptyBody")}</p>
         </div>

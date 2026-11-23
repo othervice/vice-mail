@@ -24,6 +24,7 @@
 //! (`mail_model::RenderToken`), external images are fetched by the engine and passed in as
 //! bytes ([`RemotePolicy::Allow`]), the random part of a Message-ID too ([`new_message_id`]).
 
+mod attachment_preview;
 mod calendar;
 mod classify;
 mod compose;
@@ -43,6 +44,7 @@ mod templates;
 mod text;
 mod visible;
 
+pub use attachment_preview::{preview_kind, render_preview};
 pub use calendar::{
     CalendarPart, MAX_CALENDAR_ATTENDEES, MAX_CALENDAR_BYTES, MAX_CALENDAR_DESCRIPTION_BYTES,
     MAX_CALENDAR_EVENTS, MAX_CALENDAR_LINE_BYTES, MAX_CALENDAR_LINES, MAX_CALENDAR_PARTS,

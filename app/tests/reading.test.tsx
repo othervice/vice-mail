@@ -98,7 +98,13 @@ const READING_COMMANDS = new Set([
   // Stage 16: whether the message asks for a read receipt (nothing is sent without a click) and the
   // views with "Unread first" (a device setting); both read-only.
   "get_read_receipt",
+  // Stage 16 (decision 0036): how much mail of blocked senders the inbox leaves out, and the
+  // pinned attachments of the open message (both read-only).
+  "count_blocked_hidden",
+  "get_attachment_pins",
   "get_unread_first_views",
+  // Stage 15 (decision 0037): the update setting and state (local; nothing is requested).
+  "get_update_info",
   // Stage 16: the blocked senders, for the quiet note on a blocked sender's message (read-only).
   "list_blocked_senders",
   "plugin:event|listen",

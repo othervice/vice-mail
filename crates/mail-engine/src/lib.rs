@@ -19,6 +19,7 @@ pub mod settings_sync;
 pub mod sync;
 pub mod sync_state;
 mod ui_prefs;
+pub mod updates;
 
 pub use crate::clock::{Clock, SystemClock};
 pub use crate::core::{AppCore, BuildInfo, Connector, CoreConfig, CoreServices, DATABASE_FILE};
@@ -27,6 +28,7 @@ pub use crate::reading::{
     DesktopOpener, ReadingServices, RecordingOpener, RemoteConfig, SystemOpener,
 };
 pub use crate::sync::SyncConfig;
+pub use crate::updates::{DownloadProgress, UpdateFuture, UpdateSchedule, UpdateSource};
 
 #[cfg(test)]
 mod action_tests;

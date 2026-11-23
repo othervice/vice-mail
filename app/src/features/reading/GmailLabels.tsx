@@ -72,7 +72,7 @@ export function GmailLabels({ account, messageId }: GmailLabelsProps) {
 
   return (
     <div className="flex flex-col gap-1" data-testid="gmail-labels">
-      <ul aria-label={t("reading.labels.region")} className="flex flex-wrap items-center gap-1.5">
+      <ul aria-label={t("reading.labels.region")} className="flex flex-wrap items-center gap-2">
         {shown.length === 0 && <li className="text-12 text-secondary">{t("reading.labels.none")}</li>}
         {shown.map((label) => (
           <li key={label} className="flex h-6 items-center gap-1 rounded-control border border-border px-2 text-12 text-primary">

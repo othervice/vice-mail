@@ -408,6 +408,21 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   Der Schlüssel erscheint nirgends in der Oberfläche.
 - **Ergebnis:**
 
+## 19. Neuere Version installieren (ab Prototyp 2) und Updates in der App (Stufe 15, 0037)
+
+- **Tun (von Hand):** Den Installer einer neueren Version über eine installierte ältere starten.
+  Auf der Seite „Bereits installiert“ die vorgewählte Option „Vor der Installation deinstallieren“
+  lassen, „Weiter“; im Deinstallationsfenster „Lösche die Anwendungsdaten“ **nicht** ankreuzen.
+- **Erwartet:** Ein Durchgang erledigt beides; danach startet die neue Version mit allen Konten,
+  Mails und Einstellungen (Passwörter in der Anmeldeinformationsverwaltung unverändert).
+- **Tun (in der App, erst nach dem ersten öffentlichen Release):** Einstellungen → Über: Schalter
+  ist aus; „Jetzt suchen“, „Update herunterladen“, „Neu starten und installieren“.
+- **Erwartet:** Ohne Klick keine Verbindung. Der Installer läuft mit Fortschrittsbalken, ohne
+  Fragen und ohne die Seite „Bereits installiert“; danach startet die App in der neuen Version mit
+  allen Daten. SmartScreen fragt beim Update nicht (der Installer wird nicht aus dem Browser
+  geladen); falls doch, notieren.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

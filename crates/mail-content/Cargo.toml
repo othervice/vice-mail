@@ -19,6 +19,8 @@ icu_properties.workspace = true
 mail-builder.workspace = true
 # Civil dates only (calendar reader); never the time-zone database outside tests.
 jiff.workspace = true
+image.workspace = true
+hayro.workspace = true
 
 [dev-dependencies]
 markup5ever_rcdom.workspace = true

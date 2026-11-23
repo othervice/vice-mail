@@ -35,6 +35,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     // Stage 14: Gmail over IMAP: message id and labels per message, Gmail seen at login
     // (decision 0034).
     M::up(include_str!("../migrations/0014_gmail.sql")),
+    // Stage 16: pinned attachments (decision 0036).
+    M::up(include_str!("../migrations/0015_attachment_pins.sql")),
 ];
 
 /// All migrations this build knows.

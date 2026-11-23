@@ -248,6 +248,11 @@ async fn blocked_senders_hide_mail_on_read_only_accounts_until_unblocked() {
     let listed = f.store.blocked_senders().await.expect("list");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].address, "sender@example.org");
+    // Decision 0036: the list's note counts what is left out.
+    assert_eq!(
+        f.store.count_blocked_hidden(scope()).await.expect("count"),
+        1
+    );
 
     assert!(
         f.store
@@ -261,6 +266,173 @@ async fn blocked_senders_hide_mail_on_read_only_accounts_until_unblocked() {
         .await
         .expect("rows");
     assert_eq!(rows.items.len(), 2, "unblocking shows it again");
+    assert_eq!(
+        f.store.count_blocked_hidden(scope()).await.expect("count"),
+        0
+    );
+}
+
+/// Decision 0036: pins of attachments by account, Message-ID and index; listed with their
+/// message, captured for the sync, and written back from a record (also with a `/` in the
+/// Message-ID).
+#[tokio::test]
+async fn attachment_pins_are_listed_captured_and_applied_from_the_sync() {
+    use crate::AttachmentPinInput;
+    let f = fixture().await;
+    let headers = vec![
+        header(1, 1_700_000_000, Some("a@x")),
+        header(2, 1_700_000_600, Some("b/c@x")),
+        header(3, 1_700_001_200, None),
+    ];
+    f.store
+        .store_headers(f.inbox, UV, headers, None)
+        .await
+        .expect("store");
+    let page = f
+        .store
+        .list_messages(f.inbox, None, 10)
+        .await
+        .expect("list");
+    let ids: Vec<MessageId> = page.items.iter().map(|i| i.id).collect();
+    f.store
+        .write(|tx| Ok(tx.execute("DELETE FROM sync_dirty", [])?))
+        .await
+        .expect("clear");
+    let input = |index: u32, name: &str| AttachmentPinInput {
+        index,
+        name: name.into(),
+        mime_type: "application/pdf".into(),
+        size: 42,
+    };
+    let (_, changed) = f
+        .store
+        .set_attachment_pin(ids[1], 2, Some(input(2, "b.pdf")), 10)
+        .await
+        .expect("pin");
+    assert!(changed);
+    let (_, changed) = f
+        .store
+        .set_attachment_pin(ids[1], 2, Some(input(2, "b.pdf")), 11)
+        .await
+        .expect("again");
+    assert!(!changed, "pinning twice changes nothing");
+    f.store
+        .set_attachment_pin(ids[2], 0, Some(input(0, "a.pdf")), 12)
+        .await
+        .expect("pin");
+    assert!(
+        f.store
+            .set_attachment_pin(ids[0], 0, Some(input(0, "x.pdf")), 13)
+            .await
+            .is_err(),
+        "a message without Message-ID cannot be pinned"
+    );
+    assert!(
+        f.store
+            .set_attachment_pin(ids[1], 1, Some(input(1, "bad\u{7}name")), 13)
+            .await
+            .is_err(),
+        "no controls in a kept name"
+    );
+    assert_eq!(
+        f.store.attachment_pins_of(ids[1]).await.expect("pins"),
+        vec![2]
+    );
+    assert!(
+        f.store
+            .attachment_pins_of(ids[0])
+            .await
+            .expect("none")
+            .is_empty()
+    );
+
+    let view = f
+        .store
+        .pinned_attachments(vec![f.account], vec![f.inbox], 100)
+        .await
+        .expect("view");
+    let listed: Vec<(&str, u32, &str)> = view
+        .iter()
+        .map(|p| (p.message.subject.as_str(), p.index, p.name.as_str()))
+        .collect();
+    assert_eq!(
+        listed,
+        vec![("Subject 1", 0, "a.pdf"), ("Subject 2", 2, "b.pdf")],
+        "newest pin first"
+    );
+    let dirty = sync_kinds(&f.store).await;
+    assert_eq!(
+        dirty,
+        vec![
+            ("attachmentPin".to_owned(), format!("{}/a@x/0", f.account)),
+            ("attachmentPin".to_owned(), format!("{}/b/c@x/2", f.account)),
+        ]
+    );
+    let id = format!("{}/b/c@x/2", f.account);
+    let content = f
+        .store
+        .read({
+            let id = id.clone();
+            move |c| crate::attachment_pins::synced_content(c, &id)
+        })
+        .await
+        .expect("content")
+        .expect("some");
+    assert_eq!(
+        content,
+        serde_json::json!({ "name": "b.pdf", "mimeType": "application/pdf", "size": 42,
+                            "pinnedAtMs": 10 })
+    );
+
+    // From another device: a new pin, then the removal of this one.
+    let other = format!("{}/b/c@x/5", f.account);
+    f.store
+        .write({
+            let other = other.clone();
+            move |tx| {
+                crate::attachment_pins::apply_synced(
+                    tx,
+                    &other,
+                    Some(
+                        &serde_json::json!({ "name": "c.txt", "mimeType": "text/plain",
+                                              "size": 1, "pinnedAtMs": 20 }),
+                    ),
+                )?;
+                crate::attachment_pins::apply_synced(tx, &id, None)
+            }
+        })
+        .await
+        .expect("apply");
+    assert_eq!(
+        f.store.attachment_pins_of(ids[1]).await.expect("pins"),
+        vec![5]
+    );
+    let refused = f
+        .store
+        .write(move |tx| {
+            crate::attachment_pins::apply_synced(
+                tx,
+                &other,
+                Some(&serde_json::json!({ "name": "", "mimeType": "x", "size": 1,
+                                          "pinnedAtMs": 1 })),
+            )
+        })
+        .await;
+    assert!(refused.is_err(), "an empty name is refused");
+
+    let (_, changed) = f
+        .store
+        .set_attachment_pin(ids[1], 5, None, 30)
+        .await
+        .expect("unpin");
+    assert!(changed);
+    assert!(
+        f.store
+            .attachment_pins_of(ids[1])
+            .await
+            .expect("none")
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -385,6 +557,16 @@ fn check_plans(conn: &Connection, stage: &str) {
             parity::READING_OF.to_owned(),
             vec![
                 "SEARCH reading_list USING INDEX sqlite_autoindex_reading_list_1 (account_uuid=? AND message_id_hdr=?)",
+            ],
+        ),
+        (
+            "hidden mail of blocked senders, counted",
+            parity::COUNT_HIDDEN.to_owned(),
+            vec![
+                "SEARCH h USING PRIMARY KEY (account_uuid=?)",
+                "SEARCH m USING COVERING INDEX message_msgid (account_id=? AND message_id_hdr=?)",
+                // The primary key or `loc_message`, both a single probe.
+                "SEARCH l USING ",
             ],
         ),
         (

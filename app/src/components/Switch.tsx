@@ -41,13 +41,14 @@ export function Switch({ label, description, checked, onChange, disabled = false
         }}
         data-testid={rest["data-testid"]}
         className={cx(
-          "relative flex h-6 w-12 shrink-0 items-center rounded-full border p-1 transition-colors disabled:opacity-50",
-          checked ? "justify-end border-accent bg-accent" : "justify-start border-border-strong bg-surface",
+          // Design pass 23.11.2026: 40 × 24, on the accent when on, a recessed track when off.
+          "relative flex h-6 w-10 shrink-0 items-center rounded-full border p-1 transition-colors disabled:opacity-50",
+          checked ? "justify-end border-accent bg-accent" : "justify-start border-border-strong bg-track",
         )}
       >
         <span
           aria-hidden
-          className={cx("size-4 rounded-full transition-colors", checked ? "bg-surface-raised" : "bg-secondary")}
+          className={cx("size-4 rounded-full shadow-row transition-colors", checked ? "bg-surface-raised" : "bg-secondary")}
         />
       </button>
     </div>

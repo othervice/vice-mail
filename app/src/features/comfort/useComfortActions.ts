@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { blockedSendersQueryKey } from "../blocked/queries";
+import { refreshBlockedHidden } from "../reading/attachmentQueries";
 import {
   comfortIpc,
   parityIpc,
@@ -114,6 +115,8 @@ export function useComfortActions(account: Account) {
         let list: BlockedSender[] = [];
         for (const address of addresses) list = await parityIpc.blockSender(address);
         queryClient.setQueryData(blockedSendersQueryKey, list);
+        // Stage 16 (decision 0036): the inbox's note counts the mail that is hidden now.
+        refreshBlockedHidden(queryClient);
         return { type: "sendersBlocked", addresses };
       });
     },

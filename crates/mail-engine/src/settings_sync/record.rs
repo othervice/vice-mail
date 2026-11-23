@@ -56,6 +56,8 @@ pub enum RecordKind {
     MailboxPref,
     /// A blocked sender, by its normalised address (stage 16).
     BlockedSender,
+    /// A pinned attachment, by account, Message-ID and attachment index (stage 16, 0036).
+    AttachmentPin,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, Einstellungs-Sync).
@@ -88,6 +90,9 @@ pub enum IdShape {
     /// `<account uuid>/<decoded mailbox path>` (mailbox preferences, stage 16): the path may
     /// hold spaces, never controls.
     AccountPath,
+    /// `<account uuid>/<Message-ID>/<attachment index>` (pinned attachments, stage 16): the
+    /// index is the last segment, the Message-ID may hold `/` itself.
+    MailPart,
 }
 
 /// What a winning tombstone does to a live local record.
@@ -117,7 +122,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 19] = [
+pub const REGISTRY: [KindSpec; 20] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -295,6 +300,16 @@ pub const REGISTRY: [KindSpec; 19] = [
         Removal::Apply,
         KIB,
     ),
+    // Decision 0036: a pinned attachment keeps its name, type and size (names up to 1 KiB).
+    spec(
+        RecordKind::AttachmentPin,
+        "attachmentPin",
+        "attachment_pin",
+        MergeRule::NewerWins,
+        IdShape::MailPart,
+        Removal::Apply,
+        2 * KIB,
+    ),
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -338,6 +353,8 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     // Stage 16 (decision 0033): "send and archive" for new replies, the read-receipt answer.
     "compose.archive_on_reply",
     "compose.read_receipts",
+    // Stage 16 (decision 0036): the accent theme, like the text size.
+    "ui.accent_theme",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the
@@ -347,7 +364,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -367,6 +384,7 @@ impl RecordKind {
         Self::ReadingList,
         Self::MailboxPref,
         Self::BlockedSender,
+        Self::AttachmentPin,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -497,6 +515,28 @@ impl RecordKey {
             IdShape::Address => {
                 if !is_token(id) {
                     return Err(invalid("address is empty, too long or holds whitespace"));
+                }
+            }
+            IdShape::MailPart => {
+                let (account, rest) = id.split_once('/').ok_or_else(|| invalid("no account"))?;
+                if !is_canonical_uuid(account) {
+                    return Err(invalid("account is not a lowercase hyphenated UUID"));
+                }
+                let (message_id, index) = rest
+                    .rsplit_once('/')
+                    .ok_or_else(|| invalid("no attachment index"))?;
+                if !is_token(message_id) {
+                    return Err(invalid(
+                        "the Message-ID is empty, too long, or holds whitespace, controls or \
+                         brackets",
+                    ));
+                }
+                if index.is_empty()
+                    || !index.bytes().all(|b| b.is_ascii_digit())
+                    || (index.len() > 1 && index.starts_with('0'))
+                    || index.parse::<u32>().is_err()
+                {
+                    return Err(invalid("the attachment index is not a number"));
                 }
             }
             IdShape::AccountPath => {
@@ -768,6 +808,18 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::BlockedSender => {
             EmptyContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
+        RecordKind::AttachmentPin => {
+            let pin =
+                AttachmentPinContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if pin.name.is_empty() || pin.name.chars().any(char::is_control) {
+                return Err(invalid(
+                    "the attachment name is empty or holds controls".into(),
+                ));
+            }
+            if pin.mime_type.chars().any(char::is_control) {
+                return Err(invalid("the attachment type holds controls".into()));
+            }
+        }
         RecordKind::Signature => {
             let signature =
                 SignatureContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
@@ -962,6 +1014,17 @@ pub struct TaskInfo {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReadingListInfo {
     pub added_at_ms: i64,
+}
+
+/// Content of a pinned attachment record (stage 16, decision 0036): when it was pinned and
+/// what it was (sanitised name, declared type, size), so the list shows it without the body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AttachmentPinContent {
+    pub pinned_at_ms: i64,
+    pub name: String,
+    pub mime_type: String,
+    pub size: u32,
 }
 
 /// Content of a mailbox preference record (stage 16): favourite position and colour, at least
@@ -1273,6 +1336,58 @@ mod tests {
             .is_err()
         );
         assert!(RecordKey::parse(RecordKind::Signature, "global/ui.theme").is_err());
+    }
+
+    /// Decision 0036: a pinned attachment is `<account>/<Message-ID>/<index>`; the Message-ID
+    /// may hold `/`, the index is a plain number. The content keeps name, type and size.
+    #[test]
+    fn attachment_pins_check_their_ids_and_content() {
+        let account = account_id();
+        for good in [
+            format!("{account}/a@b/0"),
+            format!("{account}/a/b@c/12"),
+            format!("{account}/x@y/4294967295"),
+        ] {
+            assert!(
+                RecordKey::parse(RecordKind::AttachmentPin, &good).is_ok(),
+                "{good:?}"
+            );
+        }
+        for bad in [
+            format!("{account}/a@b"),
+            format!("{account}/a@b/"),
+            format!("{account}//1"),
+            format!("{account}/a@b/01"),
+            format!("{account}/a@b/-1"),
+            format!("{account}/a@b/x"),
+            format!("{account}/a@b/4294967296"),
+            format!("{account}/a b@c/1"),
+            "not-a-uuid/a@b/1".to_owned(),
+        ] {
+            assert!(
+                RecordKey::parse(RecordKind::AttachmentPin, &bad).is_err(),
+                "{bad:?}"
+            );
+        }
+        let pin = json!({ "pinnedAtMs": 1, "name": "a.pdf", "mimeType": "application/pdf",
+                          "size": 3 });
+        assert!(SyncContent::new(RecordKind::AttachmentPin, pin).is_ok());
+        for bad in [
+            json!({ "pinnedAtMs": 1, "name": "a.pdf", "mimeType": "x" }),
+            json!({ "pinnedAtMs": 1, "name": "", "mimeType": "x", "size": 1 }),
+            json!({ "pinnedAtMs": 1, "name": "a\u{7}", "mimeType": "x", "size": 1 }),
+            json!({ "pinnedAtMs": 1, "name": "a", "mimeType": "x", "size": 1, "path": "/" }),
+        ] {
+            assert!(
+                SyncContent::new(RecordKind::AttachmentPin, bad.clone()).is_err(),
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            RecordKind::from_name("attachmentPin"),
+            Some(RecordKind::AttachmentPin)
+        );
+        assert_eq!(RecordKind::AttachmentPin.spec().table, "attachment_pin");
     }
 
     #[test]

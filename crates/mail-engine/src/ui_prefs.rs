@@ -4,6 +4,7 @@
 //! |---|---|---|
 //! | `ui.shortcuts.macos`, `ui.shortcuts.windows` | changed commands of one platform | synced |
 //! | `ui.text_size` | percent, 80 to 150 | synced |
+//! | `ui.accent_theme` | one of the six accent themes (stage 16, decision 0036) | synced |
 //! | `ui.recent_commands` | palette entry keys, newest first | device |
 //! | `ui.ai_panel` | the AI panel unfolded or folded in (decision 0028) | device |
 //! | `ui.layout.<slot>` | [`WindowLayout`] of one kind of window | device |
@@ -14,8 +15,8 @@
 //! before they are stored, so a stored list always fits into a sync record.
 
 use mail_model::{
-    AiPanelState, CoreError, CoreEvent, DEFAULT_TEXT_SIZE, PlatformShortcuts, Shortcut,
-    ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
+    AccentTheme, AiPanelState, CoreError, CoreEvent, DEFAULT_TEXT_SIZE, PlatformShortcuts,
+    Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
     validate_layout_slot, validate_overrides, validate_recent_commands,
 };
 use mail_store::GLOBAL_SCOPE;
@@ -28,6 +29,8 @@ use crate::settings_sync::{RecordKind, SyncContent};
 pub(crate) const SHORTCUTS_MACOS_KEY: &str = "ui.shortcuts.macos";
 pub(crate) const SHORTCUTS_WINDOWS_KEY: &str = "ui.shortcuts.windows";
 pub(crate) const TEXT_SIZE_KEY: &str = "ui.text_size";
+/// Stage 16 (decision 0036): synced like the text size.
+pub(crate) const ACCENT_THEME_KEY: &str = "ui.accent_theme";
 pub(crate) const RECENT_COMMANDS_KEY: &str = "ui.recent_commands";
 /// Device only (decision 0028): AI in the app is set up per device (0024), and the panel is
 /// part of the window's layout, which stays on the device too (0025).
@@ -152,6 +155,14 @@ fn decode_text_size(json: &str) -> u8 {
     }
 }
 
+/// A theme this version does not know (from a newer device) reads as the default.
+fn decode_accent(json: &str) -> AccentTheme {
+    serde_json::from_str(json).unwrap_or_else(|err| {
+        tracing::warn!(key = ACCENT_THEME_KEY, %err, "stored accent theme unreadable, using the default");
+        AccentTheme::default()
+    })
+}
+
 fn decode_recent(json: &str) -> Vec<String> {
     match serde_json::from_str::<Vec<String>>(json) {
         Ok(list) if validate_recent_commands(&list).is_ok() => list,
@@ -206,6 +217,7 @@ impl<C: Connector> AppCore<C> {
                         decode_overrides(ShortcutPlatform::Windows, key, value);
                 }
                 TEXT_SIZE_KEY => prefs.text_size = decode_text_size(value),
+                ACCENT_THEME_KEY => prefs.accent_theme = decode_accent(value),
                 RECENT_COMMANDS_KEY => prefs.recent_commands = decode_recent(value),
                 AI_PANEL_KEY => prefs.ai_panel = decode_ai_panel(value),
                 _ => {}
@@ -236,6 +248,10 @@ impl<C: Connector> AppCore<C> {
             ),
             (TEXT_SIZE_KEY.to_owned(), encode(&preferences.text_size)?),
             (
+                ACCENT_THEME_KEY.to_owned(),
+                encode(&preferences.accent_theme)?,
+            ),
+            (
                 RECENT_COMMANDS_KEY.to_owned(),
                 encode(&preferences.recent_commands)?,
             ),
@@ -249,6 +265,7 @@ impl<C: Connector> AppCore<C> {
             macos = stored.shortcuts.macos.len(),
             windows = stored.shortcuts.windows.len(),
             text_size = stored.text_size,
+            accent = ?stored.accent_theme,
             "UI preferences stored"
         );
         self.emit_event(CoreEvent::UiPreferencesChanged {

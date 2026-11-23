@@ -107,7 +107,7 @@ export function OpenReplyHintBar({ messageId }: { messageId: MessageId }) {
   return (
     <div className="flex flex-col gap-2 rounded-card border border-border bg-priority-tint p-3" data-print-hide data-testid="open-reply-bar">
       <div className="flex items-start gap-3">
-        <MessageCircleQuestionMark aria-hidden className="mt-0.5 size-(--ui-icon) shrink-0 text-secondary" strokeWidth={1.75} />
+        <MessageCircleQuestionMark aria-hidden className="size-(--ui-icon) shrink-0 text-secondary" strokeWidth={1.75} />
         <div role="note" aria-label={t("ai.openReplies.barLabel")} className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="text-13 text-primary">{title}</p>
           <p className="text-12 text-secondary">{t("ai.openReplies.barHint")}</p>

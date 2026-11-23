@@ -101,6 +101,46 @@ pub async fn save_eml_attachment<R: Runtime>(
     })
 }
 
+/// Stage 16 (decision 0036): the preview of an attachment of the file (page `page` of a PDF).
+#[tauri::command]
+#[specta::specta]
+pub async fn preview_eml_attachment(
+    core: State<'_, AppCore>,
+    file_id: EmlFileId,
+    index: u32,
+    page: u32,
+) -> Result<mail_model::AttachmentPreview, IpcError> {
+    core.preview_eml_attachment(checked(file_id)?, index, page)
+        .await
+        .map_err(to_ipc("preview_eml_attachment"))
+}
+
+/// Stage 16 (decision 0036): every attachment of the file into a folder the user picks.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_all_eml_attachments<R: Runtime>(
+    window: WebviewWindow<R>,
+    core: State<'_, AppCore>,
+    file_id: EmlFileId,
+) -> Result<mail_model::SaveAllAttachmentsResult, IpcError> {
+    let id = checked(file_id)?;
+    let Some(folder) = super::reading::ask_folder(&window)
+        .await
+        .map_err(to_ipc("save_all_eml_attachments"))?
+    else {
+        return Ok(mail_model::SaveAllAttachmentsResult::Cancelled);
+    };
+    let (saved, renamed) = core
+        .save_all_eml_attachments_to(id, folder.clone())
+        .await
+        .map_err(to_ipc("save_all_eml_attachments"))?;
+    Ok(mail_model::SaveAllAttachmentsResult::Saved {
+        folder: folder.display().to_string(),
+        saved,
+        renamed,
+    })
+}
+
 /// Opens a read-only copy of an attachment of the file; executables need `confirmedExecutable`.
 #[tauri::command]
 #[specta::specta]

@@ -1,16 +1,20 @@
-// Stage 16: accent themes (Settings → Appearance, per device until the core stores them) and the
-// notification sounds (Settings → Notifications, from the core's fixed list of this system).
+// Stage 16: accent themes (Settings → Appearance, a UI preference of the core synced between
+// devices since decision 0036, orange by default since decision 0038) and the notification
+// sounds (Settings → Notifications, from the core's fixed list of this system).
 import { act, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ACCENT_THEMES, readStoredAccent, useAccentStore } from "../src/features/preferences/accent";
-import type { NotificationSettings, ThemePreference } from "../src/services/ipc";
+import { ACCENT_THEMES, useAccentStore } from "../src/features/preferences/accent";
+import type { AccentTheme, NotificationSettings, ThemePreference } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
-import { makeAccount, mockCore, standardMailboxes } from "./support/core";
+import { ipcError, makeAccount, mockCore, standardMailboxes } from "./support/core";
+import { emitCore } from "./support/events";
 import { focusRingReport } from "./support/focusRing";
 import { WINDOWS_SOUNDS } from "./support/paritySettings";
 import { renderApp } from "./support/render";
+import { DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
 
+/** The key of the per-device fallback before decision 0036 (only migrated now). */
 const STORAGE_KEY = "vice-mail.ui.accentTheme";
 
 beforeEach(() => {
@@ -21,7 +25,7 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   act(() => {
-    useAccentStore.setState({ accent: "teal", stored: true });
+    useAccentStore.setState(useAccentStore.getInitialState(), true);
   });
   delete document.documentElement.dataset["accent"];
 });
@@ -41,28 +45,43 @@ function openSettings(section: "appearance" | "notifications") {
   });
 }
 
+const withAccent = (accentTheme: string) => ({
+  ui: { preferences: { ...DEFAULT_UI_PREFERENCES, accentTheme: accentTheme as AccentTheme } },
+});
+
+const lastAccent = (core: ReturnType<typeof mockCore>) =>
+  (core.callsOf("set_ui_preferences").at(-1)?.["preferences"] as { accentTheme?: string } | undefined)?.accentTheme;
+
 describe("accent themes", () => {
-  it("offers six themes by name, the default marked, and applies a choice at once", async () => {
-    mockCore();
+  it("offers six themes by name, orange marked as the default, and saves a choice to the core", async () => {
+    const core = mockCore();
     const { user } = renderApp();
     openSettings("appearance");
 
     const group = await screen.findByRole("radiogroup", { name: "Accent colour" });
     const radios = within(group).getAllByRole("radio");
-    expect(radios.map((radio) => radio.textContent)).toEqual(["Teal (default)", "Blue", "Violet", "Rose", "Orange", "Green"]);
-    expect(within(group).getByRole("radio", { name: "Teal (default)" }).getAttribute("aria-checked")).toBe("true");
-    expect(document.documentElement.dataset["accent"]).toBeUndefined();
-
-    await user.click(within(group).getByRole("radio", { name: "Orange" }));
+    expect(radios.map((radio) => radio.textContent)).toEqual(["Teal", "Blue", "Violet", "Rose", "Orange (default)", "Green"]);
+    expect(within(group).getByRole("radio", { name: "Orange (default)" }).getAttribute("aria-checked")).toBe("true");
+    // Decision 0038: the default is set on the root too (the root values of tokens.css are teal's).
     expect(document.documentElement.dataset["accent"]).toBe("orange");
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('"orange"');
-    expect(within(group).getByRole("radio", { name: "Orange" }).getAttribute("aria-checked")).toBe("true");
 
-    // Back to the default: the attribute goes, the tokens' own values apply again.
-    await user.click(within(group).getByRole("radio", { name: "Teal (default)" }));
-    expect(document.documentElement.dataset["accent"]).toBeUndefined();
-    // Says honestly that it is not synced yet.
-    expect(screen.getByTestId("accent-device-note").textContent).toContain("not synced");
+    await user.click(within(group).getByRole("radio", { name: "Blue" }));
+    expect(document.documentElement.dataset["accent"]).toBe("blue");
+    await waitFor(() => {
+      expect(core.ui.preferences.accentTheme).toBe("blue");
+    });
+    expect(lastAccent(core)).toBe("blue");
+    expect(within(group).getByRole("radio", { name: "Blue" }).getAttribute("aria-checked")).toBe("true");
+    // Nothing goes to the web view's storage any more.
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    await user.click(within(group).getByRole("radio", { name: "Teal" }));
+    expect(document.documentElement.dataset["accent"]).toBe("teal");
+    await waitFor(() => {
+      expect(core.ui.preferences.accentTheme).toBe("teal");
+    });
+    // Says honestly that it is synced now.
+    expect(screen.getByTestId("accent-device-note").textContent).toContain("Synced");
   });
 
   it("each swatch carries its own theme, so it shows that colour in the current mode", async () => {
@@ -76,48 +95,101 @@ describe("accent themes", () => {
   });
 
   it("arrow keys move between the themes, Space picks one", async () => {
-    mockCore();
+    const core = mockCore();
     const { user } = renderApp();
     openSettings("appearance");
-    const teal = await screen.findByRole("radio", { name: "Teal (default)" });
+    const orange = await screen.findByRole("radio", { name: "Orange (default)" });
     act(() => {
-      teal.focus();
+      orange.focus();
     });
     await user.keyboard("{ArrowRight}");
-    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Blue" }));
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Green" }));
     await user.keyboard(" ");
-    expect(document.documentElement.dataset["accent"]).toBe("blue");
+    expect(document.documentElement.dataset["accent"]).toBe("green");
+    await waitFor(() => {
+      expect(core.ui.preferences.accentTheme).toBe("green");
+    });
   });
 
-  it("reads a stored choice back, ignores anything invalid, and follows another window", () => {
-    window.localStorage.setItem(STORAGE_KEY, '"violet"');
-    expect(readStoredAccent()).toBe("violet");
-    window.localStorage.setItem(STORAGE_KEY, '"magenta"');
-    expect(readStoredAccent()).toBe("teal");
-    window.localStorage.setItem(STORAGE_KEY, "{broken");
-    expect(readStoredAccent()).toBe("teal");
-
-    mockCore();
+  it("starts with the core's theme and follows another window or device (uiPreferencesChanged)", async () => {
+    mockCore(withAccent("violet"));
     renderApp();
-    window.localStorage.setItem(STORAGE_KEY, '"green"');
-    act(() => {
-      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+    await waitFor(() => {
+      expect(document.documentElement.dataset["accent"]).toBe("violet");
     });
+    await emitCore({ type: "uiPreferencesChanged", preferences: { ...DEFAULT_UI_PREFERENCES, accentTheme: "rose" } });
+    expect(document.documentElement.dataset["accent"]).toBe("rose");
+    // A theme of a newer version reads as the default.
+    await emitCore({ type: "uiPreferencesChanged", preferences: { ...DEFAULT_UI_PREFERENCES, accentTheme: "magenta" as AccentTheme } });
+    expect(document.documentElement.dataset["accent"]).toBe("orange");
+  });
+
+  it("puts the previous theme back and says why when the core refuses the choice", async () => {
+    mockCore({ ...withAccent("violet"), failures: { set_ui_preferences: ipcError("database") } });
+    const { user } = renderApp();
+    openSettings("appearance");
+    await waitFor(() => {
+      expect(document.documentElement.dataset["accent"]).toBe("violet");
+    });
+    await user.click(await screen.findByRole("radio", { name: "Rose" }));
+    const error = await screen.findByTestId("accent-not-stored");
+    expect(error.textContent).toContain("could not be saved");
+    expect(error.getAttribute("data-error-code")).toBe("database");
+    expect(document.documentElement.dataset["accent"]).toBe("violet");
+    expect(screen.getByRole("radio", { name: "Violet" }).getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("moving the accent of the per-device fallback to the core, once", () => {
+  it("writes a valid local theme to the core, then removes the local key", async () => {
+    window.localStorage.setItem(STORAGE_KEY, '"green"');
+    const core = mockCore();
+    renderApp();
+    await waitFor(() => {
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+    expect(core.ui.preferences.accentTheme).toBe("green");
+    expect(core.callsOf("set_ui_preferences")).toHaveLength(1);
     expect(document.documentElement.dataset["accent"]).toBe("green");
   });
 
-  it("says so when this computer cannot store the choice", async () => {
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("QuotaExceededError");
+  it("removes the key without a write when it equals the core's theme or is not a theme", async () => {
+    window.localStorage.setItem(STORAGE_KEY, '"violet"');
+    const same = mockCore(withAccent("violet"));
+    const first = renderApp();
+    await waitFor(() => {
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
-    mockCore();
-    const { user } = renderApp();
-    openSettings("appearance");
-    await user.click(await screen.findByRole("radio", { name: "Rose" }));
-    expect(document.documentElement.dataset["accent"]).toBe("rose");
-    expect(screen.getByTestId("accent-not-stored").textContent).toContain("until you quit");
+    expect(same.callsOf("set_ui_preferences")).toHaveLength(0);
+    first.unmount();
   });
 
+  it("drops a value that is no theme, and changes nothing in the core", async () => {
+    window.localStorage.setItem(STORAGE_KEY, '"magenta"');
+    const core = mockCore();
+    renderApp();
+    await waitFor(() => {
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+    expect(core.callsOf("set_ui_preferences")).toHaveLength(0);
+    expect(core.ui.preferences.accentTheme).toBe("orange");
+  });
+
+  it("keeps the local key for the next start when the core refuses it", async () => {
+    window.localStorage.setItem(STORAGE_KEY, '"rose"');
+    const core = mockCore({ failures: { set_ui_preferences: ipcError("database") } });
+    renderApp();
+    await waitFor(() => {
+      expect(core.callsOf("set_ui_preferences")).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(useAccentStore.getState().saveError?.code).toBe("database");
+    });
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('"rose"');
+  });
+});
+
+describe("accent themes in light and dark", () => {
   describe.each(["light", "dark"] as const)("%s mode", (theme: ThemePreference) => {
     it.each(ACCENT_THEMES)("Appearance in the %s theme has no serious axe findings and focus rings", async (accent) => {
       mockCore({ preferences: { theme, language: "system" } });

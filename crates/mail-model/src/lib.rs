@@ -10,6 +10,7 @@
 
 mod account;
 mod ai;
+mod attachments;
 mod backend;
 mod body;
 mod bundle;
@@ -41,6 +42,7 @@ mod snippets;
 pub mod threading;
 mod ui;
 mod uid_set;
+mod updates;
 mod views;
 mod writer;
 
@@ -58,6 +60,11 @@ pub use ai::{
     AiTransferInput, AiTrimming, AiWritingResult, AiWritingTask, MAX_AI_PASSAGE_CHARS,
     MAX_AI_PROFILE_NAME_CHARS, MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS, MAX_AI_REQUEST_ID_CHARS,
     MAX_AI_REQUEST_PAGE, OpenReplyHint, OpenReplyKind, OpenReplySettings,
+};
+pub use attachments::{
+    AttachmentPreview, MAX_PINNED_ATTACHMENTS, MAX_PREVIEW_EDGE, MAX_PREVIEW_INPUT_BYTES,
+    MAX_PREVIEW_PDF_PAGES, MAX_PREVIEW_PIXELS, MAX_PREVIEW_TEXT_BYTES, PinnedAttachment,
+    PreviewError, PreviewKind, SaveAllAttachmentsResult,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,
@@ -180,14 +187,18 @@ pub use snippets::{
     TemplateInfo, TemplateInput,
 };
 pub use ui::{
-    AiPanelState, DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS,
-    MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES,
-    MAX_SHORTCUTS_PER_COMMAND, MAX_TEXT_SIZE, MIN_TEXT_SIZE, PlatformShortcuts,
-    ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences,
-    UiPreferencesError, WindowLayout, validate_layout_slot, validate_overrides,
+    AccentTheme, AiPanelState, DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS,
+    MAX_LAYOUT_SLOT_CHARS, MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS,
+    MAX_SHORTCUT_OVERRIDES, MAX_SHORTCUTS_PER_COMMAND, MAX_TEXT_SIZE, MIN_TEXT_SIZE,
+    PlatformShortcuts, ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform,
+    UiPreferences, UiPreferencesError, WindowLayout, validate_layout_slot, validate_overrides,
     validate_recent_commands,
 };
 pub use uid_set::UidSet;
+pub use updates::{
+    AvailableUpdate, MAX_UPDATE_NOTES_CHARS, UPDATE_CHECK_INTERVAL_MS, UpdateError, UpdateInfo,
+    UpdateSettings, UpdateStatus,
+};
 pub use views::{
     AccountGroup, AccountGroupId, IdentityInfo, IdentityInput, MAX_GROUP_NAME_CHARS,
     MAX_SEARCH_PAGE, MAX_THREAD_MESSAGES, SearchHighlights, SearchHit, SearchIndexState,

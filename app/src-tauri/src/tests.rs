@@ -682,7 +682,9 @@ fn ui_preference_commands_store_validate_and_emit() {
             "shortcuts": { "macos": [], "windows": [] },
             "textSize": 100,
             "recentCommands": [],
-            "aiPanel": "open"
+            "aiPanel": "open",
+            // Decisions 0036 and 0038: synced, orange by default.
+            "accentTheme": "orange"
         })
     );
 
@@ -696,9 +698,11 @@ fn ui_preference_commands_store_validate_and_emit() {
         },
         "textSize": 115,
         "recentCommands": ["action:archive"],
-        "aiPanel": "folded"
+        "aiPanel": "folded",
+        "accentTheme": "violet"
     });
     let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
+    assert_eq!(stored["accentTheme"], "violet");
     // Decision 0028: the AI panel's state is part of the preferences.
     assert_eq!(stored["aiPanel"], "folded");
     // Ordered by command, as stored.
@@ -742,6 +746,11 @@ fn ui_preference_commands_store_validate_and_emit() {
     sideways["aiPanel"] = json!("sideways");
     invoke(&h, "set_ui_preferences", json!({ "preferences": sideways }))
         .expect_err("unknown panel state");
+    // Decision 0036: only the six accent themes.
+    let mut magenta = stored.clone();
+    magenta["accentTheme"] = json!("magenta");
+    invoke(&h, "set_ui_preferences", json!({ "preferences": magenta }))
+        .expect_err("unknown accent theme");
     let mut small = stored.clone();
     small["textSize"] = json!(79);
     let err =
@@ -751,6 +760,52 @@ fn ui_preference_commands_store_validate_and_emit() {
         invoke(&h, "get_ui_preferences", json!({})).expect("get"),
         stored
     );
+}
+
+/// Decision 0036: the attachment and blocked-sender commands are wired with their argument
+/// names and answer typed errors (no account, nothing stored).
+#[test]
+fn stage_16_attachment_commands_are_wired() {
+    let h = harness(|_| {});
+    for (cmd, args) in [
+        (
+            "preview_attachment",
+            json!({ "messageId": 1, "index": 0, "page": 0 }),
+        ),
+        (
+            "set_attachment_pinned",
+            json!({ "messageId": 1, "index": 0, "pinned": true }),
+        ),
+        ("get_attachment_pins", json!({ "messageId": 1 })),
+    ] {
+        let err = invoke(&h, cmd, args).expect_err(cmd);
+        assert_eq!(code_of(&err), Some("not_found"), "{cmd}: {err}");
+    }
+    assert_eq!(
+        invoke(
+            &h,
+            "list_pinned_attachments",
+            json!({ "scope": { "kind": "all" } })
+        )
+        .expect("pinned"),
+        json!([])
+    );
+    assert_eq!(
+        invoke(
+            &h,
+            "count_blocked_hidden",
+            json!({ "scope": { "kind": "unified", "view": { "kind": "all" } } })
+        )
+        .expect("count"),
+        json!(0)
+    );
+    let err = invoke(
+        &h,
+        "preview_eml_attachment",
+        json!({ "fileId": "0".repeat(32), "index": 0, "page": 0 }),
+    )
+    .expect_err("no such file");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
 }
 
 #[test]

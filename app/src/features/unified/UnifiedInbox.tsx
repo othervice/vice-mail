@@ -15,6 +15,7 @@ import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useAccountGroups, useHiddenAccounts } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
+import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
@@ -83,6 +84,8 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   return (
     <div className={layout.container} data-testid="unified-inbox" data-reading-pane={layout.position}>
       <div {...layout.listColumn(open)}>
+        {/* Stage 16 (decision 0036): mail of blocked senders the unified inbox leaves out. */}
+        <BlockedHiddenNote scope={unreadScope} accountId={null} />
         <MessageList
           source={source}
           folderName={name}

@@ -12,6 +12,10 @@
 //! - **Blocked senders** (normalised addresses, synced as `blockedSender`): new mail from them
 //!   is moved to the junk folder through the outbox where the account may write and has one;
 //!   otherwise it is hidden from the inbox lists. Neither runs the local rules nor notifies.
+//! - **Pinned attachments** (decision 0036): a local mark by account, Message-ID and attachment
+//!   index, synced (`attachmentPin`); the pin keeps name, type and size for the list.
+//! - **Hidden mail of blocked senders** is counted per inbox scope for the list's note
+//!   ([`AppCore::count_blocked_hidden`]).
 //! - **Between accounts** ([`AppCore::transfer_messages`]): the message's bytes are frozen,
 //!   appended to the target through the target account's outbox (crash check by Message-ID
 //!   above the target's UIDNEXT, as every append), and for a move the source is removed through
@@ -22,11 +26,11 @@ use std::collections::HashSet;
 use mail_content::normalize_address;
 use mail_model::{
     AccountColor, AccountId, ActionResult, BlockedSender, CoreError, CoreEvent, DraftId,
-    InboxScope, MAX_ACTION_MESSAGES, MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, MailAction,
-    Mailbox, MailboxId, MarkScope, MessageId, MessageListItem, MessageRef, TransferMode,
-    UnreadFirstCursor, UnreadFirstPage,
+    InboxScope, MAX_ACTION_MESSAGES, MAX_PINNED_ATTACHMENTS, MAX_UNREAD_FIRST_VIEWS,
+    MAX_VIEW_KEY_CHARS, MailAction, Mailbox, MailboxId, MarkScope, MessageId, MessageListItem,
+    MessageRef, PinnedAttachment, TransferMode, UnreadFirstCursor, UnreadFirstPage,
 };
-use mail_store::{ArrivedMessage, GLOBAL_SCOPE, InboxMailboxes, MarkView};
+use mail_store::{ArrivedMessage, AttachmentPinInput, GLOBAL_SCOPE, InboxMailboxes, MarkView};
 
 use crate::AppCore;
 use crate::core::Connector;
@@ -93,6 +97,83 @@ impl<C: Connector> AppCore<C> {
         scope: MarkScope,
     ) -> Result<Vec<MessageListItem>, CoreError> {
         self.mark_view(MarkView::ReadingList, scope).await
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Pinned attachments (decision 0036)
+
+    /// Pins attachment `index` of a message or takes the pin off. Pinning needs the attachment
+    /// list of the stored body (the reading pane shows it); a message without Message-ID is
+    /// `invalid_argument`. Local only; emits `inboxChanged`.
+    pub async fn set_attachment_pinned(
+        &self,
+        message: MessageId,
+        index: u32,
+        pinned: bool,
+    ) -> Result<(), CoreError> {
+        let input = if pinned {
+            let info = self.reading_ref()?.attachment_info(message, index).await?;
+            Some(AttachmentPinInput {
+                index,
+                name: info.name,
+                mime_type: info.mime_type,
+                size: info.size,
+            })
+        } else {
+            None
+        };
+        let (key, changed) = self
+            .store_ref()?
+            .set_attachment_pin(message, index, input, self.now_ms())
+            .await?;
+        if changed {
+            tracing::info!(message = message.0, index, pinned, "attachment pin changed");
+            self.marks_changed(&HashSet::from([key.account]));
+        }
+        Ok(())
+    }
+
+    /// The pinned attachment indexes of a message, for the reading pane.
+    pub async fn get_attachment_pins(&self, message: MessageId) -> Result<Vec<u32>, CoreError> {
+        Ok(self.store_ref()?.attachment_pins_of(message).await?)
+    }
+
+    /// "Angeheftete Anhänge": the pinned attachments of the scope, the newest pin first (at
+    /// most 1,000), each with its message as a list row. Pins of messages not stored on this
+    /// device are left out.
+    pub async fn list_pinned_attachments(
+        &self,
+        scope: MarkScope,
+    ) -> Result<Vec<PinnedAttachment>, CoreError> {
+        let (accounts, prefer) = self.mark_scope(scope).await?;
+        let rows = self
+            .store_ref()?
+            .pinned_attachments(accounts, prefer, MAX_PINNED_ATTACHMENTS)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| PinnedAttachment {
+                preview: mail_content::preview_kind(&row.name, &row.mime_type),
+                message: row.message,
+                index: row.index,
+                name: row.name,
+                mime_type: row.mime_type,
+                size: row.size,
+                pinned_at: row.pinned_at,
+            })
+            .collect())
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Hidden mail of blocked senders
+
+    /// How many messages of blocked senders the inbox lists of `scope` leave out (read-only
+    /// accounts, or no junk folder), for the list's quiet note.
+    pub async fn count_blocked_hidden(&self, scope: InboxScope) -> Result<u32, CoreError> {
+        Ok(self
+            .store_ref()?
+            .count_blocked_hidden(mailboxes_of(scope))
+            .await?)
     }
 
     fn marks_changed(&self, accounts: &HashSet<AccountId>) {

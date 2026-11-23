@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/Button";
@@ -175,14 +175,16 @@ function RemoveAccount({ account }: { account: Account }) {
           tabIndex={-1}
           role="group"
           aria-labelledby="remove-account-title"
-          className="flex flex-col gap-3 rounded-card border border-danger p-4"
+          // Design pass 23.11.2026: like InlineConfirm, a raised card with a danger bar and symbol.
+          className="relative flex flex-col gap-3 overflow-hidden rounded-card border border-border-subtle bg-surface-raised p-4 ps-5 shadow-card before:absolute before:inset-y-0 before:start-0 before:w-1 before:bg-danger"
           data-testid="remove-confirm"
         >
-          <p id="remove-account-title" className="font-semibold text-primary">
-            {t("settings.accounts.detail.remove.confirmTitle", { email: account.email })}
+          <p id="remove-account-title" className="flex items-start gap-2 font-semibold text-primary">
+            <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
+            <span>{t("settings.accounts.detail.remove.confirmTitle", { email: account.email })}</span>
           </p>
-          <p className="text-secondary">{t("settings.accounts.detail.remove.confirmBody")}</p>
-          <div className="flex gap-2">
+          <p className="ps-8 text-secondary">{t("settings.accounts.detail.remove.confirmBody")}</p>
+          <div className="flex gap-2 ps-8">
             <Button
               variant="danger"
               disabled={remove.isPending}
@@ -296,7 +298,7 @@ export function AccountDetail({ accountId }: { accountId: string }) {
       <div className="flex items-center gap-3">
         <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
         <div className="flex min-w-0 flex-col">
-          <h2 id="account-title" className="truncate text-16 font-semibold text-primary">
+          <h2 id="account-title" className="truncate text-20 font-semibold text-primary">
             {account.displayName || account.email}
           </h2>
           <p className="truncate text-13 text-secondary select-text">{account.email}</p>

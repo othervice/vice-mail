@@ -57,6 +57,8 @@ export const config = {
     "./tests/e2e/mcp-sync.e2e.mjs",
     "./tests/e2e/ai.e2e.mjs",
     "./tests/e2e/a11y.e2e.mjs",
+    // Stage 15 (decision 0037): in-app updates against a local update server (written, not run yet).
+    "./tests/e2e/updates.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   maxInstances: 1,
@@ -126,6 +128,9 @@ export const config = {
     process.env[EXTRA_CA_ENV] = CA_FILE;
     // External images from the counter server on 127.0.0.1 (reading.e2e.mjs); e2e builds only.
     process.env[LOOPBACK_IMAGES_ENV] = "1";
+    // Decision 0037: the update manifest from updates.e2e.mjs's local server (port 18996); the
+    // other specs leave automatic checks off, so nothing connects there before it.
+    process.env.MAIL_APP_E2E_UPDATE_ENDPOINT = "http://127.0.0.1:18996/latest.json";
   },
   onComplete: () => {
     try {

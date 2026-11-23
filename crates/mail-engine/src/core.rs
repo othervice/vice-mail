@@ -162,6 +162,8 @@ struct Inner<C: Connector> {
     settings_sync: crate::settings_sync::service::SettingsSync<C>,
     /// Stage 13: AI in the app (running requests, settings changes).
     ai: crate::ai::AiState,
+    /// Stage 15 (decision 0037): in-app updates (source, state, background task).
+    updates: crate::updates::UpdatesState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -183,6 +185,7 @@ impl<C: Connector> Drop for Inner<C> {
         self.mcp.abort();
         self.settings_sync.stop();
         self.ai.cancel_all();
+        self.updates.stop();
     }
 }
 
@@ -339,6 +342,7 @@ impl<C: Connector> AppCore<C> {
                 mcp: crate::mcp::McpState::new(config.data_dir.clone()),
                 settings_sync,
                 ai: crate::ai::AiState::default(),
+                updates: crate::updates::UpdatesState::default(),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -881,6 +885,33 @@ impl<C: Connector> AppCore<C> {
             .await
     }
 
+    /// Stage 16 (decision 0036): the preview of an attachment (`page` of a PDF, 0-based):
+    /// re-encoded images, rasterised PDF pages or plain text, decoded by the core. Typed
+    /// errors `preview_unsupported`, `preview_too_large`, `preview_damaged`.
+    pub async fn preview_attachment(
+        &self,
+        message: MessageId,
+        index: u32,
+        page: u32,
+    ) -> Result<mail_model::AttachmentPreview, CoreError> {
+        self.reading()?
+            .preview_attachment(message, index, page)
+            .await
+    }
+
+    /// Stage 16 (decision 0036): every attachment into `folder`, which the user chose in the
+    /// system dialog; how many were written, and how many of them under another name (an
+    /// existing file is never replaced).
+    pub async fn save_all_attachments_to(
+        &self,
+        message: MessageId,
+        folder: PathBuf,
+    ) -> Result<(u32, u32), CoreError> {
+        self.reading()?
+            .save_all_attachments_to(message, folder)
+            .await
+    }
+
     /// Opens a read-only copy of an attachment with the system's default app. Executable types
     /// answer `needsConfirmation` unless `confirmed_executable`; nothing is written then.
     pub async fn open_attachment(
@@ -947,6 +978,7 @@ impl<C: Connector> AppCore<C> {
         // First the MCP host: no AI client may start a tool call while the rest stops.
         crate::mcp::shutdown(&self.inner.mcp).await;
         self.inner.ai.cancel_all();
+        self.inner.updates.stop();
         let grace = self.inner.sync.shutdown_grace;
         let handles = self.inner.accounts.take_all();
         let mut stopping = tokio::task::JoinSet::new();
@@ -1220,6 +1252,11 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn comfort(&self) -> &crate::comfort::ComfortState {
         &self.inner.comfort
+    }
+
+    /// Stage 15 (`crate::updates`, decision 0037).
+    pub(crate) fn updates(&self) -> &crate::updates::UpdatesState {
+        &self.inner.updates
     }
 
     /// A reference that does not keep the core alive (for background tasks).

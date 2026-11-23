@@ -99,7 +99,7 @@ pub(crate) fn base64_encode_into(bytes: &[u8], out: &mut String) {
 
 /// Lenient base64 decoder for `data:` URIs written by mail authors: skips whitespace and stops
 /// at padding. Returns `None` on any other byte outside the alphabet.
-fn base64_decode(input: &str) -> Option<Vec<u8>> {
+pub(crate) fn base64_decode(input: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(input.len() / 4 * 3);
     let mut acc: u32 = 0;
     let mut bits = 0u32;

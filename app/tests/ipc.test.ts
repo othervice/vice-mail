@@ -204,6 +204,16 @@ describe("error codes", () => {
     // Stage 7: saved searches.
     "saved_search_exists",
     "saved_search_limit",
+    // Stage 16 (decision 0036): attachment previews.
+    "preview_unsupported",
+    "preview_too_large",
+    "preview_damaged",
+    // Stage 15 (decision 0037): in-app updates.
+    "update_check_failed",
+    "update_download_failed",
+    "update_signature_invalid",
+    "update_install_failed",
+    "update_not_ready",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

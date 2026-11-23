@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
+import { Welcome } from "./Welcome";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
@@ -50,6 +51,8 @@ import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
+import { PinnedAttachmentsView } from "../reading/PinnedAttachmentsView";
+import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { SavedSearchesView } from "../search/SavedSearchesView";
 import { SearchArea } from "../search/SearchArea";
 import { useSearchShortcut } from "../search/shortcut";
@@ -328,6 +331,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           />
         )}
         {source?.controls}
+        {/* Stage 16 (decision 0036): mail of blocked senders the inbox leaves out. */}
+        {kind === "inbox" && <BlockedHiddenNote scope={{ kind: "mailbox", mailboxId: mailbox.id }} accountId={account.id} />}
         <MessageList
           account={account}
           mailbox={mailbox}
@@ -538,6 +543,10 @@ function MailBody({ view, account }: MailBodyProps) {
     (view.mailView === "later" || view.mailView === "pinned" || view.mailView === "tasks" || view.mailView === "readingList")
       ? view.mailView
       : null;
+  // Stage 16 (decision 0036): pinned attachments of the account, like the reading list.
+  if (view.kind === "mail" && view.mailView === "pinnedAttachments") {
+    return <PinnedAttachmentsView scope={{ kind: "account", accountId: account.id }} />;
+  }
   if (view.kind === "mail" && !roleView && !markView) {
     // Views without a function yet (Later, Tasks, Pinned, Saved views) say so honestly.
     const name = t(`nav.${view.mailView}`);
@@ -679,16 +688,11 @@ export function MailView({ view }: MailViewProps) {
       </div>
     );
   } else if (!account) {
+    // Design pass 23.11.2026: the first start shows the wordmark and the one next step.
     body = (
-      <EmptyState
-        icon={Inbox}
-        title={t("mail.noAccount.title")}
-        body={t("mail.noAccount.body")}
-        action={{
-          label: t("mail.noAccount.action"),
-          onClick: () => {
-            showAccountsPage({ kind: "add" });
-          },
+      <Welcome
+        onAdd={() => {
+          showAccountsPage({ kind: "add" });
         }}
       />
     );

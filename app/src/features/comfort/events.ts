@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { comfortIpc, type CoreEvent, type NotificationTexts } from "../../services/ipc";
 import { useAiPanelStore } from "../../stores/aiPanel";
 import { selectWhenListed } from "../../stores/listSelect";
+import { refreshAttachmentPins } from "../reading/attachmentQueries";
 import { useNoticeStore } from "../../stores/notices";
 import { useUiStore } from "../../stores/ui";
 import { openMessageInWindow } from "../windows/open";
@@ -26,6 +27,8 @@ export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): 
       break;
     case "messagesChanged":
       refreshComfortListsOf(queryClient, event.accountId, event.mailboxId);
+      // Stage 16 (decision 0036): a pinned attachment's message may be gone.
+      refreshAttachmentPins(queryClient);
       break;
     case "ruleSkipped":
       useNoticeStore.getState().push({

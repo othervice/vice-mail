@@ -287,6 +287,50 @@ impl<C: MailConnector + 'static> Reading<C> {
         Ok(saved)
     }
 
+    /// Stage 16 (decision 0036): the preview of an attachment of an opened file.
+    pub(crate) async fn preview_eml_attachment(
+        &self,
+        id: &EmlFileId,
+        index: u32,
+        page: u32,
+    ) -> Result<mail_model::AttachmentPreview, CoreError> {
+        let (_, _, content) = self.eml_content(id).await?;
+        let info = content
+            .attachments
+            .iter()
+            .find(|a| a.info.index == index)
+            .map(|a| a.info.clone())
+            .ok_or_else(|| CoreError::NotFound(format!("attachment {index} of the file")))?;
+        let kind = super::preview_kind_of(&info)?;
+        let (_, bytes) = self.eml_attachment(id, index).await?;
+        super::render_preview(kind, bytes, page).await
+    }
+
+    /// Stage 16 (decision 0036): every attachment of an opened file into `folder`.
+    pub(crate) async fn save_all_eml_attachments_to(
+        &self,
+        id: &EmlFileId,
+        folder: PathBuf,
+    ) -> Result<(u32, u32), CoreError> {
+        let (_, _, content) = self.eml_content(id).await?;
+        if content.attachments.is_empty() {
+            return Err(CoreError::InvalidArgument(
+                "the file has no attachments".into(),
+            ));
+        }
+        let (mut saved, mut renamed) = (0u32, 0u32);
+        for index in content.attachments.iter().map(|a| a.info.index) {
+            let (info, bytes) = self.eml_attachment(id, index).await?;
+            let name = mail_content::sanitize_filename(&info.name);
+            if super::save_into(&folder, name, bytes).await? {
+                renamed += 1;
+            }
+            saved += 1;
+        }
+        tracing::info!(saved, renamed, "all attachments of an opened file saved");
+        Ok((saved, renamed))
+    }
+
     pub(crate) async fn open_eml_attachment(
         &self,
         id: &EmlFileId,
@@ -377,6 +421,30 @@ impl<C: Connector> AppCore<C> {
     ) -> Result<OpenAttachmentResult, CoreError> {
         self.reading_ref()?
             .open_eml_attachment(&id, index, confirmed_executable)
+            .await
+    }
+
+    /// Stage 16 (decision 0036): the preview of an attachment of an opened file.
+    pub async fn preview_eml_attachment(
+        &self,
+        id: EmlFileId,
+        index: u32,
+        page: u32,
+    ) -> Result<mail_model::AttachmentPreview, CoreError> {
+        self.reading_ref()?
+            .preview_eml_attachment(&id, index, page)
+            .await
+    }
+
+    /// Stage 16 (decision 0036): every attachment of an opened file into the folder the user
+    /// chose; how many were written, and how many of them under another name.
+    pub async fn save_all_eml_attachments_to(
+        &self,
+        id: EmlFileId,
+        folder: PathBuf,
+    ) -> Result<(u32, u32), CoreError> {
+        self.reading_ref()?
+            .save_all_eml_attachments_to(&id, folder)
             .await
     }
 

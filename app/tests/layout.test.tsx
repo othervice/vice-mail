@@ -180,7 +180,7 @@ describe("layouts", () => {
   });
 
   it("shows a text size the UI does not offer at the nearest one it does", async () => {
-    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open" } });
+    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open", accentTheme: "orange" } });
     await screen.findByRole("navigation", { name: "Views" });
     expect(document.documentElement.dataset["textSize"]).toBe("115");
   });

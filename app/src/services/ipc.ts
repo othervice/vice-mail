@@ -202,6 +202,16 @@ export const ERROR_CODES = [
   // Stage 7: saved searches.
   "saved_search_exists",
   "saved_search_limit",
+  // Stage 16 (decision 0036): attachment previews.
+  "preview_unsupported",
+  "preview_too_large",
+  "preview_damaged",
+  // Stage 15 (decision 0037): in-app updates.
+  "update_check_failed",
+  "update_download_failed",
+  "update_signature_invalid",
+  "update_install_failed",
+  "update_not_ready",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1550,4 +1560,80 @@ export const parityIpc = {
   /** The sounds this system offers (`Default` first); never fails. */
   getNotificationSoundChoices: (): Promise<NotificationSoundChoices> =>
     infallible(() => parityCommands.getNotificationSoundChoices()),
+};
+
+// ---- Stage 16 (decision 0036): attachment previews, "Save all", pinned attachments, accent ----
+import {
+  commands as attachmentCommands,
+  MAX_PINNED_ATTACHMENTS,
+  MAX_PREVIEW_INPUT_BYTES,
+  MAX_PREVIEW_PDF_PAGES,
+  MAX_PREVIEW_TEXT_BYTES,
+  type AccentTheme,
+  type AttachmentPreview,
+  type PinnedAttachment,
+  type PreviewKind,
+  type SaveAllAttachmentsResult,
+} from "../generated/bindings";
+
+export { MAX_PINNED_ATTACHMENTS, MAX_PREVIEW_INPUT_BYTES, MAX_PREVIEW_PDF_PAGES, MAX_PREVIEW_TEXT_BYTES };
+export type { AccentTheme, AttachmentPreview, PinnedAttachment, PreviewKind, SaveAllAttachmentsResult };
+
+/**
+ * Stage 16: what the core decodes of an attachment for the preview (images and PDF pages as
+ * `data:` URIs it encoded itself, text as text; nothing of the attachment runs), every
+ * attachment into one folder, pins on attachments of stored messages, and the count of mail
+ * that blocked senders leave out of an inbox list.
+ */
+export const attachmentIpc = {
+  /**
+   * Page `page` (0-based) of a PDF, or the image or text. `preview_unsupported`,
+   * `preview_too_large`, `preview_damaged` when there is nothing to show.
+   */
+  previewAttachment: (messageId: MessageId, index: number, page: number): Promise<AttachmentPreview> =>
+    call(() => attachmentCommands.previewAttachment(messageId, index, page)),
+  previewEmlAttachment: (fileId: EmlFileId, index: number, page: number): Promise<AttachmentPreview> =>
+    call(() => attachmentCommands.previewEmlAttachment(fileId, index, page)),
+  /** The core shows the system's folder dialog; taken names get a number, nothing is replaced. */
+  saveAllAttachments: (messageId: MessageId): Promise<SaveAllAttachmentsResult> =>
+    call(() => attachmentCommands.saveAllAttachments(messageId)),
+  saveAllEmlAttachments: (fileId: EmlFileId): Promise<SaveAllAttachmentsResult> =>
+    call(() => attachmentCommands.saveAllEmlAttachments(fileId)),
+  /** Local only, synced; emits `inboxChanged`. */
+  setAttachmentPinned: (messageId: MessageId, index: number, pinned: boolean): Promise<void> =>
+    done(call(() => attachmentCommands.setAttachmentPinned(messageId, index, pinned))),
+  /** The pinned attachment indexes of one message. */
+  getAttachmentPins: (messageId: MessageId): Promise<number[]> => call(() => attachmentCommands.getAttachmentPins(messageId)),
+  /** "Pinned attachments" of the scope, the newest pin first (at most `MAX_PINNED_ATTACHMENTS`). */
+  listPinnedAttachments: (scope: MarkScope): Promise<PinnedAttachment[]> =>
+    call(() => attachmentCommands.listPinnedAttachments(scope)),
+  /** Messages of blocked senders that the inbox lists of the scope leave out. */
+  countBlockedHidden: (scope: InboxScope): Promise<number> => call(() => attachmentCommands.countBlockedHidden(scope)),
+};
+
+// ---- Stage 15 (decision 0037): in-app updates, opt-in ----
+import {
+  commands as updateCommands,
+  type AvailableUpdate,
+  type UpdateInfo,
+  type UpdateStatus,
+} from "../generated/bindings";
+
+export type { AvailableUpdate, UpdateInfo, UpdateStatus };
+
+/**
+ * In-app updates. The core asks the update server only with the user's consent (the switch) or
+ * after "Check now", and downloads or installs only on a click. A failed step shows up in
+ * `status` (`failed`); these calls reject only when a step cannot start (`update_not_ready`).
+ */
+export const updateIpc = {
+  getInfo: (): Promise<UpdateInfo> => call(() => updateCommands.getUpdateInfo()),
+  /** The switch "Check automatically"; either value also answers the one-time question. */
+  setAutoCheck: (enabled: boolean): Promise<UpdateInfo> => call(() => updateCommands.setUpdateAutoCheck(enabled)),
+  /** Asks the update server now, whatever the switch says. */
+  checkNow: (): Promise<UpdateInfo> => call(() => updateCommands.checkForUpdates()),
+  /** Starts the download; progress and the outcome come as `updateStatusChanged`. */
+  download: (): Promise<UpdateInfo> => call(() => updateCommands.downloadUpdate()),
+  /** "Restart to install": the app closes, updates itself and starts again. */
+  install: (): Promise<UpdateInfo> => call(() => updateCommands.installUpdate()),
 };

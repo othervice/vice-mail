@@ -142,7 +142,7 @@ function CategoryDetails({ info }: { info: MessageCategoryInfo }) {
   }));
 
   return (
-    <div className="flex flex-col gap-4 rounded-card border border-border bg-surface-raised p-4" data-testid="category-details">
+    <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="category-details">
       <p className="text-13 text-primary" data-testid="category-reason">
         {decision ? reasonText(decision.reason) : t("comfort.category.notYet")}
       </p>

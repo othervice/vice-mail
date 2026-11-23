@@ -24,7 +24,7 @@ function AccountRow({ account }: { account: Account }) {
           showAccountsPage({ kind: "account", accountId: account.id });
         }}
         data-testid={`account-row-${account.id}`}
-        className="flex w-full items-center gap-3 rounded-card px-3 py-2 text-left transition-colors hover:bg-hover"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover focus-visible:-outline-offset-2"
       >
         <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -37,7 +37,7 @@ function AccountRow({ account }: { account: Account }) {
           </span>
         </span>
         {!account.writesEnabled && (
-          <span className="shrink-0 rounded-control border border-border-strong px-2 text-12 font-medium text-secondary">
+          <span className="shrink-0 rounded-full bg-badge px-2 text-12 font-medium text-secondary">
             {t("settings.accounts.readOnly")}
           </span>
         )}
@@ -68,7 +68,7 @@ function AccountList() {
         />
       )}
       {accounts.data?.length === 0 && (
-        <div className="flex rounded-card border border-border bg-canvas">
+        <div className="flex rounded-card border border-border-subtle bg-surface-raised shadow-card">
           <EmptyState
             icon={UserPlus}
             title={t("settings.accounts.empty.title")}
@@ -79,7 +79,11 @@ function AccountList() {
       )}
       {accounts.data && accounts.data.length > 0 && (
         <>
-          <ul aria-label={t("settings.accounts.title")} className="flex flex-col gap-1">
+          <ul
+            aria-label={t("settings.accounts.title")}
+            // Design pass 23.11.2026: the accounts as one raised group, rows split by hairlines.
+            className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-card border border-border-subtle bg-surface-raised shadow-card"
+          >
             {accounts.data.map((account) => (
               <AccountRow key={account.id} account={account} />
             ))}

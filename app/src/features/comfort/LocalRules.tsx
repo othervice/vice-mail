@@ -85,7 +85,7 @@ export function LocalRules() {
   const ids = list.map((rule) => rule.id);
 
   return (
-    <SettingsSection title={t("comfort.rules.title")}>
+    <SettingsSection sub title={t("comfort.rules.title")}>
       <p className="text-13 text-secondary" data-testid="rules-local-note">
         {t("comfort.rules.local")}
       </p>
@@ -247,7 +247,7 @@ function RuleEditor({ initial, accounts, saving, error, onSave, onCancel }: Rule
         setTried(true);
         if (ruleProblem(input) === null) onSave({ ...input, name: input.name.trim() });
       }}
-      className="flex flex-col gap-4 rounded-card border border-border bg-surface-raised p-4"
+      className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
       data-testid="rule-editor"
     >
       <h3 id={headingId} className="text-14 font-semibold text-primary">

@@ -813,6 +813,18 @@ impl<C: Connector> AppCore<C> {
         view: MarkView,
         scope: MarkScope,
     ) -> Result<Vec<MessageListItem>, CoreError> {
+        let (accounts, prefer) = self.mark_scope(scope).await?;
+        Ok(self
+            .store_ref()?
+            .mark_view(view, accounts, prefer, MAX_MARK_VIEW)
+            .await?)
+    }
+
+    /// The accounts of a mark view and their inboxes (where a marked message is shown).
+    pub(crate) async fn mark_scope(
+        &self,
+        scope: MarkScope,
+    ) -> Result<(Vec<AccountId>, Vec<MailboxId>), CoreError> {
         let store = self.store_ref()?;
         let accounts = match scope {
             MarkScope::All => store.visible_accounts(None).await?,
@@ -830,9 +842,7 @@ impl<C: Connector> AppCore<C> {
                 prefer.push(inbox);
             }
         }
-        Ok(store
-            .mark_view(view, accounts, prefer, MAX_MARK_VIEW)
-            .await?)
+        Ok((accounts, prefer))
     }
 
     /// Returns the snoozes due now: they come back on top, their keyword goes, the user is

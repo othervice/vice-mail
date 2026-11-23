@@ -44,11 +44,11 @@ pub use plan::{
     SyncPlan, TOMBSTONE_RETENTION_MS,
 };
 pub use record::{
-    ACCOUNT_FIELDS, AccountGroupContent, ContactContent, DeviceInfo, EmptyContent, FieldValue,
-    IdShape, IdentityContent, KindSpec, MailboxPrefContent, MergeRule, PinInfo, REGISTRY,
-    ReadingListInfo, RecordBody, RecordKey, RecordKind, Removal, RuleContent, SYNCED_SETTINGS,
-    SenderRuleContent, SettingScope, SignatureContent, SnoozeInfo, SyncContent, SyncRecord,
-    SyncedAccount, TaskInfo,
+    ACCOUNT_FIELDS, AccountGroupContent, AttachmentPinContent, ContactContent, DeviceInfo,
+    EmptyContent, FieldValue, IdShape, IdentityContent, KindSpec, MailboxPrefContent, MergeRule,
+    PinInfo, REGISTRY, ReadingListInfo, RecordBody, RecordKey, RecordKind, Removal, RuleContent,
+    SYNCED_SETTINGS, SenderRuleContent, SettingScope, SignatureContent, SnoozeInfo, SyncContent,
+    SyncRecord, SyncedAccount, TaskInfo,
 };
 pub use transport::{
     EntryHandle, MemoryTransport, RawHeader, RemoteEntry, SettingsTransport, StoredEntry,

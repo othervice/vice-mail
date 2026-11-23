@@ -150,6 +150,9 @@ pub struct ReadingPreferences {
 ///   values. Every window applies them.
 /// - `savedSearchesChanged` (stage 7, decision 0026): saved searches were created, renamed or
 ///   deleted (here or by the settings sync). Reload `listSavedSearches`.
+/// - `updateStatusChanged` (stage 15, decision 0037): the update state changed (checking, up
+///   to date, available, download progress, ready, installing, failed). The setting itself
+///   comes back from the command that changed it; reload `getUpdateInfo` for the rest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -260,6 +263,11 @@ pub enum CoreEvent {
     },
     /// Stage 7 (decision 0026): the saved searches changed (here or from another device).
     SavedSearchesChanged,
+    /// Stage 15 (decision 0037): the update state changed (a check, the download's progress,
+    /// ready to install, a failure).
+    UpdateStatusChanged {
+        status: crate::UpdateStatus,
+    },
 }
 
 #[cfg(test)]

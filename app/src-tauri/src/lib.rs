@@ -11,6 +11,7 @@ mod events;
 pub mod links;
 mod navigation;
 mod notifications;
+mod updater;
 mod window_theme;
 pub mod windows;
 
@@ -67,6 +68,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // The runtime parameter only matters for the type export; Tauri's handler infers it.
             commands::reading::save_attachment::<tauri::Wry>,
             commands::reading::open_attachment,
+            commands::reading::preview_attachment,
+            commands::reading::save_all_attachments::<tauri::Wry>,
             commands::reading::get_prefetch_settings,
             commands::reading::set_prefetch_settings,
             commands::reading::get_prefetch_status,
@@ -197,6 +200,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::parity::unblock_sender,
             commands::parity::list_blocked_senders,
             commands::parity::transfer_messages,
+            commands::parity::set_attachment_pinned,
+            commands::parity::get_attachment_pins,
+            commands::parity::list_pinned_attachments,
+            commands::parity::count_blocked_hidden,
             commands::comfort::list_rules,
             commands::comfort::create_rule,
             commands::comfort::update_rule,
@@ -220,6 +227,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::eml::load_eml_remote_content,
             commands::eml::save_eml_attachment::<tauri::Wry>,
             commands::eml::open_eml_attachment,
+            commands::eml::preview_eml_attachment,
+            commands::eml::save_all_eml_attachments::<tauri::Wry>,
             // Stage 12: AI access over MCP (decisions 0015, 0021).
             commands::mcp::get_mcp_settings,
             commands::mcp::set_mcp_enabled,
@@ -263,6 +272,12 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::settings_sync::reset_settings_sync,
             commands::settings_sync::disable_settings_sync,
             commands::settings_sync::set_sync_device_name,
+            // Stage 15 (decision 0037): in-app updates, opt-in.
+            commands::updates::get_update_info,
+            commands::updates::set_update_auto_check,
+            commands::updates::check_for_updates,
+            commands::updates::download_update,
+            commands::updates::install_update,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -273,6 +288,14 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // `applyAction` may cover (larger selections are split by the UI).
         .constant("MARK_READ_DELAY_MS", mail_model::MARK_READ_DELAY_MS)
         .constant("MAX_ACTION_MESSAGES", mail_model::MAX_ACTION_MESSAGES)
+        // Stage 16 (decision 0036): attachment previews and pins.
+        .constant(
+            "MAX_PREVIEW_INPUT_BYTES",
+            mail_model::MAX_PREVIEW_INPUT_BYTES,
+        )
+        .constant("MAX_PREVIEW_TEXT_BYTES", mail_model::MAX_PREVIEW_TEXT_BYTES)
+        .constant("MAX_PREVIEW_PDF_PAGES", mail_model::MAX_PREVIEW_PDF_PAGES)
+        .constant("MAX_PINNED_ATTACHMENTS", mail_model::MAX_PINNED_ATTACHMENTS)
         // Stage 7: the largest search, thread and unified page, and the most messages of a
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)
@@ -442,6 +465,8 @@ pub fn run() {
             for url in default_app::mailto_arguments(std::env::args().skip(1)) {
                 links::opened(app.handle(), &url);
             }
+            // Stage 15 (decision 0037): the update source; it only checks with consent.
+            start_updates(app.handle(), &core);
             attach_core(app.handle(), &specta, core);
             let window = open_main_window(app.handle(), theme)?;
             window_theme::follow(window, theme_events);
@@ -474,22 +499,48 @@ pub fn run() {
             eml_files::open_files(handle, eml_files::eml_urls(urls));
         }
         if let RunEvent::Exit = event {
-            tracing::info!("exiting");
-            // Ends the sync tasks; connections get a moment to log out.
-            if let Some(core) = handle.try_state::<AppCore>() {
-                tauri::async_runtime::block_on(core.shutdown());
-            }
-            if let Some(state) = handle.try_state::<LogGuardState>() {
-                drop(
-                    state
-                        .0
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .take(),
-                );
-            }
+            before_exit(handle);
         }
     });
+}
+
+/// Ends the sync tasks (connections get a moment to log out) and flushes the log. On every
+/// quit, and on Windows before an update's installer takes over (decision 0037).
+pub(crate) fn before_exit<R: Runtime>(handle: &AppHandle<R>) {
+    tracing::info!("exiting");
+    if let Some(core) = handle.try_state::<AppCore>() {
+        tauri::async_runtime::block_on(core.shutdown());
+    }
+    if let Some(state) = handle.try_state::<LogGuardState>() {
+        drop(
+            state
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take(),
+        );
+    }
+}
+
+/// Stage 15 (decision 0037): hands the core the update source on top of the updater plugin,
+/// with the endpoint from `tauri.conf.json` (desktop-test builds may point to a local server).
+/// Without a usable endpoint the app runs without updates and says so in About.
+fn start_updates<R: Runtime>(app: &AppHandle<R>, core: &AppCore) {
+    #[cfg(feature = "e2e")]
+    let endpoint = e2e::update_endpoint().or_else(|| updater::configured_endpoint(app));
+    #[cfg(not(feature = "e2e"))]
+    let endpoint = updater::configured_endpoint(app);
+    let Some(endpoint) = endpoint else {
+        tracing::warn!("no update endpoint configured; updates are off in this build");
+        return;
+    };
+    match updater::PluginSource::new(app.clone(), endpoint, updater::installed_app_only) {
+        Ok(source) => tauri::async_runtime::block_on(core.start_updates(
+            std::sync::Arc::new(source),
+            mail_engine::UpdateSchedule::default(),
+        )),
+        Err(err) => tracing::error!(%err, "update source unavailable; updates are off"),
+    }
 }
 
 /// Stage 9: the notification plugin (used from Rust only; the UI has no notification
@@ -515,7 +566,10 @@ fn with_system_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder
         }
         eml_files::open_files(app, files);
     }));
-    builder.plugin(tauri_plugin_notification::init())
+    builder
+        .plugin(tauri_plugin_notification::init())
+        // Decision 0037: used from Rust only; no capability grants `updater:*`.
+        .plugin(updater::plugin())
 }
 
 /// File logging in the app's log directory; console too in debug builds. A logging failure is

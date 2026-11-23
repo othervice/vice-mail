@@ -59,6 +59,7 @@ fn sample() -> UiPreferences {
         text_size: 130,
         recent_commands: vec!["action:archive".into(), "view:inbox".into()],
         ai_panel: AiPanelState::Folded,
+        accent_theme: mail_model::AccentTheme::Violet,
     }
 }
 
@@ -143,6 +144,48 @@ async fn shortcuts_are_stored_compactly_per_platform() {
         Some(json!(["action:archive", "view:inbox"]))
     );
     assert_eq!(stored(&core, "ui.ai_panel").await, Some(json!("folded")));
+    assert_eq!(
+        stored(&core, "ui.accent_theme").await,
+        Some(json!("violet"))
+    );
+}
+
+/// Decision 0036: the accent theme is a UI preference, synced like the text size, orange by
+/// default (decision 0038); only the six themes pass the bridge, and a stored theme this
+/// version does not know (a newer device) reads as the default.
+#[tokio::test]
+async fn the_accent_theme_is_stored_validated_and_synced() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").accent_theme,
+        mail_model::AccentTheme::Orange
+    );
+    let mut prefs = UiPreferences::default();
+    // Orange last: what the user chose stays, also the default once chosen.
+    for theme in ["teal", "blue", "violet", "rose", "green", "orange"] {
+        prefs.accent_theme = serde_json::from_value(json!(theme)).expect("theme");
+        let stored_prefs = core.set_ui_preferences(prefs.clone()).await.expect("store");
+        assert_eq!(stored_prefs.accent_theme, prefs.accent_theme);
+        assert_eq!(stored(&core, "ui.accent_theme").await, Some(json!(theme)));
+    }
+    // What the UI sends is checked at the bridge (the enum): anything else does not decode.
+    let mut wire = serde_json::to_value(UiPreferences::default()).expect("json");
+    wire["accentTheme"] = json!("magenta");
+    assert!(serde_json::from_value::<UiPreferences>(wire).is_err());
+    // A theme from a newer version reads as the default.
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![("ui.accent_theme".to_owned(), "\"magenta\"".to_owned())],
+        )
+        .await
+        .expect("seed");
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").accent_theme,
+        mail_model::AccentTheme::Orange
+    );
+    assert!(RecordKey::setting(SettingScope::Global, "ui.accent_theme").is_ok());
 }
 
 /// Decision 0028: the AI panel's state is a UI preference of this device: stored, announced,
@@ -296,6 +339,7 @@ async fn unreadable_stored_values_fall_back_to_defaults() {
                 put("ui.text_size", "300"),
                 put("ui.recent_commands", "[\"\"]"),
                 put("ui.ai_panel", "42"),
+                put("ui.accent_theme", "7"),
                 put("ui.layout.main", "{\"readingPane\":\"left\"}"),
             ],
         )

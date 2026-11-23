@@ -24,7 +24,7 @@ export function Notice({ tone = "info", title, children, role, ...rest }: Notice
     <div
       role={role}
       data-testid={rest["data-testid"]}
-      className="flex gap-3 rounded-card border border-border bg-canvas p-4"
+      className="flex gap-3 rounded-card border border-border-subtle bg-canvas p-4"
     >
       <Icon aria-hidden className={cx("size-(--ui-icon) shrink-0", className)} strokeWidth={1.75} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">

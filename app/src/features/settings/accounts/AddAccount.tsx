@@ -204,7 +204,7 @@ export function AddAccount() {
         </Button>
       </div>
       <div className="flex flex-col gap-2">
-        <h2 id={titleId} className="text-16 font-semibold text-primary">
+        <h2 id={titleId} className="text-20 font-semibold text-primary">
           {t("settings.accounts.setup.title")}
         </h2>
         <p className="text-14 text-secondary">{t("settings.accounts.setup.intro")}</p>
@@ -277,7 +277,7 @@ export function AddAccount() {
         )}
 
         {serversVisible && sourceNote && !showForm && (
-          <div className="flex flex-col gap-3 rounded-card border border-border p-4" data-testid="server-summary">
+          <div className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="server-summary">
             <p className="text-14 font-medium text-primary">{sourceNote}</p>
             {origin?.kind === "online" && <p className="text-13 text-secondary">{t("settings.accounts.setup.checkFound")}</p>}
             <dl className="flex flex-col gap-2">
