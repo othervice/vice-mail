@@ -24,7 +24,24 @@ import {
 
 const PRODUCT_NAME = "Vice Mail";
 // Mail views (MAIL_VIEW_IDS in src/stores/ui.ts), then activity, the outbox (stage 5) and settings.
-const RAIL = ["inbox", "later", "tasks", "pinned", "sent", "drafts", "archive", "trash", "folders", "savedViews", "activity", "outbox", "settings"];
+const RAIL = [
+  "inbox",
+  "later",
+  "tasks",
+  // Stage 16: the reading list and the pinned attachments.
+  "readingList",
+  "pinnedAttachments",
+  "pinned",
+  "sent",
+  "drafts",
+  "archive",
+  "trash",
+  "folders",
+  "savedViews",
+  "activity",
+  "outbox",
+  "settings",
+];
 
 /** Facts collected along the way, printed at the end for the review of the screenshots. */
 const report = {};

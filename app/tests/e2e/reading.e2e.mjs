@@ -1016,8 +1016,13 @@ describe("reading mail (stage 3)", function () {
       assert.equal(fs.statSync(file).mode & 0o222, 0, `${file} is writable`);
       return { file: path.relative(dataDir(), file), bytes: bytes.length, sha256: sha.slice(0, 16) };
     };
+    // The row's "Open <name>" button (a click on the card itself previews it since stage 16).
     const clickOpen = (index) =>
-      browser.execute((i) => document.querySelectorAll(`[data-testid="attachment"][data-index="${i}"] button`)[1].click(), index);
+      browser.execute((i) => {
+        const row = document.querySelector(`[data-testid="attachment"][data-index="${i}"]`);
+        const name = row.querySelector('[data-testid="attachment-name"]').textContent;
+        [...row.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === `Open ${name}`).click();
+      }, index);
 
     const plain = list.find((a) => !a.executable);
     await clickOpen(plain.index);

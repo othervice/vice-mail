@@ -1,7 +1,6 @@
 // Stage 16 in the real app (decision 0036): the attachment preview (docs/stages/16, "Desktop-Tests
-// für ... Anhangsvorschau"). Written for the desktop suite and not run yet; add
-// "./tests/e2e/attachment-preview.e2e.mjs" to `specs` in wdio.conf.mjs after
-// find-in-message.e2e.mjs (it only appends one message of its own to the inbox and reads it).
+// für ... Anhangsvorschau"). In `specs` of wdio.conf.mjs after find-in-message.e2e.mjs (it only
+// appends one message of its own to the inbox and reads it).
 //
 // 1. A mail with three attachments is appended to the inbox through IMAP: a PNG image, a PDF of
 //    two pages and a plain-text file whose text looks like markup.

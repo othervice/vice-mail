@@ -169,7 +169,10 @@ def append(folder: str, files: list[str]) -> dict:
     env = load_env()
     imap = login(env)
     try:
-        check(*imap.create(quoted(folder)), f"CREATE {folder}")
+        # A new folder (reading.e2e.mjs) or one that exists, such as INBOX (find-in-message.e2e.mjs).
+        typ, data = imap.create(quoted(folder))
+        if typ != "OK" and not any(isinstance(d, bytes) and b"ALREADYEXISTS" in d for d in data):
+            check(typ, data, f"CREATE {folder}")
         appended = []
         for name in files:
             raw = Path(name).read_bytes()

@@ -55,13 +55,17 @@ async function shot(name) {
  * Presses Tab until the message list has the focus (at most `limit` times). `pressTab` moves the
  * focus as the browser would: the embedded WebDriver sends Tab's key events only.
  */
-async function tabToList(limit = 40) {
+async function tabToList(limit = 120) {
+  // The unfolded sidebar (the app keeps it as the user left it) puts every folder before the list.
   for (let i = 0; i < limit; i += 1) {
     const now = await active();
-    if (now.role === "listbox" && now.testId === "message-list") return now;
+    if (now.role === "listbox" && now.testId === "message-list") {
+      report.tabsToList = Math.max(report.tabsToList ?? 0, i);
+      return now;
+    }
     await pressTab();
   }
-  throw new Error("Tab never reached the message list");
+  throw new Error(`Tab never reached the message list (${String(limit)} presses)`);
 }
 
 async function mailboxByRole(role) {

@@ -36,6 +36,9 @@ const LOCAL_ACTIONS = new Set([
   // Stage 10: a local draft with the message attached; stage 8: the message in its own window.
   "forwardAsAttachment",
   "openInWindow",
+  // Stage 16: the reading list is a local mark; blocking a sender hides its mail on this device.
+  "toggleReadingList",
+  "blockSender",
   "editDraft",
   "togglePin",
   "snooze",
@@ -65,13 +68,16 @@ async function shootBothThemes(name) {
   await setTheme("light");
 }
 
-/** The rendered rows: id, accessible name, selected state. */
+/**
+ * The rendered message rows: id, name, selected state. Bundle rows and "Show all" are list
+ * entries too since decision 0031; they act instead of selecting and are left out here.
+ */
 function rows() {
   return browser.execute(() =>
-    [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')]
+    [...document.querySelectorAll('[data-testid="message-list"] [role="option"][data-testid="message-row"]')]
       .map((el) => ({
         id: el.id,
-        label: el.getAttribute("aria-label") ?? "",
+        label: el.querySelector('[data-testid="row-name"]')?.textContent ?? "",
         selected: el.getAttribute("aria-selected") === "true",
         top: el.getBoundingClientRect().top,
       }))

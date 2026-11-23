@@ -84,6 +84,19 @@ const frameState = () =>
     };
   });
 
+/**
+ * A screenshot without losing the focus: `screenshot` blurs the focused element (no focus ring in
+ * the picture), which would send the next keys (Enter, Escape) to the page body, not the find field.
+ */
+async function shot(name) {
+  await browser.execute(() => {
+    window.__e2eFocus = document.activeElement;
+  });
+  const file = await screenshot(name);
+  await browser.execute(() => window.__e2eFocus?.focus());
+  return file;
+}
+
 async function openBySubject(subject) {
   const row = await browser.$(`//*[@role="option"][contains(., "${subject}")]`);
   await row.waitForExist({ timeout: 30000 });
@@ -149,7 +162,7 @@ describe("stage 16: find in the open message", () => {
     assert.equal(first.currentText?.toLowerCase(), "quarterly");
     assert.equal(first.styles, 1, "the highlight colours are in the frame");
     assert.equal(first.scripts, 0, "no script in the frame");
-    report.screenshots.push(await screenshot("find-html"));
+    report.screenshots.push(await shot("find-html"));
     await browser.keys("Enter");
     await browser.waitUntil(async () => (await count())?.text === "2 of 2", { timeoutMsg: "Enter did not move to the next match" });
     report.steps.html = { first, second: await frameState() };
@@ -178,7 +191,7 @@ describe("stage 16: find in the open message", () => {
       return { current: registry?.get("vice-find-current")?.size ?? 0, others: registry?.get("vice-find")?.size ?? 0 };
     });
     assert.deepEqual(highlighted, { current: 1, others: 1 });
-    report.screenshots.push(await screenshot("find-text"));
+    report.screenshots.push(await shot("find-text"));
     await browser.keys("Escape");
   });
 

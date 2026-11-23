@@ -43,6 +43,7 @@ export const config = {
     "./tests/e2e/reading.e2e.mjs",
     // Stage 16: find in the open message (written, not run yet).
     "./tests/e2e/find-in-message.e2e.mjs",
+    "./tests/e2e/attachment-preview.e2e.mjs",
     "./tests/e2e/comfort.e2e.mjs",
     "./tests/e2e/search.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
