@@ -20,15 +20,15 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 01 | [Projektgerüst und Design-Grundlage](stages/01-projektgeruest.md) | fertig | App startet mit leerer Oberfläche im Zieldesign |
 | 02 | [Konto und Synchronisierung, nur lesend](stages/02-konto-und-sync-lesend.md) | fertig | echte Postfächer erscheinen als Liste |
 | 03 | [Nachricht lesen](stages/03-nachricht-lesen.md) | fertig | Mails und Anhänge sicher lesbar, auch offline |
-| 04 | [Aktionen und Outbox](stages/04-aktionen-und-outbox.md) | in Arbeit | archivieren, löschen, verschieben, markieren |
-| 05 | [Verfassen und Senden](stages/05-verfassen-und-senden.md) | offen | **erste täglich nutzbare Version auf dem Mac** |
+| 04 | [Aktionen und Outbox](stages/04-aktionen-und-outbox.md) | fertig | archivieren, löschen, verschieben, markieren |
+| 05 | [Verfassen und Senden](stages/05-verfassen-und-senden.md) | in Arbeit | **erste täglich nutzbare Version auf dem Mac** |
 | 06 | [Windows und Builds](stages/06-windows-und-builds.md) | offen | **installierbar auf Windows und MacBook** |
-| 07 | [Suche, Threads, mehrere Konten](stages/07-suche-threads-konten.md) | offen | vereinter Posteingang, schnelle Suche |
+| 07 | [Suche, Threads, mehrere Konten](stages/07-suche-threads-konten.md) | in Arbeit | vereinter Posteingang, schnelle Suche |
 | 08 | [Bedienung und Barrierefreiheit](stages/08-bedienung-und-barrierefreiheit.md) | offen | Layouts, Tastatur, Command Palette |
-| 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | offen | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
-| 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | offen | Signaturen, Vorlagen, Kontakte, Später senden |
-| 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | offen | **Geräte gleichen sich über das Postfach ab** |
-| 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | offen | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
+| 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | in Arbeit | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
+| 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | in Arbeit | Signaturen, Vorlagen, Kontakte, Später senden |
+| 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | in Arbeit | **Geräte gleichen sich über das Postfach ab** |
+| 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | in Arbeit | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
 | 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | offen | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
 | 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | bei Bedarf | Microsoft, Gmail-Eigenheiten, JMAP |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen | öffentliches Repo, signierte Builds, Updates |
