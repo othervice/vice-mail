@@ -166,7 +166,10 @@ function useFitting(
     if (!element || typeof ResizeObserver === "undefined") return undefined;
     const measure = () => {
       const bar = toolbar.current;
-      const sample = bar?.querySelector<HTMLElement>("button");
+      // A shown button: the first one may be folded into "More" (Reply goes before Archive and
+      // Delete), and a hidden button measures 0, which would read as "nothing measured" and show
+      // every button again, so the toolbar would flip between both states on every measurement.
+      const sample = bar ? [...bar.querySelectorAll<HTMLElement>("button")].find((button) => !button.closest("[hidden]")) : undefined;
       if (!bar || !sample) return;
       // No layout (jsdom, a hidden window): nothing is measured, every primary action shows.
       if (element.clientWidth === 0) {

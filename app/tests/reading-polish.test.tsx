@@ -1,7 +1,7 @@
 // The reading pane's polish: the toolbar folds what does not fit into "More actions" (every action
 // stays reachable), AI chips under the open message only where AI may work on it, and the ask bar
 // that hands a question to the AI panel without sending anything before consent.
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fittingCount, visibleEntries } from "../src/features/actions/ActionButtons";
 import type { ActionId } from "../src/features/actions/registry";
@@ -160,6 +160,45 @@ describe("reading toolbar", () => {
       expect(core.callsOf("apply_action")).toHaveLength(1);
     });
     expect(within(pane).queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("reading toolbar in a very narrow pane", () => {
+  it("keeps Reply folded away when it measures again, instead of flipping back to every button", async () => {
+    // 100 px leave room for Archive and Delete next to “More”: Reply, the first button in the
+    // toolbar, is folded away. A folded (hidden) button measures 0 like in a browser; measuring
+    // with it read as “nothing measured” and showed every button again on the next callback.
+    const callbacks: (() => void)[] = [];
+    class ManualResizeObserver implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(() => {
+          callback([], this);
+        });
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", ManualResizeObserver);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const width = this.hasAttribute("data-toolbar-separator") ? 1 : this.closest("[hidden]") ? 0 : 32;
+      return { width, height: 32, top: 0, left: 0, right: width, bottom: 32, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    const { user } = setup();
+    const pane = await openMessage(user);
+    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const shown = () => within(toolbar).getAllByRole("button").map(nameOf);
+    await waitFor(() => {
+      expect(shown()).toEqual(["Archive", "Delete", "More actions"]);
+    });
+    // The pane or the read-only note changes size: the toolbar measures again, twice.
+    for (let round = 0; round < 2; round += 1) {
+      act(() => {
+        for (const callback of callbacks) callback();
+      });
+      expect(shown()).toEqual(["Archive", "Delete", "More actions"]);
+    }
   });
 });
 
