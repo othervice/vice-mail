@@ -28,6 +28,7 @@ import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
   type ActionResult,
+  type DiagnosticsExportResult,
   type MailAction,
   type MessageRef,
   type OperationInfo,
@@ -322,6 +323,8 @@ interface FakeCoreOptions {
   attachments?: AttachmentsFakeOptions;
   /** Stage 15 (decision 0037): the update setting and state (default: a build without updater). */
   updates?: UpdatesFakeOptions;
+  /** Stage 15: what "Export diagnostics…" answers (default: saved in Downloads). */
+  diagnostics?: DiagnosticsExportResult;
   /** Decision 0039: which messages form a thread (default: every message is its own). */
   conversations?: ConversationFakeOptions;
 }
@@ -836,6 +839,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       switch (cmd) {
         case "get_app_info":
           return appInfo;
+        // Stage 15: the core shows the save dialog and writes the file.
+        case "export_diagnostics":
+          return options.diagnostics ?? { kind: "saved", path: "/Users/test/Downloads/app-diagnostics-2026-11-23.txt" };
         case "get_preferences":
           return preferences;
         case "set_preferences":

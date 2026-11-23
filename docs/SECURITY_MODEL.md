@@ -173,10 +173,11 @@ party, which is advisable before wide distribution.
   deletes its keychain entry first and stops if the keychain refuses; revoking an MCP client,
   deleting an AI profile and switching sync off delete their entries.
 - Logs are local files (14 days, our crates at `info` in release builds) without secrets,
-  subjects, bodies or addresses logged on purpose; error texts that reach the log can still
-  contain file paths and addresses (finding V-07). The diagnostics export (stage 15 task) was
-  being written during this review and is not covered by it; the stage requires a test that it
-  contains no secrets and no mail content.
+  subjects, bodies or addresses logged on purpose; failed commands are logged with their code
+  only (V-07, fixed). Error texts logged inside the core can still contain a path or an address.
+  The diagnostics export (b13d553, after this review) includes the end of the newest three logs
+  and redacts every line again; its test proves that no secret and no mail content of a seeded
+  account reaches the file (`docs/PRIVACY.md`, "Diagnostics").
 - Settings sync: records are encrypted with age to a random X25519 key (kept locally in the
   keychain as `settings-sync:key`); that key is wrapped with the passphrase (age scrypt, work
   factor 2^18 when writing, at most 2^20 accepted when reading, so a hostile server cannot make
@@ -329,6 +330,7 @@ unlikely preconditions; **info** = hardening or documentation.
 | C-7 | c | low | The "link text names another domain" warning was suppressed by invisible characters or look-alike full stops in the link text (`paypal\u{200B}.com`, `paypal．com`). | `links.rs`: the text is stripped of hidden characters and look-alike dots are read as dots before the comparison. Test: `links::tests::text_naming_another_domain_warns`. |
 | N-2 | d | low | The private-network block for remote images and one-click unsubscribe let through IPv4-translated (`::ffff:0:a.b.c.d`), local-use NAT64 (`64:ff9b:1::/48`), Teredo and the rest of `2001::/23`, discard (`100::/64`) and the new documentation range (`3fff::/20`). | `reading/remote.rs`: refused (the embedded IPv4 address decides for IPv4-translated). Test: `reading::remote::tests::only_public_addresses_are_contacted` (10 new cases, 4 public controls). |
 | V-08 (part) | b | low | `remove_draft_dir`/`remove_outgoing_dir` joined the raw draft id to the compose directory; a draft id from the UI is not validated when deserialised (`"../.."`), so only the store's earlier refusal of unknown ids kept `remove_dir_all` inside. | `compose/files.rs`: both go through `resolve`, the allowlist every other compose path uses. Test: `compose::files::tests::draft_directories_are_removed_only_inside_the_compose_directory` (removes `../../victim` with the old code). |
+| V-07 | b | low | The IPC bridge logged every command error text; some contain file paths (drag and drop), addresses or contact search text, which then sat in the local logs (and would go into a diagnostics export). | 177ef1b: the bridge logs command, code and the fixed summary of the error kind (`logging::command_failed`); only `internal` and `database` errors add their detail, redacted (home paths as `~/…`, other paths as `<path>`, addresses, hosts, secret-looking values). The diagnostics export (b13d553) redacts every log line again in the same way, with the accounts' names and folder names. Tests: `tests::failed_commands_are_logged_without_personal_error_texts`, `diagnostics::tests::the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content` (error texts with a home path and an address). Error texts themselves are unchanged and still reach the UI's technical details. |
 | N-3 (part) | d | low | On `github.com` an update manifest could point to any repository's release files (the signature check still applied). | `updates/http.rs`: on `github.com` only paths under the endpoint's `/<owner>/<repo>/releases/`. Test: `updates::http::tests::github_endpoint_allows_its_file_hosts_over_https_only`. Size and time limits of the download: open, see 7.2. |
 
 ### 7.2 Open, with reason
@@ -345,7 +347,6 @@ unlikely preconditions; **info** = hardening or documentation.
 | V-02 | b | low | Changing an AI profile's base URL keeps the stored API key (consent is reset, but "test connection" and "list models" send the key). | A typo or a misleading instruction sends the key to another host. | Remove the key (or refuse) when the host changes and the key is kept. | Changes the settings flow; UI decision. |
 | V-04 | a | low | App CSP `frame-src 'self' http: https:` is broader than needed (only `https://link.invalid` placeholders must reach the hook). | If a navigation ever passed the sanitiser while the WebView2 guard is inactive, the frame could load a web page. | `frame-src 'self' https://link.invalid`, checked with the desktop link tests on WebKit and WebView2. | Needs the desktop tests on both platforms (decision 0005 measured the current value). |
 | V-05 | a | low | The WebView2 frame guard fails open: an installation error is only logged, and a window whose `finish` fails stays open. | Unchecked frame navigations on Windows (today only placeholders exist in the frame). | Close the window or render mail as text for it. | Windows-only, not testable here. |
-| V-07 | b | low | The IPC bridge logs every command error text; some contain file paths (drag and drop), addresses or contact search text. | Personal data in local log files (and in a future diagnostics export). | Log the error code only, or redact the detail; drop paths and addresses from error texts. | Touches many error texts; do together with the diagnostics export. |
 | F3 | e | low | The Windows named pipe keeps the default access list. | Other local users can open instances (they cannot authenticate) and use up the 16 connection slots. | Owner-only security descriptor (current user and SYSTEM). | Setting security attributes needs an `unsafe` call, which the project allows only in `webview2-guard`; Windows-only. |
 | F4 | e | low | MCP `read_message`/`read_thread` return mail that lies only in Trash or Junk when the id is known (ids are sequential). | A client sees spam (and injected instructions in it) of a shared account without naming the mailbox (decision 0021). | Refuse mail that exists only in Trash/Junk unless the call names that mailbox. | Behaviour decision for MCP. |
 | F5 | e | low | The suggested Claude Code setup command contains the MCP token as an argument (`--env MAIL_MCP_TOKEN=…`). | Visible in `ps` while it runs and kept in the shell history. | Offer `MAIL_MCP_TOKEN_FILE` (a 0600 file); warn about history. | New configuration option. |
@@ -358,8 +359,8 @@ unlikely preconditions; **info** = hardening or documentation.
 ### 7.3 Information and hardening notes
 
 - **I-1** Autoconfig sends the full address as `?emailaddress=` to `autoconfig.<domain>` (after
-  the click, `discovery/autoconfig.rs`). `docs/PRIVACY.md` currently says only the domain is
-  sent; either the text or the query has to change.
+  the click, `discovery/autoconfig.rs`). `docs/PRIVACY.md` said only the domain is sent; the
+  text now matches the code (the query is unchanged, as Thunderbird sends it too).
 - **I-2** DNS SRV lookups use the resolvers from the system configuration directly (plain UDP),
   bypassing encrypted DNS configured in the OS.
 - **I-3** LOGIN is used for ASCII credentials even if the server announces `LOGINDISABLED` (only
@@ -370,9 +371,11 @@ unlikely preconditions; **info** = hardening or documentation.
 - **I-7** AI profiles over `http` to LAN addresses send key and mail unencrypted across the LAN
   (documented; a UI hint would help).
 - **F6** "Export diagnostics" (stage 15 task) was being written while this review ran and is not
-  covered by it. The logs it would include contain hosts of opened links and images, attachment
-  temp paths and error texts with paths or addresses (V-07), which an export must redact; the
-  stage requires a test that no secrets and no mail content are in it.
+  covered by it. The logs it includes contain hosts of opened links and images, attachment
+  temp paths and error texts with paths or addresses (V-07). Done in b13d553 and 177ef1b: hosts
+  outside the provider table, paths, addresses and secret-looking values are replaced in every
+  log line, with a test that none of a seeded account's secrets or mail content reaches the file;
+  free text such as a subject cannot be recognised and must stay out of the logs.
 - **F7** The sync passphrase minimum is 8 characters; changing it re-wraps the same key (after a
   leak, "reset" is needed, not "change").
 - **F8** age's X25519 recipients do not authenticate the sender: records are accepted because the

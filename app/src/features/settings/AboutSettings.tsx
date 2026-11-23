@@ -5,6 +5,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { LICENSE_SPDX, PRODUCT_NAME, PROJECT_URL } from "../../config/product";
 import { useAppInfo } from "../app-info/queries";
+import { DiagnosticsPanel } from "../diagnostics/DiagnosticsPanel";
 import { UpdatePanel } from "../updates/UpdatePanel";
 import { CopyableAddress } from "./CopyableAddress";
 import { OpenSourceLicenses } from "./OpenSourceLicenses";
@@ -75,6 +76,8 @@ export function AboutSettings() {
       </dl>
       {/* Stage 15 (decision 0037): updates, opt-in. */}
       <UpdatePanel />
+      {/* Stage 15: "Export diagnostics…", a file the user reads before sending it. */}
+      <DiagnosticsPanel />
       {/* Stage 15: the third-party libraries and their licences (scripts/licenses.mjs). */}
       <OpenSourceLicenses />
     </SettingsSection>

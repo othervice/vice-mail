@@ -1231,6 +1231,17 @@ export const de: Translation = {
         text: "Lizenztext: {{license}}",
         notice: "Hinweis",
       },
+      // Stufe 15: „Diagnose exportieren …“. Der Kern schreibt eine Textdatei, die man vorher lesen kann.
+      diagnostics: {
+        title: "Diagnose",
+        intro: "Wenn etwas nicht funktioniert, hilft eine Diagnosedatei, die Ursache zu finden. Sie ist eine reine Textdatei: Lies sie, bevor du sie jemandem schickst. Die App verschickt sie nie von selbst.",
+        contains: "Sie enthält die Versionen von App und System, die Größe der App-Daten, Zahlen aus der Datenbank, Art und Zustand jedes Kontos, Einstellungen, die nichts Persönliches verraten, und das Ende der letzten Protokolldateien.",
+        never: "Sie enthält nie Passwörter, Schlüssel oder Tokens, E-Mail-Adressen, Namen, Benutzernamen, die Namen deiner eigenen Server, Betreffzeilen, Nachrichtentexte, Namen von Anhängen, Kontakte oder Ordnernamen.",
+        export: "Diagnose exportieren …",
+        exporting: "Wird gesammelt …",
+        saved: "Gespeichert als {{path}}",
+        failed: "Die Diagnose konnte nicht exportiert werden.",
+      },
     },
   },
   // ---- Stufe 12: KI über MCP ----

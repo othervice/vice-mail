@@ -24,7 +24,8 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   - *Offen bis zur Veröffentlichung:* erstes Release mit `latest.json` auf GitHub, dann Update von einer Version auf die nächste auf echtem macOS und Windows (Abnahmepunkt 2). **Der Mensch sichert den privaten Schlüssel und sein Passwort** (`docs/RELEASING.md`, „Back it up now“).
 - [ ] **Sicherheitsprüfung.** `/security-review` über den gesamten Code. Bedrohungsmodell als `docs/SECURITY_MODEL.md`: was geschützt ist, was nicht, welche Grenzen es gibt. Zeitlich begrenztes Fuzzing von MIME-Parser-Anbindung und HTML-Pipeline. Befunde beheben oder begründet offen lassen.
 - [ ] **Erster Start.** Geführte Einrichtung für neue Nutzer: Konto, Thema, optional Sync und KI.
-- [ ] **Diagnose.** „Diagnose exportieren“ packt Logs und Systemangaben in eine Datei; ein Test stellt sicher, dass keine Geheimnisse und keine Mail-Inhalte enthalten sind.
+- [x] **Diagnose.** „Diagnose exportieren“ packt Logs und Systemangaben in eine Datei; ein Test stellt sicher, dass keine Geheimnisse und keine Mail-Inhalte enthalten sind.
+  - *Umgesetzt am 23.11.2026:* Einstellungen → Über → „Diagnose exportieren …“: Speichern-Dialog des Systems (Downloads, `<produkt>-diagnostics-JJJJ-MM-TT.txt`), dann sammelt, schwärzt und schreibt der Kern (`crates/mail-engine/src/diagnostics/`) eine reine Textdatei. Inhalt, Ausschlüsse und Schwärzung in `docs/PRIVACY.md` („Diagnostics“); Prüfung siehe Ergebnis.
 
 ## Abnahme
 
@@ -100,6 +101,58 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   source=Notarized Developer ID“, die Option Apple-Account im Setup, das Update-Archiv mit
   gestapelter App im echten Updater, die Schlüsselbund-Abfrage beim Wechsel, Gatekeeper auf einem
   zweiten Mac.
+
+- Diagnose (23.11., b13d553, 177ef1b und der UI-Commit danach): **Format** reine Textdatei
+  (UTF-8) statt JSON, damit man sie vor dem Weitergeben lesen kann; die App verschickt sie nie. **Inhalt:** Version, Commit,
+  Build-Datum, Plattform; System, Version (macOS aus `SystemVersion.plist`, Windows über
+  `cmd /D /C ver` ohne Konsolenfenster), Architektur, Sprache der WebView, App-Sprache,
+  WebView-Version; Größe des Datenordners (Pfad mit `~`) und seiner Teile; Schema-Version,
+  Datenbankgröße, Zeilen je Tabelle (ohne FTS-Tabellen), Outbox-Vorgänge je Zustand und
+  Fehlercodes, Suchindex; je Konto UUID, Anbieterart (`gmail`, `icloud`, … aus der eingebauten
+  Anbieterliste, `local`, sonst `other`), Anmeldung „Passwort“, TLS-Art und Port, Schreiben an/aus,
+  Sync-Zustand mit Fehlercode und Zeiten, Zahl der Ordner, Nachrichten und gespeicherten Texte;
+  Zustand von Einstellungs-Sync, Updates, KI und MCP; nicht persönliche Einstellungen; das Ende der
+  neuesten drei Logdateien, je höchstens 256 KiB, Zeilen höchstens 2000 Zeichen. **Nie:**
+  Passwörter, Schlüssel, Tokens (der Schlüsselbund wird nicht gelesen), Adressen, Namen,
+  Benutzernamen, Hostnamen eigener Server, Betreffe, Texte, Anhangsnamen, Kontakte, Ordnernamen.
+  **Entscheidung Hostnamen:** Server der eingebauten Anbieterliste und der Update-Quelle dürfen in
+  Logzeilen stehen bleiben (sie verraten nur die Anbieterart), alle anderen werden `<host>`. Die
+  Logzeilen werden ein zweites Mal geschwärzt: bekannte Kontodaten, Identitäten und eigene
+  Ordnernamen, Adressen, Hostnamen, IPv4 außer Loopback, Pfade (Feld und freier Text; unter dem
+  Benutzerordner als `~/…`, sonst `<path>`, ohne Dateinamen), Geheimnis- und Personenfelder,
+  `Bearer`/`Basic`, Token-Formate, lange Zufallsfolgen; lieber zu viel (`ui.theme` wird `<host>`). Betreffe oder Kontaktnamen in freiem Text kann sie nicht
+  erkennen; sie werden nicht protokolliert. Sammeln scheitert nie (kaputte Datenbank, fehlende Logs
+  stehen als „unavailable“ in der Datei); nur das Schreiben kann scheitern: neuer Fehlercode
+  `diagnostics_write_failed` (atomar, ohne Reste). Keine neue Abhängigkeit. Aus der
+  Sicherheitsprüfung mit erledigt: **V-07** (177ef1b) – die IPC-Brücke protokolliert fehlgeschlagene
+  Befehle nur mit Code und fester Kurzbeschreibung, Details nur bei `internal`/`database` und
+  geschwärzt (`logging::command_failed`); `docs/SECURITY_MODEL.md` 7.2 → 7.1. **I-1** – der Satz
+  zur Autoconfig-Suche in `docs/PRIVACY.md` entspricht jetzt dem Code (die volle Adresse geht als
+  `?emailaddress=` an `autoconfig.<domain>`; Code unverändert).
+  **Ausgeführt und geprüft:** `cargo test` für `mail-model`, `mail-store`, `mail-engine` und
+  `mail-app` grün, darin `diagnostics::tests::the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content`
+  (Konto mit Passwort im Test-Schlüsselbund, Nachricht mit Betreff, Text, Adressen und Anhang,
+  eigener Ordner, Logzeilen mit Adresse, OAuth-Token, API-Schlüssel, Passwort, Benutzername,
+  Server, Ordner, Anhangspfad sowie Fehlertexten mit Pfad im Benutzerordner und mit Adresse: keine
+  dieser Zeichenfolgen und nicht der Benutzerordner steht in der Datei),
+  `tests::failed_commands_are_logged_without_personal_error_texts` (V-07),
+  `only_the_newest_log_files_and_only_their_ends_are_included` (fünf Logdateien zu je über 1 MiB:
+  höchstens 3 × 256 KiB + 64 KiB, nur die neuesten drei, nur ihr Ende),
+  `a_broken_database_or_missing_logs_still_give_a_file`,
+  `a_file_that_cannot_be_written_is_a_typed_error_and_leaves_nothing`,
+  die Schwärzungs- und System-Tests und der Zähltest im Store; Bindings mit `--features e2e`
+  erzeugt, Frische-Test grün; Vitest `tests/diagnostics.test.tsx` (Erklärung, Export nur auf Klick,
+  Abbruch, Fehler mit erneutem Versuch, Deutsch, axe), `ipc.test.ts`, `i18n.test.ts`;
+  `pnpm --dir app typecheck` und `lint`; Clippy auch für das Windows-Ziel (cargo-xwin).
+  `scripts/check.sh`: der erste Lauf war rot in „Rust tests“ mit zwei zeitabhängigen
+  Compose-Tests (`compose::stage10_tests::offline_at_the_scheduled_time_it_goes_out_once_online`,
+  `compose::tests::with_core::sending_at_once_while_offline_waits_and_goes_out_once_online`:
+  Zustand `sending` statt `queued` bei einer Systemlast um 20; einzeln und in drei Wiederholungen
+  der ganzen Engine-Tests grün, von dieser Änderung nicht berührt); der zweite Lauf und der letzte
+  nach V-07 (Arbeitsstand mit der Oberfläche) vollständig grün.
+  **Ungeprüft:** der Klick in der echten App (Speichern-Dialog, Datei auf der Platte; kein
+  Desktop-Test), die Windows-Version über `ver` und die Pfade unter Windows (nur übersetzt, nicht
+  ausgeführt).
 
 **Wartet auf**
 - Mensch: den privaten Update-Schlüssel und sein Passwort sichern (`docs/RELEASING.md`, „Back it up

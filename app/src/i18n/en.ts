@@ -1234,6 +1234,17 @@ export const en = {
         text: "License text: {{license}}",
         notice: "Notice",
       },
+      // Stage 15: "Export diagnostics…". The core writes a plain-text file the user can read first.
+      diagnostics: {
+        title: "Diagnostics",
+        intro: "If something does not work, a diagnostics file helps to find the cause. It is a plain text file: read it before you send it to anyone. The app never sends it anywhere by itself.",
+        contains: "It contains the app and system versions, the size of the app's data, counts from the database, the kind and state of each account, settings that are not personal, and the end of the recent log files.",
+        never: "It never contains passwords, keys or tokens, email addresses, names, user names, the names of your own servers, subjects, message text, attachment names, contacts or folder names.",
+        export: "Export diagnostics…",
+        exporting: "Collecting…",
+        saved: "Saved as {{path}}",
+        failed: "The diagnostics could not be exported.",
+      },
     },
   },
   // ---- Stage 12: AI over MCP ----

@@ -22,7 +22,7 @@ change to this page.
 | What | When | To whom | What they learn |
 |---|---|---|---|
 | **Your mail servers** (IMAP, SMTP) | while the app runs and an account is set up | the servers in the account settings | everything a mail server sees from any mail program: your login, which mail you fetch, what you send. The app fetches message bodies without marking them read |
-| **Finding server settings** | only during account setup, after you click "Search settings online" | your system's DNS servers (SRV records for your address's domain), then `autoconfig.<your domain>` and `<your domain>/.well-known/autoconfig/` over HTTPS | your IP address and the domain of the address you are adding. No third-party directory (such as Mozilla's ISPDB) is asked |
+| **Finding server settings** | only during account setup, after you click "Search settings online" | your system's DNS servers (SRV records for your address's domain), then `autoconfig.<your domain>` and `<your domain>/.well-known/autoconfig/` over HTTPS | your DNS servers: your IP address and the domain of the address you are adding. `autoconfig.<your domain>`: your IP address and the full address you are adding (sent as `?emailaddress=`, as Thunderbird does, so the provider can answer per address). `<your domain>/.well-known/autoconfig/`: your IP address and the domain only. No third-party directory (such as Mozilla's ISPDB) is asked |
 | **Remote images in a message** | only after you allow them for this message, or always for a sender | the servers named in the message | your IP address, the time, and that you opened this message: remote images are often used to track exactly that. The app sends no cookies and no referrer, identifies itself only as `Mozilla/5.0`, and never connects to addresses in your local network |
 | **One-click unsubscribe** | only when you click "Unsubscribe" and the message offers one-click unsubscribe (RFC 8058) | the HTTPS address in the message's `List-Unsubscribe` header | your IP address and that you unsubscribed. Other kinds of unsubscribe open a draft (mail) or your browser (web page) instead |
 | **AI provider** (optional) | only if you turn on AI in the app and use an AI feature; a cloud provider only after you agreed for that provider, and only with mail from accounts you allowed for cloud use | the address in your AI profile: a local server such as Ollama or LM Studio, or a cloud provider with your own API key | the text needed for the request: for example the current conversation without repeated quotes and without attachments. Never your whole mailbox without a confirmation that states how many messages. Before the first transfer the app shows its size. What a cloud provider does with it is governed by that provider's terms |
@@ -51,7 +51,7 @@ Security Policy forbids remote sources), and no lookups in third-party directori
 | Message bodies and attachments you have opened or the app has prefetched, stored compressed (zstd) as files | no |
 | Copies of attachments you added to a draft, and copies of attachments you opened with another program | no |
 | Backups of the database taken before each update of its format (the last three) | no |
-| Logs: technical events such as account IDs, server and link host names, error codes. Passwords are masked by design; the logs are not meant to contain message text. One file per day, the last 14 are kept | no |
+| Logs: technical events such as account IDs, server and link host names, error codes. Passwords are masked by design; the logs are not meant to contain message text, and a failed command is logged with its error code, not its error text. One file per day, the last 14 are kept | no |
 | The AI request log (only if you use AI in the app): feature, provider host, model, number of messages and bytes, result, duration. No message content. Kept 30 days, at most 10,000 entries | no |
 | The MCP access log (only if you turn on the MCP server): which client used which tool, when, on how many messages, and the outcome. Never the request's arguments or any content. Kept 30 days, at most 10,000 entries | no |
 | Web view data (the interface's local storage and cache) | no |
@@ -104,6 +104,51 @@ Off until you turn it on in **Settings → AI over MCP**. When it is on:
 
 What an AI client does with the mail it reads is outside the app. A client that uses a cloud model
 sends what it reads to that model's provider.
+
+## Diagnostics
+
+**Settings → About → Export diagnostics…** writes one file where you choose in the system's save
+dialog. The app never sends it anywhere: you decide whether to attach it to an issue or an email.
+It is plain text (UTF-8) rather than JSON, so you can read every line before you pass it on.
+
+What the file contains:
+
+- the app's version, commit and build date; the operating system, its version, the processor
+  architecture, the language the system reports, the app's language setting and the web view's
+  version;
+- the size of the app's data directory (its path with your home folder shown as `~`) and of its
+  top-level parts (database, message bodies, backups, …);
+- the database's schema version, size and the number of rows per table, outbox operations per
+  state and the error codes of failed ones, the state of the search index;
+- per account: its random ID, the provider kind (`gmail`, `icloud`, `outlook`, … when the IMAP
+  server is one of the built-in providers, `local` for a server on this computer, otherwise
+  `other`), the sign-in kind (password), the connection security and port of both servers,
+  whether writing is on, the sync state with the last error code and times, and the number of
+  folders, messages and stored bodies;
+- the state of the settings sync, updates, AI in the app and AI over MCP (on or off, counts,
+  error codes);
+- settings that are not personal (theme, text size, prefetch, send delay, notification switches
+  and similar);
+- the end of the newest three log files, at most 256 KiB of each.
+
+What the file never contains: passwords, keys, tokens or other sign-in data (the export does not
+read the keychain at all), email addresses, names, user names, the host names of your own
+servers, subjects, message text, attachment names, contacts and folder names. Server host names
+of the built-in providers (such as `imap.gmail.com`) and of the update source (`github.com`) may
+appear in log lines, as they say nothing about you beyond the provider kind.
+
+The log lines are checked once more before they go into the file, although the app is built not
+to log personal data. Replaced are: the addresses, names, user names and server names of your
+accounts and identities and your folder names wherever they appear; anything that looks like an
+email address, a host name or an IPv4 address other than this computer; file paths, shown as `~/…`
+when they lie in your home folder and as `<path>` otherwise, without the file name (it can be an
+attachment's name); values of fields that hold secrets or personal data (`password=`, `token:`,
+`subject=`, …); the credential after `Bearer` or `Basic`; known token formats and long
+random-looking strings. The placeholders say what was there: `<email>`, `<host>`, `<ip>`, `~/…`,
+`<path>`, `<folder>`, `<user>`, `<user name>`, `<removed>`, `[redacted]`. This check errs on the
+side of removing too much. It works by patterns and by what the app knows about your accounts, so
+it cannot recognise free text such as a subject or a contact's name; the app does not write such
+text to its logs.
 
 ## Questions
 
