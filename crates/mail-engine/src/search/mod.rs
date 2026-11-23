@@ -54,32 +54,46 @@ pub(crate) struct SearchState {
     /// Keeps the store the worker reaches through its weak reference.
     _store: Option<Arc<Store>>,
     task: Mutex<Option<JoinHandle<()>>>,
+    /// Work found at start, begun by [`SearchState::started`].
+    pending_at_start: std::sync::atomic::AtomicBool,
 }
 
 impl SearchState {
-    /// Gives the store its body text source; starts the background worker if there is work
-    /// left (an index job, messages without a thread).
+    /// Gives the store its body text source and looks whether there is work left (an index
+    /// job, messages without a thread). The worker begins with [`SearchState::started`] at the
+    /// end of [`AppCore::start`] (decision 0029), so its first step does not hold the writer
+    /// while the start's own writes wait.
     pub(crate) async fn start(store: Option<&Store>) -> Self {
         let wake = Arc::new(Notify::new());
         let store = store.map(|store| {
             store.set_body_text_source(Arc::new(ContentText));
             Arc::new(store.clone())
         });
-        let state = Self {
-            wake,
-            _store: store,
-            task: Mutex::new(None),
-        };
-        if let Some(store) = &state._store {
+        let mut pending = false;
+        if let Some(store) = &store {
             match store.background_work_pending().await {
-                Ok(false) => {}
-                Ok(true) => state.kick(),
+                Ok(found) => pending = found,
                 Err(err) => {
                     tracing::error!(error = %err, "background indexing could not start");
                 }
             }
         }
-        state
+        Self {
+            wake,
+            _store: store,
+            task: Mutex::new(None),
+            pending_at_start: std::sync::atomic::AtomicBool::new(pending),
+        }
+    }
+
+    /// The core has started: begins the work found at start, if any.
+    pub(crate) fn started(&self) {
+        if self
+            .pending_at_start
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            self.kick();
+        }
     }
 
     /// New work (a rebuild was started): wakes the worker, or starts it.

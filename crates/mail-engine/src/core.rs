@@ -345,7 +345,7 @@ impl<C: Connector> AppCore<C> {
             reading.clear_open_dir().await;
         }
         // Stage 9 before the sync starts, so no arrival is missed.
-        crate::comfort::start(&core).await;
+        let categories_pending = crate::comfort::start(&core).await;
         // Stage 10: scheduled sends missed while the app was off are asked about, not sent;
         // before anything can start the outbox (a connected account wakes it).
         if let Some(compose) = &core.inner.compose {
@@ -365,6 +365,12 @@ impl<C: Connector> AppCore<C> {
         crate::mcp::start(&core).await;
         // Stage 11: the settings sync's worker (it only connects while the sync is on).
         crate::settings_sync::service::start(&core);
+        // Stages 7 and 9: index, thread and category work found at start begins now, after
+        // the start's own writes (decision 0029).
+        core.inner.search.started();
+        if categories_pending {
+            core.inner.comfort.kick_categories();
+        }
         core
     }
 

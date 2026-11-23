@@ -263,11 +263,22 @@ pub(crate) fn own_addresses(conn: &Connection) -> Result<Vec<String>, StoreError
 // Background jobs
 
 /// Messages not classified yet, newest first (`message_category_todo`).
+///
+/// `INDEXED BY` here and in [`ANY_UNCLASSIFIED`]: `PRAGMA optimize` records the size of the
+/// partial index while every message is still unclassified (a database from before stage 9, a
+/// first sync). After the backfill the index is empty, but the statistics still count every
+/// message, and the planner then scans the whole `message` table to find no row: at 100,000
+/// messages about 100 MB read at every start (`docs/testing/performance.md`, stage 8/9).
 pub(crate) const UNCLASSIFIED: &str = "
     SELECT id, account_id, subject, from_name, from_addr, to_addrs, cc_addrs, message_id_hdr,
            in_reply_to, references_hdr, list_id, list_unsubscribe, auto_submitted, precedence,
            date, size, has_attachments
-    FROM message WHERE category IS NULL ORDER BY id DESC LIMIT ?1";
+    FROM message INDEXED BY message_category_todo
+    WHERE category IS NULL ORDER BY id DESC LIMIT ?1";
+
+/// Whether any message is still unclassified (`message_category_todo`, see [`UNCLASSIFIED`]).
+pub(crate) const ANY_UNCLASSIFIED: &str = "
+    SELECT EXISTS (SELECT 1 FROM message INDEXED BY message_category_todo WHERE category IS NULL)";
 
 pub(crate) const SET_CATEGORY: &str = "
     UPDATE message SET category = ?2, category_auto = ?3, category_reason = ?4, important = ?5,
@@ -416,7 +427,7 @@ pub(crate) fn rules_step(txn: &Transaction<'_>, limit: u32) -> Result<(usize, bo
 /// Whether a job has work: unclassified messages or a pending rules pass.
 pub(crate) fn work_pending(conn: &Connection) -> Result<bool, StoreError> {
     let unclassified: bool = conn
-        .prepare_cached("SELECT EXISTS (SELECT 1 FROM message WHERE category IS NULL)")?
+        .prepare_cached(ANY_UNCLASSIFIED)?
         .query_row([], |r| r.get(0))?;
     let rules: Option<i64> = conn
         .prepare_cached(RULES_BELOW)?

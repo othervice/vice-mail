@@ -544,15 +544,11 @@ async fn bundles_continue_across_pages() {
     assert_eq!(members, 4);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn stored_messages_are_classified_in_the_background() {
+/// A database at `path` with three messages stored before a classifier existed (as by an
+/// older version); its store and inbox.
+async fn unclassified_store(path: &std::path::Path) -> (mail_store::Store, mail_model::MailboxId) {
     use mail_model::{Address, Flags, MessageHeader};
-    let dir = TempDir::new().expect("temp dir");
-    let store = mail_store::Store::open(
-        &dir.path().join("db.sqlite3"),
-        mail_store::StoreOptions::default(),
-    )
-    .expect("open");
+    let store = mail_store::Store::open(path, mail_store::StoreOptions::default()).expect("open");
     let account = store
         .insert_account(mail_store::NewAccount {
             id: "00000000-0000-4000-8000-000000000001".parse().expect("id"),
@@ -609,7 +605,6 @@ async fn stored_messages_are_classified_in_the_background() {
         has_attachments: false,
         category_headers: Vec::new(),
     };
-    // Stored before a classifier exists (as by an older version).
     store
         .store_headers(
             inbox,
@@ -623,16 +618,10 @@ async fn stored_messages_are_classified_in_the_background() {
         )
         .await
         .expect("store");
-    let page = store.list_messages(inbox, None, 10).await.expect("list");
-    assert!(page.items.iter().all(|i| i.category.is_none()));
-    assert!(store.category_work_pending().await.expect("pending"));
-    store.set_classifier(Arc::new(super::classifier::ContentClassifier));
-    loop {
-        let step = store.category_step().await.expect("step");
-        if step.done && step.classified == 0 {
-            break;
-        }
-    }
+    (store, inbox)
+}
+
+async fn assert_classified(store: &mail_store::Store, inbox: mail_model::MailboxId) {
     let page = store.list_messages(inbox, None, 10).await.expect("list");
     let by_subject: HashMap<String, Option<MessageCategory>> = page
         .items
@@ -643,6 +632,58 @@ async fn stored_messages_are_classified_in_the_background() {
     assert_eq!(by_subject["S 2"], Some(MessageCategory::Notification));
     assert_eq!(by_subject["S 3"], Some(MessageCategory::Newsletter));
     assert!(!store.category_work_pending().await.expect("pending"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stored_messages_are_classified_in_the_background() {
+    let dir = TempDir::new().expect("temp dir");
+    let (store, inbox) = unclassified_store(&dir.path().join("db.sqlite3")).await;
+    let page = store.list_messages(inbox, None, 10).await.expect("list");
+    assert!(page.items.iter().all(|i| i.category.is_none()));
+    assert!(store.category_work_pending().await.expect("pending"));
+    store.set_classifier(Arc::new(super::classifier::ContentClassifier));
+    loop {
+        let step = store.category_step().await.expect("step");
+        if step.done && step.classified == 0 {
+            break;
+        }
+    }
+    assert_classified(&store, inbox).await;
+}
+
+/// The core finds the unclassified messages at start and classifies them once its start is
+/// done (decision 0029: the backfill does not hold the writer during the start).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_core_classifies_older_messages_after_its_start() {
+    let dir = TempDir::new().expect("temp dir");
+    let data = dir.path().join("data");
+    let (store, inbox) = unclassified_store(&data.join(crate::DATABASE_FILE)).await;
+    drop(store);
+    let server = FakeServer::new();
+    server.with(|s| s.faults.connect = Some(mail_model::BackendError::ConnectionRefused));
+    let core = AppCore::start(
+        CoreConfig {
+            data_dir: data,
+            build: BuildInfo {
+                version: "0.0.0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        CoreServices::with_connector(
+            Credentials::new(MemorySecretStore::new()),
+            FakeConnector(server),
+        ),
+    )
+    .await;
+    let store = core.store_for_tests().clone();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while store.category_work_pending().await.expect("pending") {
+        assert!(Instant::now() < deadline, "the backfill did not run");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_classified(&store, inbox).await;
+    core.shutdown().await;
 }
 
 // ---------------------------------------------------------------------------------------------

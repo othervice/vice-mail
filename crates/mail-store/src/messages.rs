@@ -68,10 +68,14 @@ pub(crate) const INSERT_MESSAGE: &str = "
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
             ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)";
 
+/// A new message's location gets the category and important mark just classified (`?11`,
+/// `?12`), so the trigger `loc_category_new` (migration 0007) only runs where they are not
+/// known here: a merged location, an unclassified message. Its UPDATE of the new row cost
+/// about 1.8 ms per window of 500 (`docs/testing/performance.md`, stage 8/9).
 pub(crate) const INSERT_LOCATION: &str = "
     INSERT INTO message_location (mailbox_id, message_id, uid, seen, flagged, answered, draft,
-                                  deleted, keywords, modseq)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
+                                  deleted, keywords, modseq, category, important)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
 
 pub(crate) const REMOVE_UID_RANGE: &str =
     "DELETE FROM message_location WHERE mailbox_id = ?1 AND uid BETWEEN ?2 AND ?3";
@@ -127,7 +131,16 @@ pub(crate) fn store_headers(
                 .query_row(params![account_row, message_id, mailbox.0], |r| r.get(0))
                 .optional()?;
             if let Some(existing) = existing {
-                insert_location(conn, mailbox, existing, header.uid, &flags, header.modseq)?;
+                // The trigger copies the message's category onto the new location.
+                insert_location(
+                    conn,
+                    mailbox,
+                    existing,
+                    header.uid,
+                    &flags,
+                    header.modseq,
+                    None,
+                )?;
                 report.merged += 1;
                 continue;
             }
@@ -159,7 +172,15 @@ pub(crate) fn store_headers(
             thread,
             category.as_ref(),
         )?;
-        insert_location(conn, mailbox, id, header.uid, &flags, header.modseq)?;
+        insert_location(
+            conn,
+            mailbox,
+            id,
+            header.uid,
+            &flags,
+            header.modseq,
+            category.as_ref(),
+        )?;
         fts_rows.push((id, crate::fts::Row::from_header(header)));
         report.inserted += 1;
     }
@@ -447,6 +468,8 @@ fn apply_flags(
     Ok(Some(!same_flags))
 }
 
+/// `category`: the columns just written for a new message; `None` leaves the copy to the
+/// trigger (merged locations, unclassified messages).
 fn insert_location(
     conn: &Connection,
     mailbox: MailboxId,
@@ -454,6 +477,7 @@ fn insert_location(
     uid: Uid,
     flags: &Flags,
     modseq: Option<ModSeq>,
+    category: Option<&crate::categories::CategoryColumns>,
 ) -> Result<(), StoreError> {
     conn.prepare_cached(INSERT_LOCATION)?
         .execute(params![
@@ -467,6 +491,8 @@ fn insert_location(
             flags.deleted,
             keywords_text(&flags.keywords),
             modseq_param(modseq)?,
+            category.map(|c| c.category),
+            category.is_some_and(|c| c.important),
         ])
         .map_err(StoreError::sqlite("insert location"))?;
     Ok(())

@@ -135,7 +135,11 @@ von 4), `windows.e2e.mjs` (3 von 3) und `layouts.e2e.mjs` (7 grün, die 6 Fälle
   Texte (alle leeren, ladenden und Fehlerzustände durchgehen): keine Durchsicht mit Nachweis.
   Vollständige und gleiche Schlüssel in Englisch und Deutsch prüft `i18n.test.ts`.
 - Automatische Prüfung: axe läuft nur in Vitest/jsdom, nicht in den Desktop-Tests.
-- Leistungswerte aus Stufe 7: Nachmessung läuft (siehe `docs/testing/performance.md`).
+- Leistungswerte aus Stufe 7 am 23.11. neu gemessen (`docs/testing/performance.md`, nur der Kern):
+  die gefundene Verschlechterung beim Start ist behoben (0029); der Start braucht 4 statt 2 ms, weil
+  das Schema auf 161 Objekte gewachsen ist (benannte Abweichung, Ziel 1 s weit eingehalten). Offen
+  bleibt die Verlangsamung beim Scrollen in der WebView nach sehr vielen Zeilen (wird untersucht);
+  deshalb ist der Abnahmepunkt noch nicht abgehakt.
 - Nächster Schritt: axe in den Desktop-Tests für die Hauptansichten in beiden Themen, Durchsicht
   von Fokusring, Bewegung und Zuständen mit Nachweis, dann die Nachmessung eintragen.
 

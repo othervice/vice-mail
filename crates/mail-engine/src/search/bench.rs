@@ -11,7 +11,10 @@
 //! `bench_100k` and `bench_500k` print markdown rows. "Start" and memory are measured in a
 //! child process (this test binary again, `child_measure`), so the generator's memory does not
 //! count: it starts the core on the generated database, lists the largest inbox, runs a few
-//! searches and thread lists, waits two seconds and reads its resident size (`ps`).
+//! searches and thread lists, waits two seconds and reads its resident size (`ps`). It fails
+//! when the start alone makes more than [`START_READ_LIMIT_MB`] resident (the database is
+//! mapped, so that means the start read the database broadly, as the category check of stage 9
+//! once did) or when start, first page or idle memory miss the targets of `docs/SPEC.md`.
 //! `small_data_meets_generous_thresholds` runs in every `cargo test` with 3,000 messages.
 
 use std::collections::HashMap;
@@ -832,6 +835,42 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
     worst
 }
 
+/// The background jobs that still have work, by name (empty when none).
+async fn background_pending(store: &Store) -> String {
+    let mut pending = Vec::new();
+    if store.category_work_pending().await.expect("categories") {
+        pending.push("categories");
+    }
+    if !store.contacts_todo(1).await.expect("contacts").is_empty() {
+        pending.push("contacts");
+    }
+    if store.background_work_pending().await.expect("index") {
+        pending.push("index and threads");
+    }
+    pending.join(", ")
+}
+
+/// Starts the core on `data` and waits until its background jobs have nothing left (at most
+/// ten minutes); how long that took and what was left.
+async fn settle(data: &Dataset) -> (f64, String) {
+    let started = Instant::now();
+    let core = start_core(&data.dir.path().join("data")).await;
+    let store = core.store_for_tests().clone();
+    let mut left = background_pending(&store).await;
+    while !left.is_empty() && started.elapsed() < Duration::from_secs(600) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        left = background_pending(&store).await;
+    }
+    drop(store);
+    core.shutdown().await;
+    (started.elapsed().as_secs_f64(), left)
+}
+
+/// Most resident memory the start alone may add (database pages read through the mapping,
+/// caches, threads). Measured 8 MB at 100,000 and 500,000 messages; a start that reads the
+/// `message` table once adds about as much as the table (80 MB at 100,000 messages).
+const START_READ_LIMIT_MB: f64 = 40.0;
+
 /// Starts a child process that measures start and idle memory on `data`.
 fn child(data: &Dataset) -> String {
     let exe = std::env::current_exe().expect("test binary");
@@ -855,7 +894,7 @@ fn child(data: &Dataset) -> String {
         .filter_map(|l| l.find("CHILD ").map(|i| l[i + 6..].to_owned()))
         .collect();
     assert!(
-        !lines.is_empty(),
+        out.status.success() && !lines.is_empty(),
         "child measurement failed: {text}\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -894,6 +933,7 @@ async fn child_measure() {
         .await
         .expect("first page");
     let usable = started.elapsed();
+    let after_start = rss_mb();
     // What a user does first: threads, the unified inbox, a few searches.
     core.list_threads(inbox, None, 100).await.expect("threads");
     core.list_unified_inbox(UnifiedView::All, None, 100)
@@ -906,12 +946,24 @@ async fn child_measure() {
     }
     tokio::time::sleep(Duration::from_secs(2)).await;
     let idle = rss_mb();
+    let left = background_pending(core.store_for_tests()).await;
     println!(
-        "CHILD start: core started {:.0} ms, first list page {:.0} ms after start; resident memory {before:.0} MB before, {idle:.0} MB idle after loading",
+        "CHILD start: core started {:.0} ms, first list page {:.0} ms after start; resident memory {before:.0} MB before, {after_start:.0} MB after start and first page, {idle:.0} MB idle after loading; background work left: {}",
         ms(opened),
-        ms(usable)
+        ms(usable),
+        if left.is_empty() { "none" } else { &left }
     );
     core.shutdown().await;
+    assert!(
+        after_start - before < START_READ_LIMIT_MB,
+        "the start made {:.0} MB resident (limit {START_READ_LIMIT_MB} MB): it reads the database broadly",
+        after_start - before
+    );
+    assert!(
+        usable < Duration::from_secs(1),
+        "first list page after {usable:?}"
+    );
+    assert!(idle < 250.0, "{idle:.0} MB idle");
 }
 
 fn file_mb(path: &Path) -> f64 {
@@ -967,6 +1019,15 @@ async fn report(total: usize, runs: usize) {
         sizes.state
     );
     measure(&data, runs).await;
+    // The generator stores as stage 7 did, without the classifier: the categories are left to
+    // catch up as after an upgrade from before stage 9, the contact directory as after every
+    // first sync. The child measures the warm start after that one-time work, like stage 7
+    // (which had no such work).
+    let (caught_up, still) = settle(&data).await;
+    println!(
+        "background catch-up after the measurements: {caught_up:.1} s ({})",
+        if still.is_empty() { "done" } else { &still }
+    );
     println!("{}", child(&data));
 
     // The rebuild in the background: the whole index again, bodies parsed again.

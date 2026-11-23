@@ -217,6 +217,124 @@ async fn categories_are_stored_and_copied_onto_locations() {
     );
 }
 
+/// Category and important mark of every location of `message`, by mailbox.
+async fn location_marks(store: &crate::Store, message: i64) -> Vec<(i64, Option<i64>, i64)> {
+    store
+        .read(move |c| {
+            Ok(c.prepare(
+                "SELECT mailbox_id, category, important FROM message_location
+                 WHERE message_id = ?1 ORDER BY mailbox_id",
+            )?
+            .query_map([message], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?)
+        })
+        .await
+        .expect("locations")
+}
+
+/// A domain rule that marks `shop.example` important, and the classifier.
+async fn important_shop(store: &crate::Store) {
+    store.set_classifier(Arc::new(ByLocalPart));
+    store
+        .put_sender_rule(
+            SenderKey::domain("shop.example"),
+            SenderRuleChange {
+                category: None,
+                important: Some(true),
+            },
+            1,
+        )
+        .await
+        .expect("rule");
+}
+
+#[tokio::test]
+async fn new_locations_take_the_category_without_the_trigger() {
+    let f = fixture().await;
+    // The insert itself writes category and important mark of a new message (the trigger's
+    // UPDATE is the slower way and only needed where they are not known).
+    f.store
+        .write(|tx| Ok(tx.execute_batch("DROP TRIGGER loc_category_new")?))
+        .await
+        .expect("drop trigger");
+    important_shop(&f.store).await;
+    let news = from(header(1, D + 1, Some("1@x")), "news@shop.example");
+    let person = from(header(2, D + 2, Some("2@x")), "carol@else.example");
+    f.store
+        .store_headers(f.inbox, UV, vec![news, person], None)
+        .await
+        .expect("store");
+    let inbox = f.inbox.0;
+    assert_eq!(
+        location_marks(&f.store, D + 1).await,
+        vec![(inbox, Some(MessageCategory::Newsletter.code()), 1)]
+    );
+    assert_eq!(
+        location_marks(&f.store, D + 2).await,
+        vec![(inbox, Some(MessageCategory::Person.code()), 0)]
+    );
+}
+
+#[tokio::test]
+async fn merged_locations_take_category_and_important_mark() {
+    let f = fixture().await;
+    important_shop(&f.store).await;
+    let news = from(header(1, D + 1, Some("1@x")), "news@shop.example");
+    f.store
+        .store_headers(f.inbox, UV, vec![news.clone()], None)
+        .await
+        .expect("store");
+    // The same message in a second mailbox: the trigger copies onto the new location.
+    f.store
+        .store_headers(f.archive, UV, vec![news], None)
+        .await
+        .expect("store archive");
+    let (inbox, archive) = (f.inbox.0, f.archive.0);
+    let newsletter = Some(MessageCategory::Newsletter.code());
+    assert_eq!(
+        location_marks(&f.store, D + 1).await,
+        vec![(inbox, newsletter, 1), (archive, newsletter, 1)]
+    );
+}
+
+#[tokio::test]
+async fn unclassified_locations_follow_the_later_classification() {
+    let f = fixture().await;
+    // Stored without a classifier (a database from before stage 9): no category yet.
+    f.store
+        .store_headers(
+            f.inbox,
+            UV,
+            vec![from(header(1, D + 1, Some("1@x")), "news@shop.example")],
+            None,
+        )
+        .await
+        .expect("store");
+    f.store
+        .store_headers(
+            f.archive,
+            UV,
+            vec![from(header(1, D + 1, Some("1@x")), "news@shop.example")],
+            None,
+        )
+        .await
+        .expect("store archive");
+    let (inbox, archive) = (f.inbox.0, f.archive.0);
+    assert_eq!(
+        location_marks(&f.store, D + 1).await,
+        vec![(inbox, None, 0), (archive, None, 0)]
+    );
+    assert!(f.store.category_work_pending().await.expect("pending"));
+    f.store.set_classifier(Arc::new(ByLocalPart));
+    while f.store.category_step().await.expect("step").classified > 0 {}
+    let newsletter = Some(MessageCategory::Newsletter.code());
+    assert_eq!(
+        location_marks(&f.store, D + 1).await,
+        vec![(inbox, newsletter, 0), (archive, newsletter, 0)]
+    );
+    assert!(!f.store.category_work_pending().await.expect("pending"));
+}
+
 #[tokio::test]
 async fn marks_follow_the_message_id_and_need_one() {
     let f = fixture().await;

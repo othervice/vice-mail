@@ -199,11 +199,18 @@ einer klaren Meldung abgelehnt.
 - Aus Stufe 9 (`docs/decisions/0020-posteingang-komfort.md`): Neue Mails werden in der
   Transaktion eingeordnet, die sie speichert (Regeln aus `mail-content` über einen `Classifier` der
   Engine, lokale Signale aus der Datenbank); geänderte Absender-Regeln und Bestandsmails laufen als
-  Auftrag im Hintergrund, neueste zuerst. Kategorie und Wichtig-Markierung stehen per Trigger auch
-  am Ort (`loc_category`, Teilindex `loc_important`), damit Listen nach Kategorie per Keyset laufen.
+  Auftrag im Hintergrund, neueste zuerst. Kategorie und Wichtig-Markierung stehen auch am Ort
+  (`loc_category`, Teilindex `loc_important`; ein neuer Ort übernimmt sie beim Einfügen, Änderungen
+  per Trigger), damit Listen nach Kategorie per Keyset laufen.
   Snooze, Pins und Aufgaben verweisen über Konto-UUID und Message-ID; die Posteingangsliste lässt
   sie je Zeile über den eindeutigen Index weg. Gemessen: Einordnen kostet je Fenster von 500
   Kopfdaten 2,5 ms; Listenseiten bleiben unter 0,3 ms.
+- Aus der Nachmessung Stufe 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): Abfragen auf
+  einen Teilindex, der nach einem Nachholauf leer wird (`message_category_todo`,
+  `message_contacts_todo`), nennen ihn per `INDEXED BY`. `PRAGMA optimize` beim Schließen hält
+  sonst die Größe von vor dem Nachholen fest, und der Planer liest die ganze Tabelle, um keine
+  Zeile zu finden. Hintergrundaufträge, die beim Start Arbeit finden, beginnen erst nach dem
+  Start, damit sie den Schreib-Thread nicht vor den Schreibvorgängen des Starts belegen.
 
 ## Regeln der Mail-Engine
 

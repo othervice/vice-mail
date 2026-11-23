@@ -604,3 +604,71 @@ async fn a_rebuild_runs_in_the_background_and_search_keeps_working() {
     assert_eq!(page.hits.len(), 50);
     assert!(page.next_cursor.is_some());
 }
+
+/// An index job left by the previous run is found at start and done once the start is over
+/// (decision 0029: the work found at start does not hold the writer during the start).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_index_job_found_at_start_runs_after_the_start() {
+    let f = fixture().await;
+    let store = f.core.store_for_tests().clone();
+    let inbox = f.accounts[0].1;
+    let headers: Vec<MessageHeader> = (1..=300)
+        .map(|uid| {
+            header(
+                uid,
+                D + i64::from(uid),
+                "Bestellung",
+                ("Shop", "shop@example.org"),
+                "alice@example.org",
+            )
+        })
+        .collect();
+    store
+        .store_headers(inbox, UV, headers, None)
+        .await
+        .expect("headers");
+    // Through the store, so the running core is not told: the job waits for the next start.
+    assert!(store.rebuild_search_index().await.expect("rebuild"));
+    drop(store);
+    let Fixture {
+        _dir: dir, core, ..
+    } = f;
+    core.shutdown().await;
+    drop(core);
+
+    let server = crate::sync::fake::FakeServer::new();
+    server.with(|s| s.faults.connect = Some(mail_model::BackendError::ConnectionRefused));
+    let core = AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().join("data"),
+            build: BuildInfo {
+                version: "0.0.0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        CoreServices::with_connector(
+            Credentials::new(MemorySecretStore::new()),
+            crate::sync::fake::FakeConnector(server),
+        ),
+    )
+    .await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let status = core.get_search_index_status().await.expect("status");
+        if status.state == SearchIndexState::Ready {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the index job found at start did not run"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let page = core
+        .search(request("bestellung", SearchScope::All))
+        .await
+        .expect("search");
+    assert_eq!(page.hits.len(), 50);
+    core.shutdown().await;
+}

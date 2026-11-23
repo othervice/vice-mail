@@ -159,3 +159,197 @@ Benachrichtigungen); fünf Pins, fünf Snoozes, ein wichtiger Absender. Abfragen
   Kategorie am Ort, Last durch andere Sitzungen; nicht getrennt gemessen.
 - Alle Listen bleiben um Größenordnungen unter den Zielen; Pläne prüft
   `crates/mail-store/src/stage9_plan_tests.rs`.
+
+## Stufe 8/9 – Nachmessung 23.11.2026
+
+**Umgebung:** wie Stufe 7 (Mac mini M4, macOS 27.2.1, Release-Build, warm). „Vorher“ ist Stand
+`ab594b7`, „nachher“ derselbe Stand mit den Änderungen unten
+(`docs/decisions/0029-start-ohne-breites-lesen.md`). Load 2,5–3,3 bei den Benchmarks; andere
+Sitzungen arbeiteten nebenher (zeitweise Load 9, diese Läufe sind verworfen), das Schreiben
+schwankt deshalb um bis zu ±2 ms je Fenster. **Wie gemessen:** dieselben Benchmarks wie in Stufe 7 und 9 (`search::bench`,
+`comfort::bench`, `mail-store`s `bench_100k_headers_and_list_pages`). Neu in `search::bench`:
+
+- Vor dem Kindprozess wartet der Benchmark, bis die einmalige Nachholarbeit fertig ist
+  (Kategorien, Kontaktverzeichnis, Threads und Index), und meldet, wie lange das noch dauerte. Der
+  Generator speichert wie in Stufe 7 ohne Einordnung; danach fällt dieselbe Arbeit an wie nach dem
+  Umstieg von einer Version vor Stufe 9 (Kategorien) bzw. nach jedem Erstabgleich (Kontakte).
+  Bisher lief der Kindprozess je nach Dauer der Messungen mitten in diese Arbeit. Der Warmstart wird
+  so wieder wie in Stufe 7 gemessen, als es diese Aufträge noch nicht gab.
+- `child_measure` meldet den residenten Speicher auch direkt nach Start und erster Seite und was an
+  Hintergrundarbeit offen ist. Es scheitert, wenn der Start allein mehr als 40 MB resident macht
+  (die Datenbank ist gemappt: der Start hat sie breit gelesen), die erste Seite länger als 1 s
+  braucht oder der Leerlauf über 250 MB liegt.
+- Die Ursachen wurden mit einer vorübergehenden Zeitmessung jedes Schritts von `AppCore::start`
+  (nicht im Code geblieben) im Kindprozess auf Kopien der 100.000er-Datenbank gesucht, in drei
+  Zuständen: direkt nach dem Generator, nach den Messungen (Nachholarbeit offen), nach erledigter
+  Nachholarbeit.
+
+### Ergebnis gegen die Ziele
+
+| Ziel (`docs/SPEC.md`) | Stufe 7 (100.000 / 500.000) | vorher | nachher | erfüllt |
+|---|---|---|---|---|
+| Suche bis erste Treffer unter 200 ms bei 100.000 Mails | 0,24–4,3 / 0,26–16,5 ms | 0,24–4,98 / 0,24–19,5 ms | 0,24–5,27 / 0,25–21,0 ms, schlechteste p95 5,44 / 21,3 ms | ja |
+| Wechsel zwischen lokal vorhandenen Mails unter 100 ms | 0,36 / 0,39 ms | 0,34 / 0,35 ms | 0,39 / 0,37 ms (p95 0,51 / 0,55) | ja |
+| Warmstart bis benutzbarer Posteingang unter 1 s | 2 / 2 ms | 13 / 14 ms | 5 / 5 ms (Kern gestartet nach 4 ms) | ja (nur Kern) |
+| Arbeitsspeicher im Leerlauf unter 250 MB | 21 / 21–54 MB | 98 / 171 MB | 25 / 25 MB | ja (nur Kern) |
+
+Suche und Mail öffnen: Median aller Anfragen bzw. von 200 Mails. Einschränkungen wie in Stufe 7:
+nur der Kern (keine WebView, kein Rendern), kein Kaltstart nach Neustart des Rechners.
+
+Listen, Threads und Suchen sind vorher und nachher gleich (Abweichungen 0–15 %, beim zweiten Lauf
+war die Last höher; diese Pfade haben sich nicht geändert). Gegenüber Stufe 7 sind die Listen um
+0,1–0,4 ms gewachsen (Listenseite 0,10 → 0,18 ms, vereinter Posteingang 0,47 → 0,71 ms); die
+Ursache ist nicht getrennt gemessen, vermutlich die Markierungen je Zeile aus Stufe 9
+(`comfort::bench`: 0,21 ms für 100 Zeilen samt Markierungen).
+
+| Messung nachher (ms) | 100.000 Median | p95 | 500.000 Median | p95 |
+|---|---:|---:|---:|---:|
+| Listenseite größter Posteingang (100 Zeilen) | 0,18 | 0,22 | 0,19 | 0,28 |
+| … Keyset ab Mitte | 0,18 | 0,25 | 0,17 | 0,22 |
+| Vereinter Posteingang, 5 Konten (100) | 0,71 | 0,89 | 0,71 | 1,08 |
+| Thread-Liste größter Posteingang (100) | 0,39 | 0,51 | 0,40 | 0,54 |
+| … Keyset ab Mitte | 0,43 | 0,52 | 0,42 | 0,55 |
+| Thread-Liste vereinter Posteingang (100) | 1,79 | 2,01 | 2,01 | 2,44 |
+| Thread-Liste Newsletter (langer Listen-Thread) | 0,92 | 1,17 | 4,60 | 5,02 |
+| Thread öffnen (1.461 bzw. 7.620 Mails) | 3,37 | 5,67 | 3,93 | 5,64 |
+| Suche häufiges Wort `rechnung` | 0,27 | 0,43 | 0,31 | 0,59 |
+| sehr häufiges Wort `und` | 0,28 | 0,37 | 0,26 | 0,41 |
+| seltenes Wort | 0,24 | 0,40 | 0,26 | 0,44 |
+| beim Tippen, Präfix `rech` | 1,02 | 1,14 | 2,92 | 3,10 |
+| Phrase `"viele grüße"` | 0,36 | 0,47 | 0,37 | 0,52 |
+| zwei Wörter | 0,32 | 0,37 | 0,33 | 0,48 |
+| `from:` Nachname | 0,27 | 0,37 | 0,26 | 0,38 |
+| Wort + `account:` (kleinstes Konto) | 0,83 | 1,25 | 0,75 | 1,25 |
+| Wort + `in:inbox is:unread` | 0,43 | 0,57 | 0,43 | 0,69 |
+| Wort + `newer_than:1y` | 0,27 | 0,34 | 0,28 | 0,33 |
+| `filename:rechnung has:attachment` | 0,25 | 0,32 | 0,25 | 0,39 |
+| ohne Text: `is:unread in:inbox` | 0,35 | 0,52 | 0,38 | 0,64 |
+| nur Ausschluss `-und` | 5,27 | 5,44 | 20,95 | 21,34 |
+| `rechnung OR invoice` | 0,34 | 0,37 | 0,37 | 0,46 |
+| Mail öffnen, Body lokal (`getMessage`, HTML) | 0,39 | 0,51 | 0,37 | 0,55 |
+
+### Start und Speicher: Ursachen
+
+**1. Der Start las die ganze Tabelle `message` (Hauptursache).** `comfort::start` fragt bei jedem
+Start `category_work_pending` (`SELECT EXISTS (… FROM message WHERE category IS NULL)`). Der
+Teilindex `message_category_todo` ist nach dem Nachholen leer, aber `PRAGMA optimize` beim
+Schließen hatte seine Größe aufgenommen, als noch alle Mails ohne Kategorie waren (`sqlite_stat1`:
+100.000 Zeilen). Die Zahl der Mails ändert sich danach nicht, also frischt `PRAGMA optimize` die
+Statistik nicht auf, und der Planer wählt `SCAN message`: Um keine Zeile zu finden, liest er die
+ganze Tabelle, deren Seiten über `mmap` resident bleiben. Im Produkt kann das jede Datenbank
+treffen, die von vor Stufe 9 kommt (alle Mails ohne Kategorie, bis der Auftrag sie einordnet); im
+Benchmark trifft es jede, weil der Generator ohne Einordnung speichert.
+
+| 100.000 Mails, Nachholarbeit erledigt, Kindprozess | vorher | nachher |
+|---|---:|---:|
+| Schritt `comfort::start` (frische Kopie, Seiten nicht im Cache) | 279 ms | 0,07–0,5 ms |
+| resident nach Start und erster Seite | 88 MB | 16 MB |
+| resident im Leerlauf | 92–94 MB | 25 MB |
+
+Im Benchmark (Seiten warm im Cache) kostete derselbe Scan rund 11 ms: daher 13 statt 2 ms Start
+und 98 MB im Leerlauf bei einer Datenbank von 98 MB. Bei 500.000 Mails begrenzt `mmap_size`
+(256 MiB) den gemappten Teil, daher 171 MB.
+
+**2. Nachholarbeit beim Start hielt den Schreib-Thread.** Fand der Start Mails ohne Kategorie,
+schrieb der Kategorie-Auftrag sofort (500 Mails je Schritt), und die Schreibvorgänge des Starts
+selbst warteten dahinter: Schritt „verpasste geplante Sendungen“ (Stufe 10) 114–128 ms, Start
+121–134 ms, erste Seite 121–134 ms nach Beginn (Kopie nach den Messungen, 79.000 Mails ohne
+Kategorie). Nachher auf denselben Kopien (kalt, Load 5,5): Start 7–8 ms, erste Seite 16–17 ms.
+
+**3. Einmalige Nachholarbeit im Leerlauf.** Direkt nach dem Generator ordnete der
+Kategorie-Auftrag in den 2 s Leerlauf rund 96.000 Mails ein; der residente Speicher stieg dabei
+gleichmäßig von 24 auf 142 MB (nachher gleich, 123–144 MB). Der Kontakt-Auftrag beginnt 2 s nach
+dem Start. Nach den Messungen dauerte die restliche Nachholarbeit noch 3,8 s (100.000) bzw. 12,1 s
+(500.000). Das fällt einmal je Datenbank an und läuft im Hintergrund; Listen und Suche bleiben
+dabei benutzbar.
+
+**4. Was der Warmstart nachher kostet** (100.000 Mails, Nachholarbeit erledigt, warm, zwei Läufe;
+zusammen 4,5–5,7 ms):
+
+| Schritt von `AppCore::start` | ms |
+|---|---:|
+| Datenbank öffnen (Prüfverbindung, Schreib- und zwei Leseverbindungen) | 2,7–3,5 |
+| Einstellungs-Sync: Zustand lesen, Erfassung (Stufe 11) | 0,1 |
+| Stufe 9 anlegen (Zeitzone des Systems 0,9–1,8, Abmelde-Client 0,05–0,17) | 0,9–1,1 |
+| Suche: offene Arbeit nachsehen (Stufe 7, FTS-Auftrag, Threads) | 0,05 |
+| Stufe 9 starten: offene Kategorien, nächster Snooze | 0,07 |
+| verpasste geplante Sendungen (Stufe 10) | 0,06–0,08 |
+| Konten starten | 0,05 |
+| Outbox fortsetzen | 0,3–0,4 |
+| Entwürfe, Kontakt-Auftrag (Stufe 5/10) | 0,1 |
+| MCP-Host (Stufe 12) | 0,06 |
+| Einstellungs-Sync-Worker (Stufe 11) | 0,01–0,04 |
+| alles Übrige (Lesen, Outbox anlegen, Ordner der geöffneten Anhänge leeren) | < 0,1 |
+
+Das Öffnen ist teurer als in Stufe 7, weil jede der vier Verbindungen das Schema liest: 161
+Objekte (48 Tabellen, 60 Indizes, 53 Trigger, 41 KB SQL) gegenüber 5 Migrationen damals. KI
+(Stufe 13) und Oberflächen-Einstellungen tun beim Start nichts; sie lesen erst, wenn die
+Oberfläche fragt.
+
+### Kosten je Abgleichsfenster
+
+`mail-store`-Benchmark, 100.000 Kopfdaten in 200 Fenstern ohne Einordnung, je zwei Läufe; für die
+Zuordnung wurde vor dem Speichern jeweils ein Trigger bzw. Index entfernt:
+
+| Stand | ms je Fenster |
+|---|---:|
+| Stufe 7 | 10,3–10,4 |
+| vorher | 13,8–14,1 |
+| … ohne Trigger `loc_category_new` | 12,0–12,3 |
+| … ohne Index `loc_category` | 12,8–13,5 |
+| … ohne Teilindizes `message_category_todo`, `message_contacts_todo` | 13,2–13,8 |
+| … ohne alle vier | 11,3–11,8 |
+| nachher (Load 3,3) | 14,3–14,4 |
+
+- Größter Einzelposten ist der Trigger `loc_category_new` (Stufe 9): Er kopiert Kategorie und
+  Wichtig-Markierung mit einem `UPDATE` auf jeden neuen Ort, 1,8 ms je Fenster. Der Index
+  `loc_category` kostet 0,6–1,0 ms, die beiden Teilindizes der Nachhol-Aufträge 0,3–0,6 ms. Der
+  Rest gegenüber Stufe 7 (rund 1 ms) ist nicht getrennt gemessen (mehr Spalten je Nachricht, Last).
+- Nachher bekommt der Ort einer neu eingeordneten Nachricht die Werte im `INSERT`, der Trigger
+  läuft dann nicht. Ohne Klassifizierer (dieser Benchmark, `search::bench`, eine Datenbank von vor
+  Stufe 9) bleibt der Weg gleich; die Werte nachher liegen in der Schwankung.
+- Die Einordnung (`comfort::bench`, mit gegen ohne Klassifizierer) kostete vorher 2,3 ms je
+  Fenster (13,69 / 15,97 ms). Im selben Binary abwechselnd gemessen, drei Paare: mit Einordnung
+  nachher 15,3 / 15,8 / 15,9 ms, vorher 17,5 / 18,1 / 16,8 ms (ohne Einordnung 13,7–14,6 ms).
+  Die Einordnung selbst kostet damit 1,6–1,7 ms je Fenster (Kopfzeilen-Block parsen, eine
+  Kontakt- und bis zu zehn Antwort-Abfragen je Mail); weniger ginge nur am Klassifizierer selbst,
+  das bleibt.
+- `search::bench` (fünf Konten, ohne Einordnung): Stufe 7 18,5 / 29,2 ms, vorher 22,2 / 37,0 ms,
+  nachher 25,1 / 35,4 ms je Fenster (100.000 / 500.000). Der Weg ist vorher und nachher derselbe
+  (Mails ohne Kategorie, der Trigger läuft); dass 100.000 höher und 500.000 niedriger liegt, ist
+  Schwankung, wie der `mail-store`-Benchmark auf demselben Weg zeigt (13,8–14,1 gegen 14,3–14,4 ms).
+
+### Behoben
+
+1. **Teilindex fest:** Die Abfragen auf Mails ohne Kategorie nennen `INDEXED BY
+   message_category_todo`, wie `CONTACTS_TODO` schon `message_contacts_todo`. Plan-Test
+   `stage9_plan_tests::stale_statistics_of_the_unclassified_index_do_not_cause_a_scan` (Statistik
+   bei 3.000 Mails ohne Kategorie, danach alle eingeordnet, neu geöffnet; scheitert ohne
+   `INDEXED BY` mit `SCAN message`).
+2. **Nachholarbeit nach dem Start:** Kategorie-Auftrag (Stufe 9) und Such-Auftrag (Stufe 7)
+   beginnen erst am Ende von `AppCore::start`. Tests
+   `comfort::tests::the_core_classifies_older_messages_after_its_start`,
+   `search::tests::an_index_job_found_at_start_runs_after_the_start`.
+3. **Kategorie gleich beim Einfügen:** Der Ort einer neuen Nachricht bekommt Kategorie und Wichtig
+   im `INSERT`; der Trigger greift nur noch für zusammengeführte Orte und Mails ohne Kategorie.
+   Tests `stage9_tests::new_locations_take_the_category_without_the_trigger` (Trigger entfernt;
+   scheitert mit dem alten `INSERT`), `merged_locations_take_category_and_important_mark`,
+   `unclassified_locations_follow_the_later_classification`.
+4. **Schwellen im Benchmark:** `child_measure` scheitert über 40 MB Zuwachs durch den Start (vorher
+   80 MB, nachher 8 MB), über 1 s bis zur ersten Seite und über 250 MB im Leerlauf.
+
+### Bleibt
+
+- **Öffnen der Datenbank 2,7–3,5 ms**, weil vier Verbindungen das gewachsene Schema lesen. Die
+  Leseverbindungen ließen sich nebeneinander öffnen; bei einem Ziel von 1 s lohnt das nicht.
+- **Zeitzone des Systems 0,9–1,8 ms** beim Anlegen von Stufe 9. Die erste Posteingangsseite mit
+  Datumsabschnitten braucht sie ohnehin.
+- **Schreiben je Fenster** bleibt um `loc_category` und die beiden Teilindizes teurer als in
+  Stufe 7 (zusammen 1–1,5 ms); sie tragen die Listen nach Kategorie und die Nachhol-Aufträge.
+  Ohne Klassifizierer läuft der Trigger weiter.
+- **Einmalige Nachholarbeit** nach dem Umstieg bzw. einem Erstabgleich: läuft im Hintergrund und
+  macht dabei gemappte Seiten resident (siehe 3.).
+- `-und` bei 500.000 Mails (rund 20 ms Median) und der Zähler am Symbol (2,3 ms) sind unverändert.
+
+**Ungeprüft:** wie in Stufe 7 (Kaltstart nach Neustart, die App mit WebView, echte Postfächer,
+Windows).

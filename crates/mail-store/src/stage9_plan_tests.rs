@@ -134,6 +134,11 @@ fn expected() -> Vec<Expected> {
             &["SCAN message USING INDEX message_category_todo"],
         ),
         e(
+            "any unclassified message (at every start)",
+            categories::ANY_UNCLASSIFIED,
+            &["SCAN message USING INDEX message_category_todo"],
+        ),
+        e(
             "rules pass",
             categories::RULE_ROWS,
             &["SEARCH message USING INTEGER PRIMARY KEY (rowid<?)"],
@@ -354,4 +359,62 @@ async fn every_stage_9_query_uses_its_index() {
     drop(store);
     let store = Store::open(&db_path(&dir), StoreOptions::default()).expect("reopen");
     check_all(&store, "reopened with statistics").await;
+}
+
+/// Statistics taken while every message was unclassified (`PRAGMA optimize` at close after a
+/// first sync or the upgrade to stage 9) and kept after the backfill: the planner must still
+/// use the partial index, not scan `message` to find nothing (stage 8/9 re-measurement,
+/// `docs/testing/performance.md`).
+#[tokio::test]
+async fn stale_statistics_of_the_unclassified_index_do_not_cause_a_scan() {
+    let f = fixture().await;
+    let headers: Vec<_> = (1..=3_000u32)
+        .map(|uid| {
+            let k = i64::from(uid);
+            seen(header(
+                uid,
+                1_700_000_000 + k * 600,
+                Some(&format!("{k}@x")),
+            ))
+        })
+        .collect();
+    for window in headers.chunks(500) {
+        f.store
+            .store_headers(f.inbox, UV, window.to_vec(), None)
+            .await
+            .expect("store");
+    }
+    f.store
+        .write(|tx| Ok(tx.execute_batch("ANALYZE")?))
+        .await
+        .expect("analyze");
+    f.store
+        .write(|tx| {
+            tx.execute_batch("UPDATE message SET category = 0, category_auto = 0")?;
+            Ok(())
+        })
+        .await
+        .expect("classify");
+    let Fixture {
+        _dir: dir, store, ..
+    } = f;
+    drop(store);
+    let store = Store::open(&db_path(&dir), StoreOptions::default()).expect("reopen");
+    let todo: i64 = store
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT stat FROM sqlite_stat1 WHERE idx = 'message_category_todo'",
+                [],
+                |r| r.get::<_, String>(0),
+            )?
+            .split(' ')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0))
+        })
+        .await
+        .expect("statistics");
+    assert_eq!(todo, 3_000, "the statistics still count every message");
+    check_all(&store, "stale statistics after the backfill").await;
+    assert!(!store.category_work_pending().await.expect("pending"));
 }

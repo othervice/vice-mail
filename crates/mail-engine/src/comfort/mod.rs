@@ -182,10 +182,14 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// looked up here, so the tasks only touch the store when there is work: a core dropped right
 /// after its start closes the database at once (the tasks hold it only weakly, and never
 /// while idle).
-pub(crate) async fn start<C: Connector>(core: &AppCore<C>) {
+///
+/// Returns whether the category jobs have work. They begin only when [`AppCore::start`] kicks
+/// them at its end (decision 0029): a backfill step holds the writer, and the start's own
+/// writes (missed sends, the outbox) would wait behind it.
+pub(crate) async fn start<C: Connector>(core: &AppCore<C>) -> bool {
     let state = core.comfort();
     let Ok(store) = core.store_ref() else {
-        return;
+        return false;
     };
     let categories_pending = store.category_work_pending().await.unwrap_or_else(|err| {
         tracing::error!(error = %err, "categories: pending work unknown");
@@ -199,7 +203,6 @@ pub(crate) async fn start<C: Connector>(core: &AppCore<C>) {
     tasks.push(tokio::spawn(category_worker(
         core.downgrade(),
         Arc::clone(&state.categories),
-        categories_pending,
     )));
     tasks.push(tokio::spawn(snooze_worker(
         core.downgrade(),
@@ -213,12 +216,13 @@ pub(crate) async fn start<C: Connector>(core: &AppCore<C>) {
         core.downgrade(),
         core.subscribe(),
     )));
+    categories_pending
 }
 
-async fn category_worker<C: Connector>(weak: WeakCore<C>, wake: Arc<Notify>, pending: bool) {
-    if !pending {
-        wake.notified().await;
-    }
+/// Waits for [`ComfortState::kick_categories`] (a kick before the wait is kept by the
+/// `Notify`), then runs the category jobs until nothing is left, and waits again.
+async fn category_worker<C: Connector>(weak: WeakCore<C>, wake: Arc<Notify>) {
+    wake.notified().await;
     loop {
         let mut unannounced = false;
         let mut last_event = Instant::now();

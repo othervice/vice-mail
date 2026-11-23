@@ -33,7 +33,7 @@ zwei Sitzungen verteilt werden (A: Kategorien, Pins, Snooze, Aufgaben, Regeln. B
 - [x] Test: Ohne Klick geht keine Abmelde-Anfrage hinaus (Zähl-Server)
 - [x] Tests für Einladungen: ganztägig, wiederkehrend, fremde Zeitzone, kaputte Datei
 - [ ] von Hand auf beiden Systemen geprüft und im Ergebnis vermerkt: Benachrichtigungen, Ruhezeiten, Standard-Mail-App
-- [ ] Leistungswerte neu gemessen; `scripts/check.sh` ist grün
+- [x] Leistungswerte neu gemessen; `scripts/check.sh` ist grün
 
 ## Nicht in dieser Stufe
 
@@ -174,8 +174,11 @@ Messung: `docs/testing/performance.md` (Stufe 9).
   oder ein Mitglied eines zugeklappten Bündels öffnet sich in einem eigenen Fenster.
 
 **Ungeprüft / offen**
-- Leistungswerte aus Stufe 7: Nachmessung läuft (siehe `docs/testing/performance.md`); die
-  Stufe-9-Messung oben betrifft nur den Kern.
+- Leistungswerte aus Stufe 7 am 23.11. neu gemessen (`docs/testing/performance.md`, Abschnitt
+  „Stufe 8/9 – Nachmessung“, nur der Kern): Die Nachmessung fand eine Verschlechterung beim Start
+  (13 statt 2 ms, 98 statt 21 MB im Leerlauf; veraltete SQLite-Statistiken ließen eine Prüfung die
+  ganze Nachrichtentabelle lesen) und behob sie (Entscheidung 0029): Start 4 ms, Leerlauf 25 MB,
+  Suche und Listen unverändert weit unter den Zielen.
 - Befund aus dem Desktop-Test: Nachdem alle 9.959 Zeilen des Posteingangs (mit aufgeklappten
   Bündeln) zweimal gerendert worden waren, wurde späteres Scrollen langsam (längster Frame rund
   250 ms statt 25 ms); der Test misst das Scrollen vorher. Wird gerade untersucht.

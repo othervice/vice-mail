@@ -25,7 +25,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 06 | [Windows und Builds](stages/06-windows-und-builds.md) | wartet auf Windows-Test | **installierbar auf Windows und MacBook** |
 | 07 | [Suche, Threads, mehrere Konten](stages/07-suche-threads-konten.md) | fertig | vereinter Posteingang, schnelle Suche |
 | 08 | [Bedienung und Barrierefreiheit](stages/08-bedienung-und-barrierefreiheit.md) | in Arbeit | Layouts, Tastatur, Command Palette |
-| 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | in Arbeit | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
+| 09 | [Posteingang-Komfort](stages/09-posteingang-komfort.md) | fertig | Kategorien, Snooze, Benachrichtigungen, Standard-Mail-App |
 | 10 | [Composer vollständig](stages/10-composer-vollstaendig.md) | fertig | Signaturen, Vorlagen, Kontakte, Später senden |
 | 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | fertig | **Geräte gleichen sich über das Postfach ab** |
 | 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | fertig | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
