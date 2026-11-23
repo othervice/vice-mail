@@ -40,6 +40,44 @@ nach GitHub.
   jederzeit möglich, auch als Privatperson ohne D-U-N-S-Nummer (die braucht Apple nur für Firmen):
   Apple-Developer-Programm als Einzelperson, für Windows ein OV-Zertifikat für Einzelpersonen.
 
+## Nachtrag 23.11.2026: macOS-Signatur vorbereitet
+
+Der Mensch hat die Mitgliedschaft im Apple-Developer-Programm als Einzelperson beantragt; die
+Aktivierung steht aus. Signiert werden soll **nur macOS**; **Windows bleibt unsigniert** (kein
+OV-Zertifikat beantragt, SmartScreen-Abschnitt in `docs/INSTALL.md` gilt weiter). Releases vor der
+Aktivierung bleiben ad hoc signiert.
+
+Vorbereitet (Ablauf und Portal-Schritte in `docs/RELEASING.md`, „macOS signing and notarisation“):
+
+- `scripts/apple-signing-setup.sh`: privater Schlüssel (RSA 2048) direkt im Anmelde-Schlüsselbund,
+  nur über Pipes, nie als Datei; Zertifikatsanfrage (CSR) nach `~/Downloads`; Import des
+  `.cer` mit Prüfung, dass es zum Schlüssel passt, und Apples Zwischenzertifikat bei Bedarf;
+  Notarisierungs-Zugang als notarytool-Profil `vicemail-notary` im Schlüsselbund, bevorzugt mit
+  einem App-Store-Connect-API-Schlüssel (Team-Schlüssel, Rolle „Developer“; persönliche Schlüssel
+  kann notarytool nicht nutzen), sonst Apple-Account mit App-spezifischem Passwort; die `.p8`-Datei
+  wird nur nach Bestätigung gelöscht und erst, nachdem das Profil ohne sie funktioniert hat;
+  `--check` prüft Identität, eine Testsignatur und das Profil, ohne Geheimnisse auszugeben.
+- `scripts/build-macos.sh` erkennt eine gültige Identität „Developer ID Application“ selbst
+  (oder `VICEMAIL_SIGNING_IDENTITY`) und signiert dann von innen nach außen (`mail-mcp`, dann die
+  App) mit Hardened Runtime und sicherem Zeitstempel, notarisiert in zwei Runden (App als Zip,
+  danach das Disk-Image mit der gestapelten App), stapelt beide und prüft mit `codesign`, `spctl`
+  („accepted, source=Notarized Developer ID“) und `stapler validate`. Mit `VICEMAIL_UPDATER=1`
+  enthält das Update-Archiv die notarisierte App. Scheitert etwas, bricht der Build ab; ohne
+  Identität bleibt er ad hoc wie bisher. Tauri signiert und notarisiert dabei nicht selbst: Es
+  kennt kein notarytool-Profil, nur Umgebungsvariablen mit Passwort oder Pfad zur `.p8`
+  (`APPLE_PASSWORD`, `APPLE_API_KEY_PATH`), und es baut Disk-Image und Update-Archiv im selben
+  Lauf wie die App, also bevor das Skript sie stapeln könnte. Deshalb legt Tauri nur die App an;
+  Disk-Image und Update-Archiv entstehen im Skript aus der gestapelten App.
+- Entitlements: keine (`app/src-tauri/Entitlements.plist`, leer, mit Begründung). WKWebView
+  führt JavaScript im WebContent-Prozess von WebKit aus, die Passwörter liegen im klassischen
+  Schlüsselbund (`apple-native-keyring-store`, Feature `keychain`), ausgehende Verbindungen
+  brauchen außerhalb der Sandbox keine Berechtigung. Die Ad-hoc-Builds laufen seit Tauri 2 schon
+  mit Hardened Runtime ohne Entitlements.
+- Getestet mit einem selbst signierten Testzertifikat in einem Wegwerf-Schlüsselbund (siehe
+  Stufe 15, Ergebnis). Ungeprüft bis zur Aktivierung: Notarisierung, Stapeln, Urteil von
+  Gatekeeper, das Verhalten auf einem zweiten Mac und die einmalige Schlüsselbund-Abfrage beim
+  Wechsel von der unsignierten zur signierten App.
+
 ## Rückweg
 
 Solange niemand von außen beigetragen hat, lässt sich die Lizenzentscheidung noch ändern; danach nur

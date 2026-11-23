@@ -9,10 +9,13 @@
 > deleting). Allowing changes is a separate step per account that you take yourself once the app
 > offers it; until then the server stays as it is.
 
-> **Unsigned builds.** The macOS app is only ad-hoc signed (no Apple Developer ID, not notarised)
-> and the Windows installer is not signed at all. macOS and Windows therefore warn before the first
-> start. This guide explains each warning and what is safe to do about it. Signed releases are
-> planned for a later stage.
+> **Signed and unsigned builds.** The Windows installer is not signed, so Windows warns before the
+> first start. On macOS there are two kinds of builds: **signed** ones (Apple Developer ID,
+> notarised by Apple), which open like any app from the internet, and **unsigned** ones (only
+> ad-hoc signed), which macOS blocks until you allow them once. The builds so far are unsigned;
+> signing is prepared and starts once the project's Apple developer membership is active. The
+> release notes say which kind a release is, and "Is my copy signed?" below shows how to check.
+> This guide explains each warning and what is safe to do about it.
 
 ## System requirements
 
@@ -37,10 +40,11 @@ A release directory contains three files (`<version>` is for example `0.1.0`):
 | `Vice-Mail-<version>-windows-x64-setup.exe` | Windows |
 | `SHA256SUMS` | the SHA-256 checksum of both |
 
-Because the builds are not signed, the checksum is the only way to confirm that your copy is the
-file that was built. It only helps if you get `SHA256SUMS` from the person who built the files
-through a channel you trust; a checksum downloaded from the same place as the file only catches a
-broken download.
+For an unsigned build, the checksum is the only way to confirm that your copy is the file that was
+built. It only helps if you get `SHA256SUMS` from the person who built the files through a channel
+you trust; a checksum downloaded from the same place as the file only catches a broken download.
+A signed macOS build is checked by macOS itself as well (signature and Apple's notarisation); the
+Windows installer is unsigned either way.
 
 macOS, in Terminal, in the folder with the downloaded files:
 
@@ -75,8 +79,16 @@ If a checksum does not match, delete the file and do not open it.
 When a file arrives through a browser, Mail, Messages or AirDrop, macOS marks it with the
 *quarantine* attribute (`com.apple.quarantine`). The copy you drag out of the disk image inherits
 it. Before the first start of a quarantined app, Gatekeeper checks that it is signed with an Apple
-Developer ID and notarised by Apple. This build is neither, so macOS blocks the first start. That
-is expected; it does not mean that something is wrong with the file.
+Developer ID and notarised by Apple.
+
+**Signed builds** pass that check. On the first start macOS asks once whether you want to open an
+app downloaded from the internet; click **Open**. Nothing else is needed: no System Settings, no
+`xattr`, no checksum required. If macOS blocks a build that the release notes call signed, do not
+work around it; download it again and report it.
+
+**Unsigned builds** are neither signed with a Developer ID nor notarised, so macOS blocks their
+first start. That is expected; it does not mean that something is wrong with the file. Allow it
+once as follows.
 
 **macOS 15 Sequoia and later** (including 26 and 27):
 
@@ -108,13 +120,19 @@ recording that you allowed this app, and it also silences the "damaged" warning,
 pointing at a real problem. Prefer the System Settings route. If you remove the attribute anyway,
 verify the checksum first and remove it only from this app, never from a whole folder.
 
-To look at the signature yourself:
+**Is my copy signed?** In Terminal:
 
 ```sh
-codesign --verify --deep --strict --verbose=2 "/Applications/Vice Mail.app"   # valid on disk
-codesign -dv "/Applications/Vice Mail.app"   # Signature=adhoc, TeamIdentifier=not set
-spctl --assess -vv "/Applications/Vice Mail.app"   # rejected: no Developer ID, as expected
+codesign --verify --deep --strict --verbose=2 "/Applications/Vice Mail.app"   # valid on disk (both kinds)
+codesign -dvv "/Applications/Vice Mail.app" 2>&1 | grep -E '^(Signature|Authority|TeamIdentifier)='
+spctl --assess -vv "/Applications/Vice Mail.app"
 ```
+
+| | signed build | unsigned build |
+|---|---|---|
+| `codesign -dvv` | `Authority=Developer ID Application: …`, a `TeamIdentifier` of ten characters | `Signature=adhoc`, `TeamIdentifier=not set` |
+| `spctl --assess -vv` | `accepted`, `source=Notarized Developer ID` | `rejected` (no Developer ID), as expected |
+| `xcrun stapler validate "/Applications/Vice Mail.app"` (needs Xcode or its command line tools) | `The validate action worked!` | fails: no ticket |
 
 ### Updating
 
@@ -126,6 +144,11 @@ temporary place because it was never moved (App Translocation), cannot replace i
 
 **By hand:** quit the app, then drag the new version from its disk image onto Applications and
 replace the old one. Your accounts and mail stay.
+
+**From an unsigned to the first signed version:** macOS may ask once per account whether "Vice
+Mail" may use the password stored in your keychain, because the app's signature changed. Enter
+your Mac's password and choose **Always Allow**. Signed versions keep the same signature identity,
+so later updates should not ask again.
 
 Do not go back to an older version: once a newer version has upgraded the local database, an
 older one refuses to open it.
@@ -270,7 +293,11 @@ passwords behind.
 
 Checked on the build Mac (macOS 27.2, Apple M4): the disk image mounts, contains the app and the
 Applications link, the app's ad-hoc signature verifies, Gatekeeper's assessment is `rejected` as
-described, and the app starts from the disk image. **Not yet checked:** the Gatekeeper dialogs on a
+described, and the app starts from the disk image. **Signed builds** are prepared but none exists
+yet (the Apple developer membership is not active): the signing path was checked with a
+self-signed test certificate only (hardened runtime, the app starts from the disk image). The
+"signed build" column above and the single **Open** prompt are what Apple documents; they will be
+confirmed with the first notarised build on a second Mac. **Not yet checked:** the Gatekeeper dialogs on a
 second Mac, everything on Windows (SmartScreen, Smart App Control, installer, WebView2 download,
 uninstaller). The Windows steps follow the installer's configuration and the manual test plan; they
 will be confirmed or corrected after the first test on a Windows PC.

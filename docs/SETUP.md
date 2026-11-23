@@ -103,7 +103,7 @@ indicates they must be present“), und ein heruntergeladenes Exemplar gilt als 
 
 | Skript | Ergebnis |
 |---|---|
-| `scripts/build-macos.sh [version]` | `.app` und `.dmg` für Apple Silicon unter `target/release/bundle/`, ad hoc signiert. Prüft Signatur und Disk-Image, startet die App aus dem Image unter einem temporären `HOME` und beendet sie wieder (`SKIP_LAUNCH_CHECK=1` ohne GUI-Sitzung). Gibt Pfad, Größe und SHA-256 aus, dazu eine `.sha256`-Datei |
+| `scripts/build-macos.sh [version]` | `.app` und `.dmg` für Apple Silicon unter `target/release/bundle/`, ad hoc signiert; mit einer Identität „Developer ID Application“ im Schlüsselbund signiert, notarisiert und gestapelt (`docs/RELEASING.md`, „macOS signing and notarisation“; einrichten mit `scripts/apple-signing-setup.sh`). Prüft Signatur und Disk-Image, startet die App aus dem Image unter einem temporären `HOME` und beendet sie wieder (`SKIP_LAUNCH_CHECK=1` ohne GUI-Sitzung). Gibt Pfad, Größe und SHA-256 aus, dazu eine `.sha256`-Datei |
 | `scripts/build-windows.sh [version]` | NSIS-Installer unter `target/x86_64-pc-windows-msvc/release/bundle/nsis/`, mit Pfad, Größe, SHA-256 und `.sha256`-Datei |
 | `scripts/release-local.sh [--force] [version]` | beide Builds, danach `dist/<version>/<Produktname>-<version>-macos-arm64.dmg`, `…-windows-x64-setup.exe` und `SHA256SUMS` |
 

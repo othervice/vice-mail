@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds the macOS disk image (scripts/build-macos.sh) and the Windows installer
-# (scripts/build-windows.sh) from this checkout and puts both, named by version, into
-# dist/<version>/ with a SHA256SUMS file. Unsigned local builds; see docs/INSTALL.md.
+# Builds the macOS disk image (scripts/build-macos.sh: notarised if the keychain holds a Developer
+# ID, else ad hoc) and the unsigned Windows installer (scripts/build-windows.sh) from this checkout
+# and puts both, named by version, into dist/<version>/ with a SHA256SUMS file (docs/INSTALL.md).
 #
 #   scripts/release-local.sh                    version from tauri.conf.json, else the Cargo workspace
 #   scripts/release-local.sh 0.1.0-preview.1    this version (semver) for both builds

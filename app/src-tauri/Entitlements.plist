@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Entitlements of the Developer ID build (scripts/build-macos.sh signs the app with them, the
+     hardened runtime and a secure timestamp; docs/RELEASING.md, "macOS signing and notarisation").
+     Tauri does not read this file; ad-hoc builds carry no entitlements.
+
+     Deliberately empty. The app is not sandboxed, and the hardened runtime asks for nothing it uses:
+     - WKWebView: JavaScript and its JIT run in WebKit's own WebContent process, which Apple signs
+       with its own entitlements; the app process itself never JITs, so no
+       com.apple.security.cs.allow-jit or allow-unsigned-executable-memory.
+     - Keychain: the passwords live in the legacy login keychain (apple-native-keyring-store,
+       feature "keychain"), which needs no keychain-access-groups entitlement and no provisioning
+       profile. Only the data-protection keychain ("protected") would.
+     - Network (IMAP, SMTP, AI providers, the update check): com.apple.security.network.client is an
+       App Sandbox entitlement; a non-sandboxed app connects without it.
+     - No plug-ins or foreign libraries are loaded (library validation stays on), no DYLD_
+       variables are needed, and the app sends no Apple events to other apps (notifications, the
+       save panel and the mailto: handler need none).
+     The MCP helper (Contents/MacOS/mail-mcp) is signed without entitlements.
+
+     Since Tauri 2 the ad-hoc builds already run with the hardened runtime flag and no
+     entitlements, so the Developer ID build changes the signer, not the runtime rules. -->
+<plist version="1.0">
+<dict/>
+</plist>

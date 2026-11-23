@@ -17,6 +17,8 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
 - [ ] **Datenschutz.** Kurze, ehrliche Erklärung: welche Verbindungen die App aufbaut (Liste aus der Architektur), dass es keine Telemetrie gibt, was lokal unverschlüsselt liegt.
 - [ ] **CI.** Gitea Actions mit Runner auf dem Mac mini, und nach dem Umzug GitHub Actions mit gehosteten macOS- und Windows-Runnern. Beide rufen `scripts/check.sh` auf und bauen die Installer. Damit laufen Tests erstmals regelmäßig auf echtem Windows.
 - [ ] **Signierung.** Erste Releases ohne Signatur (0035): die Warnungen von Gatekeeper und SmartScreen in `docs/INSTALL.md` und im Release-Text ehrlich beschreiben. Später mit Zertifikaten: macOS signieren und notarisieren, Windows signieren.
+  - *macOS vorbereitet am 23.11.2026 (0035, Nachtrag; noch nicht abgehakt):* Apple-Developer-Mitgliedschaft als Einzelperson beantragt, Aktivierung ausstehend. `scripts/apple-signing-setup.sh` (Schlüssel und CSR, Zertifikat importieren, notarytool-Profil `vicemail-notary`, `--check`); `scripts/build-macos.sh` signiert mit einer gefundenen Identität „Developer ID Application“ (Hardened Runtime, Zeitstempel, `mail-mcp` zuerst, leere `app/src-tauri/Entitlements.plist` mit Begründung), notarisiert App und Disk-Image, stapelt, prüft mit `codesign`, `spctl` und `stapler`, baut das Update-Archiv aus der gestapelten App und bricht ab, statt ad hoc weiterzumachen; ohne Identität bleibt der Ad-hoc-Build unverändert. Ablauf nach der Aktivierung, Erneuerung und Sicherung in `docs/RELEASING.md` („macOS signing and notarisation“), `docs/INSTALL.md` beschreibt signierte und unsignierte Builds. Getestet mit einem selbst signierten Testzertifikat (siehe Ergebnis).
+  - *Offen:* Aktivierung, die Portal-Schritte des Menschen, der erste notarisierte Build und sein Test auf einem zweiten Mac. Windows bleibt unsigniert (0035).
 - [ ] **Updates.** Tauri-Updater mit Signaturprüfung. Der private Schlüssel liegt im Schlüsselbund des Build-Macs (0037; mit CI später als CI-Geheimnis, nie im Repo). Update-Beschreibung als statische Datei bei den Releases. Prüfung nur mit Zustimmung (0037: Standard aus). Rückweg: die vorherige Version bleibt herunterladbar, und die Datenbank-Sicherungen aus Stufe 1 erlauben das Zurückgehen.
   - *Vorbereitet am 23.11.2026 (0037, noch nicht abgehakt):* `tauri-plugin-updater` =2.14.1 nur aus Rust; Schalter „Automatisch nach Updates suchen“ (aus), einmalige Frage nach dem ersten Konto, Tagesdrossel, „Jetzt suchen“, Download und „Neu starten und installieren“ nur nach Klick, Windows `passive`; Endpunkt `https://github.com/othervice/vice-mail/releases/latest/download/latest.json` in `tauri.conf.json`; Schlüssel `org.vicemail.updater` im Schlüsselbund erzeugt, öffentlicher Schlüssel in `tauri.conf.json`; `VICEMAIL_UPDATER=1` für `scripts/build-macos.sh`, `build-windows.sh`, `release-local.sh` (signierte Artefakte, Signaturprüfung, `latest.json` über `scripts/updater-manifest.mjs`); Ablauf, Sicherung und Wechsel des Schlüssels in `docs/RELEASING.md`. Getestet gegen einen lokalen Update-Server (Rust) und in Vitest; der Desktop-Test `app/tests/e2e/updates.e2e.mjs` lief im Desktop-Lauf auf a7dd759 mit 4 von 4 grün (siehe Ergebnis).
   - *Offen bis zur Veröffentlichung:* erstes Release mit `latest.json` auf GitHub, dann Update von einer Version auf die nächste auf echtem macOS und Windows (Abnahmepunkt 2). **Der Mensch sichert den privaten Schlüssel und sein Passwort** (`docs/RELEASING.md`, „Back it up now“).
@@ -74,9 +76,39 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   Prototyp 2 auf 3 gefunden). Test `tests::partial_backups_left_behind_are_removed_and_never_listed`
   (in `check.sh`); der Fehler selbst tritt nur unter Windows auf und ist dort noch nicht nachgeprüft.
 
+- macOS-Signatur (23.11., 15:15, auf dem Arbeitsstand nach e0ad102, nicht committet): vorbereitet,
+  siehe Aufgabe „Signierung“ und `docs/RELEASING.md`. **Ausgeführt und geprüft:**
+  `scripts/build-macos.sh 0.1.0-signtest.1` mit `VICEMAIL_UPDATER=1` und einem selbst signierten
+  Code-Signing-Zertifikat in einem Wegwerf-Schlüsselbund (`VICEMAIL_SIGNING_KEYCHAIN`,
+  `VICEMAIL_SIGNING_TEST=1`; Schlüsselbund danach gelöscht): `mail-mcp` und App mit Hardened
+  Runtime, sicherem Zeitstempel von Apple und leeren Entitlements signiert, `codesign --verify
+  --deep --strict` grün, Disk-Image (HFS+, UDZO, Volume-Symbol, Applications-Link wie bei Tauri)
+  aus der signierten App gebaut und signiert, dieselbe CDHash in App, Disk-Image und
+  Update-Archiv, Update-Signatur für die Version geprüft, Start aus dem Disk-Image grün; von Hand:
+  der WebContent-Prozess lädt die Oberfläche wie beim Ad-hoc-Build (gleicher Speicherbedarf),
+  `spctl` lehnt den Testbuild erwartungsgemäß ab. Derselbe Lauf ohne Identität baut ad hoc wie
+  bisher (`--bundles app,dmg`, Update-Archiv von Tauri, Start grün). Abbrüche geprüft: unbekannte
+  Identität, Nicht-Apple-Identität ohne `VICEMAIL_SIGNING_TEST`, ein selbst ausgestelltes
+  Zertifikat mit dem Namen „Developer ID Application: …“ gilt nicht als Apple-Identität.
+  `scripts/apple-signing-setup.sh` gegen einen Wegwerf-Schlüsselbund: `--check` meldet fehlende
+  Identität und fehlendes Profil, `csr` legt Schlüssel und CSR an (CSR gültig, Schlüssel im
+  Schlüsselbund, keine Schlüsseldatei), ein zweiter Lauf legt keinen zweiten Schlüssel an, `cert`
+  lehnt ein fremdes Zertifikat und eines zu einem anderen Schlüssel ab und holt bei unbekannter
+  Kette Apples Zwischenzertifikat; `notary` prüft Key ID und Issuer ID, ein erfundener Schlüssel
+  wird von Apple abgelehnt und nichts gespeichert. **Ungeprüft bis zur Aktivierung:** Import eines
+  echten Developer-ID-Zertifikats, Notarisierung (beide Runden), Stapeln, `spctl` „accepted,
+  source=Notarized Developer ID“, die Option Apple-Account im Setup, das Update-Archiv mit
+  gestapelter App im echten Updater, die Schlüsselbund-Abfrage beim Wechsel, Gatekeeper auf einem
+  zweiten Mac.
+
 **Wartet auf**
 - Mensch: den privaten Update-Schlüssel und sein Passwort sichern (`docs/RELEASING.md`, „Back it up
   now“).
+- Mensch (macOS-Signatur, nach der Aktivierung der Apple-Mitgliedschaft): die Schritte 1 bis 6 in
+  `docs/RELEASING.md`, „macOS signing and notarisation“ (Schlüssel und CSR mit
+  `scripts/apple-signing-setup.sh`, Developer-ID-Zertifikat im Portal, Import, Team-API-Schlüssel
+  mit Rolle „Developer“, notarytool-Profil, `--check`); `.p8` und das exportierte `.p12` im
+  Passwort-Manager sichern. Danach den ersten notarisierten Build auf einem zweiten Mac öffnen.
 - Mensch (Windows): `prototype-2026-11-23-3.1` über eine installierte ältere Version installieren
   (Update mit Migration, `docs/testing/windows-checklist.md`, Abschnitt 19). Das Symbol in der
   Taskleiste bei 125 und 150 Prozent Skalierung ansehen, sobald ein Prototyp mit 90934bb gebaut ist

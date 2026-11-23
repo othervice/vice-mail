@@ -1,7 +1,8 @@
 # Releasing Vice Mail
 
-How a release is built, signed for the in-app updater and published, and how the update signing
-key is kept, backed up and replaced. Background: decision 0037 (`docs/decisions/0037-*.md`).
+How a release is built, signed for the in-app updater and published, how the update signing
+key is kept, backed up and replaced, and how the macOS build is signed with a Developer ID and
+notarised. Background: decisions 0035 and 0037 (`docs/decisions/`).
 
 > Until the first public release (stage 15) the repository is private and there is no
 > `latest.json` on GitHub; "Check now" in the app then reports that it could not check.
@@ -87,6 +88,160 @@ this:
 If the old key is **lost** (not leaked), there is no bridge: publish the next version with a new
 key and tell users in the release notes and `docs/INSTALL.md` to install it by hand once.
 
+## macOS signing and notarisation
+
+A macOS build signed with an Apple **Developer ID Application** certificate and notarised by Apple
+opens on any Mac without the Gatekeeper workaround of `docs/INSTALL.md`. Two things on the build
+Mac make `scripts/build-macos.sh` (and so `scripts/release-local.sh`) produce such a build:
+
+| What | Where | Made by |
+|---|---|---|
+| the signing identity: private key plus Apple's certificate "Developer ID Application: *name* (*team ID*)" | login keychain | `scripts/apple-signing-setup.sh` steps 1 and 2 |
+| the notarisation credentials, as the notarytool profile `vicemail-notary` (an App Store Connect API key, or an Apple Account with an app-specific password) | login keychain | `scripts/apple-signing-setup.sh` step 3 |
+
+Without the identity the build stays ad-hoc signed and says so. Windows stays unsigned for now
+(decision 0035).
+
+> **Status (23.11.2026):** prepared, waiting for the activation of the Apple Developer Program
+> membership (individual). The signing path was tested with a self-signed test certificate (hardened
+> runtime, helper, disk image, update archive, start from the disk image); notarisation, stapling and
+> Gatekeeper's verdict can only be tried with the real certificate.
+
+### After the membership is active (once)
+
+All steps work over SSH; the browser steps run on any computer. Only the **Account Holder** of the
+membership can create Developer ID certificates.
+
+1. **On the build Mac:** unlock the login keychain if you are connected over SSH, then start the
+   guided setup:
+
+   ```sh
+   security unlock-keychain ~/Library/Keychains/login.keychain-db
+   scripts/apple-signing-setup.sh
+   ```
+
+   Step 1 asks for your email address, name and country, makes an RSA 2048 private key directly in
+   the login keychain (the key never touches the disk) and writes the certificate signing request
+   `~/Downloads/ViceMail-DeveloperID.certSigningRequest`. The request is not secret; copy it to the
+   computer with the browser (`scp`, or VS Code: right-click → *Download…*), or copy the text the
+   script prints into a file with that name.
+2. **developer.apple.com → Account → Certificates, IDs & Profiles → Certificates → "+"**
+   (direct: <https://developer.apple.com/account/resources/certificates/add>). Under *Software*
+   choose **Developer ID Application**, *Continue*. Profile type **G2 Sub-CA (Xcode 11.4.1 or
+   later)**, choose the `.certSigningRequest` file, *Continue*, **Download**. The file is called
+   `developerID_application.cer`.
+3. **On the build Mac:** copy the `.cer` there (it is not secret either) and import it:
+
+   ```sh
+   scripts/apple-signing-setup.sh cert ~/Downloads/developerID_application.cer
+   ```
+
+   The script checks that the certificate belongs to the key from step 1, imports it, fetches
+   Apple's intermediate certificate if macOS lacks it, and makes a test signature.
+4. **appstoreconnect.apple.com → Users and Access → Integrations → App Store Connect API →
+   Team Keys** (direct: <https://appstoreconnect.apple.com/access/integrations/api>). The first time,
+   the Account Holder clicks **Request Access** and accepts the terms. Then **"+"** (*Generate API
+   Key*): name `Vice Mail notarisation`, access **Developer**, *Generate*. Note the **Issuer ID**
+   (above the table) and the **Key ID**, and **Download API Key**: `AuthKey_<KEY ID>.p8`. Apple
+   offers the download **only once**; put a copy into your password manager right away. (Individual
+   keys from your user profile do not work with notarytool; it has to be a team key. Should Apple
+   refuse the key with 401 or 403, give it the role *App Manager*.)
+5. **On the build Mac:** copy the `.p8` there (over `scp`, it is a secret) and store the profile:
+
+   ```sh
+   scripts/apple-signing-setup.sh notary
+   ```
+
+   Choose `1`, give the path, the Key ID and the Issuer ID. notarytool checks them with Apple and
+   keeps its own copy of the key in the login keychain. The script then proves that the profile
+   works without the file and offers to delete the `.p8` from the Mac; say yes once it is in your
+   password manager (and empty the browser's download folder on the other computer).
+   *Fallback without an API key:* choose `2`, enter your Apple Account and the Team ID; notarytool
+   asks for an app-specific password (<https://account.apple.com> → Sign-In and Security →
+   App-Specific Passwords).
+6. **Check:** `scripts/apple-signing-setup.sh --check` must end with "Ready". It prints the identity,
+   its expiry date, a test signature and whether Apple accepts the profile; no secrets.
+7. **Signed build:** `scripts/build-macos.sh <version>` or, for a release,
+   `VICEMAIL_UPDATER=1 scripts/release-local.sh <version>`. The summary must show
+   `signature: Developer ID Application: … notarised and stapled` and
+   `spctl: … accepted source=Notarized Developer ID`. Two notarisation rounds run (most finish
+   within 15 minutes; the very first submission of a new team can take hours, see
+   `VICEMAIL_NOTARY_TIMEOUT`).
+8. **Try it on a second Mac:** download the disk image with a browser, open it, drag the app to
+   Applications and start it. macOS should only ask whether to open an app downloaded from the
+   internet; no "Open Anyway" in System Settings. Then update `docs/INSTALL.md` (status section)
+   and decision 0035.
+
+### What the build does with an identity
+
+1. Tauri lays out the app as before (sealed ad hoc). The script then signs inside out: first
+   `Contents/MacOS/mail-mcp` (identifier `org.vicemail.desktop.mail-mcp`, no entitlements), then the
+   app, both with the hardened runtime (`--options runtime`) and a secure timestamp
+   (`--timestamp`), the app with `app/src-tauri/Entitlements.plist`. That file is empty on purpose;
+   it explains why WKWebView, the keychain and outgoing connections need no entitlement in a
+   non-sandboxed app.
+2. Round 1: a zip of the app goes to `notarytool submit --keychain-profile vicemail-notary --wait`;
+   the ticket is stapled to the app.
+3. The disk image is made from the stapled app (same layout as Tauri's: app, Applications link,
+   volume icon), signed, notarised in round 2 and stapled.
+4. With `VICEMAIL_UPDATER=1`, the update archive is packed from the stapled app and signed with the
+   update key for this version (`tauri signer sign --app-version`), so an in-app update installs
+   the notarised app.
+5. Checks: `codesign --verify --deep --strict`, hardened runtime, timestamp and team ID on app and
+   helper, `spctl -a -vv` on the app (`-t exec`) and the disk image (`-t open`) must say
+   `accepted` and `source=Notarized Developer ID`, `xcrun stapler validate` on app, disk image,
+   the app inside the image and the app inside the update archive, the same code (CDHash) in all
+   three, then the usual start from the disk image. Apple's notarisation logs land in
+   `target/release/bundle/notarisation-*.json` (read them: they may hold warnings).
+
+Any failure stops the build. It never falls back to an ad-hoc build once an identity was found;
+to build unsigned on purpose, set `VICEMAIL_SIGNING_IDENTITY=-`.
+
+| Variable | Effect |
+|---|---|
+| `VICEMAIL_SIGNING_IDENTITY` | the identity to use, by name or SHA-1 (default: the one valid "Developer ID Application" identity; with two, for example after a renewal, the build asks for this); `-` builds ad hoc |
+| `VICEMAIL_NOTARY_PROFILE` | another notarytool profile (default `vicemail-notary`) |
+| `VICEMAIL_NOTARY_TIMEOUT` | how long to wait for each notarisation (default `2h`); after a timeout, `xcrun notarytool info <id> --keychain-profile vicemail-notary` shows the state, and the build is run again |
+| `VICEMAIL_SIGNING_KEYCHAIN` | look for the identity only in this keychain file (tests, later CI) |
+| `VICEMAIL_SIGNING_TEST=1` | allows an identity that is not an Apple Developer ID (a self-signed test certificate): signed and checked like a release, **never notarised, never to be published** |
+
+### Keychain prompts after the switch
+
+The app's account passwords live in the login keychain, and macOS lets the app that stored an item
+read it without asking. An ad-hoc signature changes with every build, a Developer ID signature
+stays the same across versions (identifier and team ID). So on the first start of the first signed
+version, macOS is expected to ask once per account whether "Vice Mail" may use its stored password
+(answer with the Mac's password and **Always Allow**); later signed updates should not ask again.
+Not yet observed; check it with the first signed build.
+
+### Renewal
+
+- A **Developer ID Application certificate is valid for five years.** Apps signed while it was
+  valid keep opening after it expires (the secure timestamp proves when they were signed); only new
+  builds need a valid certificate. `scripts/apple-signing-setup.sh --check` warns 60 days ahead.
+  To renew: `scripts/apple-signing-setup.sh csr --new`, steps 2 and 3 above, then delete the old
+  identity in Keychain Access (login → My Certificates) so that only one valid identity is left.
+  The team ID stays, so the app's identity for macOS (and keychain access) stays too.
+- The **membership** renews every year (99 USD). Without it, no new certificates and no new
+  notarisations. Builds published before stay signed and notarised (their timestamp and ticket do
+  not depend on the membership); confirm with Apple's current terms if it ever matters.
+- The **API key** does not expire. Revoke it in App Store Connect (same page as step 4) if it may
+  have leaked, make a new one and run `scripts/apple-signing-setup.sh notary` again.
+
+### What to back up
+
+| Item | How | If lost |
+|---|---|---|
+| `AuthKey_<KEY ID>.p8`, with Key ID and Issuer ID | password manager, right after the download (Apple offers it once) | revoke it, make a new key, `apple-signing-setup.sh notary` |
+| the signing identity (private key and certificate) | Keychain Access → login → My Certificates → right-click "Developer ID Application: …" → *Export* → `.p12` with a strong password, into the password manager or an encrypted stick | make a new certificate (steps 1 to 3); published builds are not affected |
+| the notarytool profile | nothing to back up; it is made again from the `.p8` | `apple-signing-setup.sh notary` |
+
+On a new build Mac: import the `.p12` with Keychain Access (or `security import <file>.p12 -k
+~/Library/Keychains/login.keychain-db -T /usr/bin/codesign`, which asks for its password), run
+`scripts/apple-signing-setup.sh notary` with the `.p8`, then `--check`. If the identity's private key
+may have leaked, revoke the certificate in the portal (Certificates → the certificate → *Revoke*)
+after reading Apple's notes there: a revocation can also stop published builds from opening.
+
 ## Building a release
 
 On the build Mac (Apple silicon), from a clean checkout of the release commit:
@@ -99,6 +254,9 @@ VICEMAIL_UPDATER=1 VICEMAIL_RELEASE_NOTES=notes.txt scripts/release-local.sh 0.2
   Tauri CLI signs the macOS `.app.tar.gz` and the Windows `-setup.exe` and binds each signature to
   the version. Each script checks the new signature against `plugins.updater.pubkey` with
   `scripts/updater-manifest.mjs verify` and stops if it does not verify.
+- With a Developer ID identity and the notarytool profile in the keychain, the macOS build is
+  signed, notarised and stapled, and the update archive holds the notarised app (section above).
+  The build stops if notarisation fails. The Windows installer stays unsigned.
 - Over SSH the login keychain may be locked; unlock it first:
   `security unlock-keychain ~/Library/Keychains/login.keychain-db`.
 - `notes.txt` is plain text (no Markdown or HTML; the app shows it as it is, at most 4,000
