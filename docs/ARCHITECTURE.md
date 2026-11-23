@@ -392,7 +392,10 @@ einer klaren Meldung abgelehnt.
 **HTML aus Mails**
 0. Eine lineare Vorprüfung weist HTML ab, das html5ever quadratisch langsam machen oder die Ausgabe
    aufblähen würde (mehr als 150.000 Tags, Tiefe über 1500, zu viele offene Formatierungs-Tags);
-   solche Mails werden als Text gezeigt.
+   solche Mails werden als Text gezeigt. Sie muss das HTML lesen wie der Tokenizer von html5ever
+   (Kommentare, Attribute, Rohtext nur für HTML-Elemente, nicht in SVG und MathML, CDATA dort);
+   Stufe 15 fand drei Abweichungen (`docs/SECURITY_MODEL.md`, C-1), ein Differenztest in
+   `crates/mail-content/tests/fuzz.rs` vergleicht sie seitdem mit dem Parser.
 1. In Rust mit ammonia bereinigen: kein Script, keine Ereignis-Attribute, keine Formulare, kein
    `meta refresh`, kein `base`, keine eingebetteten Objekte oder Frames.
 2. Externe Adressen in Bildern, `srcset`, Hintergründen und CSS durch Platzhalter ersetzen, solange
@@ -444,7 +447,8 @@ einer klaren Meldung abgelehnt.
 - Tauri-Init-Scripts werden nie für alle Frames eingespritzt.
 - `unsafe` ist überall verboten (`forbid`), außer in `crates/webview2-guard` (`deny` mit einzeln
   begründeten `#[allow(unsafe_code)]` und `// SAFETY:`); `scripts/check.sh` prüft das per Suche.
-- Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab.
+- Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab, ebenso Downloads der
+  WebView selbst (Kontextmenü „Verknüpfte Datei laden“, „Bild sichern“; Stufe 15).
 - Fenster öffnet nur die Shell (Stufe 8, 0025): das Hauptfenster, je Mail ein Mail-Fenster
   (`openMessageWindow`, Label `message-<Konto>-<Mail>`, Seite `index.html?window=message&…`) und
   je Entwurf ein Composer-Fenster (`openComposerWindow`, `composer-<Entwurf>`,
@@ -470,6 +474,11 @@ einer klaren Meldung abgelehnt.
 - Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
   keine Steuerzeichen, keine Richtungsumkehr-Zeichen. Geschrieben wird nur an den Ort, den der
   Nutzer im Systemdialog wählt.
+- Jede Datei, die die App aus einem Anhang schreibt (Öffnen, Speichern, Alle speichern), trägt
+  die Herkunftsmarke des Systems: unter Windows den `Zone.Identifier` (Zone 3), unter macOS
+  `com.apple.quarantine` (Stufe 15, über `/usr/bin/xattr` mit festen Argumenten), gesetzt,
+  solange die Datei noch beschreibbar ist. So prüfen SmartScreen und Gatekeeper wie bei einem
+  Download, auch eine App aus einem angehängten Archiv.
 - „Alle speichern“ (Stufe 16, 0036): ein Ordner aus dem Ordnerdialog des Systems; jede Datei unter
   ihrem bereinigten Namen, mit `create_new` belegt: eine vorhandene Datei wird nie ersetzt, ein
   vergebener Name wird `Name (2).ext` usw.; unter Windows mit Herkunftsmarke wie jedes Speichern.
@@ -539,7 +548,8 @@ einer klaren Meldung abgelehnt.
   `https://github.com/othervice/vice-mail/releases/latest/download/latest.json`), dazu für die
   Weiterleitung und den Download GitHubs Dateihosts `objects.githubusercontent.com` und
   `release-assets.githubusercontent.com`. Nur HTTPS, Weiterleitungen nur zu diesen Hosts (höchstens
-  fünf), eine Download-Adresse außerhalb wird vor jeder Verbindung abgelehnt. Client wie bei
+  fünf), auf `github.com` nur Pfade unter `/<Besitzer>/<Repo>/releases/` des Endpunkts (Stufe 15),
+  eine Download-Adresse außerhalb wird vor jeder Verbindung abgelehnt. Client wie bei
   externen Bildern: gemeinsame TLS-Konfiguration, ohne Cookies, Referrer, Proxy und Wiederholungen,
   neutrale Kennung, keine App-Version und keine Kennung in der Anfrage. Heruntergeladen und
   installiert wird nur nach Klick; die Datei muss mit dem Update-Schlüssel und für genau die
