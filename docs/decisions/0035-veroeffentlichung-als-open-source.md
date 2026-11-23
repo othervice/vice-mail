@@ -34,7 +34,11 @@ nach GitHub.
   Jahr), Developer-ID-Zertifikat und Notarisierung. Windows: Azure Artifact Signing nur für
   Organisationen in den zugelassenen Ländern (Privatpersonen nur USA/Kanada), sonst ein
   OV-Zertifikat einer Zertifizierungsstelle (z. B. Certum Open Source) mit Schlüssel auf Hardware
-  oder im Cloud-HSM. Offen: als Privatperson oder über eine Firma; Kauf durch den Menschen.
+  oder im Cloud-HSM.
+- Entscheidung des Menschen (23.11.2026): Veröffentlichung als Privatperson, zunächst **ohne
+  Signatur**. `docs/INSTALL.md` erklärt die Warnungen von Gatekeeper und SmartScreen. Nachrüsten ist
+  jederzeit möglich, auch als Privatperson ohne D-U-N-S-Nummer (die braucht Apple nur für Firmen):
+  Apple-Developer-Programm als Einzelperson, für Windows ein OV-Zertifikat für Einzelpersonen.
 
 ## Rückweg
 
