@@ -40,8 +40,9 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Gruppierung nach Konversation, abschaltbar.
 - Kategorien ohne KI: Personen, Benachrichtigungen, Newsletter, dazu ein Block „Priorität“ für
   wichtige Absender. Gebündelte Zeilen für Benachrichtigungen und Newsletter. Abschaltbar.
-- Ansichten: Ungelesen, Markiert, Angepinnt, Später (Snooze), Aufgaben, Entwürfe, Gesendet, Archiv,
-  Papierkorb, Spam, Ordner und Labels, gespeicherte Suchen.
+- Ansichten: Ungelesen, Markiert, Angepinnt, Später (Snooze), Aufgaben, Zum Lesen, Entwürfe, Gesendet,
+  Archiv, Papierkorb, Spam, Ordner und Labels, gespeicherte Suchen.
+- Schalter „Nur ungelesene“, Ungelesene oben gruppieren; Lieblingsordner und Ordnerfarben (Stufe 16).
 
 ### Lesen
 - Thread-Ansicht, HTML sicher dargestellt, reiner Text als Rückfall.
@@ -56,7 +57,9 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 ### Aktionen
 - Gelesen/ungelesen, markieren, archivieren, löschen, verschieben, Spam, Schlagwörter.
 - Mehrfachauswahl, Rückgängig für die letzte Aktion.
-- Anpinnen, Snooze, „Als Aufgabe markieren“ (Markierung mit eigener Ansicht „Aufgaben“ und Erledigt-Schalter).
+- Anpinnen, Snooze, „Als Aufgabe markieren“ (Markierung mit eigener Ansicht „Aufgaben“ und Erledigt-Schalter),
+  „Zum Lesen“ (Stufe 16).
+- Mails zwischen Konten verschieben und kopieren; Absender blockieren (Stufe 16).
 - Lokale Regeln: Bedingung (Absender, Empfänger, Betreff, Liste, Konto) und Aktion (verschieben,
   als gelesen markieren, Kategorie, anpinnen, Benachrichtigung an/aus). Sie laufen nur, während die
   App läuft, und sind so beschriftet.
@@ -70,6 +73,10 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Senden rückgängig über kurze Verzögerung.
 - Später senden: nur lokal, und die Oberfläche sagt klar, dass die App zum Zeitpunkt laufen muss.
 - Rechtschreibprüfung des Systems.
+- Inline-Schnellantwort unter der geöffneten Mail, „Senden und archivieren“, Vorlagen mit Empfängern
+  (Stufe 16).
+- Lesebestätigung nur nach Standard (MDN): anfordern je Nachricht; eingehende Anforderungen werden nie
+  ohne Rückfrage beantwortet. Kein Tracking mit Zählpixel (0032).
 
 ### Suche
 - Volltext offline über alles, was lokal vorliegt; erste Treffer beim Tippen.
@@ -81,7 +88,7 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Layouts: Liste mit Lesebereich rechts, Lesebereich unten, nur Liste; kompakt und komfortabel.
 - Command Palette (Cmd+K / Ctrl+K) für Navigation und alle Aktionen.
 - Vollständige Tastaturbedienung, Kürzel änderbar, Konflikte werden erkannt.
-- Heller und dunkler Modus, folgt dem System.
+- Heller und dunkler Modus, folgt dem System; mehrere Farbthemen (Stufe 16).
 - Sprachen: Englisch und Deutsch; Spanisch vorbereitet.
 
 ### System
@@ -89,6 +96,7 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Native Benachrichtigungen für neue Mails, fehlgeschlagene Sendungen, fällige Snoozes; pro Konto
   steuerbar, Ruhezeiten, Inhalt auf dem Sperrbildschirm ausblendbar.
 - Zähler am Dock- bzw. Taskleisten-Symbol.
+- Benachrichtigungstöne, je Konto stumm schaltbar (Stufe 16).
 
 ### Kontakte
 - Lokales Verzeichnis aus gesendeten und empfangenen Mails, nach Häufigkeit und Aktualität sortiert.
@@ -142,7 +150,7 @@ Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr lange
 ## Nicht in Version 1
 
 - PGP und S/MIME
-- Kalender und Adressbuch-Abgleich (CalDAV, CardDAV); Einladungen werden nur angezeigt
+- Kalender und Adressbuch-Abgleich (CalDAV, CardDAV); Einladungen werden nur angezeigt. Kommt als eigene Stufe nach Version 1 (0032)
 - POP3
 - Serverseitige Filter (Sieve)
 - Eigener Sync-Server; die Sync-Schicht ist aber so gebaut, dass ein zweiter Transportweg möglich bleibt
@@ -150,6 +158,9 @@ Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr lange
 - Verschlüsselung der lokalen Datenbank; Schutz über FileVault bzw. BitLocker
 - Bezahlfunktionen, Lizenzprüfung, Telemetrie, automatische Absturzberichte
 - Threads über mehrere Konten hinweg
+- Tracking gesendeter Mails mit Zählpixel; nur die Standard-Lesebestätigung (0032)
+- Eingebettete Fremd-Apps (Messenger, Notizen, Chat-KI) in einer Seitenleiste (0032)
+- Kontaktbilder aus dem Netz (Gravatar, BIMI), LinkedIn-Suche, mobile Apps (vorerst, 0032)
 
 ## Entscheidungen
 

@@ -30,7 +30,8 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | fertig | **Geräte gleichen sich über das Postfach ab** |
 | 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | fertig | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
 | 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | fertig | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
-| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | bei Bedarf | Microsoft, Gmail-Eigenheiten, JMAP |
+| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | geplant | Microsoft, Gmail-Eigenheiten, JMAP |
+| 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | offen | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
@@ -39,7 +40,8 @@ Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
 
 Stufen 00 bis 06 sind der kritische Pfad und bauen streng aufeinander auf. Danach ist die Reihenfolge
 weniger fest: 07 bis 10 lassen sich tauschen, 11 braucht 09 (Snooze, Pins) und 10 (Signaturen,
-Vorlagen), 12 braucht 05 und 07, 13 braucht 07 und 12. Stufe 14 kommt, sobald ein Konto sie braucht.
+Vorlagen), 12 braucht 05 und 07, 13 braucht 07 und 12. Stufe 16 (Funktionsabgleich, 0032) und Stufe 14 (weitere Anbieter, seit 0032
+geplant) kommen vor Stufe 15; Kalender und Adressbuch-Abgleich folgen nach Version 1.
 
 ## Was der Mensch beisteuert
 
