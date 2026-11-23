@@ -6,7 +6,9 @@
 //! - a newer, correctly signed update downloads and verifies;
 //! - a manipulated update file, and a manifest that announces another version than the file was
 //!   signed for, are rejected; a lower or equal version is not offered;
-//! - a manifest pointing its download elsewhere is refused without connecting there.
+//! - a manifest pointing its download elsewhere is refused without connecting there;
+//! - a download larger than the cap (announced or not) or slower than the time limit stops
+//!   (finding N-3).
 //!
 //! The fixtures were signed once with a throwaway key whose private half was never stored;
 //! only its public key is here.
@@ -44,6 +46,12 @@ const FAST: UpdateSchedule = UpdateSchedule {
 struct Routes {
     manifest: Value,
     payload: Vec<u8>,
+    /// The update file without `Content-Length` (the body ends when the connection closes).
+    no_length: bool,
+    /// The update file in 1 KiB pieces with this pause between them.
+    trickle: Option<Duration>,
+    /// Bytes of the update file written before the client went away.
+    sent: usize,
 }
 
 /// A local HTTP/1.1 server on 127.0.0.1 that counts accepted TCP connections.
@@ -61,6 +69,9 @@ impl CountingServer {
         let routes = Arc::new(std::sync::Mutex::new(Routes {
             manifest: json!({}),
             payload: PAYLOAD.to_vec(),
+            no_length: false,
+            trickle: None,
+            sent: 0,
         }));
         let (count, shared) = (Arc::clone(&connections), Arc::clone(&routes));
         std::thread::spawn(move || {
@@ -101,6 +112,10 @@ impl CountingServer {
     fn serve_payload(&self, payload: Vec<u8>) {
         self.routes.lock().expect("lock").payload = payload;
     }
+
+    fn routes(&self) -> std::sync::MutexGuard<'_, Routes> {
+        self.routes.lock().expect("lock")
+    }
 }
 
 fn serve(mut stream: TcpStream, routes: &std::sync::Mutex<Routes>) {
@@ -123,6 +138,10 @@ fn serve(mut stream: TcpStream, routes: &std::sync::Mutex<Routes>) {
         }
     }
     let path = request_line.split_whitespace().nth(1).unwrap_or("/");
+    let (no_length, trickle) = {
+        let routes = routes.lock().expect("lock");
+        (routes.no_length, routes.trickle)
+    };
     let (status, body, kind) = {
         let routes = routes.lock().expect("lock");
         match path {
@@ -135,11 +154,29 @@ fn serve(mut stream: TcpStream, routes: &std::sync::Mutex<Routes>) {
             _ => ("404 Not Found", Vec::new(), "text/plain"),
         }
     };
-    let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
+    let payload = path == "/update.bin";
+    let length = if payload && no_length {
+        String::new()
+    } else {
+        format!("Content-Length: {}\r\n", body.len())
+    };
+    let head =
+        format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\n{length}Connection: close\r\n\r\n");
     let _ = stream.write_all(head.as_bytes());
+    if payload {
+        // In pieces, counting what got out before the client closed the connection.
+        for piece in body.chunks(1024) {
+            if stream.write_all(piece).is_err() || stream.flush().is_err() {
+                break;
+            }
+            routes.lock().expect("lock").sent += piece.len();
+            if let Some(pause) = trickle {
+                std::thread::sleep(pause);
+            }
+        }
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+        return;
+    }
     let _ = stream.write_all(&body);
     let _ = stream.flush();
     let mut rest = Vec::new();
@@ -156,6 +193,11 @@ struct Setup {
 /// The mock app with the updater plugin (test key, `requireSignedVersion` as shipped), a core
 /// with a fresh data directory, and the plugin source pointed at the local server.
 fn setup() -> Setup {
+    setup_with(None)
+}
+
+/// [`setup`] with other download limits (size cap, time limit).
+fn setup_with(limits: Option<(u64, Duration)>) -> Setup {
     let server = CountingServer::start();
     let mut context = mock_context(noop_assets());
     assert_eq!(context.package_info().version.to_string(), RUNNING);
@@ -179,10 +221,13 @@ fn setup() -> Setup {
         },
         CoreServices::new(Credentials::new(MemorySecretStore::new())),
     ));
-    let source = PluginSource::new(app.handle().clone(), server.endpoint(), || {
+    let mut source = PluginSource::new(app.handle().clone(), server.endpoint(), || {
         Err("tests never install".into())
     })
     .expect("source");
+    if let Some((max_bytes, timeout)) = limits {
+        source = source.with_download_limits(max_bytes, timeout);
+    }
     tauri::async_runtime::block_on(core.start_updates(Arc::new(source), FAST));
     Setup {
         _dir: dir,
@@ -195,7 +240,7 @@ fn setup() -> Setup {
 fn status_after_download(core: &AppCore) -> UpdateStatus {
     tauri::async_runtime::block_on(async {
         core.download_update().await.expect("download started");
-        for _ in 0..500 {
+        for _ in 0..1000 {
             let status = core.get_update_info().await.expect("info").status;
             if !matches!(status, UpdateStatus::Downloading { .. }) {
                 return status;
@@ -261,6 +306,73 @@ fn a_correctly_signed_newer_update_downloads_and_verifies() {
     assert_eq!(
         failure_code(&info.status),
         Some(ErrorCode::UpdateInstallFailed)
+    );
+}
+
+/// N-3: a release file over the size cap stops the download, whether the server announces its
+/// length or not, long before the whole file is in memory.
+#[test]
+fn a_download_over_the_size_cap_stops() {
+    const CAP: u64 = 256 * 1024;
+    for no_length in [false, true] {
+        let s = setup_with(Some((CAP, Duration::from_secs(60))));
+        s.server.announce("0.2.0", SIGNATURE_0_2_0, None);
+        // 64 MiB the signature never covers; a slow pace so the server notices the client go.
+        s.server.serve_payload(vec![0x5a; 64 * 1024 * 1024]);
+        {
+            let mut routes = s.server.routes();
+            routes.no_length = no_length;
+            routes.trickle = Some(Duration::from_micros(200));
+        }
+        tauri::async_runtime::block_on(s.core.check_for_updates()).expect("check");
+        let status = status_after_download(&s.core);
+        let UpdateStatus::Failed { error, .. } = &status else {
+            panic!("expected a failed download, got {status:?}");
+        };
+        assert_eq!(error.code, ErrorCode::UpdateDownloadFailed, "{status:?}");
+        let text = format!(
+            "{} {}",
+            error.message,
+            error.detail.as_deref().unwrap_or_default()
+        );
+        assert!(text.contains("larger than"), "{error:?}");
+        // The server stops writing once the connection is gone.
+        std::thread::sleep(Duration::from_millis(300));
+        let sent = s.server.routes().sent;
+        assert!(
+            sent < 16 * 1024 * 1024,
+            "no length: {no_length}; {sent} bytes went out"
+        );
+        let err = tauri::async_runtime::block_on(s.core.install_update()).expect_err("not ready");
+        assert_eq!(err.code(), ErrorCode::UpdateNotReady);
+    }
+}
+
+/// N-3: a download slower than the time limit stops (the plugin's request timeout or the limit
+/// around the whole download, whichever notices first).
+#[test]
+fn a_download_over_the_time_limit_stops() {
+    let s = setup_with(Some((300 * 1024 * 1024, Duration::from_millis(400))));
+    s.server.announce("0.2.0", SIGNATURE_0_2_0, None);
+    // 512 pieces of 1 KiB, 20 ms apart: about ten seconds for the whole file.
+    s.server.serve_payload(vec![0x5a; 512 * 1024]);
+    s.server.routes().trickle = Some(Duration::from_millis(20));
+    tauri::async_runtime::block_on(s.core.check_for_updates()).expect("check");
+    let started = std::time::Instant::now();
+    let status = status_after_download(&s.core);
+    let UpdateStatus::Failed { error, .. } = &status else {
+        panic!("expected a failed download, got {status:?}");
+    };
+    assert_eq!(error.code, ErrorCode::UpdateDownloadFailed, "{status:?}");
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        started.elapsed()
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        s.server.routes().sent < 512 * 1024,
+        "the connection was dropped"
     );
 }
 

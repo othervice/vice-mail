@@ -554,7 +554,9 @@ einer klaren Meldung abgelehnt.
   externen Bildern: gemeinsame TLS-Konfiguration, ohne Cookies, Referrer, Proxy und Wiederholungen,
   neutrale Kennung, keine App-Version und keine Kennung in der Anfrage. Heruntergeladen und
   installiert wird nur nach Klick; die Datei muss mit dem Update-Schlüssel und für genau die
-  angekündigte Version signiert sein. Andere Endpunkte nur in Tests und im Desktop-Test-Build
+  angekündigte Version signiert sein. Zeitgrenzen: Manifest 30 s, Download insgesamt 15 Minuten;
+  der Download bricht ab, sobald mehr als 300 MiB angekündigt oder angekommen sind
+  (Sicherheitsprüfung N-3). Andere Endpunkte nur in Tests und im Desktop-Test-Build
   (`MAIL_APP_E2E_UPDATE_ENDPOINT`), HTTP nur zu Loopback-Endpunkten
 - Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
   (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.
