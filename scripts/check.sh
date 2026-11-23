@@ -82,6 +82,21 @@ step "Clippy" cargo clippy --workspace --all-targets --locked -- -D warnings
 # The desktop-test build (decision 0005) must stay warning-free too; its WebDriver tests need a
 # GUI session and run separately: `pnpm --dir app test:e2e`.
 step "Clippy (feature e2e)" cargo clippy -p mail-app --all-targets --locked --features e2e -- -D warnings
+# Windows code (`cfg(windows)`: named pipe, credential manager, WebView2 guard) is compiled on the
+# Mac only here, with cargo-xwin like scripts/build-windows.sh. Skipped, with a note, when the
+# cross tools are missing; the Windows build itself needs them anyway.
+clippy_windows() {
+  local llvm_bin="${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}"
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 XWIN_CACHE_DIR="$PWD/.xwin-cache" XWIN_ARCH=x86_64 \
+    PATH="$llvm_bin:$PATH" cargo xwin clippy --target x86_64-pc-windows-msvc --workspace \
+    --all-targets --locked -- -D warnings
+}
+if cargo xwin --version >/dev/null 2>&1 && [[ -x "${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}/clang-cl" ]] &&
+  rustup target list --installed 2>/dev/null | grep -qx x86_64-pc-windows-msvc; then
+  step "Clippy (Windows target)" clippy_windows
+else
+  printf '\n==> Clippy (Windows target)\n    skipped: cargo-xwin, LLVM or the Rust target x86_64-pc-windows-msvc missing (docs/SETUP.md)\n'
+fi
 step "Rust tests" cargo test --workspace --locked
 step "Rust tests (feature e2e)" cargo test -p mail-app --locked --features e2e --lib e2e::
 

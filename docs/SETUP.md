@@ -153,3 +153,10 @@ cargo xwin --version
 cargo deny --version
 makensis -VERSION
 ```
+
+`scripts/check.sh` übersetzt den Code zusätzlich für Windows (`cargo xwin clippy --target
+x86_64-pc-windows-msvc`), damit Code hinter `cfg(windows)` (Named Pipe, Anmeldeinformationen,
+WebView2-Wächter) auf dem Mac nicht unbemerkt bricht. Fehlen cargo-xwin, LLVM oder das Rust-Ziel,
+wird der Schritt mit Hinweis übersprungen. Das Windows-SDK liegt in `.xwin-cache/` im Repository;
+in einem zusätzlichen `git worktree` vorher verlinken (`ln -s <repo>/.xwin-cache .xwin-cache`),
+sonst lädt cargo-xwin es erneut herunter.
