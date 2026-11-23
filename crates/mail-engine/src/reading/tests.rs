@@ -717,7 +717,10 @@ async fn links_are_checked_and_opened_only_through_the_core() {
         shown_domain: "bank.example".into(),
         target_domain: "evil.example".into()
     }));
-    h.core.open_link(render_token, 0).await.expect("open");
+    assert_eq!(
+        h.core.open_link(render_token, 0).await.expect("open"),
+        mail_model::LinkOpened::Opened
+    );
     let script = (0..3)
         .find(|i| {
             h.core
@@ -738,14 +741,18 @@ async fn links_are_checked_and_opened_only_through_the_core() {
                 .is_ok_and(|l| l.scheme == "mailto")
         })
         .expect("mailto link");
-    h.core
+    // Stage 10: a mailto link opens the app's own composer, not the system's mail app.
+    let opened = h
+        .core
         .open_link(render_token, mail)
         .await
         .expect("mailto opens");
-    assert_eq!(
-        h.opener.opened(),
-        ["https://evil.example/login", "mailto:help@shop.example"]
-    );
+    let mail_model::LinkOpened::Compose { request } = opened else {
+        panic!("{opened:?}");
+    };
+    assert_eq!(request.to.len(), 1);
+    assert_eq!(request.to[0].email, "help@shop.example");
+    assert_eq!(h.opener.opened(), ["https://evil.example/login"]);
     let err = h
         .core
         .describe_link(&RenderToken::from_random(1), 0)

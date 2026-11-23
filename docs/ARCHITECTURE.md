@@ -33,7 +33,7 @@ wenn er groß genug ist.
 | Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
 | Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
 | Bausteine | Radix UI (`radix-ui`), Lucide-Icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen. Achtung CSP: Radix Dialog, Popover, Select und ScrollArea fügen `<style>`-Elemente ein; vor ihrer Verwendung im Release-Build prüfen |
-| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2; mit Schnellaktionen in Stufe 4 neu entscheiden) |
+| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2). Stufe 8: die Schnellaktionen in den Zeilen sind reine Mausziele ohne Rolle und Fokus (eine `option` darf keine Bedienelemente enthalten, axe `nested-interactive`); Tastatur und Screenreader haben dieselben Aktionen als Kürzel, in der Symbolleiste und in der Befehlspalette |
 | Daten im Frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
 | Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
 | Sprachen | i18next, react-i18next | 27.2 / 18.0 | Standard, Englisch und Deutsch; Textliterale in Komponenten verbietet `eslint-plugin-i18next` (`no-literal-string`) |
@@ -58,6 +58,7 @@ wenn er groß genug ist.
 | Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
 | Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
 | Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
+| Barrierefreiheit (Tests) | axe-core (nur Entwicklung) | =4.14.0 | Stufe 8: prüft Rollen, Namen, ARIA und Struktur der gerenderten Ansichten in Vitest (`app/tests/a11y.test.tsx`), hell und dunkel; keine schweren oder kritischen Befunde erlaubt. Farbkontraste prüft `app/tests/contrast.test.ts` an den Tokens, weil jsdom keine Stylesheets rendert; die Mail im Sandbox-Frame bleibt außen vor. MPL-2.0 (verträglich mit GPL-3.0, wird nicht ausgeliefert); 4.14.0 vom 5. Oktober 2026 statt der eine Woche alten 4.14.1 |
 | Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
 | Windows-Build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | Installer vom Mac aus, in Spike C gebaut (kalt 74 s); `makensis` nur mit UTF-8-Locale (`LANG=en_US.UTF-8`), siehe `docs/SETUP.md` |
 
@@ -120,7 +121,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | Tabelle | Inhalt | Klasse |
 |---|---|---|
 | `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled` | sync (ohne Geheimnisse) |
-| `identity` | Absenderadresse, Name, Reply-To, Signatur, Standard | sync |
+| `identity` | Absenderadresse, Name, Reply-To, Standard; ab Stufe 10 Standard-Signatur für neue Mails und für Antworten (UUIDs, 0023) | sync |
 | `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
 | `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
 | `message_location` | Nachricht, Postfach, UID, Flags, Schlagwörter, MODSEQ | Cache |
@@ -130,9 +131,11 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `remote_content_sender` | Absender, deren externe Bilder immer geladen werden (Konto-UUID, normalisierte Adresse) | sync |
 | `message_fts` | FTS5-Index über Betreff, Absender, Empfänger, Text, Anhangnamen | Cache |
 | `operation` | Outbox: Art, Nutzdaten, Idempotenzschlüssel, Zustand, Versuche, letzter Fehler | Gerät |
-| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein, Anhänge als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018) | Gerät (Abgleich über IMAP) |
-| `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter (0016, 0018) | Cache; von Hand bearbeitete Einträge sync |
-| `signature`, `template`, `rule`, `saved_view` | wie benannt; `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge) | sync |
+| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein und gewählte Signatur (Stufe 10), Anhänge und Inline-Bilder (mit Content-ID) als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018, 0023) | Gerät (Abgleich über IMAP) |
+| `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter, `contact_group` für zusammengeführte Kontakte (0016, 0018, 0023) | Cache; Name und Zusammenführung sync |
+| `contact_dismissed` | abgelehnte Dubletten-Paare (Stufe 10, 0023) | Gerät |
+| `signature` | Pool aller Signaturen: Name, Editor-HTML, Text, kleine Bilder (Base64, als `cid:` versendet) (Stufe 10, 0023) | sync |
+| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge) | sync |
 | `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
@@ -255,6 +258,19 @@ einer klaren Meldung abgelehnt.
   derselben Transaktion Gesendet-Kopie (`append`), Entfernen der Entwurfskopie (`remove_copy`)
   und `\Answered`/`$Forwarded` am Original. Entwürfe gehen als `append` in den Entwürfe-Ordner
   (neue Fassung anhängen, alte nur bei passender Message-ID entfernen).
+- Ab Stufe 10 (0023), **Später senden lokal:** eine `send`-Operation mit der gewählten Zeit als
+  `not_before` (`SendJob::scheduled`), sofort gebaut und mit dieser Zeit datiert; gesendet wird
+  nur, wenn die App dann läuft und online ist. Beim Start, bevor Outbox und Konten laufen,
+  werden geplante Sendungen, die mehr als eine Stunde verpasst wurden, nicht gesendet, sondern
+  zur Frage (`send_missed`: jetzt senden, neu planen, als Entwurf behalten); bis zu einer Stunde
+  gehen sie hinaus. Gestartet wird eine Sendung nur, wenn sie nach der Uhr des Workers fällig ist
+  (`begin_due_operations`); der Worker wartet höchstens 30 s am Stück (Ruhezustand).
+- **SIZE:** Die Grenze des SMTP-Servers liest der Adapter auf Anfrage aus einem zweiten EHLO
+  nach der Anmeldung (nichts wird gesendet); über einer bekannten Grenze lehnt Senden mit
+  `message_too_large` ab.
+- **Inline-Bilder** gehen als `multipart/related` um `multipart/alternative`, nur die, die das
+  HTML noch zeigt; **Weiterleiten als Anhang** legt die ganze Nachricht als `message/rfc822`
+  bei (7-Bit-saubere unkodiert).
 
 **Verbindungen (0002)**
 - Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
@@ -292,6 +308,14 @@ einer klaren Meldung abgelehnt.
   gleicher normalisierter Betreff, gemeinsame Teilnehmer, enges Zeitfenster.
 
 ## Sicherheitsgrenzen
+
+**HTML im Composer (Stufe 10, 0023)**
+- Ausgehendes HTML, Signaturen und Vorlagen laufen durch die Allowlist von `mail_content::mail_html`
+  (Absätze, Überschriften h1–h3, Ausrichtung, Auszeichnungen, Listen, Zitate, Code, Links nur
+  `http`/`https`/`mailto`). Bilder nur als `cid:` mit strenger Content-ID-Syntax, und nur im
+  eigenen Editor-Inhalt; ihre Bytes liest der Kern aus Dateien, die der Nutzer im Systemdialog
+  gewählt oder auf das Fenster gezogen hat. Eingefügtes HTML (Word, Webseiten) bereinigt der Kern
+  (`cleanPastedHtml`): kein Script, kein Stil, kein Bild, keine externe Referenz.
 
 **HTML aus Mails**
 0. Eine lineare Vorprüfung weist HTML ab, das html5ever quadratisch langsam machen oder die Ausgabe
@@ -480,6 +504,36 @@ die kompatible Schnittstelle sind Ablehnungen nicht erkennbar (0019). Crate `mai
   dieselbe Prüfung wie Links in Mails.
 - Gesendet wird nur, was die Anfrage braucht: der aktuelle Thread ohne doppelte Zitate und ohne
   Anhänge. Nie das ganze Postfach ohne ausdrückliche Bestätigung mit Mengenangabe.
+
+## Tastaturkürzel
+
+Stufe 8. Alle Kürzel kommen aus dem Aktionsverzeichnis (`app/src/features/actions/registry.ts`,
+Aktionen und App-Befehle mit Standardkürzeln je Plattform). Die Änderungen des Nutzers liegen in
+`app/src/stores/shortcuts.ts` (je Plattform die ganze Liste eines Befehls); jeder Tastendruck liest
+die aktuelle Belegung, eine Änderung wirkt also sofort. Regeln (`app/src/features/keyboard/bindings.ts`):
+
+- **Tastaturlayouts:** Ein Kürzel steht für das Zeichen, das die Taste erzeugt (`event.key`), nicht
+  für ihre Lage (`event.code`). „#“ ist auf deutscher und US-Tastatur „#“, wo immer die Taste liegt.
+  Buchstaben ignorieren Groß-/Kleinschreibung, aber nicht Umschalt; andere Zeichen ignorieren
+  Umschalt (ob sie es brauchen, hängt vom Layout ab). Braucht ein Kürzel einmal die Lage einer
+  Taste, bekommt es dafür ein eigenes Feld statt `key` umzudeuten.
+- **Sondertasten:** `mod` ist Cmd auf macOS und Strg auf Windows. Wahl-/Alt-Kombinationen sind nicht
+  belegbar (sie erzeugen auf vielen Layouts Zeichen, AltGr meldet Strg+Alt).
+- **Nicht belegbar:** was das System oder jedes Textfeld beansprucht (macOS Cmd+Q/W/H/M/,/Leertaste/`/Tab,
+  überall Kopieren, Einfügen, Ausschneiden; Windows Strg+Esc, Strg+Tab) und die festen Tasten zum
+  Bewegen (Pfeile, j/k, Pos1/Ende, Bild auf/ab, Eingabe, Esc, Tab).
+- **Doppelbelegung:** wird abgelehnt und nennt den Befehl, der das Kürzel hat. Ausnahme sind Befehle,
+  die nie gleichzeitig verfügbar sind (Löschen/Endgültig löschen, Junk/Kein Junk).
+- **Standard:** e archiviert, # löscht, r/a/f antworten und leiten weiter, c schreibt neu, / und
+  Cmd/Strg+F suchen, j/k und Pfeile bewegen, Eingabe öffnet, Esc schließt, Cmd/Strg+K öffnet die
+  Befehlspalette, ? die Übersicht, Cmd/Strg+1 bis 8 die Ansichten der Icon-Leiste. Auf Layouts, auf
+  denen Ziffern Umschalt brauchen (AZERTY), gilt Cmd/Strg+Umschalt+Ziffer, weil Umschalt bei
+  Zeichen nicht zählt.
+
+Bis der Kern einen Befehl für Oberflächen-Einstellungen hat, liegen Kürzel, Layout je Fenster und die
+zuletzt benutzten Befehle der Palette in einem klar markierten Ersatzspeicher im Web-Storage des
+Geräts (`app/src/features/keyboard/localFallback.ts`): keine Mail-Daten, nichts Geheimes, beim Lesen
+geprüft. Sie werden dadurch noch nicht synchronisiert.
 
 ## Tests
 

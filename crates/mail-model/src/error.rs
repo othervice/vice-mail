@@ -69,6 +69,13 @@ pub enum ErrorCode {
     /// Stage 5: the message is in the outbox (cancel sending to change it), or its submission
     /// started and can no longer be cancelled.
     SendInProgress,
+    /// Stage 10: a message scheduled for later was due while the app was not running, and
+    /// more than an hour has passed: nothing was sent. The user decides (`resolveMissedSend`:
+    /// send now, schedule again, or keep it as a draft).
+    SendMissed,
+    /// Stage 10: the message is larger than the account's SMTP server accepts (its SIZE
+    /// limit); the server would refuse it.
+    MessageTooLarge,
     /// Stage 11: the passphrase does not unlock the settings sync; nothing was changed.
     SyncWrongPassphrase,
     /// Stage 11: the account holds no settings sync yet (set it up instead of joining).
@@ -84,6 +91,25 @@ pub enum ErrorCode {
     /// Stage 11: the settings sync is on, but this device has no sync key; enter the
     /// passphrase again.
     SyncKeyMissing,
+    /// Stage 13: AI is off, or the function has no provider (or the provider no model).
+    AiOff,
+    /// Stage 13: a cloud provider needs the user's consent before the first request
+    /// (`grantAiConsent`); nothing was sent.
+    AiConsentRequired,
+    /// Stage 13: an account involved may not send mail to a cloud provider; nothing was sent.
+    AiNotPermitted,
+    /// Stage 13: the request was cancelled.
+    AiCancelled,
+    /// Stage 13: the provider could not be reached or did not answer in time.
+    AiUnreachable,
+    /// Stage 13: the provider refused the key (missing, wrong, no access).
+    AiUnauthorized,
+    /// Stage 13: rate limit or overload at the provider; try later.
+    AiBusy,
+    /// Stage 13: the model declined the request.
+    AiRefused,
+    /// Stage 13: any other failure of an AI request (address, model, size, unreadable answer).
+    AiFailed,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -309,6 +335,14 @@ pub enum CoreError {
     /// A settings sync request failed (stage 11).
     #[error(transparent)]
     SettingsSync(#[from] crate::SettingsSyncFailure),
+
+    /// A contact request was refused (stage 10); nothing changed.
+    #[error(transparent)]
+    Contact(#[from] crate::ContactRequestError),
+
+    /// An AI request failed or was refused (stage 13).
+    #[error(transparent)]
+    Ai(#[from] crate::AiFailure),
 }
 
 impl CoreError {
@@ -325,6 +359,8 @@ impl CoreError {
             Self::Action(err) => err.code(),
             Self::Draft(err) => err.code(),
             Self::SettingsSync(err) => err.code(),
+            Self::Contact(err) => err.code(),
+            Self::Ai(err) => err.code(),
         }
     }
 
@@ -354,6 +390,8 @@ impl CoreError {
             Self::Action(err) => err.message(),
             Self::Draft(err) => err.message(),
             Self::SettingsSync(err) => err.message(),
+            Self::Contact(err) => err.message(),
+            Self::Ai(err) => err.message(),
         }
     }
 
@@ -373,6 +411,8 @@ impl CoreError {
             Self::Action(err) => err.detail(),
             Self::Draft(err) => err.detail(),
             Self::SettingsSync(err) => err.detail(),
+            Self::Contact(err) => err.detail(),
+            Self::Ai(err) => err.detail(),
         }
     }
 }
@@ -472,6 +512,15 @@ mod tests {
             (ErrorCode::SyncKeyInvalid, "sync_key_invalid"),
             (ErrorCode::SyncOff, "sync_off"),
             (ErrorCode::SyncKeyMissing, "sync_key_missing"),
+            (ErrorCode::AiOff, "ai_off"),
+            (ErrorCode::AiConsentRequired, "ai_consent_required"),
+            (ErrorCode::AiNotPermitted, "ai_not_permitted"),
+            (ErrorCode::AiCancelled, "ai_cancelled"),
+            (ErrorCode::AiUnreachable, "ai_unreachable"),
+            (ErrorCode::AiUnauthorized, "ai_unauthorized"),
+            (ErrorCode::AiBusy, "ai_busy"),
+            (ErrorCode::AiRefused, "ai_refused"),
+            (ErrorCode::AiFailed, "ai_failed"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

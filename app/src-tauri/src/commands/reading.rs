@@ -77,14 +77,15 @@ pub fn describe_link(
         .map_err(to_ipc("describe_link"))
 }
 
-/// Opens a link in the system browser (http, https, mailto only).
+/// Opens a link in the system browser (http, https); a `mailto:` link returns
+/// `{kind: "compose", request}` for the app's own composer instead (stage 10).
 #[tauri::command]
 #[specta::specta]
 pub async fn open_link(
     core: State<'_, AppCore>,
     render_token: RenderToken,
     index: u32,
-) -> Result<(), IpcError> {
+) -> Result<mail_model::LinkOpened, IpcError> {
     core.open_link(&render_token, index)
         .await
         .map_err(to_ipc("open_link"))

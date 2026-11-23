@@ -153,6 +153,55 @@ describe("changeable shortcuts", () => {
     expect(screen.getByTestId("shortcut-status").textContent).toBe("All shortcuts are back to standard.");
   });
 
+  it("a changed shortcut works in the unified inbox and in the palette too", async () => {
+    const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", writesEnabled: true });
+    const mine = makeMessages(2);
+    const theirs = makeMessages(1, { mailboxId: 20, newest: Date.now() - 30_000 }).map((m) => ({ ...m, accountId: work.id, subject: "Projekt" }));
+    const core = mockCore({
+      accounts: [makeAccount({ writesEnabled: true }), work],
+      mailboxes: [
+        ...standardMailboxes(),
+        makeMailbox({ id: 7, path: "Archive", role: "archive", roleSource: "server" }),
+        makeMailbox({ id: 20, accountId: work.id, path: "INBOX", role: "inbox", roleSource: "server" }),
+        makeMailbox({ id: 21, accountId: work.id, path: "Archive", role: "archive", roleSource: "server" }),
+      ],
+      messages: { 1: mine, 20: theirs },
+      views: Object.fromEntries([...mine, ...theirs].map((item) => [item.id, makeView(item)])),
+      readingPreferences: { markReadOnOpen: "never" },
+    });
+    const { user } = renderApp();
+    await openKeyboardSettings();
+    await user.click(screen.getByRole("button", { name: "Remove E from Archive" }));
+    await record(user, "Archive", "y");
+
+    act(() => {
+      useUiStore.getState().showUnifiedInbox({ kind: "all" });
+    });
+    const list = await screen.findByRole("listbox", { name: "Messages in All inboxes" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(3);
+    });
+    const row = within(list).getAllByRole("option").find((o) => (o.getAttribute("aria-label") ?? "").includes("Projekt"));
+    if (!row) throw new Error("no row");
+    await user.click(row);
+    await screen.findByRole("region", { name: "Message" });
+    list.focus();
+    await user.keyboard("e");
+    expect(core.callsOf("apply_action")).toHaveLength(0);
+    await user.keyboard("y");
+    await waitFor(() => {
+      expect(core.callsOf("apply_action")).toHaveLength(1);
+    });
+    expect(core.callsOf("apply_action")[0]).toMatchObject({ action: { type: "archive" }, messages: [{ mailboxId: 20 }] });
+    // The palette names the new shortcut.
+    await user.keyboard("{Meta>}k{/Meta}");
+    await user.keyboard("archive");
+    const option = within(screen.getByRole("dialog", { name: "Command palette" }))
+      .getAllByRole("option")
+      .find((o) => o.querySelector("span > span")?.textContent === "Archive");
+    expect(option?.getAttribute("aria-keyshortcuts")).toBe("Y");
+  });
+
   it("changes the palette shortcut itself, which works at once", async () => {
     mockCore();
     const { user } = renderApp();

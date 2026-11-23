@@ -86,7 +86,17 @@ const STYLE_ATTRIBUTES: &[&str] = &[
     "height",
 ];
 
+/// What cleaning pasted HTML removes (the same report as for signatures and templates).
+/// Pasted content keeps no image at all, not even a `cid:` one (it points into another mail).
+pub(crate) fn paste_notes(html: &str) -> SanitizeNotes {
+    notes_with(html, false)
+}
+
 fn notes(html: &str) -> SanitizeNotes {
+    notes_with(html, true)
+}
+
+fn notes_with(html: &str, keep_cid_images: bool) -> SanitizeNotes {
     if guard::check(html).is_err() {
         return SanitizeNotes {
             images_removed: 0,
@@ -100,10 +110,21 @@ fn notes(html: &str) -> SanitizeNotes {
             && let NodeData::Element { name, attrs, .. } = &node.data
         {
             let tag = name.local.as_ref();
-            if matches!(tag, "img" | "picture" | "svg") {
+            // Inline images of the message itself (`cid:`, stage 10) stay.
+            let kept_image = keep_cid_images
+                && tag == "img"
+                && attrs.borrow().iter().any(|a| {
+                    &*a.name.local == "src" && crate::compose::content_id_of(&a.value).is_some()
+                });
+            if matches!(tag, "img" | "picture" | "svg") && !kept_image {
                 notes.images_removed += 1;
             }
-            if STYLED_ELEMENTS.contains(&tag)
+            // Editor content keeps headings h1–h3 (stage 10).
+            let kept_heading = keep_cid_images && matches!(tag, "h1" | "h2" | "h3");
+            if kept_image {
+                return Descend::Yes;
+            }
+            if (STYLED_ELEMENTS.contains(&tag) && !kept_heading)
                 || attrs
                     .borrow()
                     .iter()

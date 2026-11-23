@@ -63,8 +63,9 @@ pub fn sniff_image(bytes: &[u8]) -> Option<ImageType> {
     }
 }
 
-/// `data:<mime>;base64,<payload>` for bytes that are a known image, else `None`.
-pub(crate) fn image_data_uri(bytes: &[u8]) -> Option<String> {
+/// `data:<mime>;base64,<payload>` for bytes that are a known image, else `None`. Also for the
+/// composer (stage 10): inline images of a draft or signature shown in the editor.
+pub fn image_data_uri(bytes: &[u8]) -> Option<String> {
     let kind = sniff_image(bytes)?;
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4 + 32);
     out.push_str("data:");

@@ -15,6 +15,8 @@ mail-imap.workspace = true
 mail-content.workspace = true
 # Stage 12: the MCP host, its tools and the client configurations (decisions 0015, 0021).
 mail-mcp.workspace = true
+# Stage 13: AI in the app (decisions 0019, 0024): providers, prompts, data minimisation.
+mail-ai.workspace = true
 # Account ids (UUID v4).
 uuid = { workspace = true, features = ["v4"] }
 serde.workspace = true

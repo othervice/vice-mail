@@ -26,6 +26,20 @@ pub struct ComposeRequest {
     pub notices: Vec<MailtoNotice>,
 }
 
+/// What `openLink` did (stage 10): opened the link in the system (`http`, `https`), or, for a
+/// `mailto:` link in a mail, nothing yet: the UI opens its own composer with the request
+/// (whether or not this app is the system's default mail app).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum LinkOpened {
+    Opened,
+    Compose { request: ComposeRequest },
+}
+
 /// A field of a `mailto:` link that a [`MailtoNotice`] refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]

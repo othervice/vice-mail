@@ -32,6 +32,37 @@ pub trait MailSender: Send + Sync + 'static {
 
     /// Connects and logs in, then says goodbye (account setup); also for read-only accounts.
     fn verify<'a>(&'a self, config: &'a ConnectConfig) -> SendFuture<'a, ()>;
+
+    /// What the server announces about the size of a message (SMTP extension SIZE, RFC 1870),
+    /// read from its EHLO reply after logging in; nothing is sent. Senders that cannot tell
+    /// report no limit.
+    fn limits<'a>(&'a self, config: &'a ConnectConfig) -> SendFuture<'a, SmtpLimits> {
+        let _ = config;
+        Box::pin(async { Ok(SmtpLimits::default()) })
+    }
+}
+
+/// Limits an SMTP server announces.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SmtpLimits {
+    /// Largest message in bytes (`SIZE n`, RFC 1870); `None` when the server announces no fixed
+    /// limit (no SIZE, or `SIZE 0`).
+    pub max_message_bytes: Option<u64>,
+}
+
+impl SmtpLimits {
+    /// From the lines of an EHLO reply (without the reply code): `SIZE 35882577`.
+    pub fn from_ehlo<'a>(lines: impl IntoIterator<Item = &'a str>) -> Self {
+        let max_message_bytes = lines.into_iter().find_map(|line| {
+            let mut words = line.split_ascii_whitespace();
+            let keyword = words.next()?;
+            if !keyword.eq_ignore_ascii_case("SIZE") {
+                return None;
+            }
+            words.next()?.parse::<u64>().ok().filter(|n| *n > 0)
+        });
+        Self { max_message_bytes }
+    }
 }
 
 /// `MAIL FROM` and `RCPT TO` of one submission. Blind-copy recipients are listed here and appear
@@ -219,5 +250,40 @@ mod tests {
             text: String::new(),
         };
         assert_eq!(bare.to_string(), "250");
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::SmtpLimits;
+
+    #[test]
+    fn size_extension_from_ehlo_lines() {
+        let lines = [
+            "mail.example.org",
+            "PIPELINING",
+            "SIZE 35882577",
+            "8BITMIME",
+        ];
+        assert_eq!(
+            SmtpLimits::from_ehlo(lines).max_message_bytes,
+            Some(35_882_577)
+        );
+        assert_eq!(
+            SmtpLimits::from_ehlo(["size 1000"]).max_message_bytes,
+            Some(1000)
+        );
+        for none in [
+            &["SIZE"][..],
+            &["SIZE 0"],
+            &["SIZE x"],
+            &["SIZEX 5"],
+            &["8BITMIME"],
+        ] {
+            assert_eq!(
+                SmtpLimits::from_ehlo(none.iter().copied()).max_message_bytes,
+                None
+            );
+        }
     }
 }

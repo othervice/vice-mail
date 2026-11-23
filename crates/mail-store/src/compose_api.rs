@@ -55,6 +55,8 @@ pub struct StoredDraft {
     pub outgoing: Option<OperationId>,
     /// An append of the draft is queued or in flight.
     pub saving: bool,
+    /// The signature the composer switched to (stage 10); `None` = the identity's default.
+    pub signature: Option<mail_model::SignatureId>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -73,6 +75,8 @@ pub struct DraftContent {
     pub include_quote: bool,
     pub quote_position: QuotePosition,
     pub include_signature: bool,
+    /// The signature chosen in the composer (stage 10); `None` = the identity's default.
+    pub signature: Option<mail_model::SignatureId>,
 }
 
 /// A new draft.

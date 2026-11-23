@@ -27,6 +27,8 @@ import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageList
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
 import { Command, FilePen, Forward, Keyboard, Reply, ReplyAll, SquarePen } from "lucide-react";
 import { openComposer } from "../../stores/composer";
+import type { MailViewId } from "../../stores/ui";
+import { MAIL_VIEW_ICONS } from "../mail/views";
 
 /**
  * The action directory (Aktionsverzeichnis, docs/stages/08): every mail action the UI offers,
@@ -673,9 +675,44 @@ export function leavesFolder(action: MailAction, mailbox: Mailbox): boolean {
  * (i18n) for the rest. Stage 8's palette lists them; their shortcuts are changeable like the
  * actions' (`features/keyboard/bindings.ts`).
  */
-export const APP_COMMAND_IDS = ["search", "palette", "shortcutHelp"] as const;
+export const APP_COMMAND_IDS = [
+  "search",
+  "palette",
+  "shortcutHelp",
+  // Stage 8: the views of the rail by number (Cmd/Ctrl+1 to 8, like most mail apps).
+  "goInbox",
+  "goLater",
+  "goTasks",
+  "goPinned",
+  "goSent",
+  "goDrafts",
+  "goArchive",
+  "goTrash",
+] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
+
+/** The view each "go to" command opens. */
+export const VIEW_COMMANDS = {
+  goInbox: "inbox",
+  goLater: "later",
+  goTasks: "tasks",
+  goPinned: "pinned",
+  goSent: "sent",
+  goDrafts: "drafts",
+  goArchive: "archive",
+  goTrash: "trash",
+} as const satisfies Partial<Record<AppCommandId, MailViewId>>;
+
+export type ViewCommandId = keyof typeof VIEW_COMMANDS;
+
+export const isViewCommand = (id: string): id is ViewCommandId => id in VIEW_COMMANDS;
+
+const viewCommand = (id: ViewCommandId, digit: number): AppCommandDefinition => ({
+  id,
+  icon: MAIL_VIEW_ICONS[VIEW_COMMANDS[id]],
+  shortcuts: both({ key: String(digit), mod: true }),
+});
 
 export interface AppCommandDefinition {
   id: AppCommandId;
@@ -702,4 +739,12 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
     icon: Keyboard,
     shortcuts: both({ key: "?" }),
   },
+  goInbox: viewCommand("goInbox", 1),
+  goLater: viewCommand("goLater", 2),
+  goTasks: viewCommand("goTasks", 3),
+  goPinned: viewCommand("goPinned", 4),
+  goSent: viewCommand("goSent", 5),
+  goDrafts: viewCommand("goDrafts", 6),
+  goArchive: viewCommand("goArchive", 7),
+  goTrash: viewCommand("goTrash", 8),
 };

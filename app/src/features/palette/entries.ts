@@ -15,16 +15,26 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { Mailbox } from "../../services/ipc";
+import type { Account, Mailbox } from "../../services/ipc";
+import { openComposer } from "../../stores/composer";
 import { currentActionTarget, useActionTargetStore, type ActionTarget } from "../../stores/actionTarget";
 import { useLayoutStore, type Density, type ReadingPanePosition } from "../../stores/layout";
 import { useNoticeStore } from "../../stores/notices";
 import { useSearchStore } from "../../stores/search";
 import { useBoundShortcuts } from "../../stores/shortcuts";
 import { usePaletteStore } from "../../stores/palette";
-import { MAIL_VIEW_IDS, SETTINGS_SECTION_IDS, useUiStore } from "../../stores/ui";
+import { MAIL_VIEW_IDS, SETTINGS_SECTION_IDS, useUiStore, type MailViewId } from "../../stores/ui";
 import { useSelectedAccount } from "../accounts/selection";
-import { ACTION_IDS, ACTIONS, APP_COMMANDS, actionState, type ActionId, type ActionLabel } from "../actions/registry";
+import {
+  ACTION_IDS,
+  ACTIONS,
+  APP_COMMANDS,
+  actionState,
+  VIEW_COMMANDS,
+  type ActionId,
+  type ActionLabel,
+  type ViewCommandId,
+} from "../actions/registry";
 import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useMailboxes } from "../mailboxes/queries";
@@ -75,10 +85,24 @@ const TOGGLE_IDS = new Set<ActionId>(PALETTE_TOGGLES.map(([toggle]) => toggle));
 
 const isExplicit = (id: ActionId): id is ActionLabel => !TOGGLE_IDS.has(id);
 
+/** The "go to" command of a view of the rail, for its shortcut. */
+const VIEW_COMMAND_OF = new Map(
+  (Object.entries(VIEW_COMMANDS) as [ViewCommandId, MailViewId][]).map(([command, view]) => [view, command]),
+);
+
 /** The actions the palette lists, in the order of the directory. */
 export const PALETTE_ACTION_IDS: readonly ActionLabel[] = ACTION_IDS.filter(isExplicit);
 
-function useActionEntries(platform: ShortcutPlatform, target: ActionTarget | null): PaletteEntry[] {
+interface ActionEntryOptions {
+  platform: ShortcutPlatform;
+  target: ActionTarget | null;
+  /** A mail view is open (it offers its actions once a message is chosen). */
+  inMailView: boolean;
+  /** The account a new message is from without a view (like the header's button). */
+  account: Account | null;
+}
+
+function useActionEntries({ platform, target, inMailView, account }: ActionEntryOptions): PaletteEntry[] {
   const { t } = useTranslation();
   const push = useNoticeStore((state) => state.push);
   const shortcutsOf = useBoundShortcuts(platform);
@@ -98,10 +122,19 @@ function useActionEntries(platform: ShortcutPlatform, target: ActionTarget | nul
       icon: definition.icon(ctx ?? NO_CONTEXT),
       ...(shortcut && { shortcut }),
     };
-    // No view with messages, or one that has nothing to act on yet (the unified inbox before a
-    // message is chosen).
-    if (!target) return { ...base, disabled: t("palette.disabled.noView"), run: () => undefined };
-    if (!ctx) return { ...base, disabled: t("palette.disabled.noMessage"), run: () => undefined };
+    // A new message needs no message to act on: from the selected account, like the header's
+    // button, also where no view offers its actions (the unified inbox before a message is open).
+    if (id === "compose" && !ctx && account) {
+      return {
+        ...base,
+        run: () => {
+          openComposer({ kind: "new", accountId: account.id });
+        },
+      };
+    }
+    // No view with messages, or one that has nothing to act on yet.
+    if (!target && !inMailView) return { ...base, disabled: t("palette.disabled.noView"), run: () => undefined };
+    if (!target || !ctx) return { ...base, disabled: t("palette.disabled.noMessage"), run: () => undefined };
     if (target.allowed && !target.allowed.has(id)) {
       return { ...base, disabled: t("palette.disabled.notHere"), run: () => undefined };
     }
@@ -177,7 +210,8 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const accountList = accounts.data ?? [];
   const noAccount = account ? undefined : t("palette.disabled.noAccount");
 
-  const entries: PaletteEntry[] = [...useActionEntries(platform, target)];
+  const inMailView = ui.view.kind === "mail" || ui.view.kind === "mailbox";
+  const entries: PaletteEntry[] = [...useActionEntries({ platform, target, inMailView, account })];
 
   const searchShortcut = shortcutsOf("search")[0];
   entries.push({
@@ -203,11 +237,14 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   });
 
   for (const id of MAIL_VIEW_IDS) {
+    const command = VIEW_COMMAND_OF.get(id);
+    const viewShortcut = command ? shortcutsOf(command)[0] : undefined;
     entries.push({
       key: `view:${id}`,
       group: "views",
       label: t("palette.goTo", { name: t(`nav.${id}`) }),
       icon: MAIL_VIEW_ICONS[id],
+      ...(viewShortcut && { shortcut: viewShortcut }),
       run: () => {
         ui.showMailView(id);
       },

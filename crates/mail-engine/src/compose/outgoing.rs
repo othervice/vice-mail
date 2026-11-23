@@ -21,6 +21,14 @@ pub(crate) fn send_state(op: &StoredOperation, phase: SendPhase, now: i64) -> Se
         {
             SendState::Unclear
         }
+        OperationState::Failed
+            if op
+                .last_error
+                .as_ref()
+                .is_some_and(|e| e.code == ErrorCode::SendMissed) =>
+        {
+            SendState::Missed
+        }
         OperationState::Failed | OperationState::Conflict => SendState::Failed,
     }
 }
@@ -40,6 +48,7 @@ pub(crate) fn outgoing_mail(op: &StoredOperation, now: i64) -> Option<OutgoingMa
         recipient_count: job.recipient_count,
         state,
         send_at: op.not_before.unwrap_or(op.created_at),
+        scheduled: job.scheduled,
         error: op.last_error.clone(),
         attempts: op.attempts,
         notice: op.notice,

@@ -29,6 +29,7 @@
 //!   (keys in the keychain) and the access log with its retention (decision 0021).
 
 mod accounts;
+mod ai;
 pub mod backup;
 mod bodies;
 mod body_api;
@@ -38,6 +39,7 @@ mod comfort_api;
 mod compose;
 mod compose_api;
 mod contacts;
+mod contacts_dir;
 mod error;
 mod fts;
 mod groups;
@@ -53,14 +55,17 @@ mod outbox;
 mod outbox_api;
 mod reading;
 mod rules;
+mod schedule;
 mod search;
 mod search_api;
 mod settings;
 pub mod settings_sync;
+mod signatures;
 mod store;
 mod threads;
 mod workers;
 
+pub use ai::{NewAiRequest, OpenReplyRow};
 pub use bodies::BodyInfo;
 pub use body_api::{BODY_PACK_LIMIT, SWEEP_MIN_AGE};
 pub use body_files::SweepReport;
@@ -73,6 +78,10 @@ pub use compose_api::{
     ContactSource, DraftContent, MAX_DRAFTS_PAGE, NewDraftRow, StoredContact, StoredDraft,
 };
 pub use contacts::MAX_SEARCH_WORDS;
+pub use contacts_dir::{
+    ContactCursor, MAX_CONTACT_ROWS, MergeOutcome, SeparateOutcome, StoredContactGroup,
+    StoredContactPage,
+};
 pub use error::StoreError;
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;
@@ -88,12 +97,17 @@ pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredO
 pub use reading::{
     MAX_PREFETCH_BATCH, MAX_PREVIEW_CHARS, MessageLocation, PrefetchCandidate, StoredMessage,
 };
+pub use schedule::{Reschedule, is_missed, is_waiting_schedule};
 pub use search::{MAX_SEARCH_LIMIT, SearchFilter, StoredHit, StoredHitPage};
 pub use search_api::{INDEX_BATCH, IndexStep};
 pub use settings::{GLOBAL_SCOPE, Setting};
 pub use settings_sync::{
     ApplyOutcome, ApplySkip, CaptureOutcome, CapturedChange, StoredSyncDevice, SyncApply,
     SyncCapture, SyncProgress, SyncRecordRow, SyncStateRow, TableWrite,
+};
+pub use signatures::{
+    SignatureDefaults, SignatureRow, StoredSignature, StoredSignatureImage, StoredTemplate,
+    TemplateRow,
 };
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 
@@ -106,6 +120,8 @@ mod body_tests;
 #[cfg(test)]
 mod compose_tests;
 #[cfg(test)]
+mod contacts_dir_tests;
+#[cfg(test)]
 mod mail_tests;
 #[cfg(test)]
 mod outbox_tests;
@@ -113,6 +129,8 @@ mod outbox_tests;
 mod plan_tests;
 #[cfg(test)]
 mod settings_sync_tests;
+#[cfg(test)]
+mod signature_tests;
 #[cfg(test)]
 mod stage7_plan_tests;
 #[cfg(test)]

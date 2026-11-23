@@ -854,3 +854,37 @@ async fn envelope_problems_fail_before_connecting() {
         .expect_err("bad address");
     assert!(matches!(err, BackendError::InvalidState(_)), "{err:?}");
 }
+
+#[tokio::test]
+async fn the_size_limit_is_read_from_ehlo_and_nothing_is_sent() {
+    for (reply, expected) in [
+        (
+            "250-test.example\r\n250-SIZE 10485760\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n",
+            Some(10_485_760),
+        ),
+        ("250-test.example\r\n250-SIZE\r\n250 AUTH PLAIN\r\n", None),
+        ("250-test.example\r\n250 AUTH PLAIN\r\n", None),
+    ] {
+        let mut steps = opening(false);
+        steps.extend([
+            Expect("EHLO [127.0.0.1]"),
+            Send(reply),
+            Expect("QUIT"),
+            Send("221 2.0.0 bye\r\n"),
+        ]);
+        let server = Server::start(true, steps).await;
+        let limits = SmtpSender::new()
+            .limits(&server.config(Security::Tls))
+            .await
+            .expect("limits");
+        assert_eq!(limits.max_message_bytes, expected, "{reply}");
+        let seen = server.seen().await;
+        assert!(
+            seen.lines.iter().all(|l| !l.starts_with("MAIL")
+                && !l.starts_with("RCPT")
+                && !l.starts_with("DATA")),
+            "{:?}",
+            seen.lines
+        );
+    }
+}

@@ -42,6 +42,7 @@ fn saved_content_is_cleaned() {
         include_quote: true,
         quote_position: QuotePosition::Above,
         include_signature: true,
+        signature_id: None,
     };
     let content = content_of(&update).expect("content");
     assert_eq!(

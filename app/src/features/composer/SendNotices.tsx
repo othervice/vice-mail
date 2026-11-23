@@ -141,6 +141,13 @@ function SendNotice({ send }: { send: TrackedSend }) {
         { label: t("composer.outbox.show"), run: showOutbox, testId: "send-show-outbox" },
       ];
       break;
+    case "missed":
+      // Stage 10: a scheduled send was due while the app was off; the outbox asks what to do.
+      icon = Clock;
+      tone = "warning";
+      text = t("composer.send.missed");
+      buttons = [{ label: t("composer.outbox.show"), run: showOutbox, testId: "send-show-outbox" }];
+      break;
     case "unclear":
       icon = CircleQuestionMark;
       tone = "warning";
@@ -175,7 +182,7 @@ function SendNotice({ send }: { send: TrackedSend }) {
       break;
   }
 
-  const needsUser = mail.state === "failed" || mail.state === "unclear";
+  const needsUser = mail.state === "failed" || mail.state === "unclear" || mail.state === "missed";
   return (
     <div
       role={needsUser ? "alert" : undefined}

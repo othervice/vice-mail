@@ -51,8 +51,11 @@ export const commands = {
 	revokeRemoteContent: (accountId: AccountId, sender: string, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("revoke_remote_content", { accountId, sender }, options)),
 	/**  The real target of a link of one rendering, with warnings. `not_found` for an unknown token. */
 	describeLink: (renderToken: RenderToken, index: number, options?: InvokeOptions) => typedError<LinkInfo, IpcError>(__TAURI_INVOKE("describe_link", { renderToken, index }, options)),
-	/**  Opens a link in the system browser (http, https, mailto only). */
-	openLink: (renderToken: RenderToken, index: number, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_link", { renderToken, index }, options)),
+	/**
+	 *  Opens a link in the system browser (http, https); a `mailto:` link returns
+	 *  `{kind: "compose", request}` for the app's own composer instead (stage 10).
+	 */
+	openLink: (renderToken: RenderToken, index: number, options?: InvokeOptions) => typedError<LinkOpened, IpcError>(__TAURI_INVOKE("open_link", { renderToken, index }, options)),
 	/**  Saves an attachment where the user picks in the system dialog. */
 	saveAttachment: (messageId: MessageId, index: number, options?: InvokeOptions) => typedError<SaveAttachmentResult, IpcError>(__TAURI_INVOKE("save_attachment", { messageId, index }, options)),
 	/**  Opens a copy of an attachment with the system's default app; executables need `confirmedExecutable`. */
@@ -159,6 +162,89 @@ export const commands = {
 	setIdentitySignature: (identityId: IdentityId, signature: string | null, options?: InvokeOptions) => typedError<ComposeIdentity, IpcError>(__TAURI_INVOKE("set_identity_signature", { identityId, signature }, options)),
 	/**  Autocomplete from addresses of earlier mail. `limit` 1..50. */
 	searchContacts: (query: string, limit: number, options?: InvokeOptions) => typedError<ContactSuggestion[], IpcError>(__TAURI_INVOKE("search_contacts", { query, limit }, options)),
+	/**
+	 *  "Send later": queues the draft for `when.sendAt` (Unix ms). The message goes out only if the app
+	 *  runs and is online at that time. `requestId` is a UUID per press of the button.
+	 */
+	scheduleSend: (draftId: DraftId, requestId: string, when: SendLater, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("schedule_send", { draftId, requestId, when }, options)),
+	/**  Scheduled sends of every account (waiting or missed), the earliest first. */
+	listScheduledSends: (options?: InvokeOptions) => typedError<OutgoingMail[], IpcError>(__TAURI_INVOKE("list_scheduled_sends", undefined, options)),
+	/**  Moves a scheduled send to `when.sendAt`, or (null) sends it now after the undo delay. */
+	rescheduleSend: (operationId: OperationId, when: SendLater | null, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("reschedule_send", { operationId, when }, options)),
+	/**  The answer to a scheduled send missed while the app was off; null after `keep_as_draft`. */
+	resolveMissedSend: (operationId: OperationId, decision: MissedSendDecision, options?: InvokeOptions) => typedError<OutgoingMail | null, IpcError>(__TAURI_INVOKE("resolve_missed_send", { operationId, decision }, options)),
+	/**
+	 *  The draft's size against the SMTP server's limit (SIZE); the first call per account and
+	 *  session asks the server (up to 15 seconds).
+	 */
+	checkDraftSize: (draftId: DraftId, options?: InvokeOptions) => typedError<DraftSizeCheck, IpcError>(__TAURI_INVOKE("check_draft_size", { draftId }, options)),
+	/**
+	 *  Lets the user pick images in the system dialog and adds them as inline images; cancelling
+	 *  adds nothing.
+	 */
+	pickInlineImages: (draftId: DraftId, options?: InvokeOptions) => typedError<InlineImagesAdded, IpcError>(__TAURI_INVOKE("pick_inline_images", { draftId }, options)),
+	/**
+	 *  Adds images dropped on the window as inline images: only paths of a drop the shell saw
+	 *  itself, shortly before (`invalid_argument` otherwise; see `drops.rs`).
+	 */
+	addDroppedInlineImages: (draftId: DraftId, paths: string[], options?: InvokeOptions) => typedError<InlineImagesAdded, IpcError>(__TAURI_INVOKE("add_dropped_inline_images", { draftId, paths }, options)),
+	/**  An inline image of a draft as a `data:` URL, for showing it in the editor. */
+	inlineImageData: (draftId: DraftId, attachmentId: string, options?: InvokeOptions) => typedError<string, IpcError>(__TAURI_INVOKE("inline_image_data", { draftId, attachmentId }, options)),
+	/**  Cleans HTML pasted into the editor (Word, web pages): no script, no external reference. */
+	cleanPastedHtml: (html: string, options?: InvokeOptions) => typedError<CleanedPaste, IpcError>(__TAURI_INVOKE("clean_pasted_html", { html }, options)),
+	/**
+	 *  One page of the directory, highest ranked first (frequency and recency). `query` filters by
+	 *  word prefixes of names and addresses; `cursor` is the previous page's `next`; `limit` 1..200.
+	 */
+	listContacts: (query: string | null, cursor: string | null, limit: number, options?: InvokeOptions) => typedError<ContactPage, IpcError>(__TAURI_INVOKE("list_contacts", { query, cursor, limit }, options)),
+	/**  The contact with this address (any of its addresses). */
+	getContact: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("get_contact", { email }, options)),
+	/**  Sets the name the user gives a contact, or with `null` goes back to the names seen in mail. */
+	setContactName: (email: string, name: string | null, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("set_contact_name", { email, name }, options)),
+	/**  Possible duplicates, the surest first. Nothing is merged by this. */
+	listContactDuplicates: (options?: InvokeOptions) => typedError<ContactDuplicate[], IpcError>(__TAURI_INVOKE("list_contact_duplicates", undefined, options)),
+	/**  Hides a duplicate suggestion for good: the `key`s of its contacts (one or two). */
+	dismissContactDuplicate: (contacts: string[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("dismiss_contact_duplicate", { contacts }, options)),
+	/**
+	 *  Merges contacts; only with `confirmed: true` (the user confirmed), else
+	 *  `confirmation_required` and nothing changes.
+	 */
+	mergeContacts: (request: ContactMergeRequest, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("merge_contacts", { request }, options)),
+	/**  Takes an address out of a merged contact (the preferred address takes it apart entirely). */
+	separateContact: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("separate_contact", { email }, options)),
+	/**  Every signature of the pool, in the user's order. */
+	listSignatures: (options?: InvokeOptions) => typedError<SignatureInfo[], IpcError>(__TAURI_INVOKE("list_signatures", undefined, options)),
+	/**
+	 *  Creates (`id` null) or changes a signature; the HTML is sanitised and may show only the
+	 *  signature's own `cid:` images.
+	 */
+	saveSignature: (signature: SignatureInput, options?: InvokeOptions) => typedError<SavedSignature, IpcError>(__TAURI_INVOKE("save_signature", { signature }, options)),
+	deleteSignature: (signatureId: SignatureId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_signature", { signatureId }, options)),
+	getIdentitySignatureDefaults: (identityId: IdentityId, options?: InvokeOptions) => typedError<IdentitySignatureDefaults, IpcError>(__TAURI_INVOKE("get_identity_signature_defaults", { identityId }, options)),
+	/**  The default signatures of an identity for new mails and for replies and forwards. */
+	setIdentitySignatureDefaults: (identityId: IdentityId, newSignature: SignatureId | null, replySignature: SignatureId | null, options?: InvokeOptions) => typedError<IdentitySignatureDefaults, IpcError>(__TAURI_INVOKE("set_identity_signature_defaults", { identityId, newSignature, replySignature }, options)),
+	/**
+	 *  Lets the user pick images in the system dialog and adds them to the signature; cancelling
+	 *  changes nothing. The new images are the last ones of `images`; insert them as
+	 *  `<img src="cid:CONTENT_ID">` and save the signature.
+	 */
+	pickSignatureImages: (signatureId: SignatureId, options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("pick_signature_images", { signatureId }, options)),
+	/**
+	 *  Adds images dropped on the window: only paths of a drop the shell saw itself, shortly
+	 *  before (`invalid_argument` otherwise; see `drops.rs`).
+	 */
+	addDroppedSignatureImages: (signatureId: SignatureId, paths: string[], options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("add_dropped_signature_images", { signatureId, paths }, options)),
+	removeSignatureImage: (signatureId: SignatureId, contentId: string, options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("remove_signature_image", { signatureId, contentId }, options)),
+	/**  The signature's images as `data:` URLs, to show them in the editor in place of `cid:`. */
+	signatureImageData: (signatureId: SignatureId, options?: InvokeOptions) => typedError<SignatureImageData[], IpcError>(__TAURI_INVOKE("signature_image_data", { signatureId }, options)),
+	listTemplates: (options?: InvokeOptions) => typedError<TemplateInfo[], IpcError>(__TAURI_INVOKE("list_templates", undefined, options)),
+	saveTemplate: (template: TemplateInput, options?: InvokeOptions) => typedError<SavedTemplate, IpcError>(__TAURI_INVOKE("save_template", { template }, options)),
+	deleteTemplate: (templateId: TemplateId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_template", { templateId }, options)),
+	/**
+	 *  The template filled for the draft (first To recipient, identity, today's date); the draft
+	 *  itself is not changed.
+	 */
+	fillTemplate: (templateId: TemplateId, draftId: DraftId, language: QuoteLanguage, options?: InvokeOptions) => typedError<FilledTemplateInfo, IpcError>(__TAURI_INVOKE("fill_template", { templateId, draftId, language }, options)),
 	/**
 	 *  One page of the inbox: rows with date sections, bundles when categories are on, and on the
 	 *  first page the pinned, returned and priority messages. `limit` counts messages.
@@ -460,6 +546,61 @@ export type Address = {
 	/**  Decoded display name (RFC 2047), null if none. */
 	name: string | null,
 	email: string,
+};
+
+/**
+ *  The functions that can use a provider. The open-reply hints are not one of them: they work
+ *  without AI (decision 0024).
+ */
+export type AiFunction = "summary" | "reply_suggestion" | "writing_help" | "search";
+
+/**
+ *  Where a profile's base URL points. `thisDevice` and `localNetwork` are shown as "local":
+ *  the transport only ever connects to such addresses for them.
+ */
+export type AiLocality = "this_device" | "local_network" | 
+/**  A cloud provider: consent first, and only accounts with cloud permission. */
+"internet";
+
+/**  How a request ended. */
+export type AiRequestOutcome = "ok" | "cancelled" | "failed";
+
+/**  Progress of a running request, as `aiRequest` events. */
+export type AiRequestPhase = 
+/**  About to send this (one per provider request; a question has up to two). */
+{ phase: "sending"; transfer: AiTransfer } | 
+/**  Characters of the answer received so far. */
+{ phase: "receiving"; chars: number } | 
+/**  Done (the command returns the result or the error). */
+{ phase: "finished"; outcome: AiRequestOutcome };
+
+/**  What one request sends and to whom, shown before and while it runs. */
+export type AiTransfer = {
+	function: AiFunction,
+	profileId: string,
+	profileName: string,
+	/**  The recipient: host and port of the provider. */
+	host: string,
+	locality: AiLocality,
+	model: string,
+	/**  Messages sent (0 for a question's first step and for the writing help). */
+	mails: number,
+	/**  Accounts the messages belong to. */
+	accounts: AccountId[],
+	/**  Bytes of text sent. */
+	bytes: number,
+	/**  Attachment names sent (never contents). */
+	attachmentNames: number,
+	/**  Quoted passages left out because an earlier message has them. */
+	quotesRemoved: number,
+	trimming: AiTrimming,
+};
+
+/**  What was shortened for the length budget. All zero: nothing. */
+export type AiTrimming = {
+	mailsLeftOut: number,
+	mailsShortened: number,
+	charsRemoved: number,
 };
 
 /**  Version information shown under Settings, About. */
@@ -811,6 +952,19 @@ export type CategoryReason =
 /**  Stage 9: a local rule set the category of this message (its name at the time). */
 { kind: "localRule"; ruleName: string };
 
+/**  Stage 10: pasted HTML as the composer gets it back (`cleanPastedHtml`). */
+export type CleanedPaste = {
+	/**
+	 *  Editor HTML: the mail allowlist, no script, no style, no image, no external reference;
+	 *  links only `http`, `https`, `mailto`.
+	 */
+	html: string,
+	/**  Images that were dropped (web addresses, local files, `data:`, other mails' `cid:`). */
+	imagesRemoved: number,
+	/**  Colours, fonts, sizes, tables or headings were simplified. */
+	formattingSimplified: boolean,
+};
+
 /**  Rich text (HTML from the editor, sent as `multipart/alternative`) or plain text only. */
 export type ComposeFormat = "html" | "text";
 
@@ -822,8 +976,15 @@ export type ComposeIdentity = {
 	name: string,
 	replyTo: string | null,
 	isDefault: boolean,
-	/**  Plain text without the `-- ` separator (added when the message is put together). */
+	/**
+	 *  Plain text without the `-- ` separator (added when the message is put together): the
+	 *  text of the default signature for new mails (stage 5 field, kept).
+	 */
 	signature: string | null,
+	/**  Default signature of new mails (stage 10); null = none. */
+	signatureNew: SignatureId | null,
+	/**  Default signature of replies and forwards (stage 10); null = none. */
+	signatureReply: SignatureId | null,
 };
 
 /**
@@ -873,6 +1034,74 @@ export type ConnectionTestResult = {
 	 *  with a delay".
 	 */
 	capabilities: Capabilities,
+};
+
+/**  One address of a contact and how it was used. */
+export type ContactAddressInfo = {
+	/**  The address to write to (local part as last written, Unicode domain). */
+	email: string,
+	/**  Messages the user sent to it. */
+	sent: number,
+	/**  Messages received from it (only from people, not newsletters or notifications). */
+	received: number,
+	/**  Last message to or from it, Unix ms. */
+	lastUsed: number | null,
+};
+
+/**
+ *  A possible duplicate. Nothing is merged unless the user confirms (`mergeContacts` with
+ *  `confirmed: true`); `dismissDuplicate` hides it for good.
+ */
+export type ContactDuplicate = {
+	reason: DuplicateReason,
+	/**  The shared name (`sameName`). */
+	name: string | null,
+	/**  The names seen (`namesDiffer`). */
+	names: string[],
+	/**  Two contacts, or one for `namesDiffer`. */
+	contacts: ContactEntry[],
+};
+
+/**  A contact of the directory. */
+export type ContactEntry = {
+	/**  Normalised address of the preferred address: the contact's id in every command. */
+	key: string,
+	/**  The name to show: the user's, else the most used one seen in mail. */
+	name: string | null,
+	/**  The name the user gave (synchronised between devices). */
+	userName: string | null,
+	/**  The preferred address to write to. */
+	email: string,
+	/**  Every address, the preferred one first. */
+	addresses: ContactAddressInfo[],
+	/**  Over all addresses. */
+	sent: number,
+	received: number,
+	/**  Unix ms. */
+	lastUsed: number | null,
+};
+
+/**  Merging contacts the user confirmed as one person. */
+export type ContactMergeRequest = {
+	/**  Any address of the contact that stays; its preferred address stays preferred. */
+	keep: string,
+	/**  Any address of each contact merged into it. */
+	merge: string[],
+	/**
+	 *  Must be `true`: the user confirmed the merge. Without it nothing changes
+	 *  (`confirmation_required`).
+	 */
+	confirmed: boolean,
+};
+
+/**
+ *  One page of the directory, highest ranked first (frequency and recency in one score:
+ *  sent mail counts four times a received one, and every 30 days a message counts half).
+ */
+export type ContactPage = {
+	items: ContactEntry[],
+	/**  Pass to `listContacts` for the next page; `null` at the end. Opaque. */
+	next: string | null,
 };
 
 /**  An autocomplete suggestion from addresses of earlier mail. */
@@ -932,11 +1161,25 @@ export type ContactSuggestion = {
  *  - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
  *  - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
  *    failed.
+ *  - `signaturesChanged`, `templatesChanged` (stage 10): reload the signature pool or the
+ *    templates.
  *  - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
  *    questions or detected folders changed. Data a pass took over from another device comes
  *    with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
+/**
+ *  Stage 13: a running AI request (the id the UI chose): what is sent to whom before each
+ *  provider request, the characters received, the end.
+ */
+{ type: "aiRequest"; requestId: string; phase: AiRequestPhase } | 
+/**
+ *  Stage 10: the signature pool changed (here or from another device); identity defaults
+ *  come with `accountsChanged`.
+ */
+{ type: "signaturesChanged" } | 
+/**  Stage 10: the templates changed (here or from another device). */
+{ type: "templatesChanged" };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -1028,6 +1271,11 @@ export type Draft = {
 	quotePosition: QuotePosition,
 	/**  The identity's text signature goes below what the user wrote. */
 	includeSignature: boolean,
+	/**
+	 *  The signature the composer switched to (stage 10); null = the identity's default for
+	 *  this kind of draft (new mail or reply/forward).
+	 */
+	signatureId: SignatureId | null,
 	attachments: DraftAttachment[],
 	/**  The message answered or forwarded, while it is still stored locally. */
 	originalMessageId: MessageId | null,
@@ -1054,6 +1302,11 @@ export type DraftAttachment = {
 	mime: string,
 	/**  Decoded bytes. */
 	size: number,
+	/**
+	 *  Set for an inline image (stage 10): the editor shows it as `<img src="cid:…">`, it goes
+	 *  out as a part of `multipart/related`, and the attachment list leaves it out.
+	 */
+	contentId: string | null,
 };
 
 /**  Id of a local draft: a UUID, lower case. Stable for the life of the draft. */
@@ -1072,6 +1325,29 @@ export type DraftServerState =
 "saving" | 
 /**  The server has the newest version. */
 "saved";
+
+/**  Stage 10: the draft's size against what the account's SMTP server accepts (extension SIZE). */
+export type DraftSizeCheck = {
+	/**
+	 *  Size of the message as it would go out, in bytes (attachments and inline images
+	 *  base64-encoded, text, headers): an estimate within a few kilobytes.
+	 */
+	size: number,
+	/**
+	 *  The server's limit (SIZE); null when the server announces none or it could not be
+	 *  read (offline: then `limitKnown` is false).
+	 */
+	serverLimit: number | null,
+	/**  The server answered (now or earlier in this session). */
+	limitKnown: boolean,
+	/**  `size` is above `serverLimit`: the server would refuse the message; sending is refused. */
+	exceedsServerLimit: boolean,
+	/**
+	 *  Above [`LARGE_ATTACHMENT_WARNING_BYTES`] of attachments: many providers refuse such
+	 *  messages on the receiving side even when this server accepts them.
+	 */
+	large: boolean,
+};
 
 /**  Whether the local draft is a draft or already on its way. */
 export type DraftState = 
@@ -1110,7 +1386,26 @@ export type DraftUpdate = {
 	includeQuote: boolean,
 	quotePosition: QuotePosition,
 	includeSignature: boolean,
+	/**
+	 *  The signature chosen in the composer (stage 10); null or left out = the identity's
+	 *  default for this kind of draft.
+	 */
+	signatureId?: SignatureId | null,
 };
+
+/**  Why two contacts may be the same person (or one contact has several names). */
+export type DuplicateReason = 
+/**  `alice+shop@x` and `alice@x`. */
+"plus_address" | 
+/**  The same mailbox at the provider (Gmail ignores dots; `googlemail.com`). */
+"same_mailbox" | 
+/**  The same name at two addresses (`name`). */
+"same_name" | 
+/**
+ *  One address was seen with different names (`names`); the user may pick one with
+ *  `setContactName`. `contacts` has one entry.
+ */
+"names_differ";
 
 /**
  *  Stable, machine-readable error kinds. The UI picks its (translated) text by this code.
@@ -1186,6 +1481,17 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  *  started and can no longer be cancelled.
  */
 "send_in_progress" | 
+/**
+ *  Stage 10: a message scheduled for later was due while the app was not running, and
+ *  more than an hour has passed: nothing was sent. The user decides (`resolveMissedSend`:
+ *  send now, schedule again, or keep it as a draft).
+ */
+"send_missed" | 
+/**
+ *  Stage 10: the message is larger than the account's SMTP server accepts (its SIZE
+ *  limit); the server would refuse it.
+ */
+"message_too_large" | 
 /**  Stage 11: the passphrase does not unlock the settings sync; nothing was changed. */
 "sync_wrong_passphrase" | 
 /**  Stage 11: the account holds no settings sync yet (set it up instead of joining). */
@@ -1202,10 +1508,43 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  *  Stage 11: the settings sync is on, but this device has no sync key; enter the
  *  passphrase again.
  */
-"sync_key_missing";
+"sync_key_missing" | 
+/**  Stage 13: AI is off, or the function has no provider (or the provider no model). */
+"ai_off" | 
+/**
+ *  Stage 13: a cloud provider needs the user's consent before the first request
+ *  (`grantAiConsent`); nothing was sent.
+ */
+"ai_consent_required" | 
+/**  Stage 13: an account involved may not send mail to a cloud provider; nothing was sent. */
+"ai_not_permitted" | 
+/**  Stage 13: the request was cancelled. */
+"ai_cancelled" | 
+/**  Stage 13: the provider could not be reached or did not answer in time. */
+"ai_unreachable" | 
+/**  Stage 13: the provider refused the key (missing, wrong, no access). */
+"ai_unauthorized" | 
+/**  Stage 13: rate limit or overload at the provider; try later. */
+"ai_busy" | 
+/**  Stage 13: the model declined the request. */
+"ai_refused" | 
+/**  Stage 13: any other failure of an AI request (address, model, size, unreadable answer). */
+"ai_failed";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
+
+/**
+ *  A template filled for a draft: the composer puts `html` where the cursor is and takes the
+ *  subject if its own is empty (the draft itself is not changed).
+ */
+export type FilledTemplateInfo = {
+	subject: string,
+	/**  Editor HTML. */
+	html: string,
+	text: string,
+	problems: TemplateFillProblem[],
+};
 
 /**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
@@ -1228,6 +1567,15 @@ export type IdentityInput = {
 	email: string,
 	name: string,
 	replyTo: string | null,
+};
+
+/**  The default signatures of an identity. */
+export type IdentitySignatureDefaults = {
+	identityId: IdentityId,
+	/**  For new mails; null = none. */
+	newSignature: SignatureId | null,
+	/**  For replies and forwards; null = none. */
+	replySignature: SignatureId | null,
 };
 
 /**
@@ -1318,6 +1666,16 @@ export type InboxTop = {
 	priorityUnread: number,
 };
 
+/**  Stage 10: what adding inline images to a draft did. */
+export type InlineImagesAdded = {
+	draft: Draft,
+	/**
+	 *  The new images in the order of the files: the editor inserts
+	 *  `<img src="cid:{contentId}">` for each and shows it with `inlineImageData`.
+	 */
+	added: DraftAttachment[],
+};
+
 /**  The error as it crosses the IPC bridge: `{ code, message, detail }`. */
 export type IpcError = {
 	code: ErrorCode,
@@ -1343,6 +1701,13 @@ export type LinkInfo = {
 	/**  Only `http`, `https` and `mailto` can be opened. */
 	openable: boolean,
 };
+
+/**
+ *  What `openLink` did (stage 10): opened the link in the system (`http`, `https`), or, for a
+ *  `mailto:` link in a mail, nothing yet: the UI opens its own composer with the request
+ *  (whether or not this app is the system's default mail app).
+ */
+export type LinkOpened = { kind: "opened" } | { kind: "compose"; request: ComposeRequest };
 
 /**  Why a link deserves a second look. */
 export type LinkWarning = 
@@ -1927,6 +2292,15 @@ export type MessageViewHeader = {
 	subject: string,
 };
 
+/**  Stage 10: the user's answer to a scheduled send that was missed while the app was off. */
+export type MissedSendDecision = 
+/**  Send it now (after the usual undo delay). */
+{ kind: "send_now" } | 
+/**  Schedule it again for this time (Unix ms, in the future). */
+{ kind: "reschedule"; sendAt: number } | 
+/**  Take it out of the outbox; it becomes an editable draft again. */
+{ kind: "keep_as_draft" };
+
 /**  How a new draft starts. */
 export type NewDraft = 
 /**
@@ -1939,7 +2313,20 @@ export type NewDraft =
 /**  An answer to the sender and every other recipient except the user's own addresses. */
 { kind: "reply_all"; messageId: MessageId; language: QuoteLanguage } | 
 /**  The message with its attachments, to new recipients. */
-{ kind: "forward"; messageId: MessageId; language: QuoteLanguage };
+{ kind: "forward"; messageId: MessageId; language: QuoteLanguage } | 
+/**
+ *  Stage 10: a new message with every field of a [`crate::ComposeRequest`] (a `mailto:`
+ *  link, `openLink` → `compose`): recipients, subject, plain-text body, and `In-Reply-To`
+ *  (with `References`) for threading. From the account's default identity unless
+ *  `identityId`. The request's notices are the UI's to show; they are not stored.
+ */
+{ kind: "compose"; accountId: AccountId; identityId: IdentityId | null; request: ComposeRequest } | 
+/**
+ *  Stage 10: the whole message as an attachment (`message/rfc822`, `<subject>.eml`), to
+ *  new recipients; nothing quoted. Needs the complete original (`invalid_argument` for a
+ *  large message stored only in part: forward it inline instead).
+ */
+{ kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage };
 
 /**  Notification settings (device settings). */
 export type NotificationSettings = {
@@ -2104,8 +2491,16 @@ export type OutgoingMail = {
 	to: Address[],
 	recipientCount: number,
 	state: SendState,
-	/**  When the submission starts (Unix ms): the end of the undo delay. */
+	/**
+	 *  When the submission starts (Unix ms): the end of the undo delay, or the time the user
+	 *  chose (`scheduled`).
+	 */
 	sendAt: number,
+	/**
+	 *  Stage 10: the user chose the time ("send later"); otherwise `sendAt` is the end of the
+	 *  undo delay.
+	 */
+	scheduled: boolean,
 	/**  Why it failed, is unclear or waits (the last temporary error). */
 	error: IpcError | null,
 	/**  Times the submission was started. */
@@ -2299,12 +2694,32 @@ export type RuleSkipReason =
 /**  The outbox refused the action (detail in the log). */
 "failed";
 
+/**  What sanitising removed or simplified, for a hint below the editor. */
+export type SanitizeReport = {
+	/**  Images dropped (not one of the signature's own `cid:` images: external, `data:`, SVG). */
+	imagesRemoved: number,
+	/**  Colours, fonts, sizes, alignment, tables or headings were simplified. */
+	formattingSimplified: boolean,
+};
+
 /**  Result of `saveAttachment`. */
 export type SaveAttachmentResult = 
 /**  Written to the path the user chose in the system dialog. */
 { kind: "saved"; path: string } | 
 /**  The user closed the dialog. */
 { kind: "cancelled" };
+
+/**  A saved signature and what sanitising changed. */
+export type SavedSignature = {
+	signature: SignatureInfo,
+	notes: SanitizeReport,
+};
+
+/**  A saved template and what sanitising changed. */
+export type SavedTemplate = {
+	template: TemplateInfo,
+	notes: SanitizeReport,
+};
 
 /**
  *  Where the query's words occur in the fields the list shows. Computed from the stored text
@@ -2448,9 +2863,19 @@ export type Security =
  */
 "starttls";
 
+/**  Stage 10: a time chosen for "send later". */
+export type SendLater = {
+	/**  Unix milliseconds; in the future, at most a year ahead. */
+	sendAt: number,
+};
+
 /**  Where a sent message stands, for the outbox view ("Ausgang"). */
 export type SendState = 
-/**  Waiting out the undo delay until `sendAt`; can be cancelled. */
+/**
+ *  Waiting until `sendAt`: the undo delay, or (`scheduled`) the time the user chose
+ *  ("send later", stage 10). Can be cancelled (back to the draft) or, when scheduled,
+ *  moved (`rescheduleSend`). It is sent only if the app runs and is online at that time.
+ */
 "scheduled" | 
 /**  Due, waiting for the server (offline, or a temporary refusal); `error` says why. */
 "queued" | 
@@ -2468,6 +2893,12 @@ export type SendState =
 "unclear" | 
 /**  Refused (`error`); nothing was delivered. Retry, or edit the draft again. */
 "failed" | 
+/**
+ *  Stage 10: scheduled for a time when the app was not running, and more than an hour has
+ *  passed (`error.code: send_missed`). Nothing was sent; the user decides
+ *  ([`MissedSendDecision`]).
+ */
+"missed" | 
 /**  The server accepted it. */
 "sent";
 
@@ -2614,6 +3045,57 @@ export type SettingsSyncStatus = {
 };
 
 /**
+ *  Id of a signature: a UUID, the same on every device (the sync record id). A signature
+ *  taken over from a stage 5 text signature has the UUID of its identity.
+ */
+export type SignatureId = string;
+
+/**
+ *  One image of a signature as a `data:` URL, for the signature editor (the editor shows it in
+ *  place of `cid:<contentId>` and writes `cid:<contentId>` back when saving).
+ */
+export type SignatureImageData = {
+	contentId: string,
+	dataUrl: string,
+};
+
+/**  An image a signature shows (`<img src="cid:CONTENT_ID">` in its HTML). */
+export type SignatureImageInfo = {
+	/**
+	 *  The `Content-ID` of the image part, without angle brackets; the HTML refers to it as
+	 *  `cid:<contentId>`.
+	 */
+	contentId: string,
+	fileName: string,
+	/**  `image/png`, `image/jpeg`, `image/gif` or `image/webp` (recognised from the bytes). */
+	mime: string,
+	size: number,
+};
+
+/**  A signature of the pool. */
+export type SignatureInfo = {
+	id: SignatureId,
+	name: string,
+	/**  Allowlisted editor HTML; images as `cid:` (see [`SignatureImageData`] for showing them). */
+	html: string,
+	/**  The plain text (without the `-- ` separator, added when the message is put together). */
+	text: string,
+	images: SignatureImageInfo[],
+	/**  Unix milliseconds. */
+	updatedAt: number,
+};
+
+/**
+ *  A signature to create (`id` null) or change. The HTML is sanitised with the allowlist of
+ *  outgoing mail; `cid:` images must name images of this signature.
+ */
+export type SignatureInput = {
+	id: SignatureId | null,
+	name: string,
+	html: string,
+};
+
+/**
  *  When a snoozed message comes back. Times are computed in the user's time zone; daylight
  *  saving changes are taken into account (a local time that does not exist moves forward).
  */
@@ -2702,6 +3184,38 @@ export type TaskFilter = "open" | "done" | "all";
 /**  A task mark on a list row. */
 export type TaskMark = {
 	done: boolean,
+};
+
+/**  Something to point out after filling a template. */
+export type TemplateFillProblem = 
+/**  `{{name}}` is no known placeholder; it stays as written. */
+{ kind: "unknown"; name: string } | 
+/**  No value (for example a recipient without a name) and no fallback: left empty. */
+{ kind: "missing"; placeholder: string };
+
+/**  Id of a template: a UUID, the same on every device. */
+export type TemplateId = string;
+
+/**  A template. */
+export type TemplateInfo = {
+	id: TemplateId,
+	name: string,
+	/**  May hold placeholders such as `{{first_name}}`. */
+	subject: string,
+	/**  Allowlisted editor HTML with placeholders. */
+	html: string,
+	/**  Known placeholders the template uses (`first_name`, `date`, …) and unknown ones. */
+	placeholders: string[],
+	unknownPlaceholders: string[],
+	updatedAt: number,
+};
+
+/**  A template to create (`id` null) or change. */
+export type TemplateInput = {
+	id: TemplateId | null,
+	name: string,
+	subject: string,
+	html: string,
 };
 
 /**  How a text condition compares (case and accents ignored). */

@@ -31,12 +31,12 @@ use std::time::Duration;
 
 use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::transport::smtp::client::AsyncSmtpConnection;
-use lettre::transport::smtp::commands::{Data, Mail, Rcpt};
+use lettre::transport::smtp::commands::{Data, Ehlo, Mail, Rcpt};
 use lettre::transport::smtp::extension::{ClientId, Extension, MailBodyParameter, MailParameter};
 use lettre::transport::smtp::response::{Response, Severity};
 use mail_model::{
     Access, BackendError, ConnectConfig, Envelope, RecipientRefusal, Security, SendOutcome,
-    SendRejection, SmtpReply, SmtpStep,
+    SendRejection, SmtpLimits, SmtpReply, SmtpStep,
 };
 use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
@@ -110,6 +110,25 @@ impl SmtpSender {
         let mut session = self.open(config).await?;
         let _ = timeout(QUIT_LIMIT, session.conn.quit()).await;
         Ok(())
+    }
+
+    /// Connects and logs in, asks EHLO once more and reads what the server announces about
+    /// message sizes (SIZE, RFC 1870), then says goodbye. Nothing is sent; also allowed for
+    /// read-only accounts (the composer warns before the user presses send).
+    pub async fn limits(&self, config: &ConnectConfig) -> Result<SmtpLimits, BackendError> {
+        let mut session = self.open(config).await?;
+        let reply = session
+            .conn
+            .command(Ehlo::new(HELLO))
+            .await
+            .map_err(|err| match reply_of(&err) {
+                Some(reply) => BackendError::Rejected(format!("EHLO: {reply}")),
+                None => from_lettre(&err),
+            })?;
+        let limits = SmtpLimits::from_ehlo(reply.message());
+        tracing::debug!(max = ?limits.max_message_bytes, "SMTP size limit");
+        let _ = timeout(QUIT_LIMIT, session.conn.quit()).await;
+        Ok(limits)
     }
 
     /// Submits `message` (the bytes for sending, without `Bcc`) to the envelope's recipients.
@@ -356,6 +375,10 @@ impl mail_model::MailSender for SmtpSender {
 
     fn verify<'a>(&'a self, config: &'a ConnectConfig) -> mail_model::SendFuture<'a, ()> {
         Box::pin(SmtpSender::verify(self, config))
+    }
+
+    fn limits<'a>(&'a self, config: &'a ConnectConfig) -> mail_model::SendFuture<'a, SmtpLimits> {
+        Box::pin(SmtpSender::limits(self, config))
     }
 }
 

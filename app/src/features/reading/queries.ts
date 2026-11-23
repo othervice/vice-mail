@@ -11,6 +11,7 @@ import {
   type RemoteContentScope,
   type RenderToken,
 } from "../../services/ipc";
+import { useMailtoStore } from "../../stores/mailto";
 
 /**
  * A view nobody shows any more is dropped after this time. The core keeps the link targets of
@@ -122,9 +123,16 @@ export function useDescribeLink(renderToken: RenderToken, index: number) {
   });
 }
 
+/**
+ * Opens a confirmed link. A `mailto:` link comes back as a compose request and goes to the same
+ * queue as links from the system, so it never replaces a message being written.
+ */
 export function useOpenLink() {
   return useMutation({
     mutationFn: ({ renderToken, index }: { renderToken: RenderToken; index: number }) => ipc.openLink(renderToken, index),
+    onSuccess: (opened) => {
+      if (opened.kind === "compose") useMailtoStore.getState().enqueue([opened.request]);
+    },
   });
 }
 

@@ -16,7 +16,11 @@ export function CommandPalette({ platform }: CommandPaletteProps) {
   return open ? <PalettePanel platform={platform} /> : null;
 }
 
-/** Back to where the focus was when an overlay opened, unless something else took it meanwhile. */
+/**
+ * Back to where the focus was when an overlay opened, unless something else took it meanwhile.
+ * If that element is gone (the command went to another view), the main area takes the focus, so
+ * the next Tab continues there instead of at the top of the window.
+ */
 export function useFocusReturn(): void {
   const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
   useEffect(
@@ -24,6 +28,7 @@ export function useFocusReturn(): void {
       const active = document.activeElement;
       if (active && active !== document.body) return;
       if (opener?.isConnected && opener !== document.body) opener.focus({ preventScroll: true });
+      else document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
     },
     [opener],
   );

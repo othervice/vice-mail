@@ -31,6 +31,8 @@ export function makeIdentity(overrides: Partial<ComposeIdentity> = {}): ComposeI
     replyTo: null,
     isDefault: true,
     signature: null,
+    signatureNew: null,
+    signatureReply: null,
     ...overrides,
   };
 }
@@ -55,6 +57,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     includeQuote: true,
     quotePosition: "below",
     includeSignature: true,
+    signatureId: null,
     attachments: [],
     originalMessageId: null,
     revision: 0,
@@ -76,6 +79,7 @@ export function makeOutgoing(overrides: Partial<OutgoingMail> = {}): OutgoingMai
     to: [{ name: "Grace Hopper", email: "grace@example.org" }],
     recipientCount: 1,
     state: "scheduled",
+    scheduled: false,
     sendAt: Date.now() + 10_000,
     error: null,
     attempts: 0,
@@ -155,10 +159,19 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       const identity = identitiesOf(request.accountId).find((i) => i.isDefault) ?? identitiesOf(request.accountId)[0];
       return store(makeDraft({ accountId: request.accountId, identityId: request.identityId ?? identity?.id ?? null, to: request.to }));
     }
+    if (request.kind === "compose") {
+      // Stage 10: a mailto request with every field.
+      const identity = identitiesOf(request.accountId).find((i) => i.isDefault) ?? identitiesOf(request.accountId)[0];
+      const { to, cc, bcc, subject, body } = request.request;
+      return store(
+        makeDraft({ accountId: request.accountId, identityId: request.identityId ?? identity?.id ?? null, to, cc, bcc, subject: subject ?? "", bodyText: body ?? "" }),
+      );
+    }
     const prepared = options.replies?.[request.messageId];
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (!prepared) return Promise.reject(composeError("not_found"));
-    return store(makeDraft({ kind: request.kind, originalMessageId: request.messageId, ...prepared }));
+    const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind;
+    return store(makeDraft({ kind, originalMessageId: request.messageId, ...prepared }));
   }
 
   function send(draftId: string, requestId: string): OutgoingMail | Promise<never> {
@@ -189,6 +202,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       to: draft.to.slice(0, 5),
       recipientCount: all.length,
       state: delay > 0 ? "scheduled" : "queued",
+      scheduled: false,
       sendAt: now + delay * 1000,
       error: null,
       attempts: 0,
@@ -294,6 +308,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
           fileName: path.split("/").pop() ?? path,
           mime: "application/octet-stream",
           size: 1000,
+          contentId: null,
         }));
         return store({ ...draft, attachments: [...draft.attachments, ...added] });
       }

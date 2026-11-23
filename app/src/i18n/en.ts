@@ -179,6 +179,7 @@ export const en = {
       sent: "Message sent",
       noSentCopy: "No Sent folder was found, so no copy was saved.",
       failed: "The message could not be sent.",
+      missed: "A message planned for later was not sent while the app was off.",
     },
     unclear: {
       title: "It is unclear whether the message was sent.",
@@ -211,6 +212,7 @@ export const en = {
         verifying: "Checking",
         unclear: "Unclear",
         failed: "Failed",
+        missed: "Missed",
         sent: "Sent",
       },
     },
@@ -1279,6 +1281,7 @@ export const en = {
         backKeys: "Esc",
         extend: "Extend the selection",
         extendKeys: "Shift+↓ ↑",
+        send: "Send the message (in the composer)",
       },
     },
     settings: {
@@ -2211,6 +2214,50 @@ export const en = {
       sync_key_missing: {
         title: "This computer has no key for the settings sync.",
         hint: "Enter the passphrase again to keep syncing.",
+      },
+      send_missed: {
+        title: "A message planned for later was not sent.",
+        hint: "The app was not running at the planned time. In the outbox, send it now, plan it again or keep it as a draft.",
+      },
+      message_too_large: {
+        title: "The message is larger than your mail server accepts.",
+        hint: "Remove or shrink attachments, or share large files as a link.",
+      },
+      ai_off: {
+        title: "AI is not set up for this.",
+        hint: "Turn on AI and choose a provider for this function in the settings.",
+      },
+      ai_consent_required: {
+        title: "Your consent is needed first.",
+        hint: "This provider is a cloud service. Read what is sent and agree before the first request. Nothing was sent.",
+      },
+      ai_not_permitted: {
+        title: "This account's mail may not go to a cloud provider.",
+        hint: "Allow it in the account's AI settings, or use a local provider. Nothing was sent.",
+      },
+      ai_cancelled: {
+        title: "The request was cancelled.",
+        hint: "Start it again when you need it.",
+      },
+      ai_unreachable: {
+        title: "The AI provider could not be reached.",
+        hint: "Check the address in the settings and whether the provider is running, then try again.",
+      },
+      ai_unauthorized: {
+        title: "The AI provider did not accept the key.",
+        hint: "Check the API key in the provider's settings.",
+      },
+      ai_busy: {
+        title: "The AI provider is busy right now.",
+        hint: "Wait a moment and try again.",
+      },
+      ai_refused: {
+        title: "The model declined the request.",
+        hint: "Try another wording or another model.",
+      },
+      ai_failed: {
+        title: "The AI request failed.",
+        hint: "Check the provider's address and model in the settings. If it keeps happening, try another model.",
       },
     },
   },

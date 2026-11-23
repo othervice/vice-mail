@@ -305,6 +305,7 @@ impl<C: Connector> AppCore<C> {
             include_quote: draft.include_quote,
             quote_position: draft.quote_position,
             include_signature: draft.include_signature,
+            signature_id: draft.signature_id.clone(),
         };
         if let Err(err) = compose.save(draft.id.clone(), update).await {
             if let Err(cleanup) = compose.delete(draft.id.clone()).await {

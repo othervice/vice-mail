@@ -21,6 +21,7 @@ const STATE_TONE: Record<SendState, string> = {
   verifying: "text-warning",
   unclear: "text-warning",
   failed: "text-danger",
+  missed: "text-warning",
   sent: "text-success",
 };
 

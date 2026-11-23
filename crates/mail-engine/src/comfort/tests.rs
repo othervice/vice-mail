@@ -1178,6 +1178,7 @@ async fn failed_sends_are_announced_once() {
         recipient_count: 1,
         state: mail_model::SendState::Failed,
         send_at: 0,
+        scheduled: false,
         error: None,
         attempts: 1,
         notice: None,

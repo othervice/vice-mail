@@ -54,7 +54,7 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
       if (!open || replace) return "flex min-h-0 min-w-0 flex-1 flex-col";
       return position === "bottom"
         ? "flex h-(--ui-list-height-reading) min-h-(--ui-list-min-height-reading) min-w-0 shrink-0 flex-col border-b border-border"
-        : "flex min-h-0 min-w-0 w-(--ui-list-width-reading) shrink-0 flex-col border-e border-border";
+        : "flex min-h-0 min-w-0 w-(--ui-list-width-reading) max-w-(--ui-list-max-width-reading) shrink-0 flex-col border-e border-border";
     },
     listHidden: (open) => replace && opened && open,
     paneShown: (open) => (replace ? opened && open : open),

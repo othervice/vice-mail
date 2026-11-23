@@ -118,16 +118,17 @@ pub const REGISTRY: [KindSpec; 16] = [
         Removal::Apply,
         4 * KIB,
     ),
-    // The signature of an identity, by the identity's UUID; its own record, so a deleted
-    // signature and a concurrent edit merge as "edit beats delete".
+    // A signature of the pool (stage 10, decision 0023), by its UUID (a stage 5 text
+    // signature kept its identity's UUID); a deleted signature and a concurrent edit merge as
+    // "edit beats delete". Up to 128 KiB of images in base64 plus the HTML.
     spec(
         RecordKind::Signature,
         "signature",
-        "identity",
+        "signature",
         MergeRule::EditBeatsDelete,
         IdShape::Uuid,
         Removal::Apply,
-        64 * KIB,
+        256 * KIB,
     ),
     spec(
         RecordKind::Template,
@@ -689,6 +690,9 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
                 return Err(invalid("a signature needs text or html".into()));
             }
         }
+        RecordKind::Template => {
+            TemplateContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
         RecordKind::Identity => {
             IdentityContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
@@ -723,10 +727,16 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
             EmptyContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
         RecordKind::Contact => {
-            ContactContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            let contact =
+                ContactContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if contact.user_name.is_none() && contact.merged_into.is_none() {
+                return Err(invalid(
+                    "a contact record has a name or a merge (delete it instead)".into(),
+                ));
+            }
         }
-        // No local table yet (templates, saved views, AI settings): any object, kept as it is.
-        RecordKind::Template | RecordKind::SavedView | RecordKind::AiSettings => {
+        // No local table yet (saved views, AI settings): any object, kept as it is.
+        RecordKind::SavedView | RecordKind::AiSettings => {
             if !value.is_object() {
                 return Err(invalid("content is not a JSON object".into()));
             }
@@ -849,18 +859,44 @@ pub struct TaskInfo {
     pub done_at_ms: Option<i64>,
 }
 
-/// Content of a signature record (the signature of the identity with the record's UUID).
-/// `html` is for the HTML signatures of the composer; today only `text` is written.
+/// Content of a signature record: a signature of the pool (stage 10, decision 0023). `html` is
+/// the allowlisted editor HTML (absent for a stage 5 text signature), `images` the pictures it
+/// shows as `cid:<contentId>`. A record of stage 11 (`{text}` only) still reads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SignatureContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub html: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<SignatureImageContent>,
 }
 
-/// Content of an identity record (the signature is a record of its own).
+/// An image of a signature record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SignatureImageContent {
+    pub id: String,
+    pub content_id: String,
+    pub file_name: String,
+    pub mime: String,
+    pub data_base64: String,
+}
+
+/// Content of a template record (stage 10).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TemplateContent {
+    pub name: String,
+    pub subject: String,
+    pub html: String,
+}
+
+/// Content of an identity record (the signatures are records of their own; the identity names
+/// its defaults by UUID, stage 10, absent when none is set).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IdentityContent {
@@ -869,6 +905,10 @@ pub struct IdentityContent {
     pub name: String,
     pub reply_to: Option<String>,
     pub is_default: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_new: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_reply: Option<String>,
 }
 
 /// Content of a local rule. `definition` is the rule's conditions and actions as stored
@@ -905,11 +945,16 @@ pub struct AccountGroupContent {
 #[serde(deny_unknown_fields)]
 pub struct EmptyContent {}
 
-/// Content of a contact record: the name the user gave it.
+/// Content of a contact record (by normalised address): the name the user gave it and, for an
+/// address the user merged into another contact, that contact's address (stage 10). At least
+/// one of the two.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContactContent {
-    pub user_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_into: Option<String>,
 }
 
 /// A record: content or tombstone, with the version that produced it.

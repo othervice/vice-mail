@@ -657,7 +657,11 @@ impl<C: MailConnector + 'static> Reading<C> {
         Ok(links::link_info(&link, &check))
     }
 
-    pub(crate) async fn open_link(&self, token: &RenderToken, index: u32) -> Result<(), CoreError> {
+    pub(crate) async fn open_link(
+        &self,
+        token: &RenderToken,
+        index: u32,
+    ) -> Result<mail_model::LinkOpened, CoreError> {
         let (_, check) = self.renderings.link(token, index)?;
         let url = check.open_url.ok_or_else(|| {
             CoreError::InvalidArgument(format!(
@@ -665,10 +669,19 @@ impl<C: MailConnector + 'static> Reading<C> {
                 check.scheme
             ))
         })?;
+        // Stage 10: a `mailto:` link opens the app's own composer, not the system's mail app.
+        if check.scheme.eq_ignore_ascii_case("mailto") {
+            let request = mail_content::parse_mailto(&url)?;
+            tracing::info!(
+                recipients = request.to.len() + request.cc.len() + request.bcc.len(),
+                "mailto link of a mail opens the composer"
+            );
+            return Ok(mail_model::LinkOpened::Compose { request });
+        }
         let opener = Arc::clone(&self.opener);
         blocking(move || opener.open_url(&url)).await??;
         tracing::info!(scheme = %check.scheme, host = check.host.as_deref(), "link opened in the system");
-        Ok(())
+        Ok(mail_model::LinkOpened::Opened)
     }
 
     /// The navigation hook saw a click on a link placeholder: tells the UI, if the token is

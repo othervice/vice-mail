@@ -295,24 +295,62 @@ pub(crate) fn content_of(
             .optional()?,
         "identity" => conn
             .prepare_cached(
-                "SELECT a.uuid, i.email, i.name, i.reply_to, i.is_default
+                "SELECT a.uuid, i.email, i.name, i.reply_to, i.is_default, i.signature_new,
+                        i.signature_reply
                  FROM identity i JOIN account a ON a.id = i.account_id WHERE i.uuid = ?1",
             )?
             .query_row([id], |r| {
-                Ok(json!({
+                let mut value = json!({
                     "account": r.get::<_, String>(0)?,
                     "email": r.get::<_, String>(1)?,
                     "name": r.get::<_, String>(2)?,
                     "replyTo": r.get::<_, Option<String>>(3)?,
                     "isDefault": r.get::<_, bool>(4)?,
-                }))
+                });
+                // Stage 10: the default signatures, only when set (an identity without them
+                // keeps the content, and so the version, it had before).
+                for (field, idx) in [("signatureNew", 5), ("signatureReply", 6)] {
+                    if let (Some(uuid), Some(map)) =
+                        (r.get::<_, Option<String>>(idx)?, value.as_object_mut())
+                    {
+                        map.insert(field.to_owned(), Value::String(uuid));
+                    }
+                }
+                Ok(value)
             })
             .optional()?,
+        // Stage 10: a signature of the pool (decision 0023); `html` and `images` only when set.
         "signature" => conn
-            .prepare_cached(
-                "SELECT signature FROM identity WHERE uuid = ?1 AND signature IS NOT NULL",
-            )?
-            .query_row([id], |r| Ok(json!({ "text": r.get::<_, String>(0)? })))
+            .prepare_cached("SELECT name, html, text, images FROM signature WHERE uuid = ?1")?
+            .query_row([id], |r| {
+                let mut value = json!({
+                    "name": r.get::<_, String>(0)?,
+                    "text": r.get::<_, String>(2)?,
+                });
+                if let Some(map) = value.as_object_mut() {
+                    if let Some(html) = r.get::<_, Option<String>>(1)? {
+                        map.insert("html".to_owned(), Value::String(html));
+                    }
+                    let images = crate::signatures::images_from_text(&r.get::<_, String>(3)?);
+                    if !images.is_empty() {
+                        map.insert(
+                            "images".to_owned(),
+                            Value::Array(images.iter().map(|i| i.to_json()).collect()),
+                        );
+                    }
+                }
+                Ok(value)
+            })
+            .optional()?,
+        "template" => conn
+            .prepare_cached("SELECT name, subject, html FROM template WHERE uuid = ?1")?
+            .query_row([id], |r| {
+                Ok(json!({
+                    "name": r.get::<_, String>(0)?,
+                    "subject": r.get::<_, String>(1)?,
+                    "html": r.get::<_, String>(2)?,
+                }))
+            })
             .optional()?,
         "senderRule" => {
             let Some((key_kind, key_value)) = id.split_once(':') else {
@@ -390,12 +428,8 @@ pub(crate) fn content_of(
                 }
             }
         }
-        "contact" => conn
-            .prepare_cached(
-                "SELECT user_name FROM contact WHERE address_key = ?1 AND user_name IS NOT NULL",
-            )?
-            .query_row([id], |r| Ok(json!({ "userName": r.get::<_, String>(0)? })))
-            .optional()?,
+        // Stage 10: the name the user gave and the merge (decision 0023).
+        "contact" => crate::contacts_dir::synced_content(conn, id)?,
         "device" => conn
             .prepare_cached(
                 "SELECT name, system, last_seen_ms FROM sync_device WHERE device_id = ?1",
@@ -569,28 +603,84 @@ fn put_table(
                 )?
                 .execute(params![row, id])?;
             }
+            let signature_new = opt_text(value, "signatureNew");
+            let signature_reply = opt_text(value, "signatureReply");
             let updated = conn
                 .prepare_cached(
                     "UPDATE identity SET account_id = ?2, email = ?3, name = ?4, reply_to = ?5,
-                       is_default = ?6 WHERE uuid = ?1",
+                       is_default = ?6, signature_new = ?7, signature_reply = ?8 WHERE uuid = ?1",
                 )?
-                .execute(params![id, row, email, name, reply_to, is_default])?;
+                .execute(params![
+                    id,
+                    row,
+                    email,
+                    name,
+                    reply_to,
+                    is_default,
+                    signature_new,
+                    signature_reply
+                ])?;
             if updated == 0 {
                 conn.prepare_cached(
-                    "INSERT INTO identity (account_id, email, name, reply_to, is_default, uuid)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    "INSERT INTO identity (account_id, email, name, reply_to, is_default, uuid,
+                                           signature_new, signature_reply)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 )?
-                .execute(params![row, email, name, reply_to, is_default, id])?;
+                .execute(params![
+                    row,
+                    email,
+                    name,
+                    reply_to,
+                    is_default,
+                    id,
+                    signature_new,
+                    signature_reply
+                ])?;
             }
         }
         "signature" => {
-            let text = opt_text(value, "text");
-            let updated = conn
-                .prepare_cached("UPDATE identity SET signature = ?2 WHERE uuid = ?1")?
-                .execute(params![id, text])?;
-            if updated == 0 {
-                return Err(missing(format!("identity {id}")));
-            }
+            let images: Vec<crate::signatures::StoredSignatureImage> = value
+                .get("images")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(crate::signatures::StoredSignatureImage::from_json)
+                .collect();
+            let text = opt_text(value, "text").unwrap_or_default();
+            conn.prepare_cached(
+                "INSERT INTO signature (uuid, name, html, text, images, position, created_at,
+                                        updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, (SELECT coalesce(max(position), -1) + 1 FROM signature),
+                         ?6, ?6)
+                 ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, html = excluded.html,
+                   text = excluded.text, images = excluded.images,
+                   updated_at = excluded.updated_at",
+            )?
+            .execute(params![
+                id,
+                opt_text(value, "name").unwrap_or_default(),
+                opt_text(value, "html"),
+                text,
+                crate::signatures::images_text(&images),
+                now
+            ])?;
+        }
+        "template" => {
+            conn.prepare_cached(
+                "INSERT INTO template (uuid, name, subject, html, position, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, (SELECT coalesce(max(position), -1) + 1 FROM template),
+                         ?5, ?5)
+                 ON CONFLICT (uuid) DO UPDATE SET name = excluded.name,
+                   subject = excluded.subject, html = excluded.html,
+                   updated_at = excluded.updated_at",
+            )?
+            .execute(params![
+                id,
+                text(value, "name")?,
+                text(value, "subject")?,
+                text(value, "html")?,
+                now
+            ])?;
         }
         "senderRule" => {
             let (key_kind, key_value) = id
@@ -719,9 +809,14 @@ fn put_table(
             }
         }
         "contact" => {
-            // Only the name the user gave; a contact this device never saw has nothing to name.
-            conn.prepare_cached("UPDATE contact SET user_name = ?2 WHERE address_key = ?1")?
-                .execute(params![id, opt_text(value, "userName")])?;
+            // The name the user gave and the merge; a contact this device never saw has nothing
+            // to name: the record waits in `sync_record` until the address appears.
+            crate::contacts_dir::apply_synced(
+                conn,
+                id,
+                opt_text(value, "userName"),
+                opt_text(value, "mergedInto"),
+            )?;
         }
         "device" => {
             conn.prepare_cached(
@@ -736,8 +831,8 @@ fn put_table(
                 int(value, "lastSeenMs")?
             ])?;
         }
-        // Kinds without a local table yet (templates, views, AI settings): kept in the sync
-        // state only, so they are not lost for a later version.
+        // Kinds without a local table yet (views, AI settings): kept in the sync state only,
+        // so they are not lost for a later version.
         _ => return Ok(()),
     }
     outcome.kinds.insert(item.kind.clone());
@@ -761,8 +856,13 @@ fn delete_table(
         "identity" => conn
             .prepare_cached("DELETE FROM identity WHERE uuid = ?1")?
             .execute([id])?,
+        // The defaults and draft choices that name it stay: a name that points nowhere means
+        // "none", and the deleting device sends the identities it changed itself.
         "signature" => conn
-            .prepare_cached("UPDATE identity SET signature = NULL WHERE uuid = ?1")?
+            .prepare_cached("DELETE FROM signature WHERE uuid = ?1")?
+            .execute([id])?,
+        "template" => conn
+            .prepare_cached("DELETE FROM template WHERE uuid = ?1")?
             .execute([id])?,
         "senderRule" => {
             let (key_kind, key_value) = id
@@ -792,9 +892,7 @@ fn delete_table(
         "accountGroup" => conn
             .prepare_cached("DELETE FROM account_group WHERE uuid = ?1")?
             .execute([id])?,
-        "contact" => conn
-            .prepare_cached("UPDATE contact SET user_name = NULL WHERE address_key = ?1")?
-            .execute([id])?,
+        "contact" => crate::contacts_dir::apply_synced(conn, id, None, None)?,
         "device" => conn
             .prepare_cached("DELETE FROM sync_device WHERE device_id = ?1")?
             .execute([id])?,
@@ -877,12 +975,14 @@ fn rekey_identity(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyEr
     if n == 0 {
         return Err(missing(format!("identity {from}")));
     }
+    // Since stage 10 a signature is a record of its own (also the one that has the identity's
+    // former UUID): it keeps its id.
     conn.execute(
-        "DELETE FROM sync_record WHERE kind IN ('identity', 'signature') AND id = ?1",
+        "DELETE FROM sync_record WHERE kind = 'identity' AND id = ?1",
         [from],
     )?;
     conn.execute(
-        "DELETE FROM sync_dirty WHERE kind IN ('identity', 'signature') AND id = ?1",
+        "DELETE FROM sync_dirty WHERE kind = 'identity' AND id = ?1",
         [from],
     )?;
     Ok(())

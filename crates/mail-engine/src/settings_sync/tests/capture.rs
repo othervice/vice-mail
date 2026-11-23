@@ -152,6 +152,32 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_identity_signature(identity.id, Some("Regards, Alice".into()))
         .await
         .expect("signature");
+    // Stage 10: a signature of the pool as the reply default, and a template.
+    let pooled = core
+        .save_signature(mail_model::SignatureInput {
+            id: None,
+            name: "Short".into(),
+            html: "<p><strong>A.</strong></p>".into(),
+        })
+        .await
+        .expect("pool signature")
+        .signature;
+    let identity_signature = core
+        .get_identity_signature_defaults(identity.id)
+        .await
+        .expect("defaults")
+        .new_signature;
+    core.set_identity_signature_defaults(identity.id, identity_signature, Some(pooled.id.clone()))
+        .await
+        .expect("reply default");
+    core.save_template(mail_model::TemplateInput {
+        id: None,
+        name: "Thanks".into(),
+        subject: "Thanks, {{first_name}}".into(),
+        html: "<p>Hi {{first_name}}</p>".into(),
+    })
+    .await
+    .expect("template");
     core.set_sender_category(
         SenderKey::address("news@shop.example"),
         Some(MessageCategory::Newsletter),
@@ -218,11 +244,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     let mcp_key = mcp.token.rsplit('_').next().expect("key part").to_owned();
 
     let captured = kinds(&core).await;
-    let without_table = [
-        RecordKind::Template,
-        RecordKind::SavedView,
-        RecordKind::AiSettings,
-    ];
+    let without_table = [RecordKind::SavedView, RecordKind::AiSettings];
     for kind in RecordKind::ALL {
         if without_table.contains(&kind) {
             continue;
@@ -301,6 +323,28 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     .await
     .expect("changed");
     assert!(theme(&store.sync_records().await.expect("rows")) > first);
+    // The identity names its defaults; the pool signature is its own record.
+    let identity_record = store
+        .sync_record("identity", &identity_uuid(&rows, "alice+work@fake.test"))
+        .await
+        .expect("read")
+        .expect("identity");
+    assert_eq!(
+        identity_record.content.expect("content")["signatureReply"],
+        serde_json::json!(pooled.id.as_str())
+    );
+    assert_eq!(
+        store
+            .sync_record("signature", pooled.id.as_str())
+            .await
+            .expect("read")
+            .expect("pool signature")
+            .content
+            .expect("content")["html"]
+            .as_str()
+            .map(str::trim_end),
+        Some("<p><strong>A.</strong></p>")
+    );
     core.set_identity_signature(identity.id, None)
         .await
         .expect("signature removed");
@@ -344,6 +388,24 @@ fn captured_content_of_every_table_passes_its_kind() {
             "signature",
             account,
             serde_json::json!({ "text": "Regards" }),
+        ),
+        (
+            "signature",
+            account,
+            serde_json::json!({ "name": "Work", "text": "A", "html": "<p>A</p>",
+            "images": [{ "id": "1", "contentId": "sig-1@signature", "fileName": "a.png",
+                         "mime": "image/png", "dataBase64": "iVBORw0KGgo=" }] }),
+        ),
+        (
+            "template",
+            account,
+            serde_json::json!({ "name": "T", "subject": "S", "html": "<p>B</p>" }),
+        ),
+        (
+            "identity",
+            account,
+            serde_json::json!({ "account": account, "email": "a@b", "name": "A",
+            "replyTo": null, "isDefault": true, "signatureNew": account }),
         ),
         (
             "senderRule",

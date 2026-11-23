@@ -18,6 +18,7 @@ mod tests;
 
 pub use draft::{DraftBody, DraftParts, Quote, ReplyPosition, assemble_draft};
 pub use signature::{MAX_SIGNATURE_BYTES, SIGNATURE_SEPARATOR, Signature};
+pub(crate) use snippet::paste_notes;
 pub use snippet::{MAX_SNIPPET_INPUT_BYTES, SanitizeNotes, SnippetError};
 pub use template::{
     FilledTemplate, LocalDate, MAX_TEMPLATE_BYTES, MAX_TEMPLATE_SUBJECT_CHARS, Placeholder,

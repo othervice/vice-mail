@@ -189,7 +189,8 @@ describe("command palette", () => {
       expect(screen.queryByRole("dialog", { name: "Command palette" }), id).toBeNull();
       expectRan(id, host, ctx);
     }
-  });
+    // 33 rounds through the palette: more than the default 5 s on a busy machine.
+  }, 30_000);
 
   it("shows actions that cannot run here, with the reason, and does not run them", async () => {
     mockCore();
@@ -210,6 +211,24 @@ describe("command palette", () => {
     expect(palette()).toBeTruthy();
     expect(within(palette()).getByText("Archive: Select a message first")).toBeTruthy();
     expect(host.apply).not.toHaveBeenCalled();
+  });
+
+  it("outside a mail view names the reason; a new message works from the selected account", async () => {
+    const account = makeAccount();
+    mockCore({ accounts: [account], mailboxes: standardMailboxes(), messages: { 1: [] } });
+    const { user } = renderApp();
+    await screen.findByRole("navigation", { name: "Views" });
+    act(() => {
+      useUiStore.getState().showSettings("general");
+    });
+    await openPalette(user);
+    await user.keyboard("Archive");
+    const archive = within(palette()).getAllByRole("option").find((o) => optionLabel(o) === "Archive");
+    expect(archive?.textContent).toContain("Open a mail view first");
+    await user.keyboard("{Escape}");
+    await openPalette(user);
+    await chooseByKeyboard(user, "new message", "New message");
+    expect(useComposerStore.getState().session?.source).toEqual({ kind: "new", accountId: account.id });
   });
 
   it("runs an action on the open message of the real mail view and gives the focus back", async () => {
@@ -252,6 +271,8 @@ describe("command palette", () => {
     await openPalette(user);
     await chooseByKeyboard(user, "sent", "Go to Sent");
     expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });
+    // The opener was the page itself: the main area takes the focus, Tab goes on from there.
+    expect(document.activeElement).toBe(screen.getByRole("main"));
 
     await openPalette(user);
     await chooseByKeyboard(user, "2026", "Open folder 2026");
@@ -333,6 +354,31 @@ describe("command palette", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
     expect(document.activeElement).toBe(settings);
+  });
+
+  it("opens the views of the rail with Cmd+1 to 8, which the rail and the palette name", async () => {
+    mockCore({ accounts: [makeAccount()], mailboxes: standardMailboxes(), messages: { 1: [] } });
+    const { user } = renderApp();
+    const later = await screen.findByTestId("rail-later");
+    expect(later.getAttribute("aria-keyshortcuts")).toBe("Meta+2");
+    expect(screen.getByTestId("rail-trash").getAttribute("aria-keyshortcuts")).toBe("Meta+8");
+    expect(screen.getByTestId("rail-folders").getAttribute("aria-keyshortcuts")).toBeNull();
+
+    await user.keyboard("{Meta>}2{/Meta}");
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "later" });
+    // From the search field too (a shortcut with Cmd works while typing).
+    act(() => {
+      useSearchStore.getState().openSearch();
+    });
+    const field = await screen.findByRole("searchbox", { name: "Search mail" });
+    field.focus();
+    await user.keyboard("{Meta>}5{/Meta}");
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });
+
+    await openPalette(user);
+    await user.keyboard("go to drafts");
+    const drafts = within(palette()).getAllByRole("option").find((o) => optionLabel(o) === "Go to Drafts");
+    expect(drafts?.getAttribute("aria-keyshortcuts")).toBe("Meta+6");
   });
 
   it("shows the shortcut overview with ? and from the palette", async () => {

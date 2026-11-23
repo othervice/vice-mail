@@ -62,6 +62,7 @@ fn message(env: &TestEnv, subject: &str) -> OutgoingMessage {
         text: None,
         html: Some("<p>Hallo <strong>Alice</strong>, schöne Grüße 👋</p>".to_owned()),
         attachments: Vec::new(),
+        inline_images: Vec::new(),
         message_id: new_message_id(&env.bob.address, unique()),
         in_reply_to: None,
         references: Vec::new(),
@@ -463,5 +464,21 @@ async fn cut_during_the_data_is_not_sent() {
         )
         .await;
         assert!(copies.is_empty(), "{security:?}: nothing delivered");
+    }
+}
+
+/// Stage 10: the test server's SIZE limit is read over both transports; nothing is sent.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn the_size_limit_of_the_server_is_read() {
+    let env = TestEnv::require();
+    for security in [Security::Starttls, Security::Tls] {
+        let limits = SmtpSender::new()
+            .limits(&env.smtp_config(&env.bob, security))
+            .await
+            .expect("limits");
+        println!("{security:?}: {:?}", limits.max_message_bytes);
+        let max = limits.max_message_bytes.expect("Stalwart announces SIZE");
+        assert!(max >= 1024 * 1024, "{max}");
     }
 }

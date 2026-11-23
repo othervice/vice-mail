@@ -240,7 +240,7 @@ describe("composer: writing and drafts", () => {
   });
 
   it("attaches files through the core's dialog, warns about size and removes them", async () => {
-    const big = { id: "a1", fileName: "Prüfbericht 🧾.pdf", mime: "application/pdf", size: 16 * 1024 * 1024 };
+    const big = { id: "a1", fileName: "Prüfbericht 🧾.pdf", mime: "application/pdf", size: 16 * 1024 * 1024, contentId: null };
     const { core, user } = setup({ compose: { picked: [big] } });
     await openNew(user);
     await user.click(screen.getByRole("button", { name: "Attach files" }));

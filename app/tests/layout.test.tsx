@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadLayout, useLayoutStore } from "../src/stores/layout";
 import { useUiStore } from "../src/stores/ui";
-import { makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
+import { makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
 
 beforeEach(() => {
@@ -119,6 +119,43 @@ describe("layouts", () => {
     expect(cursorRow(list)?.getAttribute("aria-label")).toContain(items[2]?.subject ?? "");
     await user.keyboard("k");
     expect(cursorRow(list)?.getAttribute("aria-label")).toContain(items[1]?.subject ?? "");
+  });
+
+  it("applies to the unified inbox too", async () => {
+    const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work" });
+    const ada = makeMessage({ id: 3000, subject: "Privat", date: Date.now() - 60_000 });
+    const job = makeMessage({ id: 2000, accountId: work.id, mailboxId: 20, subject: "Projekt", date: Date.now() - 120_000 });
+    mockCore({
+      accounts: [makeAccount(), work],
+      mailboxes: [...standardMailboxes(), makeMailbox({ id: 20, accountId: work.id, path: "INBOX", role: "inbox", roleSource: "server" })],
+      messages: { 1: [ada], 20: [job] },
+      views: { 3000: makeView(ada), 2000: makeView(job) },
+      readingPreferences: { markReadOnOpen: "never" },
+    });
+    const { user } = renderApp();
+    await chooseInAppearance(user, "Reading pane", "Instead of the list");
+    act(() => {
+      useUiStore.getState().showUnifiedInbox({ kind: "all" });
+    });
+    const list = await screen.findByRole("listbox", { name: "Messages in All inboxes" });
+    await waitFor(() => {
+      expect(within(list).getAllByRole("option")).toHaveLength(2);
+    });
+    list.focus();
+    await user.keyboard("j");
+    expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
+    await user.keyboard("{Enter}");
+    const pane = await screen.findByRole("region", { name: "Message" });
+    expect(pane.textContent).toContain("Projekt");
+    expect(screen.queryByRole("listbox", { name: "Messages in All inboxes" })).toBeNull();
+    await waitFor(() => {
+      expect(pane.contains(document.activeElement)).toBe(true);
+    });
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Messages in All inboxes" }));
+    });
+    expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
   });
 
   it("keeps the unfolded sidebar after a restart", async () => {

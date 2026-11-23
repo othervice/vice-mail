@@ -393,6 +393,18 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         credentials: Credentials,
         config: OutboxConfig,
     ) -> Self {
+        Self::with_clock(store, connector, credentials, config, Arc::new(SystemClock))
+    }
+
+    /// Like [`Outbox::new`] with the core's clock: when delayed and scheduled operations are
+    /// due (stage 10; tests move the clock).
+    pub fn with_clock(
+        store: Store,
+        connector: Arc<C>,
+        credentials: Credentials,
+        config: OutboxConfig,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         let store_for_emitter = store.clone();
         Self {
             shared: Arc::new(Shared {
@@ -400,7 +412,7 @@ impl<C: WriteConnector + 'static> Outbox<C> {
                 connector,
                 credentials,
                 config,
-                clock: Arc::new(SystemClock),
+                clock,
                 emitter: Emitter::new(store_for_emitter),
                 hook: RwLock::new(Arc::new(NoSyncHook)),
             }),
@@ -632,6 +644,23 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         if !change.operations.is_empty() {
             self.kick(change.account);
         }
+    }
+
+    /// Stage 10: what the account's SMTP server announces about message sizes (SIZE), asked
+    /// over a connection of its own that sends nothing.
+    pub(crate) async fn smtp_limits(
+        &self,
+        account: &mail_store::StoredAccount,
+    ) -> Result<mail_model::SmtpLimits, CoreError> {
+        let key = crate::credentials::CredentialRef::parse(&account.credential_ref)?;
+        let password = self.shared.credentials.get(&key).await?.ok_or_else(|| {
+            CoreError::Keychain("no password stored for this account; enter it again".into())
+        })?;
+        let mut config =
+            mail_model::ConnectConfig::new(&account.smtp, password, mail_model::Access::ReadOnly);
+        config.timeouts = self.shared.config.timeouts;
+        config.extra_root_ca = self.shared.config.extra_root_ca.clone();
+        Ok(self.shared.config.sender.0.limits(&config).await?)
     }
 
     pub(crate) fn compose_config(&self) -> &ComposeConfig {

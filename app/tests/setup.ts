@@ -36,6 +36,7 @@ afterEach(() => {
   usePaletteStore.setState(usePaletteStore.getInitialState(), true);
   useActionTargetStore.setState(useActionTargetStore.getInitialState(), true);
   delete document.documentElement.dataset["density"];
+  delete document.documentElement.dataset["textSize"];
   const root = document.documentElement;
   delete root.dataset["theme"];
   delete root.dataset["platform"];

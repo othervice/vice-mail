@@ -22,6 +22,10 @@ use crate::sync_state::{Jitter, SplitMix64};
 
 /// Longest wait for LOGOUT when the connection is closed on purpose.
 const LOGOUT_LIMIT: Duration = Duration::from_secs(2);
+/// Longest single wait for a delayed operation (stage 10): Tokio's timers follow the
+/// monotonic clock, which stands still while the computer sleeps; a send scheduled for 9:00
+/// must not wait for the hours the lid was closed, so the wall clock is looked at again.
+const MAX_DUE_WAIT: Duration = Duration::from_secs(30);
 
 /// What woke the worker.
 enum Wake {
@@ -101,7 +105,8 @@ pub(crate) async fn run<C: WriteConnector + 'static>(
                     .unwrap_or(now);
                 let delay = Duration::from_millis(
                     u64::try_from(next.saturating_sub(now)).unwrap_or(0).max(1),
-                );
+                )
+                .min(MAX_DUE_WAIT);
                 match wait(&kick, &mut stop, Some(delay)).await {
                     Wake::Stop => break,
                     Wake::Kick | Wake::Timer => continue,

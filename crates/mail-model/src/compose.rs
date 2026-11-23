@@ -30,6 +30,12 @@ pub const DEFAULT_SEND_DELAY_SECS: u32 = 10;
 pub const MAX_SEND_DELAY_SECS: u32 = 30;
 /// Most bytes of all attachments of one draft together (decoded). Larger drafts are refused
 /// with [`ErrorCode::AttachmentTooLarge`]; most providers refuse far less (see below).
+/// Stage 10: a scheduled send that was due while the app was off goes out at the next start if
+/// at most this much time has passed (Unix ms); after longer the user is asked.
+pub const MISSED_SEND_GRACE_MS: i64 = 60 * 60 * 1000;
+/// Stage 10: how far ahead a message can be scheduled (one year and a day, in ms).
+pub const MAX_SCHEDULE_AHEAD_MS: i64 = 366 * 24 * 60 * 60 * 1000;
+
 pub const MAX_ATTACHMENT_BYTES: u64 = 100 * 1024 * 1024;
 /// Above this total the composer warns: many providers refuse messages over 20 to 25 MB (the
 /// encoded message is a third larger than its attachments).
@@ -197,6 +203,9 @@ pub struct DraftAttachment {
     /// Decoded bytes.
     #[specta(type = Number)]
     pub size: u64,
+    /// Set for an inline image (stage 10): the editor shows it as `<img src="cid:…">`, it goes
+    /// out as a part of `multipart/related`, and the attachment list leaves it out.
+    pub content_id: Option<String>,
 }
 
 /// Whether the local draft is a draft or already on its way.
@@ -270,6 +279,9 @@ pub struct Draft {
     pub quote_position: QuotePosition,
     /// The identity's text signature goes below what the user wrote.
     pub include_signature: bool,
+    /// The signature the composer switched to (stage 10); null = the identity's default for
+    /// this kind of draft (new mail or reply/forward).
+    pub signature_id: Option<crate::SignatureId>,
     pub attachments: Vec<DraftAttachment>,
     /// The message answered or forwarded, while it is still stored locally.
     pub original_message_id: Option<MessageId>,
@@ -318,6 +330,10 @@ pub struct DraftUpdate {
     pub include_quote: bool,
     pub quote_position: QuotePosition,
     pub include_signature: bool,
+    /// The signature chosen in the composer (stage 10); null or left out = the identity's
+    /// default for this kind of draft.
+    #[serde(default)]
+    pub signature_id: Option<crate::SignatureId>,
 }
 
 /// How a new draft starts.
@@ -350,13 +366,31 @@ pub enum NewDraft {
         message_id: MessageId,
         language: QuoteLanguage,
     },
+    /// Stage 10: a new message with every field of a [`crate::ComposeRequest`] (a `mailto:`
+    /// link, `openLink` → `compose`): recipients, subject, plain-text body, and `In-Reply-To`
+    /// (with `References`) for threading. From the account's default identity unless
+    /// `identityId`. The request's notices are the UI's to show; they are not stored.
+    Compose {
+        account_id: AccountId,
+        identity_id: Option<IdentityId>,
+        request: crate::ComposeRequest,
+    },
+    /// Stage 10: the whole message as an attachment (`message/rfc822`, `<subject>.eml`), to
+    /// new recipients; nothing quoted. Needs the complete original (`invalid_argument` for a
+    /// large message stored only in part: forward it inline instead).
+    ForwardAsAttachment {
+        message_id: MessageId,
+        language: QuoteLanguage,
+    },
 }
 
 /// Where a sent message stands, for the outbox view ("Ausgang").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SendState {
-    /// Waiting out the undo delay until `sendAt`; can be cancelled.
+    /// Waiting until `sendAt`: the undo delay, or (`scheduled`) the time the user chose
+    /// ("send later", stage 10). Can be cancelled (back to the draft) or, when scheduled,
+    /// moved (`rescheduleSend`). It is sent only if the app runs and is online at that time.
     Scheduled,
     /// Due, waiting for the server (offline, or a temporary refusal); `error` says why.
     Queued,
@@ -370,6 +404,10 @@ pub enum SendState {
     Unclear,
     /// Refused (`error`); nothing was delivered. Retry, or edit the draft again.
     Failed,
+    /// Stage 10: scheduled for a time when the app was not running, and more than an hour has
+    /// passed (`error.code: send_missed`). Nothing was sent; the user decides
+    /// ([`MissedSendDecision`]).
+    Missed,
     /// The server accepted it.
     Sent,
 }
@@ -387,9 +425,13 @@ pub struct OutgoingMail {
     pub to: Vec<Address>,
     pub recipient_count: u32,
     pub state: SendState,
-    /// When the submission starts (Unix ms): the end of the undo delay.
+    /// When the submission starts (Unix ms): the end of the undo delay, or the time the user
+    /// chose (`scheduled`).
     #[specta(type = Number)]
     pub send_at: i64,
+    /// Stage 10: the user chose the time ("send later"); otherwise `sendAt` is the end of the
+    /// undo delay.
+    pub scheduled: bool,
     /// Why it failed, is unclear or waits (the last temporary error).
     pub error: Option<IpcError>,
     /// Times the submission was started.
@@ -411,6 +453,82 @@ pub enum UnclearDecision {
     /// Submit it once more with the same Message-ID. The user confirmed that recipients may get
     /// it twice.
     SendAgain,
+}
+
+/// Stage 10: a time chosen for "send later".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SendLater {
+    /// Unix milliseconds; in the future, at most a year ahead.
+    #[specta(type = Number)]
+    pub send_at: i64,
+}
+
+/// Stage 10: pasted HTML as the composer gets it back (`cleanPastedHtml`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanedPaste {
+    /// Editor HTML: the mail allowlist, no script, no style, no image, no external reference;
+    /// links only `http`, `https`, `mailto`.
+    pub html: String,
+    /// Images that were dropped (web addresses, local files, `data:`, other mails' `cid:`).
+    pub images_removed: u32,
+    /// Colours, fonts, sizes, tables or headings were simplified.
+    pub formatting_simplified: bool,
+}
+
+/// Stage 10: largest single inline image of a draft (the reading side shows images up to
+/// 8 MiB).
+pub const MAX_INLINE_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Stage 10: what adding inline images to a draft did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InlineImagesAdded {
+    pub draft: Draft,
+    /// The new images in the order of the files: the editor inserts
+    /// `<img src="cid:{contentId}">` for each and shows it with `inlineImageData`.
+    pub added: Vec<DraftAttachment>,
+}
+
+/// Stage 10: the draft's size against what the account's SMTP server accepts (extension SIZE).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftSizeCheck {
+    /// Size of the message as it would go out, in bytes (attachments and inline images
+    /// base64-encoded, text, headers): an estimate within a few kilobytes.
+    #[specta(type = Number)]
+    pub size: u64,
+    /// The server's limit (SIZE); null when the server announces none or it could not be
+    /// read (offline: then `limitKnown` is false).
+    #[specta(type = Option<Number>)]
+    pub server_limit: Option<u64>,
+    /// The server answered (now or earlier in this session).
+    pub limit_known: bool,
+    /// `size` is above `serverLimit`: the server would refuse the message; sending is refused.
+    pub exceeds_server_limit: bool,
+    /// Above [`LARGE_ATTACHMENT_WARNING_BYTES`] of attachments: many providers refuse such
+    /// messages on the receiving side even when this server accepts them.
+    pub large: bool,
+}
+
+/// Stage 10: the user's answer to a scheduled send that was missed while the app was off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum MissedSendDecision {
+    /// Send it now (after the usual undo delay).
+    SendNow,
+    /// Schedule it again for this time (Unix ms, in the future).
+    Reschedule {
+        #[specta(type = Number)]
+        send_at: i64,
+    },
+    /// Take it out of the outbox; it becomes an editable draft again.
+    KeepAsDraft,
 }
 
 /// App-wide compose settings.
@@ -480,8 +598,13 @@ pub struct ComposeIdentity {
     pub name: String,
     pub reply_to: Option<String>,
     pub is_default: bool,
-    /// Plain text without the `-- ` separator (added when the message is put together).
+    /// Plain text without the `-- ` separator (added when the message is put together): the
+    /// text of the default signature for new mails (stage 5 field, kept).
     pub signature: Option<String>,
+    /// Default signature of new mails (stage 10); null = none.
+    pub signature_new: Option<crate::SignatureId>,
+    /// Default signature of replies and forwards (stage 10); null = none.
+    pub signature_reply: Option<crate::SignatureId>,
 }
 
 /// An autocomplete suggestion from addresses of earlier mail.
@@ -528,6 +651,23 @@ pub enum DraftError {
     /// The account has no identity to send from (or the chosen one belongs to another account).
     #[error("no usable identity: {0}")]
     NoIdentity(String),
+
+    /// Stage 10: the message is larger than the SMTP server's SIZE limit.
+    #[error("the message has about {size} bytes; the server accepts at most {limit}")]
+    TooLargeForServer { size: u64, limit: u64 },
+
+    /// Stage 10: a send time in the past or too far ahead.
+    #[error("not a usable send time: {0}")]
+    InvalidSendTime(String),
+
+    /// Stage 10: a scheduled send was due while the app was not running, more than
+    /// [`MISSED_SEND_GRACE_MS`] ago; it was not sent (the error of the missed send).
+    #[error("operation {0} was scheduled for a time when the app was not running")]
+    Missed(OperationId),
+
+    /// Stage 10: the operation is not a scheduled (or missed) send that can be moved.
+    #[error("operation {0} is not waiting for a scheduled time")]
+    NotScheduled(OperationId),
 }
 
 impl DraftError {
@@ -539,6 +679,10 @@ impl DraftError {
             Self::AttachmentTooLarge { .. } => ErrorCode::AttachmentTooLarge,
             Self::NeedsDecision(_) => ErrorCode::ConfirmationRequired,
             Self::NoIdentity(_) => ErrorCode::InvalidArgument,
+            Self::TooLargeForServer { .. } => ErrorCode::MessageTooLarge,
+            Self::Missed(_) => ErrorCode::SendMissed,
+            Self::InvalidSendTime(_) => ErrorCode::InvalidArgument,
+            Self::NotScheduled(_) => ErrorCode::SendInProgress,
         }
     }
 
@@ -552,6 +696,12 @@ impl DraftError {
             Self::AttachmentTooLarge { .. } => "The attachments are too large.",
             Self::NeedsDecision(_) => "The message may have been sent already; decide explicitly.",
             Self::NoIdentity(_) => "Choose a sender address for this message.",
+            Self::TooLargeForServer { .. } => "The message is larger than the server accepts.",
+            Self::Missed(_) => {
+                "The app was not running at the scheduled time; the message was not sent."
+            }
+            Self::InvalidSendTime(_) => "Choose a time in the future.",
+            Self::NotScheduled(_) => "This message is not waiting for a scheduled time.",
         }
     }
 
@@ -615,6 +765,11 @@ pub struct SendJob {
     /// Searches of the Sent folder after an unclear outcome so far.
     #[serde(default)]
     pub checks: u32,
+    /// Stage 10: the user chose the send time (`not_before` of the operation); a scheduled
+    /// send missed by more than [`MISSED_SEND_GRACE_MS`] while the app was off is not sent
+    /// but asked about.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub scheduled: bool,
 }
 
 /// An attachment of a draft as stored (`draft.attachments`): the core's own copy of the bytes.
@@ -629,6 +784,9 @@ pub struct DraftFile {
     pub sha256: String,
     /// Path of the copy relative to the compose directory (`drafts/<draft>/<id>`).
     pub file: String,
+    /// An inline image of the HTML (stage 10), referred to as `cid:<content_id>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_id: Option<String>,
 }
 
 impl DraftFile {
@@ -638,6 +796,7 @@ impl DraftFile {
             file_name: self.file_name.clone(),
             mime: self.mime.clone(),
             size: self.size,
+            content_id: self.content_id.clone(),
         }
     }
 }

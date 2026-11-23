@@ -92,6 +92,27 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     expect(findings).toEqual([]);
   });
 
+  it("finds nothing serious in the activity view, the outbox and with the sidebar unfolded", async () => {
+    const { user } = setup(theme);
+    await screen.findByRole("listbox", { name: /^Messages in/ });
+    act(() => {
+      useUiStore.getState().showActivity();
+    });
+    await screen.findByRole("heading", { level: 1, name: "Activity" });
+    expect(await seriousFindings()).toEqual([]);
+    act(() => {
+      useUiStore.getState().showOutbox();
+    });
+    await screen.findByRole("heading", { level: 1, name: "Outbox" });
+    expect(await seriousFindings()).toEqual([]);
+    act(() => {
+      useUiStore.getState().showMailView("inbox");
+    });
+    await user.click(await screen.findByTestId("rail-folders"));
+    await screen.findByTestId("mailbox-5");
+    expect(await seriousFindings()).toEqual([]);
+  });
+
   it("finds nothing serious in the command palette and the shortcut overview", async () => {
     const { user } = setup(theme);
     await screen.findByRole("listbox", { name: /^Messages in/ });

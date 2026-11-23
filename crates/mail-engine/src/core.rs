@@ -272,11 +272,12 @@ impl<C: Connector> AppCore<C> {
         let sender = Arc::clone(&outbox_config.sender.0);
         let outbox = opened.as_ref().ok().map(|store| {
             let config = outbox_config.clone();
-            let outbox = Outbox::new(
+            let outbox = Outbox::with_clock(
                 store.clone(),
                 Arc::clone(&connector),
                 services.credentials.clone(),
                 config,
+                Arc::clone(&services.clock),
             );
             outbox.forward_to(events.clone());
             outbox.set_sync_hook(Arc::new(CoreSyncHook {
@@ -304,6 +305,7 @@ impl<C: Connector> AppCore<C> {
                 outbox.clone(),
                 Arc::clone(reading),
                 events.clone(),
+                Arc::clone(&services.clock),
             )),
             _ => None,
         };
@@ -340,6 +342,11 @@ impl<C: Connector> AppCore<C> {
         }
         // Stage 9 before the sync starts, so no arrival is missed.
         crate::comfort::start(&core).await;
+        // Stage 10: scheduled sends missed while the app was off are asked about, not sent;
+        // before anything can start the outbox (a connected account wakes it).
+        if let Some(compose) = &core.inner.compose {
+            compose.check_missed_sends().await;
+        }
         core.start_stored_accounts().await;
         if let Some(outbox) = &core.inner.outbox
             && let Err(err) = outbox.start().await
@@ -814,9 +821,14 @@ impl<C: Connector> AppCore<C> {
         self.reading()?.describe_link(token, index)
     }
 
-    /// Opens link `index` of a rendering with the system (`http`, `https`, `mailto` only;
-    /// anything else is `invalid_argument`).
-    pub async fn open_link(&self, token: &RenderToken, index: u32) -> Result<(), CoreError> {
+    /// Opens link `index` of a rendering with the system (`http`, `https`); a `mailto:` link
+    /// comes back as a compose request for the app's own composer (stage 10). Anything else is
+    /// `invalid_argument`.
+    pub async fn open_link(
+        &self,
+        token: &RenderToken,
+        index: u32,
+    ) -> Result<mail_model::LinkOpened, CoreError> {
         self.reading()?.open_link(token, index).await
     }
 

@@ -22,7 +22,13 @@
 pub(crate) mod build;
 pub(crate) mod contacts;
 pub mod files;
+mod inline;
 pub(crate) mod outgoing;
+mod schedule;
+pub(crate) mod snippets;
+mod stage10;
+#[cfg(test)]
+mod stage10_tests;
 
 #[cfg(test)]
 mod tests;
@@ -195,7 +201,20 @@ fn content_of(update: &DraftUpdate) -> Result<DraftContent, CoreError> {
         include_quote: update.include_quote,
         quote_position: update.quote_position,
         include_signature: update.include_signature,
+        signature: update.signature_id.clone(),
     })
+}
+
+/// `<subject>.eml` for a message forwarded as an attachment (`Message.eml` without subject).
+fn forwarded_file_name(subject: &str) -> String {
+    let base: String = subject
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(120)
+        .collect();
+    let base = base.trim();
+    let base = if base.is_empty() { "Message" } else { base };
+    mail_content::sanitize_filename(&format!("{base}.eml"))
 }
 
 /// The plain text of a rendered text body.
@@ -291,6 +310,10 @@ struct Inner<C: Connector> {
     timers: Mutex<HashMap<DraftId, JoinHandle<()>>>,
     contacts_kick: Arc<Notify>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    /// Stage 10: the core's clock (when a scheduled send is due, missed; tests move it).
+    clock: Arc<dyn Clock>,
+    /// Stage 10: the SMTP SIZE limit per account, as last read in this session.
+    limits: Mutex<HashMap<AccountId, schedule::KnownLimit>>,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -320,6 +343,7 @@ impl<C: Connector> Compose<C> {
         outbox: Outbox<C>,
         reading: Arc<Reading<C>>,
         events: broadcast::Sender<CoreEvent>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         let root = files::compose_dir(&store);
         let config = outbox.compose_config().clone();
@@ -334,6 +358,8 @@ impl<C: Connector> Compose<C> {
                 timers: Mutex::default(),
                 contacts_kick: Arc::new(Notify::new()),
                 tasks: Mutex::default(),
+                clock,
+                limits: Mutex::default(),
             }),
         }
     }
@@ -501,6 +527,7 @@ impl<C: Connector> Compose<C> {
             include_quote: draft.include_quote,
             quote_position: draft.quote_position,
             include_signature: draft.include_signature,
+            signature_id: draft.signature.clone(),
             attachments: draft.attachments.iter().map(DraftFile::info).collect(),
             original_message_id: draft.original,
             revision: draft.revision,
@@ -589,6 +616,21 @@ impl<C: Connector> Compose<C> {
                 self.create_answer(message_id, DraftKind::Forward, language)
                     .await?
             }
+            NewDraft::ForwardAsAttachment {
+                message_id,
+                language,
+            } => {
+                self.create_forward_as_attachment(message_id, language)
+                    .await?
+            }
+            NewDraft::Compose {
+                account_id,
+                identity_id,
+                request,
+            } => {
+                self.create_from_request(account_id, identity_id, request)
+                    .await?
+            }
         };
         tracing::info!(account = %draft.account, kind = draft.kind.as_str(), "draft created");
         self.drafts_changed(draft.account, vec![draft.id.clone()], Vec::new());
@@ -612,6 +654,7 @@ impl<C: Connector> Compose<C> {
             include_quote: true,
             quote_position: QuotePosition::Above,
             include_signature: true,
+            signature: None,
         }
     }
 
@@ -654,6 +697,91 @@ impl<C: Connector> Compose<C> {
             in_reply_to: None,
             references: Vec::new(),
             content: Self::empty_content(chosen.0.id, clean_addresses(&to), ComposeFormat::Html),
+            quote_html: None,
+            quote_text: None,
+            attachments: Vec::new(),
+            server_copy: None,
+            now: now_ms(),
+        };
+        Ok(store.create_draft(row).await?)
+    }
+
+    /// Stage 10: a new draft with the fields of a compose request (a `mailto:` link), checked
+    /// like a save; the body is plain text, put in as editor HTML; `In-Reply-To` and
+    /// `References` thread it.
+    async fn create_from_request(
+        &self,
+        account: AccountId,
+        identity: Option<IdentityId>,
+        request: mail_model::ComposeRequest,
+    ) -> Result<StoredDraft, CoreError> {
+        let in_reply_to = match request.in_reply_to.as_deref().map(str::trim) {
+            None | Some("") => None,
+            Some(id) => {
+                let id = id.trim_start_matches('<').trim_end_matches('>');
+                let usable = id.len() <= 250
+                    && id.contains('@')
+                    && id
+                        .chars()
+                        .all(|c| c.is_ascii_graphic() && !matches!(c, '<' | '>' | '"' | '\\'));
+                if !usable {
+                    return Err(CoreError::InvalidArgument(
+                        "inReplyTo is not one valid Message-ID".into(),
+                    ));
+                }
+                Some(id.to_owned())
+            }
+        };
+        let store = &self.inner.store;
+        if store.account(account).await?.is_none() {
+            return Err(CoreError::NotFound(format!("account {account}")));
+        }
+        let identities = store.compose_identities(account).await?;
+        let chosen = match identity {
+            Some(id) => identities.iter().find(|(i, _)| i.id == id).ok_or_else(|| {
+                CoreError::Draft(DraftError::NoIdentity(format!(
+                    "identity {} is not one of the account's",
+                    id.0
+                )))
+            })?,
+            None => identities
+                .iter()
+                .find(|(i, _)| i.is_default)
+                .or_else(|| identities.first())
+                .ok_or_else(|| {
+                    CoreError::Draft(DraftError::NoIdentity("the account has none".into()))
+                })?,
+        };
+        let body = request.body.unwrap_or_default();
+        let content = content_of(&DraftUpdate {
+            identity_id: Some(chosen.0.id),
+            to: request.to,
+            cc: request.cc,
+            bcc: request.bcc,
+            subject: request.subject.unwrap_or_default(),
+            format: ComposeFormat::Html,
+            body_html: if body.trim().is_empty() {
+                String::new()
+            } else {
+                mail_content::text_to_editor_html(&body)
+            },
+            body_text: String::new(),
+            include_quote: true,
+            quote_position: QuotePosition::Above,
+            include_signature: true,
+            signature_id: None,
+        })?;
+        let row = NewDraftRow {
+            id: DraftId::from_random(random_u128()),
+            account,
+            identity: Some(chosen.0.id),
+            kind: DraftKind::New,
+            message_id_header: mail_content::new_message_id(&chosen.0.email, random_bytes()),
+            original: None,
+            original_message_id_header: None,
+            in_reply_to: in_reply_to.clone(),
+            references: in_reply_to.into_iter().collect(),
+            content,
             quote_html: None,
             quote_text: None,
             attachments: Vec::new(),
@@ -728,6 +856,27 @@ impl<C: Connector> Compose<C> {
         kind: DraftKind,
         language: QuoteLanguage,
     ) -> Result<StoredDraft, CoreError> {
+        self.create_answer_with(message, kind, language, false)
+            .await
+    }
+
+    /// Stage 10: a forward with the original as a `message/rfc822` attachment.
+    async fn create_forward_as_attachment(
+        &self,
+        message: MessageId,
+        language: QuoteLanguage,
+    ) -> Result<StoredDraft, CoreError> {
+        self.create_answer_with(message, DraftKind::Forward, language, true)
+            .await
+    }
+
+    async fn create_answer_with(
+        &self,
+        message: MessageId,
+        kind: DraftKind,
+        language: QuoteLanguage,
+        as_attachment: bool,
+    ) -> Result<StoredDraft, CoreError> {
         let store = &self.inner.store;
         let summary = store
             .message_summary(message)
@@ -742,6 +891,12 @@ impl<C: Connector> Compose<C> {
         }
         let (raw, text) = self.original_raw(message).await?;
         let whole = raw.is_some();
+        if as_attachment && !whole {
+            return Err(CoreError::InvalidArgument(
+                "only part of this large message is stored; forward it inline instead".into(),
+            ));
+        }
+        let original_bytes = if as_attachment { raw.clone() } else { None };
         let raw =
             raw.unwrap_or_else(|| synthetic_original(&summary, text.as_deref().unwrap_or("")));
         let options = QuoteOptions {
@@ -790,7 +945,24 @@ impl<C: Connector> Compose<C> {
         let lock = self.inner.outbox.files_lock();
         let _held = lock.lock().await;
         let mut attachments = Vec::new();
-        if kind == DraftKind::Forward {
+        if let Some(bytes) = original_bytes {
+            let file_id = "1".to_owned();
+            let root = self.inner.root.clone();
+            let draft = id.clone();
+            let fid = file_id.clone();
+            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+            let sha256 =
+                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
+            attachments.push(DraftFile {
+                id: file_id.clone(),
+                file_name: forwarded_file_name(&summary.subject),
+                mime: "message/rfc822".to_owned(),
+                size,
+                sha256,
+                file: files::attachment_path(&id, &file_id),
+                content_id: None,
+            });
+        } else if kind == DraftKind::Forward {
             if whole {
                 for (n, attachment) in prepared.attachments.iter().enumerate() {
                     let file_id = (n + 1).to_string();
@@ -808,6 +980,7 @@ impl<C: Connector> Compose<C> {
                         size: u64::try_from(attachment.bytes.len()).unwrap_or(u64::MAX),
                         sha256,
                         file: files::attachment_path(&id, &file_id),
+                        content_id: None,
                     });
                 }
             } else {
@@ -828,8 +1001,8 @@ impl<C: Connector> Compose<C> {
             in_reply_to: prepared.in_reply_to.clone(),
             references: prepared.references.clone(),
             content,
-            quote_html: Some(prepared.html.clone()),
-            quote_text: Some(prepared.text.clone()),
+            quote_html: (!as_attachment).then(|| prepared.html.clone()),
+            quote_text: (!as_attachment).then(|| prepared.text.clone()),
             attachments,
             server_copy: None,
             now: now_ms(),
@@ -878,6 +1051,7 @@ impl<C: Connector> Compose<C> {
                 size: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
                 sha256: files::sha256_hex(&bytes),
                 file: relative,
+                content_id: None,
             });
         }
         Ok(out)
@@ -966,6 +1140,7 @@ impl<C: Connector> Compose<C> {
                 size,
                 sha256,
                 file: files::attachment_path(&id, &file_id),
+                content_id: None,
             });
         }
         let (format, body_html, body_text) = match &parsed.html {
@@ -1008,6 +1183,7 @@ impl<C: Connector> Compose<C> {
                 quote_position: QuotePosition::Above,
                 // The signature is part of the text already.
                 include_signature: false,
+                signature: None,
             },
             quote_html: None,
             quote_text: None,
@@ -1121,6 +1297,7 @@ impl<C: Connector> Compose<C> {
                 size,
                 sha256,
                 file: relative,
+                content_id: None,
             });
         }
         let draft = match self
@@ -1185,13 +1362,25 @@ impl<C: Connector> Compose<C> {
         id: DraftId,
         request: String,
     ) -> Result<OutgoingMail, CoreError> {
+        self.send_at(id, request, None).await
+    }
+
+    /// Like [`Compose::send`]; with `at` (Unix ms) the send waits until then ("send later",
+    /// stage 10): the message is dated `at`, and it goes out only if the app runs and is
+    /// online at that time.
+    pub(crate) async fn send_at(
+        &self,
+        id: DraftId,
+        request: String,
+        at: Option<i64>,
+    ) -> Result<OutgoingMail, CoreError> {
         valid_request_id(&request)?;
         let store = &self.inner.store;
         let draft = self.stored(&id).await?;
         if draft.state != DraftState::Editing {
             if let Some(op) = draft.outgoing
                 && let Some(op) = store.operation(op).await?
-                && let Some(mail) = outgoing::outgoing_mail(&op, now_ms())
+                && let Some(mail) = outgoing::outgoing_mail(&op, self.now())
             {
                 // The same press of "send" twice: the send that is already queued.
                 return Ok(mail);
@@ -1209,6 +1398,7 @@ impl<C: Connector> Compose<C> {
         let sender = build::sender_of(&draft, &identities).ok_or_else(|| {
             CoreError::Draft(DraftError::NoIdentity("choose a sender address".into()))
         })?;
+        let sender = snippets::with_signature(store, &draft, sender).await?;
         for address in draft.to.iter().chain(&draft.cc).chain(&draft.bcc) {
             if mail_content::normalize_email(&address.email).is_err() {
                 return Err(CoreError::Draft(DraftError::InvalidAddress(
@@ -1233,17 +1423,23 @@ impl<C: Connector> Compose<C> {
             SentCopyMode::Auto => files_sent_itself(&account.imap.host),
         };
         let delay = self.send_delay().await?;
-        let now = now_ms();
+        let now = self.now();
+        if let Some(at) = at {
+            schedule::check_time(at, now)?;
+        }
 
-        // Built once: the bytes are what every attempt sends.
+        // Built once: the bytes are what every attempt sends. A scheduled message is dated
+        // with its send time.
+        let date = at.unwrap_or(now) / 1000;
         let root = self.inner.root.clone();
         let for_build = draft.clone();
         let built = blocking(move || {
-            let attachments = build::attachments(&root, &for_build)?;
-            let message = build::outgoing(&for_build, &sender, attachments, now / 1000);
+            let files = build::files_of(&root, &for_build)?;
+            let message = build::outgoing(&for_build, &sender, files, date);
             mail_content::build_message(&message).map_err(build::compose_error)
         })
         .await??;
+        self.refuse_too_large(draft.account, built.for_sending.len())?;
         let to: Vec<Address> = draft
             .to
             .iter()
@@ -1277,8 +1473,12 @@ impl<C: Connector> Compose<C> {
             original,
             phase: SendPhase::Submit,
             checks: 0,
+            scheduled: at.is_some(),
         };
-        let not_before = (delay > 0).then(|| now + i64::from(delay) * 1000);
+        let not_before = match at {
+            Some(at) => Some(at),
+            None => (delay > 0).then(|| now + i64::from(delay) * 1000),
+        };
         let lock = self.inner.outbox.files_lock();
         let held = lock.lock().await;
         let root = self.inner.root.clone();
@@ -1318,8 +1518,8 @@ impl<C: Connector> Compose<C> {
                     .ok_or_else(|| CoreError::Internal("the send was not recorded".into()))?
             }
         };
-        tracing::info!(account = %draft.account, operation = %op.id, delay, "send queued");
-        outgoing::outgoing_mail(&op, now_ms())
+        tracing::info!(account = %draft.account, operation = %op.id, delay, scheduled = at.is_some(), "send queued");
+        outgoing::outgoing_mail(&op, self.now())
             .ok_or_else(|| CoreError::Internal("the send was not recorded".into()))
     }
 
@@ -1344,7 +1544,7 @@ impl<C: Connector> Compose<C> {
         before: Option<OperationId>,
         limit: u32,
     ) -> Result<Vec<OutgoingMail>, CoreError> {
-        let now = now_ms();
+        let now = self.now();
         Ok(self
             .inner
             .store
@@ -1377,7 +1577,7 @@ impl<C: Connector> Compose<C> {
                 .await?
                 .ok_or_else(|| CoreError::NotFound(format!("operation {operation}")))?,
         };
-        outgoing::outgoing_mail(&op, now_ms())
+        outgoing::outgoing_mail(&op, self.now())
             .ok_or_else(|| CoreError::NotFound(format!("send {operation}")))
     }
 
@@ -1455,11 +1655,10 @@ impl<C: Connector> Compose<C> {
         if store.account(account).await?.is_none() {
             return Err(CoreError::NotFound(format!("account {account}")));
         }
-        Ok(store
-            .compose_identities(account)
-            .await?
-            .into_iter()
-            .map(|(identity, signature)| ComposeIdentity {
+        let mut out = Vec::new();
+        for (identity, signature) in store.compose_identities(account).await? {
+            let defaults = store.signature_defaults(identity.id).await?;
+            out.push(ComposeIdentity {
                 id: identity.id,
                 account_id: identity.account_id,
                 email: identity.email,
@@ -1467,8 +1666,11 @@ impl<C: Connector> Compose<C> {
                 reply_to: identity.reply_to,
                 is_default: identity.is_default,
                 signature,
-            })
-            .collect())
+                signature_new: defaults.new,
+                signature_reply: defaults.reply,
+            });
+        }
+        Ok(out)
     }
 
     pub(crate) async fn set_signature(
@@ -1482,6 +1684,7 @@ impl<C: Connector> Compose<C> {
             .set_identity_signature(identity, signature)
             .await?;
         self.emit(CoreEvent::AccountsChanged);
+        self.emit(CoreEvent::SignaturesChanged);
         self.identities(account)
             .await?
             .into_iter()

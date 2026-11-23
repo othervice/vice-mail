@@ -5,12 +5,15 @@ import { Button } from "../../components/Button";
 import { usePaletteStore } from "../../stores/palette";
 import { useBoundShortcuts } from "../../stores/shortcuts";
 import { useUiStore } from "../../stores/ui";
-import { formatShortcut, type ShortcutPlatform } from "../actions/shortcuts";
+import { formatShortcut, type Shortcut, type ShortcutPlatform } from "../actions/shortcuts";
 import { useFocusReturn } from "../palette/CommandPalette";
 import { COMMAND_IDS, isActionId, type CommandId } from "./bindings";
 import { useCommandLabel } from "./labels";
 
 const MOVING = ["list", "open", "back", "extend"] as const;
+
+/** The composer's send shortcut (Composer.tsx); fixed, so only shown here. */
+const SEND: Shortcut = { key: "Enter", mod: true };
 
 /** Keeps Tab and Shift+Tab inside a modal panel. */
 export function trapTab(event: KeyboardEvent<HTMLElement>): void {
@@ -42,10 +45,19 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
   const shortcutsOf = useBoundShortcuts(platform);
   const label = useCommandLabel();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   useFocusReturn();
   useEffect(() => {
     closeRef.current?.focus();
-  }, []);
+    // A click outside closes it, like Escape.
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panelRef.current?.contains(event.target)) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [close]);
 
   const row = (id: CommandId) => {
     const shortcuts = shortcutsOf(id);
@@ -68,6 +80,7 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
 
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -122,6 +135,15 @@ function OverviewPanel({ platform }: { platform: ShortcutPlatform }) {
                   <dd className="shrink-0 text-12 text-secondary">{t(`keyboard.overview.moving.${id}Keys`)}</dd>
                 </div>
               ))}
+              {/* The composer's own shortcut (the same in every composer, not changeable). */}
+              <div className="flex items-baseline justify-between gap-4 py-1">
+                <dt className="min-w-0 text-13 text-primary">{t("keyboard.overview.moving.send")}</dt>
+                <dd className="shrink-0 text-12 text-secondary">
+                  <kbd className="rounded-control border border-border px-1.5 font-sans text-primary">
+                    {formatShortcut(SEND, platform)}
+                  </kbd>
+                </dd>
+              </div>
             </dl>
           </section>
         </div>

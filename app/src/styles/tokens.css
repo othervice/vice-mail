@@ -123,7 +123,9 @@
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
      lines), the line length of plain-text mail and the width of an attachment card. */
   --ui-list-width-reading: 24rem;
-  /* Stage 8: with the reading pane below, the list keeps 40 % of the height, at least 10 rem. */
+  /* Stage 8: next to the reading pane the list takes at most 45 % of the width (large text in a
+     small window keeps room for the message); below it, 40 % of the height, at least 10 rem. */
+  --ui-list-max-width-reading: 45%;
   --ui-list-height-reading: 40%;
   --ui-list-min-height-reading: 10rem;
   --ui-reading-max-width: 46rem;

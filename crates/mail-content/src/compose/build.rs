@@ -1,5 +1,7 @@
 //! The outgoing message as bytes (mail-builder underneath): headers, `multipart/alternative`
-//! from text and mail HTML, `multipart/mixed` with attachments. Two byte sequences come out:
+//! from text and mail HTML, `multipart/related` around it with the inline images the HTML
+//! refers to (`cid:`, stage 10), `multipart/mixed` with attachments; a forwarded message
+//! (`message/rfc822`) goes in unencoded when it is 7-bit clean. Two byte sequences come out:
 //! the one for the SMTP server (no `Bcc` header) and the copy for the Sent folder (with it),
 //! byte for byte the same otherwise.
 //!
@@ -25,7 +27,7 @@ use mail_builder::mime::{BodyPart, MimePart};
 use mail_model::{Address, Envelope};
 
 use super::address::{clean_header_text, is_valid_message_id, normalize_email};
-use super::html::{document, html_blocks};
+use super::html::{document, html_blocks, inline_image_ids, is_valid_content_id};
 use crate::filename::sanitize_filename;
 use crate::text::html_to_text;
 
@@ -48,6 +50,10 @@ pub struct OutgoingMessage {
     /// becomes `multipart/alternative` with a text version.
     pub html: Option<String>,
     pub attachments: Vec<Attachment>,
+    /// Images the HTML shows (`<img src="cid:…">`), as parts of `multipart/related`. Only
+    /// those the HTML refers to go out (an image the user deleted from the text is not sent);
+    /// without HTML none do.
+    pub inline_images: Vec<InlineImage>,
     /// Without angle brackets. Made once when the draft is created ([`crate::new_message_id`])
     /// and kept for every attempt.
     pub message_id: String,
@@ -80,6 +86,30 @@ impl fmt::Debug for Attachment {
             .finish()
     }
 }
+
+/// An image shown in the message's HTML, referred to as `cid:<content_id>`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct InlineImage {
+    /// Without angle brackets; see [`crate::is_valid_content_id`]. Invalid ids are left out.
+    pub content_id: String,
+    pub file_name: String,
+    /// `image/png`, `image/jpeg`, `image/gif` or `image/webp`; anything else is left out.
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+impl fmt::Debug for InlineImage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InlineImage")
+            .field("content_id", &self.content_id)
+            .field("mime", &self.mime)
+            .field("len", &self.bytes.len())
+            .finish()
+    }
+}
+
+/// Raster types an inline image may have (the reading side shows only these, never SVG).
+const INLINE_IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /// The message ready to send.
 #[derive(Clone, PartialEq, Eq)]
@@ -332,6 +362,31 @@ fn attachment_type(mime: &str) -> String {
     }
 }
 
+/// Line ends of raw bytes as CRLF (a stored message may have bare LF).
+fn crlf_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() + bytes.len() / 32);
+    let mut previous = 0u8;
+    for &byte in bytes {
+        if byte == b'\n' && previous != b'\r' {
+            out.push(b'\r');
+        }
+        out.push(byte);
+        previous = byte;
+    }
+    if !out.ends_with(b"\r\n") {
+        out.extend_from_slice(b"\r\n");
+    }
+    out
+}
+
+/// 7-bit data in lines of at most 998 bytes, without NUL or bare CR (RFC 5322, 2.1.1).
+fn is_7bit_clean(bytes: &[u8]) -> bool {
+    bytes.split(|b| *b == b'\n').all(|line| {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        line.len() <= 998 && line.iter().all(|b| *b != 0 && *b != b'\r' && b.is_ascii())
+    })
+}
+
 /// FNV-1a, for boundaries that only need to be stable and distinct.
 fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -354,16 +409,33 @@ fn body(message: &OutgoingMessage, message_id: &str) -> Vec<u8> {
         (None, None) => String::new(),
     };
     let text = crlf(&text);
+    // The images the HTML shows, each once, in the order the HTML shows them.
+    let inline: Vec<&InlineImage> = match &message.html {
+        Some(editor) => inline_image_ids(editor)
+            .iter()
+            .filter_map(|id| {
+                message.inline_images.iter().find(|image| {
+                    image.content_id == *id
+                        && is_valid_content_id(&image.content_id)
+                        && INLINE_IMAGE_TYPES
+                            .contains(&image.mime.trim().to_ascii_lowercase().as_str())
+                })
+            })
+            .collect(),
+        None => Vec::new(),
+    };
     let html = html.map(|h| crlf(&h));
-    let attachments: Vec<(String, String, &[u8])> = message
+    let attachments: Vec<(String, String, Cow<'_, [u8]>)> = message
         .attachments
         .iter()
         .map(|a| {
-            (
-                sanitize_filename(&a.file_name),
-                attachment_type(&a.mime),
-                a.bytes.as_slice(),
-            )
+            let mime = attachment_type(&a.mime);
+            let bytes = if mime == "message/rfc822" {
+                Cow::Owned(crlf_bytes(&a.bytes))
+            } else {
+                Cow::Borrowed(a.bytes.as_slice())
+            };
+            (sanitize_filename(&a.file_name), mime, bytes)
         })
         .collect();
 
@@ -376,12 +448,15 @@ fn body(message: &OutgoingMessage, message_id: &str) -> Vec<u8> {
         let has = |hay: &[u8]| hay.windows(b.len()).any(|w| w == b);
         has(text.as_bytes())
             || html.as_deref().is_some_and(|h| has(h.as_bytes()))
-            || attachments
-                .iter()
-                .any(|(_, mime, bytes)| mime.starts_with("text/") && has(bytes))
+            || attachments.iter().any(|(_, mime, bytes)| {
+                (mime.starts_with("text/") || mime == "message/rfc822") && has(bytes)
+            })
     };
     for round in 0u32..16 {
-        if !collides(&boundary(1, &suffix)) && !collides(&boundary(2, &suffix)) {
+        if !collides(&boundary(1, &suffix))
+            && !collides(&boundary(2, &suffix))
+            && !collides(&boundary(3, &suffix))
+        {
             break;
         }
         suffix = format!("_{round}");
@@ -405,18 +480,50 @@ fn body(message: &OutgoingMessage, message_id: &str) -> Vec<u8> {
         }
         None => text_part,
     };
+    let content = if inline.is_empty() {
+        content
+    } else {
+        let mut parts = vec![content];
+        for image in inline {
+            let name = sanitize_filename(&image.file_name);
+            parts.push(
+                MimePart::new(
+                    ContentType::new(image.mime.trim().to_ascii_lowercase())
+                        .attribute("name", name.clone()),
+                    BodyPart::Binary(Cow::Borrowed(image.bytes.as_slice())),
+                )
+                .header(
+                    "Content-Disposition",
+                    ContentType::new("inline").attribute("filename", name),
+                )
+                .cid(image.content_id.clone()),
+            );
+        }
+        MimePart::new(
+            ContentType::new("multipart/related")
+                .attribute("type", "multipart/alternative")
+                .attribute("boundary", boundary(3, &suffix)),
+            BodyPart::Multipart(parts),
+        )
+    };
     let root = if attachments.is_empty() {
         content
     } else {
         let mut parts = vec![content];
         for (name, mime, bytes) in attachments {
-            parts.push(
-                MimePart::new(
-                    ContentType::new(mime).attribute("name", name.clone()),
-                    BodyPart::Binary(Cow::Borrowed(bytes)),
-                )
-                .attachment(name),
+            let clean = mime == "message/rfc822" && is_7bit_clean(&bytes);
+            let part = MimePart::new(
+                ContentType::new(mime).attribute("name", name.clone()),
+                BodyPart::Binary(bytes),
             );
+            // A forwarded message is a message, not a file: unencoded (RFC 2046, 5.2.1) when
+            // it can be; base64 only for 8-bit or long-lined originals (readers accept it).
+            let part = if clean {
+                part.transfer_encoding("7bit")
+            } else {
+                part
+            };
+            parts.push(part.attachment(name));
         }
         MimePart::new(
             ContentType::new("multipart/mixed").attribute("boundary", boundary(2, &suffix)),

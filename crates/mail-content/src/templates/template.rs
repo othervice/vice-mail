@@ -341,7 +341,9 @@ fn replace(text: &str, values: &Resolved, problems: &mut Vec<TemplateProblem>) -
 fn for_each_text(blocks: &mut [Block], f: &mut dyn FnMut(&mut String)) {
     for block in blocks {
         match block {
-            Block::Paragraph(inlines) => {
+            Block::Paragraph(inlines)
+            | Block::AlignedParagraph(_, inlines)
+            | Block::Heading { inlines, .. } => {
                 for inline in inlines {
                     if let Inline::Text(text, _) = inline {
                         f(text);

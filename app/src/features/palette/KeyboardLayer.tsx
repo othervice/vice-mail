@@ -1,22 +1,25 @@
 import { useEffect, useEffectEvent } from "react";
 import { usePaletteStore } from "../../stores/palette";
 import { boundShortcuts } from "../../stores/shortcuts";
+import { useUiStore } from "../../stores/ui";
+import { VIEW_COMMANDS, type ViewCommandId } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform } from "../actions/shortcuts";
 import { useAppInfo } from "../app-info/queries";
 import { ShortcutOverview } from "../keyboard/ShortcutOverview";
-import { useLayoutEffects } from "../layout/useLayoutEffects";
+import { useStoredSidebar } from "../layout/useStoredSidebar";
 import { CommandPalette } from "./CommandPalette";
 
 /**
  * Stage 8, mounted once in the frame: the command palette (Cmd/Ctrl+K, also from text fields
- * like Cmd/Ctrl+F) and the shortcut overview ("?", not while typing), with the user's
- * assignment; the layout of the window.
+ * like Cmd/Ctrl+F), the shortcut overview ("?", not while typing) and the views of the rail
+ * (Cmd/Ctrl+1 to 8), with the user's assignment; the sidebar state of the window.
  */
 export function KeyboardLayer() {
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const openPalette = usePaletteStore((state) => state.openPalette);
   const openOverview = usePaletteStore((state) => state.openOverview);
-  useLayoutEffects();
+  const showMailView = useUiStore((state) => state.showMailView);
+  useStoredSidebar();
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat) return;
@@ -30,6 +33,14 @@ export function KeyboardLayer() {
     if (help && (help.mod || !isEditableTarget(event.target))) {
       event.preventDefault();
       openOverview();
+      return;
+    }
+    for (const id of Object.keys(VIEW_COMMANDS) as ViewCommandId[]) {
+      const match = boundShortcuts(id, platform).find((s) => matchesShortcut(event, s, platform));
+      if (!match || (!match.mod && isEditableTarget(event.target))) continue;
+      event.preventDefault();
+      showMailView(VIEW_COMMANDS[id]);
+      return;
     }
   });
   useEffect(() => {

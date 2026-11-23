@@ -743,7 +743,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           return link ?? Promise.reject(ipcError("not_found"));
         }
         case "open_link":
-          return null;
+          return { kind: "opened" };
         case "save_attachment":
           return (
             options.saveResults?.[`${String(args["messageId"])}/${String(args["index"])}`] ?? {

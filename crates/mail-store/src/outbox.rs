@@ -1338,10 +1338,14 @@ pub(crate) fn retry(
         }
         create @ OperationPayload::CreateMailbox { .. } => create,
         OperationPayload::Send(mut job) => {
-            let unclear = op
-                .last_error
-                .as_ref()
-                .is_some_and(|e| e.code == mail_model::ErrorCode::SendUnclear);
+            // Unclear sends, and scheduled sends missed while the app was off (stage 10), are
+            // only sent again on the user's explicit decision.
+            let unclear = op.last_error.as_ref().is_some_and(|e| {
+                matches!(
+                    e.code,
+                    mail_model::ErrorCode::SendUnclear | mail_model::ErrorCode::SendMissed
+                )
+            });
             if unclear {
                 return Err(StoreError::Draft(mail_model::DraftError::NeedsDecision(id)));
             }

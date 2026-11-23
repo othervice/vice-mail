@@ -6,6 +6,8 @@ pub mod actions;
 pub mod app;
 pub mod comfort;
 pub mod compose;
+pub mod composer;
+pub mod contacts;
 pub mod groups;
 pub mod mail;
 pub mod mcp;
@@ -13,6 +15,7 @@ pub mod preferences;
 pub mod reading;
 pub mod search;
 pub mod settings_sync;
+pub mod snippets;
 pub mod threads;
 
 use mail_model::{CoreError, IpcError};

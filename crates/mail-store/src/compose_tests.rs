@@ -39,6 +39,7 @@ fn content(subject: &str) -> DraftContent {
         include_quote: true,
         quote_position: QuotePosition::Above,
         include_signature: true,
+        signature: None,
     }
 }
 
@@ -71,6 +72,7 @@ async fn new_draft(f: &Fixture, n: u128) -> crate::StoredDraft {
                 size: 3,
                 sha256: "00".into(),
                 file: format!("drafts/{}/1", DraftId::from_random(n)),
+                content_id: None,
             }],
             server_copy: None,
             now: D * 1000,
@@ -97,6 +99,7 @@ fn job(draft: &DraftId, server_saves_sent: bool) -> SendJob {
         }),
         phase: SendPhase::Submit,
         checks: 0,
+        scheduled: false,
     }
 }
 

@@ -475,6 +475,7 @@ fn the_sent_message_carries_the_signature_in_both_parts() {
         text: Some(draft.text.clone()),
         html: Some(draft.html.clone()),
         attachments: Vec::new(),
+        inline_images: Vec::new(),
         message_id: "sig-test@vicemail.test".into(),
         in_reply_to: prepared.in_reply_to.clone(),
         references: prepared.references.clone(),

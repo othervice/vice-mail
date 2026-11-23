@@ -15,6 +15,10 @@ import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
 import { useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
+import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
+import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
+import { useAppInfo } from "../features/app-info/queries";
+import { useBoundShortcuts } from "../stores/shortcuts";
 import type { Account, Mailbox, MailboxId } from "../services/ipc";
 import { MAIL_VIEW_IDS, useUiStore } from "../stores/ui";
 
@@ -31,11 +35,14 @@ interface RailButtonProps {
   badge?: ReactNode;
   /** Rows dragged out of the list can be dropped here: they move into this folder. */
   dropMailbox?: Mailbox | undefined;
+  /** Stage 8: the view's shortcut, in the tooltip and for screen readers. */
+  shortcut?: { hint: string; aria: string } | undefined;
   /** Stable hook for the desktop tests (labels change with the language). */
   "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, dropMailbox, ...rest }: RailButtonProps) {
+function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, dropMailbox, shortcut, ...rest }: RailButtonProps) {
+  const { t } = useTranslation();
   const drop = useDropTarget(dropMailbox);
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone.
   const className = cx(
@@ -50,6 +57,7 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     <button
       type="button"
       aria-label={label}
+      aria-keyshortcuts={shortcut?.aria}
       aria-current={active ? "page" : undefined}
       aria-expanded={disclosure?.expanded}
       aria-controls={disclosure?.controls}
@@ -72,7 +80,11 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
   );
   // Same element in both modes: unfolding the sidebar keeps the focus on the button.
   return (
-    <Tooltip label={label} side="right" disabled={expanded}>
+    <Tooltip
+      label={shortcut ? t("actions.withShortcut", { label, shortcut: shortcut.hint }) : label}
+      side="right"
+      disabled={expanded}
+    >
       {button}
     </Tooltip>
   );
@@ -278,6 +290,14 @@ export function IconRail() {
   /** Rail views that take dragged rows: they move into the folder the view shows. */
   const dropFolder = (id: (typeof MAIL_VIEW_IDS)[number]) =>
     id === "inbox" || id === "archive" || id === "trash" ? mailboxWithRole(mailboxes, id) : undefined;
+  // Stage 8: Cmd/Ctrl+1 to 8 open the views (as the user assigned them).
+  const platform = shortcutPlatform(useAppInfo().data?.platform);
+  const shortcutsOf = useBoundShortcuts(platform);
+  const viewShortcut = (id: (typeof MAIL_VIEW_IDS)[number]) => {
+    const command = (Object.keys(VIEW_COMMANDS) as ViewCommandId[]).find((key) => VIEW_COMMANDS[key] === id);
+    const first = command ? shortcutsOf(command)[0] : undefined;
+    return first && { hint: formatShortcut(first, platform), aria: ariaShortcut(first, platform) };
+  };
 
   return (
     <nav
@@ -312,6 +332,7 @@ export function IconRail() {
                     showMailView(id);
                   }}
                   dropMailbox={dropFolder(id)}
+                  shortcut={viewShortcut(id)}
                   data-testid={`rail-${id}`}
                 />
               )}

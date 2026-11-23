@@ -72,11 +72,12 @@ pub(crate) async fn submit<C: Send + Sync + 'static>(
         return Ok(Submitted::Done(None));
     };
     let store = &shared.store;
+    // Only if it is still due: a scheduled send moved to a later time meanwhile waits.
     let begun = store
-        .begin_operations(vec![(op.id, op.payload.clone())])
+        .begin_due_operations(vec![(op.id, op.payload.clone())], shared.clock.now_ms())
         .await?;
     if begun.is_empty() {
-        // Cancelled (or decided) just before.
+        // Cancelled, decided or moved just before.
         return Ok(Submitted::Done(None));
     }
     let attempts = op.attempts.saturating_add(1);
@@ -379,6 +380,8 @@ impl<W: MailWriter> Step<'_, W> {
                     );
                     return Ok(None);
                 };
+                let sender =
+                    crate::compose::snippets::with_signature(self.store, &stored, sender).await?;
                 let revision = stored.revision;
                 let replace = stored.server_copy.clone();
                 let built = tokio::task::spawn_blocking(move || {

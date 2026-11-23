@@ -4,9 +4,11 @@
 //! — paragraphs of text runs with marks (bold, italic, underline, strike, code, link), lists,
 //! quotes, preformatted blocks — and written out again with a fixed allowlist: `p`, `br`,
 //! `strong`, `em`, `u`, `s`, `ul`, `ol`, `li`, `blockquote`, `a` (`http`, `https`, `mailto`
-//! only), `pre`, `code`. Every style is inline, there are no classes, ids, scripts or other
-//! attributes. Anything else in the input is dropped (scripts, styles, forms, images, frames)
-//! or unwrapped (spans, divs, tables, headings become paragraph boundaries).
+//! only), `pre`, `code`, and (stage 10) `img` only with a `cid:` source (an inline part of the
+//! message itself) and its `width`/`height`. Every style is inline, there are no classes, ids,
+//! scripts or other attributes. Anything else in the input is dropped (scripts, styles, forms,
+//! other images, frames) or unwrapped (spans, divs, tables, headings become paragraph
+//! boundaries).
 //!
 //! The walk over the parsed input is iterative and the nesting of quotes and lists is capped,
 //! so hostile or very deep HTML cannot overflow the stack; HTML the guard refuses is read as
@@ -30,6 +32,9 @@ const STYLE_QUOTE: &str = "margin:0 0 1em 0;padding:0 0 0 1em;border-left:2px so
 const STYLE_LIST: &str = "margin:0 0 1em 0;padding:0 0 0 2em";
 const STYLE_LIST_IN_ITEM: &str = "margin:0;padding:0 0 0 2em";
 const STYLE_ITEM: &str = "margin:0";
+const STYLE_H1: &str = "margin:0 0 0.5em 0;font-size:1.6em;font-weight:bold";
+const STYLE_H2: &str = "margin:0 0 0.5em 0;font-size:1.3em;font-weight:bold";
+const STYLE_H3: &str = "margin:0 0 0.5em 0;font-size:1.1em;font-weight:bold";
 const STYLE_PRE: &str = "margin:0 0 1em 0;padding:8px;background-color:#f4f4f4;\
                          font-family:Menlo,Consolas,'Courier New',monospace;font-size:13px;\
                          white-space:pre-wrap";
@@ -97,12 +102,140 @@ pub(crate) struct Marks {
 pub(crate) enum Inline {
     Text(String, Marks),
     Break,
+    /// An inline image of the message itself (`cid:`, stage 10). Images from anywhere else
+    /// (`http`, `data:`, `file:`) never get into the model.
+    Image(Image),
+}
+
+/// An inline image: the Content-ID of its MIME part and the size the user chose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Image {
+    pub(crate) content_id: String,
+    pub(crate) width: Option<u32>,
+    pub(crate) height: Option<u32>,
+    pub(crate) alt: String,
+}
+
+/// Largest width or height kept for an inline image, in CSS pixels.
+const MAX_IMAGE_SIDE: u32 = 4096;
+/// Longest Content-ID accepted.
+pub const MAX_CONTENT_ID_CHARS: usize = 128;
+
+/// Whether `id` can be the Content-ID of an inline image: `left@right`, ASCII letters, digits
+/// and `.`, `_`, `-`, `+`, `$`, `=` only, at most [`MAX_CONTENT_ID_CHARS`]. Strict on purpose:
+/// the id goes into `cid:` URLs and a MIME header without any escaping.
+pub fn is_valid_content_id(id: &str) -> bool {
+    let allowed = |s: &str| {
+        !s.is_empty()
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-+$=".contains(&b))
+    };
+    id.len() <= MAX_CONTENT_ID_CHARS
+        && id
+            .split_once('@')
+            .is_some_and(|(left, right)| allowed(left) && allowed(right) && !right.contains('@'))
+}
+
+/// The Content-ID of a `cid:` URL, if it is one we accept.
+pub(crate) fn content_id_of(src: &str) -> Option<String> {
+    let src = src.trim();
+    src.get(..4).filter(|p| p.eq_ignore_ascii_case("cid:"))?;
+    let id = src.get(4..)?;
+    is_valid_content_id(id).then(|| id.to_owned())
+}
+
+/// A width or height from an `img` attribute (`300`, `300px`) or a `style` declaration.
+fn image_side(value: &str) -> Option<u32> {
+    let value = value.trim();
+    let digits = value.strip_suffix("px").unwrap_or(value).trim();
+    let n: u32 = digits.parse().ok()?;
+    (1..=MAX_IMAGE_SIDE).contains(&n).then_some(n)
+}
+
+/// `width`/`height` from an `img` element: the attributes, else `width:`/`height:` in px from
+/// its style (what resizable editor images write).
+fn image_of(node: &dom::Handle) -> Option<Image> {
+    let content_id = dom::attribute(node, "src").and_then(|src| content_id_of(&src))?;
+    let style = dom::attribute(node, "style").unwrap_or_default();
+    let from_style = |name: &str| {
+        style.split(';').find_map(|decl| {
+            let (key, value) = decl.split_once(':')?;
+            key.trim()
+                .eq_ignore_ascii_case(name)
+                .then(|| image_side(value))
+                .flatten()
+        })
+    };
+    let side = |name: &str| {
+        dom::attribute(node, name)
+            .and_then(|v| image_side(&v))
+            .or_else(|| from_style(name))
+    };
+    let alt: String = dom::attribute(node, "alt")
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(200)
+        .collect();
+    Some(Image {
+        content_id,
+        width: side("width"),
+        height: side("height"),
+        alt: alt.trim().to_owned(),
+    })
+}
+
+/// Text alignment the composer can set (stage 10); left is the default and not written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Align {
+    Center,
+    Right,
+    Justify,
+}
+
+impl Align {
+    fn css(self) -> &'static str {
+        match self {
+            Self::Center => "text-align:center",
+            Self::Right => "text-align:right",
+            Self::Justify => "text-align:justify",
+        }
+    }
+
+    /// From `style="text-align: …"` or the old `align` attribute of an element.
+    fn of(node: &dom::Handle) -> Option<Self> {
+        let parse = |value: &str| match value.trim().to_ascii_lowercase().as_str() {
+            "center" => Some(Self::Center),
+            "right" => Some(Self::Right),
+            "justify" => Some(Self::Justify),
+            _ => None,
+        };
+        let from_style = dom::attribute(node, "style").and_then(|style| {
+            style.split(';').find_map(|decl| {
+                let (key, value) = decl.split_once(':')?;
+                key.trim()
+                    .eq_ignore_ascii_case("text-align")
+                    .then(|| parse(value))
+                    .flatten()
+            })
+        });
+        from_style.or_else(|| dom::attribute(node, "align").and_then(|a| parse(&a)))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Block {
     /// An empty paragraph is an empty line the user typed.
     Paragraph(Vec<Inline>),
+    /// Stage 10, editor content only: a paragraph the user aligned (never empty).
+    AlignedParagraph(Align, Vec<Inline>),
+    /// Stage 10, editor content only: a heading of level 1 to 3 (never empty). In HTML of
+    /// other origin headings stay bold paragraphs.
+    Heading {
+        level: u8,
+        align: Option<Align>,
+        inlines: Vec<Inline>,
+    },
     Pre(String),
     List {
         ordered: bool,
@@ -141,8 +274,10 @@ pub(crate) fn html_blocks(html: &str) -> Vec<Block> {
     blocks
 }
 
-/// Blocks of an HTML text. `keep_empty`: an empty `<p>` stays an empty line (editor content);
-/// in a received mail's HTML it is dropped (it is mostly layout, an image or a spacer).
+/// Blocks of an HTML text. `keep_empty`: editor content: an empty `<p>` stays an empty line
+/// and `cid:` images stay (inline images of the draft or signature); in HTML of other origin
+/// (a received mail, pasted content) empty paragraphs are dropped (mostly layout, an image or
+/// a spacer) and so are all images.
 pub(crate) fn html_blocks_with(html: &str, keep_empty: bool) -> Vec<Block> {
     if guard::check(html).is_err() {
         return text_blocks(&guard::strip_tags(html));
@@ -291,6 +426,7 @@ fn normalize(inlines: Vec<Inline>) -> Vec<Inline> {
     for inline in inlines {
         match inline {
             Inline::Break => out.push(Inline::Break),
+            Inline::Image(image) => out.push(Inline::Image(image)),
             Inline::Text(text, marks) => {
                 let mut collapsed = String::with_capacity(text.len());
                 let mut space = false;
@@ -311,6 +447,7 @@ fn normalize(inlines: Vec<Inline>) -> Vec<Inline> {
                 // A space after a space or a line break is not shown.
                 let after_space = match out.last() {
                     None | Some(Inline::Break) => true,
+                    Some(Inline::Image(_)) => false,
                     Some(Inline::Text(prev, _)) => prev.ends_with(' '),
                 };
                 if after_space && collapsed.starts_with(' ') {
@@ -365,6 +502,9 @@ struct Container {
     paragraph: Vec<Inline>,
     /// The open paragraph is an explicit `<p>`.
     explicit: bool,
+    /// Stage 10: alignment and heading level of the open paragraph (editor content).
+    align: Option<Align>,
+    heading: Option<u8>,
 }
 
 impl Container {
@@ -375,12 +515,39 @@ impl Container {
             items: Vec::new(),
             paragraph: Vec::new(),
             explicit: false,
+            align: None,
+            heading: None,
         }
     }
 
     fn end_paragraph(&mut self) {
         let explicit = std::mem::take(&mut self.explicit);
-        end_paragraph(&mut self.blocks, &mut self.paragraph, explicit);
+        let align = self.align.take();
+        match self.heading.take() {
+            Some(level) => {
+                let inlines = normalize(std::mem::take(&mut self.paragraph));
+                if !inlines.is_empty() {
+                    self.blocks.push(Block::Heading {
+                        level,
+                        align,
+                        inlines,
+                    });
+                }
+            }
+            None => match align {
+                Some(align) => {
+                    let inlines = normalize(std::mem::take(&mut self.paragraph));
+                    if inlines.is_empty() {
+                        if explicit {
+                            self.blocks.push(Block::Paragraph(inlines));
+                        }
+                    } else {
+                        self.blocks.push(Block::AlignedParagraph(align, inlines));
+                    }
+                }
+                None => end_paragraph(&mut self.blocks, &mut self.paragraph, explicit),
+            },
+        }
     }
 }
 
@@ -555,6 +722,28 @@ impl Collector {
         let Some(name) = dom::html_name(node) else {
             return Descend::Skip;
         };
+        // Word's list bullets and numbers (`<span style="mso-list:Ignore">·</span>`).
+        if dom::attribute(node, "style").is_some_and(|style| {
+            style
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>()
+                .to_ascii_lowercase()
+                .contains("mso-list:ignore")
+        }) {
+            return Descend::Skip;
+        }
+        if name == "img" && self.pre_depth == 0 {
+            // Only editor content (the composer's own HTML, signatures) has inline images of
+            // its own; in HTML of any other origin (a received mail being quoted, a draft of
+            // another program, pasted content) a `cid:` points into someone else's message.
+            if self.keep_empty
+                && let Some(image) = image_of(node)
+            {
+                self.inline(Inline::Image(image));
+            }
+            return Descend::Skip;
+        }
         if SKIPPED.contains(&name) {
             return Descend::Skip;
         }
@@ -594,9 +783,21 @@ impl Collector {
             }
             "p" => {
                 let keep_empty = self.keep_empty;
+                let align = keep_empty.then(|| Align::of(node)).flatten();
                 let target = self.target();
                 target.end_paragraph();
                 target.explicit = keep_empty;
+                target.align = align;
+                Opened::Paragraph
+            }
+            // Stage 10: headings of the composer's own content stay headings.
+            "h1" | "h2" | "h3" if self.keep_empty => {
+                let align = Align::of(node);
+                let level = name.as_bytes().get(1).map_or(1, |b| b - b'0');
+                let target = self.target();
+                target.end_paragraph();
+                target.heading = Some(level);
+                target.align = align;
                 Opened::Paragraph
             }
             "blockquote" => self.open(Kind::Quote),
@@ -714,6 +915,16 @@ pub(crate) fn fragment(blocks: &[Block]) -> String {
     out
 }
 
+/// Like [`open_tag`], but the editor fragment keeps the alignment (`unstyled`), so it survives
+/// being read again.
+fn open_aligned(out: &mut String, tag: &str, style: &str, unstyled: &str, styled: bool) {
+    if styled {
+        open_tag(out, tag, style, true);
+    } else {
+        open_tag(out, tag, unstyled, true);
+    }
+}
+
 fn open_tag(out: &mut String, tag: &str, style: &str, styled: bool) {
     out.push('<');
     out.push_str(tag);
@@ -748,6 +959,39 @@ fn write_blocks(blocks: &[Block], context: Context, styled: bool, out: &mut Stri
                     write_inlines(inlines, styled, out);
                 }
                 out.push_str("</p>");
+            }
+            Block::AlignedParagraph(align, inlines) => {
+                let base = if context == Context::Item {
+                    STYLE_P_IN_ITEM
+                } else {
+                    STYLE_P
+                };
+                let style = format!("{base};{}", align.css());
+                open_aligned(out, "p", &style, align.css(), styled);
+                write_inlines(inlines, styled, out);
+                out.push_str("</p>");
+            }
+            Block::Heading {
+                level,
+                align,
+                inlines,
+            } => {
+                let tag = format!("h{}", level.clamp(&1, &3));
+                let mut style = match level {
+                    1 => STYLE_H1,
+                    2 => STYLE_H2,
+                    _ => STYLE_H3,
+                }
+                .to_owned();
+                if let Some(align) = align {
+                    style.push(';');
+                    style.push_str(align.css());
+                }
+                open_aligned(out, &tag, &style, align.map_or("", Align::css), styled);
+                write_inlines(inlines, styled, out);
+                out.push_str("</");
+                out.push_str(&tag);
+                out.push('>');
             }
             Block::Pre(text) => {
                 open_tag(out, "pre", STYLE_PRE, styled);
@@ -847,8 +1091,8 @@ fn write_inlines(inlines: &[Inline], styled: bool, out: &mut String) {
     for inline in inlines {
         let wanted = match inline {
             Inline::Text(_, marks) => mark_tags(marks),
-            // A line break keeps the open marks.
-            Inline::Break => open.clone(),
+            // A line break and an image keep the open marks.
+            Inline::Break | Inline::Image(_) => open.clone(),
         };
         let common = open.iter().zip(&wanted).take_while(|(a, b)| a == b).count();
         while open.len() > common {
@@ -863,11 +1107,61 @@ fn write_inlines(inlines: &[Inline], styled: bool, out: &mut String) {
         match inline {
             Inline::Text(text, _) => escape_into(text, out),
             Inline::Break => out.push_str("<br>"),
+            Inline::Image(image) => write_image(image, styled, out),
         }
     }
     while let Some(tag) = open.pop() {
         tag.close(out);
     }
+}
+
+/// `<img src="cid:…">` with the chosen size; in mail HTML it never grows wider than the window.
+fn write_image(image: &Image, styled: bool, out: &mut String) {
+    out.push_str("<img src=\"cid:");
+    out.push_str(&image.content_id);
+    out.push_str("\" alt=\"");
+    escape_attribute_into(&image.alt, out);
+    out.push('"');
+    for (name, value) in [("width", image.width), ("height", image.height)] {
+        if let Some(value) = value {
+            out.push_str(&format!(" {name}=\"{value}\""));
+        }
+    }
+    if styled {
+        out.push_str(" style=\"max-width:100%;height:auto\"");
+    }
+    out.push('>');
+}
+
+/// Content-IDs of the inline images in editor or mail HTML, in order, each once.
+pub fn inline_image_ids(html: &str) -> Vec<String> {
+    fn walk(blocks: &[Block], out: &mut Vec<String>) {
+        for block in blocks {
+            match block {
+                Block::Paragraph(inlines)
+                | Block::AlignedParagraph(_, inlines)
+                | Block::Heading { inlines, .. } => {
+                    for inline in inlines {
+                        if let Inline::Image(image) = inline
+                            && !out.contains(&image.content_id)
+                        {
+                            out.push(image.content_id.clone());
+                        }
+                    }
+                }
+                Block::Pre(_) => {}
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk(item, out);
+                    }
+                }
+                Block::Quote(children) => walk(children, out),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&html_blocks(html), &mut out);
+    out
 }
 
 pub(crate) fn escape_into(text: &str, out: &mut String) {

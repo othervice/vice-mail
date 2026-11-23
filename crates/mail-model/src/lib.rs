@@ -9,6 +9,7 @@
 //! Types documented as internal (adapter results, sync state) never cross the bridge.
 
 mod account;
+mod ai;
 mod backend;
 mod body;
 mod bundle;
@@ -16,6 +17,7 @@ mod calendar;
 mod capabilities;
 mod category;
 mod compose;
+mod contacts;
 mod error;
 mod ids;
 mod inbox;
@@ -31,6 +33,7 @@ pub mod search;
 mod secret;
 mod send;
 mod settings_sync;
+mod snippets;
 pub mod threading;
 mod uid_set;
 mod views;
@@ -40,6 +43,15 @@ pub use account::{
     Account, AccountColor, AccountSettings, AccountState, AccountStatus, ConnectionTestResult,
     DiscoveryResult, DiscoverySource, Identity, ProviderHint, Security, ServerSettings,
     SyncProgress,
+};
+pub use ai::{
+    AI_REQUEST_MAX_ENTRIES, AI_REQUEST_RETENTION_DAYS, AiAccountCloud, AiAnswer, AiAvailability,
+    AiClaim, AiConnectionTest, AiDeadline, AiFailure, AiFunction, AiFunctionChoice, AiKeyChange,
+    AiLocality, AiModel, AiPreset, AiProfileInfo, AiProfileInput, AiProviderKind, AiReplySuggestion,
+    AiRequestEntry, AiRequestOutcome, AiRequestPage, AiRequestPhase, AiSettingsInfo, AiSummary,
+    AiTargetLanguage, AiTone, AiTransfer, AiTrimming, AiWritingResult, AiWritingTask,
+    MAX_AI_PASSAGE_CHARS, MAX_AI_PROFILE_NAME_CHARS, MAX_AI_PROFILES, MAX_AI_QUESTION_CHARS,
+    MAX_AI_REQUEST_ID_CHARS, MAX_AI_REQUEST_PAGE, OpenReplyHint, OpenReplyKind, OpenReplySettings,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,
@@ -63,13 +75,19 @@ pub use category::{
     CategoryCorrection, CategoryDecision, CategoryReason, MessageCategory, SenderKey, SenderKeyKind,
 };
 pub use compose::{
-    AccountSendSettings, ComposeFormat, ComposeIdentity, ComposeSettings, ContactNameRecord,
-    ContactSuggestion, DEFAULT_SEND_DELAY_SECS, Draft, DraftAttachment, DraftError, DraftFile,
-    DraftId, DraftKind, DraftServerState, DraftState, DraftSummary, DraftUpdate,
-    LARGE_ATTACHMENT_WARNING_BYTES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
-    MAX_DRAFT_BODY_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS,
-    MAX_TEXT_SIGNATURE_BYTES, NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition,
-    SendJob, SendPhase, SendState, SentCopyMode, ServerCopy, UnclearDecision,
+    AccountSendSettings, CleanedPaste, ComposeFormat, ComposeIdentity, ComposeSettings,
+    ContactNameRecord, ContactSuggestion, DEFAULT_SEND_DELAY_SECS, Draft, DraftAttachment,
+    DraftError, DraftFile, DraftId, DraftKind, DraftServerState, DraftSizeCheck, DraftState,
+    DraftSummary, DraftUpdate, InlineImagesAdded, LARGE_ATTACHMENT_WARNING_BYTES,
+    MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS, MAX_DRAFT_BODY_BYTES,
+    MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SCHEDULE_AHEAD_MS, MAX_SEND_DELAY_SECS,
+    MAX_SUBJECT_CHARS, MAX_TEXT_SIGNATURE_BYTES, MISSED_SEND_GRACE_MS, MissedSendDecision,
+    NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition, SendJob, SendLater,
+    SendPhase, SendState, SentCopyMode, ServerCopy, UnclearDecision,
+};
+pub use contacts::{
+    ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactPage,
+    ContactRequestError, DuplicateReason, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN,
 };
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use ids::{AccountId, IdentityId, ListCursor, MailboxId, MessageId, ModSeq, Uid, UidValidity};
@@ -90,7 +108,7 @@ pub use ipc::{
 pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
-pub use mailto::{ComposeRequest, MailtoField, MailtoNotice};
+pub use mailto::{ComposeRequest, LinkOpened, MailtoField, MailtoNotice};
 pub use mcp::{
     MAX_MCP_ACCESS_PAGE, MAX_MCP_CLIENT_NAME_CHARS, MAX_MCP_CLIENTS, MCP_ACCESS_MAX_ENTRIES,
     MCP_ACCESS_RETENTION_DAYS, McpAccessEntry, McpAccessId, McpAccessOutcome, McpAccessPage,
@@ -119,14 +137,21 @@ pub use reading::{
 pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use secret::Secret;
 pub use send::{
-    Envelope, MailSender, RecipientRefusal, SendFuture, SendOutcome, SendRejection, SmtpReply,
-    SmtpStep,
+    Envelope, MailSender, RecipientRefusal, SendFuture, SendOutcome, SendRejection, SmtpLimits,
+    SmtpReply, SmtpStep,
 };
 pub use settings_sync::{
     MIN_SYNC_PASSPHRASE_CHARS, SETTINGS_SYNC_FOLDER, SYNC_ID_HEADER, SYNC_VERSION_HEADER,
     SettingsSyncFailure, SettingsSyncPreview, SettingsSyncState, SettingsSyncStatus, SyncDevice,
     SyncFolder, SyncFolderConnector, SyncFolderEntry, SyncFolderState, SyncKindCount, SyncQuestion,
     is_settings_sync_folder,
+};
+pub use snippets::{
+    FilledTemplateInfo, IdentitySignatureDefaults, MAX_SIGNATURE_IMAGE_BYTES, MAX_SIGNATURE_IMAGES,
+    MAX_SIGNATURE_IMAGES_BYTES, MAX_SIGNATURES, MAX_SNIPPET_NAME_CHARS, MAX_TEMPLATES,
+    SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
+    SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
+    TemplateInfo, TemplateInput,
 };
 pub use uid_set::UidSet;
 pub use views::{

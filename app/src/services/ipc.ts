@@ -32,6 +32,7 @@ import {
   type IpcError,
   type LanguagePreference,
   type LinkInfo,
+  type LinkOpened,
   type LinkWarning,
   type ListCursor,
   type MailAction,
@@ -101,6 +102,7 @@ export type {
   IpcError,
   LanguagePreference,
   LinkInfo,
+  LinkOpened,
   LinkWarning,
   ListCursor,
   MailAction,
@@ -182,6 +184,17 @@ export const ERROR_CODES = [
   "sync_key_invalid",
   "sync_off",
   "sync_key_missing",
+  "send_missed",
+  "message_too_large",
+  "ai_off",
+  "ai_consent_required",
+  "ai_not_permitted",
+  "ai_cancelled",
+  "ai_unreachable",
+  "ai_unauthorized",
+  "ai_busy",
+  "ai_refused",
+  "ai_failed",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -289,9 +302,12 @@ export const ipc = {
   /** The real target of a clicked link. The UI never learns it any other way. */
   describeLink: (renderToken: RenderToken, index: number): Promise<LinkInfo> =>
     call(() => commands.describeLink(renderToken, index)),
-  /** Opens a link in the system browser. Only after the user confirmed the target. */
-  openLink: (renderToken: RenderToken, index: number): Promise<void> =>
-    done(call(() => commands.openLink(renderToken, index))),
+  /**
+   * Opens a link after the user confirmed the target: http(s) in the system browser
+   * (`{ kind: "opened" }`); a `mailto:` link comes back as a compose request for the composer.
+   */
+  openLink: (renderToken: RenderToken, index: number): Promise<LinkOpened> =>
+    call(() => commands.openLink(renderToken, index)),
   /** The core shows the system's save dialog. */
   saveAttachment: (messageId: MessageId, index: number): Promise<SaveAttachmentResult> =>
     call(() => commands.saveAttachment(messageId, index)),

@@ -49,7 +49,8 @@ macro_rules! select_drafts {
                       ORDER BY o.id DESC LIMIT 1),
                     EXISTS (SELECT 1 FROM operation o
                              WHERE o.draft_id = d.id AND o.kind = 'append'
-                               AND o.state IN ('queued', 'in_flight'))
+                               AND o.state IN ('queued', 'in_flight')),
+                    d.signature_uuid
              FROM draft d ",
             $rest
         )
@@ -77,15 +78,16 @@ pub(crate) const INSERT_DRAFT: &str = "
                        bcc_addrs, subject, format, body_html, body_text, quote_html, quote_text,
                        include_quote, quote_position, include_signature, attachments, state,
                        revision, server_revision, server_mailbox_id, server_mailbox,
-                       server_uidvalidity, server_uid, created_at, updated_at)
+                       server_uidvalidity, server_uid, created_at, updated_at, signature_uuid)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-            ?20, ?21, ?22, 'editing', 1, ?23, ?24, ?25, ?26, ?27, ?28, ?28)";
+            ?20, ?21, ?22, 'editing', 1, ?23, ?24, ?25, ?26, ?27, ?28, ?28, ?29)";
 
 pub(crate) const UPDATE_DRAFT: &str = "
     UPDATE draft
     SET identity_id = ?2, to_addrs = ?3, cc_addrs = ?4, bcc_addrs = ?5, subject = ?6,
         format = ?7, body_html = ?8, body_text = ?9, include_quote = ?10, quote_position = ?11,
-        include_signature = ?12, revision = revision + 1, updated_at = ?13
+        include_signature = ?12, revision = revision + 1, updated_at = ?13,
+        signature_uuid = ?14
     WHERE id = ?1 AND state = 'editing'";
 
 pub(crate) const SET_DRAFT_ATTACHMENTS: &str = "
@@ -205,6 +207,10 @@ fn draft_from_row(r: &Row<'_>) -> rusqlite::Result<StoredDraft> {
         updated_at: r.get(32)?,
         outgoing: r.get::<_, Option<i64>>(33)?.map(OperationId),
         saving: r.get(34)?,
+        signature: r
+            .get::<_, Option<String>>(35)?
+            .as_deref()
+            .and_then(mail_model::SignatureId::parse),
     })
 }
 
@@ -326,6 +332,10 @@ pub(crate) fn insert_draft(
             copy_validity,
             copy_uid,
             new.now,
+            content
+                .signature
+                .as_ref()
+                .map(mail_model::SignatureId::as_str),
         ])
         .map_err(StoreError::sqlite("insert draft"))?;
     require_draft(conn, &new.id)
@@ -366,6 +376,10 @@ pub(crate) fn save_draft(
             content.quote_position.as_str(),
             content.include_signature,
             now,
+            content
+                .signature
+                .as_ref()
+                .map(mail_model::SignatureId::as_str),
         ])
         .map_err(StoreError::sqlite("save draft"))?;
     require_draft(conn, id)

@@ -139,9 +139,9 @@ describe("stage 3 commands", () => {
     await expect(ipc.describeLink("b".repeat(32), 0)).rejects.toMatchObject({ name: "CoreError", code: "not_found" });
   });
 
-  it("revokeRemoteContent and openLink resolve to undefined", async () => {
+  it("openLink says how the link was opened; revokeRemoteContent resolves to undefined", async () => {
     mockCore();
-    await expect(ipc.openLink("c".repeat(32), 0)).resolves.toBeUndefined();
+    await expect(ipc.openLink("c".repeat(32), 0)).resolves.toEqual({ kind: "opened" });
     await expect(ipc.revokeRemoteContent(makeAccount().id, "x@y.example")).resolves.toBeUndefined();
   });
 });
@@ -186,6 +186,17 @@ describe("error codes", () => {
     "sync_key_invalid",
     "sync_off",
     "sync_key_missing",
+    "send_missed",
+    "message_too_large",
+    "ai_off",
+    "ai_consent_required",
+    "ai_not_permitted",
+    "ai_cancelled",
+    "ai_unreachable",
+    "ai_unauthorized",
+    "ai_busy",
+    "ai_refused",
+    "ai_failed",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

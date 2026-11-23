@@ -181,6 +181,7 @@ export const de: Translation = {
       sent: "Nachricht gesendet",
       noSentCopy: "Es gibt keinen Gesendet-Ordner, daher wurde keine Kopie abgelegt.",
       failed: "Die Nachricht ließ sich nicht senden.",
+      missed: "Eine für später geplante Nachricht wurde nicht gesendet, weil die App aus war.",
     },
     unclear: {
       title: "Unklar, ob die Nachricht gesendet wurde.",
@@ -213,6 +214,7 @@ export const de: Translation = {
         verifying: "Wird geprüft",
         unclear: "Unklar",
         failed: "Fehlgeschlagen",
+        missed: "Verpasst",
         sent: "Gesendet",
       },
     },
@@ -1282,6 +1284,7 @@ export const de: Translation = {
         backKeys: "Esc",
         extend: "Auswahl erweitern",
         extendKeys: "Umschalt+↓ ↑",
+        send: "Nachricht senden (beim Verfassen)",
       },
     },
     settings: {
@@ -2214,6 +2217,50 @@ export const de: Translation = {
       sync_key_missing: {
         title: "Dieser Computer hat keinen Schlüssel für den Einstellungs-Sync.",
         hint: "Gib die Passphrase noch einmal ein, damit weiter abgeglichen wird.",
+      },
+      send_missed: {
+        title: "Eine für später geplante Nachricht wurde nicht gesendet.",
+        hint: "Die App lief zum geplanten Zeitpunkt nicht. Im Ausgang kannst du sie jetzt senden, neu planen oder als Entwurf behalten.",
+      },
+      message_too_large: {
+        title: "Die Nachricht ist größer, als dein Mailserver annimmt.",
+        hint: "Entferne oder verkleinere Anhänge oder teile große Dateien als Link.",
+      },
+      ai_off: {
+        title: "Dafür ist keine KI eingerichtet.",
+        hint: "Schalte die KI ein und wähle in den Einstellungen einen Anbieter für diese Funktion.",
+      },
+      ai_consent_required: {
+        title: "Zuerst ist deine Zustimmung nötig.",
+        hint: "Dieser Anbieter ist ein Cloud-Dienst. Lies, was gesendet wird, und stimme vor der ersten Anfrage zu. Es wurde nichts gesendet.",
+      },
+      ai_not_permitted: {
+        title: "Mails dieses Kontos dürfen nicht an einen Cloud-Anbieter gehen.",
+        hint: "Erlaube es in den KI-Einstellungen des Kontos oder nimm einen lokalen Anbieter. Es wurde nichts gesendet.",
+      },
+      ai_cancelled: {
+        title: "Die Anfrage wurde abgebrochen.",
+        hint: "Starte sie neu, wenn du sie brauchst.",
+      },
+      ai_unreachable: {
+        title: "Der KI-Anbieter ist nicht erreichbar.",
+        hint: "Prüfe die Adresse in den Einstellungen und ob der Anbieter läuft, dann versuche es erneut.",
+      },
+      ai_unauthorized: {
+        title: "Der KI-Anbieter hat den Schlüssel nicht angenommen.",
+        hint: "Prüfe den API-Schlüssel in den Einstellungen des Anbieters.",
+      },
+      ai_busy: {
+        title: "Der KI-Anbieter ist gerade ausgelastet.",
+        hint: "Warte einen Moment und versuche es erneut.",
+      },
+      ai_refused: {
+        title: "Das Modell hat die Anfrage abgelehnt.",
+        hint: "Versuche eine andere Formulierung oder ein anderes Modell.",
+      },
+      ai_failed: {
+        title: "Die KI-Anfrage ist fehlgeschlagen.",
+        hint: "Prüfe Adresse und Modell des Anbieters in den Einstellungen. Passiert es wieder, versuche ein anderes Modell.",
       },
     },
   },

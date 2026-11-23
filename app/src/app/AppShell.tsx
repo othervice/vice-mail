@@ -30,7 +30,8 @@ export function AppShell({ eventsError }: AppShellProps) {
     // `data-sidebar` lets app.css move header titles clear of the macOS window buttons.
     <div className="flex h-full bg-canvas text-primary" data-sidebar={sidebarExpanded ? "expanded" : "collapsed"}>
       <IconRail />
-      <main className="relative flex min-w-0 flex-1 flex-col bg-surface">
+      {/* Focusable (not in the Tab order): where the focus goes when what had it is gone (stage 8). */}
+      <main tabIndex={-1} className="relative flex min-w-0 flex-1 flex-col bg-surface outline-none">
         {eventsError && (
           <div className="px-6 pt-4">
             <ErrorNotice context={t("errors.context.events")} error={eventsError} />

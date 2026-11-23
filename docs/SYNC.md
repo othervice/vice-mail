@@ -122,8 +122,8 @@ stay local.
 | Kind (`kind`) | Id | Merge rule | Removed elsewhere | Max content | Local data |
 |---|---|---|---|---|---|
 | `setting` | `global/<key>` or `<account uuid>/<key>` | newer wins | applied | 4 KiB | `setting` |
-| `signature` | identity UUID | newer wins, edit beats delete | applied | 64 KiB | `identity.signature` |
-| `template` | UUID | newer wins, edit beats delete | applied | 256 KiB | none yet |
+| `signature` | signature UUID (a stage 5 text signature kept its identity's UUID) | newer wins, edit beats delete | applied | 256 KiB | `signature` |
+| `template` | UUID | newer wins, edit beats delete | applied | 256 KiB | `template` |
 | `rule` | UUID | newer wins, edit beats delete | applied | 16 KiB | `rule` |
 | `savedView` | UUID | newer wins, edit beats delete | applied | 16 KiB | none yet |
 | `snooze` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `snooze` |
@@ -136,7 +136,7 @@ stay local.
 | `senderRule` | `address:<v>`, `domain:<v>` or `list_id:<v>` | newer wins | applied | 1 KiB | `sender_rule` |
 | `accountGroup` | UUID | newer wins, edit beats delete | applied | 16 KiB | `account_group` |
 | `remoteContent` | `<account uuid>/<address>` | newer wins | applied | 1 KiB | `remote_content_sender` |
-| `contact` | normalised address | newer wins | applied | 4 KiB | `contact.user_name` |
+| `contact` | normalised address | newer wins | applied | 4 KiB | `contact.user_name`, `contact.contact_group` |
 
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
 ids or UIDs. Sender rules are referred to by their normalised key, not by a UUID: two devices
@@ -147,8 +147,9 @@ that set "always as newsletter" for the same sender change the same record.
 | Kind | Content |
 |---|---|
 | `setting` | the setting's JSON value (not null) |
-| `signature` | `{text?, html?}`, at least one (today only `text`) |
-| `identity` | `{account, email, name, replyTo, isDefault}` (the signature is its own record) |
+| `signature` | `{name?, text?, html?, images?}`, text or html at least (stage 10: a signature of the pool; `images` are `[{id, contentId, fileName, mime, dataBase64}]`, PNG/JPEG/GIF/WebP, at most 8 and 128 KiB; a stage 11 record `{text}` still reads) |
+| `identity` | `{account, email, name, replyTo, isDefault, signatureNew?, signatureReply?}` (signatures are records of their own; the identity names its defaults by signature UUID, absent when none is set; a name that points nowhere means none) |
+| `template` | `{name, subject, html}` (stage 10) |
 | `rule` | `{name, position, enabled, definition: {matchAll, conditions, actions, stop}}` |
 | `snooze` | `{untilMs}`; whether it came back is each device's own (every device's timer brings it back) |
 | `pin` | `{pinnedAtMs}` |
@@ -156,10 +157,10 @@ that set "always as newsletter" for the same sender change the same record.
 | `senderRule` | `{category, important}`: `person`, `notification`, `newsletter` or null; not both empty |
 | `accountGroup` | `{name, position, accounts: [account uuid, …]}` |
 | `remoteContent` | `{}` (that it exists is all) |
-| `contact` | `{userName}`: the name the user gave |
+| `contact` | `{userName?, mergedInto?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions stay on the device |
 | `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
 | `device` | `{name, system, lastSeenMs}` |
-| `template`, `savedView`, `aiSettings` | any object (no local data yet; kept as they are) |
+| `savedView`, `aiSettings` | any object (no local data yet; kept as they are) |
 
 ### No secrets
 

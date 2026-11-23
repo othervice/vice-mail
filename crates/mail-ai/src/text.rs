@@ -93,6 +93,20 @@ pub(crate) fn clean_output(input: &str, max_chars: usize) -> String {
     clean_line(&strip_markdown_images(input), max_chars)
 }
 
+/// A multi-line text from the model (a reply or a rewritten passage) for an editable draft:
+/// Markdown image embeds reduced to their alt text, then [`clean_text`] (no control or hidden
+/// characters, at most two blank lines in a row), cut to `max_chars` characters. The text is
+/// only ever put into a plain-text editor field, never rendered as HTML.
+pub(crate) fn clean_output_text(input: &str, max_chars: usize) -> String {
+    let cleaned = clean_text(&strip_markdown_images(input)).text;
+    if cleaned.chars().count() <= max_chars {
+        return cleaned;
+    }
+    let mut cut: String = cleaned.chars().take(max_chars.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
+}
+
 /// `![alt](anything)` becomes `alt`; also the reference form `![alt][ref]`. An unterminated
 /// embed loses its `!` so it is no image either.
 fn strip_markdown_images(input: &str) -> String {

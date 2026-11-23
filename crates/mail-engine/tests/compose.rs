@@ -304,6 +304,7 @@ impl Bed {
                     include_quote: true,
                     quote_position: QuotePosition::Above,
                     include_signature: true,
+                    signature_id: None,
                 },
             )
             .await
@@ -904,6 +905,7 @@ async fn cancelling_within_the_delay_sends_nothing() {
                 include_quote: true,
                 quote_position: QuotePosition::Above,
                 include_signature: true,
+                signature_id: None,
             },
         )
         .await
@@ -1374,6 +1376,7 @@ async fn crash_child_saves_a_draft_and_aborts() {
             include_quote: true,
             quote_position: QuotePosition::Above,
             include_signature: true,
+            signature_id: None,
         },
     )
     .await
@@ -1438,5 +1441,92 @@ async fn a_read_only_account_keeps_drafts_local_and_refuses_to_send() {
         "nothing on the server"
     );
     bed.core.shutdown().await;
+    clean_server(env).await;
+}
+
+/// A 1×1 PNG.
+const PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+    0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+/// Stage 10: an inline image goes out as a `cid:` part and is shown by the second account's
+/// reading pane (as `data:` in the sandboxed document), not listed as an attachment.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn an_inline_image_arrives_and_is_shown_at_the_second_account() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Inline image {}", run_id());
+    let files = TempDir::new().expect("files");
+    let path = files.path().join("Diagramm.png");
+    std::fs::write(&path, PNG).expect("png");
+
+    let draft = bed.new_draft(bed.alice).await;
+    let added = bed
+        .core
+        .add_inline_images(draft.id.clone(), vec![path])
+        .await
+        .expect("inline image");
+    let content_id = added.added[0].content_id.clone().expect("content id");
+    let html = format!(
+        "<p>Hallo Bob, hier das Diagramm:</p><p><img src=\"cid:{content_id}\" width=\"120\" \
+         alt=\"Diagramm\"></p>"
+    );
+    let draft = bed
+        .write(
+            &added.draft,
+            vec![person("Bob", &env.bob.address)],
+            Vec::new(),
+            &subject,
+            &html,
+        )
+        .await;
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("inline"))
+        .await
+        .expect("send");
+    bed.sent(bed.alice, outgoing.operation_id).await;
+    let item = bed.arrived(bed.bob, MailboxRole::Inbox, &subject).await;
+
+    // On the server: one related part with the image, unchanged.
+    let (_, raw) = server_message(env, &env.bob, "INBOX", &subject)
+        .await
+        .expect("on the server");
+    let parsed = mail_content::parse(&raw);
+    assert_eq!(parsed.inline.len(), 1, "{:?}", parsed.inline);
+    assert_eq!(parsed.inline[0].content_id, content_id);
+    assert_eq!(&*parsed.inline[0].bytes, PNG);
+    assert!(
+        String::from_utf8_lossy(&raw).contains("multipart/related"),
+        "{}",
+        header_block(&raw)
+    );
+
+    // Bob's reading pane resolves it.
+    let view = until("bob's view of the message", || async {
+        let view = bed
+            .core
+            .get_message(item.id, mail_model::BodyFormat::Html)
+            .await
+            .expect("view");
+        matches!(view.body, mail_model::MessageBody::Html { .. }).then_some(view)
+    })
+    .await;
+    let mail_model::MessageBody::Html { srcdoc, .. } = &view.body else {
+        unreachable!("checked above");
+    };
+    assert!(srcdoc.contains("src=\"data:image/png;base64,"), "{srcdoc}");
+    assert!(!srcdoc.contains("cid:"), "{srcdoc}");
+    assert!(
+        view.attachments.is_empty(),
+        "an inline image is not an attachment: {:?}",
+        view.attachments
+    );
     clean_server(env).await;
 }

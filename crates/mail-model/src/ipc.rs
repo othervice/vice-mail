@@ -138,6 +138,8 @@ pub struct ReadingPreferences {
 /// - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
 /// - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
 ///   failed.
+/// - `signaturesChanged`, `templatesChanged` (stage 10): reload the signature pool or the
+///   templates.
 /// - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
 ///   questions or detected folders changed. Data a pass took over from another device comes
 ///   with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
@@ -230,6 +232,17 @@ pub enum CoreEvent {
     SettingsSyncChanged {
         status: crate::SettingsSyncStatus,
     },
+    /// Stage 13: a running AI request (the id the UI chose): what is sent to whom before each
+    /// provider request, the characters received, the end.
+    AiRequest {
+        request_id: String,
+        phase: crate::AiRequestPhase,
+    },
+    /// Stage 10: the signature pool changed (here or from another device); identity defaults
+    /// come with `accountsChanged`.
+    SignaturesChanged,
+    /// Stage 10: the templates changed (here or from another device).
+    TemplatesChanged,
 }
 
 #[cfg(test)]

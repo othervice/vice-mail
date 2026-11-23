@@ -17,6 +17,9 @@
 //! - [`prepare_summary`]/[`summarize`] and [`ask`] (with [`prepare_query`], [`parse_query`],
 //!   [`prepare_answer`]): every statement keeps only references to messages that were sent;
 //!   no candidates means "nothing found" without a model call.
+//! - [`prepare_reply`]/[`suggest_reply`]: a reply to the newest message as plain text for an
+//!   editable draft; [`prepare_writing`]/[`rewrite`]: the writing help on a passage, as a
+//!   preview. Neither creates or changes anything.
 //! - [`CloudPolicy`]: accounts without cloud permission never reach a provider that is not
 //!   local.
 //!
@@ -36,9 +39,11 @@ mod prepare;
 mod profile;
 mod prompt;
 mod provider;
+mod reply;
 mod sse;
 mod summary;
 mod text;
+mod writing;
 
 pub use anthropic::{
     ANTHROPIC_BASE_URL, ANTHROPIC_VERSION, AnthropicMessages, DEFAULT_MAX_TOKENS,
@@ -46,7 +51,8 @@ pub use anthropic::{
 };
 pub use ask::{
     Answer, AnswerOutcome, AskRequest, CandidateSource, MAX_QUESTION_CHARS, PreparedAnswer,
-    PreparedQuery, QueryPlan, ask, parse_query, prepare_answer, prepare_query,
+    PreparedQuery, QueryPlan, ask, parse_query, partition_candidates, prepare_answer,
+    prepare_query, send_answer, send_query,
 };
 pub use cancel::CancelToken;
 pub use claims::Claim;
@@ -59,12 +65,19 @@ pub use prepare::{
     Budget, MAX_ATTACHMENT_NAMES, MAX_RECIPIENTS, MailInput, TransferInfo, Trimming,
 };
 pub use profile::{PRESETS, Preset, ProviderConfig, build_provider};
-pub use prompt::{ANSWER_TASK, AnswerLanguage, DATA_RULES, QUERY_SYSTEM, SUMMARY_TASK};
+pub use prompt::{
+    ANSWER_TASK, AnswerLanguage, DATA_RULES, QUERY_SYSTEM, REPLY_TASK, SUMMARY_TASK, WRITING_RULES,
+};
 pub use provider::{
     AiProvider, BoxFuture, ChatRequest, ChatStream, Completed, Finish, ModelInfo, OutputSchema,
     ProviderInfo, ProviderKind, StopReason, StreamEvent, Usage, collect,
 };
+pub use reply::{MAX_REPLY_CHARS, PreparedReply, ReplySuggestion, prepare_reply, suggest_reply};
 pub use summary::{Context, Deadline, PreparedSummary, Summary, prepare_summary, summarize};
+pub use writing::{
+    MAX_WRITING_CHARS, PreparedWriting, TargetLanguage, Tone, WritingResult, WritingTask,
+    prepare_writing, rewrite,
+};
 
 /// A TLS configuration for unit tests, which only talk plain HTTP to local servers. Built
 /// with the process default provider (whichever one rustls was compiled with), so the tests

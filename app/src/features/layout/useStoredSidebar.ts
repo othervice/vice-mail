@@ -6,7 +6,7 @@ import { useUiStore } from "../../stores/ui";
  * Stage 8: the sidebar state, which the UI store holds, stored with the layout of this window
  * (the density is applied by the layout store itself).
  */
-export function useLayoutEffects(): void {
+export function useStoredSidebar(): void {
   useEffect(() => {
     const stored = useLayoutStore.getState().sidebarExpanded;
     if (useUiStore.getState().sidebarExpanded !== stored) useUiStore.getState().toggleSidebar();

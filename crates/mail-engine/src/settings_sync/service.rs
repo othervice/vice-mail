@@ -937,6 +937,12 @@ impl<C: Connector> AppCore<C> {
         {
             self.emit_event(CoreEvent::PreferencesChanged { preferences });
         }
+        if any(&["signature"]) {
+            self.emit_event(CoreEvent::SignaturesChanged);
+        }
+        if any(&["template"]) {
+            self.emit_event(CoreEvent::TemplatesChanged);
+        }
         if any(&["senderRule"]) {
             self.comfort().kick_categories();
         }

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { ActionId, ActionLabel } from "../actions/registry";
+import { isViewCommand, VIEW_COMMANDS, type ActionId, type ActionLabel } from "../actions/registry";
 import { isActionId, type CommandId } from "./bindings";
 
 type ToggleId = Exclude<ActionId, ActionLabel>;
@@ -19,6 +19,7 @@ export function useCommandLabel(): (id: CommandId) => string {
   const { t } = useTranslation();
   return (id) => {
     if (id === "search") return t("search.open");
+    if (isViewCommand(id)) return t("palette.goTo", { name: t(`nav.${VIEW_COMMANDS[id]}`) });
     if (!isActionId(id)) return t(`keyboard.commands.${id}`);
     if (isToggle(id)) return t(`keyboard.toggles.${id}`);
     return t(`actions.labels.${id}`);

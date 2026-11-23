@@ -38,12 +38,10 @@ pub(crate) const UPSERT_CONTACT: &str = "
                          last_sent, last_received, rank, names, user_name, search, updated_at)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
     ON CONFLICT (address_key) DO UPDATE SET
-      local_part = excluded.local_part, domain = excluded.domain,
-      contact_group = excluded.contact_group, sent = excluded.sent,
+      local_part = excluded.local_part, domain = excluded.domain, sent = excluded.sent,
       received = excluded.received, last_sent = excluded.last_sent,
       last_received = excluded.last_received, rank = excluded.rank, names = excluded.names,
-      user_name = excluded.user_name, search = excluded.search,
-      updated_at = excluded.updated_at";
+      search = excluded.search, updated_at = excluded.updated_at";
 
 /// Messages not yet read into the directory (`message_contacts_todo`), oldest id first.
 pub(crate) const CONTACTS_TODO: &str = "
@@ -55,11 +53,13 @@ pub(crate) const CONTACTS_TODO: &str = "
 
 pub(crate) const MARK_CONTACTS_SEEN: &str = "UPDATE message SET contacts_seen = 1 WHERE id = ?1";
 
+/// Stage 10: the text of the identity's default signature for new mails stands in for the
+/// stage 5 text signature.
 pub(crate) const COMPOSE_IDENTITIES: &str = "
-    SELECT id, email, name, reply_to, is_default, signature FROM identity
+    SELECT id, email, name, reply_to, is_default,
+           (SELECT s.text FROM signature s WHERE s.uuid = identity.signature_new)
+    FROM identity
     WHERE account_id = ?1 ORDER BY is_default DESC, id";
-
-pub(crate) const SET_SIGNATURE: &str = "UPDATE identity SET signature = ?2 WHERE id = ?1";
 
 /// Unfinished sends and appends, for the sweep of compose files (`operation_pending` covers the
 /// pending ones; failed and conflicting ones are few, the scan of `operation` is the table
@@ -92,24 +92,29 @@ fn count_at(r: &Row<'_>, idx: usize) -> rusqlite::Result<u32> {
 }
 
 fn contact_from_row(r: &Row<'_>) -> rusqlite::Result<StoredContact> {
-    let rank: f64 = r.get(8)?;
+    contact_at(r, 0)
+}
+
+/// A contact from [`CONTACT_COLUMNS`] starting at column `o`.
+pub(crate) fn contact_at(r: &Row<'_>, o: usize) -> rusqlite::Result<StoredContact> {
+    let rank: f64 = r.get(o + 8)?;
     Ok(StoredContact {
-        key: r.get(0)?,
-        local_part: r.get(1)?,
-        domain: r.get(2)?,
-        group: r.get(3)?,
-        sent: count_at(r, 4)?,
-        received: count_at(r, 5)?,
-        last_sent: r.get(6)?,
-        last_received: r.get(7)?,
+        key: r.get(o)?,
+        local_part: r.get(o + 1)?,
+        domain: r.get(o + 2)?,
+        group: r.get(o + 3)?,
+        sent: count_at(r, o + 4)?,
+        received: count_at(r, o + 5)?,
+        last_sent: r.get(o + 6)?,
+        last_received: r.get(o + 7)?,
         rank: if rank <= NO_RANK {
             f64::NEG_INFINITY
         } else {
             rank
         },
-        names: names_at(r, 9)?,
-        user_name: r.get(10)?,
-        search: r.get(11)?,
+        names: names_at(r, o + 9)?,
+        user_name: r.get(o + 10)?,
+        search: r.get(o + 11)?,
     })
 }
 
@@ -154,6 +159,14 @@ pub(crate) fn record(
                 now,
             ])
             .map_err(StoreError::sqlite("write contact"))?;
+    }
+    // Stage 10: a name or merge synchronised from another device before this device saw the
+    // address applies now (the directory is a cache; the record waited in `sync_record`).
+    for c in contacts
+        .iter()
+        .filter(|c| c.user_name.is_none() && c.group.is_none())
+    {
+        crate::contacts_dir::apply_waiting_record(conn, &c.key)?;
     }
     let mut mark = conn.prepare_cached(MARK_CONTACTS_SEEN)?;
     for message in seen {
@@ -240,6 +253,8 @@ pub(crate) fn compose_identities(
         .collect::<Result<Vec<_>, _>>()?)
 }
 
+/// The stage 5 text signature: since stage 10 a signature with the identity's UUID that both
+/// defaults of the identity name (`crate::signatures::set_text_signature`).
 pub(crate) fn set_signature(
     conn: &Connection,
     identity: IdentityId,
@@ -256,20 +271,13 @@ pub(crate) fn set_signature(
             "a signature has at most {MAX_TEXT_SIGNATURE_BYTES} bytes"
         )));
     }
-    let account: Option<String> = conn
-        .prepare_cached(
-            "SELECT (SELECT a.uuid FROM account a WHERE a.id = i.account_id)
-             FROM identity i WHERE i.id = ?1",
-        )?
-        .query_row([identity.0], |r| r.get(0))
-        .optional()?;
-    let account = account
-        .and_then(|uuid| uuid.parse::<AccountId>().ok())
-        .ok_or_else(|| StoreError::NotFound(format!("identity {}", identity.0)))?;
-    conn.prepare_cached(SET_SIGNATURE)?
-        .execute(params![identity.0, signature])
-        .map_err(StoreError::sqlite("set signature"))?;
-    Ok(account)
+    crate::signatures::set_text_signature(
+        conn,
+        identity,
+        None,
+        signature.as_deref(),
+        crate::settings::now_millis(),
+    )
 }
 
 pub(crate) fn unfinished_payloads(conn: &Connection) -> Result<Vec<OperationPayload>, StoreError> {

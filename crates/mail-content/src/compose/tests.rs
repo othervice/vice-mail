@@ -55,11 +55,13 @@ fn assert_allowlisted(html: &str) {
         "a",
         "pre",
         "code",
+        "img",
+        "h1",
+        "h2",
+        "h3",
     ];
     let lower = html.to_ascii_lowercase();
-    for banned in [
-        " class=", " id=", "<script", "<img", "<iframe", "<style", "<svg",
-    ] {
+    for banned in [" class=", " id=", "<script", "<iframe", "<style", "<svg"] {
         assert!(!lower.contains(banned), "{banned:?} in {html}");
     }
     let parsed = dom::parse_document(html);
@@ -76,6 +78,10 @@ fn assert_allowlisted(html: &str) {
                     ("a", "href") => ["http://", "https://", "mailto:"]
                         .iter()
                         .any(|p| attr.value.starts_with(p)),
+                    // Stage 10: inline images only as parts of the message itself.
+                    ("img", "src") => crate::compose::content_id_of(&attr.value).is_some(),
+                    ("img", "alt") => true,
+                    ("img", "width" | "height") => attr.value.parse::<u32>().is_ok(),
                     (_, "style") => tag != "meta",
                     _ => false,
                 };
@@ -117,6 +123,7 @@ fn outgoing() -> OutgoingMessage {
         text: None,
         html: Some("<p>Hello <strong>Bob</strong></p>".to_owned()),
         attachments: Vec::new(),
+        inline_images: Vec::new(),
         message_id: "0123456789abcdef0123456789abcdef@example.org".to_owned(),
         in_reply_to: None,
         references: Vec::new(),
@@ -929,5 +936,409 @@ fn forward_takes_the_attachments_along() {
             .starts_with("-------- Forwarded Message --------\nSubject: AW: Re: Treffen am Montag\nDate: Mon, 23 Nov 2026 14:05 +0100\n"),
         "{}",
         forward_en.text
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 10: pasted content, inline images, forwarding as an attachment
+
+/// What pasted or generated HTML must never contain: scripts, style sheets, frames, forms and
+/// any reference the reader's program would load (images, CSS URLs, preconnects).
+fn assert_no_script_or_external_reference(html: &str) {
+    let lower = html.to_ascii_lowercase();
+    for needle in [
+        "<script",
+        "<style",
+        "<link",
+        "<iframe",
+        "<form",
+        "<input",
+        "<object",
+        "<embed",
+        "<svg",
+        "<video",
+        "<meta",
+        "srcset",
+        "url(",
+        "javascript:",
+        "file:",
+        "data:",
+        " on",
+        "@import",
+        "tracker.example",
+        "cdn.example.com",
+        "ads.example",
+        "phish.example",
+        "class=",
+        "style=",
+        "ping=",
+        "target=",
+        "background",
+    ] {
+        assert!(!lower.contains(needle), "{needle:?} in {html}");
+    }
+    for (index, _) in lower.match_indices("<img") {
+        let tag = &lower[index..lower[index..].find('>').map_or(lower.len(), |e| index + e)];
+        assert!(
+            tag.contains("src=\"cid:"),
+            "an image with another source: {tag}"
+        );
+    }
+    assert_allowlisted(&format!("<html><body>{html}</body></html>"));
+}
+
+#[test]
+fn pasted_word_content_is_clean_and_keeps_its_text() {
+    let word = include_str!("samples/paste_word.html");
+    let pasted = clean_pasted_html(word).expect("paste");
+    assert_no_script_or_external_reference(&pasted.html);
+    assert!(!pasted.html.contains("<img"), "{}", pasted.html);
+    for text in [
+        "Protokoll der Sitzung",
+        "<em>wichtigsten</em>",
+        "<a href=\"https://intranet.example.org/protokoll?id=7\">Intranet</a>",
+        "Haushalt für 2027 beschlossen",
+        "<u>3. Dezember</u>",
+        "Frau Müller",
+        "Viele Grüße<br>Hans",
+    ] {
+        assert!(
+            pasted.html.contains(text),
+            "{text:?} missing in {}",
+            pasted.html
+        );
+    }
+    // Word's bullets (`mso-list:Ignore`) and its namespaced tags do not show up as text.
+    assert!(!pasted.html.contains('·'), "{}", pasted.html);
+    assert!(!pasted.html.contains("o:p"), "{}", pasted.html);
+    assert!(pasted.notes.images_removed >= 1);
+    assert!(pasted.notes.formatting_simplified);
+    snapshot("paste_word", &pasted.html);
+}
+
+#[test]
+fn pasted_web_content_is_clean_and_keeps_its_text() {
+    let web = include_str!("samples/paste_web.html");
+    let pasted = clean_pasted_html(web).expect("paste");
+    assert_no_script_or_external_reference(&pasted.html);
+    // No image survives a paste, not even a `cid:` of another message.
+    assert!(!pasted.html.contains("<img"), "{}", pasted.html);
+    for text in [
+        "Release notes 2.4",
+        "<strong>faster search</strong>",
+        "<code>--offline</code>",
+        "<a href=\"https://docs.example.com/guide\">guide</a>",
+        "<a href=\"mailto:team@example.com\">the team</a>",
+        "<blockquote>",
+        "Simple is better than complex.",
+        "<a href=\"http://example.org/old\">plain http link</a>",
+    ] {
+        assert!(
+            pasted.html.contains(text),
+            "{text:?} missing in {}",
+            pasted.html
+        );
+    }
+    // Links with other schemes keep only their text.
+    assert!(pasted.html.contains("Click me") && pasted.html.contains("a file link"));
+    assert!(!pasted.html.contains("passwd"), "{}", pasted.html);
+    assert_eq!(pasted.notes.images_removed, 5);
+    snapshot("paste_web", &pasted.html);
+
+    // What the composer then sends contains no external reference either: every address
+    // left is a link target.
+    let mail = mail_html(&pasted.html);
+    assert_allowlisted(&mail);
+    let lower = mail.to_ascii_lowercase();
+    for needle in [
+        "url(",
+        "src=",
+        "<link",
+        "<script",
+        "tracker.example",
+        "cdn.example.com",
+    ] {
+        assert!(!lower.contains(needle), "{needle:?} in {mail}");
+    }
+    assert_eq!(
+        lower.matches("http://").count() + lower.matches("https://").count(),
+        lower.matches("href=\"http").count(),
+        "{mail}"
+    );
+}
+
+#[test]
+fn oversized_paste_is_refused() {
+    let huge = "a".repeat(crate::MAX_SNIPPET_INPUT_BYTES + 1);
+    assert!(matches!(
+        clean_pasted_html(&huge),
+        Err(crate::SnippetError::TooLarge { .. })
+    ));
+}
+
+/// A 1×1 PNG.
+const PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+    0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+fn png(content_id: &str, name: &str) -> InlineImage {
+    InlineImage {
+        content_id: content_id.to_owned(),
+        file_name: name.to_owned(),
+        mime: "image/png".to_owned(),
+        bytes: PNG.to_vec(),
+    }
+}
+
+#[test]
+fn inline_images_keep_their_size_and_only_cid_sources() {
+    let editor = "<p>Look: <img src=\"cid:chart.1@example.org\" width=\"320\" height=\"200\" \
+                  alt=\"Chart\"> and <img src=\"cid:logo.2@example.org\" style=\"width: 64px; \
+                  height:32px\"> but not <img src=\"https://tracker.example/x.gif\"> or \
+                  <img src=\"cid:bad id@x\"> or <img src=\"data:image/png;base64,AAAA\"></p>";
+    let html = editor_html_for_tests(editor);
+    assert_eq!(
+        html,
+        "<p>Look: <img src=\"cid:chart.1@example.org\" alt=\"Chart\" width=\"320\" height=\"200\"> \
+         and <img src=\"cid:logo.2@example.org\" alt=\"\" width=\"64\" height=\"32\"> but not or \
+         or</p>\n"
+    );
+    assert_eq!(
+        inline_image_ids(editor),
+        vec![
+            "chart.1@example.org".to_owned(),
+            "logo.2@example.org".to_owned()
+        ]
+    );
+    for id in ["a@b", "image001.png@01DA1234.5678ABCD", "x+y=z@h-1.example"] {
+        assert!(is_valid_content_id(id), "{id}");
+    }
+    for id in [
+        "",
+        "nobody",
+        "a@b@c",
+        "a b@c",
+        "<a@b>",
+        "a@b\"",
+        &"x".repeat(129),
+    ] {
+        assert!(!is_valid_content_id(id), "{id}");
+    }
+    // Received mail HTML (a quote) never brings `cid:` images of its own.
+    assert!(!editor_html(editor).contains("<img"));
+}
+
+/// Editor HTML as the composer's own content (empty lines and inline images kept).
+fn editor_html_for_tests(html: &str) -> String {
+    fragment(&html_blocks(html))
+}
+
+#[test]
+fn inline_images_go_out_as_related_parts_and_resolve() {
+    let mut message = outgoing();
+    message.html = Some(
+        "<p>Our new logo:</p><p><img src=\"cid:logo.1@example.org\" width=\"120\"></p>".to_owned(),
+    );
+    message.inline_images = vec![
+        png("logo.1@example.org", "logo.png"),
+        // Deleted from the text before sending: does not go out.
+        png("gone.2@example.org", "gone.png"),
+        // Not a raster type the reader would show: never sent as an inline image.
+        InlineImage {
+            mime: "image/svg+xml".to_owned(),
+            ..png("vector.3@example.org", "v.svg")
+        },
+    ];
+    let built = build_message(&message).expect("build");
+    let raw = String::from_utf8_lossy(&built.for_sending).into_owned();
+    assert!(raw.contains("Content-Type: multipart/related;"), "{raw}");
+    assert!(raw.contains("type=\"multipart/alternative\""), "{raw}");
+    assert!(raw.contains("Content-ID: <logo.1@example.org>"), "{raw}");
+    assert!(
+        raw.contains("Content-Disposition: inline; filename=\"logo.png\""),
+        "{raw}"
+    );
+    assert!(
+        !raw.contains("gone.2@example.org") && !raw.contains("vector.3"),
+        "{raw}"
+    );
+    // Related inside mixed when there are attachments too.
+    let parsed = parse(&built.for_sending);
+    assert_eq!(parsed.inline.len(), 1);
+    assert_eq!(parsed.inline[0].content_id, "logo.1@example.org");
+    assert_eq!(parsed.inline[0].mime, "image/png");
+    // The reader lists the part as inline, not as an attachment to show.
+    assert!(
+        parsed.attachments.iter().all(|a| a.inline),
+        "{:?}",
+        parsed.attachments
+    );
+    let html = parsed.html.expect("html");
+    assert!(html.contains("src=\"cid:logo.1@example.org\""), "{html}");
+    // The reading side resolves it: the rendered mail shows the image as `data:`.
+    let mut options = crate::RenderOptions::new(mail_model::RenderToken::from_random(7));
+    for part in &parsed.inline {
+        options.inline.insert(&part.content_id, part.bytes.clone());
+    }
+    let rendered = crate::render_html(&html, &options);
+    assert!(
+        rendered.srcdoc.contains("src=\"data:image/png;base64,"),
+        "{}",
+        rendered.srcdoc
+    );
+    assert_eq!(rendered.inline_used, vec!["logo.1@example.org".to_owned()]);
+
+    message.attachments = vec![Attachment {
+        file_name: "notes.txt".to_owned(),
+        mime: "text/plain".to_owned(),
+        bytes: b"notes\n".to_vec(),
+    }];
+    let built = build_message(&message).expect("build");
+    let parsed = parse(&built.for_sending);
+    assert_eq!(parsed.inline.len(), 1);
+    assert_eq!(parsed.attachments.iter().filter(|a| !a.inline).count(), 1);
+    let raw = String::from_utf8_lossy(&built.for_sending).into_owned();
+    let mixed = raw.find("multipart/mixed").expect("mixed");
+    let related = raw.find("multipart/related").expect("related");
+    assert!(mixed < related, "{raw}");
+
+    // A text-only message has no images.
+    message.html = None;
+    message.text = Some("plain".to_owned());
+    let raw = build_message(&message).expect("build").for_sending;
+    assert!(!String::from_utf8_lossy(&raw).contains("multipart/related"));
+}
+
+#[test]
+fn generated_html_with_signature_inline_image_and_quote() {
+    let (signature, notes) = crate::Signature::from_html(
+        "<p>-- </p><p><strong>Alice Example</strong><br>Example GmbH · \
+         <a href=\"https://example.org\">example.org</a></p>\
+         <p><img src=\"cid:sig-logo@signature\" width=\"96\" height=\"32\" alt=\"Example\"></p>",
+    )
+    .expect("signature");
+    assert_eq!(notes.images_removed, 0, "{notes:?}");
+    assert!(
+        signature.html.contains("cid:sig-logo@signature"),
+        "{}",
+        signature.html
+    );
+    let assembled = crate::assemble_draft(&crate::DraftParts {
+        body_html: "<p>Hi Bob,</p><p>here is the chart:</p>\
+                    <p><img src=\"cid:chart.1@example.org\" width=\"300\" alt=\"Chart\"></p>",
+        signature: Some(&signature),
+        quote: Some(crate::Quote {
+            html: "<p>Am 23.11.2026 schrieb Bob:</p><blockquote><p>Can you send the \
+                   chart?</p></blockquote>",
+            text: "Am 23.11.2026 schrieb Bob:\n> Can you send the chart?",
+        }),
+        position: crate::ReplyPosition::AboveQuote,
+    });
+    let mut message = outgoing();
+    message.html = Some(assembled.html.clone());
+    message.text = Some(assembled.text.clone());
+    message.inline_images = vec![
+        png("chart.1@example.org", "chart.png"),
+        png("sig-logo@signature", "logo.png"),
+    ];
+    let built = build_message(&message).expect("build");
+    let parsed = parse(&built.for_sending);
+    let html = parsed.html.expect("html");
+    snapshot("signature_image_quote_mail", &html);
+    assert_allowlisted(&html);
+    assert_eq!(parsed.inline.len(), 2);
+    // The text part stays readable: no tags, the separator, the quote with `>`.
+    let text = parsed.text.expect("text");
+    assert_eq!(
+        text,
+        "Hi Bob,\n\nhere is the chart:\n\n-- \nAlice Example\nExample GmbH · example.org \
+         <https://example.org/>\n\nAm 23.11.2026 schrieb Bob:\n> Can you send the chart?\n"
+    );
+    assert_eq!(text.matches('<').count(), 1, "only the link target: {text}");
+}
+
+#[test]
+fn a_message_forwarded_as_attachment_goes_in_unencoded_when_it_can() {
+    let original = b"From: Bob <bob@example.net>\nTo: alice@example.org\nSubject: Plan\n\
+Message-ID: <plan-1@example.net>\nContent-Type: text/plain; charset=us-ascii\n\nThe plan.\n";
+    let mut message = outgoing();
+    message.attachments = vec![Attachment {
+        file_name: "Plan.eml".to_owned(),
+        mime: "message/rfc822".to_owned(),
+        bytes: original.to_vec(),
+    }];
+    let built = build_message(&message).expect("build");
+    let raw = String::from_utf8_lossy(&built.for_sending).into_owned();
+    assert!(
+        raw.contains("Content-Type: message/rfc822; name=\"Plan.eml\""),
+        "{raw}"
+    );
+    assert!(raw.contains("Content-Transfer-Encoding: 7bit"), "{raw}");
+    // Embedded as it is, with CRLF line ends.
+    assert!(
+        raw.contains("Subject: Plan\r\nMessage-ID: <plan-1@example.net>\r\n"),
+        "{raw}"
+    );
+    let parsed = parse(&built.for_sending);
+    assert_eq!(parsed.attachments.len(), 1, "{:?}", parsed.attachments);
+    let bytes = attachment_bytes(&built.for_sending, parsed.attachments[0].part_id)
+        .expect("attachment bytes");
+    let inner = parse(&bytes);
+    assert_eq!(inner.headers.subject.as_deref(), Some("Plan"));
+    assert_eq!(
+        inner.headers.message_id.as_deref(),
+        Some("plan-1@example.net")
+    );
+
+    // 8-bit or long lines: base64 (readers accept it; 8-bit could break on 7-bit relays).
+    let mut eight = original.to_vec();
+    eight.extend_from_slice("Grüße\n".as_bytes());
+    message.attachments[0].bytes = eight.clone();
+    let built = build_message(&message).expect("build");
+    let raw = String::from_utf8_lossy(&built.for_sending).into_owned();
+    assert!(raw.contains("Content-Transfer-Encoding: base64"), "{raw}");
+    let parsed = parse(&built.for_sending);
+    let bytes = attachment_bytes(&built.for_sending, parsed.attachments[0].part_id)
+        .expect("attachment bytes");
+    assert!(String::from_utf8_lossy(&bytes).contains("Grüße"));
+}
+
+#[test]
+fn headings_and_alignment_of_the_composer_survive() {
+    let editor = "<h1>Plan</h1><h2 style=\"text-align: center\">Week <em>48</em></h2>\
+                  <p style=\"text-align:right\">right</p><p style=\"text-align: left\">left</p>\
+                  <p style=\"text-align:justify\"></p><h4>small</h4><p>end</p>";
+    let fragment = editor_html_for_tests(editor);
+    assert_eq!(
+        fragment,
+        "<h1>Plan</h1>\n<h2 style=\"text-align:center\">Week <em>48</em></h2>\n\
+         <p style=\"text-align:right\">right</p>\n<p>left</p>\n<p><br></p>\n\
+         <p><strong>small</strong></p>\n<p>end</p>\n"
+    );
+    // Read again (the composer's parts are put together, then built): unchanged.
+    assert_eq!(editor_html_for_tests(&fragment), fragment);
+    let mail = mail_html(editor);
+    assert_allowlisted(&mail);
+    assert!(
+        mail.contains(
+            "<h2 style=\"margin:0 0 0.5em 0;font-size:1.3em;font-weight:bold;text-align:center\">"
+        ),
+        "{mail}"
+    );
+    assert!(mail.contains("text-align:right\">right</p>"), "{mail}");
+    // The text part keeps the words.
+    let text = crate::html_to_text(&mail);
+    assert!(
+        text.contains("Plan") && text.contains("Week 48") && text.contains("right"),
+        "{text}"
+    );
+    // A received mail's headings and alignment stay simplified when quoted or opened.
+    assert_eq!(
+        editor_html("<h1 align=\"center\">Hi</h1><p style=\"text-align:center\">x</p>"),
+        "<p><strong>Hi</strong></p>\n<p>x</p>\n"
     );
 }

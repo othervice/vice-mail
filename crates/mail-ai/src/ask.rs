@@ -249,6 +249,49 @@ pub struct AskRequest<'a> {
     pub context: Context<'a>,
 }
 
+/// Step 1 on its own, for callers that show every transfer before it starts: sends the
+/// question (no mail content) and checks the proposed query.
+pub async fn send_query(
+    provider: &dyn AiProvider,
+    prepared: &PreparedQuery,
+    context: &Context<'_>,
+    cancel: &CancelToken,
+    progress: impl FnMut(usize) + Send,
+) -> Result<QueryPlan, AiError> {
+    let stream = provider.chat(&prepared.request, cancel).await?;
+    let text = collect(stream, progress).await?.into_text()?;
+    parse_query(&text, context)
+}
+
+/// Step 3 on its own: sends the candidates and returns the checked outcome and the number of
+/// statements dropped for lack of a valid reference. Fails with [`AiError::NotPermitted`]
+/// (nothing sent) if a candidate's account has no cloud permission and the provider is not
+/// local; callers filter first ([`partition_candidates`]).
+pub async fn send_answer(
+    provider: &dyn AiProvider,
+    prepared: &PreparedAnswer,
+    cloud: &dyn CloudPolicy,
+    cancel: &CancelToken,
+    progress: impl FnMut(usize) + Send,
+) -> Result<(AnswerOutcome, u32), AiError> {
+    policy::check(provider.info().locality, &prepared.info.accounts, cloud)?;
+    let stream = provider.chat(&prepared.request, cancel).await?;
+    let text = collect(stream, progress).await?.into_text()?;
+    parse_answer(&text, &prepared.sent)
+}
+
+/// Splits candidates into those the provider may see and those it may not (accounts without
+/// cloud permission, for a provider that is not local).
+pub fn partition_candidates(
+    candidates: Vec<MailInput>,
+    locality: crate::Locality,
+    cloud: &dyn CloudPolicy,
+) -> (Vec<MailInput>, Vec<MailInput>) {
+    candidates
+        .into_iter()
+        .partition(|mail| policy::allowed(locality, &mail.account, cloud))
+}
+
 /// The whole flow. Sends at most two requests: the query step (question only) and, if the
 /// search found permitted candidates, the answer step.
 pub async fn ask(

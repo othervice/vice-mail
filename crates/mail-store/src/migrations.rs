@@ -22,6 +22,11 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0008_mcp.sql")),
     // Stage 11: settings sync records, change capture, device state (decisions 0014, 0022).
     M::up(include_str!("../migrations/0009_settings_sync.sql")),
+    // Stage 10: several HTML signatures, templates, default signatures per identity, merged
+    // contacts and dismissed duplicate pairs (decision 0023).
+    M::up(include_str!("../migrations/0010_composer.sql")),
+    // Stage 13: AI request log and dismissed open-reply hints (decision 0024).
+    M::up(include_str!("../migrations/0011_ai.sql")),
 ];
 
 /// All migrations this build knows.

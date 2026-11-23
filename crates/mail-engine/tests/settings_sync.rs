@@ -1045,6 +1045,7 @@ async fn an_outage_of_the_sync_account_leaves_reading_and_sending_alone() {
                 include_quote: false,
                 quote_position: mail_model::QuotePosition::Above,
                 include_signature: false,
+                signature_id: None,
             },
         )
         .await
