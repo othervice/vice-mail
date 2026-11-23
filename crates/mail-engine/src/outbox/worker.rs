@@ -9,15 +9,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mail_model::{
-    Access, AccountId, BackendError, ConnectConfig, CoreError, MailWriter, WriteConnector,
-};
+use mail_model::{Access, AccountId, BackendError, CoreError, MailWriter, WriteConnector};
 use mail_store::{StoreError, StoredAccount};
 use tokio::sync::{Notify, watch};
 
 use super::Shared;
 use super::exec::{self, Connection, StepError};
-use crate::credentials::CredentialRef;
 use crate::sync_state::{Jitter, SplitMix64};
 
 /// Longest wait for LOGOUT when the connection is closed on purpose.
@@ -290,14 +287,17 @@ async fn connect<C: WriteConnector>(
     shared: &Shared<C>,
     account: &StoredAccount,
 ) -> Result<C::Writer, CoreError> {
-    let key = CredentialRef::parse(&account.credential_ref)?;
-    let password = shared.credentials.get(&key).await?.ok_or_else(|| {
-        CoreError::Keychain("no password stored for this account; enter it again".into())
-    })?;
-    let mut config = ConnectConfig::new(&account.imap, password, Access::ReadWrite);
-    config.timeouts = shared.config.timeouts;
-    config.extra_root_ca = shared.config.extra_root_ca.clone();
-    Ok(shared.connector.connect_writer(&config).await?)
+    // Stage 14: a password or an access token (renewed once if the server rejects it).
+    shared
+        .credentials
+        .with_login(&account.credential_ref, &account.imap, true, |login| {
+            let mut config = login.config(&account.imap, Access::ReadWrite);
+            config.timeouts = shared.config.timeouts;
+            config.extra_root_ca = shared.config.extra_root_ca.clone();
+            let connector = &shared.connector;
+            async move { connector.connect_writer(&config).await }
+        })
+        .await
 }
 
 async fn logout<W: MailWriter>(writer: W) {

@@ -6,7 +6,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use mail_model::{
-    AccountId, AccountStatus, CoreError, CoreEvent, MailConnector, MailboxId, Secret,
+    AccountId, AccountStatus, CoreError, CoreEvent, LoginAuth, MailConnector, MailboxId, Secret,
 };
 use mail_store::StoredAccount;
 use tokio::sync::{mpsc, watch};
@@ -15,7 +15,7 @@ use tokio::time::Instant;
 
 use super::session::{Session, SessionEvent, SessionOutput};
 use super::{Env, emit};
-use crate::credentials::CredentialRef;
+use crate::credentials::Login;
 use crate::sync_state::{SplitMix64, SyncAction, SyncEvent, SyncMachine};
 
 /// What the app tells an account's supervisor.
@@ -163,6 +163,9 @@ impl<C: MailConnector + 'static> Supervisor<C> {
         let mut jitter = SplitMix64::from_entropy();
         let mut session: Option<Session> = None;
         let mut retry_at: Option<Instant> = None;
+        // Stage 14: whether the access token was renewed after a rejection since the last
+        // successful connection (only once).
+        let mut token_renewed = false;
         let mut action = machine.handle(SyncEvent::Start, self.env.clock.now_ms(), &mut jitter);
         self.publish(&machine);
 
@@ -171,11 +174,14 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                 SyncAction::Connect => {
                     retry_at = None;
                     drop(session.take());
-                    match self.password().await {
-                        Ok(password) => {
+                    match self.login().await {
+                        Ok(login) => {
                             // Read-only also when writes are on: the outbox writes.
-                            let config =
-                                self.env.config.connect_config(&self.account.imap, password);
+                            let mut config = self
+                                .env
+                                .config
+                                .connect_config(&self.account.imap, login.secret);
+                            config.auth = login.auth;
                             session = Some(Session::start(&self.env, id, config));
                         }
                         Err(err) => {
@@ -233,6 +239,7 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                 },
                 output = next_output(&mut session) => match output {
                     SessionOutput::Event(SessionEvent::Connected { idle }) => {
+                        token_renewed = false;
                         if let Some(session) = session.as_mut() {
                             session.start_watchers(&self.env, idle);
                         }
@@ -250,6 +257,17 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                         SyncEvent::PassCompleted
                     }
                     SessionOutput::Event(SessionEvent::Changed) => SyncEvent::Changed,
+                    // Stage 14: a rejected access token is renewed once, at once.
+                    SessionOutput::Ended(err)
+                        if !token_renewed
+                            && err.code() == mail_model::ErrorCode::AuthFailed
+                            && self.env.credentials.login_rejected(&self.account.credential_ref) =>
+                    {
+                        drop(session.take());
+                        token_renewed = true;
+                        tracing::info!(account = %id, "the server rejected the access token; renewing it");
+                        SyncEvent::CredentialsChanged
+                    }
                     SessionOutput::Ended(err) => {
                         drop(session.take());
                         tracing::warn!(account = %id, code = ?err.code(), error = %err, "sync connection failed");
@@ -266,21 +284,24 @@ impl<C: MailConnector + 'static> Supervisor<C> {
         }
     }
 
-    /// The password: the one handed in, or the keychain's.
-    async fn password(&mut self) -> Result<Secret<String>, CoreError> {
+    /// The login: the password handed in or the keychain's (kept), or (stage 14) an access
+    /// token, asked for at every connect so it is always valid.
+    async fn login(&mut self) -> Result<Login, CoreError> {
         if let Some(password) = &self.password {
-            return Ok(password.clone());
+            return Ok(Login {
+                secret: password.clone(),
+                auth: LoginAuth::Password,
+            });
         }
-        let key = CredentialRef::parse(&self.account.credential_ref)?;
-        match self.env.credentials.get(&key).await? {
-            Some(password) => {
-                self.password = Some(password.clone());
-                Ok(password)
-            }
-            None => Err(CoreError::Keychain(
-                "no password stored for this account; enter it again".into(),
-            )),
+        let login = self
+            .env
+            .credentials
+            .login(&self.account.credential_ref, &self.account.imap, true)
+            .await?;
+        if login.auth == LoginAuth::Password {
+            self.password = Some(login.secret.clone());
         }
+        Ok(login)
     }
 
     /// Publishes the machine's status if it changed (the UI gets the complete status).

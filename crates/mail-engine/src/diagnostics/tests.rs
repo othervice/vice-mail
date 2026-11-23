@@ -31,6 +31,11 @@ const CONTACT: &str = "charles@babbage.example";
 const CONTACT_NAME: &str = "Charles Babbage";
 const LOGGED_TOKEN: &str = "ya29.a0AfH6SMBx3pQ-very-secret-oauth-token";
 const LOGGED_KEY: &str = "sk-live-0123456789abcdefABCDEF";
+// Stage 14: an account that signs in with Google; its refresh token in the keychain and an
+// access token in memory and in a careless log line.
+const OAUTH_EMAIL: &str = "grace.hopper@gmail.com";
+const REFRESH_TOKEN: &str = "1//0gRefresh-Token-Of-Grace-Hopper-COBOL";
+const ACCESS_TOKEN: &str = "ya29.a0Access-Token-Of-Grace-Hopper-1959";
 
 fn env(log_dir: Option<PathBuf>) -> DiagnosticsEnv {
     DiagnosticsEnv {
@@ -159,7 +164,38 @@ async fn seed(core: &AppCore) -> AccountId {
         .store_body(MessageId(DATE), raw.into_bytes())
         .await
         .expect("body");
+    seed_oauth(core).await;
     id
+}
+
+/// Stage 14: a second account that signs in with Google, with its tokens.
+async fn seed_oauth(core: &AppCore) {
+    let id: AccountId = "00000000-0000-4000-8000-000000001906".parse().expect("id");
+    let key = CredentialRef::for_oauth_account(mail_model::OAuthProvider::Google, id);
+    let server = |host: &str| ServerSettings {
+        host: host.into(),
+        port: 993,
+        security: Security::Tls,
+        username: OAUTH_EMAIL.into(),
+    };
+    core.store_for_tests()
+        .insert_account(NewAccount {
+            id,
+            email: OAUTH_EMAIL.into(),
+            display_name: String::new(),
+            imap: server("imap.gmail.com"),
+            smtp: server("smtp.gmail.com"),
+            credential_ref: key.to_string(),
+        })
+        .await
+        .expect("account");
+    crate::oauth::store::save(
+        core.credentials_ref(),
+        &key,
+        &Secret::new(REFRESH_TOKEN.to_owned()),
+    )
+    .await
+    .expect("keychain");
 }
 
 /// Log lines as a careless call site might write them: addresses, tokens, a password, the
@@ -190,6 +226,8 @@ fn leaky_lines() -> Vec<String> {
         format!("2026-11-23T08:00:05.000001Z  WARN main mail_engine::reading::files: copy could not be removed path=/tmp/attachments/{ATTACHMENT} err=denied"),
         format!("2026-11-23T08:00:06.000001Z  WARN main mail_engine::sync: mailbox not found: {FOLDER}"),
         format!("2026-11-23T08:00:07.000001Z  WARN main mail_engine::credentials: login password={PASSWORD}"),
+        format!("2026-11-23T08:00:07.500001Z DEBUG main mail_engine::oauth: token refresh_token={REFRESH_TOKEN} access_token={ACCESS_TOKEN}"),
+        format!("2026-11-23T08:00:07.600001Z  WARN main mail_imap: AUTHENTICATE XOAUTH2 user={OAUTH_EMAIL}\x01auth=Bearer {ACCESS_TOKEN}"),
         "2026-11-23T08:00:08.000001Z  INFO main mail_engine::sync: sync-pass-marker account=00000000-0000-4000-8000-000000001815".into(),
     ]
 }
@@ -234,6 +272,12 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         "a0AfH6SMBx3pQ",
         LOGGED_KEY,
         "0123456789abcdef",
+        OAUTH_EMAIL,
+        "grace.hopper",
+        REFRESH_TOKEN,
+        "Refresh-Token-Of",
+        ACCESS_TOKEN,
+        "Access-Token-Of",
     ] {
         assert!(
             !text.to_lowercase().contains(&secret.to_lowercase()),
@@ -251,8 +295,9 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         &format!("architecture: {}", std::env::consts::ARCH),
         "locale: de-DE",
         "web view: 621.1.15",
-        "count: 1",
-        &format!("account 1 ({account}):"),
+        "count: 2",
+        &format!("({account}):"),
+        "sign-in: Google sign-in (refresh token in the system keychain)",
         "provider: other",
         "sign-in: password (system keychain)",
         "incoming: tls, port 993",
@@ -261,7 +306,7 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         "folders: 2 (1 without a role, 1 fully synced)",
         "messages: 1",
         "stored bodies: 1",
-        "  account: 1",
+        "  account: 2",
         "  message: 1",
         "theme: system",
         "settings sync: off",

@@ -25,6 +25,7 @@ import {
   type ServersDraft,
 } from "./serverDraft";
 import { ServerFields } from "./ServerFields";
+import { OAuthSetup, oauthProviderFor } from "./OAuthSignIn";
 
 /** Waits until typing pauses before the local provider lookup runs. */
 function useDebounced<T>(value: T, delay: number): T {
@@ -119,6 +120,10 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   // Stage 14: Gmail also by its server (Google Workspace domains, servers typed in by hand).
   const providerHint =
     suggestion?.providerHint ?? (online.data?.providerHint || null) ?? (isGmailHost(servers.imap.host) ? "gmail" : null);
+  // Stage 14 (decision 0042): sign-in with Microsoft or Google where the address belongs to
+  // them. Microsoft accepts no password at all, so its accounts have no password field.
+  const oauthProvider = oauthProviderFor(providerHint, servers.imap.host);
+  const passwordless = oauthProvider === "microsoft";
   const lookupSettled = isEmail(email) && debouncedEmail === email.trim() && (known.isSuccess || known.isError);
   const lookupDone = lookupSettled && known.isSuccess;
   // Address first: the server part appears once the lookup for it has answered.
@@ -224,25 +229,39 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
             autoComplete="name"
             data-testid="setup-name"
           />
-          <TextField
-            type="password"
-            label={t("settings.accounts.setup.password")}
-            description={t("settings.accounts.setup.passwordDescription")}
-            value={password}
-            onChange={(next) => {
-              setPassword(next);
-              changed();
-            }}
-            required
-            error={attempted && !password ? t("settings.accounts.setup.required") : null}
-            data-testid="setup-password"
-          />
+          {!passwordless && (
+            <TextField
+              type="password"
+              label={t("settings.accounts.setup.password")}
+              description={t("settings.accounts.setup.passwordDescription")}
+              value={password}
+              onChange={(next) => {
+                setPassword(next);
+                changed();
+              }}
+              required
+              error={attempted && !password ? t("settings.accounts.setup.required") : null}
+              data-testid="setup-password"
+            />
+          )}
         </div>
 
         {providerHint && (
           <Notice tone="warning" title={t(`settings.accounts.setup.providerHint.${providerHint}.title`)} data-testid="provider-hint">
             <p>{t(`settings.accounts.setup.providerHint.${providerHint}.body`)}</p>
           </Notice>
+        )}
+
+        {oauthProvider && serversVisible && (
+          <OAuthSetup
+            provider={oauthProvider}
+            settings={settings}
+            onAdded={(account) => {
+              selectAccount(account.id);
+              showMailView("inbox");
+              embedded?.onAdded(account);
+            }}
+          />
         )}
 
         {offerOnline && (
@@ -337,12 +356,16 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || (attempted && !ready)} data-testid="setup-submit">
-            {add.isPending ? t("settings.accounts.setup.adding") : t("settings.accounts.setup.submit")}
-          </Button>
-          <Button variant="secondary" onClick={runTest} disabled={busy || (attempted && !ready)} data-testid="setup-test">
-            {test.isPending ? t("settings.accounts.setup.testing") : t("settings.accounts.setup.test")}
-          </Button>
+          {!passwordless && (
+            <>
+              <Button type="submit" disabled={busy || (attempted && !ready)} data-testid="setup-submit">
+                {add.isPending ? t("settings.accounts.setup.adding") : t("settings.accounts.setup.submit")}
+              </Button>
+              <Button variant="secondary" onClick={runTest} disabled={busy || (attempted && !ready)} data-testid="setup-test">
+                {test.isPending ? t("settings.accounts.setup.testing") : t("settings.accounts.setup.test")}
+              </Button>
+            </>
+          )}
           {!embedded && (
             <Button
               variant="quiet"

@@ -12,6 +12,12 @@
 //! keychain, which can show system dialogs). The engine uses the [`Credentials`] handle, which
 //! runs every call on a blocking thread.
 //!
+//! Stage 14 (decision 0042): accounts that sign in with Microsoft or Google have a reference
+//! `oauth:<provider>:<id>`; their entry holds the refresh token (in pieces if it is long, see
+//! `oauth::store`), never a password. [`Credentials::get`] refuses such entries, so a token can
+//! never be sent as a password; connections ask [`Credentials::login`], which hands out an
+//! access token for the provider's own servers only.
+//!
 //! No secret ever reaches a log line or an error text: values are only handled as
 //! [`Secret<String>`], and keychain errors are mapped to [`CoreError::Keychain`] without the
 //! data some platform errors carry (see [`keychain_error`]).
@@ -20,7 +26,11 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use mail_model::{AccountId, CoreError, Secret};
+use mail_model::{
+    AccountId, CoreError, LoginAuth, OAuthError, OAuthProvider, Secret, ServerSettings,
+};
+
+use crate::oauth::OAuthService;
 
 /// Longest accepted [`CredentialRef`]. Windows allows 32767 characters for a generic target
 /// name and 513 for the user name; an account UUID has 36.
@@ -44,6 +54,26 @@ impl CredentialRef {
     /// The entry that holds the password of an account.
     pub fn for_account(id: AccountId) -> Self {
         Self(id.to_string())
+    }
+
+    /// Stage 14 (decision 0042): the entry of an account that signs in with `provider`,
+    /// `oauth:<provider>:<uuid>`. It holds the refresh token.
+    pub fn for_oauth_account(provider: OAuthProvider, id: AccountId) -> Self {
+        Self(format!(
+            "{}{}:{id}",
+            mail_model::OAUTH_CREDENTIAL_PREFIX,
+            provider.as_str()
+        ))
+    }
+
+    /// The provider whose sign-in this entry holds; `None` for a password or another secret.
+    pub fn oauth_provider(&self) -> Option<OAuthProvider> {
+        mail_model::oauth_provider_of_credential_ref(&self.0)
+    }
+
+    /// Piece `n` (1…) of a long refresh token (`oauth::store`).
+    pub(crate) fn piece(&self, n: usize) -> Self {
+        Self(format!("{}#{n}", self.0))
     }
 
     /// Stage 12: the entry that holds the token of an AI client (MCP), `mcp-client:<id>`. The
@@ -110,6 +140,28 @@ pub trait SecretStore: Send + Sync + 'static {
 #[derive(Clone)]
 pub struct Credentials {
     store: Arc<dyn SecretStore>,
+    /// Stage 14: sign-in with Microsoft and Google; `None` where no provider is configured.
+    oauth: Option<Arc<OAuthService>>,
+}
+
+/// What a connection logs in with: a password or an access token (`Debug` shows neither).
+#[derive(Debug)]
+pub(crate) struct Login {
+    pub secret: Secret<String>,
+    pub auth: LoginAuth,
+}
+
+impl Login {
+    /// The connection settings for `server` with this login (default limits, no extra root).
+    pub(crate) fn config(
+        self,
+        server: &ServerSettings,
+        access: mail_model::Access,
+    ) -> mail_model::ConnectConfig {
+        let mut config = mail_model::ConnectConfig::new(server, self.secret, access);
+        config.auth = self.auth;
+        config
+    }
 }
 
 impl fmt::Debug for Credentials {
@@ -122,15 +174,123 @@ impl Credentials {
     pub fn new(store: impl SecretStore) -> Self {
         Self {
             store: Arc::new(store),
+            oauth: None,
         }
     }
 
     pub fn from_arc(store: Arc<dyn SecretStore>) -> Self {
-        Self { store }
+        Self { store, oauth: None }
     }
 
-    /// Stores or replaces the secret of `key`.
+    /// Stage 14: with sign-in through these providers (the shell passes the build's profiles).
+    #[must_use]
+    pub fn with_oauth(mut self, service: Arc<OAuthService>) -> Self {
+        self.oauth = Some(service);
+        self
+    }
+
+    pub(crate) fn oauth(&self) -> Option<&Arc<OAuthService>> {
+        self.oauth.as_ref()
+    }
+
+    /// Stage 14: what a connection to `server` logs in with. A password account gets its
+    /// password; an account that signs in with a provider gets a valid access token, and only
+    /// for that provider's IMAP (`imap`) or SMTP servers.
+    pub(crate) async fn login(
+        &self,
+        credential_ref: &str,
+        server: &ServerSettings,
+        imap: bool,
+    ) -> Result<Login, CoreError> {
+        let key = CredentialRef::parse(credential_ref)?;
+        let Some(provider) = key.oauth_provider() else {
+            let password = self.get(&key).await?.ok_or_else(|| {
+                CoreError::Keychain("no password stored for this account; enter it again".into())
+            })?;
+            return Ok(Login {
+                secret: password,
+                auth: LoginAuth::Password,
+            });
+        };
+        let service = self
+            .oauth
+            .as_ref()
+            .ok_or(OAuthError::Unavailable(provider))?;
+        let profile = service.profile(provider)?;
+        if !profile.allows_host(&server.host, imap) {
+            return Err(OAuthError::Failed(format!(
+                "{} is not a {} server; the sign-in is only used with the provider's servers",
+                server.host,
+                provider.name()
+            ))
+            .into());
+        }
+        let token = crate::oauth::tokens::access_token(service, self, &key, provider).await?;
+        Ok(Login {
+            secret: token,
+            auth: LoginAuth::Bearer,
+        })
+    }
+
+    /// Stage 14: runs `connect` with the account's login; when the server rejects an access
+    /// token, renews it and runs `connect` once more (the token may have been revoked or ended
+    /// early). A rejected password is returned as it is.
+    pub(crate) async fn with_login<T, F, Fut>(
+        &self,
+        credential_ref: &str,
+        server: &ServerSettings,
+        imap: bool,
+        mut connect: F,
+    ) -> Result<T, CoreError>
+    where
+        F: FnMut(Login) -> Fut,
+        Fut: std::future::Future<Output = Result<T, mail_model::BackendError>>,
+    {
+        let login = self.login(credential_ref, server, imap).await?;
+        let bearer = login.auth == LoginAuth::Bearer;
+        match connect(login).await {
+            Err(mail_model::BackendError::AuthFailed(_))
+                if bearer && self.login_rejected(credential_ref) =>
+            {
+                tracing::info!("the server rejected the access token; renewing it once");
+                let login = self.login(credential_ref, server, imap).await?;
+                Ok(connect(login).await?)
+            }
+            other => Ok(other?),
+        }
+    }
+
+    /// Stage 14: a server rejected the access token of `credential_ref`; the next
+    /// [`Credentials::login`] renews it. Nothing happens for a password.
+    pub(crate) fn login_rejected(&self, credential_ref: &str) -> bool {
+        let Ok(key) = CredentialRef::parse(credential_ref) else {
+            return false;
+        };
+        match (&self.oauth, key.oauth_provider()) {
+            (Some(service), Some(_)) => {
+                service.tokens.reject(&key);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Stores or replaces the secret of `key`. Not for sign-in entries (`oauth::store`).
     pub async fn set(&self, key: &CredentialRef, secret: Secret<String>) -> Result<(), CoreError> {
+        if key.oauth_provider().is_some() {
+            return Err(CoreError::InvalidArgument(
+                "this account signs in with its provider; it has no password".into(),
+            ));
+        }
+        self.set_raw(key, secret).await
+    }
+
+    /// [`Credentials::set`] for any entry, sign-in entries included.
+    pub(crate) async fn set_raw(
+        &self,
+        key: &CredentialRef,
+        secret: Secret<String>,
+    ) -> Result<(), CoreError> {
         let result = self
             .run(key, move |store, key| store.set(key, &secret))
             .await;
@@ -143,8 +303,22 @@ impl Credentials {
         result
     }
 
-    /// The secret of `key`, `None` if the keychain has no entry for it.
+    /// The secret of `key`, `None` if the keychain has no entry for it. Refuses the entry of
+    /// an account that signs in with a provider: its refresh token is never a password.
     pub async fn get(&self, key: &CredentialRef) -> Result<Option<Secret<String>>, CoreError> {
+        if key.oauth_provider().is_some() {
+            return Err(CoreError::Keychain(
+                "this account signs in with its provider and has no password".into(),
+            ));
+        }
+        self.get_raw(key).await
+    }
+
+    /// [`Credentials::get`] for any entry (`oauth::store` reads its own).
+    pub(crate) async fn get_raw(
+        &self,
+        key: &CredentialRef,
+    ) -> Result<Option<Secret<String>>, CoreError> {
         let result = self.run(key, |store, key| store.get(key)).await;
         match &result {
             Ok(found) => {
@@ -157,8 +331,23 @@ impl Credentials {
         result
     }
 
-    /// Removes the entry of `key`; `false` if there was none.
+    /// Removes the entry of `key`; `false` if there was none. For a sign-in entry also its
+    /// pieces and the access token in memory (the provider is not asked here; see
+    /// `AppCore::remove_account`, which revokes first).
     pub async fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError> {
+        if key.oauth_provider().is_some() {
+            for n in 1..crate::oauth::store::MAX_PIECES {
+                self.delete_raw(&key.piece(n)).await?;
+            }
+            if let Some(service) = &self.oauth {
+                service.tokens.forget(key);
+            }
+        }
+        self.delete_raw(key).await
+    }
+
+    /// Removes exactly the entry of `key`.
+    pub(crate) async fn delete_raw(&self, key: &CredentialRef) -> Result<bool, CoreError> {
         let result = self.run(key, |store, key| store.delete(key)).await;
         match &result {
             Ok(existed) => tracing::debug!(credential = %key, existed, "keychain entry deleted"),
@@ -362,6 +551,20 @@ impl MemorySecretStore {
 
     pub fn contains(&self, key: &CredentialRef) -> bool {
         self.lock().contains_key(key)
+    }
+
+    /// Length in characters of the longest stored secret (stage 14: pieces of long tokens).
+    pub fn longest(&self) -> usize {
+        self.lock()
+            .values()
+            .map(|s| s.expose_secret().chars().count())
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Every stored secret, for leak checks in tests.
+    pub fn secrets(&self) -> Vec<Secret<String>> {
+        self.lock().values().cloned().collect()
     }
 
     fn check(&self, op: SecretOp) -> Result<(), CoreError> {

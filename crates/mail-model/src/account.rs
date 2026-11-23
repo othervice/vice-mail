@@ -151,6 +151,9 @@ pub struct Account {
     pub color: AccountColor,
     pub imap: ServerSettings,
     pub smtp: ServerSettings,
+    /// Stage 14 (decision 0042): the provider this account signs in with instead of a
+    /// password (Microsoft, Google); `null` for a password.
+    pub oauth: Option<crate::OAuthProvider>,
     /// `false` for every new account. Only the user turns it on (stage 4); until then the
     /// adapter opens mailboxes read-only and refuses every writing command.
     pub writes_enabled: bool,

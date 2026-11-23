@@ -576,6 +576,8 @@ impl<C: Connector> AppCore<C> {
             reading.forget_account(id);
         }
         let key = CredentialRef::parse(&account.credential_ref)?;
+        // Stage 14: the provider forgets the app's permission where it offers that (Google).
+        crate::oauth::revoke(&self.inner.credentials, &key).await;
         if let Err(err) = self.inner.credentials.delete(&key).await {
             self.spawn_sync(account, None);
             return Err(err);
@@ -619,6 +621,15 @@ impl<C: Connector> AppCore<C> {
             .account(id)
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {id}")))?;
+        if let Some(provider) =
+            mail_model::oauth_provider_of_credential_ref(&account.credential_ref)
+        {
+            // Stage 14: such an account has no password; it signs in again instead.
+            return Err(CoreError::InvalidArgument(format!(
+                "this account signs in with {}; sign in again instead",
+                provider.name()
+            )));
+        }
         self.check_login(&account.imap, password.clone()).await?;
         let _admin = self.inner.admin.lock().await;
         let key = CredentialRef::parse(&account.credential_ref)?;
@@ -1027,7 +1038,7 @@ impl<C: Connector> AppCore<C> {
         }
     }
 
-    fn spawn_sync(&self, account: StoredAccount, password: Option<Secret<String>>) {
+    pub(crate) fn spawn_sync(&self, account: StoredAccount, password: Option<Secret<String>>) {
         let Ok(store) = self.store() else { return };
         let env = Env {
             store: store.clone(),
@@ -1052,8 +1063,20 @@ impl<C: Connector> AppCore<C> {
         server: &ServerSettings,
         password: Secret<String>,
     ) -> Result<Capabilities, CoreError> {
+        self.check_login_with(server, password, mail_model::LoginAuth::Password)
+            .await
+    }
+
+    /// [`AppCore::check_login`] with a password or (stage 14) an access token.
+    pub(crate) async fn check_login_with(
+        &self,
+        server: &ServerSettings,
+        password: Secret<String>,
+        auth: mail_model::LoginAuth,
+    ) -> Result<Capabilities, CoreError> {
         // Always read-only, whatever the account allows later.
-        let config = self.inner.sync.connect_config(server, password);
+        let mut config = self.inner.sync.connect_config(server, password);
+        config.auth = auth;
         let connector = Arc::clone(&self.inner.connector);
         let task = tokio::spawn(async move {
             let backend = connector.connect(&config).await?;
@@ -1179,6 +1202,11 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn credentials_ref(&self) -> &Credentials {
         &self.inner.credentials
+    }
+
+    /// Stage 14: serialises adding and removing accounts, as for passwords.
+    pub(crate) async fn admin_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.inner.admin.lock().await
     }
 
     // Stage 11 (`crate::settings_sync::service`) works through these.

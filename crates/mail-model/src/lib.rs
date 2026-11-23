@@ -150,7 +150,10 @@ pub use message::{
     Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_MESSAGES_BY_IDS, MAX_SORT_DATE,
     MessageActivity, MessageHeader, MessageListItem, MessagePage, sort_date,
 };
-pub use oauth::LoginAuth;
+pub use oauth::{
+    LoginAuth, MAX_OAUTH_PAGE_TEXT_CHARS, OAUTH_CREDENTIAL_PREFIX, OAuthAvailability, OAuthError,
+    OAuthPageTexts, OAuthProvider, oauth_provider_of_credential_ref,
+};
 pub use outbox::{
     ActionError, ActionKind, ActionResult, AppendSource, BatchId, ConflictReason, Flag,
     MAX_ACTION_MESSAGES, MAX_KEYWORD_LEN, MailAction, MessageRef, OperationId, OperationInfo,

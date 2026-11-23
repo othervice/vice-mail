@@ -26,6 +26,8 @@ import { createAttachmentsFake, type AttachmentsFakeOptions, type AttachmentsFak
 import { createUpdatesFake, type UpdatesFakeOptions, type UpdatesFakeState } from "./updates";
 // Stage 15 (decision 0044): the guided first start.
 import { createFirstStartFake, type FirstStartFakeOptions, type FirstStartFakeState } from "./firstStart";
+// Stage 14 (decision 0042): sign-in with Microsoft and Google.
+import { createOAuthFake, type OAuthFakeOptions, type OAuthFakeState } from "./oauth";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -92,6 +94,7 @@ export function makeAccount(overrides: Partial<Account> = {}): Account {
     color: 0,
     imap: server,
     smtp: { ...server, port: 1465 },
+    oauth: null,
     writesEnabled: false,
     status: IDLE,
     ...overrides,
@@ -331,6 +334,8 @@ interface FakeCoreOptions {
   conversations?: ConversationFakeOptions;
   /** Stage 15 (decision 0044): the guided first start (default: ended, the frame shows). */
   firstStart?: FirstStartFakeOptions;
+  /** Stage 14 (decision 0042): sign-in with Microsoft and Google (default: not in this build). */
+  oauth?: OAuthFakeOptions;
 }
 
 export interface FakeCore {
@@ -387,6 +392,8 @@ export interface FakeCore {
   readonly updates: UpdatesFakeState;
   /** Stage 15 (decision 0044): the first start as the fake holds it now. */
   readonly firstStart: FirstStartFakeState;
+  /** Stage 14 (decision 0042): sign-ins the UI started. */
+  readonly oauth: OAuthFakeState;
 }
 
 /**
@@ -798,6 +805,28 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   const updatesFake = createUpdatesFake(options.updates ?? {}, { reject: (code) => reject(code) });
   // Stage 15 (decision 0044): the guided first start.
   const firstStartFake = createFirstStartFake(options.firstStart ?? {}, { accounts: () => accounts });
+  // Stage 14 (decision 0042): the account appears read-only, like one added with a password.
+  const oauthFake = createOAuthFake(options.oauth ?? {}, {
+    add: (settings, provider) => {
+      const account = makeAccount({
+        id: "44444444-4444-4444-8444-444444444444",
+        email: settings.email,
+        displayName: settings.displayName,
+        color: accounts.length % 8,
+        imap: settings.imap,
+        smtp: settings.smtp,
+        oauth: provider,
+        writesEnabled: false,
+        status: { state: "connecting", progress: null, error: null, retryAt: null, lastSyncAt: null },
+      });
+      accounts.push(account);
+      return account;
+    },
+    signedIn: (accountId) => {
+      const account = accounts.find((a) => a.id === accountId);
+      if (account) account.status = IDLE;
+    },
+  });
 
   // Stage 16: rows carry `readingList` wherever the fake core lists them (as the core does).
   const markReadingList = (answer: unknown): unknown => {
@@ -1006,6 +1035,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 15 (decision 0044): the guided first start.
           const firstStartAnswer = firstStartFake.handle(cmd, args);
           if (firstStartAnswer !== undefined) return firstStartAnswer;
+          // Stage 14 (decision 0042): sign-in with Microsoft and Google.
+          const oauthAnswer = oauthFake.handle(cmd, args);
+          if (oauthAnswer !== undefined) return oauthAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -1085,5 +1117,6 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     attachments: attachmentsFake.state,
     updates: updatesFake.state,
     firstStart: firstStartFake.state,
+    oauth: oauthFake.state,
   };
 }

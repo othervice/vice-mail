@@ -78,6 +78,8 @@ pub(crate) struct ServerState {
     pub fetched: usize,
     /// Access mode of every read connect attempt (sync, IDLE, reading, login check).
     pub access: Vec<Access>,
+    /// Stage 14: how every connect attempt logged in (password or access token).
+    pub auths: Vec<mail_model::LoginAuth>,
     /// Writer connections tried and opened (the outbox), and the writing commands they sent,
     /// in order.
     pub writer_attempts: usize,
@@ -123,6 +125,7 @@ impl FakeServer {
             logins: 0,
             fetched: 0,
             access: Vec::new(),
+            auths: Vec::new(),
             writer_attempts: 0,
             writer_logins: 0,
             writes: Vec::new(),
@@ -418,6 +421,7 @@ impl FakeConnector {
     fn open(&self, config: &ConnectConfig, writer: bool) -> Result<FakeBackend, BackendError> {
         let server = Arc::clone(&self.0);
         let (capabilities, generation) = server.with(|s| {
+            s.auths.push(config.auth);
             if writer {
                 s.writer_attempts += 1;
                 if let Some(err) = s.faults.writer_connect.clone().or(s.faults.connect.clone()) {

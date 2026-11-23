@@ -1024,8 +1024,8 @@ export const de: Translation = {
             body: "Erstelle in den Fastmail-Einstellungen unter Privacy & Security ein App-Passwort mit Zugriff auf IMAP und SMTP und gib es oben als Passwort ein.",
           },
           outlook: {
-            title: "Outlook.com-Konten lassen sich noch nicht hinzufügen",
-            body: "Microsoft lässt Apps nur über die eigene Anmeldeseite (OAuth) herein, nicht mit einem Passwort. Das lernt die App in einer späteren Version; bis dahin schlägt die Anmeldung hier fehl.",
+            title: "Outlook.com braucht die Anmeldung mit Microsoft",
+            body: "Microsoft lässt Apps nur über die eigene Anmeldeseite herein, nicht mit einem Passwort, deshalb gibt es hier kein Passwortfeld.",
           },
           proton: {
             title: "Proton Mail geht nur über Proton Mail Bridge",
@@ -1054,6 +1054,41 @@ export const de: Translation = {
         adding: "Fügt hinzu …",
         addFailed: "Das Konto konnte nicht hinzugefügt werden.",
         cancel: "Abbrechen",
+      },
+      // Stufe 14 (Entscheidung 0042): Anmeldung bei Microsoft und Google im System-Browser.
+      oauth: {
+        microsoft: {
+          title: "Mit Microsoft anmelden",
+          body: "Outlook.com, Hotmail und Microsoft 365 lassen Mail-Programme nur über Microsofts eigene Anmeldeseite herein. Die App öffnet sie in deinem Browser; dort meldest du dich an und erlaubst den Zugriff auf deine Mails. Dein Microsoft-Passwort sieht die App nie.",
+          button: "Mit Microsoft anmelden",
+          waiting: "Warte auf die Anmeldung bei Microsoft",
+          signedIn: "Mit Microsoft angemeldet",
+          unavailableTitle: "Diese Version der App kann sich nicht bei Microsoft anmelden",
+          unavailableBody: "Microsoft-Konten brauchen eine Anmeldung, die in diesem Build fehlt (er wurde ohne Microsoft-App-ID gebaut). Mit einem Passwort funktionieren diese Konten nicht.",
+        },
+        google: {
+          title: "Oder mit Google anmelden",
+          body: "Statt eines App-Passworts kann die App Googles Anmeldeseite in deinem Browser öffnen. Dort meldest du dich an und erlaubst den Zugriff auf Gmail; dein Google-Passwort sieht die App nie.",
+          button: "Mit Google anmelden",
+          waiting: "Warte auf die Anmeldung bei Google",
+          signedIn: "Mit Google angemeldet",
+          unavailableTitle: "Diese Version der App kann sich nicht bei Google anmelden",
+          unavailableBody: "In diesem Build fehlt die Google-Anmeldung. Entferne das Konto und füge es mit einem App-Passwort neu hinzu.",
+        },
+        waitingBody: "Schließ die Anmeldung in deinem Browser ab und komm dann hierher zurück. Die App wartet bis zu fünf Minuten.",
+        cancel: "Anmeldung abbrechen",
+        cancelled: "Die Anmeldung wurde abgebrochen. Es wurde nichts hinzugefügt.",
+        failed: "Die Anmeldung hat nicht geklappt.",
+        accountBody: "Gespeichert ist die Freigabe im Schlüsselbund dieses Computers, nie dein Passwort. Andere Computer, die das Konto über den Einstellungs-Sync bekommen, melden sich dort selbst an.",
+        signInRequired: "Erneut anmelden",
+        signInRequiredBody: "Die Freigabe für dieses Konto ist abgelaufen oder wurde zurückgezogen, deshalb kann die App deine Mails nicht lesen. Melde dich erneut an, um weiterzumachen.",
+        signInAgain: "Erneut anmelden",
+        signedInAgain: "Erneut angemeldet. Das Konto wird wieder abgeglichen.",
+        page: {
+          title: "Anmeldung für Mail",
+          done: "Du bist angemeldet. Du kannst dieses Fenster schließen und zur App zurückkehren.",
+          failed: "Die Anmeldung hat nicht geklappt. In der App siehst du, warum.",
+        },
       },
       detail: {
         status: "Status",
@@ -3187,6 +3222,31 @@ export const de: Translation = {
       update_not_ready: {
         title: "Für diesen Schritt liegt kein Update bereit.",
         hint: "Suche zuerst nach Updates. Wenn du das gerade getan hast, warte, bis der Download fertig ist.",
+      },
+      // Stufe 14 (Entscheidung 0042): Anmeldung bei Microsoft und Google.
+      oauth_unavailable: {
+        title: "Diese Version der App kann sich bei diesem Anbieter nicht anmelden.",
+        hint: "Sie wurde ohne die App-ID des Anbieters gebaut. Nimm ein App-Passwort, wo der Anbieter eins anbietet.",
+      },
+      oauth_cancelled: {
+        title: "Die Anmeldung wurde abgebrochen.",
+        hint: "Starte sie neu, wenn du so weit bist.",
+      },
+      oauth_timeout: {
+        title: "Die Anmeldung im Browser wurde nicht rechtzeitig abgeschlossen.",
+        hint: "Starte sie neu und schließ sie innerhalb von fünf Minuten im Browser ab.",
+      },
+      oauth_denied: {
+        title: "Der Anbieter hat die Anmeldung nicht erlaubt.",
+        hint: "Erlaube den Zugriff der App auf der Seite des Anbieters. Bei einem Konto der Arbeit oder Schule muss die Verwaltung die App eventuell zuerst freigeben.",
+      },
+      oauth_failed: {
+        title: "Die Anmeldung hat nicht geklappt.",
+        hint: "Versuche es noch einmal. Die technischen Details sagen, was schiefging.",
+      },
+      oauth_sign_in_required: {
+        title: "Die Freigabe für dieses Konto ist abgelaufen oder wurde zurückgezogen.",
+        hint: "Öffne die Einstellungen des Kontos und melde dich erneut an.",
       },
       // Stufe 15: „Diagnose exportieren …“.
       diagnostics_write_failed: {

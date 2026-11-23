@@ -54,6 +54,8 @@ fn account(n: u128, email: &str, name: &str) -> Account {
         color: AccountColor::new(0).unwrap(),
         imap: server.clone(),
         smtp: server,
+        // Stage 14 (decision 0042): a password account.
+        oauth: None,
         writes_enabled: false,
         status: AccountStatus {
             state: AccountState::Idle,

@@ -13,6 +13,7 @@ import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } fro
 import { useSetWritesEnabled } from "../../actions/queries";
 import { useSendSettings } from "../../composer/queries";
 import { SpecialFolders } from "./SpecialFolders";
+import { OAuthSignInAgain } from "./OAuthSignIn";
 import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
 import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
 import { useResolveServerChange, useSettingsSyncStatus } from "../../settings-sync/queries";
@@ -374,7 +375,8 @@ export function AccountDetail({ accountId }: { accountId: string }) {
         </dl>
       </Block>
       <GmailNote account={account} />
-      <PasswordChange account={account} />
+      {/* Stage 14: an account that signs in with its provider has no password. */}
+      {account.oauth ? <OAuthSignInAgain account={account} /> : <PasswordChange account={account} />}
       {/* Stage 7: sender addresses, and whether the account shows in the unified inbox. */}
       <Block title={t("identities.title")} description={t("identities.description")}>
         <IdentitiesBlock account={account} />

@@ -21,16 +21,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mail_model::{
-    Access, AppendSource, BackendError, ConnectConfig, CoreError, DraftState, Envelope, Flag,
-    IpcError, MailWriter, MailboxRole, OperationPayload, OperationState, SendOutcome, SendPhase,
-    ServerCopy, TargetMailbox, TargetMark, Uid, UidSet,
+    Access, AppendSource, BackendError, CoreError, DraftState, Envelope, Flag, IpcError,
+    MailWriter, MailboxRole, OperationPayload, OperationState, SendOutcome, SendPhase, ServerCopy,
+    TargetMailbox, TargetMark, Uid, UidSet,
 };
 use mail_store::{OperationResult, OutboxChange, StoreError, StoredAccount, StoredOperation};
 
 use super::{Step, StepError, lost, refusal};
 use crate::clock::Clock;
 use crate::compose::{build, files};
-use crate::credentials::CredentialRef;
 use crate::outbox::Shared;
 
 /// Stage 16: the flags a message copied from another account keeps: the system flags, never
@@ -127,24 +126,13 @@ pub(crate) async fn submit<C: Send + Sync + 'static>(
             ));
         }
     };
-    let password = match CredentialRef::parse(&account.credential_ref) {
-        Ok(key) => shared.credentials.get(&key).await,
-        Err(err) => Err(err),
-    };
-    let password = match password {
-        Ok(Some(password)) => password,
-        Ok(None) => {
-            let err =
-                CoreError::Keychain("no password stored for this account; enter it again".into());
-            let change = finish(OperationResult::Later {
-                keep_in_flight: false,
-                error: Some(IpcError::from(&err)),
-                not_before: None,
-                payload: None,
-            })
-            .await?;
-            return Ok(Submitted::RetryLater(change, err));
-        }
+    // Stage 14: a password or an access token for the provider's SMTP server.
+    let login = match shared
+        .credentials
+        .login(&account.credential_ref, &account.smtp, false)
+        .await
+    {
+        Ok(login) => login,
         Err(err) => {
             let change = finish(OperationResult::Later {
                 keep_in_flight: false,
@@ -156,7 +144,8 @@ pub(crate) async fn submit<C: Send + Sync + 'static>(
             return Ok(Submitted::RetryLater(change, err));
         }
     };
-    let mut config = ConnectConfig::new(&account.smtp, password, Access::ReadWrite);
+    let bearer = login.auth == mail_model::LoginAuth::Bearer;
+    let mut config = login.config(&account.smtp, Access::ReadWrite);
     config.timeouts = shared.config.timeouts;
     config.extra_root_ca = shared.config.extra_root_ca.clone();
     let envelope = Envelope {
@@ -164,7 +153,26 @@ pub(crate) async fn submit<C: Send + Sync + 'static>(
         recipients: job.recipients.clone(),
     };
     let sender = Arc::clone(&shared.config.sender.0);
-    let outcome = sender.send(&config, &envelope, &bytes).await;
+    let mut outcome = sender.send(&config, &envelope, &bytes).await;
+    // A rejected access token: nothing was sent yet; renew it and try once more.
+    if bearer
+        && matches!(outcome, Err(mail_model::BackendError::AuthFailed(_)))
+        && shared.credentials.login_rejected(&account.credential_ref)
+    {
+        match shared
+            .credentials
+            .login(&account.credential_ref, &account.smtp, false)
+            .await
+        {
+            Ok(login) => {
+                config.password = login.secret;
+                outcome = sender.send(&config, &envelope, &bytes).await;
+            }
+            Err(err) => {
+                tracing::warn!(account = %op.account, code = ?err.code(), "access token not renewed for sending");
+            }
+        }
+    }
     let checks = &shared.config.compose.sent_checks;
     let (result, retry) = match outcome {
         Ok(SendOutcome::Accepted(reply)) => {

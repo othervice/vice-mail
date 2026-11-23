@@ -133,9 +133,9 @@ describe("account setup: known provider", () => {
     expect(note.textContent).toContain(texts.body);
   });
 
-  it("says honestly that Outlook.com sign-in does not work yet", () => {
-    expect(en.settings.accounts.setup.providerHint.outlook.title).toBe("Outlook.com accounts cannot be added yet");
-    expect(en.settings.accounts.setup.providerHint.outlook.body).toMatch(/later version/);
+  it("says that Outlook.com needs the sign-in with Microsoft, not a password (stage 14)", () => {
+    expect(en.settings.accounts.setup.providerHint.outlook.title).toBe("Outlook.com needs the sign-in with Microsoft");
+    expect(en.settings.accounts.setup.providerHint.outlook.body).toMatch(/not with a password/);
   });
 
   it("no app-password note for other providers", async () => {

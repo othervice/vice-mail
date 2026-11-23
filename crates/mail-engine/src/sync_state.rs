@@ -298,10 +298,13 @@ impl SyncMachine {
             (S::Failed, E::Wake) => {
                 // A network change can heal a certificate error (captive portal) but not a
                 // wrong password; repeating a rejected login may lock the account.
-                let auth = self
-                    .last_error
-                    .as_ref()
-                    .is_some_and(|e| e.code() == ErrorCode::AuthFailed);
+                let auth = self.last_error.as_ref().is_some_and(|e| {
+                    // Stage 14: neither heals an ended sign-in.
+                    matches!(
+                        e.code(),
+                        ErrorCode::AuthFailed | ErrorCode::OauthSignInRequired
+                    )
+                });
                 if auth {
                     SyncAction::None
                 } else {

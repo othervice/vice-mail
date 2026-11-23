@@ -351,7 +351,20 @@ impl<C: Connector> AppCore<C> {
             let gmail = counts.is_some_and(|c| c.gmail);
             line(out, &format!("account {} ({}):", n + 1, account.id));
             field(out, "  provider", provider_kind(&account.imap, gmail));
-            field(out, "  sign-in", "password (system keychain)");
+            field(
+                out,
+                "  sign-in",
+                match account.oauth {
+                    // Stage 14: the refresh token is in the keychain, the access token in memory.
+                    Some(mail_model::OAuthProvider::Microsoft) => {
+                        "Microsoft sign-in (refresh token in the system keychain)"
+                    }
+                    Some(mail_model::OAuthProvider::Google) => {
+                        "Google sign-in (refresh token in the system keychain)"
+                    }
+                    None => "password (system keychain)",
+                },
+            );
             field(out, "  incoming", &server(&account.imap));
             field(out, "  outgoing", &server(&account.smtp));
             field(

@@ -11,6 +11,7 @@ mod events;
 pub mod links;
 mod navigation;
 mod notifications;
+mod oauth;
 mod updater;
 mod window_theme;
 pub mod windows;
@@ -55,6 +56,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::accounts::remove_account,
             commands::accounts::retry_account,
             commands::accounts::update_password,
+            commands::oauth::get_oauth_availability,
+            commands::oauth::add_oauth_account,
+            commands::oauth::sign_in_again,
+            commands::oauth::cancel_oauth_sign_in,
             commands::mail::list_mailboxes,
             commands::mail::set_mailbox_role,
             commands::mail::list_messages,
@@ -622,7 +627,15 @@ fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, Box<dyn std:
     services.reading.preview_helper = preview_helper();
     // Desktop-test build: may trust the local test server's CA (decision 0007).
     #[cfg(feature = "e2e")]
-    let services = e2e::with_test_ca(services)?;
+    let mut services = e2e::with_test_ca(services)?;
+    // Stage 14 (decision 0042): sign-in with Microsoft and Google opens the provider's page with
+    // the same opener as links (the system browser; the desktop test's recorder).
+    let oauth = mail_engine::OAuthService::with(
+        oauth::config(),
+        std::sync::Arc::clone(&services.reading.opener),
+        std::sync::Arc::new(mail_engine::SystemClock),
+    );
+    services.credentials = services.credentials.with_oauth(std::sync::Arc::new(oauth));
     Ok(services)
 }
 

@@ -214,6 +214,13 @@ describe("error codes", () => {
     "update_signature_invalid",
     "update_install_failed",
     "update_not_ready",
+    // Stage 14 (decision 0042): sign-in with Microsoft and Google.
+    "oauth_unavailable",
+    "oauth_cancelled",
+    "oauth_timeout",
+    "oauth_denied",
+    "oauth_failed",
+    "oauth_sign_in_required",
     // Stage 15: "Export diagnostics…".
     "diagnostics_write_failed",
   ];

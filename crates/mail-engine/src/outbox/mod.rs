@@ -688,15 +688,17 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         &self,
         account: &mail_store::StoredAccount,
     ) -> Result<mail_model::SmtpLimits, CoreError> {
-        let key = crate::credentials::CredentialRef::parse(&account.credential_ref)?;
-        let password = self.shared.credentials.get(&key).await?.ok_or_else(|| {
-            CoreError::Keychain("no password stored for this account; enter it again".into())
-        })?;
-        let mut config =
-            mail_model::ConnectConfig::new(&account.smtp, password, mail_model::Access::ReadOnly);
-        config.timeouts = self.shared.config.timeouts;
-        config.extra_root_ca = self.shared.config.extra_root_ca.clone();
-        Ok(self.shared.config.sender.0.limits(&config).await?)
+        // Stage 14: a password or an access token (renewed once if the server rejects it).
+        self.shared
+            .credentials
+            .with_login(&account.credential_ref, &account.smtp, false, |login| {
+                let mut config = login.config(&account.smtp, mail_model::Access::ReadOnly);
+                config.timeouts = self.shared.config.timeouts;
+                config.extra_root_ca = self.shared.config.extra_root_ca.clone();
+                let sender = std::sync::Arc::clone(&self.shared.config.sender.0);
+                async move { sender.limits(&config).await }
+            })
+            .await
     }
 
     pub(crate) fn compose_config(&self) -> &ComposeConfig {

@@ -13,6 +13,7 @@ mod first_start;
 mod gmail;
 pub mod logging;
 mod mcp;
+pub mod oauth;
 pub mod outbox;
 mod parity;
 pub mod reading;
@@ -26,6 +27,7 @@ pub mod updates;
 pub use crate::clock::{Clock, SystemClock};
 pub use crate::core::{AppCore, BuildInfo, Connector, CoreConfig, CoreServices, DATABASE_FILE};
 pub use crate::diagnostics::DiagnosticsEnv;
+pub use crate::oauth::{OAuthConfig, OAuthService, ProviderProfile};
 pub use crate::outbox::{ComposeConfig, OutboxConfig, SenderHandle};
 pub use crate::reading::{
     DesktopOpener, ReadingServices, RecordingOpener, RemoteConfig, SystemOpener,

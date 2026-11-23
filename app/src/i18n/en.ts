@@ -1028,8 +1028,8 @@ export const en = {
             body: "Create an app password in the Fastmail settings under Privacy & Security, with access to IMAP and SMTP, and enter it as the password above.",
           },
           outlook: {
-            title: "Outlook.com accounts cannot be added yet",
-            body: "Microsoft only lets apps sign in through its own login page (OAuth), not with a password. The app learns that in a later version; until then the login here fails.",
+            title: "Outlook.com needs the sign-in with Microsoft",
+            body: "Microsoft only lets apps in through its own sign-in page, not with a password, so there is no password field here.",
           },
           proton: {
             title: "Proton Mail works only through Proton Mail Bridge",
@@ -1058,6 +1058,41 @@ export const en = {
         adding: "Adding…",
         addFailed: "The account could not be added.",
         cancel: "Cancel",
+      },
+      // Stage 14 (decision 0042): sign-in with Microsoft and Google in the system browser.
+      oauth: {
+        microsoft: {
+          title: "Sign in with Microsoft",
+          body: "Outlook.com, Hotmail and Microsoft 365 let mail apps in only through Microsoft's own sign-in page. The app opens it in your browser; you sign in there and allow access to your mail. The app never sees your Microsoft password.",
+          button: "Sign in with Microsoft",
+          waiting: "Waiting for the sign-in with Microsoft",
+          signedIn: "Signed in with Microsoft",
+          unavailableTitle: "This version of the app cannot sign in with Microsoft",
+          unavailableBody: "Microsoft accounts need a sign-in that this build does not include (it was built without a Microsoft app ID). A password does not work for these accounts.",
+        },
+        google: {
+          title: "Or sign in with Google",
+          body: "Instead of an app password, the app can open Google's sign-in page in your browser. You sign in there and allow access to Gmail; the app never sees your Google password.",
+          button: "Sign in with Google",
+          waiting: "Waiting for the sign-in with Google",
+          signedIn: "Signed in with Google",
+          unavailableTitle: "This version of the app cannot sign in with Google",
+          unavailableBody: "This build does not include the Google sign-in. Remove the account and add it again with an app password.",
+        },
+        waitingBody: "Finish signing in in your browser, then come back here. The app waits up to five minutes.",
+        cancel: "Cancel sign-in",
+        cancelled: "The sign-in was cancelled. Nothing was added.",
+        failed: "The sign-in did not work.",
+        accountBody: "The permission is kept in the system keychain of this computer, never your password. Other computers that get this account through the settings sync sign in there themselves.",
+        signInRequired: "Sign in again",
+        signInRequiredBody: "The permission for this account has expired or was withdrawn, so the app cannot read your mail. Sign in again to continue.",
+        signInAgain: "Sign in again",
+        signedInAgain: "Signed in again. The account syncs again.",
+        page: {
+          title: "Mail sign-in",
+          done: "You are signed in. You can close this window and return to the app.",
+          failed: "The sign-in did not work. Return to the app to see why.",
+        },
       },
       detail: {
         status: "Status",
@@ -3190,6 +3225,31 @@ export const en = {
       update_not_ready: {
         title: "There is no update ready for this step.",
         hint: "Check for updates first. If you just did, wait until the download has finished.",
+      },
+      // Stage 14 (decision 0042): sign-in with Microsoft and Google.
+      oauth_unavailable: {
+        title: "This version of the app cannot sign in with this provider.",
+        hint: "It was built without the provider's app ID. Use an app password where the provider offers one.",
+      },
+      oauth_cancelled: {
+        title: "The sign-in was cancelled.",
+        hint: "Start it again when you are ready.",
+      },
+      oauth_timeout: {
+        title: "The sign-in in the browser was not finished in time.",
+        hint: "Start it again and finish it in the browser within five minutes.",
+      },
+      oauth_denied: {
+        title: "The provider did not allow the sign-in.",
+        hint: "Allow the app's access on the provider's page. For a work or school account, your administrator may have to allow the app first.",
+      },
+      oauth_failed: {
+        title: "The sign-in did not work.",
+        hint: "Try again. The technical details say what went wrong.",
+      },
+      oauth_sign_in_required: {
+        title: "The permission for this account has expired or was withdrawn.",
+        hint: "Open the account's settings and sign in again.",
       },
       // Stage 15: "Export diagnostics…".
       diagnostics_write_failed: {

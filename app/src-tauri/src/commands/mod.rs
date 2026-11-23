@@ -14,6 +14,7 @@ pub mod first_start;
 pub mod groups;
 pub mod mail;
 pub mod mcp;
+pub mod oauth;
 pub mod parity;
 pub mod preferences;
 pub mod reading;

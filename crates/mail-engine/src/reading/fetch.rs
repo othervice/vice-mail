@@ -31,7 +31,7 @@ use mail_store::{MessageLocation, Store, StoredAccount};
 use tokio::sync::OwnedMutexGuard;
 use tokio::time::Instant;
 
-use crate::credentials::{CredentialRef, Credentials};
+use crate::credentials::Credentials;
 use crate::sync::SyncConfig;
 
 /// A reading connection unused for this long is checked with NOOP before it is used again.
@@ -121,10 +121,17 @@ impl<C: MailConnector> Connections<C> {
         account: &StoredAccount,
     ) -> Result<(), CoreError> {
         if connection.backend.is_none() {
-            let password = self.password(account).await?;
-            // Always read-only, whatever the account allows.
-            let config = self.config.connect_config(&account.imap, password);
-            let backend = self.connector.connect(&config).await?;
+            // Always read-only, whatever the account allows. Stage 14: a password or an
+            // access token (renewed once if the server rejects it).
+            let backend = self
+                .credentials
+                .with_login(&account.credential_ref, &account.imap, true, |login| {
+                    let mut config = self.config.connect_config(&account.imap, login.secret);
+                    config.auth = login.auth;
+                    let connector = &self.connector;
+                    async move { connector.connect(&config).await }
+                })
+                .await?;
             tracing::debug!(account = %account.id, "reading connection open");
             connection.backend = Some(backend);
         }
@@ -152,16 +159,6 @@ impl<C: MailConnector> Connections<C> {
                 }
             });
         }
-    }
-
-    async fn password(
-        &self,
-        account: &StoredAccount,
-    ) -> Result<mail_model::Secret<String>, CoreError> {
-        let key = CredentialRef::parse(&account.credential_ref)?;
-        self.credentials.get(&key).await?.ok_or_else(|| {
-            CoreError::Keychain("no password stored for this account; enter it again".into())
-        })
     }
 }
 

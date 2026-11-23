@@ -137,6 +137,18 @@ pub enum ErrorCode {
     UpdateInstallFailed,
     /// Stage 15 (decision 0037): no update is available or ready for this step.
     UpdateNotReady,
+    /// Stage 14 (decision 0042): this build has no client ID for the provider's sign-in.
+    OauthUnavailable,
+    /// Stage 14 (decision 0042): the user cancelled the sign-in.
+    OauthCancelled,
+    /// Stage 14 (decision 0042): the browser did not come back in time.
+    OauthTimeout,
+    /// Stage 14 (decision 0042): the provider or the user refused the sign-in.
+    OauthDenied,
+    /// Stage 14 (decision 0042): the sign-in failed for another reason (see the detail).
+    OauthFailed,
+    /// Stage 14 (decision 0042): the permission expired or was revoked; sign in again.
+    OauthSignInRequired,
     /// Stage 15: the diagnostics file could not be written where the user chose.
     DiagnosticsWriteFailed,
 }
@@ -392,6 +404,10 @@ pub enum CoreError {
     /// The diagnostics file could not be written (stage 15).
     #[error(transparent)]
     Diagnostics(#[from] crate::DiagnosticsError),
+
+    /// Signing in with Microsoft or Google failed, or its permission ended (stage 14, 0042).
+    #[error(transparent)]
+    OAuth(crate::OAuthError),
 }
 
 impl CoreError {
@@ -415,6 +431,7 @@ impl CoreError {
             Self::Preview(err) => err.code(),
             Self::Update(err) => err.code(),
             Self::Diagnostics(err) => err.code(),
+            Self::OAuth(err) => err.code(),
         }
     }
 
@@ -451,6 +468,7 @@ impl CoreError {
             Self::Preview(err) => err.message(),
             Self::Update(err) => err.message(),
             Self::Diagnostics(err) => err.message(),
+            Self::OAuth(err) => err.message(),
         }
     }
 
@@ -477,6 +495,7 @@ impl CoreError {
             Self::Preview(err) => err.detail(),
             Self::Update(err) => err.detail(),
             Self::Diagnostics(err) => err.detail(),
+            Self::OAuth(err) => err.detail(),
         }
     }
 }
@@ -601,10 +620,22 @@ mod tests {
             ),
             (ErrorCode::UpdateInstallFailed, "update_install_failed"),
             (ErrorCode::UpdateNotReady, "update_not_ready"),
+            (ErrorCode::OauthUnavailable, "oauth_unavailable"),
+            (ErrorCode::OauthCancelled, "oauth_cancelled"),
+            (ErrorCode::OauthTimeout, "oauth_timeout"),
+            (ErrorCode::OauthDenied, "oauth_denied"),
+            (ErrorCode::OauthFailed, "oauth_failed"),
+            (ErrorCode::OauthSignInRequired, "oauth_sign_in_required"),
             (
                 ErrorCode::DiagnosticsWriteFailed,
                 "diagnostics_write_failed",
             ),
+            (ErrorCode::OauthUnavailable, "oauth_unavailable"),
+            (ErrorCode::OauthCancelled, "oauth_cancelled"),
+            (ErrorCode::OauthTimeout, "oauth_timeout"),
+            (ErrorCode::OauthDenied, "oauth_denied"),
+            (ErrorCode::OauthFailed, "oauth_failed"),
+            (ErrorCode::OauthSignInRequired, "oauth_sign_in_required"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

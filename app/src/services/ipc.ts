@@ -212,6 +212,13 @@ export const ERROR_CODES = [
   "update_signature_invalid",
   "update_install_failed",
   "update_not_ready",
+  // Stage 14 (decision 0042): sign-in with Microsoft and Google.
+  "oauth_unavailable",
+  "oauth_cancelled",
+  "oauth_timeout",
+  "oauth_denied",
+  "oauth_failed",
+  "oauth_sign_in_required",
   // Stage 15: "Export diagnostics…".
   "diagnostics_write_failed",
 ] as const satisfies readonly ErrorCode[];
@@ -1730,4 +1737,31 @@ export const firstStartIpc = {
   get: (): Promise<FirstStart> => call(() => firstStartCommands.getFirstStart()),
   /** "Skip setup" or the last step; it does not show again on this device. */
   finish: (end: FirstStartEnd): Promise<FirstStart> => call(() => firstStartCommands.finishFirstStart(end)),
+};
+
+// ---- Stage 14 (decision 0042): sign-in with Microsoft and Google ----
+import {
+  commands as oauthCommands,
+  type OAuthAvailability,
+  type OAuthPageTexts,
+  type OAuthProvider,
+} from "../generated/bindings";
+
+export type { OAuthAvailability, OAuthPageTexts, OAuthProvider };
+
+/**
+ * Accounts that sign in with their provider's login page instead of a password. The core opens
+ * the system browser and waits for it (up to five minutes); the WebView never shows the page.
+ */
+export const oauthIpc = {
+  /** Which providers this build can sign in with (a client ID was configured at build time). */
+  availability: (): Promise<OAuthAvailability> => infallible(() => oauthCommands.getOauthAvailability()),
+  /** Browser step, IMAP check with the token, then the account is stored read-only. */
+  addAccount: (settings: AccountSettings, provider: OAuthProvider, texts: OAuthPageTexts): Promise<Account> =>
+    call(() => oauthCommands.addOauthAccount(settings, provider, texts)),
+  /** For an account whose permission ended or that came from another device. */
+  signInAgain: (accountId: AccountId, texts: OAuthPageTexts): Promise<void> =>
+    done(call(() => oauthCommands.signInAgain(accountId, texts))),
+  /** Ends the wait for the browser; the running command fails with `oauth_cancelled`. */
+  cancel: (): Promise<boolean> => infallible(() => oauthCommands.cancelOauthSignIn()),
 };

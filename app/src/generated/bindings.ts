@@ -75,6 +75,18 @@ export const commands = {
 	retryAccount: (accountId: AccountId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("retry_account", { accountId }, options)),
 	/**  Checks the login with the new password, replaces the keychain entry and reconnects. */
 	updatePassword: (accountId: AccountId, password: string, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("update_password", { accountId, password }, options)),
+	/**  Which providers this build can sign in with (a client ID was configured when it was built). */
+	getOauthAvailability: (options?: InvokeOptions) => __TAURI_INVOKE<OAuthAvailability>("get_oauth_availability", undefined, options),
+	/**
+	 *  Signs in with `provider` in the system browser, checks the IMAP login with the token and
+	 *  adds the account read-only. Waits for the browser (up to five minutes);
+	 *  `cancelOauthSignIn` ends the wait.
+	 */
+	addOauthAccount: (settings: AccountSettings, provider: OAuthProvider, texts: OAuthPageTexts, options?: InvokeOptions) => typedError<Account, IpcError>(__TAURI_INVOKE("add_oauth_account", { settings, provider, texts }, options)),
+	/**  Signs in again for an account whose permission ended (or that came from another device). */
+	signInAgain: (accountId: AccountId, texts: OAuthPageTexts, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("sign_in_again", { accountId, texts }, options)),
+	/**  Ends a running sign-in; its command fails with `oauth_cancelled`. `false` if none ran. */
+	cancelOauthSignIn: (options?: InvokeOptions) => __TAURI_INVOKE<boolean>("cancel_oauth_sign_in", undefined, options),
 	/**  Mailboxes of an account, ordered by path. */
 	listMailboxes: (accountId: AccountId, options?: InvokeOptions) => typedError<Mailbox[], IpcError>(__TAURI_INVOKE("list_mailboxes", { accountId }, options)),
 	/**  Sets the role of a mailbox (source `user`) and returns all mailboxes of its account. */
@@ -764,6 +776,11 @@ export type Account = {
 	color: AccountColor,
 	imap: ServerSettings,
 	smtp: ServerSettings,
+	/**
+	 *  Stage 14 (decision 0042): the provider this account signs in with instead of a
+	 *  password (Microsoft, Google); `null` for a password.
+	 */
+	oauth: OAuthProvider | null,
 	/**
 	 *  `false` for every new account. Only the user turns it on (stage 4); until then the
 	 *  adapter opens mailboxes read-only and refuses every writing command.
@@ -2344,6 +2361,18 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 "update_install_failed" | 
 /**  Stage 15 (decision 0037): no update is available or ready for this step. */
 "update_not_ready" | 
+/**  Stage 14 (decision 0042): this build has no client ID for the provider's sign-in. */
+"oauth_unavailable" | 
+/**  Stage 14 (decision 0042): the user cancelled the sign-in. */
+"oauth_cancelled" | 
+/**  Stage 14 (decision 0042): the browser did not come back in time. */
+"oauth_timeout" | 
+/**  Stage 14 (decision 0042): the provider or the user refused the sign-in. */
+"oauth_denied" | 
+/**  Stage 14 (decision 0042): the sign-in failed for another reason (see the detail). */
+"oauth_failed" | 
+/**  Stage 14 (decision 0042): the permission expired or was revoked; sign in again. */
+"oauth_sign_in_required" | 
 /**  Stage 15: the diagnostics file could not be written where the user chose. */
 "diagnostics_write_failed";
 
@@ -3281,6 +3310,38 @@ export type NotifyCategories = {
 	notifications?: boolean,
 	newsletters?: boolean,
 };
+
+/**
+ *  Which sign-ins this build offers: a provider needs a client ID configured when the app was
+ *  built. Without one the setup hides the button and says that this build cannot sign in there.
+ */
+export type OAuthAvailability = {
+	microsoft: boolean,
+	google: boolean,
+};
+
+/**
+ *  The texts of the page the browser shows when it comes back to the app (the UI's
+ *  translations; the core escapes them). Plain text, no markup.
+ */
+export type OAuthPageTexts = {
+	/**  Title of the page (the app's name, for example). */
+	title: string,
+	/**  Shown when the sign-in went through: "You can close this window and return to the app." */
+	done: string,
+	/**  Shown when the provider refused or something failed. */
+	failed: string,
+};
+
+/**
+ *  A provider whose accounts sign in through its own login page (OAuth 2.0) instead of a
+ *  password. Stored as part of the account's keychain reference (`oauth:<provider>:…`).
+ */
+export type OAuthProvider = 
+/**  Microsoft 365 and Outlook.com (Microsoft Entra, authority `common`). */
+"microsoft" | 
+/**  Gmail and Google Workspace. */
+"google";
 
 /**  Result of `openAttachment`. */
 export type OpenAttachmentResult = 
