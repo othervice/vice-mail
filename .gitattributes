@@ -1,2 +1,5 @@
 # Test mails are RFC 5322 data with CRLF line endings; never convert them.
 *.eml -text
+
+# Snapshots of built mails keep their CRLF line endings.
+crates/mail-content/src/compose/snapshots/*.html -text
