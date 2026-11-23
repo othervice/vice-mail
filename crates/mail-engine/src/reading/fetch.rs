@@ -8,6 +8,12 @@
 //! connection-level error and opened again on the next use. Opening a message and the prefetch
 //! share it; the lock is fair, so an open waits for at most one prefetch batch.
 //!
+//! A connection used within [`STALE_AFTER`] is not checked, so after a server restart or a
+//! network change the next fetch runs into the dead connection. Fetching for the user (opening
+//! a message, an attachment) therefore runs once more on a new connection after a
+//! connection-level failure ([`retry_on_new_connection`]) before it reports the error; never
+//! after a refusal, a login or certificate error, and never more than once.
+//!
 //! Where to fetch from: the message's locations (`message_location`), each checked against the
 //! UIDVALIDITY the server reports on EXAMINE. A location whose UIDVALIDITY changed is skipped
 //! (the next sync rebuilds it); a UID the server no longer has is "not on the server".
@@ -92,16 +98,38 @@ impl<C: MailConnector> Connections<C> {
             tracing::debug!(account = %account.id, error = %err, "reading connection went stale; reconnecting");
             guard.backend = None;
         }
-        if guard.backend.is_none() {
+        self.connect_if_closed(&mut guard, account).await?;
+        Ok(Held { guard })
+    }
+
+    /// After `cause` ([`retry_on_new_connection`]): closes the held connection and opens a new
+    /// one, keeping the lock, so the caller can run its step once more.
+    async fn reconnect(
+        &self,
+        held: &mut Held<C::Backend>,
+        account: &StoredAccount,
+        cause: &CoreError,
+    ) -> Result<(), CoreError> {
+        tracing::info!(account = %account.id, error = %cause, "reading connection failed; trying once more on a new connection");
+        held.guard.backend = None;
+        self.connect_if_closed(&mut held.guard, account).await
+    }
+
+    async fn connect_if_closed(
+        &self,
+        connection: &mut ReadConnection<C::Backend>,
+        account: &StoredAccount,
+    ) -> Result<(), CoreError> {
+        if connection.backend.is_none() {
             let password = self.password(account).await?;
             // Always read-only, whatever the account allows.
             let config = self.config.connect_config(&account.imap, password);
             let backend = self.connector.connect(&config).await?;
             tracing::debug!(account = %account.id, "reading connection open");
-            guard.backend = Some(backend);
+            connection.backend = Some(backend);
         }
-        guard.last_used = Some(Instant::now());
-        Ok(Held { guard })
+        connection.last_used = Some(Instant::now());
+        Ok(())
     }
 
     /// Closes the account's reading connection (account removed, password changed).
@@ -261,7 +289,22 @@ pub(crate) async fn fetch_body<C: MailConnector>(
         return Ok(Fetched::NotOnServer);
     }
     let mut held = connections.hold(account).await?;
-    for location in &locations {
+    match body_from(&mut held, &locations, size, limit).await {
+        Err(err) if retry_on_new_connection(&err) => {
+            connections.reconnect(&mut held, account, &err).await?;
+            body_from(&mut held, &locations, size, limit).await
+        }
+        result => result,
+    }
+}
+
+async fn body_from<B: MailBackend>(
+    held: &mut Held<B>,
+    locations: &[MessageLocation],
+    size: u32,
+    limit: u32,
+) -> Result<Fetched, CoreError> {
+    for location in locations {
         let Some(selected) = held.open(location).await? else {
             continue;
         };
@@ -300,7 +343,21 @@ pub(crate) async fn fetch_sections<C: MailConnector>(
 ) -> Result<Option<Vec<FetchedSection>>, CoreError> {
     let locations = usable_locations(store.message_locations(message).await?);
     let mut held = connections.hold(account).await?;
-    for location in &locations {
+    match sections_from(&mut held, &locations, sections).await {
+        Err(err) if retry_on_new_connection(&err) => {
+            connections.reconnect(&mut held, account, &err).await?;
+            sections_from(&mut held, &locations, sections).await
+        }
+        result => result,
+    }
+}
+
+async fn sections_from<B: MailBackend>(
+    held: &mut Held<B>,
+    locations: &[MessageLocation],
+    sections: &[BodySection],
+) -> Result<Option<Vec<FetchedSection>>, CoreError> {
+    for location in locations {
         let Some(selected) = held.open(location).await? else {
             continue;
         };
@@ -309,6 +366,18 @@ pub(crate) async fn fetch_sections<C: MailConnector>(
         }
     }
     Ok(None)
+}
+
+/// Whether a failed fetch gets one more try on a new connection: the connection broke (closed,
+/// reset, aborted: `ConnectionLost`; silent past the read limit: `Timeout`), as a reused
+/// connection does after a server restart or a network change. Not after a refusal, a login,
+/// certificate or TLS error, or a failure to connect: a new connection gets the same answer
+/// (and repeated logins can lock an account).
+fn retry_on_new_connection(err: &CoreError) -> bool {
+    matches!(
+        err,
+        CoreError::Mail(BackendError::ConnectionLost(_) | BackendError::Timeout(_))
+    )
 }
 
 /// The limit above which opening a message fetches it in parts.

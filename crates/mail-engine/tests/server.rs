@@ -135,6 +135,22 @@ impl Engine {
         (status, before)
     }
 
+    /// Waits until `done` holds, checking again after every event. For changes from outside,
+    /// wait for their effect, not for "the next `messagesChanged`": since stage 3 the prefetch
+    /// announces the preview of a body it stored with the same event, so the next event for
+    /// the inbox may belong to the prefetch and the change may not be stored yet.
+    async fn until(&mut self, what: &str, done: impl AsyncFn(&AppCore) -> bool) {
+        let deadline = Instant::now() + WAIT;
+        while !done(&self.core).await {
+            match tokio::time::timeout_at(deadline, self.events.recv()).await {
+                // A lagging receiver lost events, not state: look again.
+                Ok(Ok(_) | Err(broadcast::error::RecvError::Lagged(_))) => {}
+                Ok(Err(err)) => panic!("event stream: {err}"),
+                Err(_) => panic!("{what}: not stored within {WAIT:?}"),
+            }
+        }
+    }
+
     async fn current(&self) -> AccountStatus {
         let accounts = self.core.list_accounts().await.expect("accounts");
         accounts.first().expect("an account").status.clone()
@@ -457,31 +473,33 @@ async fn new_mail_flag_change_and_deletion_from_outside_arrive_by_idle() {
     )
     .await;
     let changed = Instant::now();
+    // The prefetch stores the new mail's body meanwhile (its own `messagesChanged`).
+    let listed = async |core: &AppCore| {
+        core.list_messages(inbox.id, None, 5)
+            .await
+            .expect("page")
+            .items
+            .into_iter()
+            .find(|m| m.subject == subject)
+    };
     engine
-        .event(|e| matches!(e, CoreEvent::MessagesChanged { mailbox_id, .. } if *mailbox_id == inbox.id))
+        .until("flag change", async |core| {
+            listed(core).await.is_some_and(|m| m.flagged)
+        })
         .await;
-    engine.idle().await;
     println!("flag change seen after {:?}", changed.elapsed());
-    let page = engine
-        .core
-        .list_messages(inbox.id, None, 5)
-        .await
-        .expect("page");
-    let item = page
-        .items
-        .iter()
-        .find(|m| m.subject == subject)
-        .expect("listed");
+    engine.idle().await;
+    let item = listed(&engine.core).await.expect("listed");
     assert!(!item.unread && item.flagged);
 
     let total = engine.mailbox(id, "INBOX").await.total;
     expunge(&mut writer, "INBOX", &new).await;
     let deleted = Instant::now();
     engine
-        .event(|e| matches!(e, CoreEvent::MessagesChanged { mailbox_id, .. } if *mailbox_id == inbox.id))
+        .until("deletion", async |core| listed(core).await.is_none())
         .await;
-    engine.idle().await;
     println!("deletion seen after {:?}", deleted.elapsed());
+    engine.idle().await;
     assert_eq!(engine.mailbox(id, "INBOX").await.total, total - 1);
     assert!(!engine.subjects(inbox.id).await.contains(&subject));
     writer.logout().await.ok();

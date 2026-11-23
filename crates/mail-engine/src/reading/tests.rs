@@ -391,6 +391,153 @@ async fn failures_offline_and_vanished_messages_are_reported() {
     assert_eq!(err.code(), ErrorCode::NotFound);
 }
 
+/// Opens `message` (not stored) and returns how its fetch ended: `messageBodyAvailable` or
+/// `messageBodyFailed`.
+async fn fetch_outcome(h: &mut Harness, message: MessageId) -> CoreEvent {
+    let view = h
+        .core
+        .get_message(message, BodyFormat::Auto)
+        .await
+        .expect("get");
+    assert_eq!(view.body, MessageBody::Loading);
+    h.event(|e| {
+        matches!(e,
+            CoreEvent::MessageBodyAvailable { message_id, .. }
+            | CoreEvent::MessageBodyFailed { message_id, .. } if *message_id == message)
+    })
+    .await
+}
+
+fn failed_code(event: &CoreEvent) -> ErrorCode {
+    match event {
+        CoreEvent::MessageBodyFailed { error, .. } => error.code,
+        other => panic!("expected messageBodyFailed, got {other:?}"),
+    }
+}
+
+/// Waits until the sync went down and is idle again (after a server restart).
+async fn sync_recovered(h: &mut Harness) {
+    h.event(|e| {
+        matches!(e, CoreEvent::AccountStatusChanged { status, .. } if status.state != AccountState::Idle)
+    })
+    .await;
+    h.event(|e| {
+        matches!(e, CoreEvent::AccountStatusChanged { status, .. } if status.state == AccountState::Idle)
+    })
+    .await;
+}
+
+/// After a server restart the reading connection is dead, and it was used too recently for
+/// the NOOP check. The next open runs once more on a new connection and succeeds without
+/// `messageBodyFailed`. A connection that breaks again is reported after exactly one more
+/// try; a refusal is reported at once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_first_open_after_a_server_restart_reconnects_once() {
+    let server = FakeServer::new();
+    server.deliver("INBOX", 6, false);
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let inbox = h.inbox(account).await;
+    let items = h.items(inbox).await;
+    // The reading connection is open and was just used.
+    h.open_fetched(items[0].id, BodyFormat::Auto).await;
+
+    // The sync notices the restart at once (IDLE) and is back before the user opens the next
+    // message; the reading connection is not checked before its first use.
+    server.restart();
+    sync_recovered(&mut h).await;
+    let before = server.read(|s| s.body_fetches);
+    let event = fetch_outcome(&mut h, items[1].id).await;
+    assert!(
+        matches!(event, CoreEvent::MessageBodyAvailable { .. }),
+        "{event:?}"
+    );
+    // EXAMINE failed on the dead connection; the body came over the new one.
+    assert_eq!(server.read(|s| s.body_fetches) - before, 1);
+    let view = h
+        .core
+        .get_message(items[1].id, BodyFormat::Auto)
+        .await
+        .expect("get");
+    assert!(text_of(&view).contains("Body of message"));
+
+    // Every connection breaks on its first body fetch: two tries, then the error.
+    let cases = [
+        (
+            BackendError::ConnectionLost("reset by peer".into()),
+            ErrorCode::ConnectionLost,
+            2,
+        ),
+        (
+            BackendError::Timeout("no data for 30 s".into()),
+            ErrorCode::ConnectionTimeout,
+            2,
+        ),
+        (
+            BackendError::Rejected("NO [UNAVAILABLE] busy".into()),
+            ErrorCode::ServerRejected,
+            1,
+        ),
+    ];
+    for ((fault, code, fetches), item) in cases.into_iter().zip(&items[2..]) {
+        server.with(|s| s.faults.bodies = Some(fault.clone()));
+        let before = server.read(|s| s.body_fetches);
+        let event = fetch_outcome(&mut h, item.id).await;
+        assert_eq!(failed_code(&event), code, "{fault:?}");
+        assert_eq!(
+            server.read(|s| s.body_fetches) - before,
+            fetches,
+            "tries after {fault:?}"
+        );
+    }
+    // "Try again" works once the server does.
+    server.with(|s| s.faults.bodies = None);
+    let event = fetch_outcome(&mut h, items[2].id).await;
+    assert!(
+        matches!(event, CoreEvent::MessageBodyAvailable { .. }),
+        "{event:?}"
+    );
+}
+
+/// A dead reading connection whose new connection is refused at login or by the certificate
+/// check: reported with that error after one connect, never tried again on its own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn login_and_certificate_errors_are_never_retried() {
+    let server = FakeServer::new();
+    server.deliver("INBOX", 4, false);
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let inbox = h.inbox(account).await;
+    let items = h.items(inbox).await;
+
+    let cases = [
+        (
+            BackendError::AuthFailed("[AUTHENTICATIONFAILED] Authentication failed.".into()),
+            ErrorCode::AuthFailed,
+        ),
+        (
+            BackendError::CertUntrusted("UnknownIssuer".into()),
+            ErrorCode::CertUntrusted,
+        ),
+    ];
+    for (n, (fault, code)) in cases.into_iter().enumerate() {
+        // A fresh reading connection, then a restart; the sync reconnects before the fault.
+        h.open_fetched(items[2 * n].id, BodyFormat::Auto).await;
+        server.restart();
+        sync_recovered(&mut h).await;
+        server.with(|s| s.faults.connect = Some(fault.clone()));
+        let (connects, fetches) = server.read(|s| (s.access.len(), s.body_fetches));
+        let event = fetch_outcome(&mut h, items[2 * n + 1].id).await;
+        assert_eq!(failed_code(&event), code, "{fault:?}");
+        assert_eq!(
+            server.read(|s| (s.access.len() - connects, s.body_fetches - fetches)),
+            (1, 0),
+            "one connect, no fetch after {fault:?}"
+        );
+        server.with(|s| s.faults.connect = None);
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn prefetch_stores_the_period_and_works_offline() {
     let server = FakeServer::new();

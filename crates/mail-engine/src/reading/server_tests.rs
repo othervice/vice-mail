@@ -605,3 +605,111 @@ async fn prefetched_messages_open_while_the_server_is_stopped() {
     })
     .await;
 }
+
+/// After a server restart the reading connection is dead but was used too recently for the
+/// NOOP check (60 s). The next open still brings the content, without `messageBodyFailed`: the
+/// fetch runs once more on a new connection. Stops and starts the shared test server, so it
+/// only runs with `VICEMAIL_RESTART_TEST=1`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs the test server with a seed; stops and starts it"]
+async fn the_first_open_after_a_server_restart_needs_no_retry() {
+    if std::env::var("VICEMAIL_RESTART_TEST").as_deref() != Ok("1") {
+        println!("skipped: set VICEMAIL_RESTART_TEST=1 to stop and start the test server");
+        return;
+    }
+    let env = TestEnv::require();
+    let mut engine = Engine::start(&env).await;
+    // The prefetch of the default period is done, so it does not touch the reading
+    // connection after the restart before the open does.
+    let since = PrefetchPeriod::default().since(
+        i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_secs(),
+        )
+        .expect("now"),
+    );
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let left = engine
+            .core
+            .store_for_tests()
+            .prefetch_candidates(engine.account, since, None, 1)
+            .await
+            .expect("candidates");
+        let state = engine
+            .core
+            .get_prefetch_status(engine.account)
+            .await
+            .expect("status")
+            .state;
+        if left.is_empty() && state != PrefetchState::Running {
+            break;
+        }
+        assert!(Instant::now() < deadline, "prefetch did not finish");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let mut not_stored = Vec::new();
+    for (path, id, _) in engine.messages().await {
+        if path == "INBOX"
+            && engine
+                .core
+                .store_for_tests()
+                .body_info(id)
+                .await
+                .expect("info")
+                .is_none()
+        {
+            not_stored.push(id);
+        }
+        if not_stored.len() == 2 {
+            break;
+        }
+    }
+    let [warm, after] = not_stored[..] else {
+        panic!("two inbox messages outside the prefetch: {not_stored:?}");
+    };
+    // The reading connection is open and was just used.
+    engine.open(warm, BodyFormat::Auto).await;
+
+    let script = env.repo.join("scripts/testmail.sh");
+    let run = |arg: &str| {
+        let status = std::process::Command::new(&script)
+            .arg(arg)
+            .status()
+            .expect("run testmail.sh");
+        assert!(status.success(), "testmail.sh {arg}");
+    };
+    let restarted = Instant::now();
+    run("stop");
+    wait(&mut engine.events, |e| {
+        matches!(e, CoreEvent::AccountStatusChanged { status, .. } if status.state == AccountState::Offline)
+    })
+    .await;
+    run("start");
+    wait(&mut engine.events, |e| {
+        matches!(e, CoreEvent::AccountStatusChanged { status, .. } if status.state == AccountState::Idle)
+    })
+    .await;
+    let since_restart = restarted.elapsed();
+    assert!(
+        since_restart < crate::reading::fetch::STALE_AFTER,
+        "the restart took {since_restart:?}; the NOOP check would hide the dead connection"
+    );
+    let opened = Instant::now();
+    // `open` fails on `messageBodyFailed`.
+    let view = engine.open(after, BodyFormat::Auto).await;
+    assert!(
+        matches!(
+            view.body,
+            MessageBody::Html { .. } | MessageBody::Text { .. }
+        ),
+        "{:?}",
+        view.body
+    );
+    println!(
+        "restart until idle: {since_restart:?}; first open after it: {:?}",
+        opened.elapsed()
+    );
+}

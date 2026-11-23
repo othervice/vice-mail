@@ -1,8 +1,8 @@
 //! An in-memory mail server behind [`MailConnector`]/[`MailBackend`], for fast and exact engine
 //! tests: mailboxes with UIDVALIDITY, UIDNEXT and mod-sequences, IDLE that wakes on changes, and
 //! fault injection (refused or failing connects, a connection cut after some fetches, slow
-//! fetches, a panic like imap-proto's on `INTERNALDATE NIL`). The test server tests in
-//! `tests/server.rs` cover the real adapter.
+//! fetches, a restart that kills every open connection, a panic like imap-proto's on
+//! `INTERNALDATE NIL`). The test server tests in `tests/server.rs` cover the real adapter.
 //!
 //! Stage 4: the same connector opens writer connections ([`WriteConnector`]) for the outbox:
 //! STORE (with `UNCHANGEDSINCE`), MOVE (COPYUID with `UIDPLUS`), EXPUNGE, CREATE and STATUS on
@@ -89,6 +89,8 @@ pub(crate) struct ServerState {
     /// UIDs whose whole body or sections were returned.
     pub body_fetches: usize,
     pub bodies_sent: Vec<Uid>,
+    /// Bumped by [`FakeServer::restart`]; connections from before are dead.
+    restarts: u64,
     next_validity: u32,
     next_serial: u64,
 }
@@ -127,6 +129,7 @@ impl FakeServer {
             examined: Vec::new(),
             body_fetches: 0,
             bodies_sent: Vec::new(),
+            restarts: 0,
             next_validity: 100,
             next_serial: 1,
         };
@@ -172,6 +175,12 @@ impl FakeServer {
 
     pub(crate) fn open_connections(&self) -> usize {
         self.open.load(Ordering::SeqCst)
+    }
+
+    /// A server restart: every open connection is dead (its next command, and IDLE, fail
+    /// with `ConnectionLost`); new connections work as before.
+    pub(crate) fn restart(&self) {
+        self.with(|s| s.restarts += 1);
     }
 
     /// Delivers `n` messages to `mailbox`; returns their UIDs.
@@ -364,7 +373,7 @@ impl FakeConnector {
     /// Logs in; `writer` for the outbox's connections (counted apart, own fault).
     fn open(&self, config: &ConnectConfig, writer: bool) -> Result<FakeBackend, BackendError> {
         let server = Arc::clone(&self.0);
-        let capabilities = server.with(|s| {
+        let (capabilities, generation) = server.with(|s| {
             if writer {
                 s.writer_attempts += 1;
                 if let Some(err) = s.faults.writer_connect.clone().or(s.faults.connect.clone()) {
@@ -386,7 +395,10 @@ impl FakeConnector {
             } else {
                 s.logins += 1;
             }
-            Ok(Capabilities::from_names(s.capabilities.iter().copied()))
+            Ok((
+                Capabilities::from_names(s.capabilities.iter().copied()),
+                s.restarts,
+            ))
         })?;
         server.open.fetch_add(1, Ordering::SeqCst);
         Ok(FakeBackend {
@@ -396,6 +408,7 @@ impl FakeConnector {
             selected: None,
             idle_seen: 0,
             poisoned: false,
+            generation,
         })
     }
 }
@@ -428,6 +441,8 @@ pub(crate) struct FakeBackend {
     /// `changes` of the open mailbox that IDLE has reported.
     idle_seen: u64,
     poisoned: bool,
+    /// The server's `restarts` when this connection was opened.
+    generation: u64,
 }
 
 impl Drop for FakeBackend {
@@ -475,6 +490,8 @@ impl FakeBackend {
             Err(BackendError::ConnectionLost(
                 "fake connection was cut".into(),
             ))
+        } else if self.server.read(|s| s.restarts) != self.generation {
+            Err(BackendError::ConnectionLost("fake server restarted".into()))
         } else {
             Ok(())
         }
@@ -853,6 +870,8 @@ impl MailBackend for FakeBackend {
         let deadline = tokio::time::Instant::now() + max;
         let mut stop = std::pin::pin!(stop);
         loop {
+            // A restart ends IDLE as a real server's BYE does.
+            self.usable()?;
             let changes = self.server.read(|s| {
                 s.mailboxes
                     .get(&mailbox.name)

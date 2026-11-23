@@ -197,8 +197,13 @@ async fn account_task<C: MailConnector + 'static>(
         if let Err(err) = outcome {
             tracing::warn!(account = %account, code = ?err.code(), error = %err, "prefetch stopped");
         }
-        run.report(state, true);
-        if shared.restart.load(Ordering::SeqCst) {
+        let restart = shared.restart.load(Ordering::SeqCst);
+        // New settings stopped the run: the next run starts at once and reports, so no `idle`
+        // in between (a run can start before the settings change and still read the new ones).
+        if !(restart && state == PrefetchState::Idle) {
+            run.report(state, true);
+        }
+        if restart {
             shared.wake.notify_one();
         }
     }
