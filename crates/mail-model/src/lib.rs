@@ -22,6 +22,7 @@ mod contacts;
 mod diagnostics;
 mod eml;
 mod error;
+mod first_start;
 mod gmail;
 mod ids;
 mod inbox;
@@ -112,6 +113,7 @@ pub use eml::{
     OpenEmlFileResult,
 };
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
+pub use first_start::{FirstStart, FirstStartEnd, FirstStartOutcome};
 pub use gmail::{
     GmailInfo, INBOX_LABEL, MAX_LABEL_LEN, SYSTEM_LABELS, is_gmail_host, is_system_folder,
     is_valid_label, label_of_mailbox, normalize_labels, system_label,

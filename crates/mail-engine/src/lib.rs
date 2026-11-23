@@ -9,6 +9,7 @@ mod core;
 pub mod credentials;
 mod diagnostics;
 pub mod discovery;
+mod first_start;
 mod gmail;
 pub mod logging;
 mod mcp;

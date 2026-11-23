@@ -642,6 +642,13 @@ export const commands = {
 	downloadUpdate: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("download_update", undefined, options)),
 	/**  "Restart to install": installs the downloaded, verified update and restarts the app. */
 	installUpdate: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("install_update", undefined, options)),
+	/**
+	 *  Whether to show the guided first start: never ended and no account yet. An installation that
+	 *  already has an account counts as done.
+	 */
+	getFirstStart: (options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("get_first_start", undefined, options)),
+	/**  "Skip setup" or the last step: the first start does not show again on this device. */
+	finishFirstStart: (end: FirstStartEnd, options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("finish_first_start", { end }, options)),
 };
 
 /** Events */
@@ -2363,6 +2370,32 @@ export type FilledTemplateInfo = {
 	bcc: Address[],
 	recipientsAdded: number,
 };
+
+/**  `getFirstStart` and `finishFirstStart`. */
+export type FirstStart = {
+	/**  Show the guided first start now: it never ended and there is no account yet. */
+	show: boolean,
+	/**  How it ended; `None` while it is still to be shown. */
+	outcome: FirstStartOutcome | null,
+};
+
+/**  What the UI may end the first start with (`finishFirstStart`). `NotNeeded` is the core's own. */
+export type FirstStartEnd = "completed" | "skipped";
+
+/**
+ *  How the guided first start ended. Stored per device (setting `first_start`, never synced:
+ *  accounts and the update question belong to this computer).
+ */
+export type FirstStartOutcome = 
+/**  Walked through to the last step. */
+"completed" | 
+/**  "Skip setup" on one of the steps. */
+"skipped" | 
+/**
+ *  The installation already had an account when the core was first asked (it predates the
+ *  first start), so it was never shown.
+ */
+"notNeeded";
 
 /**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync

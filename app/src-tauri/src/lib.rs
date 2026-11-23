@@ -287,6 +287,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::updates::check_for_updates,
             commands::updates::download_update,
             commands::updates::install_update,
+            // Stage 15 (decision 0041): the guided first start.
+            commands::first_start::get_first_start,
+            commands::first_start::finish_first_start,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)

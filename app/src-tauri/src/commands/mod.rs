@@ -10,6 +10,7 @@ pub mod compose;
 pub mod composer;
 pub mod contacts;
 pub mod eml;
+pub mod first_start;
 pub mod groups;
 pub mod mail;
 pub mod mcp;
