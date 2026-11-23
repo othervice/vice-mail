@@ -25,9 +25,16 @@ nach GitHub.
   internes Archiv kennzeichnen (Aufgaben der Stufe 15).
 - Zugang: Das Repo legt der Mensch unter `othervice` an oder gibt dafür einen Zugang frei; das auf
   dem Mac mini angemeldete `gh`-Konto ist ein anderes.
-- Noch offen und vor Stufe 15 zu entscheiden: der endgültige Produktname (Marken- und
-  Domain-Prüfung, die Bundle-ID `org.vicemail.desktop` hängt daran) und ob signierte Builds
-  gewünscht sind (Apple-Developer-Programm, Windows-Signatur).
+- Zugang: Das `gh`-Konto `othervice` ist auf dem Mac mini angemeldet (neben `opensourceminers`);
+  für Stufe 15 genügt `gh auth switch --user othervice`.
+- Name (Nachtrag 23.11.2026, vom Menschen): Der Produktname bleibt „Vice Mail“, mit eigenem Logo
+  (drei Entwürfe zur Auswahl). Eine Marken- und Domain-Prüfung vor der Veröffentlichung bleibt
+  empfohlen; die Bundle-ID `org.vicemail.desktop` hängt am Namen.
+- Signierte Builds sind gewünscht (Nachtrag 23.11.2026). macOS: Apple-Developer-Programm (99 USD im
+  Jahr), Developer-ID-Zertifikat und Notarisierung. Windows: Azure Artifact Signing nur für
+  Organisationen in den zugelassenen Ländern (Privatpersonen nur USA/Kanada), sonst ein
+  OV-Zertifikat einer Zertifizierungsstelle (z. B. Certum Open Source) mit Schlüssel auf Hardware
+  oder im Cloud-HSM. Offen: als Privatperson oder über eine Firma; Kauf durch den Menschen.
 
 ## Rückweg
 
