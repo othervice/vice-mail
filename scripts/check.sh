@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Full project check: formatting, lints, tests, typecheck, frontend build, licences and
-# security advisories. Stops at the first failing step with a non-zero exit code.
+# Full project check: formatting, lints, tests, typecheck, frontend build, licences (Rust and
+# npm, and the shipped list of them) and security advisories. Stops at the first failing step with
+# a non-zero exit code.
 #
 #   scripts/check.sh
 #
@@ -45,6 +46,7 @@ need() {
 
 need cargo "see docs/SETUP.md"
 need pnpm "brew install pnpm"
+need node "brew install node"
 cargo deny --version >/dev/null 2>&1 || {
   echo "missing tool: cargo-deny (cargo install --locked cargo-deny)" >&2
   exit 1
@@ -109,6 +111,10 @@ step "Vite build" pnpm --dir app build
 # Dependencies
 step "cargo deny (licences, advisories, bans, sources)" cargo deny check --hide-inclusion-graph
 step "pnpm audit (production dependencies)" pnpm --dir app audit --prod
+# Stage 15: every shipped Rust crate and npm production package has a licence of the allow-list
+# (deny.toml, plus the npm extras in the script), and the list in the app (Settings → About) and
+# the installers is up to date. After a dependency change: `node scripts/licenses.mjs`.
+step "Third-party licences (allow-list, shipped list up to date)" node scripts/licenses.mjs --check
 
 CURRENT=""
 printf '\n\033[32mAll checks passed\033[0m (%ds)\n' "$((SECONDS - STARTED))"

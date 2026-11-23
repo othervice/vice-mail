@@ -358,6 +358,25 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await screen.findByRole("heading", { name: "Invoices" });
     expect(await seriousFindings()).toEqual([]);
   });
+
+  // Stage 15: the open-source licenses in Settings → About, the whole list open, one entry open.
+  it("finds nothing serious in Settings → About with the license list and an open entry", async () => {
+    const { user } = setup(theme);
+    await screen.findByRole("listbox", { name: /^Messages in/ });
+    act(() => {
+      useUiStore.getState().showSettings("about");
+    });
+    const panel = await screen.findByRole("tabpanel", { name: "About" });
+    await user.click(within(panel).getByRole("button", { name: "Show libraries and licenses" }));
+    const list = await within(panel).findByTestId("about-licenses");
+    await within(list).findByRole("searchbox", { name: "Search libraries" });
+    await user.click(within(list).getByRole("button", { name: /^react-dom/ }));
+    await within(list).findByTestId("about-license-details");
+    expect(await seriousFindings()).toEqual([]);
+    await user.type(within(list).getByRole("searchbox", { name: "Search libraries" }), "no-such-library");
+    await within(list).findByText("No library matches “no-such-library”.");
+    expect(await seriousFindings()).toEqual([]);
+  });
 });
 
 // ---- Stage 13: AI in the app (settings with providers, consent and log; panel; writing help) ----

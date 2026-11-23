@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AppIcon, Wordmark } from "../../components/Brand";
-import { Button } from "../../components/Button";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { LICENSE_SPDX, PRODUCT_NAME, PROJECT_URL } from "../../config/product";
 import { useAppInfo } from "../app-info/queries";
 import { UpdatePanel } from "../updates/UpdatePanel";
+import { CopyableAddress } from "./CopyableAddress";
+import { OpenSourceLicenses } from "./OpenSourceLicenses";
 
 function formatBuildDate(value: string, language: string): string {
   const date = new Date(value);
@@ -20,45 +21,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-secondary">{label}</dt>
       <dd className="min-w-0 text-primary select-text">{children}</dd>
     </>
-  );
-}
-
-/**
- * The project's address: selectable text and a button that copies it. The app opens no web pages
- * itself (the frontend has no network and no command for it), so it is not a link.
- */
-function ProjectAddress() {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
-  const address = PROJECT_URL.replace(/^https:\/\//, "");
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="font-mono text-13 break-all select-text">{address}</span>
-      <Button
-        variant="quiet"
-        data-testid="about-copy-project"
-        onClick={() => {
-          const clipboard = typeof navigator === "undefined" ? undefined : (navigator.clipboard as Clipboard | undefined);
-          if (!clipboard) {
-            setCopied("failed");
-            return;
-          }
-          clipboard.writeText(PROJECT_URL).then(
-            () => {
-              setCopied("copied");
-            },
-            () => {
-              setCopied("failed");
-            },
-          );
-        }}
-      >
-        {t("settings.about.copy")}
-      </Button>
-      <span role="status" className={copied === "failed" ? "text-12 text-danger" : "text-12 text-secondary"}>
-        {copied && t(copied === "copied" ? "settings.about.copied" : "settings.about.copyFailed")}
-      </span>
-    </div>
   );
 }
 
@@ -108,11 +70,13 @@ export function AboutSettings() {
         )}
         <Row label={t("settings.about.license")}>{LICENSE_SPDX}</Row>
         <Row label={t("settings.about.project")}>
-          <ProjectAddress />
+          <CopyableAddress url={PROJECT_URL} data-testid="about-copy-project" />
         </Row>
       </dl>
       {/* Stage 15 (decision 0037): updates, opt-in. */}
       <UpdatePanel />
+      {/* Stage 15: the third-party libraries and their licences (scripts/licenses.mjs). */}
+      <OpenSourceLicenses />
     </SettingsSection>
   );
 }
