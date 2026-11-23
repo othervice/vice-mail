@@ -1,4 +1,4 @@
-import { FolderX, Hourglass, Inbox, ListChecks, Search, SquarePen } from "lucide-react";
+import { FolderX, Inbox, ListChecks, Search, SquarePen } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -24,7 +24,7 @@ import { openComposer } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
 import { boundShortcuts } from "../../stores/shortcuts";
 import { useActionTarget } from "../../stores/actionTarget";
-import { useUiStore, type View } from "../../stores/ui";
+import { useUiStore, type ShownMailViewId, type View } from "../../stores/ui";
 import { accountFill } from "../accounts/accountColor";
 import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
 import { isFirstSyncRunning, useSelectedAccount } from "../accounts/selection";
@@ -46,10 +46,11 @@ import { AiPanelToggle } from "../ai/AiPanel";
 import { useAppInfo } from "../app-info/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
+import type { MarkListKind } from "../comfort/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
-import { isRoleView, mailboxWithRole } from "../mailboxes/tree";
+import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
@@ -545,6 +546,29 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   );
 }
 
+/**
+ * What a mail view lists: the folder with a role, or the marked messages of the account. Every
+ * view of the rail has one, except the two with panes of their own (`null`).
+ */
+function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView } | { kind: "mark"; mark: MarkListKind } | null {
+  switch (mailView) {
+    case "inbox":
+    case "sent":
+    case "drafts":
+    case "archive":
+    case "trash":
+      return { kind: "role", role: mailView };
+    case "later":
+    case "pinned":
+    case "tasks":
+    case "readingList":
+      return { kind: "mark", mark: mailView };
+    case "pinnedAttachments":
+    case "savedViews":
+      return null;
+  }
+}
+
 interface MailBodyProps {
   view: MailViewState;
   account: Account;
@@ -558,22 +582,16 @@ function MailBody({ view, account }: MailBodyProps) {
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
   const accountName = account.displayName || account.email;
 
-  const roleView = view.kind === "mail" && isRoleView(view.mailView) ? view.mailView : null;
-  // Stage 9: Later, Pinned and Tasks show the marked messages of the account's inbox.
-  const markView =
-    view.kind === "mail" &&
-    (view.mailView === "later" || view.mailView === "pinned" || view.mailView === "tasks" || view.mailView === "readingList")
-      ? view.mailView
-      : null;
   // Stage 16 (decision 0036): pinned attachments of the account, like the reading list.
   if (view.kind === "mail" && view.mailView === "pinnedAttachments") {
     return <PinnedAttachmentsView scope={{ kind: "account", accountId: account.id }} />;
   }
-  if (view.kind === "mail" && !roleView && !markView) {
-    // Views without a function yet (Later, Tasks, Pinned, Saved views) say so honestly.
-    const name = t(`nav.${view.mailView}`);
-    return <EmptyState icon={Hourglass} title={t("mail.notYet.title")} body={t("mail.notYet.body", { view: name })} />;
-  }
+  const list = view.kind === "mail" ? mailViewList(view.mailView) : null;
+  // The saved searches have a pane of their own, which `MailView` shows instead of this.
+  if (view.kind === "mail" && !list) return null;
+  const roleView = list?.kind === "role" ? list.role : null;
+  // Stage 9: Later, Pinned and Tasks show the marked messages of the account's inbox.
+  const markView = list?.kind === "mark" ? list.mark : null;
   if (mailboxes.isPending) return null;
   if (mailboxes.isError) {
     return (

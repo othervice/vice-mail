@@ -308,8 +308,10 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
       label: t("palette.goTo", { name: t(`nav.${id}`) }),
       icon: MAIL_VIEW_ICONS[id],
       ...(viewShortcut && { shortcut: viewShortcut }),
+      // "Folders" is no view of its own: like the rail's entry it opens the column, and focuses it.
       run: () => {
-        ui.showMailView(id);
+        if (id === "folders") ui.openSidebar();
+        else ui.showMailView(id);
       },
     });
   }

@@ -77,10 +77,6 @@ export const en = {
         keychain: "Your password stays in the system keychain of this computer.",
       },
     },
-    notYet: {
-      title: "Not available yet",
-      body: "“{{view}}” arrives in a later version of the app.",
-    },
     noRoleFolder: {
       title: "No folder for “{{role}}”",
       body: "No folder of {{account}} is marked as “{{role}}”. If the account has one, choose it in the account settings.",

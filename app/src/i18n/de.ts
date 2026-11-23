@@ -75,10 +75,6 @@ export const de: Translation = {
         keychain: "Dein Passwort bleibt im Schlüsselbund dieses Computers.",
       },
     },
-    notYet: {
-      title: "Noch nicht verfügbar",
-      body: "„{{view}}“ kommt in einer späteren Version der App.",
-    },
     noRoleFolder: {
       title: "Kein Ordner für „{{role}}“",
       body: "Kein Ordner von {{account}} ist als „{{role}}“ markiert. Hat das Konto einen, wähle ihn in den Kontoeinstellungen.",

@@ -302,6 +302,52 @@ describe("command palette", () => {
     expect(await screen.findByRole("heading", { name: "Keyboard shortcuts" })).toBeTruthy();
   });
 
+  it("“Go to Folders” opens the accounts-and-folders column and focuses it, never an empty view", async () => {
+    const account = makeAccount();
+    mockCore({ accounts: [account], mailboxes: standardMailboxes(), messages: { 1: [], 5: [], 6: [] } });
+    const { user } = renderApp();
+    await screen.findByRole("navigation", { name: "Views" });
+    act(() => {
+      useUiStore.setState({ sidebarExpanded: false, sidebarNarrow: false });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("sidebar-column")).toBeNull();
+    });
+
+    await openPalette(user);
+    await chooseByKeyboard(user, "go to folders", "Go to Folders");
+    // The view stays where it was; the column shows instead, with the focus on the current entry.
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "inbox" });
+    const column = await screen.findByTestId("sidebar-column");
+    await waitFor(() => {
+      expect(column.contains(document.activeElement)).toBe(true);
+    });
+    expect(document.activeElement?.getAttribute("role")).toBe("treeitem");
+
+    // Already open: it only takes the focus (it does not fold).
+    screen.getByRole("main").focus();
+    await openPalette(user);
+    await chooseByKeyboard(user, "go to folders", "Go to Folders");
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-column").contains(document.activeElement)).toBe(true);
+    });
+
+    // In a narrow window the column opens over the content, focused the same way.
+    act(() => {
+      useUiStore.setState({ sidebarNarrow: true, sidebarOverlay: false });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("sidebar-column")).toBeNull();
+    });
+    await openPalette(user);
+    await chooseByKeyboard(user, "go to folders", "Go to Folders");
+    const over = await screen.findByTestId("sidebar-column");
+    expect(over.getAttribute("data-overlay")).toBe("true");
+    await waitFor(() => {
+      expect(over.contains(document.activeElement)).toBe(true);
+    });
+  });
+
   it("hands the typed text to the search", async () => {
     mockCore({ accounts: [makeAccount()], mailboxes: standardMailboxes(), messages: { 1: [] } });
     const { user } = renderApp();

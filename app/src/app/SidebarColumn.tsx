@@ -247,6 +247,17 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const shortcut = useBoundShortcuts(platform)("toggleSidebar")[0];
   const label = t("nav.hideSidebar");
   const onKeyDown = useOverlayDismiss(column, overlay);
+  // "Go to Folders" (palette): the entry shown right now takes the focus, else the first tree's.
+  const focusRequested = useUiStore((state) => state.sidebarFocusRequested);
+  const sidebarFocused = useUiStore((state) => state.sidebarFocused);
+  useEffect(() => {
+    if (!focusRequested) return;
+    sidebarFocused();
+    const node = column.current;
+    const target =
+      node?.querySelector<HTMLElement>('[role="treeitem"][aria-current="page"]') ?? node?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]');
+    target?.focus();
+  }, [focusRequested, sidebarFocused]);
 
   // The width as a variable on the column: CSSOM, not a style attribute (CSP style-src 'self').
   useLayoutEffect(() => {

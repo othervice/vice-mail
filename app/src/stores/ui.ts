@@ -22,6 +22,9 @@ export const MAIL_VIEW_IDS = [
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];
 
+/** The rail's "Folders" opens the accounts-and-folders column; every other entry is a view. */
+export type ShownMailViewId = Exclude<MailViewId, "folders">;
+
 /**
  * Width of the accounts-and-folders column in px at 100 % text size (it scales with the text).
  * The limits are the core's (`WindowLayout.sidebarWidth`, stored with the window's layout).
@@ -60,7 +63,7 @@ export type AccountsPage = { kind: "list" } | { kind: "add" } | { kind: "account
 
 export type View =
   /** Stage 7: `savedSearchId` with `savedViews`: one saved search's results instead of the list. */
-  | { kind: "mail"; mailView: MailViewId; savedSearchId?: SavedSearchId }
+  | { kind: "mail"; mailView: ShownMailViewId; savedSearchId?: SavedSearchId }
   /** A folder picked in the folder tree that has no view of its own in the rail. */
   | { kind: "mailbox"; accountId: AccountId; mailboxId: MailboxId }
   | { kind: "settings"; section: SettingsSectionId }
@@ -106,6 +109,8 @@ interface UiState {
   sidebarOverlay: boolean;
   /** Width of the column in px at 100 % text size, 200 to 320 (`SIDEBAR_WIDTH`). */
   sidebarWidth: number;
+  /** The column should take the focus once it shows (`openSidebar`); it clears this then. */
+  sidebarFocusRequested: boolean;
   /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
   collapsedMailboxes: ReadonlySet<MailboxId>;
   /** Accounts of the column whose folders are hidden. */
@@ -114,7 +119,7 @@ interface UiState {
   collapsedSections: ReadonlySet<string>;
   accountsPage: AccountsPage;
   linkRequest: LinkRequest | null;
-  showMailView: (mailView: MailViewId) => void;
+  showMailView: (mailView: ShownMailViewId) => void;
   showMailbox: (accountId: AccountId, mailboxId: MailboxId) => void;
   /** Stage 7: the results of a saved search (a view of the sidebar). */
   showSavedSearch: (savedSearchId: SavedSearchId) => void;
@@ -126,6 +131,9 @@ interface UiState {
   showOutbox: () => void;
   /** The column's toggle (button, shortcut, palette): docked or folded, in a narrow window over the content. */
   toggleSidebar: () => void;
+  /** "Go to Folders" (palette): shows the column (docked, or over the content) and focuses it. */
+  openSidebar: () => void;
+  sidebarFocused: () => void;
   setSidebarNarrow: (narrow: boolean) => void;
   closeSidebarOverlay: () => void;
   setSidebarWidth: (width: number) => void;
@@ -145,6 +153,7 @@ export const useUiStore = create<UiState>()((set) => ({
   sidebarNarrow: false,
   sidebarOverlay: false,
   sidebarWidth: SIDEBAR_WIDTH.default,
+  sidebarFocusRequested: false,
   collapsedMailboxes: new Set<MailboxId>(),
   collapsedAccounts: new Set<AccountId>(),
   collapsedSections: new Set<string>(),
@@ -184,6 +193,12 @@ export const useUiStore = create<UiState>()((set) => ({
   },
   toggleSidebar: () => {
     set((state) => (state.sidebarNarrow ? { sidebarOverlay: !state.sidebarOverlay } : { sidebarExpanded: !state.sidebarExpanded }));
+  },
+  openSidebar: () => {
+    set((state) => ({ ...(state.sidebarNarrow ? { sidebarOverlay: true } : { sidebarExpanded: true }), sidebarFocusRequested: true }));
+  },
+  sidebarFocused: () => {
+    set({ sidebarFocusRequested: false });
   },
   setSidebarNarrow: (sidebarNarrow) => {
     set((state) => (state.sidebarNarrow === sidebarNarrow ? state : { sidebarNarrow, sidebarOverlay: false }));
