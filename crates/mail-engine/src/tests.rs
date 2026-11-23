@@ -183,6 +183,51 @@ impl<'a> MakeWriter<'a> for Buffer {
     }
 }
 
+/// Finding V-07: the bridge logs a failed command with its code and a fixed summary; error texts
+/// with addresses, search text or paths stay out, an internal error's detail is redacted.
+#[test]
+fn failed_commands_are_logged_without_personal_error_texts() {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    let buffer = Buffer::default();
+    tracing::subscriber::with_default(logging::test_subscriber(buffer.clone(), false), || {
+        logging::command_failed(
+            "add_account",
+            &CoreError::AccountExists("ada.lovelace@analytical-engine.example".into()),
+        );
+        logging::command_failed(
+            "search_contacts",
+            &CoreError::InvalidArgument("search text \"Babbage Kontoauszug\" is too long".into()),
+        );
+        logging::command_failed(
+            "add_dropped_attachments",
+            &CoreError::Internal(format!("copy {home}/Documents/Rechnung März.pdf: denied")),
+        );
+    });
+    let log = buffer.text();
+    assert_eq!(log.matches("command failed").count(), 3, "{log}");
+    assert!(
+        log.contains("command=add_account code=AccountExists"),
+        "{log}"
+    );
+    assert!(
+        log.contains("summary=An account with this email address is already set up."),
+        "{log}"
+    );
+    assert!(log.contains("detail=internal error: copy ~/…"), "{log}");
+    for personal in [
+        "ada.lovelace",
+        "analytical-engine",
+        "Babbage",
+        "Kontoauszug",
+        "Rechnung",
+    ] {
+        assert!(!log.contains(personal), "{personal:?} in the log:\n{log}");
+    }
+    assert!(home.len() < 2 || !log.contains(&home), "{log}");
+}
+
 /// Every usual way of getting a value into a log line: field with `?`/`%`, message formatting,
 /// a struct's `Debug`, an error carrying the secret, and a span field.
 #[test]

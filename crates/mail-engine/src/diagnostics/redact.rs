@@ -12,7 +12,8 @@
 //!    ignored;
 //! 3. a scanner replaces: values of secret-like fields (`password=…`, `token: …`, `"secret":"…"`)
 //!    and of personal or path fields (`subject=…`, `path=…`); the word after `Bearer`/`Basic`;
-//!    file paths in free text (`~/…`, `/Users/…`, `C:\…`, to the next field or the line's end);
+//!    file paths in free text (`~/…`, `/Users/…`, `C:\…`, to the next field or the line's end),
+//!    as `~/…` under the home directory and `<path>` elsewhere, without the file name;
 //!    email addresses; known token formats (JWT, `sk-…`, `ghp_…`, `AGE-SECRET-KEY-…`, …); IPv4
 //!    addresses other than loopback; host names other than a short list of known provider and
 //!    app hosts; long opaque strings of letters and digits (24 characters or more);
@@ -36,6 +37,8 @@ pub(crate) const EMAIL: &str = "<email>";
 pub(crate) const HOST: &str = "<host>";
 pub(crate) const IP: &str = "<ip>";
 pub(crate) const PATH: &str = "<path>";
+/// A path under the home directory: only that it was there stays.
+pub(crate) const HOME_PATH: &str = "~/…";
 pub(crate) const REMOVED: &str = "<removed>";
 pub(crate) const USER: &str = "<user>";
 
@@ -344,7 +347,7 @@ fn field_value(rest: &str, prev: Option<char>) -> Option<(usize, String)> {
     let placeholder = match kind {
         FieldKind::Secret => REDACTED,
         FieldKind::Personal => REMOVED,
-        FieldKind::Path => PATH,
+        FieldKind::Path => path_placeholder(bare),
     };
     let head = rest.get(..value_start)?;
     Some((value_start + value_len, format!("{head}{placeholder}")))
@@ -428,7 +431,17 @@ fn free_path(rest: &str, prev: Option<char>) -> Option<(usize, String)> {
             end = close;
         }
     }
-    Some((end, PATH.to_owned()))
+    Some((end, path_placeholder(rest).to_owned()))
+}
+
+/// `~/…` for a path under the home directory (already shortened to `~`), `<path>` for any
+/// other. Not even the file name stays: it can be an attachment's name.
+fn path_placeholder(path: &str) -> &'static str {
+    if path.trim_start_matches(['"', '\'']).starts_with('~') {
+        HOME_PATH
+    } else {
+        PATH
+    }
 }
 
 /// `Bearer xyz`, `Basic xyz`: the credential after the scheme.
@@ -706,7 +719,7 @@ mod tests {
         let r = redactor();
         assert_eq!(
             r.line("WARN copy could not be removed path=/Users/ada/Library/Caches/org.vicemail.desktop/attachments/Rechnung März.pdf err=denied"),
-            "WARN copy could not be removed path=<path> err=denied"
+            "WARN copy could not be removed path=~/… err=denied"
         );
         assert_eq!(
             r.line("database ready schema_version=15 migrated_from=14 backup=None"),
@@ -722,13 +735,17 @@ mod tests {
         );
         assert_eq!(
             r.line("error=file not found: /Users/ada/Documents/Rechnung März.pdf code=NotFound"),
-            "error=file not found: <path> code=NotFound"
+            "error=file not found: ~/… code=NotFound"
         );
         assert_eq!(
             r.line("drop refused: \"C:\\Users\\x\\Steuer 2025.pdf\" (too large)"),
             "drop refused: \"<path>\" (too large)"
         );
-        assert_eq!(r.line("opened ~/x and more"), "opened <path>");
+        assert_eq!(r.line("opened ~/x and more"), "opened ~/…");
+        assert_eq!(
+            r.line("copy failed path=/private/var/folders/T/attachments/Rechnung.pdf kind=io"),
+            "copy failed path=<path> kind=io"
+        );
         assert_eq!(
             r.app_path("/Users/ada/Library/Application Support/org.vicemail.desktop"),
             "~/Library/Application Support/org.vicemail.desktop"

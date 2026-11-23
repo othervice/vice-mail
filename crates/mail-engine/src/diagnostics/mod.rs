@@ -142,17 +142,7 @@ impl<C: Connector> AppCore<C> {
     /// The redactor for the log lines: knows the accounts' personal strings and the hosts that
     /// may stay.
     async fn diagnostics_redactor(&self, env: &DiagnosticsEnv) -> Redactor {
-        let mut redactor = Redactor::new(
-            system::home_dir().as_deref(),
-            system::user_name().as_deref(),
-        );
-        for provider in crate::discovery::known::all() {
-            redactor.allow_host(provider.imap.host);
-            redactor.allow_host(provider.smtp.host);
-        }
-        for host in UPDATE_HOSTS {
-            redactor.allow_host(host);
-        }
+        let mut redactor = base_redactor();
         if !env.app_identifier.trim().is_empty() {
             redactor.allow_host(&env.app_identifier);
         }
@@ -540,6 +530,29 @@ impl<C: Connector> AppCore<C> {
             Err(err) => unavailable(out, "notifications", &err),
         }
     }
+}
+
+/// A redactor without account knowledge: the home directory, the system's user name and the
+/// hosts that may stay (provider table, update source).
+fn base_redactor() -> Redactor {
+    let mut redactor = Redactor::new(
+        system::home_dir().as_deref(),
+        system::user_name().as_deref(),
+    );
+    for provider in crate::discovery::known::all() {
+        redactor.allow_host(provider.imap.host);
+        redactor.allow_host(provider.smtp.host);
+    }
+    for host in UPDATE_HOSTS {
+        redactor.allow_host(host);
+    }
+    redactor
+}
+
+/// Redacts one text before it is written to the log (finding V-07): addresses, host names,
+/// paths, secret-looking values, as in a diagnostics export but without the accounts' names.
+pub(crate) fn redact_for_log(text: &str) -> String {
+    base_redactor().line(text)
 }
 
 /// What the blocking part gathered.

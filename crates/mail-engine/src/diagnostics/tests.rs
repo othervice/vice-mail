@@ -171,8 +171,17 @@ fn write_log(dir: &Path, name: &str, lines: &[String]) {
     std::fs::write(dir.join(name), lines.join("\n") + "\n").expect("log file");
 }
 
+/// The home directory as the logs would show it (a stand-in where none is set).
+fn home() -> String {
+    system::home_dir().unwrap_or_else(|| "/Users/ada".to_owned())
+}
+
 fn leaky_lines() -> Vec<String> {
+    let home = home();
     vec![
+        // Finding V-07: error texts with a path in the home directory and with an address.
+        format!("2026-11-23T07:59:58.000001Z  WARN main mail_app::commands: command failed command=add_dropped_attachments code=Internal error=internal error: copy {home}/Documents/{ATTACHMENT}: denied"),
+        format!("2026-11-23T07:59:59.000001Z  WARN main mail_app::commands: command failed command=send_draft code=InvalidAddress error=the address {CONTACT} is not valid"),
         "2026-11-23T08:00:00.000001Z  INFO main mail_engine::core: database ready schema_version=15".into(),
         format!("2026-11-23T08:00:01.000001Z  WARN main mail_app::commands: command failed command=add_account code=AccountExists error=an account for {EMAIL} exists already"),
         format!("2026-11-23T08:00:02.000001Z DEBUG main mail_engine::ai: request sent authorization=\"Bearer {LOGGED_TOKEN}\" key={LOGGED_KEY}"),
@@ -262,9 +271,16 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         "database ready schema_version=15",
         "<email>",
         "[redacted]",
+        "error=internal error: copy ~/…",
+        "error=the address <email> is not valid",
     ] {
         assert!(text.contains(expected), "{expected:?} missing:\n{text}");
     }
+    let home = home();
+    assert!(
+        home.len() < 2 || !text.contains(&home),
+        "the home directory {home:?} leaked:\n{text}"
+    );
     // The temporary file is gone.
     let left: Vec<_> = std::fs::read_dir(target.parent().expect("parent"))
         .expect("list")

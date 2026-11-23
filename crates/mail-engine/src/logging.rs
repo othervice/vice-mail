@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use mail_model::CoreError;
+use mail_model::{CoreError, ErrorCode};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{Builder, Rotation};
@@ -72,6 +72,21 @@ pub fn init(config: &LogConfig) -> Result<LogGuard, CoreError> {
         .map_err(|err| CoreError::Internal(format!("install log subscriber: {err}")))?;
 
     Ok(LogGuard { _file: guard })
+}
+
+/// Logs a command that failed at the IPC bridge, once (finding V-07 of the stage 15 review).
+/// Error texts can hold file paths, addresses or search text, so the line carries the command,
+/// the code and the fixed English summary of the error kind; only `internal` and `database`
+/// errors, whose detail is technical, add it, redacted like a diagnostics export.
+pub fn command_failed(command: &str, err: &CoreError) {
+    let code = err.code();
+    let summary = err.message();
+    if matches!(code, ErrorCode::Internal | ErrorCode::Database) {
+        let detail = crate::diagnostics::redact_for_log(&err.to_string());
+        tracing::warn!(%command, ?code, %summary, %detail, "command failed");
+    } else {
+        tracing::warn!(%command, ?code, %summary, "command failed");
+    }
 }
 
 /// The formatting layer used for the log file. Public so tests can point it at a buffer and

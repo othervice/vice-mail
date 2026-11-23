@@ -25,10 +25,12 @@ pub mod updates;
 
 use mail_model::{CoreError, IpcError};
 
-/// Logs a failed command once, at the bridge, and converts the error for the UI.
+/// Logs a failed command once, at the bridge, and converts the error for the UI. The log line
+/// holds the code and a fixed summary, never the error text with its paths or addresses
+/// ([`mail_engine::logging::command_failed`], finding V-07).
 fn to_ipc(command: &'static str) -> impl FnOnce(CoreError) -> IpcError {
     move |err| {
-        tracing::warn!(command, code = ?err.code(), error = %err, "command failed");
+        mail_engine::logging::command_failed(command, &err);
         IpcError::from(err)
     }
 }
