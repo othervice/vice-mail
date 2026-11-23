@@ -1416,6 +1416,13 @@ export const de: Translation = {
       copyLabel: "Konfiguration für {{client}} kopieren",
       copied: "Kopiert.",
       copyFailed: "Kopieren hat nicht geklappt. Markiere den Text und kopiere ihn von Hand.",
+      history:
+        "Der Befehl landet mitsamt Schlüssel im Verlauf deiner Shell, und andere Programme auf diesem Computer sehen ihn, solange er läuft. Damit er nicht im Verlauf landet, stell ihm ein Leerzeichen voran, wo deine Shell das unterstützt (zsh mit „setopt HIST_IGNORE_SPACE“, bash mit „HISTCONTROL=ignorespace“), oder nimm unten den Befehl mit Schlüsseldatei.",
+      tokenFile: {
+        title: "Stattdessen mit Schlüsseldatei",
+        body: "Dieser Befehl nennt statt des Schlüssels eine Datei, so steht der Schlüssel in keinem Verlauf und in keiner Prozessliste. Speichere zuerst den Schlüssel des Clients (er beginnt mit mcp1_) als einzigen Inhalt in {{file}}, zum Beispiel mit einem Texteditor. Unter macOS erlaubst du danach nur dir das Lesen: chmod 600 {{file}}. Das Hilfsprogramm lehnt eine Schlüsseldatei ab, die andere lesen können.",
+        copyLabel: "Befehl mit Schlüsseldatei für {{client}} kopieren",
+      },
     },
     test: {
       action: "Verbindung testen",

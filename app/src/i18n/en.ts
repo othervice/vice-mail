@@ -1419,6 +1419,13 @@ export const en = {
       copyLabel: "Copy the configuration for {{client}}",
       copied: "Copied.",
       copyFailed: "Copying did not work. Select the text and copy it by hand.",
+      history:
+        "The command, key included, ends up in your shell's history, and other programs on this computer can see it while it runs. To keep it out of the history, start it with a space where your shell supports that (zsh with “setopt HIST_IGNORE_SPACE”, bash with “HISTCONTROL=ignorespace”), or use the command with a key file below.",
+      tokenFile: {
+        title: "With a key file instead",
+        body: "This command names a file instead of the key, so the key appears in no history and no process list. First save the client's key (it starts with mcp1_) as the only content of {{file}}, for example with a text editor. On macOS, then let only yourself read it: chmod 600 {{file}}. The helper program refuses a key file that others can read.",
+        copyLabel: "Copy the command with a key file for {{client}}",
+      },
     },
     test: {
       action: "Test connection",

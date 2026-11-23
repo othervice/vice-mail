@@ -44,6 +44,11 @@ export function mcpConfigs(token: string): McpClientConfig[] {
       kind === "claude_code"
         ? `claude mcp add --transport stdio --scope user --env MAIL_MCP_TOKEN=${token} vice-mail -- '${MCP_HELPER_PATH}'`
         : json,
+    // Finding F5: only Claude Code gets the command that names a key file instead of the key.
+    tokenFileContent:
+      kind === "claude_code"
+        ? `claude mcp add --transport stdio --scope user --env "MAIL_MCP_TOKEN_FILE=$HOME/.mail-mcp-token" vice-mail -- '${MCP_HELPER_PATH}'`
+        : null,
     source: `https://docs.example.test/${kind}`,
   }));
 }

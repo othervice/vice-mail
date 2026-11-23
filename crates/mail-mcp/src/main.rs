@@ -3,15 +3,20 @@
 
 use std::process::ExitCode;
 
-use mail_mcp::helper::{ENV_ENDPOINT, ENV_TOKEN, HelperConfig, run_stdio};
+use mail_mcp::helper::{ENV_ENDPOINT, ENV_TOKEN, ENV_TOKEN_FILE, HelperConfig, run_stdio};
 
 const USAGE: &str = "mail-mcp: local MCP server of the mail app (stdio).
 
 An AI client starts this program and talks MCP with it on stdin and stdout. It needs two
 environment variables, both shown in the app's settings under AI access:
 
-  MAIL_MCP_ENDPOINT  where the app listens (socket path or pipe name)
-  MAIL_MCP_TOKEN     the token of this client (mcp1_...)
+  MAIL_MCP_ENDPOINT    where the app listens (socket path or pipe name)
+  MAIL_MCP_TOKEN       the token of this client (mcp1_...)
+
+Instead of MAIL_MCP_TOKEN, MAIL_MCP_TOKEN_FILE can name a file that holds only the token
+(absolute path), so that the token appears in no command line. On macOS and Linux only you
+may access the file (chmod 600); a file others may read is refused. If both are set, the
+file wins.
 
 Options: --help, --version. Log messages go to stderr (more with MAIL_MCP_LOG=debug).";
 
@@ -52,7 +57,7 @@ fn main() -> ExitCode {
     let config = HelperConfig::from_env();
     if let Err(problem) = &config {
         tracing::warn!(
-            "{problem}; set {ENV_ENDPOINT} and {ENV_TOKEN} as shown in the mail app's settings"
+            "{problem}; set {ENV_ENDPOINT} and {ENV_TOKEN} (or {ENV_TOKEN_FILE}) as shown in the mail app's settings"
         );
     }
     let runtime = match tokio::runtime::Builder::new_current_thread()

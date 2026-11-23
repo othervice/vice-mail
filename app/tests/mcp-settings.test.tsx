@@ -198,6 +198,22 @@ describe("Settings, AI over MCP", () => {
     expect(await navigator.clipboard.readText()).toBe(code.textContent);
     expect(within(created).getByText("Copied.")).toBeTruthy();
 
+    // Finding F5: the command keeps the key in the shell history; a key file avoids that.
+    expect(within(created).getByTestId("mcp-config-history").textContent).toBe(
+      "The command, key included, ends up in your shell's history, and other programs on this computer can see it while it runs. To keep it out of the history, start it with a space where your shell supports that (zsh with “setopt HIST_IGNORE_SPACE”, bash with “HISTCONTROL=ignorespace”), or use the command with a key file below.",
+    );
+    const keyFile = within(created).getByRole("region", { name: "With a key file instead" });
+    expect(keyFile.textContent).toContain(
+      "First save the client's key (it starts with mcp1_) as the only content of ~/.mail-mcp-token",
+    );
+    expect(keyFile.textContent).toContain("chmod 600 ~/.mail-mcp-token");
+    const fileCommand = within(keyFile).getByTestId("mcp-config-token-file-content-claude_code");
+    expect(fileCommand.textContent).toContain('--env "MAIL_MCP_TOKEN_FILE=$HOME/.mail-mcp-token"');
+    expect(fileCommand.textContent).not.toContain("s3cr3tkey");
+    await user.click(within(keyFile).getByRole("button", { name: "Copy the command with a key file for Claude Code" }));
+    expect(await navigator.clipboard.readText()).toBe(fileCommand.textContent);
+    expect(within(keyFile).getByText("Copied.")).toBeTruthy();
+
     // The new client is listed while its key is still shown.
     const list = within(panel).getByRole("list", { name: "AI clients" });
     expect(within(list).getByText("Claude on the MacBook")).toBeTruthy();
@@ -274,10 +290,17 @@ describe("Settings, AI over MCP", () => {
       "Cursor",
       "LM Studio",
     ]);
+    // Only the terminal command gets the history hint and the key-file variant.
+    expect(within(panel).queryByTestId("mcp-config-history")).toBeNull();
+    expect(within(panel).queryByRole("region", { name: "With a key file instead" })).toBeNull();
+    await user.click(within(panel).getByRole("tab", { name: "Claude Code" }));
+    expect(within(panel).getByTestId("mcp-config-history")).toBeTruthy();
+    expect(within(panel).getByRole("region", { name: "With a key file instead" })).toBeTruthy();
     await user.click(within(panel).getByRole("tab", { name: "LM Studio" }));
     expect(within(panel).getByTestId("mcp-config-location").textContent).toBe(
       "Where it goes: LM Studio: Program > Install > Edit mcp.json",
     );
+    expect(within(panel).queryByTestId("mcp-config-history")).toBeNull();
 
     await user.click(within(panel).getByRole("button", { name: "Test connection" }));
     const problem = await within(panel).findByTestId("mcp-test-problem");

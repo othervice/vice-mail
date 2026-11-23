@@ -10,7 +10,7 @@
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use mail_mcp::helper::{ENV_ENDPOINT, ENV_TOKEN};
+use mail_mcp::helper::{ENV_ENDPOINT, ENV_TOKEN, ENV_TOKEN_FILE};
 use mail_mcp::{AccessKind, ClientToken, ToolName};
 use mail_model::{CoreError, McpConnectionTest, McpHostState, McpRefusal, McpTestProblem, McpTool};
 use serde_json::{Value, json};
@@ -242,6 +242,8 @@ async fn talk(
     let mut child = Command::new(helper)
         .env(ENV_ENDPOINT, endpoint)
         .env(ENV_TOKEN, token)
+        // A token file in the app's own environment would win over the probe's token.
+        .env_remove(ENV_TOKEN_FILE)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

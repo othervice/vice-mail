@@ -2876,6 +2876,12 @@ export type McpClientConfig = {
 	 *  when it comes from `createMcpClient`, the placeholder `<token>` otherwise.
 	 */
 	content: string,
+	/**
+	 *  Claude Code only: the same command with `MAIL_MCP_TOKEN_FILE` (a file in the home
+	 *  directory that holds the token) instead of the token, so the token ends up in no shell
+	 *  history and no process list. Never contains the token.
+	 */
+	tokenFileContent: string | null,
 	/**  The client's documentation of the format. */
 	source: string,
 };

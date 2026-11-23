@@ -271,6 +271,7 @@ impl<C: Connector> McpState<C> {
                     },
                     location: config.location.to_owned(),
                     content: config.content,
+                    token_file_content: config.token_file_content,
                     source: config.source.to_owned(),
                 }
             })

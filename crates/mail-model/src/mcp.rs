@@ -142,6 +142,10 @@ pub struct McpClientConfig {
     /// JSON for the configuration files, a command line for Claude Code. Contains the token
     /// when it comes from `createMcpClient`, the placeholder `<token>` otherwise.
     pub content: String,
+    /// Claude Code only: the same command with `MAIL_MCP_TOKEN_FILE` (a file in the home
+    /// directory that holds the token) instead of the token, so the token ends up in no shell
+    /// history and no process list. Never contains the token.
+    pub token_file_content: Option<String>,
     /// The client's documentation of the format.
     pub source: String,
 }
@@ -380,6 +384,7 @@ mod tests {
                 kind: McpClientKind::Cursor,
                 location: "~/.cursor/mcp.json".into(),
                 content: "{\"MAIL_MCP_TOKEN\": \"mcp1_secret\"}".into(),
+                token_file_content: None,
                 source: "https://cursor.com/docs/context/mcp".into(),
             }],
         };

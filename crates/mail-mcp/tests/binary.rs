@@ -24,6 +24,7 @@ fn spawn(env: &[(&str, &str)]) -> Helper {
     command
         .env_remove("MAIL_MCP_ENDPOINT")
         .env_remove("MAIL_MCP_TOKEN")
+        .env_remove("MAIL_MCP_TOKEN_FILE")
         .env("MAIL_MCP_LOG", "error")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -201,4 +202,76 @@ fn version_and_help() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
+}
+
+/// Finding F5: the token from `MAIL_MCP_TOKEN_FILE`, so no command line has to carry it.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_token_can_come_from_a_private_file() {
+    let fixture = Fixture::start().await;
+    let file = fixture.dir.path().join("token");
+    std::fs::write(&file, format!("{}\n", fixture.token.expose_secret())).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut helper = spawn(&[
+        ("MAIL_MCP_ENDPOINT", fixture.endpoint.as_str()),
+        ("MAIL_MCP_TOKEN_FILE", file.to_str().unwrap()),
+        // A wrong inline token: the file wins.
+        ("MAIL_MCP_TOKEN", "mcp1_wrong"),
+    ]);
+    helper.initialize().await;
+    let (text, is_error) = helper.call(1, "list_accounts").await;
+    assert!(!is_error, "{text}");
+    assert_eq!(data_block(&text)["accounts"].as_array().unwrap().len(), 2);
+    helper.close().await;
+    fixture.stop().await;
+}
+
+/// A token file that others may read is refused, with the reason on stderr and in every tool
+/// result.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_token_file_others_may_read_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::start().await;
+    let file = fixture.dir.path().join("token");
+    let token = fixture.token.expose_secret();
+    std::fs::write(&file, &token).unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let env = [
+        ("MAIL_MCP_ENDPOINT", fixture.endpoint.as_str()),
+        ("MAIL_MCP_TOKEN_FILE", file.to_str().unwrap()),
+    ];
+
+    // stdin closed at once: the helper reports the problem on stderr and ends.
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mail-mcp"))
+        .env_remove("MAIL_MCP_TOKEN")
+        .env_remove("MAIL_MCP_LOG")
+        .envs(env)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("MAIL_MCP_TOKEN_FILE: other users may access")
+            && stderr.contains("(mode 644)")
+            && stderr.contains("chmod 600"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(&token), "never the token");
+
+    let mut helper = spawn(&env);
+    helper.initialize().await;
+    let (text, is_error) = helper.call(1, "list_accounts").await;
+    assert!(is_error);
+    assert!(text.contains("chmod 600"), "{text}");
+    helper.close().await;
+    assert!(
+        fixture.log.events().is_empty(),
+        "the helper never connected: {:?}",
+        fixture.log.events()
+    );
+    fixture.stop().await;
 }

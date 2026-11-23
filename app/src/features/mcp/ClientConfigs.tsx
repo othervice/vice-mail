@@ -7,18 +7,20 @@ import type { McpClientConfig, McpClientKind } from "../../services/ipc";
 
 type CopyState = "idle" | "copied" | "failed";
 
-function ConfigPanel({ config }: { config: McpClientConfig }) {
+/** Where the key-file command expects the key (`mail_mcp::config::TOKEN_FILE`). */
+const TOKEN_FILE = "~/.mail-mcp-token";
+
+function CopyButton({ text, label, "data-testid": testId }: { text: string; label: string; "data-testid": string }) {
   const { t } = useTranslation();
   const [copy, setCopy] = useState<CopyState>("idle");
-  const client = t(`mcp.setup.kinds.${config.kind}`);
-  const copyContent = () => {
+  const copyText = () => {
     // Only on the user's click. The text may hold the token; nothing else keeps a copy.
     const clipboard = typeof navigator === "undefined" ? undefined : (navigator.clipboard as Clipboard | undefined);
     if (!clipboard) {
       setCopy("failed");
       return;
     }
-    clipboard.writeText(config.content).then(
+    clipboard.writeText(text).then(
       () => {
         setCopy("copied");
       },
@@ -28,31 +30,63 @@ function ConfigPanel({ config }: { config: McpClientConfig }) {
     );
   };
   return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button variant="secondary" onClick={copyText} aria-label={label} data-testid={testId}>
+        <Copy aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {t("mcp.setup.copy")}
+      </Button>
+      <span role="status" className="text-13 text-secondary">
+        {copy === "copied" && t("mcp.setup.copied")}
+        {copy === "failed" && <span className="text-danger">{t("mcp.setup.copyFailed")}</span>}
+      </span>
+    </div>
+  );
+}
+
+const CONTENT_CLASS =
+  "max-h-64 overflow-auto rounded-control border border-border bg-canvas p-3 font-mono text-12 break-all whitespace-pre-wrap text-primary select-text";
+
+function ConfigPanel({ config }: { config: McpClientConfig }) {
+  const { t } = useTranslation();
+  const client = t(`mcp.setup.kinds.${config.kind}`);
+  const terminal = config.location === "terminal";
+  return (
     <div className="flex flex-col gap-2 pt-3">
       <p className="text-13 text-secondary select-text" data-testid="mcp-config-location">
-        {config.location === "terminal" ? t("mcp.setup.terminal") : t("mcp.setup.location", { location: config.location })}
+        {terminal ? t("mcp.setup.terminal") : t("mcp.setup.location", { location: config.location })}
       </p>
-      <pre
-        className="max-h-64 overflow-auto rounded-control border border-border bg-canvas p-3 font-mono text-12 break-all whitespace-pre-wrap text-primary select-text"
-        data-testid={`mcp-config-content-${config.kind}`}
-      >
+      <pre className={CONTENT_CLASS} data-testid={`mcp-config-content-${config.kind}`}>
         {config.content}
       </pre>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="secondary"
-          onClick={copyContent}
-          aria-label={t("mcp.setup.copyLabel", { client })}
-          data-testid={`mcp-config-copy-${config.kind}`}
+      <CopyButton
+        text={config.content}
+        label={t("mcp.setup.copyLabel", { client })}
+        data-testid={`mcp-config-copy-${config.kind}`}
+      />
+      {terminal && (
+        // Finding F5: the command carries the key into the shell history and the process list.
+        <p className="text-13 text-secondary select-text" data-testid="mcp-config-history">
+          {t("mcp.setup.history")}
+        </p>
+      )}
+      {config.tokenFileContent !== null && (
+        <section
+          className="flex flex-col gap-2 pt-2"
+          aria-label={t("mcp.setup.tokenFile.title")}
+          data-testid={`mcp-config-token-file-${config.kind}`}
         >
-          <Copy aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-          {t("mcp.setup.copy")}
-        </Button>
-        <span role="status" className="text-13 text-secondary">
-          {copy === "copied" && t("mcp.setup.copied")}
-          {copy === "failed" && <span className="text-danger">{t("mcp.setup.copyFailed")}</span>}
-        </span>
-      </div>
+          <h4 className="text-13 font-medium text-primary">{t("mcp.setup.tokenFile.title")}</h4>
+          <p className="text-13 text-secondary select-text">{t("mcp.setup.tokenFile.body", { file: TOKEN_FILE })}</p>
+          <pre className={CONTENT_CLASS} data-testid={`mcp-config-token-file-content-${config.kind}`}>
+            {config.tokenFileContent}
+          </pre>
+          <CopyButton
+            text={config.tokenFileContent}
+            label={t("mcp.setup.tokenFile.copyLabel", { client })}
+            data-testid={`mcp-config-copy-token-file-${config.kind}`}
+          />
+        </section>
+      )}
       <p className="text-12 text-tertiary select-text">{t("mcp.setup.source", { source: config.source })}</p>
     </div>
   );

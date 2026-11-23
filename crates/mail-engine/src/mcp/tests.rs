@@ -71,6 +71,17 @@ async fn clients_live_in_the_keychain_and_revoking_removes_them() {
             .iter()
             .all(|c| c.content.contains(&created.token))
     );
+    // Finding F5: Claude Code also gets a command that names a token file, without the token.
+    for config in &created.configs {
+        let file = config.token_file_content.as_deref();
+        if config.kind == mail_model::McpClientKind::ClaudeCode {
+            let file = file.expect("a token file variant");
+            assert!(file.contains("MAIL_MCP_TOKEN_FILE="), "{file}");
+            assert!(!file.contains(&created.token), "never the token");
+        } else {
+            assert_eq!(file, None, "{:?}", config.kind);
+        }
+    }
     let setup = core.get_mcp_setup();
     assert_eq!(setup.configs.len(), 4);
     assert!(
