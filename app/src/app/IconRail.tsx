@@ -110,7 +110,13 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
           {text ?? label}
         </span>
       )}
-      {expanded && trailing}
+      {/* A space before the trailing count: name and number are two words, as in the name. */}
+      {expanded && trailing !== undefined && (
+        <>
+          {" "}
+          {trailing}
+        </>
+      )}
     </button>
   );
   return (

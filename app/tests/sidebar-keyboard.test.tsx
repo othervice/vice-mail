@@ -72,7 +72,7 @@ describe("folder tree: keyboard model", () => {
     const tree = await unfold(user);
     const rows = within(tree).getAllByRole("treeitem");
     expect(rows.map(nameOf)).toEqual([
-      "Ada Lovelace (ada@vicemail.test), 6 unread",
+      "Ada Lovelace, 6 unread (ada@vicemail.test)",
       "Inbox, 3 unread",
       "Drafts",
       "Sent",
@@ -144,7 +144,7 @@ describe("folder tree: keyboard model", () => {
     await user.keyboard("{ArrowLeft}");
     expect(screen.getByTestId(ADA_ROW).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByTestId("mailbox-1")).toBeNull();
-    expect(tabStops(tree)).toEqual(["Ada Lovelace (ada@vicemail.test), 6 unread"]);
+    expect(tabStops(tree)).toEqual(["Ada Lovelace, 6 unread (ada@vicemail.test)"]);
     await user.keyboard("{ArrowRight}");
     expect(screen.getByTestId(ADA_ROW).getAttribute("aria-expanded")).toBe("true");
     expect(focused()).toBe(screen.getByTestId(ADA_ROW));

@@ -101,8 +101,8 @@ describe("folder tree", () => {
     const work = await screen.findByRole("tree", { name: "Folders of Work" });
     expect(within(work).getByRole("treeitem", { name: "Inbox, 7 unread" })).toBeTruthy();
     // The account's row carries its name and address, never just the colour, and its unread total.
-    expect(within(work).getByRole("treeitem", { name: "Work (work@example.com), 7 unread" }).getAttribute("aria-level")).toBe("1");
-    expect(within(ada).getByRole("treeitem", { name: "Ada Lovelace (ada@vicemail.test), 6 unread" })).toBeTruthy();
+    expect(within(work).getByRole("treeitem", { name: "Work, 7 unread (work@example.com)" }).getAttribute("aria-level")).toBe("1");
+    expect(within(ada).getByRole("treeitem", { name: "Ada Lovelace, 6 unread (ada@vicemail.test)" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Work" })).toBeTruthy();
   });
 

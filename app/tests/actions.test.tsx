@@ -89,6 +89,12 @@ async function openFirst(user: ReturnType<typeof renderApp>["user"], subject = "
   return { listbox, pane };
 }
 
+
+/** Text as axe compares it for "label in name": lower case, words only. */
+function words(text: string | null | undefined): string {
+  return (text ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
 describe("actions from the keyboard", () => {
   it.each<[string, string, MailAction["type"], string]>([
     ["e", "e", "archive", "Archived"],
@@ -334,6 +340,10 @@ describe("pending and failed changes", () => {
       expect(activity.getAttribute("aria-label")).toBe("Activity, 1 waiting, 0 need attention");
     });
     expect(within(activity).getByTestId("activity-badge").textContent).toBe("1");
+    // Label in name (WCAG 2.5.3): what the button shows, the view's name and its count as two
+    // words, is part of its accessible name.
+    expect(words(activity.getAttribute("aria-label"))).toContain(words(activity.textContent));
+    expect(words(activity.textContent)).toMatch(/\b1$/);
 
     const failed = core.settle([operation?.id ?? 0], "failed", { error: ipcError("server_rejected") });
     await emitCore({ type: "operationsChanged", accountId: ADA.id, operations: failed, removed: [] });

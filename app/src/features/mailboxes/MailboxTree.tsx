@@ -200,8 +200,9 @@ export function useAccountRowLabel(): (account: Account, unread: number) => stri
   const { t, i18n } = useTranslation();
   return (account, unread) => {
     const name = account.displayName || account.email;
-    let label = name === account.email ? name : t("nav.account", { name, email: account.email });
-    if (unread > 0) label = t("sidebar.folderUnread", { name: label, count: unread });
+    // The visible name and counter come first, together (WCAG 2.5.3, label in name), then the address.
+    const shown = unread > 0 ? t("sidebar.folderUnread", { name, count: unread }) : name;
+    const label = name === account.email ? shown : t("nav.account", { name: shown, email: account.email });
     const { state, error } = account.status;
     if (state !== "offline" && state !== "error") return label;
     const reasonKey = error ? `errors.codes.${error.code}.title` : null;
@@ -242,10 +243,14 @@ function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
       <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
       <span className="truncate">{account.displayName || account.email}</span>
       <AccountStatusMark account={account} />
+      {/* A space before the counter: name and number are two words of the text, as in the name. */}
       {unread > 0 && (
-        <span aria-hidden className="ms-auto shrink-0 ps-2 text-12 font-medium text-secondary tabular-nums">
-          {new Intl.NumberFormat(i18n.language).format(unread)}
-        </span>
+        <>
+          {" "}
+          <span aria-hidden className="ms-auto shrink-0 ps-2 text-12 font-medium text-secondary tabular-nums">
+            {new Intl.NumberFormat(i18n.language).format(unread)}
+          </span>
+        </>
       )}
     </li>
   );

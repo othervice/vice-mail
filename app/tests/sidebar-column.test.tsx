@@ -3,6 +3,7 @@ import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { useLayoutStore } from "../src/stores/layout";
 import { SIDEBAR_WIDTH, useUiStore } from "../src/stores/ui";
+import type { OperationInfo } from "../src/services/ipc";
 import { makeAccount, makeMailbox, mockCore, standardMailboxes } from "./support/core";
 import { makeSavedSearch } from "./support/search";
 import { renderApp } from "./support/render";
@@ -23,9 +24,10 @@ const CLUB = makeAccount({
   status: { state: "offline", progress: null, error: { code: "connection_lost", message: "reset", detail: null }, retryAt: null, lastSyncAt: null },
 });
 
-function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true }) {
+function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true }, operations: OperationInfo[] = []) {
   const core = mockCore({
     accounts: [ADA, CLUB],
+    operations,
     mailboxes: [
       ...standardMailboxes().map((mailbox) => (mailbox.id === 5 ? { ...mailbox, favoritePosition: 0 } : mailbox)),
       makeMailbox({ id: 40, accountId: CLUB.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 4 }),
@@ -58,7 +60,42 @@ async function seriousFindings(): Promise<string[]> {
     .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`);
 }
 
+
+/** Text as axe compares it for "label in name": lower case, words only. */
+function words(text: string | null | undefined): string {
+  return (text ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
 describe("accounts-and-folders column", () => {
+  it("names the activity count with what the column shows (label in name; the outbox count is drawn alike)", async () => {
+    const waiting: OperationInfo = {
+      id: 1,
+      batch: 1,
+      accountId: ADA.id,
+      action: "archive",
+      kind: "move",
+      state: "queued",
+      mailboxId: 1,
+      messageId: 100,
+      targetMailboxId: 7,
+      attempts: 1,
+      error: null,
+      conflict: null,
+      notice: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setup({ sidebarExpanded: true }, [waiting]);
+    const nav = await column();
+    const activity = within(nav).getByTestId("rail-activity");
+    await waitFor(() => {
+      expect(activity.getAttribute("aria-label")).toBe("Activity, 1 waiting, 0 need attention");
+    });
+    // The column shows the name and the count as two words ("Activity 1"), both in the name.
+    expect(words(activity.textContent)).toBe("activity 1");
+    expect(words(activity.getAttribute("aria-label"))).toContain(words(activity.textContent));
+  });
+
   it("replaces the rail: views, unified inbox with its count, every account's tree, the bottom group", async () => {
     setup();
     const nav = await column();
@@ -79,7 +116,10 @@ describe("accounts-and-folders column", () => {
     const root = within(club).getAllByRole("treeitem")[0];
     expect(root?.getAttribute("aria-level")).toBe("1");
     // Offline: a quiet mark, the state and its reason in the name (never the colour alone).
-    expect(root?.getAttribute("aria-label")).toBe("Club (board@club.example), 5 unread, offline: The connection to the server was lost.");
+    expect(root?.getAttribute("aria-label")).toBe("Club, 5 unread (board@club.example), offline: The connection to the server was lost.");
+    // Label in name (WCAG 2.5.3): the row shows "Club 5"; the name starts with it.
+    expect(words(root?.textContent)).toBe("club 5");
+    expect(words(root?.getAttribute("aria-label"))).toContain(words(root?.textContent));
     expect(screen.getByTestId(`account-status-${CLUB.id}`)).toBeTruthy();
     expect(within(nav).getByRole("toolbar", { name: "Activity and settings" })).toBeTruthy();
     expect(within(nav).getByTestId("rail-settings")).toBeTruthy();
