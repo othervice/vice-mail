@@ -1,0 +1,37 @@
+[package]
+name = "mail-ai"
+description = "Optional AI in the app: provider layer (OpenAI-compatible, Anthropic Messages), prompts with untrusted mail data, data minimisation, summary and natural-language search. No engine, store or IMAP."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Only `mail-model` and `mail-content` of the own crates (structural test in tests/structure.rs):
+# nothing here can reach the store, the outbox or a mail server, so no model output can turn
+# into an action.
+[dependencies]
+mail-model.workspace = true
+mail-content.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `net` for the address check of local endpoints (`lookup_host`), `time` for the limits,
+# `sync` for the cancel token, `macros` for `select!`.
+tokio = { workspace = true, features = ["sync", "time", "net", "macros", "rt"] }
+# HTTP/1.1 without cookies, proxy, compression or redirects; TLS comes from the caller
+# (`mail_imap::tls::client_config`), so the crypto provider is chosen in one place.
+reqwest.workspace = true
+rustls.workspace = true
+url.workspace = true
+# Random nonce of the data block markers.
+getrandom.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+# The HTTPS test: a certificate made at test time and a TLS server for the mock.
+rcgen.workspace = true
+tokio-rustls.workspace = true
+
+[lints]
+workspace = true
