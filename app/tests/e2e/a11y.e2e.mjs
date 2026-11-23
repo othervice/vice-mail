@@ -73,7 +73,9 @@ async function runAxe() {
           id: violation.id,
           impact: violation.impact,
           help: violation.help,
-          nodes: violation.nodes.slice(0, 10).map((node) => ({ target: node.target.join(" "), summary: node.failureSummary })),
+          nodes: violation.nodes
+            .slice(0, 10)
+            .map((node) => ({ target: node.target.join(" "), summary: node.failureSummary, html: node.html.slice(0, 300) })),
         })),
       };
     } catch (e) {
@@ -98,7 +100,13 @@ function describeFindings(violations) {
 async function check(theme, view) {
   const violations = await runAxe();
   report.views[`${theme}/${view}`] = violations;
+  // The screenshot takes the focus away (no focus ring in the picture); it goes back after, so
+  // the next keys (Escape in the palette) reach the view as before.
+  await browser.execute(() => {
+    window.__e2eFocus = document.activeElement;
+  });
   await screenshot(`a11y-${theme}-${view}`);
+  await browser.execute(() => window.__e2eFocus?.focus());
   const bad = serious(violations);
   assert.deepEqual(bad, [], `axe in ${view} (${theme}):\n${describeFindings(bad)}`);
 }

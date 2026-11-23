@@ -149,6 +149,18 @@ describe("folder tree", () => {
     });
   });
 
+  it("names a folder with its visible counter, in the same number format (label in name)", async () => {
+    mockCore({ accounts: [ACCOUNT], mailboxes: standardMailboxes().map((m) => (m.id === 1 ? { ...m, unread: 1296 } : m)) });
+    const { user } = renderApp();
+    await openFolders(user);
+    const button = await screen.findByTestId("mailbox-1");
+    expect(button.getAttribute("aria-label")).toBe("Inbox, 1,296 unread");
+    // Name and counter are two words in the button's text, both part of its name.
+    expect(button.textContent).toBe("Inbox 1,296");
+    const words = (button.textContent ?? "").split(" ");
+    for (const word of words) expect(button.getAttribute("aria-label")).toContain(word);
+  });
+
   it("without an account the sidebar shows no folders", async () => {
     mockCore();
     const { user } = renderApp();

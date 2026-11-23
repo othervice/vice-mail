@@ -30,8 +30,8 @@ export const de: Translation = {
   },
   sidebar: {
     folders: "Ordner von {{account}}",
-    folderUnread_one: "{{name}}, {{count}} ungelesen",
-    folderUnread_other: "{{name}}, {{count}} ungelesen",
+    folderUnread_one: "{{name}}, {{count, number}} ungelesen",
+    folderUnread_other: "{{name}}, {{count, number}} ungelesen",
     expand: "Unterordner von {{name}} zeigen",
     collapse: "Unterordner von {{name}} ausblenden",
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",

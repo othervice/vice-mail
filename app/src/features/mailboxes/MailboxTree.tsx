@@ -18,14 +18,21 @@ interface MailboxTreeProps {
   currentMailboxId: MailboxId | null;
 }
 
-/** Visible counter; screen readers get it through the button's name ("Inbox, 3 unread"). */
+/**
+ * Visible counter; screen readers get it through the button's name ("Inbox, 1,296 unread"). The
+ * name holds the visible text (WCAG 2.5.3, label in name): the same number format, and a space
+ * before the counter so name and number are two words (not rendered in the flex row).
+ */
 function UnreadCount({ count }: { count: number }) {
   const { i18n } = useTranslation();
   if (count <= 0) return null;
   return (
-    <span aria-hidden className="ms-auto shrink-0 text-12 font-medium text-secondary tabular-nums">
-      {new Intl.NumberFormat(i18n.language).format(count)}
-    </span>
+    <>
+      {" "}
+      <span aria-hidden className="ms-auto shrink-0 text-12 font-medium text-secondary tabular-nums">
+        {new Intl.NumberFormat(i18n.language).format(count)}
+      </span>
+    </>
   );
 }
 

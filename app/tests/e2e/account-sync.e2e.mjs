@@ -241,11 +241,16 @@ function scrollListTo(top) {
   }, top);
 }
 
-/** The rows the list has in the DOM: position, label, selection. */
+/**
+ * The entries the list has in the DOM: position, label, selection. Entries are messages and, since
+ * the design of decision 0031, the bundle rows and "Show all" (options with an action, no message):
+ * `message` tells them apart; `aria-posinset`/`aria-setsize` count both.
+ */
 function renderedRows() {
   return browser.execute(() =>
     [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')].map((el) => ({
       id: el.id,
+      message: el.dataset.testid === "message-row",
       posinset: Number(el.getAttribute("aria-posinset")),
       setsize: Number(el.getAttribute("aria-setsize")),
       selected: el.getAttribute("aria-selected") === "true",
@@ -298,17 +303,19 @@ async function unfoldEveryBundle() {
 
 /**
  * Walks the (fully loaded) list from the top to its end without changing it and collects every
- * message row by position: which message each position shows, and the bundles still folded.
+ * entry by position: which message (or bundle, "Show all") each position shows, and the bundles
+ * still folded.
  */
 async function collectRows() {
   const byPosition = new Map();
+  const messagePositions = new Set();
   let folded = 0;
   await scrollListTo(0);
   await browser.pause(50);
   for (let i = 0; i < 6000; i += 1) {
     const state = await browser.execute(() => {
       const list = document.querySelector('[data-testid="message-list"]');
-      const rows = [...list.querySelectorAll('[role="option"]')].map((o) => [Number(o.getAttribute("aria-posinset")), o.id]);
+      const rows = [...list.querySelectorAll('[role="option"]')].map((o) => [Number(o.getAttribute("aria-posinset")), o.id, o.dataset.testid === "message-row"]);
       const closed = list.querySelectorAll('[data-testid="bundle-row"][data-expanded="false"]').length;
       const atEnd = list.scrollTop + list.clientHeight >= list.scrollHeight - 2;
       if (!atEnd) {
@@ -317,13 +324,24 @@ async function collectRows() {
       }
       return { rows, closed, atEnd };
     });
-    for (const [position, id] of state.rows) {
+    for (const [position, id, message] of state.rows) {
       const seen = byPosition.get(position);
       if (seen !== undefined && seen !== id) throw new Error(`position ${position} shows ${seen} and ${id}`);
       byPosition.set(position, id);
+      if (message) messagePositions.add(position);
     }
     folded = Math.max(folded, state.closed);
-    if (state.atEnd) return { positions: byPosition.size, ids: new Set(byPosition.values()).size, maxPosition: Math.max(...byPosition.keys()), folded };
+    if (state.atEnd) {
+      const messageIds = new Set([...messagePositions].map((position) => byPosition.get(position)));
+      return {
+        positions: byPosition.size,
+        maxPosition: Math.max(...byPosition.keys()),
+        messages: messagePositions.size,
+        messageIds: messageIds.size,
+        actions: byPosition.size - messagePositions.size,
+        folded,
+      };
+    }
     await browser.pause(30);
   }
   throw new Error("the list did not reach its end");
@@ -541,8 +559,8 @@ describe("account and read-only sync (stage 2)", function () {
       const item = tree.find((t) => t.id === local.id);
       assert.ok(item, `${p} not in the folder tree`);
       const count = info.unseen > 0 ? numbers.format(info.unseen) : "";
-      assert.equal(item.text, `${name}${count}`, `tree entry of ${p}`);
-      assert.equal(item.label, info.unseen > 0 ? `${name}, ${info.unseen} unread` : name, `accessible name of ${p}`);
+      assert.equal(item.text, count ? `${name} ${count}` : name, `tree entry of ${p}`);
+      assert.equal(item.label, info.unseen > 0 ? `${name}, ${numbers.format(info.unseen)} unread` : name, `accessible name of ${p}`);
       assert.equal(item.depth, p.split("/").length - 1, `depth of ${p}`);
       rows.push(`${item.text.padEnd(18)} ${role} (${local.roleSource}) ${local.total}`);
     }
@@ -556,10 +574,15 @@ describe("account and read-only sync (stage 2)", function () {
 
   it("lists the inbox with as many messages as the server, with real senders", async () => {
     const rows = await renderedRows();
-    assert.ok(rows.length > 0);
-    assert.equal(rows[0].setsize, expected.INBOX.messages, "list size while pages are still unloaded");
+    assert.ok(rows.some((r) => r.message));
+    // While pages are still unloaded the list size is the folder's total plus the bundle rows and
+    // "Show all" of the loaded pages: never less than the server's count. The exact count of
+    // messages and entries follows with every page loaded ("reaches every message ..." below).
+    assert.ok(rows[0].setsize >= expected.INBOX.messages, `list size ${rows[0].setsize} while pages are still unloaded`);
+    assert.ok(rows.every((r) => r.setsize === rows[0].setsize), "one list size for every entry");
     assert.equal(rows[0].posinset, 1);
-    assert.ok(rows.every((r) => r.label && !r.label.startsWith("(Unknown sender)")), "rows show real senders");
+    const messages = rows.filter((r) => r.message);
+    assert.ok(messages.every((r) => r.label && !r.label.startsWith("(Unknown sender)")), "rows show real senders");
     // That every message has a row (bundle members included) is shown after the smoothness
     // measurement: "reaches every message of the inbox ..." below.
     await scrollListTo(0);
@@ -673,17 +696,21 @@ describe("account and read-only sync (stage 2)", function () {
   it("reaches every message of the inbox, bundle members included, in the same number as the server", async () => {
     // Every message has a row of its own once the bundles are unfolded: as many as on the server,
     // each position a different message.
+    // The list's entries are the messages plus the bundle rows (still entries when unfolded)
+    // and "Show all": positions 1 to the list size, every one seen once.
     const end = await unfoldEveryBundle();
     report.inboxListEnd = end;
     assert.ok(end.bundles > 0, "no bundle in the sorted inbox (the seed has newsletters and notifications)");
-    assert.equal(end.setSize, expected.INBOX.messages);
-    assert.equal(end.lastPosinset, expected.INBOX.messages);
+    assert.equal(end.lastPosinset, end.setSize);
     const seen = await collectRows();
     report.inboxRows = seen;
     assert.equal(seen.folded, 0, "a bundle is still folded");
-    assert.equal(seen.positions, expected.INBOX.messages, "positions seen");
-    assert.equal(seen.maxPosition, expected.INBOX.messages);
-    assert.equal(seen.ids, expected.INBOX.messages, "distinct messages");
+    assert.equal(seen.messages, expected.INBOX.messages, "message entries");
+    assert.equal(seen.messageIds, expected.INBOX.messages, "distinct messages");
+    assert.ok(seen.actions >= end.bundles, `${seen.actions} entries that are no message for ${end.bundles} bundles`);
+    assert.equal(seen.positions, end.setSize, "positions seen");
+    assert.equal(seen.maxPosition, end.setSize);
+    assert.equal(end.setSize, seen.messages + seen.actions);
     await scrollListTo(0);
   });
 
@@ -749,11 +776,23 @@ describe("account and read-only sync (stage 2)", function () {
     // The unfolded sidebar marks the account too (its badge has no text; the account's
     // button in the folded rail names the state).
 
-    // Scroll, click and use the keyboard in the list while offline.
-    await scrollListTo(300 * 44);
-    await browser.pause(100);
-    const rows = await renderedRows();
-    const target = rows.find((r) => r.posinset >= 300 && r.top > 150);
+    // Scroll, click and use the keyboard in the list while offline: down to about entry 300
+    // (rows, section headings and cards differ in height, so step until it is rendered).
+    let rows = [];
+    for (let i = 0; i < 100; i += 1) {
+      rows = await renderedRows();
+      if (rows.some((r) => r.message && r.posinset >= 300 && r.top > 150)) break;
+      await browser.execute(() => {
+        const list = document.querySelector('[data-testid="message-list"]');
+        list.scrollTop += Math.floor(list.clientHeight * 0.8);
+        list.dispatchEvent(new Event("scroll"));
+      });
+      await browser.pause(50);
+    }
+    // A message entry followed by a message (a bundle row or "Show all" acts instead of selecting).
+    const target = rows.find(
+      (r) => r.message && r.posinset >= 300 && r.top > 150 && rows.some((n) => n.posinset === r.posinset + 1 && n.message),
+    );
     assert.ok(target, `no row near 300 after scrolling: ${rows.map((r) => r.posinset).join(",")}`);
     await $(`[id="${target.id}"]`).click();
     await browser.waitUntil(async () => (await renderedRows()).find((r) => r.id === target.id)?.selected === true, {
@@ -764,14 +803,23 @@ describe("account and read-only sync (stage 2)", function () {
     // account, and shows no error.
     const clicked = await waitForPane(target.label);
     await browser.keys(["ArrowDown"]);
+    // The cursor (aria-activedescendant) moves to the next entry, a message or a bundle row.
     await browser.waitUntil(
-      async () => (await renderedRows()).find((r) => r.selected)?.posinset === target.posinset + 1,
-      { timeoutMsg: "ArrowDown did not move the selection" },
+      async () =>
+        (await browser.execute(() => {
+          const list = document.querySelector('[data-testid="message-list"]');
+          const active = document.getElementById(list.getAttribute("aria-activedescendant") ?? "");
+          return Number(active?.getAttribute("aria-posinset") ?? 0);
+        })) ===
+        target.posinset + 1,
+      { timeoutMsg: "ArrowDown did not move the cursor" },
     );
     const active = await testId("message-list").getAttribute("aria-activedescendant");
-    const next = (await renderedRows()).find((r) => r.selected);
+    const next = (await renderedRows()).find((r) => r.posinset === target.posinset + 1);
     assert.equal(active, next.id);
-    // The pane follows the selection.
+    // On a message the cursor selects it, as a click does, and the pane follows the selection.
+    assert.equal(next.message, true);
+    assert.equal(next.selected, true, "ArrowDown did not select the next message");
     const following = await waitForPane(next.label);
     report.offline.listUsable = { clicked: target.posinset, afterArrowDown: target.posinset + 1 };
     report.offline.readingPane = { clicked, following };
@@ -824,7 +872,7 @@ describe("account and read-only sync (stage 2)", function () {
     // New mail arrives again.
     const subject = `Desktop test after recovery ${Date.now()}`;
     const sent = await deliverMail(subject);
-    await browser.waitUntil(async () => (await renderedRows()).some((r) => r.label.includes(subject)), {
+    await browser.waitUntil(async () => (await renderedRows()).some((r) => r.label?.includes(subject)), {
       timeout: 10000,
       interval: 50,
       timeoutMsg: "no new mail after the recovery",

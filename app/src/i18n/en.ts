@@ -29,8 +29,8 @@ export const en = {
   },
   sidebar: {
     folders: "Folders of {{account}}",
-    folderUnread_one: "{{name}}, {{count}} unread",
-    folderUnread_other: "{{name}}, {{count}} unread",
+    folderUnread_one: "{{name}}, {{count, number}} unread",
+    folderUnread_other: "{{name}}, {{count, number}} unread",
     expand: "Show subfolders of {{name}}",
     collapse: "Hide subfolders of {{name}}",
     noFolders: "Folders appear after the first sync.",
