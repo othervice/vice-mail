@@ -410,8 +410,9 @@ Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und
 **KI in der App (Stufe 13, optional).** Für Funktionen in der Oberfläche (Zusammenfassen,
 Antwortvorschläge, Schreibhilfe, Suche in natürlicher Sprache) ein Trait `AiProvider` mit einer
 Umsetzung über die OpenAI-kompatible Chat-Schnittstelle mit frei wählbarer Basis-URL (Ollama,
-LM Studio, llama.cpp-Server, OpenRouter, OpenAI); ein eigener Anbieter für die Anthropic Messages API
-nur, wenn die kompatible Schnittstelle nicht genügt.
+LM Studio, llama.cpp-Server, OpenRouter, OpenAI) und eine zweite für die Anthropic Messages API: Über
+die kompatible Schnittstelle sind Ablehnungen nicht erkennbar (0019). Crate `mail-ai`, hängt nur von
+`mail-model` und `mail-content` ab; die TLS-Konfiguration wird aus `mail_imap::tls` hineingereicht.
 - Mail-Inhalte sind Daten, keine Anweisungen: fester Systemtext im Code, Mailtext klar abgegrenzt im Nutzerteil.
 - Das eingebaute Modell bekommt keine Werkzeuge. Es kann also strukturell nichts senden, löschen oder abrufen.
 - Ausgaben werden als Text angezeigt. Bilder aus KI-Ausgaben werden nie geladen, Links laufen durch

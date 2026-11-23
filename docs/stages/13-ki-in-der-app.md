@@ -11,6 +11,7 @@ in `docs/ARCHITECTURE.md` gelesen. Vor der Arbeit an Anthropic den Skill `claude
 ## Aufgaben
 
 - [ ] **Schnittstelle.** Neues Crate `mail-ai` mit Trait `AiProvider`: Anfrage mit Streaming, Abbruch, Liste der Modelle.
+- [x] **Unterbau vorgezogen:** Crate `crates/mail-ai` (Trait, beide Anbieter, Prompt-Schutz, Datensparsamkeit, Zusammenfassung und Fragen als Funktionen, Vertragstests gegen eine Attrappe), Entscheidung `docs/decisions/0019-ki-anbieter.md`. Offen: Verdrahtung, Einstellungen, Zustimmung, Protokoll, Antwortvorschläge, Schreibhilfe, offene Antworten, Prüfsatz, Panel.
 - [ ] **Ein Anbieter.** OpenAI-kompatible Chat-Schnittstelle mit frei wählbarer Basis-URL: Ollama, LM Studio, llama.cpp-Server, OpenRouter, OpenAI. Prüfen, ob Anthropic über seine OpenAI-kompatible Schnittstelle genügt; wenn nicht, einen zweiten Anbieter für die Messages API ergänzen (Stopp-Grund vor dem Lesen der Antwort prüfen, auch Ablehnung). Entscheidung festhalten.
 - [ ] **Einstellungen.** KI ist aus, bis der Nutzer sie einschaltet. Anbieter-Profile (Schlüssel im Schlüsselbund). Je Funktion einen Anbieter wählen oder aus. Je Konto festlegen, ob Cloud-Anbieter dessen Mails sehen dürfen. Kennzeichnung „lokal“, wenn die Basis-URL auf diesen Rechner oder das eigene Netz zeigt.
 - [ ] **Transparenz.** Vor der ersten Übertragung an einen Cloud-Anbieter erklären, was gesendet wird, und zustimmen lassen. Bei jeder Anfrage anzeigen: wie viele Mails, welche Größe, an wen. Lokales Protokoll der Anfragen (nur Metadaten).
