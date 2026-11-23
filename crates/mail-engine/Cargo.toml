@@ -13,12 +13,15 @@ mail-store.workspace = true
 mail-imap.workspace = true
 # Parsing, sanitising, link checks and file names of message content (stage 3).
 mail-content.workspace = true
+# Stage 12: the MCP host, its tools and the client configurations (decisions 0015, 0021).
+mail-mcp.workspace = true
 # Account ids (UUID v4).
 uuid = { workspace = true, features = ["v4"] }
 serde.workspace = true
 serde_json.workspace = true
 # `net` for the resolver of external images (`lookup_host`).
-tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "net"] }
+# `process` and `io-util`: "test connection" starts the MCP helper and talks to it (stage 12).
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "net", "process", "io-util"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true

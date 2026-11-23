@@ -3243,6 +3243,7 @@ dependencies = [
  "keyring-core",
  "mail-content",
  "mail-imap",
+ "mail-mcp",
  "mail-model",
  "mail-store",
  "open",

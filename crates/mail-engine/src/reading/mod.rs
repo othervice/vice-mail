@@ -530,6 +530,35 @@ impl<C: MailConnector + 'static> Reading<C> {
         });
     }
 
+    /// Stage 12 (AI access over MCP): the parsed body and the reading pane's attachment list.
+    /// A body that is not stored is fetched now over the account's read-only reading
+    /// connection (`BODY.PEEK`: nothing becomes read) while the account is online; `None`
+    /// when it is offline, the message is no longer on the server, or nothing usable is stored.
+    pub(crate) async fn content_for_model(
+        &self,
+        summary: &StoredMessage,
+    ) -> Result<Option<(mail_content::ParsedMessage, Vec<mail_model::AttachmentInfo>)>, CoreError>
+    {
+        let split = |content: Content| {
+            let attachments = content.attachments.into_iter().map(|a| a.info).collect();
+            (content.parsed, attachments)
+        };
+        if let Some(content) = self.load_content(summary.id).await? {
+            return Ok(Some(split(content)));
+        }
+        let state = self.accounts.status(summary.account_id).map(|s| s.state);
+        if matches!(
+            state,
+            None | Some(AccountState::Offline | AccountState::Error)
+        ) {
+            return Ok(None);
+        }
+        if !self.fetch_for_open(summary).await? {
+            return Ok(None);
+        }
+        Ok(self.load_content(summary.id).await?.map(split))
+    }
+
     /// `true` once stored, `false` if the server no longer has the message.
     async fn fetch_for_open(&self, summary: &StoredMessage) -> Result<bool, CoreError> {
         let account = self

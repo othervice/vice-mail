@@ -712,7 +712,7 @@ async fn create_draft<A: MailAccess>(
     {
         return Err(ToolError::new("The draft is empty.").into());
     }
-    access
+    let created = access
         .create_draft(NewDraft {
             account_id: account,
             to,
@@ -722,11 +722,18 @@ async fn create_draft<A: MailAccess>(
             in_reply_to,
         })
         .await?;
-    Ok(Done {
-        text: format!(
-            "Draft saved in the Drafts folder of account {account}. It has not been sent; the \
+    let text = if created.local_only {
+        format!(
+            "Draft saved in the mail app on this device only, in account {account}: the user \
+             has not allowed changes on the mail server for this account, so it does not appear \
+             in the Drafts folder on the server or on other devices. It has not been sent; the \
              user can review, change and send it in the mail app."
-        ),
-        messages: 1,
-    })
+        )
+    } else {
+        format!(
+            "Draft saved in the mail app; it goes to the Drafts folder of account {account}. \
+             It has not been sent; the user can review, change and send it in the mail app."
+        )
+    };
+    Ok(Done { text, messages: 1 })
 }

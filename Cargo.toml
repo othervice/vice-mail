@@ -19,6 +19,8 @@ mail-store = { path = "crates/mail-store" }
 mail-engine = { path = "crates/mail-engine" }
 mail-imap = { path = "crates/mail-imap" }
 mail-content = { path = "crates/mail-content" }
+# Stage 12: the MCP host and its tools (decision 0015); the shell links its helper as a sidecar.
+mail-mcp = { path = "crates/mail-mcp" }
 # Windows only: the one crate with `unsafe` (WebView2 COM calls, decision 0011).
 webview2-guard = { path = "crates/webview2-guard" }
 

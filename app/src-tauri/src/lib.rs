@@ -144,6 +144,17 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::comfort::get_default_mail_app::<tauri::Wry>,
             commands::comfort::set_default_mail_app::<tauri::Wry>,
             commands::comfort::take_launch_links,
+            // Stage 12: AI access over MCP (decisions 0015, 0021).
+            commands::mcp::get_mcp_settings,
+            commands::mcp::set_mcp_enabled,
+            commands::mcp::set_mcp_account_access,
+            commands::mcp::create_mcp_client,
+            commands::mcp::revoke_mcp_client,
+            commands::mcp::list_mcp_clients,
+            commands::mcp::get_mcp_setup,
+            commands::mcp::list_mcp_access,
+            commands::mcp::get_mcp_status,
+            commands::mcp::test_mcp_connection,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -177,6 +188,18 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             "MAX_CONTACT_SUGGESTIONS",
             mail_model::MAX_CONTACT_SUGGESTIONS,
         )
+        // Stage 12: the access log's page size and retention, the client name length.
+        .constant("MAX_MCP_ACCESS_PAGE", mail_model::MAX_MCP_ACCESS_PAGE)
+        .constant(
+            "MCP_ACCESS_RETENTION_DAYS",
+            mail_model::MCP_ACCESS_RETENTION_DAYS,
+        )
+        .constant("MCP_ACCESS_MAX_ENTRIES", mail_model::MCP_ACCESS_MAX_ENTRIES)
+        .constant(
+            "MAX_MCP_CLIENT_NAME_CHARS",
+            mail_model::MAX_MCP_CLIENT_NAME_CHARS,
+        )
+        .constant("MAX_MCP_CLIENTS", mail_model::MAX_MCP_CLIENTS)
 }
 
 /// TypeScript exporter settings, shared by the freshness test and `UPDATE_BINDINGS=1`.

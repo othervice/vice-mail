@@ -8,8 +8,8 @@ use mail_model::search::{
     TimeZone, parse,
 };
 use mail_model::{
-    AccountId, CoreError, MailboxId, SearchProblem, SearchProblemCode, SearchRequest, SearchScope,
-    SearchTermInfo, utf16_range,
+    AccountId, CoreError, MailboxId, MailboxRole, SearchProblem, SearchProblemCode, SearchRequest,
+    SearchScope, SearchTermInfo, utf16_range,
 };
 use mail_store::{MailboxName, SearchFilter, Store, StoredAccount};
 
@@ -104,10 +104,33 @@ pub(crate) fn compile(
     (parsed, compiled)
 }
 
+/// Which accounts a search covers before `account:` narrows it.
+#[derive(Clone, Copy)]
+pub(crate) enum Base<'a> {
+    /// The request's own scope (the app's search).
+    Scope(&'a SearchScope),
+    /// Exactly these accounts, or one mailbox of them (stage 12, AI access over MCP). Hidden
+    /// accounts of the app do not matter here (they are a view setting, not a permission).
+    /// Without a mailbox and without a positive `in:`, Trash and Junk are left out.
+    Exactly {
+        accounts: &'a [AccountId],
+        mailbox: Option<MailboxId>,
+    },
+}
+
 pub(crate) async fn plan(
     store: &Store,
     request: &SearchRequest,
+    compiled: (ParsedQuery, CompiledQuery),
+) -> Result<Plan, CoreError> {
+    plan_with(store, request, compiled, Base::Scope(&request.scope)).await
+}
+
+pub(crate) async fn plan_with(
+    store: &Store,
+    request: &SearchRequest,
     (parsed, compiled): (ParsedQuery, CompiledQuery),
+    base_scope: Base<'_>,
 ) -> Result<Plan, CoreError> {
     let input = request.query.as_str();
     let mut problems: Vec<SearchProblem> = parsed
@@ -137,24 +160,45 @@ pub(crate) async fn plan(
     let all = store.accounts().await?;
     let hidden = store.hidden_accounts().await?;
     let mut scope_mailbox = None;
-    let base: Vec<AccountId> = match &request.scope {
-        SearchScope::All => all
+    let scope = match base_scope {
+        Base::Scope(scope) => scope,
+        Base::Exactly { .. } => &SearchScope::All,
+    };
+    let base: Vec<AccountId> = match (base_scope, scope) {
+        (Base::Exactly { accounts, mailbox }, _) => match mailbox {
+            Some(mailbox) => {
+                let owner = store.mailbox_owner(mailbox).await?;
+                if !accounts.contains(&owner) {
+                    return Err(CoreError::NotFound(format!("mailbox {}", mailbox.0)));
+                }
+                scope_mailbox = Some(mailbox);
+                vec![owner]
+            }
+            None => all
+                .iter()
+                .map(|a| a.id)
+                .filter(|id| accounts.contains(id))
+                .collect(),
+        },
+        (_, SearchScope::All) => all
             .iter()
             .map(|a| a.id)
             .filter(|id| !hidden.contains(id))
             .collect(),
-        SearchScope::Account { account_id } => {
+        (_, SearchScope::Account { account_id }) => {
             if !all.iter().any(|a| a.id == *account_id) {
                 return Err(CoreError::NotFound(format!("account {account_id}")));
             }
             vec![*account_id]
         }
-        SearchScope::Mailbox { mailbox_id } => {
+        (_, SearchScope::Mailbox { mailbox_id }) => {
             let owner = store.mailbox_owner(*mailbox_id).await?;
             scope_mailbox = Some(*mailbox_id);
             vec![owner]
         }
-        SearchScope::Group { group_id } => store.visible_accounts(Some(group_id.clone())).await?,
+        (_, SearchScope::Group { group_id }) => {
+            store.visible_accounts(Some(group_id.clone())).await?
+        }
     };
 
     // `account:`: every positive value narrows, every negative one removes.
@@ -187,9 +231,14 @@ pub(crate) async fn plan(
         .filter(|a| allowed.contains(&a.id))
         .cloned()
         .collect();
-    // Mailbox names (without counters) only when `in:` needs them.
+    // Mailbox names (without counters) only when `in:` needs them, or to leave out Trash and
+    // Junk (stage 12).
+    let positive_in = parsed
+        .terms()
+        .any(|t| matches!(t.filter, Filter::In(_)) && !t.negated);
+    let skip_trash = matches!(base_scope, Base::Exactly { mailbox: None, .. }) && !positive_in;
     let mut searched: Vec<MailboxName> = Vec::new();
-    if parsed.terms().any(|t| matches!(t.filter, Filter::In(_))) {
+    if skip_trash || parsed.terms().any(|t| matches!(t.filter, Filter::In(_))) {
         for account in &accounts {
             searched.extend(store.mailbox_names(account.id).await?);
         }
@@ -216,6 +265,14 @@ pub(crate) async fn plan(
         } else {
             mailbox_sets.push(named);
         }
+    }
+    if skip_trash {
+        excluded.extend(
+            searched
+                .iter()
+                .filter(|m| matches!(m.role, MailboxRole::Trash | MailboxRole::Junk))
+                .map(|m| m.id),
+        );
     }
     if allowed.is_empty() {
         matches_nothing = true;

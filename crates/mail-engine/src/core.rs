@@ -148,6 +148,8 @@ struct Inner<C: Connector> {
     sender: std::sync::Arc<dyn mail_model::MailSender>,
     /// Stage 9: categories, snoozes, rules and notifications in the background.
     comfort: crate::comfort::ComfortState,
+    /// Stage 12: AI access over MCP (host, settings, access log).
+    mcp: crate::mcp::McpState<C>,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -166,6 +168,7 @@ impl<C: Connector> Drop for Inner<C> {
             compose.shutdown();
         }
         self.comfort.stop();
+        self.mcp.abort();
     }
 }
 
@@ -311,6 +314,7 @@ impl<C: Connector> AppCore<C> {
                 compose,
                 sender,
                 comfort,
+                mcp: crate::mcp::McpState::new(config.data_dir.clone()),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -328,6 +332,8 @@ impl<C: Connector> AppCore<C> {
         if let Some(compose) = &core.inner.compose {
             compose.start().await;
         }
+        // Stage 12: the MCP host (it listens only while AI access is on).
+        crate::mcp::start(&core).await;
         core
     }
 
@@ -536,6 +542,10 @@ impl<C: Connector> AppCore<C> {
             return Err(err.into());
         }
         tracing::info!(account = %id, "account removed");
+        // Stage 12: its AI access went with it (`mcp_account` cascades).
+        if let Err(err) = self.mcp_reload().await {
+            tracing::warn!(error = %err, "MCP settings could not be republished");
+        }
         self.emit(CoreEvent::AccountsChanged);
         Ok(())
     }
@@ -874,6 +884,8 @@ impl<C: Connector> AppCore<C> {
     /// Stops every sync task and the outbox; connections get a moment to log out. Call when the
     /// app quits. Operations still in flight are checked against the server at the next start.
     pub async fn shutdown(&self) {
+        // First the MCP host: no AI client may start a tool call while the rest stops.
+        crate::mcp::shutdown(&self.inner.mcp).await;
         let grace = self.inner.sync.shutdown_grace;
         let handles = self.inner.accounts.take_all();
         let mut stopping = tokio::task::JoinSet::new();
@@ -1035,6 +1047,20 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn search_state(&self) -> &crate::search::SearchState {
         &self.inner.search
+    }
+
+    // Stage 12 (`crate::mcp`) works through these.
+
+    pub(crate) fn mcp(&self) -> &crate::mcp::McpState<C> {
+        &self.inner.mcp
+    }
+
+    pub(crate) fn compose_ref(&self) -> Result<&Compose<C>, CoreError> {
+        self.compose()
+    }
+
+    pub(crate) fn credentials_ref(&self) -> &Credentials {
+        &self.inner.credentials
     }
 
     // Stage 9 (`crate::comfort`) works through these.

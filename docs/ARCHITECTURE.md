@@ -137,6 +137,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `ai_profile` | Anbieter, Basis-URL, Modell, Freigaben | sync (ohne Schlüssel) |
+| `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
 | `sync_record` | zuletzt abgeglichene Version je Datensatz | Gerät |
 
 Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt auf dem Gerät.
@@ -368,7 +369,8 @@ einer klaren Meldung abgelehnt.
 - Links und Anhänge öffnet nicht die App, sondern das System (Browser, Mail-Programm, Standard-App),
   erst nach Klick und Prüfung, Links nur `http`, `https`, `mailto`
 - KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13)
-- Der MCP-Server nimmt nur lokale Verbindungen an (stdio bzw. `127.0.0.1`) und baut selbst keine auf
+- Der MCP-Server nimmt nur lokale Verbindungen an (Hilfsprogramm über stdio, zur App über einen
+  Unix-Socket bzw. eine Named Pipe, nie TCP; 0015) und baut selbst keine auf
 - Abmelden (Stufe 9, 0020), nur nach Klick: Ein-Klick nach RFC 8058 als HTTPS-POST
   (`List-Unsubscribe=One-Click`) an die `https`-Adresse aus `List-Unsubscribe`, nur wenn
   `List-Unsubscribe-Post` es anbietet; Client wie bei externen Bildern (gemeinsame TLS-Konfiguration,
@@ -427,7 +429,12 @@ Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und
 - Je Konto: unsichtbar, lesen, lesen und Entwürfe. Standard: unsichtbar.
 - Kein Werkzeug sendet, löscht, verschiebt, markiert oder ändert Einstellungen.
 - Werkzeuge liefern bereinigten Text (kein rohes HTML, keine externen Bilder, Anhänge nur mit Namen),
-  als nicht vertrauenswürdige Daten gekennzeichnet, mit Größen- und Mengengrenzen.
+  als nicht vertrauenswürdige Daten gekennzeichnet, mit Größen- und Mengengrenzen. Als Text gilt, was
+  der Lesebereich zeigt: der sichtbare Text des HTML-Teils, nur ohne HTML der Text-Teil (für MCP und
+  die eingebaute KI gleich, 0021). Bodies werden nur mit `BODY.PEEK` geholt; nichts wird gelesen markiert.
+- Integration (0021): `AppCore` setzt `MailAccess` um (genau die freigegebenen Konten, Papierkorb und
+  Spam nur mit Postfachangabe), Entwürfe über die Entwürfe aus Stufe 5 (ohne Schreibzugriff nur lokal),
+  das Hilfsprogramm liegt als Tauri-Sidecar im Bundle (`Contents/MacOS/mail-mcp`, neben der App unter Windows).
 - Jeder Zugriff ist in der App sichtbar; Clients einzeln widerrufbar, Not-Aus für alle.
 - Grenze, ehrlich benannt: Der Client hat eigene Werkzeuge, und Mailinhalte können ihn mit
   eingeschleusten Anweisungen manipulieren. Die App begrenzt, was er bekommt und tun darf; was ein

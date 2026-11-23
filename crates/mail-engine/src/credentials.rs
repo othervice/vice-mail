@@ -1,4 +1,4 @@
-//! Passwords in the system keychain.
+//! Passwords in the system keychain, and since stage 12 the tokens of AI clients (MCP).
 //!
 //! The database only holds a [`CredentialRef`] (column `account.credential_ref`); the secret
 //! itself lives in the macOS keychain or the Windows Credential Manager under the app's service
@@ -23,6 +23,9 @@ use mail_model::{AccountId, CoreError, Secret};
 /// name and 513 for the user name; an account UUID has 36.
 const MAX_REF_LEN: usize = 256;
 
+/// Prefix of the keychain entries of AI clients (stage 12).
+const MCP_CLIENT_PREFIX: &str = "mcp-client:";
+
 /// Name of a keychain entry under the app's service. For accounts it is the account UUID.
 /// Stored in the database instead of the secret.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -32,6 +35,17 @@ impl CredentialRef {
     /// The entry that holds the password of an account.
     pub fn for_account(id: AccountId) -> Self {
         Self(id.to_string())
+    }
+
+    /// Stage 12: the entry that holds the token of an AI client (MCP), `mcp-client:<id>`. The
+    /// prefix keeps it apart from account entries (UUIDs) under the same service.
+    pub fn for_mcp_client(id: &mail_mcp::ClientId) -> Self {
+        Self(format!("{MCP_CLIENT_PREFIX}{id}"))
+    }
+
+    /// Whether this is the entry of an AI client rather than an account password.
+    pub fn is_mcp_client(&self) -> bool {
+        self.0.starts_with(MCP_CLIENT_PREFIX)
     }
 
     /// Checks a reference read back from the database.

@@ -18,6 +18,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0006_compose.sql")),
     // Stage 9: categories, sender rules, snoozes, pins, tasks, local rules (decision 0020).
     M::up(include_str!("../migrations/0007_inbox.sql")),
+    // Stage 12: AI access over MCP: switch, shared accounts, clients, access log (decision 0021).
+    M::up(include_str!("../migrations/0008_mcp.sql")),
 ];
 
 /// All migrations this build knows.

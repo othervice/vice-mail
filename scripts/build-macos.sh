@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds the macOS app (.app) and disk image (.dmg) for Apple silicon, ad-hoc signed: no developer
-# signature and no notarisation (both stage 15, see docs/INSTALL.md). Checks the signature and the
-# disk image, starts the app from the disk image under a temporary HOME, then prints path, size and
-# SHA-256 of the .dmg.
+# signature and no notarisation (both stage 15, see docs/INSTALL.md). The MCP helper `mail-mcp`
+# goes into Contents/MacOS as a Tauri sidecar (stage 12, decision 0021). Checks the signatures and
+# the disk image, starts the app from the disk image under a temporary HOME, then prints path, size
+# and SHA-256 of the .dmg.
 #
 #   scripts/build-macos.sh              version from tauri.conf.json, else the Cargo workspace
 #   scripts/build-macos.sh 0.1.0-preview.1
@@ -14,7 +15,7 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -95,16 +96,30 @@ trap cleanup EXIT
 
 # --- Build -----------------------------------------------------------------------------------
 
+target_dir="${CARGO_TARGET_DIR:-$repo/target}"
+triple="$(rustc -vV | sed -n 's/^host: //p')"
+[[ "$triple" == aarch64-apple-darwin ]] || fail "unexpected host triple '$triple'"
+
+# The MCP helper (decision 0021): built first, then handed to Tauri as `bundle.externalBin`,
+# which wants `<path>-<target triple>` and puts it into Contents/MacOS as `mail-mcp`. Only for
+# this build (through --config), so plain cargo builds need no helper file.
+printf 'build-macos: cargo build --release --locked -p mail-mcp --bin mail-mcp\n'
+cargo build --release --locked -p mail-mcp --bin mail-mcp --manifest-path "$repo/Cargo.toml" ||
+  fail "building the MCP helper failed"
+sidecar_dir="$target_dir/sidecar"
+mkdir -p "$sidecar_dir"
+cp -f "$target_dir/release/mail-mcp" "$sidecar_dir/mail-mcp-$triple"
+
 # Tauri's default leaves only the linker's signature on the binary: `codesign --verify` then
 # fails ("code has no resources but signature indicates they must be present"), and a downloaded
 # copy is reported as damaged. "-" seals the whole bundle ad hoc, without a developer identity.
-config='"bundle":{"macOS":{"signingIdentity":"-"}}'
+config="\"bundle\":{\"macOS\":{\"signingIdentity\":\"-\"},\"externalBin\":[\"$sidecar_dir/mail-mcp\"]}"
 if [[ -n "$version" ]]; then
   config="\"version\":\"$version\",$config"
 fi
 args=(build --bundles app,dmg --config "{$config}")
 
-bundle_dir="${CARGO_TARGET_DIR:-$repo/target}/release/bundle"
+bundle_dir="$target_dir/release/bundle"
 touch "$tmp/started"
 started=$(date +%s)
 printf 'build-macos: SOURCE_DATE_EPOCH=%s pnpm --dir app tauri %s\n' "${SOURCE_DATE_EPOCH:-}" "${args[*]}"
@@ -137,6 +152,19 @@ codesign --verify --deep --strict "$app" 2>"$tmp/codesign.log" || {
 }
 signature="$(codesign -dv "$app" 2>&1 | sed -n 's/^Signature=//p')"
 [[ "$signature" == adhoc ]] || fail "expected an ad-hoc signature, codesign reports '${signature:-none}'"
+
+# The MCP helper: in Contents/MacOS, signed (ad hoc, like the app), and it runs.
+helper="$app/Contents/MacOS/mail-mcp"
+[[ -x "$helper" ]] || fail "the MCP helper is missing in $app/Contents/MacOS"
+codesign --verify --strict "$helper" 2>"$tmp/codesign.log" || {
+  cat "$tmp/codesign.log" >&2
+  fail "codesign --verify failed for the MCP helper"
+}
+helper_signature="$(codesign -dv "$helper" 2>&1 | sed -n 's/^Signature=//p')"
+[[ "$helper_signature" == adhoc ]] ||
+  fail "expected an ad-hoc signature on the MCP helper, codesign reports '${helper_signature:-none}'"
+helper_version="$("$helper" --version)" || fail "the MCP helper does not run"
+[[ "$helper_version" == "mail-mcp "* ]] || fail "unexpected answer of the MCP helper: $helper_version"
 # Gatekeeper rejects every app without a notarised Developer ID signature; that is expected here.
 gatekeeper="$(spctl --assess --type execute "$app" 2>&1 || true)"
 
@@ -147,6 +175,7 @@ hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$mountpoint" 
   fail "cannot mount $dmg"
 image_app="$mountpoint/$(basename "$app")"
 [[ -d "$image_app" ]] || fail "$(basename "$app") is missing in the disk image"
+[[ -x "$image_app/Contents/MacOS/mail-mcp" ]] || fail "the MCP helper is missing in the disk image"
 [[ -L "$mountpoint/Applications" ]] || fail "the disk image has no Applications link to drag the app onto"
 codesign --verify --deep --strict "$image_app" 2>"$tmp/codesign.log" || {
   cat "$tmp/codesign.log" >&2
@@ -219,6 +248,8 @@ printf '\nmacOS app and disk image built in %d s\n' "$seconds"
 printf '  app:       %s (%s)\n' "$app" "$(du -sh "$app" | cut -f1)"
 printf '  version:   %s\n' "$built_version"
 printf '  signature: ad-hoc (no Developer ID, not notarised); codesign --verify ok\n'
+printf '  helper:    Contents/MacOS/mail-mcp (%s, %s), ad-hoc signed, in the disk image\n' \
+  "$helper_version" "$(du -h "$helper" | cut -f1)"
 printf '  spctl:     %s\n' "$(printf '%s' "$gatekeeper" | tr '\n' ' ' | sed 's/ *$//')"
 printf '  start:     %s\n' "$launch"
 printf '  path:      %s\n' "$dmg"

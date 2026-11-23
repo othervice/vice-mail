@@ -8,6 +8,7 @@ mod core;
 pub mod credentials;
 pub mod discovery;
 pub mod logging;
+mod mcp;
 pub mod outbox;
 pub mod reading;
 pub mod search;

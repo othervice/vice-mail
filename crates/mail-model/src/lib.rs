@@ -22,6 +22,7 @@ mod inbox;
 mod ipc;
 mod mailbox;
 mod mailto;
+mod mcp;
 mod message;
 mod outbox;
 mod reading;
@@ -89,6 +90,13 @@ pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
 pub use mailto::{ComposeRequest, MailtoField, MailtoNotice};
+pub use mcp::{
+    MAX_MCP_ACCESS_PAGE, MAX_MCP_CLIENT_NAME_CHARS, MAX_MCP_CLIENTS, MCP_ACCESS_MAX_ENTRIES,
+    MCP_ACCESS_RETENTION_DAYS, McpAccessEntry, McpAccessId, McpAccessOutcome, McpAccessPage,
+    McpAccountAccess, McpAccountShare, McpClientConfig, McpClientCreated, McpClientInfo,
+    McpClientKind, McpConnectionTest, McpHelperInfo, McpHostState, McpRefusal, McpSettingsInfo,
+    McpSetup, McpStatus, McpTestProblem, McpTool,
+};
 pub use message::{
     Address, DATE_HEADER_TOLERANCE, FlagUpdate, Flags, MAX_SORT_DATE, MessageActivity,
     MessageHeader, MessageListItem, MessagePage, sort_date,

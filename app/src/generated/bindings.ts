@@ -240,6 +240,26 @@ export const commands = {
 	 *  fields. Call once at start; later links arrive as `composeRequested`.
 	 */
 	takeLaunchLinks: (options?: InvokeOptions) => __TAURI_INVOKE<ComposeRequest[]>("take_launch_links", undefined, options),
+	/**  Switch, accounts with their access level, clients and the endpoint's state. */
+	getMcpSettings: (options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("get_mcp_settings", undefined, options)),
+	/**  On or off. Off is the emergency stop: every open AI connection closes at once. */
+	setMcpEnabled: (enabled: boolean, options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("set_mcp_enabled", { enabled }, options)),
+	/**  `hidden`, `read` or `read_and_drafts` for one account. */
+	setMcpAccountAccess: (accountId: AccountId, access: McpAccountAccess, options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("set_mcp_account_access", { accountId, access }, options)),
+	/**  Registers a client; returns its token and the configurations with it, once. */
+	createMcpClient: (name: string, options?: InvokeOptions) => typedError<McpClientCreated, IpcError>(__TAURI_INVOKE("create_mcp_client", { name }, options)),
+	/**  Revokes a client: its token stops working, its connections close. */
+	revokeMcpClient: (clientId: string, options?: InvokeOptions) => typedError<McpSettingsInfo, IpcError>(__TAURI_INVOKE("revoke_mcp_client", { clientId }, options)),
+	/**  Registered and revoked clients, newest first. */
+	listMcpClients: (options?: InvokeOptions) => typedError<McpClientInfo[], IpcError>(__TAURI_INVOKE("list_mcp_clients", undefined, options)),
+	/**  Helper path, endpoint and the configurations with the placeholder `<token>`. */
+	getMcpSetup: (options?: InvokeOptions) => __TAURI_INVOKE<McpSetup>("get_mcp_setup", undefined, options),
+	/**  The access log ("Zugriffe"), newest first, below `before`. `limit` 1..=500. */
+	listMcpAccess: (before: McpAccessId | null, limit: number, options?: InvokeOptions) => typedError<McpAccessPage, IpcError>(__TAURI_INVOKE("list_mcp_access", { before, limit }, options)),
+	/**  Whether AI access is on, the endpoint's state and the helper. */
+	getMcpStatus: (options?: InvokeOptions) => __TAURI_INVOKE<McpStatus>("get_mcp_status", undefined, options),
+	/**  Starts the helper like an AI client would and runs the handshake through it. */
+	testMcpConnection: (options?: InvokeOptions) => typedError<McpConnectionTest, IpcError>(__TAURI_INVOKE("test_mcp_connection", undefined, options)),
 };
 
 /** Events */
@@ -264,11 +284,21 @@ export const MAX_ATTACHMENT_BYTES = 104857600 as const;
 
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 
+export const MAX_MCP_ACCESS_PAGE = 500 as const;
+
+export const MAX_MCP_CLIENTS = 50 as const;
+
+export const MAX_MCP_CLIENT_NAME_CHARS = 100 as const;
+
 export const MAX_SEARCH_PAGE = 200 as const;
 
 export const MAX_SEND_DELAY_SECS = 30 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
+
+export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
+
+export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
 
 /* Types */
 /**  A configured account as the UI sees it. */
@@ -859,8 +889,11 @@ export type ContactSuggestion = {
  *  - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
  *    composer with these fields and show `request.notices` (a link that sets blind copies, or
  *    tried to set headers that were ignored).
+ *  - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
+ *  - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
+ *    failed.
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -1412,6 +1445,230 @@ export type MarkScope =
 { kind: "group"; groupId: AccountGroupId } | 
 /**  One account (also a hidden one). */
 { kind: "account"; accountId: AccountId };
+
+/**  One entry of the access log: metadata only, never arguments or content. */
+export type McpAccessEntry = {
+	id: McpAccessId,
+	/**  Unix milliseconds. */
+	at: number,
+	/**  Null for a connection refused before the client was known. */
+	clientId: string | null,
+	/**  The client's name at that moment. */
+	clientName: string | null,
+	/**  The tool called; null for a refused connection. */
+	tool: McpTool | null,
+	/**  Messages whose data the answer contained (a created draft counts as one). */
+	messages: number,
+	outcome: McpAccessOutcome,
+	/**  Set for a refused connection. */
+	refusal: McpRefusal | null,
+};
+
+/**  Id of an access log entry; grows with every entry. The cursor of `listMcpAccess`. */
+export type McpAccessId = number;
+
+/**  How a logged access ended. */
+export type McpAccessOutcome = 
+/**  The tool ran and answered. */
+"ok" | 
+/**  The tool ran and reported an error (bad argument, unknown id, app error). */
+"error" | 
+/**  Not run (not allowed, rate limit, timeout), or a connection was refused. */
+"refused";
+
+/**  One page of the access log, newest first. */
+export type McpAccessPage = {
+	entries: McpAccessEntry[],
+	/**  Pass as `before` for the next page; null on the last page. */
+	nextCursor: McpAccessId | null,
+};
+
+/**  What AI clients may do with one account. Every account starts `hidden`. */
+export type McpAccountAccess = 
+/**  Invisible to every tool, also to the search. */
+"hidden" | 
+/**  Listed, searchable, readable (bodies are read with `BODY.PEEK`: nothing becomes read). */
+"read" | 
+/**
+ *  Also "create draft". Without writes on for the account the draft stays in the app on
+ *  this device (`localOnly`).
+ */
+"read_and_drafts";
+
+/**  The access level of one account. */
+export type McpAccountShare = {
+	accountId: AccountId,
+	access: McpAccountAccess,
+};
+
+/**  One configuration to copy. */
+export type McpClientConfig = {
+	kind: McpClientKind,
+	/**
+	 *  Where it goes: a file path with `~` or `%APPDATA%`, `terminal` for Claude Code, or a
+	 *  short hint for LM Studio (shown as is).
+	 */
+	location: string,
+	/**
+	 *  JSON for the configuration files, a command line for Claude Code. Contains the token
+	 *  when it comes from `createMcpClient`, the placeholder `<token>` otherwise.
+	 */
+	content: string,
+	/**  The client's documentation of the format. */
+	source: string,
+};
+
+/**
+ *  A new client (`createMcpClient`): its token and the configurations with the token filled
+ *  in. Shown once; the app cannot show the token again (a lost token means a new client).
+ */
+export type McpClientCreated = {
+	client: McpClientInfo,
+	/**  `mcp1_<client id>_<key>`; the environment variable `MAIL_MCP_TOKEN` of the client. */
+	token: string,
+	configs: McpClientConfig[],
+};
+
+/**
+ *  A registered AI client. Its key lives in the system keychain; the app shows the token only
+ *  once, right after creating the client.
+ */
+export type McpClientInfo = {
+	/**  32 lowercase hex digits; not secret (it names the client in the access log). */
+	clientId: string,
+	/**  Chosen by the user. */
+	name: string,
+	/**  Unix milliseconds. */
+	createdAt: number,
+	/**  Set once revoked: the token no longer works, the key is gone from the keychain. */
+	revokedAt: number | null,
+	/**  The last tool call or connection attempt of this client. */
+	lastUsedAt: number | null,
+};
+
+/**  The AI clients with a ready-made configuration. */
+export type McpClientKind = "claude_desktop" | "claude_code" | "cursor" | "lm_studio";
+
+/**
+ *  Result of "test connection": the app starts its helper program like an AI client would,
+ *  with a temporary client of its own, and asks it for the tools and the shared accounts.
+ */
+export type McpConnectionTest = {
+	ok: boolean,
+	problem: McpTestProblem | null,
+	refusal: McpRefusal | null,
+	/**  The helper that was started. */
+	helperPath: string | null,
+	/**  MCP protocol version the helper agreed on. */
+	protocolVersion: string | null,
+	/**  Tools the helper listed (from the app when it was reached). */
+	tools: McpTool[],
+	/**  Accounts visible to AI clients right now. */
+	sharedAccounts: number,
+	/**  Technical detail for a failure (English, from the app or the helper; never mail data). */
+	detail: string | null,
+	durationMs: number,
+};
+
+/**  The helper program `mail-mcp` that AI clients start. */
+export type McpHelperInfo = {
+	/**  Absolute path, as the client configurations contain it. */
+	path: string | null,
+	/**  The file exists. */
+	found: boolean,
+	/**
+	 *  The app runs from a place that changes (a disk image, macOS App Translocation): the
+	 *  path in a client configuration would stop working. The UI asks to move the app first.
+	 */
+	unstableLocation: boolean,
+};
+
+/**  What the local endpoint is doing. */
+export type McpHostState = 
+/**  MCP is off: no socket or pipe exists, nothing can connect. */
+"stopped" | 
+/**  Waiting for the helper program of an AI client. */
+"listening" | 
+/**
+ *  MCP is on, but the endpoint could not be opened (`McpStatus::error` says why). Tried
+ *  again at the next settings change.
+ */
+"failed";
+
+/**  Why the app refused a connection of a helper program. */
+export type McpRefusal = 
+/**  The helper speaks another IPC version (app and helper from different releases). */
+"unsupported_protocol" | 
+/**  MCP is off. */
+"disabled" | 
+/**  The client was never registered, or was revoked. */
+"unknown_client" | 
+/**  The token's key is wrong. */
+"bad_proof" | 
+/**  The helper sent something unreadable. */
+"malformed" | 
+/**  The handshake took too long. */
+"timeout" | 
+/**  Too many AI clients at once. */
+"too_many_connections";
+
+/**  Everything the settings page "AI over MCP" shows. */
+export type McpSettingsInfo = {
+	enabled: boolean,
+	/**  Every account, oldest first, with its access level (`hidden` when never shared). */
+	accounts: McpAccountShare[],
+	/**  Registered clients, newest first; revoked ones stay listed with `revokedAt`. */
+	clients: McpClientInfo[],
+	status: McpStatus,
+};
+
+/**
+ *  The setup help without a token (`getMcpSetup`): helper path, endpoint and the
+ *  configurations with the placeholder `<token>`.
+ */
+export type McpSetup = {
+	helper: McpHelperInfo,
+	endpoint: string | null,
+	configs: McpClientConfig[],
+};
+
+/**  State of AI access, for the settings page and `mcpStatusChanged`. */
+export type McpStatus = {
+	/**  The master switch. */
+	enabled: boolean,
+	state: McpHostState,
+	/**  Where the app listens (socket path on macOS, pipe name on Windows); null until known. */
+	endpoint: string | null,
+	/**
+	 *  Why the endpoint could not be opened (`failed`); technical text from the app, never
+	 *  from a mail.
+	 */
+	error: string | null,
+	helper: McpHelperInfo,
+};
+
+/**  What went wrong in "test connection". */
+export type McpTestProblem = 
+/**  MCP is off; turn it on first. */
+"disabled" | 
+/**
+ *  The helper program is not where the configurations say (a development build without
+ *  `cargo build -p mail-mcp`, or a damaged installation).
+ */
+"helper_missing" | 
+/**  The helper program did not start, crashed or did not speak MCP. */
+"helper_failed" | 
+/**  The app could not open its endpoint (`McpStatus::error`). */
+"endpoint_failed" | 
+/**  The helper started but could not reach the app. */
+"unreachable" | 
+/**  The app refused the helper (`refusal`). */
+"refused" | 
+/**  No answer in time. */
+"timeout";
+
+/**  The tools of the MCP server (fixed in `mail-mcp`; nothing sends, deletes, moves or marks). */
+export type McpTool = "list_accounts" | "list_mailboxes" | "search_messages" | "list_messages" | "read_message" | "read_thread" | "create_draft";
 
 /**
  *  Outbox state of a message as its list row shows it (stage 4). If several operations touch

@@ -21,6 +21,8 @@
 //! - Stage 9 (`comfort_api`): categories classified when messages are stored (through the
 //!   engine's [`Classifier`]) and the user's sender rules, the inbox lists without snoozed and
 //!   pinned messages and per category, snoozes, pins, tasks, local rules (decision 0020).
+//! - Stage 12 (`mcp`): AI access over MCP: the switch, shared accounts, registered clients
+//!   (keys in the keychain) and the access log with its retention (decision 0021).
 
 mod accounts;
 pub mod backup;
@@ -40,6 +42,7 @@ mod lists;
 mod mail_api;
 mod mailboxes;
 mod marks;
+mod mcp;
 mod messages;
 mod migrations;
 mod outbox;
@@ -74,6 +77,7 @@ pub use mail_api::{
     StoredAccount,
 };
 pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
+pub use mcp::{NewMcpAccess, StoredMcpClient, StoredMcpState};
 pub use migrations::SCHEMA_VERSION;
 pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
 pub use reading::{

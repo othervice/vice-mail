@@ -135,6 +135,9 @@ pub struct ReadingPreferences {
 /// - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
 ///   composer with these fields and show `request.notices` (a link that sets blind copies, or
 ///   tried to set headers that were ignored).
+/// - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
+/// - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
+///   failed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -214,6 +217,12 @@ pub enum CoreEvent {
     },
     ComposeRequested {
         request: crate::ComposeRequest,
+    },
+    McpAccess {
+        entries: Vec<crate::McpAccessEntry>,
+    },
+    McpStatusChanged {
+        status: crate::McpStatus,
     },
 }
 

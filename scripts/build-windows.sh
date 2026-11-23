@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Windows installer (NSIS, x86_64) on the Mac by cross-compiling with cargo-xwin
-# (docs/SETUP.md, decision 0004). Prints path, size and SHA-256 of the installer at the end.
+# (docs/SETUP.md, decision 0004). The MCP helper `mail-mcp.exe` goes next to the app as a Tauri
+# sidecar (stage 12, decision 0021). Prints path, size and SHA-256 of the installer at the end.
 #
 #   scripts/build-windows.sh            version from tauri.conf.json, else the Cargo workspace
 #   scripts/build-windows.sh 0.1.0-preview.1
@@ -13,7 +14,7 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -98,13 +99,27 @@ fi
 
 # --- Build -----------------------------------------------------------------------------------
 
-# The version goes in through --config (as in build-macos.sh): no project file is changed.
-args=(build --runner cargo-xwin --target "$target" --bundles nsis)
-if [[ -n "$version" ]]; then
-  args+=(--config "{\"version\":\"$version\"}")
-fi
+target_dir="${CARGO_TARGET_DIR:-$repo/target}"
 
-nsis_dir="${CARGO_TARGET_DIR:-$repo/target}/$target/release/bundle/nsis"
+# The MCP helper (decision 0021): built first, then handed to Tauri as `bundle.externalBin`
+# (`<path>-<target triple>.exe`); the installer puts it next to the app as `mail-mcp.exe`. Only
+# for this build (through --config), so plain cargo builds need no helper file.
+printf 'build-windows: cargo xwin build --release --locked -p mail-mcp --bin mail-mcp --target %s\n' "$target"
+cargo xwin build --release --locked -p mail-mcp --bin mail-mcp --target "$target" \
+  --manifest-path "$repo/Cargo.toml" || fail "building the MCP helper failed"
+sidecar_dir="$target_dir/sidecar"
+mkdir -p "$sidecar_dir"
+cp -f "$target_dir/$target/release/mail-mcp.exe" "$sidecar_dir/mail-mcp-$target.exe"
+
+# The version and the sidecar go in through --config (as in build-macos.sh): no project file is
+# changed.
+config="\"bundle\":{\"externalBin\":[\"$sidecar_dir/mail-mcp\"]}"
+if [[ -n "$version" ]]; then
+  config="\"version\":\"$version\",$config"
+fi
+args=(build --runner cargo-xwin --target "$target" --bundles nsis --config "{$config}")
+
+nsis_dir="$target_dir/$target/release/bundle/nsis"
 touch "$tmp/started"
 started=$(date +%s)
 printf 'build-windows: SOURCE_DATE_EPOCH=%s pnpm --dir app tauri %s\n' "${SOURCE_DATE_EPOCH:-}" "${args[*]}"
@@ -123,11 +138,20 @@ installer="${installers[0]}"
 [[ -z "$version" || "$(basename "$installer")" == *"_${version}_"* ]] ||
   fail "$(basename "$installer") does not carry version $version"
 
+# The MCP helper: next to the app in the build, and in the installer's file list.
+[[ -f "$target_dir/$target/release/mail-mcp.exe" ]] ||
+  fail "the MCP helper is missing next to the app in $target_dir/$target/release"
+nsi="$target_dir/$target/release/nsis/x64/installer.nsi"
+[[ -f "$nsi" ]] || fail "the NSIS script $nsi is missing"
+grep -q 'mail-mcp\.exe' "$nsi" || fail "the installer does not install mail-mcp.exe ($nsi)"
+helper_size="$(du -h "$target_dir/$target/release/mail-mcp.exe" | cut -f1)"
+
 bytes=$(wc -c <"$installer" | tr -d ' ')
 sha256=$(shasum -a 256 "$installer" | cut -d' ' -f1)
 printf '%s  %s\n' "$sha256" "$(basename "$installer")" >"$installer.sha256"
 
 printf '\nWindows installer built in %d s\n' "$seconds"
+printf '  helper:  mail-mcp.exe (%s) next to the app, listed in the installer script\n' "$helper_size"
 printf '  path:    %s\n' "$installer"
 printf '  size:    %s bytes (%s MB)\n' "$bytes" "$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1048576 }')"
 printf '  sha256:  %s\n' "$sha256"

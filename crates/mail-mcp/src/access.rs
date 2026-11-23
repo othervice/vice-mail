@@ -198,4 +198,8 @@ pub struct NewDraft {
 pub struct DraftCreated {
     /// The local id once the draft is stored, if already known.
     pub message_id: Option<MessageId>,
+    /// The draft stays in the app on this device: the user has not allowed changes on the
+    /// server for this account (or it has no Drafts folder). Otherwise it goes to the Drafts
+    /// folder.
+    pub local_only: bool,
 }

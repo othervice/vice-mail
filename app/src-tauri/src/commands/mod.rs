@@ -8,6 +8,7 @@ pub mod comfort;
 pub mod compose;
 pub mod groups;
 pub mod mail;
+pub mod mcp;
 pub mod preferences;
 pub mod reading;
 pub mod search;

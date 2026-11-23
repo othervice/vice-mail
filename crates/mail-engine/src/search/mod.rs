@@ -174,6 +174,14 @@ async fn background(store: Weak<Store>, wake: Arc<Notify>) {
     }
 }
 
+/// A page of [`AppCore::search_exactly`] or [`AppCore::list_exactly`].
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ExactPage {
+    pub(crate) hits: Vec<mail_model::MessageListItem>,
+    pub(crate) next_cursor: Option<ListCursor>,
+    pub(crate) problems: Vec<mail_model::SearchProblemCode>,
+}
+
 fn check_limit(limit: u32) -> Result<(), CoreError> {
     if limit == 0 || limit > MAX_SEARCH_PAGE {
         return Err(CoreError::InvalidArgument(format!(
@@ -279,6 +287,116 @@ impl<C: Connector> AppCore<C> {
             (compiled, server)
         };
         server::search(self, &request, compiled, server).await
+    }
+
+    /// Stage 12 (AI access over MCP): a submitted search in exactly `accounts`, or in one of
+    /// their mailboxes. Without a mailbox and without a positive `in:`, Trash and Junk are left
+    /// out. Hidden accounts of the app do not matter (the caller decides what is shared).
+    pub(crate) async fn search_exactly(
+        &self,
+        query: &str,
+        accounts: &[AccountId],
+        mailbox: Option<MailboxId>,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ExactPage, CoreError> {
+        check_limit(limit)?;
+        let store = self.store_ref()?;
+        let request = SearchRequest {
+            query: query.to_owned(),
+            scope: mail_model::SearchScope::All,
+            cursor,
+            limit,
+            typing: false,
+            month_first: false,
+        };
+        let compiled = {
+            let zone = LocalZone::system();
+            let context = self.search_context(&zone, &request);
+            resolve::compile(&request, &context, CompileOptions::default())
+        };
+        let plan = resolve::plan_with(
+            store,
+            &request,
+            compiled,
+            resolve::Base::Exactly { accounts, mailbox },
+        )
+        .await?;
+        let mut page = ExactPage {
+            problems: plan.problems.iter().map(|p| p.code).collect(),
+            ..ExactPage::default()
+        };
+        if plan.matches_nothing || plan.empty || accounts.is_empty() {
+            return Ok(page);
+        }
+        let found = store.search(plan.filter, cursor, limit).await?;
+        page.hits = found.hits.into_iter().map(|h| h.item).collect();
+        page.next_cursor = found.next_cursor;
+        Ok(page)
+    }
+
+    /// Stage 12: unread or flagged messages in exactly `accounts` (or one of their mailboxes),
+    /// newest first; without a mailbox Trash and Junk are left out.
+    pub(crate) async fn list_exactly(
+        &self,
+        flagged: bool,
+        accounts: &[AccountId],
+        mailbox: Option<MailboxId>,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ExactPage, CoreError> {
+        /// Up to this many mailboxes are one `UNION ALL` branch each (driven by `loc_unseen`);
+        /// more are filtered per message (SQLite allows 500 compound terms).
+        const MAX_BRANCHES: usize = 100;
+        check_limit(limit)?;
+        let store = self.store_ref()?;
+        if accounts.is_empty() {
+            return Ok(ExactPage::default());
+        }
+        let mut boxes = Vec::new();
+        let mut skipped = Vec::new();
+        match mailbox {
+            Some(mailbox) => {
+                if !accounts.contains(&store.mailbox_owner(mailbox).await?) {
+                    return Err(CoreError::NotFound(format!("mailbox {}", mailbox.0)));
+                }
+                boxes.push(mailbox);
+            }
+            None => {
+                for account in accounts {
+                    for name in store.mailbox_names(*account).await? {
+                        if matches!(
+                            name.role,
+                            mail_model::MailboxRole::Trash | mail_model::MailboxRole::Junk
+                        ) {
+                            skipped.push(name.id);
+                        } else {
+                            boxes.push(name.id);
+                        }
+                    }
+                }
+            }
+        }
+        let mut filter = mail_store::SearchFilter {
+            accounts: Some(accounts.to_vec()),
+            ..Default::default()
+        };
+        if flagged {
+            filter.flagged = Some(true);
+        } else {
+            filter.unread = Some(true);
+        }
+        if boxes.len() <= MAX_BRANCHES {
+            filter.mailbox_sets = vec![boxes];
+        } else {
+            filter.excluded_mailboxes = skipped;
+        }
+        let found = store.search(filter, cursor, limit).await?;
+        Ok(ExactPage {
+            hits: found.hits.into_iter().map(|h| h.item).collect(),
+            next_cursor: found.next_cursor,
+            problems: Vec::new(),
+        })
     }
 
     /// State of the full-text index.
