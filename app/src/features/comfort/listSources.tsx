@@ -1,4 +1,4 @@
-import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, type InfiniteData, type QueryKey } from "@tanstack/react-query";
 import { Clock, Inbox, ListTodo, Pin, Zap } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,9 @@ import {
   type Mailbox,
   type MarkScope,
   type MessageListItem,
+  type MessagePage,
   type TaskFilter,
+  type UnifiedView,
 } from "../../services/ipc";
 import type { MessageListSource } from "../messages/listSource";
 import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
@@ -86,43 +88,35 @@ function mailboxScope(mailbox: Mailbox): InboxScope {
  * The rows of a list by kind. `folder` gives none (the list reads the folder's pages itself).
  * Every query runs only for its own kind, so a folder view asks the core nothing extra.
  */
-export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox): MessageListSource | undefined {
+/**
+ * The sorted inbox of a scope (one account's inbox, or the unified inbox of all visible accounts
+ * or a group): blocks and bundles, and the "Priority" list behind "Show all".
+ */
+function useSortedInboxSource(
+  scope: InboxScope,
+  keys: { inbox: QueryKey; priority: QueryKey },
+  enabled: boolean,
+): MessageListSource {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [priorityOnly, setPriorityOnly] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("open");
-  const scope = mailboxScope(mailbox);
-  const markScope: MarkScope = { kind: "account", accountId: account.id };
 
   const inbox = useInfiniteQuery({
-    queryKey: inboxQueryKey(account.id, mailbox.id),
-    queryFn: ({ pageParam }) => comfortIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE),
+    queryKey: keys.inbox,
+    queryFn: ({ pageParam }: { pageParam: InboxCursor | null }) => comfortIpc.listInbox(scope, pageParam, INBOX_PAGE_SIZE),
     initialPageParam: null as InboxCursor | null,
-    getNextPageParam: (last) => last.nextCursor,
+    getNextPageParam: (last: InboxPage) => last.nextCursor,
     select: selectInboxPages,
-    enabled: kind === "inbox" && !priorityOnly,
+    enabled: enabled && !priorityOnly,
   });
 
   const priority = useInfiniteQuery({
-    queryKey: priorityQueryKey(account.id, mailbox.id),
-    queryFn: ({ pageParam }) => comfortIpc.listInboxFiltered(scope, { kind: "priority" }, pageParam, INBOX_PAGE_SIZE),
+    queryKey: keys.priority,
+    queryFn: ({ pageParam }: { pageParam: ListCursor | null }) =>
+      comfortIpc.listInboxFiltered(scope, { kind: "priority" }, pageParam, INBOX_PAGE_SIZE),
     initialPageParam: null as ListCursor | null,
-    getNextPageParam: (last) => last.nextCursor,
-    enabled: kind === "inbox" && priorityOnly,
-  });
-
-  const markKind: MarkListKind = kind === "later" || kind === "pinned" || kind === "tasks" ? kind : "later";
-  const marks = useInfiniteQuery({
-    queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
-    queryFn: async (): Promise<{ items: MessageListItem[] }> => {
-      // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
-      if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
-      if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
-      return { items: await comfortIpc.listTasks(markScope, taskFilter) };
-    },
-    initialPageParam: null,
-    getNextPageParam: () => null,
-    enabled: kind === markKind,
+    getNextPageParam: (last: MessagePage) => last.nextCursor,
+    enabled: enabled && priorityOnly,
   });
 
   const toggle = useCallback((key: string) => {
@@ -160,6 +154,56 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
     ],
     [back],
   );
+
+  return useMemo((): MessageListSource => {
+    if (priorityOnly) {
+      return {
+        query: priority,
+        buildRows: priorityRows,
+        empty: { icon: Zap, title: t("comfort.priority.empty.title"), body: t("comfort.priority.empty.body") },
+      };
+    }
+    return { query: inbox, buildRows: inboxRows };
+  }, [priorityOnly, priority, priorityRows, inbox, inboxRows, t]);
+}
+
+/**
+ * Stage 7: the unified inbox (every visible account, or a group's) as a sorted inbox, through
+ * `listInbox` with the unified scope, so it keeps blocks, bundles and hidden snoozes. Keyed under
+ * `["unified", view]`, which `messagesChanged` and `inboxChanged` reload.
+ */
+export function useUnifiedInboxSource(view: UnifiedView, enabled: boolean): MessageListSource {
+  return useSortedInboxSource(
+    { kind: "unified", view },
+    { inbox: ["unified", view, "inbox"], priority: ["unified", view, "priority"] },
+    enabled,
+  );
+}
+
+export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox): MessageListSource | undefined {
+  const { t } = useTranslation();
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("open");
+  const markScope: MarkScope = { kind: "account", accountId: account.id };
+  const sorted = useSortedInboxSource(
+    mailboxScope(mailbox),
+    { inbox: inboxQueryKey(account.id, mailbox.id), priority: priorityQueryKey(account.id, mailbox.id) },
+    kind === "inbox",
+  );
+
+  const markKind: MarkListKind = kind === "later" || kind === "pinned" || kind === "tasks" ? kind : "later";
+  const marks = useInfiniteQuery({
+    queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
+    queryFn: async (): Promise<{ items: MessageListItem[] }> => {
+      // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
+      if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
+      if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
+      return { items: await comfortIpc.listTasks(markScope, taskFilter) };
+    },
+    initialPageParam: null,
+    getNextPageParam: () => null,
+    enabled: kind === markKind,
+  });
+
   const plainRows = useCallback((items: readonly MessageListItem[], bounds: DayBounds) => buildRows(items, bounds), []);
 
   return useMemo((): MessageListSource | undefined => {
@@ -167,14 +211,7 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
       case "folder":
         return undefined;
       case "inbox":
-        if (priorityOnly) {
-          return {
-            query: priority,
-            buildRows: priorityRows,
-            empty: { icon: Zap, title: t("comfort.priority.empty.title"), body: t("comfort.priority.empty.body") },
-          };
-        }
-        return { query: inbox, buildRows: inboxRows };
+        return sorted;
       case "later":
       case "pinned":
       case "tasks": {
@@ -192,7 +229,7 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
         };
       }
     }
-  }, [kind, priorityOnly, priority, priorityRows, inbox, inboxRows, marks, plainRows, taskFilter, t]);
+  }, [kind, sorted, marks, plainRows, taskFilter, t]);
 }
 
 const TASK_FILTERS: readonly TaskFilter[] = ["open", "done", "all"];

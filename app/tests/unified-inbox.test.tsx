@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { accountRing } from "../src/features/accounts/accountColor";
-import type { AccountGroup } from "../src/services/ipc";
+import type { AccountGroup, InboxScope } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
 
@@ -52,7 +52,9 @@ describe("unified inbox", () => {
     await waitFor(() => {
       expect(within(list).getAllByRole("option")).toHaveLength(3);
     });
-    expect(core.callsOf("list_unified_inbox")[0]).toEqual({ view: { kind: "all" }, cursor: null, limit: 200 });
+    // Stage 9's sorted inbox with the unified scope (blocks, bundles, hidden snoozes).
+    expect(core.callsOf("list_inbox")).toContainEqual({ scope: { kind: "unified", view: { kind: "all" } }, cursor: null, limit: 200 });
+    expect(core.callsOf("list_unified_inbox")).toEqual([]);
     const options = within(list).getAllByRole("option");
     for (const [index, account] of [ADA, WORK, CLUB].entries()) {
       expect(options[index]?.querySelector(`.${accountRing(account.color)}`)).toBeTruthy();
@@ -159,7 +161,11 @@ describe("unified inbox", () => {
     await waitFor(() => {
       expect(subjects(list)).toEqual(["Privat", "Training"]);
     });
-    expect(core.callsOf("list_unified_inbox")).toContainEqual({ view: { kind: "group", groupId: GROUP.id }, cursor: null, limit: 200 });
+    expect(core.callsOf("list_inbox")).toContainEqual({
+      scope: { kind: "unified", view: { kind: "group", groupId: GROUP.id } },
+      cursor: null,
+      limit: 200,
+    });
 
     // Back to one account through the switcher.
     await choose(user, "Work (work@example.com)");
@@ -175,19 +181,21 @@ describe("unified inbox", () => {
     expect(within(tree).getByRole("button", { name: "All inboxes" }).getAttribute("aria-current")).toBe("page");
   });
 
-  it("shows conversations of the unified inbox when the conversation view is on", async () => {
+  it("stays a sorted inbox: the conversation view is not offered for inboxes", async () => {
     const { core, user } = setup();
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
     await choose(user, "All accounts");
     await screen.findByRole("listbox", { name: "Messages in All inboxes" });
-    await user.click(screen.getByRole("button", { name: "Conversations" }));
-    await waitFor(() => {
-      expect(core.callsOf("list_unified_threads")).toEqual([{ view: { kind: "all" }, cursor: null, limit: 200 }]);
-    });
+    expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
+    expect(core.callsOf("list_unified_threads")).toEqual([]);
   });
 
   it("shows a failed load at its place with a retry", async () => {
-    const { user } = setup({ failures: { list_unified_inbox: ipcError("database") } });
+    const { user } = setup({
+      fail: (cmd, args) =>
+        cmd === "list_inbox" && (args["scope"] as InboxScope).kind === "unified" ? ipcError("database") : undefined,
+    });
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await choose(user, "All accounts");
     const alert = await screen.findByRole("alert");

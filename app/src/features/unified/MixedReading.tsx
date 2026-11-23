@@ -11,7 +11,6 @@ import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { useMailboxes } from "../mailboxes/queries";
 import type { MessageListHandle } from "../messages/MessageList";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
-import { ThreadPane } from "../threads/ThreadPane";
 
 /**
  * Actions of the reading pane in a mixed list: those that need no picker or dialog of the folder
@@ -24,14 +23,13 @@ const SHORTCUT_ACTIONS: ReadonlySet<ActionId> = new Set([...UNIFIED_TOOLBAR, "un
 interface ReadingProps {
   account: Account;
   item: MessageListItem;
-  conversations: boolean;
   focusRequest: FocusRequest | null;
   platform: ShortcutPlatform;
   list: RefObject<MessageListHandle | null>;
 }
 
 /** The open row with the actions of its own account and folder (one action controller each). */
-function ReadingWithActions({ account, mailbox, item, conversations, focusRequest, platform, list }: ReadingProps & { mailbox: Mailbox }) {
+function ReadingWithActions({ account, mailbox, item, focusRequest, platform, list }: ReadingProps & { mailbox: Mailbox }) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id).data ?? [];
   const controller = useActionController({ account, mailbox, list });
@@ -51,16 +49,15 @@ function ReadingWithActions({ account, mailbox, item, conversations, focusReques
   const closePane = () => {
     list.current?.clearSelection();
   };
-  const toolbarFor = (message: MessageListItem) =>
-    message.mailboxId === mailbox.id && (
-      <ActionToolbar
-        ids={UNIFIED_TOOLBAR}
-        ctx={{ account, mailbox, items: [message], canUndo: controller.canUndo }}
-        host={controller.host}
-        platform={platform}
-        label={t("actions.toolbar")}
-      />
-    );
+  const toolbar = (
+    <ActionToolbar
+      ids={UNIFIED_TOOLBAR}
+      ctx={{ account, mailbox, items: [item], canUndo: controller.canUndo }}
+      host={controller.host}
+      platform={platform}
+      label={t("actions.toolbar")}
+    />
+  );
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {controller.missing && (
@@ -77,34 +74,21 @@ function ReadingWithActions({ account, mailbox, item, conversations, focusReques
           }}
         />
       )}
-      {conversations ? (
-        <ThreadPane
-          account={account}
-          item={item}
-          mailboxId={item.mailboxId}
-          focusRequest={focusRequest}
-          toolbarFor={toolbarFor}
-          onEscape={focusList}
-          onClose={closePane}
-        />
-      ) : (
-        <ReadingPane
-          account={account}
-          messageId={item.id}
-          focusRequest={focusRequest}
-          toolbar={toolbarFor(item)}
-          onEscape={focusList}
-          onClose={closePane}
-        />
-      )}
+      <ReadingPane
+        account={account}
+        messageId={item.id}
+        focusRequest={focusRequest}
+        toolbar={toolbar}
+        onEscape={focusList}
+        onClose={closePane}
+      />
     </div>
   );
 }
 
 /**
  * The open row of a list that mixes folders or accounts (unified inbox, search results): the
- * reading pane or the conversation, with the actions of the row's own account and folder once
- * that folder is known.
+ * reading pane with the actions of the row's own account and folder once that folder is known.
  */
 export function MixedReading(props: ReadingProps) {
   const mailbox = useMailboxes(props.account.id).data?.find((m) => m.id === props.item.mailboxId);
@@ -115,17 +99,7 @@ export function MixedReading(props: ReadingProps) {
   const closePane = () => {
     props.list.current?.clearSelection();
   };
-  return props.conversations ? (
-    <ThreadPane
-      key={props.item.id}
-      account={props.account}
-      item={props.item}
-      mailboxId={props.item.mailboxId}
-      focusRequest={props.focusRequest}
-      onEscape={focusList}
-      onClose={closePane}
-    />
-  ) : (
+  return (
     <ReadingPane
       key={props.item.id}
       account={props.account}

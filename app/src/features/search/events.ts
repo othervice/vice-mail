@@ -10,7 +10,7 @@ function refreshAll(queryClient: QueryClient, prefix: QueryKey): void {
 }
 
 /** Query prefixes of stage 7 whose rows come from messages of any account. */
-const MIXED_LISTS: readonly QueryKey[] = [["search"], ["unified"], ["unifiedThreads"]];
+const MIXED_LISTS: readonly QueryKey[] = [["search"], ["unified"]];
 
 /**
  * Stage 7: core events for search results, conversation lists, the unified inbox, account
@@ -28,6 +28,10 @@ export function handleSearchEvent(queryClient: QueryClient, event: CoreEvent): v
       refreshAll(queryClient, ["threads", event.accountId]);
       refreshAll(queryClient, ["thread", event.accountId]);
       for (const prefix of MIXED_LISTS) refreshAll(queryClient, prefix);
+      break;
+    case "inboxChanged":
+      // Stage 9 marks or categories changed: the unified inbox is a sorted inbox too.
+      refreshAll(queryClient, ["unified"]);
       break;
     case "accountsChanged":
       // Groups, hidden accounts and identities change with this event, and so may every list.

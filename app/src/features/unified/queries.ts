@@ -1,27 +1,8 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import {
-  searchIpc,
-  type AccountGroupId,
-  type AccountId,
-  type ListCursor,
-  type UnifiedView,
-} from "../../services/ipc";
-import { MESSAGE_PAGE_SIZE } from "../messages/queries";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { searchIpc, type AccountGroupId, type AccountId } from "../../services/ipc";
 
-export const unifiedQueryKey = (view: UnifiedView) => ["unified", view] as const;
 export const accountGroupsQueryKey = ["accountGroups"] as const;
 export const hiddenAccountsQueryKey = ["hiddenAccounts"] as const;
-
-/** The unified inbox (or a group's inboxes), mixed by date; every row keeps its account. */
-export function useUnifiedPages(view: UnifiedView, enabled: boolean) {
-  return useInfiniteQuery({
-    queryKey: unifiedQueryKey(view),
-    queryFn: ({ pageParam }) => searchIpc.listUnifiedInbox(view, pageParam, MESSAGE_PAGE_SIZE),
-    initialPageParam: null as ListCursor | null,
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled,
-  });
-}
 
 /** Account groups in the order of the sidebar; refreshed by `accountsChanged`. */
 export function useAccountGroups(enabled = true) {
@@ -36,7 +17,7 @@ export function useHiddenAccounts() {
 /** Lists that mix accounts change with groups and hidden accounts. */
 async function invalidateMixed(queryClient: QueryClient): Promise<void> {
   await Promise.all(
-    [accountGroupsQueryKey, hiddenAccountsQueryKey, ["unified"], ["unifiedThreads"], ["search"]].map((queryKey) =>
+    [accountGroupsQueryKey, hiddenAccountsQueryKey, ["unified"], ["search"]].map((queryKey) =>
       queryClient.invalidateQueries({ queryKey }),
     ),
   );

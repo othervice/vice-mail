@@ -138,15 +138,14 @@ describe("core events for stage 7 lists", () => {
   const invalidated = (invalidate: MockInstance<QueryClient["invalidateQueries"]>): string[] =>
     invalidate.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
 
-  it("messagesChanged reloads the folder's conversations, open threads, searches and unified lists", async () => {
+  it("messagesChanged reloads the folder's conversations, open threads, searches and the unified inbox", async () => {
     vi.useFakeTimers();
     const { queryClient, invalidate } = clientWith([
       ["threads", "acc", 1],
       ["threads", "acc", 2],
       ["thread", "acc", 5, 1],
       ["search", { query: "x" }],
-      ["unified", { kind: "all" }],
-      ["unifiedThreads", { kind: "all" }],
+      ["unified", { kind: "all" }, "inbox"],
     ]);
     handleSearchEvent(queryClient, { type: "messagesChanged", accountId: "acc", mailboxId: 1 });
     await vi.runAllTimersAsync();
@@ -156,8 +155,16 @@ describe("core events for stage 7 lists", () => {
     expect(keys).not.toContain(JSON.stringify(["threads", "acc", 2]));
     expect(keys).toContain(JSON.stringify(["thread", "acc", 5, 1]));
     expect(keys).toContain(JSON.stringify(["search", { query: "x" }]));
-    expect(keys).toContain(JSON.stringify(["unified", { kind: "all" }]));
-    expect(keys).toContain(JSON.stringify(["unifiedThreads", { kind: "all" }]));
+    expect(keys).toContain(JSON.stringify(["unified", { kind: "all" }, "inbox"]));
+  });
+
+  it("inboxChanged reloads the unified inbox (a sorted inbox too)", async () => {
+    vi.useFakeTimers();
+    const { queryClient, invalidate } = clientWith([["unified", { kind: "group", groupId: "g" }, "inbox"]]);
+    handleSearchEvent(queryClient, { type: "inboxChanged", accountId: null });
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    expect(invalidated(invalidate)).toContain(JSON.stringify(["unified", { kind: "group", groupId: "g" }, "inbox"]));
   });
 
   it("accountsChanged reloads groups, hidden accounts and identities", () => {

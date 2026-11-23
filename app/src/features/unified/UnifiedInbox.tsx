@@ -5,16 +5,14 @@ import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import type { Account, AccountColor, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
-import { useSearchStore } from "../../stores/search";
 import { useUiStore } from "../../stores/ui";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
-import { buildRows } from "../messages/rows";
-import { useUnifiedThreadSource } from "../threads/source";
+import { useUnifiedInboxSource } from "../comfort/listSources";
 import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
-import { useAccountGroups, useHiddenAccounts, useUnifiedPages } from "./queries";
+import { useAccountGroups, useHiddenAccounts } from "./queries";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -33,20 +31,24 @@ interface PanesProps {
 }
 
 /**
- * The list of a unified view and the reading pane: rows of every shown account mixed by time,
- * each in its account's colour (the avatar ring), opened with the account it belongs to.
+ * The list of a unified view and the reading pane: the sorted inbox (stage 9: blocks, bundles,
+ * hidden snoozes) over every shown account, each row in its account's colour (the avatar ring),
+ * opened with the account it belongs to. The conversation view does not apply to inboxes: the
+ * core has no thread variant of the sorted inbox.
  */
 function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const { t } = useTranslation();
-  const conversations = useSearchStore((state) => state.conversations);
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
   const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
   const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
-  const messages = useUnifiedPages(view, !conversations);
-  const threadSource = useUnifiedThreadSource(view, conversations, accountColor);
-  const source: MessageListSource = threadSource ?? { query: messages, buildRows, accountColor };
+  const sorted = useUnifiedInboxSource(view, true);
+  const source: MessageListSource = {
+    empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
+    ...sorted,
+    accountColor,
+  };
   const query = source.query;
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
@@ -63,9 +65,6 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
         />
       </div>
     );
-  }
-  if (query.isSuccess && query.data.pages.every((page) => page.items.length === 0)) {
-    return <EmptyState icon={Inbox} title={t("unified.empty.title")} body={t("unified.empty.body")} />;
   }
 
   return (
@@ -97,7 +96,6 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           key={single.id}
           account={account}
           item={single}
-          conversations={conversations}
           focusRequest={focusRequest}
           platform={platform}
           list={list}

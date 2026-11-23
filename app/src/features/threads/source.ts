@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import type { AccountColor, AccountId, MailboxId, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
+import type { AccountId, MailboxId, MessageId, MessageListItem } from "../../services/ipc";
 import type { MessageListSource } from "../messages/listSource";
 import { buildRows } from "../messages/rows";
-import { useThreadPages, useUnifiedThreadPages, type ThreadListPage } from "./queries";
+import { useThreadPages, type ThreadListPage } from "./queries";
 
 /** Conversation sizes by the id of the row that shows each thread. */
 function useCounts(pages: readonly ThreadListPage[] | undefined): ReadonlyMap<MessageId, number> {
@@ -25,16 +25,4 @@ export function useThreadSource(accountId: AccountId, mailboxId: MailboxId, enab
   const counts = useCounts(query.data?.pages);
   if (!enabled) return undefined;
   return { query, buildRows, decorate: decorateWith(counts) };
-}
-
-/** The unified inbox in conversation view: every row in its account's colour. */
-export function useUnifiedThreadSource(
-  view: UnifiedView,
-  enabled: boolean,
-  accountColor: (item: MessageListItem) => AccountColor,
-): MessageListSource | undefined {
-  const query = useUnifiedThreadPages(view, enabled);
-  const counts = useCounts(query.data?.pages);
-  if (!enabled) return undefined;
-  return { query, buildRows, accountColor, decorate: decorateWith(counts) };
 }

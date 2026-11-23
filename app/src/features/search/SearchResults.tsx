@@ -104,7 +104,6 @@ function HitList({ query, accounts, label, platform, header, footer }: HitListPr
           key={single.id}
           account={account}
           item={single}
-          conversations={false}
           focusRequest={focusRequest}
           platform={platform}
           list={list}

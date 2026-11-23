@@ -199,10 +199,11 @@ function SelectionSummary({ count, platform }: { count: number; platform: Shortc
  */
 function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: MailboxPanesProps) {
   const { t } = useTranslation();
-  // Stage 7: conversation view for folders and the inbox (Later, Pinned, Tasks stay single messages).
-  const conversations = useSearchStore((state) => state.conversations) && (kind === "folder" || kind === "inbox");
+  // Stage 7: conversation view for plain folders. The sorted inbox (stage 9) and Later, Pinned and
+  // Tasks keep their rows: the core has no thread variant of them.
+  const conversations = useSearchStore((state) => state.conversations) && kind === "folder";
   const threadSource = useThreadSource(account.id, mailbox.id, conversations);
-  const comfortSource = useListSource(conversations ? "folder" : kind, account, mailbox);
+  const comfortSource = useListSource(kind, account, mailbox);
   const source = threadSource ?? comfortSource;
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const mailboxes = useMailboxes(account.id).data;
@@ -557,6 +558,9 @@ export function MailView({ view }: MailViewProps) {
   const unified = useUiStore((state) => state.unifiedInbox);
   const accountList = accounts.data ?? [];
   const inboxView = view.kind === "mail" && view.mailView === "inbox";
+  // Conversations exist for plain folders only (not the sorted inbox, Later, Pinned, Tasks).
+  const conversationsApply =
+    view.kind === "mailbox" || (isRoleView(view.mailView) && view.mailView !== "inbox");
   const unifiedView = inboxView && account ? unified : null;
   const unifiedName = useUnifiedName(unifiedView ?? { kind: "all" });
   const roleMailboxes = useMailboxes(unifiedView ? null : account?.id).data ?? [];
@@ -636,7 +640,7 @@ export function MailView({ view }: MailViewProps) {
         <div className="flex min-w-0 items-center gap-3">
           {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
           <div className="flex shrink-0 items-center gap-1">
-            {account && <ConversationToggle />}
+            {account && conversationsApply && <ConversationToggle />}
             <IconButton icon={Search} label={t("search.open")} disabled={!account} onClick={openSearch} />
             <IconButton
               icon={SquarePen}

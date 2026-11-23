@@ -1,10 +1,14 @@
 // Stage 7 part of the fake core: search, conversations, unified inbox, account groups, hidden
 // accounts and identities, with the rules of the stage 7 IPC contract.
+import { messageRow } from "./comfort";
 import type {
   Account,
   AccountGroup,
   IdentityInfo,
   IdentityInput,
+  InboxCursor,
+  InboxPage,
+  InboxScope,
   IpcError,
   Mailbox,
   MessageListItem,
@@ -180,6 +184,27 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
           args["limit"] as number,
         );
         return { items: paged.items.map((entry) => entry.thread), nextCursor: paged.nextCursor };
+      }
+      case "list_inbox": {
+        // Stage 9's sorted inbox with the unified scope: the inboxes of the visible accounts
+        // (or a group's), chronological; one account's inbox stays with the stage 9 fake.
+        const scope = args["scope"] as InboxScope;
+        if (scope.kind !== "unified") return undefined;
+        if (scope.view.kind === "group" && !groups.some((g) => scope.view.kind === "group" && g.id === scope.view.groupId)) {
+          return error("not_found");
+        }
+        const cursor = args["cursor"] as InboxCursor | null;
+        const paged = page(inboxMessages(scope.view), cursor?.before ?? null, args["limit"] as number);
+        return {
+          rows: paged.items.map((item) => messageRow(item)),
+          nextCursor: paged.nextCursor === null ? null : { before: paged.nextCursor, bundles: null },
+          top: null,
+          categories: false,
+        } satisfies InboxPage;
+      }
+      case "list_inbox_filtered": {
+        const scope = args["scope"] as InboxScope;
+        return scope.kind === "unified" ? { items: [], nextCursor: null } : undefined;
       }
       case "list_unified_threads": {
         const view = args["view"] as UnifiedView;

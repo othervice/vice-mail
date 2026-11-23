@@ -8,12 +8,10 @@ import {
   type MessageListItem,
   type ThreadListItem,
   type ThreadPage,
-  type UnifiedView,
 } from "../../services/ipc";
 import { MESSAGE_PAGE_SIZE } from "../messages/queries";
 
 export const threadsQueryKey = (accountId: AccountId, mailboxId: MailboxId) => ["threads", accountId, mailboxId] as const;
-export const unifiedThreadsQueryKey = (view: UnifiedView) => ["unifiedThreads", view] as const;
 export const threadQueryKey = (accountId: AccountId, messageId: MessageId, mailboxId: MailboxId | null) =>
   ["thread", accountId, messageId, mailboxId] as const;
 
@@ -40,18 +38,6 @@ export function useThreadPages(accountId: AccountId, mailboxId: MailboxId, enabl
   return useInfiniteQuery({
     queryKey: threadsQueryKey(accountId, mailboxId),
     queryFn: ({ pageParam }) => searchIpc.listThreads(mailboxId, pageParam, MESSAGE_PAGE_SIZE),
-    initialPageParam: null as ListCursor | null,
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled,
-    select: withItems,
-  });
-}
-
-/** The conversations of the unified inbox or of a group's inboxes. */
-export function useUnifiedThreadPages(view: UnifiedView, enabled: boolean) {
-  return useInfiniteQuery({
-    queryKey: unifiedThreadsQueryKey(view),
-    queryFn: ({ pageParam }) => searchIpc.listUnifiedThreads(view, pageParam, MESSAGE_PAGE_SIZE),
     initialPageParam: null as ListCursor | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled,

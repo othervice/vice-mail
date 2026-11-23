@@ -6,8 +6,8 @@
 //    hits with the word marked, and the core answers within 200 ms.
 // 2. A broken date (`before:32.13.2026`) is explained under the field, at its place.
 // 3. "Search on the server" asks the server and comes back with a list or the "nothing more" note.
-// 4. The conversation view lists threads (`list_threads`) with their size; opening one shows the
-//    conversation's messages above the reading pane.
+// 4. The conversation view is not offered in the sorted inbox; in Archive it lists threads with
+//    their size (the seed's offsite thread), and opening one shows its messages above the pane.
 // 5. Identities: the account's default identity is listed in its settings.
 // 6. No CSP violation on the way.
 import assert from "node:assert/strict";
@@ -116,12 +116,25 @@ describe("stage 7: search, conversations, identities", () => {
     await testId("search-close").click();
   });
 
-  it("lists conversations and opens one", async () => {
+  it("lists conversations in a plain folder (not in the sorted inbox) and opens one", async () => {
+    // The sorted inbox of stage 9 has no conversation view.
+    assert.equal(await testId("conversation-toggle").isExisting(), false, "conversation toggle in the inbox");
+    // The seed's 60-message thread "Planning the 2026 offsite" lies in Archive, INBOX and Sent.
+    await testId("rail-archive").click();
+    await testId("message-list").waitForExist({ timeout: 20000 });
     await testId("conversation-toggle").click();
     await browser.waitUntil(async () => (await testId("conversation-toggle").getAttribute("aria-pressed")) === "true");
     await testId("message-list").waitForExist({ timeout: 20000 });
-    const first = await browser.execute(() => document.querySelector('[data-testid="message-list"] [role="option"]')?.id ?? null);
-    assert.ok(first, "no conversation row");
+    let first = null;
+    await browser.waitUntil(
+      async () => {
+        first = await browser.execute(
+          () => document.querySelector('[data-testid="row-thread-count"]')?.closest('[role="option"]')?.id ?? null,
+        );
+        return first !== null;
+      },
+      { timeout: 20000, timeoutMsg: "no conversation row with a count" },
+    );
     await (await browser.$(`[id="${first}"]`)).click();
     await testId("thread-pane").waitForExist({ timeout: 10000 });
     report.steps.threadRows = await browser.execute(() => document.querySelectorAll('[data-testid="row-thread-count"]').length);

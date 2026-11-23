@@ -6,11 +6,11 @@ import { renderApp } from "./support/render";
 
 const ACCOUNT = makeAccount({ writesEnabled: true });
 const now = Date.now();
-const FIRST = makeMessage({ id: 1000, subject: "Plan", from: { name: "Anna", email: "anna@example.org" }, date: now - 3 * 3_600_000, preview: "Wie wäre es mit Montag?" });
+const FIRST = makeMessage({ id: 1000, mailboxId: 5, subject: "Plan", from: { name: "Anna", email: "anna@example.org" }, date: now - 3 * 3_600_000, preview: "Wie wäre es mit Montag?" });
 // The reply in Sent: part of the conversation, but not of the inbox.
 const REPLY = makeMessage({ id: 1100, mailboxId: 2, subject: "Re: Plan", from: { name: "Ada Lovelace", email: "ada@vicemail.test" }, date: now - 2 * 3_600_000 });
-const ANSWER = makeMessage({ id: 1200, subject: "Re: Plan", from: { name: "Anna", email: "anna@example.org" }, date: now - 3_600_000, unread: true, preview: "Montag passt" });
-const SINGLE = makeMessage({ id: 900, subject: "Allein", date: now - 5 * 3_600_000 });
+const ANSWER = makeMessage({ id: 1200, mailboxId: 5, subject: "Re: Plan", from: { name: "Anna", email: "anna@example.org" }, date: now - 3_600_000, unread: true, preview: "Montag passt" });
+const SINGLE = makeMessage({ id: 900, mailboxId: 5, subject: "Allein", date: now - 5 * 3_600_000 });
 
 const THREAD: ThreadView = {
   threadId: 7,
@@ -27,21 +27,26 @@ function setup(options: Parameters<typeof mockCore>[0] = {}) {
   const core = mockCore({
     accounts: [ACCOUNT],
     mailboxes: standardMailboxes(),
-    messages: { 1: [ANSWER, FIRST, SINGLE], 2: [REPLY] },
+    messages: { 1: [makeMessage({ id: 500, subject: "In the inbox", date: now })], 5: [ANSWER, FIRST, SINGLE], 2: [REPLY] },
     views: Object.fromEntries([FIRST, REPLY, ANSWER, SINGLE].map((m) => [m.id, makeView(m)])),
-    search: { threads: { 1: THREADS }, threadViews: { [ANSWER.id]: THREAD } },
+    search: { threads: { 5: THREADS }, threadViews: { [ANSWER.id]: THREAD } },
     ...options,
   });
   return { core, ...renderApp() };
 }
 
+/** Opens the folder "Projekte" (conversations are for plain folders, not the sorted inbox). */
 async function conversations(user: ReturnType<typeof renderApp>["user"]) {
   await screen.findByRole("listbox", { name: "Messages in Inbox" });
+  expect(screen.queryByRole("button", { name: "Conversations" })).toBeNull();
+  await user.click(screen.getByTestId("rail-folders"));
+  await user.click(await screen.findByTestId("mailbox-5"));
+  await screen.findByRole("listbox", { name: "Messages in Projekte" });
   const toggle = screen.getByRole("button", { name: "Conversations" });
   expect(toggle.getAttribute("aria-pressed")).toBe("false");
   await user.click(toggle);
   expect(toggle.getAttribute("aria-pressed")).toBe("true");
-  const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+  const list = await screen.findByRole("listbox", { name: "Messages in Projekte" });
   await waitFor(() => {
     expect(within(list).getAllByRole("option")).toHaveLength(2);
   });
@@ -52,7 +57,7 @@ describe("conversation view", () => {
   it("shows one row per conversation with its size, from the core's thread list", async () => {
     const { core, user } = setup();
     const list = await conversations(user);
-    expect(core.callsOf("list_threads")).toEqual([{ mailboxId: 1, cursor: null, limit: 200 }]);
+    expect(core.callsOf("list_threads")).toEqual([{ mailboxId: 5, cursor: null, limit: 200 }]);
     const [thread, single] = within(list).getAllByRole("option");
     expect(thread?.getAttribute("aria-label")).toContain("conversation with 3 messages");
     expect(within(thread as HTMLElement).getByTestId("row-thread-count").textContent).toBe("3");
@@ -62,7 +67,7 @@ describe("conversation view", () => {
     // Off again: single messages.
     await user.click(screen.getByRole("button", { name: "Conversations" }));
     await waitFor(() => {
-      expect(within(screen.getByRole("listbox", { name: "Messages in Inbox" })).getAllByRole("option")).toHaveLength(3);
+      expect(within(screen.getByRole("listbox", { name: "Messages in Projekte" })).getAllByRole("option")).toHaveLength(3);
     });
   });
 
@@ -72,7 +77,7 @@ describe("conversation view", () => {
     await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
 
     const entries = await screen.findByRole("region", { name: "Conversation with 3 messages" });
-    expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
+    expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 5 }]);
     const buttons = within(entries).getAllByTestId("thread-entry");
     expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
       expect.stringMatching(/^Show message from Anna, /),
@@ -110,7 +115,7 @@ describe("conversation view", () => {
 
   it("names how much of a very long conversation it shows", async () => {
     const { user } = setup({
-      search: { threads: { 1: THREADS }, threadViews: { [ANSWER.id]: { ...THREAD, total: 1500 } } },
+      search: { threads: { 5: THREADS }, threadViews: { [ANSWER.id]: { ...THREAD, total: 1500 } } },
     });
     const list = await conversations(user);
     await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
