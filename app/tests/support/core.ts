@@ -903,6 +903,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
             smtp: settings.smtp,
             writesEnabled: false,
             status: { state: "connecting", progress: null, error: null, retryAt: null, lastSyncAt: null },
+            // Stage 14 (decision 0041): a JMAP account says so.
+            ...(settings.protocol === "jmap" ? { protocol: "jmap" as const } : {}),
           });
           accounts.push(account);
           return account;

@@ -1048,6 +1048,23 @@ export const en = {
             body: "Use the separate email password from the Telekom customer center, not the password of your Telekom login.",
           },
         },
+        // Stage 14 (decision 0041): JMAP as a protocol choice in the server settings.
+        jmap: {
+          protocol: "Protocol",
+          protocolDescription:
+            "IMAP and SMTP work with almost every provider. JMAP (for example Fastmail or Stalwart) is one connection over HTTPS for reading, changes and sending, with new mail pushed at once.",
+          options: {
+            imap: "IMAP and SMTP",
+            jmap: "JMAP",
+          },
+          server: "JMAP server",
+          serverNote:
+            "The app asks https://{{host}}/.well-known/jmap for the server's addresses and always connects encrypted (HTTPS).",
+          hostPlaceholder: "server",
+          found: "{{domain}} also offers JMAP ({{host}}). You can choose it under the server settings.",
+          testPush: "New mail shows up right away: the server pushes changes.",
+          testNoPush: "The server does not push changes, so new mail shows up with a delay.",
+        },
         test: "Test connection",
         testing: "Testing…",
         testOk: "The connection works and the server accepted the login.",

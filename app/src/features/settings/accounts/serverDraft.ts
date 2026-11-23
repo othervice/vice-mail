@@ -99,3 +99,23 @@ export function isGmailHost(host: string): boolean {
   const name = host.trim().replace(/\.$/, "").toLowerCase();
   return ["gmail.com", "googlemail.com"].some((domain) => name === domain || name.endsWith(`.${domain}`));
 }
+
+/** Stage 14 (decision 0041): the JMAP server of the form (HTTPS, port 443 unless given). */
+export function emptyJmap(email: string): ServerDraft {
+  return { host: "", port: "443", security: "tls", username: email.trim() };
+}
+
+/** The JMAP server discovery found, if any. */
+export function jmapFromDiscovery(result: DiscoveryResult | undefined, email: string): ServerDraft | null {
+  const found = result?.jmap;
+  if (!found || found.host.trim() === "") return null;
+  return { host: found.host, port: String(found.port), security: "tls", username: found.username || email.trim() };
+}
+
+/** Settings of a JMAP account: one server, always TLS; the core uses it for sending too. */
+export function toJmapSettings(email: string, displayName: string, draft: ServerDraft): AccountSettings | null {
+  const port = parsePort(draft.port);
+  if (port === null || hasErrors(serverErrors(draft)) || !isEmail(email)) return null;
+  const server: ServerSettings = { host: draft.host.trim(), port, security: "tls", username: draft.username.trim() };
+  return { email: email.trim(), displayName: displayName.trim(), imap: server, smtp: server, protocol: "jmap" };
+}

@@ -25,6 +25,8 @@ import {
   type ServersDraft,
 } from "./serverDraft";
 import { ServerFields } from "./ServerFields";
+import { JmapFields, ProtocolChoice } from "./ProtocolChoice";
+import { useJmapChoice } from "./jmapChoice";
 import { OAuthSetup, oauthProviderFor } from "./OAuthSignIn";
 
 /** Waits until typing pauses before the local provider lookup runs. */
@@ -67,8 +69,8 @@ function knownSuggestion(result: DiscoveryResult | undefined): DiscoveryResult |
   return result?.source === "knownProvider" ? result : null;
 }
 
-function serverOf(settings: ServerSettings | null): boolean {
-  return settings !== null && settings.host.trim() !== "";
+function serverOf(settings: ServerSettings | null | undefined): boolean {
+  return settings != null && settings.host.trim() !== "";
 }
 
 interface AddAccountProps {
@@ -115,7 +117,9 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   const servers = manual ?? (suggestion ? fromDiscovery(suggestion, email) : emptyServers(email));
   const discovered = manual === null ? suggestion !== null : origin?.kind === "online";
   const showForm = editing || !discovered;
-  const settings = toSettings(email, displayName, servers);
+  // Stage 14 (decision 0041): JMAP instead of IMAP and SMTP, chosen in the server settings.
+  const jmap = useJmapChoice(email, displayName, online.data);
+  const settings = jmap.protocol === "jmap" ? jmap.settings : toSettings(email, displayName, servers);
   const ready = settings !== null && password !== "";
   // Stage 14: Gmail also by its server (Google Workspace domains, servers typed in by hand).
   const providerHint =
@@ -159,7 +163,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
     online.mutate(address, {
       onSuccess: (result) => {
         if (result.source === "none" || result.source === "knownProvider") return;
-        if (!serverOf(result.imap) && !serverOf(result.smtp)) return;
+        if (!serverOf(result.imap) && !serverOf(result.smtp) && !serverOf(result.jmap)) return;
         setManual(fromDiscovery(result, address));
         setOrigin({ kind: "online", source: result.source, domain: domainOf(address) });
         // Only one of the servers found: the user completes the other in the form.
@@ -203,7 +207,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
         : t("settings.accounts.setup.foundAutoconfig", { domain: origin.domain });
   }
   const offerOnline = lookupDone && !suggestion && origin?.kind !== "online";
-  const nothingFoundOnline = online.isSuccess && (online.data.source === "none" || online.data.source === "knownProvider" || (!serverOf(online.data.imap) && !serverOf(online.data.smtp)));
+  const nothingFoundOnline = online.isSuccess && !serverOf(online.data.jmap) && (online.data.source === "none" || online.data.source === "knownProvider" || (!serverOf(online.data.imap) && !serverOf(online.data.smtp)));
 
   const form = (
       <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-6" data-testid="add-account">
@@ -312,26 +316,52 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
           <div className="flex flex-col gap-4">
             {sourceNote && <p className="text-14 font-medium text-primary">{sourceNote}</p>}
             {origin?.kind === "online" && <p className="text-13 text-secondary">{t("settings.accounts.setup.checkFound")}</p>}
-            <ServerFields
-              kind="imap"
-              legend={t("settings.accounts.setup.incoming")}
-              draft={servers.imap}
-              onChange={(draft) => {
-                changeServer("imap", draft);
+            <ProtocolChoice
+              value={jmap.protocol}
+              onChange={(protocol) => {
+                jmap.setProtocol(protocol);
+                changed();
               }}
-              showErrors={attempted}
             />
-            <ServerFields
-              kind="smtp"
-              legend={t("settings.accounts.setup.outgoing")}
-              note={t("settings.accounts.setup.outgoingNote")}
-              draft={servers.smtp}
-              onChange={(draft) => {
-                changeServer("smtp", draft);
-              }}
-              showErrors={attempted}
-            />
+            {jmap.protocol === "jmap" ? (
+              <JmapFields
+                draft={jmap.draft}
+                onChange={(draft) => {
+                  jmap.setDraft(draft);
+                  changed();
+                }}
+                showErrors={attempted}
+              />
+            ) : (
+              <>
+                <ServerFields
+                  kind="imap"
+                  legend={t("settings.accounts.setup.incoming")}
+                  draft={servers.imap}
+                  onChange={(draft) => {
+                    changeServer("imap", draft);
+                  }}
+                  showErrors={attempted}
+                />
+                <ServerFields
+                  kind="smtp"
+                  legend={t("settings.accounts.setup.outgoing")}
+                  note={t("settings.accounts.setup.outgoingNote")}
+                  draft={servers.smtp}
+                  onChange={(draft) => {
+                    changeServer("smtp", draft);
+                  }}
+                  showErrors={attempted}
+                />
+              </>
+            )}
           </div>
+        )}
+
+        {serversVisible && jmap.found && jmap.protocol === "imap" && (
+          <p className="text-13 text-secondary" data-testid="jmap-found">
+            {t("settings.accounts.setup.jmap.found", { domain, host: jmap.found.host })}
+          </p>
         )}
 
         <Notice title={t("settings.accounts.setup.readOnlyTitle")} data-testid="read-only-note">
@@ -341,9 +371,13 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
         {test.isSuccess && (
           <Notice tone="success" role="status" title={t("settings.accounts.setup.testOk")} data-testid="test-result">
             <p>
-              {test.data.capabilities.idle
-                ? t("settings.accounts.setup.testIdle")
-                : t("settings.accounts.setup.testNoIdle")}
+              {test.data.capabilities.jmap
+                ? test.data.capabilities.idle
+                  ? t("settings.accounts.setup.jmap.testPush")
+                  : t("settings.accounts.setup.jmap.testNoPush")
+                : test.data.capabilities.idle
+                  ? t("settings.accounts.setup.testIdle")
+                  : t("settings.accounts.setup.testNoIdle")}
             </p>
             <p>{t("settings.accounts.setup.outgoingNote")}</p>
           </Notice>

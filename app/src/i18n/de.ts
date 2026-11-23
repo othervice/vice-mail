@@ -1044,6 +1044,23 @@ export const de: Translation = {
             body: "Nutze das eigene E-Mail-Passwort aus dem Telekom Kundencenter, nicht das Passwort deines Telekom-Logins.",
           },
         },
+        // Stage 14 (decision 0041): JMAP als Protokoll in den Server-Einstellungen.
+        jmap: {
+          protocol: "Protokoll",
+          protocolDescription:
+            "IMAP und SMTP funktionieren bei fast jedem Anbieter. JMAP (zum Beispiel Fastmail oder Stalwart) ist eine Verbindung über HTTPS für Lesen, Änderungen und Senden; neue Mails kommen sofort.",
+          options: {
+            imap: "IMAP und SMTP",
+            jmap: "JMAP",
+          },
+          server: "JMAP-Server",
+          serverNote:
+            "Die App fragt https://{{host}}/.well-known/jmap nach den Adressen des Servers und verbindet sich immer verschlüsselt (HTTPS).",
+          hostPlaceholder: "server",
+          found: "{{domain}} bietet auch JMAP an ({{host}}). Du kannst es in den Server-Einstellungen wählen.",
+          testPush: "Neue Mails erscheinen sofort: Der Server meldet Änderungen von sich aus.",
+          testNoPush: "Der Server meldet Änderungen nicht von sich aus, deshalb erscheinen neue Mails mit Verzögerung.",
+        },
         test: "Verbindung testen",
         testing: "Testet …",
         testOk: "Die Verbindung funktioniert, und der Server hat die Anmeldung angenommen.",

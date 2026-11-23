@@ -370,8 +370,15 @@ export function AccountDetail({ accountId }: { accountId: string }) {
       <WritesBlock account={account} />
       <Block title={t("settings.accounts.detail.servers")}>
         <dl className="flex flex-col gap-3">
-          <ServerRow label={t("settings.accounts.setup.incoming")} server={account.imap} />
-          <ServerRow label={t("settings.accounts.setup.outgoing")} server={account.smtp} />
+          {/* Stage 14 (decision 0041): a JMAP account has one server for everything. */}
+          {account.protocol === "jmap" ? (
+            <ServerRow label={t("settings.accounts.setup.jmap.server")} server={account.imap} />
+          ) : (
+            <>
+              <ServerRow label={t("settings.accounts.setup.incoming")} server={account.imap} />
+              <ServerRow label={t("settings.accounts.setup.outgoing")} server={account.smtp} />
+            </>
+          )}
         </dl>
       </Block>
       <GmailNote account={account} />
