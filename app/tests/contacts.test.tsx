@@ -85,12 +85,23 @@ describe("Settings, contacts: the directory", () => {
     expect(within(panel).queryByRole("button", { name: "Show more contacts" })).toBeNull();
   });
 
+  it("names the rename button with its visible text first (WCAG 2.5.3, label in name)", async () => {
+    mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN] } });
+    const { user } = renderApp();
+    const panel = await openContacts(user);
+    await within(panel).findByRole("list", { name: "Contacts" });
+    const button = within(panel).getByRole("button", { name: "Edit name of grace@example.org" });
+    const visible = button.textContent?.trim() ?? "";
+    expect(visible).toBe("Edit name");
+    expect(button.getAttribute("aria-label")).toContain(visible);
+  });
+
   it("changes a name and goes back to the name seen in mail", async () => {
     const core = mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN] } });
     const { user } = renderApp();
     const panel = await openContacts(user);
     await within(panel).findByRole("list", { name: "Contacts" });
-    await user.click(within(panel).getByRole("button", { name: "Edit the name of grace@example.org" }));
+    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
     const field = within(panel).getByLabelText("Name");
     expect((field as HTMLInputElement).value).toBe("Grace Hopper");
     await user.clear(field);
@@ -101,7 +112,7 @@ describe("Settings, contacts: the directory", () => {
     expect(core.callsOf("set_contact_name")).toEqual([{ email: "grace@example.org", name: "Amazing Grace" }]);
     expect(within(panel).getAllByTestId("contact-row")[0]?.textContent).toContain("Your name");
 
-    await user.click(within(panel).getByRole("button", { name: "Edit the name of grace@example.org" }));
+    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
     await user.click(within(panel).getByRole("button", { name: "Use the name from mail" }));
     await waitFor(() => {
       expect(names(panel)[0]).toBe("Grace Hopper");
@@ -119,12 +130,12 @@ describe("Settings, contacts: the directory", () => {
     const { user } = renderApp();
     const panel = await openContacts(user);
     await within(panel).findByRole("list", { name: "Contacts" });
-    await user.click(within(panel).getByRole("button", { name: "Edit the name of grace@example.org" }));
+    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
     await user.keyboard("{Escape}");
     expect(within(panel).queryByLabelText("Name")).toBeNull();
     expect(screen.getByRole("tabpanel", { name: "Contacts" })).toBeTruthy();
 
-    await user.click(within(panel).getByRole("button", { name: "Edit the name of grace@example.org" }));
+    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
     await user.click(within(panel).getByRole("button", { name: "Save name" }));
     const error = await within(panel).findByTestId("contact-name-error");
     expect(error.dataset["errorCode"]).toBe("invalid_argument");

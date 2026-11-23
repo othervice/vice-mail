@@ -2351,7 +2351,7 @@ export const de: Translation = {
     otherAddressesOf: "Weitere Adressen von {{name}}",
     rename: {
       open: "Namen ändern",
-      openLabel: "Namen von {{email}} ändern",
+      openLabel: "Namen ändern für {{email}}",
       label: "Name",
       hint: "Lass das Feld leer, um den Namen aus den Mails zu verwenden.",
       save: "Namen speichern",

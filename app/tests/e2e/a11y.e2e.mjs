@@ -10,7 +10,7 @@
 // Views, each in the light and in the dark theme: the inbox, the reading pane with the newest
 // message, the composer (a new, empty message) and its question before discarding it, every
 // settings section and the command palette. Only reads mail; it adds the test account and removes it at the end.
-// Not in `specs` of wdio.conf.mjs yet: it can run anywhere after account-sync.e2e.mjs.
+// In `specs` of wdio.conf.mjs before layouts.e2e.mjs (it can run anywhere after account-sync.e2e.mjs).
 //
 // The findings (all impacts) go to tests/e2e/screenshots/a11y-report.json, a screenshot of each
 // view to a11y-<theme>-<view>.png.
@@ -63,6 +63,10 @@ async function runAxe() {
   await injectAxe();
   const result = await browser.execute(async () => {
     try {
+      // A hidden test window runs no animation frames, so CSS transitions (theme colours,
+      // hover) stay on their first frame and axe would read the colours of before. Finish them,
+      // as the screenshots do (support/app.mjs).
+      for (const animation of document.getAnimations()) animation.finish();
       const results = await window.axe.run(document, { resultTypes: ["violations"], iframes: false });
       return {
         violations: results.violations.map((violation) => ({

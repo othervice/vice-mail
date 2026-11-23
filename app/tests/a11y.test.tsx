@@ -210,7 +210,7 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
       expect(document.documentElement.dataset["theme"]).toBe(theme);
     });
     expect(await seriousFindings()).toEqual([]);
-    await user.click(screen.getByRole("button", { name: "Edit the name of linus@example.org" }));
+    await user.click(screen.getByRole("button", { name: "Edit name of linus@example.org" }));
     await screen.findByLabelText("Name");
     expect(await seriousFindings()).toEqual([]);
     await user.click(screen.getAllByRole("button", { name: "Merge…" })[0] ?? document.body);

@@ -2348,7 +2348,7 @@ export const en = {
     otherAddressesOf: "Other addresses of {{name}}",
     rename: {
       open: "Edit name",
-      openLabel: "Edit the name of {{email}}",
+      openLabel: "Edit name of {{email}}",
       label: "Name",
       hint: "Leave it empty to use the name seen in mail.",
       save: "Save name",

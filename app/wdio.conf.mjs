@@ -34,8 +34,8 @@ export const config = {
   // keyboard.e2e.mjs archives a message it delivered itself; windows.e2e.mjs only reads.
   // actions.e2e.mjs changes the inbox on the server (archive, trash); compose.e2e.mjs,
   // composer-complete.e2e.mjs and send-later.e2e.mjs write drafts and send to alice.
-  // ai.e2e.mjs uses the counting server as its provider. layouts.e2e.mjs changes the stored
-  // window layout (and restores it) and comes last.
+  // ai.e2e.mjs uses the counting server as its provider; a11y.e2e.mjs runs axe over the main
+  // views. layouts.e2e.mjs changes the stored window layout (and restores it) and comes last.
   specs: [
     "./tests/e2e/frame.e2e.mjs",
     "./tests/e2e/restart.e2e.mjs",
@@ -52,6 +52,7 @@ export const config = {
     "./tests/e2e/send-later.e2e.mjs",
     "./tests/e2e/mcp-sync.e2e.mjs",
     "./tests/e2e/ai.e2e.mjs",
+    "./tests/e2e/a11y.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   maxInstances: 1,
