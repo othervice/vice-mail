@@ -8,9 +8,12 @@
 //! and 2,000 paragraphs, 21 KB of input, become 7 MB of output. Browsers cap the depth at 512.
 //!
 //! The scan follows the tokenizer rules closely enough to see the same tags (quoted attribute
-//! values, comments, raw-text elements) and estimates the depth from above: it only pops an
+//! values, comments, raw-text elements, CDATA sections; raw text only for HTML elements, not
+//! for the same names inside SVG and MathML) and estimates the depth from above: it only pops an
 //! element when the parser certainly does (an end tag for the current element, and the usual
-//! implied closings of `p`, `li`, `dd`/`dt`, `option`, `tr`, `td`/`th`).
+//! implied closings of `p`, `li`, `dd`/`dt`, `option`, `tr`, `td`/`th`). Where the scan read the
+//! input differently from html5ever, nesting could hide behind the difference (stage 15 review,
+//! `docs/SECURITY_MODEL.md`, finding C-1); `tests/fuzz.rs` compares the two.
 
 /// More start tags than this are refused (a large newsletter has a few thousand).
 pub(crate) const MAX_START_TAGS: usize = 150_000;
@@ -205,13 +208,17 @@ const CLOSES_P: &[&str] = &[
 pub(crate) fn check(html: &str) -> Result<(), TooComplex> {
     let mut scanner = Scanner::default();
     let mut result = Ok(());
-    scan(html, &mut |event| {
+    let complete = scan(html, &mut |event| {
         if result.is_err() {
             return false;
         }
         result = scanner.event(event);
         result.is_ok()
     });
+    // The scan gave up on SVG/MathML content it cannot model.
+    if !complete && result.is_ok() {
+        result = Err(TooComplex::Depth);
+    }
     result
 }
 
@@ -219,7 +226,7 @@ pub(crate) fn check(html: &str) -> Result<(), TooComplex> {
 /// entities decoded. For HTML that [`check`] refuses.
 pub(crate) fn strip_tags(html: &str) -> String {
     let mut out = String::new();
-    scan(html, &mut |event| {
+    let _complete = scan(html, &mut |event| {
         match event {
             Event::Text(text) => decode_entities_into(text, &mut out),
             Event::Start { name, .. } | Event::End { name } => {
@@ -516,11 +523,13 @@ impl Scanner {
 }
 
 /// Walks the tags and text of `html` the way the HTML tokenizer splits them. `visit` returns
-/// `false` to stop.
-fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
+/// `false` to stop. Returns `false` when the scan gave up on SVG and MathML content: nested
+/// deeper than [`MAX_DEPTH`], or ended in a way its model cannot follow ([`Foreign::end`]).
+fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) -> bool {
     let bytes = html.as_bytes();
     let mut i = 0;
     let mut text_start = 0;
+    let mut foreign = Foreign::default();
     while i < bytes.len() {
         if bytes[i] != b'<' {
             i += 1;
@@ -534,12 +543,15 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
             match next {
                 Some(b'!') => {
                     if text_start < i && !visit(Event::Text(&html[text_start..i])) {
-                        return;
+                        return true;
                     }
                     let end = if html[i..].starts_with("<!--") {
-                        html[i + 4..]
-                            .find("-->")
-                            .map_or(bytes.len(), |p| i + 4 + p + 3)
+                        i + 4 + comment_length(&html[i + 4..])
+                    } else if foreign.cdata_sections() && html[i..].starts_with("<![CDATA[") {
+                        // In SVG and MathML a CDATA section ends at `]]>`, not at `>`.
+                        html[i + 9..]
+                            .find("]]>")
+                            .map_or(bytes.len(), |p| i + 9 + p + 3)
                     } else {
                         html[i..].find('>').map_or(bytes.len(), |p| i + p + 1)
                     };
@@ -548,7 +560,7 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
                 }
                 Some(b'?') | Some(b'/') => {
                     if text_start < i && !visit(Event::Text(&html[text_start..i])) {
-                        return;
+                        return true;
                     }
                     i = html[i..].find('>').map_or(bytes.len(), |p| i + p + 1);
                     text_start = i;
@@ -558,8 +570,9 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
             continue;
         }
         if text_start < i && !visit(Event::Text(&html[text_start..i])) {
-            return;
+            return true;
         }
+        let tag_start = i;
         let mut j = name_start;
         while j < bytes.len()
             && !matches!(
@@ -590,7 +603,12 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
                         break;
                     }
                 }
-                Some(_) => {
+                Some(&first) => {
+                    // An attribute name may start with `=` (`<a ="x">` has the attribute
+                    // `="x"`); only later `=` signs start a value.
+                    if first == b'=' {
+                        j += 1;
+                    }
                     while j < bytes.len()
                         && !matches!(
                             bytes[j],
@@ -637,24 +655,34 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
         i = j.min(bytes.len());
         text_start = i;
         if is_end {
+            foreign.end(&name);
+            if foreign.lost {
+                return false;
+            }
             if !visit(Event::End { name }) {
-                return;
+                return true;
             }
             continue;
         }
-        let raw_text = RAW_TEXT.contains(&name.as_str());
-        let plaintext = name == "plaintext";
+        // Raw text and `plaintext` exist only for HTML elements; inside SVG and MathML the
+        // same names are ordinary elements whose content is markup.
+        let html_element = foreign.start(&name, self_closing, &html[tag_start..i]);
+        if foreign.lost || foreign.stack.len() > MAX_DEPTH {
+            return false;
+        }
+        let raw_text = html_element && RAW_TEXT.contains(&name.as_str());
+        let plaintext = html_element && name == "plaintext";
         if !visit(Event::Start {
             name: name.clone(),
             self_closing,
         }) {
-            return;
+            return true;
         }
         if plaintext {
             if i < bytes.len() {
                 visit(Event::Text(&html[i..]));
             }
-            return;
+            return true;
         }
         if raw_text {
             match find_end_tag(&bytes[i..], name.as_bytes()) {
@@ -662,13 +690,260 @@ fn scan(html: &str, visit: &mut dyn FnMut(Event<'_>) -> bool) {
                     i += p;
                     text_start = i;
                 }
-                None => return,
+                None => return true,
             }
         }
     }
     if text_start < bytes.len() {
         visit(Event::Text(&html[text_start..]));
     }
+    true
+}
+
+/// Length of a comment after its `<!--`, up to and including its end, as the tokenizer reads
+/// it: `<!-->` and `<!--->` are complete (empty) comments, and `--!>` ends a comment as well as
+/// `-->`. Without an end, the comment runs to the end of the input.
+fn comment_length(rest: &str) -> usize {
+    if rest.starts_with('>') {
+        return 1;
+    }
+    if rest.starts_with("->") {
+        return 2;
+    }
+    let plain = rest.find("-->").map(|p| p + 3);
+    let bang = rest.find("--!>").map(|p| p + 4);
+    match (plain, bang) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(end), None) | (None, Some(end)) => end,
+        (None, None) => rest.len(),
+    }
+}
+
+/// Start tags that end SVG or MathML content (HTML standard, "parsing tokens in foreign
+/// content"); `font` only with `color`, `face` or `size`.
+const BREAKOUT: &[&str] = &[
+    "b",
+    "big",
+    "blockquote",
+    "body",
+    "br",
+    "center",
+    "code",
+    "dd",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "embed",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "head",
+    "hr",
+    "i",
+    "img",
+    "li",
+    "listing",
+    "menu",
+    "meta",
+    "nobr",
+    "ol",
+    "p",
+    "pre",
+    "ruby",
+    "s",
+    "small",
+    "span",
+    "strong",
+    "strike",
+    "sub",
+    "sup",
+    "table",
+    "tt",
+    "u",
+    "ul",
+    "var",
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// An HTML element inside SVG or MathML (below an integration point).
+    Html,
+    /// An SVG or MathML element whose content is SVG or MathML.
+    Foreign { svg: bool },
+    /// `foreignObject`, `desc`, `title` in SVG; `annotation-xml` for HTML: content is HTML.
+    HtmlIntegration,
+    /// `mi`, `mo`, `mn`, `ms`, `mtext`: start tags inside are HTML (except `mglyph`,
+    /// `malignmark`).
+    MathText,
+}
+
+/// Where the tokenizer is with respect to SVG and MathML: the elements opened since the
+/// outermost `svg` or `math` (empty in HTML content). Only as precise as the guard needs: it
+/// decides whether `style`, `script`, `title`, `textarea` … are raw text (HTML elements) or
+/// markup (foreign elements), and whether `<![CDATA[` starts a CDATA section.
+#[derive(Default)]
+struct Foreign {
+    stack: Vec<(String, Kind)>,
+    /// HTML elements open outside SVG and MathML, by name (an estimate from above): an end tag
+    /// for one of them may end the foreign content around it.
+    outer: std::collections::HashMap<String, usize>,
+    /// The model cannot tell what the parser does next (see [`Foreign::end`]).
+    lost: bool,
+}
+
+impl Foreign {
+    fn current(&self) -> Option<Kind> {
+        self.stack.last().map(|(_, kind)| *kind)
+    }
+
+    /// CDATA sections exist where the current node is an SVG or MathML element.
+    fn cdata_sections(&self) -> bool {
+        matches!(
+            self.current(),
+            Some(Kind::Foreign { .. } | Kind::HtmlIntegration | Kind::MathText)
+        )
+    }
+
+    /// Whether a start tag `name` is processed by the HTML rules here.
+    fn html_rules(&self, name: &str) -> bool {
+        match self.current() {
+            None | Some(Kind::Html | Kind::HtmlIntegration) => true,
+            Some(Kind::MathText) => !matches!(name, "mglyph" | "malignmark"),
+            Some(Kind::Foreign { .. }) => false,
+        }
+    }
+
+    /// A start tag; `tag` is its source. Returns whether it creates an HTML element.
+    fn start(&mut self, name: &str, self_closing: bool, tag: &str) -> bool {
+        if !self.html_rules(name) {
+            let lower = tag.to_ascii_lowercase();
+            let font_breakout = name == "font"
+                && ["color", "face", "size"]
+                    .iter()
+                    .any(|attribute| has_attribute(&lower, attribute));
+            if BREAKOUT.contains(&name) || font_breakout {
+                while matches!(self.current(), Some(Kind::Foreign { .. })) {
+                    self.stack.pop();
+                }
+                return self.start(name, self_closing, tag);
+            }
+            // A new element takes the namespace of the current node: `<svg>` inside MathML is
+            // a MathML element (and its `foreignObject` no integration point). Only
+            // `annotation-xml` hands `<svg>` to the HTML rules, which start SVG.
+            let svg = match self.stack.last() {
+                Some((open, _)) if open == "annotation-xml" && name == "svg" => true,
+                Some((_, Kind::Foreign { svg })) => *svg,
+                _ => false,
+            };
+            if !self_closing {
+                let kind = if svg && matches!(name, "foreignobject" | "desc" | "title") {
+                    Kind::HtmlIntegration
+                } else if !svg && matches!(name, "mi" | "mo" | "mn" | "ms" | "mtext") {
+                    Kind::MathText
+                } else if !svg
+                    && name == "annotation-xml"
+                    && (lower.contains("text/html") || lower.contains("application/xhtml+xml"))
+                {
+                    Kind::HtmlIntegration
+                } else {
+                    Kind::Foreign { svg }
+                };
+                self.stack.push((name.to_owned(), kind));
+            }
+            return false;
+        }
+        if name == "svg" || name == "math" {
+            if !self_closing {
+                self.stack
+                    .push((name.to_owned(), Kind::Foreign { svg: name == "svg" }));
+            }
+            return false;
+        }
+        if VOID.contains(&name) || matches!(name, "html" | "head" | "body") {
+            return true;
+        }
+        if self.stack.is_empty() {
+            *self.outer.entry(name.to_owned()).or_default() += 1;
+        } else {
+            self.stack.push((name.to_owned(), Kind::Html));
+        }
+        true
+    }
+
+    /// An end tag (HTML standard: "any other end tag" in body and in foreign content). `</p>`
+    /// and `</br>` end SVG and MathML content like the start tags in [`BREAKOUT`].
+    fn end(&mut self, name: &str) {
+        if self.stack.is_empty() {
+            if let Some(count) = self.outer.get_mut(name) {
+                *count = count.saturating_sub(1);
+            }
+            return;
+        }
+        if matches!(self.current(), Some(Kind::Foreign { .. })) {
+            if matches!(name, "p" | "br") {
+                while matches!(self.current(), Some(Kind::Foreign { .. })) {
+                    self.stack.pop();
+                }
+                return;
+            }
+            // Through SVG and MathML elements to the nearest one of that name; at the first
+            // HTML element the HTML rules take over.
+            for index in (0..self.stack.len()).rev() {
+                let (open, kind) = &self.stack[index];
+                if open == name {
+                    self.stack.truncate(index);
+                    return;
+                }
+                if *kind == Kind::Html {
+                    break;
+                }
+            }
+        }
+        // HTML rules: the nearest HTML element of that name, unless a special element (the
+        // integration points are special) lies above it.
+        for index in (0..self.stack.len()).rev() {
+            let (open, kind) = &self.stack[index];
+            if *kind == Kind::Html && open == name {
+                self.stack.truncate(index);
+                return;
+            }
+            let special = match kind {
+                Kind::Html => SPECIAL.contains(&open.as_str()),
+                Kind::HtmlIntegration | Kind::MathText => true,
+                Kind::Foreign { .. } => open == "annotation-xml",
+            };
+            if special {
+                return;
+            }
+        }
+        // Out of SVG and MathML without a stop: if an HTML element of that name is still open
+        // around them, the parser closes it and the foreign content with it; if the parser
+        // closed it already (implied end tags, `</table>` …), it ignores the end tag. The count
+        // is only an estimate, and guessing wrong either way would let markup hide (raw text
+        // that is markup, or markup that is raw text): the scan gives up instead.
+        if self.outer.get(name).is_some_and(|count| *count > 0) {
+            self.lost = true;
+        }
+    }
+}
+
+/// Whether the source of a start tag (lower case) has an attribute `name`: the name after white
+/// space or `/`, followed by `=`, white space, `/`, `>` or the end. A quoted value that looks
+/// like an attribute counts too (an estimate).
+fn has_attribute(tag: &str, name: &str) -> bool {
+    tag.match_indices(name).any(|(at, _)| {
+        let before = tag[..at].chars().next_back();
+        let after = tag[at + name.len()..].chars().next();
+        matches!(before, Some(' ' | '\t' | '\n' | '\r' | '\x0c' | '/'))
+            && matches!(
+                after,
+                None | Some('=' | ' ' | '\t' | '\n' | '\r' | '\x0c' | '/' | '>')
+            )
+    })
 }
 
 /// Position of `</name` (ASCII case-insensitive) in `haystack`.
@@ -747,6 +1022,69 @@ mod tests {
             "<div>".repeat(5_000)
         );
         assert_eq!(check(&hidden), Ok(()));
+    }
+
+    /// Stage 15 review (finding C-1): where the scan read the input differently from the
+    /// html5ever tokenizer, deep nesting behind the difference went unseen.
+    #[test]
+    fn tokenizer_differences_do_not_hide_nesting() {
+        let deep = "<div>".repeat(MAX_DEPTH + 2);
+        for prefix in [
+            "<!-->",
+            "<!--->",
+            "<!-- --!>",
+            "<!-- x --!>",
+            "<a =\"",
+            "<a ='",
+            "<svg><style>",
+            "<svg><title>",
+            "<svg><script>",
+            "<svg><textarea>",
+            "<svg><noscript>",
+            "<svg><xmp>",
+            "<math><style>",
+            "<math><title>",
+            "<svg><![CDATA[ > <!-- ]]>",
+            "<math><![CDATA[ <style> ]]>",
+            "<svg><g><b><style><!--</style>",
+            "<div><svg></div><style><!--</style>",
+            "<svg><foreignObject><style><!--</style>",
+            "<math><mtext><style><!--</style>",
+            "<math><annotation-xml encoding=\"text/html\"><style><!--</style>",
+            "<svg><font color=red><style><!--</style>",
+            "<svg></p><style><!--</style>",
+            // `svg` inside MathML is MathML: no integration point, no raw text.
+            "<math><svg><foreignObject><title>",
+            "<math><svg><desc><style>",
+            // An end tag for an element the parser may or may not still have open.
+            "<table><td><div></table><svg></div><style>",
+            "<svg><font size=2><style><!--</style>",
+        ] {
+            assert_eq!(
+                check(&format!("{prefix}{deep}")),
+                Err(TooComplex::Depth),
+                "{prefix}"
+            );
+        }
+        // Elements the parser closes itself (`option`) pile up in the model of foreign content;
+        // past the depth limit the scan gives up instead of getting slow.
+        assert_eq!(
+            check(&format!(
+                "<svg><foreignObject>{}",
+                "<option>".repeat(MAX_DEPTH + 1)
+            )),
+            Err(TooComplex::Depth)
+        );
+        // Still raw text where the parser treats it so.
+        let hidden = format!("<style>{deep}</style><svg><foreignObject><style>{deep}</style>");
+        assert_eq!(check(&hidden), Ok(()));
+        let cdata = format!("<svg><![CDATA[{deep}]]></svg>");
+        assert_eq!(check(&cdata), Ok(()));
+        // `font` leaves SVG only with a color, face or size attribute, not with the word in a
+        // value: here `style` stays an SVG element and the comment hides the rest from the
+        // parser too.
+        let font = format!("<svg><font class=\" color\"><style><!--</style>{deep}");
+        assert_eq!(check(&font), Ok(()));
     }
 
     #[test]

@@ -339,7 +339,10 @@ fn attribute_violations(tag: &str, attr: &str, value: &str) -> Vec<String> {
             // CSS: `javascript:` outside `url()` is an identifier and a colon; `url()` itself
             // is checked in css_violations.
             | "style"
-    ) || attr.starts_with("aria-");
+    ) || attr.starts_with("aria-")
+        // ARIA like `aria-*`: a token list, never a URL (stage 15 campaign: `role` with the
+        // text `javascript:` in a mutated mail is harmless).
+        || attr == "role";
     if !free_text && (squashed.contains("javascript:") || squashed.contains("vbscript:")) {
         found.push(format!("script URL in {attr} on <{tag}>"));
     }
