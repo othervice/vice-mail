@@ -151,7 +151,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `receipt_answer`, `receipt_received` | Lesebestätigungen (RFC 8098): Antwort des Nutzers auf eine eingehende Anforderung (`queued`, `sent`, `declined`) je Konto-UUID und Message-ID; zurückgekommene Bestätigungen je gemeldeter Message-ID und Empfänger, erkannt beim Speichern des Bodys (Stufe 16, 0033) | Gerät bzw. Cache |
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
-| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät, (0036) `ui.accent_theme` (Farbthema, eins von sechs, Standard Orange nach 0038) sync | sync bzw. Gerät |
+| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: Lesebereich, Dichte, Konten-und-Ordner-Spalte sichtbar (Standard ja) und ihre Breite 200–320 px, Standard 240) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät, (0036) `ui.accent_theme` (Farbthema, eins von sechs, Standard Orange nach 0038) sync, (0039) `ui.conversations` (Konversationsansicht, Standard an) sync | sync bzw. Gerät |
 | `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
 | `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
@@ -221,6 +221,14 @@ einer klaren Meldung abgelehnt.
   den Primärschlüssel (`seen = 1` als Filter, kein eigener Index). Die Posteingangslisten lassen
   ausgeblendete Mails blockierter Absender je Zeile über den Primärschlüssel von
   `blocked_hidden` weg; Lese-Liste und Ordnereinstellungen sind je eine Indexsuche.
+- Aus `docs/decisions/0039-konversationen-im-sortierten-posteingang.md`: Die Konversationsvariante
+  jeder Posteingangsliste ist die Nachrichtenliste derselben Art, nach Thread gruppiert, eine Zeile
+  je Thread bei seinem neuesten Mitglied, das in derselben Liste stünde (`NOT EXISTS` über einen
+  Bereich von `message_thread` und den Schlüssel des Orts); Keyset über die Mail-ID der Zeile.
+  Threads mit angepinnter oder zurückgekehrter Mail stehen nur oben (Prüfung je Thread-Mitglied
+  über die eindeutigen Indizes von `pin` und `snooze`). Je Zeile zählen Anzahl und Ungelesene über
+  alle Mails des Threads (`message_thread`, `loc_message` per `INDEXED BY`), Teilnehmer, Anhang und
+  Markierung kommen aus den neuesten 200 Mails. Keine Migration.
 - Aus der Nachmessung Stufe 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): Abfragen auf
   einen Teilindex, der nach einem Nachholauf leer wird (`message_category_todo`,
   `message_contacts_todo`), nennen ihn per `INDEXED BY`. `PRAGMA optimize` beim Schließen hält
@@ -352,6 +360,13 @@ einer klaren Meldung abgelehnt.
 **Threads**
 - Je Konto, über Message-ID, In-Reply-To und References. Rückfall auf den Betreff nur vorsichtig:
   gleicher normalisierter Betreff, gemeinsame Teilnehmer, enges Zeitfenster.
+- Konversationsansicht (0039, Standard an, synchronisierte Einstellung): Posteingang, vereinter
+  Posteingang, Ordner und Suchergebnisse zeigen eine Zeile je Konversation. Bündel enthalten
+  Konversationen. Angepinnte und zurückgekehrte Konversationen stehen oben, einmal; wartende
+  Snoozes und ausgeblendete Mails wirken je Mail. Aktionen auf einer Konversationszeile treffen die
+  Mails, die der Kern nennt (`conversationTargets`): Verschieben, Löschen, Zurückstellen die Mails im
+  angezeigten Postfach; Gelesen, Entmarkieren, Lösen alle Mails; Ungelesen, Markieren, Anpinnen die
+  Mail der Zeile. Ausgeführt wird über die Outbox wie jede Aktion.
 
 **Gmail über IMAP (Stufe 14, Block A, 0034)**
 - Erkannt an `X-GM-EXT-1` bei jeder Anmeldung (vermerkt in `account_server`), für Gesendet und

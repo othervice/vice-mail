@@ -333,9 +333,10 @@ Liste. Abstand zwischen Abschnitten 20 px, Kontobäume 12 px.
 Standard). Der Griff ist ein Fenster-Trenner nach WAI-ARIA (`role="separator"`, Wert in px):
 ← und → ändern um 16 px, Pos1 und Ende auf Minimum und Maximum, Eingabe klappt die Spalte ein. Die
 Breite wird in px bei 100 % Schrift gehalten und wächst mit der Schriftgröße (rem); gesetzt wird sie
-per CSSOM an der Spalte, nicht als Stil-Attribut (CSP). Gespeichert ist sie noch nicht über einen
-Neustart hinaus: Das Fenster-Layout des Kerns hat kein Feld dafür (offen, siehe Ergebnis der
-Sitzung).
+per CSSOM an der Spalte, nicht als Stil-Attribut (CSP). Gespeichert wird sie mit dem Layout des
+Fensters im Kern (`WindowLayout.sidebarWidth`, nur auf diesem Gerät), sobald sie 400 ms ruht: ein
+Ziehen ist eine Speicherung. Die Spalte ist im Kern standardmäßig sichtbar
+(`WindowLayout.sidebarExpanded`).
 
 **Ein- und ausklappen.** Knopf in der Kopfzeile, Cmd/Strg+Umschalt+S (Befehl „Seitenleiste ein- oder
 ausblenden“ im Aktionsverzeichnis, änderbar, wirkt mit Modifier auch in Textfeldern; im Editor des

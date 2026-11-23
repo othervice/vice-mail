@@ -5,6 +5,7 @@
 //! | `ui.shortcuts.macos`, `ui.shortcuts.windows` | changed commands of one platform | synced |
 //! | `ui.text_size` | percent, 80 to 150 | synced |
 //! | `ui.accent_theme` | one of the six accent themes (stage 16, decision 0036) | synced |
+//! | `ui.conversations` | one row per conversation (default) or per message (decision 0039) | synced |
 //! | `ui.recent_commands` | palette entry keys, newest first | device |
 //! | `ui.ai_panel` | the AI panel unfolded or folded in (decision 0028) | device |
 //! | `ui.layout.<slot>` | [`WindowLayout`] of one kind of window | device |
@@ -31,6 +32,8 @@ pub(crate) const SHORTCUTS_WINDOWS_KEY: &str = "ui.shortcuts.windows";
 pub(crate) const TEXT_SIZE_KEY: &str = "ui.text_size";
 /// Stage 16 (decision 0036): synced like the text size.
 pub(crate) const ACCENT_THEME_KEY: &str = "ui.accent_theme";
+/// Decision 0039: the conversation view, synced like the text size.
+pub(crate) const CONVERSATIONS_KEY: &str = "ui.conversations";
 pub(crate) const RECENT_COMMANDS_KEY: &str = "ui.recent_commands";
 /// Device only (decision 0028): AI in the app is set up per device (0024), and the panel is
 /// part of the window's layout, which stays on the device too (0025).
@@ -163,6 +166,14 @@ fn decode_accent(json: &str) -> AccentTheme {
     })
 }
 
+/// Anything but a boolean reads as the default (on).
+fn decode_conversations(json: &str) -> bool {
+    serde_json::from_str(json).unwrap_or_else(|err| {
+        tracing::warn!(key = CONVERSATIONS_KEY, %err, "stored conversation view unreadable, using on");
+        true
+    })
+}
+
 fn decode_recent(json: &str) -> Vec<String> {
     match serde_json::from_str::<Vec<String>>(json) {
         Ok(list) if validate_recent_commands(&list).is_ok() => list,
@@ -183,11 +194,48 @@ fn decode_ai_panel(json: &str) -> AiPanelState {
     })
 }
 
+/// A stored layout as older versions wrote it: fields missing then take the default (a layout
+/// stored before the column's width existed keeps its reading pane, density and sidebar).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredLayout {
+    #[serde(default)]
+    reading_pane: mail_model::ReadingPanePosition,
+    #[serde(default)]
+    density: mail_model::Density,
+    #[serde(default = "default_sidebar_expanded")]
+    sidebar_expanded: bool,
+    #[serde(default = "default_sidebar_width")]
+    sidebar_width: u16,
+}
+
+fn default_sidebar_expanded() -> bool {
+    WindowLayout::default().sidebar_expanded
+}
+
+fn default_sidebar_width() -> u16 {
+    mail_model::DEFAULT_SIDEBAR_WIDTH
+}
+
 fn decode_layout(key: &str, json: &str) -> WindowLayout {
-    serde_json::from_str(json).unwrap_or_else(|err| {
-        tracing::warn!(key, %err, "stored window layout unreadable, using the default");
-        WindowLayout::default()
-    })
+    let stored = match serde_json::from_str::<StoredLayout>(json) {
+        Ok(stored) => stored,
+        Err(err) => {
+            tracing::warn!(key, %err, "stored window layout unreadable, using the default");
+            return WindowLayout::default();
+        }
+    };
+    let mut layout = WindowLayout {
+        reading_pane: stored.reading_pane,
+        density: stored.density,
+        sidebar_expanded: stored.sidebar_expanded,
+        sidebar_width: stored.sidebar_width,
+    };
+    if let Err(reason) = layout.validate() {
+        tracing::warn!(key, %reason, "stored sidebar width not accepted, using the default");
+        layout.sidebar_width = mail_model::DEFAULT_SIDEBAR_WIDTH;
+    }
+    layout
 }
 
 fn layout_key(slot: &str) -> Result<String, CoreError> {
@@ -218,6 +266,7 @@ impl<C: Connector> AppCore<C> {
                 }
                 TEXT_SIZE_KEY => prefs.text_size = decode_text_size(value),
                 ACCENT_THEME_KEY => prefs.accent_theme = decode_accent(value),
+                CONVERSATIONS_KEY => prefs.conversations = decode_conversations(value),
                 RECENT_COMMANDS_KEY => prefs.recent_commands = decode_recent(value),
                 AI_PANEL_KEY => prefs.ai_panel = decode_ai_panel(value),
                 _ => {}
@@ -252,6 +301,10 @@ impl<C: Connector> AppCore<C> {
                 encode(&preferences.accent_theme)?,
             ),
             (
+                CONVERSATIONS_KEY.to_owned(),
+                encode(&preferences.conversations)?,
+            ),
+            (
                 RECENT_COMMANDS_KEY.to_owned(),
                 encode(&preferences.recent_commands)?,
             ),
@@ -266,6 +319,7 @@ impl<C: Connector> AppCore<C> {
             windows = stored.shortcuts.windows.len(),
             text_size = stored.text_size,
             accent = ?stored.accent_theme,
+            conversations = stored.conversations,
             "UI preferences stored"
         );
         self.emit_event(CoreEvent::UiPreferencesChanged {
@@ -293,6 +347,7 @@ impl<C: Connector> AppCore<C> {
         layout: WindowLayout,
     ) -> Result<WindowLayout, CoreError> {
         let key = layout_key(slot)?;
+        layout.validate().map_err(CoreError::InvalidArgument)?;
         self.store_ref()?
             .put_settings(GLOBAL_SCOPE, vec![(key, encode(&layout)?)])
             .await?;

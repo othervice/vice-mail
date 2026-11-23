@@ -60,6 +60,7 @@ fn sample() -> UiPreferences {
         recent_commands: vec!["action:archive".into(), "view:inbox".into()],
         ai_panel: AiPanelState::Folded,
         accent_theme: mail_model::AccentTheme::Violet,
+        conversations: false,
     }
 }
 
@@ -186,6 +187,45 @@ async fn the_accent_theme_is_stored_validated_and_synced() {
         mail_model::AccentTheme::Orange
     );
     assert!(RecordKey::setting(SettingScope::Global, "ui.accent_theme").is_ok());
+}
+
+/// Decision 0039: the conversation view is a UI preference, on by default, synced like the text
+/// size; a value that is not a boolean reads as on.
+#[tokio::test]
+async fn the_conversation_view_is_on_by_default_stored_and_synced() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let mut events = core.subscribe();
+    assert!(core.get_ui_preferences().await.expect("read").conversations);
+    let prefs = UiPreferences {
+        conversations: false,
+        ..UiPreferences::default()
+    };
+    let stored_prefs = core.set_ui_preferences(prefs).await.expect("store");
+    assert!(!stored_prefs.conversations);
+    assert_eq!(stored(&core, "ui.conversations").await, Some(json!(false)));
+    let announced = loop {
+        match tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("event in time")
+            .expect("event")
+        {
+            CoreEvent::UiPreferencesChanged { preferences } => break preferences,
+            _ => continue,
+        }
+    };
+    assert!(!announced.conversations);
+    assert!(!core.get_ui_preferences().await.expect("read").conversations);
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![("ui.conversations".to_owned(), "\"threads\"".to_owned())],
+        )
+        .await
+        .expect("seed");
+    assert!(core.get_ui_preferences().await.expect("read").conversations);
+    assert!(RecordKey::setting(SettingScope::Global, "ui.conversations").is_ok());
+    assert!(crate::settings_sync::SYNCED_SETTINGS.contains(&"ui.conversations"));
 }
 
 /// Decision 0028: the AI panel's state is a UI preference of this device: stored, announced,
@@ -366,7 +406,8 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
     let main = WindowLayout {
         reading_pane: ReadingPanePosition::Bottom,
         density: Density::Compact,
-        sidebar_expanded: true,
+        sidebar_expanded: false,
+        sidebar_width: 280,
     };
     let message = WindowLayout {
         reading_pane: ReadingPanePosition::Replace,
@@ -386,7 +427,59 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
     );
     assert_eq!(
         stored(&core, "ui.layout.main").await,
-        Some(json!({ "readingPane": "bottom", "density": "compact", "sidebarExpanded": true }))
+        Some(json!({
+            "readingPane": "bottom",
+            "density": "compact",
+            "sidebarExpanded": false,
+            "sidebarWidth": 280
+        }))
+    );
+
+    // The column's width: 200 to 320 pixels; a refused layout changes nothing.
+    for width in [199, 321, 0] {
+        let err = core
+            .set_window_layout(
+                "main",
+                WindowLayout {
+                    sidebar_width: width,
+                    ..main
+                },
+            )
+            .await
+            .expect_err("width out of range");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument, "{width}");
+    }
+    assert_eq!(core.get_window_layout("main").await.expect("main"), main);
+    // A layout stored before the width existed keeps its other fields; a width out of range
+    // reads as the default.
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![
+                (
+                    "ui.layout.main".to_owned(),
+                    r#"{"readingPane":"bottom","density":"compact","sidebarExpanded":false}"#
+                        .to_owned(),
+                ),
+                (
+                    "ui.layout.message".to_owned(),
+                    r#"{"readingPane":"replace","density":"comfortable","sidebarExpanded":true,"sidebarWidth":900}"#
+                        .to_owned(),
+                ),
+            ],
+        )
+        .await
+        .expect("older layouts");
+    assert_eq!(
+        core.get_window_layout("main").await.expect("main"),
+        WindowLayout {
+            sidebar_width: mail_model::DEFAULT_SIDEBAR_WIDTH,
+            ..main
+        }
+    );
+    assert_eq!(
+        core.get_window_layout("message").await.expect("message"),
+        message
     );
 
     for slot in ["", "Main", "../x", "ui.theme"] {

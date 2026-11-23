@@ -157,6 +157,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         ai_panel: mail_model::AiPanelState::Folded,
         // Stage 16 (decision 0036): the accent theme is synced like the text size.
         accent_theme: mail_model::AccentTheme::Green,
+        conversations: false,
     })
     .await
     .expect("ui preferences");

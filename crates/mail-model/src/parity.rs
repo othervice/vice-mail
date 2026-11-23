@@ -59,6 +59,16 @@ pub struct UnreadFirstPage {
     pub next_cursor: Option<UnreadFirstCursor>,
 }
 
+/// Decision 0039: "unread first" as conversations: the conversations with an unread message in
+/// the listed mailboxes, then the others.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadFirstThreadPage {
+    pub items: Vec<crate::ThreadListItem>,
+    /// Null on the last page.
+    pub next_cursor: Option<UnreadFirstCursor>,
+}
+
 /// Copy or move to a mailbox of another account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

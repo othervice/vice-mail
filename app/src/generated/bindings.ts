@@ -640,6 +640,8 @@ export const CORE_EVENT_NAME = "core-event" as const;
 
 export const DEFAULT_SEND_DELAY_SECS = 10 as const;
 
+export const DEFAULT_SIDEBAR_WIDTH = 240 as const;
+
 export const DEFAULT_TEXT_SIZE = 100 as const;
 
 export const LARGE_ATTACHMENT_WARNING_BYTES = 15728640 as const;
@@ -698,6 +700,8 @@ export const MAX_SHORTCUT_KEY_CHARS = 20 as const;
 
 export const MAX_SHORTCUT_OVERRIDES = 100 as const;
 
+export const MAX_SIDEBAR_WIDTH = 320 as const;
+
 export const MAX_SIGNATURE_IMAGES = 8 as const;
 
 export const MAX_SIGNATURE_IMAGES_BYTES = 131072 as const;
@@ -711,6 +715,8 @@ export const MAX_THREAD_MESSAGES = 1000 as const;
 export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 
 export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
+
+export const MIN_SIDEBAR_WIDTH = 200 as const;
 
 export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
 
@@ -4528,8 +4534,14 @@ export type UpdateStatus =
 export type WindowLayout = {
 	readingPane: ReadingPanePosition,
 	density: Density,
-	/**  The icon rail unfolded into the labelled sidebar. */
+	/**  The accounts-and-folders column is shown (default) instead of the icon rail alone. */
 	sidebarExpanded: boolean,
+	/**
+	 *  Width of the accounts-and-folders column in CSS pixels, [`MIN_SIDEBAR_WIDTH`] to
+	 *  [`MAX_SIDEBAR_WIDTH`] ([`DEFAULT_SIDEBAR_WIDTH`] by default); the column's drag handle
+	 *  sets it.
+	 */
+	sidebarWidth: number,
 };
 
 /* Tauri Specta runtime */

@@ -353,3 +353,49 @@ Zuordnung wurde vor dem Speichern jeweils ein Trigger bzw. Index entfernt:
 
 **Ungeprüft:** wie in Stufe 7 (Kaltstart nach Neustart, die App mit WebView, echte Postfächer,
 Windows).
+
+## Konversationen (Entscheidung 0039) – 23.11.2026
+
+**Umgebung:** wie Stufe 7 (Mac mini M4, macOS 27.2.1, Release-Build, warm). Andere Sitzungen bauten
+und testeten nebenher (Load 5–8 während der Messung); die Grundwerte dieses Laufs liegen deshalb
+etwa doppelt so hoch wie in Stufe 7 (Listenseite 0,19 statt 0,10 ms). **Wie gemessen:** der
+Benchmark der Stufe 7 (`crates/mail-engine/src/search/bench.rs`, gleiche Daten: fünf Konten,
+40 % Antworten auf eine der letzten 300 Unterhaltungen, langer Listen-Thread) mit neuen Zeilen für
+den sortierten Posteingang als Konversationen; alles über `AppCore`.
+
+```text
+cargo test -p mail-engine --release --lib search::bench -- --ignored --nocapture --test-threads 1
+```
+
+| Messung (ms) | 100.000 Median | p95 | max | 500.000 Median | p95 | max |
+|---|---:|---:|---:|---:|---:|---:|
+| Listenseite größter Posteingang (100) | 0,19 | 0,24 | 0,38 | 0,20 | 0,28 | 0,37 |
+| Sortierter Posteingang, Nachrichten (`listInbox`, 100) | 0,39 | 0,43 | 0,73 | 0,39 | 0,45 | 0,80 |
+| **Sortierter Posteingang, Konversationen (100)** | **2,18** | 2,39 | 2,57 | **2,21** | 2,46 | 2,61 |
+| … Keyset ab Mitte | 2,12 | 2,22 | 2,33 | 2,08 | 2,26 | 2,41 |
+| **Vereinter Posteingang, Konversationen (5 Konten, 100)** | **4,49** | 4,81 | 6,17 | **4,64** | 4,89 | 6,20 |
+| Nur ungelesene, Konversationen (100) | 1,64 | 2,13 | 2,30 | 1,88 | 2,12 | 2,18 |
+| Ungelesene oben, Konversationen (100) | 1,49 | 1,97 | 2,21 | 1,87 | 2,09 | 2,15 |
+| Ziele einer Aktion auf 100 Konversationen (Archivieren) | 1,49 | 1,84 | 1,88 | 1,69 | 1,84 | 1,88 |
+| Thread-Liste größter Posteingang (100) | 1,84 | 1,97 | 2,02 | 1,88 | 2,11 | 2,29 |
+| Thread-Liste vereinter Posteingang (100) | 2,54 | 2,78 | 3,22 | 2,59 | 2,99 | 3,34 |
+| Thread-Liste Newsletter (langer Listen-Thread, 1.461 bzw. 7.620 Mails) | 2,62 | 2,81 | 3,40 | 6,77 | 7,33 | 26,37 |
+
+- Eine Seite Konversationen bleibt bei 100.000 und 500.000 Mails unter 3 ms (vereint unter 5 ms),
+  weit unter jedem Ziel; die Seite wächst nicht mit der Größe des Postfachs (Keyset, Plan-Test
+  `conversation_tests::every_conversation_query_uses_its_index`).
+- **Kosten gegenüber Mails:** rund 2 ms mehr je Seite. Sie kommen aus der Zusammenfassung je Zeile
+  (Anzahl und Ungelesene über alle Mails des Threads, Absender und Markierungen über die neuesten
+  200) und der Prüfung „keine neuere Mail des Threads“. Die Threads dieses Generators sind groß
+  (die letzten 300 Unterhaltungen teilen sich 40 % aller Mails, im Mittel weit über 100 Mails je
+  Thread); echte Unterhaltungen sind meist kürzer, der Wert ist eine Obergrenze.
+- **Thread-Liste eines Ordners:** nutzt jetzt dieselbe Zusammenfassung (mit Absendern, Anhang und
+  Markierung) und kostet deshalb mehr als in Stufe 7 (0,26 → 1,84 ms bei 100 Zeilen). Ein erster
+  Entwurf las für Absender und Markierungen jede Mail des Threads: die Zeile des langen
+  Listen-Threads kostete bei 500.000 Mails 18,3 ms (Median); mit der Grenze von 200 Mails 6,8 ms.
+  Das Maximum von 26 ms ist ein einzelner Ausreißer unter Last (p95 7,3 ms).
+- Nicht berührt (gleiche Abfragen wie vorher; die höheren Werte als in Stufe 7 sind die Last):
+  Listenseite, vereinter Posteingang als Mails, Suche, Start (4–9 ms bis zur ersten Seite) und
+  Speicher im Leerlauf (26–27 MB).
+- Der automatische Test `search::bench::small_data_meets_generous_thresholds` (3.000 Mails, Debug)
+  prüft jetzt auch den Posteingang als Konversationen (Grenze 200 ms) und vereint (300 ms).

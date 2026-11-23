@@ -295,6 +295,7 @@ async fn bench_stage_9() {
                 .into_iter()
                 .map(|item| super::Sectioned {
                     section: super::time::section(item.date, now, &zone),
+                    unread: item.unread,
                     item,
                 })
                 .collect();

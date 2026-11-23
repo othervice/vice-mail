@@ -42,14 +42,15 @@ use jiff::tz::TimeZone;
 use mail_content::{SenderIdentity, SenderRules, apply_user_rules, normalize_key};
 use mail_model::{
     AccountId, BadgeMode, BundleItem, BundleOptions, BundleRow, BundleState, CategoryCorrection,
-    CategoryDecision, CoreError, CoreEvent, DEFAULT_BUNDLE_CHIPS, DateSection, ErrorCode,
-    ExtraRootCa, InboxCursor, InboxFilter, InboxPage, InboxRow, InboxScope, InboxSettings,
-    InboxTop, ListCursor, MAX_ACTION_MESSAGES, MAX_TOP_PINNED, MAX_TOP_RETURNED, MailAction,
-    MailRule, MailboxId, MarkScope, MessageCategory, MessageCategoryInfo, MessageId,
-    MessageListItem, MessagePage, MessageRef, NotificationSettings, NotificationTexts, OperationId,
-    PRIORITY_PREVIEW, RuleId, RuleInput, RuleSkipReason, SendState, SenderKey, SenderRule,
-    SnoozeChoice, SnoozeTimes, TaskFilter, TaskMark, UidSet, UnifiedView, UnsubscribeMethod,
-    UnsubscribeOptions, UnsubscribeOutcome, bundle_page,
+    CategoryDecision, ConversationIntent, ConversationSummary, CoreError, CoreEvent,
+    DEFAULT_BUNDLE_CHIPS, DateSection, ErrorCode, ExtraRootCa, InboxCursor, InboxFilter, InboxPage,
+    InboxRow, InboxScope, InboxSettings, InboxTop, ListCursor, MAX_ACTION_MESSAGES, MAX_TOP_PINNED,
+    MAX_TOP_RETURNED, MailAction, MailRule, MailboxId, MarkScope, MessageCategory,
+    MessageCategoryInfo, MessageId, MessageListItem, MessagePage, MessageRef, NotificationSettings,
+    NotificationTexts, OperationId, PRIORITY_PREVIEW, RuleId, RuleInput, RuleSkipReason, SendState,
+    SenderKey, SenderRule, SnoozeChoice, SnoozeTimes, TaskFilter, TaskMark, ThreadListItem,
+    ThreadPage, UidSet, UnifiedView, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome,
+    bundle_page,
 };
 use mail_store::{
     GLOBAL_SCOPE, InboxListKind, InboxMailboxes, MAX_MARK_VIEW, MarkView, MessageKey,
@@ -327,10 +328,67 @@ async fn event_worker<C: Connector>(weak: WeakCore<C>, mut events: broadcast::Re
     }
 }
 
-/// A list row with its date section, for the bundler.
+/// A list row with its date section, for the bundler. `unread`: the message, or in
+/// conversation view (decision 0039) any message of its conversation, is unread.
 struct Sectioned {
     item: MessageListItem,
     section: DateSection,
+    unread: bool,
+}
+
+fn filter_kind(filter: InboxFilter) -> InboxListKind {
+    match filter {
+        InboxFilter::Category { category } => InboxListKind::Category(category),
+        InboxFilter::Priority => InboxListKind::Important,
+        // Stage 16 (decision 0033): "Nur ungelesene".
+        InboxFilter::Unread => InboxListKind::Unread,
+    }
+}
+
+/// Decision 0039: the conversation summaries of an inbox page, once per row message.
+#[derive(Default)]
+struct Summaries {
+    list: Vec<ConversationSummary>,
+    seen: HashSet<MessageId>,
+}
+
+impl Summaries {
+    fn add(&mut self, item: &ThreadListItem) {
+        if self.seen.insert(item.message.id) {
+            self.list.push(ConversationSummary::of(item));
+        }
+    }
+
+    /// The rows' messages with "unread" for the bundler, keeping the summaries.
+    fn take(&mut self, items: Vec<ThreadListItem>) -> Vec<(MessageListItem, bool)> {
+        items
+            .into_iter()
+            .map(|item| {
+                self.add(&item);
+                (item.message, item.unread_count > 0)
+            })
+            .collect()
+    }
+
+    fn messages(&mut self, items: Vec<ThreadListItem>) -> Vec<MessageListItem> {
+        items
+            .into_iter()
+            .map(|item| {
+                self.add(&item);
+                item.message
+            })
+            .collect()
+    }
+
+    fn plain(items: Vec<MessageListItem>) -> Vec<(MessageListItem, bool)> {
+        items
+            .into_iter()
+            .map(|item| {
+                let unread = item.unread;
+                (item, unread)
+            })
+            .collect()
+    }
 }
 
 impl BundleItem for Sectioned {
@@ -344,7 +402,7 @@ impl BundleItem for Sectioned {
         self.item.from.as_ref()
     }
     fn unread(&self) -> bool {
-        self.item.unread
+        self.unread
     }
     fn section(&self) -> i64 {
         self.section.start
@@ -408,30 +466,89 @@ impl<C: Connector> AppCore<C> {
         cursor: Option<InboxCursor>,
         limit: u32,
     ) -> Result<InboxPage, CoreError> {
+        self.sorted_inbox(scope, cursor, limit, false).await
+    }
+
+    /// Decision 0039: the inbox as conversations. Same page as [`AppCore::list_inbox`], but
+    /// every message of the rows and of the top stands for its conversation (its newest
+    /// message in the inbox) and `conversations` holds their summaries. Bundles hold
+    /// conversations; pinned conversations and those with a returned snooze stand on top once;
+    /// waiting snoozes and mail of blocked senders are left out per message. `limit` 1..=500
+    /// counts conversations.
+    pub async fn list_inbox_conversations(
+        &self,
+        scope: InboxScope,
+        cursor: Option<InboxCursor>,
+        limit: u32,
+    ) -> Result<InboxPage, CoreError> {
+        self.sorted_inbox(scope, cursor, limit, true).await
+    }
+
+    async fn sorted_inbox(
+        &self,
+        scope: InboxScope,
+        cursor: Option<InboxCursor>,
+        limit: u32,
+        conversations: bool,
+    ) -> Result<InboxPage, CoreError> {
         let store = self.store_ref()?;
         let settings = self.get_inbox_settings().await?;
         let mailboxes = mailboxes_of(scope);
         let before = cursor.as_ref().map(|c| c.before);
-        let page = store
-            .inbox_list(mailboxes.clone(), InboxListKind::Rows, before, limit)
-            .await?;
+        let mut summaries = Summaries::default();
+        let (page_items, page_next) = if conversations {
+            let page = store
+                .inbox_conversations(mailboxes.clone(), InboxListKind::Rows, before, limit)
+                .await?;
+            (summaries.take(page.items), page.next_cursor)
+        } else {
+            let page = store
+                .inbox_list(mailboxes.clone(), InboxListKind::Rows, before, limit)
+                .await?;
+            (Summaries::plain(page.items), page.next_cursor)
+        };
         let top = if cursor.is_none() {
-            let pinned = store
-                .inbox_top(mailboxes.clone(), false, MAX_TOP_PINNED)
-                .await?;
-            let returned = store
-                .inbox_top(mailboxes.clone(), true, MAX_TOP_RETURNED)
-                .await?;
+            let (pinned, returned) = if conversations {
+                let pinned = store
+                    .inbox_top_conversations(mailboxes.clone(), false, MAX_TOP_PINNED)
+                    .await?;
+                let returned = store
+                    .inbox_top_conversations(mailboxes.clone(), true, MAX_TOP_RETURNED)
+                    .await?;
+                (summaries.messages(pinned), summaries.messages(returned))
+            } else {
+                (
+                    store
+                        .inbox_top(mailboxes.clone(), false, MAX_TOP_PINNED)
+                        .await?,
+                    store
+                        .inbox_top(mailboxes.clone(), true, MAX_TOP_RETURNED)
+                        .await?,
+                )
+            };
             let (priority, priority_total, priority_unread) = if settings.categories {
-                let priority = store
-                    .inbox_list(
-                        mailboxes.clone(),
-                        InboxListKind::Important,
-                        None,
-                        PRIORITY_PREVIEW,
-                    )
-                    .await?
-                    .items;
+                let priority = if conversations {
+                    let page = store
+                        .inbox_conversations(
+                            mailboxes.clone(),
+                            InboxListKind::Important,
+                            None,
+                            PRIORITY_PREVIEW,
+                        )
+                        .await?;
+                    summaries.messages(page.items)
+                } else {
+                    store
+                        .inbox_list(
+                            mailboxes.clone(),
+                            InboxListKind::Important,
+                            None,
+                            PRIORITY_PREVIEW,
+                        )
+                        .await?
+                        .items
+                };
+                // Messages, also in conversation view: the count is one index range.
                 let (total, unread) = store.important_counts(mailboxes).await?;
                 (priority, total, unread)
             } else {
@@ -463,11 +580,11 @@ impl<C: Connector> AppCore<C> {
             .unwrap_or_default();
         let zone = self.comfort().zone();
         let now = self.now_ms();
-        let items: Vec<Sectioned> = page
-            .items
+        let items: Vec<Sectioned> = page_items
             .into_iter()
-            .map(|item| Sectioned {
+            .map(|(item, unread)| Sectioned {
                 section: time::section(item.date, now, &zone),
+                unread,
                 item,
             })
             .collect();
@@ -499,7 +616,7 @@ impl<C: Connector> AppCore<C> {
         if let Some(last) = last_section {
             state.keep_section(last);
         }
-        let next_cursor = page.next_cursor.map(|before| InboxCursor {
+        let next_cursor = page_next.map(|before| InboxCursor {
             before,
             bundles: (!state.is_empty())
                 .then(|| serde_json::to_string(&state).ok())
@@ -510,7 +627,37 @@ impl<C: Connector> AppCore<C> {
             next_cursor,
             top,
             categories: settings.categories,
+            conversations: summaries.list,
         })
+    }
+
+    /// Decision 0039: the inbox filtered (a category, the important senders, unread only) as
+    /// conversations, newest first; waiting snoozes left out. `limit` 1..=500.
+    pub async fn list_inbox_conversations_filtered(
+        &self,
+        scope: InboxScope,
+        filter: InboxFilter,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ThreadPage, CoreError> {
+        Ok(self
+            .store_ref()?
+            .inbox_conversations(mailboxes_of(scope), filter_kind(filter), cursor, limit)
+            .await?)
+    }
+
+    /// Decision 0039: the messages an action on conversation rows touches (`rows`: each row's
+    /// message and the mailbox it is listed in), as list rows; the UI then runs the action on
+    /// them as usual (see [`ConversationIntent::reach`]).
+    pub async fn conversation_targets(
+        &self,
+        rows: Vec<mail_model::MessageRef>,
+        intent: ConversationIntent,
+    ) -> Result<Vec<MessageListItem>, CoreError> {
+        Ok(self
+            .store_ref()?
+            .conversation_targets(rows, intent.reach(), intent.per_location())
+            .await?)
     }
 
     /// The inbox filtered by category or to the important senders, newest first (snoozed
@@ -522,15 +669,9 @@ impl<C: Connector> AppCore<C> {
         cursor: Option<ListCursor>,
         limit: u32,
     ) -> Result<MessagePage, CoreError> {
-        let kind = match filter {
-            InboxFilter::Category { category } => InboxListKind::Category(category),
-            InboxFilter::Priority => InboxListKind::Important,
-            // Stage 16 (decision 0033): "Nur ungelesene".
-            InboxFilter::Unread => InboxListKind::Unread,
-        };
         Ok(self
             .store_ref()?
-            .inbox_list(mailboxes_of(scope), kind, cursor, limit)
+            .inbox_list(mailboxes_of(scope), filter_kind(filter), cursor, limit)
             .await?)
     }
 

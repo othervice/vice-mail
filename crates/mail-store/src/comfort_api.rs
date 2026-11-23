@@ -3,14 +3,15 @@
 //! sync window brought. Every method runs on the writer thread or a reader, like the rest.
 
 use mail_model::{
-    AccountGroupId, AccountId, ListCursor, MailRule, MailboxId, MessageCategory, MessageId,
-    MessageListItem, MessagePage, RuleId, RuleInput, SenderKey, UidSet,
+    AccountGroupId, AccountId, ConversationReach, ListCursor, MailRule, MailboxId, MessageCategory,
+    MessageId, MessageListItem, MessagePage, MessageRef, RuleId, RuleInput, SenderKey,
+    ThreadListItem, ThreadPage, UidSet, UnreadFirstCursor, UnreadFirstThreadPage,
 };
 
 use crate::categories::{self, CATEGORY_BATCH, SenderRuleChange, StoredCategory};
 use crate::inbox::{self, ArrivedMessage, InboxListKind};
 use crate::marks::{self, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
-use crate::{Store, StoreError, groups, lists, rules};
+use crate::{Store, StoreError, conversations, groups, lists, rules};
 
 /// Which mailboxes an inbox list covers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +149,63 @@ impl Store {
             inbox::list(c, kind, &mailboxes, cursor, limit)
         })
         .await
+    }
+
+    /// Decision 0039: one page of the conversation variant of an inbox list (see
+    /// `conversations`); `limit` counts conversations.
+    pub async fn inbox_conversations(
+        &self,
+        scope: InboxMailboxes,
+        kind: InboxListKind,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ThreadPage, StoreError> {
+        self.read(move |c| {
+            let mailboxes = resolve(c, &scope)?;
+            conversations::list(c, kind, &mailboxes, cursor, limit)
+        })
+        .await
+    }
+
+    /// Decision 0039: pinned conversations (`returned = false`) or those with a returned
+    /// snooze, once per thread, as the row of their newest message in the scope.
+    pub async fn inbox_top_conversations(
+        &self,
+        scope: InboxMailboxes,
+        returned: bool,
+        limit: u32,
+    ) -> Result<Vec<ThreadListItem>, StoreError> {
+        self.read(move |c| {
+            let mailboxes = resolve(c, &scope)?;
+            conversations::top(c, returned, &mailboxes, limit)
+        })
+        .await
+    }
+
+    /// Decision 0039: "unread first" as conversations.
+    pub async fn unread_first_conversations(
+        &self,
+        scope: InboxMailboxes,
+        cursor: Option<UnreadFirstCursor>,
+        limit: u32,
+    ) -> Result<UnreadFirstThreadPage, StoreError> {
+        self.read(move |c| {
+            let mailboxes = resolve(c, &scope)?;
+            conversations::unread_first(c, &mailboxes, cursor, limit)
+        })
+        .await
+    }
+
+    /// Decision 0039: the messages an action on conversation rows touches (see
+    /// `conversations::targets`).
+    pub async fn conversation_targets(
+        &self,
+        rows: Vec<MessageRef>,
+        reach: ConversationReach,
+        per_location: bool,
+    ) -> Result<Vec<MessageListItem>, StoreError> {
+        self.read(move |c| conversations::targets(c, &rows, reach, per_location))
+            .await
     }
 
     /// Pinned (`returned = false`) or returned messages lying in the scope.

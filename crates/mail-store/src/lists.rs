@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use mail_model::{
     AccountId, Address, ListCursor, MailboxId, MessageActivity, MessageId, MessageListItem,
-    MessagePage, ThreadEntry, ThreadListItem, ThreadPage, ThreadView,
+    MessagePage, ThreadEntry, ThreadPage, ThreadView,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 
@@ -189,21 +189,11 @@ pub(crate) fn unified(
 /// below the cursor `?1`, at most `?2`. A location is the thread's row when no newer message
 /// of its thread lies in the same mailbox (`message_thread` gives the thread's ids in order).
 /// Unthreaded messages (thread NULL) are rows of their own. Columns: the list columns, then
-/// thread id, message count, last message id, unread count, mailbox id.
+/// thread id and mailbox id. Counts, senders and flags of the conversation come from
+/// `conversations::summarize` (decision 0039).
 fn thread_branch(param: usize) -> String {
     format!(
-        "SELECT * FROM (SELECT {cols}, m.thread_id,
-               (SELECT t.message_count FROM thread t WHERE t.id = m.thread_id),
-               (SELECT t.last_message_id FROM thread t WHERE t.id = m.thread_id),
-               CASE WHEN m.thread_id IS NULL
-                 THEN EXISTS (SELECT 1 FROM message_location ul
-                              WHERE ul.message_id = m.id AND ul.seen = 0)
-                 ELSE (SELECT count(*) FROM message u
-                       WHERE u.thread_id = m.thread_id
-                         AND EXISTS (SELECT 1 FROM message_location ul
-                                     WHERE ul.message_id = u.id AND ul.seen = 0))
-               END,
-               l.mailbox_id
+        "SELECT * FROM (SELECT {cols}, m.thread_id, l.mailbox_id
            FROM message_location l CROSS JOIN message m ON m.id = l.message_id
            WHERE l.mailbox_id = ?{param} AND l.message_id < ?1
              AND NOT EXISTS (SELECT 1 FROM message n CROSS JOIN message_location nl
@@ -240,31 +230,19 @@ pub(crate) fn threads(
     let rows = conn
         .prepare_cached(&sql)?
         .query_map(params_from_iter(values), |r| {
-            let mailbox = MailboxId(r.get(18)?);
+            let mailbox = MailboxId(r.get(15)?);
             let account = accounts
                 .get(&mailbox.0)
                 .copied()
-                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(18))?;
-            let message = item_at(r, account, mailbox)?;
-            let thread_id: Option<i64> = r.get(14)?;
-            let count: Option<i64> = r.get(15)?;
-            let last: Option<i64> = r.get(16)?;
-            let unread: i64 = r.get(17)?;
-            let last_activity = last.unwrap_or(message.id.0).max(message.id.0);
-            Ok(ThreadListItem {
-                thread_id,
-                message_count: u32::try_from(count.unwrap_or(1).max(1)).unwrap_or(u32::MAX),
-                unread_count: u32::try_from(unread.max(0)).unwrap_or(u32::MAX),
-                // The id is the sort date (or a few seconds above it): close enough for "last
-                // activity", without another lookup.
-                last_activity: last_activity.saturating_mul(1000),
-                message,
-            })
+                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(15))?;
+            Ok((item_at(r, account, mailbox)?, r.get::<_, Option<i64>>(14)?))
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let (mut items, next_cursor) = page(rows, limit, |i| i.message.id);
-    for item in &mut items {
-        crate::marks::decorate(conn, std::slice::from_mut(&mut item.message))?;
+    let (rows, next_cursor) = page(rows, limit, |(item, _)| item.id);
+    let mut items = Vec::with_capacity(rows.len());
+    for (mut message, thread) in rows {
+        crate::marks::decorate(conn, std::slice::from_mut(&mut message))?;
+        items.push(crate::conversations::summarize(conn, message, thread)?);
     }
     Ok(ThreadPage { items, next_cursor })
 }

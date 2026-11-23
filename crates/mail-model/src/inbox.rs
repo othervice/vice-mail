@@ -132,6 +132,9 @@ pub struct InboxPage {
     /// Categories are on: notifications and newsletters are bundled. Off: the rows are purely
     /// chronological.
     pub categories: bool,
+    /// Decision 0039 (`listInboxConversations`): every message of the rows and of `top` stands
+    /// for its conversation; one summary per such message. Empty for `listInbox`.
+    pub conversations: Vec<crate::ConversationSummary>,
 }
 
 /// A filtered inbox list ("Alle anzeigen", a click on a bundle's category).

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { saveUiPreferences, saveWindowLayout } from "../features/keyboard/uiPreferences";
-import type { CoreError, CoreWindowLayout } from "../services/ipc";
+import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, type CoreError, type CoreWindowLayout } from "../services/ipc";
 
 /**
  * Where the reading pane opens (docs/DESIGN.md, docs/SPEC.md): right of the list (default),
@@ -35,9 +35,23 @@ export interface WindowLayout {
   textSize: TextSize;
   /** The rail unfolded into the labelled sidebar. */
   sidebarExpanded: boolean;
+  /** Width of the accounts-and-folders column, px at 100 % text size (200 to 320). */
+  sidebarWidth: number;
 }
 
-export const DEFAULT_LAYOUT: WindowLayout = { readingPane: "right", density: "comfortable", textSize: 100, sidebarExpanded: false };
+export const DEFAULT_LAYOUT: WindowLayout = {
+  readingPane: "right",
+  density: "comfortable",
+  textSize: 100,
+  sidebarExpanded: false,
+  sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+};
+
+/** A width the core accepts: whole pixels from 200 to 320 (anything else: the default). */
+export function storedSidebarWidth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SIDEBAR_WIDTH;
+  return Math.round(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value)));
+}
 
 function pick<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.find((candidate) => candidate === value) ?? fallback;
@@ -51,6 +65,7 @@ export function parseStoredLayout(raw: unknown): WindowLayout {
     density: pick(value["density"], DENSITIES, DEFAULT_LAYOUT.density),
     textSize: pick(value["textSize"], TEXT_SIZES, DEFAULT_LAYOUT.textSize),
     sidebarExpanded: value["sidebarExpanded"] === true,
+    sidebarWidth: DEFAULT_LAYOUT.sidebarWidth,
   };
 }
 
@@ -80,6 +95,7 @@ const windowPart = (layout: WindowLayout): CoreWindowLayout => ({
   readingPane: layout.readingPane,
   density: layout.density,
   sidebarExpanded: layout.sidebarExpanded,
+  sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
 });
 
 /**
@@ -100,7 +116,12 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
       applyToDocument(next);
       set({ ...change, saveError: null });
       if (change.textSize !== undefined) saveUiPreferences({ textSize: change.textSize }).catch(failed);
-      if (change.readingPane !== undefined || change.density !== undefined || change.sidebarExpanded !== undefined) {
+      if (
+        change.readingPane !== undefined ||
+        change.density !== undefined ||
+        change.sidebarExpanded !== undefined ||
+        change.sidebarWidth !== undefined
+      ) {
         saveWindowLayout(windowPart(next)).catch(failed);
       }
     },
@@ -109,6 +130,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
         readingPane: pick(layout.readingPane, READING_PANE_POSITIONS, DEFAULT_LAYOUT.readingPane),
         density: pick(layout.density, DENSITIES, DEFAULT_LAYOUT.density),
         sidebarExpanded: layout.sidebarExpanded,
+        sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
       };
       applyToDocument({ density: next.density, textSize: get().textSize });
       set(next);

@@ -47,7 +47,9 @@ describe("layouts", () => {
     await waitFor(() => {
       expect(core.ui.layout.readingPane).toBe("bottom");
     });
-    expect(core.callsOf("set_window_layout").at(-1)).toEqual({ layout: { readingPane: "bottom", density: "comfortable", sidebarExpanded: false } });
+    expect(core.callsOf("set_window_layout").at(-1)).toEqual({
+      layout: { readingPane: "bottom", density: "comfortable", sidebarExpanded: false, sidebarWidth: 240 },
+    });
 
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });
     list.focus();

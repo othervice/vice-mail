@@ -815,9 +815,19 @@ fn stage_16_attachment_commands_are_wired() {
 #[test]
 fn window_layout_belongs_to_the_calling_window() {
     let h = harness(|_| {});
-    let layout = json!({ "readingPane": "bottom", "density": "compact", "sidebarExpanded": true });
-    let default =
-        json!({ "readingPane": "right", "density": "comfortable", "sidebarExpanded": false });
+    let layout = json!({
+        "readingPane": "bottom",
+        "density": "compact",
+        "sidebarExpanded": false,
+        "sidebarWidth": 300
+    });
+    // The accounts-and-folders column is shown by default, 240 pixels wide.
+    let default = json!({
+        "readingPane": "right",
+        "density": "comfortable",
+        "sidebarExpanded": true,
+        "sidebarWidth": 240
+    });
     assert_eq!(
         invoke(&h, "get_window_layout", json!({})).expect("get"),
         default
@@ -830,6 +840,11 @@ fn window_layout_belongs_to_the_calling_window() {
         invoke(&h, "get_window_layout", json!({})).expect("get"),
         layout
     );
+    // The width is checked: 200 to 320 pixels.
+    let mut too_wide = layout.clone();
+    too_wide["sidebarWidth"] = json!(400);
+    let err = invoke(&h, "set_window_layout", json!({ "layout": too_wide })).expect_err("width");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
 
     // A message window has a layout of its own, shared by all message windows.
     let label = |id: i64| {
@@ -845,8 +860,12 @@ fn window_layout_belongs_to_the_calling_window() {
         invoke_from(&first, "get_window_layout", json!({})).expect("get"),
         default
     );
-    let replace =
-        json!({ "readingPane": "replace", "density": "comfortable", "sidebarExpanded": false });
+    let replace = json!({
+        "readingPane": "replace",
+        "density": "comfortable",
+        "sidebarExpanded": false,
+        "sidebarWidth": 240
+    });
     invoke_from(&first, "set_window_layout", json!({ "layout": replace })).expect("set");
     let second = WebviewWindowBuilder::new(&h.app, label(2), Default::default())
         .build()

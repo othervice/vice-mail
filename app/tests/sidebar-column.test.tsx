@@ -31,7 +31,7 @@ function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true })
       makeMailbox({ id: 40, accountId: CLUB.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 4 }),
       makeMailbox({ id: 41, accountId: CLUB.id, path: "Turniere", unread: 1 }),
     ],
-    ui: { layout: { readingPane: "right", density: "comfortable", ...layout } },
+    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, ...layout } },
     search: { savedSearches: [makeSavedSearch({ name: "Invoices" })] },
   });
   return { core, ...renderApp() };
@@ -137,6 +137,29 @@ describe("accounts-and-folders column", () => {
     expect(splitter.getAttribute("aria-valuenow")).toBe(String(SIDEBAR_WIDTH.min));
     await user.keyboard("{Enter}");
     expect(await screen.findByTestId("icon-rail")).toBeTruthy();
+  });
+
+  it("stores its width with the window once it rests, and opens at the stored width", async () => {
+    const { core, user } = setup();
+    await column();
+    const splitter = screen.getByRole("separator", { name: "Sidebar width" });
+    act(() => {
+      splitter.focus();
+    });
+    // Three steps in a row are one save, after the width rests.
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
+    expect(splitter.getAttribute("aria-valuenow")).toBe("288");
+    await waitFor(() => {
+      expect(core.ui.layout.sidebarWidth).toBe(288);
+    });
+    expect(core.callsOf("set_window_layout").filter((call) => (call as { layout: { sidebarWidth: number } }).layout.sidebarWidth !== 240)).toHaveLength(1);
+    expect(useLayoutStore.getState().sidebarWidth).toBe(288);
+    // Another window (or a refused save) puts a stored width in place: the column follows.
+    act(() => {
+      useLayoutStore.getState().applyStoredLayout({ ...core.ui.layout, sidebarWidth: 208 });
+    });
+    expect(splitter.getAttribute("aria-valuenow")).toBe("208");
+    expect((await column()).style.getPropertyValue("--ui-sidebar-width")).toBe("13rem");
   });
 
   it("an account's row closes and opens all of its folders", async () => {

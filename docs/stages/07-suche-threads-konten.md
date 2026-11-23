@@ -120,7 +120,9 @@ Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, daru
 - Ungelesene je Thread werden beim Lesen gezählt, nicht gepflegt. Die Thread-Liste eines Postfachs
   sortiert nach der neuesten Mail in diesem Postfach.
 - Konversationen gibt es in normalen Ordnern; der Posteingang ist seit Stufe 9 sortiert und zeigt
-  sie nicht.
+  sie nicht. *Nachtrag 23.11.2026:* Seit 0039 hat der sortierte Posteingang (auch vereint, nur
+  ungelesene, ungelesene oben) eine Konversationsvariante; die Konversationsansicht ist eine
+  synchronisierte Einstellung und standardmäßig an.
 - Die Server-Suche liefert nur Mails ohne vollständigen lokalen Body, höchstens die neuesten 5.000
   Kandidaten; ohne Textbedingung wird nichts gesendet.
 - Zeitzonen über `jiff` (lag schon im Lockfile). Der Abgleich schreibt je Fenster von 500 Kopfdaten

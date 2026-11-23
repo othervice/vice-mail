@@ -41,6 +41,7 @@ mod compose;
 mod compose_api;
 mod contacts;
 mod contacts_dir;
+mod conversations;
 mod error;
 mod fts;
 mod gmail;
@@ -130,6 +131,8 @@ mod body_tests;
 mod compose_tests;
 #[cfg(test)]
 mod contacts_dir_tests;
+#[cfg(test)]
+mod conversation_tests;
 #[cfg(test)]
 mod gmail_tests;
 #[cfg(test)]

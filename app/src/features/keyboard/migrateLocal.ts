@@ -22,12 +22,13 @@ function isDefaultPreferences(preferences: UiPreferences): boolean {
   );
 }
 
+/**
+ * Whether a layout is what nothing stored looks like. The sidebar does not count: the core's
+ * default for it changed with the accounts-and-folders column (shown) after older cores had
+ * stored the folded rail as their default.
+ */
 function isDefaultLayout(layout: CoreWindowLayout): boolean {
-  return (
-    layout.readingPane === DEFAULT_LAYOUT.readingPane &&
-    layout.density === DEFAULT_LAYOUT.density &&
-    layout.sidebarExpanded === DEFAULT_LAYOUT.sidebarExpanded
-  );
+  return layout.readingPane === DEFAULT_LAYOUT.readingPane && layout.density === DEFAULT_LAYOUT.density;
 }
 
 /**
@@ -60,7 +61,13 @@ export async function migrateLocalFallback(preferences: UiPreferences, layout: C
   const stored = legacyLayout === null ? null : parseStoredLayout(legacyLayout);
   const layoutChange =
     stored && isDefaultLayout(layout) && !isDefaultLayout(stored)
-      ? { readingPane: stored.readingPane, density: stored.density, sidebarExpanded: stored.sidebarExpanded }
+      ? {
+          readingPane: stored.readingPane,
+          density: stored.density,
+          sidebarExpanded: stored.sidebarExpanded,
+          // The local fallback had no column width; the core's layout keeps its own.
+          sidebarWidth: layout.sidebarWidth,
+        }
       : null;
 
   if (Object.keys(change).length > 0) await saveUiPreferences(change);

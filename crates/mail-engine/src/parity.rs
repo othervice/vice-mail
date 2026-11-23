@@ -203,6 +203,20 @@ impl<C: Connector> AppCore<C> {
             .await?)
     }
 
+    /// Decision 0039: "unread first" as conversations: those with an unread message in the
+    /// scope (at their newest unread message), then the others. `limit` counts conversations.
+    pub async fn list_unread_first_conversations(
+        &self,
+        scope: InboxScope,
+        cursor: Option<UnreadFirstCursor>,
+        limit: u32,
+    ) -> Result<mail_model::UnreadFirstThreadPage, CoreError> {
+        Ok(self
+            .store_ref()?
+            .unread_first_conversations(mailboxes_of(scope), cursor, limit)
+            .await?)
+    }
+
     /// The list views that group unread messages on top (keys the UI chooses, for example
     /// `mailbox:<id>` or `unified:all`). Device setting.
     pub async fn get_unread_first_views(&self) -> Result<Vec<String>, CoreError> {

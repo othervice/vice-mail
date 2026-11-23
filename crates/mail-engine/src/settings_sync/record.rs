@@ -355,6 +355,8 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "compose.read_receipts",
     // Stage 16 (decision 0036): the accent theme, like the text size.
     "ui.accent_theme",
+    // Decision 0039: the conversation view, like the text size.
+    "ui.conversations",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the

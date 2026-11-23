@@ -759,6 +759,88 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
     })
     .await;
     row("Thread-Liste Newsletter (langer Listen-Thread)", &t);
+    // Decision 0039: the sorted inbox as conversations (rows, top and priority on the first
+    // page, bundles), next to the same inbox as messages.
+    let scope = mail_model::InboxScope::Mailbox { mailbox_id: inbox };
+    let unified = mail_model::InboxScope::Unified {
+        view: UnifiedView::All,
+    };
+    let t = time(runs, || async {
+        core.list_inbox(scope.clone(), None, 100)
+            .await
+            .expect("inbox");
+    })
+    .await;
+    row("Sortierter Posteingang, Nachrichten (100)", &t);
+    let t = time(runs, || async {
+        core.list_inbox_conversations(scope.clone(), None, 100)
+            .await
+            .expect("conversations");
+    })
+    .await;
+    row("Sortierter Posteingang, Konversationen (100)", &t);
+    worst.insert("conversations", t.median);
+    let from_middle = mail_model::InboxCursor {
+        before: middle,
+        bundles: None,
+    };
+    let t = time(runs, || async {
+        core.list_inbox_conversations(scope.clone(), Some(from_middle.clone()), 100)
+            .await
+            .expect("conversations");
+    })
+    .await;
+    row("… Keyset ab Mitte", &t);
+    let t = time(runs, || async {
+        core.list_inbox_conversations(unified.clone(), None, 100)
+            .await
+            .expect("conversations");
+    })
+    .await;
+    row("Vereinter Posteingang, Konversationen (5 Konten, 100)", &t);
+    worst.insert("unified conversations", t.median);
+    let t = time(runs, || async {
+        core.list_inbox_conversations_filtered(
+            scope.clone(),
+            mail_model::InboxFilter::Unread,
+            None,
+            100,
+        )
+        .await
+        .expect("unread conversations");
+    })
+    .await;
+    row("Nur ungelesene, Konversationen (100)", &t);
+    let t = time(runs, || async {
+        core.list_unread_first_conversations(scope.clone(), None, 100)
+            .await
+            .expect("unread first");
+    })
+    .await;
+    row("Ungelesene oben, Konversationen (100)", &t);
+    let first_rows: Vec<mail_model::MessageRef> = core
+        .list_threads(inbox, None, 100)
+        .await
+        .expect("threads")
+        .items
+        .iter()
+        .map(|t| mail_model::MessageRef {
+            mailbox_id: inbox,
+            message_id: t.message.id,
+        })
+        .collect();
+    let t = time(runs, || async {
+        core.conversation_targets(
+            first_rows.clone(),
+            mail_model::ConversationIntent::Action {
+                action: mail_model::MailAction::Archive,
+            },
+        )
+        .await
+        .expect("targets");
+    })
+    .await;
+    row("Ziele einer Aktion auf 100 Konversationen", &t);
     // The longest thread, opened.
     let longest = core
         .list_threads(newsletter, None, 100)
@@ -1073,6 +1155,8 @@ async fn small_data_meets_generous_thresholds() {
     limit("list", 50);
     limit("unified", 100);
     limit("threads", 200);
+    limit("conversations", 200);
+    limit("unified conversations", 300);
     limit("search", 200);
     limit("open", 500);
 }

@@ -1705,3 +1705,186 @@ async fn notifications_wait_for_the_shell_s_sink() {
 // Stage 16 (decision 0033): a child module, so it shares the harness.
 #[path = "parity_tests.rs"]
 mod parity;
+
+// ---------------------------------------------------------------------------------------------
+// Decision 0039: the inbox as conversations
+
+fn threaded(from: &str, subject: &str, refs: &[&str], extra: &str) -> Vec<u8> {
+    let refs = if refs.is_empty() {
+        String::new()
+    } else {
+        let list: Vec<String> = refs.iter().map(|r| format!("<{r}>")).collect();
+        format!(
+            "In-Reply-To: {}\r\nReferences: {}\r\n",
+            list.last().cloned().unwrap_or_default(),
+            list.join(" ")
+        )
+    };
+    format!(
+        "From: {from}\r\nTo: alice@fake.test\r\nSubject: {subject}\r\n\
+         {refs}{extra}Content-Type: text/plain; charset=utf-8\r\n\r\nText\r\n"
+    )
+    .into_bytes()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_inbox_as_conversations_bundles_conversations_and_keeps_the_top() {
+    const GH: &str = "X-GitHub-Reason: mention\r\nList-Id: repo <repo.owner.github.com>\r\n";
+    let bob = "Bob Example <bob@friends.example>";
+    let carol = "Carol <carol@friends.example>";
+    let github = "GitHub <notifications@github.com>";
+    // The fake server numbers Message-IDs in delivery order: `<n>@fake.test`.
+    let raws = [
+        threaded(bob, "Lunch tomorrow?", &[], ""),
+        threaded(github, "[repo] Issue 1", &[], GH),
+        threaded(github, "Re: [repo] Issue 1", &["2@fake.test"], GH),
+        threaded(
+            github,
+            "Re: [repo] Issue 1",
+            &["2@fake.test", "3@fake.test"],
+            GH,
+        ),
+        threaded(github, "[repo] Issue 2", &[], GH),
+        threaded(carol, "Re: Lunch tomorrow?", &["1@fake.test"], ""),
+    ];
+    let refs: Vec<&[u8]> = raws.iter().map(Vec::as_slice).collect();
+    let h = Harness::new(server_with(&refs)).await;
+    let inbox = h.mailbox(MailboxRole::Inbox).await;
+    let lunch1 = h.by_subject("Lunch tomorrow?").await;
+    let lunch2 = h.by_subject("Re: Lunch tomorrow?").await;
+    assert_eq!(lunch1.category, Some(MessageCategory::Person));
+
+    // Messages: two person rows and one bundle of four notifications.
+    let messages = h
+        .core
+        .list_inbox(h.scope(inbox), None, 50)
+        .await
+        .expect("inbox");
+    assert!(messages.conversations.is_empty());
+    let bundle_size = |page: &mail_model::InboxPage| {
+        page.rows
+            .iter()
+            .find_map(|r| match r {
+                InboxRow::Bundle {
+                    summary, members, ..
+                } => Some((summary.count, members.len())),
+                _ => None,
+            })
+            .expect("a bundle")
+    };
+    assert_eq!(bundle_size(&messages), (4, 4));
+
+    // Conversations: one person row for the lunch thread, a bundle of two conversations.
+    let page = h
+        .core
+        .list_inbox_conversations(h.scope(inbox), None, 50)
+        .await
+        .expect("conversations");
+    let rows: Vec<MessageId> = page
+        .rows
+        .iter()
+        .filter_map(|r| match r {
+            InboxRow::Message { item, .. } => Some(item.id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(rows, [lunch2.id]);
+    assert_eq!(bundle_size(&page), (2, 2));
+    let summary = |id: MessageId| {
+        page.conversations
+            .iter()
+            .find(|c| c.message_id == id)
+            .cloned()
+            .expect("summary of a row")
+    };
+    let lunch = summary(lunch2.id);
+    assert_eq!(lunch.message_count, 2);
+    assert_eq!(lunch.unread_count, 2);
+    assert_eq!(lunch.participants.len(), 2);
+    let issue = h.by_subject("Re: [repo] Issue 1").await;
+    let members: Vec<MessageId> = page
+        .rows
+        .iter()
+        .flat_map(|r| match r {
+            InboxRow::Bundle { members, .. } => members.iter().map(|m| m.id).collect(),
+            _ => Vec::new(),
+        })
+        .collect();
+    assert_eq!(members.len(), 2);
+    assert!(
+        members
+            .iter()
+            .any(|m| summary(*m).message_count == 3 && *m >= issue.id)
+    );
+
+    // Pinning the older lunch message pins the conversation: on top, once, not in the rows.
+    h.core.set_pinned(vec![lunch1.id], true).await.expect("pin");
+    let page = h
+        .core
+        .list_inbox_conversations(h.scope(inbox), None, 50)
+        .await
+        .expect("conversations");
+    let top = page.top.expect("top on the first page");
+    assert_eq!(
+        top.pinned.iter().map(|m| m.id).collect::<Vec<_>>(),
+        [lunch2.id]
+    );
+    assert!(
+        page.conversations
+            .iter()
+            .any(|c| c.message_id == lunch2.id && c.message_count == 2)
+    );
+    assert!(page.rows.iter().all(|r| match r {
+        InboxRow::Message { item, .. } => item.id != lunch2.id,
+        _ => true,
+    }));
+
+    // What an action on the row touches.
+    let row = vec![mail_model::MessageRef {
+        mailbox_id: inbox,
+        message_id: lunch2.id,
+    }];
+    let ids = |items: Vec<MessageListItem>| items.into_iter().map(|i| i.id).collect::<Vec<_>>();
+    let archive = h
+        .core
+        .conversation_targets(
+            row.clone(),
+            mail_model::ConversationIntent::Action {
+                action: mail_model::MailAction::Archive,
+            },
+        )
+        .await
+        .expect("archive targets");
+    assert_eq!(ids(archive), [lunch2.id, lunch1.id]);
+    let unread = h
+        .core
+        .conversation_targets(
+            row.clone(),
+            mail_model::ConversationIntent::Action {
+                action: mail_model::MailAction::MarkUnread,
+            },
+        )
+        .await
+        .expect("unread targets");
+    assert_eq!(ids(unread), [lunch2.id]);
+    let unpin = h
+        .core
+        .conversation_targets(row, mail_model::ConversationIntent::Pin { pinned: false })
+        .await
+        .expect("unpin targets");
+    assert_eq!(ids(unpin), [lunch2.id, lunch1.id]);
+
+    // Only unread and "unread first" as conversations.
+    let only = h
+        .core
+        .list_inbox_conversations_filtered(h.scope(inbox), InboxFilter::Unread, None, 50)
+        .await
+        .expect("unread conversations");
+    assert_eq!(only.items.len(), 3, "lunch, issue 1, issue 2");
+    let first = h
+        .core
+        .list_unread_first_conversations(h.scope(inbox), None, 50)
+        .await
+        .expect("unread first");
+    assert_eq!(first.items.len(), 3);
+}

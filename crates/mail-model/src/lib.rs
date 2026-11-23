@@ -154,7 +154,7 @@ pub use outbox::{
 pub use parity::{
     BlockedSender, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
     MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
-    UnreadPhase,
+    UnreadFirstThreadPage, UnreadPhase,
 };
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
@@ -187,12 +187,12 @@ pub use snippets::{
     TemplateInfo, TemplateInput,
 };
 pub use ui::{
-    AccentTheme, AiPanelState, DEFAULT_TEXT_SIZE, Density, MAX_COMMAND_ID_CHARS,
-    MAX_LAYOUT_SLOT_CHARS, MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS,
-    MAX_SHORTCUT_OVERRIDES, MAX_SHORTCUTS_PER_COMMAND, MAX_TEXT_SIZE, MIN_TEXT_SIZE,
-    PlatformShortcuts, ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform,
-    UiPreferences, UiPreferencesError, WindowLayout, validate_layout_slot, validate_overrides,
-    validate_recent_commands,
+    AccentTheme, AiPanelState, DEFAULT_SIDEBAR_WIDTH, DEFAULT_TEXT_SIZE, Density,
+    MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS, MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS,
+    MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES, MAX_SHORTCUTS_PER_COMMAND, MAX_SIDEBAR_WIDTH,
+    MAX_TEXT_SIZE, MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE, PlatformShortcuts, ReadingPanePosition,
+    Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
+    validate_layout_slot, validate_overrides, validate_recent_commands,
 };
 pub use uid_set::UidSet;
 pub use updates::{
@@ -200,7 +200,8 @@ pub use updates::{
     UpdateSettings, UpdateStatus,
 };
 pub use views::{
-    AccountGroup, AccountGroupId, IdentityInfo, IdentityInput, MAX_GROUP_NAME_CHARS,
+    AccountGroup, AccountGroupId, ConversationIntent, ConversationReach, ConversationSummary,
+    IdentityInfo, IdentityInput, MAX_CONVERSATION_PARTICIPANTS, MAX_GROUP_NAME_CHARS,
     MAX_SEARCH_PAGE, MAX_THREAD_MESSAGES, SearchHighlights, SearchHit, SearchIndexState,
     SearchIndexStatus, SearchPage, SearchProblem, SearchProblemCode, SearchRequest, SearchScope,
     SearchTermInfo, SearchTermKind, ServerSearchResult, TextRange, ThreadEntry, ThreadListItem,

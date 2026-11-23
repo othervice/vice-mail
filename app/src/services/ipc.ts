@@ -1323,7 +1323,10 @@ export const savedSearchIpc = {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   commands as stage8Commands,
+  DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,
   MAX_RECENT_COMMANDS,
@@ -1344,7 +1347,10 @@ import {
 import type { AiPanelState } from "../generated/bindings";
 
 export {
+  DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,
   MAX_RECENT_COMMANDS,

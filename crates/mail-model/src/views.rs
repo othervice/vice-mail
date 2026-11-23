@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use specta_typescript::Number;
 
 use crate::search::{Filter, SearchErrorKind, Status, Term, TextField};
-use crate::{AccountId, Identity, IdentityId, ListCursor, MailboxId, MessageListItem};
+use crate::{
+    AccountId, Address, Identity, IdentityId, ListCursor, MailboxId, MessageId, MessageListItem,
+};
 
 /// Largest page of [`SearchPage`], [`ThreadPage`] and the unified inbox.
 pub const MAX_SEARCH_PAGE: u32 = 200;
@@ -219,6 +221,12 @@ pub struct SearchHit {
     /// The whole message is stored locally, so its text was searched. Otherwise only headers
     /// (and the text parts of a large message) were: "search on the server" can find more.
     pub body_local: bool,
+    /// Decision 0039: the message's conversation (null while it is not threaded) and how many
+    /// messages it has, so the results can show one row per conversation.
+    #[specta(type = Option<Number>)]
+    pub thread_id: Option<i64>,
+    #[specta(type = Number)]
+    pub thread_message_count: u32,
 }
 
 /// State of the full-text index.
@@ -303,6 +311,140 @@ pub struct ThreadListItem {
     /// reply in Sent.
     #[specta(type = Number)]
     pub last_activity: i64,
+    /// Decision 0039: the distinct senders of the conversation, oldest first, at most
+    /// [`MAX_CONVERSATION_PARTICIPANTS`] (compared by address without case). Like the two
+    /// marks below, taken from the newest 200 messages of the conversation (the counts are
+    /// exact).
+    pub participants: Vec<Address>,
+    /// Decision 0039: a message of the conversation has attachments.
+    pub has_attachments: bool,
+    /// Decision 0039: a message of the conversation is flagged (in any mailbox).
+    pub flagged: bool,
+}
+
+/// Most senders a conversation row names ([`ThreadListItem::participants`]).
+pub const MAX_CONVERSATION_PARTICIPANTS: usize = 4;
+
+/// Decision 0039: what a conversation row adds to its message (the newest of the conversation in
+/// the listed mailbox), for lists whose rows stay message rows (the sorted inbox with its blocks
+/// and bundles). Same fields as [`ThreadListItem`] without the message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationSummary {
+    /// The row's message.
+    pub message_id: MessageId,
+    #[specta(type = Option<Number>)]
+    pub thread_id: Option<i64>,
+    #[specta(type = Number)]
+    pub message_count: u32,
+    #[specta(type = Number)]
+    pub unread_count: u32,
+    #[specta(type = Number)]
+    pub last_activity: i64,
+    pub participants: Vec<Address>,
+    pub has_attachments: bool,
+    pub flagged: bool,
+}
+
+impl ConversationSummary {
+    pub fn of(item: &ThreadListItem) -> Self {
+        Self {
+            message_id: item.message.id,
+            thread_id: item.thread_id,
+            message_count: item.message_count,
+            unread_count: item.unread_count,
+            last_activity: item.last_activity,
+            participants: item.participants.clone(),
+            has_attachments: item.has_attachments,
+            flagged: item.flagged,
+        }
+    }
+}
+
+/// Decision 0039: which messages of a conversation an action on its row touches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ConversationReach {
+    /// The row's own message (the conversation's newest in the listed mailbox).
+    Newest,
+    /// Every message of the conversation that lies in the listed mailbox.
+    Listed,
+    /// Every message of the conversation in every mailbox of its account.
+    Everywhere,
+}
+
+/// Decision 0039: what the user does with conversation rows. The core answers which messages
+/// it touches ([`ConversationIntent::reach`]); the UI then runs its usual per-message action
+/// (`applyAction` through the outbox, or the marks).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ConversationIntent {
+    /// A mail action of the outbox.
+    Action {
+        action: crate::MailAction,
+    },
+    /// Pin (`true`) or unpin.
+    Pin {
+        pinned: bool,
+    },
+    Snooze,
+    /// End or clear snoozes.
+    Unsnooze,
+    /// Set or change a task mark (`clear`: take it off).
+    Task {
+        clear: bool,
+    },
+    /// Put on (`true`) or take off the reading list.
+    ReadingList {
+        on: bool,
+    },
+    /// Block the sender.
+    Block,
+}
+
+impl ConversationIntent {
+    /// Which messages the intent touches. Moving, deleting, spam, tags and labels take the
+    /// conversation out of (or change it in) the listed mailbox: its messages there. Marking
+    /// read, unflagging, unpinning and ending snoozes clear what the row sums up over the whole
+    /// conversation: every message. Marking unread, flagging, pinning, tasks, the reading list
+    /// and blocking need one message: the row's.
+    pub fn reach(&self) -> ConversationReach {
+        use crate::MailAction as A;
+        match self {
+            Self::Action { action } => match action {
+                A::MarkRead | A::Unflag => ConversationReach::Everywhere,
+                A::MarkUnread | A::Flag => ConversationReach::Newest,
+                A::AddKeyword { .. }
+                | A::RemoveKeyword { .. }
+                | A::AddLabel { .. }
+                | A::RemoveLabel { .. }
+                | A::Archive
+                | A::Delete
+                | A::DeletePermanently
+                | A::Move { .. }
+                | A::Spam
+                | A::NotSpam => ConversationReach::Listed,
+            },
+            Self::Pin { pinned: true } => ConversationReach::Newest,
+            Self::Pin { pinned: false } | Self::Unsnooze => ConversationReach::Everywhere,
+            Self::Task { clear: true } => ConversationReach::Everywhere,
+            Self::Task { clear: false } | Self::ReadingList { on: true } | Self::Block => {
+                ConversationReach::Newest
+            }
+            Self::ReadingList { on: false } => ConversationReach::Everywhere,
+            Self::Snooze => ConversationReach::Listed,
+        }
+    }
+
+    /// Mail actions work per location (one entry per mailbox a message lies in); the marks of
+    /// stage 9 and 16 are per message (one entry per message).
+    pub fn per_location(&self) -> bool {
+        matches!(self, Self::Action { .. })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -424,6 +566,75 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn conversation_intents_reach_what_the_row_sums_up() {
+        use crate::MailAction as A;
+        let action = |action| ConversationIntent::Action { action };
+        for (intent, reach) in [
+            (action(A::Archive), ConversationReach::Listed),
+            (action(A::Delete), ConversationReach::Listed),
+            (action(A::DeletePermanently), ConversationReach::Listed),
+            (
+                action(A::Move {
+                    target: MailboxId(3),
+                }),
+                ConversationReach::Listed,
+            ),
+            (action(A::Spam), ConversationReach::Listed),
+            (action(A::NotSpam), ConversationReach::Listed),
+            (
+                action(A::AddKeyword {
+                    keyword: "x".into(),
+                }),
+                ConversationReach::Listed,
+            ),
+            (action(A::MarkRead), ConversationReach::Everywhere),
+            (action(A::Unflag), ConversationReach::Everywhere),
+            (action(A::MarkUnread), ConversationReach::Newest),
+            (action(A::Flag), ConversationReach::Newest),
+            (
+                ConversationIntent::Pin { pinned: true },
+                ConversationReach::Newest,
+            ),
+            (
+                ConversationIntent::Pin { pinned: false },
+                ConversationReach::Everywhere,
+            ),
+            (ConversationIntent::Snooze, ConversationReach::Listed),
+            (ConversationIntent::Unsnooze, ConversationReach::Everywhere),
+            (
+                ConversationIntent::Task { clear: false },
+                ConversationReach::Newest,
+            ),
+            (
+                ConversationIntent::Task { clear: true },
+                ConversationReach::Everywhere,
+            ),
+            (
+                ConversationIntent::ReadingList { on: true },
+                ConversationReach::Newest,
+            ),
+            (
+                ConversationIntent::ReadingList { on: false },
+                ConversationReach::Everywhere,
+            ),
+            (ConversationIntent::Block, ConversationReach::Newest),
+        ] {
+            assert_eq!(intent.reach(), reach, "{intent:?}");
+            assert_eq!(
+                intent.per_location(),
+                matches!(intent, ConversationIntent::Action { .. })
+            );
+        }
+        let intent: ConversationIntent =
+            serde_json::from_value(json!({ "kind": "action", "action": { "type": "archive" } }))
+                .expect("intent");
+        assert_eq!(intent, action(A::Archive));
+        let intent: ConversationIntent =
+            serde_json::from_value(json!({ "kind": "pin", "pinned": false })).expect("pin");
+        assert_eq!(intent, ConversationIntent::Pin { pinned: false });
+    }
 
     #[test]
     fn wire_format() {

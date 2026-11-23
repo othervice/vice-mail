@@ -20,7 +20,16 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
 /** Decision 0039: the core's own default, the conversation view on. */
 export const CONVERSATION_PREFERENCES: UiPreferences = { ...DEFAULT_UI_PREFERENCES, conversations: true };
 
-export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = { readingPane: "right", density: "comfortable", sidebarExpanded: false };
+/**
+ * The fake core's window layout. The real core shows the accounts-and-folders column by default;
+ * the earlier tests are written for the icon rail, so the fake starts with it folded.
+ */
+export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = {
+  readingPane: "right",
+  density: "comfortable",
+  sidebarExpanded: false,
+  sidebarWidth: 240,
+};
 
 /** What Tauri answers a window command the capability does not allow (a plain string). */
 export const CLOSE_DENIED = "window.close not allowed. Permissions associated with this command: core:window:allow-close";
@@ -116,9 +125,15 @@ export function createUiFake(options: UiFakeOptions, deps: Deps) {
       }
       case "get_window_layout":
         return layout;
-      case "set_window_layout":
-        layout = args["layout"] as CoreWindowLayout;
+      case "set_window_layout": {
+        const next = args["layout"] as CoreWindowLayout;
+        // The core's `WindowLayout::validate`: the column is 200 to 320 px wide.
+        if (!Number.isInteger(next.sidebarWidth) || next.sidebarWidth < 200 || next.sidebarWidth > 320) {
+          return deps.reject("invalid_argument", `sidebar width ${String(next.sidebarWidth)} is outside 200 to 320 pixels`);
+        }
+        layout = next;
         return layout;
+      }
       case "open_message_window": {
         const accountId = args["accountId"] as string;
         const messageId = args["messageId"] as number;

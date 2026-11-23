@@ -1302,6 +1302,7 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         recent_commands: vec!["action:archive".into()],
         ai_panel: mail_model::AiPanelState::Folded,
         accent_theme: mail_model::AccentTheme::Green,
+        conversations: false,
     };
     a.core
         .set_ui_preferences(prefs.clone())

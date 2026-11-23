@@ -345,8 +345,18 @@ impl FakeServer {
             }],
             cc: Vec::new(),
             message_id: Some(format!("{serial}@fake.test")),
-            in_reply_to: None,
-            references: Vec::new(),
+            // Decision 0039: a raw message can answer another one (`<serial>@fake.test`).
+            in_reply_to: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "In-Reply-To"))
+                .and_then(|value| message_ids(&value).into_iter().next_back()),
+            references: message
+                .raw
+                .as_deref()
+                .and_then(|raw| raw_header(raw, "References"))
+                .map(|value| message_ids(&value))
+                .unwrap_or_default(),
             list_id: message
                 .raw
                 .as_deref()
@@ -379,6 +389,15 @@ impl FakeServer {
             gmail: None,
         }
     }
+}
+
+/// The ids in `<…>` of a header value, without the brackets.
+fn message_ids(value: &str) -> Vec<String> {
+    value
+        .split('<')
+        .filter_map(|part| part.split_once('>').map(|(id, _)| id.trim().to_owned()))
+        .filter(|id| !id.is_empty())
+        .collect()
 }
 
 /// A header field of a raw message (one unfolded line), for the header the fake reports.

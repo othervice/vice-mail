@@ -384,6 +384,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MIN_TEXT_SIZE", mail_model::MIN_TEXT_SIZE)
         .constant("MAX_TEXT_SIZE", mail_model::MAX_TEXT_SIZE)
         .constant("DEFAULT_TEXT_SIZE", mail_model::DEFAULT_TEXT_SIZE)
+        // The accounts-and-folders column's width (window layout).
+        .constant("MIN_SIDEBAR_WIDTH", mail_model::MIN_SIDEBAR_WIDTH)
+        .constant("MAX_SIDEBAR_WIDTH", mail_model::MAX_SIDEBAR_WIDTH)
+        .constant("DEFAULT_SIDEBAR_WIDTH", mail_model::DEFAULT_SIDEBAR_WIDTH)
         .constant(
             "MAX_RECENT_COMMANDS",
             u32::try_from(mail_model::MAX_RECENT_COMMANDS).unwrap_or(u32::MAX),

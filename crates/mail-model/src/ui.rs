@@ -106,8 +106,8 @@ pub enum AccentTheme {
     Green,
 }
 
-/// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size and (stage
-/// 16) the accent theme are synchronised between devices; the recent commands and the AI
+/// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
+/// 16) the accent theme and (decision 0039) the conversation view are synchronised between devices; the recent commands and the AI
 /// panel's state stay on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +122,9 @@ pub struct UiPreferences {
     /// Stage 16 (decision 0036): the accent colours; synced like the text size. Only the six
     /// themes are accepted (anything else is refused when the value is read from the UI).
     pub accent_theme: AccentTheme,
+    /// Decision 0039: lists show one row per conversation (default) instead of one per message;
+    /// synced like the text size.
+    pub conversations: bool,
 }
 
 impl Default for UiPreferences {
@@ -132,6 +135,7 @@ impl Default for UiPreferences {
             recent_commands: Vec::new(),
             ai_panel: AiPanelState::Open,
             accent_theme: AccentTheme::Orange,
+            conversations: true,
         }
     }
 }
@@ -334,13 +338,48 @@ pub enum Density {
 
 /// The layout of one window, stored per window on this device (not synchronised: the screens
 /// differ). `getWindowLayout` / `setWindowLayout` take the window from the calling window.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowLayout {
     pub reading_pane: ReadingPanePosition,
     pub density: Density,
-    /// The icon rail unfolded into the labelled sidebar.
+    /// The accounts-and-folders column is shown (default) instead of the icon rail alone.
     pub sidebar_expanded: bool,
+    /// Width of the accounts-and-folders column in CSS pixels, [`MIN_SIDEBAR_WIDTH`] to
+    /// [`MAX_SIDEBAR_WIDTH`] ([`DEFAULT_SIDEBAR_WIDTH`] by default); the column's drag handle
+    /// sets it.
+    pub sidebar_width: u16,
+}
+
+/// Narrowest accounts-and-folders column ([`WindowLayout::sidebar_width`]).
+pub const MIN_SIDEBAR_WIDTH: u16 = 200;
+/// Widest accounts-and-folders column.
+pub const MAX_SIDEBAR_WIDTH: u16 = 320;
+/// The column's width until the user drags it.
+pub const DEFAULT_SIDEBAR_WIDTH: u16 = 240;
+
+impl Default for WindowLayout {
+    fn default() -> Self {
+        Self {
+            reading_pane: ReadingPanePosition::default(),
+            density: Density::default(),
+            sidebar_expanded: true,
+            sidebar_width: DEFAULT_SIDEBAR_WIDTH,
+        }
+    }
+}
+
+impl WindowLayout {
+    /// Checks the limits; the values come from the UI.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(MIN_SIDEBAR_WIDTH..=MAX_SIDEBAR_WIDTH).contains(&self.sidebar_width) {
+            return Err(format!(
+                "sidebar width {} is outside {MIN_SIDEBAR_WIDTH} to {MAX_SIDEBAR_WIDTH} pixels",
+                self.sidebar_width
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Longest layout slot name (see [`validate_layout_slot`]).
@@ -401,6 +440,7 @@ mod tests {
             recent_commands: vec!["action:archive".into()],
             ai_panel: AiPanelState::Folded,
             accent_theme: AccentTheme::Rose,
+            conversations: false,
         };
         let wire = json!({
             "shortcuts": {
@@ -410,7 +450,8 @@ mod tests {
             "textSize": 115,
             "recentCommands": ["action:archive"],
             "aiPanel": "folded",
-            "accentTheme": "rose"
+            "accentTheme": "rose",
+            "conversations": false
         });
         assert_eq!(serde_json::to_value(&prefs).expect("json"), wire);
         assert_eq!(
@@ -420,16 +461,43 @@ mod tests {
         let layout = WindowLayout {
             reading_pane: ReadingPanePosition::Replace,
             density: Density::Compact,
-            sidebar_expanded: true,
+            sidebar_expanded: false,
+            sidebar_width: 300,
         };
         assert_eq!(
             serde_json::to_value(layout).expect("json"),
-            json!({ "readingPane": "replace", "density": "compact", "sidebarExpanded": true })
+            json!({
+                "readingPane": "replace",
+                "density": "compact",
+                "sidebarExpanded": false,
+                "sidebarWidth": 300
+            })
         );
+        // The accounts-and-folders column is shown by default, 240 pixels wide.
         assert_eq!(
             serde_json::to_value(WindowLayout::default()).expect("json"),
-            json!({ "readingPane": "right", "density": "comfortable", "sidebarExpanded": false })
+            json!({
+                "readingPane": "right",
+                "density": "comfortable",
+                "sidebarExpanded": true,
+                "sidebarWidth": 240
+            })
         );
+        assert!(WindowLayout::default().validate().is_ok());
+        for width in [MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH] {
+            let edge = WindowLayout {
+                sidebar_width: width,
+                ..WindowLayout::default()
+            };
+            assert!(edge.validate().is_ok(), "{width}");
+        }
+        for width in [0, MIN_SIDEBAR_WIDTH - 1, MAX_SIDEBAR_WIDTH + 1, u16::MAX] {
+            let wrong = WindowLayout {
+                sidebar_width: width,
+                ..WindowLayout::default()
+            };
+            assert!(wrong.validate().is_err(), "{width}");
+        }
     }
 
     #[test]
@@ -447,7 +515,8 @@ mod tests {
                 "textSize": 100,
                 "recentCommands": [],
                 "aiPanel": panel,
-                "accentTheme": "orange"
+                "accentTheme": "orange",
+                "conversations": true
             })
         };
         for (text, state) in [

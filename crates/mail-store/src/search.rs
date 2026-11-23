@@ -61,7 +61,15 @@ pub struct StoredHit {
     pub mailbox_ids: Vec<MailboxId>,
     /// The whole message is stored locally.
     pub body_complete: bool,
+    /// Decision 0039: the message's thread (none while not threaded) and its message count.
+    pub thread_id: Option<i64>,
+    pub thread_message_count: u32,
 }
+
+/// Thread and message count of a hit (decision 0039).
+pub(crate) const HIT_THREAD: &str = "
+    SELECT m.thread_id, (SELECT t.message_count FROM thread t WHERE t.id = m.thread_id)
+    FROM message m WHERE m.id = ?1";
 
 /// A page of [`StoredHit`], newest first.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -350,10 +358,15 @@ pub(crate) fn search(
             body_complete,
         }) = entry(conn, MessageId(*id), &prefer)?
         {
+            let (thread_id, count): (Option<i64>, Option<i64>) =
+                conn.prepare_cached(HIT_THREAD)?
+                    .query_row([*id], |r| Ok((r.get(0)?, r.get(1)?)))?;
             hits.push(StoredHit {
                 item,
                 mailbox_ids,
                 body_complete,
+                thread_id,
+                thread_message_count: u32::try_from(count.unwrap_or(1).max(1)).unwrap_or(u32::MAX),
             });
         }
     }

@@ -73,7 +73,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         accentTheme: "orange",
         conversations: false,
       },
-      layout: { readingPane: "bottom", density: "compact", sidebarExpanded: true },
+      layout: { readingPane: "bottom", density: "compact", sidebarExpanded: true, sidebarWidth: 240 },
     });
     // Unfolded: the accounts-and-folders column instead of the rail.
     await screen.findByRole("navigation", { name: "Accounts and folders" });
@@ -209,7 +209,7 @@ describe("moving the old local fallback to the core, once", () => {
       accentTheme: "orange",
       conversations: false,
     });
-    expect(core.ui.layout).toEqual({ readingPane: "bottom", density: "compact", sidebarExpanded: true });
+    expect(core.ui.layout).toEqual({ readingPane: "bottom", density: "compact", sidebarExpanded: true, sidebarWidth: 240 });
     expect(stored("paletteRecent")).toBeNull();
     expect(stored("layout.main")).toBeNull();
     expect(boundShortcuts("archive", "macos")).toEqual([{ key: "y" }]);
@@ -222,7 +222,7 @@ describe("moving the old local fallback to the core, once", () => {
     local("layout.main", { readingPane: "bottom", density: "compact", textSize: 130, sidebarExpanded: false });
     const { core } = setup({
       preferences: { ...NONE, textSize: 90 },
-      layout: { readingPane: "replace", density: "comfortable", sidebarExpanded: false },
+      layout: { readingPane: "replace", density: "comfortable", sidebarExpanded: false, sidebarWidth: 240 },
     });
     await waitFor(() => {
       expect(stored("shortcuts")).toBeNull();

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "../services/ipc";
 import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } from "../services/ipc";
 
 /** Mail views of the icon rail, top to bottom (docs/DESIGN.md). Ids double as i18n keys in `nav`. */
@@ -21,8 +22,11 @@ export const MAIL_VIEW_IDS = [
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];
 
-/** Width of the accounts-and-folders column in px at 100 % text size (it scales with the text). */
-export const SIDEBAR_WIDTH = { min: 200, default: 240, max: 320, step: 16 } as const;
+/**
+ * Width of the accounts-and-folders column in px at 100 % text size (it scales with the text).
+ * The limits are the core's (`WindowLayout.sidebarWidth`, stored with the window's layout).
+ */
+export const SIDEBAR_WIDTH = { min: MIN_SIDEBAR_WIDTH, default: DEFAULT_SIDEBAR_WIDTH, max: MAX_SIDEBAR_WIDTH, step: 16 } as const;
 
 export function clampSidebarWidth(width: number): number {
   return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
