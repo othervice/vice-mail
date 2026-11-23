@@ -376,7 +376,8 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await user.type(within(list).getByRole("searchbox", { name: "Search libraries" }), "no-such-library");
     await within(list).findByText("No library matches “no-such-library”.");
     expect(await seriousFindings()).toEqual([]);
-  });
+    // Two axe passes over several hundred list rows: about 2 s alone, over 5 s on a busy CI host.
+  }, 20_000);
 });
 
 // ---- Stage 13: AI in the app (settings with providers, consent and log; panel; writing help) ----
