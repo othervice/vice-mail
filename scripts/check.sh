@@ -110,7 +110,10 @@ step "Vite build" pnpm --dir app build
 
 # Dependencies
 step "cargo deny (licences, advisories, bans, sources)" cargo deny check --hide-inclusion-graph
-step "pnpm audit (production dependencies)" pnpm --dir app audit --prod
+# All npm dependencies, the desktop-test tree included (finding G-1). Fixes for that tree come in
+# as exact `overrides`; an advisory without a fixed version is ignored only by its GHSA id with the
+# reason, both in app/pnpm-workspace.yaml.
+step "pnpm audit (all dependencies)" pnpm --dir app audit
 # Stage 15: every shipped Rust crate and npm production package has a licence of the allow-list
 # (deny.toml, plus the npm extras in the script), and the list in the app (Settings → About) and
 # the installers is up to date. After a dependency change: `node scripts/licenses.mjs`.

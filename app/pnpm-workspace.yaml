@@ -5,3 +5,22 @@ allowBuilds:
   edgedriver: false
   esbuild: false
   geckodriver: false
+
+# Security fixes in the dev tree (desktop tests, WebdriverIO; finding G-1 in
+# docs/SECURITY_MODEL.md). Each selector is the vulnerable range of the advisories, so the override
+# stops applying once the consumer requires a fixed version itself. The consumers only use API
+# that the new majors keep: mocha (parallel mode) calls `serialize()`; get-uri uses
+# `Client.access/lastMod/list/downloadTo/close` (basic-ftp 6 only refuses a separate transfer host
+# by default); @wdio/config and archiver-utils call `glob.sync()`, and glob 14 brings minimatch 11.
+overrides:
+  "serialize-javascript@<7.1.3": 7.1.4
+  "basic-ftp@<6.2.4": 6.2.6
+  "glob@>=9.0.0 <14.0.2": 14.0.6
+
+# extract-zip (via @puppeteer/browsers) has no fixed version. It only unpacks browser downloads,
+# which the desktop tests never make (browserName "tauri", WebDriver inside the app). Check again
+# when a fixed version exists, then replace this list with an override.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-jmr9-qjv8-65gv
+    - GHSA-7pqw-9j4j-h8q3
