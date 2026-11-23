@@ -153,6 +153,17 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   **Ungeprüft:** der Klick in der echten App (Speichern-Dialog, Datei auf der Platte; kein
   Desktop-Test), die Windows-Version über `ver` und die Pfade unter Windows (nur übersetzt, nicht
   ausgeführt).
+- CI (23.11., b408449, de88964, b8e41a4): **Gitea** `.gitea/workflows/ci.yml`, Runner
+  `gitea-runner` 6.0.1 (Homebrew, `brew services`) im Host-Modus auf dem Mac mini, nur für dieses
+  Repo registriert, Bau-Cache unter `~/.cache/vice-mail-ci`; Einrichtung und Grenzen in
+  `docs/RELEASING.md` („CI“). **Ausgeführt:** Lauf 464 (manuell, Zweig `ci-test`) rot in Vitest:
+  der neue axe-Test der Lizenzliste brauchte auf dem ausgelasteten Mac mehr als 5 s (Zeitlimit
+  jetzt 20 s, de88964); Lauf 465 (manuell, de88964) grün: `check.sh` in 393 s, beide Installer
+  gebaut und als Artefakt hochgeladen (`.dmg` ad hoc signiert, `-setup.exe`, `SHA256SUMS`); Lauf
+  466 (Push auf `main`, 788dcd4) grün. **GitHub** `.github/workflows/ci.yml` (b8e41a4): dieselben
+  Schritte auf gehosteten Runnern `macos-latest` und `windows-latest`, unter Windows `check.sh`
+  und der Installer nativ. **Ungeprüft:** der GitHub-Workflow ist noch nie gelaufen (erst nach dem
+  ersten Push auf GitHub), damit auch noch kein Testlauf auf echtem Windows.
 
 **Wartet auf**
 - Mensch: den privaten Update-Schlüssel und sein Passwort sichern (`docs/RELEASING.md`, „Back it up
