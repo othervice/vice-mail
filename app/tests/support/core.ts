@@ -14,6 +14,11 @@ import { createAiFake, type AiFakeOptions, type AiFakeState } from "./ai";
 import { createUiFake, type UiFakeOptions, type UiFakeState } from "./uiPrefs";
 // Stage 9 and 13 gaps (decision 0027): `.eml` files and messages by id.
 import { createEmlFake, type EmlFakeOptions, type EmlFakeState } from "./eml";
+// Stage 16 (decision 0033): reading list, unread views, favourites, transfers, blocked senders.
+import { createParityFake, type ParityFakeOptions, type ParityFakeState } from "./parity";
+import { createParitySettingsFake, type ParitySettingsFakeOptions } from "./paritySettings";
+// Stage 16: read receipts (RFC 8098).
+import { createParityComposeFake, type ParityComposeFakeOptions, type ParityComposeFakeState } from "./parityCompose";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -300,6 +305,12 @@ interface FakeCoreOptions {
   ui?: UiFakeOptions;
   /** Decision 0027: opened `.eml` files and the open dialog. */
   eml?: EmlFakeOptions;
+  /** Stage 16: reading list, unread views, favourites and colours, transfers, blocked senders. */
+  parity?: ParityFakeOptions;
+  /** Stage 16: the notification sounds of this system (default: macOS). */
+  paritySettings?: ParitySettingsFakeOptions;
+  /** Stage 16: read receipts by message id. */
+  receipts?: ParityComposeFakeOptions;
 }
 
 export interface FakeCore {
@@ -346,6 +357,10 @@ export interface FakeCore {
   readonly ui: UiFakeState;
   /** Decision 0027: dialogs shown, attachments saved or opened, `getMessagesByIds` calls. */
   readonly eml: EmlFakeState;
+  /** Stage 16: reading list, unread views, transfers and blocked senders as the fake holds them now. */
+  readonly parity: ParityFakeState;
+  /** Stage 16: receipts the user sent or declined (only ever after a click). */
+  readonly receipts: ParityComposeFakeState;
 }
 
 /**
@@ -724,8 +739,57 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     reject: (code, detail = null) => reject(code, detail),
   });
 
+  // Stage 16: notification sounds of this system.
+  const paritySettingsFake = createParitySettingsFake(options.paritySettings ?? {});
+  // Stage 16: reading list, unread views, favourites and colours, transfers, blocked senders.
+  // Stage 16: read receipts; the policy is the compose setting.
+  const parityComposeFake = createParityComposeFake(options.receipts ?? {}, {
+    policy: () => composeFake.state.settings.readReceipts ?? "ask",
+    accountOf: (messageId) => {
+      const accountId = [...messages.values()].flat().find((m) => m.id === messageId)?.accountId;
+      const account = accounts.find((a) => a.id === accountId);
+      return account ? { id: account.id, writesEnabled: account.writesEnabled } : null;
+    },
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
+  const parityFake = createParityFake(options.parity ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    mailboxes: () => mailboxes,
+    setMailboxes: (next) => {
+      mailboxes = next;
+    },
+    writesEnabled: (accountId) => accounts.find((a) => a.id === accountId)?.writesEnabled ?? false,
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
+  // Stage 16: rows carry `readingList` wherever the fake core lists them (as the core does).
+  const markReadingList = (answer: unknown): unknown => {
+    const ids = parityFake.state.readingList;
+    if (ids.length === 0 || answer === null || typeof answer !== "object" || answer instanceof Promise) return answer;
+    const walk = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(walk);
+      if (value === null || typeof value !== "object") return value;
+      const record = value as Record<string, unknown>;
+      const next: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(record)) next[key] = walk(child);
+      const isRow = typeof record["id"] === "number" && typeof record["subject"] === "string" && "mailboxId" in record;
+      if (isRow && ids.includes(record["id"] as number)) next["readingList"] = true;
+      return next;
+    };
+    return walk(answer);
+  };
+
   mockIPC(
     (cmd, rawArgs) => {
+      const answer = handleCommand(cmd, rawArgs);
+      return cmd.startsWith("list_") || cmd === "get_thread" ? markReadingList(answer) : answer;
+    },
+    { shouldMockEvents: options.mockEvents ?? true },
+  );
+
+  function handleCommand(cmd: string, rawArgs: unknown): unknown {
+    {
       calls.push({ cmd, args: rawArgs });
       const args = (rawArgs ?? {}) as Record<string, unknown>;
       const failure = options.failures?.[cmd] ?? options.fail?.(cmd, args);
@@ -856,6 +920,13 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stages 12 and 11: AI over MCP and the settings sync.
           const mcpSyncAnswer = mcpSyncFake.handle(cmd, args);
           if (mcpSyncAnswer !== undefined) return mcpSyncAnswer;
+          // Stage 16 before stage 9: it answers `listInboxFiltered` with the unread filter.
+          const parityAnswer = parityFake.handle(cmd, args);
+          if (parityAnswer !== undefined) return parityAnswer;
+          const paritySettingsAnswer = paritySettingsFake.handle(cmd);
+          if (paritySettingsAnswer !== undefined) return paritySettingsAnswer;
+          const parityComposeAnswer = parityComposeFake.handle(cmd, args);
+          if (parityComposeAnswer !== undefined) return parityComposeAnswer;
           // Stage 9: sorted inbox, snooze, pins, tasks, sender rules, notification settings.
           const comfortAnswer = comfortFake.handle(cmd, args);
           if (comfortAnswer !== undefined) return comfortAnswer;
@@ -880,9 +951,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           return Promise.reject(`command ${cmd} not found`);
         }
       }
-    },
-    { shouldMockEvents: options.mockEvents ?? true },
-  );
+    }
+  }
 
   return {
     calls,
@@ -951,5 +1021,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     ai: aiFake.state,
     ui: uiFake.state,
     eml: emlFake.state,
+    parity: parityFake.state,
+    receipts: parityComposeFake.state,
   };
 }

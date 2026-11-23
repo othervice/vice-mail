@@ -1,4 +1,4 @@
-import { TriangleExclamationPoint } from "lucide-react";
+import { ArrowRightLeft, TriangleExclamationPoint } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
@@ -16,6 +16,13 @@ interface ConfirmDialogProps {
    * that opened the dialog may be gone by then. After a cancel it returns to that element.
    */
   focusAfterConfirm?: () => void;
+  /**
+   * Stage 16: a second way to go on (moving between accounts: "Move" or "Copy"). Shown between
+   * Cancel and the confirm button; it counts as a confirmation for the focus.
+   */
+  secondary?: { label: string; onClick: () => void };
+  /** `danger` (default: deleting for good) or `neutral` (a question without loss). */
+  tone?: "danger" | "neutral";
   "data-testid"?: string;
 }
 
@@ -35,6 +42,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   focusAfterConfirm,
+  secondary,
+  tone = "danger",
   ...rest
 }: ConfirmDialogProps) {
   const titleId = useId();
@@ -132,7 +141,11 @@ export function ConfirmDialog({
         className="flex w-full max-w-(--ui-dialog-width) flex-col gap-4 rounded-panel border border-border bg-surface-raised p-6 shadow-panel"
       >
         <div className="flex gap-3">
-          <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
+          {tone === "danger" ? (
+            <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
+          ) : (
+            <ArrowRightLeft aria-hidden className="size-(--ui-icon) shrink-0 text-accent" strokeWidth={1.75} />
+          )}
           <div className="flex min-w-0 flex-col gap-2">
             <h2 id={titleId} className="text-16 font-semibold text-primary">
               {title}
@@ -144,8 +157,20 @@ export function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2">
           <CancelButton ref={cancelRef} label={cancelLabel} onClick={onCancel} />
+          {secondary && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                confirmed.current = true;
+                secondary.onClick();
+              }}
+              data-testid="confirm-dialog-secondary"
+            >
+              {secondary.label}
+            </Button>
+          )}
           <Button
-            variant="danger"
+            variant={tone === "danger" ? "danger" : "primary"}
             onClick={() => {
               confirmed.current = true;
               onConfirm();

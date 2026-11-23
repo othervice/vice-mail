@@ -10,6 +10,7 @@ const TOGGLES: Record<ToggleId, true> = {
   togglePin: true,
   toggleTask: true,
   toggleTaskDone: true,
+  toggleReadingList: true,
 };
 
 const isToggle = (id: ActionId): id is ToggleId => id in TOGGLES;

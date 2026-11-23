@@ -95,6 +95,12 @@ const READING_COMMANDS = new Set([
   "list_open_reply_hints",
   // Stage 14: the Gmail labels of the open message (null off Gmail; read-only).
   "get_message_labels",
+  // Stage 16: whether the message asks for a read receipt (nothing is sent without a click) and the
+  // views with "Unread first" (a device setting); both read-only.
+  "get_read_receipt",
+  "get_unread_first_views",
+  // Stage 16: the blocked senders, for the quiet note on a blocked sender's message (read-only).
+  "list_blocked_senders",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);

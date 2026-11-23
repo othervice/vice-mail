@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { useTranslation } from "react-i18next";
 import { ComboBox, type ComboOption } from "../../components/ComboBox";
 import { IconButton } from "../../components/IconButton";
-import type { Mailbox, MessageListItem } from "../../services/ipc";
+import type { Account, Mailbox, MessageListItem } from "../../services/ipc";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { buildMailboxTree, isRoleView, type MailboxNode } from "../mailboxes/tree";
 import { hasTag, isValidKeyword, tagsOf } from "./keywords";
@@ -113,17 +113,41 @@ interface MovePickerProps {
   mailboxes: readonly Mailbox[];
   /** The folder the messages are in; not offered. */
   current: Mailbox;
+  /** Stage 16: folders of the other accounts, after the account's own (choosing one asks first). */
+  otherAccounts?: readonly { account: Account; mailboxes: readonly Mailbox[] }[];
   onChoose: (target: Mailbox) => void;
   onClose: () => void;
   restoreFocus: () => void;
 }
 
 /** "Move to …": the account's folders with a filter, keyboard first (shortcut V). */
-export function MovePicker({ count, mailboxes, current, onChoose, onClose, restoreFocus }: MovePickerProps) {
+export function MovePicker({ count, mailboxes, current, otherAccounts = [], onChoose, onClose, restoreFocus }: MovePickerProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const options = useFolderOptions(mailboxes, query, (mailbox) => mailbox.id === current.id);
-  const others = mailboxes.some((mailbox) => mailbox.selectable && mailbox.id !== current.id);
+  const own = useFolderOptions(mailboxes, query, (mailbox) => mailbox.id === current.id);
+  const foreign = useFolderOptions(
+    otherAccounts.flatMap((entry) => entry.mailboxes),
+    "",
+    () => false,
+  );
+  const needle = query.trim().toLowerCase();
+  const accountOf = new Map(otherAccounts.map((entry) => [entry.account.id, entry.account.displayName || entry.account.email]));
+  const options = [
+    ...own,
+    ...foreign
+      .map((option) => {
+        const account = accountOf.get(option.value.accountId) ?? "";
+        return {
+          ...option,
+          key: `other-${option.key}`,
+          detail: t("organize.transfer.option", { folder: option.value.path, account }),
+        };
+      })
+      .filter((option) => !needle || option.label.toLowerCase().includes(needle) || option.detail.toLowerCase().includes(needle)),
+  ];
+  const others =
+    mailboxes.some((mailbox) => mailbox.selectable && mailbox.id !== current.id) ||
+    otherAccounts.some((entry) => entry.mailboxes.some((mailbox) => mailbox.selectable));
   return (
     <FloatingPanel title={t("actions.move.title", { count })} onClose={onClose} restoreFocus={restoreFocus} data-testid="move-picker">
       <ComboBox

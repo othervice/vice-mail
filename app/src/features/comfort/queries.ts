@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { refreshQuery } from "../../app/refreshQuery";
+import { blockedSendersQueryKey } from "../blocked/queries";
 import {
   comfortIpc,
   type AccountId,
@@ -16,7 +17,7 @@ import {
  * key `["messages", accountId, mailboxId]`, so everything that reloads a folder's lists (the
  * action controller, `mailboxesChanged`) reloads them too.
  */
-export type MarkListKind = "later" | "pinned" | "tasks";
+export type MarkListKind = "later" | "pinned" | "tasks" | "readingList";
 
 export const inboxQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
   ["messages", accountId, mailboxId, "inbox"] as const;
@@ -31,7 +32,8 @@ export const messageCategoryQueryKey = (messageId: MessageId) => ["comfort", "ca
 export const snoozeTimesQueryKey = ["comfort", "snoozeTimes"] as const;
 export const notificationSettingsQueryKey = ["comfort", "notificationSettings"] as const;
 
-const COMFORT_LIST_KINDS = new Set(["inbox", "priority", "later", "pinned", "tasks"]);
+// Stage 16: the reading list, and the "Unread only" and "Unread first" lists of a folder.
+const COMFORT_LIST_KINDS = new Set(["inbox", "priority", "later", "pinned", "tasks", "readingList", "unread", "unreadFirst"]);
 
 /**
  * Reloads the stage 9 lists after `inboxChanged` (pins, snoozes, tasks or categories changed, a
@@ -46,7 +48,7 @@ export function refreshComfortLists(queryClient: QueryClient, accountId: Account
   for (const query of queries) refreshQuery(queryClient, query.queryKey);
 }
 
-const MARK_KINDS = new Set(["later", "pinned", "tasks"]);
+const MARK_KINDS = new Set(["later", "pinned", "tasks", "readingList"]);
 
 /**
  * After `messagesChanged` of one folder: its sorted inbox, and the mark views of the account
@@ -68,6 +70,8 @@ export function handleInboxChanged(queryClient: QueryClient, accountId: AccountI
   refreshComfortLists(queryClient, accountId);
   void queryClient.invalidateQueries({ queryKey: ["comfort", "category"] });
   refreshQuery(queryClient, senderRulesQueryKey);
+  // Stage 16: a sender blocked or unblocked here or on another device (settings sync).
+  refreshQuery(queryClient, blockedSendersQueryKey);
 }
 
 export function useInboxSettings() {

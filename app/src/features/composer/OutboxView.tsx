@@ -83,7 +83,7 @@ function OutgoingRow({ mail, account, showAccount }: { mail: OutgoingMail; accou
         {showAccount && account && (
           <span aria-hidden className={cx("size-(--ui-dot) shrink-0 self-center rounded-full", accountFill(account.color))} />
         )}
-        <p className="min-w-0 flex-1 truncate text-14 font-medium text-primary">{mail.subject.trim() || t("composer.noSubject")}</p>
+        <p className="min-w-0 flex-1 truncate text-14 font-medium text-primary">{mail.readReceipt ? t("composer.send.receipt") : mail.subject.trim() || t("composer.noSubject")}</p>
         <p className={cx("shrink-0 text-12 font-medium", STATE_TONE[mail.state])} data-testid="outgoing-state">
           {planned ? t("sendLater.outbox.state") : t(`composer.outbox.state.${mail.state}`)}
         </p>
@@ -129,6 +129,12 @@ function OutgoingRow({ mail, account, showAccount }: { mail: OutgoingMail; accou
         <p className="text-13 text-secondary">{confirming ? t("composer.unclear.confirmBody") : t("composer.unclear.body")}</p>
       )}
       {mail.state === "sent" && mail.notice === "no_sent_copy" && <p className="text-13 text-secondary">{t("composer.send.noSentCopy")}</p>}
+      {/* Stage 16: "Send and archive" without an Archive folder; the original stayed. */}
+      {mail.state === "sent" && mail.archive === "no_archive_mailbox" && (
+        <p className="text-13 text-secondary" data-testid="outbox-no-archive">
+          {t("composer.send.noArchive")}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         {mail.state === "scheduled" && !mail.scheduled && mail.draftId && (
           <Button variant="secondary" disabled={busy} onClick={act(() => reopenDraft(mail, "undo"))} data-testid="outgoing-undo">

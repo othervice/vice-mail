@@ -29,6 +29,12 @@ import { MessageHeader, SubjectTitle } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
+import { BlockedNote } from "../organize/BlockedNote";
+// Stage 16: find in the open message.
+import { FindBar, useFindShortcut } from "./FindBar";
+// Stage 16: read receipts (RFC 8098) and the inline quick reply.
+import { ReadReceipts } from "./ReadReceipts";
+import { QuickReply } from "../composer/QuickReply";
 
 /** The list asks the pane to take the focus (Enter or double click on a row). */
 export interface FocusRequest {
@@ -394,7 +400,24 @@ export function ReadingPane({
   const backToMessage = () => {
     articleRef.current?.focus({ preventScroll: true });
   };
+  // Stage 16: Cmd/Ctrl+F in the pane finds in the message (elsewhere it stays the mail search).
+  const isFindShortcut = useFindShortcut();
+  const [finding, setFinding] = useState(0);
+  const findReturn = useRef<HTMLElement | null>(null);
+  const closeFind = () => {
+    setFinding(0);
+    const back = findReturn.current;
+    findReturn.current = null;
+    if (back?.isConnected) back.focus({ preventScroll: true });
+    else backToMessage();
+  };
   const onKeyDown = (event: KeyboardEvent) => {
+    if (!event.defaultPrevented && isFindShortcut(event.nativeEvent)) {
+      event.preventDefault();
+      if (finding === 0) findReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setFinding((seq) => seq + 1);
+      return;
+    }
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
     onEscape();
@@ -434,6 +457,10 @@ export function ReadingPane({
           <MessageExtras accountId={account.id} messageId={view.id} />
           {/* Stage 13: "maybe still open" (rules in the core, no AI). */}
           <OpenReplyHintBar messageId={view.id} />
+          {/* Stage 16: the sender is blocked (future mail goes to Junk or is hidden). */}
+          <BlockedNote from={view.header.from} />
+          {/* Stage 16: a request for a read receipt (answered only by a click), receipts that came back. */}
+          <ReadReceipts account={account} messageId={view.id} bodyShown={shownFormat !== null} />
           <Problems view={view} />
           <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
           {/* HTML or plain text: a small switch at the body it changes, not in the toolbar. */}
@@ -448,6 +475,18 @@ export function ReadingPane({
           {draft ? <span /> : <ReplyRow messageId={view.id} sender={(sender && addressName(sender)) ?? t("list.unknownSender")} />}
           {!inWindow && <QuickReplies account={account} messageId={view.id} />}
         </div>
+        {/* Stage 16: the inline quick reply (the same drafts and outbox as the composer). */}
+        {!draft && !inWindow && (
+          <div className="px-3 pb-3">
+            <QuickReply
+              key={view.id}
+              account={account}
+              messageId={view.id}
+              sender={(sender && addressName(sender)) ?? t("list.unknownSender")}
+              onLeave={backToMessage}
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -458,6 +497,7 @@ export function ReadingPane({
       aria-label={t("reading.region")}
       onKeyDown={onKeyDown}
       data-testid="reading-pane"
+      data-find-scope
       className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
     >
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border-subtle ps-3 pe-2">
@@ -470,6 +510,7 @@ export function ReadingPane({
         <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
         <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
       </div>
+      {finding > 0 && <FindBar scopeRef={scrollerRef} focusSeq={finding} onClose={closeFind} />}
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto" data-testid="reading-scroller">
         <article
           ref={articleRef}

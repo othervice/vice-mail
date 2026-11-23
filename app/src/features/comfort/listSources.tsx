@@ -1,10 +1,11 @@
 import { useInfiniteQuery, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { Clock, Inbox, ListTodo, Pin, Zap } from "lucide-react";
+import { BookOpen, Clock, Inbox, ListTodo, Pin, Zap } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import {
   comfortIpc,
+  parityIpc,
   type Account,
   type InboxCursor,
   type InboxPage,
@@ -204,13 +205,16 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
     kind === "inbox",
   );
 
-  const markKind: MarkListKind = kind === "later" || kind === "pinned" || kind === "tasks" ? kind : "later";
+  const markKind: MarkListKind =
+    kind === "later" || kind === "pinned" || kind === "tasks" || kind === "readingList" ? kind : "later";
   const marks = useInfiniteQuery({
     queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
     queryFn: async (): Promise<{ items: MessageListItem[] }> => {
       // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
       if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
       if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
+      // Stage 16: the reading list, most recently added first (at most 1,000 as well).
+      if (markKind === "readingList") return { items: await parityIpc.listReadingList(markScope) };
       return { items: await comfortIpc.listTasks(markScope, taskFilter) };
     },
     initialPageParam: null,
@@ -219,6 +223,12 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
   });
 
   const plainRows = useCallback((items: readonly MessageListItem[], bounds: DayBounds) => buildRows(items, bounds), []);
+  // Stage 16: the reading list is in the order mail was added, so date sections would repeat.
+  const addedRows = useCallback(
+    (items: readonly MessageListItem[]): ListRow[] =>
+      items.map((item, position) => ({ kind: "message", key: `message-${String(item.id)}`, item, position })),
+    [],
+  );
 
   return useMemo((): MessageListSource | undefined => {
     switch (kind) {
@@ -226,6 +236,13 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
         return undefined;
       case "inbox":
         return sorted;
+      case "readingList":
+        return {
+          query: marks,
+          buildRows: addedRows,
+          total: marks.data?.pages[0]?.items.length ?? 0,
+          empty: { icon: BookOpen, title: t("organize.readingList.emptyTitle"), body: t("organize.readingList.emptyBody") },
+        };
       case "later":
       case "pinned":
       case "tasks": {
@@ -243,7 +260,7 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
         };
       }
     }
-  }, [kind, sorted, marks, plainRows, taskFilter, t]);
+  }, [kind, sorted, marks, plainRows, addedRows, taskFilter, t]);
 }
 
 const TASK_FILTERS: readonly TaskFilter[] = ["open", "done", "all"];

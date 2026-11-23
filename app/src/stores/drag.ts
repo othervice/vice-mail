@@ -32,13 +32,11 @@ export const useDragStore = create<DragState>()((set) => ({
   },
 }));
 
-/** Whether `mailbox` takes the rows of the running session (same account, another real folder). */
+/**
+ * Whether `mailbox` takes the rows of the running session: another real folder. Since stage 16 a
+ * folder of another account takes them too; the session's `drop` then asks whether to move or
+ * copy (decision 0033), so nothing crosses accounts without the user's answer.
+ */
 export function acceptsDrop(session: DragSession | null, mailbox: Mailbox | undefined): mailbox is Mailbox {
-  return (
-    session !== null &&
-    mailbox !== undefined &&
-    mailbox.accountId === session.accountId &&
-    mailbox.selectable &&
-    mailbox.id !== session.sourceMailboxId
-  );
+  return session !== null && mailbox !== undefined && mailbox.selectable && mailbox.id !== session.sourceMailboxId;
 }

@@ -241,3 +241,16 @@
     clip-path: none;
   }
 }
+
+/* Stage 16: find in the open message (features/reading/find.ts). The app's own text (head,
+   plain-text mail) is highlighted here; HTML mail gets the same rules in its frame's style sheet.
+   The current match is underlined as well, so it is not told apart by colour alone. */
+::highlight(vice-find) {
+  background-color: var(--ui-find-match);
+  color: var(--ui-text-primary);
+}
+::highlight(vice-find-current) {
+  background-color: var(--ui-find-current);
+  color: var(--ui-find-current-text);
+  text-decoration: underline 2px;
+}

@@ -96,9 +96,10 @@ export const FIXED_KEYS: readonly Shortcut[] = [
 
 /**
  * Shortcuts of the app outside the directory: printing (features/extras, Cmd/Ctrl+P) and sending
- * in the composer (Cmd/Ctrl+Enter). Not changeable, so not assignable either.
+ * in the composer (Cmd/Ctrl+Enter; stage 16: with Shift, "Send and archive"). Not changeable, so
+ * not assignable either.
  */
-const APP_KEYS: readonly Shortcut[] = [withMod("p"), withMod("Enter")];
+const APP_KEYS: readonly Shortcut[] = [withMod("p"), withMod("Enter"), { key: "Enter", mod: true, shift: true }];
 
 /**
  * What the operating system or every text field claims (docs/stages/08: no shortcuts the

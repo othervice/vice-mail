@@ -91,7 +91,25 @@ function NoticeItem({ notice }: { notice: Notice }) {
       break;
     case "error":
       text = t(`actions.failed.${content.context}`);
-      detail = t(`errors.codes.${content.error.code}.title`);
+      detail =
+        // Stage 16: the one refusal of a transfer the user can act on (decision 0033).
+        content.context === "transfer" && content.error.code === "invalid_argument"
+          ? t("organize.transfer.noMessageId")
+          : t(`errors.codes.${content.error.code}.title`);
+      break;
+    case "transfer":
+      text =
+        content.mode === "move"
+          ? t("organize.transfer.movingStarted", { count: content.count, folder: content.folder, account: content.account })
+          : t("organize.transfer.started", { count: content.count, folder: content.folder, account: content.account });
+      action = {
+        label: t("actions.showActivity"),
+        run: () => {
+          dismiss(notice.id);
+          showActivity();
+        },
+        testId: "notice-show-activity",
+      };
       break;
     case "comfort": {
       // Stage 9: pins, snoozes, tasks, skipped local rules.

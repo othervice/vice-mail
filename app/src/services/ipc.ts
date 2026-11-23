@@ -1441,3 +1441,113 @@ export const gmailIpc = {
   setMessageLabel: (messageId: MessageId, label: string, add: boolean, requestId: string): Promise<ActionResult> =>
     call(() => gmailCommands.setMessageLabel(messageId, label, add, requestId)),
 };
+
+// ---- Stage 16 (decision 0033): feature parity ----
+import {
+  commands as parityCommands,
+  type ArchiveAfterSend,
+  type BlockedSender,
+  type DraftSendOptions,
+  type NotificationSound,
+  type NotificationSoundChoices,
+  type ReadReceiptAnswer,
+  type ReadReceiptInfo,
+  type ReadReceiptPolicy,
+  type ReadReceiptRequest,
+  type ReceiptDisposition,
+  type ReceivedReadReceipt,
+  type SoundPlatform,
+  type TransferMode,
+  type UnreadFirstCursor,
+  type UnreadFirstPage,
+  type UnreadPhase,
+} from "../generated/bindings";
+
+export type {
+  ArchiveAfterSend,
+  BlockedSender,
+  DraftSendOptions,
+  NotificationSound,
+  NotificationSoundChoices,
+  ReadReceiptAnswer,
+  ReadReceiptInfo,
+  ReadReceiptPolicy,
+  ReadReceiptRequest,
+  ReceiptDisposition,
+  ReceivedReadReceipt,
+  SoundPlatform,
+  TransferMode,
+  UnreadFirstCursor,
+  UnreadFirstPage,
+  UnreadPhase,
+};
+
+/** Stage 16 limits of the IPC contract that the bindings do not export. */
+export const PARITY_LIMITS = {
+  /** `setReadingList`: messages per call. */
+  readingListIds: 10_000,
+  /** `listUnreadFirst`: page size. */
+  unreadFirstPage: 500,
+  /** `setUnreadFirstView`: length of a view key. */
+  unreadFirstViewChars: 200,
+  /** `setMailboxFavorite`: favourites over all accounts. */
+  favorites: 200,
+  /** `transferMessages`: messages per call. */
+  transferMessages: 500,
+} as const;
+
+/**
+ * Stage 16: the reading list, unread views, favourite folders and folder colours, moving and
+ * copying between accounts, blocked senders, send options of a draft, read receipts (RFC 8098)
+ * and the notification sounds of this system.
+ */
+export const parityIpc = {
+  /** Local only (never a keyword on the server). `invalid_argument` for a message without Message-ID. */
+  setReadingList: (messageIds: MessageId[], on: boolean): Promise<void> =>
+    done(call(() => parityCommands.setReadingList(messageIds, on))),
+  /** Most recently added first, at most 1,000. */
+  listReadingList: (scope: MarkScope): Promise<MessageListItem[]> => call(() => parityCommands.listReadingList(scope)),
+  /** Unread rows first, then read ones; pass `nextCursor` back unchanged. */
+  listUnreadFirst: (scope: InboxScope, cursor: UnreadFirstCursor | null, limit: number): Promise<UnreadFirstPage> =>
+    call(() => parityCommands.listUnreadFirst(scope, cursor, limit)),
+  /** The view keys with "Unread first" on (device setting). */
+  getUnreadFirstViews: (): Promise<string[]> => call(() => parityCommands.getUnreadFirstViews()),
+  setUnreadFirstView: (view: string, enabled: boolean): Promise<string[]> =>
+    call(() => parityCommands.setUnreadFirstView(view, enabled)),
+  /** New favourites go to the end. Emits `mailboxesChanged`. */
+  setMailboxFavorite: (mailboxId: MailboxId, favorite: boolean): Promise<void> =>
+    done(call(() => parityCommands.setMailboxFavorite(mailboxId, favorite))),
+  /** A colour of the account palette, or none. Always shown with the folder's name. */
+  setMailboxColor: (mailboxId: MailboxId, color: AccountColor | null): Promise<void> =>
+    done(call(() => parityCommands.setMailboxColor(mailboxId, color))),
+  /** The given favourites first in this order, the rest after them; answers all favourites. */
+  reorderFavoriteMailboxes: (mailboxIds: MailboxId[]): Promise<Mailbox[]> =>
+    call(() => parityCommands.reorderFavoriteMailboxes(mailboxIds)),
+  /** Favourites of every account, in their order. */
+  listFavoriteMailboxes: (): Promise<Mailbox[]> => call(() => parityCommands.listFavoriteMailboxes()),
+  /**
+   * Copy or move into a folder of another account (APPEND in the target, the source removed only
+   * after the copy is confirmed). `read_only` unless the target (and for a move the source) may
+   * write. `requestId` is a fresh UUID per user action.
+   */
+  transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string): Promise<ActionResult> =>
+    call(() => parityCommands.transferMessages(messages, targetMailboxId, mode, requestId)),
+  /** A bare address; answers every blocked sender, sorted. */
+  blockSender: (address: string): Promise<BlockedSender[]> => call(() => parityCommands.blockSender(address)),
+  unblockSender: (address: string): Promise<BlockedSender[]> => call(() => parityCommands.unblockSender(address)),
+  listBlockedSenders: (): Promise<BlockedSender[]> => call(() => parityCommands.listBlockedSenders()),
+  /** "Send and archive" and "Request read receipt" of one draft. `send_in_progress` while frozen. */
+  setDraftSendOptions: (draftId: DraftId, options: DraftSendOptions): Promise<Draft> =>
+    call(() => parityCommands.setDraftSendOptions(draftId, options)),
+  /** Read receipts of a shown message (call after its body is shown). */
+  getReadReceipt: (messageId: MessageId): Promise<ReadReceiptInfo> => call(() => parityCommands.getReadReceipt(messageId)),
+  /** The user's explicit "Send receipt": the only way a receipt is ever sent. */
+  sendReadReceipt: (messageId: MessageId, language: QuoteLanguage, requestId: string): Promise<OutgoingMail> =>
+    call(() => parityCommands.sendReadReceipt(messageId, language, requestId)),
+  /** The user's "Don't send": nothing is sent. */
+  declineReadReceipt: (messageId: MessageId, requestId: string): Promise<ReadReceiptInfo> =>
+    call(() => parityCommands.declineReadReceipt(messageId, requestId)),
+  /** The sounds this system offers (`Default` first); never fails. */
+  getNotificationSoundChoices: (): Promise<NotificationSoundChoices> =>
+    infallible(() => parityCommands.getNotificationSoundChoices()),
+};

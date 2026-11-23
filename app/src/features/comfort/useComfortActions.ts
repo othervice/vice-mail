@@ -1,8 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { blockedSendersQueryKey } from "../blocked/queries";
 import {
   comfortIpc,
+  parityIpc,
   toCoreError,
+  type BlockedSender,
   type Account,
   type MessageListItem,
   type SnoozeChoice,
@@ -11,7 +14,17 @@ import {
 import { useNoticeStore, type ComfortNotice } from "../../stores/notices";
 import type { ActionHost } from "../actions/registry";
 
-type ComfortHost = Pick<ActionHost, "setPinned" | "openSnooze" | "unsnooze" | "setTask">;
+type ComfortHost = Pick<ActionHost, "setPinned" | "openSnooze" | "unsnooze" | "setTask" | "setReadingList" | "blockSenders">;
+
+/** Stage 16: the distinct sender addresses of messages (drafts are the user's own). */
+export function senderAddresses(items: readonly MessageListItem[]): string[] {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const address = item.from?.email.trim().toLowerCase();
+    if (address && !item.draft) seen.add(address);
+  }
+  return [...seen];
+}
 
 type TaskNotice = "taskAdded" | "taskRemoved" | "taskDone" | "taskReopened";
 
@@ -81,6 +94,27 @@ export function useComfortActions(account: Account) {
           mark,
         );
         return { type: taskNotice(mark, items), count: items.length };
+      });
+    },
+    // Stage 16: local only, never a keyword on the server (decision 0033).
+    setReadingList: (items, on) => {
+      if (items.length === 0) return;
+      void run("readingList", async () => {
+        await parityIpc.setReadingList(
+          items.map((item) => item.id),
+          on,
+        );
+        return { type: on ? "readingListAdded" : "readingListRemoved", count: items.length };
+      });
+    },
+    blockSenders: (items) => {
+      const addresses = senderAddresses(items);
+      if (addresses.length === 0) return;
+      void run("block", async () => {
+        let list: BlockedSender[] = [];
+        for (const address of addresses) list = await parityIpc.blockSender(address);
+        queryClient.setQueryData(blockedSendersQueryKey, list);
+        return { type: "sendersBlocked", addresses };
       });
     },
   };

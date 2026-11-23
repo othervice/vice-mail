@@ -8,7 +8,12 @@
  */
 const PREFIX = "vice-mail.ui.";
 
-export type LocalKey = "shortcuts" | "paletteRecent" | `layout.${string}`;
+export type LocalKey =
+  | "shortcuts"
+  | "paletteRecent"
+  | `layout.${string}`
+  // Stage 16 FALLBACK: the accent theme, until the core stores it (features/preferences/accent.ts).
+  | "accentTheme";
 
 export function readLocal(key: LocalKey): unknown {
   try {

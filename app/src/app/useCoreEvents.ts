@@ -7,6 +7,7 @@ import { handleComposeEvent } from "../features/composer/queries";
 import { handleExtrasEvent } from "../features/extras/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
+import { favoriteMailboxesQueryKey } from "../features/organize/queries";
 import { handleMcpEvent } from "../features/mcp/events";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
@@ -53,6 +54,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       break;
     case "mailboxesChanged":
       refreshQuery(queryClient, mailboxesQueryKey(event.accountId));
+      // Stage 16: favourites and folder colours come with this event too.
+      refreshQuery(queryClient, favoriteMailboxesQueryKey);
       // Folders may have gone or been rebuilt (UIDVALIDITY): reload the lists of this account
       // too. The engine sends this together with `messagesChanged`; `refreshQuery` merges both.
       for (const query of queryClient.getQueryCache().findAll({ queryKey: ["messages", event.accountId] })) {

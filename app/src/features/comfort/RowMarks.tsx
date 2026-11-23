@@ -1,8 +1,8 @@
-import { AlarmClockCheck, Clock, ListTodo, Pin, SquareCheckBig, Zap, type LucideIcon } from "lucide-react";
+import { AlarmClockCheck, BookOpen, Clock, ListTodo, Pin, SquareCheckBig, Zap, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { MessageListItem } from "../../services/ipc";
 
-export type RowMark = "important" | "pinned" | "snoozed" | "returned" | "task" | "taskDone";
+export type RowMark = "important" | "pinned" | "snoozed" | "returned" | "task" | "taskDone" | "readingList";
 
 const MARK_ICONS: Record<RowMark, LucideIcon> = {
   important: Zap,
@@ -11,6 +11,7 @@ const MARK_ICONS: Record<RowMark, LucideIcon> = {
   returned: AlarmClockCheck,
   task: ListTodo,
   taskDone: SquareCheckBig,
+  readingList: BookOpen,
 };
 
 /** Stage 9 marks of a row, in reading order: important, pinned, snoozed or back, task. */
@@ -20,13 +21,16 @@ export function rowMarks(item: MessageListItem): RowMark[] {
   if (item.pinned) marks.push("pinned");
   if (item.snooze) marks.push(item.snooze.returned ? "returned" : "snoozed");
   if (item.task) marks.push(item.task.done ? "taskDone" : "task");
+  // Stage 16: on the reading list (local, never on the server).
+  if (item.readingList) marks.push("readingList");
   return marks;
 }
 
 /** The marks as words for the row's accessible name. */
 export function useRowMarkLabels(): (item: MessageListItem) => string[] {
   const { t } = useTranslation();
-  return (item) => rowMarks(item).map((mark) => t(`comfort.marks.${mark}`));
+  return (item) =>
+    rowMarks(item).map((mark) => (mark === "readingList" ? t("organize.readingList.mark") : t(`comfort.marks.${mark}`)));
 }
 
 /**
@@ -54,8 +58,9 @@ export function RowMarks({ item, omit }: { item: MessageListItem; omit?: readonl
             </span>
           );
         }
+        const title = mark === "readingList" ? t("organize.readingList.mark") : t(`comfort.marks.${mark}`);
         return (
-          <span key={mark} title={t(`comfort.marks.${mark}`)} className="flex shrink-0" data-testid={`row-mark-${mark}`}>
+          <span key={mark} title={title} className="flex shrink-0" data-testid={`row-mark-${mark}`}>
             <Icon
               aria-hidden
               className={mark === "important" ? "size-(--ui-icon-small) text-warning" : "size-(--ui-icon-small) text-tertiary"}

@@ -17,6 +17,7 @@ import { useShortcutStore } from "../src/stores/shortcuts";
 import { installSystemFakes, resetSystem } from "./support/system";
 import { resetUiPreferencesForTests } from "../src/features/keyboard/uiPreferences";
 import { resetMigrationForTests } from "../src/features/keyboard/useUiPreferencesSync";
+import { useOnlyUnreadStore } from "../src/features/organize/unread";
 
 beforeEach(() => {
   installSystemFakes();
@@ -49,6 +50,8 @@ afterEach(() => {
   useAiRequestStore.setState(useAiRequestStore.getInitialState(), true);
   // Stage 9: lists that select messages by id, and a request waiting for one (decision 0028).
   resetListSelectForTests();
+  // Stage 16: "Unread only" is a filter of this session.
+  useOnlyUnreadStore.setState(useOnlyUnreadStore.getInitialState(), true);
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];
   const root = document.documentElement;

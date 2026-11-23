@@ -43,6 +43,9 @@ import { useAiPaletteEntries } from "../ai/palette";
 import { useEmlPaletteEntries } from "../eml/palette";
 import { useMailboxes } from "../mailboxes/queries";
 import { useTemplates } from "../snippets/queries";
+// Stage 16: favourite folders of every account.
+import { Star } from "lucide-react";
+import { useFavoriteMailboxes } from "../organize/queries";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -84,6 +87,8 @@ export const PALETTE_TOGGLES: readonly (readonly [toggle: ActionId, forms: reado
   ["togglePin", ["pin", "unpin"]],
   ["toggleTask", ["addTask", "removeTask"]],
   ["toggleTaskDone", ["completeTask", "reopenTask"]],
+  // Stage 16
+  ["toggleReadingList", ["addToReadingList", "removeFromReadingList"]],
 ];
 
 const TOGGLE_IDS = new Set<ActionId>(PALETTE_TOGGLES.map(([toggle]) => toggle));
@@ -209,6 +214,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const shortcutsOf = useBoundShortcuts(platform);
   const { accounts, account } = useSelectedAccount();
   const mailboxes = useMailboxes(account?.id ?? null).data ?? [];
+  const favorites = useFavoriteMailboxes().data ?? [];
   const layout = useLayoutStore();
   const openSearch = useSearchStore((state) => state.openSearch);
   const setQuery = useSearchStore((state) => state.setQuery);
@@ -293,6 +299,25 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
     { key: "view:activity", group: "views", label: t("palette.goTo", { name: t("activity.nav") }), icon: Activity, run: ui.showActivity },
     { key: "view:outbox", group: "views", label: t("palette.goTo", { name: t("composer.outbox.nav") }), icon: Send, run: ui.showOutbox },
   );
+
+  // Stage 16: the favourites first, in their order, with their account (any account).
+  for (const mailbox of favorites) {
+    const owner = accountList.find((candidate) => candidate.id === mailbox.accountId);
+    if (!owner) continue;
+    const ownerName = owner.displayName || owner.email;
+    const name = mailbox.role === "custom" ? mailbox.name : t(`roles.${mailbox.role}`);
+    entries.push({
+      key: `favorite:${String(mailbox.id)}`,
+      group: "folders",
+      label: t("organize.favorites.paletteOpen", { name }),
+      detail: accountList.length > 1 ? t("organize.favorites.inAccount", { name: mailbox.path, account: ownerName }) : mailbox.path,
+      keywords: [ownerName, mailbox.path],
+      icon: Star,
+      run: () => {
+        ui.showMailbox(mailbox.accountId, mailbox.id);
+      },
+    });
+  }
 
   if (account) {
     const accountName = account.displayName || account.email;

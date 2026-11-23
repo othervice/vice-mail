@@ -2,11 +2,14 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
+import { Switch } from "../../components/Switch";
 import {
   DEFAULT_SEND_DELAY_SECS,
   MAX_SEND_DELAY_SECS,
   type Account,
+  type ComposeSettings as ComposeSettingsValue,
   type QuotePosition,
+  type ReadReceiptPolicy,
   type SentCopyMode,
 } from "../../services/ipc";
 import { useAccounts } from "../accounts/queries";
@@ -29,6 +32,10 @@ const SENT_COPY_MODES: readonly SentCopyMode[] = ["auto", "app", "server"];
 
 /** Stage 8 (decision 0025): where a new reply or forward puts the answer; "above" is the core's default. */
 const QUOTE_POSITIONS: readonly QuotePosition[] = ["above", "below"];
+
+/** Stage 16: what happens when a sender asks for a read receipt ("ask" is the core's default). */
+const RECEIPT_POLICIES: readonly ReadReceiptPolicy[] = ["ask", "never"];
+const DEFAULT_RECEIPT_POLICY: ReadReceiptPolicy = "ask";
 
 function AccountComposeSettings({ account }: { account: Account }) {
   const { t } = useTranslation();
@@ -98,6 +105,12 @@ export function ComposeSettings() {
   // Both fields go back on every save: a missing quote position would reset it to the default.
   const quotePosition: QuotePosition = settings.data?.defaultQuotePosition ?? "above";
   const choices = SEND_DELAY_CHOICES.includes(delay) ? SEND_DELAY_CHOICES : [...SEND_DELAY_CHOICES, delay].sort((a, b) => a - b);
+  const receiptsId = useId();
+  const receiptsHintId = useId();
+  // Stage 16: the fields the core sent stay as they are; a change replaces one of them.
+  const update = (patch: Partial<ComposeSettingsValue>) => {
+    save.mutate({ ...settings.data, sendDelaySeconds: delay, defaultQuotePosition: quotePosition, ...patch });
+  };
   return (
     <SettingsSection title={t("composer.settings.title")}>
       {settings.isError && <ErrorNotice context={t("composer.settings.loadFailed")} error={settings.error} onRetry={() => void settings.refetch()} />}
@@ -110,7 +123,7 @@ export function ComposeSettings() {
           value={delay}
           disabled={!settings.data}
           onChange={(e) => {
-            save.mutate({ sendDelaySeconds: Number(e.target.value), defaultQuotePosition: quotePosition });
+            update({ sendDelaySeconds: Number(e.target.value) });
           }}
           className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
           data-testid="send-delay"
@@ -134,7 +147,7 @@ export function ComposeSettings() {
           aria-describedby={quoteHintId}
           onChange={(e) => {
             const position = QUOTE_POSITIONS.find((p) => p === e.target.value);
-            if (position) save.mutate({ sendDelaySeconds: delay, defaultQuotePosition: position });
+            if (position) update({ defaultQuotePosition: position });
           }}
           className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
           data-testid="default-quote-position"
@@ -148,8 +161,44 @@ export function ComposeSettings() {
         <p id={quoteHintId} className="text-12 text-secondary">
           {t("writingDefaults.quotePosition.hint")}
         </p>
-        {save.isError && <ErrorNotice context={t("composer.settings.saveFailed")} error={save.error} />}
       </div>
+      <Switch
+        label={t("composer.settings.archiveOnReply")}
+        description={t("composer.settings.archiveOnReplyHint")}
+        checked={settings.data?.archiveOnReply ?? false}
+        disabled={!settings.data}
+        onChange={(archiveOnReply) => {
+          update({ archiveOnReply });
+        }}
+        data-testid="archive-on-reply"
+      />
+      <div className="flex flex-col gap-1">
+        <label htmlFor={receiptsId} className="text-13 font-medium text-primary">
+          {t("composer.settings.readReceipts")}
+        </label>
+        <select
+          id={receiptsId}
+          value={settings.data?.readReceipts ?? DEFAULT_RECEIPT_POLICY}
+          disabled={!settings.data}
+          aria-describedby={receiptsHintId}
+          onChange={(e) => {
+            const policy = RECEIPT_POLICIES.find((p) => p === e.target.value);
+            if (policy) update({ readReceipts: policy });
+          }}
+          className="h-8 w-fit rounded-control border border-border-strong bg-surface px-2 text-13 text-primary"
+          data-testid="read-receipt-policy"
+        >
+          {RECEIPT_POLICIES.map((policy) => (
+            <option key={policy} value={policy}>
+              {t(`composer.settings.readReceiptsPolicy.${policy}`)}
+            </option>
+          ))}
+        </select>
+        <p id={receiptsHintId} className="text-12 text-secondary">
+          {t("composer.settings.readReceiptsHint")}
+        </p>
+      </div>
+      {save.isError && <ErrorNotice context={t("composer.settings.saveFailed")} error={save.error} />}
       <SignatureSettings />
       {(accounts.data ?? []).map((account) => (
         <AccountComposeSettings key={account.id} account={account} />

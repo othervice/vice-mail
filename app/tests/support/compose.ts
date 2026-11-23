@@ -186,7 +186,9 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (!prepared) return Promise.reject(composeError("not_found"));
     const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind;
-    return store(makeDraft({ kind, originalMessageId: request.messageId, ...prepared }));
+    // Stage 16: a new reply starts with the "send and archive" setting.
+    const archiveOriginal = (kind === "reply" || kind === "reply_all") && Boolean(settings.archiveOnReply);
+    return store(makeDraft({ kind, originalMessageId: request.messageId, archiveOriginal, ...prepared }));
   }
 
   function send(draftId: string, requestId: string): OutgoingMail | Promise<never> {
@@ -222,7 +224,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       error: null,
       attempts: 0,
       notice: null,
-      archive: null,
+      archive: draft.archiveOriginal ? "waiting" : null,
       readReceipt: false,
       createdAt: now,
       updatedAt: now,
@@ -357,6 +359,16 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       }
       case "send_draft":
         return send(args["draftId"] as string, args["requestId"] as string);
+      // Stage 16: "send and archive" and "request read receipt" of one draft.
+      case "set_draft_send_options": {
+        const draft = get(args["draftId"]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!draft) return Promise.reject(composeError("not_found"));
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (draft.state === "sending") return Promise.reject(composeError("send_in_progress"));
+        const options = args["options"] as { archiveOriginal: boolean; requestReadReceipt: boolean };
+        return store({ ...draft, archiveOriginal: options.archiveOriginal, requestReadReceipt: options.requestReadReceipt });
+      }
       case "cancel_send":
         return cancelSend(args["draftId"] as string);
       case "list_outgoing": {

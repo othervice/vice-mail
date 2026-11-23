@@ -4,8 +4,8 @@ import { acceptsDrop, MESSAGE_DRAG_TYPE, useDragStore } from "../../stores/drag"
 
 /**
  * Makes a folder entry (sidebar tree, rail) a drop target for rows dragged out of the message
- * list: it accepts them only for another real folder of the same account, and says so while the
- * rows are over it (`over`), so the target is visible.
+ * list: it accepts them for another real folder (since stage 16 also of another account, which asks
+ * first), and says so while the rows are over it (`over`), so the target is visible.
  */
 export function useDropTarget(mailbox: Mailbox | undefined) {
   const session = useDragStore((state) => state.session);

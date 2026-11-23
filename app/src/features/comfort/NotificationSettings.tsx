@@ -4,16 +4,25 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
-import type { BadgeMode, NotificationSettings as Settings, NotifyCategories, QuietHours } from "../../services/ipc";
+import type {
+  BadgeMode,
+  NotificationSettings as Settings,
+  NotificationSound,
+  NotifyCategories,
+  QuietHours,
+} from "../../services/ipc";
 import { useAccounts } from "../accounts/queries";
+import { NotificationSoundSettings } from "./NotificationSound";
 import { useNotificationSettings, useSetNotificationSettings } from "./queries";
 
 /** The categories new mail can announce itself for, in the order of the settings. */
 const NOTIFY_CATEGORIES = ["people", "priority", "notifications", "newsletters"] as const satisfies readonly (keyof NotifyCategories)[];
 
-type Full = Required<Omit<Settings, "categories" | "quietHours">> & {
+type Full = Required<Omit<Settings, "categories" | "quietHours" | "sound">> & {
   categories: Required<NotifyCategories>;
   quietHours: QuietHours;
+  /** Stage 16: sound on or off, one system sound per platform, accounts without sound. */
+  sound: Required<NotificationSound>;
 };
 
 /** The core's defaults (decision 0020): people and priority, failed sends, snoozes, quiet 22–7 off. */
@@ -37,6 +46,8 @@ export function withNotificationDefaults(settings: Settings | undefined): Full {
     categories: { ...NOTIFICATION_DEFAULTS.categories, ...settings?.categories },
     quietHours: settings?.quietHours ?? NOTIFICATION_DEFAULTS.quietHours,
     mutedAccounts: settings?.mutedAccounts ?? [],
+    // Stage 16: settings stored before have no sound (the core reads them as the default).
+    sound: { ...NOTIFICATION_DEFAULTS.sound, ...settings?.sound },
   };
 }
 
@@ -232,6 +243,16 @@ export function NotificationSettings() {
           ))}
         </fieldset>
       )}
+      {/* Stage 16: notification sounds. */}
+      <NotificationSoundSettings
+        sound={current.sound}
+        off={off}
+        accounts={accounts.data ?? []}
+        mutedAccounts={current.mutedAccounts}
+        onChange={(sound) => {
+          update({ sound });
+        }}
+      />
       <ChoiceGroup
         label={t("comfort.notifications.badge.label")}
         description={t("comfort.notifications.badge.description")}

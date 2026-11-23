@@ -37,7 +37,11 @@ export type NoticeContent =
   /** The list was out of date (`not_found`) and was reloaded. */
   | { kind: "outdated" }
   /** A command of the core failed right away. */
-  | { kind: "error"; context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel"; error: IpcError }
+  | {
+      kind: "error";
+      context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel" | "folder" | "transfer";
+      error: IpcError;
+    }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */
   | {
       kind: "operationFailed";
@@ -46,6 +50,8 @@ export type NoticeContent =
       error: IpcError | null;
       conflict: ConflictReason | null;
     }
+  /** Stage 16: a copy or move into another account was recorded (its progress is in Activity). */
+  | { kind: "transfer"; mode: "copy" | "move"; count: number; folder: string; account: string }
   /** Stage 9: pins, snoozes, tasks and skipped local rules (texts: `features/comfort/notices.ts`). */
   | { kind: "comfort"; notice: ComfortNotice };
 
@@ -53,7 +59,10 @@ export type NoticeContent =
 export type ComfortNotice =
   | { type: "pinned" | "unpinned" | "unsnoozed" | "taskAdded" | "taskRemoved" | "taskDone" | "taskReopened"; count: number }
   | { type: "snoozed"; count: number; until: number; messageIds: readonly MessageId[] }
-  | { type: "failed"; what: "pin" | "snooze" | "unsnooze" | "task"; error: IpcError }
+  | { type: "failed"; what: "pin" | "snooze" | "unsnooze" | "task" | "readingList" | "block"; error: IpcError }
+  /** Stage 16: the reading list, and senders blocked by the user (undo unblocks them). */
+  | { type: "readingListAdded" | "readingListRemoved"; count: number }
+  | { type: "sendersBlocked"; addresses: readonly string[] }
   | { type: "ruleSkipped"; ruleName: string; reason: RuleSkipReason; count: number };
 
 export interface Notice {

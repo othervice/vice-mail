@@ -27,6 +27,8 @@ import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageList
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
 import { Command, FilePen, Forward, Keyboard, Paperclip, Reply, ReplyAll, SquarePen } from "lucide-react";
 import { AppWindow } from "lucide-react";
+// Stage 16: the reading list and blocked senders.
+import { BookOpen, BookX, UserX } from "lucide-react";
 import { openComposer } from "../../stores/composer";
 import { openMessageInWindow } from "../windows/open";
 import type { MailViewId } from "../../stores/ui";
@@ -77,12 +79,20 @@ export const ACTION_IDS = [
   "compose",
   // Stage 8: the message in a window of its own.
   "openInWindow",
+  // Stage 16: the reading list (local, never on the server) and blocking a sender.
+  "toggleReadingList",
+  "addToReadingList",
+  "removeFromReadingList",
+  "blockSender",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
 
 /** Labels in `actions.labels` (i18n). Toggles take the label of what they would do now. */
-export type ActionLabel = Exclude<ActionId, "toggleRead" | "toggleFlag" | "togglePin" | "toggleTask" | "toggleTaskDone">;
+export type ActionLabel = Exclude<
+  ActionId,
+  "toggleRead" | "toggleFlag" | "togglePin" | "toggleTask" | "toggleTaskDone" | "toggleReadingList"
+>;
 
 /** What an action looks at: the account and folder of the view and the messages it acts on. */
 export interface ActionContext {
@@ -108,6 +118,9 @@ export interface ActionHost {
   openSnooze: (items: readonly MessageListItem[]) => void;
   unsnooze: (items: readonly MessageListItem[]) => void;
   setTask: (items: readonly MessageListItem[], mark: { done: boolean } | null) => void;
+  /** Stage 16: the reading list (local only) and blocking the senders of these messages. */
+  setReadingList: (items: readonly MessageListItem[], on: boolean) => void;
+  blockSenders: (items: readonly MessageListItem[]) => void;
 }
 
 export interface ActionDefinition {
@@ -144,6 +157,9 @@ const someNoTask = (ctx: ActionContext) => ctx.items.some((item) => !item.task);
 const someTask = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.task));
 const someOpenTask = (ctx: ActionContext) => ctx.items.some((item) => item.task?.done === false);
 const someDoneTask = (ctx: ActionContext) => ctx.items.some((item) => item.task?.done === true);
+const someNotOnReadingList = (ctx: ActionContext) => ctx.items.some((item) => !item.readingList);
+const someOnReadingList = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.readingList));
+const someSender = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.from?.email) && !item.draft);
 const always = () => true;
 const oneMail = (ctx: ActionContext) => ctx.items.length === 1;
 
@@ -593,6 +609,64 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
       if (item) openMessageInWindow(ctx.account.id, item.id);
     },
   },
+  // ---- Stage 16 (decision 0033): the reading list is local like pins and tasks, so these also
+  // work on read-only accounts; blocking a sender is a local rule (the core moves future mail to
+  // Junk where the account may write, else hides it). ----
+  toggleReadingList: {
+    id: "toggleReadingList",
+    label: (ctx) => (someNotOnReadingList(ctx) ? "addToReadingList" : "removeFromReadingList"),
+    icon: (ctx) => (someNotOnReadingList(ctx) ? BookOpen : BookX),
+    shortcuts: both({ key: "q" }),
+    writes: false,
+    needsMessages: true,
+    available: always,
+    run: (ctx, host) => {
+      if (someNotOnReadingList(ctx)) host.setReadingList(ctx.items.filter((item) => !item.readingList), true);
+      else host.setReadingList(ctx.items, false);
+    },
+  },
+  addToReadingList: {
+    id: "addToReadingList",
+    label: () => "addToReadingList",
+    icon: () => BookOpen,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someNotOnReadingList,
+    run: (ctx, host) => {
+      host.setReadingList(
+        ctx.items.filter((item) => !item.readingList),
+        true,
+      );
+    },
+  },
+  removeFromReadingList: {
+    id: "removeFromReadingList",
+    label: () => "removeFromReadingList",
+    icon: () => BookX,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someOnReadingList,
+    run: (ctx, host) => {
+      host.setReadingList(
+        ctx.items.filter((item) => item.readingList),
+        false,
+      );
+    },
+  },
+  blockSender: {
+    id: "blockSender",
+    label: () => "blockSender",
+    icon: () => UserX,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someSender,
+    run: (ctx, host) => {
+      host.blockSenders(ctx.items);
+    },
+  },
 };
 
 /** Quick actions of a row, in the order of docs/DESIGN.md. */
@@ -628,6 +702,9 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   "unsnooze",
   "toggleTask",
   "toggleTaskDone",
+  // Stage 16: the reading list and blocking the sender (in "More actions").
+  "toggleReadingList",
+  "blockSender",
   // Stage 8: last, so the mail actions keep their places.
   "openInWindow",
 ];
@@ -729,6 +806,8 @@ export const APP_COMMAND_IDS = [
   "goDrafts",
   "goArchive",
   "goTrash",
+  // Stage 16: the reading list (Cmd/Ctrl+9, next to the views 1 to 8).
+  "goReadingList",
 ] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
@@ -743,6 +822,7 @@ export const VIEW_COMMANDS = {
   goDrafts: "drafts",
   goArchive: "archive",
   goTrash: "trash",
+  goReadingList: "readingList",
 } as const satisfies Partial<Record<AppCommandId, MailViewId>>;
 
 export type ViewCommandId = keyof typeof VIEW_COMMANDS;
@@ -788,4 +868,5 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   goDrafts: viewCommand("goDrafts", 6),
   goArchive: viewCommand("goArchive", 7),
   goTrash: viewCommand("goTrash", 8),
+  goReadingList: viewCommand("goReadingList", 9),
 };

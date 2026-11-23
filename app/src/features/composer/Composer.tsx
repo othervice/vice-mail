@@ -1,4 +1,4 @@
-import { FileText, Send, Trash2, Upload, X } from "lucide-react";
+import { Archive, FileText, Send, Trash2, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -10,12 +10,14 @@ import { Tooltip } from "../../components/Tooltip";
 import {
   composeIpc,
   composerIpc,
+  parityIpc,
   snippetsIpc,
   toCoreError,
   type Address,
   type CoreError,
   type Draft,
   type DraftAttachment,
+  type DraftSendOptions,
   type DraftSizeCheck,
   type DraftUpdate,
   type InlineImagesAdded,
@@ -42,6 +44,9 @@ import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { FIELD_ROW_FOCUS, RecipientField } from "./RecipientField";
 import { WritingHelp } from "../ai/WritingHelp";
+// Stage 16: "Send and archive" in the menu next to the send button.
+import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
+import { ariaShortcut } from "../actions/shortcuts";
 
 // The editor (TipTap, ProseMirror) loads with the first rich text body, not with the app.
 const RichEditor = lazy(() => import("./RichEditor").then((module) => ({ default: module.RichEditor })));
@@ -287,7 +292,7 @@ function ComposerFrame({ title, onClose, status, actions, children, onKeyDown, d
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-type ActionErrorContext = "attach" | "discard" | "unfreeze" | "images" | "template" | "size" | "window";
+type ActionErrorContext = "attach" | "discard" | "unfreeze" | "images" | "template" | "size" | "window" | "sendOptions";
 
 const ACTION_ERROR_TEXT = {
   attach: "composer.errors.attach",
@@ -297,7 +302,11 @@ const ACTION_ERROR_TEXT = {
   template: "writing.templates.failed",
   size: "writing.size.checkFailed",
   window: "windows.composer.openFailed",
+  sendOptions: "composer.sendOptions.failed",
 } as const satisfies Record<ActionErrorContext, string>;
+
+/** Stage 16: Cmd/Ctrl+Shift+Enter sends and archives the original (fixed, like Cmd/Ctrl+Enter). */
+export const SEND_AND_ARCHIVE_SHORTCUT = { key: "Enter", mod: true, shift: true } as const;
 
 /** The value of the signature choice: the draft kind's default, one of the pool, or none. */
 const SIGNATURE_DEFAULT = "default";
@@ -332,7 +341,17 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [sizeCheck, setSizeCheck] = useState<DraftSizeCheck | null>(null);
   const [pasteNote, setPasteNote] = useState<PasteResult | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
-  const [templateNote, setTemplateNote] = useState<{ name: string; problems: readonly TemplateFillProblem[] } | null>(null);
+  const [templateNote, setTemplateNote] = useState<{
+    name: string;
+    problems: readonly TemplateFillProblem[];
+    recipientsAdded: number;
+  } | null>(null);
+  // Stage 16: "send and archive" and "request read receipt" of this draft (`setDraftSendOptions`).
+  const [sendOptions, setSendOptions] = useState<DraftSendOptions>({
+    archiveOriginal: initial.archiveOriginal,
+    requestReadReceipt: initial.requestReadReceipt,
+  });
+  const optionsQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [laterOpen, setLaterOpen] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [laterError, setLaterError] = useState<CoreError | null>(null);
@@ -573,13 +592,41 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     }
   };
 
-  const send = async () => {
+  /**
+   * Stage 16: the send options go to the core at once (they are not part of the draft's fields);
+   * a refusal puts the switch back.
+   */
+  const applySendOptions = (next: DraftSendOptions): Promise<void> => {
+    const previous = sendOptions;
+    setSendOptions(next);
+    const run = optionsQueue.current.then(async () => {
+      try {
+        const saved = await parityIpc.setDraftSendOptions(draftId, next);
+        setDraft((d) => ({ ...d, archiveOriginal: saved.archiveOriginal, requestReadReceipt: saved.requestReadReceipt }));
+      } catch (e) {
+        setSendOptions(previous);
+        setActionError({ context: "sendOptions", error: toCoreError(e) });
+        throw e;
+      }
+    });
+    optionsQueue.current = run.catch(() => undefined);
+    return run;
+  };
+
+  /** Sends after the undo delay; `archive` first turns on "archive the original" (Send and archive). */
+  const send = async (archive = false) => {
     if (sending || frozen) return;
     setSending(true);
     setSendError(null);
     try {
       dirty.current = true; // the final save, also when nothing changed since the last one
       await flush();
+      await optionsQueue.current;
+      if (archive && !sendOptions.archiveOriginal) {
+        const next = { ...sendOptions, archiveOriginal: true };
+        await parityIpc.setDraftSendOptions(draftId, next);
+        setSendOptions(next);
+      }
       const mail = await composeIpc.sendDraft(draftId, crypto.randomUUID());
       finished.current = true;
       track(mail);
@@ -634,6 +681,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       const filled = await snippetsIpc.fillTemplate(templateId, draftId, language);
       const name = (templates.data ?? []).find((tpl) => tpl.id === templateId)?.name ?? "";
       if (latest.current.subject.trim() === "" && filled.subject.trim() !== "") change({ subject: filled.subject });
+      // Stage 16: the template's recipients, merged by the core after the draft's own.
+      if (filled.recipientsAdded > 0) {
+        change({ to: [...filled.to], cc: [...filled.cc], bcc: [...filled.bcc] });
+        if (filled.cc.length > 0) setShowCc(true);
+        if (filled.bcc.length > 0) setShowBcc(true);
+      }
       if (latest.current.format === "html") {
         if (editorHandle.current) editorHandle.current.insertHtml(filled.html);
         else {
@@ -643,7 +696,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       } else {
         change({ bodyText: insertAtCursor(latest.current.bodyText, filled.text, textBody.current) });
       }
-      setTemplateNote({ name, problems: filled.problems });
+      setTemplateNote({ name, problems: filled.problems, recipientsAdded: filled.recipientsAdded });
     } catch (e) {
       setActionError({ context: "template", error: toCoreError(e) });
     }
@@ -697,10 +750,13 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     setEditorKey((n) => n + 1);
   };
 
+  const canArchive = draft.originalMessageId !== null;
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" && (platform === "macos" ? event.metaKey : event.ctrlKey) && !event.altKey) {
+      // Stage 16: with Shift, "Send and archive" (where there is an original to archive).
+      if (event.shiftKey && !canArchive) return;
       event.preventDefault();
-      void send();
+      void send(event.shiftKey);
     }
   };
 
@@ -727,6 +783,21 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const hasQuote = draft.quoteHtml !== null || draft.quoteText !== null;
   const refused = sendError?.code === "invalid_address" ? invalidAddressIn(sendError.detail, [fields.to, fields.cc, fields.bcc]) : null;
   const sendShortcut = formatShortcut({ key: "Enter", mod: true }, platform);
+  const archiveShortcut = formatShortcut(SEND_AND_ARCHIVE_SHORTCUT, platform);
+  // Stage 16: the menu next to the send button.
+  const sendMenu: OverflowItem[] = [
+    {
+      id: "sendAndArchive",
+      label: t("composer.sendOptions.sendAndArchive"),
+      icon: Archive,
+      detail: archiveShortcut,
+      keyshortcuts: ariaShortcut(SEND_AND_ARCHIVE_SHORTCUT, platform),
+      onSelect: () => {
+        void send(true);
+      },
+      "data-testid": "composer-send-and-archive",
+    },
+  ];
   const title = fields.subject.trim() || t(`composer.title.${kind}`);
 
   const status = (
@@ -998,6 +1069,11 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
               title={t("writing.templates.inserted", { name: templateNote.name })}
               data-testid="composer-template-note"
             >
+              {templateNote.recipientsAdded > 0 && (
+                <p data-testid="composer-template-recipients">
+                  {t("writing.templates.recipientsAdded", { count: templateNote.recipientsAdded })}
+                </p>
+              )}
               {templateNote.problems.map((problem) => (
                 <p key={problem.kind === "unknown" ? `u:${problem.name}` : `m:${problem.placeholder}`}>
                   {problem.kind === "unknown"
@@ -1186,6 +1262,35 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             )}
           </div>
         )}
+        {/* Stage 16: per-draft send options. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 text-13 text-secondary" data-testid="composer-send-options">
+          {canArchive && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={sendOptions.archiveOriginal}
+                disabled={frozen}
+                onChange={(e) => {
+                  void applySendOptions({ ...sendOptions, archiveOriginal: e.target.checked }).catch(() => undefined);
+                }}
+                data-testid="composer-archive-original"
+              />
+              {t("composer.sendOptions.archiveOriginal")}
+            </label>
+          )}
+          <label className="flex items-center gap-2" title={t("composer.sendOptions.readReceiptHint")}>
+            <input
+              type="checkbox"
+              checked={sendOptions.requestReadReceipt}
+              disabled={frozen}
+              onChange={(e) => {
+                void applySendOptions({ ...sendOptions, requestReadReceipt: e.target.checked }).catch(() => undefined);
+              }}
+              data-testid="composer-read-receipt"
+            />
+            {t("composer.sendOptions.readReceipt")}
+          </label>
+        </div>
       </div>
       {addingImages && (
         <p role="status" className="shrink-0 border-t border-border px-4 py-2 text-12 text-secondary" data-testid="composer-images-adding">
@@ -1285,6 +1390,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           <kbd aria-hidden className="rounded-control border border-border-subtle bg-canvas px-1 font-sans text-12 text-tertiary">
             {sendShortcut}
           </kbd>
+          {canArchive && !sending && !frozen && (
+            <OverflowMenu label={t("composer.sendOptions.menu")} align="start" items={sendMenu} data-testid="composer-send-menu" />
+          )}
           <Button
             variant="secondary"
             disabled={sending || frozen || scheduling}

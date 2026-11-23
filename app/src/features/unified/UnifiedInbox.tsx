@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
-import type { Account, AccountColor, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
+import type { Account, AccountColor, InboxScope, MessageId, MessageListItem, UnifiedView } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { MessageListSource } from "../messages/listSource";
@@ -15,6 +15,7 @@ import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useAccountGroups, useHiddenAccounts } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
+import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -47,10 +48,14 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
   // Stage 8: with more than one account, each row names its account next to the colour.
   const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
-  const sorted = useUnifiedInboxSource(view, true);
+  // Stage 16: "Unread only" and "Unread first" over the same accounts.
+  const unreadScope: InboxScope = { kind: "unified", view };
+  const unreadMode = useUnreadMode(unreadViewKey(unreadScope));
+  const unread = useUnreadSource(unreadScope, ["unified", view], unreadMode, selection.items);
+  const sorted = useUnifiedInboxSource(view, !unread);
   const source: MessageListSource = {
     empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
-    ...sorted,
+    ...(unread ?? sorted),
     accountColor,
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
   };

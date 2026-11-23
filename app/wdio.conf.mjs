@@ -41,6 +41,8 @@ export const config = {
     "./tests/e2e/restart.e2e.mjs",
     "./tests/e2e/account-sync.e2e.mjs",
     "./tests/e2e/reading.e2e.mjs",
+    // Stage 16: find in the open message (written, not run yet).
+    "./tests/e2e/find-in-message.e2e.mjs",
     "./tests/e2e/comfort.e2e.mjs",
     "./tests/e2e/search.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
@@ -50,6 +52,8 @@ export const config = {
     "./tests/e2e/compose.e2e.mjs",
     "./tests/e2e/composer-complete.e2e.mjs",
     "./tests/e2e/send-later.e2e.mjs",
+    // Stage 16: the inline quick reply.
+    "./tests/e2e/quick-reply.e2e.mjs",
     "./tests/e2e/mcp-sync.e2e.mjs",
     "./tests/e2e/ai.e2e.mjs",
     "./tests/e2e/a11y.e2e.mjs",

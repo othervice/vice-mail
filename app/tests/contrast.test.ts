@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import tokensCss from "../src/styles/tokens.css?raw";
 import { contrast, deltaE, luminance } from "./support/color";
+import { ACCENT_THEMES, DEFAULT_ACCENT } from "../src/features/preferences/accent";
 
 // Contrast rules from docs/SPEC.md (Barrierefreiheit): text >= 4.5:1, controls and other
 // meaningful graphics >= 3:1, in both themes. The pairs below are the ones the UI uses.
@@ -24,7 +25,19 @@ function block(selector: RegExp): string {
 
 const light = colourTokens(block(/:root\s*\{([^}]*)\}/));
 const dark = { ...light, ...colourTokens(block(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)) };
-const themes = { light, dark };
+
+// Stage 16: the accent themes. Each changes only the accent family, in light and in dark.
+const ACCENT_FAMILY = ["accent", "accent-soft", "selected", "focus-ring", "text-on-accent"];
+const accentLight = (accent: string) => colourTokens(block(new RegExp(`(?:^|\\n)\\[data-accent="${accent}"\\]\\s*\\{([^}]*)\\}`)));
+const accentDark = (accent: string) =>
+  colourTokens(block(new RegExp(`:root\\[data-theme="dark"\\] \\[data-accent="${accent}"\\]\\s*\\{([^}]*)\\}`)));
+const accentThemes = Object.fromEntries(
+  ACCENT_THEMES.flatMap((accent) => [
+    [`light ${accent}`, { ...light, ...accentLight(accent) }],
+    [`dark ${accent}`, { ...dark, ...accentDark(accent) }],
+  ]),
+);
+const themes: Record<string, Tokens> = { light, dark, ...accentThemes };
 
 // Decision 0031: `surface-list` is the list column's own tinted surface.
 const SURFACES = ["canvas", "surface", "surface-list", "surface-raised", "rail", "priority-tint", "selected", "hover"];
@@ -70,6 +83,10 @@ const TEXT_PAIRS: [string, string][] = [
   ["text-tertiary", "rail-hover"],
   ["accent", "priority-tint"],
   ["accent", "surface-list"],
+  // Stage 16, find in the open message: highlighted text (it takes text-primary) and the current
+  // match with its own text colour.
+  ["text-primary", "find-match"],
+  ["find-current-text", "find-current"],
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -198,6 +215,35 @@ it("keeps the eight avatar tints apart from each other in both themes", () => {
       }
     }
   }
+});
+
+describe("accent themes (stage 16)", () => {
+  it("define the accent family and nothing else, in light and dark", () => {
+    for (const accent of ACCENT_THEMES) {
+      for (const tokens of [accentLight(accent), accentDark(accent)]) {
+        expect(Object.keys(tokens).sort(), accent).toEqual([...ACCENT_FAMILY].sort());
+      }
+    }
+  });
+
+  it("the default's block repeats the default values (the picker's swatch shows it)", () => {
+    for (const name of ACCENT_FAMILY) {
+      expect(accentLight(DEFAULT_ACCENT)[name], name).toBe(light[name]);
+      expect(accentDark(DEFAULT_ACCENT)[name], name).toBe(dark[name]);
+    }
+  });
+
+  it("are told apart from each other in both modes", () => {
+    for (const mode of ["light", "dark"]) {
+      for (const [i, a] of ACCENT_THEMES.entries()) {
+        for (const b of ACCENT_THEMES.slice(i + 1)) {
+          const ta = themes[`${mode} ${a}`]?.["accent"] ?? "";
+          const tb = themes[`${mode} ${b}`]?.["accent"] ?? "";
+          expect(deltaE(ta, tb), `${mode}: ${a} vs ${b}`).toBeGreaterThan(15);
+        }
+      }
+    }
+  });
 });
 
 it("the contrast check itself is calibrated (black on white is 21:1)", () => {

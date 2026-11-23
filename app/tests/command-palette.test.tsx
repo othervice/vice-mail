@@ -30,6 +30,8 @@ function fakeHost() {
     openSnooze: vi.fn<ActionHost["openSnooze"]>(),
     unsnooze: vi.fn<ActionHost["unsnooze"]>(),
     setTask: vi.fn<ActionHost["setTask"]>(),
+    setReadingList: vi.fn<ActionHost["setReadingList"]>(),
+    blockSenders: vi.fn<ActionHost["blockSenders"]>(),
   } satisfies ActionHost;
 }
 
@@ -52,6 +54,7 @@ function contextFor(id: ActionId): ActionContext {
     completeTask: { task: { done: false } },
     reopenTask: { task: { done: true } },
     editDraft: { draft: true },
+    removeFromReadingList: { readingList: true },
   };
   return {
     account: makeAccount({ writesEnabled: true }),
@@ -117,6 +120,10 @@ function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionC
     toggleTaskDone: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, { done: true }),
     completeTask: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, { done: true }),
     reopenTask: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, { done: false }),
+    toggleReadingList: () => expect(host.setReadingList).toHaveBeenCalledWith(ctx.items, true),
+    addToReadingList: () => expect(host.setReadingList).toHaveBeenCalledWith(ctx.items, true),
+    removeFromReadingList: () => expect(host.setReadingList).toHaveBeenCalledWith(ctx.items, false),
+    blockSender: () => expect(host.blockSenders).toHaveBeenCalledWith(ctx.items),
     reply: () => {
       composer("reply");
     },

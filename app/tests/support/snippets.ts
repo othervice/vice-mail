@@ -3,6 +3,7 @@
 // At most this many images per signature: the core's constant (decision 0025).
 import { MAX_SIGNATURE_IMAGES } from "../../src/services/ipc";
 import type {
+  Address,
   Draft,
   FilledTemplateInfo,
   IdentitySignatureDefaults,
@@ -158,8 +159,29 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
     return putSignature({ ...signature, images: [...signature.images, ...fresh], updatedAt: clock++ });
   }
 
+  /** Stage 16: trimmed, checked, each address once over all three fields (To before Cc before Bcc). */
+  function templateRecipients(input: TemplateInput): { to: Address[]; cc: Address[]; bcc: Address[] } | Promise<never> {
+    const seen = new Set<string>();
+    const result = { to: [] as Address[], cc: [] as Address[], bcc: [] as Address[] };
+    for (const kind of ["to", "cc", "bcc"] as const) {
+      for (const raw of input[kind] ?? []) {
+        const email = raw.email.trim();
+        if (email === "") continue;
+        if (!/^[^\s@]+@[^\s@]+$/.test(email)) return reject("invalid_address", `not a valid address: ${email}`);
+        const key = email.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result[kind].push({ name: raw.name?.trim() || null, email });
+      }
+    }
+    if (seen.size > 100) return reject("invalid_argument", "at most 100 recipients");
+    return result;
+  }
+
   function saveTemplate(input: TemplateInput): SavedTemplate | Promise<never> {
     if (input.name.trim() === "") return reject("invalid_argument", "a template needs a name");
+    const recipients = templateRecipients(input);
+    if (recipients instanceof Promise) return recipients;
     if (/<img\b/.test(input.html)) return reject("invalid_argument", "templates contain no images");
     const existing = input.id === null ? undefined : templates.find((t) => t.id === input.id);
     if (input.id !== null && !existing) return reject("not_found");
@@ -169,9 +191,7 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
       name: input.name.trim(),
       subject: input.subject,
       html: cleaned.html,
-      to: input.to ?? [],
-      cc: input.cc ?? [],
-      bcc: input.bcc ?? [],
+      ...recipients,
       ...placeholdersOf(`${input.subject} ${cleaned.html}`),
       updatedAt: clock++,
     };
@@ -184,7 +204,21 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
     if (!template) return reject("not_found");
     const draft = deps.drafts().get(draftId);
     if (!draft) return reject("not_found");
-    const to = draft.to[0];
+    // Stage 16: the draft's recipients first; the template's added where they are in no field yet.
+    const known = new Set([...draft.to, ...draft.cc, ...draft.bcc].map((a) => a.email.toLowerCase()));
+    let recipientsAdded = 0;
+    const merge = (own: readonly Address[], extra: readonly Address[]) => [
+      ...own,
+      ...extra.filter((a) => {
+        const key = a.email.toLowerCase();
+        if (known.has(key)) return false;
+        known.add(key);
+        recipientsAdded += 1;
+        return true;
+      }),
+    ];
+    const merged = { to: merge(draft.to, template.to), cc: merge(draft.cc, template.cc), bcc: merge(draft.bcc, template.bcc) };
+    const to = merged.to[0];
     const [first, ...rest] = (to?.name ?? "").split(/\s+/).filter(Boolean);
     const values: Record<string, string | undefined> = {
       first_name: first,
@@ -216,10 +250,8 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
       html,
       text: htmlText(html),
       problems,
-      to: draft.to,
-      cc: draft.cc,
-      bcc: draft.bcc,
-      recipientsAdded: 0,
+      ...merged,
+      recipientsAdded,
     };
   }
 

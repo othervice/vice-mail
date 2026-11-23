@@ -5,8 +5,11 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { Notice } from "../../components/Notice";
 import { TextField } from "../../components/TextField";
-import { toCoreError, type CoreError, type SanitizeReport, type TemplateId, type TemplateInfo } from "../../services/ipc";
+import { toCoreError, type Address, type CoreError, type SanitizeReport, type TemplateId, type TemplateInfo } from "../../services/ipc";
 import type { RichEditorHandle } from "../composer/RichEditor";
+// Stage 16: templates with recipients, entered like the composer's.
+import { invalidAddressIn } from "../composer/addresses";
+import { RecipientField } from "../composer/RecipientField";
 import { escapeHtml, placeholderToken, TEMPLATE_PLACEHOLDERS } from "./placeholders";
 import { hasNotes, SnippetNotes } from "./SnippetNotes";
 import { useDeleteTemplate, useSaveTemplate, useTemplates } from "./queries";
@@ -18,6 +21,10 @@ const RichEditor = lazy(() => import("../composer/RichEditor").then((module) => 
 type Editing = { kind: "new"; seq: number } | { kind: "edit"; id: TemplateId; seq: number };
 
 let nextSeq = 1;
+
+/** Stage 16: the recipient fields of a template, in the order the core merges them. */
+const RECIPIENT_KINDS = ["to", "cc", "bcc"] as const;
+type RecipientKind = (typeof RECIPIENT_KINDS)[number];
 
 /** Test hook of the editor body (the composer's is `composer-rich-body`). */
 const BODY_TEST_ID = "template-body";
@@ -151,6 +158,15 @@ function TemplateEditor({ template, onClose, onCreated }: TemplateEditorProps) {
   const [nameError, setNameError] = useState(false);
   const [subject, setSubject] = useState(template?.subject ?? "");
   const [html, setHtml] = useState(template?.html ?? "");
+  // Stage 16: To, Cc and Bcc the template adds to a message (refs: a blur commits just before Save).
+  const [recipients, setRecipients] = useState<Record<RecipientKind, Address[]>>({
+    to: template?.to ?? [],
+    cc: template?.cc ?? [],
+    bcc: template?.bcc ?? [],
+  });
+  const latestRecipients = useRef(recipients);
+  const recipientsId = useId();
+  const recipientsHintId = useId();
   const [editorKey, setEditorKey] = useState(0);
   const [unknown, setUnknown] = useState<readonly string[]>(template?.unknownPlaceholders ?? []);
   const [notes, setNotes] = useState<SanitizeReport | null>(null);
@@ -166,8 +182,22 @@ function TemplateEditor({ template, onClose, onCreated }: TemplateEditorProps) {
     }
     setError(null);
     try {
-      const result = await save.mutateAsync({ id: savedId, name: name.trim(), subject, html: latestHtml.current });
+      // Empty lists are left out ("none"), so a template without recipients saves as before.
+      const { to, cc, bcc } = latestRecipients.current;
+      const result = await save.mutateAsync({
+        id: savedId,
+        name: name.trim(),
+        subject,
+        html: latestHtml.current,
+        ...(to.length > 0 && { to }),
+        ...(cc.length > 0 && { cc }),
+        ...(bcc.length > 0 && { bcc }),
+      });
       setUnknown(result.template.unknownPlaceholders);
+      // The core trims, checks and removes doubles: show what it kept.
+      const saved = { to: result.template.to, cc: result.template.cc, bcc: result.template.bcc };
+      latestRecipients.current = saved;
+      setRecipients(saved);
       setNotes(hasNotes(result.notes) ? result.notes : null);
       if (hasNotes(result.notes)) {
         latestHtml.current = result.template.html;
@@ -183,6 +213,16 @@ function TemplateEditor({ template, onClose, onCreated }: TemplateEditorProps) {
       setError(toCoreError(e));
     }
   };
+
+  const changeRecipients = (kind: RecipientKind, addresses: Address[]) => {
+    const next = { ...latestRecipients.current, [kind]: addresses };
+    latestRecipients.current = next;
+    setRecipients(next);
+    setStatus("idle");
+    setError(null);
+  };
+  const refused =
+    error?.code === "invalid_address" ? invalidAddressIn(error.detail, [recipients.to, recipients.cc, recipients.bcc]) : null;
 
   const insertPlaceholder = (placeholder: string) => {
     const token = escapeHtml(placeholderToken(placeholder));
@@ -221,6 +261,29 @@ function TemplateEditor({ template, onClose, onCreated }: TemplateEditorProps) {
         description={t("snippets.templates.subjectHint", { example: placeholderToken("first_name") })}
         data-testid="template-subject"
       />
+      <div role="group" aria-labelledby={recipientsId} aria-describedby={recipientsHintId} className="flex flex-col gap-1">
+        <span id={recipientsId} className="text-13 font-medium text-primary">
+          {t("snippets.templates.recipients")}
+        </span>
+        <div className="flex flex-col rounded-control border border-border-strong bg-surface [&>*:last-child]:border-b-0" data-testid="template-recipients">
+          {RECIPIENT_KINDS.map((kind) => (
+            <RecipientField
+              key={kind}
+              label={t(`composer.recipients.${kind}`)}
+              addresses={recipients[kind]}
+              onChange={(addresses) => {
+                changeRecipients(kind, addresses);
+              }}
+              onBlur={() => undefined}
+              refused={refused}
+              data-testid={`template-${kind}`}
+            />
+          ))}
+        </div>
+        <p id={recipientsHintId} className="text-12 text-secondary">
+          {t("snippets.templates.recipientsHint")}
+        </p>
+      </div>
       <div className="flex flex-col gap-1">
         <span className="text-13 font-medium text-primary">{t("snippets.templates.body")}</span>
         <div className="flex min-h-(--ui-picker-list-height) flex-col rounded-control border border-border-strong bg-surface">

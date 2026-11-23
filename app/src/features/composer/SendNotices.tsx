@@ -147,7 +147,8 @@ function SendNotice({ send }: { send: TrackedSend }) {
       setBusy(false);
     });
   };
-  const subject = mail.subject.trim() || t("composer.noSubject");
+  // Stage 16: a read receipt has no subject of the user's; it says what it is.
+  const subject = mail.readReceipt ? t("composer.send.receipt") : mail.subject.trim() || t("composer.noSubject");
   let icon: LucideIcon = Send;
   let tone: "calm" | "success" | "danger" | "warning" = "calm";
   let text: string;
@@ -187,6 +188,8 @@ function SendNotice({ send }: { send: TrackedSend }) {
       tone = "success";
       text = t("composer.send.sent");
       if (mail.notice === "no_sent_copy") detail = t("composer.send.noSentCopy");
+      // Stage 16: "Send and archive" found no Archive folder; the original stayed where it was.
+      if (mail.archive === "no_archive_mailbox") detail = [detail, t("composer.send.noArchive")].filter(Boolean).join(" ");
       break;
     case "failed":
       icon = CircleExclamationPoint;

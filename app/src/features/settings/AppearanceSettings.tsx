@@ -5,6 +5,7 @@ import { SettingsSection } from "../../components/SettingsSection";
 import type { ThemePreference } from "../../services/ipc";
 import { LayoutSettings } from "../layout/LayoutSettings";
 import { DEFAULT_PREFERENCES, usePreferences, useSetPreferences } from "../preferences/queries";
+import { AccentPicker } from "./AccentPicker";
 
 export function AppearanceSettings() {
   const { t } = useTranslation();
@@ -39,6 +40,8 @@ export function AppearanceSettings() {
         }}
       />
       {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
+      {/* Stage 16: the accent theme (per device until the core stores it). */}
+      <AccentPicker />
       {/* Stage 8: layout of this window. */}
       <LayoutSettings />
     </SettingsSection>

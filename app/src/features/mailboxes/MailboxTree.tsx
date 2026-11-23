@@ -1,9 +1,11 @@
 import { ChevronDown, ChevronRight, Folder, type LucideIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
-import type { Account, MailboxId } from "../../services/ipc";
+import type { Account, Mailbox, MailboxId } from "../../services/ipc";
+// Stage 16: folder colours and favourites.
+import { FolderColorDot, FolderColorPicker, FolderMenu, useColorName } from "../organize/folders";
 import { useUiStore } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useMailboxes } from "./queries";
@@ -35,10 +37,13 @@ interface ItemProps {
   node: MailboxNode;
   account: Account;
   currentMailboxId: MailboxId | null;
+  /** Stage 16: "Folder colour…" of the folder's menu. */
+  onColor: (mailbox: Mailbox) => void;
 }
 
-function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
+function MailboxItem({ node, account, currentMailboxId, onColor }: ItemProps) {
   const { t } = useTranslation();
+  const colorName = useColorName();
   const collapsed = useUiStore((state) => state.collapsedMailboxes.has(node.mailbox.id));
   const toggleMailbox = useUiStore((state) => state.toggleMailbox);
   const showMailView = useUiStore((state) => state.showMailView);
@@ -64,13 +69,19 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
     <>
       <FolderIcon icon={isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder} />
       <span className="truncate">{name}</span>
+      <FolderColorDot color={mailbox.color} />
       <UnreadCount count={mailbox.unread} />
     </>
   );
+  // Stage 16: the colour is named with the folder, never shown alone.
+  const named =
+    mailbox.color === undefined || mailbox.color === null
+      ? name
+      : t("organize.favorites.withColor", { name, color: colorName(mailbox.color) });
 
   return (
     <li>
-      <div className="flex items-center gap-1">
+      <div className="group/folder flex items-center gap-1">
         {children.length > 0 ? (
           <button
             type="button"
@@ -94,7 +105,7 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
           <button
             type="button"
             aria-current={current ? "page" : undefined}
-            aria-label={mailbox.unread > 0 ? t("sidebar.folderUnread", { name, count: mailbox.unread }) : name}
+            aria-label={mailbox.unread > 0 ? t("sidebar.folderUnread", { name: named, count: mailbox.unread }) : named}
             title={mailbox.path}
             onClick={open}
             {...drop.handlers}
@@ -113,11 +124,22 @@ function MailboxItem({ node, account, currentMailboxId }: ItemProps) {
             {label}
           </span>
         )}
+        {mailbox.selectable && (
+          // Shown on hover and while focused; always reachable with Tab.
+          <div className="flex opacity-0 group-hover/folder:opacity-100 focus-within:opacity-100">
+            <FolderMenu
+              mailbox={mailbox}
+              onColor={() => {
+                onColor(mailbox);
+              }}
+            />
+          </div>
+        )}
       </div>
       {children.length > 0 && !collapsed && (
         <ul className="ps-4">
           {children.map((child) => (
-            <MailboxItem key={child.mailbox.id} node={child} account={account} currentMailboxId={currentMailboxId} />
+            <MailboxItem key={child.mailbox.id} node={child} account={account} currentMailboxId={currentMailboxId} onColor={onColor} />
           ))}
         </ul>
       )}
@@ -133,6 +155,8 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id);
   const tree = useMemo(() => buildMailboxTree(mailboxes.data ?? []), [mailboxes.data]);
+  const [coloring, setColoring] = useState<MailboxId | null>(null);
+  const colored = coloring === null ? undefined : mailboxes.data?.find((mailbox) => mailbox.id === coloring);
 
   if (mailboxes.isPending) return null;
   if (mailboxes.isError) {
@@ -148,10 +172,29 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
   }
   if (tree.length === 0) return <p className="px-2 text-12 text-tertiary">{t("sidebar.noFolders")}</p>;
   return (
-    <ul aria-label={t("sidebar.folders", { account: account.displayName || account.email })} className="flex flex-col">
-      {tree.map((node) => (
-        <MailboxItem key={node.mailbox.id} node={node} account={account} currentMailboxId={currentMailboxId} />
-      ))}
-    </ul>
+    <>
+      <ul aria-label={t("sidebar.folders", { account: account.displayName || account.email })} className="flex flex-col">
+        {tree.map((node) => (
+          <MailboxItem
+            key={node.mailbox.id}
+            node={node}
+            account={account}
+            currentMailboxId={currentMailboxId}
+            onColor={(mailbox) => {
+              setColoring(mailbox.id);
+            }}
+          />
+        ))}
+      </ul>
+      {colored && (
+        <FolderColorPicker
+          mailbox={colored}
+          onClose={() => {
+            setColoring(null);
+          }}
+          restoreFocus={() => undefined}
+        />
+      )}
+    </>
   );
 }

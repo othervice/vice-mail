@@ -79,6 +79,15 @@
      were made for white, and recolouring would break them (docs/DESIGN.md). Not redefined below. */
   --ui-mail-canvas: #ffffff;
 
+  /* Stage 16, find in the open message: every match, and the current one (also underlined, so
+     not by colour alone). The mail-* pair is for HTML mail on its white canvas, in both themes;
+     it is written into the mail frame's own style sheet (features/reading/find.ts). */
+  --ui-find-match: #f8e4a4;
+  --ui-find-current: #efb43a;
+  --ui-find-current-text: #1e1c19;
+  --ui-mail-find-match: #fbe7a6;
+  --ui-mail-find-current: #f5b83d;
+
   /* Type: system font (SF Pro on macOS, Segoe UI Variable on Windows 11). Segoe UI Variable comes
      before system-ui, which WebView2 resolves to the older Segoe UI; Windows 10 falls back to
      that. rem so text scaling works. */
@@ -225,6 +234,11 @@
   --ui-success: #72c78f;
   --ui-warning: #e3a851;
 
+  /* Stage 16: find in the open message (the mail-* pair stays as in light, like the canvas) */
+  --ui-find-match: #5b4614;
+  --ui-find-current: #e3a851;
+  --ui-find-current-text: #141312;
+
   /* Account colours */
   --ui-account-1: #7fa9f2;
   --ui-account-2: #ad90ee;
@@ -307,4 +321,103 @@
   /* The floating "Ask anything" bar at the bottom of the reading pane and room kept for it. */
   --ui-reading-ask-width: 26rem;
   --ui-reading-ask-room: 5rem;
+}
+
+/* ---- Stage 16: accent themes (Settings → Appearance) ----
+   The accent family of each theme, light and dark: the accent itself, its soft fill, the
+   selected row, the focus ring and the text on the accent. Everything else stays as above.
+   "teal" is the default above; the root never carries it, but the swatches of the theme picker
+   do (each shows its own theme inside the current mode), so it repeats the default values.
+   tests/contrast.test.ts checks every theme in both modes with the same pairs as the default
+   and that the teal block equals the default. Orange is the logo's "Vice orange" (#ff7a00,
+   docs/brand/README.md): the dark theme uses it as it is, the light one a burnt tone of the same
+   hue, so text on it reaches 4.5:1. */
+[data-accent="teal"] {
+  --ui-accent: #0b746c;
+  --ui-accent-soft: #dceeeb;
+  --ui-selected: #dfefec;
+  --ui-focus-ring: #0b6e66;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"] [data-accent="teal"] {
+  --ui-accent: #5dbdb1;
+  --ui-accent-soft: #1e3a36;
+  --ui-selected: #1d3633;
+  --ui-focus-ring: #63c7ba;
+  --ui-text-on-accent: #0c1a18;
+}
+[data-accent="blue"] {
+  --ui-accent: #2263bf;
+  --ui-accent-soft: #dae6f6;
+  --ui-selected: #dae5f3;
+  --ui-focus-ring: #2f76da;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="blue"],
+:root[data-theme="dark"] [data-accent="blue"] {
+  --ui-accent: #5a95e7;
+  --ui-accent-soft: #1d2a3d;
+  --ui-selected: #1c2838;
+  --ui-focus-ring: #639be9;
+  --ui-text-on-accent: #0c131d;
+}
+[data-accent="violet"] {
+  --ui-accent: #774bc3;
+  --ui-accent-soft: #e8e0f5;
+  --ui-selected: #e8e0f5;
+  --ui-focus-ring: #7d53c6;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="violet"],
+:root[data-theme="dark"] [data-accent="violet"] {
+  --ui-accent: #a27de3;
+  --ui-accent-soft: #281d3d;
+  --ui-selected: #261c38;
+  --ui-focus-ring: #a885e5;
+  --ui-text-on-accent: #120c1d;
+}
+[data-accent="rose"] {
+  --ui-accent: #ba2c67;
+  --ui-accent-soft: #f8e0ea;
+  --ui-selected: #f5e0e9;
+  --ui-focus-ring: #d23f7c;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="rose"],
+:root[data-theme="dark"] [data-accent="rose"] {
+  --ui-accent: #e4659a;
+  --ui-accent-soft: #3d1d2a;
+  --ui-selected: #381c28;
+  --ui-focus-ring: #e670a1;
+  --ui-text-on-accent: #1d0c13;
+}
+[data-accent="orange"] {
+  --ui-accent: #a14d00;
+  --ui-accent-soft: #f3e0cd;
+  --ui-selected: #f0e0d0;
+  --ui-focus-ring: #bf5b00;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="orange"],
+:root[data-theme="dark"] [data-accent="orange"] {
+  --ui-accent: #ff7a00;
+  --ui-accent-soft: #3d2c1d;
+  --ui-selected: #38291c;
+  --ui-focus-ring: #ff8a1f;
+  --ui-text-on-accent: #1d140c;
+}
+[data-accent="green"] {
+  --ui-accent: #21733c;
+  --ui-accent-soft: #d8f0df;
+  --ui-selected: #daf0e0;
+  --ui-focus-ring: #288848;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="green"],
+:root[data-theme="dark"] [data-accent="green"] {
+  --ui-accent: #45b76b;
+  --ui-accent-soft: #1d3d27;
+  --ui-selected: #1c3825;
+  --ui-focus-ring: #4aba6f;
+  --ui-text-on-accent: #0c1d12;
 }

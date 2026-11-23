@@ -5,7 +5,9 @@ import { IconButton } from "../../components/IconButton";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
 import type { InboxSettings as Settings, SenderRule } from "../../services/ipc";
+import { BlockedSenders } from "../blocked/BlockedSenders";
 import { LocalRules } from "./LocalRules";
+import { UnreadFirstSettings } from "../organize/UnreadFirstSettings";
 import { useDeleteSenderRule, useInboxSettings, useSenderRules, useSetInboxSettings } from "./queries";
 
 /** The core's defaults (everything on), for fields an older store left out. */
@@ -71,7 +73,11 @@ export function InboxSettings() {
         />
         {save.isError && <ErrorNotice context={t("comfort.settings.saveFailed")} error={save.error} />}
       </SettingsSection>
+      {/* Stage 16: the views that show their unread mail first (device setting). */}
+      <UnreadFirstSettings />
       <SenderRules />
+      {/* Stage 16: blocked senders, with "Unblock". */}
+      <BlockedSenders />
       <LocalRules />
     </div>
   );

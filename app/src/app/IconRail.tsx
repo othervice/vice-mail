@@ -11,6 +11,7 @@ import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { UnifiedTree } from "../features/unified/UnifiedTree";
+import { FavoriteFolders } from "../features/organize/folders";
 import { SavedSearchNav } from "../features/search/SavedSearchNav";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
@@ -343,6 +344,8 @@ export function IconRail() {
         </ul>
         {expanded && (
           <div id={foldersId} className="flex flex-col gap-4 border-t border-border-subtle pt-4">
+            {/* Stage 16: favourite folders of every account, at the top. */}
+            <FavoriteFolders accounts={accountList} />
             <UnifiedTree accountCount={accountList.length} />
             {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
             {accounts.isSuccess && accountList.length === 0 && (

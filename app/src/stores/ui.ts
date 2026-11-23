@@ -6,6 +6,8 @@ export const MAIL_VIEW_IDS = [
   "inbox",
   "later",
   "tasks",
+  // Stage 16: the reading list ("Zum Lesen"), a local mark like Tasks.
+  "readingList",
   "pinned",
   "sent",
   "drafts",

@@ -1,5 +1,6 @@
 import {
   Archive,
+  BookOpen,
   Bookmark,
   Clock,
   FilePen,
@@ -17,6 +18,7 @@ export const MAIL_VIEW_ICONS: Record<MailViewId, LucideIcon> = {
   inbox: Inbox,
   later: Clock,
   tasks: ListTodo,
+  readingList: BookOpen,
   pinned: Pin,
   sent: Send,
   drafts: FilePen,

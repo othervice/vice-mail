@@ -17,6 +17,8 @@ export function useSearchShortcut(platform: ShortcutPlatform): void {
     if (!match) return;
     // A plain key ("/") is text in a field; Cmd/Ctrl+F works from fields too.
     if (!match.mod && isEditableTarget(event.target)) return;
+    // Stage 16: inside the reading pane Cmd/Ctrl+F finds in the open message (ReadingPane).
+    if (match.mod && event.target instanceof Element && event.target.closest("[data-find-scope]")) return;
     event.preventDefault();
     openSearch();
   });

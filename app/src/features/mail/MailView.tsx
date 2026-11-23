@@ -58,6 +58,11 @@ import { useThreadSource } from "../threads/source";
 import { ThreadPane } from "../threads/ThreadPane";
 import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
 import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
+// Stage 16: "Unread only" and "Unread first".
+import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
+import type { InboxScope } from "../../services/ipc";
+// Stage 16: moving and copying into another account.
+import { TransferDialog, useOtherAccountFolders, useTransfer, type TransferRequest } from "../organize/transfer";
 
 export type MailViewState = Extract<View, { kind: "mail" } | { kind: "mailbox" }>;
 
@@ -206,18 +211,36 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const { t } = useTranslation();
   // Stage 7: conversation view for plain folders. The sorted inbox (stage 9) and Later, Pinned and
   // Tasks keep their rows: the core has no thread variant of them.
-  const conversations = useSearchStore((state) => state.conversations) && kind === "folder";
+  const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
+  // Stage 16: "Unread only" and "Unread first" replace the folder's or the inbox's own list.
+  const unreadScope: InboxScope | null = kind === "folder" || kind === "inbox" ? { kind: "mailbox", mailboxId: mailbox.id } : null;
+  const unreadMode = useUnreadMode(unreadScope && unreadViewKey(unreadScope));
+  const unreadSource = useUnreadSource(unreadScope, ["messages", account.id, mailbox.id], unreadMode, selection.items);
+  const conversations = useSearchStore((state) => state.conversations) && kind === "folder" && !unreadSource;
   const threadSource = useThreadSource(account.id, mailbox.id, conversations);
-  const comfortSource = useListSource(kind, account, mailbox);
-  const source = threadSource ?? comfortSource;
+  const comfortSource = useListSource(unreadSource ? "folder" : kind, account, mailbox);
+  const source = unreadSource ?? threadSource ?? comfortSource;
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const mailboxes = useMailboxes(account.id).data;
-  const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations);
+  const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations && !unreadSource);
   const label = useMailboxLabel();
   const push = useNoticeStore((state) => state.push);
   const startDrag = useDragStore((state) => state.start);
   const endDrag = useDragStore((state) => state.end);
-  const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
+  const otherFolders = useOtherAccountFolders(account.id);
+  const transfer = useTransfer();
+  const [transferRequest, setTransferRequest] = useState<TransferRequest | null>(null);
+  /** A folder of another account asks first (decision 0033); one of this account moves at once. */
+  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[]) => {
+    if (target.accountId === account.id) {
+      void controller.apply({ type: "move", target: target.id }, items, { detail: label(target) });
+      return;
+    }
+    const targetAccount = otherFolders.find((entry) => entry.account.id === target.accountId)?.account;
+    if (targetAccount && items.length > 0) {
+      setTransferRequest({ items, source: { account, mailbox }, target: { account: targetAccount, mailbox: target } });
+    }
+  };
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
   const controller = useActionController({ account, mailbox, list });
@@ -356,7 +379,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               sourceMailboxId: mailbox.id,
               count: items.length,
               drop: (target) => {
-                void controller.apply({ type: "move", target: target.id }, items, { detail: label(target) });
+                moveOrAsk(target, items);
               },
             });
           }}
@@ -446,13 +469,28 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           count={overlay.ids.length}
           mailboxes={mailboxes ?? []}
           current={mailbox}
+          otherAccounts={otherFolders}
           onChoose={(target) => {
             const items = fresh(overlay.ids);
             controller.closeOverlay();
-            void controller.apply({ type: "move", target: target.id }, items, { detail: label(target) });
+            moveOrAsk(target, items);
           }}
           onClose={controller.closeOverlay}
           restoreFocus={focusList}
+        />
+      )}
+      {transferRequest && (
+        <TransferDialog
+          request={transferRequest}
+          onChoose={(mode) => {
+            const request = transferRequest;
+            setTransferRequest(null);
+            void transfer(request, mode);
+          }}
+          onCancel={() => {
+            setTransferRequest(null);
+          }}
+          focusAfter={focusList}
         />
       )}
       {overlay?.kind === "tags" && (
@@ -496,7 +534,8 @@ function MailBody({ view, account }: MailBodyProps) {
   const roleView = view.kind === "mail" && isRoleView(view.mailView) ? view.mailView : null;
   // Stage 9: Later, Pinned and Tasks show the marked messages of the account's inbox.
   const markView =
-    view.kind === "mail" && (view.mailView === "later" || view.mailView === "pinned" || view.mailView === "tasks")
+    view.kind === "mail" &&
+    (view.mailView === "later" || view.mailView === "pinned" || view.mailView === "tasks" || view.mailView === "readingList")
       ? view.mailView
       : null;
   if (view.kind === "mail" && !roleView && !markView) {
@@ -607,6 +646,15 @@ export function MailView({ view }: MailViewProps) {
   };
 
   const folder = view.kind === "mailbox" ? mailboxes.data?.find((m) => m.id === view.mailboxId) : undefined;
+  // Stage 16: the view "Unread only" and "Unread first" apply to (folders, inboxes, unified views).
+  const roleMailbox = view.kind === "mail" && !unifiedView && isRoleView(view.mailView) ? mailboxWithRole(roleMailboxes, view.mailView) : undefined;
+  const unreadScope: InboxScope | null = unifiedView
+    ? { kind: "unified", view: unifiedView }
+    : folder
+      ? { kind: "mailbox", mailboxId: folder.id }
+      : roleMailbox
+        ? { kind: "mailbox", mailboxId: roleMailbox.id }
+        : null;
   const title = unifiedView
     ? unifiedName
     : view.kind === "mail"
@@ -678,6 +726,7 @@ export function MailView({ view }: MailViewProps) {
         <div className="flex min-w-0 items-center gap-3">
           {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
           <div className="flex shrink-0 items-center gap-1">
+            {account && unreadScope && <UnreadControls viewKey={unreadViewKey(unreadScope)} />}
             {account && conversationsApply && <ConversationToggle />}
             {/* Stage 13: folds the AI panel in and out (only while AI is usable). */}
             {account && <AiPanelToggle />}

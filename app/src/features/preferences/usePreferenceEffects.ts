@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveLanguage } from "../../i18n";
 import type { Preferences } from "../../services/ipc";
+import { applyAccent, useAccentStore } from "./accent";
 import { applyTheme, DARK_SCHEME_QUERY, resolveTheme } from "./theme";
 
 /**
@@ -11,6 +12,21 @@ import { applyTheme, DARK_SCHEME_QUERY, resolveTheme } from "./theme";
 export function usePreferenceEffects(preferences: Preferences): void {
   const { theme, language } = preferences;
   const { i18n } = useTranslation();
+  // Stage 16: the accent theme (per device for now, see accent.ts), in every window of the app.
+  const accent = useAccentStore((state) => state.accent);
+  const reloadAccent = useAccentStore((state) => state.reload);
+
+  useEffect(() => {
+    applyAccent(accent);
+  }, [accent]);
+
+  useEffect(() => {
+    // Windows share the web view's storage; a change in one reaches the others through this event.
+    window.addEventListener("storage", reloadAccent);
+    return () => {
+      window.removeEventListener("storage", reloadAccent);
+    };
+  }, [reloadAccent]);
 
   useEffect(() => {
     const media = window.matchMedia(DARK_SCHEME_QUERY);
