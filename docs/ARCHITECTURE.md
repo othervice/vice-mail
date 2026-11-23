@@ -53,7 +53,7 @@ wenn er groß genug ist.
 | Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID |
 | Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht |
 | Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
-| Sync-Verschlüsselung | age (X25519, scrypt), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014) |
+| Sync-Verschlüsselung | age (X25519, scrypt, Feature `armor`), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014). Im IMAP-Ordner liegt der Chiffretext als age-ASCII-Armor (0022) |
 | Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017). `mail-content` nutzt nur die zivilen Datumstypen (Kalendereinladungen: Datum, Wochentag, Datumsrechnung); Zeitzonen löst dort die Engine über den Trait `ZoneResolver`, die tzdb wird in `mail-content` nur in Tests gelesen |
 | Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
 | Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
@@ -138,7 +138,9 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
 | `ai_profile` | Anbieter, Basis-URL, Modell, Freigaben | sync (ohne Schlüssel) |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
-| `sync_record` | zuletzt abgeglichene Version je Datensatz | Gerät |
+| `sync_record` | je synchronisierbarem Datensatz die aktuelle Version (Inhalt oder Grabstein, bei Konten mit Feldversionen) und die zuletzt abgeglichene; `sync_dirty` hält die in einer Transaktion geänderten bis zum Commit (Stufe 11, 0022) | Gerät |
+| `sync_state`, `sync_adopted` | Geräte-ID im Sync, höchste Version der Uhr, an/aus, Sync-Konto und Ordner, letzter Durchlauf und letzte Vollprüfung, Ordnerstand; übernommene Konten ohne Passwort | Gerät |
+| `sync_device` | Geräte des Syncs mit Name, System, zuletzt gesehen | sync |
 
 Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt auf dem Gerät.
 **sync** wandert über den Einstellungs-Sync. Eine Tabelle wird nur abgeglichen, wenn sie
@@ -269,6 +271,10 @@ einer klaren Meldung abgelehnt.
 - Auch bei freigeschaltetem Schreibzugriff verbinden sich Abgleich, IDLE, Lesebereich und
   Verbindungstest immer nur lesend (EXAMINE, PEEK); geschrieben wird ausschließlich über die eigene
   Verbindung der Outbox (Mitschnitt-Test in `crates/mail-engine/tests/actions.rs`).
+- Ausnahme, nur nach „Sync einschalten“ (Stufe 11, 0014, 0022): Die Verbindung des
+  Einstellungs-Syncs darf in genau einen Ordner schreiben, den Sync-Ordner; jede andere
+  schreibende Zeile lehnt der Adapter mit `read_only` ab, bevor sie gesendet wird
+  (Mitschnitt-Test in `crates/mail-imap/tests/sync_folder.rs`).
 - Nach jedem Schritt der Outbox stößt ein Hook sofort einen Abgleich genau der betroffenen Ordner an;
   die Oberfläche bekommt je Änderung ein gebündeltes Ereignis `operationsChanged`.
 
@@ -347,7 +353,9 @@ einer klaren Meldung abgelehnt.
 
 **Erlaubte Netzverbindungen**
 - Mailserver, die der Nutzer eingerichtet hat, auch für Bodies und Anhänge (Stufe 3): je Konto eine
-  eigene Leseverbindung neben Abgleich und IDLE, immer nur lesend (EXAMINE, `BODY.PEEK[…]`)
+  eigene Leseverbindung neben Abgleich und IDLE, immer nur lesend (EXAMINE, `BODY.PEEK[…]`);
+  beim Sync-Konto eine weitere für den Einstellungs-Sync (Stufe 11), die nur in den Sync-Ordner
+  schreibt
 - Bei der Einrichtung, nur nach Klick auf „online suchen“: DNS-SRV-Abfragen (RFC 6186) über die
   System-DNS-Server für die Domain der Adresse, danach HTTPS (Port 443) zur Autokonfiguration der
   eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
@@ -404,7 +412,9 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 |---|---|
 | Einstellungen | je Schlüssel gewinnt die neuere Version |
 | Signaturen, Vorlagen, Regeln, Ansichten | je Datensatz gewinnt die neuere Version; Bearbeiten schlägt gleichzeitiges Löschen |
-| Snooze, Pins | je Mail gewinnt die neuere Version |
+| Snooze, Pins, Aufgaben | je Mail gewinnt die neuere Version |
+| Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
+| Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
 | Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt |
 
 - **Neues Gerät:** Sync-Konto einrichten, Passphrase eingeben, Vorschau der zu übernehmenden Daten,
@@ -414,6 +424,24 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 - **Sichtbar für den Mailserver:** Anzahl, Größe und Zeitpunkte der Datensätze. Mehr nicht.
 - **Transport austauschbar:** ein Trait `SettingsTransport` (auflisten, schreiben, löschen). Erste
   Umsetzung ist der IMAP-Ordner; ein selbst gehosteter Server oder ein Dateiordner können folgen.
+- **Umsetzung (Stufe 11, `docs/decisions/0022-einstellungs-sync-integration.md`):**
+  - Ordner `Settings-Sync` (oben oder unter `INBOX`), nicht abonniert, aus der Ordnerliste des
+    Mail-Abgleichs ausgeblendet; je Fassung eine Nachricht mit `X-Settings-Sync-Id` und
+    `X-Settings-Sync-Version`, Körper age-ASCII-Armor. Nachrichten ohne beide Kopfzeilen fasst
+    der Sync nie an.
+  - Erfassen in einem Haken: Trigger auf jeder synchronisierbaren Tabelle merken den Datensatz
+    vor, `Store::write` lässt ihn vor dem Commit von der Engine versionieren (`SyncCapture`).
+  - Eigene Verbindung, die nur in den Sync-Ordner schreiben darf (Prüfung jeder Befehlszeile im
+    Adapter, `FolderScope`), auch bei `writes_enabled = false` (0014). Ihr Ausfall berührt Lesen
+    und Senden nicht.
+  - Durchläufe nach lokalen Änderungen, nach jedem Mail-Durchlauf des Sync-Kontos und im
+    Poll-Abstand; unveränderter Ordnerstand (UIDVALIDITY, UIDNEXT, EXISTS, HIGHESTMODSEQ) und
+    nichts lokal offen heißt: nichts zu tun. Täglich eine Vollprüfung.
+  - Zweites Gerät: das vorher eingerichtete Sync-Konto und seine Standard-Identität übernehmen
+    die IDs aus dem Ordner (gleiche Adresse, nie abgeglichen); übernommene Konten starten nur
+    lesend und ohne Passwort.
+  - Konto anderswo entfernt: Rückfrage; bis zur Antwort warten auch die Löschungen seiner
+    Identitäten, Snoozes usw.; „behalten“ erneuert Konto und diese Datensätze.
 
 ## KI
 

@@ -155,6 +155,17 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::mcp::list_mcp_access,
             commands::mcp::get_mcp_status,
             commands::mcp::test_mcp_connection,
+            // Stage 11: settings sync (decisions 0014, 0022).
+            commands::settings_sync::get_settings_sync_status,
+            commands::settings_sync::enable_settings_sync,
+            commands::settings_sync::preview_settings_sync_join,
+            commands::settings_sync::join_settings_sync,
+            commands::settings_sync::sync_settings_now,
+            commands::settings_sync::resolve_sync_question,
+            commands::settings_sync::change_settings_sync_passphrase,
+            commands::settings_sync::reset_settings_sync,
+            commands::settings_sync::disable_settings_sync,
+            commands::settings_sync::set_sync_device_name,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -200,6 +211,12 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             mail_model::MAX_MCP_CLIENT_NAME_CHARS,
         )
         .constant("MAX_MCP_CLIENTS", mail_model::MAX_MCP_CLIENTS)
+        // Stage 11: the shortest passphrase the core accepts, and the sync folder's name.
+        .constant(
+            "MIN_SYNC_PASSPHRASE_CHARS",
+            mail_model::MIN_SYNC_PASSPHRASE_CHARS,
+        )
+        .constant("SETTINGS_SYNC_FOLDER", mail_model::SETTINGS_SYNC_FOLDER)
 }
 
 /// TypeScript exporter settings, shared by the freshness test and `UPDATE_BINDINGS=1`.

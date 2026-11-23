@@ -581,7 +581,7 @@ async fn snooze_and_pin_follow_the_message_not_local_ids() {
     let (_, mut a, mut b) = pair().await;
     let pin = RecordKey::mail(RecordKind::Pin, account_id(1), "<x@example.org>").expect("pin");
     a.put(&snooze(1), json!({ "untilMs": START_MS + DAY_MS }));
-    a.put(&pin, json!({}));
+    a.put(&pin, json!({ "pinnedAtMs": START_MS }));
     settle(&mut [&mut a, &mut b]).await;
     // B un-snoozes later than A re-snoozes: the newer wins.
     a.advance(10);
@@ -735,14 +735,12 @@ async fn passwords_tokens_and_api_keys_appear_in_no_record() {
             RecordKind::Template,
             json!({ "name": "t", "body": "Hello" }),
         ),
-        (
-            RecordKind::Rule,
-            json!({ "if": { "from": "x@example.org" }, "then": "archive" }),
-        ),
+        (RecordKind::Rule, rule_content("x@example.org", 0)),
         (RecordKind::SavedView, json!({ "query": "is:unread" })),
         (
             RecordKind::Identity,
-            json!({ "email": "ann@example.org", "name": "Ann" }),
+            json!({ "account": account_id(1).to_string(), "email": "ann@example.org",
+                    "name": "Ann", "replyTo": null, "isDefault": true }),
         ),
         (
             RecordKind::AiSettings,

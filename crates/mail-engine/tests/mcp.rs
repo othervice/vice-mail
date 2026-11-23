@@ -112,6 +112,22 @@ impl WriteConnector for Split {
     }
 }
 
+/// Stage 11: the settings sync connection (unused here) through the write tap.
+impl mail_model::SyncFolderConnector for Split {
+    type Folder = mail_imap::ImapSyncFolder<TlsTransport>;
+
+    async fn connect_sync_folder(
+        &self,
+        config: &ConnectConfig,
+        folder: &str,
+    ) -> Result<Self::Folder, BackendError> {
+        ImapConnector::new()
+            .with_wire_tap(Taps::new_tap(&self.0.write))
+            .connect_sync_folder(config, folder)
+            .await
+    }
+}
+
 fn sync_config(env: &TestEnv) -> SyncConfig {
     let mut config = SyncConfig {
         backoff: BackoffPolicy {

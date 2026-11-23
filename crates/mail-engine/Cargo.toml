@@ -39,8 +39,9 @@ url.workspace = true
 open.workspace = true
 # Local time zone for search dates (stage 7, search/).
 jiff.workspace = true
-# Settings sync (settings_sync/): encryption, opaque record ids, typed errors.
-age.workspace = true
+# Settings sync (settings_sync/): encryption, opaque record ids, typed errors. `armor`: the
+# ciphertext travels as age's ASCII armor in the IMAP folder (no extra dependency).
+age = { workspace = true, features = ["armor"] }
 hmac.workspace = true
 sha2.workspace = true
 thiserror.workspace = true

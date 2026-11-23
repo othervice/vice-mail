@@ -309,6 +309,8 @@ async fn server_counts(env: &TestEnv) -> Vec<(String, u32, Option<u32>)> {
         .await
         .expect("list")
         .into_iter()
+        // Stage 11: the settings sync folder (left by its tests) is never shown as mail.
+        .filter(|m| !mail_model::is_settings_sync_folder(&m.name, m.delimiter))
         .filter_map(|m| m.status.map(|s| (m.path, s.messages, s.unseen)))
         .collect();
     counts.sort();

@@ -30,6 +30,7 @@ mod role;
 pub mod search;
 mod secret;
 mod send;
+mod settings_sync;
 pub mod threading;
 mod uid_set;
 mod views;
@@ -120,6 +121,12 @@ pub use secret::Secret;
 pub use send::{
     Envelope, MailSender, RecipientRefusal, SendFuture, SendOutcome, SendRejection, SmtpReply,
     SmtpStep,
+};
+pub use settings_sync::{
+    MIN_SYNC_PASSPHRASE_CHARS, SETTINGS_SYNC_FOLDER, SYNC_ID_HEADER, SYNC_VERSION_HEADER,
+    SettingsSyncFailure, SettingsSyncPreview, SettingsSyncState, SettingsSyncStatus, SyncDevice,
+    SyncFolder, SyncFolderConnector, SyncFolderEntry, SyncFolderState, SyncKindCount, SyncQuestion,
+    is_settings_sync_folder,
 };
 pub use uid_set::UidSet;
 pub use views::{

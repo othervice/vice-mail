@@ -19,6 +19,10 @@
 //!   configurations before connecting); STORE with `UNCHANGEDSINCE`, MOVE with its COPY/EXPUNGE
 //!   fallback, CREATE.
 //!
+//! - **Settings sync** (stage 11): [`ImapSyncFolder`] is a read-only connection that may
+//!   write to exactly one folder, the settings sync folder (decision 0014); the command layer
+//!   refuses every other writing command before it is sent.
+//!
 //! - **Sending** (stage 5): [`SmtpSender`] submits a message over SMTP with TLS or STARTTLS
 //!   (lettre's protocol layer on the adapter's own TLS streams) and reports accepted, refused
 //!   (per recipient) or unclear (connection ended after the data went out).
@@ -36,6 +40,7 @@ pub mod mutf7;
 mod sasl;
 mod search;
 mod smtp;
+mod sync_folder;
 mod timeout_io;
 pub mod tls;
 mod writer;
@@ -53,6 +58,7 @@ pub use backend::{ImapBackend, MAX_IDLE, TlsTransport};
 pub use command::Transport;
 pub use connector::ImapConnector;
 pub use smtp::SmtpSender;
+pub use sync_folder::ImapSyncFolder;
 #[cfg(feature = "test-support")]
 pub use wire_tap::WireTap;
 pub use writer::ImapWriter;

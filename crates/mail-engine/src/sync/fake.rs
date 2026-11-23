@@ -456,6 +456,53 @@ impl WriteConnector for FakeConnector {
     }
 }
 
+/// Stage 11: the fake server has no settings sync folder; every call fails as unsupported (the
+/// settings sync is tested against the in-memory folder and the test server).
+#[derive(Debug)]
+pub(crate) struct NoSyncFolder;
+
+fn no_folder<T>() -> Result<T, BackendError> {
+    Err(BackendError::Unsupported("settings sync folder".into()))
+}
+
+impl mail_model::SyncFolder for NoSyncFolder {
+    async fn open(&mut self, _: bool) -> Result<Option<mail_model::SyncFolderState>, BackendError> {
+        no_folder()
+    }
+
+    async fn list(&mut self, _: &[&str]) -> Result<Vec<mail_model::SyncFolderEntry>, BackendError> {
+        no_folder()
+    }
+
+    async fn read(&mut self, _: &UidSet) -> Result<Vec<(Uid, Vec<u8>)>, BackendError> {
+        no_folder()
+    }
+
+    async fn append(&mut self, _: &[u8]) -> Result<Option<Uid>, BackendError> {
+        no_folder()
+    }
+
+    async fn delete(&mut self, _: &UidSet) -> Result<(), BackendError> {
+        no_folder()
+    }
+
+    async fn logout(self) -> Result<(), BackendError> {
+        Ok(())
+    }
+}
+
+impl mail_model::SyncFolderConnector for FakeConnector {
+    type Folder = NoSyncFolder;
+
+    async fn connect_sync_folder(
+        &self,
+        _: &ConnectConfig,
+        _: &str,
+    ) -> Result<NoSyncFolder, BackendError> {
+        no_folder()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct FakeBackend {
     server: Arc<FakeServer>,

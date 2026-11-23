@@ -138,6 +138,9 @@ pub struct ReadingPreferences {
 /// - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
 /// - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
 ///   failed.
+/// - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
+///   questions or detected folders changed. Data a pass took over from another device comes
+///   with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -223,6 +226,9 @@ pub enum CoreEvent {
     },
     McpStatusChanged {
         status: crate::McpStatus,
+    },
+    SettingsSyncChanged {
+        status: crate::SettingsSyncStatus,
     },
 }
 

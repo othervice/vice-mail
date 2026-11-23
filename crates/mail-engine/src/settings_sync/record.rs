@@ -39,6 +39,17 @@ pub enum RecordKind {
     AiSettings,
     /// One device of the sync: name, system, last seen.
     Device,
+    /// A message marked as a task (open or done), by account and Message-ID (stage 9).
+    Task,
+    /// A sender rule: the category correction ("always as …") and/or the importance of an
+    /// address, domain or list, by its normalised key (stage 9).
+    SenderRule,
+    /// An account group of the sidebar, with its members by account UUID (stage 7).
+    AccountGroup,
+    /// A sender whose external images always load, by account and normalised address.
+    RemoteContent,
+    /// The name the user gave a contact, by its normalised address.
+    Contact,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, Einstellungs-Sync).
@@ -62,6 +73,12 @@ pub enum IdShape {
     Uuid,
     /// `<account uuid>/<Message-ID without angle brackets>`. Never local ids or UIDs.
     Mail,
+    /// `<address|domain|list_id>:<normalised value>` (sender rules).
+    SenderKey,
+    /// `<account uuid>/<normalised address>` (remote content senders).
+    AccountAddress,
+    /// A normalised address (contacts).
+    Address,
 }
 
 /// What a winning tombstone does to a live local record.
@@ -91,7 +108,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 11] = [
+pub const REGISTRY: [KindSpec; 16] = [
     spec(
         RecordKind::Setting,
         "setting",
@@ -101,10 +118,12 @@ pub const REGISTRY: [KindSpec; 11] = [
         Removal::Apply,
         4 * KIB,
     ),
+    // The signature of an identity, by the identity's UUID; its own record, so a deleted
+    // signature and a concurrent edit merge as "edit beats delete".
     spec(
         RecordKind::Signature,
         "signature",
-        "signature",
+        "identity",
         MergeRule::EditBeatsDelete,
         IdShape::Uuid,
         Removal::Apply,
@@ -191,6 +210,51 @@ pub const REGISTRY: [KindSpec; 11] = [
         Removal::Apply,
         4 * KIB,
     ),
+    spec(
+        RecordKind::Task,
+        "task",
+        "task",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::SenderRule,
+        "senderRule",
+        "sender_rule",
+        MergeRule::NewerWins,
+        IdShape::SenderKey,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::AccountGroup,
+        "accountGroup",
+        "account_group",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        16 * KIB,
+    ),
+    spec(
+        RecordKind::RemoteContent,
+        "remoteContent",
+        "remote_content_sender",
+        MergeRule::NewerWins,
+        IdShape::AccountAddress,
+        Removal::Apply,
+        KIB,
+    ),
+    spec(
+        RecordKind::Contact,
+        "contact",
+        "contact",
+        MergeRule::NewerWins,
+        IdShape::Address,
+        Removal::Apply,
+        4 * KIB,
+    ),
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -214,9 +278,17 @@ const fn spec(
     }
 }
 
-/// Setting keys that are synchronised. Every other key of the `setting` table is a device
-/// setting: `prefetch.*` (what this machine keeps offline) stays local.
-pub const SYNCED_SETTINGS: &[&str] = &["ui.theme", "ui.language"];
+/// Setting keys that are synchronised (decision 0022): theme, language, when an opened message
+/// counts as read, the undo delay of sending, and the notification settings. Every other key
+/// of the `setting` table is a device setting: `prefetch.*` (what this machine keeps offline),
+/// `inbox.settings` (categories and bundles on this screen, decision 0020).
+pub const SYNCED_SETTINGS: &[&str] = &[
+    "ui.theme",
+    "ui.language",
+    "reading.mark_read_on_open",
+    "compose.send_delay_seconds",
+    "notifications.settings",
+];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the
 /// keychain and have no field. `writes_enabled` is deliberately not synchronised: write access
@@ -225,7 +297,7 @@ pub const SYNCED_SETTINGS: &[&str] = &["ui.theme", "ui.language"];
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 16] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -237,6 +309,11 @@ impl RecordKind {
         Self::Identity,
         Self::AiSettings,
         Self::Device,
+        Self::Task,
+        Self::SenderRule,
+        Self::AccountGroup,
+        Self::RemoteContent,
+        Self::Contact,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -342,20 +419,31 @@ impl RecordKey {
                     return Err(RecordError::SettingNotSynced(key.to_owned()));
                 }
             }
-            IdShape::Mail => {
+            IdShape::Mail | IdShape::AccountAddress => {
                 let (account, message_id) =
                     id.split_once('/').ok_or_else(|| invalid("no account"))?;
                 if !is_canonical_uuid(account) {
                     return Err(invalid("account is not a lowercase hyphenated UUID"));
                 }
-                if message_id.is_empty() || message_id.len() > MAX_MESSAGE_ID_BYTES {
-                    return Err(invalid("Message-ID is empty or too long"));
+                if !is_token(message_id) {
+                    return Err(invalid(
+                        "the part after the account is empty, too long, or holds whitespace, \
+                         controls or brackets",
+                    ));
                 }
-                if message_id
-                    .chars()
-                    .any(|c| c.is_whitespace() || c.is_control() || c == '<' || c == '>')
-                {
-                    return Err(invalid("Message-ID holds whitespace, controls or brackets"));
+            }
+            IdShape::SenderKey => {
+                let (kind, value) = id.split_once(':').ok_or_else(|| invalid("no key kind"))?;
+                if !matches!(kind, "address" | "domain" | "list_id") {
+                    return Err(invalid("key kind is not address, domain or list_id"));
+                }
+                if !is_token(value) {
+                    return Err(invalid("key is empty, too long or holds whitespace"));
+                }
+            }
+            IdShape::Address => {
+                if !is_token(id) {
+                    return Err(invalid("address is empty, too long or holds whitespace"));
                 }
             }
         }
@@ -378,6 +466,16 @@ impl fmt::Display for RecordKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.kind, self.id)
     }
+}
+
+/// A Message-ID, normalised address or key: 1 to 998 bytes, no whitespace, controls or angle
+/// brackets.
+fn is_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_MESSAGE_ID_BYTES
+        && !s
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == '<' || c == '>')
 }
 
 fn is_canonical_uuid(s: &str) -> bool {
@@ -578,13 +676,57 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::Snooze => {
             SnoozeInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
-        RecordKind::Signature
-        | RecordKind::Template
-        | RecordKind::Rule
-        | RecordKind::SavedView
-        | RecordKind::Pin
-        | RecordKind::Identity
-        | RecordKind::AiSettings => {
+        RecordKind::Pin => {
+            PinInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Task => {
+            TaskInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Signature => {
+            let signature =
+                SignatureContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if signature.text.is_none() && signature.html.is_none() {
+                return Err(invalid("a signature needs text or html".into()));
+            }
+        }
+        RecordKind::Identity => {
+            IdentityContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Rule => {
+            let rule = RuleContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            let definition = rule.definition.as_object();
+            let shaped = definition.is_some_and(|d| {
+                d.get("matchAll").is_some_and(Value::is_boolean)
+                    && d.get("stop").is_some_and(Value::is_boolean)
+                    && d.get("conditions").is_some_and(Value::is_array)
+                    && d.get("actions").is_some_and(Value::is_array)
+            });
+            if !shaped {
+                return Err(invalid(
+                    "a rule definition has matchAll, conditions, actions and stop".into(),
+                ));
+            }
+        }
+        RecordKind::SenderRule => {
+            let rule =
+                SenderRuleContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            if rule.category.is_none() && !rule.important {
+                return Err(invalid(
+                    "a sender rule sets a category or importance (delete it instead)".into(),
+                ));
+            }
+        }
+        RecordKind::AccountGroup => {
+            AccountGroupContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::RemoteContent => {
+            EmptyContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        RecordKind::Contact => {
+            ContactContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
+        // No local table yet (templates, saved views, AI settings): any object, kept as it is.
+        RecordKind::Template | RecordKind::SavedView | RecordKind::AiSettings => {
             if !value.is_object() {
                 return Err(invalid("content is not a JSON object".into()));
             }
@@ -684,12 +826,90 @@ pub struct DeviceInfo {
     pub last_seen_ms: i64,
 }
 
-/// Content of a snooze record.
+/// Content of a snooze record. Whether it came back already is each device's own business
+/// (every device's timer brings it back), so only the time is synchronised.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SnoozeInfo {
     /// Unix ms when the message comes back.
     pub until_ms: i64,
+}
+
+/// Content of a pin record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PinInfo {
+    pub pinned_at_ms: i64,
+}
+
+/// Content of a task record: open (`None`) or done at this time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskInfo {
+    pub done_at_ms: Option<i64>,
+}
+
+/// Content of a signature record (the signature of the identity with the record's UUID).
+/// `html` is for the HTML signatures of the composer; today only `text` is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SignatureContent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+}
+
+/// Content of an identity record (the signature is a record of its own).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IdentityContent {
+    pub account: AccountId,
+    pub email: String,
+    pub name: String,
+    pub reply_to: Option<String>,
+    pub is_default: bool,
+}
+
+/// Content of a local rule. `definition` is the rule's conditions and actions as stored
+/// (`{matchAll, conditions, actions, stop}`); conditions and actions this version does not
+/// know are kept and skipped when rules run, like those of a newer version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuleContent {
+    pub name: String,
+    pub position: i64,
+    pub enabled: bool,
+    pub definition: Value,
+}
+
+/// Content of a sender rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SenderRuleContent {
+    pub category: Option<mail_model::MessageCategory>,
+    pub important: bool,
+}
+
+/// Content of an account group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountGroupContent {
+    pub name: String,
+    pub position: i64,
+    pub accounts: Vec<AccountId>,
+}
+
+/// Content of a record whose existence is all there is (remote content senders).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmptyContent {}
+
+/// Content of a contact record: the name the user gave it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactContent {
+    pub user_name: String,
 }
 
 /// A record: content or tombstone, with the version that produced it.
@@ -919,7 +1139,7 @@ mod tests {
         )
         .expect("maxTokens");
         SyncContent::new(
-            RecordKind::Rule,
+            RecordKind::SavedView,
             json!({ "keyword": "passport", "passive": true }),
         )
         .expect("passport");
@@ -982,7 +1202,8 @@ mod tests {
         let v2 = Hlc::new(2, 0, device).expect("v2");
         assert!(SyncRecord::tombstone(key.clone(), v2, v1).is_ok());
         assert!(SyncRecord::tombstone(key.clone(), v1, v1).is_err());
-        let content = SyncContent::new(RecordKind::Signature, json!({})).expect("content");
+        let content =
+            SyncContent::new(RecordKind::Signature, json!({ "text": "Ann" })).expect("content");
         assert!(
             SyncRecord::content(key, v1, content).is_err(),
             "kind mismatch"

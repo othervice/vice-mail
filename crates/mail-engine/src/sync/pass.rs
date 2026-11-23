@@ -123,7 +123,15 @@ pub(crate) async fn run<B: MailBackend>(
         }
     }
     if scope == Scope::Full {
-        let remote = backend.list_mailboxes().await?;
+        let mut remote = backend.list_mailboxes().await?;
+        // Stage 11: the settings sync folder holds encrypted records, not mail. It stays out
+        // of the folder list; that it exists tells a new device the account holds a sync.
+        let sync_folder = remote
+            .iter()
+            .find(|m| mail_model::is_settings_sync_folder(&m.name, m.delimiter))
+            .map(|m| m.name.clone());
+        remote.retain(|m| !mail_model::is_settings_sync_folder(&m.name, m.delimiter));
+        reporter.sync_folder_seen(sync_folder);
         let report = store.sync_mailboxes(account, remote).await?;
         if report.changed {
             tracing::debug!(

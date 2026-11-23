@@ -207,6 +207,11 @@ impl LocalState {
         self.last_complete_sync_ms = None;
     }
 
+    /// Replaces a record (the integration renews records it keeps against a removal).
+    pub fn replace(&mut self, record: LocalRecord) {
+        self.insert(record);
+    }
+
     fn apply(&mut self, key: &RecordKey, change: &LocalChange) {
         match change {
             LocalChange::Apply(record) => {
@@ -302,7 +307,46 @@ pub async fn prepare_pass<T: SettingsTransport>(
     hlc: &mut HlcClock,
     mode: PassMode,
 ) -> Result<PreparedPass, SettingsSyncError> {
-    let listed_at_ms = hlc.wall_ms();
+    let now_ms = hlc.wall_ms();
+    fetch_pass(transport, key, state, now_ms, mode)
+        .await?
+        .plan(hlc)
+}
+
+/// The IO half of [`prepare_pass`]: listed, downloaded and opened, not yet planned. Planning
+/// ([`FetchedPass::plan`]) needs the clock but no IO, so an integration that shares one clock
+/// with other writers holds it only for that synchronous step.
+#[derive(Debug)]
+pub struct FetchedPass<'a> {
+    planner: Planner<'a>,
+    opened: Vec<(EntryHandle, Result<SyncRecord, super::crypto::OpenError>)>,
+    old_key_records: Vec<EntryHandle>,
+    listed_at_ms: i64,
+}
+
+impl FetchedPass<'_> {
+    /// Merges every record into a plan (observes the accepted versions on `hlc` and takes new
+    /// versions from it where the plan needs them).
+    pub fn plan(self, hlc: &mut HlcClock) -> Result<PreparedPass, SettingsSyncError> {
+        let plan = self.planner.finish(self.opened, hlc)?;
+        Ok(PreparedPass {
+            plan,
+            old_key_records: self.old_key_records,
+            listed_at_ms: self.listed_at_ms,
+        })
+    }
+}
+
+/// Lists the folder, downloads and opens what is new (see [`prepare_pass`]). `now_ms` is the
+/// wall clock at the start (the listing's time).
+pub async fn fetch_pass<'a, T: SettingsTransport>(
+    transport: &mut T,
+    key: &SyncKey,
+    state: &'a LocalState,
+    now_ms: i64,
+    mode: PassMode,
+) -> Result<FetchedPass<'a>, SettingsSyncError> {
+    let listed_at_ms = now_ms;
     let listing = transport.list().await?;
     let mut ours = key_records(&listing)
         .into_iter()
@@ -341,9 +385,9 @@ pub async fn prepare_pass<T: SettingsTransport>(
             })
             .collect()
     };
-    let plan = planner.finish(opened, hlc)?;
-    Ok(PreparedPass {
-        plan,
+    Ok(FetchedPass {
+        planner,
+        opened,
         old_key_records,
         listed_at_ms,
     })

@@ -1,6 +1,7 @@
 //! Scenario, convergence and performance tests of the settings sync: simulated devices with
 //! their own clocks and local state over one shared in-memory folder.
 
+mod capture;
 mod convergence;
 mod perf;
 mod scenarios;
@@ -220,6 +221,21 @@ pub(super) fn snooze(n: u128) -> RecordKey {
         &format!("<msg-{n}@example.org>"),
     )
     .expect("snooze")
+}
+
+/// The content of a local rule that archives mail from `from`.
+pub(super) fn rule_content(from: &str, position: i64) -> Value {
+    json!({
+        "name": format!("from {from}"),
+        "position": position,
+        "enabled": true,
+        "definition": {
+            "matchAll": true,
+            "conditions": [{ "type": "from", "op": "contains", "value": from }],
+            "actions": [{ "type": "markRead" }],
+            "stop": false,
+        },
+    })
 }
 
 pub(super) fn account_fields(email: &str, name: &str) -> Value {

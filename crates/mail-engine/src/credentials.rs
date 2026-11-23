@@ -1,4 +1,5 @@
-//! Passwords in the system keychain, and since stage 12 the tokens of AI clients (MCP).
+//! Passwords in the system keychain, since stage 12 the tokens of AI clients (MCP), and since
+//! stage 11 the settings sync key.
 //!
 //! The database only holds a [`CredentialRef`] (column `account.credential_ref`); the secret
 //! itself lives in the macOS keychain or the Windows Credential Manager under the app's service
@@ -26,6 +27,9 @@ const MAX_REF_LEN: usize = 256;
 /// Prefix of the keychain entries of AI clients (stage 12).
 const MCP_CLIENT_PREFIX: &str = "mcp-client:";
 
+/// Name of the keychain entry with the settings sync key (stage 11).
+const SETTINGS_SYNC_KEY: &str = "settings-sync:key";
+
 /// Name of a keychain entry under the app's service. For accounts it is the account UUID.
 /// Stored in the database instead of the secret.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -41,6 +45,12 @@ impl CredentialRef {
     /// prefix keeps it apart from account entries (UUIDs) under the same service.
     pub fn for_mcp_client(id: &mail_mcp::ClientId) -> Self {
         Self(format!("{MCP_CLIENT_PREFIX}{id}"))
+    }
+
+    /// Stage 11: the entry that holds the settings sync key (`AGE-SECRET-KEY-1…`, never the
+    /// passphrase; decision 0014). One per device: the sync has one folder.
+    pub fn for_settings_sync() -> Self {
+        Self(SETTINGS_SYNC_KEY.to_owned())
     }
 
     /// Whether this is the entry of an AI client rather than an account password.

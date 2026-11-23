@@ -85,6 +85,9 @@ pub const WAKE_THRESHOLD: Duration = Duration::from_secs(20);
 /// Time the session tasks get to log out before they are aborted (account removed, app quits).
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
+/// Stage 11: pause between a change and the settings pass that uploads it.
+pub const SETTINGS_SYNC_DEBOUNCE: Duration = Duration::from_secs(2);
+
 /// Tunables of the sync engine. The defaults are the product values; tests shorten them.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
@@ -103,6 +106,15 @@ pub struct SyncConfig {
     /// Additional trusted root (tests against the local test server and the desktop test
     /// build only). `None` in the product.
     pub extra_root_ca: Option<ExtraRootCa>,
+    /// Stage 11: the settings sync runs its passes by itself (after local changes, after the
+    /// sync account's mail passes, at `poll_interval`). Tests turn it off to drive passes.
+    pub settings_sync_auto: bool,
+    /// Stage 11: pause after a wake-up before a settings pass, so a burst of changes is one
+    /// pass.
+    pub settings_sync_debounce: Duration,
+    /// Stage 11: scrypt work factor (log2 N) for new key records; the product uses 18
+    /// (`docs/SYNC.md`), tests 10.
+    pub settings_sync_work_factor: u8,
 }
 
 impl Default for SyncConfig {
@@ -120,6 +132,9 @@ impl Default for SyncConfig {
             shutdown_grace: SHUTDOWN_GRACE,
             timeouts: Timeouts::default(),
             extra_root_ca: None,
+            settings_sync_auto: true,
+            settings_sync_debounce: SETTINGS_SYNC_DEBOUNCE,
+            settings_sync_work_factor: 18,
         }
     }
 }
@@ -156,6 +171,8 @@ pub(crate) struct Env<C> {
     pub on_connected: OnConnected,
     /// Stage 9: told after each stored new-mail window outside the first sync.
     pub on_arrival: crate::comfort::OnArrival,
+    /// Stage 11: told which folder list holds a settings sync folder and when a pass ended.
+    pub sync_signals: Arc<crate::settings_sync::service::SyncSignals>,
 }
 
 impl<C> Clone for Env<C> {
@@ -169,6 +186,7 @@ impl<C> Clone for Env<C> {
             events: self.events.clone(),
             on_connected: Arc::clone(&self.on_connected),
             on_arrival: Arc::clone(&self.on_arrival),
+            sync_signals: Arc::clone(&self.sync_signals),
         }
     }
 }

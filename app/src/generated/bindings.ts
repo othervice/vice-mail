@@ -260,6 +260,42 @@ export const commands = {
 	getMcpStatus: (options?: InvokeOptions) => __TAURI_INVOKE<McpStatus>("get_mcp_status", undefined, options),
 	/**  Starts the helper like an AI client would and runs the handshake through it. */
 	testMcpConnection: (options?: InvokeOptions) => typedError<McpConnectionTest, IpcError>(__TAURI_INVOKE("test_mcp_connection", undefined, options)),
+	/**
+	 *  State, sync account and folder, last pass, devices, open questions, accounts that still
+	 *  need their password, accounts whose mailbox holds a sync folder (while off).
+	 */
+	getSettingsSyncStatus: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("get_settings_sync_status", undefined, options)),
+	/**
+	 *  Turns the sync on with `account_id`: creates the folder (unsubscribed), protects a new key
+	 *  with the passphrase and uploads this device's data. Allows writing to that one folder only.
+	 *  `sync_already_set_up`: the account holds a sync already (join it instead).
+	 */
+	enableSettingsSync: (accountId: AccountId, passphrase: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("enable_settings_sync", { accountId, passphrase }, options)),
+	/**
+	 *  Second device (or after a reset elsewhere): checks the passphrase and shows what joining
+	 *  would take over. Writes nothing; `sync_wrong_passphrase` changes nothing.
+	 */
+	previewSettingsSyncJoin: (accountId: AccountId, passphrase: string, options?: InvokeOptions) => typedError<SettingsSyncPreview, IpcError>(__TAURI_INVOKE("preview_settings_sync_join", { accountId, passphrase }, options)),
+	/**  Confirms the previewed join: merges, takes accounts over (they need their password here). */
+	joinSettingsSync: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("join_settings_sync", undefined, options)),
+	/**  A pass now. */
+	syncSettingsNow: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("sync_settings_now", undefined, options)),
+	/**
+	 *  Another device removed `account_id`: `remove` removes it here too, otherwise it is kept and
+	 *  comes back on every device.
+	 */
+	resolveSyncQuestion: (accountId: AccountId, remove: boolean, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("resolve_sync_question", { accountId, remove }, options)),
+	/**  Protects the key with a new passphrase; other devices keep working. */
+	changeSettingsSyncPassphrase: (passphrase: string, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("change_settings_sync_passphrase", { passphrase }, options)),
+	/**
+	 *  Forgotten passphrase or "reset sync": empties the folder, new key, uploads this device's
+	 *  data. Other devices then need the new passphrase.
+	 */
+	resetSettingsSync: (passphrase: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("reset_settings_sync", { passphrase }, options)),
+	/**  Turns the sync off on this device (the key leaves the keychain; the folder stays). */
+	disableSettingsSync: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("disable_settings_sync", undefined, options)),
+	/**  The name of this device in the device list (1 to 64 characters). */
+	setSyncDeviceName: (name: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("set_sync_device_name", { name }, options)),
 };
 
 /** Events */
@@ -299,6 +335,10 @@ export const MAX_THREAD_MESSAGES = 1000 as const;
 export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 
 export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
+
+export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
+
+export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
 /* Types */
 /**  A configured account as the UI sees it. */
@@ -892,8 +932,11 @@ export type ContactSuggestion = {
  *  - `mcpAccess` (stage 12): new entries of the AI access log ("Zugriffe"), oldest first.
  *  - `mcpStatusChanged` (stage 12): AI access was switched, its endpoint opened, closed or
  *    failed.
+ *  - `settingsSyncChanged` (stage 11): the settings sync's state, last pass, devices, open
+ *    questions or detected folders changed. Data a pass took over from another device comes
+ *    with the usual events (`preferencesChanged`, `accountsChanged`, `inboxChanged`, …).
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus };
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus };
 
 export type DateSection = {
 	kind: DateSectionKind,
@@ -1142,7 +1185,24 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  *  Stage 5: the message is in the outbox (cancel sending to change it), or its submission
  *  started and can no longer be cancelled.
  */
-"send_in_progress";
+"send_in_progress" | 
+/**  Stage 11: the passphrase does not unlock the settings sync; nothing was changed. */
+"sync_wrong_passphrase" | 
+/**  Stage 11: the account holds no settings sync yet (set it up instead of joining). */
+"sync_not_set_up" | 
+/**  Stage 11: the account holds a settings sync already (join it instead of setting up). */
+"sync_already_set_up" | 
+/**  Stage 11: the settings sync was reset on another device; enter the new passphrase. */
+"sync_key_changed" | 
+/**  Stage 11: the settings sync data in the mailbox is damaged or from a newer version. */
+"sync_key_invalid" | 
+/**  Stage 11: the request needs the settings sync to be on. */
+"sync_off" | 
+/**
+ *  Stage 11: the settings sync is on, but this device has no sync key; enter the
+ *  passphrase again.
+ */
+"sync_key_missing";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -2492,6 +2552,67 @@ export type ServerSettings = {
 	username: string,
 };
 
+/**  The preview a new device shows before it merges (`previewSettingsSyncJoin`). */
+export type SettingsSyncPreview = {
+	kinds: SyncKindCount[],
+	/**  Addresses of accounts that will be added; each asks for its password afterwards. */
+	newAccounts: string[],
+	/**  Records of this device that will be uploaded. */
+	uploads: number,
+	/**  Devices that already take part. */
+	devices: SyncDevice[],
+};
+
+/**  Overall state of the settings sync on this device. */
+export type SettingsSyncState = 
+/**  Not turned on. `detectedAccounts` lists accounts whose mailbox holds a sync folder. */
+"off" | 
+/**  On, the last pass worked (or none ran yet). */
+"active" | 
+/**
+ *  The sync key is missing from the keychain (`sync_key_missing`), or the folder was reset
+ *  on another device (`sync_key_changed`): enter the passphrase again
+ *  (`previewSettingsSyncJoin`, then `joinSettingsSync`). Nothing is written.
+ */
+"needsPassphrase" | 
+/**
+ *  On, but the last pass failed (`lastError`); retried with the account's sync. Reading
+ *  and sending mail are not affected.
+ */
+"error";
+
+/**  Everything the settings page shows about the sync. */
+export type SettingsSyncStatus = {
+	state: SettingsSyncState,
+	/**  The sync account; null while off. */
+	accountId: AccountId | null,
+	/**  Wire name of the sync folder; null while off. */
+	folder: string | null,
+	/**  Unix ms of the last complete pass; null before the first. */
+	lastSyncAt: number | null,
+	/**  Why the last pass failed (`error`, `needsPassphrase`). */
+	lastError: IpcError | null,
+	/**  Local changes not yet in the folder. */
+	pendingChanges: number,
+	/**
+	 *  Entries of the folder the last pass rejected (modified, damaged, from another key) and
+	 *  reported; the rest synced as usual.
+	 */
+	rejectedEntries: number,
+	devices: SyncDevice[],
+	questions: SyncQuestion[],
+	/**
+	 *  Accounts taken over from another device that still need their password on this one
+	 *  (`updatePassword`).
+	 */
+	accountsNeedingPassword: AccountId[],
+	/**
+	 *  Accounts whose mailbox holds a sync folder while the sync is off here: offer to join
+	 *  with the passphrase.
+	 */
+	detectedAccounts: AccountId[],
+};
+
 /**
  *  When a snoozed message comes back. Times are computed in the user's time zone; daylight
  *  saving changes are taken into account (a local time that does not exist moves forward).
@@ -2533,6 +2654,30 @@ export type SnoozeTimes = {
 	nextWeek: number,
 };
 
+/**  A device that takes part (each one writes a small record). */
+export type SyncDevice = {
+	/**  Random id of the device in the sync (not tied to the hardware). */
+	id: string,
+	name: string,
+	system: string,
+	/**  Unix ms; updated at most once a day. */
+	lastSeenAt: number,
+	/**  This device. */
+	current: boolean,
+};
+
+/**  What joining would take over, per kind of data. */
+export type SyncKindCount = {
+	/**  Kind name from `docs/SYNC.md` (`setting`, `signature`, `snooze`, …). */
+	kind: string,
+	/**  New here. */
+	added: number,
+	/**  Exists here and changes. */
+	changed: number,
+	/**  Exists here and is removed. */
+	removed: number,
+};
+
 /**  Progress of the first sync of one mailbox. */
 export type SyncProgress = {
 	mailboxId: MailboxId,
@@ -2541,6 +2686,15 @@ export type SyncProgress = {
 	/**  Messages in this mailbox on the server (EXISTS when the pass started). */
 	total: number,
 };
+
+/**  A decision only the user can make. */
+export type SyncQuestion = 
+/**
+ *  Another device removed this account (or it vanished from the folder long ago). It stays
+ *  here until the user decides (`resolveSyncQuestion`): remove it here too, or keep it,
+ *  which brings it back on every device.
+ */
+{ type: "accountRemoved"; accountId: AccountId; email: string };
 
 /**  Which tasks the "Aufgaben" view lists. */
 export type TaskFilter = "open" | "done" | "all";

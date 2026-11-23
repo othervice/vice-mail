@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod preferences;
 pub mod reading;
 pub mod search;
+pub mod settings_sync;
 pub mod threads;
 
 use mail_model::{CoreError, IpcError};

@@ -21,6 +21,10 @@
 //! - Stage 9 (`comfort_api`): categories classified when messages are stored (through the
 //!   engine's [`Classifier`]) and the user's sender rules, the inbox lists without snoozed and
 //!   pinned messages and per category, snoozes, pins, tasks, local rules (decision 0020).
+//! - Stage 11 (`settings_sync`): every change of a synchronised table is captured in the same
+//!   transaction (triggers mark it, the engine's [`SyncCapture`] versions it before commit);
+//!   records of a pass are applied with a check against concurrent local changes
+//!   (decision 0022).
 //! - Stage 12 (`mcp`): AI access over MCP: the switch, shared accounts, registered clients
 //!   (keys in the keychain) and the access log with its retention (decision 0021).
 
@@ -52,6 +56,7 @@ mod rules;
 mod search;
 mod search_api;
 mod settings;
+pub mod settings_sync;
 mod store;
 mod threads;
 mod workers;
@@ -86,6 +91,10 @@ pub use reading::{
 pub use search::{MAX_SEARCH_LIMIT, SearchFilter, StoredHit, StoredHitPage};
 pub use search_api::{INDEX_BATCH, IndexStep};
 pub use settings::{GLOBAL_SCOPE, Setting};
+pub use settings_sync::{
+    ApplyOutcome, ApplySkip, CaptureOutcome, CapturedChange, StoredSyncDevice, SyncApply,
+    SyncCapture, SyncProgress, SyncRecordRow, SyncStateRow, TableWrite,
+};
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 
 #[cfg(test)]
@@ -102,6 +111,8 @@ mod mail_tests;
 mod outbox_tests;
 #[cfg(test)]
 mod plan_tests;
+#[cfg(test)]
+mod settings_sync_tests;
 #[cfg(test)]
 mod stage7_plan_tests;
 #[cfg(test)]

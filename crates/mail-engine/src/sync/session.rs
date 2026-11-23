@@ -51,6 +51,18 @@ pub(crate) struct Reporter {
     session: mpsc::UnboundedSender<SessionEvent>,
     /// Stage 9: new-mail windows for local rules and notifications.
     arrival: crate::comfort::ArrivalHook,
+    /// Stage 11: the settings sync folder seen (or not) in the folder list.
+    sync_signals: SignalsHook,
+}
+
+/// [`crate::settings_sync::service::SyncSignals`] for the `Debug` reporter.
+#[derive(Clone)]
+pub(crate) struct SignalsHook(pub Arc<crate::settings_sync::service::SyncSignals>);
+
+impl std::fmt::Debug for SignalsHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SignalsHook")
+    }
 }
 
 impl Reporter {
@@ -97,6 +109,11 @@ impl Reporter {
             mailbox,
             uids,
         });
+    }
+
+    /// Stage 11: the folder list was read; `folder` is the settings sync folder in it.
+    pub(crate) fn sync_folder_seen(&self, folder: Option<String>) {
+        self.sync_signals.0.folder_seen(self.account, folder);
     }
 
     pub(crate) fn progress(&self, progress: SyncProgress) {
@@ -192,6 +209,7 @@ impl Session {
             events: env.events.clone(),
             session: events_tx,
             arrival: crate::comfort::ArrivalHook(Arc::clone(&env.on_arrival)),
+            sync_signals: SignalsHook(Arc::clone(&env.sync_signals)),
         };
         let (passes_tx, passes_rx) = mpsc::unbounded_channel();
         let (shutdown, shutdown_rx) = watch::channel(false);

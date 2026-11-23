@@ -244,7 +244,11 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                     SessionOutput::Event(SessionEvent::Progress(progress)) => {
                         SyncEvent::Progress(progress)
                     }
-                    SessionOutput::Event(SessionEvent::PassCompleted) => SyncEvent::PassCompleted,
+                    SessionOutput::Event(SessionEvent::PassCompleted) => {
+                        // Stage 11: the settings sync runs along with its account's mail sync.
+                        self.env.sync_signals.pass_completed(id);
+                        SyncEvent::PassCompleted
+                    }
                     SessionOutput::Event(SessionEvent::Changed) => SyncEvent::Changed,
                     SessionOutput::Ended(err) => {
                         drop(session.take());

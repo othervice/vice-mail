@@ -125,6 +125,107 @@ fn fetch_sets_no_flag(line: &str) -> Result<(), String> {
     }
 }
 
+/// Stage 11 (decision 0014): a read-only connection that may also write to exactly one
+/// mailbox, the settings sync folder. Besides the read-only allowlist it lets through only
+/// what the folder needs, each command checked against the exact line that would be sent:
+///
+/// - `SELECT "<folder>"` (optionally `(CONDSTORE)`), `CREATE "<folder>"`,
+///   `UNSUBSCRIBE "<folder>"`, `APPEND "<folder>" ()` or `(\Seen)`;
+/// - `UID STORE <uids> +FLAGS.SILENT (\Deleted)`, `UID EXPUNGE <uids>` and `EXPUNGE`, only
+///   while the folder is the selected mailbox (opened with SELECT here; an EXAMINE or a failed
+///   SELECT ends that).
+///
+/// Everything else fails with [`BackendError::ReadOnly`] before a byte is written, whatever the
+/// account's `writes_enabled` says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FolderScope {
+    /// The folder's wire name as a quoted string, as the commands carry it.
+    quoted: String,
+    /// The folder is the selected mailbox, opened with SELECT.
+    selected: bool,
+}
+
+impl FolderScope {
+    pub(crate) fn new(mailbox: &str) -> Result<Self, BackendError> {
+        if mailbox.is_empty() {
+            return Err(BackendError::InvalidState(
+                "the settings sync folder needs a name".into(),
+            ));
+        }
+        Ok(Self {
+            quoted: quote(mailbox)?,
+            selected: false,
+        })
+    }
+
+    fn check(&self, line: &str) -> Result<(), String> {
+        if read_only_check(line).is_ok() {
+            return Ok(());
+        }
+        let name = command_name(line);
+        if line.contains(['\r', '\n']) {
+            return Err(format!("{name} (multi-line)"));
+        }
+        let mut words = line.splitn(2, ' ');
+        let first = words.next().unwrap_or_default().to_ascii_uppercase();
+        let rest = words.next().unwrap_or_default();
+        let folder = self.quoted.as_str();
+        let allowed = match first.as_str() {
+            "SELECT" => rest == folder || rest.strip_prefix(folder) == Some(" (CONDSTORE)"),
+            "CREATE" | "UNSUBSCRIBE" => rest == folder,
+            "APPEND" => rest
+                .strip_prefix(folder)
+                .is_some_and(|flags| flags == " ()" || flags == " (\\Seen)"),
+            "EXPUNGE" => self.selected && rest.is_empty(),
+            "UID" => {
+                let mut parts = rest.splitn(2, ' ');
+                let verb = parts.next().unwrap_or_default().to_ascii_uppercase();
+                let args = parts.next().unwrap_or_default();
+                match verb.as_str() {
+                    "STORE" => {
+                        self.selected
+                            && args
+                                .strip_suffix(" +FLAGS.SILENT (\\Deleted)")
+                                .is_some_and(is_uid_set)
+                    }
+                    "EXPUNGE" => self.selected && is_uid_set(args),
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
+        if allowed {
+            Ok(())
+        } else {
+            Err(format!("{name} outside the settings sync folder"))
+        }
+    }
+
+    /// Tracks whether the folder is the selected mailbox after `line` ran.
+    fn after(&mut self, line: &str, ok: bool) {
+        let first = line
+            .split_ascii_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_ascii_uppercase();
+        match first.as_str() {
+            // Only a SELECT of the folder passes the check; a failed one deselects (RFC 3501).
+            "SELECT" => self.selected = ok,
+            "EXAMINE" | "CLOSE" | "UNSELECT" => self.selected = false,
+            _ => {}
+        }
+    }
+}
+
+/// A UID set as the adapter writes it: numbers, `:` and `,`, nothing else (no `*`).
+fn is_uid_set(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_digit() || b == b':' || b == b',')
+        && text.bytes().next().is_some_and(|b| b.is_ascii_digit())
+}
+
 fn command_name(line: &str) -> String {
     let mut words = line.split_ascii_whitespace();
     match (words.next(), words.next()) {
@@ -410,6 +511,8 @@ pub(crate) struct Conn<S: Transport> {
     timeouts: TimeoutHandle,
     read_limit: Duration,
     access: Access,
+    /// Stage 11: writes allowed to the settings sync folder only (see [`FolderScope`]).
+    folder: Option<FolderScope>,
     /// Why the connection is unusable; set while a command runs and cleared when it ends cleanly.
     poisoned: Option<String>,
     pub(crate) watch: Watch,
@@ -427,8 +530,30 @@ impl<S: Transport> Conn<S> {
             timeouts,
             read_limit,
             access,
+            folder: None,
             poisoned: None,
             watch: Watch::default(),
+        }
+    }
+
+    /// Stage 11: from now on the connection is read-only except for the settings sync folder
+    /// (see [`FolderScope`]). Called right after login, on a read-only connection.
+    pub(crate) fn restrict_to_folder(&mut self, scope: FolderScope) {
+        self.folder = Some(scope);
+    }
+
+    /// The access check for `line`: the folder scope if there is one, else the access mode.
+    fn check(&self, line: &str) -> Result<(), BackendError> {
+        match &self.folder {
+            Some(scope) => scope.check(line).map_err(BackendError::ReadOnly),
+            None => permit(self.access, line),
+        }
+    }
+
+    fn track(&mut self, line: &str, result: &Result<Tagged, BackendError>) {
+        if let Some(scope) = &mut self.folder {
+            let ok = matches!(result, Ok(tagged) if tagged.status == TaggedStatus::Ok);
+            scope.after(line, ok);
         }
     }
 
@@ -461,10 +586,11 @@ impl<S: Transport> Conn<S> {
         F: FnMut(&Response<'_>) -> bool + Send,
     {
         self.usable()?;
-        permit(self.access, line)?;
+        self.check(line)?;
         self.poisoned = Some(format!("{} was aborted", command_name(line)));
         let result = self.exchange(line, &mut on_untagged).await;
         self.settle(&result);
+        self.track(line, &result);
         result
     }
 
@@ -511,7 +637,7 @@ impl<S: Transport> Conn<S> {
         F: FnMut(&Response<'_>) -> bool + Send,
     {
         self.usable()?;
-        permit(self.access, line)?;
+        self.check(line)?;
         if line.contains(['\r', '\n']) {
             return Err(BackendError::InvalidState(format!(
                 "{} with a line break before the literal",
@@ -523,6 +649,7 @@ impl<S: Transport> Conn<S> {
             .literal_exchange(line, literal, non_sync, &mut on_untagged)
             .await;
         self.settle(&result);
+        self.track(line, &result);
         result
     }
 
@@ -602,8 +729,8 @@ impl<S: Transport> Conn<S> {
         St: Future<Output = ()> + Send,
     {
         self.usable()?;
-        permit(self.access, "IDLE")?;
-        permit(self.access, "DONE")?;
+        self.check("IDLE")?;
+        self.check("DONE")?;
         self.poisoned = Some("IDLE was aborted".into());
         let result = self.idle_exchange(max, stop).await;
         self.timeouts.set_read(self.read_limit);
@@ -711,7 +838,7 @@ impl<S: Transport> Conn<S> {
     /// LOGOUT, then close TLS. EOF after BYE is the expected end.
     pub(crate) async fn logout(mut self) -> Result<(), BackendError> {
         self.usable()?;
-        permit(self.access, "LOGOUT")?;
+        self.check("LOGOUT")?;
         let tag = self
             .session
             .run_command("LOGOUT")
@@ -811,6 +938,88 @@ mod tests {
             );
             assert_eq!(permit(Access::ReadWrite, line), Ok(()), "{line:?}");
         }
+    }
+
+    #[test]
+    fn folder_scope_writes_only_to_the_sync_folder() {
+        let mut scope = FolderScope::new("Settings-Sync").expect("scope");
+        let refused = |scope: &FolderScope, line: &str| {
+            assert!(scope.check(line).is_err(), "{line:?} must be refused");
+        };
+        // Reads pass as on any read-only connection.
+        for line in [
+            "LIST \"\" \"*\"",
+            "STATUS \"Settings-Sync\" (MESSAGES UIDNEXT)",
+            "EXAMINE \"INBOX\"",
+            "UID FETCH 1:* (UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (X-A X-B)])",
+            "UID FETCH 3 (UID BODY.PEEK[TEXT])",
+            "UID SEARCH DELETED",
+            "NOOP",
+        ] {
+            assert_eq!(scope.check(line), Ok(()), "{line:?}");
+        }
+        // The folder itself.
+        for line in [
+            "SELECT \"Settings-Sync\"",
+            "SELECT \"Settings-Sync\" (CONDSTORE)",
+            "CREATE \"Settings-Sync\"",
+            "UNSUBSCRIBE \"Settings-Sync\"",
+            "APPEND \"Settings-Sync\" (\\Seen)",
+            "APPEND \"Settings-Sync\" ()",
+        ] {
+            assert_eq!(scope.check(line), Ok(()), "{line:?}");
+        }
+        // Everywhere else, and anything the folder does not need.
+        for line in [
+            "SELECT \"INBOX\"",
+            "SELECT \"Settings-Sync2\"",
+            "SELECT \"Settings-Sync\" (QRESYNC (1 2))",
+            "CREATE \"Other\"",
+            "CREATE \"Settings-Sync\" (USE (\\Archive))",
+            "APPEND \"INBOX\" (\\Seen)",
+            "APPEND \"Settings-Sync\" (\\Flagged)",
+            "APPEND \"Settings-Sync\" (\\Seen) \"01-Jan-2026 00:00:00 +0000\"",
+            "SUBSCRIBE \"Settings-Sync\"",
+            "DELETE \"Settings-Sync\"",
+            "RENAME \"Settings-Sync\" \"x\"",
+            "UID COPY 1 \"Settings-Sync\"",
+            "UID MOVE 1 \"Settings-Sync\"",
+            "UID FETCH 1 (BODY[TEXT])",
+        ] {
+            refused(&scope, line);
+        }
+        // STORE and EXPUNGE only while the folder is selected for writing.
+        let store = "UID STORE 4:6,9 +FLAGS.SILENT (\\Deleted)";
+        refused(&scope, store);
+        refused(&scope, "UID EXPUNGE 4:6,9");
+        refused(&scope, "EXPUNGE");
+        scope.after("SELECT \"Settings-Sync\"", true);
+        for line in [store, "UID EXPUNGE 4:6,9", "EXPUNGE"] {
+            assert_eq!(scope.check(line), Ok(()), "{line:?}");
+        }
+        for line in [
+            "UID STORE 4 +FLAGS (\\Deleted)",
+            "UID STORE 4 +FLAGS.SILENT (\\Seen)",
+            "UID STORE 1:* +FLAGS.SILENT (\\Deleted)",
+            "UID STORE 4 -FLAGS.SILENT (\\Deleted)",
+            "STORE 4 +FLAGS.SILENT (\\Deleted)",
+            "UID EXPUNGE 1:*",
+            "UID EXPUNGE",
+            "EXPUNGE extra",
+            "NOOP\r\nA0009 UID STORE 1 +FLAGS (\\Deleted)",
+        ] {
+            refused(&scope, line);
+        }
+        // Opening any mailbox read-only (or failing to select) ends the write permission.
+        scope.after("EXAMINE \"INBOX\"", true);
+        refused(&scope, store);
+        scope.after("SELECT \"Settings-Sync\"", true);
+        scope.after("SELECT \"Settings-Sync\"", false);
+        refused(&scope, store);
+        assert_eq!(
+            scope.check("APPEND \"INBOX\" ()"),
+            Err("APPEND outside the settings sync folder".to_owned())
+        );
     }
 
     #[test]

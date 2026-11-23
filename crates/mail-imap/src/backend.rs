@@ -212,6 +212,67 @@ impl<S: Transport> ImapBackend<S> {
         }
     }
 
+    /// EXAMINE or SELECT (`verb`) of `name` (wire name); the command layer decides whether a
+    /// SELECT may be sent (read-write connections, and the settings sync folder).
+    pub(crate) async fn open_as(
+        &mut self,
+        name: &str,
+        verb: &'static str,
+    ) -> Result<SelectedMailbox, BackendError> {
+        let condstore = if self.caps.condstore {
+            " (CONDSTORE)"
+        } else {
+            ""
+        };
+        let line = format!("{verb} {}{condstore}", quote(name)?);
+        // A failed EXAMINE/SELECT leaves no mailbox selected (RFC 3501).
+        self.selected = None;
+        let mut state = OpenState::default();
+        let tagged = self.conn.run(&line, |resp| state.take(resp)).await?;
+        match tagged.status {
+            TaggedStatus::Ok => {}
+            TaggedStatus::No => {
+                let code = tagged.bracket_code().unwrap_or_default();
+                return Err(if NOT_A_MISSING_MAILBOX.contains(&code.as_str()) {
+                    BackendError::Rejected(format!("{verb}: NO {}", tagged.text))
+                } else {
+                    BackendError::MailboxNotFound(name.to_owned())
+                });
+            }
+            TaggedStatus::Bad => {
+                return Err(BackendError::Rejected(format!(
+                    "{verb}: BAD {}",
+                    tagged.text
+                )));
+            }
+        }
+        let uid_validity = state.uid_validity.ok_or_else(|| {
+            BackendError::Protocol(format!("{verb} {} without UIDVALIDITY", short(name)))
+        })?;
+        let exists = state.exists.unwrap_or(0);
+        let uid_next = match state.uid_next {
+            Some(next) => next,
+            None => self.derive_uid_next(exists).await?,
+        };
+        let highest_modseq = if state.no_modseq || !self.caps.condstore {
+            None
+        } else {
+            state.highest_modseq.map(ModSeq)
+        };
+        self.conn.watch.reset(exists);
+        let mailbox = SelectedMailbox {
+            name: name.to_owned(),
+            uid_validity: UidValidity(uid_validity),
+            uid_next,
+            exists,
+            highest_modseq,
+            read_only: verb == "EXAMINE" || tagged.read_only,
+            keywords_allowed: state.keywords_allowed,
+        };
+        self.selected = Some(mailbox.clone());
+        Ok(mailbox)
+    }
+
     /// UIDNEXT for a server that did not send it: highest UID + 1, or 1 for an empty mailbox.
     async fn derive_uid_next(&mut self, exists: u32) -> Result<Uid, BackendError> {
         if exists == 0 {
@@ -483,58 +544,7 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
             Access::ReadOnly => "EXAMINE",
             Access::ReadWrite => "SELECT",
         };
-        let condstore = if self.caps.condstore {
-            " (CONDSTORE)"
-        } else {
-            ""
-        };
-        let line = format!("{verb} {}{condstore}", quote(name)?);
-        // A failed EXAMINE/SELECT leaves no mailbox selected (RFC 3501).
-        self.selected = None;
-        let mut state = OpenState::default();
-        let tagged = self.conn.run(&line, |resp| state.take(resp)).await?;
-        match tagged.status {
-            TaggedStatus::Ok => {}
-            TaggedStatus::No => {
-                let code = tagged.bracket_code().unwrap_or_default();
-                return Err(if NOT_A_MISSING_MAILBOX.contains(&code.as_str()) {
-                    BackendError::Rejected(format!("{verb}: NO {}", tagged.text))
-                } else {
-                    BackendError::MailboxNotFound(name.to_owned())
-                });
-            }
-            TaggedStatus::Bad => {
-                return Err(BackendError::Rejected(format!(
-                    "{verb}: BAD {}",
-                    tagged.text
-                )));
-            }
-        }
-        let uid_validity = state.uid_validity.ok_or_else(|| {
-            BackendError::Protocol(format!("{verb} {} without UIDVALIDITY", short(name)))
-        })?;
-        let exists = state.exists.unwrap_or(0);
-        let uid_next = match state.uid_next {
-            Some(next) => next,
-            None => self.derive_uid_next(exists).await?,
-        };
-        let highest_modseq = if state.no_modseq || !self.caps.condstore {
-            None
-        } else {
-            state.highest_modseq.map(ModSeq)
-        };
-        self.conn.watch.reset(exists);
-        let mailbox = SelectedMailbox {
-            name: name.to_owned(),
-            uid_validity: UidValidity(uid_validity),
-            uid_next,
-            exists,
-            highest_modseq,
-            read_only: self.access == Access::ReadOnly || tagged.read_only,
-            keywords_allowed: state.keywords_allowed,
-        };
-        self.selected = Some(mailbox.clone());
-        Ok(mailbox)
+        self.open_as(name, verb).await
     }
 
     async fn search_uids(&mut self, mailbox: &SelectedMailbox) -> Result<UidSet, BackendError> {

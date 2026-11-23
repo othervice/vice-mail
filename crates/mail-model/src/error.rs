@@ -69,6 +69,21 @@ pub enum ErrorCode {
     /// Stage 5: the message is in the outbox (cancel sending to change it), or its submission
     /// started and can no longer be cancelled.
     SendInProgress,
+    /// Stage 11: the passphrase does not unlock the settings sync; nothing was changed.
+    SyncWrongPassphrase,
+    /// Stage 11: the account holds no settings sync yet (set it up instead of joining).
+    SyncNotSetUp,
+    /// Stage 11: the account holds a settings sync already (join it instead of setting up).
+    SyncAlreadySetUp,
+    /// Stage 11: the settings sync was reset on another device; enter the new passphrase.
+    SyncKeyChanged,
+    /// Stage 11: the settings sync data in the mailbox is damaged or from a newer version.
+    SyncKeyInvalid,
+    /// Stage 11: the request needs the settings sync to be on.
+    SyncOff,
+    /// Stage 11: the settings sync is on, but this device has no sync key; enter the
+    /// passphrase again.
+    SyncKeyMissing,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -290,6 +305,10 @@ pub enum CoreError {
     /// A compose request was refused (stage 5); nothing changed.
     #[error(transparent)]
     Draft(#[from] crate::DraftError),
+
+    /// A settings sync request failed (stage 11).
+    #[error(transparent)]
+    SettingsSync(#[from] crate::SettingsSyncFailure),
 }
 
 impl CoreError {
@@ -305,6 +324,7 @@ impl CoreError {
             Self::AccountExists(_) => ErrorCode::AccountExists,
             Self::Action(err) => err.code(),
             Self::Draft(err) => err.code(),
+            Self::SettingsSync(err) => err.code(),
         }
     }
 
@@ -333,6 +353,7 @@ impl CoreError {
             Self::AccountExists(_) => "An account with this email address is already set up.",
             Self::Action(err) => err.message(),
             Self::Draft(err) => err.message(),
+            Self::SettingsSync(err) => err.message(),
         }
     }
 
@@ -351,6 +372,7 @@ impl CoreError {
             Self::Mail(err) => err.detail(),
             Self::Action(err) => err.detail(),
             Self::Draft(err) => err.detail(),
+            Self::SettingsSync(err) => err.detail(),
         }
     }
 }
@@ -443,6 +465,13 @@ mod tests {
             (ErrorCode::InvalidAddress, "invalid_address"),
             (ErrorCode::AttachmentTooLarge, "attachment_too_large"),
             (ErrorCode::SendInProgress, "send_in_progress"),
+            (ErrorCode::SyncWrongPassphrase, "sync_wrong_passphrase"),
+            (ErrorCode::SyncNotSetUp, "sync_not_set_up"),
+            (ErrorCode::SyncAlreadySetUp, "sync_already_set_up"),
+            (ErrorCode::SyncKeyChanged, "sync_key_changed"),
+            (ErrorCode::SyncKeyInvalid, "sync_key_invalid"),
+            (ErrorCode::SyncOff, "sync_off"),
+            (ErrorCode::SyncKeyMissing, "sync_key_missing"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);

@@ -153,7 +153,7 @@ impl ComfortState {
         self.snoozes.notify_one();
     }
 
-    fn kick_categories(&self) {
+    pub(crate) fn kick_categories(&self) {
         self.categories.notify_one();
     }
 

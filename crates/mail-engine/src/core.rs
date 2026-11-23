@@ -54,10 +54,18 @@ pub struct CoreConfig {
 }
 
 /// What the core needs from the mail adapter: read-only connections for the sync, IDLE and
-/// reading ([`MailConnector`]) and writer connections for the outbox ([`WriteConnector`]).
-pub trait Connector: MailConnector + WriteConnector + 'static {}
+/// reading ([`MailConnector`]), writer connections for the outbox ([`WriteConnector`]) and,
+/// since stage 11, the settings sync connection that may write to its folder only
+/// ([`mail_model::SyncFolderConnector`]).
+pub trait Connector:
+    MailConnector + WriteConnector + mail_model::SyncFolderConnector + 'static
+{
+}
 
-impl<T: MailConnector + WriteConnector + 'static> Connector for T {}
+impl<T: MailConnector + WriteConnector + mail_model::SyncFolderConnector + 'static> Connector
+    for T
+{
+}
 
 /// What the core is given instead of reaching for it: the keychain, the mail connector, the
 /// clock and the sync tunables. Tests inject an in-memory keychain, a fake or instrumented
@@ -150,6 +158,8 @@ struct Inner<C: Connector> {
     comfort: crate::comfort::ComfortState,
     /// Stage 12: AI access over MCP (host, settings, access log).
     mcp: crate::mcp::McpState<C>,
+    /// Stage 11: the settings sync (capture hook, clock, worker, folder connection).
+    settings_sync: crate::settings_sync::service::SettingsSync<C>,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -169,6 +179,7 @@ impl<C: Connector> Drop for Inner<C> {
         }
         self.comfort.stop();
         self.mcp.abort();
+        self.settings_sync.stop();
     }
 }
 
@@ -226,6 +237,12 @@ impl<C: Connector> AppCore<C> {
             }
         }
 
+        // Stage 11 first: the capture hook must be set before anything writes.
+        let settings_sync = crate::settings_sync::service::SettingsSync::new(
+            opened.as_ref().ok(),
+            Arc::clone(&services.clock),
+        )
+        .await;
         let (events, _) = broadcast::channel(EVENT_CAPACITY);
         let accounts = Arc::new(Registry::default());
         let sync = Arc::new(services.sync);
@@ -315,6 +332,7 @@ impl<C: Connector> AppCore<C> {
                 sender,
                 comfort,
                 mcp: crate::mcp::McpState::new(config.data_dir.clone()),
+                settings_sync,
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -334,6 +352,8 @@ impl<C: Connector> AppCore<C> {
         }
         // Stage 12: the MCP host (it listens only while AI access is on).
         crate::mcp::start(&core).await;
+        // Stage 11: the settings sync's worker (it only connects while the sync is on).
+        crate::settings_sync::service::start(&core);
         core
     }
 
@@ -546,6 +566,10 @@ impl<C: Connector> AppCore<C> {
         if let Err(err) = self.mcp_reload().await {
             tracing::warn!(error = %err, "MCP settings could not be republished");
         }
+        // Stage 11: removing the sync account turns the settings sync off. Not under the admin
+        // lock: a settings pass may be waiting for it (it restarts accounts it changed).
+        drop(_admin);
+        self.sync_account_removed(id).await;
         self.emit(CoreEvent::AccountsChanged);
         Ok(())
     }
@@ -588,6 +612,10 @@ impl<C: Connector> AppCore<C> {
         if let Some(outbox) = &self.inner.outbox {
             // It reads the new password from the keychain on its next connect.
             outbox.wake(id);
+        }
+        // Stage 11: an account taken over from another device has its password now.
+        if let Err(err) = store.clear_sync_adopted(id).await {
+            tracing::warn!(account = %id, error = %err, "adopted mark not cleared");
         }
         tracing::info!(account = %id, "password replaced");
         Ok(())
@@ -905,6 +933,13 @@ impl<C: Connector> AppCore<C> {
         self.inner.stop_reading();
         self.inner.search.stop();
         self.inner.comfort.stop();
+        self.inner.settings_sync.stop();
+        if let Some(folder) = self.inner.settings_sync.take_connection().await {
+            use mail_model::SyncFolder;
+            if let Err(err) = folder.logout().await {
+                tracing::debug!(error = %err, "LOGOUT of the settings sync connection failed");
+            }
+        }
         tracing::info!("sync stopped");
     }
 
@@ -935,6 +970,7 @@ impl<C: Connector> AppCore<C> {
             events: self.inner.events.clone(),
             on_connected: Arc::clone(&self.inner.on_connected),
             on_arrival: self.inner.comfort.on_arrival(),
+            sync_signals: Arc::clone(&self.inner.settings_sync.signals),
         };
         let id = account.id;
         let handle = account::spawn(env, account, password);
@@ -1061,6 +1097,81 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn credentials_ref(&self) -> &Credentials {
         &self.inner.credentials
+    }
+
+    // Stage 11 (`crate::settings_sync::service`) works through these.
+
+    pub(crate) fn settings_sync(&self) -> &crate::settings_sync::service::SettingsSync<C> {
+        &self.inner.settings_sync
+    }
+
+    pub(crate) fn sync_config(&self) -> Arc<SyncConfig> {
+        Arc::clone(&self.inner.sync)
+    }
+
+    pub(crate) fn connector_ref(&self) -> &Arc<C> {
+        &self.inner.connector
+    }
+
+    pub(crate) fn wall_clock(&self) -> Arc<dyn Clock> {
+        Arc::clone(&self.inner.clock)
+    }
+
+    /// An account taken over from another device: its sync starts (and waits for the
+    /// password), and the UI hears of it.
+    pub(crate) async fn start_synced_account(&self, id: AccountId) {
+        let Ok(store) = self.store() else { return };
+        match store.account(id).await {
+            Ok(Some(account)) => {
+                tracing::info!(account = %id, "account taken over from another device");
+                self.spawn_sync(account, None);
+            }
+            Ok(None) => {}
+            Err(err) => tracing::warn!(account = %id, error = %err, "adopted account unreadable"),
+        }
+    }
+
+    /// The account's settings changed through the settings sync: its sync reconnects with them.
+    pub(crate) async fn restart_account_sync(&self, id: AccountId) {
+        let Ok(store) = self.store() else { return };
+        let Ok(Some(account)) = store.account(id).await else {
+            return;
+        };
+        let _admin = self.inner.admin.lock().await;
+        if let Some(handle) = self.inner.accounts.remove(id) {
+            handle.stop(self.inner.sync.shutdown_grace).await;
+        }
+        if let Some(reading) = &self.inner.reading {
+            reading.credentials_changed(id);
+        }
+        self.spawn_sync(account, None);
+    }
+
+    /// A local account took the id of the same account in the settings sync folder: its tasks
+    /// run under the new id from now on (the keychain entry and the local data stay).
+    pub(crate) async fn rekeyed_account(&self, old: AccountId, new: AccountId) {
+        let _admin = self.inner.admin.lock().await;
+        if let Some(handle) = self.inner.accounts.remove(old) {
+            handle.stop(self.inner.sync.shutdown_grace).await;
+        }
+        if let Some(outbox) = &self.inner.outbox {
+            outbox.stop_account(old).await;
+        }
+        if let Some(reading) = &self.inner.reading {
+            reading.forget_account(old);
+        }
+        let Ok(store) = self.store() else { return };
+        match store.account(new).await {
+            Ok(Some(account)) => {
+                tracing::info!(%old, %new, "account matched with the settings sync");
+                self.spawn_sync(account, None);
+                if let Some(outbox) = &self.inner.outbox {
+                    outbox.wake(new);
+                }
+            }
+            Ok(None) => {}
+            Err(err) => tracing::warn!(account = %new, error = %err, "matched account unreadable"),
+        }
     }
 
     // Stage 9 (`crate::comfort`) works through these.

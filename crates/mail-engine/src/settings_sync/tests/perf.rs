@@ -36,14 +36,14 @@ fn fill(device: &mut Device) {
             &format!("<pin-{n}@example.org>"),
         )
         .expect("pin");
-        device.put(&key, json!({}));
+        device.put(&key, json!({ "pinnedAtMs": START_MS }));
     }
     for n in 0..150 {
         let key =
             RecordKey::uuid(RecordKind::Rule, uuid::Uuid::from_u128(0x7000 + n)).expect("rule");
         device.put(
             &key,
-            json!({ "if": { "from": format!("x{n}@example.org") }, "then": "archive" }),
+            rule_content(&format!("x{n}@example.org"), i64::try_from(n).unwrap_or(0)),
         );
     }
     for n in 0..48 {

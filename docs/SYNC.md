@@ -1,9 +1,9 @@
 # Settings sync format
 
 Status 23.11.2026. The logic (records, versions, merge rules, encryption, planning, the pass
-over a transport) is implemented in `crates/mail-engine/src/settings_sync/`. The IMAP
-transport, the `sync_record` table and the UI follow with the rest of stage 11; where this
-document describes them, it says so ("planned").
+over a transport) is in `crates/mail-engine/src/settings_sync/`; the integration (change
+capture in the store, the IMAP folder, the flows in the core) is described in decision 0022.
+The settings page itself (UI) follows.
 
 The settings sync merges what only the app knows between devices. The mail server already
 syncs mails, folders, flags and drafts; they are not part of this. Passwords, tokens and keys
@@ -11,19 +11,41 @@ never leave the device.
 
 ## Folder
 
-- **Planned (IMAP):** one dedicated folder in an account the user picks (the "sync account").
-  It is created but not subscribed, so most other mail clients do not show it.
-- **One entry per record version.** On IMAP an entry is one message: two header values (below)
-  and the age ciphertext as the body. Changing a record means appending the new version, then
-  deleting the old one. A crash in between leaves two versions; the next pass of any device
-  removes the loser.
-- **Header values** are the only plaintext besides size and time:
-  - *opaque id*: 32 lowercase hex digits for a record, `key-` plus 32 hex digits for the key
-    record;
-  - *version*: the hybrid logical clock value, `TTTTTTTTTTTTT-CCCCCCCC-<device uuid>`
-    (13 decimal digits of Unix milliseconds, 8 hex digits of counter, the writing device's
-    random id), for example `1764000000000-0000002a-6f9619ff-8b86-4d11-b42d-00c04fc964ff`.
-    Fixed width, so the text sorts like the versions.
+- **One folder** in an account the user picks (the "sync account"): `Settings-Sync` at the top
+  level, or `INBOX<delimiter>Settings-Sync` on servers that keep every folder below the inbox.
+  The name is plain ASCII without hierarchy delimiters, spaces or a leading dot (no modified
+  UTF-7, never split into a hierarchy, valid on every common server), neutral (no product
+  name) and tells a person who finds it in another mail client what it is.
+- **Not subscribed**: created with CREATE and unsubscribed right after (some servers subscribe
+  new folders themselves), so most mail clients do not show it. The app's own mail sync leaves
+  it out of the folder list; seeing it there tells a new device that the account holds a sync.
+- **Writing only there.** Turning the sync on allows the app to write to this folder only
+  (decision 0014): its connection is read-only for the rest of the account, also when writing
+  is off for the account. The IMAP adapter checks every command line before it is sent:
+  `SELECT`, `CREATE`, `UNSUBSCRIBE` and `APPEND` name exactly this folder, and
+  `UID STORE <uids> +FLAGS.SILENT (\Deleted)`, `UID EXPUNGE <uids>` and `EXPUNGE` pass only
+  while it is the selected mailbox. Everything else fails with `read_only`.
+- **One message per record version**: two header fields and the age ciphertext as the body.
+  Changing a record means appending the new version, then deleting the old one. A crash in
+  between leaves two versions; the next pass of any device removes the loser.
+- **Header fields** are the only plaintext besides size and time:
+  - `X-Settings-Sync-Id`, the *opaque id*: 32 lowercase hex digits for a record, `key-` plus 32
+    hex digits for the key record;
+  - `X-Settings-Sync-Version`, the *version*: the hybrid logical clock value,
+    `TTTTTTTTTTTTT-CCCCCCCC-<device uuid>` (13 decimal digits of Unix milliseconds, 8 hex
+    digits of counter, the writing device's random id), for example
+    `1764000000000-0000002a-6f9619ff-8b86-4d11-b42d-00c04fc964ff`. Fixed width, so the text
+    sorts like the versions.
+- **The rest of the message**: `Date` (the time of writing), `Subject: Settings sync data
+  (encrypted, do not edit)`, `Content-Type: text/plain; charset=us-ascii`, and the body in
+  age's ASCII armor (`-----BEGIN AGE ENCRYPTED FILE-----`, 7-bit, CRLF). Appended with `\Seen`.
+  Messages without both header fields are not the sync's: it never reads, changes or deletes
+  them (also not when it is reset).
+- **Changes are noticed by the folder's state.** At the start of every pass the folder is
+  selected; UIDVALIDITY, UIDNEXT, EXISTS and HIGHESTMODSEQ are kept. Unchanged, with nothing
+  local to upload, the pass ends there (one SELECT on a kept connection). Passes run after a
+  local change (two seconds later, so a burst is one pass), after each pass of the sync
+  account's mail sync, and at the mail sync's poll interval.
 - The transport is a trait, `SettingsTransport` (list, read, write, delete). Tests use an
   in-memory folder; a self-hosted server or a plain directory could be further transports.
 
@@ -92,35 +114,52 @@ new `format` or a new kind name; older versions then leave such records alone.
 ### Kinds
 
 Only kinds in the registry (`REGISTRY` in `record.rs`) exist; of the `setting` table only the
-keys in `SYNCED_SETTINGS` (`ui.theme`, `ui.language`). Device settings such as `prefetch.*`
+keys in `SYNCED_SETTINGS`: `ui.theme`, `ui.language`, `reading.mark_read_on_open`,
+`compose.send_delay_seconds`, `notifications.settings`. Device settings such as `prefetch.*`
+(what this machine keeps offline) and `inbox.settings` (categories and bundles on this screen)
 stay local.
 
-| Kind (`kind`) | Id | Merge rule | Removed elsewhere | Max content |
-|---|---|---|---|---|
-| `setting` | `global/<key>` or `<account uuid>/<key>` | newer wins | applied | 4 KiB |
-| `signature` | UUID | newer wins, edit beats delete | applied | 64 KiB |
-| `template` | UUID | newer wins, edit beats delete | applied | 256 KiB |
-| `rule` | UUID | newer wins, edit beats delete | applied | 16 KiB |
-| `savedView` | UUID | newer wins, edit beats delete | applied | 16 KiB |
-| `snooze` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB |
-| `pin` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB |
-| `account` | account UUID | per field | **user is asked** | 16 KiB |
-| `identity` | UUID | newer wins, edit beats delete | applied | 16 KiB |
-| `aiSettings` | UUID | newer wins, edit beats delete | applied | 16 KiB |
-| `device` | device UUID | newer wins | applied | 4 KiB |
+| Kind (`kind`) | Id | Merge rule | Removed elsewhere | Max content | Local data |
+|---|---|---|---|---|---|
+| `setting` | `global/<key>` or `<account uuid>/<key>` | newer wins | applied | 4 KiB | `setting` |
+| `signature` | identity UUID | newer wins, edit beats delete | applied | 64 KiB | `identity.signature` |
+| `template` | UUID | newer wins, edit beats delete | applied | 256 KiB | none yet |
+| `rule` | UUID | newer wins, edit beats delete | applied | 16 KiB | `rule` |
+| `savedView` | UUID | newer wins, edit beats delete | applied | 16 KiB | none yet |
+| `snooze` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `snooze` |
+| `pin` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `pin` |
+| `account` | account UUID | per field | **user is asked** | 16 KiB | `account` |
+| `identity` | UUID | newer wins, edit beats delete | applied | 16 KiB | `identity` |
+| `aiSettings` | UUID | newer wins, edit beats delete | applied | 16 KiB | none yet |
+| `device` | device UUID | newer wins | applied | 4 KiB | `sync_device` |
+| `task` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `task` |
+| `senderRule` | `address:<v>`, `domain:<v>` or `list_id:<v>` | newer wins | applied | 1 KiB | `sender_rule` |
+| `accountGroup` | UUID | newer wins, edit beats delete | applied | 16 KiB | `account_group` |
+| `remoteContent` | `<account uuid>/<address>` | newer wins | applied | 1 KiB | `remote_content_sender` |
+| `contact` | normalised address | newer wins | applied | 4 KiB | `contact.user_name` |
 
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
-ids or UIDs.
+ids or UIDs. Sender rules are referred to by their normalised key, not by a UUID: two devices
+that set "always as newsletter" for the same sender change the same record.
 
-**Planned for stage 11, from stage 9 (decision 0020):** the tables exist (`snooze`, `pin`,
-`task`, `sender_rule`, `rule`), the kinds are not in `REGISTRY` yet:
-- `task`: id `<account uuid>/<Message-ID>`, newer wins, content `{doneAt}` (null while open);
-- sender rules: id = the rule's UUID, newer wins, content `{key: {kind, value}, category,
-  important}` (key normalised); either a kind of its own (`senderRule`) or `rule` with
-  `"type": "sender"`;
-- local rules: `rule`, content `{name, enabled, position, matchAll, conditions, actions, stop}`;
-- `snooze` content `{until, returnedAt}`, `pin` content `{pinnedAt}`.
-`inbox.settings` and `notifications.settings` stay device settings.
+**Content per kind** (JSON, camelCase, unknown fields refused):
+
+| Kind | Content |
+|---|---|
+| `setting` | the setting's JSON value (not null) |
+| `signature` | `{text?, html?}`, at least one (today only `text`) |
+| `identity` | `{account, email, name, replyTo, isDefault}` (the signature is its own record) |
+| `rule` | `{name, position, enabled, definition: {matchAll, conditions, actions, stop}}` |
+| `snooze` | `{untilMs}`; whether it came back is each device's own (every device's timer brings it back) |
+| `pin` | `{pinnedAtMs}` |
+| `task` | `{doneAtMs}` (null while open) |
+| `senderRule` | `{category, important}`: `person`, `notification`, `newsletter` or null; not both empty |
+| `accountGroup` | `{name, position, accounts: [account uuid, …]}` |
+| `remoteContent` | `{}` (that it exists is all) |
+| `contact` | `{userName}`: the name the user gave |
+| `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
+| `device` | `{name, system, lastSeenMs}` |
+| `template`, `savedView`, `aiSettings` | any object (no local data yet; kept as they are) |
 
 ### No secrets
 
@@ -167,21 +206,41 @@ tests).
   it is stored as a new version.
 - **Account removed elsewhere:** a winning tombstone does not delete a live local account. The
   user is asked: remove it here too, or keep it, which stores it again under a new version and
-  brings it back on every device.
+  brings it back on every device. Until the user decides, the removals of the account's other
+  records (identities, signatures, snoozes, pins, tasks, remote content senders, its settings)
+  wait too; keeping the account renews them as well, so they come back with it.
 
 ## A pass
 
 1. List the folder (headers only). Without any key record: "not set up". With key records of
    another key only: "reset elsewhere, enter the passphrase again". Nothing is written then.
 2. Decide what to download: not the versions equal to the local or last synced version, and not
-   those that provably lose against the local version from the header alone.
+   those that provably lose against the local version from the header alone. Once a day the
+   pass downloads and checks every entry (`PassMode::FullCheck`).
 3. Download, decrypt, check against the header.
 4. Merge every record. Upload the winner if it is not on the server, then delete the other
    versions and extra copies (upload first, so a crash leaves a duplicate, never a gap), then
    store the result locally with its synced version.
 
-A failed upload leaves the record unchanged locally and is retried by the next pass. Reading
-and sending mail do not depend on the sync account.
+A failed upload leaves the record unchanged locally and is retried by the next pass. A record
+that changed locally while the pass ran is not overwritten; the next pass merges both. Reading
+and sending mail do not depend on the sync account: the sync has a connection of its own, and
+its failure only shows in its status.
+
+**Local side.** Every change of a synchronised table gets its new version in the transaction
+that makes it: triggers mark the record, and before the transaction commits the store hands
+the new content to the core, which versions it (unchanged content keeps its version). Records
+of a pass are written into their tables without such a mark, so applying never creates a new
+version.
+
+**The same thing on both sides under different ids.** The sync account is set up on the second
+device before it joins, with its own account id and default identity. A local account with the
+address of an account in the folder, or a local identity with the account and address of one
+in the folder, that was never synced takes the folder's id (the keychain entry, the stored
+mail and the local data stay); its local records are replaced by the folder's.
+
+**Accounts taken over** start read-only and without a password ("password missing"), and
+without a default identity of their own (their identities come from the folder).
 
 ## Tombstones and absent records
 
@@ -205,7 +264,11 @@ and sending mail do not depend on the sync account.
 
 - **Setup:** new key, key record with the passphrase, then the first pass uploads everything.
 - **Join (second device):** the key records are tried newest first. A wrong passphrase is a
-  typed error (`WrongPassphrase`); nothing is written on the server or locally.
+  typed error (`WrongPassphrase`); nothing is written on the server or locally. The device
+  first shows what joining would take over (a pass planned against its data, nothing
+  written), then merges like a new device.
+- **Passphrase rules:** at least 8 characters; the UI shows a hint about strength and what
+  forgetting it means. The keychain holds the sync key, never the passphrase (decision 0014).
 - **Change:** the key is wrapped again with the new passphrase and written as a new key record,
   then the old one is deleted. Other devices keep working with the key they hold.
 - **Forgotten / reset:** every entry in the folder is deleted, a new key is set up, and every
@@ -217,7 +280,9 @@ and sending mail do not depend on the sync account.
 - **Number of entries**, and that one of them is a key record.
 - **Sizes**: plaintexts are padded to 256-byte blocks, and age adds a random "grease" stanza of
   up to a few hundred bytes to every header.
-- **Times**: when an entry was stored (IMAP internal date) and the version's time.
+- **Times**: when an entry was stored (IMAP internal date, the `Date` field) and the version's
+  time; when a device checks the folder (its connection and SELECTs).
+- **That the account holds a settings sync** (the folder and its fixed subject).
 - **Which entries are versions of the same record** (same opaque id), so how often and when a
   record changes, and how many records there are.
 - **The writing device's random id** in every version: how many devices take part and which
@@ -246,4 +311,16 @@ views; 912 KiB encrypted), in-memory folder, age 0.11.5, Apple M4
 In the debug build the dependencies are unoptimised. With optimisation (release build of the
 same age calls) encrypting 1,000 records of 1,280 bytes takes 41 ms and decrypting 39 ms;
 scrypt at log2(N) = 18 takes 356 ms to wrap and 341 ms to unwrap (debug build: 12.8 s each).
-The IMAP round trips of the planned transport come on top.
+
+**Over IMAP** (two engines with their own databases, local Stalwart 1.1.1 over TLS, debug
+build, scrypt log2(N) = 10 in the tests; `cargo test -p mail-engine --test settings_sync --
+--include-ignored a_thousand --nocapture`): 1,000 sender rules plus the account, identity and
+device records (1,003 entries):
+
+| Step | Time |
+|---|---|
+| creating the 1,000 rules (each a write transaction with its capture) | 2.3 s |
+| turning the sync on: key, first pass, 1,003 APPENDs | 0.76 s |
+| joining on the second device: preview (download, decrypt, plan), then the first pass (download again, match the sync account and its identity, merge, write 1,003 records into the tables) | 1.9 s |
+| a pass without changes (forced: list the headers, nothing downloaded) | 37 ms |
+| the daily full check (download and check everything) | 0.47 s |

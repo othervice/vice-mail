@@ -1,0 +1,413 @@
+//! Stage 11: every registered kind is captured when its data changes through the core, in the
+//! transaction that changes it, and nothing else is (device settings, secrets, `writes_enabled`).
+//! Through `AppCore` with the fake server and the real store.
+
+use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::time::Duration;
+
+use mail_model::{
+    AccountSettings, AccountState, ComposeSettings, CoreEvent, IdentityInput, LanguagePreference,
+    MarkReadOnOpen, MessageCategory, NotificationSettings, Preferences, PrefetchPeriod,
+    PrefetchSettings, ReadingPreferences, RuleAction, RuleCondition, RuleInput, Secret, Security,
+    SenderKey, ServerSettings, SnoozeChoice, TaskMark, TextMatchOp, ThemePreference,
+};
+use mail_store::StoredContact;
+use tempfile::TempDir;
+use tokio::time::Instant;
+
+use super::*;
+use crate::credentials::{Credentials, MemorySecretStore};
+use crate::sync::SyncConfig;
+use crate::sync::fake::{FakeConnector, FakeServer, PASSWORD};
+use crate::{AppCore, BuildInfo, CoreConfig, CoreServices};
+
+const MESSAGE: &[u8] = b"From: Bob <bob@friends.example>\r\nTo: alice@fake.test\r\n\
+Subject: Lunch\r\nMessage-ID: <lunch-1@friends.example>\r\nContent-Type: text/plain\r\n\r\nHi\r\n";
+
+fn settings() -> AccountSettings {
+    let server = |host: &str, port| ServerSettings {
+        host: host.into(),
+        port,
+        security: Security::Tls,
+        username: "alice".into(),
+    };
+    AccountSettings {
+        email: "alice@fake.test".into(),
+        display_name: "Alice".into(),
+        imap: server("imap.fake.test", 993),
+        smtp: server("smtp.fake.test", 465),
+    }
+}
+
+async fn kinds(core: &AppCore<FakeConnector>) -> BTreeSet<String> {
+    core.store_for_tests()
+        .sync_records()
+        .await
+        .expect("rows")
+        .into_iter()
+        .map(|r| r.kind)
+        .collect()
+}
+
+#[tokio::test]
+async fn every_registered_kind_is_captured_when_it_changes() {
+    let dir = TempDir::new().expect("dir");
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", MESSAGE);
+    let mut services = CoreServices::with_connector(
+        Credentials::new(Arc::new(MemorySecretStore::new())),
+        FakeConnector(Arc::clone(&server)),
+    );
+    services.sync = SyncConfig {
+        poll_interval: Duration::from_secs(600),
+        settings_sync_auto: false,
+        ..SyncConfig::default()
+    };
+    let core = AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().join("data"),
+            build: BuildInfo {
+                version: "0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        services,
+    )
+    .await;
+    let mut events = core.subscribe();
+    let account = core
+        .add_account(settings(), Secret::new(PASSWORD.into()))
+        .await
+        .expect("account")
+        .id;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let message = loop {
+        let inbox = core
+            .list_mailboxes(account)
+            .await
+            .expect("mailboxes")
+            .into_iter()
+            .find(|m| m.path == "INBOX");
+        if let Some(inbox) = inbox {
+            let page = core.list_messages(inbox.id, None, 10).await.expect("list");
+            if let Some(item) = page.items.first() {
+                break item.id;
+            }
+        }
+        assert!(Instant::now() < deadline, "message never arrived");
+        let _ = tokio::time::timeout(Duration::from_millis(50), events.recv()).await;
+    };
+    let accounts = core.list_accounts().await.expect("accounts");
+    assert_ne!(accounts[0].status.state, AccountState::Error);
+
+    // Settings: the registered ones are captured, device settings are not.
+    core.set_preferences(Preferences {
+        theme: ThemePreference::Dark,
+        language: LanguagePreference::De,
+    })
+    .await
+    .expect("preferences");
+    core.set_reading_preferences(ReadingPreferences {
+        mark_read_on_open: MarkReadOnOpen::Never,
+    })
+    .await
+    .expect("reading");
+    core.set_compose_settings(ComposeSettings {
+        send_delay_seconds: 7,
+    })
+    .await
+    .expect("compose");
+    core.set_notification_settings(NotificationSettings {
+        hide_content: true,
+        ..NotificationSettings::default()
+    })
+    .await
+    .expect("notifications");
+    core.set_prefetch_settings(PrefetchSettings {
+        period: PrefetchPeriod::default(),
+        max_message_size: 1_000,
+    })
+    .await
+    .expect("prefetch");
+    let mut inbox_settings = core.get_inbox_settings().await.expect("inbox settings");
+    inbox_settings.categories = !inbox_settings.categories;
+    core.set_inbox_settings(inbox_settings)
+        .await
+        .expect("inbox");
+
+    // Identities with a signature, sender rules, local rules, marks, groups, remote content.
+    let identity = core
+        .add_identity(
+            account,
+            IdentityInput {
+                email: "alice+work@fake.test".into(),
+                name: "Alice at work".into(),
+                reply_to: None,
+            },
+        )
+        .await
+        .expect("identity");
+    core.set_identity_signature(identity.id, Some("Regards, Alice".into()))
+        .await
+        .expect("signature");
+    core.set_sender_category(
+        SenderKey::address("news@shop.example"),
+        Some(MessageCategory::Newsletter),
+    )
+    .await
+    .expect("sender rule");
+    core.create_rule(RuleInput {
+        name: "Bob".into(),
+        enabled: true,
+        match_all: true,
+        conditions: vec![RuleCondition::From {
+            op: TextMatchOp::Contains,
+            value: "bob@".into(),
+        }],
+        actions: vec![RuleAction::MarkRead],
+        stop: false,
+    })
+    .await
+    .expect("rule");
+    core.snooze_messages(vec![message], SnoozeChoice::Tomorrow)
+        .await
+        .expect("snooze");
+    core.set_pinned(vec![message], true).await.expect("pin");
+    core.set_task(vec![message], Some(TaskMark { done: false }))
+        .await
+        .expect("task");
+    core.create_account_group("Work".into(), vec![account])
+        .await
+        .expect("group");
+    let store = core.store_for_tests();
+    store
+        .allow_remote_content(account, "bob@friends.example")
+        .await
+        .expect("remote content");
+    // A contact the user named (no command yet; the store path the composer will use).
+    store
+        .record_contacts(
+            vec![StoredContact {
+                key: "bob@friends.example".into(),
+                local_part: "bob".into(),
+                domain: "friends.example".into(),
+                group: None,
+                sent: 1,
+                received: 0,
+                last_sent: None,
+                last_received: None,
+                rank: 0.0,
+                names: Vec::new(),
+                user_name: Some("Bobby".into()),
+                search: " bob bobby".into(),
+            }],
+            Vec::new(),
+        )
+        .await
+        .expect("contact");
+    core.set_sync_device_name("Test Mac".into())
+        .await
+        .expect("device");
+    // Secrets of other parts of the app: an AI client's key (MCP) lives in the keychain only.
+    let mcp = core
+        .create_mcp_client("Test client".into())
+        .await
+        .expect("mcp client");
+    let mcp_key = mcp.token.rsplit('_').next().expect("key part").to_owned();
+
+    let captured = kinds(&core).await;
+    let without_table = [
+        RecordKind::Template,
+        RecordKind::SavedView,
+        RecordKind::AiSettings,
+    ];
+    for kind in RecordKind::ALL {
+        if without_table.contains(&kind) {
+            continue;
+        }
+        assert!(
+            captured.contains(kind.name()),
+            "{kind} was not captured; captured {captured:?}"
+        );
+    }
+
+    let rows = store.sync_records().await.expect("rows");
+    let settings: BTreeSet<String> = rows
+        .iter()
+        .filter(|r| r.kind == "setting")
+        .map(|r| r.id.clone())
+        .collect();
+    let expected: BTreeSet<String> = SYNCED_SETTINGS
+        .iter()
+        .map(|k| format!("global/{k}"))
+        .collect();
+    assert_eq!(settings, expected, "exactly the registered settings");
+
+    // No secrets, no write switch, in any record.
+    for row in &rows {
+        let text = row
+            .content
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        assert!(
+            !text.contains(PASSWORD),
+            "{}: password in a record",
+            row.kind
+        );
+        assert!(
+            !text.contains(&mcp.token),
+            "{}: MCP token in a record",
+            row.kind
+        );
+        assert!(
+            !text.contains(&mcp_key),
+            "{}: MCP key in a record",
+            row.kind
+        );
+        assert!(
+            !text.contains("writesEnabled"),
+            "{}: writesEnabled",
+            row.kind
+        );
+        assert!(
+            !text.contains("credential"),
+            "{}: keychain reference",
+            row.kind
+        );
+    }
+
+    // Unchanged data keeps its version; a change gets a new one; deleting leaves a tombstone.
+    let theme = |rows: &[mail_store::SyncRecordRow]| {
+        rows.iter()
+            .find(|r| r.id == "global/ui.theme")
+            .map(|r| r.version.clone())
+            .expect("theme")
+    };
+    let first = theme(&rows);
+    core.set_preferences(Preferences {
+        theme: ThemePreference::Dark,
+        language: LanguagePreference::De,
+    })
+    .await
+    .expect("same again");
+    assert_eq!(theme(&store.sync_records().await.expect("rows")), first);
+    core.set_preferences(Preferences {
+        theme: ThemePreference::Light,
+        language: LanguagePreference::De,
+    })
+    .await
+    .expect("changed");
+    assert!(theme(&store.sync_records().await.expect("rows")) > first);
+    core.set_identity_signature(identity.id, None)
+        .await
+        .expect("signature removed");
+    let signature = store
+        .sync_record("signature", &identity_uuid(&rows, "alice+work@fake.test"))
+        .await
+        .expect("read")
+        .expect("row");
+    assert!(signature.content.is_none() && signature.deleted_version.is_some());
+    core.shutdown().await;
+}
+
+fn identity_uuid(rows: &[mail_store::SyncRecordRow], email: &str) -> String {
+    rows.iter()
+        .find(|r| {
+            r.kind == "identity"
+                && r.content
+                    .as_ref()
+                    .is_some_and(|c| c["email"].as_str() == Some(email))
+        })
+        .map(|r| r.id.clone())
+        .expect("identity record")
+}
+
+#[test]
+fn captured_content_of_every_table_passes_its_kind() {
+    // The shapes the store writes (mail-store `settings_sync::content_of`) against the
+    // registry's checks.
+    let account = "6f9619ff-8b86-4d11-b42d-00c04fc964ff";
+    let server =
+        serde_json::json!({ "host": "h", "port": 993, "security": "tls", "username": "u" });
+    let cases = [
+        ("setting", "global/ui.theme", serde_json::json!("dark")),
+        (
+            "identity",
+            account,
+            serde_json::json!({ "account": account, "email": "a@b",
+            "name": "A", "replyTo": null, "isDefault": true }),
+        ),
+        (
+            "signature",
+            account,
+            serde_json::json!({ "text": "Regards" }),
+        ),
+        (
+            "senderRule",
+            "address:a@b",
+            serde_json::json!({ "category": "newsletter", "important": false }),
+        ),
+        (
+            "rule",
+            account,
+            serde_json::json!({ "name": "r", "position": 0, "enabled": true,
+            "definition": { "matchAll": true, "conditions": [], "actions": [], "stop": false } }),
+        ),
+        (
+            "snooze",
+            &format!("{account}/m@x"),
+            serde_json::json!({ "untilMs": 5 }),
+        ),
+        (
+            "pin",
+            &format!("{account}/m@x"),
+            serde_json::json!({ "pinnedAtMs": 5 }),
+        ),
+        (
+            "task",
+            &format!("{account}/m@x"),
+            serde_json::json!({ "doneAtMs": null }),
+        ),
+        (
+            "accountGroup",
+            account,
+            serde_json::json!({ "name": "g", "position": 0, "accounts": [account] }),
+        ),
+        (
+            "remoteContent",
+            &format!("{account}/a@b"),
+            serde_json::json!({}),
+        ),
+        ("contact", "a@b", serde_json::json!({ "userName": "A" })),
+        (
+            "device",
+            account,
+            serde_json::json!({ "name": "Mac", "system": "macOS", "lastSeenMs": 1 }),
+        ),
+    ];
+    for (kind, id, content) in cases {
+        let kind = RecordKind::from_name(kind).expect("kind");
+        RecordKey::parse(kind, id).unwrap_or_else(|err| panic!("{kind}: {err}"));
+        SyncContent::new(kind, content).unwrap_or_else(|err| panic!("{kind}: {err}"));
+    }
+    let fields = serde_json::json!({ "email": "a@b", "displayName": "A", "color": 2,
+        "imap": server, "smtp": server });
+    let mut clock = HlcClock::new(
+        Arc::new(crate::clock::SystemClock),
+        DeviceId::from_uuid(uuid::Uuid::from_u128(1)),
+    );
+    let change = mail_store::CapturedChange {
+        kind: "account".into(),
+        id: account.into(),
+        current: Some(fields),
+        stored: None,
+    };
+    let row = super::super::local::capture_one(&change, &mut clock)
+        .expect("captured")
+        .expect("row");
+    assert!(row.content.expect("content")["email"]["version"].is_string());
+    let _ = CoreEvent::AccountsChanged;
+}

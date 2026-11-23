@@ -76,6 +76,8 @@ struct Inner {
     body_text: std::sync::RwLock<Option<Arc<dyn crate::BodyTextSource>>>,
     /// Classifies new messages (stage 9); set by the engine after opening.
     classifier: std::sync::RwLock<Option<Arc<dyn crate::Classifier>>>,
+    /// Versions captured changes of synchronised tables (stage 11); set by the engine.
+    pub(crate) sync_capture: std::sync::RwLock<Option<Arc<dyn crate::SyncCapture>>>,
 }
 
 /// A set of migrations and the schema version they lead to.
@@ -179,6 +181,7 @@ impl Store {
                 },
                 body_text: std::sync::RwLock::new(None),
                 classifier: std::sync::RwLock::new(None),
+                sync_capture: std::sync::RwLock::new(None),
             }),
         })
     }
@@ -226,6 +229,24 @@ impl Store {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(classifier);
     }
 
+    /// Sets the hook that assigns versions to captured changes (stage 11). The engine sets it
+    /// right after opening; until then marks wait in `sync_dirty`.
+    pub fn set_sync_capture(&self, capture: Arc<dyn crate::SyncCapture>) {
+        *self
+            .inner
+            .sync_capture
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(capture);
+    }
+
+    pub(crate) fn sync_capture(&self) -> Option<Arc<dyn crate::SyncCapture>> {
+        self.inner
+            .sync_capture
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     pub(crate) fn classifier(&self) -> Option<Arc<dyn crate::Classifier>> {
         self.inner
             .classifier
@@ -234,13 +255,25 @@ impl Store {
             .clone()
     }
 
-    /// Runs `f` in a `BEGIN IMMEDIATE` transaction on the writer thread.
+    /// Runs `f` in a `BEGIN IMMEDIATE` transaction on the writer thread. Before the
+    /// transaction commits, the changes it made to synchronised tables are captured for the
+    /// settings sync (stage 11, [`crate::settings_sync`]): one central place for every write.
     pub(crate) async fn write<T, F>(&self, f: F) -> Result<T, StoreError>
     where
         F: FnOnce(&Transaction<'_>) -> Result<T, StoreError> + Send + 'static,
         T: Send + 'static,
     {
-        self.inner.workers.write(f).await
+        let capture = self.sync_capture();
+        self.inner
+            .workers
+            .write(move |tx| {
+                let value = f(tx)?;
+                if let Some(capture) = &capture {
+                    crate::settings_sync::flush(tx, capture.as_ref())?;
+                }
+                Ok(value)
+            })
+            .await
     }
 
     /// Runs `f` on a reader thread.
