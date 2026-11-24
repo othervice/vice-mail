@@ -36,6 +36,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | fertig | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
 | 17 | [Gespräche und Kontakte](stages/17-gespraeche-und-kontakte.md) | fertig | Gespräche aufklappen wie in Thunderbird, Kontakte mit Bildern, eigene Ansichten; vor dem ersten öffentlichen Release |
 | 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | in Arbeit | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen |
+| 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | offen, nach 18 | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
