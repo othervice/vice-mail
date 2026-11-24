@@ -575,13 +575,15 @@ Klick klappt auf oder zu und wählt nichts; er ist ein Ziel für die Maus wie da
 36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: die Auswahlspalte wie bei
 jeder Zeile (Punkt für ungelesen, beim Überfahren und bei Auswahl das Kästchen), in der
 Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der Linie, der Absender in der Spalte der
-Absender (13 px, halbfett wenn ungelesen, sonst normal; in der schmalen Liste 40 %), liegt die Mail
-in einem anderen Ordner als die Zeile, dessen Name als Pille (`badge`, 12 px, „Gesendet“,
-„Posteingang“, „Papierkorb“), dann der Anfang des Textes (13 px; `text-secondary` wenn ungelesen,
-sonst `text-tertiary`; ohne Vorschau der Betreff), Büroklammer, Markierung, ausstehende Änderung und
-die Zeit (12 px, Tabellenziffern, ungelesen mittel in Primärfarbe). Fläche, Auswahl (`selected`),
-Überfahren (`hover`), Fokusring und Schnellaktionen wie bei jeder Zeile, auch in den Karten von
-Priorität und Bündeln.
+Absender (13 px, halbfett wenn ungelesen, sonst normal; in der schmalen Liste so breit wie der
+Name, höchstens ein Drittel, damit der Text Platz behält), liegt die Mail in einem anderen Ordner
+als die Zeile, dessen Name als Pille (`badge`, 12 px, „Gesendet“, „Posteingang“, „Papierkorb“),
+dann der Anfang des Textes (13 px; `text-secondary` wenn ungelesen, sonst `text-tertiary`; ohne
+Vorschau der Betreff), Büroklammer, Markierung, ausstehende Änderung und die Zeit (12 px,
+Tabellenziffern, ungelesen mittel in Primärfarbe). In der breiten Liste stehen Absender und Text
+genau unter Absender und Betreff der Gesprächszeile. Fläche, Auswahl (`selected`), Überfahren
+(`hover`), Fokusring und Schnellaktionen wie bei jeder Zeile, auch in den Karten von Priorität und
+Bündeln.
 
 **Linie.** 1 px gepunktet in `border-strong` (Punkte wirken leiser als die Farbe), mittig unter der
 Avatar-Spalte (`--ui-tree-line-start`). In der aufgeklappten Zeile beginnt sie unter dem Avatar
