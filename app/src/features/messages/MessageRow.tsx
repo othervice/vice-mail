@@ -476,7 +476,8 @@ export function ChildRowContent({ item, folder, bounds, twoLine, selected, curso
           className={cx(
             "truncate text-13 text-primary",
             item.unread ? "font-semibold" : "font-regular",
-            twoLine ? "w-2/5 max-w-(--ui-list-sender-width) shrink-0" : "w-(--ui-list-sender-width) shrink-0",
+            // Narrow: as wide as the name, at most a third, so the text keeps room.
+            twoLine ? "max-w-1/3 shrink-0" : "w-(--ui-list-sender-width) shrink-0",
           )}
           data-testid="child-sender"
         >

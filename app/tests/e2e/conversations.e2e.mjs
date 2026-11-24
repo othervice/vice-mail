@@ -37,7 +37,7 @@ let preferencesBefore = null;
 
 /** Light or dark through the core, as a11y.e2e.mjs does: the list keeps its state meanwhile. */
 async function setTheme(theme) {
-  await coreCall("set_preferences", { preferences: { ...preferencesBefore, theme } });
+  await coreCall("set_preferences", { preferences: { ...preferencesBefore, language: "en", theme } });
   await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.dataset.theme)) === theme, {
     timeoutMsg: `the ${theme} theme was not applied`,
   });
@@ -95,6 +95,19 @@ const tree = (id) =>
     };
   }, id);
 
+/**
+ * A screenshot that leaves the keyboard where it was: `screenshot` blurs the focused element (no
+ * focus ring in the picture), so the next keys would go to the page body (as in keyboard.e2e.mjs).
+ */
+async function shot(name) {
+  await browser.execute(() => {
+    window.__e2eFocus = document.activeElement;
+  });
+  const file = await screenshot(name);
+  await browser.execute(() => window.__e2eFocus?.focus());
+  return file;
+}
+
 async function runAxe() {
   const present = await browser.execute(() => typeof window.axe?.run === "function");
   if (!present) await browser.execute(`${AXE_SOURCE}\n;return typeof window.axe;`);
@@ -132,6 +145,11 @@ describe("stage 17: conversations unfold in the list, one message on the right",
   before(async () => {
     await attach();
     preferencesBefore = await coreCall("get_preferences");
+    // English labels ("59 replies", "Sent") whatever the system's language; put back at the end.
+    await coreCall("set_preferences", { preferences: { ...preferencesBefore, language: "en" } });
+    await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.lang)) === "en", {
+      timeoutMsg: "the app did not switch to English",
+    });
     await coreCall("add_account", {
       settings: {
         email: ALICE.email,
@@ -159,9 +177,13 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     await browser.waitUntil(
       async () => {
         conversationId = await browser.execute(() => {
-          const rows = [...document.querySelectorAll('[data-testid="message-list"] [role="treeitem"][aria-level="1"]')];
-          const offsite = rows.find((row) => row.querySelector('[data-testid="row-name"]')?.textContent.includes("offsite"));
-          return (offsite ?? rows.find((row) => row.querySelector('[data-testid="row-replies"]')))?.id ?? null;
+          // Conversations with replies; the offsite thread if it is rendered ("the offsite" is a
+          // topic of single seed messages too).
+          const rows = [...document.querySelectorAll('[data-testid="message-list"] [role="treeitem"][aria-level="1"]')].filter((row) =>
+            row.querySelector('[data-testid="row-replies"]'),
+          );
+          const offsite = rows.find((row) => row.querySelector('[data-testid="row-name"]')?.textContent.includes("Planning the 2026 offsite"));
+          return (offsite ?? rows[0])?.id ?? null;
         });
         return conversationId !== null;
       },
@@ -204,6 +226,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     // One line each, in the token's height, on a fine dotted line.
     assert.ok(open.children.every((child) => child.height === 36), JSON.stringify(open.children.map((c) => c.height)));
     assert.deepEqual(open.line, { style: "dotted", width: "1px" });
+    await setTheme("light");
     report.screenshots.push(await screenshot("conversations-unfolded-light"));
     const lightFindings = await runAxe();
     assert.deepEqual(lightFindings, [], `axe, light: ${JSON.stringify(lightFindings)}`);
@@ -228,6 +251,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     report.steps.rowOpens = row;
     assert.equal(row.cards, 1);
     assert.equal(row.stacked, 0);
+    await setTheme("light");
     report.screenshots.push(await screenshot("conversations-reading-row"));
     await setTheme("dark");
     report.screenshots.push(await screenshot("conversations-reading-row-dark"));
@@ -267,7 +291,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     await browser.keys("ArrowDown");
     await browser.keys("ArrowDown");
     await browser.waitUntil(async () => (await cursor())?.posinset === "3", { timeoutMsg: "↓ did not walk the messages" });
-    report.screenshots.push(await screenshot("conversations-keyboard"));
+    report.screenshots.push(await shot("conversations-keyboard"));
     await browser.keys("ArrowLeft");
     await browser.waitUntil(async () => (await cursor())?.id === conversationId, { timeoutMsg: "← did not go up to the conversation" });
     await browser.keys("ArrowLeft");
