@@ -1,4 +1,4 @@
-# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen
+# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen, neue Farben
 
 **Ziel:** Die Grenze zwischen Liste und Lesebereich lässt sich ziehen wie die zur linken Spalte.
 Die Schnellaktionen beim Überfahren einer Zeile verdecken nie mehr das Aufklappen eines Gesprächs.
@@ -68,6 +68,21 @@ Server angelegt werden, auch vorhandene Ordner müssen geladen werden“.
 - [ ] Vorhandene Ordner: Alle wählbaren Ordner des Servers stehen im Baum (heute `LIST "" "*"`
   beim vollen Abgleich). Ordner, die ein anderes Programm anlegt, erscheinen ohne Neustart;
   dazu „Ordner vom Server neu laden“ am Konto.
+
+### E — Farbwelt: Hell mit Blau, Dunkel in GitHub-Farben
+
+Wunsch vom 24.11.2026: „die helle Version sollte in einem hellen mit Blau Design sein, die dunkle
+mehr die GitHub-Farben haben statt dieses Braun.“ Hell, Dunkel und „wie das System“ gibt es seit
+Stufe 1 (Einstellungen → Darstellung); es geht um die Farben.
+
+- [ ] Hell: kühle, klare Flächen (Weiß und helles Blaugrau statt Beige), Blau als Akzent.
+- [ ] Dunkel: neutrale, leicht bläuliche Grautöne wie bei GitHub (sehr dunkles Blaugrau als
+  Grund, abgestufte Flächen, kühle Linien) statt der warmen Brauntöne; Blau als Akzent.
+- [ ] Standard-Akzent wird Blau (löst den Standard aus 0038 ab); die anderen Farbthemen bleiben
+  wählbar, eine gespeicherte Wahl bleibt. Entscheidung festhalten.
+- [ ] Kontrast nach WCAG AA in beiden Modi für jedes Thema (`app/tests/contrast.test.ts`),
+  `docs/DESIGN.md` und die README-Bilder angepasst.
+- [ ] Hell/Dunkel schneller umschalten: Befehl in der Befehlspalette.
 
 ## Nicht in dieser Stufe
 
