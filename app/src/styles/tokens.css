@@ -206,13 +206,18 @@
      (the step bar does not jump), smaller only where the window is lower. */
   --ui-first-start-height: 44rem;
   /* Reading pane: width of the list while a message is open (below 720 px, so its rows get two
-     lines), the line length of plain-text mail and the width of an attachment card. */
+     lines), the line length of plain-text mail and the width of an attachment card.
+     Stage 18: the list's width beside the pane and its height above it follow the handle between
+     them (stored with the window's layout, set on the box of list and pane through the CSSOM);
+     these are the defaults and the list's minimums, the core's limits in rem
+     (`DEFAULT_LIST_WIDTH`, `MIN_LIST_WIDTH`, `DEFAULT_LIST_HEIGHT`, `MIN_LIST_HEIGHT`). The pane
+     keeps at least 360 × 240 px: in a window too small for the stored size the list gives way. */
   --ui-list-width-reading: 24rem;
-  /* Stage 8: next to the reading pane the list takes at most 45 % of the width (large text in a
-     small window keeps room for the message); below it, 40 % of the height, at least 10 rem. */
-  --ui-list-max-width-reading: 45%;
-  --ui-list-height-reading: 40%;
+  --ui-list-min-width-reading: 20rem;
+  --ui-list-height-reading: 20rem;
   --ui-list-min-height-reading: 10rem;
+  --ui-reading-min-width: 22.5rem;
+  --ui-reading-min-height: 15rem;
   --ui-reading-max-width: 46rem;
   --ui-attachment-width: 16rem;
   /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)

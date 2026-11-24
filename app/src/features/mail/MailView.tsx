@@ -49,6 +49,7 @@ import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
+import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
@@ -444,6 +445,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           onDragEnd={endDrag}
         />
       </div>
+      {/* Stage 18: the border between list and pane can be dragged. */}
+      <ListResizeHandle layout={layout} open={layout.paneShown(open)} />
       {!layout.paneShown(open) ? null : single && conversationOpen ? (
         <ThreadPane
           key={rowKey}

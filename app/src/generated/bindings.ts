@@ -724,6 +724,10 @@ export const events = {
 /* Constants */
 export const CORE_EVENT_NAME = "core-event" as const;
 
+export const DEFAULT_LIST_HEIGHT = 320 as const;
+
+export const DEFAULT_LIST_WIDTH = 384 as const;
+
 export const DEFAULT_SEND_DELAY_SECS = 10 as const;
 
 export const DEFAULT_SIDEBAR_WIDTH = 240 as const;
@@ -749,6 +753,10 @@ export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 export const MAX_EML_FILE_BYTES = 67108864 as const;
 
 export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
+
+export const MAX_LIST_HEIGHT = 1600 as const;
+
+export const MAX_LIST_WIDTH = 1600 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
 
@@ -803,6 +811,10 @@ export const MAX_THREAD_MESSAGES = 1000 as const;
 export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 
 export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
+
+export const MIN_LIST_HEIGHT = 160 as const;
+
+export const MIN_LIST_WIDTH = 320 as const;
 
 export const MIN_SIDEBAR_WIDTH = 200 as const;
 
@@ -5048,6 +5060,19 @@ export type WindowLayout = {
 	 *  sets it.
 	 */
 	sidebarWidth: number,
+	/**
+	 *  Stage 18: width of the message list beside the reading pane on the right, in CSS pixels
+	 *  at 100 % text size, [`MIN_LIST_WIDTH`] to [`MAX_LIST_WIDTH`] ([`DEFAULT_LIST_WIDTH`] by
+	 *  default); the drag handle between list and pane sets it. A window too narrow for it
+	 *  draws the list narrower and keeps this value.
+	 */
+	listWidth: number,
+	/**
+	 *  Stage 18: height of the message list above the reading pane below it, in CSS pixels at
+	 *  100 % text size, [`MIN_LIST_HEIGHT`] to [`MAX_LIST_HEIGHT`] ([`DEFAULT_LIST_HEIGHT`] by
+	 *  default); the same handle sets it when the pane is below the list.
+	 */
+	listHeight: number,
 };
 
 /* Tauri Specta runtime */

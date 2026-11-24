@@ -537,6 +537,8 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
         density: Density::Compact,
         sidebar_expanded: false,
         sidebar_width: 280,
+        list_width: 640,
+        list_height: 400,
     };
     let message = WindowLayout {
         reading_pane: ReadingPanePosition::Replace,
@@ -560,7 +562,9 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
             "readingPane": "bottom",
             "density": "compact",
             "sidebarExpanded": false,
-            "sidebarWidth": 280
+            "sidebarWidth": 280,
+            "listWidth": 640,
+            "listHeight": 400
         }))
     );
 
@@ -578,9 +582,28 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
             .expect_err("width out of range");
         assert_eq!(err.code(), ErrorCode::InvalidArgument, "{width}");
     }
+    // Stage 18: the list's width and height have their own limits.
+    for (list_width, list_height) in [(319, 320), (1601, 320), (384, 159), (384, 1601)] {
+        let err = core
+            .set_window_layout(
+                "main",
+                WindowLayout {
+                    list_width,
+                    list_height,
+                    ..main
+                },
+            )
+            .await
+            .expect_err("list size out of range");
+        assert_eq!(
+            err.code(),
+            ErrorCode::InvalidArgument,
+            "{list_width}×{list_height}"
+        );
+    }
     assert_eq!(core.get_window_layout("main").await.expect("main"), main);
     // A layout stored before the width existed keeps its other fields; a width out of range
-    // reads as the default.
+    // reads as the default. The same for the list's size (stage 18), each size on its own.
     core.store_for_tests()
         .put_settings(
             GLOBAL_SCOPE,
@@ -603,12 +626,32 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
         core.get_window_layout("main").await.expect("main"),
         WindowLayout {
             sidebar_width: mail_model::DEFAULT_SIDEBAR_WIDTH,
+            list_width: mail_model::DEFAULT_LIST_WIDTH,
+            list_height: mail_model::DEFAULT_LIST_HEIGHT,
             ..main
         }
     );
     assert_eq!(
         core.get_window_layout("message").await.expect("message"),
         message
+    );
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![(
+                "ui.layout.main".to_owned(),
+                r#"{"readingPane":"bottom","density":"compact","sidebarExpanded":false,"sidebarWidth":280,"listWidth":5000,"listHeight":400}"#
+                    .to_owned(),
+            )],
+        )
+        .await
+        .expect("a list width out of range");
+    assert_eq!(
+        core.get_window_layout("main").await.expect("main"),
+        WindowLayout {
+            list_width: mail_model::DEFAULT_LIST_WIDTH,
+            ..main
+        }
     );
 
     for slot in ["", "Main", "../x", "ui.theme"] {

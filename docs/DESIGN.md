@@ -81,6 +81,24 @@ unten oder anstelle der Liste. Kopf mit Betreff, Absender, Empfängern, Zeit und
 als Symbolleiste. Immer genau eine Mail; die anderen Mails eines Gesprächs klappen in der Liste auf
 (Stufe 17, „Gespräche aufklappen“).
 
+**Grenze zwischen Liste und Lesebereich (Stufe 18).** Steht der Lesebereich rechts, lässt sich die
+Breite der Liste an der Grenze ziehen, steht er unten, ihre Höhe; anstelle der Liste gibt es keine
+Grenze. Derselbe Griff wie am Rand der Seitenspalte (`ResizeHandle`): 8 px zum Greifen über der
+Haarlinie, beim Überfahren und Ziehen eine Linie in `accent-fill`, Doppelklick setzt den Standard.
+Ein Fenster-Trenner nach WAI-ARIA (`role="separator"`, „Breite der Liste“ bzw. „Höhe der Liste“,
+Wert in px, `aria-controls` auf die Liste): ← → (rechts) bzw. ↑ ↓ (unten) ändern um 16 px, Pos1 und
+Ende auf Minimum und das, was gerade passt; Eingabe hat keine Wirkung. Standard 384 × 320 px,
+Grenzen des Kerns 320 bis 1.600 px Breite, 160 bis 1.600 px Höhe, in px bei 100 % Schrift (wächst
+mit der Schriftgröße). Der Lesebereich behält immer mindestens 360 px Breite bzw. 240 px Höhe
+(`--ui-reading-min-width`, `--ui-reading-min-height`): Wird das Fenster kleiner, zeichnet das
+Stylesheet die Liste kleiner, der gespeicherte Wert bleibt; Wert, Ende und ein Ziehen beginnen bei
+dem, was zu sehen ist. Die Zeilen wechseln wie bisher an 720 px Listenbreite zwischen ein- und
+mehrzeilig. Gesetzt wird das Maß per CSSOM an der Fläche von Liste und Lesebereich (CSP),
+gespeichert mit dem Layout des Fensters (`WindowLayout.listWidth`, `listHeight`, nur auf diesem
+Gerät), sobald es 400 ms ruht. Vorher nahm die Liste neben dem Lesebereich fest 24 rem, höchstens
+45 % der Breite, darunter 40 % der Höhe. Geprüft in `list-resize.test.tsx` und mit echtem Zeiger in
+`columns.e2e.mjs`.
+
 **KI-Panel.** 380 px, rechts, einklappbar. Bezieht sich auf den gewählten Thread. Gespräch oben,
 Eingabefeld unten, Ergebnisse als Karten. Bei schmalem Fenster liegt es über dem Lesebereich.
 Ohne eingerichtete KI ist das Panel nicht sichtbar.

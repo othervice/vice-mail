@@ -1833,6 +1833,12 @@ export const de: Translation = {
   },
   layout: {
     title: "Layout",
+    // Stage 18: the handle between the message list and the reading pane.
+    listSize: {
+      width: "Breite der Liste",
+      height: "Höhe der Liste",
+      value: "{{size}} Pixel",
+    },
     readingPane: {
       label: "Lesebereich",
       description: "Wo eine geöffnete Nachricht erscheint.",

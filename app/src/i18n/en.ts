@@ -1844,6 +1844,12 @@ export const en = {
   },
   layout: {
     title: "Layout",
+    // Stage 18: the handle between the message list and the reading pane.
+    listSize: {
+      width: "List width",
+      height: "List height",
+      value: "{{size}} pixels",
+    },
     readingPane: {
       label: "Reading pane",
       description: "Where an opened message appears.",

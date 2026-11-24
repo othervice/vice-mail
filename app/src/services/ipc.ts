@@ -1414,9 +1414,15 @@ export const savedSearchIpc = {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   commands as stage8Commands,
+  DEFAULT_LIST_HEIGHT,
+  DEFAULT_LIST_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
+  MAX_LIST_HEIGHT,
+  MAX_LIST_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MIN_LIST_HEIGHT,
+  MIN_LIST_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,
@@ -1440,10 +1446,16 @@ import type { AiPanelState } from "../generated/bindings";
 import { MAX_COLUMN_VIEWS, type ColumnView } from "../generated/bindings";
 
 export {
+  DEFAULT_LIST_HEIGHT,
+  DEFAULT_LIST_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
   MAX_COLUMN_VIEWS,
+  MAX_LIST_HEIGHT,
+  MAX_LIST_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MIN_LIST_HEIGHT,
+  MIN_LIST_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,

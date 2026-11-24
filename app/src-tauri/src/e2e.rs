@@ -25,7 +25,7 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use mail_engine::CoreServices;
 use mail_engine::RecordingOpener;
 use mail_model::{CoreError, ExtraRootCa};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Invoke;
 use tauri::{AppHandle, Builder, Runtime, WebviewWindow, Wry};
 
@@ -166,6 +166,7 @@ pub fn install(
         Box::new(tauri::generate_handler![
             e2e_window_controls,
             e2e_native_mouse,
+            e2e_native_mouse_event,
             e2e_opened,
             e2e_invoked,
             e2e_drop_files
@@ -335,6 +336,44 @@ pub async fn e2e_native_mouse(
     }
 }
 
+/// What one native mouse event does ([`e2e_native_mouse_event`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MouseEventKind {
+    /// The pointer moves there with no button down (hover).
+    Move,
+    /// The left button goes down there.
+    Down,
+    /// The pointer moves there with the left button down.
+    Drag,
+    /// The left button comes up there.
+    Up,
+}
+
+/// Stage 18: one real mouse event at `x`/`y` (the same coordinates as [`e2e_native_mouse`]), for
+/// what a click alone cannot show: hovering a row (`:hover`, its quick actions) and dragging a
+/// handle (down, drags, up, with pointer capture). The events are `NSEvent`s handed to the
+/// WKWebView like the mouse's own; a move in a window that is not key is sent so that WebKit
+/// still updates `:hover` (see `send_event`).
+#[tauri::command]
+pub async fn e2e_native_mouse_event(
+    window: WebviewWindow,
+    kind: MouseEventKind,
+    x: f64,
+    y: f64,
+    viewport_height: Option<f64>,
+) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::mouse_event(&window, kind, x, y, viewport_height).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, kind, x, y, viewport_height);
+        Err("native mouse events are only implemented for macOS".into())
+    }
+}
+
 /// Everything the core handed to the (recording) system opener so far: URLs as given, files as
 /// their path.
 #[tauri::command]
@@ -392,7 +431,7 @@ mod macos {
     use objc2_foundation::{NSPoint, NSProcessInfo};
     use tauri::WebviewWindow;
 
-    use super::{ControlRect, WindowControls};
+    use super::{ControlRect, MouseEventKind, WindowControls};
 
     /// Event numbers of the synthesized mouse events; any increasing value will do.
     static EVENT_NUMBER: AtomicIsize = AtomicIsize::new(1000);
@@ -408,6 +447,16 @@ mod macos {
         viewport_height: Option<f64>,
     ) -> Result<String, String> {
         on_main_window(window, move |w| send_click(w, x, y, viewport_height)).await
+    }
+
+    pub async fn mouse_event(
+        window: &WebviewWindow,
+        kind: MouseEventKind,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        on_main_window(window, move |w| send_event(w, kind, x, y, viewport_height)).await
     }
 
     /// Runs `f` on the main thread with the `NSWindow` of `window`.
@@ -450,14 +499,13 @@ mod macos {
             .find_map(|sub| find_view(sub, class))
     }
 
-    /// Left button down and up at one point of the web view, delivered to the WKWebView
-    /// directly (`NSWindow.sendEvent` did not reach WebKit in Spike D).
-    fn send_click(
+    /// The WKWebView of `window` and `x`/`y` of its viewport in window coordinates.
+    fn web_view_point(
         window: &NSWindow,
         x: f64,
         y: f64,
         viewport_height: Option<f64>,
-    ) -> Result<String, String> {
+    ) -> Result<(Retained<NSView>, NSPoint), String> {
         let class = AnyClass::get(c"WKWebView").ok_or("WebKit is not loaded")?;
         let content = window
             .contentView()
@@ -473,30 +521,95 @@ mod macos {
             bounds.size.height - y
         };
         let location = view.convertPoint_toView(NSPoint::new(x, local_y), None);
-        let make = |kind: NSEventType| {
-            NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
-                kind,
-                location,
-                NSEventModifierFlags::empty(),
-                NSProcessInfo::processInfo().systemUptime(),
-                window.windowNumber(),
-                None,
-                EVENT_NUMBER.fetch_add(1, Ordering::Relaxed),
-                1,
-                1.0,
-            )
-            .ok_or_else(|| format!("could not create a {kind:?} event"))
-        };
-        let down = make(NSEventType::LeftMouseDown)?;
-        let up = make(NSEventType::LeftMouseUp)?;
+        Ok((view, location))
+    }
+
+    /// A mouse event of `kind` at `location` (window coordinates) of `window`.
+    fn mouse(
+        window: &NSWindow,
+        kind: NSEventType,
+        location: NSPoint,
+        clicks: isize,
+        pressure: f32,
+    ) -> Result<Retained<NSEvent>, String> {
+        NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+            kind,
+            location,
+            NSEventModifierFlags::empty(),
+            NSProcessInfo::processInfo().systemUptime(),
+            window.windowNumber(),
+            None,
+            EVENT_NUMBER.fetch_add(1, Ordering::Relaxed),
+            clicks,
+            pressure,
+        )
+        .ok_or_else(|| format!("could not create a {kind:?} event"))
+    }
+
+    /// Left button down and up at one point of the web view, delivered to the WKWebView
+    /// directly (`NSWindow.sendEvent` did not reach WebKit in Spike D).
+    fn send_click(
+        window: &NSWindow,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        let (view, location) = web_view_point(window, x, y, viewport_height)?;
+        let down = mouse(window, NSEventType::LeftMouseDown, location, 1, 1.0)?;
+        let up = mouse(window, NSEventType::LeftMouseUp, location, 1, 1.0)?;
         view.mouseDown(&down);
         view.mouseUp(&up);
+        let bounds = view.bounds();
         Ok(format!(
             "clicked at ({:.1}, {:.1}) in a {:.0}x{:.0} web view, key window: {}",
             location.x,
             location.y,
             bounds.size.width,
             bounds.size.height,
+            window.isKeyWindow()
+        ))
+    }
+
+    /// One move, press, drag or release at a point of the web view (stage 18).
+    fn send_event(
+        window: &NSWindow,
+        kind: MouseEventKind,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        let (view, location) = web_view_point(window, x, y, viewport_height)?;
+        match kind {
+            MouseEventKind::Move if window.isKeyWindow() => {
+                let event = mouse(window, NSEventType::MouseMoved, location, 0, 0.0)?;
+                view.mouseMoved(&event);
+            }
+            MouseEventKind::Move => {
+                // A window that is not key (a locked screen, another app in front) hit-tests a
+                // plain mouse move for its scroll bars only and leaves `:hover` as it was
+                // (WebKit, WebPage.cpp `handleMouseEvent`); a move that names a button gets the
+                // full hit test. No press came before it, so WebKit drags nothing and the page
+                // sees a `pointermove` without pressed buttons (`buttons` is the hardware's).
+                let event = mouse(window, NSEventType::LeftMouseDragged, location, 0, 0.0)?;
+                view.mouseDragged(&event);
+            }
+            MouseEventKind::Down => {
+                let event = mouse(window, NSEventType::LeftMouseDown, location, 1, 1.0)?;
+                view.mouseDown(&event);
+            }
+            MouseEventKind::Drag => {
+                let event = mouse(window, NSEventType::LeftMouseDragged, location, 1, 1.0)?;
+                view.mouseDragged(&event);
+            }
+            MouseEventKind::Up => {
+                let event = mouse(window, NSEventType::LeftMouseUp, location, 1, 1.0)?;
+                view.mouseUp(&event);
+            }
+        }
+        Ok(format!(
+            "{kind:?} at ({:.1}, {:.1}), key window: {}",
+            location.x,
+            location.y,
             window.isKeyWindow()
         ))
     }

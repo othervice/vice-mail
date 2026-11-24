@@ -898,7 +898,8 @@ commands with at most 4 shortcuts each), the text size (80 to 150) and the at mo
 used commands of the palette; every change goes as `uiPreferencesChanged` to all windows.
 Shortcuts and text size are synced by the settings sync (one key per platform), the history
 of the palette stays on the device. The layout (reading pane on the right, at the bottom or instead of the list,
-density, sidebar) is stored by `setWindowLayout` per window kind on the device. The core checks shape
+density, sidebar, the sidebar's width and, since stage 18, the list's width beside the reading pane and
+its height above it) is stored by `setWindowLayout` per window kind on the device. The core checks shape
 and limits; which commands exist and which shortcuts are assignable is decided by the UI.
 Until the UI has been switched over, these values are still kept in the marked fallback store
 `app/src/features/keyboard/localFallback.ts`.

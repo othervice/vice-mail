@@ -1,8 +1,9 @@
 import { EyeOff, PanelLeftClose, SlidersHorizontal } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
+import { ResizeHandle } from "../components/ResizeHandle";
 import { Tooltip } from "../components/Tooltip";
 import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
 import { useSelectedAccount } from "../features/accounts/selection";
@@ -188,71 +189,24 @@ function AccountFolders({ account, selected }: { account: Account; selected: boo
 }
 
 /** The drag handle at the column's edge (WAI-ARIA window splitter): arrows, Home, End, Enter. */
-function ResizeHandle({ controls }: { controls: string }) {
+function SidebarResizeHandle({ controls }: { controls: string }) {
   const { t } = useTranslation();
   const width = useUiStore((state) => state.sidebarWidth);
   const setWidth = useUiStore((state) => state.setSidebarWidth);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const drag = useRef<{ x: number; width: number; scale: number } | null>(null);
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = SIDEBAR_WIDTH.step;
-    const next =
-      event.key === "ArrowRight"
-        ? width + step
-        : event.key === "ArrowLeft"
-          ? width - step
-          : event.key === "Home"
-            ? SIDEBAR_WIDTH.min
-            : event.key === "End"
-              ? SIDEBAR_WIDTH.max
-              : null;
-    if (next !== null) {
-      event.preventDefault();
-      setWidth(next);
-    } else if (event.key === "Enter") {
-      // The splitter's own key: folds the column (its toggle in the header does the same).
-      event.preventDefault();
-      toggleSidebar();
-    }
-  };
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    // The width is in px at 100 % text size; the column grows with the text.
-    const scale = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
-    drag.current = { x: event.clientX, width, scale };
-  };
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const start = drag.current;
-    if (start) setWidth(start.width + (event.clientX - start.x) / start.scale);
-  };
-  const stop = () => {
-    drag.current = null;
-  };
   return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={t("nav.resizeSidebar")}
-      aria-controls={controls}
-      aria-valuemin={SIDEBAR_WIDTH.min}
-      aria-valuemax={SIDEBAR_WIDTH.max}
-      aria-valuenow={width}
-      aria-valuetext={t("nav.sidebarWidth", { width })}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={stop}
-      onPointerCancel={stop}
-      onDoubleClick={() => {
-        setWidth(SIDEBAR_WIDTH.default);
-      }}
+    <ResizeHandle
+      orientation="vertical"
+      value={width}
+      limits={SIDEBAR_WIDTH}
+      onChange={setWidth}
+      // The splitter's own key: folds the column (its toggle in the header does the same).
+      onEnter={toggleSidebar}
+      label={t("nav.resizeSidebar")}
+      valueText={t("nav.sidebarWidth", { width })}
+      controls={controls}
+      className="absolute inset-y-0 -end-1"
       data-testid="sidebar-resize"
-      // 8 px to grab, straddling the hairline; a line in the accent while hovered or dragged.
-      className="absolute inset-y-0 -end-1 z-20 w-2 cursor-col-resize after:absolute after:inset-y-0 after:start-[calc(var(--ui-space-1)-1px)] after:w-[2px] after:transition-colors hover:after:bg-accent-fill active:after:bg-accent-fill"
     />
   );
 }
@@ -381,7 +335,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
           </button>
         </Tooltip>
       </div>
-      {!overlay && <ResizeHandle controls={contentId} />}
+      {!overlay && <SidebarResizeHandle controls={contentId} />}
       {/* Scrolls on its own, never sideways; the edges fade so a cut-off row reads as "more". */}
       <div
         id={contentId}

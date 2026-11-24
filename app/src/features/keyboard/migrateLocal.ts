@@ -65,8 +65,10 @@ export async function migrateLocalFallback(preferences: UiPreferences, layout: C
           readingPane: stored.readingPane,
           density: stored.density,
           sidebarExpanded: stored.sidebarExpanded,
-          // The local fallback had no column width; the core's layout keeps its own.
+          // The local fallback had no column width nor list size; the core's layout keeps its own.
           sidebarWidth: layout.sidebarWidth,
+          listWidth: layout.listWidth,
+          listHeight: layout.listHeight,
         }
       : null;
 
