@@ -1003,8 +1003,7 @@ export const de: Translation = {
         hideServers: "Servereinstellungen ausblenden",
         incoming: "Eingehende Mails (IMAP)",
         outgoing: "Ausgehende Mails (SMTP)",
-        outgoingNote:
-          "Senden kommt in einer späteren Version der App. Sie speichert diese Einstellungen schon dafür, prüft sie aber noch nicht.",
+        outgoingNote: "Der Verbindungstest prüft auch die Anmeldung zum Senden. Dabei wird nichts gesendet.",
         host: "Server",
         port: "Port",
         username: "Benutzername",

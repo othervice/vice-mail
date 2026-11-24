@@ -217,6 +217,10 @@ describe("account setup: unknown domain", () => {
     const result = await screen.findByTestId("test-result");
     expect(result.textContent).toContain("The connection works and the server accepted the login.");
     expect(result.textContent).toContain("new mail shows up with a delay");
+    // Sending exists, and the test checks the sign-in for it too (audit 24.11.2026).
+    expect(result.textContent).toContain("The connection test also checks that the app can sign in for sending. Nothing is sent.");
+    expect(screen.getByRole("group", { name: "Outgoing mail (SMTP)" }).textContent).toContain("checks that the app can sign in for sending");
+    expect(document.body.textContent).not.toContain("later version");
     expect(core.callsOf("test_connection")).toEqual([
       {
         settings: {

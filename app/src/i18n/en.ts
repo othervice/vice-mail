@@ -1010,8 +1010,8 @@ export const en = {
         hideServers: "Hide server settings",
         incoming: "Incoming mail (IMAP)",
         outgoing: "Outgoing mail (SMTP)",
-        outgoingNote:
-          "Sending arrives in a later version of the app. It stores these settings for then, but does not test them yet.",
+        // Audit 24.11.2026: sending exists, and the connection test checks it (it signs in, sends nothing).
+        outgoingNote: "The connection test also checks that the app can sign in for sending. Nothing is sent.",
         host: "Server",
         port: "Port",
         username: "User name",
