@@ -45,6 +45,13 @@ use mail_model::{RenderToken, link_placeholder, parse_link_placeholder};
 /// hook.
 pub const MAIL_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
+/// Default style of every `srcdoc`, before anything from the mail: a mail that names no font gets
+/// the app's system font (SF Pro on macOS, Segoe UI Variable on Windows, as `--ui-font-family` in
+/// `app/src/styles/tokens.css`) instead of the web view's Times. `:where()` gives it no
+/// specificity and it comes first, so any font the mail sets wins. Only `font-family`: sizes,
+/// colours and margins stay the web view's defaults, which mail layouts assume.
+pub const MAIL_DEFAULT_STYLE: &str = ":where(html){font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI Variable Text\",\"Segoe UI Variable\",system-ui,\"Segoe UI\",sans-serif}";
+
 /// Largest HTML that is rendered; longer input is cut (and [`RenderedHtml::truncated`] set).
 pub const MAX_HTML_BYTES: usize = 8 << 20;
 
@@ -578,7 +585,9 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
         "<!DOCTYPE html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"",
     );
     srcdoc.push_str(MAIL_CSP);
-    srcdoc.push_str("\"><meta name=\"referrer\" content=\"no-referrer\">");
+    srcdoc.push_str("\"><meta name=\"referrer\" content=\"no-referrer\"><style>");
+    srcdoc.push_str(MAIL_DEFAULT_STYLE);
+    srcdoc.push_str("</style>");
     if !stylesheet.is_empty() {
         srcdoc.push_str("<style>\n");
         srcdoc.push_str(&stylesheet);
@@ -1004,6 +1013,35 @@ mod tests {
         ));
         assert!(r.srcdoc.ends_with("<body><p>Hello</p></body></html>"));
         assert_eq!(r.fallback, None);
+    }
+
+    #[test]
+    fn a_mail_without_a_font_gets_the_system_font_and_its_own_font_wins() {
+        // Without a font of its own the mail would be set in the web view's Times.
+        let plain = render("<p>Hello</p>");
+        let head = &plain.srcdoc[..plain.srcdoc.find("</head>").unwrap()];
+        assert!(
+            head.ends_with(&format!("<style>{MAIL_DEFAULT_STYLE}</style>")),
+            "{head}"
+        );
+        assert!(MAIL_DEFAULT_STYLE.starts_with(":where(html){font-family:-apple-system,"));
+        assert!(MAIL_DEFAULT_STYLE.ends_with("sans-serif}"));
+        // No specificity and first in the document: the mail's rules come after it and win.
+        let styled = render(
+            "<html><head><style>body{font-family:Georgia,serif}</style></head><body><p>t</p></body></html>",
+        );
+        let default_at = styled.srcdoc.find(MAIL_DEFAULT_STYLE).unwrap();
+        let mail_at = styled
+            .srcdoc
+            .find("body{font-family:Georgia,serif;}")
+            .unwrap();
+        assert!(default_at < mail_at, "{}", styled.srcdoc);
+        // The CSP stays the first thing in the document and keeps allowing only inline styles.
+        assert!(styled.srcdoc.starts_with(
+            "<!DOCTYPE html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline';"
+        ));
+        // Nothing in the default style reaches the network or closes its element.
+        assert!(!MAIL_DEFAULT_STYLE.contains("url(") && !MAIL_DEFAULT_STYLE.contains('<'));
     }
 
     #[test]
