@@ -126,24 +126,31 @@ describe("stage 7: search, conversations, identities", () => {
     await testId("conversation-toggle").click();
     await browser.waitUntil(async () => (await testId("conversation-toggle").getAttribute("aria-pressed")) === "true");
     await testId("message-list").waitForExist({ timeout: 20000 });
+    // Stage 17 (decision 0049): the list is a tree; a conversation row says "n replies".
     let first = null;
     await browser.waitUntil(
       async () => {
         first = await browser.execute(
-          () => document.querySelector('[data-testid="row-thread-count"]')?.closest('[role="option"]')?.id ?? null,
+          () => document.querySelector('[data-testid="row-replies"]')?.closest('[role="treeitem"]')?.id ?? null,
         );
         return first !== null;
       },
-      { timeout: 20000, timeoutMsg: "no conversation row with a count" },
+      { timeout: 20000, timeoutMsg: "no conversation row with replies" },
     );
     await (await browser.$(`[id="${first}"]`)).click();
     await testId("thread-pane").waitForExist({ timeout: 10000 });
-    report.steps.threadRows = await browser.execute(() => document.querySelectorAll('[data-testid="row-thread-count"]').length);
+    await testId("message-card").waitForExist({ timeout: 10000 });
+    // One message on the right, not the stacked conversation.
+    assert.deepEqual(
+      await browser.execute(() => [document.querySelectorAll('[data-testid="message-card"]').length, document.querySelectorAll('[data-testid="thread-entries"]').length]),
+      [1, 0],
+    );
+    report.steps.threadRows = await browser.execute(() => document.querySelectorAll('[data-testid="row-replies"]').length);
     report.screenshots.push(await screenshot("conversation"));
     // The offsite thread lies in INBOX as well: a conversation row of the sorted inbox.
     await openView("inbox");
     await browser.waitUntil(
-      async () => (await browser.execute(() => document.querySelectorAll('[data-testid="row-thread-count"]').length)) > 0,
+      async () => (await browser.execute(() => document.querySelectorAll('[data-testid="row-replies"]').length)) > 0,
       { timeout: 20000, timeoutMsg: "no conversation row in the inbox" },
     );
     await testId("conversation-toggle").click();

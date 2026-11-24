@@ -188,7 +188,7 @@ async function shoot(name, { keepFocus = false, buttons = true } = {}) {
 /** Accessible names of the rendered list rows, to find one and to report what the list showed. */
 const rowNames = () =>
   browser.execute(() =>
-    [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')].map((o) => ({
+    [...document.querySelectorAll('[data-testid="message-list"] :is([role="option"], [role="treeitem"])')].map((o) => ({
       id: o.id,
       name: (o.querySelector('[data-testid="row-name"]')?.textContent ?? o.textContent ?? "").trim(),
     })),
@@ -411,7 +411,7 @@ describe("README screenshots (docs/images)", function () {
     // docs/DESIGN.md, "Nach den README-Bildern": a row without a preview (older than the prefetch)
     // has its two lines in the middle of the fixed row height.
     const offsets = await browser.execute(() =>
-      [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')]
+      [...document.querySelectorAll('[data-testid="message-list"] :is([role="option"], [role="treeitem"])')]
         .filter((option) => option.querySelector('[data-testid="row-preview"]') === null && !option.querySelector('[data-testid="bundle-row"]'))
         .map((option) => {
           const row = option.getBoundingClientRect();
@@ -531,7 +531,7 @@ describe("README screenshots (docs/images)", function () {
     await input.waitForExist();
     await input.setValue(query);
     await browser.waitUntil(
-      async () => (await browser.execute(() => document.querySelectorAll('[data-testid="message-list"] [role="option"]').length)) > 0,
+      async () => (await browser.execute(() => document.querySelectorAll('[data-testid="message-list"] :is([role="option"], [role="treeitem"])').length)) > 0,
       { timeout: 10000, timeoutMsg: "no search results" },
     );
     await browser.pause(800);

@@ -40,7 +40,8 @@ export const config = {
   // WebDriver port closed and starts the app again (it logs "unreachable — restarting").
   // account-sync.e2e.mjs needs the empty data directory the first three leave behind, and the
   // server exactly as seeded; reading.e2e.mjs adds folders to it. comfort.e2e.mjs,
-  // search.e2e.mjs (the offsite thread in Archive) and extras.e2e.mjs read the seed;
+  // search.e2e.mjs and conversations.e2e.mjs (the offsite thread in Archive) and extras.e2e.mjs
+  // read the seed;
   // keyboard.e2e.mjs archives a message it delivered itself; windows.e2e.mjs only reads.
   // actions.e2e.mjs changes the inbox on the server (archive, trash); compose.e2e.mjs,
   // composer-complete.e2e.mjs and send-later.e2e.mjs write drafts and send to alice.
@@ -60,6 +61,8 @@ export const config = {
     "./tests/e2e/attachment-preview.e2e.mjs",
     "./tests/e2e/comfort.e2e.mjs",
     "./tests/e2e/search.e2e.mjs",
+    // Stage 17 (decision 0049): conversations unfold in the list (the seed's offsite thread).
+    "./tests/e2e/conversations.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",

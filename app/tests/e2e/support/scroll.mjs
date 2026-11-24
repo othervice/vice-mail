@@ -33,7 +33,8 @@ export async function measureScroll({ durationMs = 8000, pxPerFrame = 80 } = {})
         return;
       }
       const syncText = () => document.querySelector('[data-testid="sync-status"]')?.textContent.trim() ?? null;
-      const setSize = () => Number(list.querySelector('[role="option"]')?.getAttribute("aria-setsize") ?? 0);
+      // Rows are options, or tree items in a list of conversations (stage 17).
+      const setSize = () => Number(list.querySelector('[role="option"], [role="treeitem"][aria-level="1"]')?.getAttribute("aria-setsize") ?? 0);
 
       // Uncovered pixels of the visible list area: no row (message, section or "loading more")
       // in the DOM there. The padding above the first and below the last row is not a gap.
