@@ -21,9 +21,6 @@
 | [brand/](brand/README.md) | logo, icon and colours |
 | [images/](images/README.md) | screenshots for the README |
 
-`ARCHITECTURE.md` is still in German. An English translation is prepared in
-[en/ARCHITECTURE.md](en/ARCHITECTURE.md) and replaces it when the project is published.
-
 ## Project log (German)
 
 Vice Mail was planned and built in numbered stages. These documents were written in German while
@@ -43,5 +40,4 @@ results behind the code. They are not needed to use or build the app.
 Code). Its rules apply to every contributor and are restated in English in
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-Folders for the maintainer: `internal/` (notes on preparing the publication, German) and `en/`
-(English translations prepared for publication).
+Folder for the maintainer: `internal/` (notes on preparing the publication, German).

@@ -1,911 +1,910 @@
-# Architektur
+# Architecture
 
-Stand 22.11.2026. Die Versionen sind die an diesem Tag aktuellen stabilen. Stufe 0 hat die riskanten
-Annahmen mit Wegwerf-Code geprüft; Messwerte und Begründungen stehen in `docs/decisions/0001` bis `0005`.
+As of 2026-11-22. The versions are the stable ones current on that day. Stage 0 tested the risky
+assumptions with throwaway code; measurements and reasons are in `docs/decisions/0001` to `0005`.
 
-## Überblick
+## Overview
 
 ```
-React-Oberfläche (WebView)
-   │   typisierte Commands und Events, einziger Weg
-app/src-tauri            dünne Shell: Fenster, Commands, Verdrahtung
+React UI (WebView)
+   │   typed commands and events, the only way
+app/src-tauri            thin shell: windows, commands, wiring
    │
-mail-engine              Konten, Sync-Planung, Outbox, Threads, Kategorien, Regeln
-   ├── mail-store        SQLite, Migrationen, FTS5, Abfragen
-   ├── mail-imap         IMAP- und SMTP-Adapter, implementiert MailBackend
-   ├── mail-jmap         JMAP-Adapter (Stufe 14, 0041), implementiert MailBackend, MailWriter, MailSender
-   ├── mail-content      Parsen, HTML-Bereinigung, Link-Prüfung, Dateinamen (rein, ohne IO)
-   ├── webview2-guard    nur Windows: Navigationen im Mail-Frame abfangen (einzige Crate mit `unsafe`, 0011)
-   └── mail-mcp          MCP-Server: Hilfsprogramm und Werkzeuge gegen `MailAccess` (0015)
-   └── mail-model        Typen, Fehler, Capabilities, MailBackend-Trait, ohne IO
+mail-engine              accounts, sync planning, outbox, threads, categories, rules
+   ├── mail-store        SQLite, migrations, FTS5, queries
+   ├── mail-imap         IMAP and SMTP adapter, implements MailBackend
+   ├── mail-jmap         JMAP adapter (stage 14, 0041), implements MailBackend, MailWriter, MailSender
+   ├── mail-content      parsing, HTML sanitising, link checking, file names (pure, no IO)
+   ├── webview2-guard    Windows only: intercept navigations in the mail frame (only crate with `unsafe`, 0011)
+   └── mail-mcp          MCP server: helper program and tools against `MailAccess` (0015)
+   └── mail-model        types, errors, capabilities, MailBackend trait, no IO
 ```
 
-Später kommen der MCP-Server (Stufe 12), `mail-ai` (Stufe 13, optional) und bei Bedarf weitere Adapter (Stufe 14) dazu. Der
-Einstellungs-Sync (Stufe 11) beginnt als Modul in `mail-engine` und wird erst ein eigenes Crate,
-wenn er groß genug ist.
+Later the MCP server (stage 12), `mail-ai` (stage 13, optional) and, if needed, further adapters (stage 14) are added. The
+settings sync (stage 11) starts as a module in `mail-engine` and only becomes a crate of its own
+once it is large enough.
 
 ## Stack
 
-| Bereich | Wahl | Version | Warum |
+| Area | Choice | Version | Why |
 |---|---|---|---|
-| Desktop-Shell | Tauri | 2.12 (Crate 2.12.7, CLI 2.12.6) | System-WebView statt mitgeliefertem Browser: kleine App, wenig Speicher, Rust-Kern; Spike-App: `.dmg` 2,2 MB, Windows-Installer 1,9 MB (0004) |
-| Kern | Rust stable, Edition 2024, Tokio | mind. 1.98, geprüft 1.100 | Geschwindigkeit, Speichersicherheit; 1.98 verlangt mail-parser, 1.90 Tauri 2.12 (0006) |
-| Oberfläche | React, TypeScript strict | 19.3.1 / 7.0.2 | größtes Ökosystem für die nötigen Bausteine. Typecheck mit TS 7 (Paket-Alias `typescript7`); `typescript` 6.0.3 nur für typescript-eslint, das die klassische TS-API braucht |
-| Build | Vite, pnpm | 8.3 / 12.19 | schnell, Standard bei Tauri |
-| Styling | Tailwind CSS mit eigenen Tokens | 4.3.5 | Tokens als CSS-Variablen, kein Laufzeit-CSS |
-| Bausteine | Radix UI (`radix-ui`), Lucide-Icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | zugängliche Grundbausteine ohne fremdes Aussehen. Achtung CSP: Radix Dialog, Popover, Select und ScrollArea fügen `<style>`-Elemente ein; vor ihrer Verwendung im Release-Build prüfen |
-| Liste | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | Virtualisierung für sehr lange Listen; bei 10.000 Einträgen höchstens etwa 40 Zeilen im DOM. Liste als `listbox` mit `aria-activedescendant` (Stufe 2). Stufe 8: die Schnellaktionen in den Zeilen sind reine Mausziele ohne Rolle und Fokus (eine `option` darf keine Bedienelemente enthalten, axe `nested-interactive`); Tastatur und Screenreader haben dieselben Aktionen als Kürzel, in der Symbolleiste und in der Befehlspalette. Entscheidung 0031: Bündel, „Alle anzeigen“ und „Zurück zum Posteingang“ sind selbst `option`s (Pfeiltasten, Enter, Leertaste; axe `aria-required-children`), und jede `option` wird über ihren Inhalt benannt statt über `aria-label` (WCAG 2.5.3) |
-| Daten im Frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query für Daten aus dem Kern, Zustand für reinen UI-Zustand |
-| Editor | TipTap | 3.35 | ausgereifter Rich-Text-Editor mit kontrollierbarem HTML |
-| Sprachen | i18next, react-i18next | 27.2 / 18.0 | Standard, Englisch und Deutsch; Textliterale in Komponenten verbietet `eslint-plugin-i18next` (`no-literal-string`) |
-| Lint | ESLint, typescript-eslint, eslint-plugin-react-hooks, eslint-plugin-i18next | 10.15 / 8.73 / 7.1 / 6.1 | `eslint-plugin-react` scheidet aus (kein Release seit April 2025, kein ESLint 10) |
-| IDs | uuid | 1.29 | Konto-IDs (UUID v4) |
-| Datenbank | SQLite über rusqlite (bundled, FTS5, Tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | ein Prozess, ein Schreiber: synchrones rusqlite ist einfacher und schneller als SQLx; bei 500.000 Mails Listenseite 0,04 ms, erste Suchtreffer unter 0,2 ms (0003) |
-| Migrationen | rusqlite_migration | 2.7.0 | klein, nutzt `user_version`; legt rusqlite auf ^0.41 fest (0006) |
-| IMAP | async-imap (Tokio, rustls) plus eigene schmale Befehlsschicht in `mail-imap` | 0.12.0 | im Dauereinsatz bei Delta Chat; Verbindung, Parser, IDLE kommen aus der Bibliothek. Status-Prüfung, Antwortcodes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS und modifiziertes UTF-7 über die eigene Schicht. 10.000 Kopfdaten in 0,044 s über TLS (0002) |
-| JMAP | eigener Adapter `mail-jmap` über das reqwest des Workspace (HTTP/1.1, rustls aus `mail_imap::tls`) und serde_json | – | Stufe 14 (0041): RFC 8620/8621 sind JSON über HTTPS; die wenigen Methoden (Sitzung, `Mailbox/get`, `Email/query`, `/changes`, `/get`, `/set`, `/import`, `EmailSubmission/set`, Blobs, EventSource) sind schmaler als eine Bibliothek. Keine neue Abhängigkeit |
-| SMTP | lettre (nur Protokollschicht, `smtp-transport` + `tokio1`) | 0.11.24 | TLS, Zeitlimits und STARTTLS macht der Adapter selbst wie bei IMAP (Plattform-Verifier); lettre ohne eigenes TLS |
-| MIME lesen / schreiben | mail-parser / mail-builder | 1.0.1 / 2.0.1 | robust gegen kaputte Mails, vom Stalwart-Projekt |
-| Body-Ablage | zstd (Stufe 3, mit Prüfsumme) | 0.14.4 | gleiches Verhältnis wie Deflate, 4- bis 20-mal schneller beim Packen; Dateien statt BLOBs, damit Datenbank und Migrationssicherungen klein bleiben (0009) |
-| HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
-| TLS | rustls mit Provider `aws-lc-rs`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7, aws-lc-rs 1.19 | kein OpenSSL; der Standard-Provider von rustls, regelmäßig veröffentlicht, baut auch für Windows ohne CMake und NASM (vorab assemblierte Objekte aus dem Crate, 0002). Provider und Client-Konfiguration entstehen an einer Stelle (`mail_imap::tls`), auch für reqwest und die TLS-Server der Tests. Selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver |
-| System öffnen, Dateidialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | Links und Anhänge im System öffnen, Speichern-Dialog; beide nur in Rust, hinter Traits testbar. Nicht `tauri-plugin-dialog` (spritzt ein Script ein und bringt `tauri-plugin-fs` mit) |
-| Anhangsvorschau | image (`png`, `jpeg`, `gif`, `webp`), hayro | 0.25.10 / 0.9.0 | Stufe 16 (0036): Bilder dekodiert und neu kodiert, PDF-Seiten gerastert, beides in Rust; die WebView sieht nur selbst erzeugte PNG/JPEG. Dieselben Decoder kodieren die Bilder in Mails neu (Sicherheitsprüfung C-4, 0046; animiert als GIF mit dem `gif`-Encoder von `image`), ebenfalls im Helfer. hayro ist reines Rust (`hayro` selbst `forbid(unsafe_code)`, `hayro-syntax` mit einer `unsafe`-Stelle für die Seitenliste, 0043), ohne Script-Engine und Netz; ohne eigene Grenze für entpackte Streams und Zeit; deshalb läuft die Vorschau im Helfer `mail-mcp` mit Zeit- und Speichergrenze (C-2, 0043), mit eingebetteten Standardschriften und CMaps. Beide Apache-2.0 OR MIT |
-| Benachrichtigungen, eine Instanz | tauri-plugin-notification, tauri-plugin-single-instance (nur Windows) | 2.8.1 / 2.5.5 | Stufe 9 (0020): native Mitteilungen nur aus Rust (keine Capability für die Oberfläche), Klicks über den Aktions-Handler des Plugins; auf Windows reicht ein zweiter Start (`mailto:`-Link) seine Argumente an die laufende App weiter. Beide Apache-2.0 OR MIT |
-| Updates in der App | tauri-plugin-updater | =2.14.1 | Stufe 15 (0037): Manifest, Signaturprüfung (minisign/Ed25519, `requireSignedVersion`), Austausch des App-Bundles (macOS) und NSIS-Installer im Modus `passive` (Windows); nur aus Rust, keine Capability für die Oberfläche. Ohne Default-Features (kein `ring`, kein System-Proxy, kein zip), TLS über unser reqwest/rustls per `configure_client`, deshalb exakt gepinnt. Release 28.10.2026, Apache-2.0 OR MIT. `tauri-plugin-process` nicht nötig (`AppHandle::request_restart`) |
-| WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
-| Schlüsselbund | keyring-core mit apple-native-keyring-store und windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS-Schlüsselbund (login keychain) und Windows-Anmeldeinformationen; vom `keyring`-Projekt für Apps empfohlen, ohne globalen Standardspeicher und ohne Linux-D-Bus. Dienstname = Bundle-ID, Kontoname = Konto-UUID; aus dem Einstellungs-Sync übernommene Konten bekommen einen zufälligen Namen `synced:<hex>` (0040) |
-| Kontoerkennung | hickory-resolver, reqwest (rustls, ohne Default-Features), roxmltree | 0.26 / 0.13 / 0.21 | DNS-SRV, HTTPS für die Autokonfiguration der eigenen Domain, XML ohne DTD; reqwest wird später auch für externe Bilder und KI gebraucht, ab Stufe 14 für die Token-Endpunkte der Anmeldung bei Microsoft und Google (0042; PKCE mit sha2, Zufall aus aws-lc-rs, keine OAuth-Bibliothek) |
-| Typen über IPC | tauri-specta, specta, specta-typescript, exakt gepinnt | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | erzeugt Typen, Commands und Events; `u64` wird nicht still falsch typisiert; Export per Test, der bei veralteter Datei scheitert (0004). TypeScript-Typen werden nie von Hand gepflegt |
-| Sync-Verschlüsselung | age (X25519, scrypt, Feature `armor`), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | geprüftes Format, keine eigene Kryptografie; 0.11 statt 0.12 wegen einer Sicherheitsmeldung im P-256-Zweig von 0.12 (0014). Im IMAP-Ordner liegt der Chiffretext als age-ASCII-Armor (0022) |
-| Zeitzone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | Systemzone samt Sommerzeit für Datumsfilter der Suche, auf Windows mit mitgelieferter tzdb; MIT OR Unlicense (0017). `mail-content` nutzt nur die zivilen Datumstypen (Kalendereinladungen: Datum, Wochentag, Datumsrechnung); Zeitzonen löst dort die Engine über den Trait `ZoneResolver`, die tzdb wird in `mail-content` nur in Tests gelesen |
-| Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | strukturierte Logs, täglich rotierend (14 Dateien) im Log-Verzeichnis der App; `Secret<T>` schwärzt |
-| Allgemein (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | Serialisierung, typisierte Fehler, Laufzeit |
-| Tests | cargo test, Vitest, WebdriverIO mit `@wdio/tauri-service` und `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | eingebetteter WebDriver, nur mit Cargo-Feature `e2e`; läuft auf macOS (Spike D). Nicht `tauri-plugin-wdio` (wartet ohne `switchToWindow` je Befehl 5 s). WebDriver-Klicks sind synthetisch; echte Mausklicks über ein eigenes Test-Command. Desktop-Tests brauchen eine GUI-Sitzung und laufen nicht in `scripts/check.sh`, sondern als `pnpm --dir app test:e2e` |
-| Barrierefreiheit (Tests) | axe-core (nur Entwicklung) | =4.14.0 | Stufe 8: prüft Rollen, Namen, ARIA und Struktur der gerenderten Ansichten in Vitest (`app/tests/a11y.test.tsx`), hell und dunkel; keine schweren oder kritischen Befunde erlaubt. Farbkontraste prüft `app/tests/contrast.test.ts` an den Tokens, weil jsdom keine Stylesheets rendert; die Mail im Sandbox-Frame bleibt außen vor. MPL-2.0 (verträglich mit GPL-3.0, wird nicht ausgeliefert); 4.14.0 vom 5. Oktober 2026 statt der eine Woche alten 4.14.1 |
-| Testserver | Stalwart (ein Binary, IMAP+SMTP+JMAP), eingerichtet per Management-API durch `scripts/testmail.sh` | 1.1.1 | ohne Docker und sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, eigene Schlagwörter nachgewiesen (0001). JMAP über HTTPS auf 18443 mit `STALWART_PUBLIC_URL` (0041). Nur Entwicklungswerkzeug, wird nicht ausgeliefert |
-| Windows-Build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | Installer vom Mac aus, in Spike C gebaut (kalt 74 s); `makensis` nur mit UTF-8-Locale (`LANG=en_US.UTF-8`), siehe `docs/SETUP.md` |
+| Desktop shell | Tauri | 2.12 (crate 2.12.7, CLI 2.12.6) | system WebView instead of a bundled browser: small app, little memory, Rust core; spike app: `.dmg` 2.2 MB, Windows installer 1.9 MB (0004) |
+| Core | Rust stable, edition 2024, Tokio | at least 1.98, tested 1.100 | speed, memory safety; mail-parser requires 1.98, Tauri 2.12 requires 1.90 (0006) |
+| UI | React, TypeScript strict | 19.3.1 / 7.0.2 | largest ecosystem for the building blocks needed. Typecheck with TS 7 (package alias `typescript7`); `typescript` 6.0.3 only for typescript-eslint, which needs the classic TS API |
+| Build | Vite, pnpm | 8.3 / 12.19 | fast, standard with Tauri |
+| Styling | Tailwind CSS with own tokens | 4.3.5 | tokens as CSS variables, no runtime CSS |
+| Building blocks | Radix UI (`radix-ui`), Lucide icons (`lucide-react`), cmdk | 1.8.1 / 1.77 / 1.1 | accessible primitives without an imposed look. Beware CSP: Radix Dialog, Popover, Select and ScrollArea insert `<style>` elements; check before using them in the release build |
+| List | TanStack Virtual (`@tanstack/react-virtual`) | 3.14.26 | virtualisation for very long lists; with 10,000 entries at most about 40 rows in the DOM. List as `listbox` with `aria-activedescendant` (stage 2). Stage 8: the quick actions in the rows are pure mouse targets without role or focus (an `option` must not contain controls, axe `nested-interactive`); keyboard and screen reader have the same actions as shortcuts, in the toolbar and in the command palette. Decision 0031: bundles, "Show all" and "Back to inbox" are `option`s themselves (arrow keys, Enter, Space; axe `aria-required-children`), and every `option` is named by its content instead of by `aria-label` (WCAG 2.5.3) |
+| Data in the frontend | TanStack Query, Zustand | 5.108.2 / 5.1.0 | Query for data from the core, Zustand for pure UI state |
+| Editor | TipTap | 3.35 | mature rich-text editor with controllable HTML |
+| Languages | i18next, react-i18next | 27.2 / 18.0 | standard, English and German; text literals in components are forbidden by `eslint-plugin-i18next` (`no-literal-string`) |
+| Lint | ESLint, typescript-eslint, eslint-plugin-react-hooks, eslint-plugin-i18next | 10.15 / 8.73 / 7.1 / 6.1 | `eslint-plugin-react` is ruled out (no release since April 2025, no ESLint 10) |
+| IDs | uuid | 1.29 | account IDs (UUID v4) |
+| Database | SQLite via rusqlite (bundled, FTS5, tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | one process, one writer: synchronous rusqlite is simpler and faster than SQLx; with 500,000 mails a list page takes 0.04 ms, first search hits under 0.2 ms (0003) |
+| Migrations | rusqlite_migration | 2.7.0 | small, uses `user_version`; pins rusqlite to ^0.41 (0006) |
+| IMAP | async-imap (Tokio, rustls) plus our own thin command layer in `mail-imap` | 0.12.0 | in continuous use at Delta Chat; connection, parser, IDLE come from the library. Status checking, response codes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS and modified UTF-7 via our own layer. 10,000 headers in 0.044 s over TLS (0002) |
+| JMAP | our own adapter `mail-jmap` over the workspace's reqwest (HTTP/1.1, rustls from `mail_imap::tls`) and serde_json | – | stage 14 (0041): RFC 8620/8621 are JSON over HTTPS; the few methods (session, `Mailbox/get`, `Email/query`, `/changes`, `/get`, `/set`, `/import`, `EmailSubmission/set`, blobs, EventSource) are slimmer than a library. No new dependency |
+| SMTP | lettre (protocol layer only, `smtp-transport` + `tokio1`) | 0.11.24 | the adapter does TLS, timeouts and STARTTLS itself, as with IMAP (platform verifier); lettre without its own TLS |
+| Reading / writing MIME | mail-parser / mail-builder | 1.0.1 / 2.0.1 | robust against broken mails, from the Stalwart project |
+| Body storage | zstd (stage 3, with checksum) | 0.14.4 | same ratio as Deflate, 4 to 20 times faster at compressing; files instead of BLOBs, so that the database and migration backups stay small (0009) |
+| HTML sanitising | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | allowlist sanitizer; CSS is rewritten token by token (no regex); Punycode decoded by ourselves per RFC 3492, deliberately not `idna` directly (no release since August 2025) |
+| TLS | rustls with provider `aws-lc-rs`, tokio-rustls, verification via the system store with rustls-platform-verifier | 0.23 / 0.26 / 0.7, aws-lc-rs 1.19 | no OpenSSL; the default provider of rustls, released regularly, also builds for Windows without CMake and NASM (pre-assembled objects from the crate, 0002). Provider and client configuration are created in one place (`mail_imap::tls`), also for reqwest and the tests' TLS servers. Self-signed server certificates work if the system trusts them. Additional root CA (`new_with_extra_roots`) only for tests against the test server |
+| Opening in the system, file dialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | open links and attachments in the system, save dialog; both only in Rust, testable behind traits. Not `tauri-plugin-dialog` (injects a script and brings `tauri-plugin-fs` along) |
+| Attachment preview | image (`png`, `jpeg`, `gif`, `webp`), hayro | 0.25.10 / 0.9.0 | stage 16 (0036): images decoded and re-encoded, PDF pages rasterised, both in Rust; the WebView only sees PNG/JPEG generated by ourselves. The same decoders re-encode the images in mails (security review C-4, 0046; animated ones as GIF with the `gif` encoder of `image`), likewise in the helper. hayro is pure Rust (`hayro` itself `forbid(unsafe_code)`, `hayro-syntax` with one `unsafe` block for the page list, 0043), without a script engine and network, with embedded standard fonts and CMaps, but without a limit of its own for decompressed streams and time; hence the preview runs in the helper `mail-mcp` with a time and memory limit (C-2, 0043). Both Apache-2.0 OR MIT |
+| Notifications, single instance | tauri-plugin-notification, tauri-plugin-single-instance (Windows only) | 2.8.1 / 2.5.5 | stage 9 (0020): native notifications only from Rust (no capability for the UI), clicks via the plugin's action handler; on Windows a second launch (`mailto:` link) passes its arguments on to the running app. Both Apache-2.0 OR MIT |
+| In-app updates | tauri-plugin-updater | =2.14.1 | stage 15 (0037): manifest, signature verification (minisign/Ed25519, `requireSignedVersion`), replacing the app bundle (macOS) and NSIS installer in `passive` mode (Windows); only from Rust, no capability for the UI. Without default features (no `ring`, no system proxy, no zip), TLS via our reqwest/rustls through `configure_client`, hence pinned exactly. Released 2026-10-28, Apache-2.0 OR MIT. `tauri-plugin-process` not needed (`AppHandle::request_restart`) |
+| WebView2 access | webview2-com (only in `webview2-guard`) | =0.39.1 | subscribe to `FrameNavigationStarting`, which wry does not offer (0011) |
+| Keychain | keyring-core with apple-native-keyring-store and windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS keychain (login keychain) and Windows credentials; recommended for apps by the `keyring` project, without a global default store and without Linux D-Bus. Service name = bundle ID, account name = account UUID; accounts adopted from the settings sync get a random name `synced:<hex>` (0040) |
+| Account discovery | hickory-resolver, reqwest (rustls, without default features), roxmltree | 0.26 / 0.13 / 0.21 | DNS SRV, HTTPS for the domain's own autoconfiguration, XML without DTD; reqwest will later also be needed for external images and AI, from stage 14 for the token endpoints of the sign-in with Microsoft and Google (0042; PKCE with sha2, randomness from aws-lc-rs, no OAuth library) |
+| Types over IPC | tauri-specta, specta, specta-typescript, pinned exactly | =2.0.0-rc.29 / =2.0.0-rc.28 / =0.0.15 | generates types, commands and events; `u64` is not silently mistyped; export via a test that fails when the file is outdated (0004). TypeScript types are never maintained by hand |
+| Sync encryption | age (X25519, scrypt, feature `armor`), hmac, sha2 | 0.11.5 / 0.13 / 0.11 | reviewed format, no home-made cryptography; 0.11 instead of 0.12 because of a security advisory in the P-256 branch of 0.12 (0014). In the IMAP folder the ciphertext is stored as age ASCII armor (0022) |
+| Time zone | jiff (`std`, `tz-system`, `tzdb-zoneinfo`, `tzdb-bundle-platform`) | 1.0.2 | system zone including daylight saving time for the search's date filters, on Windows with a bundled tzdb; MIT OR Unlicense (0017). `mail-content` uses only the civil date types (calendar invitations: date, weekday, date arithmetic); time zones there are resolved by the engine through the trait `ZoneResolver`, the tzdb is read in `mail-content` only in tests |
+| Logging | tracing, tracing-subscriber, tracing-appender | 0.1.44 / 0.3.23 / 0.2.5 | structured logs, rotating daily (14 files) in the app's log directory; `Secret<T>` redacts |
+| General (Rust) | serde, serde_json, thiserror, tokio | 1.0 / 1.0 / 2.0 / 1.54 | serialisation, typed errors, runtime |
+| Tests | cargo test, Vitest, WebdriverIO with `@wdio/tauri-service` and `tauri-plugin-wdio-webdriver` | – / 5.1 / 9.31, 1.5.1, =1.5.1 | embedded WebDriver, only with Cargo feature `e2e`; runs on macOS (spike D). Not `tauri-plugin-wdio` (without `switchToWindow` it waits 5 s per command). WebDriver clicks are synthetic; real mouse clicks via a dedicated test command. Desktop tests need a GUI session and do not run in `scripts/check.sh` but as `pnpm --dir app test:e2e` |
+| Accessibility (tests) | axe-core (development only) | =4.14.0 | stage 8: checks roles, names, ARIA and structure of the rendered views in Vitest (`app/tests/a11y.test.tsx`), light and dark; no serious or critical findings allowed. Colour contrasts are checked by `app/tests/contrast.test.ts` on the tokens, because jsdom does not render stylesheets; the mail in the sandbox frame is left out. MPL-2.0 (compatible with GPL-3.0, not shipped); 4.14.0 of 2026-10-05 instead of the one-week-old 4.14.1 |
+| Test server | Stalwart (one binary, IMAP+SMTP+JMAP), set up via the management API by `scripts/testmail.sh` | 1.1.1 | without Docker and sudo; IDLE, CONDSTORE, QRESYNC, MOVE, UIDPLUS, SPECIAL-USE, custom keywords verified (0001). JMAP over HTTPS on 18443 with `STALWART_PUBLIC_URL` (0041). Development tool only, not shipped |
+| Windows build | cargo-xwin, LLVM, NSIS | 0.24.1 / 23.1 / 3.13 | installer from the Mac, built in spike C (cold 74 s); `makensis` only with a UTF-8 locale (`LANG=en_US.UTF-8`), see `docs/SETUP.md` |
 
-Verworfen: SQLx (asynchron ohne Nutzen bei einem Schreiber, SQLCipher nur über Umwege), SQLCipher
-(siehe Entscheidungen), Electron (Speicherbedarf), eingebettetes llama.cpp (Build-Aufwand pro Plattform),
-eigener Sync-Server mit PostgreSQL.
+Rejected: SQLx (asynchronous without benefit with one writer, SQLCipher only via detours), SQLCipher
+(see decisions), Electron (memory footprint), embedded llama.cpp (build effort per platform),
+own sync server with PostgreSQL.
 
 ## Repository
 
 ```
 vice-mail/
-├── app/                    Tauri-App
+├── app/                    Tauri app
 │   ├── src/                React: app/ features/ components/ services/ stores/ i18n/ styles/ config/
-│   ├── src-tauri/          Shell, Commands, Capabilities
-│   └── tests/              Vitest und WebdriverIO
+│   ├── src-tauri/          shell, commands, capabilities
+│   └── tests/              Vitest and WebdriverIO
 ├── crates/
 │   ├── mail-model/
 │   ├── mail-store/
 │   ├── mail-imap/
 │   └── mail-engine/
-├── testmail/               Testserver-Konfiguration und Seed-Daten
-├── spikes/                 Wegwerf-Code aus Stufe 0, nie von Produktcode importiert
+├── testmail/               test server configuration and seed data
+├── spikes/                 throwaway code from stage 0, never imported by product code
 ├── scripts/
 ├── docs/
-├── Cargo.toml              Workspace
+├── Cargo.toml              workspace
 └── CLAUDE.md
 ```
 
-## Modulgrenzen
+## Module boundaries
 
-- `mail-model`: IDs, Konto, Postfach, Nachricht, Flags, Capabilities, Fehlertypen und der Trait
-  `MailBackend`. Kein IO, keine Abhängigkeit auf andere eigene Crates.
-- `mail-store`: einzige Stelle mit SQL. Ein Schreib-Thread, ein Pool von Lese-Verbindungen, WAL.
-  Kein Datenbankaufruf blockiert einen Tokio-Worker.
-- `mail-imap`: spricht IMAP und SMTP, liefert Modelltypen. Kennt weder Datenbank noch Oberfläche.
-- `mail-jmap` (Stufe 14, 0041): spricht JMAP über HTTPS hinter denselben Traits, liefert
-  Modelltypen. Kennt weder Datenbank noch Oberfläche; seine UID-Nummerierung schreibt er über den
-  Trait `UidMapStore`, den der Speicher umsetzt. Die Engine wählt den Adapter je Konto
+- `mail-model`: IDs, account, mailbox, message, flags, capabilities, error types and the trait
+  `MailBackend`. No IO, no dependency on other crates of our own.
+- `mail-store`: the only place with SQL. One write thread, a pool of read connections, WAL.
+  No database call blocks a Tokio worker.
+- `mail-imap`: speaks IMAP and SMTP, returns model types. Knows neither database nor UI.
+- `mail-jmap` (stage 14, 0041): speaks JMAP over HTTPS behind the same traits, returns
+  model types. Knows neither database nor UI; it writes its UID numbering through the
+  trait `UidMapStore`, which the store implements. The engine chooses the adapter per account
   (`AnyConnector`, `AnySender` in `mail-engine/src/protocols.rs`).
-- `mail-content`: macht aus Rohdaten eine angezeigte Mail: Parsen, HTML-Bereinigung mit Pflicht-CSP,
-  Link-Platzhalter, Link-Warnungen, sichere Dateinamen, Vorschautext. Rein, ohne IO, ohne Tokio;
-  sicherheitskritisch und mit eigenem Korpus getestet (deshalb ein fünftes Crate).
-- `mail-engine`: verbindet Adapter und Speicher. Bietet der Shell eine Fassade `AppCore` und einen
-  Strom typisierter Ereignisse. Alles Verhalten ist über `AppCore` ohne WebView testbar.
-- `app/src-tauri`: reicht Commands an `AppCore` durch und Ereignisse an die Oberfläche weiter.
-- Oberfläche: fragt Daten seitenweise ab und lädt neu, wenn ein Ereignis die Ansicht betrifft. Sie pollt nie.
-  Die von tauri-specta erzeugten Bindings (`app/src/generated/`) und `@tauri-apps/api` werden nur in
-  `app/src/services/ipc.ts` importiert (ESLint `no-restricted-imports`); `invoke` steht nur in der
-  erzeugten Datei.
+- `mail-content`: turns raw data into a displayed mail: parsing, HTML sanitising with mandatory CSP,
+  link placeholders, link warnings, safe file names, preview text. Pure, without IO, without Tokio;
+  security-critical and tested with its own corpus (hence a fifth crate).
+- `mail-engine`: connects adapters and storage. Offers the shell a facade `AppCore` and a
+  stream of typed events. All behaviour is testable via `AppCore` without a WebView.
+- `app/src-tauri`: passes commands through to `AppCore` and events on to the UI.
+- UI: queries data page by page and reloads when an event affects the view. It never polls.
+  The bindings generated by tauri-specta (`app/src/generated/`) and `@tauri-apps/api` are imported only in
+  `app/src/services/ipc.ts` (ESLint `no-restricted-imports`); `invoke` appears only in the
+  generated file.
 
-**Regeln für die Brücke (0004)**
-- Jedes `u64`/`i64`-Feld legt fest, wie es in TypeScript ankommt: als Zahl, wenn es sicher unter
-  2^53 bleibt (Größen, UIDs, Zeitstempel in Millisekunden), sonst als dezimaler String (MODSEQ).
-- Fehler des Frameworks (unbekannter Command, falsches Argument, ACL) kommen als String an, nicht als
-  `IpcError`. `ipc.ts` erkennt das und bildet es auf `code: "internal"` ab.
-- Ereignisse empfängt die Oberfläche über die Capability `core:event:default`; weitere Capabilities nur mit Begründung.
+**Rules for the bridge (0004)**
+- Every `u64`/`i64` field defines how it arrives in TypeScript: as a number if it stays safely below
+  2^53 (sizes, UIDs, timestamps in milliseconds), otherwise as a decimal string (MODSEQ).
+- Framework errors (unknown command, wrong argument, ACL) arrive as a string, not as
+  `IpcError`. `ipc.ts` detects this and maps it to `code: "internal"`.
+- The UI receives events via the capability `core:event:default`; further capabilities only with a justification.
 
-`MailBackend` meldet über eine `Capabilities`-Struktur, was der Server kann (IDLE, CONDSTORE, MOVE,
-UIDPLUS, SPECIAL-USE, eigene Schlagwörter, ab Stufe 14 Gmail mit `X-GM-EXT-1` und JMAP mit dem,
-was der Adapter dort nachbildet, 0041). Die Engine und die
-Oberfläche fragen danach. Was ein
-Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem klaren Hinweis versehen.
+`MailBackend` reports via a `Capabilities` struct what the server can do (IDLE, CONDSTORE, MOVE,
+UIDPLUS, SPECIAL-USE, custom keywords, from stage 14 Gmail with `X-GM-EXT-1` and JMAP with what
+the adapter emulates there, 0041). The engine and the
+UI ask for it. What a
+server cannot do is not faked but hidden or given a clear notice.
 
-## Datenmodell
+## Data model
 
-| Tabelle | Inhalt | Klasse |
+| Table | Content | Class |
 |---|---|---|
-| `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled`; ab Stufe 14 (0042) heißt der Verweis bei Konten mit Anmeldung beim Anbieter `oauth:<microsoft\|google>:<id>` und der Eintrag hält das Refresh-Token; bei JMAP-Konten mit API-Token (0041, Nachtrag 1) `token:<id>`, der Eintrag hält das Token | sync (ohne Geheimnisse) |
-| `identity` | Absenderadresse, Name, Reply-To, Standard; ab Stufe 10 Standard-Signatur für neue Mails und für Antworten (UUIDs, 0023) | sync |
-| `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
-| `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
-| `message_location` | Nachricht, Postfach, UID, Flags, Schlagwörter, MODSEQ | Cache |
-| `message.gm_msgid`, `message.gm_labels` | Stufe 14 (0034): Gmails `X-GM-MSGID` (eine Mail über alle Labels) und `X-GM-LABELS` (JSON, dekodiert, ergänzt um das Label des gelesenen Ordners); NULL bei anderen Servern | Cache |
-| `account_server` | Stufe 14 (0034): was die letzte Anmeldung über den Server sagte, `gmail` = `X-GM-EXT-1`; nicht an `account`, dessen Trigger den Sync füttert | Gerät |
-| `thread` | Konto, normalisierter Betreff, letzte Nachricht, Anzahl, ungelesen | Cache |
-| `attachment` | Nachricht, MIME-Teil, Dateiname, Typ, Größe, Content-ID | Cache |
-| `message_body`, `message_body_part` | Verweis auf die komprimierte Body-Datei (ganze Mail oder einzelne Teile großer Mails), Größe, Prüfsumme | Cache |
-| `remote_content_sender` | Absender, deren externe Bilder immer geladen werden (Konto-UUID, normalisierte Adresse) | sync |
-| `message_fts` | FTS5-Index über Betreff, Absender, Empfänger, Text, Anhangnamen | Cache |
-| `operation` | Outbox: Art, Nutzdaten, Idempotenzschlüssel, Zustand, Versuche, letzter Fehler | Gerät |
-| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein und gewählte Signatur (Stufe 10), Anhänge und Inline-Bilder (mit Content-ID) als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018, 0023); `kept_original`: Message-ID eines fremden Entwurfs, der unberührt im Ordner bleibt, weil der Editor ihn nicht vollständig übernehmen konnte (0047) | Gerät (Abgleich über IMAP) |
-| `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter, `contact_group` für zusammengeführte Kontakte (0016, 0018, 0023) | Cache; Name und Zusammenführung sync |
-| `contact_dismissed` | abgelehnte Dubletten-Paare (Stufe 10, 0023) | Gerät |
-| `signature` | Pool aller Signaturen: Name, Editor-HTML, Text, kleine Bilder (Base64, als `cid:` versendet) (Stufe 10, 0023) | sync |
-| `template`, `rule`, `saved_view` | wie benannt; `template` mit Betreff und Editor-HTML mit Platzhaltern (0023), ab Stufe 16 mit An/CC/BCC zum Vorbelegen (0033); `rule` sind die lokalen Regeln (Bedingungen und Aktionen als JSON, Reihenfolge); `saved_view` sind die gespeicherten Suchen der Leiste: UUID, Name, Anfrage in der Suchsprache (sucht in allen Konten), Position (Stufe 7, 0026) | sync |
-| `recent_search` | letzte Suchen dieses Geräts: Anfrage, zuletzt benutzt; höchstens 10 (Stufe 7, 0026) | Gerät |
-| `sender_rule` | Korrektur „immer als …“ und Wichtig-Markierung je Adresse, Domain oder Liste (Stufe 9) | sync |
-| `snooze`, `pin`, `task` | Verweis auf die Mail über Konto-UUID und Message-ID, Zeitpunkt; Snooze mit Rückkehrzeit, Aufgabe mit Erledigt-Zeitpunkt (Stufe 9, 0020) | sync |
-| `reading_list` | Lese-Liste „Zum Lesen“: Konto-UUID, Message-ID, hinzugefügt; kein Schlagwort auf dem Server (Stufe 16, 0033) | sync |
-| `mailbox_pref` | Lieblingsordner (Position) und Ordnerfarbe (Index 0–7 der Kontofarben) je Konto-UUID und dekodiertem Pfad; nur solange eins gesetzt ist (Stufe 16, 0033) | sync |
-| `blocked_sender`, `blocked_hidden` | blockierte Absender (normalisierte Adresse); ausgeblendete Mails blockierter Absender auf Konten ohne Schreibzugriff oder ohne Spam-Ordner (Konto-UUID, Message-ID, Absender) (Stufe 16, 0033) | sync bzw. Gerät |
-| `attachment_pin` | angeheftete Anhänge: Konto-UUID, Message-ID, Index des Anhangs, dazu Name, Typ und Größe vom Anheften (die Ansicht „Angeheftete Anhänge“ braucht keinen Body); kein Schlagwort auf dem Server (Stufe 16, 0036) | sync |
-| `receipt_answer`, `receipt_received` | Lesebestätigungen (RFC 8098): Antwort des Nutzers auf eine eingehende Anforderung (`queued`, `sent`, `declined`) je Konto-UUID und Message-ID; zurückgekommene Bestätigungen je gemeldeter Message-ID und Empfänger, erkannt beim Speichern des Bodys (Stufe 16, 0033) | Gerät bzw. Cache |
-| `setting` | Schlüssel, Wert, Geltungsbereich, Version | sync, soweit als synchronisierbar registriert |
-| `setting` `ai.settings` | KI in der App (Stufe 13, 0024): Schalter, Anbieter-Profile (Art, Basis-URL, Modell), Profil je Funktion, Cloud-Freigabe je Konto, Zustimmung je Profil und Host, Hinweise auf offene Antworten; Schlüssel nur im Schlüsselbund (`ai-profile:<id>`) | Gerät |
-| `setting` `ui.*` | Oberfläche (Stufe 8, 0025): geänderte Kürzel je Plattform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) und Schriftgröße (`ui.text_size`) sync; zuletzt benutzte Befehle der Palette (`ui.recent_commands`), Zustand des KI-Panels (`ui.ai_panel`, 0028) und Layout je Fensterart (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: Lesebereich, Dichte, Konten-und-Ordner-Spalte sichtbar (Standard ja) und ihre Breite 200–320 px, Standard 240) Gerät; dazu `compose.default_quote_position` (Position der Antwort in neuen Antworten, sync wie die Sendeverzögerung); ab Stufe 16 (0033) `compose.archive_on_reply` und `compose.read_receipts` sync, `ui.unread_first` (Ansichten mit „Ungelesene oben“) Gerät, (0036) `ui.accent_theme` (Farbthema, eins von sechs, Standard Orange nach 0038) sync, (0039) `ui.conversations` (Konversationsansicht, Standard an) sync | sync bzw. Gerät |
-| `ai_request` | Anfrage-Protokoll der KI in der App, nur Metadaten (Funktion, Profil, Host, lokal, Modell, Mails, Bytes, Ergebnis, Fehlercode, Dauer; 30 Tage, höchstens 10.000) (Stufe 13, 0024) | Gerät |
-| `open_reply_dismissal` | weggeklickte Hinweise auf offene Antworten (Stufe 13, 0024) | Gerät |
-| `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | KI über MCP (Stufe 12, 0021): Hauptschalter und Windows-Pipe-Name, Freigabe je Konto, registrierte Clients (Schlüssel im Schlüsselbund, hier nur der Verweis), Zugriffsprotokoll nur mit Metadaten (30 Tage, höchstens 10.000 Einträge) | Gerät |
-| `sync_record` | je synchronisierbarem Datensatz die aktuelle Version (Inhalt oder Grabstein, bei Konten mit Feldversionen) und die zuletzt abgeglichene; `sync_dirty` hält die in einer Transaktion geänderten bis zum Commit (Stufe 11, 0022) | Gerät |
-| `sync_state`, `sync_adopted` | Geräte-ID im Sync, höchste Version der Uhr, an/aus, Sync-Konto und Ordner, letzter Durchlauf und letzte Vollprüfung, Ordnerstand; übernommene Konten ohne Passwort | Gerät |
-| `sync_device` | Geräte des Syncs mit Name, System, zuletzt gesehen | sync |
-| `account.protocol` | Stufe 14 (0041): `imap` oder `jmap`, fest ab der Einrichtung; bei JMAP nennen die `imap_*`-Spalten den JMAP-Server, `smtp_*` eine Kopie | sync (nur bei JMAP im Datensatz) |
-| `jmap_state`, `jmap_mailbox`, `jmap_uid` | Stufe 14 (0041): die UID-Nummerierung des JMAP-Adapters je Konto (JMAP-Konto-Id, Email-State, Zähler als HIGHESTMODSEQ), je JMAP-Postfach (UIDVALIDITY, nächste UID, fertig nummeriert) und je UID (Email-Id, Zählerstand der letzten Änderung) | Cache |
-| `account_server_change` | Server (IMAP und SMTP), die ein Konto-Datensatz aus dem Sync-Ordner für ein vorhandenes Konto nennt und die von denen dieses Geräts abweichen; warten auf „übernehmen“ oder „behalten“ (`dismissed`), solange sieht der Sync diese Server als die des Kontos (Sicherheitsprüfung F1, 0040) | Gerät |
+| `account` | UUID, type, address, name, colour, server settings, reference to the keychain, `writes_enabled`; from stage 14 (0042), for accounts that sign in with the provider, the reference is `oauth:<microsoft\|google>:<id>` and the entry holds the refresh token; for JMAP accounts with an API token (0041, addendum 1) `token:<id>`, the entry holds the token | sync (without secrets) |
+| `identity` | sender address, name, Reply-To, default; from stage 10 default signature for new mails and for replies (UUIDs, 0023) | sync |
+| `mailbox` | server name, delimiter, parent, role (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
+| `message` | internal ID, account, Message-ID header, thread, subject, sender, recipients, dates, size, preview, category (according to the user's rules; plus the automatic result with its reason, important marker, normalised sender address, domain and List-Id, stage 9), reference to the body | Cache |
+| `message_location` | message, mailbox, UID, flags, keywords, MODSEQ | Cache |
+| `message.gm_msgid`, `message.gm_labels` | stage 14 (0034): Gmail's `X-GM-MSGID` (one mail across all labels) and `X-GM-LABELS` (JSON, decoded, supplemented with the label of the folder read); NULL for other servers | Cache |
+| `account_server` | stage 14 (0034): what the last login said about the server, `gmail` = `X-GM-EXT-1`; not on `account`, whose trigger feeds the sync | Device |
+| `thread` | account, normalised subject, last message, count, unread | Cache |
+| `attachment` | message, MIME part, file name, type, size, Content-ID | Cache |
+| `message_body`, `message_body_part` | reference to the compressed body file (whole mail or individual parts of large mails), size, checksum | Cache |
+| `remote_content_sender` | senders whose external images are always loaded (account UUID, normalised address) | sync |
+| `message_fts` | FTS5 index over subject, sender, recipients, text, attachment names | Cache |
+| `operation` | outbox: kind, payload, idempotency key, state, attempts, last error | Device |
+| `draft` | UUID, account, identity, headers, Message-ID (fixed from creation), text, quote, signature yes/no and chosen signature (stage 10), attachments and inline images (with Content-ID) as references to our own copies under `compose/`, state (`editing`/`sending`), revision, server copy (folder, UIDVALIDITY, UID, revision) (0018, 0023); `kept_original`: Message-ID of another program's draft that stays untouched in the folder because the editor could not take it over completely (0047) | Device (reconciled via IMAP) |
+| `contact` | one row per address: key, spelling, counter, last used, rank (REAL with index), names, `user_name`, folded search words, `contact_group` for merged contacts (0016, 0018, 0023) | Cache; name and merging sync |
+| `contact_dismissed` | rejected duplicate pairs (stage 10, 0023) | Device |
+| `signature` | pool of all signatures: name, editor HTML, text, small images (Base64, sent as `cid:`) (stage 10, 0023) | sync |
+| `template`, `rule`, `saved_view` | as named; `template` with subject and editor HTML with placeholders (0023), from stage 16 with To/CC/BCC for prefilling (0033); `rule` are the local rules (conditions and actions as JSON, order); `saved_view` are the saved searches of the bar: UUID, name, query in the search language (searches in all accounts), position (stage 7, 0026) | sync |
+| `recent_search` | recent searches of this device: query, last used; at most 10 (stage 7, 0026) | Device |
+| `sender_rule` | correction "always as …" and important marker per address, domain or list (stage 9) | sync |
+| `snooze`, `pin`, `task` | reference to the mail via account UUID and Message-ID, point in time; snooze with return time, task with done time (stage 9, 0020) | sync |
+| `reading_list` | reading list "Reading list": account UUID, Message-ID, added; no keyword on the server (stage 16, 0033) | sync |
+| `mailbox_pref` | favourite folders (position) and folder colour (index 0–7 of the account colours) per account UUID and decoded path; only while one of them is set (stage 16, 0033) | sync |
+| `blocked_sender`, `blocked_hidden` | blocked senders (normalised address); hidden mails of blocked senders on accounts without write access or without a spam folder (account UUID, Message-ID, sender) (stage 16, 0033) | sync and Device respectively |
+| `attachment_pin` | pinned attachments: account UUID, Message-ID, index of the attachment, plus name, type and size at pinning time (the "Pinned attachments" view needs no body); no keyword on the server (stage 16, 0036) | sync |
+| `receipt_answer`, `receipt_received` | read receipts (RFC 8098): the user's answer to an incoming request (`queued`, `sent`, `declined`) per account UUID and Message-ID; returned receipts per reported Message-ID and recipient, detected when the body is stored (stage 16, 0033) | Device and Cache respectively |
+| `setting` | key, value, scope, version | sync, where registered as syncable |
+| `setting` `ai.settings` | AI in the app (stage 13, 0024): switch, provider profiles (kind, base URL, model), profile per function, cloud approval per account, consent per profile and host, notices of open replies; keys only in the keychain (`ai-profile:<id>`) | Device |
+| `setting` `ui.*` | UI (stage 8, 0025): changed shortcuts per platform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) and text size (`ui.text_size`) sync; recently used commands of the palette (`ui.recent_commands`), state of the AI panel (`ui.ai_panel`, 0028) and layout per window kind (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: reading pane, density, accounts-and-folders column visible (default yes) and its width 200–320 px, default 240) Device; plus `compose.default_quote_position` (position of the reply in new replies, sync like the send delay); from stage 16 (0033) `compose.archive_on_reply` and `compose.read_receipts` sync, `ui.unread_first` (views with "Unread first") Device, (0036) `ui.accent_theme` (colour theme, one of six, default orange per 0038) sync, (0039) `ui.conversations` (conversation view, default on) sync | sync and Device respectively |
+| `ai_request` | request log of the in-app AI, metadata only (function, profile, host, local, model, mails, bytes, result, error code, duration; 30 days, at most 10,000) (stage 13, 0024) | Device |
+| `open_reply_dismissal` | dismissed notices of open replies (stage 13, 0024) | Device |
+| `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | AI via MCP (stage 12, 0021): main switch and Windows pipe name, approval per account, registered clients (key in the keychain, only the reference here), access log with metadata only (30 days, at most 10,000 entries) | Device |
+| `sync_record` | per syncable record the current version (content or tombstone, for accounts with field versions) and the last reconciled one; `sync_dirty` holds those changed in a transaction until the commit (stage 11, 0022) | Device |
+| `sync_state`, `sync_adopted` | device ID in the sync, highest version of the clock, on/off, sync account and folder, last pass and last full check, folder state; adopted accounts without password | Device |
+| `sync_device` | devices of the sync with name, system, last seen | sync |
+| `account.protocol` | stage 14 (0041): `imap` or `jmap`, fixed from setup onwards; for JMAP the `imap_*` columns name the JMAP server, `smtp_*` a copy | sync (in the record only for JMAP) |
+| `jmap_state`, `jmap_mailbox`, `jmap_uid` | stage 14 (0041): the JMAP adapter's UID numbering per account (JMAP account id, Email state, counter as HIGHESTMODSEQ), per JMAP mailbox (UIDVALIDITY, next UID, numbering complete) and per UID (Email id, counter value of the last change) | Cache |
+| `account_server_change` | servers (IMAP and SMTP) that an account record from the sync folder names for an existing account and that differ from this device's; they wait for "Use the new servers" or "Keep the current servers" (`dismissed`), and until then the sync regards these servers as the account's (security review F1, 0040) | Device |
 
-Klassen: **Cache** lässt sich vom Mailserver neu aufbauen. **Gerät** bleibt auf dem Gerät.
-**sync** wandert über den Einstellungs-Sync. Eine Tabelle wird nur abgeglichen, wenn sie
-ausdrücklich als synchronisierbar registriert ist.
+Classes: **Cache** can be rebuilt from the mail server. **Device** stays on the device.
+**sync** travels via the settings sync. A table is only reconciled if it is
+explicitly registered as syncable.
 
-Die gleiche Mail in zwei Ordnern ist eine Zeile in `message` und zwei in `message_location`. Auf
-Gmail führt `X-GM-MSGID` die Orte zusammen statt der Message-ID (Stufe 14, 0034).
-Flags gehören zum Ort, wie bei IMAP. Datensätze, die zwischen Geräten wandern, verweisen auf Mails
-nie über lokale IDs oder UIDs, sondern über Konto-UUID und Message-ID-Kopfzeile.
+The same mail in two folders is one row in `message` and two in `message_location`. On
+Gmail, `X-GM-MSGID` merges the locations instead of the Message-ID (stage 14, 0034).
+Flags belong to the location, as in IMAP. Records that travel between devices never refer to mails
+by local IDs or UIDs, but by account UUID and Message-ID header.
 
-Migrationen sind nur vorwärts. Vor jeder Migration wird die Datenbankdatei kopiert; die letzten drei
-Kopien bleiben erhalten. Eine neuere Datenbank als die App kennt wird nicht geöffnet, sondern mit
-einer klaren Meldung abgelehnt. Was das Öffnen beim Start verhindert hat, holt die App-Hülle über
-`getStartupProblem` (Fehler, Datenbankdatei, Sicherungskopien, neueste zuerst) und zeigt es über
-jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren…“ (24.11.2026).
+Migrations are forward-only. Before each migration the database file is copied; the last three
+copies are kept. A database newer than the app knows is not opened but rejected with
+a clear message. Whatever prevented opening at startup is fetched by the UI's app shell via
+`getStartupProblem` (error, database file, backup copies, newest first) and shown above
+every view with the way back to a copy and to "Export diagnostics…" (2026-11-24).
 
-**Schema und Abfragen (gemessen in Spike B, `docs/decisions/0003-sqlite-schema-und-suche.md`)**
-- `message.id` ist das Sortierdatum in Sekunden; ist die Zahl belegt, die nächste freie. Vergeben
-  wird sie im Schreib-Thread. Sie ist zugleich die rowid des FTS-Index: Suchtreffer kommen ohne
-  Sortieren neueste zuerst, ein Datumsfilter ist ein rowid-Bereich.
-- Sortierdatum: die `Date`-Kopfzeile, wenn sie höchstens 24 Stunden nach INTERNALDATE liegt, sonst INTERNALDATE.
-- `message_location` ist `WITHOUT ROWID` mit Schlüssel `(mailbox_id, message_id)`, Flags als eigene
-  Spalten. Indizes: eindeutig auf UID je Postfach, auf `message_id`, Teilindex auf ungelesene
-  (`WHERE seen = 0`); dazu `message` nach Message-ID und Thread, `attachment` nach Nachricht.
-- `message_fts` ist contentless mit `contentless_delete=1`, Spalten `subject, from, to, cc, body,
-  attachments`, Tokenizer `unicode61 remove_diacritics 2`. Bodies werden nachträglich per
-  `INSERT OR REPLACE` indexiert. Teilwortsuche („auszug“ findet „Kontoauszug“) gibt es in Version 1 nicht.
-- Listen nur per Keyset, nie per `OFFSET`. Ansichten über mehrere Postfächer (vereinter Posteingang)
-  per `UNION ALL` je Postfach, nie per `IN (…)` (gemessen 0,14 ms gegen 393 ms). Feste
-  Join-Reihenfolge per `CROSS JOIN`. Für jede Listen- und Suchabfrage prüft ein Test den Abfrageplan.
-- Erste Suchtreffer nach `rowid DESC`; `bm25` höchstens als Option.
-- Aus Stufe 2: Der Abfrageplaner wählt nach `ANALYZE` mit nur einem Konto für einen Join auf
-  `account` einen Scan, trotz `CROSS JOIN`; das Konto eines Postfachs wird deshalb per skalarer
-  Unterabfrage geholt. Lese-Verbindungen laden Statistiken erst beim Öffnen, Plan-Tests prüfen daher
-  Leser und Schreiber. Ein Fenster wird nach (Sortierdatum, UID) aufsteigend gespeichert. Zusätzliche
-  Indizes: `mailbox_role` (eindeutig je Konto, wenn gesetzt), `mailbox_path` (Reihenfolge der
-  Seitenleiste). Gemessen über die Store-API: 100.000 Kopfdaten in 1,1 s, Listenseite 0,07 ms.
-- FTS-Zeilen werden je Transaktion nach rowid aufsteigend eingefügt, auch wenn der Abgleich von neu
-  nach alt läuft (absteigend kostet ein Drittel der Einfügerate).
-- Schreib-Verbindung: WAL, `synchronous=NORMAL`, `foreign_keys=ON`, 64 MB Cache, `mmap_size` 256 MB,
-  `journal_size_limit` 64 MB, `temp_store=MEMORY`. Lese-Verbindungen (2 bis 4): `query_only`,
-  8 MB Cache, `mmap`. Abgleich in Fenstern von 500 Mails mit `BEGIN IMMEDIATE`.
-- Aus Stufe 7 (`docs/decisions/0017-suche-threads-integration.md`): Index und Thread werden in der
-  Transaktion geschrieben, die Nachricht bzw. Body speichert (Body-Text über eine `BodyTextSource` der
-  Engine, höchstens 256 KiB je Mail); Bestandsmails und ein Neuaufbau laufen als Auftrag im
-  Hintergrund, der Neuaufbau mit Tausch am Ende. `thread` hält Anzahl und neueste Nachricht, die
-  Ungelesenen zählt die Thread-Liste beim Lesen; die Thread-Liste eines Postfachs zeigt je Thread die
-  neueste Mail in diesem Postfach. Hervorhebungen rechnet Rust (contentless Index). Kontogruppen
-  (sync, über Konto-UUID) und ausgeblendete Konten (Gerät) in eigenen Tabellen. Gemessen in
-  `docs/testing/performance.md`: erste Suchtreffer bei 500.000 Mails 0,3–17 ms, Thread-Liste 0,3 ms;
-  ein Abgleichsfenster kostet 4,7 ms mehr als in Stufe 2.
-- Aus Stufe 9 (`docs/decisions/0020-posteingang-komfort.md`): Neue Mails werden in der
-  Transaktion eingeordnet, die sie speichert (Regeln aus `mail-content` über einen `Classifier` der
-  Engine, lokale Signale aus der Datenbank); geänderte Absender-Regeln und Bestandsmails laufen als
-  Auftrag im Hintergrund, neueste zuerst. Kategorie und Wichtig-Markierung stehen auch am Ort
-  (`loc_category`, Teilindex `loc_important`; ein neuer Ort übernimmt sie beim Einfügen, Änderungen
-  per Trigger), damit Listen nach Kategorie per Keyset laufen.
-  Snooze, Pins und Aufgaben verweisen über Konto-UUID und Message-ID; die Posteingangsliste lässt
-  sie je Zeile über den eindeutigen Index weg. Gemessen: Einordnen kostet je Fenster von 500
-  Kopfdaten 2,5 ms; Listenseiten bleiben unter 0,3 ms.
-- Aus Stufe 16 (`docs/decisions/0033-funktionsabgleich-kern.md`): „Nur ungelesene“ ist ein
-  Bereich von `loc_unseen`, „Ungelesene oben“ dieser Bereich und danach die gelesenen Orte über
-  den Primärschlüssel (`seen = 1` als Filter, kein eigener Index). Die Posteingangslisten lassen
-  ausgeblendete Mails blockierter Absender je Zeile über den Primärschlüssel von
-  `blocked_hidden` weg; Lese-Liste und Ordnereinstellungen sind je eine Indexsuche.
-- Aus `docs/decisions/0039-konversationen-im-sortierten-posteingang.md`: Die Konversationsvariante
-  jeder Posteingangsliste ist die Nachrichtenliste derselben Art, nach Thread gruppiert, eine Zeile
-  je Thread bei seinem neuesten Mitglied, das in derselben Liste stünde (`NOT EXISTS` über einen
-  Bereich von `message_thread` und den Schlüssel des Orts); Keyset über die Mail-ID der Zeile.
-  Threads mit angepinnter oder zurückgekehrter Mail stehen nur oben (Prüfung je Thread-Mitglied
-  über die eindeutigen Indizes von `pin` und `snooze`). Je Zeile zählen Anzahl und Ungelesene über
-  alle Mails des Threads (`message_thread`, `loc_message` per `INDEXED BY`), Teilnehmer, Anhang und
-  Markierung kommen aus den neuesten 200 Mails. Keine Migration.
-- Ansicht „Markiert“ (SPEC, 24.11.2026): `\Flagged` (JMAP `$flagged`) je Postfach der Konten außer
-  Papierkorb und Spam als Bereich des Teilindex `loc_flagged`, per `UNION ALL` gemischt; jede Mail
-  einmal, im Posteingang, wenn sie dort markiert ist, sonst im neuesten Ordner, in dem sie es ist;
-  höchstens 1.000 in einer Antwort wie die übrigen Markierungsansichten (`listFlagged`). Keine Migration.
-- Aus der Nachmessung Stufe 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): Abfragen auf
-  einen Teilindex, der nach einem Nachholauf leer wird (`message_category_todo`,
-  `message_contacts_todo`), nennen ihn per `INDEXED BY`. `PRAGMA optimize` beim Schließen hält
-  sonst die Größe von vor dem Nachholen fest, und der Planer liest die ganze Tabelle, um keine
-  Zeile zu finden. Hintergrundaufträge, die beim Start Arbeit finden, beginnen erst nach dem
-  Start, damit sie den Schreib-Thread nicht vor den Schreibvorgängen des Starts belegen.
+**Schema and queries (measured in spike B, `docs/decisions/0003-sqlite-schema-und-suche.md`)**
+- `message.id` is the sort date in seconds; if that number is taken, the next free one. It is
+  assigned in the write thread. It is also the rowid of the FTS index: search hits come newest
+  first without sorting, a date filter is a rowid range.
+- Sort date: the `Date` header if it is at most 24 hours after INTERNALDATE, otherwise INTERNALDATE.
+- `message_location` is `WITHOUT ROWID` with key `(mailbox_id, message_id)`, flags as separate
+  columns. Indexes: unique on UID per mailbox, on `message_id`, partial index on unread
+  (`WHERE seen = 0`); plus `message` by Message-ID and thread, `attachment` by message.
+- `message_fts` is contentless with `contentless_delete=1`, columns `subject, from, to, cc, body,
+  attachments`, tokenizer `unicode61 remove_diacritics 2`. Bodies are indexed afterwards via
+  `INSERT OR REPLACE`. Substring search (the German "auszug" finding "Kontoauszug", bank statement) does not exist in version 1.
+- Lists only via keyset, never via `OFFSET`. Views across several mailboxes (unified inbox)
+  via `UNION ALL` per mailbox, never via `IN (…)` (measured 0.14 ms versus 393 ms). Fixed
+  join order via `CROSS JOIN`. For every list and search query a test checks the query plan.
+- First search hits by `rowid DESC`; `bm25` at most as an option.
+- From stage 2: after `ANALYZE` with only one account, the query planner chooses a scan for a join on
+  `account`, despite `CROSS JOIN`; the account of a mailbox is therefore fetched via a scalar
+  subquery. Read connections load statistics only when they are opened, so plan tests check
+  reader and writer. A window is stored in ascending order of (sort date, UID). Additional
+  indexes: `mailbox_role` (unique per account, if set), `mailbox_path` (order of the
+  sidebar). Measured via the store API: 100,000 headers in 1.1 s, list page 0.07 ms.
+- FTS rows are inserted per transaction in ascending rowid order, even when the sync runs from new
+  to old (descending costs a third of the insert rate).
+- Write connection: WAL, `synchronous=NORMAL`, `foreign_keys=ON`, 64 MB cache, `mmap_size` 256 MB,
+  `journal_size_limit` 64 MB, `temp_store=MEMORY`. Read connections (2 to 4): `query_only`,
+  8 MB cache, `mmap`. Sync in windows of 500 mails with `BEGIN IMMEDIATE`.
+- From stage 7 (`docs/decisions/0017-suche-threads-integration.md`): index and thread are written in the
+  transaction that stores the message or body (body text via a `BodyTextSource` of the
+  engine, at most 256 KiB per mail); existing mails and a rebuild run as a job in the
+  background, the rebuild with a swap at the end. `thread` holds count and newest message, the
+  unread ones are counted by the thread list when reading; the thread list of a mailbox shows per thread the
+  newest mail in that mailbox. Highlights are computed by Rust (contentless index). Account groups
+  (sync, via account UUID) and hidden accounts (Device) in separate tables. Measured in
+  `docs/testing/performance.md`: first search hits with 500,000 mails 0.3–17 ms, thread list 0.3 ms;
+  a sync window costs 4.7 ms more than in stage 2.
+- From stage 9 (`docs/decisions/0020-posteingang-komfort.md`): new mails are categorised in the
+  transaction that stores them (rules from `mail-content` via a `Classifier` of the
+  engine, local signals from the database); changed sender rules and existing mails run as a
+  background job, newest first. Category and important marker are also stored on the location
+  (`loc_category`, partial index `loc_important`; a new location takes them over on insert, changes
+  via trigger), so that lists by category run via keyset.
+  Snooze, pins and tasks refer to mails via account UUID and Message-ID; the inbox list leaves
+  them out per row via the unique index. Measured: categorising costs 2.5 ms per window of 500
+  headers; list pages stay under 0.3 ms.
+- From stage 16 (`docs/decisions/0033-funktionsabgleich-kern.md`): "Unread only" is a
+  range of `loc_unseen`, "Unread first" is this range followed by the read locations via
+  the primary key (`seen = 1` as a filter, no index of its own). The inbox lists leave out
+  hidden mails of blocked senders per row via the primary key of
+  `blocked_hidden`; reading list and folder settings are one index lookup each.
+- From `docs/decisions/0039-konversationen-im-sortierten-posteingang.md`: the conversation variant
+  of every inbox list is the message list of the same kind, grouped by thread, one row
+  per thread at its newest member that would appear in the same list (`NOT EXISTS` over a
+  range of `message_thread` and the key of the location); keyset via the mail ID of the row.
+  Threads with a pinned or returned mail appear only at the top (check per thread member
+  via the unique indexes of `pin` and `snooze`). Per row, count and unread are counted over
+  all mails of the thread (`message_thread`, `loc_message` via `INDEXED BY`), participants, attachment and
+  flag come from the newest 200 mails. No migration.
+- "Flagged" view (SPEC, 2026-11-24): `\Flagged` (JMAP `$flagged`) per mailbox of the accounts except
+  trash and spam as a range of the partial index `loc_flagged`, merged via `UNION ALL`; every mail
+  once, in the inbox if it is flagged there, otherwise in the newest folder in which it is flagged;
+  at most 1,000 in one answer like the other mark views (`listFlagged`). No migration.
+- From the re-measurement of stage 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): queries on
+  a partial index that becomes empty after a catch-up run (`message_category_todo`,
+  `message_contacts_todo`) name it via `INDEXED BY`. Otherwise `PRAGMA optimize` on close
+  records the size from before the catch-up, and the planner reads the whole table to find no
+  row. Background jobs that find work at startup only begin after the
+  startup, so that they do not occupy the write thread before the startup's writes.
 
-## Regeln der Mail-Engine
+## Mail engine rules
 
-**Synchronisierung je Postfach**
-- Erster Abgleich von neu nach alt in Fenstern, damit der Posteingang sofort benutzbar ist.
-- Danach: neue UIDs oberhalb der letzten bekannten; Flag-Änderungen über CONDSTORE, sonst über
-  fensterweises Nachladen; Löschungen über den Vergleich der UID-Mengen.
-- Ändert sich UIDVALIDITY, wird die Zuordnung des Postfachs verworfen und neu aufgebaut. Lokale
-  Daten zu Mails bleiben über die Message-ID erhalten.
-- IDLE auf dem Posteingang jedes Kontos, andere Ordner im Intervall. Nach Ruhezustand oder
-  Netzwechsel neu verbinden, mit exponentiellem Backoff und Abbruchmöglichkeit.
-- Es werden nie alle Daten neu geholt, wenn ein gezielter Abgleich reicht.
+**Sync per mailbox**
+- First sync from new to old in windows, so that the inbox is usable immediately.
+- After that: new UIDs above the last known one; flag changes via CONDSTORE, otherwise via
+  refetching window by window; deletions via comparing the UID sets.
+- If UIDVALIDITY changes, the mailbox's mapping is discarded and rebuilt. Local
+  data about mails is kept via the Message-ID.
+- IDLE on the inbox of each account, other folders at an interval. After sleep or a
+  network change reconnect, with exponential backoff and the option to cancel.
+- All data is never refetched when a targeted sync is enough.
 
-**Abgleich-Tasks (Stufe 2, 0008)**
-- Je Konto ein Aufseher-Task mit dem Zustandsautomaten (`sync_state.rs`). Verbunden: Arbeiter
-  (Hauptverbindung, Durchläufe), IDLE-Wächter (eigene Verbindung, Abschnitte von 5 Minuten),
-  Abfrager (voller Durchlauf alle 3 Minuten, ohne IDLE der Posteingang jede Minute). Eine
-  ausgefallene Verbindung beendet die Sitzung; der Automat entscheidet über Backoff oder Stopp.
-- Ein Durchlauf je Postfach: EXAMINE, bei neuer UIDVALIDITY `reset_mailbox`; unverändert (UIDNEXT,
-  HIGHESTMODSEQ, Anzahl gleich) wird übersprungen; sonst UID-Abgleich für Löschungen, Flags per
-  `CHANGEDSINCE` oder fensterweise, neue UIDs bis zum UIDNEXT des EXAMINE, dann der Rest des
-  Erstabgleichs. Verwaiste Nachrichten werden nur nach einem vollen Durchlauf ohne Erstabgleich und
-  ohne übersprungenes Postfach gelöscht.
-- Ein Panic in einer Sitzung wird zum Kontofehler `protocol` mit Backoff, nie zum App-Ende.
-- Ruhezustand: Sprung zwischen Wanduhr und monotoner Uhr (über 20 s) lässt alle Konten neu
-  verbinden; dazu `AppCore::resume()`/`network_changed()` für die Shell. Ein OS-Signal gibt es
-  nicht (bräuchte `unsafe`).
-- Ereignisse: `accountStatusChanged` trägt immer den vollständigen Status; je gespeichertem
-  Fenster ein `messagesChanged` und ein `mailboxesChanged`; `newMail` nur außerhalb des
-  Erstabgleichs, mit der Zahl neuer ungelesener Mails.
+**Sync tasks (stage 2, 0008)**
+- Per account a supervisor task with the state machine (`sync_state.rs`). Connected: worker
+  (main connection, passes), IDLE watcher (own connection, sections of 5 minutes),
+  poller (full pass every 3 minutes, without IDLE the inbox every minute). A
+  failed connection ends the session; the state machine decides on backoff or stop.
+- One pass per mailbox: EXAMINE, on a new UIDVALIDITY `reset_mailbox`; unchanged (UIDNEXT,
+  HIGHESTMODSEQ, count equal) is skipped; otherwise UID comparison for deletions, flags via
+  `CHANGEDSINCE` or window by window, new UIDs up to the UIDNEXT of the EXAMINE, then the rest of the
+  initial sync. Orphaned messages are deleted only after a full pass without initial sync and
+  without a skipped mailbox.
+- A panic in a session becomes the account error `protocol` with backoff, never the end of the app.
+- Sleep: a jump between wall clock and monotonic clock (over 20 s) makes all accounts
+  reconnect; in addition `AppCore::resume()`/`network_changed()` for the shell. There is no OS signal
+  (it would need `unsafe`).
+- Events: `accountStatusChanged` always carries the complete status; per stored
+  window one `messagesChanged` and one `mailboxesChanged`; `newMail` only outside the
+  initial sync, with the number of new unread mails.
 
 **Outbox**
-- Jede schreibende Aktion ändert zuerst den lokalen Zustand, wird als `operation` vermerkt und
-  dann ausgeführt. Zustände: `queued`, `in_flight`, `confirmed`, `failed`, `conflict`.
-- Operationen sind idempotent formuliert: „Flag setzen“ statt „Flag umschalten“; ein Verschieben
-  prüft vor der Wiederholung, ob die Mail schon am Ziel liegt.
-- Nach einem Absturz werden `in_flight`-Operationen erst gegen den Server geprüft, dann wiederholt.
-- Ab Stufe 16 (0033), **Senden und archivieren:** `SendJob.archive_original` (je Entwurf, für
-  Antworten per Einstellung `compose.archive_on_reply`) plant erst in der Transaktion, die die
-  Annahme bestätigt, die Aktion `archive` für die Orte des Originals im Batch des Sendens; ohne
-  Archivordner bleibt das Original, das Senden gilt trotzdem. **Lesebestätigungen** gehen nur auf
-  den ausdrücklichen Befehl `send_read_receipt` hinaus, als `send` ohne Entwurf und ohne Kopie in
-  „Gesendet“; danach `$MDNSent` am Original. Eingehende Anforderungen werden beim Lesen erkannt,
-  nie beim Eintreffen (Mitschnitt-Test gegen Stalwart in `crates/mail-engine/tests/compose.rs`).
-- Ab Stufe 16 (0033), **zwischen Konten:** Kopieren und Verschieben in ein anderes Konto ist ein
-  `append` in der Outbox des Zielkontos (`AppendSource::Transfer`, eingefrorene Bytes, Flags der
-  Quelle ohne Schlagwörter). Beide Konten brauchen Schreibzugriff (beim Kopieren nur das Ziel),
-  die Mail eine Message-ID. Erst wenn die Kopie im Ziel bestätigt und über die Message-ID
-  oberhalb der Marke gefunden ist, zeichnet dieselbe Transaktion im Quellkonto ein `expunge`
-  auf; nach einem Absturz wird das `append` geprüft, nicht wiederholt (nie zwei Kopien, nie
-  verloren). Servertest mit Fehlerinjektion in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
-- Ab 24.11.2026 (Abgleich mit SPEC), **Ordner umbenennen und löschen:** nur eigene Ordner (ohne
-  Rolle), nur mit Schreibzugriff, je Ordner eine Änderung zur Zeit; Löschen nur ohne Unterordner
-  und mit Rückfrage, die die hier gespeicherten Mails nennt. `rename_mailbox` und
-  `delete_mailbox` (Migration 0019) ändern lokal nichts, bis der Server bestätigt hat; die
-  Ordnerspalte zeigt die wartende Änderung. Nach `RENAME` übernehmen die Zeilen des Ordners und
-  seiner Unterordner den neuen Namen (Mails, UIDVALIDITY, Favorit und Farbe bleiben), dann wird
-  die Ordnerliste neu gelesen. Nach einem Absturz gilt ein `RENAME` als erledigt, wenn der alte
-  Name fehlt und der neue da ist, ein `DELETE`, wenn der Ordner fehlt. Vorher wird der Ordner
-  ohne EXPUNGE verlassen (`UNSELECT`, sonst `EXAMINE INBOX`, nie `CLOSE`). JMAP-Konten lehnt der
-  Kern mit `unsupported_server` ab, bevor etwas vermerkt wird: Der JMAP-Adapter bietet hinter den
-  Traits noch kein `Mailbox/set` zum Umbenennen oder Löschen.
-- Schlägt etwas fehl, wird der lokale Zustand zurückgenommen und der Fehler angezeigt. Bei einem
-  Konflikt gilt der Serverzustand, und der Nutzer erfährt es.
+- Every writing action first changes the local state, is recorded as an `operation` and
+  then executed. States: `queued`, `in_flight`, `confirmed`, `failed`, `conflict`.
+- Operations are phrased idempotently: "set flag" instead of "toggle flag"; a move
+  checks before the retry whether the mail is already at the target.
+- After a crash, `in_flight` operations are first checked against the server, then retried.
+- From stage 16 (0033), **Send and archive:** `SendJob.archive_original` (per draft, for
+  replies via the setting `compose.archive_on_reply`) schedules, only in the transaction that confirms the
+  acceptance, the action `archive` for the locations of the original in the batch of the send; without
+  an archive folder the original stays, the send still counts. **Read receipts** go out only on
+  the explicit command `send_read_receipt`, as `send` without a draft and without a copy in
+  "Sent"; after that `$MDNSent` on the original. Incoming requests are detected on reading,
+  never on arrival (wire-tap test against Stalwart in `crates/mail-engine/tests/compose.rs`).
+- From stage 16 (0033), **between accounts:** copying and moving to another account is an
+  `append` in the outbox of the target account (`AppendSource::Transfer`, frozen bytes, flags of the
+  source without keywords). Both accounts need write access (for copying only the target),
+  the mail needs a Message-ID. Only when the copy is confirmed in the target and found via the Message-ID
+  above the mark does the same transaction record an `expunge` in the source account;
+  after a crash the `append` is checked, not repeated (never two copies, never
+  lost). Server test with fault injection in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
+- From 2026-11-24 (alignment with SPEC), **renaming and deleting folders:** only the user's own folders (without
+  a role), only with write access, one change per folder at a time; deleting only without subfolders
+  and with a confirmation that names the mails stored here. `rename_mailbox` and
+  `delete_mailbox` (migration 0019) change nothing locally until the server has confirmed; the
+  folder column shows the pending change. After `RENAME` the rows of the folder and
+  its subfolders take over the new name (mails, UIDVALIDITY, favourite and colour stay), then
+  the folder list is read again. After a crash a `RENAME` counts as done if the old
+  name is missing and the new one is there, a `DELETE` if the folder is missing. Before that the folder
+  is left without EXPUNGE (`UNSELECT`, otherwise `EXAMINE INBOX`, never `CLOSE`). JMAP accounts are rejected by the
+  core with `unsupported_server` before anything is recorded: behind the traits the JMAP adapter
+  does not offer `Mailbox/set` for renaming or deleting yet.
+- If something fails, the local state is rolled back and the error is shown. In a
+  conflict the server state wins, and the user is told.
 
-**Senden**
-- Die Message-ID entsteht beim Anlegen des Entwurfs und bleibt über alle Versuche gleich.
-- Bricht die Verbindung ab, nachdem die Mail übertragen, aber bevor sie bestätigt wurde, wird nicht
-  automatisch neu gesendet. Die App sucht die Message-ID im Gesendet-Ordner; bleibt es unklar, fragt sie den Nutzer.
-  Achtung: Dort liegt die Mail nur, wenn der Server selbst eine Kopie ablegt (z. B. Gmail); bei allen
-  anderen findet die Suche nichts, und die App fragt. Der SMTP-Adapter unterscheidet „nichts
-  übertragen“ (sicher zu wiederholen) von „unklar“ (Verbindung nach der Endmarke weg).
-- Die erzeugte Nachricht verrät das Programm nicht (kein `User-Agent`/`X-Mailer`, EHLO mit
-  `[127.0.0.1]`); `Date` in UTC; derselbe Entwurf ergibt byte-gleiche Nachrichten.
-- Nach erfolgreichem Versand wird eine Kopie in „Gesendet“ abgelegt, außer der Server tut das selbst
-  (Einstellung `auto`: Gmail, erkannt am Servernamen oder an `X-GM-EXT-1`, 0034).
-- Ab Stufe 5 (0018): Senden ist die Outbox-Operation `send`. Die Bytes werden beim Klick einmal
-  gebaut und eingefroren, der Entwurf ist bis zum Ergebnis gesperrt; `not_before` hält die
-  Verzögerung zum Rückgängigmachen (Abbrechen löscht die Operation, nichts geht ins Netz).
-  Unklar heißt `failed` mit `send_unclear` und eine Frage an den Nutzer (`sendNeedsDecision`);
-  erneut gesendet wird nur auf seine ausdrückliche Entscheidung. Nach der Annahme folgen in
-  derselben Transaktion Gesendet-Kopie (`append`), Entfernen der Entwurfskopie (`remove_copy`)
-  und `\Answered`/`$Forwarded` am Original. Entwürfe gehen als `append` in den Entwürfe-Ordner
-  (neue Fassung anhängen, alte nur bei passender Message-ID entfernen). Entwürfe anderer Programme
-  behalten ihre Inline-Bilder als Inline-Teile; was der Editor nicht darstellen kann, lässt das
-  Original unberührt, und die Fassung der App liegt mit eigener Message-ID daneben (0047).
-- Ab Stufe 10 (0023), **Später senden lokal:** eine `send`-Operation mit der gewählten Zeit als
-  `not_before` (`SendJob::scheduled`), sofort gebaut und mit dieser Zeit datiert; gesendet wird
-  nur, wenn die App dann läuft und online ist. Beim Start, bevor Outbox und Konten laufen,
-  werden geplante Sendungen, die mehr als eine Stunde verpasst wurden, nicht gesendet, sondern
-  zur Frage (`send_missed`: jetzt senden, neu planen, als Entwurf behalten); bis zu einer Stunde
-  gehen sie hinaus. Gestartet wird eine Sendung nur, wenn sie nach der Uhr des Workers fällig ist
-  (`begin_due_operations`); der Worker wartet höchstens 30 s am Stück (Ruhezustand).
-- **SIZE:** Die Grenze des SMTP-Servers liest der Adapter auf Anfrage aus einem zweiten EHLO
-  nach der Anmeldung (nichts wird gesendet); über einer bekannten Grenze lehnt Senden mit
-  `message_too_large` ab.
-- **Inline-Bilder** gehen als `multipart/related` um `multipart/alternative`, nur die, die das
-  HTML noch zeigt; **Weiterleiten als Anhang** legt die ganze Nachricht als `message/rfc822`
-  bei (7-Bit-saubere unkodiert).
+**Sending**
+- The Message-ID is created when the draft is created and stays the same across all attempts.
+- If the connection breaks after the mail was transmitted but before it was confirmed, it is not
+  resent automatically. The app searches for the Message-ID in the Sent folder; if it remains unclear, it asks the user.
+  Note: the mail is only there if the server itself files a copy (e.g. Gmail); with all
+  others the search finds nothing, and the app asks. The SMTP adapter distinguishes "nothing
+  transmitted" (safe to retry) from "unclear" (connection gone after the end marker).
+- The generated message does not reveal the program (no `User-Agent`/`X-Mailer`, EHLO with
+  `[127.0.0.1]`); `Date` in UTC; the same draft yields byte-identical messages.
+- After successful sending a copy is filed in "Sent", unless the server does this itself
+  (setting `auto`: Gmail, detected by the server name or by `X-GM-EXT-1`, 0034).
+- From stage 5 (0018): sending is the outbox operation `send`. The bytes are built once on click
+  and frozen, the draft is locked until the result; `not_before` holds the
+  delay for undoing (cancelling deletes the operation, nothing goes to the network).
+  Unclear means `failed` with `send_unclear` and a question to the user (`sendNeedsDecision`);
+  it is resent only on their explicit decision. After the acceptance follow, in
+  the same transaction, the Sent copy (`append`), removal of the draft copy (`remove_copy`)
+  and `\Answered`/`$Forwarded` on the original. Drafts go as `append` into the Drafts folder
+  (append the new version, remove the old one only if the Message-ID matches). Drafts of other programs
+  keep their inline images as inline parts; what the editor cannot display leaves the
+  original untouched, and the app's version sits next to it with its own Message-ID (0047).
+- From stage 10 (0023), **Send later locally:** a `send` operation with the chosen time as
+  `not_before` (`SendJob::scheduled`), built immediately and dated with that time; it is sent
+  only if the app is running and online then. At startup, before outbox and accounts run,
+  scheduled sends that were missed by more than an hour are not sent but
+  turned into a question (`send_missed`: send now, reschedule, keep as draft); up to an hour
+  they go out. A send is only started when it is due according to the worker's clock
+  (`begin_due_operations`); the worker waits at most 30 s at a stretch (sleep).
+- **SIZE:** the adapter reads the SMTP server's limit on request from a second EHLO
+  after login (nothing is sent); above a known limit, sending is rejected with
+  `message_too_large`.
+- **Inline images** go as `multipart/related` around `multipart/alternative`, only those the
+  HTML still shows; **Forward as attachment** attaches the whole message as `message/rfc822`
+  (7-bit-clean ones unencoded).
 
-**Verbindungen (0002)**
-- Jede Verbindung hat Lese- und Schreibfristen (Standard 30 s); eine stille Verbindung wird erkannt, nicht abgewartet.
-- Anmeldung per LOGIN; enthalten Benutzername oder Passwort Nicht-ASCII-Zeichen, per
-  `AUTHENTICATE PLAIN` (UTF-8, mit SASL-IR, wenn angeboten), siehe 0008. Konten mit Anmeldung bei
-  Microsoft oder Google (0042) melden sich mit dem Access-Token per `AUTHENTICATE XOAUTH2` an, per
-  `OAUTHBEARER` (RFC 7628), wo ein Server nur das anbietet; SMTP ebenso (`AUTH XOAUTH2`). Ein Token
-  geht nie über LOGIN oder PLAIN.
-- Nach dem Login `ENABLE CONDSTORE`, bei QRESYNC-fähigen Servern `ENABLE QRESYNC`.
-- Ein abgebrochener Befehl schließt die Verbindung; sie wird nie mit halb gelesenen Antworten weiterbenutzt.
-- Unaufgeforderte Antworten werden nach jedem Befehl abgeholt (die Bibliothek puffert nur 100).
-- Zertifikatsfehler werden typisiert: nicht vertraut, falscher Name, abgelaufen.
+**Connections (0002)**
+- Every connection has read and write deadlines (default 30 s); a silent connection is detected, not waited out.
+- Login via LOGIN; if user name or password contain non-ASCII characters, via
+  `AUTHENTICATE PLAIN` (UTF-8, with SASL-IR if offered), see 0008. Accounts that sign in with
+  Microsoft or Google (0042) log in with the access token via `AUTHENTICATE XOAUTH2`, via
+  `OAUTHBEARER` (RFC 7628) where a server offers only that; SMTP likewise (`AUTH XOAUTH2`). A token
+  never goes over LOGIN or PLAIN.
+- After login `ENABLE CONDSTORE`, on QRESYNC-capable servers `ENABLE QRESYNC`.
+- An aborted command closes the connection; it is never reused with half-read responses.
+- Unsolicited responses are collected after every command (the library buffers only 100).
+- Certificate errors are typed: not trusted, wrong name, expired.
 
-**Nur-Lese-Modus**
-- Konten mit `writes_enabled = false` öffnen Postfächer mit EXAMINE. Der Adapter lehnt jeden
-  schreibenden Befehl mit einem typisierten Fehler ab. Ein Test beweist das.
-- Auch bei freigeschaltetem Schreibzugriff verbinden sich Abgleich, IDLE, Lesebereich und
-  Verbindungstest immer nur lesend (EXAMINE, PEEK); geschrieben wird ausschließlich über die eigene
-  Verbindung der Outbox (Mitschnitt-Test in `crates/mail-engine/tests/actions.rs`).
-- Gmail (Stufe 14, 0034): `X-GM-MSGID` und `X-GM-LABELS` sind FETCH-Datenelemente und laufen mit
-  EXAMINE über die Allowlist; Labels ändert nur die Outbox-Verbindung (`UID STORE ±X-GM-LABELS`,
-  `Access::ReadWrite`), die Nur-Lese- und die Sync-Verbindung lehnen es ab (Tests in
+**Read-only mode**
+- Accounts with `writes_enabled = false` open mailboxes with EXAMINE. The adapter rejects every
+  writing command with a typed error. A test proves this.
+- Even with write access enabled, sync, IDLE, reading pane and
+  connection test always connect read-only (EXAMINE, PEEK); writing happens exclusively over the
+  outbox's own connection (wire-tap test in `crates/mail-engine/tests/actions.rs`).
+- Gmail (stage 14, 0034): `X-GM-MSGID` and `X-GM-LABELS` are FETCH data items and pass with
+  EXAMINE through the allowlist; labels are changed only by the outbox connection (`UID STORE ±X-GM-LABELS`,
+  `Access::ReadWrite`), the read-only and the sync connection reject it (tests in
   `crates/mail-imap/src/tests/gmail.rs`).
-- JMAP (Stufe 14, 0041): eine nur lesende Verbindung sendet nur Methoden einer Allowlist
+- JMAP (stage 14, 0041): a read-only connection sends only methods of an allowlist
   (`Core/echo`, `*/get`, `*/query`, `*/changes`, `*/queryChanges`, `SearchSnippet/get`,
-  `Identity/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` und Uploads
-  scheitern mit `read_only`, bevor etwas gesendet wird. Writer und Sender lehnen eine nur lesende
-  Konfiguration vor jeder Verbindung ab (Tests in `crates/mail-jmap/src/tests.rs`, Mitschnitt der
-  Methoden in `crates/mail-engine/tests/jmap.rs`). Die Verbindung des Einstellungs-Syncs (0041,
-  Nachtrag 2) ist immer nur lesend; ihre eigenen Schreibzugriffe prüft ein Bereich vor dem Senden
-  an den Argumenten: `Mailbox/set` nur zum Anlegen des Sync-Ordners, `Email/import` nur in ihn,
-  `Email/set` nur Zerstören gelisteter Mails des Ordners oder Herausnehmen aus ihm
+  `Identity/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` and uploads
+  fail with `read_only` before anything is sent. Writer and sender reject a read-only
+  configuration before any connection (tests in `crates/mail-jmap/src/tests.rs`, wire-tap of the
+  methods in `crates/mail-engine/tests/jmap.rs`). The connection of the settings sync (0041,
+  addendum 2) is always read-only; its own writes are checked by a scope on their arguments
+  before sending: `Mailbox/set` only to create the sync folder, `Email/import` only into it,
+  `Email/set` only destroying listed mails of the folder or taking them out of it
   (`crates/mail-jmap/src/sync_folder.rs`).
-- Ausnahme, nur nach „Sync einschalten“ (Stufe 11, 0014, 0022): Die Verbindung des
-  Einstellungs-Syncs darf in genau einen Ordner schreiben, den Sync-Ordner; jede andere
-  schreibende Zeile lehnt der Adapter mit `read_only` ab, bevor sie gesendet wird
-  (Mitschnitt-Test in `crates/mail-imap/tests/sync_folder.rs`).
-- Nach jedem Schritt der Outbox stößt ein Hook sofort einen Abgleich genau der betroffenen Ordner an;
-  die Oberfläche bekommt je Änderung ein gebündeltes Ereignis `operationsChanged`.
+- Exception, only after "Turn on sync" (stage 11, 0014, 0022): the connection of the
+  settings sync may write to exactly one folder, the sync folder; every other
+  writing line is rejected by the adapter with `read_only` before it is sent
+  (wire-tap test in `crates/mail-imap/tests/sync_folder.rs`).
+- After every step of the outbox a hook immediately triggers a sync of exactly the affected folders;
+  the UI gets one bundled event `operationsChanged` per change.
 
 **Offline**
-- Kopfzeilen aller Mails liegen lokal. Bodies werden beim Öffnen geholt und für einen einstellbaren
-  Zeitraum im Voraus geladen (Standard 30 Tage für Posteingang, Gesendet, Entwürfe und Markiertes).
-- Bodies liegen zstd-komprimiert als Dateien unter `bodies/<Konto-UUID>/` im Datenverzeichnis der
-  App, atomar geschrieben, die Datenbank hält den Verweis (gemessen in 0009: Lesen gleich schnell wie
-  BLOB, Datenbank 2,3 MB statt 57 MB bei 460 Bodies). Kleine vorausgeladene Mails eines Kontos werden
-  in Paketen bis 1 MiB geschrieben. Mails über 2 MiB werden teilweise geholt: Kopf und Textteile
-  zuerst, Anhänge auf Wunsch. Fehlt eine Datei oder ist sie beschädigt, wird sie neu geholt.
+- Headers of all mails are stored locally. Bodies are fetched on opening and preloaded for a configurable
+  period (default 30 days for Inbox, Sent, Drafts and Flagged).
+- Bodies are stored zstd-compressed as files under `bodies/<account UUID>/` in the app's data directory,
+  written atomically, the database holds the reference (measured in 0009: reading as fast as
+  BLOB, database 2.3 MB instead of 57 MB with 460 bodies). Small preloaded mails of an account are
+  written in packs of up to 1 MiB. Mails over 2 MiB are fetched partially: header and text parts
+  first, attachments on request. If a file is missing or damaged, it is fetched again.
 
 **Threads**
-- Je Konto, über Message-ID, In-Reply-To und References. Rückfall auf den Betreff nur vorsichtig:
-  gleicher normalisierter Betreff, gemeinsame Teilnehmer, enges Zeitfenster.
-- Konversationsansicht (0039, Standard an, synchronisierte Einstellung): Posteingang, vereinter
-  Posteingang, Ordner und Suchergebnisse zeigen eine Zeile je Konversation. Bündel enthalten
-  Konversationen. Angepinnte und zurückgekehrte Konversationen stehen oben, einmal; wartende
-  Snoozes und ausgeblendete Mails wirken je Mail. Aktionen auf einer Konversationszeile treffen die
-  Mails, die der Kern nennt (`conversationTargets`): Verschieben, Löschen, Zurückstellen die Mails im
-  angezeigten Postfach; Gelesen, Entmarkieren, Lösen alle Mails; Ungelesen, Markieren, Anpinnen die
-  Mail der Zeile. Ausgeführt wird über die Outbox wie jede Aktion.
+- Per account, via Message-ID, In-Reply-To and References. Fallback to the subject only cautiously:
+  same normalised subject, shared participants, narrow time window.
+- Conversation view (0039, default on, synced setting): inbox, unified
+  inbox, folders and search results show one row per conversation. Bundles contain
+  conversations. Pinned and returned conversations appear at the top, once; pending
+  snoozes and hidden mails act per mail. Actions on a conversation row affect the
+  mails the core names (`conversationTargets`): move, delete, snooze the mails in the
+  displayed mailbox; read, unflag, unpin all mails; unread, flag, pin the
+  mail of the row. Execution goes through the outbox like every action.
 
-**Gmail über IMAP (Stufe 14, Block A, 0034)**
-- Erkannt an `X-GM-EXT-1` bei jeder Anmeldung (vermerkt in `account_server`), für Gesendet und
-  Hinweise auch am Servernamen (`imap.gmail.com`). Anbieter im Überblick: `docs/PROVIDERS.md`.
-- Kopfdaten und Flag-Abgleich holen auf Gmail `X-GM-MSGID`/`X-GM-LABELS` in derselben FETCH-Zeile.
-  Eine Mail über alle Labels und „Alle Nachrichten“ ist eine `message`-Zeile; `newMail` zählt auf
-  Gmail nur neue Zeilen. Datensätze des Sync-Ordners (dort ein Label) bleiben aus „Alle Nachrichten“.
-- Labels ändern ist `SetFlag` mit `Flag::Label` (Aktionen `addLabel`/`removeLabel`), lokale
-  Wirkung an der Mail, immer gesendet, ohne `UNCHANGEDSINCE`.
-- Archivieren entfernt `\Inbox` vom Ort im Posteingang (kein Archiv-Ordner nötig), Rückgängig über
-  „Alle Nachrichten“; Verschieben aus „Alle Nachrichten“ setzt nur das Ziel-Label (kein EXPUNGE dort).
+**Gmail via IMAP (stage 14, block A, 0034)**
+- Detected by `X-GM-EXT-1` at every login (recorded in `account_server`), for Sent and
+  hints also by the server name (`imap.gmail.com`). Providers at a glance: `docs/PROVIDERS.md`.
+- On Gmail, header fetching and flag sync fetch `X-GM-MSGID`/`X-GM-LABELS` in the same FETCH line.
+  One mail across all labels and "All mail" is one `message` row; on Gmail `newMail` counts
+  only new rows. Records of the sync folder (a label there) stay out of "All mail".
+- Changing labels is `SetFlag` with `Flag::Label` (actions `addLabel`/`removeLabel`), local
+  effect on the mail, always sent, without `UNCHANGEDSINCE`.
+- Archiving removes `\Inbox` from the location in the inbox (no archive folder needed), undo via
+  "All mail"; moving out of "All mail" only sets the target label (no EXPUNGE there).
 
-**JMAP (Stufe 14, Block D, 0041)**
-- Ein Adapter hinter den IMAP-förmigen Traits, keine zweite Engine: der Adapter nummeriert die
-  Mails jedes JMAP-Postfachs selbst (UIDVALIDITY je Postfach, UIDs in der Reihenfolge des
-  Eintreffens), HIGHESTMODSEQ ist ein Zähler je Konto, der mit jedem neuen Email-State steigt.
-  „Postfach öffnen“ liest `Email/changes` seit dem gemerkten State und die `mailboxIds` der
-  geänderten Mails; ein Neustart behält die Nummern (Tabellen `jmap_*`).
-- Push über EventSource (RFC 8620, 7.3) in `idle`; ohne EventSource fragt die Engine ab.
-- Schreiben über die Outbox wie bei IMAP: `Email/set` (Keywords, `mailboxIds`, destroy),
-  `Email/import`, `Mailbox/set`; Senden über `EmailSubmission/set`, die Gesendet-Kopie legt die App
-  ab. Konflikte über den Zählerstand je Mail.
-- Das Sync-Konto des Einstellungs-Syncs muss IMAP sprechen.
+**JMAP (stage 14, block D, 0041)**
+- One adapter behind the IMAP-shaped traits, not a second engine: the adapter numbers the
+  mails of every JMAP mailbox itself (UIDVALIDITY per mailbox, UIDs in the order of
+  arrival), HIGHESTMODSEQ is a counter per account that rises with every new Email state.
+  "Opening a mailbox" reads `Email/changes` since the remembered state and the `mailboxIds` of the
+  changed mails; a restart keeps the numbers (tables `jmap_*`).
+- Push via EventSource (RFC 8620, 7.3) in `idle`; without EventSource the engine polls.
+- Writing via the outbox as with IMAP: `Email/set` (keywords, `mailboxIds`, destroy),
+  `Email/import`, `Mailbox/set`; sending via `EmailSubmission/set`, the Sent copy is filed by the
+  app. Conflicts via the counter value per mail.
+- The sync account of the settings sync must speak IMAP.
 
-**Anmeldung mit Microsoft und Google (Stufe 14, Blöcke B und C, 0042)**
-- OAuth 2.0 Authorization Code mit PKCE (S256) im System-Browser, Weiterleitung an einen
-  Loopback-Listener des Kerns auf einem freien Port (`http://localhost:<port>` für Microsoft,
-  `http://127.0.0.1:<port>/` sonst). Angenommen wird nur `GET /` mit dem gesendeten `state`; alles
-  andere bekommt 400/404, und der Kern wartet weiter (5 Minuten, abbrechbar). Modul
-  `mail-engine/src/oauth/`, Commands `getOauthAvailability`, `addOauthAccount`, `signInAgain`,
+**Sign-in with Microsoft and Google (stage 14, blocks B and C, 0042)**
+- OAuth 2.0 authorization code with PKCE (S256) in the system browser, redirect to a
+  loopback listener of the core on a free port (`http://localhost:<port>` for Microsoft,
+  `http://127.0.0.1:<port>/` otherwise). Only `GET /` with the `state` that was sent is accepted; everything
+  else gets 400/404, and the core keeps waiting (5 minutes, cancellable). Module
+  `mail-engine/src/oauth/`, commands `getOauthAvailability`, `addOauthAccount`, `signInAgain`,
   `cancelOauthSignIn`.
-- Profile je Anbieter (Endpunkte, Scopes, erlaubte IMAP-/SMTP-Server); Client-IDs (und Googles
-  nicht vertrauliches Installed-App-Secret) aus der Build-Umgebung (`MAIL_APP_OAUTH_*`, gelesen in
-  `app/src-tauri/src/oauth.rs`). Ohne Client-ID ist der Anbieter in diesem Build nicht verfügbar.
-- Tokens hinter `Credentials`: Refresh-Token im Schlüsselbund (in Stücken bis 1.000 Zeichen wegen
-  Windows), Access-Token im Speicher, erneuert fünf Minuten vor Ablauf und einmal nach einer
-  Ablehnung; `invalid_grant` ist `oauth_sign_in_required` und stoppt das Konto bis „Erneut
-  anmelden“. Ein Token gibt es nur für die Server des Anbieters; `Credentials::get` liefert solche
-  Einträge nie als Passwort aus.
-- Gmail und Microsoft bleiben bei IMAP und SMTP (keine Gmail-API, kein Microsoft Graph).
-- Konto entfernen widerruft bei Google (RFC 7009) und löscht die Einträge. Tokens wandern nie über
-  den Einstellungs-Sync; der Konto-Datensatz nennt nur den Anbieter (`"oauth"`), ein anderes Gerät
-  übernimmt das Konto als `oauth:<Anbieter>:synced:<zufällig>` ohne Token und meldet sich selbst an.
+- Profiles per provider (endpoints, scopes, allowed IMAP/SMTP servers); client IDs (and Google's
+  non-confidential installed-app secret) from the build environment (`MAIL_APP_OAUTH_*`, read in
+  `app/src-tauri/src/oauth.rs`). Without a client ID the provider is not available in this build.
+- Tokens behind `Credentials`: refresh token in the keychain (in pieces of up to 1,000 characters because of
+  Windows), access token in memory, renewed five minutes before expiry and once after a
+  rejection; `invalid_grant` is `oauth_sign_in_required` and stops the account until "Sign in
+  again". A token exists only for the provider's servers; `Credentials::get` never hands out such
+  entries as a password.
+- Gmail and Microsoft stay with IMAP and SMTP (no Gmail API, no Microsoft Graph).
+- Removing an account revokes at Google (RFC 7009) and deletes the entries. Tokens never travel via
+  the settings sync; the account record names only the provider (`"oauth"`), another device
+  adopts the account as `oauth:<provider>:synced:<random>` without a token and signs in itself.
 
-## Sicherheitsgrenzen
+## Security boundaries
 
-**HTML im Composer (Stufe 10, 0023)**
-- Ausgehendes HTML, Signaturen und Vorlagen laufen durch die Allowlist von `mail_content::mail_html`
-  (Absätze, Überschriften h1–h3, Ausrichtung, Auszeichnungen, Listen, Zitate, Code, Links nur
-  `http`/`https`/`mailto`). Bilder nur als `cid:` mit strenger Content-ID-Syntax, und nur im
-  eigenen Editor-Inhalt; ihre Bytes liest der Kern aus Dateien, die der Nutzer im Systemdialog
-  gewählt oder auf das Fenster gezogen hat. Eingefügtes HTML (Word, Webseiten) bereinigt der Kern
-  (`cleanPastedHtml`): kein Script, kein Stil, kein Bild, keine externe Referenz.
+**HTML in the composer (stage 10, 0023)**
+- Outgoing HTML, signatures and templates go through the allowlist of `mail_content::mail_html`
+  (paragraphs, headings h1–h3, alignment, emphasis, lists, quotes, code, links only
+  `http`/`https`/`mailto`). Images only as `cid:` with strict Content-ID syntax, and only in the
+  app's own editor content; their bytes are read by the core from files the user
+  chose in the system dialog or dragged onto the window. Pasted HTML (Word, web pages) is cleaned by the core
+  (`cleanPastedHtml`): no script, no style, no image, no external reference.
 
-**HTML aus Mails**
-0. Eine lineare Vorprüfung weist HTML ab, das html5ever quadratisch langsam machen oder die Ausgabe
-   aufblähen würde (mehr als 150.000 Tags, Tiefe über 1500, zu viele offene Formatierungs-Tags);
-   solche Mails werden als Text gezeigt. Sie muss das HTML lesen wie der Tokenizer von html5ever
-   (Kommentare, Attribute, Rohtext nur für HTML-Elemente, nicht in SVG und MathML, CDATA dort);
-   Stufe 15 fand drei Abweichungen (`docs/SECURITY_MODEL.md`, C-1), ein Differenztest in
-   `crates/mail-content/tests/fuzz.rs` vergleicht sie seitdem mit dem Parser.
-1. In Rust mit ammonia bereinigen: kein Script, keine Ereignis-Attribute, keine Formulare, kein
-   `meta refresh`, kein `base`, keine eingebetteten Objekte oder Frames.
-2. Externe Adressen in Bildern, `srcset`, Hintergründen und CSS durch Platzhalter ersetzen, solange
-   der Nutzer sie nicht freigegeben hat. Inline-Bilder (`cid:`) kommen aus dem lokalen Speicher.
-3. Anzeige in einem `srcdoc`-`iframe` mit `sandbox="allow-same-origin"` und sonst nichts, nie
-   `allow-scripts` (mit beidem zusammen erreichte ein Script in Spike D `parent.__TAURI_INTERNALS__`).
-   Jedes `srcdoc` beginnt mit der Pflicht-Meta-CSP `default-src 'none'; img-src data:; style-src
-   'unsafe-inline'; base-uri 'none'; form-action 'none'` und `<meta name="referrer"
-   content="no-referrer">`, danach ein Grundstil (`MAIL_DEFAULT_STYLE`, nur `font-family` der
-   Systemschrift als `:where(html)`, ohne URL), den der Stil der Mail überschreibt. Bilder nur als `data:`, die der Kern selbst geschrieben hat: Inline-Bilder, freigegebene externe Bilder und `data:`-URLs im HTML (an den Bytes erkannt als PNG, JPEG, GIF oder WebP; nie SVG, BMP, AVIF, ICO) werden im Helfer neu kodiert (Sicherheitsprüfung C-4, 0046, „Bilder in Mails“ unten); die Bilddecoder der WebView sehen nie Bytes aus einer Mail. Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
-   `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
-   Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005). Die Höhe des Frames
-   misst das Elternfenster: `contentDocument` ist lesbar (same-origin), ein `ResizeObserver` des
-   Elternfensters auf dem Wurzelelement im Frame feuert unter WKWebView (Stufe 3 geprüft); nachgemessen
-   wird per `setTimeout`, nicht per `requestAnimationFrame` (läuft in verdeckten Fenstern nicht).
-4. Freigegebene externe Bilder lädt der Rust-Kern: ohne Cookies, ohne Referrer, mit neutraler
-   Kennung, mit Größen- und Typgrenzen.
-5. Links öffnen sich nie direkt. Ein Klick zeigt das echte Ziel und warnt bei Abweichung vom
-   Linktext oder bei verdächtigen Domains. Geöffnet wird im System-Browser, nur `http`, `https`, `mailto`.
-   Einziger Abfangpunkt ist der Navigations-Hook in Rust (`on_navigation`): WebKit ruft in einem Frame
-   ohne `allow-scripts` keine Event-Listener auf, auch keine vom Elternfenster. Der Bereiniger schreibt
-   deshalb jedes `href` auf `https://link.invalid/<Render-Token>/<Index>` um (das echte Ziel kennt nur
-   der Kern; ein Platzhalter mit fremdem Token aus der Mail selbst wird ebenfalls umgeschrieben)
-   und entfernt `<link>`, `target`, `ping` und `download`: `<link rel=preconnect>` und Klicks auf
-   `target=_blank` öffnen sonst TCP-Verbindungen, die weder Sandbox noch CSP verhindern (0005).
-   Links in KI-Ausgaben (0028) findet der Kern selbst im Text, den er zurückgibt, und hält sie
-   unter einem eigenen Token im selben Register (höchstens 32 Ergebnisse neben den 32
-   Darstellungen); die Oberfläche bekommt Segmente und öffnet einen Link nur über
-   `describeLink`/`openLink` mit Token und Index, nie mit einer URL.
-6. Die CSP der App erlaubt für die Mail-Anzeige `style-src 'self' 'unsafe-inline'` (sonst greift kein
-   Mail-CSS) und `frame-src 'self' http: https:` (sonst verwirft WebKit Link-Navigationen, bevor der
-   Hook sie sieht); Scripts bleiben auf `'self'` beschränkt. Unter WebView2 ist offen, ob der Hook
-   Navigationen im Unter-Frame sieht (wry abonniert dort nur `NavigationStarting`); Stufe 6 prüft das.
+**HTML from mails**
+0. A linear pre-check rejects HTML that would make html5ever quadratically slow or inflate the
+   output (more than 150,000 tags, depth over 1500, too many open formatting tags);
+   such mails are shown as text. It must read the HTML the way html5ever's tokenizer does
+   (comments, attributes, raw text only for HTML elements, not in SVG and MathML, CDATA there);
+   stage 15 found three differences (`docs/SECURITY_MODEL.md`, C-1), and since then a differential test in
+   `crates/mail-content/tests/fuzz.rs` compares it with the parser.
+1. Sanitise in Rust with ammonia: no script, no event attributes, no forms, no
+   `meta refresh`, no `base`, no embedded objects or frames.
+2. Replace external addresses in images, `srcset`, backgrounds and CSS with placeholders as long as
+   the user has not approved them. Inline images (`cid:`) come from local storage.
+3. Display in a `srcdoc` `iframe` with `sandbox="allow-same-origin"` and nothing else, never
+   `allow-scripts` (with both together, a script in spike D reached `parent.__TAURI_INTERNALS__`).
+   Every `srcdoc` begins with the mandatory meta CSP `default-src 'none'; img-src data:; style-src
+   'unsafe-inline'; base-uri 'none'; form-action 'none'` and `<meta name="referrer"
+   content="no-referrer">`, followed by a base style (`MAIL_DEFAULT_STYLE`, only the `font-family` of the
+   system font as `:where(html)`, without a URL) that the mail's own style overrides. Images only as `data:` that the core wrote itself: inline images, approved external images and `data:` URLs in the HTML (recognised by their bytes as PNG, JPEG, GIF or WebP; never SVG, BMP, AVIF, ICO) are re-encoded in the helper (security review C-4, 0046, "Images in mails" below); the WebView's image decoders never see bytes from a mail. The frame additionally inherits the
+   app's CSP; WebKit does not know the `csp` attribute. No JavaScript runs there, and Tauri injects its scripts only into the
+   main frame, so the Tauri interface is not reachable (0005). The height of the frame
+   is measured by the parent window: `contentDocument` is readable (same-origin), a `ResizeObserver` of the
+   parent window on the root element in the frame fires under WKWebView (checked in stage 3); re-measuring
+   happens via `setTimeout`, not via `requestAnimationFrame` (does not run in hidden windows).
+4. Approved external images are loaded by the Rust core: without cookies, without referrer, with a neutral
+   identifier, with size and type limits.
+5. Links never open directly. A click shows the real target and warns on a mismatch with the
+   link text or on suspicious domains. Opening happens in the system browser, only `http`, `https`, `mailto`.
+   The only interception point is the navigation hook in Rust (`on_navigation`): in a frame
+   without `allow-scripts` WebKit calls no event listeners, not even those of the parent window. The sanitiser
+   therefore rewrites every `href` to `https://link.invalid/<Render-Token>/<Index>` (only the core
+   knows the real target; a placeholder with a foreign token from the mail itself is rewritten too)
+   and removes `<link>`, `target`, `ping` and `download`: `<link rel=preconnect>` and clicks on
+   `target=_blank` would otherwise open TCP connections that neither sandbox nor CSP prevent (0005).
+   Links in AI outputs (0028) are found by the core itself in the text it returns, and it keeps them
+   under a token of their own in the same register (at most 32 results alongside the 32
+   renderings); the UI gets segments and opens a link only via
+   `describeLink`/`openLink` with token and index, never with a URL.
+6. For displaying mails, the app's CSP allows `style-src 'self' 'unsafe-inline'` (otherwise no
+   mail CSS applies) and `frame-src 'self' http: https:` (otherwise WebKit discards link navigations before the
+   hook sees them); scripts stay restricted to `'self'`. Under WebView2 it is open whether the hook
+   sees navigations in the sub-frame (wry subscribes there only to `NavigationStarting`); stage 6 checks this.
 
 **Shell**
-- Das Hauptfenster entsteht erst, wenn der Kern bereitsteht (`"create": false` in `tauri.conf.json`); so kann die Oberfläche keine Commands senden, bevor `AppCore` läuft.
-- `devCsp` greift im Entwicklungsmodus nicht (die WebView lädt die `devUrl` direkt). CSP-Fehler zeigen sich erst im Release- oder e2e-Build; der Desktop-Test zeichnet CSP-Verstöße auf und scheitert daran.
-- Tauri-Capabilities minimal: keine Dateisystem-, Shell- oder HTTP-Plugins für das Frontend.
-  Das Notification-Plugin (Stufe 9) benutzt nur die Shell; die Oberfläche hat keine Berechtigung
-  dafür. Ebenso das Updater-Plugin (Stufe 15, 0037): keine Capability gewährt `updater:*`, die
-  Oberfläche nutzt die eigenen Commands `getUpdateInfo`, `setUpdateAutoCheck`, `checkForUpdates`,
-  `downloadUpdate`, `installUpdate`. Ob gefragt wird, entscheidet `mail-engine/src/updates.rs`
-  (Schalter, einmalige Frage, Tagesdrossel), die Shell setzt nur das Plugin als `UpdateSource`
-  ein. Der private Update-Schlüssel liegt nur im Schlüsselbund des Build-Macs
-  (`org.vicemail.updater`, `docs/RELEASING.md`), der öffentliche in `tauri.conf.json`. Den Standard für `mailto:` fragt und setzt die Shell auf macOS über `osascript` mit festem
-  Skript (Launch Services ohne `unsafe`, 0020).
-- Strenge Content-Security-Policy für die App selbst, keine entfernten Quellen.
-- Der eingebettete WebDriver für Tests ist nur in Test-Builds enthalten, nie in ausgelieferten
-  (Cargo-Feature `e2e`; ein Test prüft, dass das Release-Binary ihn nicht enthält, 0005).
-- Tauri-Init-Scripts werden nie für alle Frames eingespritzt.
-- `unsafe` ist überall verboten (`forbid`), außer in `crates/webview2-guard` (`deny` mit einzeln
-  begründeten `#[allow(unsafe_code)]` und `// SAFETY:`); `scripts/check.sh` prüft das per Suche.
-- Neue Fenster (`target=_blank`, `window.open`) lehnt die Shell immer ab, ebenso Downloads der
-  WebView selbst (Kontextmenü „Verknüpfte Datei laden“, „Bild sichern“; Stufe 15).
-- Webseiten öffnet die App sonst nie selbst, nur nach Klick und Prüfung über den System-Browser.
-  Einzige Ausnahme (Stufe 14, 0042): „Mit Microsoft/Google anmelden“ und „Erneut anmelden“ öffnen
-  die feste Anmeldeadresse des Anbieters im System-Browser, über denselben Öffner wie Links (nie in
-  der WebView, kein eigenes Fenster). Die Antwort kommt über den Loopback-Listener des Kerns, nicht
-  über die Oberfläche.
-- Fenster öffnet nur die Shell (Stufe 8, 0025): das Hauptfenster, je Mail ein Mail-Fenster
-  (`openMessageWindow`, Label `message-<Konto>-<Mail>`, Seite `index.html?window=message&…`) und
-  je Entwurf ein Composer-Fenster (`openComposerWindow`, `composer-<Entwurf>`,
-  `index.html?window=composer&draftId=…`). Jedes Fenster entsteht über `windows::guard` und
-  `windows::finish`: derselbe Navigations-Hook, dieselbe Ablehnung neuer Fenster, auf Windows
-  derselbe WebView2-Frame-Guard. Die Capability `default` gilt für `main`, `message-*` und
-  `composer-*`, also hat jedes dieser Fenster genau die Rechte des Hauptfensters; andere Labels
-  haben keine. Welches Fenster ein Command aufruft (Layout je
-  Fenster), entnimmt die Shell dem aufrufenden `WebviewWindow`, nie einem Argument.
-- `.eml`-Dateien (Stufe 9, 0027) erscheinen in Mail-Fenstern mit dem Label `message-file-<ID>`
-  (`index.html?window=eml&fileId=<ID>`, ID 128 Bit zufällig): dieselben Rechte und Schutzregeln
-  wie jedes Mail-Fenster. Die App meldet sich für `.eml` an (`bundle.fileAssociations`; macOS mit
-  Rang „Alternate“, Mail bleibt Standard; unter Windows trägt der Installer die Zuordnung ein).
-  Dateien kommen über `RunEvent::Opened` (macOS), Startargumente und den zweiten Start
-  (`tauri-plugin-single-instance`, Windows) oder den Öffnen-Dialog des Kerns.
+- The main window is created only when the core is ready (`"create": false` in `tauri.conf.json`); this way the UI cannot send commands before `AppCore` is running.
+- `devCsp` does not apply in development mode (the WebView loads the `devUrl` directly). CSP errors only show up in the release or e2e build; the desktop test records CSP violations and fails on them.
+- Minimal Tauri capabilities: no file system, shell or HTTP plugins for the frontend.
+  The notification plugin (stage 9) is used only by the shell; the UI has no permission
+  for it. Likewise the updater plugin (stage 15, 0037): no capability grants `updater:*`, the
+  UI uses the app's own commands `getUpdateInfo`, `setUpdateAutoCheck`, `checkForUpdates`,
+  `downloadUpdate`, `installUpdate`. Whether to ask is decided by `mail-engine/src/updates.rs`
+  (switch, one-time question, daily throttle), the shell only plugs in the plugin as `UpdateSource`.
+  The private update key is only in the keychain of the build Mac
+  (`org.vicemail.updater`, `docs/RELEASING.md`), the public one in `tauri.conf.json`. The default for `mailto:` is queried and set by the shell on macOS via `osascript` with a fixed
+  script (Launch Services without `unsafe`, 0020).
+- Strict Content Security Policy for the app itself, no remote sources.
+- The embedded WebDriver for tests is only contained in test builds, never in shipped ones
+  (Cargo feature `e2e`; a test checks that the release binary does not contain it, 0005).
+- Tauri init scripts are never injected for all frames.
+- `unsafe` is forbidden everywhere (`forbid`), except in `crates/webview2-guard` (`deny` with individually
+  justified `#[allow(unsafe_code)]` and `// SAFETY:`); `scripts/check.sh` checks this by searching.
+- New windows (`target=_blank`, `window.open`) are always rejected by the shell, as are downloads by the
+  WebView itself (context menu "Download Linked File", "Save Image As"; stage 15).
+- Otherwise the app never opens web pages itself, only after a click and a check, via the system browser.
+  The only exception (stage 14, 0042): "Sign in with Microsoft/Google" and "Sign in again" open
+  the provider's fixed sign-in address in the system browser, via the same opener as links (never in
+  the WebView, no window of its own). The answer comes via the core's loopback listener, not
+  via the UI.
+- Windows are opened only by the shell (stage 8, 0025): the main window, one mail window per mail
+  (`openMessageWindow`, label `message-<account>-<message>`, page `index.html?window=message&…`) and
+  one composer window per draft (`openComposerWindow`, `composer-<draft>`,
+  `index.html?window=composer&draftId=…`). Every window is created via `windows::guard` and
+  `windows::finish`: the same navigation hook, the same rejection of new windows, on Windows
+  the same WebView2 frame guard. The capability `default` applies to `main`, `message-*` and
+  `composer-*`, so each of these windows has exactly the rights of the main window; other labels
+  have none. Which window calls a command (layout per
+  window) is taken by the shell from the calling `WebviewWindow`, never from an argument.
+- `.eml` files (stage 9, 0027) appear in mail windows with the label `message-file-<ID>`
+  (`index.html?window=eml&fileId=<ID>`, ID 128 bits random): the same rights and protection rules
+  as every mail window. The app registers for `.eml` (`bundle.fileAssociations`; macOS with
+  rank "Alternate", Mail stays the default; on Windows the installer enters the association).
+  Files arrive via `RunEvent::Opened` (macOS), launch arguments and the second launch
+  (`tauri-plugin-single-instance`, Windows) or the core's open dialog.
 
-**Geheimnisse**
-- Passwörter, Tokens und API-Schlüssel nur im System-Schlüsselbund. Ein Typ `Secret<T>` verhindert,
-  dass sie in Logs oder Fehlermeldungen landen; ein Test prüft das.
-- Stufe 14 (0042): OAuth-Refresh-Tokens ebenso (Eintrag `oauth:<Anbieter>:<id>`); Access-Tokens nur
-  im Speicher. Der Diagnose-Export enthält keins von beiden (Test). Client-IDs sind keine Geheimnisse.
-- Stufe 14 (0041, Nachtrag 1): API-Tokens von JMAP-Konten (Fastmail) wie Passwörter (Eintrag
-  `token:<id>`), gesendet nur als `Authorization: Bearer` an den eigenen JMAP-Server, nie geloggt,
-  nicht im Diagnose-Export (Test), nicht im Einstellungs-Sync (der Datensatz sagt nur
+**Secrets**
+- Passwords, tokens and API keys only in the system keychain. A type `Secret<T>` prevents
+  them from ending up in logs or error messages; a test checks this.
+- Stage 14 (0042): OAuth refresh tokens likewise (entry `oauth:<provider>:<id>`); access tokens only
+  in memory. The diagnostics export contains neither (test). Client IDs are not secrets.
+- Stage 14 (0041, addendum 1): API tokens of JMAP accounts (Fastmail) like passwords (entry
+  `token:<id>`), sent only as `Authorization: Bearer` to the account's own JMAP server, never logged,
+  not in the diagnostics export (test), not in the settings sync (the record only says
   `"signIn": "apiToken"`).
-- Konto entfernen löscht Schlüsselbund-Eintrag, lokale Daten und Dateien dieses Kontos; bei Google
-  wird das Refresh-Token vorher widerrufen.
+- Removing an account deletes the keychain entry, local data and files of this account; for Google
+  the refresh token is revoked first.
 
-**Dateien**
-- Dateinamen von Anhängen werden bereinigt: keine Pfadtrenner, keine reservierten Windows-Namen,
-  keine Steuerzeichen, keine Richtungsumkehr-Zeichen. Geschrieben wird nur an den Ort, den der
-  Nutzer im Systemdialog wählt.
-- Betreffs und Anzeigenamen (Kopfzeilen über IMAP in `mail-imap`, ganze Mails, Kontakte,
-  Einladungen und Regelprüfung in `mail-content`) verlieren dieselben Richtungszeichen
-  (U+202A–202E, U+2066–2069, U+200E, U+200F, U+061C; `mail_model::is_bidi_control`), damit
-  `Rechnung\u{202E}fdp.exe` nicht als `Rechnungexe.pdf` erscheint (Sicherheitsprüfung C-8).
-  Schon gespeicherte Kopfzeilen behalten sie, bis der lokale Stand neu aufgebaut wird (neue UIDVALIDITY, Konto neu eingerichtet); veröffentlicht war noch keine Version.
-- Jede Datei, die die App aus einem Anhang schreibt (Öffnen, Speichern, Alle speichern), trägt
-  die Herkunftsmarke des Systems: unter Windows den `Zone.Identifier` (Zone 3), unter macOS
-  `com.apple.quarantine` (Stufe 15, über `/usr/bin/xattr` mit festen Argumenten), gesetzt,
-  solange die Datei noch beschreibbar ist. So prüfen SmartScreen und Gatekeeper wie bei einem
-  Download, auch eine App aus einem angehängten Archiv.
-- „Alle speichern“ (Stufe 16, 0036): ein Ordner aus dem Ordnerdialog des Systems; jede Datei unter
-  ihrem bereinigten Namen, mit `create_new` belegt: eine vorhandene Datei wird nie ersetzt, ein
-  vergebener Name wird `Name (2).ext` usw.; unter Windows mit Herkunftsmarke wie jedes Speichern.
+**Files**
+- File names of attachments are sanitised: no path separators, no reserved Windows names,
+  no control characters, no direction-reversal characters. Writing happens only to the location the
+  user chooses in the system dialog.
+- Subjects and display names (headers via IMAP in `mail-imap`, whole mails, contacts,
+  invitations and rule matching in `mail-content`) lose the same direction characters
+  (U+202A–202E, U+2066–2069, U+200E, U+200F, U+061C; `mail_model::is_bidi_control`), so that
+  `Invoice\u{202E}fdp.exe` does not appear as `Invoiceexe.pdf` (security review C-8).
+  Headers stored before keep them until the local state is rebuilt (new UIDVALIDITY, account set up again); no version had been published yet.
+- Every file the app writes from an attachment (Open, Save, Save all) carries
+  the system's mark of origin: on Windows the `Zone.Identifier` (zone 3), on macOS
+  `com.apple.quarantine` (stage 15, via `/usr/bin/xattr` with fixed arguments), set
+  while the file is still writable. This way SmartScreen and Gatekeeper check it as they check a
+  download, including an app from an attached archive.
+- "Save all" (stage 16, 0036): a folder from the system's folder dialog; each file under
+  its sanitised name, claimed with `create_new`: an existing file is never replaced, a
+  taken name becomes `Name (2).ext` and so on; on Windows with a mark of origin like every save.
 
-**Anhangsvorschau (Stufe 16, 0036)**
-- Der Kern dekodiert, die WebView zeigt nur, was der Kern selbst erzeugt hat: Bilder (PNG, JPEG,
-  GIF, WebP, an den Bytes erkannt) in Rust dekodiert (höchstens 64 Megapixel und, schon am Kopf geprüft, höchstens 192 MiB dekodiert, Sicherheitsprüfung C-9), verkleinert auf
-  2048 px und neu kodiert (PNG mit Transparenz, sonst JPEG), PDF-Seiten mit hayro einzeln zu PNG
-  gerastert (höchstens 200 Seiten), Text dekodiert und auf 512 KiB gekürzt, als Text angezeigt.
-  Höchstens 32 MiB Eingabe. HTML, XHTML, XML und SVG nie, auch wenn nur Typ oder Name es sagt.
-- Bilder und PDF dekodiert nicht der App-Prozess, sondern der Helfer `mail-mcp` im Vorschau-Modus
-  (`--render-preview`, Sicherheitsprüfung C-2, 0043): Datei über stdin, Antwort als JSON über
-  stdout; der Kern beendet ihn nach 20 s oder über 512 MiB residentem Speicher (abgefragt alle
-  50 ms mit `ps` bzw. `tasklist`). Ein Abbruch ist `preview_too_large`, ein Absturz
-  `preview_damaged`; die App läuft weiter. Ohne Helfer lehnt ein Release-Build diese Vorschauen ab.
-- Kein eigenes Fenster und keine Änderung an CSP, Capabilities oder Navigations-Hook: der Dialog
-  im Lesebereich zeigt `data:`-Bilder (von `img-src data:` gedeckt) und Text. Der PDF-Betrachter
-  der WebView wird nicht benutzt (er bräuchte `object-src`/`frame-src data:` und führt unter
-  WebView2 PDF-Skripte aus).
-- Typisierte Fehler `preview_unsupported`, `preview_too_large`, `preview_damaged`; eine Panik
-  eines Dekoders wird `preview_damaged`.
-- `.eml`-Dateien (0027) liest nur der Kern, nur vom Pfad, den das System übergibt oder der Nutzer
-  im Öffnen-Dialog wählt, höchstens `MAX_EML_FILE_BYTES` (64 MiB, vor und beim Lesen geprüft);
-  typisierte Fehler `eml_too_large`, `eml_invalid`, `eml_unreadable`. Sie werden nicht
-  importiert: kein Konto, keine Datenbankzeile, kein Suchindex; die Bytes liegen im Speicher,
-  solange ihr Fenster offen ist (höchstens 16 Dateien). Angezeigt werden sie über dieselbe
-  Pipeline wie HTML aus Mails (Bereinigung, Pflicht-CSP, Sandbox-Frame, Link-Platzhalter mit
-  eigenem Render-Token, Anhänge über den Kern).
+**Attachment preview (stage 16, 0036)**
+- The core decodes, the WebView only shows what the core itself generated: images (PNG, JPEG,
+  GIF, WebP, recognised by their bytes) decoded in Rust (at most 64 megapixels and, checked from the header already, at most 192 MiB decoded, security review C-9), scaled down to
+  2048 px and re-encoded (PNG with transparency, otherwise JPEG), PDF pages rasterised to PNG one by one with hayro
+  (at most 200 pages), text decoded and truncated to 512 KiB, shown as text.
+  At most 32 MiB input. HTML, XHTML, XML and SVG never, even if only the type or name says so.
+- Images and PDF are decoded not by the app process but by the helper `mail-mcp` in preview mode
+  (`--render-preview`, security review C-2, 0043): file via stdin, answer as JSON via
+  stdout; the core ends it after 20 s or above 512 MiB of resident memory (polled every
+  50 ms with `ps` or `tasklist` respectively). An abort is `preview_too_large`, a crash
+  `preview_damaged`; the app keeps running. Without the helper a release build rejects these previews.
+- No window of its own and no change to CSP, capabilities or navigation hook: the dialog
+  in the reading pane shows `data:` images (covered by `img-src data:`) and text. The PDF viewer
+  of the WebView is not used (it would need `object-src`/`frame-src data:` and runs PDF scripts under
+  WebView2).
+- Typed errors `preview_unsupported`, `preview_too_large`, `preview_damaged`; a panic
+  of a decoder becomes `preview_damaged`.
+- `.eml` files (0027) are read only by the core, only from the path the system passes or the user
+  chooses in the open dialog, at most `MAX_EML_FILE_BYTES` (64 MiB, checked before and while reading);
+  typed errors `eml_too_large`, `eml_invalid`, `eml_unreadable`. They are not
+  imported: no account, no database row, no search index; the bytes stay in memory
+  as long as their window is open (at most 16 files). They are displayed via the same
+  pipeline as HTML from mails (sanitising, mandatory CSP, sandbox frame, link placeholders with
+  their own render token, attachments via the core).
 
-**Bilder in Mails (Sicherheitsprüfung C-4, 0046)**
-- `render_html` zeigt ein Bild (Inline-Teil, freigegebenes externes Bild, `data:`-URL im HTML)
-  nur als seine Neukodierung aus `RenderOptions::images` (Schlüssel: die ursprünglichen Bytes);
-  fehlt sie, bleibt das Bild weg und steht in `RenderedHtml::pending_images`. Größen- und
-  Formatprüfung (8 MiB je Bild, 32 MiB je Mail, PNG/JPEG/GIF/WebP an den Bytes) kommen vorher.
-- Der Kern (`reading/images.rs`) rendert mit dem, was er schon kennt, schickt die fehlenden Bilder
-  und die eben geladenen externen in einem Stapel an den Helfer (`mail-mcp --reencode-images`:
-  je Bild 4 Byte Länge und die Bytes über stdin, eine JSON-Antwort über stdout; höchstens 512
-  Bilder und 64 MiB je Stapel) und rendert ein zweites Mal. Überwachung wie bei der
-  Anhangsvorschau (20 s, 512 MiB). Nur `data:image/(png|jpeg|gif);base64,…` aus der Antwort kommt
-  in ein Dokument.
-- Im Helfer (`mail-content`, `reencode.rs`): auf bis zu acht Kerne verteilt, gleichzeitig
-  dekodierte Bilder zusammen höchstens 384 MiB (am Kopf geschätzt), Grenzen wie bei der
-  Anhangsvorschau (64 Megapixel, 192 MiB dekodiert, 2048 px). Standbilder als PNG (mit
-  Transparenz) oder JPEG; animierte GIF und WebP als animiertes GIF (höchstens 300 Einzelbilder,
-  12 Mi Pixel insgesamt, 16 MiB, Leinwand bis 2048 px; sonst das erste Einzelbild).
-- Abgelehnte Bilder und gescheiterte Stapel zeigt die Mail wie jedes Bild, das sich nicht zeigen
-  lässt (Element ohne Quelle), nie mit den ursprünglichen Bytes.
-- Ergebnisse und Ablehnungen merkt sich der Kern im Speicher (Schlüssel aus zwei SipHash-Werten
-  mit zufälligen Schlüsseln, höchstens 64 MiB und 4096 Einträge, die am längsten unbenutzten
-  zuerst); eine Mail zahlt beim ersten Anzeigen (Newsletter mit 32 Bildern: rund 20 ms im
-  Release-Build). Ein Helfer, der nicht starten konnte, wird beim nächsten Mal wieder versucht.
-- Ohne Helfer: Tests und Entwicklungs-Builds kodieren mit demselben Code im Prozess neu; ein
-  Release-Build übergibt den Pfad immer und zeigt die Bilder nicht, wenn die Datei fehlt.
-- Der Editor zeigt Inline-Bilder von Entwürfen (auch von Entwürfen anderer Programme) und
-  Signaturbilder ebenfalls neu kodiert (`Reading::editor_images`); Entwurf und Signatur behalten
-  und versenden ihre eigenen Bytes.
+**Images in mails (security review C-4, 0046)**
+- `render_html` shows an image (inline part, approved external image, `data:` URL in the HTML)
+  only as its re-encoding from `RenderOptions::images` (key: the original bytes);
+  if that is missing, the image is left out and is listed in `RenderedHtml::pending_images`. Size and
+  format checks (8 MiB per image, 32 MiB per mail, PNG/JPEG/GIF/WebP by their bytes) come first.
+- The core (`reading/images.rs`) renders with what it already knows, sends the missing images
+  and the external ones just loaded in one batch to the helper (`mail-mcp --reencode-images`:
+  per image a 4-byte length and the bytes via stdin, one JSON answer via stdout; at most 512
+  images and 64 MiB per batch) and renders a second time. Watchdog as for the
+  attachment preview (20 s, 512 MiB). Only `data:image/(png|jpeg|gif);base64,…` from the answer goes
+  into a document.
+- In the helper (`mail-content`, `reencode.rs`): spread over up to eight cores, images decoded
+  at the same time together at most 384 MiB (estimated from the header), limits as for the
+  attachment preview (64 megapixels, 192 MiB decoded, 2048 px). Still images as PNG (with
+  transparency) or JPEG; animated GIF and WebP as animated GIF (at most 300 frames,
+  12 Mi pixels in total, 16 MiB, canvas up to 2048 px; otherwise the first frame).
+- Rejected images and failed batches are shown by the mail like any image that cannot be
+  shown (element without a source), never with the original bytes.
+- Results and rejections are remembered by the core in memory (key from two SipHash values
+  with random keys, at most 64 MiB and 4096 entries, least recently used evicted
+  first); a mail pays the cost on its first display (newsletter with 32 images: about 20 ms in a
+  release build). A helper that could not start is tried again the next time.
+- Without the helper: tests and development builds re-encode in the process with the same code; a
+  release build always passes the path and does not show the images if the file is missing.
+- The editor shows inline images of drafts (also of drafts of other programs) and
+  signature images re-encoded as well (`Reading::editor_images`); draft and signature keep
+  and send their own bytes.
 
-**Erlaubte Netzverbindungen**
-- Mailserver, die der Nutzer eingerichtet hat, auch für Bodies und Anhänge (Stufe 3): je Konto eine
-  eigene Leseverbindung neben Abgleich und IDLE, immer nur lesend (EXAMINE, `BODY.PEEK[…]`);
-  beim Sync-Konto eine weitere für den Einstellungs-Sync (Stufe 11), die nur in den Sync-Ordner
-  schreibt
-- JMAP-Konten (Stufe 14, 0041): die Sitzung unter `https://<host>[:<port>]/.well-known/jmap` des
-  eingerichteten Servers (Weiterleitungen nur auf denselben Host oder seine Subdomains, höchstens
-  drei) und die Adressen, die diese Sitzung nennt (API, Download, Upload, EventSource), nur HTTPS.
-  Je Konto die Verbindungen wie bei IMAP (Abgleich, Push, Lesebereich, Outbox), jede ein eigener
-  HTTP-Client ohne Proxy, Cookies, Referrer und Wiederholungen
-- Bei der Einrichtung, nur nach Klick auf „online suchen“: DNS-SRV-Abfragen (RFC 6186) über die
-  System-DNS-Server für die Domain der Adresse, danach HTTPS (Port 443) zur Autokonfiguration der
-  eigenen Domain (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Weiterleitungen nur auf
-  dieselbe Domain oder ihre Subdomains, höchstens drei, ohne Cookies, Referrer und Proxy, 128 KiB
-  höchstens. Kein Mozilla-ISPDB, kein anderes fremdes Verzeichnis. Gefundene Server werden vor der
-  Bestätigung angezeigt (SRV und Autoconfig sind nicht DNSSEC-geprüft). Ein Server außerhalb der
-  Domain der Adresse (weder sie noch eine Subdomain, verglichen in ASCII-/IDNA-Form ohne
-  Groß-/Kleinschreibung und Schlusspunkt) oder als IP-Adresse bekommt dabei eine eigene Warnung
-  (`DiscoveryResult.warnings`, RFC 6186 Abschnitt 6, Sicherheitsprüfung N-4,
-  `discovery/warning.rs`); ausgenommen sind die Server der eingebauten Anbietertabelle, deren
-  Ergebnisse nie eine Warnung tragen. MX wird nicht abgefragt. Ab Stufe 14 (0041) dazu
-  ein HTTPS-GET ohne Zugangsdaten an `<domain>/.well-known/jmap` (gleiche Regeln für
-  Weiterleitungen), um einen JMAP-Server anzubieten.
-- Externe Bilder einer Mail, nur nach Freigabe („einmal laden“ oder „für diesen Absender immer“;
-  bei einer geöffneten `.eml`-Datei nur „einmal laden“, 0027).
-  Der Kern lädt sie selbst (`mail-engine/src/reading/remote.rs`): reqwest über rustls mit der
-  Zertifikatsprüfung des Systems, HTTP/1.1, ohne Cookies, Referrer, Proxy und Wiederholungen, mit
-  neutraler Kennung (`Mozilla/5.0`), nur `http`/`https`, Weiterleitungen von Hand (höchstens drei,
-  wieder nur `http`/`https`), 5 s Verbindungsaufbau, 15 s je Bild, 30 s je Mail, höchstens 200
-  Adressen, 8 MiB je Bild und 32 MiB je Mail. **Nie zu privaten, Loopback- oder Link-Local-Adressen**
-  (auch nicht zu CGNAT, Multicast, reservierten und Dokumentationsnetzen, IPv4 in IPv6 eingeschlossen):
-  IP-Literale werden vor der Anfrage geprüft, Namen nach der Auflösung, und die Verbindung nutzt nur
-  die geprüften Adressen. Eine Ausnahme nur für Loopback gibt es allein in Tests
-  (`RemoteConfig::allow_loopback`; im Desktop-Test-Build `MAIL_APP_E2E_LOOPBACK_IMAGES=1`, nur mit
-  Feature `e2e`). Grenze: Die `From`-Adresse ist fälschbar; wer einen freigegebenen Absender fälscht,
-  bekommt seine Zählpixel geladen, mehr nicht
-- Links und Anhänge öffnet nicht die App, sondern das System (Browser, Mail-Programm, Standard-App),
-  erst nach Klick und Prüfung, Links nur `http`, `https`, `mailto`
-- KI-Endpunkte, die der Nutzer eingerichtet und freigegeben hat (Stufe 13, 0024): nur die Basis-URL
-  eines Profils, nur bei eingeschalteter KI, an einen Cloud-Anbieter erst nach Zustimmung und nur mit
-  Mails aus Konten mit Cloud-Freigabe; `http` nur zu lokalen Adressen, keine Weiterleitungen,
-  Proxies oder Wiederholungen
-- Der MCP-Server nimmt nur lokale Verbindungen an (Hilfsprogramm über stdio, zur App über einen
-  Unix-Socket bzw. eine Named Pipe, nie TCP; 0015) und baut selbst keine auf
-- Abmelden (Stufe 9, 0020), nur nach Klick: Ein-Klick nach RFC 8058 als HTTPS-POST
-  (`List-Unsubscribe=One-Click`) an die `https`-Adresse aus `List-Unsubscribe`, nur wenn
-  `List-Unsubscribe-Post` es anbietet; Client wie bei externen Bildern (gemeinsame TLS-Konfiguration,
-  ohne Cookies, Referrer, Proxy und Wiederholungen, neutrale Kennung, nie zu privaten, Loopback- oder
-  Link-Local-Adressen), keine Weiterleitungen, 5 s Aufbau, 15 s gesamt. Eine `mailto:`-Abmeldung ist
-  ein Entwurf, den der Nutzer sendet; eine Web-Abmeldung öffnet nur der System-Browser
-- Update-Prüfung (Stufe 15, 0037), **nur mit Zustimmung**: automatisch nur, wenn der Nutzer
-  „Automatisch nach Updates suchen“ eingeschaltet hat (Standard aus; einmal gefragt, im Schritt
-  „Optional“ des ersten Starts oder, wer ihn vorher übersprungen hat, nach dem ersten Konto, 0044),
-  höchstens einmal am Tag; sonst nur nach Klick auf „Jetzt suchen“. Ziel ist allein der
-  Endpunkt aus `tauri.conf.json` (`plugins.updater.endpoints`,
-  `https://github.com/othervice/vice-mail/releases/latest/download/latest.json`), dazu für die
-  Weiterleitung und den Download GitHubs Dateihosts `objects.githubusercontent.com` und
-  `release-assets.githubusercontent.com`. Nur HTTPS, Weiterleitungen nur zu diesen Hosts (höchstens
-  fünf), auf `github.com` nur Pfade unter `/<Besitzer>/<Repo>/releases/` des Endpunkts (Stufe 15),
-  eine Download-Adresse außerhalb wird vor jeder Verbindung abgelehnt. Client wie bei
-  externen Bildern: gemeinsame TLS-Konfiguration, ohne Cookies, Referrer, Proxy und Wiederholungen,
-  neutrale Kennung, keine App-Version und keine Kennung in der Anfrage. Heruntergeladen und
-  installiert wird nur nach Klick; die Datei muss mit dem Update-Schlüssel und für genau die
-  angekündigte Version signiert sein. Zeitgrenzen: Manifest 30 s, Download insgesamt 15 Minuten;
-  der Download bricht ab, sobald mehr als 300 MiB angekündigt oder angekommen sind
-  (Sicherheitsprüfung N-3). Andere Endpunkte nur in Tests und im Desktop-Test-Build
-  (`MAIL_APP_E2E_UPDATE_ENDPOINT`), HTTP nur zu Loopback-Endpunkten
-- Anmeldung bei Microsoft und Google (Stufe 14, 0042), nur nach Klick auf „Mit Microsoft/Google
-  anmelden“ oder „Erneut anmelden“ und für solche Konten: Der System-Browser öffnet die
-  Anmeldeseite (`login.microsoftonline.com`, `accounts.google.com`); der Kern spricht mit dem
-  Token-Endpunkt (`login.microsoftonline.com/common/oauth2/v2.0/token`,
-  `oauth2.googleapis.com/token`) beim Anmelden und etwa stündlich zum Erneuern, solange das Konto
-  läuft, und mit `oauth2.googleapis.com/revoke` beim Entfernen eines Google-Kontos. Client wie bei
-  der Kontoerkennung (gemeinsame TLS-Konfiguration, HTTPS, ohne Weiterleitungen, Cookies, Proxy und
-  Wiederholungen, neutrale Kennung, 64 KiB Antwort). Während der Anmeldung lauscht der Kern auf
-  `127.0.0.1` (und `::1`) auf einem freien Port, nur für die Rückleitung des Browsers; HTTP zu
-  anderen Endpunkten nur in Tests zu Loopback-Adressen
-- Die Zertifikatsprüfung des Betriebssystems kann für öffentliche Zertifikate Sperrinformationen
-  (OCSP, CRL) bei der ausstellenden Stelle abfragen. Das geschieht im System, nicht in der App.
+**Allowed network connections**
+- Mail servers the user has set up, also for bodies and attachments (stage 3): per account a
+  separate read connection besides sync and IDLE, always read-only (EXAMINE, `BODY.PEEK[…]`);
+  for the sync account one more for the settings sync (stage 11), which writes only to the sync folder
+- JMAP accounts (stage 14, 0041): the session at `https://<host>[:<port>]/.well-known/jmap` of the
+  configured server (redirects only to the same host or its subdomains, at most
+  three) and the addresses this session names (API, download, upload, EventSource), HTTPS only.
+  Per account the connections as with IMAP (sync, push, reading pane, outbox), each its own
+  HTTP client without proxy, cookies, referrer and retries
+- During setup, only after clicking "search online": DNS SRV queries (RFC 6186) via the
+  system DNS servers for the domain of the address, then HTTPS (port 443) for the domain's own
+  autoconfiguration (`autoconfig.<domain>`, `<domain>/.well-known/autoconfig/`). Redirects only to
+  the same domain or its subdomains, at most three, without cookies, referrer and proxy, 128 KiB
+  at most. No Mozilla ISPDB, no other third-party directory. Servers found are shown before the
+  confirmation (SRV and autoconfig are not DNSSEC-validated). A server outside the
+  domain of the address (neither the domain nor a subdomain of it, compared in ASCII/IDNA form ignoring
+  case and a trailing dot) or given as an IP address gets a warning of its own
+  (`DiscoveryResult.warnings`, RFC 6186 section 6, security review N-4,
+  `discovery/warning.rs`); the servers of the built-in provider table are exempt, and its
+  results never carry a warning. MX is not queried. From stage 14 (0041) additionally
+  an HTTPS GET without credentials to `<domain>/.well-known/jmap` (same rules for
+  redirects), to offer a JMAP server.
+- External images of a mail, only after approval ("load once" or "always for this sender";
+  for an opened `.eml` file only "load once", 0027).
+  The core loads them itself (`mail-engine/src/reading/remote.rs`): reqwest over rustls with the
+  system's certificate verification, HTTP/1.1, without cookies, referrer, proxy and retries, with a
+  neutral identifier (`Mozilla/5.0`), only `http`/`https`, redirects by hand (at most three,
+  again only `http`/`https`), 5 s connection setup, 15 s per image, 30 s per mail, at most 200
+  addresses, 8 MiB per image and 32 MiB per mail. **Never to private, loopback or link-local addresses**
+  (nor to CGNAT, multicast, reserved and documentation networks, IPv4 embedded in IPv6 included):
+  IP literals are checked before the request, names after resolution, and the connection uses only
+  the checked addresses. An exception, for loopback only, exists solely in tests
+  (`RemoteConfig::allow_loopback`; in the desktop test build `MAIL_APP_E2E_LOOPBACK_IMAGES=1`, only with
+  feature `e2e`). Limit: the `From` address can be forged; whoever forges an approved sender
+  gets their tracking pixels loaded, nothing more
+- Links and attachments are opened not by the app but by the system (browser, mail program, default app),
+  only after a click and a check, links only `http`, `https`, `mailto`
+- AI endpoints the user has set up and approved (stage 13, 0024): only the base URL
+  of a profile, only with AI turned on, to a cloud provider only after consent and only with
+  mails from accounts with cloud approval; `http` only to local addresses, no redirects,
+  proxies or retries
+- The MCP server only accepts local connections (helper program via stdio, to the app via a
+  Unix socket or a named pipe, never TCP; 0015) and opens none itself
+- Unsubscribing (stage 9, 0020), only after a click: one-click per RFC 8058 as HTTPS POST
+  (`List-Unsubscribe=One-Click`) to the `https` address from `List-Unsubscribe`, only if
+  `List-Unsubscribe-Post` offers it; client as for external images (shared TLS configuration,
+  without cookies, referrer, proxy and retries, neutral identifier, never to private, loopback or
+  link-local addresses), no redirects, 5 s setup, 15 s total. A `mailto:` unsubscribe is
+  a draft that the user sends; a web unsubscribe is opened only by the system browser
+- Update check (stage 15, 0037), **only with consent**: automatically only if the user has
+  turned on "Check for updates automatically" (default off; asked once, in the "Optional" step
+  of the first start or, if that was skipped, after the first account, 0044),
+  at most once a day; otherwise only after clicking "Check now". The only target is the
+  endpoint from `tauri.conf.json` (`plugins.updater.endpoints`,
+  `https://github.com/othervice/vice-mail/releases/latest/download/latest.json`), plus, for the
+  redirect and the download, GitHub's file hosts `objects.githubusercontent.com` and
+  `release-assets.githubusercontent.com`. HTTPS only, redirects only to these hosts (at most
+  five), on `github.com` only paths under the endpoint's `/<owner>/<repo>/releases/` (stage 15),
+  a download address outside them is rejected before any connection. Client as for
+  external images: shared TLS configuration, without cookies, referrer, proxy and retries,
+  neutral identifier, no app version and no identifier in the request. Downloading and
+  installing only happen after a click; the file must be signed with the update key and for exactly the
+  announced version. Time limits: manifest 30 s, download 15 minutes in total;
+  the download stops as soon as more than 300 MiB are announced or have arrived
+  (security review N-3). Other endpoints only in tests and in the desktop test build
+  (`MAIL_APP_E2E_UPDATE_ENDPOINT`), HTTP only to loopback endpoints
+- Sign-in with Microsoft and Google (stage 14, 0042), only after clicking "Sign in with Microsoft/Google"
+  or "Sign in again" and for such accounts: the system browser opens the
+  sign-in page (`login.microsoftonline.com`, `accounts.google.com`); the core talks to the
+  token endpoint (`login.microsoftonline.com/common/oauth2/v2.0/token`,
+  `oauth2.googleapis.com/token`) when signing in and about hourly to renew while the account
+  is running, and to `oauth2.googleapis.com/revoke` when a Google account is removed. Client as for
+  account discovery (shared TLS configuration, HTTPS, without redirects, cookies, proxy and
+  retries, neutral identifier, 64 KiB response). During sign-in the core listens on
+  `127.0.0.1` (and `::1`) on a free port, only for the browser's redirect back; HTTP to
+  other endpoints only in tests to loopback addresses
+- The operating system's certificate verification may query revocation information
+  (OCSP, CRL) from the issuing authority for public certificates. This happens in the system, not in the app.
 
-Sonst nichts. Keine Telemetrie, keine Absturzberichte, keine Abfrage fremder Verzeichnisse ohne Klick.
+Nothing else. No telemetry, no crash reports, no queries of third-party directories without a click.
 
-## Einstellungs-Sync
+## Settings sync
 
-Der Mailserver gleicht Mails, Ordner, Flags und Entwürfe ab. Der Einstellungs-Sync gleicht nur ab,
-was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
+The mail server syncs mails, folders, flags and drafts. The settings sync only syncs
+what only the app knows, and uses the mailbox itself as storage for it.
 
-- **Ablage:** ein eigener Ordner in einem vom Nutzer gewählten Konto („Sync-Konto“), nicht abonniert,
-  damit die meisten anderen Mail-Programme ihn nicht anzeigen. Jeder Datensatz ist eine Nachricht.
-- **Verschlüsselung:** Format `age`. Beim Einrichten entsteht ein zufälliger Schlüssel; er liegt
-  selbst mit der Passphrase verschlüsselt im Ordner. Datensätze werden an diesen Schlüssel
-  verschlüsselt. Kopfzeilen tragen nur eine undurchsichtige ID und eine Version; Art und Inhalt
-  stehen im verschlüsselten Teil und werden beim Lesen gegen die Kopfzeilen geprüft.
-- **Ändern:** neue Version anhängen, alte löschen. Liegen zwei Versionen vor, entscheidet die
-  Zusammenführungsregel der Datenart, das Ergebnis wird geschrieben, die Verlierer gelöscht.
-- **Versionen:** hybride logische Uhr je Datensatz (Zeit, Zähler, Geräte-ID).
-- **Löschen:** Grabstein-Datensatz, 180 Tage aufbewahrt, damit lange abwesende Geräte davon erfahren.
-- **Regeln je Datenart:**
+- **Storage:** a dedicated folder in an account chosen by the user ("sync account"), not subscribed,
+  so that most other mail programs do not show it. Every record is one message.
+- **Encryption:** format `age`. On setup a random key is created; it is itself stored in the folder,
+  encrypted with the passphrase. Records are encrypted to this key. Headers carry only an
+  opaque ID and a version; kind and content are in the encrypted part and are checked
+  against the headers on reading.
+- **Changing:** append the new version, delete the old one. If two versions exist, the
+  merge rule of the data kind decides, the result is written, the losers are deleted.
+- **Versions:** hybrid logical clock per record (time, counter, device ID).
+- **Deleting:** tombstone record, kept for 180 days, so that devices absent for a long time learn about it.
+- **Rules per data kind:**
 
-| Datenart | Regel |
+| Data kind | Rule |
 |---|---|
-| Einstellungen | je Schlüssel gewinnt die neuere Version |
-| Signaturen, Vorlagen, Regeln, Ansichten | je Datensatz gewinnt die neuere Version; Bearbeiten schlägt gleichzeitiges Löschen |
-| Snooze, Pins, Aufgaben, Lese-Liste | je Mail gewinnt die neuere Version |
-| Angeheftete Anhänge | je Anhang (Konto-UUID, Message-ID, Index) gewinnt die neuere Version (Stufe 16, 0036) |
-| Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
-| Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
-| Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
-| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040); das Protokoll (Feld `protocol`, nur bei JMAP-Konten) und die Art der Anmeldung (Feld `signIn`, nur bei API-Token) gelten nur beim Übernehmen eines Kontos, nie für ein vorhandenes (0041) |
+| Settings | per key the newer version wins |
+| Signatures, templates, rules, views | per record the newer version wins; editing beats simultaneous deletion |
+| Snooze, pins, tasks, reading list | per mail the newer version wins |
+| Pinned attachments | per attachment (account UUID, Message-ID, index) the newer version wins (stage 16, 0036) |
+| Folder settings (favourite, colour), blocked senders | per folder (account UUID and path) or address respectively the newer version wins (stage 16, 0033) |
+| Sender rules, image approvals, contact names, devices | per key the newer version wins |
+| Identities, signatures (separate record per identity), account groups | like signatures |
+| Account list | per field the newer version wins; a removed account is not silently deleted on other devices, instead the user is asked; other servers (host, port, security, user name) for an existing account are not taken over but wait for the user (0040); the protocol (field `protocol`, only for JMAP accounts) and the kind of sign-in (field `signIn`, only with an API token) apply only when an account is adopted, never to an existing one (0041) |
 
-- **Neues Gerät:** Sync-Konto einrichten, Passphrase eingeben, Vorschau der zu übernehmenden Daten,
-  zusammenführen. Übernommene Konten fragen einzeln nach ihrem Passwort.
-- **Passphrase vergessen:** nichts geht verloren, jedes Gerät hat seine Daten lokal. Sync zurücksetzen,
-  neuer Schlüssel, von diesem Gerät neu hochladen.
-- **Sichtbar für den Mailserver:** Anzahl, Größe und Zeitpunkte der Datensätze. Mehr nicht.
-- **Transport austauschbar:** ein Trait `SettingsTransport` (auflisten, schreiben, löschen). Erste
-  Umsetzung ist der IMAP-Ordner; ein selbst gehosteter Server oder ein Dateiordner können folgen.
-- **Umsetzung (Stufe 11, `docs/decisions/0022-einstellungs-sync-integration.md`):**
-  - Ordner `Settings-Sync` (oben oder unter `INBOX`), nicht abonniert, aus der Ordnerliste des
-    Mail-Abgleichs ausgeblendet; je Fassung eine Nachricht mit `X-Settings-Sync-Id` und
-    `X-Settings-Sync-Version`, Körper age-ASCII-Armor. Nachrichten ohne beide Kopfzeilen fasst
-    der Sync nie an.
-  - Erfassen in einem Haken: Trigger auf jeder synchronisierbaren Tabelle merken den Datensatz
-    vor, `Store::write` lässt ihn vor dem Commit von der Engine versionieren (`SyncCapture`).
-  - Eigene Verbindung, die nur in den Sync-Ordner schreiben darf (Prüfung jeder Befehlszeile im
-    Adapter, `FolderScope`), auch bei `writes_enabled = false` (0014). Ihr Ausfall berührt Lesen
-    und Senden nicht.
-  - Durchläufe nach lokalen Änderungen, nach jedem Mail-Durchlauf des Sync-Kontos und im
-    Poll-Abstand; unveränderter Ordnerstand (UIDVALIDITY, UIDNEXT, EXISTS, HIGHESTMODSEQ) und
-    nichts lokal offen heißt: nichts zu tun. Täglich eine Vollprüfung.
-  - Grenzen je Durchlauf (Sicherheitsprüfung F2, `FetchLimits`), nach den gelisteten Größen
-    (`RFC822.SIZE`), bevor etwas gelesen wird: Einträge über 2 MiB werden nie geladen, nie
-    gelöscht und zählen nie als Fassung (gemeldet wie abgelehnte); höchstens 5.000 Einträge und
-    64 MiB je Durchlauf, ein Datensatz ganz oder gar nicht. Was nicht passt, wartet als Ganzes auf
-    den nächsten Durchlauf, der dann auch bei unverändertem Ordner läuft.
-  - Zweites Gerät: das vorher eingerichtete Sync-Konto und seine Standard-Identität übernehmen
-    die IDs aus dem Ordner (gleiche Adresse, nie abgeglichen); übernommene Konten starten nur
-    lesend und ohne Passwort, mit einem neuen, zufälligen Schlüsselbund-Namen.
-  - Server sind eine Grenze für Zugangsdaten (Sicherheitsprüfung F1, 0040): Nennt ein Datensatz
-    andere Server für ein vorhandenes Konto, behält das Gerät seine Server und sein Passwort; das
-    Konto zeigt „Server-Einstellungen auf einem anderen Gerät geändert“. „Übernehmen“ löscht
-    zuerst das Passwort, schaltet Schreibzugriff aus und schreibt dann die Server; das Konto
-    fragt danach nach dem Passwort. „Behalten“ lässt alles, wie es ist.
-  - Konto anderswo entfernt: Rückfrage; bis zur Antwort warten auch die Löschungen seiner
-    Identitäten, Snoozes usw.; „behalten“ erneuert Konto und diese Datensätze.
+- **New device:** set up the sync account, enter the passphrase, preview of the data to be taken over,
+  merge. Adopted accounts ask for their password one by one.
+- **Passphrase forgotten:** nothing is lost, every device has its data locally. Reset the sync,
+  new key, upload again from this device.
+- **Visible to the mail server:** number, size and times of the records. Nothing more.
+- **Transport exchangeable:** a trait `SettingsTransport` (list, write, delete). The first
+  implementation is the IMAP folder; a self-hosted server or a file folder may follow.
+- **Implementation (stage 11, `docs/decisions/0022-einstellungs-sync-integration.md`):**
+  - Folder `Settings-Sync` (at the top or under `INBOX`), not subscribed, hidden from the folder list of the
+    mail sync; per version one message with `X-Settings-Sync-Id` and
+    `X-Settings-Sync-Version`, body age ASCII armor. The sync never touches messages without both
+    headers.
+  - Capture in one hook: triggers on every syncable table mark the record,
+    `Store::write` has the engine version it before the commit (`SyncCapture`).
+  - Separate connection that may write only to the sync folder (check of every command line in the
+    adapter, `FolderScope`), also with `writes_enabled = false` (0014). Its failure does not affect reading
+    and sending.
+  - Passes after local changes, after every mail pass of the sync account and at the
+    poll interval; unchanged folder state (UIDVALIDITY, UIDNEXT, EXISTS, HIGHESTMODSEQ) and
+    nothing open locally means: nothing to do. A full check once a day.
+  - Limits per pass (security review F2, `FetchLimits`), by the listed sizes
+    (`RFC822.SIZE`), before anything is read: entries over 2 MiB are never downloaded, never
+    deleted and never count as a version (reported like rejected ones); at most 5,000 entries and
+    64 MiB per pass, a record entirely or not at all. What does not fit waits as a whole for
+    the next pass, which then runs even with an unchanged folder.
+  - Second device: the sync account set up beforehand and its default identity adopt
+    the IDs from the folder (same address, never reconciled); adopted accounts start
+    read-only and without a password, with a new, random keychain name.
+  - Servers are a boundary for credentials (security review F1, 0040): if a record names
+    other servers for an existing account, the device keeps its servers and its password; the
+    account shows "Server settings changed on another device". "Use the new servers" first deletes
+    the password, turns off write access and then writes the servers; the account
+    then asks for the password. "Keep the current servers" leaves everything as it is.
+  - Account removed elsewhere: the user is asked; until the answer, the deletions of its
+    identities, snoozes etc. wait too; "keep" renews the account and these records.
 
-## KI
+## AI
 
-Zwei Wege, beide aus, bis der Nutzer sie einschaltet (`docs/decisions/0010-ki-ueber-mcp.md`):
+Two ways, both off until the user turns them on (`docs/decisions/0010-ki-ueber-mcp.md`):
 
-**MCP-Server (Stufe 12, Hauptweg).** Die App bietet einen lokalen MCP-Server an. Jeder MCP-fähige
-KI-Client (Claude Desktop, Claude Code, Cursor, LM Studio …) kann freigegebene Konten durchsuchen,
-Threads lesen und Entwürfe anlegen. Die App enthält dafür keinen Anbieter und keinen Schlüssel.
-- Nur lokal (0015): Der Client startet das mitgelieferte Hilfsprogramm `mail-mcp` über stdio; es spricht
-  mit der laufenden App über einen Unix-Socket (0600, Verzeichnis 0700, Prüfung der Peer-UID) bzw. eine
-  Windows-Named-Pipe nur für den Benutzer, mit HMAC-Challenge-Response je Client. Nie TCP (kein
-  DNS-Rebinding, kein Zugriff anderer lokaler Prozesse über einen Port).
-- Je Konto: unsichtbar, lesen, lesen und Entwürfe. Standard: unsichtbar.
-- Kein Werkzeug sendet, löscht, verschiebt, markiert oder ändert Einstellungen.
-- Werkzeuge liefern bereinigten Text (kein rohes HTML, keine externen Bilder, Anhänge nur mit Namen),
-  als nicht vertrauenswürdige Daten gekennzeichnet, mit Größen- und Mengengrenzen. Als Text gilt, was
-  der Lesebereich zeigt: der sichtbare Text des HTML-Teils, nur ohne HTML der Text-Teil (für MCP und
-  die eingebaute KI gleich, 0021). Bodies werden nur mit `BODY.PEEK` geholt; nichts wird gelesen markiert.
-- Integration (0021): `AppCore` setzt `MailAccess` um (genau die freigegebenen Konten, Papierkorb und
-  Spam nur mit Postfachangabe, auch beim Lesen per ID: Eine Mail, die nur dort liegt, gilt ohne
-  `mailbox_id` als nicht vorhanden, ein Thread lässt sie weg, 0045), Entwürfe über die Entwürfe aus Stufe 5 (ohne Schreibzugriff nur lokal),
-  das Hilfsprogramm liegt als Tauri-Sidecar im Bundle (`Contents/MacOS/mail-mcp`, neben der App unter Windows).
-- Jeder Zugriff ist in der App sichtbar; Clients einzeln widerrufbar, Not-Aus für alle.
-- Grenze, ehrlich benannt: Der Client hat eigene Werkzeuge, und Mailinhalte können ihn mit
-  eingeschleusten Anweisungen manipulieren. Die App begrenzt, was er bekommt und tun darf; was ein
-  Cloud-Client mit gelesenen Mails macht, liegt außerhalb der App.
+**MCP server (stage 12, main way).** The app offers a local MCP server. Any MCP-capable
+AI client (Claude Desktop, Claude Code, Cursor, LM Studio …) can search approved accounts,
+read threads and create drafts. For this the app contains no provider and no key.
+- Local only (0015): the client starts the bundled helper program `mail-mcp` via stdio; it talks
+  to the running app via a Unix socket (0600, directory 0700, check of the peer UID) or a
+  Windows named pipe for the user only, with HMAC challenge-response per client. Never TCP (no
+  DNS rebinding, no access by other local processes via a port).
+- Per account: invisible, read, read and drafts. Default: invisible.
+- No tool sends, deletes, moves, flags or changes settings.
+- Tools return sanitised text (no raw HTML, no external images, attachments only by name),
+  marked as untrusted data, with size and quantity limits. What counts as text is what
+  the reading pane shows: the visible text of the HTML part, only without HTML the text part (the same for MCP and
+  the built-in AI, 0021). Bodies are fetched only with `BODY.PEEK`; nothing is marked as read.
+- Integration (0021): `AppCore` implements `MailAccess` (exactly the approved accounts, trash and
+  spam only when the mailbox is given, also when reading by ID: a mail that is only there counts as
+  non-existent without `mailbox_id`, a thread leaves it out, 0045), drafts via the drafts from stage 5 (without write access only locally),
+  the helper program is in the bundle as a Tauri sidecar (`Contents/MacOS/mail-mcp`, next to the app on Windows).
+- Every access is visible in the app; clients can be revoked individually, emergency stop for all.
+- Limit, named honestly: the client has its own tools, and mail contents can manipulate it with
+  injected instructions. The app limits what it gets and may do; what a
+  cloud client does with mails it has read is outside the app.
 
-**KI in der App (Stufe 13, optional).** Für Funktionen in der Oberfläche (Zusammenfassen,
-Antwortvorschläge, Schreibhilfe, Suche in natürlicher Sprache) ein Trait `AiProvider` mit einer
-Umsetzung über die OpenAI-kompatible Chat-Schnittstelle mit frei wählbarer Basis-URL (Ollama,
-LM Studio, llama.cpp-Server, OpenRouter, OpenAI) und eine zweite für die Anthropic Messages API: Über
-die kompatible Schnittstelle sind Ablehnungen nicht erkennbar (0019). Crate `mail-ai`, hängt nur von
-`mail-model` und `mail-content` ab; die TLS-Konfiguration wird aus `mail_imap::tls` hineingereicht.
-- Mail-Inhalte sind Daten, keine Anweisungen: fester Systemtext im Code, Mailtext klar abgegrenzt im Nutzerteil.
-- Das eingebaute Modell bekommt keine Werkzeuge. Es kann also strukturell nichts senden, löschen oder abrufen.
-- Ausgaben werden als Text angezeigt. Bilder aus KI-Ausgaben werden nie geladen, Links laufen durch
-  dieselbe Prüfung wie Links in Mails (0028: der Kern erkennt sie im eigenen Ergebnis wie in
-  Mails im Textformat, `segments` und `linkToken` je Ergebnis, `describeLink`/`openLink`).
-- Gesendet wird nur, was die Anfrage braucht: der aktuelle Thread ohne doppelte Zitate und ohne
-  Anhänge. Nie das ganze Postfach ohne ausdrückliche Bestätigung mit Mengenangabe.
+**AI in the app (stage 13, optional).** For features in the UI (summarising,
+reply suggestions, writing help, search in natural language) a trait `AiProvider` with one
+implementation over the OpenAI-compatible chat interface with a freely selectable base URL (Ollama,
+LM Studio, llama.cpp server, OpenRouter, OpenAI) and a second one for the Anthropic Messages API: over
+the compatible interface, refusals cannot be detected (0019). Crate `mail-ai`, depends only on
+`mail-model` and `mail-content`; the TLS configuration is passed in from `mail_imap::tls`.
+- Mail contents are data, not instructions: fixed system text in the code, mail text clearly delimited in the user part.
+- The built-in model gets no tools. So structurally it cannot send, delete or fetch anything.
+- Outputs are displayed as text. Images from AI outputs are never loaded, links go through
+  the same check as links in mails (0028: the core detects them in its own result as in
+  plain-text mails, `segments` and `linkToken` per result, `describeLink`/`openLink`).
+- Only what the request needs is sent: the current thread without duplicate quotes and without
+  attachments. Never the whole mailbox without explicit confirmation stating the amount.
 
-Verdrahtung (0024): `AppCore` (Modul `mail-engine/src/ai/`) prüft vor jeder Anfrage Schalter,
-Profil der Funktion, Zustimmung (Cloud) und Cloud-Freigabe des Kontos, liest den Schlüssel aus dem
-Schlüsselbund und meldet jede Anfrage an den Anbieter vorher als Ereignis `aiRequest` (Mails,
-Bytes, Konten, Host, Modell), dann Fortschritt und Ende; abbrechbar über die Anfrage-ID. Ein
-Protokoll hält nur Metadaten. Ein Schlüssel gehört zu dem Server, für den er eingegeben wurde
-(V-02): Wird ein Profil mit einer Basis-URL anderen Ursprungs (Schema, Host, Port) ohne neuen
-Schlüssel gespeichert, löscht der Kern den gespeicherten Schlüssel zuerst aus dem Schlüsselbund
-(scheitert das, wird nichts gespeichert); das Profil hat dann keinen Schlüssel und meldet
-`keyRemovedOnServerChange`, bis es wieder gespeichert wird, die Einstellungen bitten um den
-Schlüssel. Modell- und Pfadänderungen behalten ihn. Modellliste und Verbindungstest arbeiten nur
-mit dem gespeicherten Profil; jede Anfrage liest Profil und Schlüssel zusammen unter der Sperre
-der Einstellungen. Ergebnisse sind geprüfte Daten: Aussagen nur mit Verweisen auf
-gesendete Mails, Antwortvorschläge und Schreibhilfe als Text. Ein Antwortvorschlag wird erst auf
-Klick des Nutzers zu einem normalen Entwurf (Stufe 5). Hinweise auf offene Antworten sind Regeln
-ohne KI. Jede gespeicherte Änderung der Einstellungen meldet `aiSettingsChanged` mit der
-Verfügbarkeit danach an alle Fenster (0027). Quellen einer Antwort benennt und öffnet die
-Oberfläche über `getMessagesByIds` (höchstens 200 IDs, unbekannte fehlen). Vor der Zustimmung zeigt
-der Zustimmungsschritt die genaue Größe aus einem Probelauf (`aiPrepareTransfer`, 0028): dieselbe
-Vorbereitung wie die Anfrage, ohne Zustimmung, ohne Ereignis, ohne Protokoll und ohne Verbindung
-zum Anbieter; bei Fragen die erste der zwei Anfragen. Ob das KI-Panel auf- oder zugeklappt ist,
-steht in den Oberflächen-Einstellungen des Kerns (`aiPanel`, nur auf diesem Gerät).
+Wiring (0024): before every request `AppCore` (module `mail-engine/src/ai/`) checks the switch,
+the profile of the function, consent (cloud) and the account's cloud approval, reads the key from the
+keychain and reports every request to the provider beforehand as the event `aiRequest` (mails,
+bytes, accounts, host, model), then progress and end; cancellable via the request ID. A
+log holds only metadata. A key belongs to the server it was entered for
+(V-02): if a profile is saved with a base URL of another origin (scheme, host, port) without a new
+key, the core first deletes the stored key from the keychain
+(if that fails, nothing is saved); the profile then has no key and reports
+`keyRemovedOnServerChange` until it is saved again, and the settings ask for the
+key. Changes of model and path keep it. The model list and the connection test work only
+with the saved profile; every request reads profile and key together under the lock of
+the settings. Results are checked data: statements only with references to
+the mails sent to the provider, reply suggestions and writing help as text. A reply suggestion becomes a normal draft only on the
+user's click (stage 5). Notices of open replies are rules
+without AI. Every saved change of the settings reports `aiSettingsChanged` with the
+availability afterwards to all windows (0027). The sources of an answer are named and opened by the
+UI via `getMessagesByIds` (at most 200 IDs, unknown ones are missing). Before consent,
+the consent step shows the exact size from a dry run (`aiPrepareTransfer`, 0028): the same
+preparation as the request, without consent, without event, without log and without a connection
+to the provider; for questions the first of the two requests. Whether the AI panel is expanded or collapsed
+is stored in the core's UI settings (`aiPanel`, only on this device).
 
-## Tastaturkürzel
+## Keyboard shortcuts
 
-Stufe 8. Alle Kürzel kommen aus dem Aktionsverzeichnis (`app/src/features/actions/registry.ts`,
-Aktionen und App-Befehle mit Standardkürzeln je Plattform). Die Änderungen des Nutzers liegen in
-`app/src/stores/shortcuts.ts` (je Plattform die ganze Liste eines Befehls); jeder Tastendruck liest
-die aktuelle Belegung, eine Änderung wirkt also sofort. Regeln (`app/src/features/keyboard/bindings.ts`):
+Stage 8. All shortcuts come from the action registry (`app/src/features/actions/registry.ts`,
+actions and app commands with default shortcuts per platform). The user's changes are stored in
+`app/src/stores/shortcuts.ts` (per platform the whole list of a command); every key press reads
+the current binding, so a change takes effect immediately. Rules (`app/src/features/keyboard/bindings.ts`):
 
-- **Tastaturlayouts:** Ein Kürzel steht für das Zeichen, das die Taste erzeugt (`event.key`), nicht
-  für ihre Lage (`event.code`). „#“ ist auf deutscher und US-Tastatur „#“, wo immer die Taste liegt.
-  Buchstaben ignorieren Groß-/Kleinschreibung, aber nicht Umschalt; andere Zeichen ignorieren
-  Umschalt (ob sie es brauchen, hängt vom Layout ab). Braucht ein Kürzel einmal die Lage einer
-  Taste, bekommt es dafür ein eigenes Feld statt `key` umzudeuten.
-- **Sondertasten:** `mod` ist Cmd auf macOS und Strg auf Windows. Wahl-/Alt-Kombinationen sind nicht
-  belegbar (sie erzeugen auf vielen Layouts Zeichen, AltGr meldet Strg+Alt).
-- **Nicht belegbar:** was das System oder jedes Textfeld beansprucht (macOS Cmd+Q/W/H/M/,/Leertaste/`/Tab,
-  überall Kopieren, Einfügen, Ausschneiden; Windows Strg+Esc, Strg+Tab), die festen Tasten zum
-  Bewegen (Pfeile, j/k, Pos1/Ende, Bild auf/ab, Eingabe, Esc, Tab, auch mit Umschalt) und die
-  Kürzel außerhalb des Verzeichnisses (Cmd/Strg+P druckt, Cmd/Strg+Eingabe sendet).
-- **Doppelbelegung:** wird abgelehnt und nennt den Befehl, der das Kürzel hat. Ausnahme sind Befehle,
-  die nie gleichzeitig verfügbar sind (Löschen/Endgültig löschen, Junk/Kein Junk).
-- **Standard:** e archiviert, # löscht, r/a/f antworten und leiten weiter, c schreibt neu, / und
-  Cmd/Strg+F suchen, j/k und Pfeile bewegen, Eingabe öffnet, Esc schließt, Cmd/Strg+K öffnet die
-  Befehlspalette, ? die Übersicht, Cmd/Strg+1 bis 8 die Ansichten der Icon-Leiste. Auf Layouts, auf
-  denen Ziffern Umschalt brauchen (AZERTY), gilt Cmd/Strg+Umschalt+Ziffer, weil Umschalt bei
-  Zeichen nicht zählt.
+- **Keyboard layouts:** a shortcut stands for the character the key produces (`event.key`), not
+  for its position (`event.code`). "#" is "#" on German and US keyboards, wherever the key is.
+  Letters ignore upper/lower case, but not Shift; other characters ignore
+  Shift (whether they need it depends on the layout). If a shortcut ever needs the position of a
+  key, it gets a separate field for it instead of reinterpreting `key`.
+- **Special keys:** `mod` is Cmd on macOS and Ctrl on Windows. Option/Alt combinations cannot
+  be assigned (on many layouts they produce characters, AltGr reports Ctrl+Alt).
+- **Not assignable:** what the system or every text field claims (macOS Cmd+Q/W/H/M/,/Space/`/Tab,
+  everywhere copy, paste, cut; Windows Ctrl+Esc, Ctrl+Tab), the fixed keys for
+  moving (arrows, j/k, Home/End, Page Up/Down, Enter, Esc, Tab, also with Shift) and the
+  shortcuts outside the registry (Cmd/Ctrl+P prints, Cmd/Ctrl+Enter sends).
+- **Double assignment:** is rejected and names the command that has the shortcut. Exceptions are commands
+  that are never available at the same time (Delete/Delete permanently, Junk/Not junk).
+- **Default:** e archives, # deletes, r/a/f reply and forward, c composes, / and
+  Cmd/Ctrl+F search, j/k and arrows move, Enter opens, Esc closes, Cmd/Ctrl+K opens the
+  command palette, ? the overview, Cmd/Ctrl+1 to 8 the views of the icon bar. On layouts on
+  which digits need Shift (AZERTY), Cmd/Ctrl+Shift+digit applies, because Shift does not count
+  for characters.
 
-Gespeichert werden die Änderungen im Kern (0025): `getUiPreferences` / `setUiPreferences` mit den
-geänderten Befehlen je Plattform (`{ command, shortcuts: [{ key, shift, mod }] }`, höchstens 100
-Befehle mit je höchstens 4 Kürzeln), der Schriftgröße (80 bis 150) und den höchstens 5 zuletzt
-benutzten Befehlen der Palette; jede Änderung geht als `uiPreferencesChanged` an alle Fenster.
-Kürzel und Schriftgröße gleicht der Einstellungs-Sync ab (ein Schlüssel je Plattform), der Verlauf
-der Palette bleibt auf dem Gerät. Das Layout (Lesebereich rechts, unten oder anstelle der Liste,
-Dichte, Seitenleiste) speichert `setWindowLayout` je Fensterart auf dem Gerät. Der Kern prüft Form
-und Grenzen; welche Befehle es gibt und welche Kürzel belegbar sind, entscheidet die Oberfläche.
-Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatzspeicher
+The changes are stored in the core (0025): `getUiPreferences` / `setUiPreferences` with the
+changed commands per platform (`{ command, shortcuts: [{ key, shift, mod }] }`, at most 100
+commands with at most 4 shortcuts each), the text size (80 to 150) and the at most 5 most recently
+used commands of the palette; every change goes as `uiPreferencesChanged` to all windows.
+Shortcuts and text size are synced by the settings sync (one key per platform), the history
+of the palette stays on the device. The layout (reading pane on the right, at the bottom or instead of the list,
+density, sidebar) is stored by `setWindowLayout` per window kind on the device. The core checks shape
+and limits; which commands exist and which shortcuts are assignable is decided by the UI.
+Until the UI has been switched over, these values are still kept in the marked fallback store
 `app/src/features/keyboard/localFallback.ts`.
 
 ## Tests
 
-- **Unit:** Parser, Normalisierung, Threads, Suchsprache, Zusammenführungsregeln, Kategorien.
-- **Integration:** `AppCore` gegen den lokalen Testserver, ohne WebView. Hier liegt das Gewicht.
-- **Fehlerinjektion:** ein kleiner TCP-Proxy im Test kappt Verbindungen an bestimmten Stellen
-  (während des Abgleichs, nach der Übertragung beim Senden).
-- **Oberfläche:** Vitest für Komponenten; WebdriverIO gegen die echte App für wenige durchgehende Abläufe.
-- **Sicherheit:** Korpus feindlicher HTML-Mails und Dateinamen; Zähler für ausgehende Verbindungen.
-  Der Zähler zählt TCP-Verbindungen, nicht nur HTTP-Anfragen (Preconnect öffnet nur eine Verbindung).
-  Jeder Nachweis „null Zugriffe“ hat eine Positivkontrolle, die zeigt, dass der Zähler zählt.
-- **Leistung:** erzeugte Postfächer mit 100.000 und 500.000 Mails, Ergebnisse in `docs/testing/performance.md`.
+- **Unit:** parsers, normalisation, threads, search language, merge rules, categories.
+- **Integration:** `AppCore` against the local test server, without WebView. This is where the weight lies.
+- **Fault injection:** a small TCP proxy in the test cuts connections at specific points
+  (during the sync, after the transmission when sending).
+- **UI:** Vitest for components; WebdriverIO against the real app for a few end-to-end flows.
+- **Security:** corpus of hostile HTML mails and file names; counter for outgoing connections.
+  The counter counts TCP connections, not just HTTP requests (preconnect opens only a connection).
+  Every "zero accesses" proof has a positive control that shows that the counter counts.
+- **Performance:** generated mailboxes with 100,000 and 500,000 mails, results in `docs/testing/performance.md`.
 
-## Entscheidungen
+## Decisions
 
-| Entscheidung | Grund | Rückweg |
+| Decision | Reason | Way back |
 |---|---|---|
-| Sync über einen Ordner im Postfach statt eigenem Server | abzugleichen sind wenige Kilobyte; kein Server, kein Login, kein Pairing, für jeden nutzbar | zweiter Transport über `SettingsTransport` |
-| Keine Datenbank-Verschlüsselung in Version 1 | FileVault und BitLocker schützen die Platte; SQLCipher kostet Tempo und erschwert Windows-Builds | rusqlite kann SQLCipher per Feature zuschalten |
-| rusqlite statt SQLx | ein Prozess, ein Schreiber; synchron ist einfacher und schneller | Speicherzugriff ist hinter `mail-store` gekapselt |
-| KI nur über Schnittstellen | kein Modell-Download, keine GPU-Builds pro Plattform; Ollama deckt „lokal“ ab | eingebettete Laufzeit als weitere `AiProvider`-Umsetzung |
-| KI zuerst über MCP (0010) | jede KI passt, keine Anbieter und Schlüssel in der App, wenig Code | eingebaute KI (Stufe 13) ergänzt, MCP bleibt |
-| IMAP zuerst, Microsoft und Gmail-API später | eigene Konten laufen über IMAP; OAuth-Anbieter brauchen Registrierungen | `MailBackend`-Trait |
-| JMAP hinter den IMAP-förmigen Traits mit eigener UID-Nummerierung (0041) | Abgleich, Outbox, Konflikte, Lesebereich und Suche bleiben eine Logik für beide Protokolle | eigener JMAP-Abgleich in der Engine über `Email/changes` |
-| Microsoft und Google über IMAP/SMTP mit OAuth statt Graph bzw. Gmail-API (0042) | vorhandener Adapter, Gmail-Eigenheiten aus Block A bleiben; die Gmail-API hätte denselben „restricted scope“ | eigener Adapter hinter `MailBackend` |
-| Anhangsvorschau im Kern statt im PDF-Betrachter der WebView (0036) | die WebView sieht nur neu kodierte Bilder und Text; keine CSP-Lockerung, keine PDF-Skripte | PDF-Vorschau abschalten (`preview_unsupported`), Öffnen im System bleibt |
-| Bilder in Mails nur neu kodiert, im Helfer (0046) | die Bilddecoder des Systems sehen keine Bytes aus Mails (C-4); ein Stapel je Darstellung, Cache im Speicher, rund 20 ms je Newsletter | Neukodieren im App-Prozess (gleicher Code, nur ohne Isolation) |
-| Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
-| Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
-| Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |
-| Lizenz GPL-3.0-or-later (vom Menschen bestätigt am 22.11.2026) | Abwandlungen bleiben offen; alle gewählten Bibliotheken sind kompatibel | vor der Veröffentlichung änderbar |
-| tauri-specta statt ts-rs (0004) | typisierte Commands und Events, erzwungene Entscheidung bei 64-Bit-Zahlen | ts-rs erzeugt dieselben Typen; nur `ipc.ts` müsste neu geschrieben werden |
-| Stalwart als Testserver (0001) | ein Binary, alle nötigen Fähigkeiten, kein Docker | Dovecot über Homebrew mit eigenem MTA |
-| FTS5 mit `unicode61` statt `trigram` (0003) | trigram ist 5,2-mal so groß und halb so schnell beim Einfügen | Tokenizer per Migration wechselbar, Index ist Cache |
-| Geführter erster Start (0044): Geräte-Einstellung `first_start`, `getFirstStart`/`finishFirstStart`; Installationen mit Konto gelten als eingerichtet | eine neue Installation wird durch Konto, Darstellung und die optionalen Extras geführt, ohne dass bestehende Installationen etwas davon sehen | `FirstStartGate` entfernen, dann wieder der leere Zustand |
-| Updates nur mit Zustimmung über den Tauri-Updater (0037) | einzige Verbindung zu einem Server, den der Nutzer nicht eingerichtet hat; signierte Dateien, Schlüssel nur im Schlüsselbund | Schalter aus; ohne Updater installiert man von Hand |
-| rusqlite 0.41 statt 0.43 (0006) | `rusqlite_migration` 2.7 verlangt ^0.41; gleiches SQLite 3.54.1 | eigener Migrations-Runner, dann rusqlite 0.43 |
+| Sync via a folder in the mailbox instead of our own server | only a few kilobytes to sync; no server, no login, no pairing, usable by everyone | second transport via `SettingsTransport` |
+| No database encryption in version 1 | FileVault and BitLocker protect the disk; SQLCipher costs speed and makes Windows builds harder | rusqlite can switch on SQLCipher via a feature |
+| rusqlite instead of SQLx | one process, one writer; synchronous is simpler and faster | storage access is encapsulated behind `mail-store` |
+| AI only via interfaces | no model download, no GPU builds per platform; Ollama covers "local" | embedded runtime as a further `AiProvider` implementation |
+| AI via MCP first (0010) | any AI fits, no providers and keys in the app, little code | built-in AI (stage 13) supplements it, MCP stays |
+| IMAP first, Microsoft and Gmail API later | your own accounts run over IMAP; OAuth providers need registrations | `MailBackend` trait |
+| JMAP behind the IMAP-shaped traits with its own UID numbering (0041) | sync, outbox, conflicts, reading pane and search stay one logic for both protocols | a separate JMAP sync in the engine via `Email/changes` |
+| Microsoft and Google via IMAP/SMTP with OAuth instead of Graph or the Gmail API respectively (0042) | existing adapter, the Gmail specifics from block A stay; the Gmail API would have the same "restricted scope" | a separate adapter behind `MailBackend` |
+| Attachment preview in the core instead of in the WebView's PDF viewer (0036) | the WebView only sees re-encoded images and text; no CSP loosening, no PDF scripts | turn off the PDF preview (`preview_unsupported`), opening in the system remains |
+| Images in mails only re-encoded, in the helper (0046) | the system's image decoders see no bytes from mails (C-4); one batch per rendering, cache in memory, about 20 ms per newsletter | re-encoding in the app process (same code, only without isolation) |
+| Gmail via IMAP with its extensions instead of the Gmail API (0034) | labels, one mail via `X-GM-MSGID` and archiving work with the existing adapter, without a Google project | Gmail API in block C |
+| Windows installer via cross-build from the Mac | no Windows build machine needed | build on real Windows or hosted runners in stage 15 |
+| Four crates instead of eleven | only draw boundaries once they have proven themselves | split as soon as a crate has two clearly separate tasks |
+| Licence GPL-3.0-or-later (confirmed by the maintainer on 2026-11-22) | derivatives stay open; all chosen libraries are compatible | can be changed before publication |
+| tauri-specta instead of ts-rs (0004) | typed commands and events, enforced decision for 64-bit numbers | ts-rs generates the same types; only `ipc.ts` would have to be rewritten |
+| Stalwart as test server (0001) | one binary, all needed capabilities, no Docker | Dovecot via Homebrew with a separate MTA |
+| FTS5 with `unicode61` instead of `trigram` (0003) | trigram is 5.2 times as large and half as fast at inserting | tokenizer can be switched via migration, the index is cache |
+| Guided first start (0044): device setting `first_start`, `getFirstStart`/`finishFirstStart`; installations with an account count as set up | a new installation is guided through account, look and the optional extras, without existing installations seeing any of it | remove `FirstStartGate`, then the empty state again |
+| Updates only with consent via the Tauri updater (0037) | the only connection to a server the user has not set up; signed files, key only in the keychain | switch off; without the updater you install by hand |
+| rusqlite 0.41 instead of 0.43 (0006) | `rusqlite_migration` 2.7 requires ^0.41; same SQLite 3.54.1 | own migration runner, then rusqlite 0.43 |

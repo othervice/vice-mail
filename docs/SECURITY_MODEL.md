@@ -5,7 +5,7 @@ boundaries are, how each boundary is enforced, and what is explicitly **not** pr
 the result of the security review of stage 15 (23 November 2026) and lists every finding of that
 review with its status. How to report a vulnerability is in [SECURITY.md](../SECURITY.md); the
 network connections the app makes are listed in [docs/PRIVACY.md](PRIVACY.md) and, with the
-technical rules, in `docs/ARCHITECTURE.md` ("Erlaubte Netzverbindungen").
+technical rules, in `docs/ARCHITECTURE.md` ("Allowed network connections").
 
 This review was done by the project itself. It does not replace an independent review by a third
 party, which is advisable before wide distribution.
@@ -287,8 +287,8 @@ party, which is advisable before wide distribution.
 
 - **Data at rest.** The SQLite database, body files, logs and attachment copies in the app data
   directory are not encrypted by the app. Disk encryption (FileVault, BitLocker) protects them
-  when the machine is off or locked. Decision in `docs/ARCHITECTURE.md` ("Keine
-  Datenbank-Verschlüsselung in Version 1").
+  when the machine is off or locked. Decision in `docs/ARCHITECTURE.md` ("No database
+  encryption in version 1").
 - **A malicious process running as the same user** (A4b). It can read the database and body files,
   read the MCP client token from the AI client's config file or token file, attach to or inject
   into the app's processes, and on macOS may get keychain access with the user's consent prompt.
