@@ -480,3 +480,240 @@ cargo test -p mail-mcp --test reencode_isolation --release -- --ignored --nocapt
 
 **Ergebnis:** umgesetzt (Entscheidung 0046). Release: rund 20 ms je Newsletter durch den
 Helfer, einmalig je Sitzung rund 80 ms mehr; Debug: rund 0,4 s statt 1,7 s.
+
+## Desktop-App, gemessen 24.11.2026
+
+**Frage:** Erfüllt die gebaute App, nicht nur der Kern, die Ziele aus `docs/SPEC.md`? Bis hierher
+waren Start und Speicher nur im Kern gemessen (ohne WebView, ohne Zeichnen).
+
+**Umgebung:** Mac mini, Apple M4 (10 Kerne), 16 GB RAM, macOS 27.2.1; Bildschirm 1920×1080 bei
+60 Hz mit Faktor 1 (kein Retina), Fenster 1200×800. Gemessen am frühen Morgen des 24.11.: andere
+Sitzungen bauten und testeten nebenher, Spotlight indexierte zeitweise mit über 400 % CPU. Die Last
+(1 min) während der Starts steht in der Tabelle; sie lag zwischen 3 und 12.
+
+**Build:** Release, nicht Debug. Der Desktop-Test baut sonst Debug (`pnpm build:e2e`); der
+Testzugang (`--features e2e`) lässt sich aber genauso als Release bauen, mit LTO wie das
+ausgelieferte Programm (37 MB, rund 5 min):
+
+```text
+CI=true pnpm --dir app tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json
+```
+
+Gemessen ist Stand `edb80e4` mit den Messhilfen unten, für „nachher“ zusätzlich die Änderung aus
+`09258bf` (nur mit 500.000 Mails nachgemessen). Die Oberfläche ist in beiden Builds dasselbe
+Vite-Produktionsbündel; ein Debug-Build macht nur den Rust-Teil langsamer und ist **nicht
+gemessen** (er zählt für die Ziele nicht).
+
+**Wie gemessen:** `app/tests/e2e/perf.e2e.mjs`, nur mit `PERF=1` (sonst ausgeschlossen):
+
+```text
+PERF=1 PERF_SEED=100000 E2E_APP=<Release-Binary> scripts/e2e-gui.sh --spec ./tests/e2e/perf.e2e.mjs
+```
+
+- **Daten:** der lokale Testserver, `seed N --filler-folder INBOX` (alice hat N − 41 Mails im
+  Posteingang, die übrigen in Gesendet, Archiv usw.), dazu bob mit 23 Mails; zwei Konten über den
+  Kern, Konversationen an (Voreinstellung), die App startet in der Ansicht Posteingang (alle
+  Konten). Die Messung beginnt erst, wenn der Erstabgleich, das Vorausladen (30 Tage: 169 / 1.482
+  / 7.524 Bodies) und der Suchindex fertig sind. 500.000 Mails ließen sich in 6,7 min säen (2,5 GB
+  Serverdaten), der Erstabgleich brauchte 46 s; ein Direktimport war nicht nötig.
+- **Start:** Das Testprogramm beendet die App und startet die Binärdatei selbst, je Art 5-mal im
+  Wechsel nach einem verworfenen Start. Ein Aufzeichner im Testzugang (`MAIL_APP_E2E_PERF`,
+  `app/src-tauri/src/e2e.rs`) notiert in der Seite, wann Rahmen, erste Mail-Zeilen und die erste
+  geöffnete Mail erscheinen, jeweils als DOM-Änderung und als Ende des danach gezeichneten Frames.
+  **Benutzbarer Posteingang** heißt: Zeilen sind gezeichnet, ein Klick auf die erste Zeile (sofort
+  danach ausgelöst) hat die Mail mit Inhalt im Lesebereich gezeichnet. Zeiten ab dem Start des
+  Prozesses; `main` und „Datenbank offen“ aus dem Log der App.
+- **Kalt:** `sudo purge` gibt es hier nicht. Stattdessen schreibt `support/perf.py` die Dateien
+  ohne Dateicache neu (`F_NOCACHE`), `mincore` bestätigt vor jedem Start 0 % im Cache.
+  „Kalt, Daten“: alle Dateien des Datenordners. „Kalt, App neu“: zusätzlich die App-Datei; für
+  macOS ist das eine neue ausführbare Datei, die es beim ersten Start prüft, wie nach einer
+  Installation oder einem Update (Obergrenze). Warm bleiben in jedem Fall macOS, WebKit und die
+  Systembibliotheken; die leert nur ein Neustart.
+- **Speicher:** 60 s nach einem Warmstart ohne Eingabe, und noch einmal 60 s nach der ganzen
+  Arbeit unten. Gezählt werden die App und die WebKit-Prozesse, für die macOS sie verantwortlich
+  hält (WebContent, Networking, GPU), je mit RSS (`ps`) und physischem Footprint
+  (`proc_pid_rusage`, die Spalte „Speicher“ der Aktivitätsanzeige); `footprint` zerlegt ihn.
+- **Wechsel:** 30 Klicks auf Zeilen, deren Body lokal liegt; gemessen bis die Zeile markiert ist,
+  bis der Betreff im Lesebereich steht und bis die Mail mit Inhalt da ist.
+- **Suche:** vier Anfragen mit Enter (`rechnung`, `budget`, `from:dave`, `weihnachtsfeier`) und
+  zwei beim Tippen (`offsite`, `rech`, ein Zeichen alle 80 ms; gemessen ab dem letzten Zeichen,
+  darin die 150 ms Wartezeit `TYPING_DELAY_MS`), je 5-mal, bis der erste Treffer mit Markierung
+  gezeichnet ist.
+- **Aktionen:** Tastenkürzel (Markieren `s`, Ungelesen/Gelesen ⇧U/⇧I, Anpinnen `p`, Archivieren
+  `e`, Rückgängig `z`, Befehlspalette ⌘K und Esc, Suche `/`), je 5-mal, bis die Änderung in der
+  Zeile gezeichnet ist. Alice darf schreiben; die Änderungen gehen über die Outbox an den Server.
+- **Scrollen:** `support/scroll.mjs`, 8 s mit 80 px und mit 240 px je Frame (564 bzw. 1.675
+  Zeilen), dann drei weitere schnelle Durchgänge für den Speicher.
+- **Hinter dem Sperrbildschirm:** Am Mac mini sitzt niemand, der Bildschirm ist gesperrt. WebKit
+  hält die Seite dann für verdeckt und zeichnet keine Frames. Die App, die das Testprogramm
+  startet, lädt deshalb `support/keep-rendering.m` (`DYLD_INSERT_LIBRARIES`, nur im Test, die App
+  selbst bleibt unverändert), das WebKits Verdeckungserkennung abschaltet; `caffeinate` hält den
+  Bildschirm wach. Die Seite war in allen Läufen sichtbar, `requestAnimationFrame` lief mit 60 Hz:
+  die Frame-Zeiten sind echte Zeichenzeiten (bei Faktor 1, nicht Retina).
+- Angegeben ist der Median, in Klammern p95.
+
+### Ergebnis gegen die Ziele
+
+| Ziel (`docs/SPEC.md`) | 10.000 | 100.000 | 500.000 vorher | 500.000 nachher | erfüllt |
+|---|---:|---:|---:|---:|---|
+| Warmstart bis benutzbarer Posteingang unter 1 s | 387 ms | 501 ms | 389 ms | 382 ms | ja |
+| Kaltstart unter 2 s (Daten nicht im Cache) | 394 ms | 530 ms | 907 ms | 810 ms | ja |
+| … dazu App-Datei neu (wie nach Installation) | 757 ms | 924 ms | 1.306 ms | 1.243 ms | ja |
+| Wechsel zwischen lokalen Mails unter 100 ms (Mail mit Inhalt gezeichnet) | 38 (46) ms | 44 (48) ms | 45 (59) ms | 44 (54) ms | ja |
+| Suche bis erste Treffer unter 200 ms bei 100.000 (Enter) | 21–22 ms | 23–29 ms | 26–33 ms | 25–35 ms | ja |
+| … beim Tippen, ab dem letzten Zeichen | 173–175 ms | 175–176 ms | 184–185 ms | 183–187 ms | ja, knapp (150 ms davon sind Absicht) |
+| Sichtbare Reaktion auf eine Aktion unter 100 ms (langsamste Aktion) | 65 ms (Ungelesen) | 71 ms (Rückgängig) | **114 ms** (Markieren) | 72 ms (Markieren) | 10.000/100.000 ja, 500.000 nachher ja |
+| Scrollen mit 60 Bildern pro Sekunde | 59,9 fps | 59,9 fps | 59,8 fps | 59,9 fps | ja |
+| Arbeitsspeicher im Leerlauf unter 250 MB, Footprint | 174 MB | 155 MB | 201 MB | 198 MB | ja |
+| … als Summe der RSS (`ps`) | **384 MB** | **448 MB** | **747 MB** | **550 MB** | **nein** (siehe Speicher) |
+
+Lauf-Last (1 min) bei den Starts: 7,3 / 9,1 / 3,2 / 3,5.
+
+### Start im Einzelnen (ms ab Prozessstart)
+
+| ms ab Prozessstart, Median (p95) | 10.000 | 100.000 | 500.000 vorher | 500.000 nachher |
+|---|---:|---:|---:|---:|
+| Warmstart: `main` erreicht | 53 (54) | 66 (128) | 49 (54) | 49 (51) |
+| Warmstart: WebView beginnt zu laden | 176 (176) | 242 (431) | 161 (172) | 160 (163) |
+| Warmstart: Rahmen gezeichnet | 273 (274) | 355 (534) | 261 (270) | 258 (262) |
+| Warmstart: erste Zeilen gezeichnet | 337 (338) | 431 (623) | 329 (340) | 325 (337) |
+| Warmstart: erste Mail offen (benutzbar) | 387 (389) | 501 (710) | 389 (401) | 382 (395) |
+| Kaltstart, Daten nicht im Cache: `main` erreicht | 53 (57) | 80 (545) | 49 (50) | 49 (53) |
+| Kaltstart, Daten nicht im Cache: WebView beginnt zu laden | 182 (185) | 265 (1008) | 168 (168) | 165 (169) |
+| Kaltstart, Daten nicht im Cache: Rahmen gezeichnet | 279 (280) | 371 (1160) | 265 (267) | 263 (266) |
+| Kaltstart, Daten nicht im Cache: erste Zeilen gezeichnet | 343 (344) | 456 (1264) | 856 (870) | 758 (804) |
+| Kaltstart, Daten nicht im Cache: erste Mail offen (benutzbar) | 394 (396) | 530 (1328) | 907 (921) | 810 (855) |
+| Kaltstart, App-Datei neu (wie nach Installation): `main` erreicht | 416 (421) | 479 (588) | 440 (569) | 444 (517) |
+| Kaltstart, App-Datei neu (wie nach Installation): WebView beginnt zu laden | 542 (552) | 669 (782) | 559 (695) | 562 (636) |
+| Kaltstart, App-Datei neu (wie nach Installation): Rahmen gezeichnet | 643 (651) | 785 (925) | 657 (800) | 660 (730) |
+| Kaltstart, App-Datei neu (wie nach Installation): erste Zeilen gezeichnet | 703 (713) | 860 (1018) | 1257 (1406) | 1191 (1245) |
+| Kaltstart, App-Datei neu (wie nach Installation): erste Mail offen (benutzbar) | 757 (770) | 924 (1096) | 1306 (1468) | 1243 (1296) |
+
+- **Warm** braucht die App rund 50 ms bis `main` (Laden der 37-MB-Binärdatei, dyld), 4–10 ms bis
+  die Datenbank offen ist, dann 105–165 ms, bis die WebView zu laden beginnt (übriges Setup,
+  Fenster, WKWebView, WebContent-Prozess). Das Bündel (1,5 MB JavaScript) und der erste Render
+  brauchen rund 90 ms bis zum Rahmen, die erste Seite des Posteingangs 45–55 ms, das erste
+  Zeichnen der Zeilen rund 30 ms, der Klick bis zur gezeichneten Mail 50–70 ms. Die Größe des
+  Postfachs ändert den Warmstart nicht messbar: Bei 100.000 lag die Last höher (9 statt 3–7), die
+  WebView begann 65 ms später; bei 500.000 (Last 3) war alles wie bei 10.000.
+- **Kalt, App neu** kostet 360–420 ms mehr vor `main`: macOS prüft eine neue ausführbare Datei
+  beim ersten Start. Gesondert gemessen (die Testbuild-Datei ohne Testverzeichnis, sie beendet sich
+  dann sofort): 410–820 ms beim ersten Aufruf einer frisch geschriebenen Kopie, danach 63–76 ms.
+  Das fällt einmal nach Installation oder Update an.
+- **Kalt, Daten** kostete bei 10.000 und 100.000 Mails fast nichts (+6 bzw. +30 ms), bei 500.000
+  vorher **+520 ms** bis zu den ersten Zeilen: Die App las beim Start fast die ganze Datenbank.
+  Nachher sind es +430 ms (siehe Behoben).
+
+### Speicher
+
+| nach 60 s Leerlauf, MB (RSS / Footprint) | 10.000 | 100.000 | 500.000 vorher | 500.000 nachher |
+|---|---|---|---|---|
+| nach dem Start: App | 135 / 43 | 242 / 42 | 534 / 85 | 338 / 78 |
+| … WebContent | 207 / 112 | 163 / 93 | 166 / 97 | 166 / 101 |
+| … GPU, Networking | 32 / 14, 10 / 5 | 32 / 14, 10 / 5 | 36 / 14, 10 / 5 | 36 / 14, 10 / 5 |
+| … zusammen | 384 / 174 | 448 / 155 | 747 / 201 | 550 / 198 |
+| nach der Arbeit: zusammen | 762 / 306 | 1.168 / 197 | 1.260 / 219 | 1.271 / 250 |
+| … davon WebContent | 578 / 238 | 924 / 136 | 895 / 132 | 909 / 133 |
+
+- **RSS ist hier das falsche Maß für „verbraucht“.** Sie zählt die gemeinsam genutzten
+  Systembibliotheken (AppKit, WebKit, JavaScriptCore) in jedem Prozess erneut (die App hat bei
+  10.000 Mails 135 MB RSS bei 43 MB Footprint), dazu gelesene Seiten der per `mmap` eingebundenen
+  Datenbank (sauber, jederzeit verwerfbar) und in WebContent gemeinsam mit dem GPU-Prozess
+  genutzten Grafikspeicher. Mit RSS ist das Ziel nicht erreichbar, schon bei 10.000 Mails nicht;
+  der physische Footprint ist, was die Aktivitätsanzeige als Speicher zeigt, und liegt nach dem
+  Start bei 155–201 MB.
+- **Bei 500.000 Mails** hatte die App 534 MB RSS: Sie hatte beim Start die Datenbank (423 MB)
+  fast ganz gelesen. Ursache und Behebung unten.
+- **Nach der Arbeit** hat WebContent 578–924 MB RSS, aber 132–238 MB Footprint. `footprint`
+  zerlegt WebContent (500.000, nachher): „WebKit Malloc“ (JS-Heap, DOM) 100 MB belegt und 749 MB
+  verwerfbar, Grafikspeicher 10 MB belegt und 300 MB verwerfbar. Die hohe RSS ist also vor allem
+  schon freigegebener Speicher, den WebKit dem System noch nicht zurückgegeben hat: viel Umsatz
+  beim Scrollen, kein Leck. Drei weitere schnelle Scroll-Durchgänge ließen den Footprint von
+  WebContent zwischen 173 und 300 MB schwanken, ohne zu wachsen. Der GPU-Prozess lag während der
+  Arbeit bei 72–75 MB und fiel im Leerlauf auf 17–25 MB. Bei 10.000 Mails stieg der Footprint
+  insgesamt in der letzten Probe nach der Arbeit auf 306 MB (die Proben davor 229 MB); das ist
+  über dem Ziel, die Ursache ist nicht getrennt gemessen.
+
+### Behoben: Hinweise auf offene Antworten lasen die ganze Tabelle `message`
+
+`diag-start-io.e2e.mjs` (Diagnose, nicht im Lauf) startet die App mit der Datenbank außerhalb des
+Caches und ordnet die danach gelesenen Seiten per `mincore` und SQLites `dbstat` Tabellen und
+Indizes zu. Bei 100.000 Mails waren 3 s nach dem Start 93 % der Datei gelesen, auch ohne
+Server, also ohne Abgleich: jede Tabelle fast vollständig, zuerst `message`. Unter den Befehlen,
+die die Oberfläche beim Start aufruft (`e2e_invoked`), fand sich `list_open_reply_hints`
+(Stufe 13). Seine Abfrage (`crates/mail-store/src/ai.rs`) filterte `message.date`, für das es
+keinen Index gibt: `SCAN m` und eine Sortierung, bei jedem Start und nach jedem `messagesChanged`
+(die Oberfläche lädt die Hinweise dann neu), also auch nach jeder Aktion.
+
+Behoben in `09258bf` ohne neuen Index: Die Id einer Nachricht ist ihr Sortierdatum oder die nächste
+freie Zahl darüber (`messages::IdAllocator`), `date` ist dieses Sortierdatum; jede Nachricht mit
+`date >= since` hat also `id >= since`. Die Bedingung `m.id >= ?1` macht daraus einen Bereich der
+Rowid. Test `ai::tests::open_reply_rows_read_only_the_recent_ids` (Plan ohne `SCAN m`, Grenze bei
+einer über ein belegtes Datum geschobenen Id; scheitert ohne die Änderung).
+
+| Abfrage auf einer Kopie der 100.000er-Datenbank | vorher | nachher |
+|---|---:|---:|
+| kalt (Datei nicht im Cache) | 204 ms, 78,8 von 84,8 MB gelesen | 42 ms, 4,3 MB |
+| warm | 15–17 ms | 6 ms |
+| Ergebnis | 1.505 Zeilen | dieselben 1.505 Zeilen |
+
+In der App bei 500.000 Mails (vorher und nachher je ein Lauf, Last 3–5):
+
+| 500.000 Mails | vorher | nachher |
+|---|---:|---:|
+| Markieren bis gezeichnet | 114 (122) ms | 72 (85) ms |
+| Markierung entfernen / Ungelesen / Gelesen | 94 / 94 / 97 ms | 47 / 57 / 51 ms |
+| Rückgängig (Archivieren) | 108 ms | 59 (74) ms |
+| Kaltstart, Daten: erste Zeilen / benutzbar | 856 / 907 ms | 758 / 810 ms |
+| App nach dem Start, RSS / Footprint | 534 / 85 MB | 338 / 78 MB |
+
+Die Oberfläche lädt die Hinweise nach jeder Aktion neu (`messagesChanged`), neben der Liste; die
+Abfrage wächst mit der Zahl der Mails (100.000: 15 ms warm). Bei 500.000 Mails verfehlten deshalb
+Markieren, Ungelesen, Gelesen und Rückgängig das Ziel von 100 ms (zwischen beiden Läufen war nur
+diese Abfrage anders); nachher erfüllen alle Aktionen es.
+
+**Was ein Start sonst noch liest** (`diag-start-io.e2e.mjs` nachher, 100.000 Mails, Datei nicht im
+Cache): ohne Server 43 % der Datei (37 MB, fast alles vor den ersten Zeilen: `loc_uid` ganz, von
+`message` und den Thread-Tabellen je rund 45 %), mit Server 82 % (dazu `message_msgid` ganz:
+`delete_orphan_messages` nach jedem vollständigen Durchgang liest den Index ganz). Das ist nicht
+weiter aufgeteilt; bei 500.000 Mails kostet es kalt noch rund 430 ms bis zu den ersten Zeilen
+(Ziel 2 s erfüllt). Nächster Schritt: die Startbefehle der Oberfläche (`e2e_invoked` nennt 30)
+einzeln mit kalter Datei messen, wie oben für die Hinweise.
+
+### Nebenbefund: `mmap` liest bei zufälligen Zugriffen mehr
+
+Auf derselben Kopie, Datei nicht im Cache, 1.000 zufällige Zeilen von `message` über die Rowid:
+mit `mmap_size = 256 MiB` (wie die App) 34,5 MB gelesen, 154 ms; ohne `mmap` 14,6 MB, 137 ms
+(100 Zeilen: 6,4 gegen 2,3 MB). macOS liest bei Seitenfehlern in gemappten Dateien größere Blöcke
+voraus. Das betrifft nur kalte Zugriffe und ist nicht geändert.
+
+### Bleibt
+
+- **Arbeitsspeicher als RSS:** nicht erreichbar, solange gemeinsam genutzte Bibliotheken je
+  Prozess zählen. Vorschlag: das Ziel in `docs/SPEC.md` auf den physischen Footprint
+  (Aktivitätsanzeige) beziehen; den erfüllt die App nach dem Start.
+- **Speicher nach intensiver Nutzung:** 197–250 MB Footprint gesamt nach 60 s Leerlauf, bei
+  10.000 Mails einmal 306 MB; dazu rund 750 MB Umsatz im WebKit-Speicher (JS-Heap, DOM) beim
+  Scrollen von gut 7.000 Zeilen. Nächster Schritt: den JS-Heap getrennt messen (Abfrage-Cache der
+  Listen mit `gcTime`, geladene Seiten der Endlosliste, Neurendern der Zeilen beim Scrollen).
+- **Suche beim Tippen:** 175–185 ms, davon 150 ms bewusste Wartezeit. Auf langsamerer Hardware
+  wird es eng; 100–120 ms Wartezeit ließen mehr Luft. Nicht geändert (Verhalten der Oberfläche).
+- **Ungeprüft:** Kaltstart nach Neustart des Rechners (Systembibliotheken und WebKit kalt),
+  Zeichnen auf einem Retina-Bildschirm (vierfache Pixelzahl), langsamere Rechner, Windows
+  (WebView2), echte Postfächer, Debug-Build.
+
+### Messhilfen
+
+- `app/tests/e2e/perf.e2e.mjs` (dieser Abschnitt), `app/tests/e2e/diag-start-io.e2e.mjs`
+  (welche Datenbankseiten ein Start liest).
+- `app/tests/e2e/support/perf.py`: Dateien ohne Cache neu schreiben, Cache-Anteil und Seiten
+  (`mincore`), Speicher von App und WebKit-Prozessen.
+- `app/tests/e2e/support/keep-rendering.m`: Frames hinter dem Sperrbildschirm, nur im Test.
+- Aufzeichner `MAIL_APP_E2E_PERF` im Testzugang (`app/src-tauri/src/e2e.rs`);
+  `tests/e2e/check-release.mjs` prüft, dass er im Release fehlt.
+- `PERF`, `PERF_SEED`, `PERF_RUNS` in `app/wdio.conf.mjs` und `scripts/e2e-gui.sh`.
+- Ein gemeinsames `target/` für mehrere Arbeitskopien hat eine Falle: Cargo prüft eingebaute
+  Pfad-Crates nur über die Änderungszeit ihrer Quelldateien (relativ zum Paket). Eine Arbeitskopie
+  mit älteren Dateien hält das Ergebnis einer anderen für aktuell; ein Test aus `../vm-perf`
+  übersetzte so gegen `mail-model` aus dem Hauptverzeichnis. Die Release-Builds hier übersetzten
+  alle Crates aus der Arbeitskopie (im Log geprüft).
