@@ -4,6 +4,9 @@
 //! - **API token:** a JMAP account that signs in with a token (Fastmail's way) sends it as
 //!   `Authorization: Bearer`. Stalwart has no Fastmail-style API tokens; an OAuth access token
 //!   it issued for bob stands in for one (any bearer token of the account works there).
+//! - **Several providers at once:** alice over IMAP and bob over JMAP in one app. The unified
+//!   inbox shows both, every message belongs to its own account, actions go to the account's
+//!   own server over its own protocol, and read-only holds per account.
 //!
 //! Ignored by default. Take the shared lock, start the server (any seed):
 //!
@@ -27,9 +30,9 @@ use mail_imap::test_support::{TestAccount, TestEnv};
 use mail_imap::{ImapBackend, ImapConnector};
 use mail_model::{
     Access, AccountId, AccountSettings, AccountState, BackendError, ConnectConfig, CoreEvent,
-    CredentialKind, ErrorCode, MailAction, MailBackend, MailConnector, MessageListItem, MessageRef,
-    OperationState, Protocol, Secret, Security, ServerSettings, SyncFolderConnector, UidSet,
-    UnifiedView, WriteConnector,
+    CredentialKind, ErrorCode, IpcError, MailAction, MailBackend, MailConnector, MessageListItem,
+    MessageRef, OperationState, Protocol, Secret, Security, ServerSettings, SyncFolderConnector,
+    UidSet, UnifiedView, WriteConnector,
 };
 use tempfile::TempDir;
 use tokio::sync::broadcast;
@@ -69,6 +72,16 @@ impl Recording {
             .unwrap_or_else(PoisonError::into_inner)
             .iter()
             .filter(|(what, _, _)| *what == "write")
+            .map(|(_, protocol, user)| (*protocol, user.clone()))
+            .collect()
+    }
+
+    fn readers(&self) -> Vec<(Protocol, String)> {
+        self.opened
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|(what, _, _)| *what == "read")
             .map(|(_, protocol, user)| (*protocol, user.clone()))
             .collect()
     }
@@ -240,6 +253,23 @@ fn jmap_settings(env: &TestEnv, who: &TestAccount, username: &str) -> AccountSet
         imap: server.clone(),
         smtp: server,
         protocol: Protocol::Jmap,
+        credential: CredentialKind::Password,
+    }
+}
+
+fn imap_settings(env: &TestEnv, who: &TestAccount) -> AccountSettings {
+    let server = |port: u16, security: Security| ServerSettings {
+        host: env.host.clone(),
+        port,
+        security,
+        username: who.address.clone(),
+    };
+    AccountSettings {
+        email: who.address.clone(),
+        display_name: String::new(),
+        imap: server(env.imaps_port, Security::Tls),
+        smtp: server(env.submission_port, Security::Starttls),
+        protocol: Protocol::Imap,
         credential: CredentialKind::Password,
     }
 }
@@ -550,5 +580,138 @@ async fn a_jmap_account_signs_in_with_an_api_token_as_a_bearer_token() {
 
     core.shutdown().await;
     clean(&mut bob).await;
+    bob.logout().await.ok();
+}
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn imap_and_jmap_accounts_share_the_unified_inbox_each_on_its_own_server() {
+    let env = TestEnv::require();
+    let run = run();
+    let mut alice = imap(&env, &env.alice).await;
+    let mut bob = imap(&env, &env.bob).await;
+    clean(&mut alice).await;
+    clean(&mut bob).await;
+    let (alice_subject, alice_id) = (format!("{run} for alice"), format!("{run}-a@{DOMAIN}"));
+    let (bob_subject, bob_id) = (format!("{run} for bob"), format!("{run}-b@{DOMAIN}"));
+    append(&mut alice, &env.alice.address, &alice_subject, &alice_id).await;
+    append(&mut bob, &env.bob.address, &bob_subject, &bob_id).await;
+
+    let dir = TempDir::new().expect("temp dir");
+    let keychain: Arc<MemorySecretStore> = Arc::default();
+    let connector = Recording::default();
+    let core = start(&env, &dir, &keychain, connector.clone()).await;
+    let mut events = core.subscribe();
+    let over_imap = core
+        .add_account(imap_settings(&env, &env.alice), env.alice.password.clone())
+        .await
+        .expect("alice over IMAP");
+    let over_jmap = core
+        .add_account(
+            jmap_settings(&env, &env.bob, &env.bob.address),
+            env.bob.password.clone(),
+        )
+        .await
+        .expect("bob over JMAP");
+    assert_eq!(over_imap.protocol, Protocol::Imap);
+    assert_eq!(over_jmap.protocol, Protocol::Jmap);
+    all_idle(&core, &[over_imap.id, over_jmap.id]).await;
+
+    // 1. The unified inbox shows both, each message with its own account and that account's
+    //    inbox.
+    let a = until(&core, &alice_subject, |_| true).await;
+    let b = until(&core, &bob_subject, |_| true).await;
+    assert_eq!(a.account_id, over_imap.id);
+    assert_eq!(b.account_id, over_jmap.id);
+    for (item, account) in [(&a, over_imap.id), (&b, over_jmap.id)] {
+        let inbox = core
+            .list_mailboxes(account)
+            .await
+            .expect("mailboxes")
+            .into_iter()
+            .find(|m| m.path == "INBOX")
+            .expect("inbox");
+        assert_eq!(item.mailbox_id, inbox.id, "{}", item.subject);
+    }
+    let both = unified(&core).await;
+    assert!(both.iter().any(|i| i.account_id == over_imap.id));
+    assert!(both.iter().any(|i| i.account_id == over_jmap.id));
+    // Every connection so far was the account's own: alice over IMAP, bob over JMAP.
+    for (protocol, user) in connector.readers() {
+        match protocol {
+            Protocol::Imap => assert_eq!(user, env.alice.address),
+            Protocol::Jmap => assert_eq!(user, env.bob.address),
+        }
+    }
+    assert!(connector.writers().is_empty(), "both read-only");
+
+    // 2. Read-only per account: writing on for bob only. Alice's message is refused before
+    //    anything is sent; bob's reaches his server over JMAP.
+    core.set_writes_enabled(over_jmap.id, true)
+        .await
+        .expect("bob writes");
+    let err = core
+        .apply_action(MailAction::Flag, vec![at(&a)], "alice-ro".into())
+        .await
+        .expect_err("alice is read-only");
+    assert_eq!(IpcError::from(&err).code, ErrorCode::ReadOnly, "{err}");
+    let flagged = core
+        .apply_action(MailAction::Flag, vec![at(&b)], "bob-flag".into())
+        .await
+        .expect("flag bob's");
+    settled(&mut events, flagged.batch.expect("batch")).await;
+    assert_eq!(flags(&mut bob, &bob_id).await, Some((false, true)));
+    assert_eq!(flags(&mut alice, &alice_id).await, Some((false, false)));
+    assert_eq!(
+        connector.writers(),
+        [(Protocol::Jmap, env.bob.address.clone())],
+        "only bob's server was written to"
+    );
+
+    // 3. Writing on for alice too: marking both read (an action is for one account) reaches
+    //    both servers, each over its own protocol.
+    core.set_writes_enabled(over_imap.id, true)
+        .await
+        .expect("alice writes");
+    for (item, request) in [(&a, "read-alice"), (&b, "read-bob")] {
+        let read = core
+            .apply_action(MailAction::MarkRead, vec![at(item)], request.into())
+            .await
+            .unwrap_or_else(|err| panic!("mark {} read: {err}", item.subject));
+        settled(&mut events, read.batch.expect("batch")).await;
+    }
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let (fa, fb) = (
+            flags(&mut alice, &alice_id).await,
+            flags(&mut bob, &bob_id).await,
+        );
+        if fa == Some((true, false)) && fb == Some((true, true)) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "alice {fa:?}, bob {fb:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let writers = connector.writers();
+    assert!(writers.contains(&(Protocol::Imap, env.alice.address.clone())));
+    for (protocol, user) in &writers {
+        match protocol {
+            Protocol::Imap => assert_eq!(user, &env.alice.address),
+            Protocol::Jmap => assert_eq!(user, &env.bob.address),
+        }
+    }
+    until(&core, &alice_subject, |i| {
+        !i.unread && i.account_id == over_imap.id
+    })
+    .await;
+    until(&core, &bob_subject, |i| {
+        !i.unread && i.flagged && i.account_id == over_jmap.id
+    })
+    .await;
+
+    core.shutdown().await;
+    clean(&mut alice).await;
+    clean(&mut bob).await;
+    alice.logout().await.ok();
     bob.logout().await.ok();
 }
