@@ -717,3 +717,62 @@ voraus. Das betrifft nur kalte Zugriffe und ist nicht geändert.
   mit älteren Dateien hält das Ergebnis einer anderen für aktuell; ein Test aus `../vm-perf`
   übersetzte so gegen `mail-model` aus dem Hauptverzeichnis. Die Release-Builds hier übersetzten
   alle Crates aus der Arbeitskopie (im Log geprüft).
+
+## Scrollen beim Erstabgleich: Kriterium des Desktop-Tests – 24.11.2026
+
+**Frage:** `account-sync.e2e.mjs`, „scrolls the list smoothly while the first sync is running“,
+scheitert ab und zu an einem einzelnen langen Frame (53 ms im ganzen Lauf auf 10cd98d, vorher 53,
+55, 56, 60–75 und 77 ms, siehe Stufen 8, 15 und 17), bei Median 17 ms und p95 17–18 ms. Grenze war:
+längster Frame und längste Blockade des Hauptthreads je höchstens 50 ms. Liegt das an der App?
+
+**Wie untersucht:** Debug-Build des Testzugangs (`pnpm --dir app build:e2e`) auf 10cd98d mit den
+Korrekturen aus 5a8ad9a, die Spec allein über `scripts/e2e-gui.sh`, verborgenes Testfenster (Modus
+`tasks`: ein Frame ist ein Schritt einer Task-Schleife, siehe `support/scroll.mjs`). Eine nicht
+eingecheckte Kopie von `support/scroll.mjs` zeichnete während der 8 s zusätzlich auf: den Beginn
+jeder Blockade über 17 ms, jeden IPC-Aufruf der Seite (über `fetch`, mit Größe der Antwort),
+DOM-Änderungen außerhalb der Bildlaufschritte (`MutationObserver`) und jeden `setTimeout`-Rückruf
+über 6 ms samt den Mikrotasks danach; darin rendert React, nachdem TanStack Query eine Antwort
+gemeldet hat. „Last“ heißt: neun Endlosschleifen in der Shell auf den zehn Kernen, wie parallele
+Builds anderer Sitzungen.
+
+| Bedingung | Läufe | längster Frame (ms) | Blockaden über 17 ms |
+|---|---:|---|---|
+| ohne Last | 3 | 26, 25, 22 | eine: 18 ms bei 4,09 s |
+| Last | 4 | 58, 74, 34, 26 | drei: 53, 68 und 27 ms, bei 4,09–4,11 s |
+| Last, vor der Messung 30 MB kurzlebige Objekte angelegt | 4 | 27, 28, 24, 24 | eine: 18 ms bei 4,41 s |
+
+p95 lag in allen Läufen bei 17–19 ms, der Median bei 17 ms, kein leeres Bild. Mit der
+eingecheckten Messung (ohne Aufzeichnung) danach allein: 53 ms (ein Frame über 50 ms, Blockade
+47 ms, ohne zusätzliche Last) und 23 ms, unter Last 29 ms; p95 17, 17 und 18 ms.
+
+**Befund:**
+- Der lange Block kommt immer an derselben Stelle: 80–100 ms nachdem die vierte Seite der Liste
+  (Zeilen 601–800, 105 KB) angekommen ist. Die 13–14 Nachladevorgänge während der Messung (je
+  `messagesChanged` alle geladenen Seiten `list_inbox`, dazu Ordner, Favoriten und Zähler) machen
+  keinen; das Rendern danach dauert höchstens 14 ms.
+- In dem Block läuft kein App-Code, den die Aufzeichnung sieht: kein `setTimeout`-Rückruf (das
+  Rendern der vierten Seite, 14 ms, war vorher zu Ende), keine DOM-Änderung, keine IPC-Antwort.
+- Legt die Seite vor der Messung 30 MB kurzlebige Objekte an, bleibt der Block unter derselben Last
+  aus (0 von 4 Läufen). Sein Zeitpunkt hängt also an der Menge des vorher Angelegten. Das spricht für
+  eine Speicherbereinigung von JavaScriptCore; direkt sehen lässt sie sich in der Seite nicht. Ohne
+  Last dauert der Block bis 18 ms, unter Last 27–68 ms, weil seine Arbeit mit der Last um die Kerne
+  konkurriert. Das passt zu Stufe 8: im nie sichtbaren Testfenster entstehen
+  Lücken in der Arbeit von WebKit zwischen zwei Schritten, auch ohne App-Code.
+- Die anderen Verdächtigen: die Abfrage des Gesprächsbetreffs je Zeile (0e8c04b) läuft in dieser
+  Messung nicht, die Spec misst eine Liste einzelner Mails (keine zusätzlichen Aufrufe im
+  Mitschnitt); der Kontakt-Nachtrag (Entscheidung 0050) arbeitet im Kern und schickt der Oberfläche
+  keine Ereignisse (kein Kontakt-Aufruf während der Messung).
+- Eine Ursache in der App, die sich beheben ließe, ist damit nicht gefunden. Weniger Speicherumsatz
+  je Nachladen (jedes Nachladen holt alle geladenen Seiten neu, rund 0,5 MB JSON) würde die
+  Bereinigung seltener machen, aber nicht abschaffen; das ist eine eigene Aufgabe.
+
+**Kriterium seither** (`account-sync.e2e.mjs`): Median höchstens 17 ms und kein leeres Bild (wie
+bisher), dazu p95 höchstens 20 ms, höchstens ein Frame über 50 ms und keiner über 100 ms, ebenso
+höchstens eine Blockade über 50 ms und keine über 100 ms (statt längster Frame und längste
+Blockade je höchstens 50 ms). Begründung: 60 Bilder pro Sekunde heißt 16,7 ms je Frame; Median und
+p95 sichern, dass fast alle Frames im Takt bleiben. Ein einzelner Aussetzer bis 100 ms (sechs
+Frames) ist der beobachtete Block unter Last. Eine echte Verschlechterung der App
+fällt weiter auf: Kostet jedes Nachladen mehr als 50 ms, sind es 13–14 lange Frames; ein Block wie
+der von rund 250 ms aus Stufe 7 liegt über 100 ms; ein langsameres Rendern je Schritt hebt p95 über
+20 ms. Nicht mehr erkannt wird eine einmalige Verschlechterung auf 50–100 ms. `conversations.e2e.mjs`
+(Scrollen mit aufgeklapptem Gespräch, ohne laufenden Abgleich) behält die strenge Grenze von 50 ms.
