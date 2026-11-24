@@ -10,7 +10,9 @@ dieser Stufe: stärkere Filterregeln, lernender Spamfilter. Signaturen je Absend
 seit Stufe 10 (Einstellungen → Schreiben → Signaturen, Standard je Adresse für neue Mails und für
 Antworten).
 
-**Voraussetzung:** Stufe 18 abgeschlossen (gleiche Liste und Spalten).
+**Voraussetzung:** Stufe 18. Teil A (Liste) baut auf Stufe 18 A/B/F auf und beginnt nach ihnen; B und C laufen parallel zu Stufe 18.
+
+**Version:** Der Mensch hat am 24.11.2026 entschieden: Stufen 18, 19 und 20 zusammen ergeben 0.1.1 (Gitea-Release, GitHub bleibt bis zu seinem Okay privat).
 
 ## Aufgaben
 

@@ -8,7 +8,9 @@ Ausgewählt: Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker
 Postfach-Speicher. Nicht gewählt: Auswahl zitieren, automatisch Bcc/Cc, Gespräch stummschalten,
 Newsletter-Übersicht, neue Absender prüfen, App-Sperre, Abwesenheitsnotiz.
 
-**Voraussetzung:** Stufe 19 abgeschlossen.
+**Voraussetzung:** Stufen 16 und 17; läuft parallel zu Stufe 18 und 19.
+
+**Version:** Stufen 18, 19 und 20 zusammen ergeben 0.1.1 (Entscheidung des Menschen vom 24.11.2026).
 
 ## Aufgaben
 
