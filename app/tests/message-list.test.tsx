@@ -389,13 +389,14 @@ describe("date sections and the time column", () => {
     expect(rows.filter((r) => r.kind === "message").map((r) => r.position)).toEqual([0, 1, 2, 3]);
   });
 
-  it("time column: today the time, this year day and month, earlier the date", () => {
+  it("time column: today the time, this year day and month, earlier the same with the year", () => {
     const bounds = dayBounds(now, 1);
     expect(formatListDate(at(18, 9), bounds, "en")).toBe("9:00 AM");
     expect(formatListDate(at(18, 9), bounds, "de")).toBe("09:00");
     expect(formatListDate(at(3), bounds, "en")).toBe("Nov 3");
     expect(formatListDate(at(3), bounds, "de")).toBe("3. Nov.");
-    expect(formatListDate(new Date(2025, 0, 9).getTime(), bounds, "de")).toBe("09.01.25");
+    expect(formatListDate(new Date(2025, 0, 9).getTime(), bounds, "de")).toBe("9. Jan. 2025");
+    expect(formatListDate(new Date(2025, 0, 9).getTime(), bounds, "en")).toBe("Jan 9, 2025");
   });
 });
 

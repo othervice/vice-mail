@@ -107,6 +107,21 @@ function sectionKey(section: Section): string {
 }
 
 /**
+ * Rows without date sections, for lists that are not a folder's timeline (search results): every
+ * hit says its date in its row. Duplicate ids are dropped, as in `buildRows`.
+ */
+export function buildRowsWithoutSections(items: readonly MessageListItem[]): FolderRow[] {
+  const rows: FolderRow[] = [];
+  const seen = new Set<number>();
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    rows.push({ kind: "message", key: `message-${item.id}`, item, position: rows.length });
+  }
+  return rows;
+}
+
+/**
  * Flattens the messages (newest first) into list rows with a section row before each new
  * section. Duplicate ids (never expected from keyset pages) are dropped, so row keys stay unique.
  */
@@ -133,14 +148,14 @@ export function buildRows(items: readonly MessageListItem[], bounds: DayBounds):
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
-function formatter(language: string, kind: "time" | "dayMonth" | "date" | "full" | "month" | "monthYear") {
+function formatter(language: string, kind: "time" | "dayMonth" | "dayMonthYear" | "full" | "month" | "monthYear") {
   const key = `${language}:${kind}`;
   let format = formatters.get(key);
   if (!format) {
     const options: Intl.DateTimeFormatOptions = {
       time: { timeStyle: "short" } as const,
       dayMonth: { day: "numeric", month: "short" } as const,
-      date: { dateStyle: "short" } as const,
+      dayMonthYear: { day: "numeric", month: "short", year: "numeric" } as const,
       full: { dateStyle: "full", timeStyle: "short" } as const,
       month: { month: "long" } as const,
       monthYear: { month: "long", year: "numeric" } as const,
@@ -151,11 +166,15 @@ function formatter(language: string, kind: "time" | "dayMonth" | "date" | "full"
   return format;
 }
 
-/** Time column: today the time, this year day and month, before that the short date. */
+/**
+ * Time column: today the time, this year day and month ("Oct 9"), before that the same with the
+ * year ("Sep 6, 2025"). One way of writing a date, also where no month headings stand above the
+ * rows (search results).
+ */
 export function formatListDate(date: number, bounds: DayBounds, language: string): string {
   if (date >= bounds.today && date < bounds.tomorrow) return formatter(language, "time").format(date);
   if (new Date(date).getFullYear() === bounds.year) return formatter(language, "dayMonth").format(date);
-  return formatter(language, "date").format(date);
+  return formatter(language, "dayMonthYear").format(date);
 }
 
 /** Full date and time, for the tooltip of the time column. */

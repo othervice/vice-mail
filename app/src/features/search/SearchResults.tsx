@@ -11,7 +11,7 @@ import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query
 import type { ListPage, MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
-import { buildRows, type DayBounds } from "../messages/rows";
+import { buildRowsWithoutSections } from "../messages/rows";
 import type { FocusRequest } from "../reading/ReadingPane";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "../unified/MixedReading";
@@ -27,7 +27,8 @@ type HitQuery = UseInfiniteQueryResult<InfiniteData<HitPage, unknown>>;
 /**
  * Rows of hits from any account: the account colour and the found places of each. Decision 0039:
  * with the conversation view on, the newest hit of a conversation is its row (later hits of the
- * same thread are left out) and shows the conversation's size.
+ * same thread are left out) and shows the conversation's size. One list without month headings:
+ * hits spread over years would get a heading each; every row says its date.
  */
 function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: MessageListSource; hitById: ReadonlyMap<MessageId, SearchHit> } {
   const conversations = useConversationsOn();
@@ -41,13 +42,12 @@ function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: 
   const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
   // Stable between renders: the list rebuilds its rows (and reports its selection) when it changes.
   const groupedRows = useCallback(
-    (items: readonly MessageListItem[], bounds: DayBounds) =>
-      buildRows(groupByThread(items, (item) => hitById.get(item.id)?.threadId ?? null), bounds),
+    (items: readonly MessageListItem[]) => buildRowsWithoutSections(groupByThread(items, (item) => hitById.get(item.id)?.threadId ?? null)),
     [hitById],
   );
   const source: MessageListSource = {
     query,
-    buildRows: conversations ? groupedRows : buildRows,
+    buildRows: conversations ? groupedRows : buildRowsWithoutSections,
     accountColor: (item) => colors.get(item.accountId) ?? 0,
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
     decorate: (item) => {

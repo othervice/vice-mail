@@ -101,6 +101,8 @@ describe("search field", () => {
     expect(options[1]?.querySelector(`.${accountRing(WORK.color)}`)).toBeTruthy();
     const marks = within(options[0] as HTMLElement).getAllByTestId("highlight").map((m) => m.textContent);
     expect(marks).toEqual(["Rechnung", "Rechnung"]);
+    // One list: no date headings between hits (a folder's list has them).
+    expect(within(results).queryAllByTestId("list-section")).toEqual([]);
 
     await user.keyboard("{Enter}");
     await waitFor(() => {
