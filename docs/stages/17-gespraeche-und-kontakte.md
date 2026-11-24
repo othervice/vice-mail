@@ -65,8 +65,8 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 - [x] „Als Spam markieren“ sperrt die Adresse, neue Mails von ihr landen nicht im Posteingang;
   Rückgängig hebt das auf.
 - [x] Ansichten lassen sich ein-, ausblenden und sortieren; die Auswahl übersteht einen Neustart.
-- [ ] Bildschirmfotos in `docs/images/` neu, wo sich etwas sichtbar geändert hat.
-- [ ] `scripts/check.sh` ist grün, Desktop-Tests grün.
+- [x] Bildschirmfotos in `docs/images/` neu, wo sich etwas sichtbar geändert hat.
+- [x] `scripts/check.sh` ist grün, Desktop-Tests grün.
 
 ## Nicht in dieser Stufe
 
@@ -310,3 +310,15 @@ drop, damit es auch neben Tauris Datei-Drop geht). Bildschirmfotos in `docs/imag
 die Spalte im Standard nicht sichtbar (die „…“ erscheinen nur beim Überfahren); die neue Zeile
 „Kontakte“ (Block B) und die Reihenfolge der eingeklappten Leiste sind in den README-Bildern noch
 nicht neu aufgenommen.
+
+### Abschluss (24.11.2026, abends)
+
+- Volle Prüfung auf 10cd98d im sauberen Worktree: `scripts/check.sh` grün (1.358 Rust-, 4.042
+  Vitest-Tests), Servertests 1.455 von 1.455; Desktop-Tests 23 von 25 Spec-Dateien. Die zwei
+  Fehlschläge: die Einladungskarte blieb aus (ein älterer Wettlauf zwischen der ersten Antwort und
+  `messageBodyAvailable`, behoben in 5a8ad9a mit Vitest-Tests) und ein einzelnes Bild über 50 ms
+  beim Scrollen während des Erstabgleichs (Speicherbereinigung der WebView, Grenze begründet
+  angepasst in a73b1a1, `docs/testing/performance.md`). Danach auf a73b1a1: `scripts/check.sh`
+  grün (4.045 Vitest-Tests), Desktop-Tests 25 von 25 Spec-Dateien.
+- README-Bilder auf dem fertigen Stand neu (`README_SHOTS=1`); die README zeigt nur noch
+  `inbox-light.png`.
