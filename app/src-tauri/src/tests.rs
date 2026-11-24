@@ -820,6 +820,83 @@ fn stage_16_attachment_commands_are_wired() {
     assert_eq!(code_of(&err), Some("not_found"), "{err}");
 }
 
+/// Stage 19 (decisions 0061, 0062): the list view commands are wired with their argument names,
+/// answer typed errors and store orders and table settings.
+#[test]
+fn stage_19_list_view_commands_are_wired() {
+    let h = harness(|_| {});
+    let unified = json!({ "kind": "unified", "view": { "kind": "all" } });
+    let request = json!({
+        "scope": unified,
+        "order": { "key": "sender", "ascending": true },
+        "filter": { "unread": true, "text": "rechnung" }
+    });
+    assert_eq!(
+        invoke(
+            &h,
+            "list_view_messages",
+            json!({ "request": request, "cursor": null, "limit": 50 })
+        )
+        .expect("messages"),
+        json!({ "items": [], "nextCursor": null })
+    );
+    assert_eq!(
+        invoke(
+            &h,
+            "list_view_conversations",
+            json!({ "request": request, "cursor": null, "limit": 50 })
+        )
+        .expect("conversations"),
+        json!({ "items": [], "nextCursor": null })
+    );
+    assert_eq!(
+        invoke(&h, "count_list_view", json!({ "request": request })).expect("count"),
+        json!(0)
+    );
+    assert_eq!(
+        invoke(&h, "list_view_tags", json!({ "scope": unified })).expect("tags"),
+        json!([])
+    );
+    let bad = json!({
+        "scope": { "kind": "mailbox", "mailboxId": 4242 },
+        "order": { "key": "date", "ascending": false },
+        "filter": {}
+    });
+    let err = invoke(
+        &h,
+        "list_view_messages",
+        json!({ "request": bad, "cursor": null, "limit": 50 }),
+    )
+    .expect_err("unknown mailbox");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+    let orders = invoke(
+        &h,
+        "set_list_order",
+        json!({ "view": "unified:all", "order": { "key": "size", "ascending": false } }),
+    )
+    .expect("set order");
+    assert_eq!(
+        orders,
+        json!([{ "view": "unified:all", "order": { "key": "size", "ascending": false } }])
+    );
+    assert_eq!(
+        invoke(&h, "get_list_orders", json!({})).expect("orders"),
+        orders
+    );
+    let table = invoke(&h, "get_list_table", json!({})).expect("table");
+    assert_eq!(table["presentation"], json!("rows"));
+    let mut wide = table.clone();
+    wide["presentation"] = json!("table");
+    assert_eq!(
+        invoke(&h, "set_list_table", json!({ "settings": wide })).expect("set table"),
+        wide
+    );
+    let mut narrow = wide.clone();
+    narrow["columns"][2]["width"] = json!(1);
+    let err = invoke(&h, "set_list_table", json!({ "settings": narrow })).expect_err("too narrow");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+}
+
 #[test]
 fn window_layout_belongs_to_the_calling_window() {
     let h = harness(|_| {});

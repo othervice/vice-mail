@@ -17,7 +17,7 @@
 
 #[cfg(test)]
 mod bench;
-mod resolve;
+pub(crate) mod resolve;
 mod saved;
 mod server;
 #[cfg(test)]
@@ -435,7 +435,7 @@ impl<C: Connector> AppCore<C> {
         Ok(store.search_index_status().await?)
     }
 
-    fn search_context<'z>(
+    pub(crate) fn search_context<'z>(
         &self,
         zone: &'z LocalZone,
         request: &SearchRequest,

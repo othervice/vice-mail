@@ -861,6 +861,212 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
         &t,
     );
 
+    // Stage 19 (decisions 0061, 0062): the inbox and the unified inbox sorted by other keys,
+    // with the quick filter, and the counts of the filter bar.
+    {
+        use mail_model::{ListOrder, ListViewRequest, QuickFilter, SortKey};
+        let view =
+            |scope: &mail_model::InboxScope, key, ascending, filter: QuickFilter| ListViewRequest {
+                scope: scope.clone(),
+                order: ListOrder { key, ascending },
+                filter,
+            };
+        let filter = |f: fn(&mut QuickFilter)| {
+            let mut q = QuickFilter::default();
+            f(&mut q);
+            q
+        };
+        for (name, key, ascending) in [
+            ("Datum, älteste zuerst", SortKey::Date, true),
+            ("Absender A–Z", SortKey::Sender, true),
+            ("Absender Z–A", SortKey::Sender, false),
+            ("Empfänger A–Z", SortKey::Recipient, true),
+            ("Betreff A–Z", SortKey::Subject, true),
+            ("Größe, größte zuerst", SortKey::Size, false),
+        ] {
+            let request = view(&scope, key, ascending, QuickFilter::default());
+            let t = time(runs, || async {
+                core.list_view_messages(request.clone(), None, 100)
+                    .await
+                    .expect("view");
+            })
+            .await;
+            row(&format!("Stufe 19: Posteingang nach {name} (100)"), &t);
+            worst.insert(
+                "view",
+                worst.get("view").copied().unwrap_or_default().max(t.median),
+            );
+        }
+        // Keyset from the middle: the cursor after half of the inbox, by sender.
+        let by_sender = view(&scope, SortKey::Sender, true, QuickFilter::default());
+        let mut cursor = None;
+        let mut seen = 0usize;
+        while seen < ids.len() / 2 {
+            let page = core
+                .list_view_messages(by_sender.clone(), cursor.clone(), 500)
+                .await
+                .expect("page");
+            seen += page.items.len();
+            match page.next_cursor {
+                Some(next) => cursor = Some(next),
+                None => break,
+            }
+        }
+        let t = time(runs, || async {
+            core.list_view_messages(by_sender.clone(), cursor.clone(), 100)
+                .await
+                .expect("view");
+        })
+        .await;
+        row("Stufe 19: … nach Absender, Keyset ab Mitte", &t);
+        let t = time(runs, || async {
+            core.list_view_conversations(by_sender.clone(), None, 100)
+                .await
+                .expect("view");
+        })
+        .await;
+        row(
+            "Stufe 19: Posteingang nach Absender, Konversationen (100)",
+            &t,
+        );
+        worst.insert("view conversations", t.median);
+        let unified_by_sender = view(&unified, SortKey::Sender, true, QuickFilter::default());
+        let t = time(runs, || async {
+            core.list_view_messages(unified_by_sender.clone(), None, 100)
+                .await
+                .expect("view");
+        })
+        .await;
+        row(
+            "Stufe 19: Vereinter Posteingang nach Absender (5 Konten, 100)",
+            &t,
+        );
+        let t = time(runs, || async {
+            core.list_view_conversations(unified_by_sender.clone(), None, 100)
+                .await
+                .expect("view");
+        })
+        .await;
+        row(
+            "Stufe 19: Vereinter Posteingang nach Absender, Konversationen (100)",
+            &t,
+        );
+        let rare = data.rare.clone();
+        let filters: Vec<(String, SortKey, QuickFilter)> = vec![
+            (
+                "Ungelesen, Datum".into(),
+                SortKey::Date,
+                filter(|q| q.unread = true),
+            ),
+            (
+                "Ungelesen, Absender".into(),
+                SortKey::Sender,
+                filter(|q| q.unread = true),
+            ),
+            (
+                "Markiert, Datum".into(),
+                SortKey::Date,
+                filter(|q| q.flagged = true),
+            ),
+            (
+                "Markiert, Absender".into(),
+                SortKey::Sender,
+                filter(|q| q.flagged = true),
+            ),
+            (
+                "Mit Anhang, Betreff".into(),
+                SortKey::Subject,
+                filter(|q| q.attachment = true),
+            ),
+            (
+                "Von Kontakten (keiner im Generator: ganzer Ordner)".into(),
+                SortKey::Date,
+                filter(|q| q.contacts = true),
+            ),
+            (
+                "Schlagwort ohne Treffer (ganzer Ordner)".into(),
+                SortKey::Sender,
+                filter(|q| q.tag = Some("nirgends".into())),
+            ),
+            (
+                "Text `rechnung`, Datum".into(),
+                SortKey::Date,
+                filter(|q| q.text = "rechnung".into()),
+            ),
+            (
+                "Text `rechnung`, Absender".into(),
+                SortKey::Sender,
+                filter(|q| q.text = "rechnung".into()),
+            ),
+            (
+                "Text beim Tippen `rech`, Datum".into(),
+                SortKey::Date,
+                filter(|q| q.text = "rech".into()),
+            ),
+            (
+                format!("seltenes Wort `{rare}`, Datum"),
+                SortKey::Date,
+                QuickFilter {
+                    text: rare.clone(),
+                    ..QuickFilter::default()
+                },
+            ),
+            (
+                format!("seltenes Wort `{rare}`, Absender"),
+                SortKey::Sender,
+                QuickFilter {
+                    text: rare.clone(),
+                    ..QuickFilter::default()
+                },
+            ),
+            (
+                "Ungelesen + Anhang + `rechnung`, Datum".into(),
+                SortKey::Date,
+                filter(|q| {
+                    q.unread = true;
+                    q.attachment = true;
+                    q.text = "rechnung".into();
+                }),
+            ),
+        ];
+        let mut slowest_filter = Duration::ZERO;
+        let mut slowest_count = Duration::ZERO;
+        for (name, key, quick) in filters {
+            let request = view(&scope, key, false, quick);
+            let t = time(runs, || async {
+                core.list_view_messages(request.clone(), None, 100)
+                    .await
+                    .expect("view");
+            })
+            .await;
+            let rows = core
+                .list_view_messages(request.clone(), None, 100)
+                .await
+                .expect("view")
+                .items
+                .len();
+            row(
+                &format!("Stufe 19: Schnellfilter {name} ({rows} Zeilen)"),
+                &t,
+            );
+            slowest_filter = slowest_filter.max(t.median);
+            let t = time(runs.min(20), || async {
+                core.count_list_view(request.clone()).await.expect("count");
+            })
+            .await;
+            let count = core.count_list_view(request.clone()).await.expect("count");
+            row(&format!("Stufe 19: … Trefferzahl ({count})"), &t);
+            slowest_count = slowest_count.max(t.median);
+        }
+        worst.insert("view filter", slowest_filter);
+        worst.insert("view count", slowest_count);
+        let t = time(runs.min(20), || async {
+            core.list_view_tags(scope.clone()).await.expect("tags");
+        })
+        .await;
+        row("Stufe 19: Schlagwörter des Posteingangs (Menü)", &t);
+    }
+
     let mut slowest = Duration::ZERO;
     for (name, query, typing) in queries(data) {
         let t = time(runs, || async {
@@ -1159,4 +1365,10 @@ async fn small_data_meets_generous_thresholds() {
     limit("unified conversations", 300);
     limit("search", 200);
     limit("open", 500);
+    // Stage 19: sorted views, filters (a filter without matches walks the whole inbox) and
+    // the counts of the filter bar.
+    limit("view", 100);
+    limit("view conversations", 300);
+    limit("view filter", 300);
+    limit("view count", 300);
 }
