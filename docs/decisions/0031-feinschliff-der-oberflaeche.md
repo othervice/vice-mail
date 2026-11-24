@@ -111,3 +111,9 @@ ihrer Fläche (4,5:1); Warnfarbe (Prioritätssymbol) auf `priority-tint`.
 
 Alle Werte sind Tokens; eine andere Gewichtung (z. B. weniger Schatten) ist eine Änderung in
 `tokens.css`. Die Dreizeiligkeit hängt nur an `--ui-row-height-two-line` und der Dichte.
+
+## Nachtrag 24.11.2026
+
+Die Farbwerte der Tabelle oben gelten seit Entscheidung 0053 nicht mehr: kühle Grautöne statt
+warmer, die Prioritätskarte kühl statt warm getönt, die achte Avatar-Tönung Schiefer statt Sand.
+Stufen, Schatten, Avatare und Kontrastziele bleiben wie hier beschrieben.

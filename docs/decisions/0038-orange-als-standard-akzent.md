@@ -27,3 +27,8 @@ wird. Petrol und die übrigen Themen bleiben wählbar; wer schon ein Thema gewä
 
 Eine Zeile: der Standardwert von `UiPreferences.accentTheme` (bzw. der Rückfall in
 `app/src/features/preferences/accent.ts`).
+
+## Nachtrag 24.11.2026
+
+Standard-Akzent ist seit Entscheidung 0053 Blau; Orange bleibt wählbar, eine gespeicherte Wahl
+bleibt. Das Logo ist unverändert.

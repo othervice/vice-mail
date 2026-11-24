@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import tokensCss from "../src/styles/tokens.css?raw";
-import { contrast, deltaE, luminance } from "./support/color";
+import { contrast, deltaE, luminance, parseHex } from "./support/color";
 import { ACCENT_THEMES } from "../src/features/preferences/accent";
 
 /**
- * The accent of the root values of tokens.css. Since decision 0038 the default theme (orange) is
- * set on the root like every other one, so the root keeps teal's values and teal's block repeats them.
+ * The accent of the root values of tokens.css. Since decision 0053 the root holds the default
+ * theme's (blue's) values, so the first frame has them before the core answers; the chosen theme
+ * is set on the root like every other one, and blue's block repeats the root values.
  */
-const ROOT_ACCENT = "teal";
+const ROOT_ACCENT = "blue";
 
 // Contrast rules from docs/SPEC.md (Barrierefreiheit): text >= 4.5:1, controls and other
 // meaningful graphics >= 3:1, in both themes. The pairs below are the ones the UI uses.
@@ -226,6 +227,34 @@ it("orders the surfaces as decision 0031 says: rail darkest, list column tinted,
   expect(luminance(light["surface-list"] ?? "")).toBeLessThan(luminance(light["surface"] ?? ""));
   expect(luminance(dark["rail"] ?? "")).toBeLessThan(luminance(dark["surface-list"] ?? ""));
   expect(luminance(dark["surface-list"] ?? "")).toBeLessThan(luminance(dark["surface"] ?? ""));
+});
+
+it("keeps the neutrals cool in both themes, never warm (decision 0053)", () => {
+  // Surfaces, lines and text greys lean towards blue: blue never below red.
+  const NEUTRALS = [
+    "canvas",
+    "surface",
+    "surface-list",
+    "rail",
+    "rail-hover",
+    "hover",
+    "badge",
+    "track",
+    "priority-tint",
+    "priority-border",
+    "border",
+    "border-subtle",
+    "border-strong",
+    "text-primary",
+    "text-secondary",
+    "text-tertiary",
+  ];
+  for (const [mode, tokens] of [["light", light], ["dark", dark]] as const) {
+    for (const name of NEUTRALS) {
+      const [red, , blue] = parseHex(tokens[name] ?? "");
+      expect(blue, `${mode} ${name}`).toBeGreaterThanOrEqual(red);
+    }
+  }
 });
 
 it("keeps the eight avatar tints apart from each other in both themes", () => {

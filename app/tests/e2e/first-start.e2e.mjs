@@ -147,14 +147,15 @@ describe("guided first start (stage 15, decision 0044)", () => {
     await testId("first-start-theme-dark").click();
     await browser.waitUntil(async () => (await documentState()).theme === "dark", { timeoutMsg: "dark not applied" });
     assert.equal((await coreCall("get_preferences")).theme, "dark");
-    await testId("accent-blue").click();
-    await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.dataset.accent)) === "blue", {
-      timeoutMsg: "blue not applied",
-    });
-    assert.equal((await coreCall("get_ui_preferences")).accentTheme, "blue");
     await testId("accent-orange").click();
-    await browser.waitUntil(async () => (await coreCall("get_ui_preferences")).accentTheme === "orange", {
-      timeoutMsg: "orange not stored again",
+    await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.dataset.accent)) === "orange", {
+      timeoutMsg: "orange not applied",
+    });
+    assert.equal((await coreCall("get_ui_preferences")).accentTheme, "orange");
+    // Back to the default (decision 0053), so the screenshots show it.
+    await testId("accent-blue").click();
+    await browser.waitUntil(async () => (await coreCall("get_ui_preferences")).accentTheme === "blue", {
+      timeoutMsg: "blue not stored again",
     });
     await shootBothThemes("appearance");
     await checkLayout("appearance-default");

@@ -820,6 +820,8 @@ export const en = {
       // Stage 16
       folder: "The folder could not be changed.",
       transfer: "The messages could not be moved to the other account.",
+      // Stage 18: light, dark or system from the command palette.
+      appearance: "The appearance could not be changed.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",
     operationFailed_other: "{{count, number}} changes could not be made on the server: {{action}}",
@@ -1310,6 +1312,12 @@ export const en = {
         system: "System",
         light: "Light",
         dark: "Dark",
+        // Stage 18 (decision 0053): the command palette's entries.
+        command: {
+          light: "Switch to light mode",
+          dark: "Switch to dark mode",
+          system: "Match the system's light or dark mode",
+        },
       },
     },
     sync: {

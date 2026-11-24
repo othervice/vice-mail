@@ -34,8 +34,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   textSize: DEFAULT_TEXT_SIZE,
   recentCommands: [],
   aiPanel: "open",
-  // Decision 0038: orange is the default accent.
-  accentTheme: "orange",
+  // Decision 0053: blue is the default accent (orange under decision 0038 before).
+  accentTheme: "blue",
   // Decision 0039: one row per conversation.
   conversations: true,
   // Stage 17: no choice, every view of the column in its default order.

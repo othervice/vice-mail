@@ -161,20 +161,21 @@ async fn shortcuts_are_stored_compactly_per_platform() {
     );
 }
 
-/// Decision 0036: the accent theme is a UI preference, synced like the text size, orange by
-/// default (decision 0038); only the six themes pass the bridge, and a stored theme this
-/// version does not know (a newer device) reads as the default.
+/// Decision 0036: the accent theme is a UI preference, synced like the text size, blue by
+/// default (decision 0053, orange before under 0038); only the six themes pass the bridge, a
+/// stored choice stays (also orange from before 0053), and a stored theme this version does not
+/// know (a newer device) reads as the default.
 #[tokio::test]
 async fn the_accent_theme_is_stored_validated_and_synced() {
     let dir = TempDir::new().expect("dir");
     let core = core(&dir).await;
     assert_eq!(
         core.get_ui_preferences().await.expect("read").accent_theme,
-        mail_model::AccentTheme::Orange
+        mail_model::AccentTheme::Blue
     );
     let mut prefs = UiPreferences::default();
-    // Orange last: what the user chose stays, also the default once chosen.
-    for theme in ["teal", "blue", "violet", "rose", "green", "orange"] {
+    // Blue last: what the user chose stays, also the default once chosen.
+    for theme in ["teal", "orange", "violet", "rose", "green", "blue"] {
         prefs.accent_theme = serde_json::from_value(json!(theme)).expect("theme");
         let stored_prefs = core.set_ui_preferences(prefs.clone()).await.expect("store");
         assert_eq!(stored_prefs.accent_theme, prefs.accent_theme);
@@ -189,6 +190,18 @@ async fn the_accent_theme_is_stored_validated_and_synced() {
         .put_settings(
             GLOBAL_SCOPE,
             vec![("ui.accent_theme".to_owned(), "\"magenta\"".to_owned())],
+        )
+        .await
+        .expect("seed");
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").accent_theme,
+        mail_model::AccentTheme::Blue
+    );
+    // Orange, the default before decision 0053, stays where it was stored: nothing migrates it.
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![("ui.accent_theme".to_owned(), "\"orange\"".to_owned())],
         )
         .await
         .expect("seed");

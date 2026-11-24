@@ -8,8 +8,9 @@ import { useActionTargetStore } from "../src/stores/actionTarget";
 import { useComposerStore } from "../src/stores/composer";
 import { useSearchStore } from "../src/stores/search";
 import { useUiStore } from "../src/stores/ui";
-import { makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
-import { renderApp } from "./support/render";
+import { ipcError, makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
+import { renderApp, rootTheme } from "./support/render";
+import { setSystemDark } from "./support/system";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -496,5 +497,57 @@ describe("command palette", () => {
     await openPalette(user);
     await chooseByKeyboard(user, "shortcuts", "Show keyboard shortcuts");
     expect(await screen.findByRole("dialog", { name: "Keyboard shortcuts" })).toBeTruthy();
+  });
+
+  // Stage 18 (decision 0053): light and dark without opening the settings.
+  it("switches to light, dark or the system's mode, names the current one and saves it through the core", async () => {
+    setSystemDark(false);
+    const core = mockCore({ preferences: { theme: "system", language: "en" } });
+    const { user } = renderApp();
+    await screen.findByRole("navigation", { name: "Views" });
+    expect(rootTheme()).toBe("light");
+
+    await openPalette(user);
+    await chooseByKeyboard(user, "dark mode", "Switch to dark mode");
+    expect(rootTheme()).toBe("dark");
+    await waitFor(() => {
+      expect(core.preferences.theme).toBe("dark");
+    });
+
+    // The settings' words find all three; the chosen one is marked as current.
+    await openPalette(user);
+    await user.keyboard("appearance");
+    const options = within(palette()).getAllByRole("option");
+    expect(options.map(optionLabel)).toEqual(
+      expect.arrayContaining(["Switch to light mode", "Switch to dark mode", "Match the system's light or dark mode"]),
+    );
+    expect(options.find((option) => optionLabel(option) === "Switch to dark mode")?.textContent).toContain("Current");
+    expect(options.find((option) => optionLabel(option) === "Switch to light mode")?.textContent).not.toContain("Current");
+    await user.keyboard("{Escape}");
+
+    await openPalette(user);
+    await chooseByKeyboard(user, "system mode", "Match the system's light or dark mode");
+    await waitFor(() => {
+      expect(core.preferences.theme).toBe("system");
+    });
+    expect(rootTheme()).toBe("light");
+    act(() => {
+      setSystemDark(true);
+    });
+    expect(rootTheme()).toBe("dark");
+  });
+
+  it("keeps the mode and says why when the core refuses the change", async () => {
+    const core = mockCore({ preferences: { theme: "light", language: "en" }, failures: { set_preferences: ipcError("database") } });
+    const { user } = renderApp();
+    await screen.findByRole("navigation", { name: "Views" });
+    expect(rootTheme()).toBe("light");
+
+    await openPalette(user);
+    await chooseByKeyboard(user, "dark mode", "Switch to dark mode");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The appearance could not be changed.");
+    expect(rootTheme()).toBe("light");
+    expect(core.preferences.theme).toBe("light");
   });
 });
