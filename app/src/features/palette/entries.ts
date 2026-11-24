@@ -319,7 +319,8 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
     entries.push({
       key: "view:unified",
       group: "views",
-      label: t("palette.unifiedInbox"),
+      // The view's name as the sidebar writes it, like every other "Go to" entry.
+      label: t("palette.goTo", { name: t("unified.title") }),
       icon: Inbox,
       run: () => {
         ui.showUnifiedInbox();

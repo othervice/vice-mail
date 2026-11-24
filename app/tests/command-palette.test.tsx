@@ -292,6 +292,11 @@ describe("command palette", () => {
     await chooseByKeyboard(user, "2026", "Open folder 2026");
     expect(useUiStore.getState().view).toEqual({ kind: "mailbox", accountId: ada.id, mailboxId: 6 });
 
+    // With two accounts: the unified inbox, named as the sidebar names it.
+    await openPalette(user);
+    await chooseByKeyboard(user, "all inb", "Go to All inboxes");
+    expect(useUiStore.getState().unifiedInbox).toEqual({ kind: "all" });
+
     await openPalette(user);
     await chooseByKeyboard(user, "grace", "Switch to Grace (grace@vicemail.test)");
     expect(useUiStore.getState().selectedAccountId).toBe(grace.id);

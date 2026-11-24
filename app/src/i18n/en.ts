@@ -1686,7 +1686,6 @@ export const en = {
     openFolder: "Open folder {{name}}",
     switchAccount: "Switch to {{name}}",
     openSettings: "Settings: {{name}}",
-    unifiedInbox: "Go to all inboxes",
     searchFor: "Search mail for “{{query}}”",
     current: "Current",
     groups: {

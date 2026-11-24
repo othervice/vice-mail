@@ -1681,7 +1681,6 @@ export const de: Translation = {
     openFolder: "Ordner {{name}} öffnen",
     switchAccount: "Wechseln zu {{name}}",
     openSettings: "Einstellungen: {{name}}",
-    unifiedInbox: "Gehe zu allen Posteingängen",
     searchFor: "Mails nach „{{query}}“ durchsuchen",
     current: "Aktuell",
     groups: {
