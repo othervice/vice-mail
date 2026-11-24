@@ -205,8 +205,9 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     act(() => {
       useUiStore.getState().showMailView("contacts");
     });
-    await screen.findByTestId("contacts-list");
-    await screen.findByTestId("contact-detail");
+    // The view loads its list first; a busy machine (parallel builds) needs more than 1 s.
+    await screen.findByTestId("contacts-list", {}, { timeout: 5000 });
+    await screen.findByTestId("contact-detail", {}, { timeout: 5000 });
     await waitFor(() => {
       expect(document.documentElement.dataset["theme"]).toBe(theme);
     });
@@ -217,12 +218,13 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     act(() => {
       useUiStore.getState().showSettings("contacts");
     });
-    await screen.findByTestId("contact-duplicates");
+    await screen.findByTestId("contact-duplicates", {}, { timeout: 5000 });
     expect(await seriousFindings()).toEqual([]);
     await user.click(screen.getAllByRole("button", { name: "Merge…" })[0] ?? document.body);
     await screen.findByRole("alertdialog", { name: "Merge these contacts?" });
     expect(await seriousFindings()).toEqual([]);
-  });
+    // Four axe passes over two views: over 5 s on a busy host.
+  }, 20_000);
 
   it("finds nothing serious in Settings → Writing with signatures, templates and both editors open", async () => {
     const image = { contentId: "logo@vicemail.test", fileName: "logo.png", mime: "image/png", size: 2048 };
