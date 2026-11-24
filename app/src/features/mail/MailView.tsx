@@ -50,6 +50,8 @@ import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
+import { NoMessageSelected } from "../reading/NoMessageSelected";
+import { usePreviewing } from "../reading/usePreviewing";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
@@ -293,7 +295,10 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
 
   // In place of the list a message is open only once opened, not while the cursor rests on it.
   // Stage 17: what is marked read is the message the pane shows, not the whole conversation.
-  useMarkReadOnOpen(account, layout.paneShown(open) ? opened : null, controller, { exact: conversations });
+  // Stage 18 (decision 0054): not the top message the list opened by itself, until the user
+  // selects it or works with it.
+  const preview = usePreviewing(selection);
+  useMarkReadOnOpen(account, layout.paneShown(open) && !preview.previewing ? opened : null, controller, { exact: conversations });
 
   const ctxFor = (items: readonly MessageListItem[]): ActionContext => ({
     account,
@@ -422,8 +427,11 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               return;
             }
             layout.onOpen();
+            preview.engage();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
+          // Stage 18 (task F): opening a folder shows its top message (not in place of the list).
+          autoSelectFirst={layout.autoSelectFirst}
           renderQuickActions={(item, _selected, child) => (
             <QuickActions
               ids={QUICK_ACTIONS}
@@ -446,64 +454,69 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}
-      <ListResizeHandle layout={layout} open={layout.paneShown(open)} />
-      {!layout.paneShown(open) ? null : single && conversationOpen ? (
-        <ThreadPane
-          key={rowKey}
-          account={account}
-          item={single}
-          ident={rowKey}
-          focusRequest={focusRequest}
-          // The toolbar acts on the open message alone, with its own folder's actions; the row's
-          // actions act on the whole conversation.
-          toolbarFor={(message) => (
-            <ActionToolbar
-              ids={TOOLBAR_ACTIONS}
-              ctx={ctxForMessage(message)}
-              host={controller.messageHost}
-              platform={platform}
-              label={t("actions.toolbar")}
-            />
-          )}
-          onShown={(message) => {
-            setShown({ key: rowKey, message });
-          }}
-          onShowMessage={(messageId) => {
-            list.current?.showInConversation(rowKey, messageId);
-          }}
-          onEscape={() => {
-            layout.backToList(focusList);
-          }}
-          onClose={() => {
-            layout.close(() => list.current?.clearSelection());
-          }}
-        />
-      ) : single ? (
-        <ReadingPane
-          key={single.id}
-          account={account}
-          messageId={single.id}
-          draft={single.draft}
-          focusRequest={focusRequest}
-          toolbar={
-            <ActionToolbar
-              ids={TOOLBAR_ACTIONS}
-              ctx={singleIsChild ? ctxForMessage(single) : ctxFor([single])}
-              host={singleIsChild ? controller.hostFor(new Set([single.id])) : controller.host}
-              platform={platform}
-              label={t("actions.toolbar")}
-            />
-          }
-          onEscape={() => {
-            layout.backToList(focusList);
-          }}
-          onClose={() => {
-            layout.close(() => list.current?.clearSelection());
-          }}
-        />
-      ) : (
-        selection.items.length > 1 && <SelectionSummary count={selection.items.length} platform={platform} />
-      )}
+      <ListResizeHandle layout={layout} />
+      {/* Stage 18 (task F): with nothing selected the pane's place stays, with a quiet note. */}
+      {layout.placeholderShown(open) && <NoMessageSelected />}
+      {/* A press, a key or the focus in the pane: the user works with the message (decision 0054). */}
+      <div className="contents" {...preview.paneProps}>
+        {!layout.paneShown(open) ? null : single && conversationOpen ? (
+          <ThreadPane
+            key={rowKey}
+            account={account}
+            item={single}
+            ident={rowKey}
+            focusRequest={focusRequest}
+            // The toolbar acts on the open message alone, with its own folder's actions; the row's
+            // actions act on the whole conversation.
+            toolbarFor={(message) => (
+              <ActionToolbar
+                ids={TOOLBAR_ACTIONS}
+                ctx={ctxForMessage(message)}
+                host={controller.messageHost}
+                platform={platform}
+                label={t("actions.toolbar")}
+              />
+            )}
+            onShown={(message) => {
+              setShown({ key: rowKey, message });
+            }}
+            onShowMessage={(messageId) => {
+              list.current?.showInConversation(rowKey, messageId);
+            }}
+            onEscape={() => {
+              layout.backToList(focusList);
+            }}
+            onClose={() => {
+              layout.close(() => list.current?.clearSelection());
+            }}
+          />
+        ) : single ? (
+          <ReadingPane
+            key={single.id}
+            account={account}
+            messageId={single.id}
+            draft={single.draft}
+            focusRequest={focusRequest}
+            toolbar={
+              <ActionToolbar
+                ids={TOOLBAR_ACTIONS}
+                ctx={singleIsChild ? ctxForMessage(single) : ctxFor([single])}
+                host={singleIsChild ? controller.hostFor(new Set([single.id])) : controller.host}
+                platform={platform}
+                label={t("actions.toolbar")}
+              />
+            }
+            onEscape={() => {
+              layout.backToList(focusList);
+            }}
+            onClose={() => {
+              layout.close(() => list.current?.clearSelection());
+            }}
+          />
+        ) : (
+          selection.items.length > 1 && <SelectionSummary count={selection.items.length} platform={platform} />
+        )}
+      </div>
       {overlay?.kind === "confirmDelete" && (
         <ConfirmDialog
           title={t("actions.confirmDelete.title", { count: overlay.items.length })}

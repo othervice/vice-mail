@@ -13,6 +13,13 @@ export interface ReadingLayout {
   listColumn: (open: boolean) => { id: string; className: string; inert?: boolean; "aria-hidden"?: true };
   /** Whether the pane (or the summary of a selection) is shown. */
   paneShown: (open: boolean) => boolean;
+  /**
+   * Stage 18 (task F): right of the list or below it, the pane's place stays while nothing is
+   * selected and shows a quiet note (`NoMessageSelected`) instead of a list across the window.
+   */
+  placeholderShown: (open: boolean) => boolean;
+  /** Stage 18 (decision 0054): the list selects its top message by itself (not in place of the list). */
+  autoSelectFirst: boolean;
   /** The list asked to open a message (Enter, double click). */
   onOpen: () => void;
   /**
@@ -31,7 +38,9 @@ export interface ReadingLayout {
  * list gets narrower and its rows two lines), below it (the list keeps its width), or in place
  * of the list. Stage 18: right of the list or below it, the border between them can be dragged
  * (`ListResizeHandle`); the list's size is a variable on the box that holds both, and the pane
- * keeps a minimum size, also when the window gets smaller. In place of the list a message only shows once it is opened, because the list
+ * keeps a minimum size, also when the window gets smaller. Task F: there the list keeps that size
+ * with nothing selected too (the pane's place shows a quiet note), and opening a folder shows
+ * its top message (decision 0054). In place of the list a message only shows once it is opened, because the list
  * selects a message as soon as it has the focus; Escape or the close button bring the list back
  * with its cursor and scroll position where they were. Meanwhile the list stays laid out but
  * invisible and inert (not `display: none`, which would lose the scroll position), and after an
@@ -72,7 +81,8 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
       if (replace && opened && open) {
         return { id: listId, className: cx(column, "invisible absolute inset-0 min-h-0 min-w-0"), inert: true, "aria-hidden": true };
       }
-      if (!open || replace) return { id: listId, className: cx(column, "min-h-0 min-w-0 flex-1") };
+      // Stage 18 (task F): beside or above the pane the list keeps its size, open or not.
+      if (replace) return { id: listId, className: cx(column, "min-h-0 min-w-0 flex-1") };
       // Stage 18: the dragged size, never less than the list's minimum, never so much that the
       // pane gets less than its own (the list gives way first when the window gets smaller).
       return {
@@ -90,6 +100,8 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
       };
     },
     paneShown: (open) => (replace ? opened && open : open),
+    placeholderShown: (open) => !replace && !open,
+    autoSelectFirst: !replace,
     onOpen: () => {
       if (replace) setOpened(true);
     },

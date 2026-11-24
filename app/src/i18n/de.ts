@@ -559,6 +559,11 @@ export const de: Translation = {
     },
   },
   reading: {
+    // Stage 18 (task F): the pane's place while no message is selected.
+    noneSelected: {
+      title: "Keine Mail ausgewählt",
+      body: "Wähle in der Liste eine Mail, um sie hier zu lesen.",
+    },
     region: "Nachricht",
     // Stufe 14 (Entscheidung 0034): Gmail-Labels unter dem Kopf einer Gmail-Mail.
     labels: {

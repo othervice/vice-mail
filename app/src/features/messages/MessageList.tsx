@@ -25,7 +25,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { MAX_ACTION_MESSAGES, type Account, type Mailbox, type MessageId, type MessageListItem, type ThreadView } from "../../services/ipc";
 import { MESSAGE_DRAG_TYPE } from "../../stores/drag";
 import { useLayoutStore } from "../../stores/layout";
-import { useListSelectAnswer, type ListSelectScope } from "../../stores/listSelect";
+import { scopeMatches, useListSelectAnswer, useListSelectStore, type ListSelectScope } from "../../stores/listSelect";
 import { isFirstSyncRunning } from "../accounts/selection";
 import type { RowMark } from "../comfort/RowMarks";
 import type { ShortcutPlatform } from "../actions/shortcuts";
@@ -102,6 +102,12 @@ export interface ListSelection {
   /** Messages loaded so far, and whether the folder has more pages. */
   loaded: number;
   hasMore: boolean;
+  /**
+   * Stage 18 (decision 0054): the selection is the top message the list chose by itself when the
+   * folder opened (`autoSelectFirst`), not the user. Until the user selects a row or works with
+   * the message, it is not marked read on opening.
+   */
+  auto?: boolean;
 }
 
 export const NO_SELECTION: ListSelection = { cursor: null, cursorIsChild: false, items: [], childIds: new Set(), keys: [], loaded: 0, hasMore: false };
@@ -141,6 +147,13 @@ interface MessageListProps {
   selectScope?: ListSelectScope | undefined;
   /** A message was selected by id: the view opens it (in place of the list, too). */
   onSelectedById?: (messageId: MessageId) => void;
+  /**
+   * Stage 18 (decision 0054): once the first rows are there and nothing is selected, the top
+   * message is selected by the list itself (`ListSelection.auto`), without the focus. Once per
+   * list: not again after the user cleared the selection, nor while a message asked for by id
+   * (a notification) is on its way to this list.
+   */
+  autoSelectFirst?: boolean;
 }
 
 /** DOM id of the option of a drawn row with an action (bundle, "Show all"). */
@@ -185,6 +198,8 @@ interface SelectionState {
    * instead of a message; absent while the cursor is on a message. Selection stays as it was.
    */
   action?: string | null;
+  /** Stage 18: the list selected the top message by itself; any choice of the user drops it. */
+  auto?: boolean;
 }
 
 const EMPTY_STATE: SelectionState = { cursor: null, selected: new Set(), anchor: null };
@@ -370,6 +385,7 @@ export function MessageList({
   source,
   selectScope,
   onSelectedById,
+  autoSelectFirst = false,
 }: MessageListProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -612,6 +628,7 @@ export function MessageList({
   const reportSelection = useEffectEvent((next: ListSelection) => {
     onSelectionChange?.(next);
   });
+  const autoSelected = state.auto === true && selection.keys.length === 1;
   useEffect(() => {
     reportSelection({
       cursor: cursorItem,
@@ -621,8 +638,9 @@ export function MessageList({
       keys: selection.keys,
       loaded: items.length,
       hasMore,
+      ...(autoSelected && { auto: true }),
     });
-  }, [cursorItem, cursorIsChild, selection, items.length, hasMore]);
+  }, [cursorItem, cursorIsChild, selection, items.length, hasMore, autoSelected]);
 
   const rowSize = twoLine ? metrics.twoLineRow : metrics.row;
   const count = rows.length + (hasMore ? 1 : 0);
@@ -769,6 +787,28 @@ export function MessageList({
   };
   useListSelectAnswer(selectScope, !query.isPending, !query.isFetching, selectById);
 
+  // Stage 18 (decision 0054): the top message, chosen by the list when the folder opens. Once:
+  // a choice of the user, an earlier one or a cleared selection keep it from coming back.
+  const autoDone = useRef(false);
+  const selectTop = useEffectEvent(() => {
+    if (!autoSelectFirst || autoDone.current) return;
+    if (state.cursor !== null || state.selected.size > 0) {
+      autoDone.current = true;
+      return;
+    }
+    // A message asked for by id (a notification) is on its way to this list: it decides.
+    const pending = useListSelectStore.getState().pending;
+    if (pending && selectScope && scopeMatches(selectScope, pending)) return;
+    const first = selectableRows[0] === undefined ? null : cursorAt(selectableRows[0]);
+    if (!first) return;
+    autoDone.current = true;
+    // A selection made in the same batch (a message asked for by id answered just now) wins.
+    setState((current) => (current.cursor !== null || current.selected.size > 0 ? current : { ...only(first), auto: true }));
+  });
+  useEffect(() => {
+    selectTop();
+  }, [selectableRows, autoSelectFirst]);
+
   // Stage 17: a message asked for in a conversation that is unfolding: selected once it is a row.
   const pendingIndex = pendingChild ? rowByKey.get(pendingChild.key) : undefined;
   const selectPending = useEffectEvent((index: number, id: MessageId) => {
@@ -838,6 +878,7 @@ export function MessageList({
       clearSelection: () => {
         // Focus first: focusing an unselected list selects the first visible message.
         scrollRef.current?.focus({ preventScroll: true });
+        autoDone.current = true;
         setState(EMPTY_STATE);
       },
       advancePast: (ids) => {

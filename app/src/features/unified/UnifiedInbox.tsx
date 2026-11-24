@@ -11,6 +11,8 @@ import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle }
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { useUnifiedInboxSource } from "../comfort/listSources";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
+import { NoMessageSelected } from "../reading/NoMessageSelected";
+import { usePreviewing } from "../reading/usePreviewing";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
@@ -70,6 +72,8 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   // Stage 8: the reading pane right, below or in place of the list.
   const layout = useReadingLayout(list);
   const open = Boolean(single && account);
+  // Stage 18 (decision 0054): the top message the list opened by itself is not read yet.
+  const preview = usePreviewing(selection);
 
   if (query.isError && !query.data) {
     return (
@@ -115,28 +119,35 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           }}
           onOpen={(id: MessageId) => {
             layout.onOpen();
+            preview.engage();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
+          // Stage 18 (task F): opening the unified inbox shows its top message.
+          autoSelectFirst={layout.autoSelectFirst}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}
-      <ListResizeHandle layout={layout} open={Boolean(single && account && layout.paneShown(open))} />
+      <ListResizeHandle layout={layout} />
+      {layout.placeholderShown(open) && <NoMessageSelected />}
       {single && account && layout.paneShown(open) && (
-        <MixedReading
-          // Stage 17: a conversation row keeps its pane while a newer message becomes the row's.
-          key={rowKey || single.id}
-          account={account}
-          item={single}
-          focusRequest={focusRequest}
-          platform={platform}
-          list={list}
-          layout={layout}
-          conversation={conversations && !selection.childIds.has(single.id)}
-          ident={rowKey}
-          onShowMessage={(messageId) => {
-            list.current?.showInConversation(rowKey, messageId);
-          }}
-        />
+        <div className="contents" {...preview.paneProps}>
+          <MixedReading
+            markRead={!preview.previewing}
+            // Stage 17: a conversation row keeps its pane while a newer message becomes the row's.
+            key={rowKey || single.id}
+            account={account}
+            item={single}
+            focusRequest={focusRequest}
+            platform={platform}
+            list={list}
+            layout={layout}
+            conversation={conversations && !selection.childIds.has(single.id)}
+            ident={rowKey}
+            onShowMessage={(messageId) => {
+              list.current?.showInConversation(rowKey, messageId);
+            }}
+          />
+        </div>
       )}
     </div>
   );

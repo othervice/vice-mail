@@ -10,7 +10,7 @@ import {
   type AiFakeOptions,
 } from "./support/ai";
 import { makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
-import { renderApp } from "./support/render";
+import { closeOpenedMessage, renderApp } from "./support/render";
 import { optionName } from "./support/names";
 
 const ADA = makeAccount();
@@ -163,6 +163,8 @@ describe("open-reply hints", () => {
       { fail: (cmd) => (cmd === "dismiss_open_reply_hint" ? { code: "database", message: "db", detail: null } : undefined) },
     );
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
+    // Stage 18 (task F): the inbox opened with its top message; the hints show without a thread.
+    await closeOpenedMessage(user);
     const list = await within(panel).findByRole("region", { name: "Maybe still open" });
     const hint = within(list).getByTestId("open-reply-hint");
     expect(hint.textContent).toContain("Maybe still open: bob@example.org asked you something 1 day ago.");
@@ -178,6 +180,8 @@ describe("command palette", () => {
   it("offers the AI commands while AI is usable and runs them in the panel", async () => {
     const { core, user } = setup({ enabled: true, profiles: [LOCAL], functions: ALL_LOCAL });
     await screen.findByRole("complementary", { name: "AI assistant" });
+    // Stage 18 (task F): without the top message the inbox opened with, the command waits.
+    await closeOpenedMessage(user);
     await user.keyboard("{Meta>}k{/Meta}");
     let palette = await screen.findByRole("dialog", { name: "Command palette" });
     await user.keyboard("Summarise conv");

@@ -564,6 +564,11 @@ export const en = {
     },
   },
   reading: {
+    // Stage 18 (task F): the pane's place while no message is selected.
+    noneSelected: {
+      title: "No message selected",
+      body: "Choose a message in the list to read it here.",
+    },
     region: "Message",
     // Stage 14 (decision 0034): Gmail labels under the head of a Gmail message.
     labels: {

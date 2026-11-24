@@ -55,10 +55,7 @@ const listColumn = (list: HTMLElement) => list.parentElement as HTMLElement;
 describe("the border between list and reading pane", () => {
   it("is a vertical splitter with the list's width while the pane is on the right", async () => {
     const { core } = setup();
-    // Nothing open yet: no pane, no border.
-    await screen.findByRole("listbox", { name: /^Messages in/ });
-    expect(screen.queryByRole("separator", { name: "List width" })).toBeNull();
-
+    // Stage 18 (task F): the border is there as soon as the list is, open message or not.
     const list = await openFirst();
     const splitter = screen.getByRole("separator", { name: "List width" });
     expect(splitter.getAttribute("aria-orientation")).toBe("vertical");

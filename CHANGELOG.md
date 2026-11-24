@@ -7,7 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The border between the message list and the reading pane can be dragged, like the sidebar's
+  edge: the list's width with the pane on the right, its height with the pane below (keyboard,
+  screen reader and double click to reset as there). The size is kept with the window's layout;
+  a smaller window keeps the pane readable and the stored size.
+- New folders from the app: "New folder…" on an account and "New subfolder…" on a folder (menus
+  and command palette) create the folder on the server too. "Reload folders from server" on an
+  account shows folders another program created without waiting for the next sync.
+
 ### Changed
+
+- Opening a folder or view with the reading pane on the right or below shows its top message at
+  once. It counts as read only once you choose it yourself or work with it; with nothing
+  selected, the list keeps its width and the pane says so quietly, instead of a list across the
+  window.
+- The quick actions of a hovered row no longer cover the "n replies" toggle: they take the place
+  of the time at the end of the row, and a click on the toggle unfolds the conversation.
 
 - New colours: the light mode is cool white and light blue-grey with blue, the dark mode uses
   neutral, slightly bluish greys in the manner of GitHub's dark theme instead of warm browns.

@@ -285,6 +285,12 @@ function installPageHelpers() {
         if (!row) return { failure: "the row is not rendered" };
         row.scrollIntoView({ block: "nearest" });
         await new Promise((resolve) => setTimeout(resolve, 30));
+        // Stage 18 (task F): a folder shows its top message by itself. If that is this message,
+        // close it first, so the click opens it anew and the time is measured as for any other.
+        if (row.getAttribute("aria-selected") === "true" && this.paneEl()) {
+          this.paneEl().querySelector('button[aria-label="Close message"]')?.click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         const old = this.paneEl();
         return new Promise((resolve) => {
           let sawLoading = false;
