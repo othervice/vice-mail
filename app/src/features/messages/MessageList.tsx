@@ -743,11 +743,22 @@ export function MessageList({
     virtualizer.scrollToIndex(index, { align: "auto" });
   };
 
-  /** Selects one message by id, like a click, and scrolls it into view; false if it is no row. */
+  /**
+   * Selects one message by id, like a click, and scrolls it into view; false if it is no row. In a
+   * tree the message itself is meant (a notification, an AI source): a conversation with replies
+   * whose row stands for it unfolds, and the message's own row is selected (stage 17).
+   */
   const selectById = (messageId: MessageId): boolean => {
-    // A conversation's own row first, else a message of an unfolded conversation.
     let index = rows.findIndex((row) => row.kind === "message" && row.item.id === messageId);
-    if (index < 0) index = rows.findIndex((row) => row.kind === "child" && row.item.id === messageId);
+    const row = index >= 0 ? rows[index] : undefined;
+    const ident = row?.kind === "message" ? expandable(row) : null;
+    if (ident !== null) {
+      setUnfolded(ident, true);
+      setPendingChild({ key: childKey(ident, messageId), id: messageId });
+      virtualizer.scrollToIndex(index, { align: "auto" });
+      return true;
+    }
+    if (index < 0) index = rows.findIndex((entry) => entry.kind === "child" && entry.item.id === messageId);
     if (index < 0) return false;
     selectRow(index);
     onSelectedById?.(messageId);

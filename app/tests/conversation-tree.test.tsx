@@ -3,12 +3,13 @@
 // one level deeper, oldest first, from every folder. The reading pane shows one message. A tree
 // for screen readers (level, place, set size, expanded); → ← ↑ ↓ like the sidebar's trees; actions
 // on the conversation row act on the conversation, on a message row on that message alone.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { childKey, conversationIdent, treePlaces, withChildren } from "../src/features/threads/tree";
 import type { ListRow } from "../src/features/messages/rows";
 import type { MessageListItem, ThreadView } from "../src/services/ipc";
+import { selectInList } from "../src/stores/listSelect";
 import { ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { optionName } from "./support/names";
@@ -346,6 +347,29 @@ describe("unfolding a conversation", () => {
     expect(rows[0]?.getAttribute("aria-selected")).toBe("true");
     expect(within(screen.getByRole("region", { name: "Message" })).getByTestId("reading-from").textContent).toContain(ANNA.email);
     expect(core.callsOf("get_message").map((call) => call["messageId"])).not.toContain(NEWER.id);
+  });
+});
+
+describe("a message asked for by id (a notification, an AI source)", () => {
+  it("unfolds its conversation and selects the message itself", async () => {
+    const { core } = setup();
+    const { list, conversation, children } = await inbox();
+    let found = false;
+    act(() => {
+      found = selectInList(ANSWER.id);
+    });
+    expect(found).toBe(true);
+    await waitFor(() => {
+      expect(children()).toHaveLength(3);
+    });
+    await waitFor(() => {
+      expect(cursorName(list)).toMatch(/^Bob, Montag passt/);
+    });
+    expect(conversation().getAttribute("aria-expanded")).toBe("true");
+    expect(children()[2]?.getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto" });
+    });
   });
 });
 
