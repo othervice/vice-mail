@@ -11,6 +11,7 @@ import { OutboxView } from "../features/composer/OutboxView";
 import { SendNotices } from "../features/composer/SendNotices";
 import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
+import { ContactsView } from "../features/contacts/ContactsView";
 import { FolderEditHost } from "../features/mailboxes/FolderEdit";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { EditViewsHost } from "../features/layout/EditViewsDialog";
@@ -95,6 +96,9 @@ export function AppShell({ eventsError }: AppShellProps) {
           <ActivityView />
         ) : view.kind === "outbox" ? (
           <OutboxView />
+        ) : view.kind === "mail" && view.mailView === "contacts" ? (
+          // Stage 17 (decision 0050): the contacts, across every account.
+          <ContactsView />
         ) : (
           <MailView view={view} />
         )}

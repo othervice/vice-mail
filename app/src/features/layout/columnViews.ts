@@ -18,6 +18,8 @@ export const COLUMN_VIEW_IDS = [
   "flagged",
   "pinned",
   "savedViews",
+  // Stage 17 (decision 0050): the contacts, after the saved searches.
+  "contacts",
 ] as const satisfies readonly ShownMailViewId[];
 
 export type ColumnViewId = (typeof COLUMN_VIEW_IDS)[number];

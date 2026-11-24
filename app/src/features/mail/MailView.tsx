@@ -600,8 +600,10 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
     case "readingList":
     case "flagged":
       return { kind: "mark", mark: mailView };
+    // Stage 17 (decision 0050): the contacts are rendered by `AppShell` as a view of their own.
     case "pinnedAttachments":
     case "savedViews":
+    case "contacts":
       return null;
   }
 }

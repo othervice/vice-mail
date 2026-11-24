@@ -813,6 +813,8 @@ export const APP_COMMAND_IDS = [
   "goPinnedAttachments",
   // SPEC "Markiert": flagged mail of every folder; no shortcut of its own either.
   "goFlagged",
+  // Stage 17 (decision 0050): the contacts; no shortcut of its own.
+  "goContacts",
   // The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): open or fold it.
   "toggleSidebar",
 ] as const;
@@ -832,6 +834,7 @@ export const VIEW_COMMANDS = {
   goReadingList: "readingList",
   goPinnedAttachments: "pinnedAttachments",
   goFlagged: "flagged",
+  goContacts: "contacts",
 } as const satisfies Partial<Record<AppCommandId, MailViewId>>;
 
 export type ViewCommandId = keyof typeof VIEW_COMMANDS;
@@ -880,6 +883,7 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   goReadingList: viewCommand("goReadingList", 9),
   goPinnedAttachments: { id: "goPinnedAttachments", icon: MAIL_VIEW_ICONS.pinnedAttachments, shortcuts: both() },
   goFlagged: { id: "goFlagged", icon: MAIL_VIEW_ICONS.flagged, shortcuts: both() },
+  goContacts: { id: "goContacts", icon: MAIL_VIEW_ICONS.contacts, shortcuts: both() },
   // Cmd/Ctrl+Shift+S ("sidebar"): with a modifier, so it also works from text fields and is no
   // type-ahead letter in the trees; the system claims neither.
   toggleSidebar: { id: "toggleSidebar", icon: PanelLeft, shortcuts: both({ key: "S", shift: true, mod: true }) },

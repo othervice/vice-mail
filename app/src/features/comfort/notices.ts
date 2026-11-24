@@ -1,7 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { comfortIpc, parityIpc, type BlockedSender } from "../../services/ipc";
+import { comfortIpc, contactsIpc, parityIpc, type BlockedSender } from "../../services/ipc";
 import { blockedSendersQueryKey } from "../blocked/queries";
+import { refreshContacts } from "../contacts/queries";
 import type { ComfortNotice } from "../../stores/notices";
 import { refreshComfortLists } from "./queries";
 import { formatSnoozeTime } from "./snooze";
@@ -57,6 +58,30 @@ export function comfortNoticeText(t: TFunction, language: string, notice: Comfor
         },
       };
     }
+    // Stage 17 (decision 0050): "Mark as spam" on a contact.
+    case "contactSpam": {
+      const { email, undo } = notice;
+      return {
+        text:
+          notice.moved > 0
+            ? t("contacts.view.notices.spamMoved", { name: notice.name, count: notice.moved })
+            : t("contacts.view.notices.spam", { name: notice.name }),
+        detail: notice.kept > 0 ? t("contacts.view.notices.kept", { count: notice.kept }) : null,
+        error: false,
+        undo: (queryClient) => {
+          void contactsIpc
+            .undoContactSpam(email, undo)
+            .catch(() => undefined)
+            .finally(() => {
+              refreshContacts(queryClient);
+              void queryClient.invalidateQueries({ queryKey: blockedSendersQueryKey });
+              refreshComfortLists(queryClient, null);
+            });
+        },
+      };
+    }
+    case "contactNotSpam":
+      return { text: t("contacts.view.notices.notSpam", { name: notice.name }), detail: null, error: false, undo: null };
     case "failed":
       if (notice.what === "readingList" || notice.what === "block") {
         return {

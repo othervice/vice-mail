@@ -111,6 +111,8 @@ const READING_COMMANDS = new Set([
   "get_first_start",
   // Stage 16: the blocked senders, for the quiet note on a blocked sender's message (read-only).
   "list_blocked_senders",
+  // Stage 17 (decision 0050): which senders have a contact picture (read-only, local).
+  "list_contact_pictures",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);

@@ -24,73 +24,81 @@ const MERGED: ContactEntry = {
   ],
 };
 
+/** Settings → Contacts: the link to the view and the duplicate suggestions. */
 async function openContacts(user: ReturnType<typeof renderApp>["user"]) {
   await user.click(await screen.findByRole("button", { name: "Settings" }));
   await user.click(screen.getByRole("tab", { name: "Contacts" }));
   return screen.getByRole("tabpanel", { name: "Contacts" });
 }
 
+/** Stage 17 (decision 0050): the contacts view, from the rail. */
+async function openView(user: ReturnType<typeof renderApp>["user"]) {
+  await user.click(await screen.findByRole("button", { name: "Contacts" }));
+  return screen.findByTestId("contacts-view");
+}
+
 const names = (panel: HTMLElement) => within(panel).getAllByTestId("contact-name").map((n) => n.textContent);
 
-describe("Settings, contacts: the directory", () => {
-  it("lists the contacts in the core's ranking with their usage", async () => {
+describe("Contacts view: the directory", () => {
+  it("lists the contacts in the core's ranking with the date of the last mail; the first is open", async () => {
     mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN, NONAME] } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    expect(names(panel)).toEqual(["Grace Hopper", "Alan Turing", "(no name)"]);
-    const grace = within(panel).getAllByTestId("contact-row")[0];
+    const view = await openView(user);
+    const list = await within(view).findByRole("listbox", { name: "Contacts" });
+    expect(names(list)).toEqual(["Grace Hopper", "Alan Turing", "(no name)"]);
+    const grace = within(list).getAllByTestId("contact-row")[0];
     expect(grace?.textContent).toContain("grace@example.org");
-    expect(within(grace ?? panel).getByTestId("contact-usage").textContent).toMatch(/^12 sent · 30 received · last Nov 20, 2026$/);
-    expect(panel.textContent).toContain("no-reply");
+    expect(within(grace ?? list).getByTestId("contact-last-used").textContent).toBe("Nov 20");
+    const detail = within(view).getByTestId("contact-detail");
+    expect(within(detail).getByTestId("contact-detail-name").textContent).toBe("Grace Hopper");
+    expect(within(detail).getByTestId("contact-usage").textContent).toMatch(/^12 sent · 30 received · last Nov 20, 2026$/);
   });
 
-  it("says where contacts come from when there are none yet", async () => {
+  it("says where contacts come from when there are none yet, without examples", async () => {
     mockCore({ accounts: [makeAccount()] });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    expect((await within(panel).findByTestId("contacts-empty")).textContent).toContain(
-      "Contacts appear here once you send or receive mail.",
-    );
-    expect(within(panel).queryByTestId("contact-duplicates")).toBeNull();
+    const view = await openView(user);
+    expect((await within(view).findByTestId("contacts-empty")).textContent).toContain("People appear here once you write to them");
+    expect(within(view).getByText("No contacts yet", { selector: "h2" })).toBeTruthy();
+    expect(within(view).queryByTestId("contact-row")).toBeNull();
   });
 
-  it("searches the directory once typing pauses", async () => {
+  it("searches name, address and domain as the user types", async () => {
     const core = mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN] } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    await user.type(within(panel).getByLabelText("Search contacts"), "alan");
+    const view = await openView(user);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    await user.type(within(view).getByLabelText("Search contacts"), "alan");
     await waitFor(() => {
-      expect(names(panel)).toEqual(["Alan Turing"]);
+      expect(names(view)).toEqual(["Alan Turing"]);
     });
     expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: "alan", cursor: null, limit: 50, filter: "people" });
-    await user.clear(within(panel).getByLabelText("Search contacts"));
-    await user.type(within(panel).getByLabelText("Search contacts"), "nobody");
-    expect((await within(panel).findByTestId("contacts-no-match")).textContent).toBe("No contact matches “nobody”.");
+    await user.clear(within(view).getByLabelText("Search contacts"));
+    await user.type(within(view).getByLabelText("Search contacts"), "nobody");
+    expect((await within(view).findByTestId("contacts-no-match")).textContent).toBe("No contact matches “nobody”.");
   });
 
   it("loads the next page with the core's cursor", async () => {
     const many = Array.from({ length: 55 }, (_, i) => makeContact({ email: `person${String(i)}@example.org`, name: `Person ${String(i)}` }));
     const core = mockCore({ accounts: [makeAccount()], contacts: { contacts: many } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    expect(within(panel).getAllByTestId("contact-row")).toHaveLength(50);
-    await user.click(within(panel).getByRole("button", { name: "Show more contacts" }));
+    const view = await openView(user);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    expect(within(view).getAllByTestId("contact-row")).toHaveLength(50);
+    await user.click(within(view).getByRole("button", { name: "Show more contacts" }));
     await waitFor(() => {
-      expect(within(panel).getAllByTestId("contact-row")).toHaveLength(55);
+      expect(within(view).getAllByTestId("contact-row")).toHaveLength(55);
     });
     expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: null, cursor: "50", limit: 50, filter: "people" });
-    expect(within(panel).queryByRole("button", { name: "Show more contacts" })).toBeNull();
+    expect(within(view).queryByRole("button", { name: "Show more contacts" })).toBeNull();
   });
 
   it("names the rename button with its visible text first (WCAG 2.5.3, label in name)", async () => {
     mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN] } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    const button = within(panel).getByRole("button", { name: "Edit name of grace@example.org" });
+    const view = await openView(user);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    const button = within(view).getByRole("button", { name: "Edit name of grace@example.org" });
     const visible = button.textContent?.trim() ?? "";
     expect(visible).toBe("Edit name");
     expect(button.getAttribute("aria-label")).toContain(visible);
@@ -99,26 +107,25 @@ describe("Settings, contacts: the directory", () => {
   it("changes a name and goes back to the name seen in mail", async () => {
     const core = mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE, ALAN] } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
-    const field = within(panel).getByLabelText("Name");
+    const view = await openView(user);
+    const list = await within(view).findByRole("listbox", { name: "Contacts" });
+    await user.click(within(view).getByRole("button", { name: "Edit name of grace@example.org" }));
+    const field = within(view).getByLabelText("Name");
     expect((field as HTMLInputElement).value).toBe("Grace Hopper");
     await user.clear(field);
     await user.type(field, "Amazing Grace{Enter}");
     await waitFor(() => {
-      expect(names(panel)[0]).toBe("Amazing Grace");
+      expect(names(list)[0]).toBe("Amazing Grace");
     });
     expect(core.callsOf("set_contact_name")).toEqual([{ email: "grace@example.org", name: "Amazing Grace" }]);
-    expect(within(panel).getAllByTestId("contact-row")[0]?.textContent).toContain("Your name");
+    expect(within(view).getByTestId("contact-detail").textContent).toContain("You gave this name.");
 
-    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
-    await user.click(within(panel).getByRole("button", { name: "Use the name from mail" }));
+    await user.click(within(view).getByRole("button", { name: "Edit name of grace@example.org" }));
+    await user.click(within(view).getByRole("button", { name: "Use the name from mail" }));
     await waitFor(() => {
-      expect(names(panel)[0]).toBe("Grace Hopper");
+      expect(names(list)[0]).toBe("Grace Hopper");
     });
     expect(core.callsOf("set_contact_name").at(-1)).toEqual({ email: "grace@example.org", name: null });
-    expect(within(panel).queryByTestId("contact-own-name")).toBeNull();
   });
 
   it("cancels editing a name with Escape and shows a refused name in place", async () => {
@@ -128,16 +135,15 @@ describe("Settings, contacts: the directory", () => {
       failures: { set_contact_name: ipcError("invalid_argument", "name too long") },
     });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
+    const view = await openView(user);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    await user.click(within(view).getByRole("button", { name: "Edit name of grace@example.org" }));
     await user.keyboard("{Escape}");
-    expect(within(panel).queryByLabelText("Name")).toBeNull();
-    expect(screen.getByRole("tabpanel", { name: "Contacts" })).toBeTruthy();
+    expect(within(view).queryByLabelText("Name")).toBeNull();
 
-    await user.click(within(panel).getByRole("button", { name: "Edit name of grace@example.org" }));
-    await user.click(within(panel).getByRole("button", { name: "Save name" }));
-    const error = await within(panel).findByTestId("contact-name-error");
+    await user.click(within(view).getByRole("button", { name: "Edit name of grace@example.org" }));
+    await user.click(within(view).getByRole("button", { name: "Save name" }));
+    const error = await within(view).findByTestId("contact-name-error");
     expect(error.dataset["errorCode"]).toBe("invalid_argument");
     expect(error.textContent).toContain("The name could not be changed.");
     expect(core.contacts.contacts[0]?.name).toBe("Grace Hopper");
@@ -146,20 +152,22 @@ describe("Settings, contacts: the directory", () => {
   it("separates an address of a merged contact", async () => {
     const core = mockCore({ accounts: [makeAccount()], contacts: { contacts: [MERGED, GRACE] } });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    await within(panel).findByRole("list", { name: "Contacts" });
-    const others = within(panel).getByRole("list", { name: "Other addresses of Ada" });
-    expect(within(others).getAllByTestId("contact-address").map((a) => a.textContent)).toEqual(["ada@old.example.orgSeparate"]);
-    await user.click(within(panel).getByRole("button", { name: "Separate ada@old.example.org into a contact of its own" }));
+    const view = await openView(user);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    const addresses = within(view).getByRole("list", { name: "Addresses of Ada" });
+    expect(within(addresses).getAllByTestId("contact-address")).toHaveLength(2);
+    await user.click(within(view).getByRole("button", { name: "Separate ada@old.example.org into a contact of its own" }));
     await waitFor(() => {
-      expect(within(panel).getAllByTestId("contact-email").map((e) => e.textContent)).toEqual([
+      expect(within(view).getAllByTestId("contact-email").map((e) => e.textContent)).toEqual([
         "ada@example.org",
         "ada@old.example.org",
         "grace@example.org",
       ]);
     });
     expect(core.callsOf("separate_contact")).toEqual([{ email: "ada@old.example.org" }]);
-    expect(within(panel).queryByRole("list", { name: "Other addresses of Ada" })).toBeNull();
+    await waitFor(() => {
+      expect(within(within(view).getByRole("list", { name: "Addresses of Ada" })).getAllByTestId("contact-address")).toHaveLength(1);
+    });
   });
 
   it("shows a failed load with a way to try again", async () => {
@@ -170,13 +178,24 @@ describe("Settings, contacts: the directory", () => {
       fail: (cmd) => (cmd === "list_contacts" && failing ? ipcError("internal", "database locked") : undefined),
     });
     const { user } = renderApp();
-    const panel = await openContacts(user);
-    const error = await within(panel).findByTestId("contacts-error");
+    const view = await openView(user);
+    const error = await within(view).findByTestId("contacts-error");
     expect(error.textContent).toContain("The contacts could not be loaded.");
     failing = false;
     await user.click(within(error).getByRole("button", { name: "Try again" }));
-    await within(panel).findByRole("list", { name: "Contacts" });
-    expect(names(panel)).toEqual(["Grace Hopper"]);
+    await within(view).findByRole("listbox", { name: "Contacts" });
+    expect(names(view)).toEqual(["Grace Hopper"]);
+  });
+});
+
+describe("Settings, contacts", () => {
+  it("links to the contacts view", async () => {
+    mockCore({ accounts: [makeAccount()], contacts: { contacts: [GRACE] } });
+    const { user } = renderApp();
+    const panel = await openContacts(user);
+    expect(panel.textContent).toContain("Built on this device from every address");
+    await user.click(within(panel).getByRole("button", { name: "Open contacts" }));
+    expect(await screen.findByTestId("contacts-view")).toBeTruthy();
   });
 });
 
@@ -222,13 +241,10 @@ describe("Settings, contacts: duplicates", () => {
     expect(core.callsOf("merge_contacts")).toEqual([
       { request: { keep: "linus+lists@example.org", merge: ["linus@example.org"], confirmed: true } },
     ]);
-    await waitFor(() => {
-      expect(within(panel).getAllByTestId("contact-email").map((e) => e.textContent)).toEqual([
-        "linus+lists@example.org",
-        "grace@example.org",
-      ]);
-    });
-    expect(within(panel).getByRole("list", { name: "Other addresses of Linus" }).textContent).toContain("linus@example.org");
+    expect(core.contacts.contacts.map((c) => c.addresses.map((a) => a.email))).toEqual([
+      ["linus+lists@example.org", "linus@example.org"],
+      ["grace@example.org"],
+    ]);
   });
 
   it("shows the core's refusal in place and changes nothing", async () => {
@@ -269,7 +285,7 @@ describe("Settings, contacts: duplicates", () => {
     const card = await within(panel).findByTestId("contact-duplicate");
     await user.click(within(card).getByRole("button", { name: "Use “K. Lee”" }));
     await waitFor(() => {
-      expect(names(panel)).toEqual(["K. Lee"]);
+      expect(core.contacts.contacts[0]?.name).toBe("K. Lee");
     });
     expect(core.callsOf("set_contact_name")).toEqual([{ email: "kim@example.org", name: "K. Lee" }]);
     // Leaving it as it is hides the question on this device.
@@ -293,6 +309,6 @@ describe("Settings, contacts: duplicates", () => {
     const card = await within(panel).findByTestId("contact-duplicate");
     expect(card.textContent).toContain("Eine Adresse ist die andere mit einem „+“-Zusatz.");
     expect(within(card).getByRole("button", { name: "Zusammenführen …" })).toBeTruthy();
-    expect(within(panel).getByLabelText("Kontakte durchsuchen")).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Kontakte öffnen" })).toBeTruthy();
   });
 });

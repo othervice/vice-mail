@@ -201,17 +201,23 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
       },
     });
     const { user } = renderApp();
+    // Stage 17 (decision 0050): the directory is a view of its own; Settings keeps the suggestions.
     act(() => {
-      useUiStore.getState().showSettings("contacts");
+      useUiStore.getState().showMailView("contacts");
     });
     await screen.findByTestId("contacts-list");
-    await screen.findByTestId("contact-duplicates");
+    await screen.findByTestId("contact-detail");
     await waitFor(() => {
       expect(document.documentElement.dataset["theme"]).toBe(theme);
     });
     expect(await seriousFindings()).toEqual([]);
-    await user.click(screen.getByRole("button", { name: "Edit name of linus@example.org" }));
+    await user.click(screen.getByRole("button", { name: "Edit name of ada@example.org" }));
     await screen.findByLabelText("Name");
+    expect(await seriousFindings()).toEqual([]);
+    act(() => {
+      useUiStore.getState().showSettings("contacts");
+    });
+    await screen.findByTestId("contact-duplicates");
     expect(await seriousFindings()).toEqual([]);
     await user.click(screen.getAllByRole("button", { name: "Merge…" })[0] ?? document.body);
     await screen.findByRole("alertdialog", { name: "Merge these contacts?" });

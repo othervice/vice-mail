@@ -23,6 +23,8 @@ export const MAIL_VIEW_IDS = [
   "trash",
   "folders",
   "savedViews",
+  // Stage 17 (decision 0050): the contacts, a view of their own.
+  "contacts",
 ] as const;
 
 export type MailViewId = (typeof MAIL_VIEW_IDS)[number];

@@ -100,3 +100,60 @@ export function useSeparateContact() {
     },
   });
 }
+
+// ---- Stage 17 (decision 0050): the contacts view ----
+
+/** Recent mail shown with a contact. */
+export const CONTACT_MESSAGES_LIMIT = 8;
+
+export const contactQueryKey = (email: string) => ["contact", email] as const;
+export const contactMessagesQueryKey = (email: string) => ["contact", email, "messages"] as const;
+
+/** One contact by any of its addresses (the detail pane). */
+export function useContact(email: string | null) {
+  return useQuery({
+    queryKey: contactQueryKey(email ?? ""),
+    queryFn: () => contactsIpc.getContact(email ?? ""),
+    enabled: email !== null,
+  });
+}
+
+/** The newest mail from and to a contact. */
+export function useContactMessages(email: string | null) {
+  return useQuery({
+    queryKey: contactMessagesQueryKey(email ?? ""),
+    queryFn: () => contactsIpc.listContactMessages(email ?? "", CONTACT_MESSAGES_LIMIT),
+    enabled: email !== null,
+  });
+}
+
+export function useSetContactNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, note }: { email: string; note: string | null }) => contactsIpc.setContactNote(email, note),
+    onSuccess: () => {
+      refreshContacts(queryClient);
+    },
+  });
+}
+
+export function useSetContactPicture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, token, crop }: { email: string; token: string; crop: { x: number; y: number; size: number } }) =>
+      contactsIpc.setContactPicture(email, token, crop),
+    onSuccess: () => {
+      refreshContacts(queryClient);
+    },
+  });
+}
+
+export function useRemoveContactPicture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => contactsIpc.removeContactPicture(email),
+    onSuccess: () => {
+      refreshContacts(queryClient);
+    },
+  });
+}

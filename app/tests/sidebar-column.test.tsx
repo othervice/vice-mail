@@ -111,6 +111,8 @@ describe("accounts-and-folders column", () => {
       "Flagged",
       "Pinned",
       "Saved views",
+      // Stage 17 (decision 0050).
+      "Contacts",
     ]);
     // Each account is the root of its own tree, named with address and unread total.
     const club = await within(nav).findByRole("tree", { name: "Folders of Club" });
@@ -228,7 +230,7 @@ describe("accounts-and-folders column", () => {
       label.focus();
     });
     await user.keyboard("{ArrowRight}");
-    expect(within(views).getAllByRole("treeitem")).toHaveLength(8);
+    expect(within(views).getAllByRole("treeitem")).toHaveLength(9);
     await user.keyboard("{ArrowDown}");
     expect(document.activeElement?.textContent).toBe("Later");
     await user.keyboard("{ArrowLeft}{ArrowLeft}");

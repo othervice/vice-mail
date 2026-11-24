@@ -8,6 +8,7 @@ import type {
   MessageId,
   OperationInfo,
   RuleSkipReason,
+  SpamUndo,
 } from "../services/ipc";
 
 /** What an undo notice can take back: the batches of one user action (several if it was split). */
@@ -63,6 +64,12 @@ export type ComfortNotice =
   /** Stage 16: the reading list, and senders blocked by the user (undo unblocks them). */
   | { type: "readingListAdded" | "readingListRemoved"; count: number }
   | { type: "sendersBlocked"; addresses: readonly string[] }
+  /**
+   * Stage 17 (decision 0050): a contact marked as spam: `moved` messages went to junk, `kept`
+   * stayed (read-only accounts). Undo unblocks the addresses and moves the mail back.
+   */
+  | { type: "contactSpam"; email: string; name: string; undo: SpamUndo; moved: number; kept: number }
+  | { type: "contactNotSpam"; name: string }
   | { type: "ruleSkipped"; ruleName: string; reason: RuleSkipReason; count: number };
 
 export interface Notice {

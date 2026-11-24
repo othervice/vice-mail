@@ -1,6 +1,7 @@
 import {
   Archive,
   BookOpen,
+  BookUser,
   Bookmark,
   Clock,
   FilePen,
@@ -30,4 +31,6 @@ export const MAIL_VIEW_ICONS: Record<MailViewId, LucideIcon> = {
   trash: Trash,
   folders: Folder,
   savedViews: Bookmark,
+  // Stage 17 (decision 0050).
+  contacts: BookUser,
 };

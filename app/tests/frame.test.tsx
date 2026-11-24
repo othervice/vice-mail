@@ -40,6 +40,8 @@ describe("app frame without an account", () => {
       "Pinned",
       // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent.
       "Saved views",
+      // Stage 17 (decision 0050).
+      "Contacts",
       "Sent",
       "Drafts",
       "Archive",

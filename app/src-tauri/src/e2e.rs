@@ -342,13 +342,32 @@ pub fn e2e_opened() -> Vec<String> {
     OPENER.opened()
 }
 
-/// Stage 17: records `paths` as dropped on the window, as the window's `DragDrop` event does
-/// for a real drop (WebDriver cannot drag files from the Finder). The app's commands then take
-/// them like any drop (`drops.rs`).
+/// Stage 17: a drop of `paths` on the calling window, as the system makes it (WebDriver cannot
+/// drag files from the Finder): recorded like the window's `DragDrop` event records it, and
+/// announced to the page as Tauri announces a drop (`tauri://drag-drop` to this webview). The
+/// app's commands then take the paths like any drop (`drops.rs`).
 #[tauri::command]
-pub fn e2e_drop_files(drops: tauri::State<'_, crate::drops::DropRegistry>, paths: Vec<String>) {
+pub fn e2e_drop_files(
+    window: WebviewWindow,
+    drops: tauri::State<'_, crate::drops::DropRegistry>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    use tauri::{Emitter, EventTarget};
     let paths: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
     drops.record(&paths);
+    let label = window.label().to_owned();
+    window
+        .emit_filter(
+            "tauri://drag-drop",
+            serde_json::json!({ "paths": paths, "position": { "x": 0.0, "y": 0.0 } }),
+            |target| match target {
+                EventTarget::Webview { label: l } | EventTarget::WebviewWindow { label: l } => {
+                    *l == label
+                }
+                _ => false,
+            },
+        )
+        .map_err(|err| err.to_string())
 }
 
 /// Every command name that reached the invoke handler since the app started, with its count.

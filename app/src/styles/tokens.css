@@ -173,6 +173,11 @@
   /* Avatars: 32 px in rows and the rail, 16 px in the sender chips of bundles. */
   --ui-avatar: 2rem;
   --ui-avatar-mini: 1rem;
+  /* Stage 17 (decision 0050): the contact's page. Its list is 22 rem wide; the picture there is
+     96 px, the cropper's square 18 rem. */
+  --ui-avatar-large: 6rem;
+  --ui-contacts-list-width: 22rem;
+  --ui-cropper-size: 18rem;
   --ui-dot: 0.5rem;
   /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
      width rows get more lines: three comfortable (sender and time, subject, preview), two compact
