@@ -1,4 +1,4 @@
-# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails
+# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen
 
 **Ziel:** Die Grenze zwischen Liste und Lesebereich lässt sich ziehen wie die zur linken Spalte.
 Die Schnellaktionen beim Überfahren einer Zeile verdecken nie mehr das Aufklappen eines Gesprächs.
@@ -55,6 +55,20 @@ Knöpfen „Lesen“ und „Löschen“.
   alle Fenster (Navigation, WebView2-Schutz); das Fenster entsteht erst bei Bedarf und wird danach
   wieder geschlossen. Entscheidung festhalten.
 
+### D — Ordner anlegen, auch auf dem Server
+
+Wunsch vom 24.11.2026 (später am Abend): „für jedes Konto Ordner erstellen können, die auch auf dem
+Server angelegt werden, auch vorhandene Ordner müssen geladen werden“.
+
+- [ ] „Neuer Ordner…“ am Konto und „Neuer Unterordner…“ an jedem Ordner, die ein Unterordner
+  sein darf (Menü der Zeile, Befehlspalette). Name prüfen (leer, doppelt, Trennzeichen des
+  Servers); angelegt wird über die Outbox (`CreateMailbox`, IMAP und JMAP) mit sichtbarem Zustand,
+  der Ordner steht danach sofort im Baum und nimmt Mails auf (Ziehen, Verschieben).
+- [ ] Nur lesende Konten: Aktion gesperrt mit Begründung, wie bei Umbenennen und Löschen.
+- [ ] Vorhandene Ordner: Alle wählbaren Ordner des Servers stehen im Baum (heute `LIST "" "*"`
+  beim vollen Abgleich). Ordner, die ein anderes Programm anlegt, erscheinen ohne Neustart;
+  dazu „Ordner vom Server neu laden“ am Konto.
+
 ## Nicht in dieser Stufe
 
 - Benachrichtigungen für fehlgeschlagene Sendungen und Snoozes bleiben Mitteilungen des Systems.
@@ -66,6 +80,8 @@ Knöpfen „Lesen“ und „Löschen“.
 - [ ] Griff zwischen Liste und Lesebereich (rechts und unten) per Desktop-Test gezogen, Maß nach
   Neustart des Fensterlayouts wieder da.
 - [ ] Aufklappen per echtem Klick, während die Schnellaktionen sichtbar sind, per Desktop-Test.
+- [ ] Ordner anlegen per Desktop-Test: Ordner und Unterordner entstehen auf dem Testserver,
+  nur lesendes Konto sperrt die Aktion, ein auf dem Server angelegter Ordner erscheint ohne Neustart.
 - [ ] Popup per Desktop-Test: neue Mail auf dem Testserver → Popup mit Absender und Ausschnitt,
   „Lesen“ zeigt die Mail im Hauptfenster, „Löschen“ legt sie in den Papierkorb, nur lesendes Konto
   sperrt „Löschen“.
