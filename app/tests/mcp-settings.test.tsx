@@ -59,7 +59,10 @@ describe("Settings, AI over MCP", () => {
     expect(within(panel).getByTestId("mcp-helper-path").textContent).toContain(MCP_HELPER_PATH);
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    await user.click(within(endpoint).getByRole("button", { name: "Copy the full path of the connection point" }));
+    const copy = within(endpoint).getByRole("button", { name: "Copy full path of the connection point" });
+    // axe "label-content-name-mismatch": the visible text is part of the accessible name.
+    expect(copy.getAttribute("aria-label")).toContain(copy.textContent ?? "-");
+    await user.click(copy);
     expect(writeText).toHaveBeenCalledWith(MCP_ENDPOINT);
     expect(await within(endpoint).findByText("Full path copied.")).toBeTruthy();
   });

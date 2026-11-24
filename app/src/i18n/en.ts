@@ -1395,8 +1395,8 @@ export const en = {
       endpoint: "Connection point:",
       // Shown from "~" (no user name in a screenshot); the button copies the full path.
       copyPath: "Copy full path",
-      copyHelperPath: "Copy the full path of the helper program",
-      copyEndpoint: "Copy the full path of the connection point",
+      copyHelperPath: "Copy full path of the helper program",
+      copyEndpoint: "Copy full path of the connection point",
       pathCopied: "Full path copied.",
       pathCopyFailed: "Could not copy. Select the path and copy it yourself.",
     },
