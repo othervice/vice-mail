@@ -236,6 +236,221 @@ async fn what_may_not_be_renamed_or_deleted_is_refused_before_anything_is_record
     );
 }
 
+/// Stage 18 (task D): a new folder at the top of the account or below a folder, recorded as
+/// `CreateMailbox` with its decoded path; what is refused records nothing.
+#[tokio::test]
+async fn a_new_folder_is_recorded_at_the_top_or_below_a_folder() {
+    let (f, projects, year) = setup().await;
+    let created = |change: &crate::OutboxChange| match &change.operations[..] {
+        [op] => {
+            assert_eq!(op.action, ActionKind::CreateMailbox);
+            assert_eq!(op.mailbox_id, None);
+            match &op.payload {
+                OperationPayload::CreateMailbox { path, role } => {
+                    assert_eq!(*role, None);
+                    path.clone()
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+        other => panic!("{other:?}"),
+    };
+    let top = f
+        .store
+        .enqueue_create_folder(f.account, None, " Kunden ".into(), "c1".into())
+        .await
+        .expect("top");
+    assert_eq!(created(&top), "Kunden");
+    let below = f
+        .store
+        .enqueue_create_folder(f.account, Some(projects), "Q3".into(), "c2".into())
+        .await
+        .expect("below");
+    assert_eq!(created(&below), "Projekte/Q3");
+    let deeper = f
+        .store
+        .enqueue_create_folder(f.account, Some(year), "März".into(), "c3".into())
+        .await
+        .expect("deeper");
+    assert_eq!(created(&deeper), "Projekte/2026/März");
+    // The same request again records nothing new.
+    let again = f
+        .store
+        .enqueue_create_folder(f.account, None, "Kunden".into(), "c1".into())
+        .await
+        .expect("repeated");
+    assert!(again.repeated);
+    assert!(again.operations.is_empty());
+
+    let before = f
+        .store
+        .operations(f.account, None, 50)
+        .await
+        .expect("ops")
+        .len();
+    // Taken paths (the inbox in any spelling), empty names, the delimiter, control characters.
+    for (parent, name) in [
+        (None, "Projekte"),
+        (Some(projects), "2026"),
+        (None, "inbox"),
+    ] {
+        let err = f
+            .store
+            .enqueue_create_folder(f.account, parent, name.into(), format!("t-{name}"))
+            .await
+            .expect_err("taken");
+        assert!(
+            matches!(action(err), Some(ActionError::MailboxExists(_))),
+            "{name}"
+        );
+    }
+    for bad in ["", "  ", "a/b", "tab\there", &"x".repeat(201)] {
+        let err = f
+            .store
+            .enqueue_create_folder(f.account, Some(projects), bad.into(), format!("b-{bad}"))
+            .await
+            .expect_err("invalid");
+        assert!(
+            matches!(err, StoreError::InvalidArgument(_)),
+            "{bad:?}: {err:?}"
+        );
+    }
+    // A parent that does not exist.
+    let err = f
+        .store
+        .enqueue_create_folder(f.account, Some(MailboxId(999_999)), "X".into(), "nf".into())
+        .await
+        .expect_err("unknown parent");
+    assert!(matches!(err, StoreError::NotFound(_)), "{err:?}");
+    // Read-only: refused.
+    f.store
+        .set_writes_enabled(f.account, false)
+        .await
+        .expect("writes off");
+    let err = f
+        .store
+        .enqueue_create_folder(f.account, None, "Neu".into(), "ro".into())
+        .await
+        .expect_err("read-only");
+    assert!(matches!(action(err), Some(ActionError::ReadOnly(_))));
+    assert_eq!(
+        f.store
+            .operations(f.account, None, 50)
+            .await
+            .expect("ops")
+            .len(),
+        before,
+        "nothing refused was recorded"
+    );
+}
+
+/// Stage 18: where a new folder goes on other servers: below the inbox when the server keeps
+/// every folder there (`INBOX.`), nowhere below a folder that cannot hold folders, and no
+/// subfolders at all in a flat namespace.
+#[tokio::test]
+async fn a_new_folder_follows_the_servers_namespace() {
+    let f = fixture().await;
+    let dotted = |name: &str, attributes: &[&str]| mail_model::RemoteMailbox {
+        delimiter: Some('.'),
+        ..remote(name, attributes)
+    };
+    f.store
+        .sync_mailboxes(
+            f.account,
+            vec![
+                dotted("INBOX", &[]),
+                dotted("INBOX.Sent", &["\\Sent"]),
+                dotted("INBOX.Projekte", &[]),
+                dotted("INBOX.Fest", &["\\Noinferiors"]),
+            ],
+        )
+        .await
+        .expect("mailboxes");
+    f.store
+        .set_writes_enabled(f.account, true)
+        .await
+        .expect("writes");
+    let boxes = f.store.mailboxes(f.account).await.expect("boxes");
+    let id = |path: &str| {
+        boxes
+            .iter()
+            .find(|m| m.path == path)
+            .map(|m| m.id)
+            .expect(path)
+    };
+    let path = |change: crate::OutboxChange| match &change.operations[0].payload {
+        OperationPayload::CreateMailbox { path, .. } => path.clone(),
+        other => panic!("{other:?}"),
+    };
+    let top = f
+        .store
+        .enqueue_create_folder(f.account, None, "Kunden".into(), "n1".into())
+        .await
+        .expect("top");
+    assert_eq!(path(top), "INBOX.Kunden");
+    let below = f
+        .store
+        .enqueue_create_folder(
+            f.account,
+            Some(id("INBOX.Projekte")),
+            "A".into(),
+            "n2".into(),
+        )
+        .await
+        .expect("below");
+    assert_eq!(path(below), "INBOX.Projekte.A");
+    for bad in ["a.b"] {
+        let err = f
+            .store
+            .enqueue_create_folder(f.account, None, bad.into(), "n3".into())
+            .await
+            .expect_err("delimiter");
+        assert!(matches!(err, StoreError::InvalidArgument(_)), "{err:?}");
+    }
+    let err = f
+        .store
+        .enqueue_create_folder(f.account, Some(id("INBOX.Fest")), "X".into(), "n4".into())
+        .await
+        .expect_err("noinferiors");
+    assert!(matches!(err, StoreError::InvalidArgument(_)), "{err:?}");
+
+    // A flat namespace: folders at the top only.
+    let flat = fixture().await;
+    let plain = |name: &str| mail_model::RemoteMailbox {
+        delimiter: None,
+        ..remote(name, &[])
+    };
+    flat.store
+        .sync_mailboxes(flat.account, vec![plain("INBOX"), plain("Notes")])
+        .await
+        .expect("flat");
+    flat.store
+        .set_writes_enabled(flat.account, true)
+        .await
+        .expect("writes");
+    let notes = flat
+        .store
+        .mailboxes(flat.account)
+        .await
+        .expect("boxes")
+        .into_iter()
+        .find(|m| m.path == "Notes")
+        .expect("notes")
+        .id;
+    let err = flat
+        .store
+        .enqueue_create_folder(flat.account, Some(notes), "X".into(), "f1".into())
+        .await
+        .expect_err("flat");
+    assert!(matches!(err, StoreError::InvalidArgument(_)), "{err:?}");
+    let top = flat
+        .store
+        .enqueue_create_folder(flat.account, None, "a/b".into(), "f2".into())
+        .await
+        .expect("any name at the top of a flat namespace");
+    assert_eq!(path(top), "a/b");
+}
+
 #[test]
 fn the_payloads_round_trip() {
     let payload = OperationPayload::RenameMailbox {
@@ -281,6 +496,14 @@ async fn the_folder_queries_use_their_index() {
                 (
                     folders::PATH_TAKEN,
                     "SEARCH mailbox USING COVERING INDEX mailbox_path (account_id=? AND path=?)",
+                ),
+                (
+                    folders::PARENT,
+                    "SEARCH mailbox USING INTEGER PRIMARY KEY (rowid=?)",
+                ),
+                (
+                    folders::ACCOUNT_FOLDERS,
+                    "SEARCH mailbox USING INDEX mailbox_path (account_id=?)",
                 ),
                 (
                     folders::PENDING_CHANGE,

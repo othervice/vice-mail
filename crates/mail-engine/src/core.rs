@@ -833,6 +833,31 @@ impl<C: Connector> AppCore<C> {
         self.outbox()?.create_mailbox(account, path, role).await
     }
 
+    /// Stage 18: queues a new folder `name` below `parent`, or at the top of the account
+    /// ("New folder…", "New subfolder…"). Refused like the store says (read-only account,
+    /// invalid or taken name); it appears in the folder list once the server created it.
+    pub async fn create_folder(
+        &self,
+        account: AccountId,
+        parent: Option<MailboxId>,
+        name: String,
+    ) -> Result<ActionResult, CoreError> {
+        self.outbox()?.create_folder(account, parent, name).await
+    }
+
+    /// Stage 18: lists the account's folders on the server again now ("Reload folders from
+    /// server"), with a full pass; folders another program created or removed show at once
+    /// instead of at the next poll. Not connected: connects now (a new session starts with a
+    /// full pass).
+    pub async fn reload_folders(&self, account: AccountId) -> Result<(), CoreError> {
+        self.store()?;
+        if self.inner.accounts.send(account, Control::ReloadFolders) {
+            Ok(())
+        } else {
+            Err(CoreError::NotFound(format!("account {account}")))
+        }
+    }
+
     /// The account's operations, newest first (activity view), keyset-paged below `before`.
     /// `limit` 1..=500.
     pub async fn list_operations(

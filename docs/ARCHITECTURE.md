@@ -311,6 +311,15 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   above the mark does the same transaction record an `expunge` in the source account;
   after a crash the `append` is checked, not repeated (never two copies, never
   lost). Server test with fault injection in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
+- Stage 18 (task D), **creating folders:** `createFolder(account, parent | null, name)` checks the
+  name in the store (not empty, at most 200 characters, no control character, not the server's
+  delimiter, not taken at that place, a parent of the account that has a delimiter and no
+  `\Noinferiors`, write access) and computes the decoded path: below the parent, or at the top
+  of the account, below the inbox when every other folder lies there (`INBOX.` namespaces). It is
+  recorded as `create_mailbox` and created like the folder for a missing role (IMAP `CREATE`, JMAP
+  `Mailbox/set`); the folder list is read right after. `reloadFolders(account)` asks the
+  account's sync for a full pass now (folder list included; not connected: a reconnect), so
+  folders made by other programs show without waiting for the 3-minute poll.
 - From 2026-11-24 (alignment with SPEC), **renaming and deleting folders:** only the user's own folders (without
   a role), only with write access, one change per folder at a time; deleting only without subfolders
   and with a confirmation that names the mails stored here. `rename_mailbox` and
@@ -914,7 +923,8 @@ commands with at most 4 shortcuts each), the text size (80 to 150) and the at mo
 used commands of the palette; every change goes as `uiPreferencesChanged` to all windows.
 Shortcuts and text size are synced by the settings sync (one key per platform), the history
 of the palette stays on the device. The layout (reading pane on the right, at the bottom or instead of the list,
-density, sidebar) is stored by `setWindowLayout` per window kind on the device. The core checks shape
+density, sidebar, the sidebar's width and, since stage 18, the list's width beside the reading pane and
+its height above it) is stored by `setWindowLayout` per window kind on the device. The core checks shape
 and limits; which commands exist and which shortcuts are assignable is decided by the UI.
 Until the UI has been switched over, these values are still kept in the marked fallback store
 `app/src/features/keyboard/localFallback.ts`.

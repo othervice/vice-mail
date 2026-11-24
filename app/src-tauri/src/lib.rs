@@ -86,6 +86,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::actions::apply_action,
             commands::actions::undo_action,
             commands::actions::create_mailbox,
+            commands::actions::create_folder,
+            commands::actions::reload_folders,
             commands::actions::rename_mailbox,
             commands::actions::delete_mailbox,
             commands::actions::list_operations,
@@ -430,6 +432,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MIN_SIDEBAR_WIDTH", mail_model::MIN_SIDEBAR_WIDTH)
         .constant("MAX_SIDEBAR_WIDTH", mail_model::MAX_SIDEBAR_WIDTH)
         .constant("DEFAULT_SIDEBAR_WIDTH", mail_model::DEFAULT_SIDEBAR_WIDTH)
+        // Stage 18: the list's width beside the reading pane and its height above it.
+        .constant("MIN_LIST_WIDTH", mail_model::MIN_LIST_WIDTH)
+        .constant("MAX_LIST_WIDTH", mail_model::MAX_LIST_WIDTH)
+        .constant("DEFAULT_LIST_WIDTH", mail_model::DEFAULT_LIST_WIDTH)
+        .constant("MIN_LIST_HEIGHT", mail_model::MIN_LIST_HEIGHT)
+        .constant("MAX_LIST_HEIGHT", mail_model::MAX_LIST_HEIGHT)
+        .constant("DEFAULT_LIST_HEIGHT", mail_model::DEFAULT_LIST_HEIGHT)
         .constant(
             "MAX_RECENT_COMMANDS",
             u32::try_from(mail_model::MAX_RECENT_COMMANDS).unwrap_or(u32::MAX),

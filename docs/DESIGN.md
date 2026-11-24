@@ -71,7 +71,7 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Vorschau | gedämpft, abgeschnitten |
 | Konto | nur wo sich Konten mischen (vereinter Posteingang, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
-| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Anpinnen, Verschieben, Später, Mehr |
+| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
 Betreff, darunter die Vorschau (nur komfortabel).
@@ -80,6 +80,24 @@ Betreff, darunter die Vorschau (nur komfortabel).
 unten oder anstelle der Liste. Kopf mit Betreff, Absender, Empfängern, Zeit und Kontofarbe; Aktionen
 als Symbolleiste. Immer genau eine Mail; die anderen Mails eines Gesprächs klappen in der Liste auf
 (Stufe 17, „Gespräche aufklappen“).
+
+**Grenze zwischen Liste und Lesebereich (Stufe 18).** Steht der Lesebereich rechts, lässt sich die
+Breite der Liste an der Grenze ziehen, steht er unten, ihre Höhe; anstelle der Liste gibt es keine
+Grenze. Derselbe Griff wie am Rand der Seitenspalte (`ResizeHandle`): 8 px zum Greifen über der
+Haarlinie, beim Überfahren und Ziehen eine Linie in `accent-fill`, Doppelklick setzt den Standard.
+Ein Fenster-Trenner nach WAI-ARIA (`role="separator"`, „Breite der Liste“ bzw. „Höhe der Liste“,
+Wert in px, `aria-controls` auf die Liste): ← → (rechts) bzw. ↑ ↓ (unten) ändern um 16 px, Pos1 und
+Ende auf Minimum und das, was gerade passt; Eingabe hat keine Wirkung. Standard 384 × 320 px,
+Grenzen des Kerns 320 bis 1.600 px Breite, 160 bis 1.600 px Höhe, in px bei 100 % Schrift (wächst
+mit der Schriftgröße). Der Lesebereich behält immer mindestens 360 px Breite bzw. 240 px Höhe
+(`--ui-reading-min-width`, `--ui-reading-min-height`): Wird das Fenster kleiner, zeichnet das
+Stylesheet die Liste kleiner, der gespeicherte Wert bleibt; Wert, Ende und ein Ziehen beginnen bei
+dem, was zu sehen ist. Die Zeilen wechseln wie bisher an 720 px Listenbreite zwischen ein- und
+mehrzeilig. Gesetzt wird das Maß per CSSOM an der Fläche von Liste und Lesebereich (CSP),
+gespeichert mit dem Layout des Fensters (`WindowLayout.listWidth`, `listHeight`, nur auf diesem
+Gerät), sobald es 400 ms ruht. Vorher nahm die Liste neben dem Lesebereich fest 24 rem, höchstens
+45 % der Breite, darunter 40 % der Höhe. Geprüft in `list-resize.test.tsx` und mit echtem Zeiger in
+`columns.e2e.mjs`.
 
 **KI-Panel.** 380 px, rechts, einklappbar. Bezieht sich auf den gewählten Thread. Gespräch oben,
 Eingabefeld unten, Ergebnisse als Karten. Bei schmalem Fenster liegt es über dem Lesebereich.
@@ -382,7 +400,12 @@ Ausrufezeichen in `danger`), rechts die Summe der Ungelesenen in Posteingang und
 andere Ordner wiederholen). Name der Zeile und Tooltip: „Name (Adresse), n ungelesen“, bei Problemen
 dazu Zustand und Grund („offline: Die Verbindung zum Server wurde unterbrochen.“). Die Farbe steht nie
 allein. Ein Klick, Eingabe, Leertaste, ← und → klappen das Konto zu und auf; der Zustand gilt bis
-zum Beenden der App.
+zum Beenden der App. Seit Stufe 18 (Aufgabe D) hat auch die Zeile des Kontos ein „…“ wie die
+Ordner (über dem Zähler, Umschalt+F10 und Kontextmenütaste öffnen es): „Neuer Ordner …“ legt einen
+Ordner oben im Konto an (bei Servern, die alle Ordner unter `INBOX.` führen, dort), „Ordner vom
+Server neu laden“ liest die Ordnerliste des Servers sofort neu (sonst bei jedem vollen Abgleich,
+alle 3 Minuten), sodass Ordner, die ein anderes Programm angelegt oder gelöscht hat, ohne Neustart
+erscheinen bzw. verschwinden.
 
 **Ordner.** Rollen zuerst in fester Reihenfolge Posteingang, Entwürfe, Gesendet, Archiv, Spam,
 Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als Baum, je Ebene
@@ -392,6 +415,17 @@ Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen hal
 „…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
 und nimmt dem Namen keine Breite; sein Menü ist 12 rem breit, damit es auch in der schmalsten Spalte
 nicht abgeschnitten wird. Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+
+**Ordner anlegen (Stufe 18, Aufgabe D).** „Neuer Unterordner …“ im „…“ jedes Ordners, der Ordner
+enthalten darf (der Server hat ein Trennzeichen; `\Noinferiors` weist der Kern ab), dazu die
+Einträge „Neuer Ordner in „Konto“ …“, „Neuer Unterordner in „Ordner“ …“ (offener Ordner) und
+„Ordner von „Konto“ vom Server neu laden“ in der Befehlspalette. Ein schwebendes Feld wie beim
+Umbenennen fragt den Namen und prüft ihn wie der Kern: nicht leer, ohne das Trennzeichen des
+Servers, an dieser Stelle noch nicht vergeben („Hier gibt es schon einen Ordner „…“.“). Angelegt
+wird über die Outbox (`CreateMailbox`, IMAP und JMAP): ein Hinweis „Ordner „…“ wird angelegt“, der
+Vorgang in der Aktivität; sobald der Server ihn hat, steht er im Baum unter seinem Elternordner und
+nimmt Mails auf. Bei nur lesenden Konten bleiben die Einträge sichtbar, sind als nicht verfügbar
+markiert und sagen beim Klick warum (wie Umbenennen und Löschen); „Neu laden“ geht immer.
 
 **Abschnitte.** „Ansichten“, „Gespeicherte Suchen“ und „Favoriten“ haben ein leises Etikett (12 px,
 halbfett, `text-tertiary`), das die erste Zeile ihres Baums ist: Klick, Eingabe, ← und → klappen den
@@ -597,6 +631,8 @@ Tabellenziffern), 20 px hoch, rund, Fläche `badge`, Schrift `text-secondary`, b
 `accent-soft` mit Schrift `accent` (geprüft in `contrast.test.ts`). Der Pfeil dreht ohne Bewegung
 (nur Farbübergänge, `motion.test.ts`). Tooltip „Antworten zeigen“ bzw. „Antworten ausblenden“. Ein
 Klick klappt auf oder zu und wählt nichts; er ist ein Ziel für die Maus wie das Auswahlkästchen.
+Die Schnellaktionen beim Überfahren liegen nie darüber (Stufe 18, Entscheidung 0052): Ein Klick auf
+die Pille klappt auch dann auf und zu, wenn die Maus über der Zeile steht.
 Der Betreff geht vor (Feinschliff 24.11.2026): Fehlt Platz, gibt erst die Pille ihr Wort ab („3
 Antworten“, „3 Antw…“, „3“), dann erst wird der Betreff gekürzt; Pfeil und Zahl bleiben immer. Die
 Pille schiebt nie die Zeit (sie steht in der breiten Liste in der Betreffspalte, in der schmalen in

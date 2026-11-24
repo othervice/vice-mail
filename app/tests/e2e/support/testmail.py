@@ -237,6 +237,36 @@ def selectable_folders(imap: imaplib.IMAP4_SSL) -> list[str]:
     return names
 
 
+def create_folder(folder: str) -> dict:
+    """Stage 18: a folder created by another program (CREATE), for "Reload folders from server"."""
+    env = load_env()
+    imap = login(env)
+    try:
+        check(*imap.create(quoted(folder)), f"CREATE {folder}")
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    return {"created": folder}
+
+
+def delete_folders(folders: list[str]) -> dict:
+    """Stage 18: removes test folders again (deepest first); missing ones are skipped."""
+    env = load_env()
+    imap = login(env)
+    deleted = []
+    try:
+        for folder in sorted(folders, key=len, reverse=True):
+            typ, _ = imap.delete(quoted(folder))
+            if typ == "OK":
+                deleted.append(folder)
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    return {"deleted": deleted}
+
+
 def attachments(path: str) -> list:
     """The decoded parts a mail program would offer as files, independently of the app's parser."""
     message = email.message_from_bytes(Path(path).read_bytes())
@@ -262,6 +292,12 @@ def main() -> int:
         return 0
     if len(sys.argv) >= 4 and sys.argv[1] == "append":
         print(json.dumps(append(sys.argv[2], sys.argv[3:])))
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "create-folder":
+        print(json.dumps(create_folder(sys.argv[2])))
+        return 0
+    if len(sys.argv) >= 3 and sys.argv[1] == "delete-folders":
+        print(json.dumps(delete_folders(sys.argv[2:])))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "attachments":
         print(json.dumps(attachments(sys.argv[2])))

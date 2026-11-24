@@ -33,7 +33,7 @@ function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true },
       makeMailbox({ id: 40, accountId: CLUB.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 4 }),
       makeMailbox({ id: 41, accountId: CLUB.id, path: "Turniere", unread: 1 }),
     ],
-    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, ...layout } },
+    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, ...layout } },
     search: { savedSearches: [makeSavedSearch({ name: "Invoices" })] },
   });
   return { core, ...renderApp() };

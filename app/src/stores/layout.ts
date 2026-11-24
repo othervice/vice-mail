@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { saveUiPreferences, saveWindowLayout } from "../features/keyboard/uiPreferences";
-import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, type CoreError, type CoreWindowLayout } from "../services/ipc";
+import { clampSize, type SizeLimits } from "../components/ResizeHandle";
+import { DEFAULT_SIDEBAR_WIDTH, type CoreError, type CoreWindowLayout } from "../services/ipc";
+import { LIST_HEIGHT, LIST_WIDTH, SIDEBAR_WIDTH } from "./ui";
 
 /**
  * Where the reading pane opens (docs/DESIGN.md, docs/SPEC.md): right of the list (default),
@@ -37,6 +39,10 @@ export interface WindowLayout {
   sidebarExpanded: boolean;
   /** Width of the accounts-and-folders column, px at 100 % text size (200 to 320). */
   sidebarWidth: number;
+  /** Stage 18: the list's width beside the reading pane, px at 100 % text size (320 to 1600). */
+  listWidth: number;
+  /** Stage 18: the list's height above the reading pane, px at 100 % text size (160 to 1600). */
+  listHeight: number;
 }
 
 export const DEFAULT_LAYOUT: WindowLayout = {
@@ -45,12 +51,19 @@ export const DEFAULT_LAYOUT: WindowLayout = {
   textSize: 100,
   sidebarExpanded: false,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+  listWidth: LIST_WIDTH.default,
+  listHeight: LIST_HEIGHT.default,
 };
+
+/** A size the core accepts: whole pixels within its limits (anything else: the default). */
+export function storedSize(value: unknown, limits: SizeLimits): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return limits.default;
+  return clampSize(value, limits);
+}
 
 /** A width the core accepts: whole pixels from 200 to 320 (anything else: the default). */
 export function storedSidebarWidth(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SIDEBAR_WIDTH;
-  return Math.round(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value)));
+  return storedSize(value, SIDEBAR_WIDTH);
 }
 
 function pick<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -66,6 +79,8 @@ export function parseStoredLayout(raw: unknown): WindowLayout {
     textSize: pick(value["textSize"], TEXT_SIZES, DEFAULT_LAYOUT.textSize),
     sidebarExpanded: value["sidebarExpanded"] === true,
     sidebarWidth: DEFAULT_LAYOUT.sidebarWidth,
+    listWidth: DEFAULT_LAYOUT.listWidth,
+    listHeight: DEFAULT_LAYOUT.listHeight,
   };
 }
 
@@ -96,6 +111,8 @@ const windowPart = (layout: WindowLayout): CoreWindowLayout => ({
   density: layout.density,
   sidebarExpanded: layout.sidebarExpanded,
   sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
+  listWidth: storedSize(layout.listWidth, LIST_WIDTH),
+  listHeight: storedSize(layout.listHeight, LIST_HEIGHT),
 });
 
 /**
@@ -120,7 +137,9 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
         change.readingPane !== undefined ||
         change.density !== undefined ||
         change.sidebarExpanded !== undefined ||
-        change.sidebarWidth !== undefined
+        change.sidebarWidth !== undefined ||
+        change.listWidth !== undefined ||
+        change.listHeight !== undefined
       ) {
         saveWindowLayout(windowPart(next)).catch(failed);
       }
@@ -131,6 +150,8 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
         density: pick(layout.density, DENSITIES, DEFAULT_LAYOUT.density),
         sidebarExpanded: layout.sidebarExpanded,
         sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
+        listWidth: storedSize(layout.listWidth, LIST_WIDTH),
+        listHeight: storedSize(layout.listHeight, LIST_HEIGHT),
       };
       applyToDocument({ density: next.density, textSize: get().textSize });
       set(next);

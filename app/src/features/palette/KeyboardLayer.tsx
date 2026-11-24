@@ -6,7 +6,7 @@ import { VIEW_COMMANDS, type ViewCommandId } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform } from "../actions/shortcuts";
 import { useAppInfo } from "../app-info/queries";
 import { ShortcutOverview } from "../keyboard/ShortcutOverview";
-import { useStoredSidebar } from "../layout/useStoredSidebar";
+import { useStoredFrame } from "../layout/useStoredFrame";
 import { CommandPalette } from "./CommandPalette";
 
 /**
@@ -21,7 +21,7 @@ export function KeyboardLayer() {
   const openOverview = usePaletteStore((state) => state.openOverview);
   const showMailView = useUiStore((state) => state.showMailView);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  useStoredSidebar();
+  useStoredFrame();
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat) return;

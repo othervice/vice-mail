@@ -11,7 +11,9 @@ import { accountFill } from "../accounts/accountColor";
 import { indentClass, sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { useUiStore } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
+import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { useOperations } from "../actions/queries";
+import { useFolderCreateItem, useReloadFoldersItem } from "./FolderEdit";
 import { useMailboxes } from "./queries";
 import { buildMailboxTree, isRoleView, type MailboxNode } from "./tree";
 import { useDropTarget } from "./useDropTarget";
@@ -234,9 +236,27 @@ interface AccountRowProps {
   onToggle: () => void;
 }
 
+/**
+ * Stage 18 (task D): the account's "…": "New folder…" at the top of the account and "Reload
+ * folders from server". Out of the Tab order like a folder's (the row's context-menu key opens it).
+ */
+function AccountMenu({ account, returnFocus }: { account: Account; returnFocus: () => void }) {
+  const { t } = useTranslation();
+  const items: OverflowItem[] = [...useFolderCreateItem(account, null, returnFocus), useReloadFoldersItem(account)];
+  return (
+    <OverflowMenu
+      label={t("folderEdit.accountMenu", { name: account.displayName || account.email })}
+      items={items}
+      tabIndex={-1}
+      returnFocus={returnFocus}
+      narrow
+      data-testid={`account-menu-${account.id}`}
+    />
+  );
+}
+
 /** The account at the root of its tree: colour and name, its trouble, unread total; opens and closes. */
 function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
-  const { i18n } = useTranslation();
   const label = useAccountRowLabel()(account, unread);
   const Chevron = item.expanded ? ChevronDown : ChevronRight;
   return (
@@ -248,7 +268,8 @@ function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
       onClick={onToggle}
       data-testid={`sidebar-account-${account.id}`}
       data-account-state={account.status.state}
-      className="group/account flex h-8 min-w-0 items-center gap-2 rounded-control ps-1 pe-2 text-13 font-semibold text-primary transition-colors hover:bg-rail-hover"
+      // `group/folder`: the "…" shows on hover and focus as on a folder's row (`RowMenuSlot`).
+      className="group/account group/folder relative flex h-8 min-w-0 items-center gap-2 rounded-control ps-1 pe-2 text-13 font-semibold text-primary transition-colors hover:bg-rail-hover"
     >
       <span aria-hidden className="flex w-5 shrink-0 justify-center text-tertiary group-hover/account:text-primary">
         <Chevron className="size-(--ui-icon-small)" strokeWidth={1.75} />
@@ -257,15 +278,17 @@ function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
       <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
       <span className="truncate">{account.displayName || account.email}</span>
       <AccountStatusMark account={account} />
-      {/* A space before the counter: name and number are two words of the text, as in the name. */}
-      {unread > 0 && (
-        <>
-          {" "}
-          <span aria-hidden className="ms-auto shrink-0 ps-2 text-12 font-medium text-secondary tabular-nums">
-            {new Intl.NumberFormat(i18n.language).format(unread)}
-          </span>
-        </>
-      )}
+      {/* A space before the counter: name and number are two words of the text, as in the name.
+          Stage 18: it gives its place to the "…" like a folder's counter. */}
+      <UnreadCount count={unread} />
+      <RowMenuSlot>
+        <AccountMenu
+          account={account}
+          returnFocus={() => {
+            nav.focus(ACCOUNT_KEY);
+          }}
+        />
+      </RowMenuSlot>
     </li>
   );
 }

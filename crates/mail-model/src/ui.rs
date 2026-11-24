@@ -406,6 +406,15 @@ pub struct WindowLayout {
     /// [`MAX_SIDEBAR_WIDTH`] ([`DEFAULT_SIDEBAR_WIDTH`] by default); the column's drag handle
     /// sets it.
     pub sidebar_width: u16,
+    /// Stage 18: width of the message list beside the reading pane on the right, in CSS pixels
+    /// at 100 % text size, [`MIN_LIST_WIDTH`] to [`MAX_LIST_WIDTH`] ([`DEFAULT_LIST_WIDTH`] by
+    /// default); the drag handle between list and pane sets it. A window too narrow for it
+    /// draws the list narrower and keeps this value.
+    pub list_width: u16,
+    /// Stage 18: height of the message list above the reading pane below it, in CSS pixels at
+    /// 100 % text size, [`MIN_LIST_HEIGHT`] to [`MAX_LIST_HEIGHT`] ([`DEFAULT_LIST_HEIGHT`] by
+    /// default); the same handle sets it when the pane is below the list.
+    pub list_height: u16,
 }
 
 /// Narrowest accounts-and-folders column ([`WindowLayout::sidebar_width`]).
@@ -415,6 +424,20 @@ pub const MAX_SIDEBAR_WIDTH: u16 = 320;
 /// The column's width until the user drags it.
 pub const DEFAULT_SIDEBAR_WIDTH: u16 = 240;
 
+/// Narrowest message list beside the reading pane ([`WindowLayout::list_width`]): room for the
+/// avatar, a sender and the row's quick actions in the narrow (multi-line) rows.
+pub const MIN_LIST_WIDTH: u16 = 320;
+/// Widest message list beside the reading pane.
+pub const MAX_LIST_WIDTH: u16 = 1600;
+/// The list's width beside the pane until the user drags it (24 rem, as before stage 18).
+pub const DEFAULT_LIST_WIDTH: u16 = 384;
+/// Lowest message list above the reading pane ([`WindowLayout::list_height`]): a few rows.
+pub const MIN_LIST_HEIGHT: u16 = 160;
+/// Highest message list above the reading pane.
+pub const MAX_LIST_HEIGHT: u16 = 1600;
+/// The list's height above the pane until the user drags it.
+pub const DEFAULT_LIST_HEIGHT: u16 = 320;
+
 impl Default for WindowLayout {
     fn default() -> Self {
         Self {
@@ -422,20 +445,74 @@ impl Default for WindowLayout {
             density: Density::default(),
             sidebar_expanded: true,
             sidebar_width: DEFAULT_SIDEBAR_WIDTH,
+            list_width: DEFAULT_LIST_WIDTH,
+            list_height: DEFAULT_LIST_HEIGHT,
         }
     }
 }
 
+/// One size a drag handle sets: its name in messages, its field and its limits.
+struct SizeField {
+    name: &'static str,
+    field: fn(&mut WindowLayout) -> &mut u16,
+    min: u16,
+    max: u16,
+    default: u16,
+}
+
+const SIZE_FIELDS: [SizeField; 3] = [
+    SizeField {
+        name: "sidebar width",
+        field: |layout| &mut layout.sidebar_width,
+        min: MIN_SIDEBAR_WIDTH,
+        max: MAX_SIDEBAR_WIDTH,
+        default: DEFAULT_SIDEBAR_WIDTH,
+    },
+    SizeField {
+        name: "list width",
+        field: |layout| &mut layout.list_width,
+        min: MIN_LIST_WIDTH,
+        max: MAX_LIST_WIDTH,
+        default: DEFAULT_LIST_WIDTH,
+    },
+    SizeField {
+        name: "list height",
+        field: |layout| &mut layout.list_height,
+        min: MIN_LIST_HEIGHT,
+        max: MAX_LIST_HEIGHT,
+        default: DEFAULT_LIST_HEIGHT,
+    },
+];
+
 impl WindowLayout {
     /// Checks the limits; the values come from the UI.
     pub fn validate(&self) -> Result<(), String> {
-        if !(MIN_SIDEBAR_WIDTH..=MAX_SIDEBAR_WIDTH).contains(&self.sidebar_width) {
-            return Err(format!(
-                "sidebar width {} is outside {MIN_SIDEBAR_WIDTH} to {MAX_SIDEBAR_WIDTH} pixels",
-                self.sidebar_width
-            ));
+        let mut layout = *self;
+        for size in &SIZE_FIELDS {
+            let value = *(size.field)(&mut layout);
+            if !(size.min..=size.max).contains(&value) {
+                return Err(format!(
+                    "{} {value} is outside {} to {} pixels",
+                    size.name, size.min, size.max
+                ));
+            }
         }
         Ok(())
+    }
+
+    /// A stored layout as the UI may use it: every size outside its limits (an older version,
+    /// an edited setting) takes its default. Returns the layout and the names of those sizes.
+    #[must_use]
+    pub fn with_sizes_in_range(mut self) -> (Self, Vec<&'static str>) {
+        let mut replaced = Vec::new();
+        for size in &SIZE_FIELDS {
+            let value = (size.field)(&mut self);
+            if !(size.min..=size.max).contains(value) {
+                *value = size.default;
+                replaced.push(size.name);
+            }
+        }
+        (self, replaced)
     }
 }
 
@@ -531,24 +608,33 @@ mod tests {
             density: Density::Compact,
             sidebar_expanded: false,
             sidebar_width: 300,
+            list_width: 512,
+            list_height: 240,
         };
+        let wire = json!({
+            "readingPane": "replace",
+            "density": "compact",
+            "sidebarExpanded": false,
+            "sidebarWidth": 300,
+            "listWidth": 512,
+            "listHeight": 240
+        });
+        assert_eq!(serde_json::to_value(layout).expect("json"), wire);
         assert_eq!(
-            serde_json::to_value(layout).expect("json"),
-            json!({
-                "readingPane": "replace",
-                "density": "compact",
-                "sidebarExpanded": false,
-                "sidebarWidth": 300
-            })
+            serde_json::from_value::<WindowLayout>(wire).expect("parse"),
+            layout
         );
-        // The accounts-and-folders column is shown by default, 240 pixels wide.
+        // The accounts-and-folders column is shown by default, 240 pixels wide; the list beside
+        // the reading pane is 384 pixels wide, above it 320 pixels high.
         assert_eq!(
             serde_json::to_value(WindowLayout::default()).expect("json"),
             json!({
                 "readingPane": "right",
                 "density": "comfortable",
                 "sidebarExpanded": true,
-                "sidebarWidth": 240
+                "sidebarWidth": 240,
+                "listWidth": 384,
+                "listHeight": 320
             })
         );
         assert!(WindowLayout::default().validate().is_ok());
@@ -566,6 +652,81 @@ mod tests {
             };
             assert!(wrong.validate().is_err(), "{width}");
         }
+    }
+
+    /// Stage 18: the list's width beside the reading pane and its height above it have limits
+    /// like the column's width; a stored size outside them reads as its default.
+    #[test]
+    fn list_sizes_stay_within_their_limits() {
+        for width in [MIN_LIST_WIDTH, DEFAULT_LIST_WIDTH, MAX_LIST_WIDTH] {
+            let edge = WindowLayout {
+                list_width: width,
+                ..WindowLayout::default()
+            };
+            assert!(edge.validate().is_ok(), "{width}");
+        }
+        for height in [MIN_LIST_HEIGHT, DEFAULT_LIST_HEIGHT, MAX_LIST_HEIGHT] {
+            let edge = WindowLayout {
+                list_height: height,
+                ..WindowLayout::default()
+            };
+            assert!(edge.validate().is_ok(), "{height}");
+        }
+        for width in [0, MIN_LIST_WIDTH - 1, MAX_LIST_WIDTH + 1, u16::MAX] {
+            let wrong = WindowLayout {
+                list_width: width,
+                ..WindowLayout::default()
+            };
+            assert_eq!(
+                wrong.validate(),
+                Err(format!("list width {width} is outside 320 to 1600 pixels"))
+            );
+        }
+        for height in [0, MIN_LIST_HEIGHT - 1, MAX_LIST_HEIGHT + 1] {
+            let wrong = WindowLayout {
+                list_height: height,
+                ..WindowLayout::default()
+            };
+            assert_eq!(
+                wrong.validate(),
+                Err(format!(
+                    "list height {height} is outside 160 to 1600 pixels"
+                ))
+            );
+        }
+        let sidebar = WindowLayout {
+            sidebar_width: 100,
+            ..WindowLayout::default()
+        };
+        assert_eq!(
+            sidebar.validate(),
+            Err("sidebar width 100 is outside 200 to 320 pixels".to_owned())
+        );
+
+        // Stored sizes: each one outside its limits takes its default, the others stay.
+        let stored = WindowLayout {
+            reading_pane: ReadingPanePosition::Bottom,
+            sidebar_width: 280,
+            list_width: 2000,
+            list_height: 10,
+            ..WindowLayout::default()
+        };
+        let (fixed, replaced) = stored.with_sizes_in_range();
+        assert_eq!(
+            fixed,
+            WindowLayout {
+                list_width: DEFAULT_LIST_WIDTH,
+                list_height: DEFAULT_LIST_HEIGHT,
+                ..stored
+            }
+        );
+        assert_eq!(replaced, vec!["list width", "list height"]);
+        assert!(fixed.validate().is_ok());
+        let fine = WindowLayout {
+            list_width: 700,
+            ..WindowLayout::default()
+        };
+        assert_eq!(fine.with_sizes_in_range(), (fine, Vec::new()));
     }
 
     #[test]

@@ -827,14 +827,19 @@ fn window_layout_belongs_to_the_calling_window() {
         "readingPane": "bottom",
         "density": "compact",
         "sidebarExpanded": false,
-        "sidebarWidth": 300
+        "sidebarWidth": 300,
+        "listWidth": 500,
+        "listHeight": 260
     });
-    // The accounts-and-folders column is shown by default, 240 pixels wide.
+    // The accounts-and-folders column is shown by default, 240 pixels wide; the list is 384
+    // pixels wide beside the reading pane and 320 high above it (stage 18).
     let default = json!({
         "readingPane": "right",
         "density": "comfortable",
         "sidebarExpanded": true,
-        "sidebarWidth": 240
+        "sidebarWidth": 240,
+        "listWidth": 384,
+        "listHeight": 320
     });
     assert_eq!(
         invoke(&h, "get_window_layout", json!({})).expect("get"),
@@ -853,6 +858,24 @@ fn window_layout_belongs_to_the_calling_window() {
     too_wide["sidebarWidth"] = json!(400);
     let err = invoke(&h, "set_window_layout", json!({ "layout": too_wide })).expect_err("width");
     assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    // Stage 18: so are the list's width (320 to 1600) and height (160 to 1600), and both are
+    // part of the layout the UI sends.
+    for (field, value) in [("listWidth", 300), ("listHeight", 100), ("listWidth", 1700)] {
+        let mut wrong = layout.clone();
+        wrong[field] = json!(value);
+        let err = invoke(&h, "set_window_layout", json!({ "layout": wrong })).expect_err(field);
+        assert_eq!(
+            code_of(&err),
+            Some("invalid_argument"),
+            "{field} {value}: {err}"
+        );
+    }
+    let mut without = layout.clone();
+    without
+        .as_object_mut()
+        .expect("object")
+        .remove("listHeight");
+    assert!(invoke(&h, "set_window_layout", json!({ "layout": without })).is_err());
 
     // A message window has a layout of its own, shared by all message windows.
     let label = |id: i64| {
@@ -872,7 +895,9 @@ fn window_layout_belongs_to_the_calling_window() {
         "readingPane": "replace",
         "density": "comfortable",
         "sidebarExpanded": false,
-        "sidebarWidth": 240
+        "sidebarWidth": 240,
+        "listWidth": 384,
+        "listHeight": 320
     });
     invoke_from(&first, "set_window_layout", json!({ "layout": replace })).expect("set");
     let second = WebviewWindowBuilder::new(&h.app, label(2), Default::default())

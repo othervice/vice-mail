@@ -157,6 +157,18 @@ export const commands = {
 	/**  Queues the creation of a folder (for example the archive after `missing_mailbox`). */
 	createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_mailbox", { accountId, path, role }, options)),
 	/**
+	 *  Stage 18: queues a new folder `name` below `parentId`, or at the top of the account when
+	 *  null ("New folder…", "New subfolder…"); the core computes the path with the server's
+	 *  delimiter. Refused: `read_only`, `invalid_argument` (an empty or invalid name, one with the
+	 *  delimiter, a taken name, a parent that cannot hold folders), `not_found`.
+	 */
+	createFolder: (accountId: AccountId, parentId: MailboxId | null, name: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_folder", { accountId, parentId, name }, options)),
+	/**
+	 *  Stage 18: lists the account's folders on the server again now ("Reload folders from
+	 *  server"). `not_found` for an unknown account.
+	 */
+	reloadFolders: (accountId: AccountId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("reload_folders", { accountId }, options)),
+	/**
 	 *  Audit 24.11.2026: queues the rename of a folder of the user's own to `name` (one level,
 	 *  within its parent). Refused: `read_only`, `invalid_argument` (a role, a taken or invalid
 	 *  name, a change on its way), `unsupported_server` (JMAP), `not_found`.
@@ -755,6 +767,10 @@ export const events = {
 /* Constants */
 export const CORE_EVENT_NAME = "core-event" as const;
 
+export const DEFAULT_LIST_HEIGHT = 320 as const;
+
+export const DEFAULT_LIST_WIDTH = 384 as const;
+
 export const DEFAULT_SEND_DELAY_SECS = 10 as const;
 
 export const DEFAULT_SIDEBAR_WIDTH = 240 as const;
@@ -780,6 +796,10 @@ export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 export const MAX_EML_FILE_BYTES = 67108864 as const;
 
 export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
+
+export const MAX_LIST_HEIGHT = 1600 as const;
+
+export const MAX_LIST_WIDTH = 1600 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
 
@@ -835,6 +855,10 @@ export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 
 export const MCP_ACCESS_RETENTION_DAYS = 30 as const;
 
+export const MIN_LIST_HEIGHT = 160 as const;
+
+export const MIN_LIST_WIDTH = 320 as const;
+
 export const MIN_SIDEBAR_WIDTH = 200 as const;
 
 export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
@@ -848,9 +872,9 @@ export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 /* Types */
 /**
  *  Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
- *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
- *  (decision 0038). A value this version does not know (from a newer device) reads as the
- *  default.
+ *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "blue" (decision 0053; it was
+ *  the logo's orange under decision 0038, a stored choice stays). A value this version does not
+ *  know (from a newer device) reads as the default.
  */
 export type AccentTheme = "teal" | "blue" | "violet" | "rose" | "orange" | "green";
 
@@ -5179,6 +5203,19 @@ export type WindowLayout = {
 	 *  sets it.
 	 */
 	sidebarWidth: number,
+	/**
+	 *  Stage 18: width of the message list beside the reading pane on the right, in CSS pixels
+	 *  at 100 % text size, [`MIN_LIST_WIDTH`] to [`MAX_LIST_WIDTH`] ([`DEFAULT_LIST_WIDTH`] by
+	 *  default); the drag handle between list and pane sets it. A window too narrow for it
+	 *  draws the list narrower and keeps this value.
+	 */
+	listWidth: number,
+	/**
+	 *  Stage 18: height of the message list above the reading pane below it, in CSS pixels at
+	 *  100 % text size, [`MIN_LIST_HEIGHT`] to [`MAX_LIST_HEIGHT`] ([`DEFAULT_LIST_HEIGHT`] by
+	 *  default); the same handle sets it when the pane is below the list.
+	 */
+	listHeight: number,
 };
 
 /* Tauri Specta runtime */

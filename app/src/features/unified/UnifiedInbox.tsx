@@ -10,6 +10,7 @@ import type { MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { useUnifiedInboxSource } from "../comfort/listSources";
+import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "./MixedReading";
 import type { FocusRequest } from "../reading/ReadingPane";
@@ -118,6 +119,8 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           }}
         />
       </div>
+      {/* Stage 18: the border between list and pane can be dragged. */}
+      <ListResizeHandle layout={layout} open={Boolean(single && account && layout.paneShown(open))} />
       {single && account && layout.paneShown(open) && (
         <MixedReading
           // Stage 17: a conversation row keeps its pane while a newer message becomes the row's.

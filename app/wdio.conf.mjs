@@ -63,6 +63,9 @@ export const config = {
     "./tests/e2e/search.e2e.mjs",
     // Stage 17 (decision 0049): conversations unfold in the list (the seed's offsite thread).
     "./tests/e2e/conversations.e2e.mjs",
+    // Stage 18: the border between list and reading pane, unfolding beside the quick actions
+    // (real mouse events). Changes the stored layout and puts it back.
+    "./tests/e2e/columns.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",
@@ -82,6 +85,9 @@ export const config = {
     // Stage 18, block C (decision 0051): the new-mail popup. It delivers messages of its own,
     // deletes one into the trash and turns writes on for alice, then removes the account.
     "./tests/e2e/new-mail-popup.e2e.mjs",
+    // Stage 18, task D: folders created in the app on the server, and the server's folders
+    // reloaded without a restart. Creates folders on the server and removes them again.
+    "./tests/e2e/folders.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.

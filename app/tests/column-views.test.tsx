@@ -40,7 +40,7 @@ function setup({ columnViews = [], sidebarExpanded = true, failures, language = 
     messages: { 1: [] },
     ui: {
       preferences: { ...DEFAULT_UI_PREFERENCES, columnViews },
-      layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, sidebarExpanded },
+      layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, sidebarExpanded },
     },
     ...(failures && { failures }),
   });
@@ -423,7 +423,7 @@ describe("Edit views…, accessibility and languages", () => {
       messages: { 1: [] },
       preferences: { theme: "light", language: "de" },
       appInfo: { version: "0.1.0", commit: null, buildDate: null, platform: "windows" },
-      ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, sidebarExpanded: true } },
+      ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, sidebarExpanded: true } },
     });
     const { user } = renderApp("de");
     const column = await screen.findByRole("navigation", { name: "Konten und Ordner" });
