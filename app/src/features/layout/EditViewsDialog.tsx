@@ -82,9 +82,19 @@ function EditViewsDialog() {
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && !panelRef.current?.contains(event.target)) close();
     };
+    // Escape closes it also when the focus was lost to the page (a re-render, the window losing
+    // and regaining focus): the panel's own handler only sees keys pressed inside it.
+    const onDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || (event.target instanceof Node && panelRef.current?.contains(event.target))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onDocumentKeyDown, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
       drag.current?.stop();
       const active = document.activeElement;
       if (active && active !== document.body) return;

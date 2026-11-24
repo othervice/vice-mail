@@ -173,6 +173,14 @@ describe("Edit views…", () => {
     expect(await screen.findByRole("menuitem", { name: "Edit views…" })).toBeTruthy();
     await user.keyboard("{Escape}");
 
+    // Escape closes it also when the focus was lost to the page.
+    await openFromPalette(user);
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Edit views" })).toBeNull();
+
     await openFromPalette(user);
     // Tab stays inside: from the last control back to the first, and Shift+Tab the other way.
     act(() => {
