@@ -129,7 +129,13 @@ const layout = (id) =>
       const r = el.getBoundingClientRect();
       return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
     };
-    const cut = (el) => Boolean(el && el.scrollWidth > el.clientWidth + 1);
+    // Cut, by any fraction of a pixel: an ellipsis shows as soon as the text is wider than its box.
+    const cut = (el) => {
+      if (!el) return false;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.05;
+    };
     const subject = row?.querySelector('[data-testid="row-subject"]');
     const pill = row?.querySelector('[data-testid="row-replies"]');
     const avatar = row?.querySelector('[data-testid="avatar"]');
@@ -194,6 +200,20 @@ function checkLayout(found, where) {
     if (child.senderCut) assert.ok(near(child.sender.width, child.group.width / 3, 2), `${where}: message ${String(index + 1)}'s sender is cut below a third`);
     assert.ok(near(child.text.right, child.group.right), `${where}: message ${String(index + 1)}'s text leaves room unused`);
   });
+}
+
+/**
+ * Narrows the message list to `width` CSS pixels (through the CSSOM, as the CSP allows; null puts
+ * it back), so the rules that share a line are measured under pressure too.
+ */
+async function narrowList(width) {
+  await browser.execute((w) => {
+    const list = document.querySelector('[data-testid="message-list"]');
+    if (list) list.style.maxWidth = w === null ? "" : `${String(w)}px`;
+  }, width);
+  // Layout follows at once (every measurement forces it; the rows are as wide as the list). No
+  // animation frames to wait for: a window started from a terminal session gets none.
+  await browser.pause(100);
 }
 
 async function runAxe() {
@@ -356,6 +376,18 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       children: narrow.children.slice(0, 4).map((c) => ({ sender: c.sender?.width, needs: c.senderNeeds, textCut: c.textCut })),
     };
     checkLayout(narrow, "narrow list");
+    // Narrower still: the pill gives up its word, then the subject is cut (both measured).
+    report.steps.layoutSqueezed = [];
+    for (const width of [380, 330, 290]) {
+      await narrowList(width);
+      const squeezed = await layout(conversationId);
+      report.steps.layoutSqueezed.push({ width, subjectCut: squeezed.subjectCut, word: squeezed.word.width, pill: squeezed.pill.width });
+      checkLayout(squeezed, `list of ${String(width)} px`);
+    }
+    await narrowList(null);
+    const squeezes = report.steps.layoutSqueezed;
+    assert.ok(squeezes.some((m) => m.word > 1 && m.word < 40 && !m.subjectCut), `the pill's word never gave way alone: ${JSON.stringify(squeezes)}`);
+    assert.ok(squeezes.some((m) => m.subjectCut && m.word <= 1), `the subject was never cut after the word: ${JSON.stringify(squeezes)}`);
     await setTheme("light");
     report.screenshots.push(await screenshot("conversations-reading-row"));
     await setTheme("dark");
@@ -458,10 +490,13 @@ describe("stage 17: conversations unfold in the list, one message on the right",
           const label = row.querySelector('[data-testid="row-account"]');
           const dot = label?.querySelector('[data-testid="row-account-dot"]');
           if (!sender || !label || !dot) return [];
+          // Cut by any fraction of a pixel (an ellipsis shows then).
+          const range = document.createRange();
+          range.selectNodeContents(sender);
           return [
             {
               names: sender.textContent,
-              namesCut: sender.scrollWidth > sender.clientWidth + 1,
+              namesCut: range.getBoundingClientRect().width > sender.getBoundingClientRect().width + 0.05,
               label: label.getAttribute("title"),
               labelWidth: label.getBoundingClientRect().width,
               dotWidth: dot.getBoundingClientRect().width,
@@ -471,14 +506,28 @@ describe("stage 17: conversations unfold in the list, one message on the right",
         }),
       );
     await browser.waitUntil(async () => (await measure()).length > 0, { timeoutMsg: "no rows with names and an account label" });
+    const check = (rows) => {
+      for (const row of rows) {
+        assert.ok(["Alice Archer", "Bob Baker"].includes(row.label ?? ""), `label ${String(row.label)}`);
+        assert.ok(row.rowName.includes(`Account: ${String(row.label)}`), `the row's name lacks the account: ${row.rowName}`);
+        // Names cut only once the label is down to its dot.
+        if (row.namesCut) assert.ok(row.labelWidth <= row.dotWidth + 1, `"${String(row.names)}" cut beside a label of ${String(row.labelWidth)} px`);
+      }
+    };
     const rows = await measure();
     report.steps.unifiedLabels = rows.slice(0, 8);
-    for (const row of rows) {
-      assert.ok(["Alice Archer", "Bob Baker"].includes(row.label ?? ""), `label ${String(row.label)}`);
-      assert.ok(row.rowName.includes(`Account: ${String(row.label)}`), `the row's name lacks the account: ${row.rowName}`);
-      // Names cut only once the label is down to its dot.
-      if (row.namesCut) assert.ok(row.labelWidth <= row.dotWidth + 1, `"${String(row.names)}" cut beside a label of ${String(row.labelWidth)} px`);
-    }
+    check(rows);
+    // Narrower: labels give way, then names are cut beside a bare dot (both measured).
+    await narrowList(280);
+    const squeezed = await measure();
+    report.steps.unifiedSqueezed = squeezed.slice(0, 8);
+    check(squeezed);
+    assert.ok(
+      squeezed.some((row) => row.labelWidth <= row.dotWidth + 1),
+      `no label went down to its dot: ${JSON.stringify(squeezed.map((r) => r.labelWidth))}`,
+    );
+    report.screenshots.push(await screenshot("conversations-unified-squeezed"));
+    await narrowList(null);
     report.screenshots.push(await screenshot("conversations-unified-labels"));
     const findings = await runAxe();
     assert.deepEqual(findings, [], `axe, unified inbox: ${JSON.stringify(findings)}`);

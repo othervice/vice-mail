@@ -194,7 +194,9 @@ function SelectionMark({ unread, selected, multiSelect }: { unread: boolean; sel
  * The subject takes the width first: short of room, the pill gives up its word before the
  * subject loses a letter ("3 replies", "3 repl…", "3"), never its chevron and number. A grid whose
  * word column may shrink to nothing (`minmax(0, max-content)`) makes chevron and number the pill's
- * smallest size, and its large shrink factor makes the row's line take from it first.
+ * smallest size, and its shrink factor makes the row's line take from it first: a million times
+ * the subject's, so the subject's share of a shortage stays far below a 64th of a pixel (WebKit's
+ * layout unit) and no ellipsis appears while the pill can still give.
  */
 function RepliesToggle({ replies, expanded }: { replies: number; expanded: boolean | undefined }) {
   const { t } = useTranslation();
@@ -205,7 +207,7 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
       {...(foldable && { "data-row-toggle": true })}
       title={foldable ? t(expanded ? "threads.collapse" : "threads.expand") : t("threads.replies", { count: replies })}
       className={cx(
-        "grid h-5 shrink-1000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-12 font-medium tabular-nums transition-colors",
+        "grid h-5 shrink-1000000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-12 font-medium tabular-nums transition-colors",
         foldable ? "cursor-pointer ps-1 pe-2" : "px-2",
         expanded ? "bg-accent-soft text-accent" : "bg-badge text-secondary",
         foldable && !expanded && "hover:text-primary",
@@ -353,12 +355,12 @@ export function MessageRowContent({
   );
   // Stage 8: which account, in words, wherever the avatar ring's colour tells accounts apart.
   // Stage 17: the names come first; short of room the label gives way first, down to its colour
-  // dot (large shrink factor, the dot as its smallest size); the name stays its tooltip and is part
-  // of the row's accessible name.
+  // dot (a shrink factor a million times the names', see `RepliesToggle`; the dot as its smallest
+  // size); the name stays its tooltip and is part of the row's accessible name.
   const accountElement = decoration?.account ? (
     <span
       title={decoration.account}
-      className="flex max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000 items-center gap-1 overflow-hidden"
+      className="flex max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 items-center gap-1 overflow-hidden"
       data-testid="row-account"
     >
       <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />

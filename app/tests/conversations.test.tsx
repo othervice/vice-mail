@@ -488,7 +488,7 @@ describe("opening a conversation", () => {
     expect(label.getAttribute("title")).toBe("Work");
     expect(within(label).getByTestId("row-account-name").textContent).toBe("Work");
     expect(within(label).getByTestId("row-account-dot").className).toContain("bg-account-4");
-    expect(label.className).toMatch(/\bshrink-1000\b/);
+    expect(label.className).toMatch(/\bshrink-1000000\b/);
     expect(label.className).toContain("min-w-(--ui-dot)");
     expect(label.className).toContain("overflow-hidden");
     expect(optionName(projekt)).toContain("Account: Work");

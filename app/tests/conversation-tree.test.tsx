@@ -360,7 +360,7 @@ describe("the look (stage 17, after the screenshot pass)", () => {
     const pill = within(conversation()).getByTestId("row-replies");
     expect(pill.textContent).toBe("2 replies");
     // Chevron, number and the word with its space in a column that may shrink to nothing.
-    expect(classes(pill)).toEqual(expect.arrayContaining(["grid", "shrink-1000", "grid-cols-[auto_auto_minmax(0,max-content)]"]));
+    expect(classes(pill)).toEqual(expect.arrayContaining(["grid", "shrink-1000000", "grid-cols-[auto_auto_minmax(0,max-content)]"]));
     expect(classes(pill)).not.toContain("shrink-0");
     const word = within(pill).getByTestId("row-replies-word");
     expect(word.textContent).toBe(" replies");
