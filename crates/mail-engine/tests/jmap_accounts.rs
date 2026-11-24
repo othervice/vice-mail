@@ -15,9 +15,12 @@
 //!
 //! ```text
 //! scripts/testmail.sh lock jmap 60 && scripts/testmail.sh start
-//! cargo test -p mail-engine --test jmap_accounts -- --include-ignored --test-threads=1
+//! cargo test -p mail-engine --test jmap_accounts -- --include-ignored
 //! scripts/testmail.sh unlock jmap
 //! ```
+//!
+//! The tests share bob's mailbox and each one cleans it first, so they take turns ([`SERVER`]),
+//! also when the test harness runs them in parallel.
 //!
 //! Works with messages `<...@jmap-accounts.test>` it appends itself and with bob's
 //! `Settings-Sync` folder; they are removed before and after.
@@ -45,6 +48,10 @@ use url::Url;
 
 const WAIT: Duration = Duration::from_secs(60);
 const DOMAIN: &str = "jmap-accounts.test";
+
+/// One test at a time: they all work in bob's mailbox, and each removes the messages of this
+/// file (`@jmap-accounts.test`) before it starts, which would take another test's message away.
+static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn run() -> String {
     format!("ja{}", std::process::id())
@@ -499,6 +506,7 @@ async fn bearer_token(env: &TestEnv, who: &TestAccount) -> Secret<String> {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn a_jmap_account_signs_in_with_an_api_token_as_a_bearer_token() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     let run = run();
     let mut bob = imap(&env, &env.bob).await;
@@ -590,6 +598,7 @@ async fn a_jmap_account_signs_in_with_an_api_token_as_a_bearer_token() {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn imap_and_jmap_accounts_share_the_unified_inbox_each_on_its_own_server() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     let run = run();
     let mut alice = imap(&env, &env.alice).await;
@@ -784,6 +793,7 @@ async fn device(env: &TestEnv) -> (TempDir, AppCore<Recording>, AccountId) {
 #[tokio::test]
 #[ignore = "needs the test server"]
 async fn the_settings_sync_keeps_its_folder_in_a_jmap_account() {
+    let _serial = SERVER.lock().await;
     let env = TestEnv::require();
     let mut bob = imap(&env, &env.bob).await;
     drop_folder(&mut bob).await;
