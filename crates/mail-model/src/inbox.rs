@@ -534,6 +534,9 @@ pub struct NotificationSettings {
     pub badge: BadgeMode,
     /// Stage 16: the sound notifications make (settings stored before have the default).
     pub sound: NotificationSound,
+    /// Stage 18 (decision 0051): how new mail shows itself; settings stored before show the
+    /// app's popup. Failed sends and returned snoozes are always system notifications.
+    pub new_mail_style: NewMailStyle,
 }
 
 impl Default for NotificationSettings {
@@ -549,8 +552,23 @@ impl Default for NotificationSettings {
             muted_accounts: Vec::new(),
             badge: BadgeMode::default(),
             sound: NotificationSound::default(),
+            new_mail_style: NewMailStyle::default(),
         }
     }
+}
+
+/// Stage 18 (decision 0051): where a new-mail notification appears. The core decides whether to
+/// announce a message the same way for both; only the presentation differs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum NewMailStyle {
+    /// The app's own popup at the bottom right of the screen: one card per message with
+    /// "Read" and "Delete".
+    #[default]
+    Popup,
+    /// A notification of the system (macOS Notification Center, Windows toast): several
+    /// messages of one sync are one notification.
+    System,
 }
 
 /// System sounds a notification may play on macOS: the alert sounds of

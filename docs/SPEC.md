@@ -97,6 +97,10 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Als Standard-Mail-App registrierbar (`mailto:`).
 - Native Benachrichtigungen für neue Mails, fehlgeschlagene Sendungen, fällige Snoozes; pro Konto
   steuerbar, Ruhezeiten, Inhalt auf dem Sperrbildschirm ausblendbar.
+- Neue Mails wahlweise als Popup der App unten rechts am Bildschirmrand (Standard, Stufe 18):
+  eine Karte je Mail mit Bild, Absender, Betreff, zwei Zeilen Ausschnitt, „Lesen“ und „Löschen“
+  (mit „Rückgängig“), nimmt der App im Vordergrund nicht den Fokus; oder als Mitteilung des
+  Systems.
 - Zähler am Dock- bzw. Taskleisten-Symbol.
 - Benachrichtigungstöne, je Konto stumm schaltbar (Stufe 16).
 

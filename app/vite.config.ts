@@ -8,7 +8,15 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true, host: "localhost" },
   envPrefix: ["VITE_", "TAURI_ENV_"],
-  build: { target: "es2022", outDir: "dist", emptyOutDir: true, sourcemap: false },
+  build: {
+    target: "es2022",
+    outDir: "dist",
+    emptyOutDir: true,
+    sourcemap: false,
+    // Stage 18 (decision 0051): the new-mail popup's window loads a page of its own, without the
+    // rest of the app.
+    rollupOptions: { input: { main: "index.html", popup: "popup.html" } },
+  },
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}"],

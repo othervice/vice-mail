@@ -3498,6 +3498,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "objc2-quartz-core",
  "open",
  "rfd",
  "serde",
@@ -3515,6 +3516,8 @@ dependencies = [
  "tokio",
  "tracing",
  "webview2-guard",
+ "windows",
+ "windows-registry",
 ]
 
 [[package]]

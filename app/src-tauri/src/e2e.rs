@@ -6,7 +6,9 @@
 //! - A data directory of the test's own: [`DATA_DIR_ENV`] is required, so a test build never
 //!   reads or writes the user's real data or logs, not even by accident.
 //! - Test commands (`e2e_*`) for facts WebDriver cannot see, such as the native window buttons
-//!   that macOS draws over the web view, and for real (trusted) mouse clicks.
+//!   that macOS draws over the web view, the native state of a window (stage 18: the new-mail
+//!   popup never becomes key and sits at the bottom right), and for real (trusted) mouse
+//!   clicks.
 //! - A recorder for Content-Security-Policy violations from the first byte of the page on.
 //! - A recorder of every command that reaches the invoke handler (a script in a mail frame
 //!   that got hold of the IPC would show up there).
@@ -165,6 +167,7 @@ pub fn install(
     let test_commands: Box<dyn Fn(Invoke<Wry>) -> bool + Send + Sync> =
         Box::new(tauri::generate_handler![
             e2e_window_controls,
+            e2e_window_state,
             e2e_native_mouse,
             e2e_opened,
             e2e_invoked,
@@ -312,6 +315,51 @@ pub async fn e2e_window_controls(window: WebviewWindow) -> Result<WindowControls
     }
 }
 
+/// Stage 18: what macOS says about a window and the app (decision 0051).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeWindowState {
+    pub label: String,
+    /// The window has the keyboard focus.
+    pub key: bool,
+    /// The window could take it at all.
+    pub can_become_key: bool,
+    pub visible: bool,
+    /// `NSWindowLevel` (0 normal, 3 floating).
+    pub level: isize,
+    /// `NSWindowCollectionBehavior` bits.
+    pub collection_behavior: usize,
+    pub excluded_from_windows_menu: bool,
+    pub opaque: bool,
+    pub has_shadow: bool,
+    /// The content view's layer corner radius (0 without a layer).
+    pub corner_radius: f64,
+    /// The window's frame in screen points (origin bottom left): x, y, width, height.
+    pub frame: [f64; 4],
+    /// The visible frame of its screen (without menu bar and Dock), same coordinates.
+    pub visible_frame: [f64; 4],
+    /// For `screencapture -l`.
+    pub window_number: isize,
+    /// The app is the active one.
+    pub app_active: bool,
+}
+
+/// The native state of the window `label` (macOS only).
+#[tauri::command]
+pub async fn e2e_window_state(app: AppHandle, label: String) -> Result<NativeWindowState, String> {
+    let window = tauri::Manager::get_webview_window(&app, &label)
+        .ok_or_else(|| format!("no window {label}"))?;
+    #[cfg(target_os = "macos")]
+    {
+        macos::window_state(&window, label).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, label);
+        Err("the native window state is only read on macOS".into())
+    }
+}
+
 /// A real left click at `x`/`y` (CSS pixels in the main frame's viewport, as
 /// `getBoundingClientRect()` gives them; `viewport_height` is `innerHeight`, for the offset of a
 /// title bar above the viewport). WebDriver's own clicks are synthetic (`el.click()`): untrusted
@@ -399,6 +447,42 @@ mod macos {
 
     pub async fn window_controls(window: &WebviewWindow) -> Result<WindowControls, String> {
         on_main_window(window, measure).await
+    }
+
+    pub async fn window_state(
+        window: &WebviewWindow,
+        label: String,
+    ) -> Result<super::NativeWindowState, String> {
+        on_main_window(window, move |w| {
+            let mtm = MainThreadMarker::new().ok_or("not on the main thread")?;
+            let rect =
+                |r: objc2_foundation::NSRect| [r.origin.x, r.origin.y, r.size.width, r.size.height];
+            let visible_frame = w
+                .screen()
+                .map(|screen| rect(screen.visibleFrame()))
+                .unwrap_or_default();
+            let corner_radius = w
+                .contentView()
+                .and_then(|view| view.layer())
+                .map_or(0.0, |layer| layer.cornerRadius());
+            Ok(super::NativeWindowState {
+                label,
+                key: w.isKeyWindow(),
+                can_become_key: w.canBecomeKeyWindow(),
+                visible: w.isVisible(),
+                level: w.level(),
+                collection_behavior: w.collectionBehavior().bits(),
+                excluded_from_windows_menu: w.isExcludedFromWindowsMenu(),
+                opaque: w.isOpaque(),
+                has_shadow: w.hasShadow(),
+                corner_radius,
+                frame: rect(w.frame()),
+                visible_frame,
+                window_number: w.windowNumber(),
+                app_active: NSApplication::sharedApplication(mtm).isActive(),
+            })
+        })
+        .await
     }
 
     pub async fn click(

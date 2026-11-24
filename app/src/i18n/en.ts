@@ -2446,6 +2446,13 @@ export const en = {
         description: "Notifications only say “New message”. Whether previews appear on the lock screen is decided by the system: on macOS under Notifications, “Show previews”; on Windows under Notifications, “Show notifications on the lock screen”.",
       },
       accounts: "Accounts that announce new mail",
+      // Stage 18 (decision 0051): the app's popup or the system's notification for new mail.
+      style: {
+        label: "Show new mail as",
+        description: "The popup appears at the bottom right of the screen with Read and Delete and does not take the focus from the app you are in. Failed sends and messages back from Later always come as system notifications.",
+        popup: "Popup from {{product}}",
+        system: "System notification",
+      },
       badge: {
         label: "Counter on the app icon",
         description: "The number on the Dock icon (macOS) or the taskbar button (Windows).",
@@ -3968,6 +3975,26 @@ export const en = {
       openInbox: "Open inbox",
       start: "Start using {{product}}",
     },
+  },
+  // Stage 18 (decision 0051): the popup for new mail at the bottom right of the screen.
+  popup: {
+    title: "New mail",
+    newMessage: "New message",
+    noSender: "Unknown sender",
+    noSubject: "(no subject)",
+    read: "Read",
+    delete: "Delete",
+    deleted: "Deleted",
+    undo: "Undo",
+    close: "Close",
+    more_one: "{{count}} more in the inbox",
+    more_other: "{{count}} more in the inbox",
+    readOnly: "Read-only account: deleting needs changes to be allowed in Settings → Accounts.",
+    account: "In {{name}}",
+    announce: "New message from {{sender}}: {{subject}}",
+    announceHidden: "New message",
+    announceMany: "{{count}} new messages",
+    failed: "Didn’t work: {{reason}}",
   },
 } as const;
 

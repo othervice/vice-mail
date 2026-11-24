@@ -79,6 +79,9 @@ export const config = {
     // appends three messages to the inbox and moves two to Junk and back, after the specs that
     // count the seed.
     "./tests/e2e/contacts.e2e.mjs",
+    // Stage 18, block C (decision 0051): the new-mail popup. It delivers messages of its own,
+    // deletes one into the trash and turns writes on for alice, then removes the account.
+    "./tests/e2e/new-mail-popup.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.

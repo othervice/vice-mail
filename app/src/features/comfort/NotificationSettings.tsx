@@ -4,8 +4,10 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
+import { PRODUCT_NAME } from "../../config/product";
 import type {
   BadgeMode,
+  NewMailStyle,
   NotificationSettings as Settings,
   NotificationSound,
   NotifyCategories,
@@ -25,7 +27,10 @@ type Full = Required<Omit<Settings, "categories" | "quietHours" | "sound">> & {
   sound: Required<NotificationSound>;
 };
 
-/** The core's defaults (decision 0020): people and priority, failed sends, snoozes, quiet 22–7 off. */
+/**
+ * The core's defaults (decision 0020): people and priority, failed sends, snoozes, quiet 22–7
+ * off; stage 18 (decision 0051): new mail in the app's popup.
+ */
 export const NOTIFICATION_DEFAULTS: Full = {
   enabled: true,
   newMail: true,
@@ -37,6 +42,7 @@ export const NOTIFICATION_DEFAULTS: Full = {
   mutedAccounts: [],
   badge: "inboxUnread",
   sound: { enabled: true, macos: "Default", windows: "Default", silentAccounts: [] },
+  newMailStyle: "popup",
 };
 
 export function withNotificationDefaults(settings: Settings | undefined): Full {
@@ -114,6 +120,10 @@ export function NotificationSettings() {
   const category = (key: keyof NotifyCategories, value: boolean) => {
     update({ categories: { ...current.categories, [key]: value } });
   };
+  const styleOptions: ChoiceOption<NewMailStyle>[] = [
+    { value: "popup", label: t("comfort.notifications.style.popup", { product: PRODUCT_NAME }) },
+    { value: "system", label: t("comfort.notifications.style.system") },
+  ];
   const badgeOptions: ChoiceOption<BadgeMode>[] = [
     { value: "off", label: t("comfort.notifications.badge.off") },
     { value: "inboxUnread", label: t("comfort.notifications.badge.inboxUnread") },
@@ -151,6 +161,16 @@ export function NotificationSettings() {
             update({ newMail });
           }}
           data-testid="notify-new-mail"
+        />
+        {/* Stage 18 (decision 0051): the app's popup (default) or the system's notification. */}
+        <ChoiceGroup
+          label={t("comfort.notifications.style.label")}
+          description={t("comfort.notifications.style.description")}
+          value={current.newMailStyle}
+          options={styleOptions}
+          onChange={(newMailStyle) => {
+            update({ newMailStyle });
+          }}
         />
         {NOTIFY_CATEGORIES.map((key) => (
           <Switch

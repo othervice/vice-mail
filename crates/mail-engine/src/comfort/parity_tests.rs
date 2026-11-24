@@ -252,6 +252,10 @@ async fn favourites_and_colours_come_with_the_folder_list() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn blocked_senders_are_hidden_on_read_only_accounts_and_not_announced() {
     let mut h = Harness::new(FakeServer::new()).await;
+    h.core
+        .set_notification_settings(system_style())
+        .await
+        .expect("system notifications");
     let blocked = h
         .core
         .block_sender("Pushy <OFFERS@spam.example>".into())
@@ -343,6 +347,10 @@ async fn blocked_senders_go_to_junk_where_the_account_may_write() {
     add_junk(&server);
     let mut h = Harness::new(server).await;
     h.writes(true).await;
+    h.core
+        .set_notification_settings(system_style())
+        .await
+        .expect("system notifications");
     h.core
         .block_sender("offers@spam.example".into())
         .await

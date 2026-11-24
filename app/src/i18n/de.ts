@@ -2433,6 +2433,13 @@ export const de: Translation = {
         description: "Mitteilungen sagen nur „Neue Nachricht“. Ob Vorschauen auf dem Sperrbildschirm erscheinen, regelt das System: auf dem Mac unter Mitteilungen, „Vorschauen zeigen“; unter Windows unter Benachrichtigungen, „Benachrichtigungen auf dem Sperrbildschirm anzeigen“.",
       },
       accounts: "Konten, die neue Mails melden",
+      // Stufe 18 (Entscheidung 0051): das Popup der App oder die Mitteilung des Systems für neue Mails.
+      style: {
+        label: "Neue Mails zeigen als",
+        description: "Das Popup erscheint unten rechts am Bildschirmrand mit „Lesen“ und „Löschen“ und nimmt der App, in der du gerade bist, nicht den Fokus. Fehlgeschlagene Sendungen und Mails zurück aus „Später“ kommen immer als Mitteilung des Systems.",
+        popup: "Popup von {{product}}",
+        system: "Mitteilung des Systems",
+      },
       badge: {
         label: "Zähler am App-Symbol",
         description: "Die Zahl am Symbol im Dock (macOS) oder an der Taskleiste (Windows).",
@@ -3953,5 +3960,25 @@ export const de: Translation = {
       openInbox: "Posteingang öffnen",
       start: "{{product}} verwenden",
     },
+  },
+  // Stufe 18 (Entscheidung 0051): das Popup für neue Mails unten rechts am Bildschirmrand.
+  popup: {
+    title: "Neue Mail",
+    newMessage: "Neue Nachricht",
+    noSender: "Unbekannter Absender",
+    noSubject: "(kein Betreff)",
+    read: "Lesen",
+    delete: "Löschen",
+    deleted: "Gelöscht",
+    undo: "Rückgängig",
+    close: "Schließen",
+    more_one: "{{count}} weitere im Posteingang",
+    more_other: "{{count}} weitere im Posteingang",
+    readOnly: "Nur lesendes Konto: Zum Löschen musst du Änderungen unter Einstellungen → Konten erlauben.",
+    account: "In {{name}}",
+    announce: "Neue Nachricht von {{sender}}: {{subject}}",
+    announceHidden: "Neue Nachricht",
+    announceMany: "{{count}} neue Nachrichten",
+    failed: "Hat nicht geklappt: {{reason}}",
   },
 };

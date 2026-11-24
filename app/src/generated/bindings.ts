@@ -714,11 +714,42 @@ export const commands = {
 	getFirstStart: (options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("get_first_start", undefined, options)),
 	/**  "Skip setup" or the last step: the first start does not show again on this device. */
 	finishFirstStart: (end: FirstStartEnd, options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("finish_first_start", { end }, options)),
+	/**
+	 *  The popup as it is now: at most three cards (newest first), how many more wait, and the
+	 *  app's theme, language and accent.
+	 */
+	getNewMailPopup: (options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("get_new_mail_popup", undefined, options)),
+	/**
+	 *  "Read": the card goes, the main window comes to the front and shows the message in its
+	 *  inbox (`openMessageRequested`). `not_found` if the card is gone.
+	 */
+	readFromPopup: (messageId: MessageId, options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("read_from_popup", { messageId }, options)),
+	/**
+	 *  "Delete": the list's delete through the outbox into the trash; the card shows "Deleted"
+	 *  with Undo. `read_only` for a read-only account, `missing_mailbox` without a trash folder.
+	 */
+	deleteFromPopup: (messageId: MessageId, options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("delete_from_popup", { messageId }, options)),
+	/**  "Undo" on a deleted card. */
+	undoPopupDelete: (messageId: MessageId, options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("undo_popup_delete", { messageId }, options)),
+	/**
+	 *  Closes one card, or all of them (`null`: the popup hid itself). The window closes with the
+	 *  last card.
+	 */
+	dismissPopup: (messageId: MessageId | null, options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("dismiss_popup", { messageId }, options)),
+	/**  "N more": the popup closes, the main window comes to the front with the inbox. */
+	openInboxFromPopup: (options?: InvokeOptions) => typedError<NewMailPopup, IpcError>(__TAURI_INVOKE("open_inbox_from_popup", undefined, options)),
+	/**
+	 *  The popup's page measured itself: its window takes `height` (logical pixels, within limits)
+	 *  at the bottom right of the screen and appears if it has not yet. Only for the popup's own
+	 *  window (`invalid_argument` from any other).
+	 */
+	fitNewMailPopup: (height: number | null, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("fit_new_mail_popup", { height }, options)),
 };
 
 /** Events */
 export const events = {
 	coreEvent: makeEvent<CoreEvent, CoreEvent>("core-event"),
+	newMailPopupChanged: makeEvent<NewMailPopup, NewMailPopup>("new-mail-popup-changed"),
 };
 
 /* Constants */
@@ -2048,8 +2079,10 @@ export type ConversationSummary = {
  *    changed.
  *  - `ruleSkipped` (stage 9): a local rule's action did not run for `count` new messages
  *    (`readOnly`: the account is read-only). Show a notice; nothing else happened.
- *  - `openMessageRequested` (stage 9): the user clicked a system notification; show the
- *    message (in `mailboxId` if given).
+ *  - `openMessageRequested` (stage 9): the user clicked a system notification (or, stage 18,
+ *    "Read" in the new-mail popup); show the message (in `mailboxId` if given).
+ *  - `openInboxRequested` (stage 18): "N more" in the new-mail popup; show the account's inbox,
+ *    or the unified inbox for `null`.
  *  - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
  *    composer with these fields and show `request.notices` (a link that sets blind copies, or
  *    tried to set headers that were ignored).
@@ -2074,7 +2107,12 @@ export type ConversationSummary = {
  *  - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
  *    changed (here or by the settings sync). Reload the contacts and the picture list.
  */
-export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
+export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | 
+/**
+ *  Stage 18 (decision 0051): "N more" in the new-mail popup: the main window shows the
+ *  inbox of this account, or the unified inbox (`null`, the cards came from several).
+ */
+{ type: "openInboxRequested"; accountId: AccountId | null } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
  *  Stage 13: a running AI request (the id the UI chose): what is sent to whom before each
  *  provider request, the characters received, the end.
@@ -3473,6 +3511,87 @@ export type NewDraft =
  */
 { kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage };
 
+/**  The account of a card, named only when the app has more than one account. */
+export type NewMailAccount = {
+	/**  The display name, else the address. */
+	name: string,
+	color: AccountColor,
+};
+
+/**  One card of the popup: one new message. */
+export type NewMailCard = {
+	accountId: AccountId,
+	/**  The inbox the message arrived in ("Read" opens it there). */
+	mailboxId: MailboxId,
+	messageId: MessageId,
+	/**  Sort date of the message in Unix milliseconds. */
+	date: number,
+	/**  Null when the content is hidden: then only "Read" is offered. */
+	content: NewMailContent | null,
+	/**  Null with a single account. */
+	account: NewMailAccount | null,
+	/**  `false` for a read-only account: "Delete" is disabled and says why. */
+	writesEnabled: boolean,
+	/**
+	 *  Deleted from the popup (through the outbox into the trash): the card shows "Deleted"
+	 *  with "Undo" for a few seconds.
+	 */
+	deleted: boolean,
+};
+
+/**
+ *  What a card says about its message. Absent when the notification settings hide the content
+ *  (the card then says "New message" and names the account).
+ */
+export type NewMailContent = {
+	/**  Display name of the first `From` address; null without one. */
+	senderName: string | null,
+	/**  Its address; null for a message without a sender. */
+	senderEmail: string | null,
+	/**  Empty without a subject. */
+	subject: string,
+	/**
+	 *  The start of the text as plain text (the list preview, at most 256 characters); null
+	 *  until the body is stored (the core fills it in as soon as the prefetch has it).
+	 */
+	snippet: string | null,
+	/**
+	 *  Stage 17 (decision 0050): the picture the user chose for the sender, as the JPEG
+	 *  `data:` URL the core's helper wrote; null without one. Never from the network.
+	 */
+	picture: string | null,
+};
+
+/**  The popup as the UI draws it. */
+export type NewMailPopup = {
+	/**  At most [`MAX_POPUP_CARDS`], newest first. Empty: the popup closes. */
+	cards: NewMailCard[],
+	/**  Cards waiting behind the visible ones ("N more" opens the inbox). */
+	more: number,
+	appearance: PopupAppearance,
+	/**
+	 *  Grows with every change of the cards. The popup hears of a change twice (the event and
+	 *  the answer of its own command) and keeps the newest, whatever arrives last.
+	 */
+	revision: number,
+};
+
+/**
+ *  Stage 18 (decision 0051): where a new-mail notification appears. The core decides whether to
+ *  announce a message the same way for both; only the presentation differs.
+ */
+export type NewMailStyle = 
+/**
+ *  The app's own popup at the bottom right of the screen: one card per message with
+ *  "Read" and "Delete".
+ */
+"popup" | 
+/**
+ *  A notification of the system (macOS Notification Center, Windows toast): several
+ *  messages of one sync are one notification.
+ */
+"system";
+
 /**  Notification settings (device settings). */
 export type NotificationSettings = {
 	/**  Off: no notification at all. */
@@ -3493,6 +3612,11 @@ export type NotificationSettings = {
 	badge?: BadgeMode,
 	/**  Stage 16: the sound notifications make (settings stored before have the default). */
 	sound?: NotificationSound,
+	/**
+	 *  Stage 18 (decision 0051): how new mail shows itself; settings stored before show the
+	 *  app's popup. Failed sends and returned snoozes are always system notifications.
+	 */
+	newMailStyle?: NewMailStyle,
 };
 
 /**
@@ -3791,6 +3915,13 @@ export type Platform = "macos" | "windows" | "linux";
 export type PlatformShortcuts = {
 	macos: ShortcutOverride[],
 	windows: ShortcutOverride[],
+};
+
+/**  How the popup looks: the same theme, language and accent as the app's windows. */
+export type PopupAppearance = {
+	theme: ThemePreference,
+	language: LanguagePreference,
+	accent: AccentTheme,
 };
 
 /**  User preferences stored in the `setting` table. */

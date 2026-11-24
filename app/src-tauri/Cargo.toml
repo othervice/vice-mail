@@ -39,27 +39,24 @@ tauri-plugin-updater.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Test builds only (feature `e2e`): reads the native window buttons for the desktop test and
-# sends it real mouse clicks (NSEvent).
-objc2 = { workspace = true, optional = true }
-objc2-app-kit = { workspace = true, optional = true, features = [
+# Stage 18 (decision 0051): the new-mail popup's window (rounded corners through the content
+# view's layer, not in the Window menu, on every Space, never key) and its sound (NSSound,
+# NSBeep), through safe calls only. Test builds (feature `e2e`) add what reads the native window
+# buttons for the desktop test and sends it real mouse clicks (NSEvent).
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = [
     "std",
     "NSApplication",
-    "NSButton",
-    "NSControl",
-    "NSEvent",
-    "NSGraphicsContext",
+    "NSColor",
+    "NSGraphics",
     "NSResponder",
+    "NSSound",
     "NSView",
     "NSWindow",
+    "objc2-quartz-core",
 ] }
-objc2-foundation = { workspace = true, optional = true, features = [
-    "std",
-    "objc2-core-foundation",
-    "NSDate",
-    "NSGeometry",
-    "NSProcessInfo",
-] }
+objc2-foundation = { workspace = true, features = ["std", "NSString"] }
+objc2-quartz-core = { workspace = true, features = ["std", "CALayer"] }
 
 [target.'cfg(windows)'.dependencies]
 # Stage 9: a second start (a `mailto:` link) hands its arguments to the running app; the
@@ -69,6 +66,15 @@ open.workspace = true
 # WebView2 frame guard (feature `webview2-frame-guard`, decision 0011): the one crate with
 # `unsafe`; this crate itself keeps `forbid`.
 webview2-guard = { workspace = true, optional = true }
+# Stage 18 (decision 0051): the new-mail popup plays the chosen toast sound itself: the file of
+# the sound scheme's event (`AppEvents\Schemes`) through WinRT's MediaPlayer. Safe APIs only.
+windows = { workspace = true, features = [
+    "std",
+    "Foundation",
+    "Media_Core",
+    "Media_Playback",
+] }
+windows-registry.workspace = true
 
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 # Save dialog for attachments (stage 3), from Rust only; the frontend gets no dialog access.
@@ -80,9 +86,15 @@ default = ["webview2-frame-guard"]
 # test's own and the `e2e_*` test commands. Never part of a shipped build (`test:release-clean`).
 e2e = [
     "dep:tauri-plugin-wdio-webdriver",
-    "dep:objc2",
-    "dep:objc2-app-kit",
-    "dep:objc2-foundation",
+    "objc2-app-kit/NSButton",
+    "objc2-app-kit/NSControl",
+    "objc2-app-kit/NSEvent",
+    "objc2-app-kit/NSGraphicsContext",
+    "objc2-app-kit/NSScreen",
+    "objc2-foundation/objc2-core-foundation",
+    "objc2-foundation/NSDate",
+    "objc2-foundation/NSGeometry",
+    "objc2-foundation/NSProcessInfo",
 ]
 # Windows: checks navigations inside the mail frame through WebView2's FrameNavigationStarting
 # (crate webview2-guard, decision 0011). On by default; without it links in HTML mail do nothing

@@ -34,6 +34,7 @@ mod message;
 mod oauth;
 mod outbox;
 mod parity;
+mod popup;
 mod reading;
 mod role;
 mod saved_search;
@@ -131,11 +132,11 @@ pub use inbox::{
     DefaultMailAppOutcome, InboxCursor, InboxFilter, InboxPage, InboxRow, InboxScope,
     InboxSettings, InboxTop, MACOS_SOUNDS, MAX_RULE_PARTS, MAX_RULE_TEXT, MAX_RULES,
     MAX_TOP_PINNED, MAX_TOP_RETURNED, MailRule, MarkScope, MessageCategoryInfo, MessageExtras,
-    NotificationSettings, NotificationSound, NotificationSoundChoices, NotificationTexts,
-    NotifyCategories, PRIORITY_PREVIEW, QuietHours, RuleAction, RuleCondition, RuleId, RuleInput,
-    RuleSkipReason, SenderRule, SnoozeChoice, SnoozeMark, SnoozeResult, SnoozeTimes, SoundPlatform,
-    TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome,
-    WINDOWS_SOUNDS,
+    NewMailStyle, NotificationSettings, NotificationSound, NotificationSoundChoices,
+    NotificationTexts, NotifyCategories, PRIORITY_PREVIEW, QuietHours, RuleAction, RuleCondition,
+    RuleId, RuleInput, RuleSkipReason, SenderRule, SnoozeChoice, SnoozeMark, SnoozeResult,
+    SnoozeTimes, SoundPlatform, TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod,
+    UnsubscribeOptions, UnsubscribeOutcome, WINDOWS_SOUNDS,
 };
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
@@ -171,6 +172,10 @@ pub use parity::{
     BlockedSender, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
     MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
     UnreadFirstThreadPage, UnreadPhase,
+};
+pub use popup::{
+    MAX_POPUP_CARDS, MAX_POPUP_QUEUE, NewMailAccount, NewMailCard, NewMailContent, NewMailPopup,
+    PopupAppearance,
 };
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
