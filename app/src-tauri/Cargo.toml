@@ -90,6 +90,7 @@ e2e = [
     "objc2-app-kit/NSControl",
     "objc2-app-kit/NSEvent",
     "objc2-app-kit/NSGraphicsContext",
+    "objc2-app-kit/NSScreen",
     "objc2-foundation/objc2-core-foundation",
     "objc2-foundation/NSDate",
     "objc2-foundation/NSGeometry",
