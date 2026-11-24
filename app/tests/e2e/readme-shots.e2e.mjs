@@ -408,6 +408,20 @@ describe("README screenshots (docs/images)", function () {
     await testId("remote-content-bar").waitForExist({ timeout: 20000 });
     await browser.pause(800);
     await scrollListToTop();
+    // docs/DESIGN.md, "Nach den README-Bildern": a row without a preview (older than the prefetch)
+    // has its two lines in the middle of the fixed row height.
+    const offsets = await browser.execute(() =>
+      [...document.querySelectorAll('[data-testid="message-list"] [role="option"]')]
+        .filter((option) => option.querySelector('[data-testid="row-preview"]') === null && !option.querySelector('[data-testid="bundle-row"]'))
+        .map((option) => {
+          const row = option.getBoundingClientRect();
+          const content = option.querySelector("[aria-hidden] > span")?.getBoundingClientRect();
+          return content ? Math.abs(content.top + content.height / 2 - (row.top + row.height / 2)) : null;
+        })
+        .filter((offset) => offset !== null),
+    );
+    report.notes.push(`rows without a preview, distance from the middle (px): ${JSON.stringify(offsets)}`);
+    assert.ok(offsets.length > 0 && offsets.every((offset) => offset <= 2), JSON.stringify(offsets));
     await shoot("inbox-light");
     await setTheme("dark");
     await shoot("inbox-dark");
