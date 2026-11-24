@@ -49,8 +49,8 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 
 ### C — Ansichten in der Spalte bearbeiten
 
-- [ ] Neue Ansicht „Kontakte“ in der Spalte und in der Befehlspalette.
-- [ ] „Ansichten bearbeiten …“: Ansichten ein- und ausblenden und sortieren (Später, Aufgaben,
+- [x] Neue Ansicht „Kontakte“ in der Spalte und in der Befehlspalette.
+- [x] „Ansichten bearbeiten …“: Ansichten ein- und ausblenden und sortieren (Später, Aufgaben,
   Leseliste, Markiert, Angeheftet, Angeheftete Anhänge, Gespeicherte Suchen, Kontakte, …); per
   Maus und Tastatur; Zurücksetzen auf die Standardauswahl. Gespeichert als UI-Einstellung im Kern,
   mit dem Einstellungs-Sync.
@@ -64,7 +64,7 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 - [ ] Kontaktsuche findet nach Name, Adresse und Domain bei 10.000 Kontakten unter 100 ms.
 - [ ] „Als Spam markieren“ sperrt die Adresse, neue Mails von ihr landen nicht im Posteingang;
   Rückgängig hebt das auf.
-- [ ] Ansichten lassen sich ein-, ausblenden und sortieren; die Auswahl übersteht einen Neustart.
+- [x] Ansichten lassen sich ein-, ausblenden und sortieren; die Auswahl übersteht einen Neustart.
 - [ ] Bildschirmfotos in `docs/images/` neu, wo sich etwas sichtbar geändert hat.
 - [ ] `scripts/check.sh` ist grün, Desktop-Tests grün.
 
@@ -154,3 +154,71 @@ Kein neuer Command, keine Migration, Bindings unverändert.
   zweizeiligen Gesprächszeile hängt kein Stück, dessen Höhe von Schriftgröße und Zeilen abhängt).
 - Gespräche mit 1.000 Kindern in der echten App nicht gesondert gemessen (gemessen: 60).
 - Vereinter Posteingang und Suchtreffer mit aufgeklappten Gesprächen nur in Vitest geprüft.
+
+### C — Ansichten in der Spalte bearbeiten
+
+**Stand vom 24.11.2026, 15:45** (Block C, eigene Sitzung). Commits: c027e0e (Kern), 55ec9b9
+(Oberfläche), 01d868b (Escape bei verlorenem Fokus, vom Desktop-Test gefunden), cdef21e
+(Shell-Test), dd1954f, 1f82811, ada744d, 2897e5e (Desktop-Specs), d14315a (`docs/DESIGN.md`,
+Abschnitt „Ansichten bearbeiten (Stufe 17)“). Die Ansicht „Kontakte“ selbst (Seite, Palette
+„Gehe zu Kontakte“, `goContacts`) kam mit Block B in a8670d9 (Entscheidung 0050); sie steht als
+`contacts` in der einen Liste `COLUMN_VIEW_IDS` und ist damit in Spalte, Leiste und Editor, im
+Standard eingeblendet hinter den gespeicherten Ansichten. Keine neue Entscheidung: Die Stufe sah
+eine UI-Einstellung im Kern vor.
+
+**Umgesetzt**
+- Kern: `UiPreferences.columnViews` (Liste von `{ id, shown }` in der Reihenfolge des Nutzers),
+  Standard `[]` (alle Ansichten in der Reihenfolge der Oberfläche, auch nach „Auf Standard
+  zurücksetzen“), höchstens 32 Einträge, einfache IDs, keine doppelt. Schlüssel `ui.column_views`
+  in `SYNCED_SETTINGS`; ein Wert, den diese Version nicht lesen kann, gilt als Standard; die
+  Diagnose nennt „default“ oder „chosen, n hidden“. Die Oberfläche kennt die Ansichten (eine Liste,
+  `COLUMN_VIEW_IDS` in `app/src/features/layout/columnViews.ts`); eine Ansicht, die eine spätere
+  Version bringt, erscheint an ihrem Standardplatz, Einträge unbekannter Ansichten (neueres Gerät)
+  bleiben beim Speichern erhalten.
+- „Ansichten bearbeiten …“ über das „…“ am Etikett „Ansichten“, das „…“ jeder Ansicht (dort auch
+  „In der Seitenleiste ausblenden“), Umschalt+F10/Kontextmenütaste/Rechtsklick und die
+  Befehlspalette (Gruppe Layout). Dialog mit Ein-/Ausblenden, Verschieben per Griff (Ziehen mit
+  Vorschau in Spalte und Leiste, gespeichert beim Loslassen), Pfeilknöpfen und Alt+↑/Alt+↓ (Fokus
+  bleibt, Ansage der neuen Stelle), „Auf Standard zurücksetzen“, „Fertig“; Englisch und Deutsch.
+- Spalte und Leiste zeigen nur die gewählten Ansichten in gewählter Reihenfolge; in der Leiste
+  stehen sie zwischen Posteingang und Gesendet (gespeicherte Ansichten rücken damit im Standard vor
+  Gesendet), die festen Einträge bleiben. Ausgeblendete Ansichten bleiben in der Palette und behalten
+  ihre Kürzel. Keine Ansicht gewählt: leiser Hinweis mit „Ansichten bearbeiten …“.
+
+**Nachgewiesen**
+- Rust (in `check.sh`): `ui::tests::column_views_default_to_empty_and_are_checked` (Standard, Grenzen,
+  Drahtform), `ui_prefs::tests::the_column_views_default_round_trip_and_sync` (Standard, Speichern
+  in der Reihenfolge des Nutzers, Ereignis, Neustart, Ablehnung ändert nichts, unlesbare Werte,
+  Zurücksetzen speichert `[]`, Schlüssel im Sync), der Erfassungstest des Einstellungs-Syncs (der
+  Schlüssel wird ein Datensatz) und `tests::ui_preference_commands_store_validate_and_emit` (Shell).
+- Vitest `app/tests/column-views.test.tsx`, 16 Tests: Standard und Zusammenführen, Öffnen aus
+  Spalte, Menü (Umschalt+F10) und Palette, Fokus hin und zurück, Tab bleibt im Dialog, Escape auch
+  ohne Fokus im Dialog, Ein- und Ausblenden mit Vorschau in Spalte und Leiste, Alt+Pfeil mit Ansage,
+  Pfeilknöpfe, Ziehen mit Vorschau vor dem Speichern und Abbruch, Zurücksetzen, Neustart gegen den
+  gespeicherten Stand, Änderung von einem anderen Gerät (`uiPreferencesChanged`), Ablehnung durch
+  den Kern, ausgeblendete Ansichten in Palette und Kürzel, leere Auswahl mit Hinweis, Ausblenden
+  aus dem Zeilenmenü, axe ohne schwere Befunde (Dialog offen, leere Auswahl, Deutsch unter Windows).
+  Angepasst: `frame.test.tsx`, `sidebar-keyboard.test.tsx` (Reihenfolge der Leiste).
+- Desktop (`scripts/e2e-gui.sh` im eigenen Worktree, mit Kontakten): auf 8b375b7 grün
+  `frame.e2e.mjs` (13, darunter: aus der Palette öffnen, „Später“ per Klick ausblenden, „Markiert“
+  mit Alt+↑ verschieben, der Kern hält die Auswahl, die Leiste zeigt sie zwischen Posteingang und
+  Gesendet; Spalte und Leiste mit „Kontakte“), `restart.e2e.mjs` (4, die Auswahl ist nach dem
+  Neustart da, danach zurück zum Standard), `keyboard.e2e.mjs` (4) und `a11y.e2e.mjs` (12).
+- Zwei Geräte gegen Stalwart: `shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay`
+  (`crates/mail-engine/tests/settings_sync.rs`, prüft jetzt auch `columnViews`) grün auf 8b375b7.
+  Der erste Versuch direkt nach dem Desktop-Lauf scheiterte nach 0,04 s ohne sichtbaren Grund (die
+  Ausgabe war gefiltert); mit frisch gestartetem Server und voller Ausgabe danach grün.
+- `scripts/check.sh` auf cdef21e in einem sauberen Worktree grün (in zwei Läufen, weil im ersten
+  ein paralleler Build im gemeinsamen `target` fremde Artefakte einschob): 1.326 Rust-Tests (102
+  ignoriert), 5 der Feature e2e, 4.020 Vitest-Tests in 88 Dateien, Clippy auch für Windows.
+  Im Hauptcheckout auf 36db98a (ohne fremde offene Änderungen) am Ende: alle Schritte bis ESLint
+  grün (1.351 Rust-Tests, 102 ignoriert; 5 der Feature e2e; Clippy auch für Windows), Vitest im
+  Lauf von `check.sh` mit 3 Zeitüberschreitungen (5 s) in `a11y.test.tsx` und `focus-ring.test.tsx`
+  bei Systemlast 18 (parallele Agenten); danach einzeln 43 von 43 und die ganze Suite 4.036 von
+  4.036 grün, ebenso Vite-Build, cargo deny, pnpm audit und die Lizenzliste.
+
+**Ungeprüft:** Bedienung unter Windows (Alt+↑, Ziehen mit Zeigerereignissen statt HTML5-Drag-and-
+drop, damit es auch neben Tauris Datei-Drop geht). Bildschirmfotos in `docs/images/`: Block C ändert
+die Spalte im Standard nicht sichtbar (die „…“ erscheinen nur beim Überfahren); die neue Zeile
+„Kontakte“ (Block B) und die Reihenfolge der eingeklappten Leiste sind in den README-Bildern noch
+nicht neu aufgenommen.

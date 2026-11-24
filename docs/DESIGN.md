@@ -48,7 +48,7 @@ Einstellungen. Eingeklappt bleibt die **Icon-Leiste** (56 px). Von oben: vereint
 dann die Ansichten der Spalte in der gewählten Reihenfolge (Stufe 17, „Ansichten bearbeiten“; Standard:
 Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Markiert (die Markierung
 des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, gespeicherte
-Ansichten), dann fest Gesendet, Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Unten:
+Ansichten, Kontakte (Stufe 17, 0050)), dann fest Gesendet, Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Unten:
 Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
@@ -345,7 +345,7 @@ Die bisherige ausklappbare Seitenleiste ist dazu umgebaut (`app/src/app/SidebarC
 Fensterknöpfe), rechts der Knopf „Seitenleiste ausblenden“. Dann „Alle Posteingänge“ mit der Zahl
 der ungelesenen Mails aller nicht ausgeblendeten Konten, darunter die Kontogruppen (nur ab zwei
 Konten oder mit Gruppen). Dann „Ansichten“: Später, Aufgaben, Zum Lesen, Angeheftete Anhänge,
-Markiert, Angepinnt, Gespeicherte Ansichten; welche davon in welcher Reihenfolge, stellt jeder selbst
+Markiert, Angepinnt, Gespeicherte Ansichten, Kontakte (0050); welche davon in welcher Reihenfolge, stellt jeder selbst
 zusammen (Stufe 17, „Ansichten bearbeiten“ unten). Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
 in jedem Konto: Der Kern kennt vereinte Ansichten nur für den Posteingang (`UnifiedView`). Dann
 gespeicherte Suchen, Favoriten, danach je Konto ein Baum. Unten, mit Haarlinie abgesetzt, Aktivität,
@@ -446,7 +446,7 @@ Pointer-Capture (die Zeile wandert im DOM, das beendet eine Capture) und ohne HT
 
 **Tastatur.** Der Fokus beginnt auf der ersten Ansicht. Tab geht von Kästchen zu Kästchen (die
 Pfeilknöpfe sind nur für die Maus), Leertaste blendet ein und aus, Alt+↑/Alt+↓ verschiebt die
-Ansicht, der Fokus bleibt auf ihr und ein Live-Bereich sagt „Markiert, Platz 2 von 7“. Tab bleibt im
+Ansicht, der Fokus bleibt auf ihr und ein Live-Bereich sagt „Markiert, Platz 2 von 8“. Tab bleibt im
 Dialog, Escape, „Fertig“, X und ein Klick daneben schließen ihn; der Fokus kehrt zurück, wo er war
 (sonst zum Etikett „Ansichten“). Kürzel der Ansicht dahinter wirken nicht, solange er offen ist.
 
