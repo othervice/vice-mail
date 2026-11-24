@@ -29,22 +29,22 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 
 ### B — Kontakte
 
-- [ ] Jede Adresse aus empfangenen und gesendeten Mails (Von, An, Cc, Antwort an) wird Kontakt,
+- [x] Jede Adresse aus empfangenen und gesendeten Mails (Von, An, Cc, Antwort an) wird Kontakt,
   auch rückwirkend für vorhandene Mails; Listen- und Systemadressen (no-reply, Mailer-Daemon)
   bleiben erkennbar und lassen sich ausblenden.
-- [ ] Eigene Bilder: Bild aus einer Datei wählen (Ziehen oder Dateiauswahl), quadratisch
+- [x] Eigene Bilder: Bild aus einer Datei wählen (Ziehen oder Dateiauswahl), quadratisch
   zuschneiden, verkleinert lokal speichern; Entfernen. Kein Laden von Bildern aus dem Netz
   (kein Gravatar, kein BIMI). Das Bild erscheint überall, wo heute Initialen stehen (Liste,
   Lesebereich, Composer, Kontakte); ohne Bild bleiben die Initialen.
-- [ ] Die Bilder werden wie Bilder aus Mails im abgeschotteten Hilfsprozess dekodiert und neu
+- [x] Die Bilder werden wie Bilder aus Mails im abgeschotteten Hilfsprozess dekodiert und neu
   kodiert (0046), mit Größengrenze.
-- [ ] Kontaktseite als eigene Ansicht: Liste mit Bild, Name, Adresse, letzter Mail; schnelle
+- [x] Kontaktseite als eigene Ansicht: Liste mit Bild, Name, Adresse, letzter Mail; schnelle
   Suche über Name, Adresse und Domain; Detailbereich mit allen Adressen, Bild, Notiz, letzten Mails
   mit diesem Kontakt, „Mail schreiben“, „Alle Mails anzeigen“, „Als Spam markieren“.
-- [ ] „Als Spam markieren“ sperrt die Adresse (vorhandene Sperrliste aus Stufe 16) und bietet an,
+- [x] „Als Spam markieren“ sperrt die Adresse (vorhandene Sperrliste aus Stufe 16) und bietet an,
   vorhandene Mails in den Spam-Ordner zu verschieben (über die Outbox, nur bei Konten mit
   Schreibzugriff). Rückgängig machbar.
-- [ ] Kontakte, Bilder (verkleinert, mit Größengrenze) und Spam-Markierungen laufen über den
+- [x] Kontakte, Bilder (verkleinert, mit Größengrenze) und Spam-Markierungen laufen über den
   Einstellungs-Sync, wenn er an ist.
 
 ### C — Ansichten in der Spalte bearbeiten
@@ -59,10 +59,10 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 
 - [x] Gespräche lassen sich in der Liste mit Maus und Tastatur auf- und zuklappen; rechts steht
   immer genau eine Mail; Desktop-Test und axe ohne schwere Befunde.
-- [ ] Ein eigenes Bild erscheint in Liste, Lesebereich, Composer und Kontakten; nach einem
+- [x] Ein eigenes Bild erscheint in Liste, Lesebereich, Composer und Kontakten; nach einem
   Neustart noch da; ein manipuliertes Bild wird abgelehnt, ohne die App zu stören.
-- [ ] Kontaktsuche findet nach Name, Adresse und Domain bei 10.000 Kontakten unter 100 ms.
-- [ ] „Als Spam markieren“ sperrt die Adresse, neue Mails von ihr landen nicht im Posteingang;
+- [x] Kontaktsuche findet nach Name, Adresse und Domain bei 10.000 Kontakten unter 100 ms.
+- [x] „Als Spam markieren“ sperrt die Adresse, neue Mails von ihr landen nicht im Posteingang;
   Rückgängig hebt das auf.
 - [x] Ansichten lassen sich ein-, ausblenden und sortieren; die Auswahl übersteht einen Neustart.
 - [ ] Bildschirmfotos in `docs/images/` neu, wo sich etwas sichtbar geändert hat.
@@ -154,6 +154,94 @@ Kein neuer Command, keine Migration, Bindings unverändert.
   zweizeiligen Gesprächszeile hängt kein Stück, dessen Höhe von Schriftgröße und Zeilen abhängt).
 - Gespräche mit 1.000 Kindern in der echten App nicht gesondert gemessen (gemessen: 60).
 - Vereinter Posteingang und Suchtreffer mit aufgeklappten Gesprächen nur in Vitest geprüft.
+
+### B — Kontakte
+
+**Stand vom 24.11.2026, 16:00** (Block B, eigene Sitzung). Commits: 93ce385 (Kern), a8670d9
+(Oberfläche), 4ec7895 (Entscheidung 0050 und Dokumente), 293524a (Neustart im Kerntest), 899bd3e
+(Desktop-Spec, Feinschliff aus ihren Bildern), de4b577 (Datensätze eines anderen Geräts),
+f9ecd88 (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
+`docs/decisions/0050-kontakte-bilder-spam.md`, Migration 0020.
+
+**Umgesetzt**
+- Jede Adresse aus Von, An, Cc, Bcc (eigene Mails) und Antwort an wird Kontakt; Antwort an neuer
+  Mails aus dem Kopfblock der Kategorien (`message.reply_to_addrs`). Arten Person, Liste, System
+  (`contact.kind`); Listen- und Systemadressen ranken nicht, fehlen in der Autovervollständigung
+  (außer der Nutzer schrieb ihnen) und standardmäßig in der Ansicht („Listen und Systemadressen
+  zeigen“). Rückwirkend: der Kontakte-Auftrag liest nach neuen Mails die von Stufe 10 gelesenen
+  Mails im Hintergrund nach (Teilindex, je 500, älteste zuerst) und fügt nur hinzu, was Stufe 10
+  ausließ; Antwort-an alter Mails aus dem gespeicherten Mailtext (ganz, höchstens 1 MiB); Arten
+  der alten Zeilen werden einmal je Lauf neu berechnet. Rang und Zusammenführen wie bisher.
+- Bilder: Systemdialog oder Ziehen auf das Fenster; der Kern liest die Datei (höchstens 20 MiB),
+  der Helfer `mail-mcp --contact-picture` kodiert sie für den Zuschnitt (höchstens 1024 px) und das
+  Quadrat als JPEG 256 × 256, höchstens 40 KiB; gespeichert in `contact_picture` (Datenbank).
+  Typisierte Fehler `picture_too_large`, `picture_unsupported`, `picture_damaged`. Zuschnitt in der
+  Ansicht (Ziehen, Pfeiltasten, Plus/Minus, Zoom-Regler, Eingabe/Escape), Entfernen. Der Avatar
+  zeigt das Bild in Listenzeilen, Lesebereich, Composer-Chips (neu mit Mini-Avatar) und Kontakten;
+  `MessageRow.tsx` unverändert. Kein Bild aus dem Netz.
+- Ansicht `contacts` (Spalte, Leiste, Palette `goContacts`, Standardeintrag nach „Gespeicherte
+  Ansichten“, `AppShell`): Liste mit Bild, Name, Adresse, Datum der letzten Mail, Suche über Name,
+  Adresse und Domain, Listbox mit Tastatur; Detail mit Bild, Name (bearbeiten), allen Adressen
+  (Trennen), Notiz, letzten Mails (öffnen im Fenster), „Mail schreiben“, „Alle Mails anzeigen“
+  (`from:` über alle Konten), „Als Spam markieren“/„Kein Spam“. Leere Zustände ohne Beispiele.
+- „Als Spam markieren“ sperrt jede Adresse des Kontakts als blockierten Absender (Stufe 16: neue
+  Mails gehen in den Spam-Ordner bzw. werden verborgen) und fragt, ob vorhandene Mails mitgehen
+  (je Konto über die Outbox, nur mit Schreibzugriff; Konten ohne sagen es); „Rückgängig“ hebt die
+  gesetzten Sperren auf und macht das Verschieben rückgängig.
+- Sync: Notiz im Datensatz `contact`, neue Art `contactPicture` (56 KiB), Spam-Markierungen als
+  `blockedSender`; Bilder aus dem Sync zeigt das Gerät erst nach eigener Neukodierung im Helfer.
+- Einstellungen → Kontakte: Hinweis, „Kontakte öffnen“, Doppelte zusammenführen wie bisher.
+
+**Nachgewiesen**
+- Rust (in `check.sh`): `mail-content` (Beobachtungen aller Adressen, `counted_before_stage17`,
+  Arten, Systemadressen als Kontakte ohne Rang; Bildkodierung: großes Bild, Quadrat am Rand,
+  Transparenz auf Weiß, Rauschen unter 40 KiB, SVG/leer/defekt/60.000 × 60.000 px/über 20 MiB
+  abgelehnt), `mail-store` `contacts_view_tests` (8: Antwort-an mit neuen Mails, Quellen von
+  Auftrag und Nachlesen getrennt, Personenfilter und Arten, Notizen und Bilder samt Erfassung für
+  den Sync und Anzeige erst nach eigener Kodierung, Name, Notiz, Bild und dessen Entfernen von
+  einem anderen Gerät über `apply_sync` wie in einem Durchgang, Mails eines Absenders ohne
+  Spam/Gesendet, Suche bei 10.000 Kontakten, Abfragepläne), `mail-engine` (Nachlesen = Neulesen im
+  `compose::contacts`-Test; über `AppCore` mit dem Fake-Server: jede Adresse mit Art,
+  Notiz und Bild mit Neustart und Sync-Datensätzen, präparierte/zu große/fremde Dateien mit
+  typisierten Fehlern, mit konfiguriertem Helfer nichts im App-Prozess dekodiert, Spam mit
+  Verschieben, neuer Mail in den Spam-Ordner und Rückgängig, Konto ohne Schreibzugriff),
+  `mail-mcp` `picture_isolation` (2, gegen das echte Helfer-Programm: Zuschnitt und Kodierung;
+  präparierter Kopf, abgeschnittenes PNG, SVG, Abbruch nach Zeit, fehlender Helfer), der
+  Erfassungstest des Einstellungs-Syncs (jede Art, auch `contactPicture`).
+- Suche: 0,8–8,0 ms bei 10.000 Kontakten (Debug-Build, auch ohne Treffer), Grenze 100 ms.
+- Vitest: `contacts-view.test.tsx` (12: Zuschnitt-Rechnung, Bild mit Tastatur wählen und
+  speichern, Abbrechen, abgelehnte Datei, Bild in Mailliste, Lesebereich und Composer-Chip,
+  Tastatur in der Liste, Filter, Notiz, letzte Mails, „Mail schreiben“, „Alle Mails anzeigen“,
+  Spam mit Frage, Hinweis und Rückgängig, Konto ohne Schreibzugriff, „Liegen lassen“ und „Kein
+  Spam“, Ablehnung, Deutsch, axe mit offenem Zuschnitt und offener Frage), `contacts.test.tsx`
+  (16, auf die Ansicht umgestellt; Einstellungen mit Verweis und Doppelten), axe der Kontakte in
+  Hell und Dunkel (`a11y.test.tsx`).
+- Desktop: `contacts.e2e.mjs` 3 von 3 grün, zweimal, über `scripts/e2e-gui.sh` im eigenen Worktree
+  (a8670d9 mit den Dateien von 899bd3e; App und Helfer als eigene Kopie): Absender, Cc und
+  Antwort-an werden Kontakte; Suche nach Name, Adresse, Domain; ein gezogenes PNG öffnet den
+  Zuschnitt mit der JPEG des Helfers, das Bild steht danach als `data:image/jpeg` in Seite, Liste
+  und Posteingangszeile; „Als Spam markieren“ verschiebt beide Mails auf dem Server in den
+  Spam-Ordner (Posteingang 9.962 → 9.960), „Rückgängig“ holt sie zurück; keine CSP-Verletzung.
+- `scripts/check.sh` im Haupt-Checkout grün: zuerst auf 899bd3e (1.350 Rust-Tests), zuletzt
+  gestartet auf f9ecd88: 1.351 Rust-Tests (102 ignoriert), 5 der Feature e2e, Clippy auch für
+  Windows, 4.036 Vitest-Tests in 89 Dateien, Vite-Build, cargo deny, pnpm audit, Lizenzen. Den
+  Vitest-Schritt lief schon mit f1be6e3 einer anderen Sitzung (15 s je Test). Zwei Läufe dazwischen
+  scheiterten an der Last der parallelen Sitzungen (Lastmittel 17): einmal fehlte in Clippy ein
+  `objc2`-Artefakt im gemeinsamen `target`, einmal liefen drei Vitest-Tests in ihre Zeitgrenze
+  (einzeln grün; für den Kontakte-Test f9ecd88).
+
+**Ungeprüft / offen**
+- Einstellungs-Sync zwischen zwei Geräten über den echten Transport (Ordner im Postfach) nicht mit
+  Kontakten laufen lassen: geprüft sind Erfassung, Inhaltsprüfung und Anwenden je Art; der
+  Transport selbst ist artunabhängig (Konvergenztests).
+- Windows: Dialog, Ziehen, Helfer-Modus und Anzeige nicht auf Windows gelaufen (Clippy für das
+  Windows-Ziel grün).
+- Dauer der Migration 0020 bei sehr großen Datenbanken (zwei neue Indizes über `message`) nicht
+  gemessen.
+- Antwort-an alter Mails ohne gespeicherten Mailtext wird nicht nachgetragen.
+- Bildschirmfotos in `docs/images/`: nicht neu gemacht (die README-Bilder entstehen mit
+  `README_SHOTS=1`; die Kontaktansicht ist dort noch nicht dabei). Bilder des Desktop-Tests liegen
+  nur lokal unter `app/tests/e2e/screenshots/contacts-*.png`.
 
 ### C — Ansichten in der Spalte bearbeiten
 
