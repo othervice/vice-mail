@@ -625,7 +625,8 @@ fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, Box<dyn std:
     let keychain = SystemKeychain::new(&app.config().identifier)?;
     let mut services = CoreServices::new(Credentials::new(keychain));
     services.reading.open_dir = Some(cache_dir(app)?.join("attachments"));
-    // Finding C-2 (decision 0043): image and PDF previews render in the `mail-mcp` helper.
+    // Finding C-2 (decision 0043): image and PDF previews render in the `mail-mcp` helper; C-4
+    // (decision 0046): it also re-encodes every image of a mail before the web view shows it.
     services.reading.preview_helper = preview_helper();
     // Desktop-test build: may trust the local test server's CA (decision 0007).
     #[cfg(feature = "e2e")]
@@ -642,9 +643,9 @@ fn services<R: Runtime>(app: &AppHandle<R>) -> Result<CoreServices, Box<dyn std:
 }
 
 /// The `mail-mcp` helper next to the executable, which renders image and PDF previews in a child
-/// process (decision 0043). Shipped in both installers; a release build without it refuses those
-/// previews. A development build without it (`cargo build -p mail-mcp` adds it) renders them in
-/// the app.
+/// process (decision 0043) and re-encodes the images of mails (decision 0046). Shipped in both
+/// installers; a release build without it refuses those previews and shows no image of a mail. A
+/// development build without it (`cargo build -p mail-mcp` adds it) decodes them in the app.
 fn preview_helper() -> Option<std::path::PathBuf> {
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,

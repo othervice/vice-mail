@@ -53,6 +53,15 @@ pub(super) struct Harness {
 
 impl Harness {
     pub(super) async fn new(server: &Arc<FakeServer>, remote: RemoteConfig) -> Self {
+        Self::with_helper(server, remote, None).await
+    }
+
+    /// With `preview_helper` set as the shell sets it (C-2, C-4).
+    pub(super) async fn with_helper(
+        server: &Arc<FakeServer>,
+        remote: RemoteConfig,
+        preview_helper: Option<PathBuf>,
+    ) -> Self {
         let dir = TempDir::new().expect("temp dir");
         let opener = Arc::new(RecordingOpener::default());
         let open_dir = dir.path().join("cache/attachments");
@@ -65,7 +74,7 @@ impl Harness {
                 opener: Arc::clone(&opener) as Arc<dyn super::SystemOpener>,
                 remote,
                 open_dir: Some(open_dir.clone()),
-                preview_helper: None,
+                preview_helper,
             },
             outbox: None,
         };
@@ -863,7 +872,12 @@ async fn external_images_load_only_when_allowed() {
         .expect("once");
     let (srcdoc, count, loaded) = html(&once);
     assert_eq!((count, loaded), (0, true));
-    assert!(srcdoc.contains("data:image/png;base64,"), "{srcdoc}");
+    // The loaded image, encoded again by the core (C-4).
+    assert!(
+        srcdoc.contains("<img src=\"data:image/png;base64,")
+            || srcdoc.contains("<img src=\"data:image/jpeg;base64,"),
+        "{srcdoc}"
+    );
     assert_eq!(connections.load(Ordering::SeqCst), 1);
     assert_eq!(
         html(
@@ -1428,4 +1442,132 @@ async fn attachments_are_pinned_listed_and_unpinned() {
     assert_eq!(scoped.len(), 1);
     // Nothing went to the server.
     assert_eq!(server.read(|s| s.writer_attempts), 0);
+}
+
+/// A mail with an inline PNG, a broken inline GIF and a PNG written into the HTML as a `data:`
+/// URL (finding C-4).
+fn mail_with_images() -> String {
+    format!(
+        "From: News <news@shop.example>\r\nTo: alice@fake.test\r\nSubject: Pictures\r\n\
+         Message-ID: <pictures@fake.test>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: multipart/related; boundary=\"r\"\r\n\r\n\
+         --r\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+         <p>Hello</p><img src=\"cid:logo@shop\" alt=\"logo\"><img src=\"cid:broken@shop\" alt=\"broken\">\
+         <img src=\"data:image/png;base64,{PIXEL_PNG}\" alt=\"written\">\r\n\
+         --r\r\nContent-Type: image/png\r\nContent-ID: <logo@shop>\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+         {PIXEL_PNG}\r\n\
+         --r\r\nContent-Type: image/gif\r\nContent-ID: <broken@shop>\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+         R0lGODlhAQABAICAgICAgICA\r\n--r--\r\n"
+    )
+}
+
+fn srcdoc_of(view: &MessageView) -> String {
+    match &view.body {
+        MessageBody::Html { srcdoc, .. } => srcdoc.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Finding C-4: the images of a mail reach the web view only encoded again by the core, a
+/// broken one not at all, and a second view re-encodes nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mail_images_are_shown_re_encoded_and_kept() {
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", mail_with_images().as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    let reading = Arc::clone(h.core.reading_ref().expect("reading"));
+    let batches_before = reading.image_batches();
+    let srcdoc = srcdoc_of(&h.open_fetched(message, BodyFormat::Auto).await);
+    assert!(
+        !srcdoc.contains(PIXEL_PNG),
+        "never the mail's own bytes: {srcdoc}"
+    );
+    let images: Vec<&str> = srcdoc
+        .split("<img ")
+        .skip(1)
+        .map(|img| img.split('>').next().unwrap_or(""))
+        .collect();
+    assert_eq!(images.len(), 3, "{srcdoc}");
+    // The inline PNG and the written one (the same picture) show as the core's encoding.
+    for shown in [images[0], images[2]] {
+        assert!(
+            shown.starts_with("src=\"data:image/png;base64,")
+                || shown.starts_with("src=\"data:image/jpeg;base64,"),
+            "{shown}"
+        );
+    }
+    assert_eq!(images[1], "alt=\"broken\"", "the broken GIF has no source");
+    assert_eq!(
+        reading.image_batches(),
+        batches_before + 1,
+        "one batch per rendering"
+    );
+
+    // Shown again (and as text and HTML once more): nothing is re-encoded.
+    let again = srcdoc_of(
+        &h.core
+            .get_message(message, BodyFormat::Auto)
+            .await
+            .expect("get"),
+    );
+    assert_eq!(again.split("<img ").count(), 4);
+    assert_eq!(
+        again.split("src=\"data:image/").count(),
+        srcdoc.split("src=\"data:image/").count()
+    );
+    assert_eq!(
+        reading.image_batches(),
+        batches_before + 1,
+        "kept in memory"
+    );
+}
+
+/// Finding C-4: without a working helper the images are not shown, never decoded in the app
+/// and never passed on as they are.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn without_a_working_helper_mail_images_are_not_shown() {
+    let mut helpers = vec![PathBuf::from("/nonexistent/mail-mcp")];
+    if cfg!(unix) {
+        // Starts, answers nothing, ends with an error.
+        helpers.push(PathBuf::from("/usr/bin/false"));
+    }
+    for helper in helpers {
+        let server = FakeServer::new();
+        server.deliver_raw("INBOX", mail_with_images().as_bytes());
+        let mut h =
+            Harness::with_helper(&server, RemoteConfig::default(), Some(helper.clone())).await;
+        let account = h.add().await;
+        let message = h.items(h.inbox(account).await).await[0].id;
+        let srcdoc = srcdoc_of(&h.open_fetched(message, BodyFormat::Auto).await);
+        assert!(
+            srcdoc.contains("<p>Hello</p>"),
+            "the mail is shown: {srcdoc}"
+        );
+        assert!(
+            !srcdoc.contains("data:image/"),
+            "{}: no image without the helper: {srcdoc}",
+            helper.display()
+        );
+        assert_eq!(srcdoc.matches("<img alt=").count(), 3, "{srcdoc}");
+    }
+}
+
+/// Finding C-4: the composer's images (draft inline images, signature pictures) go the same way:
+/// re-encoded, never their own bytes; one that cannot be shown is `None`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn editor_images_are_re_encoded_too() {
+    let server = FakeServer::new();
+    let h = Harness::new(&server, RemoteConfig::default()).await;
+    let reading = Arc::clone(h.core.reading_ref().expect("reading"));
+    let png = crate::compose::snippets::base64_decode(PIXEL_PNG).expect("base64");
+    let original = mail_content::image_data_uri(&png).expect("a png");
+    let shown = reading
+        .editor_images(vec![png.clone().into(), b"GIF89a broken".to_vec().into()])
+        .await;
+    let first = shown[0].as_deref().expect("re-encoded");
+    assert!(mail_content::is_reencoded_data_url(first), "{first}");
+    assert_ne!(first, original, "never the original bytes");
+    assert_eq!(shown[1], None);
 }

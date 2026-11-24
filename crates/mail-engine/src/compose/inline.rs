@@ -159,7 +159,9 @@ impl<C: Connector> Compose<C> {
         })
     }
 
-    /// An inline image of the draft as a `data:` URL for the editor.
+    /// An inline image of the draft as a `data:` URL for the editor: encoded again like the
+    /// images of mails (C-4, decision 0046), since the image of a draft from another program
+    /// comes from the server. The draft keeps and sends its own bytes.
     pub(crate) async fn inline_image_data(
         &self,
         id: DraftId,
@@ -174,8 +176,13 @@ impl<C: Connector> Compose<C> {
         let root = self.inner.root.clone();
         let relative = file.file.clone();
         let bytes = blocking(move || files::read(&root, &relative)).await??;
-        mail_content::image_data_uri(&bytes)
-            .ok_or_else(|| CoreError::Internal("the stored image is not an image".into()))
+        self.inner
+            .reading
+            .editor_images(vec![bytes.into()])
+            .await
+            .pop()
+            .flatten()
+            .ok_or_else(|| CoreError::Internal("the stored image cannot be shown".into()))
     }
 }
 

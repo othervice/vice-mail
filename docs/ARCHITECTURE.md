@@ -50,7 +50,7 @@ wenn er groß genug ist.
 | HTML-Bereinigung | ammonia, html5ever, cssparser, url, icu_normalizer/icu_properties | 4.2.5 / 0.40 / 0.38 / 2.5 / 2.4 | Allowlist-Sanitizer; CSS wird Token für Token neu geschrieben (kein Regex); Punycode nach RFC 3492 selbst dekodiert, `idna` direkt bewusst nicht (kein Release seit August 2025) |
 | TLS | rustls mit Provider `aws-lc-rs`, tokio-rustls, Prüfung über den System-Speicher mit rustls-platform-verifier | 0.23 / 0.26 / 0.7, aws-lc-rs 1.19 | kein OpenSSL; der Standard-Provider von rustls, regelmäßig veröffentlicht, baut auch für Windows ohne CMake und NASM (vorab assemblierte Objekte aus dem Crate, 0002). Provider und Client-Konfiguration entstehen an einer Stelle (`mail_imap::tls`), auch für reqwest und die TLS-Server der Tests. Selbst signierte Server-Zertifikate funktionieren, wenn das System ihnen vertraut. Zusätzliche Wurzel-CA (`new_with_extra_roots`) nur für Tests gegen den Testserver |
 | System öffnen, Dateidialog | open (`shellexecute-on-windows`), rfd | 5.4.5 / 0.18.0 | Links und Anhänge im System öffnen, Speichern-Dialog; beide nur in Rust, hinter Traits testbar. Nicht `tauri-plugin-dialog` (spritzt ein Script ein und bringt `tauri-plugin-fs` mit) |
-| Anhangsvorschau | image (`png`, `jpeg`, `gif`, `webp`), hayro | 0.25.10 / 0.9.0 | Stufe 16 (0036): Bilder dekodiert und neu kodiert, PDF-Seiten gerastert, beides in Rust; die WebView sieht nur selbst erzeugte PNG/JPEG. hayro ist reines Rust (`hayro` selbst `forbid(unsafe_code)`, `hayro-syntax` mit einer `unsafe`-Stelle für die Seitenliste, 0043), ohne Script-Engine und Netz; ohne eigene Grenze für entpackte Streams und Zeit; deshalb läuft die Vorschau im Helfer `mail-mcp` mit Zeit- und Speichergrenze (C-2, 0043), mit eingebetteten Standardschriften und CMaps. Beide Apache-2.0 OR MIT |
+| Anhangsvorschau | image (`png`, `jpeg`, `gif`, `webp`), hayro | 0.25.10 / 0.9.0 | Stufe 16 (0036): Bilder dekodiert und neu kodiert, PDF-Seiten gerastert, beides in Rust; die WebView sieht nur selbst erzeugte PNG/JPEG. Dieselben Decoder kodieren die Bilder in Mails neu (Sicherheitsprüfung C-4, 0046; animiert als GIF mit dem `gif`-Encoder von `image`), ebenfalls im Helfer. hayro ist reines Rust (`hayro` selbst `forbid(unsafe_code)`, `hayro-syntax` mit einer `unsafe`-Stelle für die Seitenliste, 0043), ohne Script-Engine und Netz; ohne eigene Grenze für entpackte Streams und Zeit; deshalb läuft die Vorschau im Helfer `mail-mcp` mit Zeit- und Speichergrenze (C-2, 0043), mit eingebetteten Standardschriften und CMaps. Beide Apache-2.0 OR MIT |
 | Benachrichtigungen, eine Instanz | tauri-plugin-notification, tauri-plugin-single-instance (nur Windows) | 2.8.1 / 2.5.5 | Stufe 9 (0020): native Mitteilungen nur aus Rust (keine Capability für die Oberfläche), Klicks über den Aktions-Handler des Plugins; auf Windows reicht ein zweiter Start (`mailto:`-Link) seine Argumente an die laufende App weiter. Beide Apache-2.0 OR MIT |
 | Updates in der App | tauri-plugin-updater | =2.14.1 | Stufe 15 (0037): Manifest, Signaturprüfung (minisign/Ed25519, `requireSignedVersion`), Austausch des App-Bundles (macOS) und NSIS-Installer im Modus `passive` (Windows); nur aus Rust, keine Capability für die Oberfläche. Ohne Default-Features (kein `ring`, kein System-Proxy, kein zip), TLS über unser reqwest/rustls per `configure_client`, deshalb exakt gepinnt. Release 28.10.2026, Apache-2.0 OR MIT. `tauri-plugin-process` nicht nötig (`AppHandle::request_restart`) |
 | WebView2-Zugriff | webview2-com (nur in `webview2-guard`) | =0.39.1 | `FrameNavigationStarting` abonnieren, das wry nicht anbietet (0011) |
@@ -464,7 +464,7 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
    Jedes `srcdoc` beginnt mit der Pflicht-Meta-CSP `default-src 'none'; img-src data:; style-src
    'unsafe-inline'; base-uri 'none'; form-action 'none'` und `<meta name="referrer"
    content="no-referrer">`, danach ein Grundstil (`MAIL_DEFAULT_STYLE`, nur `font-family` der
-   Systemschrift als `:where(html)`, ohne URL), den der Stil der Mail überschreibt. Bilder nur als `data:` mit vom Kern erkannten Rasterformaten (PNG, JPEG, GIF, WebP; BMP, AVIF und ICO seit der Sicherheitsprüfung C-4 nicht mehr), nie SVG. Ihre Bytes dekodiert die WebView selbst; Neukodieren in Rust ist gemessen und offen (`docs/testing/performance.md`, C-4). Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
+   Systemschrift als `:where(html)`, ohne URL), den der Stil der Mail überschreibt. Bilder nur als `data:`, die der Kern selbst geschrieben hat: Inline-Bilder, freigegebene externe Bilder und `data:`-URLs im HTML (an den Bytes erkannt als PNG, JPEG, GIF oder WebP; nie SVG, BMP, AVIF, ICO) werden im Helfer neu kodiert (Sicherheitsprüfung C-4, 0046, „Bilder in Mails“ unten); die Bilddecoder der WebView sehen nie Bytes aus einer Mail. Das Frame erbt zusätzlich die CSP der App; WebKit kennt das
    `csp`-Attribut nicht. Dort läuft kein JavaScript, und Tauri spritzt seine Scripts nur in den
    Hauptframe ein, also ist die Tauri-Schnittstelle nicht erreichbar (0005). Die Höhe des Frames
    misst das Elternfenster: `contentDocument` ist lesbar (same-origin), ein `ResizeObserver` des
@@ -580,6 +580,34 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
   solange ihr Fenster offen ist (höchstens 16 Dateien). Angezeigt werden sie über dieselbe
   Pipeline wie HTML aus Mails (Bereinigung, Pflicht-CSP, Sandbox-Frame, Link-Platzhalter mit
   eigenem Render-Token, Anhänge über den Kern).
+
+**Bilder in Mails (Sicherheitsprüfung C-4, 0046)**
+- `render_html` zeigt ein Bild (Inline-Teil, freigegebenes externes Bild, `data:`-URL im HTML)
+  nur als seine Neukodierung aus `RenderOptions::images` (Schlüssel: die ursprünglichen Bytes);
+  fehlt sie, bleibt das Bild weg und steht in `RenderedHtml::pending_images`. Größen- und
+  Formatprüfung (8 MiB je Bild, 32 MiB je Mail, PNG/JPEG/GIF/WebP an den Bytes) kommen vorher.
+- Der Kern (`reading/images.rs`) rendert mit dem, was er schon kennt, schickt die fehlenden Bilder
+  und die eben geladenen externen in einem Stapel an den Helfer (`mail-mcp --reencode-images`:
+  je Bild 4 Byte Länge und die Bytes über stdin, eine JSON-Antwort über stdout; höchstens 512
+  Bilder und 64 MiB je Stapel) und rendert ein zweites Mal. Überwachung wie bei der
+  Anhangsvorschau (20 s, 512 MiB). Nur `data:image/(png|jpeg|gif);base64,…` aus der Antwort kommt
+  in ein Dokument.
+- Im Helfer (`mail-content`, `reencode.rs`): auf bis zu acht Kerne verteilt, gleichzeitig
+  dekodierte Bilder zusammen höchstens 384 MiB (am Kopf geschätzt), Grenzen wie bei der
+  Anhangsvorschau (64 Megapixel, 192 MiB dekodiert, 2048 px). Standbilder als PNG (mit
+  Transparenz) oder JPEG; animierte GIF und WebP als animiertes GIF (höchstens 300 Einzelbilder,
+  12 Mi Pixel insgesamt, 16 MiB, Leinwand bis 2048 px; sonst das erste Einzelbild).
+- Abgelehnte Bilder und gescheiterte Stapel zeigt die Mail wie jedes Bild, das sich nicht zeigen
+  lässt (Element ohne Quelle), nie mit den ursprünglichen Bytes.
+- Ergebnisse und Ablehnungen merkt sich der Kern im Speicher (Schlüssel aus zwei SipHash-Werten
+  mit zufälligen Schlüsseln, höchstens 64 MiB und 4096 Einträge, die am längsten unbenutzten
+  zuerst); eine Mail zahlt beim ersten Anzeigen (Newsletter mit 32 Bildern: rund 20 ms im
+  Release-Build). Ein Helfer, der nicht starten konnte, wird beim nächsten Mal wieder versucht.
+- Ohne Helfer: Tests und Entwicklungs-Builds kodieren mit demselben Code im Prozess neu; ein
+  Release-Build übergibt den Pfad immer und zeigt die Bilder nicht, wenn die Datei fehlt.
+- Der Editor zeigt Inline-Bilder von Entwürfen (auch von Entwürfen anderer Programme) und
+  Signaturbilder ebenfalls neu kodiert (`Reading::editor_images`); Entwurf und Signatur behalten
+  und versenden ihre eigenen Bytes.
 
 **Erlaubte Netzverbindungen**
 - Mailserver, die der Nutzer eingerichtet hat, auch für Bodies und Anhänge (Stufe 3): je Konto eine
@@ -851,6 +879,7 @@ Bis die Oberfläche umgestellt ist, liegen diese Werte noch im markierten Ersatz
 | JMAP hinter den IMAP-förmigen Traits mit eigener UID-Nummerierung (0041) | Abgleich, Outbox, Konflikte, Lesebereich und Suche bleiben eine Logik für beide Protokolle | eigener JMAP-Abgleich in der Engine über `Email/changes` |
 | Microsoft und Google über IMAP/SMTP mit OAuth statt Graph bzw. Gmail-API (0042) | vorhandener Adapter, Gmail-Eigenheiten aus Block A bleiben; die Gmail-API hätte denselben „restricted scope“ | eigener Adapter hinter `MailBackend` |
 | Anhangsvorschau im Kern statt im PDF-Betrachter der WebView (0036) | die WebView sieht nur neu kodierte Bilder und Text; keine CSP-Lockerung, keine PDF-Skripte | PDF-Vorschau abschalten (`preview_unsupported`), Öffnen im System bleibt |
+| Bilder in Mails nur neu kodiert, im Helfer (0046) | die Bilddecoder des Systems sehen keine Bytes aus Mails (C-4); ein Stapel je Darstellung, Cache im Speicher, rund 20 ms je Newsletter | Neukodieren im App-Prozess (gleicher Code, nur ohne Isolation) |
 | Gmail über IMAP mit seinen Erweiterungen statt Gmail-API (0034) | Labels, eine Mail über `X-GM-MSGID` und Archivieren gehen mit dem vorhandenen Adapter, ohne Google-Projekt | Gmail-API in Block C |
 | Windows-Installer per Cross-Build vom Mac | kein Windows-Build-Rechner nötig | Build auf echtem Windows oder gehosteten Runnern in Stufe 15 |
 | Vier Crates statt elf | Grenzen erst ziehen, wenn sie sich bewährt haben | aufteilen, sobald ein Crate zwei klar getrennte Aufgaben hat |

@@ -1186,9 +1186,11 @@ fn inline_images_go_out_as_related_parts_and_resolve() {
     for part in &parsed.inline {
         options.inline.insert(&part.content_id, part.bytes.clone());
     }
-    let rendered = crate::render_html(&html, &options);
+    // As the core does it: the image encoded again (finding C-4).
+    let rendered = crate::html::render_reencoded(&html, &options);
     assert!(
-        rendered.srcdoc.contains("src=\"data:image/png;base64,"),
+        rendered.srcdoc.contains("src=\"data:image/png;base64,")
+            || rendered.srcdoc.contains("src=\"data:image/jpeg;base64,"),
         "{}",
         rendered.srcdoc
     );

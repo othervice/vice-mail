@@ -573,18 +573,34 @@ impl<C: Connector> AppCore<C> {
         Ok(signature_info(&saved))
     }
 
-    /// The images of a signature as `data:` URLs for the editor.
+    /// The images of a signature as `data:` URLs for the editor, encoded again like the images
+    /// of mails (C-4, decision 0046); one that cannot be shown is left out. The signature keeps
+    /// and sends its own bytes.
     pub async fn signature_image_data(
         &self,
         id: SignatureId,
     ) -> Result<Vec<SignatureImageData>, CoreError> {
         let stored = self.require_signature(&id).await?;
-        Ok(stored
+        let decoded: Vec<(String, mail_content::ImageBytes)> = stored
             .images
             .iter()
-            .map(|image| SignatureImageData {
-                content_id: image.content_id.clone(),
-                data_url: format!("data:{};base64,{}", image.mime, image.data_base64),
+            .filter_map(|image| {
+                let bytes = base64_decode(&image.data_base64)?;
+                Some((image.content_id.clone(), bytes.into()))
+            })
+            .collect();
+        let shown = self
+            .reading_ref()?
+            .editor_images(decoded.iter().map(|(_, bytes)| bytes.clone()).collect())
+            .await;
+        Ok(decoded
+            .into_iter()
+            .zip(shown)
+            .filter_map(|((content_id, _), data_url)| {
+                Some(SignatureImageData {
+                    content_id,
+                    data_url: data_url?,
+                })
             })
             .collect())
     }
@@ -748,8 +764,14 @@ mod tests {
     use crate::sync::fake::{FakeConnector, FakeServer, PASSWORD};
     use crate::{BuildInfo, CoreConfig, CoreServices};
 
-    /// A tiny file that is a PNG by its first bytes.
-    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x01\0\0\0\x01tiny";
+    /// A 1×1 PNG with a half-transparent pixel (shown re-encoded as a PNG, C-4).
+    const PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc,
+        0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
 
     async fn core(dir: &TempDir) -> (AppCore<FakeConnector>, mail_model::AccountId) {
         let server = FakeServer::new();

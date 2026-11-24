@@ -5,7 +5,8 @@
 //! - [`render_html`]: mail HTML to a sanitised `srcdoc` for the sandboxed frame (security
 //!   boundaries 1–3 and 5 of `docs/ARCHITECTURE.md`, decision 0005): ammonia with an allowlist,
 //!   CSS re-serialised token by token, every `href` a placeholder carrying the render token,
-//!   images only as `data:` URIs, the mandatory [`MAIL_CSP`] first.
+//!   images only as `data:` URIs the core encoded again ([`reencode_images`], finding C-4), the
+//!   mandatory [`MAIL_CSP`] first.
 //! - [`render_text`]: plain text as lines and link spans, never as HTML.
 //! - [`html_to_text`]: the text of an HTML body; [`html_to_visible_text`] without the text a
 //!   reader does not see (hidden by CSS or attributes), for models; [`strip_hidden_chars`]:
@@ -40,6 +41,7 @@ mod links;
 mod mailto;
 mod parse;
 mod preview;
+mod reencode;
 mod templates;
 mod text;
 mod visible;
@@ -90,6 +92,10 @@ pub use parse::{
     MAX_TEXT_BODY_BYTES, MessageHeaders, ParseProblem, ParsedMessage, attachment_bytes, parse,
 };
 pub use preview::{PREVIEW_CHARS, preview_from_html, preview_from_text};
+pub use reencode::{
+    MAX_ANIMATION_BYTES, MAX_ANIMATION_FRAMES, MAX_ANIMATION_PIXELS, ReencodedImage,
+    ReencodedImages, is_reencoded_data_url, reencode_image, reencode_images,
+};
 pub use templates::{
     DraftBody, DraftParts, FilledTemplate, LocalDate, MAX_SIGNATURE_BYTES, MAX_SNIPPET_INPUT_BYTES,
     MAX_TEMPLATE_BYTES, MAX_TEMPLATE_SUBJECT_CHARS, Placeholder, Quote, ReplyPosition,

@@ -8,8 +8,9 @@
 //! 3. An attribute filter, run by ammonia on every kept attribute, rewrites what can reach the
 //!    network: every `href` becomes `https://link.invalid/<n>` (the real target stays in
 //!    [`RenderedHtml::links`]); image URLs (`src`, `srcset`, `background`, CSS `url()`) become
-//!    `data:` URIs from inline parts or allowed images, a transparent pixel for blocked external
-//!    images, or nothing. CSS goes through [`crate::css`].
+//!    `data:` URIs of the core's re-encoding of inline parts, allowed images and `data:` URLs
+//!    ([`RenderOptions::images`], finding C-4), a transparent pixel for blocked external images,
+//!    or nothing. CSS goes through [`crate::css`].
 //! 4. The result is parsed again and checked against the same allowlist (a regression in the
 //!    sanitiser shows the mail as text instead of as HTML), and link texts are read.
 //! 5. The document starts with [`MAIL_CSP`] as a meta tag, before anything from the mail.
@@ -25,6 +26,7 @@ use crate::css;
 use crate::dom::{self, Descend, NodeData, Visit};
 use crate::guard;
 use crate::image::{self, ImageBytes, PLACEHOLDER_PIXEL};
+use crate::reencode::ReencodedImages;
 use crate::text::html_to_text;
 use mail_model::{RenderToken, link_placeholder, parse_link_placeholder};
 
@@ -33,8 +35,8 @@ use mail_model::{RenderToken, link_placeholder, parse_link_placeholder};
 /// - `default-src 'none'`: no scripts (a second barrier besides the sandbox: with
 ///   `allow-same-origin` the app's `script-src 'self'` would otherwise apply), no frames, objects,
 ///   media, fonts, fetches or prefetches
-/// - `img-src data:`: images only as `data:` URIs, which only the core writes (inline parts,
-///   external images the user allowed, the placeholder pixel)
+/// - `img-src data:`: images only as `data:` URIs, which only the core writes (its re-encoding of
+///   inline parts, external images the user allowed and `data:` URLs, the placeholder pixel)
 /// - `style-src 'unsafe-inline'`: the sanitised `<style>` block and `style` attributes apply
 /// - `base-uri 'none'`, `form-action 'none'`: no `<base>`, no form submission, even if a later
 ///   change let one through
@@ -357,6 +359,11 @@ impl InlineImages {
             .insert(normalize_content_id(content_id), bytes);
     }
 
+    /// The images, in no particular order.
+    pub fn images(&self) -> impl Iterator<Item = &ImageBytes> {
+        self.by_content_id.values()
+    }
+
     /// The image for a `cid:` URL (with or without the scheme, percent-encoded or not).
     pub fn get(&self, cid_url: &str) -> Option<&ImageBytes> {
         self.lookup(cid_url).map(|(_, bytes)| bytes)
@@ -431,7 +438,11 @@ pub struct RenderOptions {
     pub token: RenderToken,
     pub remote: RemotePolicy,
     pub inline: InlineImages,
-    /// Largest single image shown, in bytes.
+    /// Finding C-4: the core's re-encoding of the images (inline, allowed external, `data:`
+    /// URLs), by their original bytes. Only these are shown, never the original bytes; an
+    /// image without an entry is left out and listed in [`RenderedHtml::pending_images`].
+    pub images: ReencodedImages,
+    /// Largest single image shown, in bytes (of the original).
     pub max_image_bytes: usize,
     /// Largest total of all images in one document, in bytes.
     pub max_total_image_bytes: usize,
@@ -440,13 +451,14 @@ pub struct RenderOptions {
 }
 
 impl RenderOptions {
-    /// Defaults for one rendering: external images blocked, no inline images, 8 MiB per image,
-    /// 32 MiB in total, [`MAX_HTML_BYTES`] of HTML.
+    /// Defaults for one rendering: external images blocked, no inline images, nothing
+    /// re-encoded yet, 8 MiB per image, 32 MiB in total, [`MAX_HTML_BYTES`] of HTML.
     pub fn new(token: RenderToken) -> Self {
         Self {
             token,
             remote: RemotePolicy::Block,
             inline: InlineImages::default(),
+            images: ReencodedImages::default(),
             max_image_bytes: 8 << 20,
             max_total_image_bytes: 32 << 20,
             max_html_bytes: MAX_HTML_BYTES,
@@ -470,8 +482,15 @@ pub struct RenderedHtml {
     pub remote_resources: Vec<RemoteRef>,
     /// Number of external image references that were blocked (a URL can occur several times).
     pub blocked_count: u32,
-    /// Images that could not be shown: unknown format, too large, or over the total budget.
+    /// Images that could not be shown: unknown format, too large, over the total budget, refused
+    /// by the re-encoder or not re-encoded yet.
     pub omitted_images: u32,
+    /// Finding C-4: images (PNG, JPEG, GIF or WebP by their bytes, within the size limits) the
+    /// document would show but [`RenderOptions::images`] has no entry for, each once, in
+    /// document order. They are left out of this rendering. Re-encode them
+    /// ([`crate::reencode_images`], in the product in the helper process), record the results in
+    /// `images` and render again.
+    pub pending_images: Vec<ImageBytes>,
     /// The HTML was longer than [`RenderOptions::max_html_bytes`] and was cut.
     pub truncated: bool,
     /// Set when the document shows the mail as text instead of as HTML, and why.
@@ -617,6 +636,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
         remote_resources: state.remote,
         blocked_count: state.blocked,
         omitted_images: state.omitted,
+        pending_images: state.pending,
         truncated,
         fallback: None,
     }
@@ -816,6 +836,8 @@ struct State {
     blocked: u32,
     omitted: u32,
     image_bytes: usize,
+    pending: Vec<ImageBytes>,
+    pending_seen: HashSet<ImageBytes>,
 }
 
 /// Outcome for one image URL.
@@ -914,7 +936,7 @@ impl Pipeline {
         }
         if lower.starts_with("data:") {
             return match image::decode_data_url(url, self.options.max_image_bytes) {
-                Some(bytes) => self.encode(&bytes),
+                Some(bytes) => self.encode(&ImageBytes::from(bytes)),
                 None => {
                     self.state().omitted += 1;
                     Image::Unavailable
@@ -949,25 +971,54 @@ impl Pipeline {
         Image::Blocked
     }
 
-    fn encode(&self, bytes: &[u8]) -> Image {
+    /// The re-encoding of an image (C-4), never its own bytes. The size limits and the format
+    /// check come first, so a first rendering lists exactly the images a second one needs.
+    fn encode(&self, bytes: &ImageBytes) -> Image {
         let mut state = self.state();
         if bytes.len() > self.options.max_image_bytes
             || state.image_bytes + bytes.len() > self.options.max_total_image_bytes
+            || image::sniff_image(bytes).is_none()
         {
             state.omitted += 1;
             return Image::Unavailable;
         }
-        match image::image_data_uri(bytes) {
-            Some(uri) => {
-                state.image_bytes += bytes.len();
-                Image::Data(uri)
+        state.image_bytes += bytes.len();
+        match self.options.images.lookup(bytes) {
+            Some(Some(uri)) => Image::Data(uri.to_string()),
+            Some(None) => {
+                state.omitted += 1;
+                Image::Unavailable
             }
             None => {
                 state.omitted += 1;
+                if state.pending_seen.insert(bytes.clone()) {
+                    state.pending.push(bytes.clone());
+                }
                 Image::Unavailable
             }
         }
     }
+}
+
+/// Renders as the core does (finding C-4): a first rendering lists the images it needs, they
+/// are re-encoded (here in this process), a second rendering shows them.
+#[cfg(test)]
+pub(crate) fn render_reencoded(html: &str, options: &RenderOptions) -> RenderedHtml {
+    let first = render_html(html, options);
+    if first.pending_images.is_empty() {
+        return first;
+    }
+    let mut options = options.clone();
+    let results = crate::reencode_images(&first.pending_images);
+    for (original, result) in first.pending_images.into_iter().zip(results) {
+        match result {
+            Ok(image) => {
+                options.images.insert(original, image.data_url.into());
+            }
+            Err(_) => options.images.refuse(original),
+        }
+    }
+    render_html(html, &options)
 }
 
 /// The absolute `http(s)` URL of an image reference, `None` for anything else.
@@ -1155,6 +1206,7 @@ mod tests {
         let gif: ImageBytes = image::decode_data_url(PLACEHOLDER_PIXEL, 100)
             .unwrap()
             .into();
+        let gif_bytes = gif.clone();
         let mut inline = InlineImages::new();
         inline.insert("<logo@seed>", gif.clone());
         inline.insert("html@seed", Arc::from(&b"<html>not an image</html>"[..]));
@@ -1165,22 +1217,74 @@ mod tests {
             inline,
             ..options()
         };
-        let r = render_html(
-            "<img src='cid:logo@seed'><img src='CID:logo%40seed'><img src='cid:html@seed'>\
+        let html = "<img src='cid:logo@seed'><img src='CID:logo%40seed'><img src='cid:html@seed'>\
              <img src='https://img.example/a.png'><img src='https://img.example/other.png'>\
-             <img src='data:image/svg+xml,<svg onload=alert(1)>'>",
-            &options,
-        );
+             <img src='data:image/svg+xml,<svg onload=alert(1)>'>";
+        // The first rendering asks for the one picture (three uses), once.
+        let first = render_html(html, &options);
+        assert_eq!(first.pending_images, [gif_bytes]);
+        assert!(first.inline_used.is_empty());
+        let r = render_reencoded(html, &options);
+        assert!(r.pending_images.is_empty());
+        // The transparent pixel, encoded again as a PNG; the blocked image is the placeholder.
+        assert_eq!(r.srcdoc.matches("src=\"data:image/png;base64,").count(), 3);
         assert_eq!(
             r.srcdoc
                 .matches(&format!("src=\"{PLACEHOLDER_PIXEL}\""))
                 .count(),
-            4
+            1
         );
         assert_eq!(r.remote_resources.len(), 1);
         assert_eq!(r.omitted_images, 2);
         assert_eq!(r.inline_used, ["logo@seed"]);
         assert!(!r.srcdoc.contains("svg"));
+    }
+
+    /// Finding C-4: an image is shown only as the re-encoding in `options.images`, never as its
+    /// own bytes; without one it is left out (and listed), refused it is left out.
+    #[test]
+    fn images_are_shown_only_as_their_re_encoding() {
+        let shown: ImageBytes = Arc::from(&b"\x89PNG\r\n\x1a\nshown"[..]);
+        let refused: ImageBytes = Arc::from(&b"GIF89arefused"[..]);
+        let unknown: ImageBytes = Arc::from(&b"\xFF\xD8\xFFunknown"[..]);
+        let mut inline = InlineImages::new();
+        inline.insert("shown@seed", shown.clone());
+        inline.insert("refused@seed", refused.clone());
+        inline.insert("unknown@seed", unknown.clone());
+        let mut images = ReencodedImages::new();
+        assert!(images.insert(shown, Arc::from("data:image/jpeg;base64,AAAA")));
+        images.refuse(refused);
+        let options = RenderOptions {
+            inline,
+            images,
+            ..options()
+        };
+        let mut written = String::from("data:image/png;base64,");
+        image::base64_encode_into(b"\x89PNG\r\n\x1a\nwritten", &mut written);
+        let r = render_html(
+            &format!(
+                "<img src='cid:shown@seed'><img src='cid:refused@seed'><img src='cid:unknown@seed'>\
+                 <img src='{written}'><div style='background:url(cid:shown@seed)'>x</div>"
+            ),
+            &options,
+        );
+        assert!(
+            r.srcdoc.ends_with(
+                "<body><img src=\"data:image/jpeg;base64,AAAA\"><img><img><img>\
+                 <div style=\"background:url(&quot;data:image/jpeg;base64,AAAA&quot;);\">x</div></body></html>"
+            ),
+            "{}",
+            r.srcdoc
+        );
+        assert!(
+            !r.srcdoc.contains(&written),
+            "never the bytes written into the HTML"
+        );
+        assert_eq!(r.omitted_images, 3);
+        assert_eq!(r.inline_used, ["shown@seed"]);
+        // The unknown inline image and the data: URL wait for their re-encoding.
+        let written_bytes = image::decode_data_url(&written, 100).unwrap();
+        assert_eq!(r.pending_images, [unknown, ImageBytes::from(written_bytes)]);
     }
 
     /// Finding C-4: BMP, AVIF and ICO never reach the web view's decoders, whether inline,
@@ -1219,6 +1323,7 @@ mod tests {
             r.srcdoc
         );
         assert_eq!(r.omitted_images, 4);
+        assert!(r.pending_images.is_empty(), "never asked to be re-encoded");
         assert!(r.inline_used.is_empty());
         for mime in ["image/bmp", "image/avif", "image/x-icon"] {
             assert!(!r.srcdoc.contains(mime), "{mime}");

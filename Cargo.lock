@@ -3625,6 +3625,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "hmac 0.13.0",
+ "image",
  "mail-content",
  "mail-model",
  "rmcp",

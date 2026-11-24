@@ -1,11 +1,12 @@
-//! Images in sanitised HTML. Only raster formats recognised by their magic bytes are shown, and
-//! only as base64 `data:` URIs built here, so every image URL in the output has one strict form.
-//! SVG is never accepted: it is a document format, not a picture.
+//! Images in sanitised HTML. Only raster formats recognised by their magic bytes are candidates,
+//! and they are shown only as base64 `data:` URIs of their re-encoding (`crate::reencode`,
+//! finding C-4 of the stage 15 review), so every image URL in the output has one strict form and
+//! the web view's decoders never see a mail's own bytes. SVG is never accepted: it is a document
+//! format, not a picture.
 //!
-//! The bytes go to the web view's own image decoders (finding C-4 of the stage 15 review), so
-//! only the four formats every mail client shows are accepted: PNG, JPEG, GIF and WebP. BMP, AVIF
-//! and ICO (rare in mail, decoders with a history of vulnerabilities, AVIF a large new one) are
-//! refused and shown like any other image that cannot be shown.
+//! Only the four formats every mail client shows are candidates: PNG, JPEG, GIF and WebP. BMP,
+//! AVIF and ICO (rare in mail, decoders with a history of vulnerabilities, AVIF a large new one)
+//! are refused and shown like any other image that cannot be shown.
 
 use std::sync::Arc;
 
@@ -54,8 +55,9 @@ pub fn sniff_image(bytes: &[u8]) -> Option<ImageType> {
     }
 }
 
-/// `data:<mime>;base64,<payload>` for bytes that are a known image, else `None`. Also for the
-/// composer (stage 10): inline images of a draft or signature shown in the editor.
+/// `data:<mime>;base64,<payload>` for bytes that are a known image, else `None`. Not for images
+/// of mails (they are shown re-encoded, C-4): for the composer (stage 10), inline images of a
+/// draft or signature the user chose, shown in the editor.
 pub fn image_data_uri(bytes: &[u8]) -> Option<String> {
     let kind = sniff_image(bytes)?;
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4 + 32);

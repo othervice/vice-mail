@@ -26,6 +26,8 @@ sha2.workspace = true
 getrandom.workspace = true
 
 [dev-dependencies]
+# Test pictures for the image mode (C-4): the decoders mail-content already uses.
+image.workspace = true
 rmcp.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "test-util", "process"] }

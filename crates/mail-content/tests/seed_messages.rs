@@ -57,7 +57,8 @@ fn every_seed_message_is_readable_or_explained() {
         let rendered = render_text(&text);
         assert!(!rendered.lines.is_empty(), "{name}");
         if let Some(html) = &message.html {
-            let rendered = render_html(
+            // As the core renders: images re-encoded (finding C-4).
+            let (rendered, written) = common::render_reencoded(
                 html,
                 &RenderOptions {
                     inline: message.inline_images(),
@@ -70,6 +71,8 @@ fn every_seed_message_is_readable_or_explained() {
             );
             let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
             assert!(found.is_empty(), "{name}: {found:#?}");
+            let foreign = common::foreign_images(&rendered.srcdoc, &written);
+            assert!(foreign.is_empty(), "{name}: not re-encoded: {foreign:?}");
         }
         for attachment in &message.attachments {
             let problems = common::harmless_file_name_problems(&attachment.file_name);
@@ -287,17 +290,18 @@ fn mime_structures_are_understood() {
     let (_, m) = load("mime_related-cid.eml");
     assert_eq!(m.inline.len(), 1);
     assert_eq!(m.inline[0].content_id, "logo@seed");
-    let rendered = render_html(
+    let (rendered, written) = common::render_reencoded(
         m.html.as_deref().unwrap_or_default(),
         &RenderOptions {
             inline: m.inline_images(),
             ..RenderOptions::new(common::token())
         },
     );
+    assert_eq!(written.len(), 1, "the logo, encoded again");
     assert!(
         rendered
             .srcdoc
-            .contains("<img src=\"data:image/png;base64,"),
+            .contains(&format!("<img src=\"{}\"", written[0])),
         "cid image resolved"
     );
     assert!(m.attachments.iter().any(|a| a.file_name == "beilage.pdf"));

@@ -359,7 +359,7 @@ fn attribute_violations(tag: &str, attr: &str, value: &str) -> Vec<String> {
             }
         }
         "src" | "background" => {
-            if !is_image_data_uri(value) {
+            if !checked_image(value) {
                 found.push(format!(
                     "{attr} not a data: image on <{tag}>: {}",
                     short(value)
@@ -369,7 +369,7 @@ fn attribute_violations(tag: &str, attr: &str, value: &str) -> Vec<String> {
         "srcset" => {
             for candidate in value.split(", ") {
                 let url = candidate.split(' ').next().unwrap_or("");
-                if !is_image_data_uri(url) {
+                if !checked_image(url) {
                     found.push(format!(
                         "srcset candidate not a data: image: {}",
                         short(url)
@@ -392,7 +392,7 @@ fn short(text: &str) -> String {
     text.chars().take(80).collect()
 }
 
-/// `data:image/<raster>;base64,<payload>`, nothing else.
+/// `data:image/<format>;base64,<payload>` in a format the core writes, nothing else.
 pub fn is_image_data_uri(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("data:image/") else {
         return false;
@@ -400,12 +400,86 @@ pub fn is_image_data_uri(value: &str) -> bool {
     let Some((kind, payload)) = rest.split_once(";base64,") else {
         return false;
     };
-    // C-4: the four formats the sniffer accepts; BMP, AVIF and ICO never reach the web view.
-    matches!(kind, "png" | "jpeg" | "gif" | "webp")
+    // C-4: only what the re-encoder writes (PNG, JPEG, GIF for animations; the blocked-image
+    // pixel is a GIF too). WebP, BMP, AVIF and ICO never reach the web view.
+    matches!(kind, "png" | "jpeg" | "gif")
         && payload
             .trim_end_matches('=')
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
+}
+
+/// The blocked-image pixel, the one image the renderer writes itself.
+pub const PLACEHOLDER_PIXEL: &str =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+/// A rendering as the core makes it (finding C-4): the first rendering lists the images it
+/// needs, they are re-encoded (here in this process, in the app in the helper), the second
+/// rendering shows them. Also returns every data URL the re-encoder wrote.
+pub fn render_reencoded(
+    html: &str,
+    options: &mail_content::RenderOptions,
+) -> (mail_content::RenderedHtml, Vec<String>) {
+    let first = mail_content::render_html(html, options);
+    if first.pending_images.is_empty() {
+        return (first, Vec::new());
+    }
+    let mut options = options.clone();
+    let mut written = Vec::new();
+    let results = mail_content::reencode_images(&first.pending_images);
+    for (original, result) in first.pending_images.iter().zip(results) {
+        match result {
+            Ok(image) => {
+                written.push(image.data_url.clone());
+                options
+                    .images
+                    .insert(original.clone(), image.data_url.into());
+            }
+            Err(_) => options.images.refuse(original.clone()),
+        }
+    }
+    let rendered = mail_content::render_html(html, &options);
+    assert!(
+        rendered.pending_images.is_empty(),
+        "the second rendering needs no other images"
+    );
+    (rendered, written)
+}
+
+thread_local! {
+    /// Image URLs the checker saw, while [`image_urls`] collects them.
+    static SEEN_IMAGES: std::cell::RefCell<Option<Vec<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Checks an image URL of the document ([`is_image_data_uri`]) and notes it for [`image_urls`].
+fn checked_image(url: &str) -> bool {
+    SEEN_IMAGES.with_borrow_mut(|seen| {
+        if let Some(seen) = seen {
+            seen.push(url.to_owned());
+        }
+    });
+    is_image_data_uri(url)
+}
+
+/// Every image URL of a document where the checker looks for them: `src`, `background`,
+/// `srcset` and CSS `url()` in attributes and `<style>`.
+pub fn image_urls(document: &str) -> Vec<String> {
+    SEEN_IMAGES.with_borrow_mut(|seen| *seen = Some(Vec::new()));
+    let _ = violations(document, Mode::Output, "");
+    SEEN_IMAGES
+        .with_borrow_mut(Option::take)
+        .unwrap_or_default()
+}
+
+/// Image URLs of a document that are neither one the re-encoder wrote nor the blocked-image
+/// pixel (finding C-4: no other image bytes reach the web view).
+pub fn foreign_images(document: &str, written: &[String]) -> Vec<String> {
+    image_urls(document)
+        .into_iter()
+        .filter(|url| url != PLACEHOLDER_PIXEL && !written.contains(url))
+        .map(|url| url.chars().take(80).collect())
+        .collect()
 }
 
 /// Functions that load something, read the document or run code (IE).
@@ -471,7 +545,7 @@ fn css_tokens(
                 }
             }
             Token::UnquotedUrl(url) => {
-                if !is_image_data_uri(url) {
+                if !checked_image(url) {
                     found.push(format!("CSS url() not a data: image: {}", short(url)));
                 }
             }
@@ -485,7 +559,7 @@ fn css_tokens(
                             Ok::<_, cssparser::ParseError<()>>(url)
                         })
                         .unwrap_or_default();
-                    if !is_image_data_uri(&url) {
+                    if !checked_image(&url) {
                         found.push(format!("CSS url() not a data: image: {}", short(&url)));
                     }
                 } else {

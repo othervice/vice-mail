@@ -120,14 +120,14 @@ pub fn render_preview(
 }
 
 /// Runs a decoder; a panic on hostile input is a damaged file, not a crash.
-fn guarded(
-    render: impl FnOnce() -> Result<AttachmentPreview, PreviewError>,
-) -> Result<AttachmentPreview, PreviewError> {
+pub(crate) fn guarded<T>(
+    render: impl FnOnce() -> Result<T, PreviewError>,
+) -> Result<T, PreviewError> {
     catch_unwind(AssertUnwindSafe(render))
         .unwrap_or_else(|_| Err(PreviewError::Damaged("the decoder failed".into())))
 }
 
-fn data_url(mime: &str, bytes: &[u8]) -> String {
+pub(crate) fn data_url(mime: &str, bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4 + 32);
     out.push_str("data:");
     out.push_str(mime);
@@ -139,7 +139,7 @@ fn data_url(mime: &str, bytes: &[u8]) -> String {
 // ---------------------------------------------------------------------------------------------
 // Images
 
-fn image_error(err: ImageError) -> PreviewError {
+pub(crate) fn image_error(err: ImageError) -> PreviewError {
     match err {
         ImageError::Limits(limit) => PreviewError::TooLarge(limit.to_string()),
         ImageError::Unsupported(what) => PreviewError::Unsupported(what.to_string()),
@@ -148,52 +148,99 @@ fn image_error(err: ImageError) -> PreviewError {
 }
 
 fn image_preview(bytes: &[u8]) -> Result<AttachmentPreview, PreviewError> {
-    let format = match sniff_image(bytes) {
-        Some(ImageType::Png) => ImageFormat::Png,
-        Some(ImageType::Jpeg) => ImageFormat::Jpeg,
-        Some(ImageType::Gif) => ImageFormat::Gif,
-        Some(ImageType::Webp) => ImageFormat::WebP,
-        _ => {
-            return Err(PreviewError::Unsupported(
-                "not a PNG, JPEG, GIF or WebP image".into(),
-            ));
-        }
-    };
-    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    let still = encode_still(decode_still(bytes)?)?;
+    Ok(AttachmentPreview::Image {
+        data_url: still.data_url,
+        width: still.width,
+        height: still.height,
+        scaled: still.scaled,
+    })
+}
+
+/// The `image` format of bytes the sniffer recognises.
+pub(crate) fn image_format(bytes: &[u8]) -> Result<ImageFormat, PreviewError> {
+    match sniff_image(bytes) {
+        Some(ImageType::Png) => Ok(ImageFormat::Png),
+        Some(ImageType::Jpeg) => Ok(ImageFormat::Jpeg),
+        Some(ImageType::Gif) => Ok(ImageFormat::Gif),
+        Some(ImageType::Webp) => Ok(ImageFormat::WebP),
+        None => Err(PreviewError::Unsupported(
+            "not a PNG, JPEG, GIF or WebP image".into(),
+        )),
+    }
+}
+
+/// Decoder limits of every image the core decodes: at most 32768 px per side and, as
+/// allocations, RGBA8 of the largest image and as much again for the scaled copy and the
+/// encoder.
+pub(crate) fn decode_limits() -> Limits {
     let mut limits = Limits::default();
     limits.max_image_width = Some(32_768);
     limits.max_image_height = Some(32_768);
-    // RGBA8 of the largest image, and as much again for the scaled copy and the encoder.
     limits.max_alloc = Some(MAX_PREVIEW_PIXELS * 4 * 2);
-    reader.limits(limits);
-    let mut decoder = reader.into_decoder().map_err(image_error)?;
-    let (width, height) = decoder.dimensions();
+    limits
+}
+
+/// Refuses an image of `width`×`height` whose decoded form (`decoded` bytes, from the header)
+/// is over [`MAX_PREVIEW_PIXELS`] or, counted twice, over [`MAX_PREVIEW_DECODE_BYTES`] (C-9).
+pub(crate) fn check_decoded_size(
+    width: u32,
+    height: u32,
+    decoded: u64,
+    colour: impl std::fmt::Debug,
+) -> Result<(), PreviewError> {
     if u64::from(width) * u64::from(height) > MAX_PREVIEW_PIXELS {
         return Err(PreviewError::TooLarge(format!(
             "{width}×{height} pixels, at most {MAX_PREVIEW_PIXELS}"
         )));
     }
-    // C-9: the decoded size from the header (pixels × bytes per pixel of its colour type).
-    let decoded = decoder.total_bytes();
     if decoded.saturating_mul(2) > MAX_PREVIEW_DECODE_BYTES {
         return Err(PreviewError::TooLarge(format!(
-            "{width}×{height} pixels of {:?} need {} MiB decoded, at most {} MiB",
-            decoder.color_type(),
+            "{width}×{height} pixels of {colour:?} need {} MiB decoded, at most {} MiB",
             decoded / (1024 * 1024),
             MAX_PREVIEW_DECODE_BYTES / 2 / (1024 * 1024)
         )));
     }
+    Ok(())
+}
+
+/// Decodes a PNG, JPEG, GIF or WebP (its first frame) within the limits and turns it upright.
+pub(crate) fn decode_still(bytes: &[u8]) -> Result<DynamicImage, PreviewError> {
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), image_format(bytes)?);
+    reader.limits(decode_limits());
+    let mut decoder = reader.into_decoder().map_err(image_error)?;
+    let (width, height) = decoder.dimensions();
+    // C-9: the decoded size from the header (pixels × bytes per pixel of its colour type).
+    check_decoded_size(width, height, decoder.total_bytes(), decoder.color_type())?;
     let orientation = decoder.orientation().map_err(image_error)?;
     let mut picture = DynamicImage::from_decoder(decoder).map_err(image_error)?;
     picture.apply_orientation(orientation);
+    Ok(picture)
+}
+
+/// A still picture encoded by the core.
+pub(crate) struct Still {
+    /// `data:image/png;base64,…` or `data:image/jpeg;base64,…`.
+    pub(crate) data_url: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    /// Scaled down to fit [`MAX_PREVIEW_EDGE`].
+    pub(crate) scaled: bool,
+}
+
+/// Scales a decoded picture to at most [`MAX_PREVIEW_EDGE`] per side and encodes it again: PNG
+/// where a pixel is transparent, JPEG otherwise.
+pub(crate) fn encode_still(mut picture: DynamicImage) -> Result<Still, PreviewError> {
     let scaled = picture.width() > MAX_PREVIEW_EDGE || picture.height() > MAX_PREVIEW_EDGE;
     if scaled {
         picture = picture.resize(MAX_PREVIEW_EDGE, MAX_PREVIEW_EDGE, FilterType::Triangle);
     }
     let mut out = Vec::new();
     // Transparency only where a pixel uses it: an opaque RGBA image is a photo like any other.
-    let transparent =
-        picture.color().has_alpha() && picture.to_rgba8().pixels().any(|p| p[3] < 255);
+    let transparent = match &picture {
+        DynamicImage::ImageRgba8(rgba) => rgba.pixels().any(|p| p[3] < 255),
+        other => other.color().has_alpha() && other.to_rgba8().pixels().any(|p| p[3] < 255),
+    };
     let mime = if transparent {
         picture
             .to_rgba8()
@@ -207,7 +254,7 @@ fn image_preview(bytes: &[u8]) -> Result<AttachmentPreview, PreviewError> {
             .map_err(image_error)?;
         "image/jpeg"
     };
-    Ok(AttachmentPreview::Image {
+    Ok(Still {
         data_url: data_url(mime, &out),
         width: picture.width(),
         height: picture.height(),

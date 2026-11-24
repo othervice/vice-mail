@@ -20,6 +20,11 @@
 //! with the bytes. Limit, stated plainly: the `From` address can be forged; a forger of an
 //! allowed sender gets their tracking images loaded (no code runs, nothing else changes).
 //!
+//! **Images** (inline, allowed external, `data:` URLs in the HTML) are shown only re-encoded
+//! ([`images`], finding C-4, decision 0046): a first rendering lists the ones it needs, the
+//! helper process encodes them again in one batch, a second rendering shows them; results are
+//! kept in memory, so a message pays this only the first time.
+//!
 //! **Attachments** are decoded from the stored body; of a partial body, the sections are
 //! fetched first. Saving goes to the path the shell's dialog returned ([`files`]); opening
 //! writes a read-only copy into the app's own directory and asks for confirmation for
@@ -31,6 +36,7 @@ mod eml;
 mod export;
 mod fetch;
 mod files;
+mod images;
 pub mod index_text;
 mod links;
 pub mod opener;
@@ -48,7 +54,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use mail_content::{RemotePolicy, RenderOptions, render_html, render_text};
+use mail_content::{RemotePolicy, RenderOptions, render_html, render_text, sniff_image};
 use mail_model::{
     AccountId, AccountState, BodyFormat, BodySection, BodyUnavailableReason, CoreError, CoreEvent,
     IpcError, LinkInfo, MailConnector, MailboxRole, MessageBody, MessageId, MessageView,
@@ -85,9 +91,10 @@ pub struct ReadingServices {
     /// `<data dir>/open-attachments`. The shell passes its cache directory.
     pub open_dir: Option<PathBuf>,
     /// Finding C-2 (decision 0043): the `mail-mcp` helper that renders image and PDF previews
-    /// in a child process within a time limit and a memory budget. `None`: they render in this
-    /// process (tests and tools). The app passes the helper next to its executable; when that
-    /// file is missing, those previews are refused rather than rendered here.
+    /// in a child process within a time limit and a memory budget, and (finding C-4, decision
+    /// 0046) re-encodes the images of the mails shown. `None`: both run in this process (tests
+    /// and tools). The app passes the helper next to its executable; when that file is missing,
+    /// those previews and images are refused rather than decoded here.
     pub preview_helper: Option<PathBuf>,
 }
 
@@ -121,6 +128,8 @@ pub(crate) struct Reading<C: MailConnector> {
     opener: Arc<dyn SystemOpener>,
     open_dir: PathBuf,
     preview_helper: Option<PathBuf>,
+    /// C-4: the images of renderings, re-encoded and kept.
+    images: images::Images,
     fetching: Mutex<HashSet<MessageId>>,
     pub(crate) prefetch: Prefetcher,
     listener: Mutex<Option<JoinHandle<()>>>,
@@ -175,6 +184,7 @@ impl<C: MailConnector + 'static> Reading<C> {
             remote: remote::RemoteImages::new(&services.remote),
             opener: services.opener,
             open_dir,
+            images: images::Images::new(services.preview_helper.clone()),
             preview_helper: services.preview_helper,
             fetching: Mutex::default(),
             prefetch: Prefetcher::default(),
@@ -399,7 +409,8 @@ impl<C: MailConnector + 'static> Reading<C> {
     }
 
     /// The body of `content` in `format`: sanitised HTML (external images loaded by the core
-    /// when `load`) or text, under a new render token whose links are remembered for `owner`.
+    /// when `load`, every image re-encoded) or text, under a new render token whose links are
+    /// remembered for `owner`.
     async fn render_body(
         &self,
         content: &Content,
@@ -412,11 +423,15 @@ impl<C: MailConnector + 'static> Reading<C> {
             let html = content.parsed.html.clone().unwrap_or_default();
             let mut options = RenderOptions::new(token.clone());
             options.inline = content.parsed.inline_images();
-            let (mut rendered, html, options) = blocking(move || {
+            // C-4: what is kept already; a message seen before renders once.
+            options.images = self.images.known(options.inline.images());
+            let (mut rendered, html, mut options) = blocking(move || {
                 let rendered = render_html(&html, &options);
                 (rendered, html, options)
             })
             .await?;
+            let mut wanted = std::mem::take(&mut rendered.pending_images);
+            let mut again = false;
             if load && !rendered.remote_resources.is_empty() {
                 let urls = rendered
                     .remote_resources
@@ -428,10 +443,23 @@ impl<C: MailConnector + 'static> Reading<C> {
                     .fetch_all(urls, options.max_image_bytes, options.max_total_image_bytes)
                     .await;
                 if !images.is_empty() {
-                    let mut options = options;
+                    // Re-encoded in the same batch as the rest.
+                    wanted.extend(
+                        images
+                            .values()
+                            .filter(|bytes| sniff_image(bytes).is_some())
+                            .cloned(),
+                    );
                     options.remote = RemotePolicy::Allow(images);
-                    rendered = blocking(move || render_html(&html, &options)).await?;
+                    again = true;
                 }
+            }
+            if !wanted.is_empty() {
+                options.images.extend(self.images.reencode(wanted).await);
+                again = true;
+            }
+            if again {
+                rendered = blocking(move || render_html(&html, &options)).await?;
             }
             (
                 MessageBody::Html {
@@ -965,6 +993,27 @@ impl<C: MailConnector + 'static> Reading<C> {
 
     pub(crate) fn prefetch_status(&self, account: AccountId) -> PrefetchStatus {
         self.prefetch.status(account)
+    }
+
+    /// Images the composer shows (a draft's inline images, a signature's pictures), re-encoded
+    /// like the images of mails (C-4) in one batch and kept the same way: the web view decodes
+    /// no image bytes the core did not write. `None` for one that cannot be shown. The draft or
+    /// signature keeps and sends its own bytes.
+    pub(crate) async fn editor_images(
+        &self,
+        images: Vec<mail_content::ImageBytes>,
+    ) -> Vec<Option<String>> {
+        let reencoded = self.images.reencode(images.clone()).await;
+        images
+            .iter()
+            .map(|image| reencoded.get(image).map(str::to_owned))
+            .collect()
+    }
+
+    /// Batches of mail images re-encoded so far (C-4; a cache hit runs none).
+    #[cfg(test)]
+    pub(crate) fn image_batches(&self) -> usize {
+        self.images.batches()
     }
 }
 

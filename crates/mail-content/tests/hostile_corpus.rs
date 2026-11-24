@@ -18,7 +18,7 @@ use std::sync::Arc;
 use common::{Mode, eml_files, file_name, raw_header, violations, visible_text};
 use mail_content::{
     LinkWarning, MAIL_CSP, ParseProblem, RemotePolicy, RenderOptions, check_link, parse,
-    render_html, render_text,
+    render_text,
 };
 
 /// A valid 1×1 PNG, standing in for every external image the user allowed.
@@ -46,6 +46,35 @@ fn expect_count(file: &str, checks: &HashMap<String, String>, key: &str, actual:
         let expected: usize = expected.parse().expect("number in X-Corpus-Check");
         assert_eq!(actual, expected, "{file}: {key}");
     }
+}
+
+/// Positive control of the C-4 check: an image the re-encoder did not write, or a format it
+/// never writes, is found.
+#[test]
+fn the_checker_finds_images_that_were_not_re_encoded() {
+    let png = "data:image/png;base64,iVBORw0KGgo=";
+    let document = format!(
+        "<!DOCTYPE html>\n<html><head></head><body><img src=\"{png}\">\
+         <div style=\"background:url(&quot;data:image/jpeg;base64,AAAA&quot;)\">x</div>\
+         <img srcset=\"{} 2x\"></body></html>",
+        common::PLACEHOLDER_PIXEL
+    );
+    assert_eq!(
+        common::image_urls(&document),
+        [
+            png,
+            "data:image/jpeg;base64,AAAA",
+            common::PLACEHOLDER_PIXEL
+        ]
+    );
+    assert_eq!(
+        common::foreign_images(&document, &[png.to_owned()]),
+        ["data:image/jpeg;base64,AAAA"]
+    );
+    assert!(!common::is_image_data_uri(
+        "data:image/webp;base64,UklGRg=="
+    ));
+    assert!(common::is_image_data_uri(png));
 }
 
 #[test]
@@ -80,7 +109,8 @@ fn sanitised_corpus_contains_nothing_forbidden() {
                 "{name}: positive control failed, the raw HTML has nothing hostile"
             );
 
-            let blocked = render_html(
+            // As the core renders: images re-encoded (finding C-4).
+            let (blocked, mut written) = common::render_reencoded(
                 html,
                 &RenderOptions {
                     inline: message.inline_images(),
@@ -93,7 +123,7 @@ fn sanitised_corpus_contains_nothing_forbidden() {
                 .iter()
                 .map(|r| (r.url.clone(), Arc::from(PNG)))
                 .collect();
-            let allowed = render_html(
+            let (allowed, written_allowed) = common::render_reencoded(
                 html,
                 &RenderOptions {
                     remote: RemotePolicy::Allow(fetched),
@@ -101,12 +131,18 @@ fn sanitised_corpus_contains_nothing_forbidden() {
                     ..RenderOptions::new(common::token())
                 },
             );
+            written.extend(written_allowed);
             for (policy, rendered) in [("blocked", &blocked), ("allowed", &allowed)] {
                 assert_eq!(
                     rendered.fallback, None,
                     "{name} ({policy}): self-check fell back to text"
                 );
-                let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
+                let mut found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
+                found.extend(
+                    common::foreign_images(&rendered.srcdoc, &written)
+                        .into_iter()
+                        .map(|url| format!("image not re-encoded: {url}")),
+                );
                 forbidden += found.len();
                 documents += 1;
                 assert!(

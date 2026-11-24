@@ -27,6 +27,11 @@ fn main() -> ExitCode {
     if args.get(1).map(String::as_str) == Some(mail_mcp::preview::PREVIEW_ARG) {
         return mail_mcp::preview::run_child(&args[2..]);
     }
+    // Finding C-4 (decision 0046): the app has the images of mails re-encoded here, so no image
+    // bytes of a mail reach its process or the web view's decoders.
+    if args.get(1).map(String::as_str) == Some(mail_mcp::preview::REENCODE_ARG) && args.len() == 2 {
+        return mail_mcp::preview::run_reencode_child();
+    }
     if let Some(arg) = std::env::args().nth(1) {
         return match arg.as_str() {
             "--version" | "-V" => {

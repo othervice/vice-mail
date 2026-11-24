@@ -438,4 +438,45 @@ Symbole 96×96 als PNG mit Transparenz, sechs Social-Symbole 64×64, zwei 1×1-G
 Hardware, 1,7 s im Debug-Build) auf dem Weg zum Öffnen einer Mail, dazu ein neuer Cache und der
 Verlust von Animationen, sind nicht eindeutig vertretbar. Umgesetzt ist nur der kleine Teil:
 BMP, AVIF und ICO werden nicht mehr angezeigt. Wie es weitergehen kann, steht in
-`docs/SECURITY_MODEL.md` (C-4).
+`docs/SECURITY_MODEL.md` (C-4). Nachtrag: am 24.11.2026 umgesetzt, parallel im Helfer, siehe den
+nächsten Abschnitt und Entscheidung 0046.
+
+## Inline-Bilder neu kodiert, im Helfer (C-4, Entscheidung 0046) – 24.11.2026
+
+**Frage:** Hält das Neukodieren aller Bilder einer Mail im Helfer `mail-mcp --reencode-images`
+(ein Stapel je Darstellung, auf bis zu acht Kerne verteilt) das Budget von etwa 150 ms für den
+Newsletter, Start des Helfers eingeschlossen?
+
+**Umgebung:** Mac mini, Apple M4 (10 Kerne), andere Sitzungen bauten gleichzeitig (Load 6–19).
+
+**Wie gemessen:** derselbe Newsletter, jetzt in `crates/mail-content/tests/newsletter/mod.rs`
+(geteilt), dazu ein animiertes Banner und ein animiertes WebP.
+
+```text
+cargo test -p mail-content --test inline_reencode_cost --release -- --ignored --nocapture
+cargo test -p mail-mcp --test reencode_isolation --release -- --ignored --nocapture
+# ohne --release: Debug-Build
+```
+
+| Weg | Release | Debug |
+|---|---|---|
+| bisher (erkennen, Base64) | 1,2 ms | 20–30 ms |
+| neu kodiert, nacheinander im Prozess | 66–72 ms (langsamstes Bild 9–21 ms) | 1.632–1.648 ms |
+| Stapel im Prozess (`reencode_images`, 10 Kerne) | 13–18 ms | 312–351 ms |
+| Stapel durch den Helfer, Start eingeschlossen (`reencode_isolated`) | bester 18–21 ms, Median 19–23 ms (unter Load 8–11 bis 33 ms) | bester 364–405 ms, Median 386–713 ms |
+| ein 1×1-Bild durch den Helfer (Start und Antwort) | 2–4 ms | 3 ms |
+| erster Start des Helfers in einem Prozess (einmalig) | 77–100 ms (222 ms direkt nach dem Bauen) | 417 ms |
+| animiertes Banner 600×200, 24 Einzelbilder (GIF, ≤ 256 Farben) | 56–59 ms | 1.162 ms |
+| animiertes WebP 400×300, 12 fotoähnliche Einzelbilder (Quantisierer) | 153–162 ms | 1.261 ms |
+
+- Der erste Start des Helfers kostet einmal je Prozess 77–100 ms, nicht der erste Prozessstart
+  allgemein (`/bin/echo` als erstes Kind: 1–3 ms) und nicht die Arbeit (aus der Shell antwortet
+  der Helfer in unter 10 ms). Mit diesem einmaligen Anteil braucht der erste Newsletter nach dem
+  Start der App rund 100–120 ms, jeder weitere rund 20 ms, ein schon gezeigter nichts (Cache).
+- Neu kodiert sind die `data:`-URLs etwa gleich groß (1.647 statt 1.621 KiB).
+- Animationen kosten rund 20 ms je Megapixel aller Einzelbilder (GIF, ≤ 256 Farben je Bild),
+  rund 100 ms, wo der Quantisierer läuft (WebP; Geschwindigkeit 30 statt 10 spart nur 20 %).
+  Daher die Grenze von 12 Mi Pixeln über alle Einzelbilder (darüber das erste Einzelbild).
+
+**Ergebnis:** umgesetzt (Entscheidung 0046). Release: rund 20 ms je Newsletter durch den
+Helfer, einmalig je Sitzung rund 80 ms mehr; Debug: rund 0,4 s statt 1,7 s.

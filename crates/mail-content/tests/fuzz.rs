@@ -1,8 +1,9 @@
 //! Fuzz-like tests with a fixed seed: mutated corpus mails, random tag soup, random CSS,
 //! random file names, mutated attachments for the preview decoders (images, PDF, text), the
 //! composer's HTML cleaners, MIME structure bombs and the HTML guard against the real parser. Nothing may panic, the sanitiser output must pass the independent
-//! checker for every input, sanitised file names must be harmless and stable, and previews may
-//! only ever be re-encoded PNG/JPEG or cleaned text within their limits.
+//! checker for every input, every image in it must be one the re-encoder wrote (finding C-4),
+//! sanitised file names must be harmless and stable, and previews may only ever be re-encoded
+//! PNG/JPEG or cleaned text within their limits.
 //!
 //! Campaign controls (stage 15, `docs/SECURITY_MODEL.md`), all optional:
 //! - `MAIL_CONTENT_FUZZ_ROUNDS=<n>` multiplies the number of cases (default 1).
@@ -180,7 +181,7 @@ fn check_message(raw: &[u8], what: &str) -> usize {
     }
     let mut documents = 0;
     if let Some(html) = &message.html {
-        let rendered = render_html(
+        let (rendered, written) = common::render_reencoded(
             html,
             &RenderOptions {
                 inline: message.inline_images(),
@@ -189,6 +190,8 @@ fn check_message(raw: &[u8], what: &str) -> usize {
         );
         let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
         assert!(found.is_empty(), "{what}: {found:?}");
+        let foreign = common::foreign_images(&rendered.srcdoc, &written);
+        assert!(foreign.is_empty(), "{what}: not re-encoded: {foreign:?}");
         documents += 1;
     }
     documents
@@ -311,6 +314,8 @@ const VALUES: &[&str] = &[
     "data:image/svg+xml,<svg onload=alert(1)>",
     "data:text/html,<script>alert(1)</script>",
     "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+    // A real PNG: shown only as the re-encoder's output (C-4).
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "#x",
     "/index.html",
     "background:url(http://127.0.0.1:18999/a.png)",
@@ -388,7 +393,13 @@ fn random_tag_soup_is_sanitised() {
         let case = cases;
         cases += 1;
         let html = tag_soup(&mut rng);
-        let rendered = render_html(&html, &RenderOptions::new(common::token()));
+        let (rendered, written) =
+            common::render_reencoded(&html, &RenderOptions::new(common::token()));
+        let foreign = common::foreign_images(&rendered.srcdoc, &written);
+        assert!(
+            foreign.is_empty(),
+            "case {case}: not re-encoded: {foreign:?}"
+        );
         // The guard may refuse SVG/MathML soup it cannot model (shown as text, finding C-1);
         // the sanitiser's self-check must never fail.
         assert_ne!(
@@ -447,6 +458,7 @@ const CSS_TOKENS: &[&str] = &[
     "http://127.0.0.1:18999/a",
     "cid:x",
     "data:image/png;base64,AAAA",
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "expression(",
     "behavior",
     "-moz-binding",
@@ -487,7 +499,13 @@ fn random_css_is_sanitised() {
         }
         let escaped = css.replace('&', "&amp;").replace('"', "&quot;");
         let html = format!("<style>{css}</style><p style=\"{escaped}\">x</p>");
-        let rendered = render_html(&html, &RenderOptions::new(common::token()));
+        let (rendered, written) =
+            common::render_reencoded(&html, &RenderOptions::new(common::token()));
+        let foreign = common::foreign_images(&rendered.srcdoc, &written);
+        assert!(
+            foreign.is_empty(),
+            "case {case}: not re-encoded: {foreign:?}"
+        );
         let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
         assert!(
             found.is_empty(),
@@ -799,6 +817,39 @@ fn report_decoder_panics(what: &str) {
 
 /// Renders a preview and checks what the web view would get; returns how long it took and
 /// whether there was a preview.
+/// An image of a mail (C-4): a re-encoded PNG, JPEG or, for an animation, GIF within the edge
+/// and the frame limit, or a typed error.
+fn check_reencoded(bytes: &[u8], what: &str) -> (Duration, bool) {
+    IN_DECODER.with(|flag| flag.set(true));
+    let start = Instant::now();
+    let result = mail_content::reencode_image(bytes);
+    let took = start.elapsed();
+    IN_DECODER.with(|flag| flag.set(false));
+    let Ok(image) = result else {
+        return (took, false);
+    };
+    let url = &image.data_url;
+    assert!(
+        url.starts_with("data:image/png;base64,iVBORw0KGgo")
+            || url.starts_with("data:image/jpeg;base64,/9j/")
+            || (image.frames > 1 && url.starts_with("data:image/gif;base64,R0lGODlh")),
+        "{what}: {} frames, {}",
+        image.frames,
+        &url[..url.len().min(48)]
+    );
+    assert!(mail_content::is_reencoded_data_url(url), "{what}");
+    assert!(
+        (1..=MAX_PREVIEW_EDGE).contains(&image.width)
+            && (1..=MAX_PREVIEW_EDGE).contains(&image.height)
+            && (1..=mail_content::MAX_ANIMATION_FRAMES).contains(&image.frames),
+        "{what}: {}×{}, {} frames",
+        image.width,
+        image.height,
+        image.frames
+    );
+    (took, true)
+}
+
 fn check_preview(kind: PreviewKind, bytes: &[u8], page: u32, what: &str) -> (Duration, bool) {
     IN_DECODER.with(|flag| flag.set(true));
     let start = Instant::now();
@@ -1073,7 +1124,7 @@ fn mutated_images_are_refused_or_reencoded() {
     let seeds = image_seeds();
     let mut rng = seeded(0x1A6E_2026);
     let campaign = Campaign::new();
-    let (mut cases, mut shown, mut round) = (0, 0, 0);
+    let (mut cases, mut shown, mut in_mail, mut round) = (0, 0, 0, 0);
     let mut slowest = (Duration::ZERO, String::new());
     while campaign.more(round) {
         for (i, seed) in seeds.iter().enumerate() {
@@ -1085,8 +1136,11 @@ fn mutated_images_are_refused_or_reencoded() {
                 let what = format!("round {round}, image seed {i}, mutation {j}");
                 let (took, ok) = check_preview(PreviewKind::Image, &data, 0, &what);
                 shown += usize::from(ok);
-                if took > slowest.0 {
-                    slowest = (took, what);
+                // The same bytes as an image inside a mail (C-4: animations stay animated).
+                let (took_in_mail, ok) = check_reencoded(&data, &what);
+                in_mail += usize::from(ok);
+                if took.max(took_in_mail) > slowest.0 {
+                    slowest = (took.max(took_in_mail), what);
                 }
                 cases += 1;
             }
@@ -1095,7 +1149,7 @@ fn mutated_images_are_refused_or_reencoded() {
     }
     report_decoder_panics("images");
     eprintln!(
-        "images: {cases} mutated images, {shown} re-encoded, slowest {:?} ({})",
+        "images: {cases} mutated images, {shown} re-encoded as previews, {in_mail} as mail images, slowest {:?} ({})",
         slowest.0, slowest.1
     );
 }
