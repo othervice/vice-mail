@@ -12,6 +12,8 @@ pub mod links;
 mod navigation;
 mod notifications;
 mod oauth;
+pub mod popup;
+mod sound;
 mod updater;
 mod window_theme;
 pub mod windows;
@@ -311,8 +313,20 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // Stage 15 (decision 0044): the guided first start.
             commands::first_start::get_first_start,
             commands::first_start::finish_first_start,
+            // Stage 18 (decision 0051): the new-mail popup, the only commands its window may
+            // call (`popup::POPUP_COMMANDS`).
+            commands::popup::get_new_mail_popup,
+            commands::popup::read_from_popup::<tauri::Wry>,
+            commands::popup::delete_from_popup,
+            commands::popup::undo_popup_delete,
+            commands::popup::dismiss_popup,
+            commands::popup::open_inbox_from_popup::<tauri::Wry>,
+            commands::popup::fit_new_mail_popup::<tauri::Wry>,
         ])
-        .events(collect_events![CoreEventMessage])
+        .events(collect_events![
+            CoreEventMessage,
+            popup::NewMailPopupChanged
+        ])
         .error_handling(ErrorHandlingMode::Result)
         // IPC types are one-way (arguments in, results and events out): one alias per type.
         .disable_serde_phases()
@@ -475,11 +489,13 @@ struct LogGuardState(Mutex<Option<LogGuard>>);
 
 pub fn run() {
     let specta = specta_builder::<tauri::Wry>();
+    // Stage 18 (decision 0051): the new-mail popup's window may call its own commands only.
+    let handler = popup::restrict(specta.invoke_handler());
     #[cfg(not(feature = "e2e"))]
-    let builder = tauri::Builder::default().invoke_handler(specta.invoke_handler());
+    let builder = tauri::Builder::default().invoke_handler(handler);
     // Desktop-test build: embedded WebDriver and the `e2e_*` test commands (decision 0005).
     #[cfg(feature = "e2e")]
-    let builder = e2e::install(tauri::Builder::default(), specta.invoke_handler());
+    let builder = e2e::install(tauri::Builder::default(), handler);
     let app = with_system_plugins(builder)
         .setup(move |app| {
             init_logging(app.handle());
@@ -747,6 +763,8 @@ fn open_main_window<R: Runtime>(
     let window = windows::guard(builder, app).build()?;
     // Stage 5: remember what the user drops on the window; on Windows the frame guard.
     windows::finish(app, &window)?;
+    // Stage 18: the new-mail popup closes with the main window.
+    popup::follow_main_window(app, &window);
     Ok(window)
 }
 

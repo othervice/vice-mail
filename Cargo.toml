@@ -160,9 +160,17 @@ markup5ever_rcdom = "0.40.1"
 
 # Desktop tests (decision 0005): only in test builds of mail-app (`--features e2e`), never shipped.
 tauri-plugin-wdio-webdriver = "=1.5.1"
+# macOS bindings, safe calls only (no `unsafe` outside webview2-guard): since stage 18
+# (decision 0051) the new-mail popup's window and sound, before only the desktop tests. The
+# versions Tauri itself builds with.
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false }
 objc2-foundation = { version = "0.3.2", default-features = false }
+objc2-quartz-core = { version = "0.3.2", default-features = false }
+# Windows bindings for the popup's sound (stage 18, decision 0051): WinRT's MediaPlayer and the
+# registry's sound scheme, both safe APIs; the versions already in the build (wry, hickory).
+windows = { version = "0.62.2", default-features = false }
+windows-registry = "0.6.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1377,3 +1377,144 @@ fn conversation_commands_answer_typed_pages_and_errors() {
     .expect_err("unknown message");
     assert_eq!(code_of(&err), Some("not_found"), "{err}");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 18 (decision 0051): the new-mail popup's window and its rights
+// ---------------------------------------------------------------------------------------------
+
+/// The popup's window, wired as `run()` does (restricted handler, real capabilities): it may
+/// call its own commands and listen to events, nothing else; the main window keeps everything.
+#[test]
+fn the_popup_window_may_only_call_its_own_commands() {
+    let dir = TempDir::new().expect("temp dir");
+    let specta = specta_builder::<MockRuntime>();
+    let app = mock_builder()
+        .invoke_handler(popup::restrict(specta.invoke_handler()))
+        .build(context())
+        .expect("mock app with the real config");
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
+    attach_core(app.handle(), &specta, core);
+    let main = open_main_window(app.handle(), None).expect("open main window");
+    let popup = WebviewWindowBuilder::new(
+        &app,
+        popup::POPUP_WINDOW,
+        tauri::WebviewUrl::App(popup::POPUP_PAGE.into()),
+    )
+    .build()
+    .expect("popup window");
+
+    let empty = invoke_from(&popup, "get_new_mail_popup", json!({})).expect("own command");
+    assert_eq!(empty["cards"], json!([]));
+    assert_eq!(empty["more"], json!(0));
+    assert_eq!(empty["appearance"]["accent"], json!("orange"));
+    let dismissed = invoke_from(&popup, "dismiss_popup", json!({ "messageId": null }));
+    assert!(dismissed.is_ok(), "{dismissed:?}");
+    let gone = invoke_from(&popup, "read_from_popup", json!({ "messageId": 1 }))
+        .expect_err("no such card");
+    assert_eq!(code_of(&gone), Some("not_found"));
+
+    for (command, args) in [
+        ("list_accounts", json!({})),
+        ("get_preferences", json!({})),
+        ("get_app_info", json!({})),
+        (
+            "apply_action",
+            json!({ "action": { "type": "delete" }, "messages": [], "requestId": "x" }),
+        ),
+        (
+            "open_message_window",
+            json!({ "accountId": "x", "messageId": 1 }),
+        ),
+    ] {
+        let refused = invoke_from(&popup, command, args).expect_err(command);
+        assert!(
+            refused
+                .as_str()
+                .is_some_and(|m| m.contains("not allowed in the new-mail popup")),
+            "{command}: {refused:?}"
+        );
+    }
+    // Tauri's own permissions: listening only.
+    let listen = invoke_from(
+        &popup,
+        "plugin:event|listen",
+        json!({ "event": "new-mail-popup-changed", "target": { "kind": "Any" }, "handler": 7 }),
+    );
+    assert!(listen.is_ok(), "listen must be allowed: {listen:?}");
+    for (command, args) in [
+        (
+            "plugin:event|emit",
+            json!({ "event": CORE_EVENT_NAME, "payload": null }),
+        ),
+        (
+            "plugin:window|start_dragging",
+            json!({ "label": popup::POPUP_WINDOW }),
+        ),
+        (
+            "plugin:window|close",
+            json!({ "label": popup::POPUP_WINDOW }),
+        ),
+    ] {
+        let denied = invoke_from(&popup, command, args);
+        assert!(
+            denied
+                .as_ref()
+                .err()
+                .and_then(Value::as_str)
+                .is_some_and(|m| m.contains("not allowed")),
+            "{command}: {denied:?}"
+        );
+    }
+
+    // The main window keeps every command, but cannot size the popup's window.
+    assert!(invoke_from(&main, "list_accounts", json!({})).is_ok());
+    let fit = invoke_from(&main, "fit_new_mail_popup", json!({ "height": 200.0 }))
+        .expect_err("only the popup sizes itself");
+    assert_eq!(code_of(&fit), Some("invalid_argument"));
+}
+
+/// Every command the popup may call exists under that name in the bindings.
+#[test]
+fn the_popup_s_commands_exist() {
+    let dir = TempDir::new().expect("temp dir");
+    let file = dir.path().join("bindings.ts");
+    specta_builder::<tauri::Wry>()
+        .export(typescript(), &file)
+        .expect("tauri-specta export");
+    let text = fs::read_to_string(&file).expect("bindings");
+    for command in popup::POPUP_COMMANDS {
+        assert!(
+            text.contains(&format!("TAURI_INVOKE(\"{command}\"")),
+            "{command} is not a command"
+        );
+    }
+    assert!(text.contains("\"new-mail-popup-changed\""));
+}
+
+/// The core's events reach every window but the popup's.
+#[test]
+fn core_events_skip_the_popup() {
+    use tauri::EventTarget;
+    assert!(events::hears_core_events(&EventTarget::webview_window(
+        MAIN_WINDOW
+    )));
+    assert!(events::hears_core_events(&EventTarget::webview_window(
+        "message-1-2"
+    )));
+    assert!(events::hears_core_events(&EventTarget::App));
+    assert!(!events::hears_core_events(&EventTarget::webview_window(
+        popup::POPUP_WINDOW
+    )));
+    assert!(!events::hears_core_events(&EventTarget::webview(
+        popup::POPUP_WINDOW
+    )));
+    assert!(!events::hears_core_events(&EventTarget::labeled(
+        popup::POPUP_WINDOW
+    )));
+}

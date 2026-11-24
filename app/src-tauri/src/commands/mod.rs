@@ -16,6 +16,7 @@ pub mod mail;
 pub mod mcp;
 pub mod oauth;
 pub mod parity;
+pub mod popup;
 pub mod preferences;
 pub mod reading;
 pub mod search;
