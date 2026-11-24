@@ -57,6 +57,8 @@ import { useConversationStore } from "../threads/preference";
 // Stage 17: "Edit views…" of the column and the rail.
 import { SlidersHorizontal } from "lucide-react";
 import { useColumnViewsStore } from "../layout/columnViews";
+// Stage 18 (decision 0053): light, dark or as the system.
+import { useThemePaletteEntries } from "../preferences/palette";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -433,6 +435,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
       },
     });
   }
+  entries.push(...useThemePaletteEntries());
   // The column as it shows now: docked, or (in a narrow window) over the content.
   const sidebarShown = ui.sidebarNarrow ? ui.sidebarOverlay : ui.sidebarExpanded;
   const sidebarShortcut = shortcutsOf("toggleSidebar")[0];

@@ -93,19 +93,19 @@ pub enum AiPanelState {
 }
 
 /// Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
-/// passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
-/// (decision 0038). A value this version does not know (from a newer device) reads as the
-/// default.
+/// passes WCAG AA (`app/tests/contrast.test.ts`). The default is "blue" (decision 0053; it was
+/// the logo's orange under decision 0038, a stored choice stays). A value this version does not
+/// know (from a newer device) reads as the default.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
 )]
 #[serde(rename_all = "camelCase")]
 pub enum AccentTheme {
     Teal,
+    #[default]
     Blue,
     Violet,
     Rose,
-    #[default]
     Orange,
     Green,
 }
@@ -155,7 +155,7 @@ impl Default for UiPreferences {
             text_size: DEFAULT_TEXT_SIZE,
             recent_commands: Vec::new(),
             ai_panel: AiPanelState::Open,
-            accent_theme: AccentTheme::Orange,
+            accent_theme: AccentTheme::Blue,
             conversations: true,
             column_views: Vec::new(),
         }
@@ -734,6 +734,9 @@ mod tests {
         assert_eq!(UiPreferences::default().text_size, 100);
         assert_eq!(UiPreferences::default().ai_panel, AiPanelState::Open);
         assert!(UiPreferences::default().validate().is_ok());
+        // Decision 0053: blue is the default accent, also where a stored value cannot be read.
+        assert_eq!(UiPreferences::default().accent_theme, AccentTheme::Blue);
+        assert_eq!(AccentTheme::default(), AccentTheme::Blue);
     }
 
     #[test]

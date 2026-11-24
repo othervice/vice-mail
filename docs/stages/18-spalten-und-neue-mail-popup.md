@@ -1,4 +1,4 @@
-# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails
+# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen, neue Farben, oberste Mail gleich offen
 
 **Ziel:** Die Grenze zwischen Liste und Lesebereich lässt sich ziehen wie die zur linken Spalte.
 Die Schnellaktionen beim Überfahren einer Zeile verdecken nie mehr das Aufklappen eines Gesprächs.
@@ -55,6 +55,54 @@ Knöpfen „Lesen“ und „Löschen“.
   alle Fenster (Navigation, WebView2-Schutz); das Fenster entsteht erst bei Bedarf und wird danach
   wieder geschlossen. Entscheidung festhalten.
 
+### D — Ordner anlegen, auch auf dem Server
+
+Wunsch vom 24.11.2026 (später am Abend): „für jedes Konto Ordner erstellen können, die auch auf dem
+Server angelegt werden, auch vorhandene Ordner müssen geladen werden“.
+
+- [ ] „Neuer Ordner…“ am Konto und „Neuer Unterordner…“ an jedem Ordner, die ein Unterordner
+  sein darf (Menü der Zeile, Befehlspalette). Name prüfen (leer, doppelt, Trennzeichen des
+  Servers); angelegt wird über die Outbox (`CreateMailbox`, IMAP und JMAP) mit sichtbarem Zustand,
+  der Ordner steht danach sofort im Baum und nimmt Mails auf (Ziehen, Verschieben).
+- [ ] Nur lesende Konten: Aktion gesperrt mit Begründung, wie bei Umbenennen und Löschen.
+- [ ] Vorhandene Ordner: Alle wählbaren Ordner des Servers stehen im Baum (heute `LIST "" "*"`
+  beim vollen Abgleich). Ordner, die ein anderes Programm anlegt, erscheinen ohne Neustart;
+  dazu „Ordner vom Server neu laden“ am Konto.
+
+### E — Farbwelt: Hell mit Blau, Dunkel in GitHub-Farben
+
+Wunsch vom 24.11.2026: „die helle Version sollte in einem hellen mit Blau Design sein, die dunkle
+mehr die GitHub-Farben haben statt dieses Braun.“ Hell, Dunkel und „wie das System“ gibt es seit
+Stufe 1 (Einstellungen → Darstellung); es geht um die Farben.
+
+- [ ] Hell: kühle, klare Flächen (Weiß und helles Blaugrau statt Beige), Blau als Akzent.
+- [ ] Dunkel: neutrale, leicht bläuliche Grautöne wie bei GitHub (sehr dunkles Blaugrau als
+  Grund, abgestufte Flächen, kühle Linien) statt der warmen Brauntöne; Blau als Akzent.
+- [ ] Standard-Akzent wird Blau (löst den Standard aus 0038 ab); die anderen Farbthemen bleiben
+  wählbar, eine gespeicherte Wahl bleibt. Entscheidung festhalten.
+- [ ] Kontrast nach WCAG AA in beiden Modi für jedes Thema (`app/tests/contrast.test.ts`),
+  `docs/DESIGN.md` und die README-Bilder angepasst.
+- [ ] Hell/Dunkel schneller umschalten: Befehl in der Befehlspalette.
+
+### F — Oberste Mail beim Öffnen eines Ordners gleich zeigen
+
+Wunsch vom 24.11.2026: „Wenn man z. B. in einen Ordner wie Posteingang geht, soll da nicht eine
+breite Liste aller Mails sein, sondern die oberste Mail bereits geöffnet. Dann entstehen nicht
+diese komischen langen Zeilen.“
+
+- [ ] Steht der Lesebereich rechts oder unten, zeigt das Öffnen eines Ordners oder einer Ansicht
+  (Posteingang, vereinter Posteingang, Ungelesen, …) gleich die oberste Mail im Lesebereich; bei
+  einem Gespräch die Mail, die ein Klick auf die Gesprächszeile zeigen würde (Stufe 17). In der
+  Stellung „statt der Liste“ bleibt es bei der Liste.
+- [ ] Die Liste behält immer ihre Lesebreite (Maß aus A), auch wenn nichts gewählt ist (leerer
+  Ordner, Auswahl aufgehoben): der Lesebereich zeigt dann einen ruhigen leeren Zustand statt
+  einer Liste über die ganze Breite.
+- [ ] Automatisch geöffnet heißt nicht gelesen: eine so gezeigte Mail wird nur nach der
+  Einstellung „Als gelesen markieren“ behandelt, wenn du sie selbst auswählst oder im Lesebereich
+  mit ihr arbeitest. Entscheidung festhalten (0054).
+- [ ] Während des Tippens einer Suche springt die Auswahl nicht mit; Tastatur und Fokus bleiben
+  wie bisher (der Fokus springt nicht von selbst in den Lesebereich).
+
 ## Nicht in dieser Stufe
 
 - Benachrichtigungen für fehlgeschlagene Sendungen und Snoozes bleiben Mitteilungen des Systems.
@@ -66,6 +114,8 @@ Knöpfen „Lesen“ und „Löschen“.
 - [ ] Griff zwischen Liste und Lesebereich (rechts und unten) per Desktop-Test gezogen, Maß nach
   Neustart des Fensterlayouts wieder da.
 - [ ] Aufklappen per echtem Klick, während die Schnellaktionen sichtbar sind, per Desktop-Test.
+- [ ] Ordner anlegen per Desktop-Test: Ordner und Unterordner entstehen auf dem Testserver,
+  nur lesendes Konto sperrt die Aktion, ein auf dem Server angelegter Ordner erscheint ohne Neustart.
 - [ ] Popup per Desktop-Test: neue Mail auf dem Testserver → Popup mit Absender und Ausschnitt,
   „Lesen“ zeigt die Mail im Hauptfenster, „Löschen“ legt sie in den Papierkorb, nur lesendes Konto
   sperrt „Löschen“.

@@ -126,9 +126,26 @@ feste Farben oder Abstände.
 | Schatten | vier Stufen: Zeile (Haarbreite), Karte (Priorität, leere Zustände), schwebend (Menüs, Schnellaktionen), Panel |
 | Bewegung | 120, 180, 240 ms, weich auslaufend; bei „Bewegung reduzieren“ keine |
 
-Startwerte: neutrale, leicht warme Grautöne; ein einzelner Akzent, seit Entscheidung 0038 das Orange
-aus dem Logo (Blaugrün und die anderen Farbthemen bleiben wählbar); die Prioritätsfläche in warmem Sand. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus ist kein
-invertierter heller: eigene Flächenstufen, gedämpfter Akzent, Kontrast nach `docs/SPEC.md`.
+Startwerte (seit Entscheidung 0053): kühle Grautöne, hell Weiß und helles Blaugrau, dunkel
+neutrale, leicht bläuliche Grautöne in der Art des dunklen GitHub-Themas (Grund `#0d1117`); ein
+einzelner Akzent, Blau (Blaugrün, Violett, Rosé, das Orange aus dem Logo und Grün bleiben wählbar,
+eine gespeicherte Wahl bleibt). Die Prioritätskarte ist in beiden Modi eine erhabene, kühle Karte;
+die Farbe trägt ihr Symbol. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus
+ist kein invertierter heller: eigene Flächenstufen, eigener Akzentton, Kontrast nach `docs/SPEC.md`.
+Hell, Dunkel und System lassen sich auch aus der Befehlspalette umschalten (Gruppe Layout).
+
+| Stufe | Hell | Dunkel |
+|---|---|---|
+| `rail` (dunkelste Stufe) | `#e5eaf0` | `#090c11` |
+| `canvas` | `#eef2f6` | `#0d1117` |
+| `surface-list` | `#f6f8fb` | `#12171e` |
+| `surface` (Lesebereich, hellste Stufe) | `#fdfeff` | `#161c24` |
+| `surface-raised` (Karten, Menüs) | `#ffffff` | `#212830` |
+| `border` / `border-subtle` | `#d8dfe7` / `#e3e8ee` | `#30363d` / `#21262d` |
+| Text primär / sekundär / tertiär | `#19212c` / `#444e5c` / `#566171` | `#e6edf3` / `#b7c0ca` / `#9198a1` |
+| `accent` / `accent-fill` (Blau) | `#0b5cc2` / `#1665d8` | `#4493f8` / `#1f6feb` |
+
+Alle Werte und die übrigen Tokens: `tokens.css` und Entscheidung 0053.
 
 HTML-Mails werden auf ihrem eigenen Hintergrund gezeigt und im dunklen Modus nicht umgefärbt.
 Nennt eine HTML-Mail keine Schrift, steht sie in der Systemschrift der App statt in Times (siehe
@@ -152,8 +169,9 @@ schmalen Liste drei Zeilen: Absender und Zeit, Betreff mit Plaketten, Vorschau.
 mit gleicher Zuordnung). Der Kontoring erscheint nur, wo er Konten unterscheidet (vereinter
 Posteingang, Suche über Konten, Kontoauswahl, Einstellungen).
 
-**Priorität.** Eine warm getönte Karte mit Haarlinie und weichem Schatten, Titel mit Blitz in der
-Warnfarbe, höchstens drei Zeilen, „Alle anzeigen (n)“ mittig als Abschluss.
+**Priorität.** Eine erhabene Karte mit Haarlinie und weichem Schatten (seit 0053 kühl statt warm
+getönt), Titel mit Blitz in der Warnfarbe, höchstens drei Zeilen, „Alle anzeigen (n)“ mittig als
+Abschluss.
 
 **Bündel.** Symbolkachel in eigener Tönung (Benachrichtigungen blau, Newsletter bernstein), Name,
 Zähler „6 · 2 neu“, Absender-Chips mit 16-px-Mini-Avatar und Anzahl, „+n“ für den Rest, Pfeil.
@@ -211,6 +229,10 @@ Rich Text/Text als kleiner Segmentschalter, Editor mindestens einige Absätze ho
 Fenstern scrollt der Bereich als Ganzes), Senden als Akzentbutton mit leisem Kürzel daneben.
 
 ## Gestaltungsdurchgang 23.11.2026 (Orange, alle Ansichten)
+
+(Seit Entscheidung 0053 ist Blau der Standard-Akzent; Orange bleibt wählbar und so gestaltet wie
+hier beschrieben. Blau hat ebenso zwei Stufen: `accent` `#0b5cc2` / `#4493f8`, `accent-fill`
+`#1665d8` / `#1f6feb` mit weißer Schrift.)
 
 Ziel: Jede Ansicht wirkt so fertig wie Liste und Lesebereich nach dem Feinschliff, im neuen
 Standard-Orange (Entscheidung 0038), hell und dunkel. Geprüft mit Bildschirmfotos bei 1440 × 900
@@ -273,7 +295,7 @@ bleibt unverändert. Der Name kommt immer aus `config/product.ts`.
   selbst, deshalb ist die Adresse kein Link. Der Bereich „Updates“ (Stufe 15) folgt unverändert.
 
 **Überlagerungen.** Befehlspalette, Tastenübersicht und Bestätigungsdialoge liegen über einem
-abgedunkelten Hintergrund (`scrim`: hell 24 % warmes Schwarz, dunkel 50 % Schwarz). Er erscheint
+abgedunkelten Hintergrund (`scrim`: hell 28 % kühles Schwarz, dunkel 60 % Fast-Schwarz, seit 0053). Er erscheint
 ohne Bewegung, also auch bei „Bewegung reduzieren“ gleich; ein Klick darauf schließt wie bisher ein
 Klick außerhalb. Das Feld der Palette ist eine Zeile mit Lupe auf der Spur (`track`); der Fokusring
 liegt auf dieser Zeile, solange das Feld den Fokus hat, statt als Rahmen am abgeschnittenen Rand

@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
 });
 
-const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "orange", conversations: false, columnViews: [] };
+const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "blue", conversations: false, columnViews: [] };
 
 function setup(options: { preferences?: UiPreferences; layout?: CoreWindowLayout; failures?: Record<string, Failure> } = {}) {
   const items = makeMessages(4);
@@ -118,7 +118,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         textSize: 115,
         recentCommands: ["action:reply"],
         aiPanel: "open",
-        accentTheme: "orange",
+        accentTheme: "blue",
         conversations: false,
         columnViews: [],
       },
@@ -209,7 +209,7 @@ describe("moving the old local fallback to the core, once", () => {
       textSize: 130,
       recentCommands: ["action:compose", "view:sent"],
       aiPanel: "open",
-      accentTheme: "orange",
+      accentTheme: "blue",
       conversations: false,
       columnViews: [],
     });

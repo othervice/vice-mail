@@ -5,8 +5,9 @@ import { saveUiPreferences } from "../keyboard/uiPreferences";
 /**
  * Stage 16: accent themes (Settings → Appearance). Each one changes only the accent family of
  * tokens.css (accent, its soft fill, the selected row, the focus ring, text on the accent), in
- * light and dark; tests/contrast.test.ts checks all of them. Decision 0038: "orange" is the
- * default (the core reads a missing or unknown value as orange too).
+ * light and dark; tests/contrast.test.ts checks all of them. Decision 0053: "blue" is the
+ * default (the core reads a missing or unknown value as blue too); a stored choice stays, also
+ * orange, the default of decision 0038 before.
  *
  * Decision 0036: the choice is a UI preference of the core (`UiPreferences.accentTheme`), synced
  * between devices like the text size. The store holds what the documents of this window apply;
@@ -21,7 +22,7 @@ type MissingTheme = Exclude<CoreAccentTheme, AccentTheme>;
 const themesAreComplete: [MissingTheme] extends [never] ? true : never = true;
 void themesAreComplete;
 
-export const DEFAULT_ACCENT: AccentTheme = "orange";
+export const DEFAULT_ACCENT: AccentTheme = "blue";
 
 export function isAccentTheme(value: unknown): value is AccentTheme {
   return typeof value === "string" && (ACCENT_THEMES as readonly string[]).includes(value);
@@ -29,7 +30,8 @@ export function isAccentTheme(value: unknown): value is AccentTheme {
 
 /**
  * tokens.css switches the accent family on this attribute. Always set, the default included:
- * the root values of tokens.css are teal's, which is no longer the default (decision 0038).
+ * the root values of tokens.css are blue's (decision 0053), so the first frame before the core
+ * answers has the default, and every theme, blue too, comes from its own block afterwards.
  */
 export function applyAccent(accent: AccentTheme): void {
   document.documentElement.dataset["accent"] = accent;

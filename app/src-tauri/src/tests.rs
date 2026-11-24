@@ -683,8 +683,8 @@ fn ui_preference_commands_store_validate_and_emit() {
             "textSize": 100,
             "recentCommands": [],
             "aiPanel": "open",
-            // Decisions 0036 and 0038: synced, orange by default.
-            "accentTheme": "orange",
+            // Decisions 0036 and 0053: synced, blue by default.
+            "accentTheme": "blue",
             // Decision 0039: one row per conversation by default.
             "conversations": true,
             // Stage 17: no choice of the column's views, every view in the UI's order.

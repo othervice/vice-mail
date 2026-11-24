@@ -13,50 +13,52 @@
   color-scheme: light;
 
   /* Surfaces. Feinschliff (decision 0031): three tonal steps from the frame inwards: the rail
-     darkest, the list column slightly tinted, the reading pane brightest; cards are raised. */
-  --ui-canvas: #f4f2ee;
-  --ui-surface: #fdfcfa;
-  --ui-surface-list: #f8f7f4;
+     darkest, the list column slightly tinted, the reading pane brightest; cards are raised.
+     Decision 0053: cool and clear, white and light blue-grey instead of the warm beige. */
+  --ui-canvas: #eef2f6;
+  --ui-surface: #fdfeff;
+  --ui-surface-list: #f6f8fb;
   --ui-surface-raised: #ffffff;
-  --ui-rail: #e9e6df;
-  --ui-rail-hover: #e2dfd8;
-  --ui-priority-tint: #fbf1e1;
-  --ui-selected: #dfefec;
-  --ui-hover: #efede8;
+  --ui-rail: #e5eaf0;
+  --ui-rail-hover: #dbe1e9;
+  --ui-priority-tint: #fafcff;
+  --ui-selected: #dde8f8;
+  --ui-hover: #edf1f6;
   /* Fill of small pills: conversation size, counters. */
-  --ui-badge: #ebe8e2;
+  --ui-badge: #e5eaf0;
 
   /* Lines. `border-subtle` separates panes and rows without drawing attention. */
-  --ui-border: #e3e0da;
-  --ui-border-subtle: #ebe8e2;
-  --ui-priority-border: #f0dfc2;
-  --ui-border-strong: #847e75;
-  --ui-focus-ring: #0b6e66;
+  --ui-border: #d8dfe7;
+  --ui-border-subtle: #e3e8ee;
+  --ui-priority-border: #d9e2ee;
+  --ui-border-strong: #737f8d;
+  --ui-focus-ring: #2a72dc;
 
-  /* Text */
-  --ui-text-primary: #1e1c19;
-  --ui-text-secondary: #514d47;
-  --ui-text-tertiary: #67625a;
+  /* Text: cool greys. */
+  --ui-text-primary: #19212c;
+  --ui-text-secondary: #444e5c;
+  --ui-text-tertiary: #566171;
   --ui-text-on-accent: #ffffff;
 
-  /* Accent and status. The root holds teal's accent family; every accent theme (below) brings
-     its own, and the root always carries one (decision 0038). `accent` is for text, icons,
-     borders and small controls (>= 4.5:1 on every surface); `accent-fill` fills primary buttons
-     and other marks that carry `text-on-accent` (in the orange theme the pure brand orange). */
-  --ui-accent: #0b746c;
-  --ui-accent-fill: #0b746c;
-  --ui-accent-soft: #dceeeb;
-  --ui-danger: #b3261e;
+  /* Accent and status. The root holds blue's accent family, the default theme since decision
+     0053; every accent theme (below) brings its own, and the root always carries the chosen one
+     (accent.ts). `accent` is for text, icons, borders and small controls (>= 4.5:1 on every
+     surface); `accent-fill` fills primary buttons and other marks that carry `text-on-accent`
+     (in the orange theme the pure brand orange). */
+  --ui-accent: #0b5cc2;
+  --ui-accent-fill: #1665d8;
+  --ui-accent-soft: #e0ebf9;
+  --ui-danger: #b42318;
   /* Label on the danger fill; not part of the accent family. */
   --ui-text-on-danger: #ffffff;
   /* Design pass 23.11.2026: the track of segmented controls and switches; the ink of "Vice" in
      the wordmark (docs/brand/README.md: Ink on light, white on dark). */
-  --ui-track: #ebe8e2;
+  --ui-track: #e5eaf0;
   --ui-brand-ink: #1a1619;
   /* Dims the window behind the command palette, the shortcut overview and dialogs. */
-  --ui-scrim: rgb(30 28 25 / 0.24);
-  --ui-success: #1e7239;
-  --ui-warning: #8f5300;
+  --ui-scrim: rgb(16 24 36 / 0.28);
+  --ui-success: #1a6d34;
+  --ui-warning: #875000;
 
   /* Account colours: eight distinguishable hues, always shown together with the account name. */
   --ui-account-1: #2f66c8;
@@ -69,7 +71,8 @@
   --ui-account-8: #7a5f45;
 
   /* Avatar tints (decision 0031): initials of a sender on a soft fill, the hue chosen by a stable
-     hash of the address (features/accounts/senderTint.ts). Text on fill >= 4.5:1. */
+     hash of the address (features/accounts/senderTint.ts). Text on fill >= 4.5:1. Decision 0053:
+     the eighth tint is slate instead of sand. */
   --ui-avatar-1-bg: #dce8fb;
   --ui-avatar-1-text: #1f4e9a;
   --ui-avatar-2-bg: #e8e0fa;
@@ -84,8 +87,8 @@
   --ui-avatar-6-text: #3e6a14;
   --ui-avatar-7-bg: #d5eeee;
   --ui-avatar-7-text: #0b6669;
-  --ui-avatar-8-bg: #ece4da;
-  --ui-avatar-8-text: #6b533b;
+  --ui-avatar-8-bg: #e2e7ee;
+  --ui-avatar-8-text: #435166;
 
   /* Mail content. HTML mail is shown on its own white canvas, in the dark theme too: its colours
      were made for white, and recolouring would break them (docs/DESIGN.md). Not redefined below. */
@@ -96,7 +99,7 @@
      it is written into the mail frame's own style sheet (features/reading/find.ts). */
   --ui-find-match: #f8e4a4;
   --ui-find-current: #efb43a;
-  --ui-find-current-text: #1e1c19;
+  --ui-find-current-text: #19212c;
   --ui-mail-find-match: #fbe7a6;
   --ui-mail-find-current: #f5b83d;
 
@@ -145,10 +148,10 @@
 
   /* Elevation (decision 0031): soft shadows instead of hard borders. `card` lifts a block in the
      list (priority) or a selected row by a hair; floating (menus, tooltips) and panel above it. */
-  --ui-shadow-card: 0 1px 2px rgb(30 28 25 / 0.06), 0 2px 8px rgb(30 28 25 / 0.05);
-  --ui-shadow-row: 0 1px 2px rgb(30 28 25 / 0.07);
-  --ui-shadow-floating: 0 4px 16px rgb(30 28 25 / 0.12), 0 1px 3px rgb(30 28 25 / 0.08);
-  --ui-shadow-panel: 0 12px 40px rgb(30 28 25 / 0.14), 0 2px 6px rgb(30 28 25 / 0.06);
+  --ui-shadow-card: 0 1px 2px rgb(16 24 36 / 0.06), 0 2px 8px rgb(16 24 36 / 0.05);
+  --ui-shadow-row: 0 1px 2px rgb(16 24 36 / 0.07);
+  --ui-shadow-floating: 0 4px 16px rgb(16 24 36 / 0.12), 0 1px 3px rgb(16 24 36 / 0.08);
+  --ui-shadow-panel: 0 12px 40px rgb(16 24 36 / 0.14), 0 2px 6px rgb(16 24 36 / 0.06);
 
   /* Motion: soft ease-out; all zero under "reduce motion" (below) */
   --ui-duration-fast: 120ms;
@@ -246,47 +249,48 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces */
-  --ui-canvas: #141312;
-  --ui-surface: #1d1c1a;
-  --ui-surface-list: #1a1917;
-  --ui-surface-raised: #272522;
-  --ui-rail: #0e0d0c;
-  --ui-rail-hover: #1f1d1b;
-  --ui-priority-tint: #2c2519;
-  --ui-selected: #1d3633;
-  --ui-hover: #252320;
-  --ui-badge: #2e2c28;
+  /* Surfaces. Decision 0053: neutral, slightly bluish greys in the manner of GitHub's dark
+     theme instead of the warm browns; the steps of decision 0031 stay. */
+  --ui-canvas: #0d1117;
+  --ui-surface: #161c24;
+  --ui-surface-list: #12171e;
+  --ui-surface-raised: #212830;
+  --ui-rail: #090c11;
+  --ui-rail-hover: #1a2029;
+  --ui-priority-tint: #1a2230;
+  --ui-selected: #182638;
+  --ui-hover: #1d232c;
+  --ui-badge: #262d37;
 
   /* Lines */
-  --ui-border: #34312d;
-  --ui-border-subtle: #2a2825;
-  --ui-priority-border: #3d3222;
-  --ui-border-strong: #77716a;
-  --ui-focus-ring: #63c7ba;
+  --ui-border: #30363d;
+  --ui-border-subtle: #21262d;
+  --ui-priority-border: #2e3b50;
+  --ui-border-strong: #6e7681;
+  --ui-focus-ring: #58a6ff;
 
   /* Text */
-  --ui-text-primary: #eeebe6;
-  --ui-text-secondary: #bdb8af;
-  --ui-text-tertiary: #a09a90;
-  --ui-text-on-accent: #0c1a18;
+  --ui-text-primary: #e6edf3;
+  --ui-text-secondary: #b7c0ca;
+  --ui-text-tertiary: #9198a1;
+  --ui-text-on-accent: #ffffff;
 
   /* Accent and status */
-  --ui-accent: #5dbdb1;
-  --ui-accent-fill: #5dbdb1;
-  --ui-accent-soft: #1e3a36;
-  --ui-danger: #f2857a;
-  --ui-text-on-danger: #1f0c0a;
-  --ui-track: #121110;
+  --ui-accent: #4493f8;
+  --ui-accent-fill: #1f6feb;
+  --ui-accent-soft: #1c2a3d;
+  --ui-danger: #fb6a60;
+  --ui-text-on-danger: #0d1117;
+  --ui-track: #0b0f14;
   --ui-brand-ink: #ffffff;
-  --ui-scrim: rgb(0 0 0 / 0.5);
-  --ui-success: #72c78f;
-  --ui-warning: #e3a851;
+  --ui-scrim: rgb(1 4 9 / 0.6);
+  --ui-success: #3fb950;
+  --ui-warning: #d29922;
 
   /* Stage 16: find in the open message (the mail-* pair stays as in light, like the canvas) */
-  --ui-find-match: #5b4614;
-  --ui-find-current: #e3a851;
-  --ui-find-current-text: #141312;
+  --ui-find-match: #4f4110;
+  --ui-find-current: #e3b341;
+  --ui-find-current-text: #0d1117;
 
   /* Account colours */
   --ui-account-1: #7fa9f2;
@@ -296,31 +300,32 @@
   --ui-account-5: #e9a257;
   --ui-account-6: #98c565;
   --ui-account-7: #55c3c9;
-  --ui-account-8: #c9ac8b;
+  --ui-account-8: #c4a98c;
 
-  /* Avatar tints: deep fills with light initials, the same hues as in light */
-  --ui-avatar-1-bg: #22314a;
-  --ui-avatar-1-text: #a9c5f5;
-  --ui-avatar-2-bg: #2f2848;
-  --ui-avatar-2-text: #c6b3f3;
-  --ui-avatar-3-bg: #3d2537;
-  --ui-avatar-3-text: #efb0d8;
-  --ui-avatar-4-bg: #42271f;
-  --ui-avatar-4-text: #f5b2a3;
-  --ui-avatar-5-bg: #3d2e19;
-  --ui-avatar-5-text: #edc086;
-  --ui-avatar-6-bg: #28351d;
-  --ui-avatar-6-text: #b5d98f;
-  --ui-avatar-7-bg: #1b3637;
-  --ui-avatar-7-text: #8fd8db;
-  --ui-avatar-8-bg: #36302a;
-  --ui-avatar-8-text: #d8c3aa;
+  /* Avatar tints: deep fills with light initials, the same hues as in light, each mixed into the
+     cool base so none reads brown. */
+  --ui-avatar-1-bg: #1f3454;
+  --ui-avatar-1-text: #a9c8f8;
+  --ui-avatar-2-bg: #332e54;
+  --ui-avatar-2-text: #c9b6f6;
+  --ui-avatar-3-bg: #46273f;
+  --ui-avatar-3-text: #f0b0d8;
+  --ui-avatar-4-bg: #492b2e;
+  --ui-avatar-4-text: #f6b4a6;
+  --ui-avatar-5-bg: #46391f;
+  --ui-avatar-5-text: #f0c98a;
+  --ui-avatar-6-bg: #1f4030;
+  --ui-avatar-6-text: #b4dd98;
+  --ui-avatar-7-bg: #184048;
+  --ui-avatar-7-text: #90dcde;
+  --ui-avatar-8-bg: #303946;
+  --ui-avatar-8-text: #c3cedd;
 
   /* Shadows need more weight on dark surfaces */
-  --ui-shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.25);
-  --ui-shadow-row: 0 1px 2px rgb(0 0 0 / 0.4);
-  --ui-shadow-floating: 0 4px 16px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.35);
-  --ui-shadow-panel: 0 12px 40px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+  --ui-shadow-card: 0 1px 2px rgb(1 4 9 / 0.5), 0 2px 8px rgb(1 4 9 / 0.3);
+  --ui-shadow-row: 0 1px 2px rgb(1 4 9 / 0.45);
+  --ui-shadow-floating: 0 4px 16px rgb(1 4 9 / 0.5), 0 1px 3px rgb(1 4 9 / 0.4);
+  --ui-shadow-panel: 0 12px 40px rgb(1 4 9 / 0.55), 0 2px 6px rgb(1 4 9 / 0.4);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -376,13 +381,34 @@
 /* ---- Stage 16: accent themes (Settings → Appearance) ----
    The accent family of each theme, light and dark: the accent itself, its fill, its soft fill,
    the selected row, the focus ring and the text on the fill. Everything else stays as above.
-   The root values above are teal's; the root always carries the chosen theme (accent.ts), and
-   the swatches of the theme picker carry their own (each shows its theme inside the current
-   mode), so teal's block repeats the root values. tests/contrast.test.ts checks every theme in
-   both modes with the same pairs as the root and that the teal block equals it. Orange (the default since decision 0038) is the
-   logo's "Vice orange" (#ff7a00, docs/brand/README.md): `accent-fill` is the pure brand orange in
-   both modes, with the logo's near-black on it; `accent` (text, icons, switches) is a burnt tone
-   of the same hue in light, so it reaches 4.5:1 on every surface, and a lighter one in dark. */
+   The root values above are blue's (the default since decision 0053); the root always carries
+   the chosen theme (accent.ts), and the swatches of the theme picker carry their own (each shows
+   its theme inside the current mode), so blue's block repeats the root values.
+   tests/contrast.test.ts checks every theme in both modes with the same pairs as the root and
+   that the blue block equals it. In dark, the soft fill and the selected row of every theme are
+   its accent mixed into the cool surfaces (about 12 %), so no theme brings back a warm grey.
+   Orange (the default of decision 0038 until 0053) is the logo's "Vice orange" (#ff7a00,
+   docs/brand/README.md): `accent-fill` is the pure brand orange in both modes, with the logo's
+   near-black on it; `accent` (text, icons, switches) is a burnt tone of the same hue in light,
+   so it reaches 4.5:1 on every surface, and a lighter one in dark. Blue fills primary buttons
+   with a brighter blue than its text tone, white on it in both modes. */
+[data-accent="blue"] {
+  --ui-accent: #0b5cc2;
+  --ui-accent-fill: #1665d8;
+  --ui-accent-soft: #e0ebf9;
+  --ui-selected: #dde8f8;
+  --ui-focus-ring: #2a72dc;
+  --ui-text-on-accent: #ffffff;
+}
+:root[data-theme="dark"][data-accent="blue"],
+:root[data-theme="dark"] [data-accent="blue"] {
+  --ui-accent: #4493f8;
+  --ui-accent-fill: #1f6feb;
+  --ui-accent-soft: #1c2a3d;
+  --ui-selected: #182638;
+  --ui-focus-ring: #58a6ff;
+  --ui-text-on-accent: #ffffff;
+}
 [data-accent="teal"] {
   --ui-accent: #0b746c;
   --ui-accent-fill: #0b746c;
@@ -391,30 +417,14 @@
   --ui-focus-ring: #0b6e66;
   --ui-text-on-accent: #ffffff;
 }
+:root[data-theme="dark"][data-accent="teal"],
 :root[data-theme="dark"] [data-accent="teal"] {
   --ui-accent: #5dbdb1;
   --ui-accent-fill: #5dbdb1;
-  --ui-accent-soft: #1e3a36;
-  --ui-selected: #1d3633;
+  --ui-accent-soft: #203338;
+  --ui-selected: #1c2e33;
   --ui-focus-ring: #63c7ba;
   --ui-text-on-accent: #0c1a18;
-}
-[data-accent="blue"] {
-  --ui-accent: #2263bf;
-  --ui-accent-fill: #2263bf;
-  --ui-accent-soft: #dae6f6;
-  --ui-selected: #dae5f3;
-  --ui-focus-ring: #2f76da;
-  --ui-text-on-accent: #ffffff;
-}
-:root[data-theme="dark"][data-accent="blue"],
-:root[data-theme="dark"] [data-accent="blue"] {
-  --ui-accent: #5a95e7;
-  --ui-accent-fill: #5a95e7;
-  --ui-accent-soft: #1d2a3d;
-  --ui-selected: #1c2838;
-  --ui-focus-ring: #639be9;
-  --ui-text-on-accent: #0c131d;
 }
 [data-accent="violet"] {
   --ui-accent: #774bc3;
@@ -428,8 +438,8 @@
 :root[data-theme="dark"] [data-accent="violet"] {
   --ui-accent: #a27de3;
   --ui-accent-fill: #a27de3;
-  --ui-accent-soft: #281d3d;
-  --ui-selected: #261c38;
+  --ui-accent-soft: #252739;
+  --ui-selected: #232336;
   --ui-focus-ring: #a885e5;
   --ui-text-on-accent: #120c1d;
 }
@@ -445,8 +455,8 @@
 :root[data-theme="dark"] [data-accent="rose"] {
   --ui-accent: #e4659a;
   --ui-accent-fill: #e4659a;
-  --ui-accent-soft: #3d1d2a;
-  --ui-selected: #381c28;
+  --ui-accent-soft: #312533;
+  --ui-selected: #2d212e;
   --ui-focus-ring: #e670a1;
   --ui-text-on-accent: #1d0c13;
 }
@@ -462,8 +472,8 @@
 :root[data-theme="dark"] [data-accent="orange"] {
   --ui-accent: #ff8f33;
   --ui-accent-fill: #ff7a00;
-  --ui-accent-soft: #3a2716;
-  --ui-selected: #33261a;
+  --ui-accent-soft: #342b26;
+  --ui-selected: #312721;
   --ui-focus-ring: #ff9a40;
   --ui-text-on-accent: #1a1208;
 }
@@ -479,8 +489,8 @@
 :root[data-theme="dark"] [data-accent="green"] {
   --ui-accent: #45b76b;
   --ui-accent-fill: #45b76b;
-  --ui-accent-soft: #1d3d27;
-  --ui-selected: #1c3825;
+  --ui-accent-soft: #1d322e;
+  --ui-selected: #192d29;
   --ui-focus-ring: #4aba6f;
   --ui-text-on-accent: #0c1d12;
 }

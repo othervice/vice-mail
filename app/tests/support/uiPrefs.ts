@@ -13,7 +13,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   textSize: 100,
   recentCommands: [],
   aiPanel: "open",
-  accentTheme: "orange",
+  accentTheme: "blue",
   conversations: false,
   // Stage 17: no choice, every view of the column in its default order.
   columnViews: [],

@@ -35,7 +35,9 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | wartet auf Mensch (Code fertig: A–D; B/C brauchen App-Registrierungen und Handprüfungen) | Microsoft, Gmail-Eigenheiten, JMAP |
 | 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | fertig | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
 | 17 | [Gespräche und Kontakte](stages/17-gespraeche-und-kontakte.md) | fertig | Gespräche aufklappen wie in Thunderbird, Kontakte mit Bildern, eigene Ansichten; vor dem ersten öffentlichen Release |
-| 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | in Arbeit | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen |
+| 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | in Arbeit | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen, Hell mit Blau und Dunkel wie GitHub |
+| 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | in Arbeit (B, C; A nach 18) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
+| 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | in Arbeit | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
