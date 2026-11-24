@@ -296,6 +296,7 @@ export function MessageRowContent({
         // Narrow: as wide as the names; the account label beside them gives way first.
         twoLine && "min-w-0",
       )}
+      data-testid="row-sender"
     >
       {highlights && !showRecipients && item.from && ownSender ? (
         <HighlightedText text={who} ranges={highlights.from} offset={item.from.name?.trim() ? leadingSpace(item.from.name) : 0} />

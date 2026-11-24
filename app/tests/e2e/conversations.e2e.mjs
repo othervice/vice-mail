@@ -14,6 +14,13 @@
 //    and folds it.
 // 4. The list scrolls smoothly with the conversation unfolded (docs/SPEC.md: 60 frames per second,
 //    no blank frame).
+// 5. The look, measured in the wide list and in the narrow one beside the reading pane (after the
+//    screenshot pass of 24.11.2026): the row shows the conversation's subject ("Planning the 2026
+//    offsite", not the newest "AW: …"); the replies pill gives way before the subject and never
+//    pushes the date; the dotted line leaves from under the conversation's avatar and runs on to
+//    the last message; child rows size the sender to its name and give the text the rest. With a
+//    second account in the unified inbox, the account label gives way to the names first, down to
+//    its colour dot.
 //
 // Screenshots go to tests/e2e/screenshots/conversations-*.png, the facts to
 // conversations-report.json.
@@ -25,6 +32,8 @@ import { browser } from "@wdio/globals";
 import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, setConversations, testId } from "./support/app.mjs";
 import { measureScroll } from "./support/scroll.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
+
+const BOB = { email: "bob@vicemail.test", password: "bob-test-pw" };
 
 const require = createRequire(import.meta.url);
 const AXE_SOURCE = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
@@ -106,6 +115,85 @@ async function shot(name) {
   const file = await screenshot(name);
   await browser.execute(() => window.__e2eFocus?.focus());
   return file;
+}
+
+/**
+ * Where the parts of a conversation row and its child rows are (CSS pixels): what the layout
+ * rules of the screenshot pass promise.
+ */
+const layout = (id) =>
+  browser.execute((rowId) => {
+    const row = document.getElementById(rowId);
+    const box = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+    };
+    const cut = (el) => Boolean(el && el.scrollWidth > el.clientWidth + 1);
+    const subject = row?.querySelector('[data-testid="row-subject"]');
+    const pill = row?.querySelector('[data-testid="row-replies"]');
+    const avatar = row?.querySelector('[data-testid="avatar"]');
+    return {
+      narrow: Boolean(row?.querySelector(".flex-col")),
+      row: box(row),
+      subject: subject?.textContent ?? null,
+      subjectCut: cut(subject),
+      subjectBox: box(subject),
+      pill: box(pill),
+      word: box(pill?.querySelector('[data-testid="row-replies-word"]')),
+      time: box(row?.querySelector("time")),
+      avatar: box(avatar),
+      line: box(row?.querySelector('[data-testid="tree-line"]')),
+      children: [...document.querySelectorAll('[data-testid="child-row"]')].map((child) => {
+        const sender = child.querySelector('[data-testid="child-sender"]');
+        const text = child.querySelector('[data-testid="child-text"]');
+        return {
+          // The conversation's last message (the list renders only some of them).
+          last: child.getAttribute("aria-posinset") === child.getAttribute("aria-setsize"),
+          row: box(child),
+          sender: box(sender),
+          senderNeeds: sender?.scrollWidth ?? 0,
+          senderCut: cut(sender),
+          text: box(text),
+          textCut: cut(text),
+          group: box(text?.parentElement),
+          line: box(child.querySelector('[data-testid="tree-line"]')),
+          avatar: box(child.querySelector('[data-testid="avatar"]')),
+        };
+      }),
+    };
+  }, id);
+
+/** The promises of the screenshot pass, for the row `id` unfolded (see the header, point 5). */
+function checkLayout(found, where) {
+  const near = (a, b, slack = 1) => Math.abs(a - b) <= slack;
+  // The conversation's subject: its oldest message's, without the prefix.
+  assert.equal(found.subject, "Planning the 2026 offsite", where);
+  // The pill gives way first: the subject is cut only once the pill's word is gone.
+  assert.ok(!found.subjectCut || found.word.width <= 1, `${where}: subject cut while the pill keeps ${String(found.word.width)} px of its word`);
+  assert.ok(found.pill.right <= found.row.right, `${where}: the pill leaves the row`);
+  // The date stays whole and in the row; on the pill's line it comes after it.
+  assert.ok(found.time.right <= found.row.right + 0.5, `${where}: the date is pushed out`);
+  if (near(found.time.top, found.pill.top, 4)) assert.ok(found.pill.right <= found.time.left, `${where}: the pill reaches the date`);
+  // The line: from under the avatar (its start covered by it) down to the row's end, at its centre.
+  assert.ok(found.line, `${where}: no line in the conversation's row`);
+  assert.ok(found.line.top >= found.avatar.top && found.line.top < found.avatar.bottom, `${where}: the line starts at ${String(found.line.top)}, the avatar spans ${String(found.avatar.top)}–${String(found.avatar.bottom)}`);
+  assert.ok(near(found.line.bottom, found.row.bottom), `${where}: the line ends before the row's end`);
+  assert.ok(near(found.line.left, (found.avatar.left + found.avatar.right) / 2, 1.5), `${where}: the line is not under the avatar's centre`);
+  // On through every message: no gap between rows, ending in the middle of the last one.
+  const children = found.children;
+  assert.ok(children.length > 1, `${where}: no messages below the row`);
+  children.forEach((child, index) => {
+    const last = child.last;
+    assert.ok(near(child.line.top, child.row.top), `${where}: a gap above message ${String(index + 1)}`);
+    assert.ok(near(child.line.left, found.line.left), `${where}: the line bends at message ${String(index + 1)}`);
+    if (last) assert.ok(near(child.line.bottom, (child.row.top + child.row.bottom) / 2, 1), `${where}: the line does not end in the last message`);
+    else assert.ok(near(child.line.bottom, child.row.bottom), `${where}: the line stops in message ${String(index + 1)}`);
+    // The sender as wide as its name (at most a third), the text takes the rest of the line.
+    assert.ok(child.sender.width <= child.senderNeeds + 1, `${where}: message ${String(index + 1)}'s sender is wider than its name`);
+    if (child.senderCut) assert.ok(near(child.sender.width, child.group.width / 3, 2), `${where}: message ${String(index + 1)}'s sender is cut below a third`);
+    assert.ok(near(child.text.right, child.group.right), `${where}: message ${String(index + 1)}'s text leaves room unused`);
+  });
 }
 
 async function runAxe() {
@@ -226,6 +314,10 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     // One line each, in the token's height, on a fine dotted line.
     assert.ok(open.children.every((child) => child.height === 36), JSON.stringify(open.children.map((c) => c.height)));
     assert.deepEqual(open.line, { style: "dotted", width: "1px" });
+    const wide = await layout(conversationId);
+    report.steps.layoutWide = { narrow: wide.narrow, subject: wide.subject, subjectCut: wide.subjectCut, word: wide.word, line: wide.line, avatar: wide.avatar };
+    assert.equal(wide.narrow, false, "the list beside no reading pane is wide");
+    checkLayout(wide, "wide list");
     await setTheme("light");
     report.screenshots.push(await screenshot("conversations-unfolded-light"));
     const lightFindings = await runAxe();
@@ -251,6 +343,19 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     report.steps.rowOpens = row;
     assert.equal(row.cards, 1);
     assert.equal(row.stacked, 0);
+    // Beside the reading pane the list is narrow: the same promises, two lines a row.
+    await browser.waitUntil(async () => (await layout(conversationId)).narrow, { timeoutMsg: "the list beside the reading pane is not narrow" });
+    const narrow = await layout(conversationId);
+    report.steps.layoutNarrow = {
+      subject: narrow.subject,
+      subjectCut: narrow.subjectCut,
+      word: narrow.word,
+      pill: narrow.pill,
+      line: narrow.line,
+      avatar: narrow.avatar,
+      children: narrow.children.slice(0, 4).map((c) => ({ sender: c.sender?.width, needs: c.senderNeeds, textCut: c.textCut })),
+    };
+    checkLayout(narrow, "narrow list");
     await setTheme("light");
     report.screenshots.push(await screenshot("conversations-reading-row"));
     await setTheme("dark");
@@ -319,5 +424,63 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     assert.ok(s.longestBlockingMs <= 50, `main thread blocked for ${s.longestBlockingMs} ms`);
     assert.equal(s.blankFrames, 0, `blank frames: ${JSON.stringify(measured.blankFrames.slice(0, 5))}`);
     report.steps.account = account.email;
+  });
+
+  it("puts the names before the account label in the unified inbox, down to its colour dot", async () => {
+    await coreCall("add_account", {
+      settings: {
+        email: BOB.email,
+        displayName: "Bob Baker",
+        imap: { host: SERVER.host, port: SERVER.imapsPort, security: "tls", username: BOB.email },
+        smtp: { host: SERVER.host, port: SERVER.smtpsPort, security: "tls", username: BOB.email },
+      },
+      password: BOB.password,
+    });
+    await browser.waitUntil(
+      async () => (await coreCall("list_accounts")).every((a) => a.status.state === "idle" && a.status.lastSyncAt !== null),
+      { timeout: 240000, interval: 500, timeoutMsg: "bob's first sync did not finish" },
+    );
+    const unified = await browser.$('[data-testid="unified-tree"] [role="treeitem"]');
+    await unified.waitForExist({ timeout: 20000 });
+    await unified.click();
+    await browser.waitUntil(async () => (await unified.getAttribute("aria-current")) === "page", { timeoutMsg: "the unified inbox did not open" });
+    await browser.waitUntil(async () => (await browser.execute(() => document.querySelectorAll('[data-testid="message-list"] [data-testid="row-account"]').length)) > 0, {
+      timeout: 20000,
+      timeoutMsg: "no account labels in the unified inbox",
+    });
+    // A message open on the right: the list is narrow, names and label share the first line.
+    await (await browser.$('[data-testid="message-list"] [data-testid="message-row"]')).click();
+    await testId("message-card").waitForExist({ timeout: 10000 });
+    const measure = () =>
+      browser.execute(() =>
+        [...document.querySelectorAll('[data-testid="message-list"] [data-testid="message-row"]')].flatMap((row) => {
+          const sender = row.querySelector('[data-testid="row-sender"]');
+          const label = row.querySelector('[data-testid="row-account"]');
+          const dot = label?.querySelector('[data-testid="row-account-dot"]');
+          if (!sender || !label || !dot) return [];
+          return [
+            {
+              names: sender.textContent,
+              namesCut: sender.scrollWidth > sender.clientWidth + 1,
+              label: label.getAttribute("title"),
+              labelWidth: label.getBoundingClientRect().width,
+              dotWidth: dot.getBoundingClientRect().width,
+              rowName: row.querySelector('[data-testid="row-name"]')?.textContent ?? "",
+            },
+          ];
+        }),
+      );
+    await browser.waitUntil(async () => (await measure()).length > 0, { timeoutMsg: "no rows with names and an account label" });
+    const rows = await measure();
+    report.steps.unifiedLabels = rows.slice(0, 8);
+    for (const row of rows) {
+      assert.ok(["Alice Archer", "Bob Baker"].includes(row.label ?? ""), `label ${String(row.label)}`);
+      assert.ok(row.rowName.includes(`Account: ${String(row.label)}`), `the row's name lacks the account: ${row.rowName}`);
+      // Names cut only once the label is down to its dot.
+      if (row.namesCut) assert.ok(row.labelWidth <= row.dotWidth + 1, `"${String(row.names)}" cut beside a label of ${String(row.labelWidth)} px`);
+    }
+    report.screenshots.push(await screenshot("conversations-unified-labels"));
+    const findings = await runAxe();
+    assert.deepEqual(findings, [], `axe, unified inbox: ${JSON.stringify(findings)}`);
   });
 });
