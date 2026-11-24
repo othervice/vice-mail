@@ -187,6 +187,12 @@ fn addresses_json(text: Option<String>) -> Vec<Address> {
         .unwrap_or_default()
 }
 
+/// Messages of the last days for the open-reply rules (stage 13), newest first. `message` has no
+/// index on `date`, but its id is the sort date or the next free number above it
+/// (`messages::IdAllocator`), and `date` is that sort date: every message with `date >= ?1` has
+/// `id >= ?1`. The id range reads only the recent rows; without it the query read the whole table
+/// on every call (the UI asks at start and after every change of messages): 93 % of a
+/// 100,000-mail database from disk on a cold start (docs/testing/performance.md, "Desktop-App").
 const OPEN_REPLY_ROWS: &str = "
 SELECT m.id, a.uuid, m.thread_id, m.message_id_hdr, m.in_reply_to, m.references_hdr, m.date,
        m.subject, m.from_name, m.from_addr, m.to_addrs, m.cc_addrs,
@@ -201,7 +207,7 @@ SELECT m.id, a.uuid, m.thread_id, m.message_id_hdr, m.in_reply_to, m.references_
        EXISTS (SELECT 1 FROM message_location l WHERE l.message_id = m.id AND l.answered = 1),
        EXISTS (SELECT 1 FROM open_reply_dismissal d WHERE d.message_id = m.id)
 FROM message m JOIN account a ON a.id = m.account_id
-WHERE m.date >= ?1
+WHERE m.id >= ?1 AND m.date >= ?1
 ORDER BY m.date DESC, m.id DESC
 LIMIT ?2";
 
@@ -472,6 +478,65 @@ mod tests {
 
         let own = f.store.own_addresses_by_account().await.expect("own");
         assert_eq!(own, vec![(f.account, vec!["alice@example.org".to_owned()])]);
+    }
+
+    /// The open-reply rows come from the id range of the last days, never from a scan of every
+    /// message; and a message whose id was moved above `since` (its sort date was taken) still
+    /// counts by its date.
+    #[tokio::test]
+    async fn open_reply_rows_read_only_the_recent_ids() {
+        use crate::test_support::{UV, fixture, header};
+        let f = fixture().await;
+        const D: i64 = 1_795_000_000;
+        // 3,000 older messages and three around `since` = D: two share the date D - 1 (ids D - 1
+        // and D), one has the date D (id D + 1, as D is taken).
+        let mut headers: Vec<_> = (1..=3_000u32)
+            .map(|uid| {
+                header(
+                    uid,
+                    D - 400_000 + i64::from(uid) * 60,
+                    Some(&format!("old{uid}@x")),
+                )
+            })
+            .collect();
+        headers.push(header(3_001, D - 1, Some("before-a@x")));
+        headers.push(header(3_002, D - 1, Some("before-b@x")));
+        headers.push(header(3_003, D, Some("at@x")));
+        for window in headers.chunks(500) {
+            f.store
+                .store_headers(f.inbox, UV, window.to_vec(), None)
+                .await
+                .expect("store");
+        }
+        let rows = f.store.open_reply_rows(D, 100).await.expect("rows");
+        let found: Vec<_> = rows
+            .iter()
+            .filter_map(|r| r.message_id_hdr.as_deref())
+            .collect();
+        assert_eq!(found, ["at@x"]);
+        assert!(
+            rows[0].id.0 > D,
+            "the id moved above the taken sort date: {:?}",
+            rows[0].id
+        );
+
+        let plan = f
+            .store
+            .write(|tx| {
+                tx.execute_batch("ANALYZE")?;
+                let mut stmt = tx.prepare(&format!("EXPLAIN QUERY PLAN {OPEN_REPLY_ROWS}"))?;
+                Ok(stmt
+                    .query_map(params![D, 100], |r| r.get::<_, String>(3))?
+                    .collect::<Result<Vec<_>, _>>()?)
+            })
+            .await
+            .expect("plan");
+        assert!(
+            plan.iter()
+                .any(|l| l == "SEARCH m USING INTEGER PRIMARY KEY (rowid>?)"),
+            "{plan:#?}"
+        );
+        assert!(!plan.iter().any(|l| l.starts_with("SCAN m")), "{plan:#?}");
     }
 
     #[tokio::test]
