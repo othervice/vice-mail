@@ -60,7 +60,7 @@ fn saved_content_is_cleaned() {
 // Through `AppCore` with the fake IMAP server and a recording SMTP sender (stage 5 gaps): a
 // draft of another program opened from the Drafts folder; sending at once while offline.
 
-mod with_core {
+pub(super) mod with_core {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
     use std::sync::{Arc, Mutex};
@@ -89,8 +89,8 @@ mod with_core {
 
     /// Records what it submits; can be offline (nothing transmitted).
     #[derive(Debug, Default)]
-    struct RecordingSender {
-        sent: Mutex<Vec<Vec<u8>>>,
+    pub(in crate::compose) struct RecordingSender {
+        pub(in crate::compose) sent: Mutex<Vec<Vec<u8>>>,
         offline: AtomicBool,
         attempts: AtomicI64,
     }
@@ -165,24 +165,24 @@ mod with_core {
         }
     }
 
-    struct Bed {
+    pub(in crate::compose) struct Bed {
         dir: TempDir,
-        server: Arc<FakeServer>,
+        pub(in crate::compose) server: Arc<FakeServer>,
         keychain: Arc<MemorySecretStore>,
-        sender: Arc<RecordingSender>,
-        core: AppCore<FakeConnector>,
+        pub(in crate::compose) sender: Arc<RecordingSender>,
+        pub(in crate::compose) core: AppCore<FakeConnector>,
         events: broadcast::Receiver<CoreEvent>,
-        account: AccountId,
+        pub(in crate::compose) account: AccountId,
     }
 
     impl Bed {
         /// One account with writes on, no undo delay; the fake server has a Drafts folder.
-        async fn new() -> Self {
+        pub(in crate::compose) async fn new() -> Self {
             Self::on(drafts_server()).await
         }
 
         /// Like [`Bed::new`] with this server; what lies on it is synced before this returns.
-        async fn on(server: Arc<FakeServer>) -> Self {
+        pub(in crate::compose) async fn on(server: Arc<FakeServer>) -> Self {
             let dir = TempDir::new().expect("temp dir");
             let mut bed = Self::start(dir, server, Arc::default(), Arc::default()).await;
             bed.account = bed
@@ -302,7 +302,7 @@ mod with_core {
             }
         }
 
-        async fn until<T, F, Fut>(&self, what: &str, mut probe: F) -> T
+        pub(in crate::compose) async fn until<T, F, Fut>(&self, what: &str, mut probe: F) -> T
         where
             F: FnMut() -> Fut,
             Fut: std::future::Future<Output = Option<T>>,
@@ -352,7 +352,7 @@ mod with_core {
             .await
         }
 
-        async fn settled(&self) {
+        pub(in crate::compose) async fn settled(&self) {
             self.until("the outbox to settle", || async {
                 let counts = self.core.outbox_counts(self.account).await.ok()?;
                 (counts.pending == 0).then_some(())
@@ -395,7 +395,10 @@ mod with_core {
                 .expect("save")
         }
 
-        async fn outgoing(&self, operation: mail_model::OperationId) -> mail_model::OutgoingMail {
+        pub(in crate::compose) async fn outgoing(
+            &self,
+            operation: mail_model::OperationId,
+        ) -> mail_model::OutgoingMail {
             self.core
                 .list_outgoing(self.account, None, 100)
                 .await
@@ -407,7 +410,7 @@ mod with_core {
     }
 
     /// A fake server with INBOX, Sent, Archive and Drafts (`\Drafts`).
-    fn drafts_server() -> Arc<FakeServer> {
+    pub(in crate::compose) fn drafts_server() -> Arc<FakeServer> {
         let server = FakeServer::new();
         server.with(|s| {
             s.mailboxes.insert(

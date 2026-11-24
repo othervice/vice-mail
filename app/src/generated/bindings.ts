@@ -64,6 +64,31 @@ export const commands = {
 	 *  `invalid_argument` for an id that is no UUID, `not_found` if the draft does not exist.
 	 */
 	openComposerWindow: (draftId: DraftId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_composer_window", { draftId }, options)),
+	/**
+	 *  Shows the source of one message in a window of its own (`?window=source&accountId=…&
+	 *  messageId=…`, capability `source-window`: it may close itself, nothing else). A second call
+	 *  for the same message focuses its window. `not_found` if the message does not exist or
+	 *  belongs to another account.
+	 */
+	openSourceWindow: (accountId: AccountId, messageId: MessageId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_source_window", { accountId, messageId }, options)),
+	/**
+	 *  The message as plain text (at most `MAX_SOURCE_BYTES`, cut at a line break; `truncated`
+	 *  says so and the window offers "Save as .eml" for the whole).
+	 */
+	getMessageSource: (messageId: MessageId, options?: InvokeOptions) => typedError<MessageSource, IpcError>(__TAURI_INVOKE("get_message_source", { messageId }, options)),
+	/**  Every header field of the message, in order, unfolded and decoded ("all headers"). */
+	getMessageHeaders: (messageId: MessageId, options?: InvokeOptions) => typedError<HeaderField[], IpcError>(__TAURI_INVOKE("get_message_headers", { messageId }, options)),
+	/**
+	 *  Redirects the message unchanged to new recipients; queued after the undo delay like a send
+	 *  (`requestId` names the press: the same id twice queues once). `read_only`,
+	 *  `invalid_address`, `invalid_argument`, `not_found` before anything is queued.
+	 */
+	redirectMessage: (request: RedirectRequest, requestId: string, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("redirect_message", { request, requestId }, options)),
+	/**
+	 *  "Undo" of a redirect within the delay, or dropping a failed one: nothing is sent.
+	 *  `send_in_progress` once the submission started.
+	 */
+	cancelRedirect: (operationId: OperationId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("cancel_redirect", { operationId }, options)),
 	/**  All accounts, oldest first, with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
@@ -772,6 +797,8 @@ export const MAX_RECENT_COMMAND_CHARS = 200 as const;
 
 export const MAX_RECENT_SEARCHES = 10 as const;
 
+export const MAX_REDIRECT_RECIPIENTS = 100 as const;
+
 export const MAX_SAVED_SEARCHES = 100 as const;
 
 export const MAX_SAVED_SEARCH_NAME_CHARS = 100 as const;
@@ -796,6 +823,8 @@ export const MAX_SIGNATURE_IMAGES_BYTES = 131072 as const;
 
 export const MAX_SIGNATURE_IMAGE_BYTES = 65536 as const;
 
+export const MAX_SOURCE_BYTES = 1048576 as const;
+
 export const MAX_TEXT_SIZE = 150 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
@@ -817,9 +846,9 @@ export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 /* Types */
 /**
  *  Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
- *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
- *  (decision 0038). A value this version does not know (from a newer device) reads as the
- *  default.
+ *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "blue" (decision 0053; it was
+ *  the logo's orange under decision 0038, a stored choice stays). A value this version does not
+ *  know (from a newer device) reads as the default.
  */
 export type AccentTheme = "teal" | "blue" | "violet" | "rose" | "orange" | "green";
 
@@ -2648,6 +2677,15 @@ export type FirstStartOutcome =
 "notNeeded";
 
 /**
+ *  One header field as the reading pane's "all headers" lists it: the name as written, the
+ *  value unfolded with encoded words decoded.
+ */
+export type HeaderField = {
+	name: string,
+	value: string,
+};
+
+/**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
  *  uses the identity's UUID). Exported since stage 7 (identities in the settings).
  */
@@ -3400,6 +3438,23 @@ export type MessageRef = {
 	messageId: MessageId,
 };
 
+/**
+ *  The source window's content: the message as plain text, never markup (control and direction
+ *  characters shown as visible symbols, bytes that are not UTF-8 as U+FFFD).
+ */
+export type MessageSource = {
+	accountId: AccountId,
+	messageId: MessageId,
+	/**  For the window's heading; empty without a subject. */
+	subject: string,
+	text: string,
+	/**  Size of the whole message in bytes. */
+	totalBytes: number,
+	/**  Bytes `text` shows: the whole message unless `truncated`. */
+	shownBytes: number,
+	truncated: boolean,
+};
+
 /**  What `getMessage` returns: everything the reading pane shows. */
 export type MessageView = {
 	id: MessageId,
@@ -3471,7 +3526,14 @@ export type NewDraft =
  *  new recipients; nothing quoted. Needs the complete original (`invalid_argument` for a
  *  large message stored only in part: forward it inline instead).
  */
-{ kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage };
+{ kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage } | 
+/**
+ *  Stage 19 (decision 0055): "edit as new": a new message with the recipients, subject,
+ *  text and attachments of `messageId` (also one from Sent), from the identity that sent it
+ *  or that it went to; no reply reference (no In-Reply-To, no References), a new
+ *  Message-ID, no signature added (the text has one already).
+ */
+{ kind: "edit_as_new"; messageId: MessageId };
 
 /**  Notification settings (device settings). */
 export type NotificationSettings = {
@@ -3751,6 +3813,11 @@ export type OutgoingMail = {
 	 *  draft (`draftId` names no draft; there is nothing to edit).
 	 */
 	readReceipt: boolean,
+	/**
+	 *  Stage 19: this is a redirect of a received message (no draft; "undo" in the delay is
+	 *  `cancelRedirect`).
+	 */
+	redirect: boolean,
 	createdAt: number,
 	updatedAt: number,
 };
@@ -4016,6 +4083,19 @@ export type RecentSearch = {
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly" | 
 /**  `SECONDLY`, `MINUTELY` or `HOURLY`: shown from `rule`. */
 "other";
+
+/**
+ *  "Redirect": the message unchanged to new recipients, with `Resent-*` fields, from one of the
+ *  account's identities (its default, or the identity the message went to, without
+ *  `identityId`).
+ */
+export type RedirectRequest = {
+	messageId: MessageId,
+	identityId: IdentityId | null,
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+};
 
 /**  Scope of `loadRemoteContent`. */
 export type RemoteContentScope = 

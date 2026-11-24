@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "source-window",
+  "description": "Stage 19 (decision 0055): the source window of a message (label source-*) shows the raw message as text and may close itself (Esc, after Save as .eml). Nothing else: no events, no dragging, no other plugin. The app's own commands need no entry.",
+  "windows": ["source-*"],
+  "permissions": ["core:window:allow-close"]
+}

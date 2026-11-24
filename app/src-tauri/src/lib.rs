@@ -49,6 +49,12 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::ui::set_window_layout::<tauri::Wry>,
             commands::ui::open_message_window::<tauri::Wry>,
             commands::ui::open_composer_window::<tauri::Wry>,
+            // Stage 19 (decision 0055): the source window and "all headers".
+            commands::source::open_source_window::<tauri::Wry>,
+            commands::source::get_message_source,
+            commands::source::get_message_headers,
+            commands::redirect::redirect_message,
+            commands::redirect::cancel_redirect,
             commands::accounts::list_accounts,
             commands::accounts::discover_known_provider,
             commands::accounts::discover_online,
@@ -449,6 +455,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // ids one `getMessagesByIds` takes.
         .constant("MAX_EML_FILE_BYTES", mail_model::MAX_EML_FILE_BYTES)
         .constant("MAX_MESSAGES_BY_IDS", mail_model::MAX_MESSAGES_BY_IDS)
+        // Stage 19 (decision 0055): the most bytes the source window shows, the most recipients
+        // of a redirect.
+        .constant("MAX_SOURCE_BYTES", mail_model::MAX_SOURCE_BYTES)
+        .constant(
+            "MAX_REDIRECT_RECIPIENTS",
+            mail_model::MAX_REDIRECT_RECIPIENTS,
+        )
 }
 
 /// An `i64` constant below 2^53 (milliseconds), exported as a plain TypeScript number.

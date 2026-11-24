@@ -753,7 +753,8 @@ pub(crate) fn send_followups(
     );
     recorder.change.batch = Some(op.batch);
     let mut notice = None;
-    if !copy_on_server && !job.server_saves_sent {
+    // Stage 19 (decision 0055): a redirect files no copy in Sent.
+    if !copy_on_server && !job.server_saves_sent && !job.redirect {
         match mailbox_with_role(conn, account_row, MailboxRole::Sent)? {
             Some(target) => recorder.record(OperationPayload::Append {
                 target,
@@ -1071,6 +1072,70 @@ pub(crate) fn enqueue_receipt(
     let id = recorder.insert(&OperationPayload::Send(job))?;
     set_answer(conn, account, &original, "queued", Some(id), now)?;
     Ok(recorder.change)
+}
+
+/// See [`crate::Store::enqueue_redirect`].
+pub(crate) fn enqueue_redirect(
+    conn: &Connection,
+    account: AccountId,
+    job: SendJob,
+    not_before: Option<i64>,
+    request: &str,
+    now: i64,
+) -> Result<OutboxChange, StoreError> {
+    let account_row = accounts::row_id(conn, account)?;
+    require_writes(conn, account_row)?;
+    if !job.redirect {
+        return Err(StoreError::InvalidArgument("not a redirect".into()));
+    }
+    if let Some(batch) = repeated(conn, request)? {
+        let mut change = OutboxChange::new(account);
+        change.batch = Some(batch);
+        change.repeated = true;
+        // The redirect recorded the first time, while it is still there.
+        let first: Option<i64> = conn
+            .prepare_cached("SELECT id FROM operation WHERE idempotency_key = ?1")?
+            .query_row([format!("{request}:0")], |r| r.get(0))
+            .optional()?;
+        if let Some(op) = first
+            .map(OperationId)
+            .map(|id| crate::outbox::operation(conn, id))
+        {
+            change.operations.extend(op?);
+        }
+        return Ok(change);
+    }
+    let mut recorder = Recorder::new(conn, account_row, account, ActionKind::Send, request, now);
+    recorder.not_before = not_before;
+    recorder.record(OperationPayload::Send(job))?;
+    Ok(recorder.change)
+}
+
+/// See [`crate::Store::cancel_redirect`].
+pub(crate) fn cancel_redirect(
+    conn: &Connection,
+    id: OperationId,
+) -> Result<OutboxChange, StoreError> {
+    let op = require_operation(conn, id)?;
+    let OperationPayload::Send(job) = &op.payload else {
+        return Err(StoreError::Action(ActionError::WrongState(id, op.state)));
+    };
+    if !job.redirect {
+        return Err(StoreError::Action(ActionError::WrongState(id, op.state)));
+    }
+    match op.state {
+        OperationState::InFlight | OperationState::Confirmed => {
+            Err(StoreError::Draft(DraftError::TooLate(id)))
+        }
+        OperationState::Queued | OperationState::Failed | OperationState::Conflict => {
+            conn.prepare_cached(DELETE_OPERATION)?
+                .execute([id.0])
+                .map_err(StoreError::sqlite("cancel redirect"))?;
+            let mut change = OutboxChange::new(op.account);
+            change.removed.push(id);
+            Ok(change)
+        }
+    }
 }
 
 /// See [`crate::Store::decline_receipt`].

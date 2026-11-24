@@ -42,6 +42,7 @@ mod secret;
 mod send;
 mod settings_sync;
 mod snippets;
+mod source;
 mod text;
 pub mod threading;
 mod ui;
@@ -201,6 +202,10 @@ pub use snippets::{
     MAX_TEMPLATES, SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
+};
+pub use source::{
+    HeaderField, MAX_HEADER_FIELDS, MAX_HEADER_VALUE_CHARS, MAX_REDIRECT_RECIPIENTS,
+    MAX_SOURCE_BYTES, MessageSource, RedirectRequest,
 };
 pub use text::{is_bidi_control, strip_bidi_controls};
 pub use ui::{
