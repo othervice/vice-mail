@@ -105,6 +105,12 @@ App jederzeit        {"type":"closed","reason":"disabled"|"unknown_client"}
 Ablehnungsgründe: `unsupported_protocol` (mit `supported`), `disabled`, `unknown_client`,
 `bad_proof`, `malformed`, `timeout`, `too_many_connections` (höchstens 16 Verbindungen).
 
+Stimmt der Beweis der App nicht, schickt das Hilfsprogramm `{"type":"refused","reason":"bad_proof"}`
+und wartet danach höchstens 1 s auf die Antwort der App oder das Ende der Verbindung, bevor es
+schließt (schloss es sofort, fehlte die Ablehnung auf Windows im Protokoll, CI vom 24.11.2026).
+Die App trägt jede Ablehnung ins Zugriffsprotokoll ein, bevor sie sie sendet; meldet das
+Hilfsprogramm eine Ablehnung, steht sie also schon im Protokoll.
+
 ## Werkzeuge
 
 Fest im Code (Name, Titel, Beschreibung, JSON-Schema mit `additionalProperties: false`,

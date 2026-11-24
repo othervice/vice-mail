@@ -233,7 +233,10 @@ impl<A: MailAccess> McpHost<A> {
         });
     }
 
+    /// Recorded before the helper is told, so the log has the refusal by the time the helper
+    /// reports it.
     async fn refuse<S: AsyncRead + AsyncWrite + Unpin + Send>(&self, stream: S, reason: Refusal) {
+        self.record(None, AccessKind::Refused { reason });
         let (_, mut writer) = tokio::io::split(stream);
         let _ = send(
             &mut writer,
@@ -243,7 +246,6 @@ impl<A: MailAccess> McpHost<A> {
             },
         )
         .await;
-        self.record(None, AccessKind::Refused { reason });
     }
 
     async fn serve<S>(&self, stream: S, mut stop: watch::Receiver<bool>)
@@ -261,6 +263,19 @@ impl<A: MailAccess> McpHost<A> {
         let client = match handshake {
             Ok(client) => client,
             Err((client, reason)) => {
+                // Recorded first: once the helper hears of the refusal (or closes after its
+                // own), the log has it.
+                let name = client.and_then(|id| {
+                    self.inner
+                        .settings
+                        .borrow()
+                        .client(&id)
+                        .map(|c| (id, c.name.clone()))
+                });
+                self.record(
+                    name.as_ref().map(|(id, name)| (id, name.as_str())),
+                    AccessKind::Refused { reason },
+                );
                 let _ = send(
                     &mut writer,
                     &Handshake::Refused {
@@ -273,17 +288,6 @@ impl<A: MailAccess> McpHost<A> {
                     },
                 )
                 .await;
-                let name = client.and_then(|id| {
-                    self.inner
-                        .settings
-                        .borrow()
-                        .client(&id)
-                        .map(|c| (id, c.name.clone()))
-                });
-                self.record(
-                    name.as_ref().map(|(id, name)| (id, name.as_str())),
-                    AccessKind::Refused { reason },
-                );
                 return;
             }
         };

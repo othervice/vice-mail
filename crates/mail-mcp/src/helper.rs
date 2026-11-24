@@ -40,6 +40,10 @@ pub const ENV_TOKEN_FILE: &str = "MAIL_MCP_TOKEN_FILE";
 /// Largest token file the helper reads; a token has 107 characters.
 const MAX_TOKEN_FILE_BYTES: u64 = 4096;
 
+/// How long the helper waits, after refusing an endpoint's proof, for the app to take the
+/// refusal (it answers or closes the connection) before it closes the connection itself.
+const REFUSAL_DELIVERY: Duration = Duration::from_secs(1);
+
 /// Where to reach the app and as whom.
 #[derive(Debug, Clone)]
 pub struct HelperConfig {
@@ -351,15 +355,27 @@ async fn handshake(connection: &mut Connection, token: &ClientToken) -> Result<(
         )
     });
     let Some(app_nonce) = verified else {
-        // Tell the app why (it records it), then stop: nothing else is sent.
-        let _ = write_line(
+        // Tell the app why (it records it), then stop: nothing else is sent. Closing at once
+        // races the app, which may find the connection gone before it read the line, or log
+        // the refusal only after the helper reported it. So wait a moment for the app's answer
+        // or its end of the connection (the app records the refusal before either); what
+        // comes back is not used: the endpoint did not prove itself.
+        if write_line(
             &mut connection.writer,
             &Handshake::Refused {
                 reason: Refusal::BadProof,
                 supported: Vec::new(),
             },
         )
-        .await;
+        .await
+        .is_ok()
+        {
+            let _ = timeout(
+                REFUSAL_DELIVERY,
+                read_line(&mut connection.reader, limits::HANDSHAKE_LINE_BYTES),
+            )
+            .await;
+        }
         return Err(BackendError::NotVerified);
     };
     write_line(

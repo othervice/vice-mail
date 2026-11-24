@@ -295,18 +295,25 @@ async fn wrong_or_missing_tokens_are_refused() {
         .into_iter()
         .map(|e| (e.client_id, e.kind))
         .collect();
-    assert!(refusals.contains(&(
-        None,
-        AccessKind::Refused {
-            reason: Refusal::UnknownClient
-        }
-    )));
-    assert!(refusals.contains(&(
-        Some(fixture.token.id),
-        AccessKind::Refused {
-            reason: Refusal::BadProof
-        }
-    )));
+    // Recorded before the helper heard of (or reported) the refusal, so they are here now.
+    assert!(
+        refusals.contains(&(
+            None,
+            AccessKind::Refused {
+                reason: Refusal::UnknownClient
+            }
+        )),
+        "{refusals:?}"
+    );
+    assert!(
+        refusals.contains(&(
+            Some(fixture.token.id),
+            AccessKind::Refused {
+                reason: Refusal::BadProof
+            }
+        )),
+        "{refusals:?}"
+    );
     assert!(
         fixture.access.calls().is_empty(),
         "nothing reached the mail data"
