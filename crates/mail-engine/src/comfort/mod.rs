@@ -12,7 +12,9 @@
 //!   stands above the inbox, is announced, and its server keyword is removed.
 //! - *arrivals*: the sync reports every new-mail window of an inbox (never the first sync);
 //!   the local rules run on its messages and the notification is decided.
-//! - *events*: failed and unclear sends are announced once.
+//! - *events*: failed and unclear sends are announced once; stage 18: the new-mail popup's
+//!   cards follow their messages (snippet once the body is stored, gone when the message or
+//!   its account is, see [`popup`]).
 //!
 //! **Server keywords.** Where the account may write, a snooze sets `$Snoozed` and an open task
 //! `$Task` on the message through the outbox (removed again when the snooze returns or the
@@ -22,6 +24,7 @@
 pub(crate) mod calendar;
 pub(crate) mod classifier;
 pub mod notify;
+pub(crate) mod popup;
 pub(crate) mod rules;
 pub mod time;
 pub(crate) mod unsubscribe;
@@ -35,6 +38,7 @@ mod tests;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -46,11 +50,11 @@ use mail_model::{
     DEFAULT_BUNDLE_CHIPS, DateSection, ErrorCode, ExtraRootCa, InboxCursor, InboxFilter, InboxPage,
     InboxRow, InboxScope, InboxSettings, InboxTop, ListCursor, MAX_ACTION_MESSAGES, MAX_TOP_PINNED,
     MAX_TOP_RETURNED, MailAction, MailRule, MailboxId, MarkScope, MessageCategory,
-    MessageCategoryInfo, MessageId, MessageListItem, MessagePage, MessageRef, NotificationSettings,
-    NotificationTexts, OperationId, PRIORITY_PREVIEW, RuleId, RuleInput, RuleSkipReason, SendState,
-    SenderKey, SenderRule, SnoozeChoice, SnoozeTimes, TaskFilter, TaskMark, ThreadListItem,
-    ThreadPage, UidSet, UnifiedView, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome,
-    bundle_page,
+    MessageCategoryInfo, MessageId, MessageListItem, MessagePage, MessageRef, NewMailStyle,
+    NotificationSettings, NotificationTexts, OperationId, PRIORITY_PREVIEW, RuleId, RuleInput,
+    RuleSkipReason, SendState, SenderKey, SenderRule, SnoozeChoice, SnoozeTimes, TaskFilter,
+    TaskMark, ThreadListItem, ThreadPage, UidSet, UnifiedView, UnsubscribeMethod,
+    UnsubscribeOptions, UnsubscribeOutcome, bundle_page,
 };
 use mail_store::{
     GLOBAL_SCOPE, InboxListKind, InboxMailboxes, MAX_MARK_VIEW, MarkView, MessageKey,
@@ -61,7 +65,7 @@ use tokio::task::JoinHandle;
 
 use crate::core::{AppCore, Connector, WeakCore};
 
-pub use notify::{Notification, NotificationKind, NotificationSink, RecordingSink};
+pub use notify::{Notification, NotificationKind, NotificationSink, PopupUpdate, RecordingSink};
 
 /// The keyword a snooze sets on the server where the account may write.
 pub const SNOOZE_KEYWORD: &str = "$Snoozed";
@@ -111,6 +115,12 @@ pub(crate) struct ComfortState {
     one_click: unsubscribe::OneClick,
     /// Sends already announced: operation and attempt.
     announced_sends: Mutex<HashSet<(OperationId, u32)>>,
+    /// Stage 18: the cards of the new-mail popup.
+    popup: Mutex<popup::PopupQueue>,
+    /// Stage 18: one publication of the popup at a time, so the shell sees changes in order.
+    popup_publish: tokio::sync::Mutex<()>,
+    /// Stage 18: numbers the popup's delete requests (with the time, for the outbox).
+    popup_requests: AtomicU64,
     tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -137,6 +147,9 @@ impl ComfortState {
             zone: Mutex::new(TimeZone::system()),
             one_click: unsubscribe::OneClick::new(extra_root, allow_loopback),
             announced_sends: Mutex::new(HashSet::new()),
+            popup: Mutex::new(popup::PopupQueue::default()),
+            popup_publish: tokio::sync::Mutex::new(()),
+            popup_requests: AtomicU64::new(0),
             tasks: Mutex::new(Vec::new()),
         }
     }
@@ -311,6 +324,17 @@ async fn event_worker<C: Connector>(weak: WeakCore<C>, mut events: broadcast::Re
         let mails = match event {
             CoreEvent::OutgoingChanged { mails, .. } => mails,
             CoreEvent::SendNeedsDecision { mail, .. } => vec![mail],
+            // Stage 18: the popup's cards follow their messages and accounts.
+            CoreEvent::MessagesChanged { mailbox_id, .. } => {
+                let Some(core) = weak.upgrade() else { return };
+                core.refresh_popup(mailbox_id).await;
+                continue;
+            }
+            CoreEvent::AccountsChanged => {
+                let Some(core) = weak.upgrade() else { return };
+                core.prune_popup_accounts().await;
+                continue;
+            }
             _ => continue,
         };
         let Some(core) = weak.upgrade() else { return };
@@ -1259,8 +1283,17 @@ impl<C: Connector> AppCore<C> {
         let settings = self.get_notification_settings().await?;
         let texts = lock(&self.comfort().texts).clone();
         let minute = time::minute_of_day(self.now_ms(), &self.comfort().zone());
-        if let Some(n) = notify::new_mail(&settings, &texts, minute, &overrides) {
-            self.notify(n);
+        match settings.new_mail_style {
+            NewMailStyle::System => {
+                if let Some(n) = notify::new_mail(&settings, &texts, minute, &overrides) {
+                    self.notify(n);
+                }
+            }
+            // Stage 18 (decision 0051): the same messages, as cards of the app's popup.
+            NewMailStyle::Popup => {
+                let announced = notify::announced(&settings, minute, &overrides);
+                self.popup_new_mail(&settings, &announced).await;
+            }
         }
         Ok(())
     }

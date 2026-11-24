@@ -14,12 +14,17 @@
 //! - **Sound** (stage 16): each notification carries the sound the settings choose for its
 //!   account on this platform (`NotificationSound::for_account`), or none (sounds off, a
 //!   silent account). No notification, no sound: quiet hours and muted accounts drop both.
+//! - **Popup** (stage 18, decision 0051): with `NewMailStyle::Popup` (the default) new mail is
+//!   not a system notification but cards in the app's popup ([`super::popup`]). Which messages
+//!   are announced is decided by [`announced`] for both; the sink then receives a
+//!   [`PopupUpdate`] (with the sound of the sync window) instead of a [`Notification`]. Failed
+//!   sends and returned snoozes stay system notifications.
 
 use std::sync::{Mutex, PoisonError};
 
 use mail_model::{
-    AccountId, MailboxId, MessageCategory, MessageId, NotificationSettings, NotificationTexts,
-    SoundPlatform,
+    AccountId, MailboxId, MessageCategory, MessageId, NewMailPopup, NotificationSettings,
+    NotificationTexts, SoundPlatform,
 };
 use mail_store::ArrivedMessage;
 
@@ -47,27 +52,49 @@ pub struct Notification {
     pub sound: Option<String>,
 }
 
+/// Stage 18: the new-mail popup changed. The shell opens its window for cards, updates it, or
+/// closes it when there are none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PopupUpdate {
+    pub popup: NewMailPopup,
+    /// New messages arrived: the sound of their sync window (as a system notification would
+    /// carry it, see [`Notification::sound`]); `None` for every other change and for silence.
+    pub sound: Option<String>,
+}
+
 /// The sound of a notification about `account` on this platform.
-fn sound(settings: &NotificationSettings, account: AccountId) -> Option<String> {
+pub(crate) fn sound(settings: &NotificationSettings, account: AccountId) -> Option<String> {
     settings
         .sound
         .for_account(account, SoundPlatform::current())
 }
 
-/// Shows notifications. The shell's implementation posts native ones; it must not block.
+/// Shows notifications. The shell's implementation posts native ones and owns the popup's
+/// window; it must not block.
 pub trait NotificationSink: Send + Sync + 'static {
     fn show(&self, notification: Notification);
+    /// Stage 18: the new-mail popup changed (see [`PopupUpdate`]).
+    fn popup(&self, update: PopupUpdate);
 }
 
-/// Records notifications instead of showing them (tests).
+/// Records notifications and popup updates instead of showing them (tests).
 #[derive(Debug, Default)]
 pub struct RecordingSink {
     shown: Mutex<Vec<Notification>>,
+    popups: Mutex<Vec<PopupUpdate>>,
 }
 
 impl RecordingSink {
     pub fn shown(&self) -> Vec<Notification> {
         self.shown
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Every popup update so far, oldest first.
+    pub fn popups(&self) -> Vec<PopupUpdate> {
+        self.popups
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -80,6 +107,13 @@ impl NotificationSink for RecordingSink {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(notification);
+    }
+
+    fn popup(&self, update: PopupUpdate) {
+        self.popups
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(update);
     }
 }
 
@@ -111,25 +145,36 @@ fn sender(message: &ArrivedMessage) -> Option<String> {
         .or_else(|| Some(from.email.clone()).filter(|e| !e.is_empty()))
 }
 
-/// The notification for new messages of one sync window, `None` if nothing is announced.
-/// `messages` with the override of a local rule (`Some(true)`/`Some(false)`).
-pub(crate) fn new_mail(
+/// The new messages of one sync window that are announced (as a notification or popup cards),
+/// in the order given; empty when none is. `messages` with the override of a local rule
+/// (`Some(true)`/`Some(false)`).
+pub(crate) fn announced<'a>(
     settings: &NotificationSettings,
-    texts: &NotificationTexts,
     minute_of_day: u16,
-    messages: &[(ArrivedMessage, Option<bool>)],
-) -> Option<Notification> {
+    messages: &'a [(ArrivedMessage, Option<bool>)],
+) -> Vec<&'a ArrivedMessage> {
     if !allowed(settings, minute_of_day) || !settings.new_mail {
-        return None;
+        return Vec::new();
     }
-    let announced: Vec<&ArrivedMessage> = messages
+    messages
         .iter()
         .filter(|(m, _)| !settings.muted_accounts.contains(&m.account_id))
         // A rule's decision stands (also for a message the rule marked as read); otherwise
         // unread messages by category.
         .filter(|(m, rule)| rule.unwrap_or_else(|| m.unread && by_category(settings, m)))
         .map(|(m, _)| m)
-        .collect();
+        .collect()
+}
+
+/// The system notification for new messages of one sync window, `None` if nothing is
+/// announced. `messages` with the override of a local rule (`Some(true)`/`Some(false)`).
+pub(crate) fn new_mail(
+    settings: &NotificationSettings,
+    texts: &NotificationTexts,
+    minute_of_day: u16,
+    messages: &[(ArrivedMessage, Option<bool>)],
+) -> Option<Notification> {
+    let announced = announced(settings, minute_of_day, messages);
     let newest = announced.iter().max_by_key(|m| m.id)?;
     let (title, body) = match announced.as_slice() {
         [one] if !settings.hide_content => (
@@ -286,6 +331,71 @@ mod tests {
         let mut read = arrived(6, Some(MessageCategory::Person), false);
         read.unread = false;
         assert!(one(read).is_none(), "read mail is not announced");
+    }
+
+    /// Stage 18: the popup announces exactly the messages a system notification would cover.
+    #[test]
+    fn the_popup_announces_what_a_notification_would() {
+        let mut settings = NotificationSettings::default();
+        let mut read = arrived(3, Some(MessageCategory::Person), false);
+        read.unread = false;
+        let batch = vec![
+            (arrived(1, Some(MessageCategory::Person), false), None),
+            (arrived(2, Some(MessageCategory::Newsletter), false), None),
+            (read, None),
+            (
+                arrived(4, Some(MessageCategory::Newsletter), false),
+                Some(true),
+            ),
+            (
+                arrived(5, Some(MessageCategory::Person), false),
+                Some(false),
+            ),
+            (arrived(6, Some(MessageCategory::Notification), true), None),
+        ];
+        let ids = |s: &NotificationSettings, minute| {
+            announced(s, minute, &batch)
+                .iter()
+                .map(|m| m.id.0)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&settings, NOON), [1, 4, 6]);
+        let texts = NotificationTexts::default();
+        let note = new_mail(&settings, &texts, NOON, &batch).expect("notification");
+        assert_eq!(note.title, "3 new messages");
+        settings.muted_accounts = vec![account(1)];
+        assert!(ids(&settings, NOON).is_empty());
+        settings.muted_accounts.clear();
+        settings.new_mail = false;
+        assert!(ids(&settings, NOON).is_empty());
+        settings.new_mail = true;
+        settings.quiet_hours = QuietHours {
+            enabled: true,
+            start_minute: 11 * 60,
+            end_minute: 13 * 60,
+        };
+        assert!(ids(&settings, NOON).is_empty());
+        settings.quiet_hours.enabled = false;
+        settings.enabled = false;
+        assert!(ids(&settings, NOON).is_empty());
+    }
+
+    /// Stage 18: settings stored before the popup existed show it; the style round-trips.
+    #[test]
+    fn the_popup_is_the_default_style() {
+        let old: NotificationSettings =
+            serde_json::from_str(r#"{"enabled":true,"newMail":true,"hideContent":true}"#)
+                .expect("old settings");
+        assert_eq!(old.new_mail_style, mail_model::NewMailStyle::Popup);
+        assert!(old.hide_content);
+        let system = NotificationSettings {
+            new_mail_style: mail_model::NewMailStyle::System,
+            ..NotificationSettings::default()
+        };
+        let json = serde_json::to_string(&system).expect("json");
+        assert!(json.contains(r#""newMailStyle":"system""#), "{json}");
+        let back: NotificationSettings = serde_json::from_str(&json).expect("back");
+        assert_eq!(back, system);
     }
 
     #[test]

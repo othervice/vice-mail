@@ -145,8 +145,10 @@ pub struct ReadingPreferences {
 ///   changed.
 /// - `ruleSkipped` (stage 9): a local rule's action did not run for `count` new messages
 ///   (`readOnly`: the account is read-only). Show a notice; nothing else happened.
-/// - `openMessageRequested` (stage 9): the user clicked a system notification; show the
-///   message (in `mailboxId` if given).
+/// - `openMessageRequested` (stage 9): the user clicked a system notification (or, stage 18,
+///   "Read" in the new-mail popup); show the message (in `mailboxId` if given).
+/// - `openInboxRequested` (stage 18): "N more" in the new-mail popup; show the account's inbox,
+///   or the unified inbox for `null`.
 /// - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
 ///   composer with these fields and show `request.notices` (a link that sets blind copies, or
 ///   tried to set headers that were ignored).
@@ -246,6 +248,11 @@ pub enum CoreEvent {
         account_id: AccountId,
         mailbox_id: Option<MailboxId>,
         message_id: MessageId,
+    },
+    /// Stage 18 (decision 0051): "N more" in the new-mail popup: the main window shows the
+    /// inbox of this account, or the unified inbox (`null`, the cards came from several).
+    OpenInboxRequested {
+        account_id: Option<AccountId>,
     },
     ComposeRequested {
         request: crate::ComposeRequest,
