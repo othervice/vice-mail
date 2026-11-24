@@ -132,11 +132,11 @@ ein finaler Build. Stand 24.11.2026.
   Mails): alle Ziele erreicht, Speicher als Footprint gemessen (0048); eine langsame Abfrage
   behoben.
 
-**Finale Prüfung** auf 25337ba im sauberen Worktree (24.11.2026, 08:40–09:05): `scripts/check.sh`
+**Finale Prüfung** auf c51c663 im sauberen Worktree (24.11.2026, 08:40–09:05): `scripts/check.sh`
 grün (1.326 Rust-, 3.988 Vitest-Tests, Clippy auch für Windows, cargo deny, volles pnpm audit,
 Lizenzliste); Servertests gegen den lokalen Stalwart 1.423 von 1.423 grün; Desktop-Tests
 (WKWebView, über `scripts/e2e-gui.sh` in der grafischen Sitzung) 23 von 23 Spec-Dateien, 126 Tests
-grün. **Finaler Build** aus 25337ba: siehe Stufe 15, „Finaler Build“, und das Gitea-Release
+grün. **Finaler Build** aus c51c663: siehe Stufe 15, „Finaler Build“, und das Gitea-Release
 `v0.1.0`.
 
 **Wartet auf den Menschen:**

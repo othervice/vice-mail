@@ -42,7 +42,7 @@ Entscheidung aus Spike D gelesen.
 
 Ausgeführt am 22./23.11.2026; `scripts/check.sh` (499 Rust-, 446 Vitest-Tests) und
 `pnpm --dir app test:e2e` (4 Spec-Dateien) am 23.11. von der Hauptsitzung in einem sauberen Worktree
-(Commit 034eaed) grün ausgeführt. (Hauptsitzung mit Subagenten: Inhalt/Bereinigung, Grundstein Body-Ablage,
+(Commit 9ffdfb8) grün ausgeführt. (Hauptsitzung mit Subagenten: Inhalt/Bereinigung, Grundstein Body-Ablage,
 Lese-Oberfläche, Engine/Shell, Desktop-Abnahme). Entscheidungen: 0009 (Body-Ablage), 0011
 (WebView2-Frame-Navigation, Option B).
 

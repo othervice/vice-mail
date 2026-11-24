@@ -43,9 +43,9 @@ zuverlässig auf dem Server nachgezogen, auch nach Offline-Phasen, Abstürzen un
 
 Ausgeführt am 22./23.11.2026 (Hauptsitzung mit Subagenten: Outbox und IMAP-Schreibweg, Verdrahtung in
 `AppCore`, Oberfläche). Geprüft am 23.11. von der Hauptsitzung in einem sauberen Worktree:
-`scripts/check.sh` grün auf d636d57 (878 Rust-Tests, 598 Vitest-Tests, cargo deny, pnpm audit);
+`scripts/check.sh` grün auf 15efcf3 (878 Rust-Tests, 598 Vitest-Tests, cargo deny, pnpm audit);
 alle Servertests (`cargo test --workspace -- --include-ignored`, 950 Tests gegen den lokalen
-Stalwart) grün auf f81ba9e; `pnpm --dir app test:e2e` (5 Spec-Dateien, 44 Tests, darunter
+Stalwart) grün auf c861351; `pnpm --dir app test:e2e` (5 Spec-Dateien, 44 Tests, darunter
 `actions.e2e.mjs`) und `scripts/check.sh` (878 Rust-, 599 Vitest-Tests) grün auf 8762087.
 Entscheidung: 0012 (Outbox).
 

@@ -20,7 +20,7 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   - *macOS vorbereitet am 23.11.2026 (0035, Nachtrag; noch nicht abgehakt):* Apple-Developer-Mitgliedschaft als Einzelperson beantragt, Aktivierung ausstehend. `scripts/apple-signing-setup.sh` (Schlüssel und CSR, Zertifikat importieren, notarytool-Profil `vicemail-notary`, `--check`); `scripts/build-macos.sh` signiert mit einer gefundenen Identität „Developer ID Application“ (Hardened Runtime, Zeitstempel, `mail-mcp` zuerst, leere `app/src-tauri/Entitlements.plist` mit Begründung), notarisiert App und Disk-Image, stapelt, prüft mit `codesign`, `spctl` und `stapler`, baut das Update-Archiv aus der gestapelten App und bricht ab, statt ad hoc weiterzumachen; ohne Identität bleibt der Ad-hoc-Build unverändert. Ablauf nach der Aktivierung, Erneuerung und Sicherung in `docs/RELEASING.md` („macOS signing and notarisation“), `docs/INSTALL.md` beschreibt signierte und unsignierte Builds. Getestet mit einem selbst signierten Testzertifikat (siehe Ergebnis).
   - *Offen:* Aktivierung, die Portal-Schritte des Menschen, der erste notarisierte Build und sein Test auf einem zweiten Mac. Windows bleibt unsigniert (0035).
 - [x] **Updates.** Tauri-Updater mit Signaturprüfung. Der private Schlüssel liegt im Schlüsselbund des Build-Macs (0037; mit CI später als CI-Geheimnis, nie im Repo). Update-Beschreibung als statische Datei bei den Releases. Prüfung nur mit Zustimmung (0037: Standard aus). Rückweg: die vorherige Version bleibt herunterladbar, und die Datenbank-Sicherungen aus Stufe 1 erlauben das Zurückgehen.
-  - *Vorbereitet am 23.11.2026 (0037, noch nicht abgehakt):* `tauri-plugin-updater` =2.14.1 nur aus Rust; Schalter „Automatisch nach Updates suchen“ (aus), einmalige Frage nach dem ersten Konto, Tagesdrossel, „Jetzt suchen“, Download und „Neu starten und installieren“ nur nach Klick, Windows `passive`; Endpunkt `https://github.com/othervice/vice-mail/releases/latest/download/latest.json` in `tauri.conf.json`; Schlüssel `org.vicemail.updater` im Schlüsselbund erzeugt, öffentlicher Schlüssel in `tauri.conf.json`; `VICEMAIL_UPDATER=1` für `scripts/build-macos.sh`, `build-windows.sh`, `release-local.sh` (signierte Artefakte, Signaturprüfung, `latest.json` über `scripts/updater-manifest.mjs`); Ablauf, Sicherung und Wechsel des Schlüssels in `docs/RELEASING.md`. Getestet gegen einen lokalen Update-Server (Rust) und in Vitest; der Desktop-Test `app/tests/e2e/updates.e2e.mjs` lief im Desktop-Lauf auf a7dd759 mit 4 von 4 grün (siehe Ergebnis).
+  - *Vorbereitet am 23.11.2026 (0037, noch nicht abgehakt):* `tauri-plugin-updater` =2.14.1 nur aus Rust; Schalter „Automatisch nach Updates suchen“ (aus), einmalige Frage nach dem ersten Konto, Tagesdrossel, „Jetzt suchen“, Download und „Neu starten und installieren“ nur nach Klick, Windows `passive`; Endpunkt `https://github.com/othervice/vice-mail/releases/latest/download/latest.json` in `tauri.conf.json`; Schlüssel `org.vicemail.updater` im Schlüsselbund erzeugt, öffentlicher Schlüssel in `tauri.conf.json`; `VICEMAIL_UPDATER=1` für `scripts/build-macos.sh`, `build-windows.sh`, `release-local.sh` (signierte Artefakte, Signaturprüfung, `latest.json` über `scripts/updater-manifest.mjs`); Ablauf, Sicherung und Wechsel des Schlüssels in `docs/RELEASING.md`. Getestet gegen einen lokalen Update-Server (Rust) und in Vitest; der Desktop-Test `app/tests/e2e/updates.e2e.mjs` lief im Desktop-Lauf auf dfa77d9 mit 4 von 4 grün (siehe Ergebnis).
   - *Offen bis zur Veröffentlichung:* erstes Release mit `latest.json` auf GitHub, dann Update von einer Version auf die nächste auf echtem macOS und Windows (Abnahmepunkt 2). **Der Mensch sichert den privaten Schlüssel und sein Passwort** (`docs/RELEASING.md`, „Back it up now“).
 - [x] **Sicherheitsprüfung.** `/security-review` über den gesamten Code. Bedrohungsmodell als `docs/SECURITY_MODEL.md`: was geschützt ist, was nicht, welche Grenzen es gibt. Zeitlich begrenztes Fuzzing von MIME-Parser-Anbindung und HTML-Pipeline. Befunde beheben oder begründet offen lassen.
 - [x] **Erster Start.** Geführte Einrichtung für neue Nutzer: Konto, Thema, optional Sync und KI.
@@ -65,7 +65,7 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   Aufgabe „Updates“), 0038 (Orange aus dem Logo als Standardakzent).
 - Marke: `docs/brand/` (Symbol, Zeichen, Wortmarke als Umrisse, also ohne Schriftlizenz) und die
   App-Symbole für macOS und Windows, reproduzierbar über `app/src-tauri/icons/generate.sh`
-  (205c0b8); eigene Zeichnungen für die acht kleinen Windows-Größen (90934bb); `docs/INSTALL.md`
+  (7ce21bd); eigene Zeichnungen für die acht kleinen Windows-Größen (b0d95bd); `docs/INSTALL.md`
   erklärt, wie Windows den Symbol-Cache nach einem Update erneuert.
 - Vorhanden: `README.md`, `LICENSE`, `docs/INSTALL.md` (mit Gatekeeper und SmartScreen),
   `docs/PROVIDERS.md` (Stufe 14), `docs/SYNC.md`, `docs/RELEASING.md` (Bau, Signatur der Updates,
@@ -74,21 +74,21 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
 - „Über“ zeigt Version, Commit, Build-Datum, Plattform, Lizenz (`LICENSE_SPDX`) und die Adresse
   des Quellcodes; die Liste der Bibliotheken mit Lizenz fehlt. `cargo deny` (Lizenzen,
   Sicherheitsmeldungen) und `pnpm audit` (Sicherheitsmeldungen der npm-Pakete, keine
-  Lizenzprüfung) laufen in `scripts/check.sh`, grün auf a7dd759.
-- Updates: Der Desktop-Test `updates.e2e.mjs` lief im Desktop-Lauf auf a7dd759 mit 4 von 4 grün
+  Lizenzprüfung) laufen in `scripts/check.sh`, grün auf dfa77d9.
+- Updates: Der Desktop-Test `updates.e2e.mjs` lief im Desktop-Lauf auf dfa77d9 mit 4 von 4 grün
   (keine Verbindung bei ausgeschaltetem Schalter; „Jetzt suchen“ zeigt das Update mit Hinweisen als
   Text; eine manipulierte Datei wird abgelehnt; die echte Datei lädt und wird geprüft, ein
   Entwicklungs-Build installiert sich nicht selbst). Der Lauf als Ganzes war rot (6 von 20
   Spec-Dateien rot, siehe Stufe 8). `scripts/build-macos.sh` und `build-windows.sh` bauten am 23.11.
   mit `VICEMAIL_UPDATER=1` signierte Update-Dateien (`.app.tar.gz` und `-setup.exe` mit `.sig`)
   und prüften die Signatur gegen den öffentlichen Schlüssel („signature verified for 0.1.0“), auf
-  dem Arbeitsstand vor dem Commit a7dd759; nichts davon ist veröffentlicht.
-- Windows-Prototyp `prototype-2026-11-23-3.1` (76d4da2): behebt die Sicherung vor einer Migration
-  unter Windows (bbd0fe8; „flush backup: access denied (os error 5)“, vom Menschen beim Update von
+  dem Arbeitsstand vor dem Commit dfa77d9; nichts davon ist veröffentlicht.
+- Windows-Prototyp `prototype-2026-11-23-3.1` (8b357c2): behebt die Sicherung vor einer Migration
+  unter Windows (5586e1e; „flush backup: access denied (os error 5)“, vom Menschen beim Update von
   Prototyp 2 auf 3 gefunden). Test `tests::partial_backups_left_behind_are_removed_and_never_listed`
   (in `check.sh`); der Fehler selbst tritt nur unter Windows auf und ist dort noch nicht nachgeprüft.
 
-- macOS-Signatur (23.11., 15:15, auf dem Arbeitsstand nach e0ad102, nicht committet): vorbereitet,
+- macOS-Signatur (23.11., 15:15, auf dem Arbeitsstand nach 5606689, nicht committet): vorbereitet,
   siehe Aufgabe „Signierung“ und `docs/RELEASING.md`. **Ausgeführt und geprüft:**
   `scripts/build-macos.sh 0.1.0-signtest.1` mit `VICEMAIL_UPDATER=1` und einem selbst signierten
   Code-Signing-Zertifikat in einem Wegwerf-Schlüsselbund (`VICEMAIL_SIGNING_KEYCHAIN`,
@@ -113,7 +113,7 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   gestapelter App im echten Updater, die Schlüsselbund-Abfrage beim Wechsel, Gatekeeper auf einem
   zweiten Mac.
 
-- Diagnose (23.11., b13d553, 177ef1b und der UI-Commit danach): **Format** reine Textdatei
+- Diagnose (23.11., 92789f9, c194390 und der UI-Commit danach): **Format** reine Textdatei
   (UTF-8) statt JSON, damit man sie vor dem Weitergeben lesen kann; die App verschickt sie nie. **Inhalt:** Version, Commit,
   Build-Datum, Plattform; System, Version (macOS aus `SystemVersion.plist`, Windows über
   `cmd /D /C ver` ohne Konsolenfenster), Architektur, Sprache der WebView, App-Sprache,
@@ -135,7 +135,7 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   erkennen; sie werden nicht protokolliert. Sammeln scheitert nie (kaputte Datenbank, fehlende Logs
   stehen als „unavailable“ in der Datei); nur das Schreiben kann scheitern: neuer Fehlercode
   `diagnostics_write_failed` (atomar, ohne Reste). Keine neue Abhängigkeit. Aus der
-  Sicherheitsprüfung mit erledigt: **V-07** (177ef1b) – die IPC-Brücke protokolliert fehlgeschlagene
+  Sicherheitsprüfung mit erledigt: **V-07** (c194390) – die IPC-Brücke protokolliert fehlgeschlagene
   Befehle nur mit Code und fester Kurzbeschreibung, Details nur bei `internal`/`database` und
   geschwärzt (`logging::command_failed`); `docs/SECURITY_MODEL.md` 7.2 → 7.1. **I-1** – der Satz
   zur Autoconfig-Suche in `docs/PRIVACY.md` entspricht jetzt dem Code (die volle Adresse geht als
@@ -164,25 +164,25 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   **Ungeprüft:** der Klick in der echten App (Speichern-Dialog, Datei auf der Platte; kein
   Desktop-Test), die Windows-Version über `ver` und die Pfade unter Windows (nur übersetzt, nicht
   ausgeführt).
-- CI (23.11., b408449, de88964, b8e41a4): **Gitea** `.gitea/workflows/ci.yml`, Runner
+- CI (23.11., 2528b41, 06b1f70, 2e9cf4a): **Gitea** `.gitea/workflows/ci.yml`, Runner
   `gitea-runner` 6.0.1 (Homebrew, `brew services`) im Host-Modus auf dem Mac mini, nur für dieses
   Repo registriert, Bau-Cache unter `~/.cache/vice-mail-ci`; Einrichtung und Grenzen in
   `docs/RELEASING.md` („CI“). **Ausgeführt:** Lauf 464 (manuell, Zweig `ci-test`) rot in Vitest:
   der neue axe-Test der Lizenzliste brauchte auf dem ausgelasteten Mac mehr als 5 s (Zeitlimit
-  jetzt 20 s, de88964); Lauf 465 (manuell, de88964) grün: `check.sh` in 393 s, beide Installer
+  jetzt 20 s, 06b1f70); Lauf 465 (manuell, 06b1f70) grün: `check.sh` in 393 s, beide Installer
   gebaut und als Artefakt hochgeladen (`.dmg` ad hoc signiert, `-setup.exe`, `SHA256SUMS`); Lauf
-  466 (Push auf `main`, 788dcd4) grün. **GitHub** `.github/workflows/ci.yml` (b8e41a4): dieselben
+  466 (Push auf `main`, e15d6a8) grün. **GitHub** `.github/workflows/ci.yml` (2e9cf4a): dieselben
   Schritte auf gehosteten Runnern `macos-latest` und `windows-latest`, unter Windows `check.sh`
   und der Installer nativ. **Ungeprüft:** der GitHub-Workflow ist noch nie gelaufen (erst nach dem
   ersten Push auf GitHub), damit auch noch kein Testlauf auf echtem Windows.
 
-- Erster Start (23.11., a8cd472, 143047d, d6e2ce5, af6d28b, fec0d33; Entscheidung 0044): fünf
+- Erster Start (23.11., 0bc9a85, 9b760d9, 1c62913, 478179b, d34614b; Entscheidung 0044): fünf
   Schritte auf einer Karte statt des Rahmens, Geräte-Einstellung `first_start` im Kern
   (`getFirstStart`, `finishFirstStart`, keine Migration), Update-Frage aus 0037 im Schritt
   „Optional“ (Nachtrag in 0037), vierte Zusage „Keine Telemetrie“ auch im leeren Zustand,
   `attach()` der Desktop-Tests überspringt den ersten Start an einer Stelle
   (`app/tests/e2e/support/app.mjs`). Die Nummern 0041 bis 0043 waren von anderer Arbeit belegt; der
-  erste Commit nannte noch 0041, 143047d berichtigt das.
+  erste Commit nannte noch 0041, 9b760d9 berichtigt das.
   **Ausgeführt und geprüft:** `mail-engine` 6 Tests `first_start::tests` (neue Installation bis
   zum Ende und über einen Neustart, Überspringen ohne Konto, Installation mit Konto auch nach dem
   Entfernen des Kontos, Konto während des Ablaufs, beschädigter Wert, nicht in `SYNCED_SETTINGS`),
@@ -202,7 +202,7 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   Thema und Akzent im Kern, Update-Schalter aus und nach „Weiter“ weiter aus, danach der Rahmen und
   `{show: false, outcome: "completed"}`. Bildschirmfotos aller Schritte hell und dunkel, dazu
   Willkommen, Konto und Optional bei 900 × 600: `app/tests/e2e/screenshots/first-start-*.png`
-  (nicht eingecheckt). **Voller Desktop-Lauf** auf fec0d33 über `scripts/e2e-gui.sh`:
+  (nicht eingecheckt). **Voller Desktop-Lauf** auf d34614b über `scripts/e2e-gui.sh`:
   „Spec Files: 21 passed, 1 failed, 22 total“ (123 Tests grün, 1 rot, 6 bei 2560 × 1440
   übersprungen); rot war die Messung in `account-sync.e2e.mjs` „scrolls the list smoothly while the
   first sync is running“ (längster Frame 55 ms statt höchstens 50 ms, Systemlast um 3, andere
@@ -211,7 +211,7 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   nicht fertigen Dateien der parallelen Stufe-14-Arbeit (OAuth, JMAP, u. a.
   `crates/mail-engine/src/oauth/*`, `crates/mail-store/src/jmap.rs`, `crates/mail-imap/src/smtp/*`,
   `app/src-tauri/src/commands/oauth.rs`), keine Datei dieser Aufgabe; danach bricht das Skript ab.
-  Deshalb zusätzlich im eigenen Worktree auf genau fec0d33: vollständig grün (332 s, Vitest 82
+  Deshalb zusätzlich im eigenen Worktree auf genau d34614b: vollständig grün (332 s, Vitest 82
   Dateien, 3940 Tests).
   **Ungeprüft:** Windows (WebView2, native Titelleiste über dem Band, Layout), echte Screenreader
   (VoiceOver, Narrator), ein Konto im Ablauf der echten App (der Desktop-Test fügt bewusst keins
@@ -221,14 +221,14 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   hat einen Testendpunkt; der Schalter erscheint dort und blieb aus).
 
 **Finaler Build (24.11.2026)**
-- Finale Prüfung auf 25337ba im sauberen Worktree `../vm-check` (eigenes Build-Verzeichnis):
+- Finale Prüfung auf c51c663 im sauberen Worktree `../vm-check` (eigenes Build-Verzeichnis):
   `scripts/check.sh` grün (1.326 Rust-, 3.988 Vitest-Tests); Servertests gegen den lokalen
   Stalwart 1.423 von 1.423; Desktop-Tests über `scripts/e2e-gui.sh` 23 von 23 Spec-Dateien,
-  126 Tests. Ein erster Lauf auf dc89176 fand zwei Fehler, beide behoben: der Name der Knöpfe
-  „Copy full path“ enthielt den sichtbaren Text nicht (axe, c0fd4d2), und drei JMAP-Servertests
-  räumten parallel dasselbe Postfach auf (25337ba). Dazu kam ein liegengebliebener Eintrag
+  126 Tests. Ein erster Lauf auf 56c308e fand zwei Fehler, beide behoben: der Name der Knöpfe
+  „Copy full path“ enthielt den sichtbaren Text nicht (axe, 6849fe4), und drei JMAP-Servertests
+  räumten parallel dasselbe Postfach auf (c51c663). Dazu kam ein liegengebliebener Eintrag
   `org.vicemail.desktop.e2e` im Schlüsselbund aus einem abgebrochenen Lauf (entfernt).
-- `scripts/release-local.sh --force 0.1.0` aus 25337ba (Build-Datum 2026-11-24T07:38:21Z):
+- `scripts/release-local.sh --force 0.1.0` aus c51c663 (Build-Datum 2026-11-24T07:38:21Z):
   `Vice-Mail-0.1.0-macos-arm64.dmg` (21.451.133 Bytes, SHA-256
   `594706c8cf9df021217d0b3d0e2f56a07de7f62a48179e5a703de6f1991d550a`; ad hoc signiert,
   `codesign --verify` grün, `spctl` lehnt wie erwartet ab, Start aus dem Disk-Image grün) und
@@ -252,6 +252,6 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   Passwort-Manager sichern. Danach den ersten notarisierten Build auf einem zweiten Mac öffnen.
 - Mensch (Windows): `prototype-2026-11-23-3.1` über eine installierte ältere Version installieren
   (Update mit Migration, `docs/testing/windows-checklist.md`, Abschnitt 19). Das Symbol in der
-  Taskleiste bei 125 und 150 Prozent Skalierung ansehen, sobald ein Prototyp mit 90934bb gebaut ist
+  Taskleiste bei 125 und 150 Prozent Skalierung ansehen, sobald ein Prototyp mit b0d95bd gebaut ist
   (3.1 hat noch die alten Symbole). Der Update-Weg in der App (Installer im Modus `passive`) lässt
   sich erst mit dem ersten öffentlichen Release prüfen.

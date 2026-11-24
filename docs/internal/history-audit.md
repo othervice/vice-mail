@@ -12,9 +12,9 @@ veröffentlicht werden.
 - Alle Refs, die lokal bekannt sind (`--all`): `main`, `origin/main`, `origin/prototype-3.1`,
   Tags `prototype-2026-11-23`, `prototype-2026-11-23-2`, `spike-c-0.1.0`.
   Auf Gitea liegen zusätzlich die Tags `prototype-2026-11-23-3`, `-3.1`, `-4`; `-3.1` zeigt auf
-  76d4da2 (Branch `prototype-3.1`, mitgeprüft), die anderen liegen auf `main`.
+  8b357c2 (Branch `prototype-3.1`, mitgeprüft), die anderen liegen auf `main`.
 - 114 Commits vom 22.11. bis 23.11.2026, 4.213 Objekte, Pack 5,9 MiB.
-- Stand des Arbeitsbaums: 1a3772a. Ignorierte, nie eingecheckte Ordner im Arbeitsbaum:
+- Stand des Arbeitsbaums: 745d152. Ignorierte, nie eingecheckte Ordner im Arbeitsbaum:
   `design-reference/`, `dist/`, `target/`, `.xwin-cache/`, `testmail/.data/`, `testmail/bin/`,
   `node_modules/`, `.claude/`.
 
@@ -98,7 +98,7 @@ Kopfzeilen in den Quelldateien gibt es nicht, die GPL verlangt sie nicht.
 |---|---|---|
 | **Autor- und Committer-Adresse `othervice <<old-address>>`** in allen 114 Commits | Commit-Metadaten | Wird mit dem Push öffentlich und ist danach nicht mehr zurückzuholen. **Entscheidung des Menschen**, siehe unten |
 | `Claude-Session: https://claude.ai/code/session_…` in 113 Commit-Texten, dazu `Co-Authored-By: Claude … <noreply@anthropic.com>` | Commit-Texte | Die Links führen nur mit Anmeldung des Kontoinhabers zu etwas; kein Geheimnis. Zeigt, dass Code mit Claude entstand (das ist ohnehin gewollt sichtbar). Entfernen hieße Geschichte umschreiben; nicht nötig |
-| `http://192.168.30.175:3000/othervice/vice-mail/releases/tag/spike-c-0.1.0` | `docs/stages/00-umgebung-und-spikes.md:73` (3089f7c) | interne Gitea-Adresse, aus dem Internet nicht erreichbar. Harmlos; kann im Arbeitsstand ersetzt werden, Geschichte bleibt |
+| `http://192.168.30.175:3000/othervice/vice-mail/releases/tag/spike-c-0.1.0` | `docs/stages/00-umgebung-und-spikes.md:73` (62bfefd) | interne Gitea-Adresse, aus dem Internet nicht erreichbar. Harmlos; kann im Arbeitsstand ersetzt werden, Geschichte bleibt |
 | `192.168.10.251` (Mac mini im LAN) | Tests `crates/mail-ai/src/endpoint.rs:233`, `crates/mail-engine/src/reading/remote.rs:365` (als Beispiel einer LAN-Adresse) | harmlos (private Adresse); bei Gelegenheit durch `192.168.1.x` ersetzen (Code, nicht Teil dieses Auftrags) |
 | Mac mini „Jarvis“ | `docs/SETUP.md` (im Arbeitsstand jetzt entfernt, Geschichte enthält es) | harmlos |
 | zweites `gh`-Konto `opensourceminers` | `docs/decisions/0035-…:28` | harmlos, öffentlich bekanntes Konto; bei Bedarf im Arbeitsstand kürzen |
@@ -117,7 +117,7 @@ Keine Vorkommen von `<old-domain>` im Inhalt, keine Pfade `/Users/othervice` ode
      `git filter-repo --mailmap mailmap.txt` (Werkzeug `git-filter-repo`, nicht eingerichtet) mit
      der Zeile `othervice <ID+othervice@users.noreply.github.com> <<old-address>>`.
      Folgen: **alle Commit-Hashes ändern sich** (auch die in Stufendateien, Entscheidungen und im
-     Changelog zitierten wie a7dd759, de1b915, 76d4da2, die dann nicht mehr auflösen), alle Tags
+     Changelog zitierten wie dfa77d9, 4928d71, 8b357c2, die dann nicht mehr auflösen), alle Tags
      müssen neu gesetzt, die Gitea-Kopie ersetzt oder neu geklont werden; laufende Sitzungen und
      Worktrees arbeiten auf alten Hashes weiter. Danach `git config user.email` auf die neue Adresse
      setzen, sonst kommt die alte mit dem nächsten Commit zurück.

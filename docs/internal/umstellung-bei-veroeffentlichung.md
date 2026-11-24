@@ -15,7 +15,7 @@ sind Deutsch, das Repo bleibt privat in Gitea.
   einen englischen Hinweis; `docs/stages/README.md` und `docs/decisions/README.md` erklären die
   Ordner auf Englisch. Nichts wurde verschoben, alle Verweise gelten weiter.
 - `docs/ARCHITECTURE.md`: englische Übersetzung in `docs/en/ARCHITECTURE.md`, übersetzt vom Stand
-  e0ad102 (Blob 065632e). Bis zur Umstellung ist die deutsche Datei maßgeblich und wird wie bisher
+  5606689 (Blob 065632e). Bis zur Umstellung ist die deutsche Datei maßgeblich und wird wie bisher
   gepflegt.
 - Geschichte geprüft: `docs/internal/history-audit.md`.
 
@@ -25,7 +25,7 @@ sind Deutsch, das Repo bleibt privat in Gitea.
    `docs/internal/history-audit.md`. Wird die Geschichte umgeschrieben, dann zuerst.
 2. **Architektur umstellen:**
    ```sh
-   git diff e0ad102 -- docs/ARCHITECTURE.md      # Änderungen seit der Übersetzung
+   git diff 5606689 -- docs/ARCHITECTURE.md      # Änderungen seit der Übersetzung
    ```
    Diese Änderungen in `docs/en/ARCHITECTURE.md` übertragen, den Hinweis oben entfernen, dann
    `git mv -f docs/en/ARCHITECTURE.md docs/ARCHITECTURE.md` (das deutsche Original bleibt in der

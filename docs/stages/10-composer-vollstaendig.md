@@ -45,16 +45,16 @@ Zusammenführungen noch ungenutzt), Autovervollständigung, Text-Signatur je Ide
 
 ## Ergebnis
 
-Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten): Kern, Speicher und Shell in b313c22
-(Entscheidung 0023, baut auf 0016 und 0018 auf), Oberfläche in 14e8dda, Composer im eigenen
-Fenster und Standard-Position des Zitats in e5e1519, 04e2a88 und 24ac670 (Entscheidung 0025).
-Geprüft von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf 24ac670 (998
+Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten): Kern, Speicher und Shell in e1097b4
+(Entscheidung 0023, baut auf 0016 und 0018 auf), Oberfläche in e0046af, Composer im eigenen
+Fenster und Standard-Position des Zitats in 5a19dab, 40590d4 und bd942bc (Entscheidung 0025).
+Geprüft von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf bd942bc (998
 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für das Windows-Ziel, cargo deny und pnpm
 audit); alle Servertests (`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart)
-grün auf 24ac670 (1.076 Tests); `pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus
+grün auf bd942bc (1.076 Tests); `pnpm --dir app test:e2e` grün auf bd942bc mit den Testständen aus
 ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, darunter `composer-complete.e2e.mjs` mit 4
 von 4, `send-later.e2e.mjs` mit 3 von 3 und `windows.e2e.mjs` mit 3 von 3 Tests). Der
-Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10.
+Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus bd942bc) enthält Stufe 10.
 
 **Nachgewiesen (Kern, in `check.sh` außer wo Stalwart genannt ist)**
 - Snapshot des erzeugten HTML mit Signatur, Inline-Bild und Zitat, Textteil lesbar:
@@ -63,7 +63,7 @@ Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10
 - Inline-Bild beim zweiten Testkonto:
   `tests/compose.rs::an_inline_image_arrives_and_is_shown_at_the_second_account` (Stalwart: der Teil
   kommt unverändert an, der Lesebereich zeigt ihn als `data:`-Bild und nicht als Anhang), grün im
-  Serverlauf auf 24ac670; dazu
+  Serverlauf auf bd942bc; dazu
   `compose::stage10_tests::inline_images_are_copied_checked_and_sent_as_related_parts`,
   `compose::tests::inline_images_go_out_as_related_parts_and_resolve`,
   `inline_images_keep_their_size_and_only_cid_sources`.
@@ -92,7 +92,7 @@ Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10
 - Größe (SMTP SIZE): `smtp::tests::the_size_limit_is_read_from_ehlo_and_nothing_is_sent`,
   `send::size_tests::size_extension_from_ehlo_lines`,
   `compose::stage10_tests::the_server_size_limit_warns_and_refuses_too_large_messages`; gegen
-  Stalwart `tests/smtp.rs::the_size_limit_of_the_server_is_read` (grün im Serverlauf auf 24ac670).
+  Stalwart `tests/smtp.rs::the_size_limit_of_the_server_is_read` (grün im Serverlauf auf bd942bc).
 - Weiterleiten als Anhang:
   `compose::tests::a_message_forwarded_as_attachment_goes_in_unencoded_when_it_can`,
   `compose::stage10_tests::a_message_is_forwarded_as_an_attachment`.
@@ -110,7 +110,7 @@ Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10
   `settings_sync::tests::scenarios::deleted_signature_edited_elsewhere_stays_edited`.
 - Composer-Fenster: Shell `tests::message_window_opens_once_with_the_main_windows_permissions`
   (auch ein Composer-Fenster je Entwurf, falsche oder unbekannte Entwürfe abgelehnt, Mail- und
-  Composer-Fenster dürfen sich schließen, das Hauptfenster nicht; 04e2a88) und
+  Composer-Fenster dürfen sich schließen, das Hauptfenster nicht; 40590d4) und
   `windows::tests::composer_windows_have_one_label_and_page_per_draft`.
 - `mailto:`-Links in Mails öffnen den eigenen Composer mit allen Feldern:
   `compose::stage10_tests::a_compose_request_fills_every_field_and_threads_the_reply`.
@@ -154,7 +154,7 @@ Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10
   Einstellungen → Schreiben und im Ausgang mit geplanten und verpassten Sendungen, hell und dunkel
   (`a11y.test.tsx`).
 
-**Nachgewiesen (echte App, Desktop-Tests auf 24ac670)**
+**Nachgewiesen (echte App, Desktop-Tests auf bd942bc)**
 - `composer-complete.e2e.mjs`: eine zentrierte Überschrift und durchgestrichener Text werden als
   das HTML gespeichert, das der Kern behält, ohne CSP-Verstoß; eingefügtes HTML mit Script und
   externem Bild wird im Kern bereinigt, der Hinweis auf entfernte Bilder erscheint; eine Vorlage
@@ -200,7 +200,7 @@ Windows-Prototyp `prototype-2026-11-23-2` (gebaut aus 24ac670) enthält Stufe 10
 
 **Wartet auf**
 - Mensch: Rechtschreibprüfung auf beiden Systemen prüfen und vermerken (Mac: die App; Windows:
-  Prototyp `prototype-2026-11-23-2`, Gitea-Vorab-Release, gebaut aus 24ac670; die
+  Prototyp `prototype-2026-11-23-2`, Gitea-Vorab-Release, gebaut aus bd942bc; die
   Windows-Checkliste hat für Stufe 10 noch keinen Abschnitt, die Schritte stehen im
   Release-Hinweis); eigene Signaturen anlegen und eine Mail an einen anderen Anbieter senden: Sieht
   die Signatur dort richtig aus?

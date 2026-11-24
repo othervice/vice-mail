@@ -49,13 +49,13 @@ zwei Sitzungen verteilt werden (A: Kategorien, Pins, Snooze, Aufgaben, Regeln. B
 ## Ergebnis
 
 Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten: Kern, Speicher und Shell für A und B in
-fab66da, Oberfläche A in 7acc55c, Oberfläche B in 2152c42; `.eml`-Dateien und der Klick auf eine
-Meldung in 24ac670, Auswahl nach ID in e705d75). Geprüft von der Hauptsitzung in sauberen
-Worktrees: `scripts/check.sh` grün auf 24ac670 (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit
-Clippy für das Windows-Ziel, cargo deny und pnpm audit) und auf dem Arbeitsstand, der als e705d75
+d8a6d25, Oberfläche A in d68d985, Oberfläche B in 3ac466d; `.eml`-Dateien und der Klick auf eine
+Meldung in bd942bc, Auswahl nach ID in eed0334). Geprüft von der Hauptsitzung in sauberen
+Worktrees: `scripts/check.sh` grün auf bd942bc (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit
+Clippy für das Windows-Ziel, cargo deny und pnpm audit) und auf dem Arbeitsstand, der als eed0334
 committet wurde (1.006 Rust-, 1.127 Vitest-Tests in 57 Dateien); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf 24ac670 (1.076
-Tests); `pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus ab594b7 (16
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf bd942bc (1.076
+Tests); `pnpm --dir app test:e2e` grün auf bd942bc mit den Testständen aus ab594b7 (16
 Spec-Dateien, 89 Tests grün, 6 übersprungen, darunter `comfort.e2e.mjs` mit 4 von 4 und
 `extras.e2e.mjs` mit 5 von 5 Tests). Entscheidungen: 0016 (Kategorien und Kontakte), 0020 (Kern,
 Speicher und Shell), 0027 (`.eml`-Dateien, Klick auf eine Meldung), 0028 (Auswahl nach ID).
@@ -119,12 +119,12 @@ Messung: `docs/testing/performance.md` (Stufe 9).
   unter Windows `notifications::overlay::tests::badges_have_the_size_and_white_digits`; Oberfläche
   (`comfort.test.tsx`): Einstellungen mit Kategorien, Ruhezeiten, verborgenem Inhalt, stummen Konten
   und Zähler.
-- Klick auf eine Meldung öffnet die Mail (neu in 24ac670 und e705d75): Der Ordner der Mail wird
+- Klick auf eine Meldung öffnet die Mail (neu in bd942bc und eed0334): Der Ordner der Mail wird
   gezeigt und die Mail dort in der Liste ausgewählt, sobald die Liste geladen ist; zeigt der offene
   Thread sie schon, bleibt sie dort; fehlt sie unter den geladenen Zeilen oder kommt die Liste
   nicht binnen 5 s, öffnet sie sich in einem eigenen Fenster; nur das Hauptfenster antwortet
   (`open-by-id.test.tsx`, `list-select.test.tsx`).
-- `.eml`-Dateien öffnen (neu in 24ac670, 0027): Kern
+- `.eml`-Dateien öffnen (neu in bd942bc, 0027): Kern
   `reading::eml::tests::opened_files_go_through_the_reading_pipeline_and_never_into_the_store`,
   `attachments_of_a_file_are_saved_exactly_and_opened_only_after_confirmation`,
   `files_that_cannot_be_shown_are_refused_with_typed_errors` (leer, Text, binär, fehlt, Ordner,
@@ -186,8 +186,8 @@ Messung: `docs/testing/performance.md` (Stufe 9).
   unter Windows mit einer Datei, das Schließen eines echten Fensters (der Mock der Shell sendet
   keine Fensterereignisse), ob macOS die Zuordnung ohne neue Anmeldung bei Launch Services
   übernimmt; einen Desktop-Test für `.eml` gibt es nicht.
-- Auswahl nach ID und Klick auf eine Meldung nur in Vitest geprüft; der Desktop-Lauf auf 24ac670
-  enthielt e705d75 noch nicht. Ein zugeklapptes Bündel bei der Auswahl nach ID ist nicht geprüft.
+- Auswahl nach ID und Klick auf eine Meldung nur in Vitest geprüft; der Desktop-Lauf auf bd942bc
+  enthielt eed0334 noch nicht. Ein zugeklapptes Bündel bei der Auswahl nach ID ist nicht geprüft.
 - Native Meldungen, Klick auf eine Meldung, Zähler an Dock und Taskleiste, Ruhezeiten, Standard-App,
   ein `mailto:`-Link aus dem Browser, Drucken und „Als PDF sichern“ auf echten Systemen; ob macOS
   beim Setzen des Standards nachfragt.
@@ -196,6 +196,6 @@ Messung: `docs/testing/performance.md` (Stufe 9).
 - Mensch: Passt die Einordnung beim eigenen Posteingang, welche Absender landen falsch?
   Benachrichtigungen, Ruhezeiten, Standard-Mail-App, `mailto:`-Links und `.eml`-Dateien
   (Doppelklick, „Öffnen mit“) auf Mac und Windows von Hand prüfen und hier vermerken. Für Windows
-  enthält der Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus 24ac670) Teil A
+  enthält der Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus bd942bc) Teil A
   und Teil B; die Windows-Checkliste hat einen Abschnitt nur für Teil A (Abschnitt 13), für Teil B
   stehen die Schritte im Release-Hinweis.

@@ -1,6 +1,6 @@
 # Architecture
 
-> English translation prepared for publication from the German `docs/ARCHITECTURE.md` at commit e0ad102 (blob 065632e). Until the project is published the German file is authoritative. To publish: apply the changes from `git diff e0ad102 -- docs/ARCHITECTURE.md` here, then move this file over `docs/ARCHITECTURE.md`.
+> English translation prepared for publication from the German `docs/ARCHITECTURE.md` at commit 5606689 (blob 065632e). Until the project is published the German file is authoritative. To publish: apply the changes from `git diff 5606689 -- docs/ARCHITECTURE.md` here, then move this file over `docs/ARCHITECTURE.md`.
 
 As of 2026-11-22. The versions are the stable ones current on that day. Stage 0 tested the risky
 assumptions with throwaway code; measurements and reasons are in `docs/decisions/0001` to `0005`.

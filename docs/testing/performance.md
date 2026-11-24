@@ -111,7 +111,7 @@ neu nach alt durch (`rowid NOT IN …`). Auch bei 500.000 Mails weit unter dem Z
 
 **Kosten von Threads und Index beim Abgleich**, gleiche Daten und gleicher Generator
 (`crates/mail-store/src/bench.rs`, 100.000 Kopfdaten in 200 Fenstern, je zwei Läufe hintereinander):
-Stand vor Stufe 7 (Commit `6017a13`, in eigenem Verzeichnis gebaut) **1,13 s, 5,7 ms je Fenster**;
+Stand vor Stufe 7 (Commit `e15eb2d`, in eigenem Verzeichnis gebaut) **1,13 s, 5,7 ms je Fenster**;
 mit Stufe 7 **2,06–2,08 s, 10,3–10,4 ms je Fenster**. Der Generator dort hat keine References, also
 fragt jede Mail auch den Betreff-Rückfall ab (ungünstigster Fall). Die Listenseite blieb bei
 0,07–0,09 ms.
@@ -499,8 +499,8 @@ ausgelieferte Programm (37 MB, rund 5 min):
 CI=true pnpm --dir app tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json
 ```
 
-Gemessen ist Stand `edb80e4` mit den Messhilfen unten, für „nachher“ zusätzlich die Änderung aus
-`09258bf` (nur mit 500.000 Mails nachgemessen). Die Oberfläche ist in beiden Builds dasselbe
+Gemessen ist Stand `c2575f8` mit den Messhilfen unten, für „nachher“ zusätzlich die Änderung aus
+`50375fb` (nur mit 500.000 Mails nachgemessen). Die Oberfläche ist in beiden Builds dasselbe
 Vite-Produktionsbündel; ein Debug-Build macht nur den Rust-Teil langsamer und ist **nicht
 gemessen** (er zählt für die Ziele nicht).
 
@@ -645,7 +645,7 @@ die die Oberfläche beim Start aufruft (`e2e_invoked`), fand sich `list_open_rep
 keinen Index gibt: `SCAN m` und eine Sortierung, bei jedem Start und nach jedem `messagesChanged`
 (die Oberfläche lädt die Hinweise dann neu), also auch nach jeder Aktion.
 
-Behoben in `09258bf` ohne neuen Index: Die Id einer Nachricht ist ihr Sortierdatum oder die nächste
+Behoben in `50375fb` ohne neuen Index: Die Id einer Nachricht ist ihr Sortierdatum oder die nächste
 freie Zahl darüber (`messages::IdAllocator`), `date` ist dieses Sortierdatum; jede Nachricht mit
 `date >= since` hat also `id >= since`. Die Bedingung `m.id >= ?1` macht daraus einen Bereich der
 Rowid. Test `ai::tests::open_reply_rows_read_only_the_recent_ids` (Plan ohne `SCAN m`, Grenze bei

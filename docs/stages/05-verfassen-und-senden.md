@@ -43,14 +43,14 @@ keine Mail wird versehentlich zweimal verschickt. Danach ist die App auf dem Mac
 
 Ausgeführt am 22./23.11.2026 (Hauptsitzung mit Subagenten: Nachrichtenbau und SMTP im Adapter,
 Entwürfe und Senden in Store und Engine, Composer-Oberfläche, Desktop-Abnahme; die beiden zuletzt
-fehlenden Tests in 24ac670). Geprüft am 23.11. von der Hauptsitzung in sauberen Worktrees:
-`scripts/check.sh` grün auf 24ac670 (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für
+fehlenden Tests in bd942bc). Geprüft am 23.11. von der Hauptsitzung in sauberen Worktrees:
+`scripts/check.sh` grün auf bd942bc (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für
 das Windows-Ziel, cargo deny und pnpm audit); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf 24ac670 (1.076
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf bd942bc (1.076
 Tests; `ai::tests::qa::qa_set_with_a_real_model` überspringt sich ohne lokales Modell);
-`pnpm --dir app test:e2e` grün auf 24ac670 mit den Testständen aus ab594b7 (16 Spec-Dateien, 89
+`pnpm --dir app test:e2e` grün auf bd942bc mit den Testständen aus ab594b7 (16 Spec-Dateien, 89
 Tests grün, 6 übersprungen, darunter `compose.e2e.mjs` mit 4 von 4 Tests). Die drei Tests in
-`reading.e2e.mjs`, die auf 255ce74 rot waren, sind in den Läufen auf 66ea375 und 24ac670 grün.
+`reading.e2e.mjs`, die auf 5087aae rot waren, sind in den Läufen auf 0641b44 und bd942bc grün.
 Entscheidung: 0018 (Entwürfe und Senden).
 
 **Nachgewiesen (Servertests in `crates/mail-engine/tests/compose.rs`, gegen Stalwart)**
@@ -76,7 +76,7 @@ Entscheidung: 0018 (Entwürfe und Senden).
   `bcc_recipient_gets_the_mail_and_stays_unnamed`.
 - `a_read_only_account_keeps_drafts_local_and_refuses_to_send`: Nur lesende Konten behalten Entwürfe
   lokal und senden nichts.
-- `a_draft_of_another_program_opens_and_its_server_copy_is_replaced` (neu in 24ac670): Ein Entwurf,
+- `a_draft_of_another_program_opens_and_its_server_copy_is_replaced` (neu in bd942bc): Ein Entwurf,
   wie Thunderbird ihn in bobs Entwürfe-Ordner legt, öffnet als lokaler Entwurf (HTML über die
   Allowlist, Anhang Byte für Byte). Bearbeitet und geschlossen ersetzt er die fremde Kopie: genau
   eine Kopie mit derselben Message-ID, neuem Inhalt und dem Anhang; Verwerfen entfernt sie.
@@ -95,18 +95,18 @@ Entscheidung: 0018 (Entwürfe und Senden).
   des Fensters (`drops::tests::only_recently_dropped_paths_are_accepted_once`); SMTP mit STARTTLS
   und TLS und Zertifikatsprüfung (`smtp::tests::accepted_over_tls_and_starttls`,
   `certificates_are_checked`).
-- Entwürfe anderer Programme (neu in 24ac670, in `check.sh`):
+- Entwürfe anderer Programme (neu in bd942bc, in `check.sh`):
   `compose::tests::with_core::a_draft_of_another_program_opens_cleaned_and_keeps_its_message_id`:
   Felder, HTML über die Allowlist, Anhang kopiert; die Message-ID bleibt, die Kopie im Ordner wird
   zur Serverkopie und beim ersten Sichern ersetzt; erneutes Öffnen ergibt denselben Entwurf. Ohne
   Message-ID bekommt der Entwurf eine neue, die fremde Kopie bleibt liegen.
-- Offline (neu in 24ac670, in `check.sh`):
+- Offline (neu in bd942bc, in `check.sh`):
   `compose::tests::with_core::sending_at_once_while_offline_waits_and_goes_out_once_online`:
   Senden ohne Verzögerung im Offline-Zustand überträgt nichts, die Sendung bleibt mit dem
   Verbindungsfehler vorgemerkt (auch über einen Neustart) und geht nach dem Verbinden genau einmal
   hinaus. Derselbe Weg für eine geplante Sendung in
   `compose::stage10_tests::offline_at_the_scheduled_time_it_goes_out_once_online`.
-- In der App (`compose.e2e.mjs`, grün auf 24ac670): „Rückgängig“ innerhalb der Verzögerung sendet
+- In der App (`compose.e2e.mjs`, grün auf bd942bc): „Rückgängig“ innerhalb der Verzögerung sendet
   nichts und bringt den Entwurf zurück; eine gesendete Mail kommt genau einmal an, der Hinweis sagt
   es; ein geschlossener Entwurf liegt einmal auf dem Server, auch nachdem er aus dem
   Entwürfe-Ordner erneut bearbeitet wurde; „Ausgang“ listet die Sendung; der Rich-Text-Editor
@@ -156,6 +156,6 @@ Entscheidung: 0018 (Entwürfe und Senden).
 - Mensch: vom echten Konto (nach Freischalten des Schreibzugriffs, Empfehlung Nebenkonto) an sich
   selbst und an eine Adresse bei einem anderen Anbieter senden: Wie sehen die Mails in einem anderen
   Programm aus? Ab hier die App im Alltag benutzen und Reibungspunkte sammeln.
-- Mensch (Windows): Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus 24ac670)
+- Mensch (Windows): Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus bd942bc)
   nach `docs/testing/windows-checklist.md`, Abschnitt 11 (Schreiben und Senden): auf einem
   Nebenkonto Änderungen erlauben und eine Mail an sich selbst senden.

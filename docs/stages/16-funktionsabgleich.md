@@ -43,20 +43,20 @@
 ## Ergebnis
 
 **Stand vom 23.11.2026, 13:30.** Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten): Kern in
-4343b32 (Entscheidung 0033, Migration `0013_feature_parity.sql`), Oberfläche in 3a52883, Anhänge,
-Farbthema im Kern und Zahl der ausgeblendeten Mails in a7dd759 (0036, Migration
-`0015_attachment_pins.sql`), Orange als Standardakzent (0038, 53b37ce, umgesetzt in a7dd759),
-Gestaltung in fe5cdec, gemeinsame Sperre der Outbox-Servertests in 1b457f1. Entscheidungen: 0032,
+e0db960 (Entscheidung 0033, Migration `0013_feature_parity.sql`), Oberfläche in cbe8336, Anhänge,
+Farbthema im Kern und Zahl der ausgeblendeten Mails in dfa77d9 (0036, Migration
+`0015_attachment_pins.sql`), Orange als Standardakzent (0038, 92a2d4c, umgesetzt in dfa77d9),
+Gestaltung in 5b0c53b, gemeinsame Sperre der Outbox-Servertests in 011629f. Entscheidungen: 0032,
 0033, 0036, 0038. Geprüft von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf
-a7dd759 (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit Clippy für das Windows-Ziel, cargo deny
+dfa77d9 (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit Clippy für das Windows-Ziel, cargo deny
 und pnpm audit); alle Servertests (`cargo test --workspace -- --include-ignored` gegen den lokalen
-Stalwart) auf a7dd759: 1.185 von 1.186 grün. Der eine Fehler,
+Stalwart) auf dfa77d9: 1.185 von 1.186 grün. Der eine Fehler,
 `outbox::server_tests::every_action_online_and_offline` (`MailboxNotFound("VmTransfer-tr32210-cut")`),
 war ein Wettlauf: Er listete bobs Ordner, während ein Servertest der Verschiebung zwischen Konten
-seinen Ordner entfernte. Seit 1b457f1 teilen sich beide Dateien eine Sperre; danach lief der
+seinen Ordner entfernte. Seit 011629f teilen sich beide Dateien eine Sperre; danach lief der
 gezielte Lauf gegen Stalwart grün (21 von 21 Tests der Bibliothek `mail-engine`). Desktop-Lauf auf
-dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). `prototype-2026-11-23-4` (de1b915, Windows und macOS) enthält die ganze Stufe;
-`prototype-2026-11-23-3` (205c0b8) und `-3.1` (76d4da2) hatten nur den Kern aus 4343b32.
+dem neuesten Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). `prototype-2026-11-23-4` (4928d71, Windows und macOS) enthält die ganze Stufe;
+`prototype-2026-11-23-3` (7ce21bd) und `-3.1` (8b357c2) hatten nur den Kern aus e0db960.
 
 **Nachgewiesen (Kern und Speicher in `check.sh`, wo nicht Stalwart genannt ist)**
 - Lese-Liste: `stage16_tests::reading_list_marks_rows_lists_them_and_is_captured` (Speicher),
@@ -74,7 +74,7 @@ dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-
   der Seitenleiste und in der Palette, Reihenfolge mit Alt+Pfeil und Menü, Farbe aus der Palette der
   Kontofarben neben dem Namen und mit ihm benannt.
 - Zwischen Konten verschieben und kopieren, Servertests mit Fehlerinjektion gegen Stalwart
-  (`outbox/transfer_server_tests.rs`, grün auf a7dd759):
+  (`outbox/transfer_server_tests.rs`, grün auf dfa77d9):
   `a_move_between_accounts_removes_the_source_only_after_the_copy_is_confirmed` (Kopieren: Original
   bleibt, eine Kopie im Ziel; Verschieben: erst angehängt, dann entfernt),
   `a_connection_cut_after_append_leaves_exactly_one_copy_and_the_source_until_confirmed` (der Proxy
@@ -98,18 +98,18 @@ dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-
   „Rückgängig“ öffnet denselben Entwurf; „Ausklappen“ öffnet den vollen Composer mit demselben
   Entwurf; Escape verlässt das Feld; Zitat abschaltbar; nur lesendes Konto erklärt; Verwerfen;
   abgelehnter Start fragt den Kern nicht bei jeder Taste neu. In der echten App
-  (`quick-reply.e2e.mjs`) 4 von 4 grün im Desktop-Lauf auf a7dd759 (kein Entwurf vor der ersten
+  (`quick-reply.e2e.mjs`) 4 von 4 grün im Desktop-Lauf auf dfa77d9 (kein Entwurf vor der ersten
   Taste, Escape, Senden mit Countdown und genau einer Kopie in „Gesendet“, Ausklappen). Neuester
-  Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+  Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
 - In der Mail suchen (`find-in-message.test.tsx`): Treffer über Inline-Elemente hinweg, ohne
   Groß/Klein, nie über Absätze; Verborgenes und die Bedienelemente der App zählen nicht; das
   Dokument des Mail-Frames ist ein eigener Abschnitt; Hervorheben über die Highlight-Registry des
   Frames und eine Style-Angabe, nie ein Skript, ohne Highlight-API über die Auswahl im Frame;
   Cmd+F im Lesebereich öffnet die Leiste, zählt, springt, Escape schließt; außerhalb des
   Lesebereichs bleibt Cmd+F die Mailsuche; Deutsch; axe und Fokusring. Desktop-Test
-  `find-in-message.e2e.mjs`: auf a7dd759 rot im `before all` (das Testwerkzeug `testmail.py`
+  `find-in-message.e2e.mjs`: auf dfa77d9 rot im `before all` (das Testwerkzeug `testmail.py`
   scheiterte beim Anlegen des Ordners, bevor es die zwei Testmails anhängte), kein Fall lief.
-  Neuester Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+  Neuester Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
 - Anhänge (0036): Vorschau im Kern (`mail-content`, `attachment_preview::tests::`):
   `kinds_come_from_type_and_name_and_never_cover_active_documents`,
   `images_that_are_not_what_they_claim_are_refused`, `images_are_decoded_and_encoded_again_by_the_core`,
@@ -125,8 +125,8 @@ dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-
   Kern keine hat, PDF seitenweise, Text als Text, typisierte Fehler mit Speichern und Öffnen, nur
   PNG- oder JPEG-`data:`-Bilder; „Alle speichern“ ab zwei Anhängen, mit Zahl und umbenannten
   Dateien, auch für `.eml`-Dateien; Anheften, Ansicht „Angeheftete Anhänge“, Änderung eines anderen
-  Geräts, Palette. Desktop-Test `attachment-preview.e2e.mjs`: im Lauf auf a7dd759 nicht enthalten
-  (stand nicht in `specs`). Neuester Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+  Geräts, Palette. Desktop-Test `attachment-preview.e2e.mjs`: im Lauf auf dfa77d9 nicht enthalten
+  (stand nicht in `specs`). Neuester Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
 - Absender blockieren: `blocked_senders_hide_mail_on_read_only_accounts_until_unblocked` (Speicher),
   `blocked_senders_are_hidden_on_read_only_accounts_and_not_announced`,
   `blocked_senders_go_to_junk_where_the_account_may_write`; Oberfläche: `blocked-senders.test.tsx`
@@ -170,7 +170,7 @@ dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-
 - Zwei Geräte gegen Stalwart:
   `tests/settings_sync.rs::reading_list_favourites_colours_and_blocked_senders_reach_the_other_device`
   (Lese-Liste, Favorit, Ordnerfarbe, blockierter Absender und angehefteter Anhang kommen auf dem
-  zweiten Gerät an, ihr Entfernen ebenso; grün auf a7dd759).
+  zweiten Gerät an, ihr Entfernen ebenso; grün auf dfa77d9).
 - axe ohne schwere Befunde, hell und dunkel, in Vitest: Lese-Liste, Kopf mit „Nur ungelesene“,
   Favoriten, Farben und Rückfrage beim Verschieben (`organize.test.tsx`); Lesebereich mit Frage nach
   einer Lesebestätigung und offener Schnellantwort, empfangene Bestätigungen, Sendeoptionen und
@@ -210,12 +210,12 @@ dem neuesten Stand: grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-
   (`shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay`) setzt das erste Gerät
   Orange, seit 0038 der Standard; dass das zweite Gerät Orange zeigt, beweist also nichts. Erfasst
   wird der Schlüssel `ui.accent_theme` (siehe oben), die Ankunft eines anderen Themas ist nicht
-  geprüft. Seit e929a88 setzt der Test Grün (nicht der Standard); der Lauf gegen Stalwart war
+  geprüft. Seit d95da63 setzt der Test Grün (nicht der Standard); der Lauf gegen Stalwart war
   danach grün (`tests/settings_sync.rs` 18 von 18). Der Abnahmepunkt ist damit erfüllt.
 - Desktop-Tests für Schnellantwort, Suchen in der Mail und Anhangsvorschau auf dem neuesten Stand:
-  grün auf fe5cdec mit den Testständen aus de1b915 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
-- Ein vollständiger Serverlauf nach 1b457f1 und ein `scripts/check.sh` auf fe5cdec (nur Klassen und
-  CSS in fünf Komponenten) bzw. 1b457f1 liegen nicht vor.
+  grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+- Ein vollständiger Serverlauf nach 011629f und ein `scripts/check.sh` auf 5b0c53b (nur Klassen und
+  CSS in fünf Komponenten) bzw. 011629f liegen nicht vor.
 - axe in der echten WebView für die neuen Ansichten (Suchleiste, Vorschau-Dialog, Lese-Liste,
   Angeheftete Anhänge) und in den anderen Farbthemen.
 - Vorschau unter WebView2; echte PDFs aus dem Alltag (im Test eine kleine selbst gebaute PDF); keine
