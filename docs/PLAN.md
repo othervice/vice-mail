@@ -147,7 +147,10 @@ grün. **Finaler Build** aus c51c663: siehe Stufe 15, „Finaler Build“, und d
 - Stufe 14: App-Registrierung bei Microsoft Entra und ein Google-Cloud-Projekt (genaue Angaben im
   Ergebnis der Stufe 14); danach die Handprüfungen mit Outlook.com, Microsoft 365 und Gmail.
   Fastmail mit API-Token ist ungetestet.
-- macOS-Signatur nach der Freischaltung des Apple-Kontos: die Schritte in `docs/RELEASING.md`.
+- macOS-Signatur: Herausgeber ist BITWATER LLC (0035, Nachtrag 24.11.). Der Mensch hat den Apple-
+  Support am 24.11. gebeten, die Anmeldung als Einzelperson abzubrechen; danach Anmeldung als
+  Organisation (`docs/RELEASING.md`, „Enrolling as an organisation“), dann die Schritte unter
+  „After the membership is active“. Erste signierte Version: 0.1.1.
 - Vor dem ersten Push auf GitHub: Autor-Adresse in der Geschichte und die Refs
   (`docs/internal/history-audit.md`), Kontaktadresse in `SECURITY.md`, dann die Umstellung nach
   `docs/internal/umstellung-bei-veroeffentlichung.md`.
