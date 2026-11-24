@@ -263,8 +263,9 @@ describe("app frame (stage 1)", () => {
     await testId("edit-views").waitForExist();
     const focused = () => browser.execute(() => document.activeElement?.getAttribute("data-testid") ?? null);
     await browser.waitUntil(async () => (await focused()) === "edit-views-check-later", { timeoutMsg: "the focus is not on the first view" });
-    // Space hides "Later"; the column behind the dialog follows at once.
-    await browser.keys(" ");
+    // A click hides "Later" (the embedded WebDriver performs no default action for Space, so the
+    // checkbox is clicked; Vitest covers Space); the column behind the dialog follows at once.
+    await testId("edit-views-check-later").click();
     await browser.waitUntil(async () => !(await columnViews()).includes("later"), { timeoutMsg: "Later is still in the column" });
     // Four views on: Alt+Up twice moves "Flagged" above "Reading list"; the focus stays on it.
     for (let i = 0; i < 4; i += 1) await pressTab();
