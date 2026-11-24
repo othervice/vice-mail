@@ -178,3 +178,19 @@ Mails des Ordners, nicht der Konversationen.
 - Sortierung nach Aktivität überall statt „neueste Mail im Postfach“: Tabelle
   `mailbox_thread(mailbox_id, thread_id, last_message_id)` (Rückweg aus 0017).
 - Konversationen aus als Standard: eine Zeile, der Standard von `UiPreferences.conversations`.
+
+## Nachtrag 24.11.2026: Folgen von Stufe 17 (Entscheidung 0049)
+
+- **Öffnen:** Die Zeile öffnet nicht mehr das ganze Gespräch als Kartenstapel, sondern genau eine
+  Mail: die älteste ungelesene, sonst die neueste (dieselbe Regel). Die anderen Mails klappen in der
+  Liste unter der Zeile auf (alle Mails des Threads im Konto, älteste zuerst, über `getThread`).
+- **Beim Öffnen als gelesen markieren** gilt der gezeigten Mail, nicht mehr dem ganzen Gespräch.
+  „Gelesen“ an der Zeile wirkt weiter auf das ganze Gespräch (Tabelle oben unverändert).
+- **Aktionen:** Die Tabelle gilt für Gesprächszeilen. Eine aufgeklappte Mail (Kindzeile) handelt
+  für sich allein, auch in einer gemischten Auswahl.
+- **Zeile:** Statt der Zahl der Mails nennt die Pille „n Antworten“ (Zahl der Mails minus eins) und
+  klappt auf. Die Liste der Gespräche ist ein `tree`; die Identität einer Zeile ist ihr Thread.
+- **Geprüft** zusätzlich: `conversation_tests::an_expanded_row_*` und
+  `comfort::tests::an_expanded_conversation_row_lists_its_messages_from_every_folder` (Kinder und
+  Zahl der Zeile stimmen überein), Vitest `conversation-tree.test.tsx`, Desktop
+  `conversations.e2e.mjs`.

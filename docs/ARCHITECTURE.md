@@ -409,6 +409,13 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   mails the core names (`conversationTargets`): move, delete, snooze the mails in the
   displayed mailbox; read, unflag, unpin all mails; unread, flag, pin the
   mail of the row. Execution goes through the outbox like every action.
+- Unfolding conversations (stage 17, 0049): a list of conversations is a tree in the UI.
+  The messages of an unfolded row are `getThread(row message, row mailbox)`: every message
+  of the thread in the account, oldest first, each at its location in the row's mailbox
+  where it lies there (newest 1,000), exactly the set the row's count counts; loaded on
+  unfolding, keyed by the row's thread. The reading pane shows one message (the oldest
+  unread, else the newest); opening marks that message read. Actions on a child row act on
+  that message alone. No new command, no migration.
 
 **Gmail via IMAP (stage 14, block A, 0034)**
 - Detected by `X-GM-EXT-1` at every login (recorded in `account_server`), for Sent and

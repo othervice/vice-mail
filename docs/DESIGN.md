@@ -66,7 +66,7 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Punkt links | ungelesen; beim Überfahren und bei Auswahl wird er zum Auswahlkästchen |
 | Avatar | 32 px, Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. |
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel |
-| Betreff | Haupttext (mittel, wenn ungelesen), danach Zähler der Konversation als Pille und Anhang-Symbol |
+| Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
 | Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Anpinnen, Verschieben, Später, Mehr |
@@ -76,7 +76,8 @@ Betreff, darunter die Vorschau (nur komfortabel).
 
 **Lesebereich.** Öffnet rechts neben der Liste; die Liste wird schmaler und zweizeilig. Alternativ
 unten oder anstelle der Liste. Kopf mit Betreff, Absender, Empfängern, Zeit und Kontofarbe; Aktionen
-als Symbolleiste. Ältere Mails eines Threads sind eingeklappt, ungelesene offen.
+als Symbolleiste. Immer genau eine Mail; die anderen Mails eines Gesprächs klappen in der Liste auf
+(Stufe 17, „Gespräche aufklappen“).
 
 **KI-Panel.** 380 px, rechts, einklappbar. Bezieht sich auf den gewählten Thread. Gespräch oben,
 Eingabefeld unten, Ergebnisse als Karten. Bei schmalem Fenster liegt es über dem Lesebereich.
@@ -142,7 +143,8 @@ In schmaler Liste stehen die Chips unter dem Namen und umbrechen.
 weicher Akzentfläche und Balken am Rand. Kopf ruhig: Titel 16 px halbfett, darunter eine kleine
 Zeile (Konto oder Auswahl), rechts nur Symbole.
 
-**Plaketten.** Kleine runde Pillen (`badge`) für die Zahl der Mails im Thread; Anhang als Symbol.
+**Plaketten.** Kleine runde Pillen (`badge`) für die Zahl der Antworten eines Gesprächs (seit Stufe
+17 mit Pfeil zum Aufklappen); Anhang als Symbol.
 
 **Barrierefreiheit.** Bündel, „Alle anzeigen“ und „Zurück zum Posteingang“ sind Einträge der Liste
 (Pfeiltasten, Enter, Leertaste), keine Buttons in der `listbox`. Jede Zeile wird über ihren Inhalt
@@ -153,12 +155,12 @@ Icons, Logos und Illustrationen, eine dunkle Leiste im hellen Modus, Absenderbil
 
 ### Lesebereich, Konversation und Verfassen
 
-**Karten.** Der Betreff steht als ruhiger Titel (20 px halbfett) über der Mail. Jede Mail ist eine
-Karte (`surface-raised`, Haarlinie `border-subtle`, `shadow-card`, Rundung 10). In einer Konversation
-sind ältere Mails einzeilige Karten (Avatar, Absender, Anfang des Textes, Datum, Punkt für
-ungelesen); die offene Mail ist an ihrer Stelle aufgeklappt, alles in einer Spalte (höchstens
-`reading-column`, mittig). Textmails mit Zeilenhöhe 1,6; HTML-Mails auf ihrem weißen Blatt ohne
-eigenen Rahmen. Unter der offenen Mail eine leise Zeile: Antworten, Allen antworten, Weiterleiten.
+**Karten.** Der Betreff steht als ruhiger Titel (20 px halbfett) über der Mail. Die Mail ist eine
+Karte (`surface-raised`, Haarlinie `border-subtle`, `shadow-card`, Rundung 10) in einer Spalte
+(höchstens `reading-column`, mittig); seit Stufe 17 steht dort immer genau eine, auch für ein
+Gespräch (dessen andere Mails klappen in der Liste auf, „Gespräche aufklappen“). Textmails mit
+Zeilenhöhe 1,6; HTML-Mails auf ihrem weißen Blatt ohne eigenen Rahmen. Unter der Mail eine leise
+Zeile: Antworten, Allen antworten, Weiterleiten.
 
 **Kopf der Karte.** Name und echte Adresse des Absenders bleiben immer sichtbar (gefälschte Namen
 zeigen so ihre Adresse), daneben Datum und „…“ (Allen antworten, Als Anhang weiterleiten, In neuem
@@ -475,15 +477,17 @@ Kerns und wird wie die Schriftgröße zwischen Geräten abgeglichen.
 
 **Zeile.** Steht an der neuesten Mail der Konversation im gezeigten Ordner. Absender-Spalte: bei
 mehreren Absendern ihre Namen in der Reihenfolge des Gesprächs („Anna, Ada Lovelace, Bob“), sonst
-der Absender. Nach dem Betreff die Anzahl der Mails als Pille (`badge`). Ungelesen (Punkt, halbfett),
-Markierung und Büroklammer, sobald eine Mail der Konversation es ist bzw. hat. Der Name der Zeile
-enthält den sichtbaren Text in derselben Reihenfolge, dazu „Konversation mit n Mails“. Eine
-Konversation steht nur einmal in der Liste: Steht sie im Block „Priorität“, wiederholt sie sich
-darunter nicht. Suchtreffer: der neueste Treffer einer Konversation ist ihre Zeile.
+der Absender. Nach dem Betreff seit Stufe 17 „n Antworten“ mit Pfeil (siehe „Gespräche
+aufklappen“). Ungelesen (Punkt, halbfett), Markierung und Büroklammer, sobald eine Mail der
+Konversation es ist bzw. hat. Der Name der Zeile enthält den sichtbaren Text in derselben
+Reihenfolge, „n Antworten“ eingeschlossen. Eine Konversation steht nur einmal in der Liste: Steht
+sie im Block „Priorität“, wiederholt sie sich darunter nicht. Suchtreffer: der neueste Treffer einer
+Konversation ist ihre Zeile.
 
-**Öffnen.** Die Zeile öffnet die Konversation im Lesebereich (alle Mails, ältere eingeklappt, die
-erste ungelesene offen), auch im vereinten Posteingang und in Suchtreffern. Die offene Mail bleibt
-offen, wenn die Konversation danach als gelesen gilt.
+**Öffnen.** Seit Stufe 17 (Entscheidung 0049): Die Zeile öffnet im Lesebereich eine Mail, die
+älteste ungelesene des Gesprächs, sonst die neueste, auch im vereinten Posteingang und in
+Suchtreffern. Sie bleibt offen, solange die Zeile gewählt ist, auch wenn sie danach gelesen ist oder
+eine neue Antwort die Zeile übernimmt.
 
 **Aktionen.** Aktionen an der Zeile (Schnellaktionen, Auswahlleiste, Tastenkürzel, Ziehen auf einen
 Ordner, Palette auf der Zeile) gelten der ganzen Konversation; welche Mails, entscheidet der Kern:
@@ -491,12 +495,77 @@ Archivieren, Löschen, Verschieben, Spam, Schlagwörter und Zurückstellen nehme
 gezeigten Ordner; Gelesen, Markierung entfernen, Nicht mehr anpinnen und Nicht mehr zurückstellen
 alle ihre Mails; Ungelesen, Markieren, Anpinnen, Aufgabe und Lese-Liste die Mail der Zeile. Die
 Symbolleiste im Lesebereich wirkt auf die offene Mail allein. Öffnen markiert (mit „Beim Öffnen als
-gelesen markieren“) die ganze Konversation als gelesen, wie „Gelesen“ an der Zeile.
+gelesen markieren“) seit Stufe 17 nur die gezeigte Mail als gelesen; „Gelesen“ an der Zeile
+weiter die ganze Konversation. Aktionen an einer aufgeklappten Mail wirken auf sie allein.
 
 **Umschalten.** Schalter „Konversationen“ im Kopf der Liste (gedrückt = an), Eintrag „Einzelne Mails
 zeigen“/„Konversationen zeigen“ im Menü „Listenoptionen“ und in der Befehlspalette (Gruppe
 Layout), Einstellungen → Lesen → „Konversationen“. Lehnt der Kern die Änderung ab, gilt der alte
 Wert wieder und Lesen nennt den Grund.
+
+## Gespräche aufklappen (Stufe 17, Entscheidung 0049)
+
+Wunsch vom 24.11.2026 mit einem Bildschirmfoto von Thunderbird: ein Gespräch einmal in der Liste,
+„3 Antworten“ mit Pfeil, aufgeklappt alle Mails eingerückt darunter mit einer feinen gepunkteten
+Linie, rechts nur die gewählte Mail. Übernommen ist die Funktion, nicht das Aussehen.
+
+**Pille „n Antworten“.** Nach dem Betreff (in der schmalen Liste in der Betreffzeile) statt der
+Zahl der Mails: ein Pfeil nach rechts (12 px, Strich 2,25) und „3 Antworten“ (12 px mittel,
+Tabellenziffern), 20 px hoch, rund, Fläche `badge`, Schrift `text-secondary`, beim Überfahren
+`text-primary`. Aufgeklappt zeigt der Pfeil nach unten und die Pille nimmt den Akzent:
+`accent-soft` mit Schrift `accent` (geprüft in `contrast.test.ts`). Der Pfeil dreht ohne Bewegung
+(nur Farbübergänge, `motion.test.ts`). Tooltip „Antworten zeigen“ bzw. „Antworten ausblenden“. Ein
+Klick klappt auf oder zu und wählt nichts; er ist ein Ziel für die Maus wie das Auswahlkästchen.
+
+**Kindzeilen.** Eine Zeile je Mail des Gesprächs, älteste zuerst, in jeder Listenbreite einzeilig:
+36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: die Auswahlspalte wie bei
+jeder Zeile (Punkt für ungelesen, beim Überfahren und bei Auswahl das Kästchen), in der
+Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der Linie, der Absender in der Spalte der
+Absender (13 px, halbfett wenn ungelesen, sonst normal; in der schmalen Liste 40 %), liegt die Mail
+in einem anderen Ordner als die Zeile, dessen Name als Pille (`badge`, 12 px, „Gesendet“,
+„Posteingang“, „Papierkorb“), dann der Anfang des Textes (13 px; `text-secondary` wenn ungelesen,
+sonst `text-tertiary`; ohne Vorschau der Betreff), Büroklammer, Markierung, ausstehende Änderung und
+die Zeit (12 px, Tabellenziffern, ungelesen mittel in Primärfarbe). Fläche, Auswahl (`selected`),
+Überfahren (`hover`), Fokusring und Schnellaktionen wie bei jeder Zeile, auch in den Karten von
+Priorität und Bündeln.
+
+**Linie.** 1 px gepunktet in `border-strong` (Punkte wirken leiser als die Farbe), mittig unter der
+Avatar-Spalte (`--ui-tree-line-start`). In der aufgeklappten Zeile beginnt sie unter dem Avatar
+(einzeilige Liste), läuft durch jede Kindzeile und endet in der Mitte der letzten, unter deren
+Mini-Avatar. Ladezeilen und Hinweise liegen auf derselben Linie.
+
+**Laden und Fehler.** Die Mails laden beim Aufklappen. Solange: eine Kindzeile mit zwei ruhigen
+Balken (`badge`, `hover`) und für Bildschirmleser „Konversation wird geladen“; die Zeile ist
+`aria-busy`. Scheitert es: „Die Konversation konnte nicht geladen werden. Erneut versuchen“ in
+`danger`, beim Überfahren unterstrichen, als Baumeintrag (Eingabe, Leertaste, Klick). Hat das
+Gespräch mehr als 1.000 Mails, steht über den neuesten 1.000 „Zeigt die neuesten 1.000 von n Mails.“
+(12 px, `text-tertiary`).
+
+**Baum.** Die Liste ist in der Konversationsansicht ein `tree` (sonst eine `listbox`), flach im DOM
+wie die Bäume der Seitenspalte; Ebene, Position und Größe der Geschwister an jeder Zeile,
+`aria-expanded` an Gesprächen mit Antworten und an Bündeln (deren Mitglieder Ebene 2, deren Mails
+Ebene 3). Der Name einer Kindzeile ist ihr sichtbarer Text in Lesereihenfolge plus Zustände
+(„Ungelesen, Anna, in Gesendet, Montag?, 09:12“).
+
+| Taste | Wirkung in der Liste der Gespräche |
+|---|---|
+| → | zugeklapptes Gespräch oder Bündel aufklappen; aufgeklapptes: zur ersten Zeile darunter |
+| ← | aufgeklapptes Gespräch oder Bündel zuklappen; sonst zur Zeile, zu der die Zeile gehört |
+| ↓ / ↑, j / k | nächste / vorige sichtbare Zeile, Kindzeilen eingeschlossen (Lade- und Hinweiszeilen nicht) |
+| Umschalt + ↓ / ↑ | Auswahl über Gesprächs- und Kindzeilen erweitern |
+| Eingabe | die Mail der Zeile öffnen und den Fokus in den Lesebereich |
+
+Klappt ein Gespräch zu, während der Cursor auf einer seiner Mails steht, geht er auf die
+Gesprächszeile. Aufgeklappte Gespräche bleiben aufgeklappt, gewählte gewählt, während die Liste
+nachlädt, neu sortiert oder eine neue Antwort die Zeile übernimmt.
+
+**Rechts.** Immer genau eine Mail (siehe „Konversationsansicht“, „Öffnen“). Aus der früheren
+Ansicht des ganzen Gesprächs bleiben Titel, KI-Chips (das Panel arbeitet mit dem Gespräch der
+Zeile), Antwortzeile und Schnellantwort; eine KI-Quelle aus dem offenen Gespräch klappt es in der
+Liste auf und wählt ihre Zeile.
+
+**Geprüft** in den Desktop-Tests (`conversations.e2e.mjs`) hell und dunkel bei 1200 × 800, axe ohne
+schwere Befunde, Bildschirmfotos `conversations-*.png` (nicht eingecheckt).
 
 ## Erster Start (Stufe 15, Entscheidung 0044)
 
