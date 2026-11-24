@@ -292,7 +292,8 @@ describe("app frame (stage 1)", () => {
     // Folded: the rail shows the same choice between the inbox and Sent.
     await setSidebar(false);
     const rail = await $$('[data-testid="icon-rail"] [role="toolbar"] [data-testid^="rail-"]').map((el) => el.getAttribute("data-testid"));
-    assert.deepEqual(rail, ["inbox", ...shown, "sent", "drafts", "archive", "trash", "folders"].map((id) => `rail-${id}`));
+    // Then the bottom group as before (no accounts here, so no account switcher).
+    assert.deepEqual(rail, ["inbox", ...shown, "sent", "drafts", "archive", "trash", "folders", "activity", "outbox", "settings"].map((id) => `rail-${id}`));
     await setSidebar(was);
   });
 
