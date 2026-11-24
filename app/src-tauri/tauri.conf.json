@@ -35,6 +35,8 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "BITWATER LLC",
+    "copyright": "© 2026 BITWATER LLC",
     "targets": "all",
     "resources": {
       "../src/generated/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"

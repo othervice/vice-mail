@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AppIcon, Wordmark } from "../../components/Brand";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
-import { LICENSE_SPDX, PRODUCT_NAME, PROJECT_URL } from "../../config/product";
+import { LICENSE_SPDX, PRODUCT_NAME, PROJECT_URL, PUBLISHER } from "../../config/product";
 import { useAppInfo } from "../app-info/queries";
 import { DiagnosticsPanel } from "../diagnostics/DiagnosticsPanel";
 import { UpdatePanel } from "../updates/UpdatePanel";
@@ -69,6 +69,7 @@ export function AboutSettings() {
             <Row label={t("settings.about.platform")}>{t(`platforms.${info.platform}`)}</Row>
           </>
         )}
+        <Row label={t("settings.about.publisher")}>{PUBLISHER}</Row>
         <Row label={t("settings.about.license")}>{LICENSE_SPDX}</Row>
         <Row label={t("settings.about.project")}>
           <CopyableAddress url={PROJECT_URL} data-testid="about-copy-project" />

@@ -102,10 +102,22 @@ Mac make `scripts/build-macos.sh` (and so `scripts/release-local.sh`) produce su
 Without the identity the build stays ad-hoc signed and says so. Windows stays unsigned for now
 (decision 0035).
 
-> **Status (23.11.2026):** prepared, waiting for the activation of the Apple Developer Program
-> membership (individual). The signing path was tested with a self-signed test certificate (hardened
-> runtime, helper, disk image, update archive, start from the disk image); notarisation, stapling and
-> Gatekeeper's verdict can only be tried with the real certificate.
+> **Status (24.11.2026):** prepared. The membership is to run as the organisation **BITWATER LLC**,
+> the publisher of Vice Mail (decision 0035, addendum of 24.11.2026), so the certificate reads
+> "Developer ID Application: BITWATER LLC (TEAM ID)". The signing path was tested with a self-signed
+> test certificate (hardened runtime, helper, disk image, update archive, start from the disk
+> image); notarisation, stapling and Gatekeeper's verdict can only be tried with the real
+> certificate. The first signed release is planned as 0.1.1.
+
+### Enrolling as an organisation (once)
+
+Apple needs for an organisation: the legal name exactly as in the D-U-N-S record (**BITWATER LLC**,
+D-U-N-S **146941332**), a website on the organisation's domain, a work email on that domain, and
+an Apple Account with two-factor authentication of someone who may sign contracts for the company.
+Enrol at <https://developer.apple.com/programs/enroll/> as *Company / Organization*. An enrolment
+that was started as an individual is not converted by itself: ask Apple Developer Support to
+change it to the organisation, or cancel it and enrol again. Apple may call to verify; the
+membership costs 99 USD a year.
 
 ### After the membership is active (once)
 

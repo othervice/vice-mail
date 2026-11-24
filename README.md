@@ -192,4 +192,6 @@ Vice Mail is free software under the GNU General Public License, version 3 or (a
 any later version (GPL-3.0-or-later). See [LICENSE](LICENSE). Third-party libraries keep their own
 licences; `scripts/check.sh` checks that they are compatible (`cargo deny`).
 
+Copyright © 2026 BITWATER LLC, the publisher of Vice Mail.
+
 "Vice Mail" and its logo ([docs/brand/](docs/brand/README.md)) identify this project.

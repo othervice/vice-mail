@@ -1305,6 +1305,7 @@ export const en = {
       commit: "Commit",
       buildDate: "Build date",
       platform: "Platform",
+      publisher: "Publisher",
       license: "License",
       unknown: "Unknown",
       // Design pass 23.11.2026: the head of the page and the project's address.

@@ -82,3 +82,19 @@ Vorbereitet (Ablauf und Portal-Schritte in `docs/RELEASING.md`, „macOS signing
 
 Solange niemand von außen beigetragen hat, lässt sich die Lizenzentscheidung noch ändern; danach nur
 mit Zustimmung aller Beitragenden.
+
+## Nachtrag 24.11.2026: Herausgeber BITWATER LLC
+
+Entscheidung des Menschen: Herausgeber von Vice Mail ist die Firma **BITWATER LLC** (D-U-N-S
+146941332), nicht mehr eine Privatperson. Das gilt für den Installer (`bundle.publisher`), das
+Copyright (`bundle.copyright`, „© 2026 BITWATER LLC“), die Seite „Über“ (`PUBLISHER` in
+`app/src/config/product.ts`), die README und die Apple-Mitgliedschaft, die als Organisation läuft
+(Developer-ID-Zertifikat auf BITWATER LLC; Schritte in `docs/RELEASING.md`). Die Lizenz bleibt
+GPL-3.0-or-later, Repo und Konto bleiben `github.com/othervice`.
+
+- Windows bleibt **vorerst unsigniert** (Entscheidung des Menschen). Mit der D-U-N-S-Nummer kämen
+  später Azure Artifact Signing (Firmen in den USA, der EU und Kanada) oder ein OV-Zertifikat in
+  Frage.
+- v0.1.0 erscheint unsigniert; die erste signierte Version (macOS) ist 0.1.1, sobald die
+  Mitgliedschaft aktiv ist. Sie kommt als Update in der App.
+- Die Autor-Adresse der Geschichte ist seit dem 24.11.2026 `othervice@bitwaterlabs.com`.

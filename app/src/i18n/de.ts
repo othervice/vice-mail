@@ -1296,6 +1296,7 @@ export const de: Translation = {
       commit: "Commit",
       buildDate: "Build-Datum",
       platform: "Plattform",
+      publisher: "Herausgeber",
       license: "Lizenz",
       unknown: "Unbekannt",
       // Feinschliff 23.11.2026: der Kopf der Seite und die Adresse des Projekts.

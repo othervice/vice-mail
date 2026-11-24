@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AppIcon, Wordmark } from "../src/components/Brand";
-import { PRODUCT_NAME, PROJECT_URL } from "../src/config/product";
+import { PRODUCT_NAME, PROJECT_URL, PUBLISHER } from "../src/config/product";
 import { mockCore } from "./support/core";
 import { renderApp } from "./support/render";
 
@@ -78,6 +78,7 @@ describe("first start and About", () => {
     expect(brand.querySelectorAll("svg")).toHaveLength(2);
     expect(brand.textContent).toContain(PRODUCT_NAME);
     expect(screen.getByText(PROJECT_URL.replace("https://", ""))).toBeTruthy();
+    expect(screen.getByText(PUBLISHER)).toBeTruthy();
 
     await user.click(screen.getByTestId("about-copy-project"));
     expect(await navigator.clipboard.readText()).toBe(PROJECT_URL);
