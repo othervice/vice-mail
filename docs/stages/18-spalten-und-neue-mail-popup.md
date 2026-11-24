@@ -1,4 +1,4 @@
-# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen, neue Farben
+# Stufe 18 — Verschiebbare Spalten, Aufklappen trotz Schnellaktionen, Popup für neue Mails, Ordner anlegen, neue Farben, oberste Mail gleich offen
 
 **Ziel:** Die Grenze zwischen Liste und Lesebereich lässt sich ziehen wie die zur linken Spalte.
 Die Schnellaktionen beim Überfahren einer Zeile verdecken nie mehr das Aufklappen eines Gesprächs.
@@ -83,6 +83,25 @@ Stufe 1 (Einstellungen → Darstellung); es geht um die Farben.
 - [ ] Kontrast nach WCAG AA in beiden Modi für jedes Thema (`app/tests/contrast.test.ts`),
   `docs/DESIGN.md` und die README-Bilder angepasst.
 - [ ] Hell/Dunkel schneller umschalten: Befehl in der Befehlspalette.
+
+### F — Oberste Mail beim Öffnen eines Ordners gleich zeigen
+
+Wunsch vom 24.11.2026: „Wenn man z. B. in einen Ordner wie Posteingang geht, soll da nicht eine
+breite Liste aller Mails sein, sondern die oberste Mail bereits geöffnet. Dann entstehen nicht
+diese komischen langen Zeilen.“
+
+- [ ] Steht der Lesebereich rechts oder unten, zeigt das Öffnen eines Ordners oder einer Ansicht
+  (Posteingang, vereinter Posteingang, Ungelesen, …) gleich die oberste Mail im Lesebereich; bei
+  einem Gespräch die Mail, die ein Klick auf die Gesprächszeile zeigen würde (Stufe 17). In der
+  Stellung „statt der Liste“ bleibt es bei der Liste.
+- [ ] Die Liste behält immer ihre Lesebreite (Maß aus A), auch wenn nichts gewählt ist (leerer
+  Ordner, Auswahl aufgehoben): der Lesebereich zeigt dann einen ruhigen leeren Zustand statt
+  einer Liste über die ganze Breite.
+- [ ] Automatisch geöffnet heißt nicht gelesen: eine so gezeigte Mail wird nur nach der
+  Einstellung „Als gelesen markieren“ behandelt, wenn du sie selbst auswählst oder im Lesebereich
+  mit ihr arbeitest. Entscheidung festhalten (0054).
+- [ ] Während des Tippens einer Suche springt die Auswahl nicht mit; Tastatur und Fokus bleiben
+  wie bisher (der Fokus springt nicht von selbst in den Lesebereich).
 
 ## Nicht in dieser Stufe
 
