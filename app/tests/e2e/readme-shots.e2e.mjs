@@ -9,6 +9,12 @@
 // windows-inbox.png (needs Windows), with test data only: alice and bob of the local test server,
 // default settings, English, the main window at 1440×900 points.
 //
+// Two additions to the seed, both test data: a conversation of five plain-text mails between the
+// seed's people (the seed has no recent conversation with several replies), appended to alice's
+// INBOX and Sent before the accounts are added, and contact pictures for four senders. The
+// pictures are flat shapes on gradients drawn in a canvas here, never photos; they reach the core
+// the way a dropped file does (contacts.e2e.mjs), and the core's helper encodes them.
+//
 // What a picture is: the web view at 2x. WebDriver renders the web content only, so the window
 // frame, its shadow and the window buttons are not in it; the buttons are drawn into the page where
 // macOS puts them (`e2e_window_controls`) for the main window. `screencapture -l` would include the
@@ -28,7 +34,7 @@ import { $, browser } from "@wdio/globals";
 import { attach, coreCall, dataDir, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
 import { startHiDpiDisplay } from "./support/hidpi-display.mjs";
 import { optimizePng } from "./support/png.mjs";
-import { ALICE, REPO, SERVER } from "./support/testmail.mjs";
+import { ALICE, REPO, SERVER, appendMessages } from "./support/testmail.mjs";
 
 const OUT = path.join(REPO, "docs", "images");
 const WINDOW = { width: 1440, height: 900 };
@@ -40,6 +46,213 @@ const BOB = { email: "bob@vicemail.test", password: "bob-test-pw" };
 const report = { images: [], notes: [] };
 let display = null;
 let alice;
+/** The conversation's .eml files and the pictures; removed in `after`. */
+let workDir = null;
+
+const ALICE_FROM = "Alice Archer <alice@vicemail.test>";
+const CAROL = "Carol Clark <carol@example.org>";
+const DAVE = "Dave Dawson <dave@example.net>";
+const MARIA = "Maria Rossi <maria.rossi@example.com>";
+/**
+ * The conversation of the main picture: Carol asks, Dave, Alice (her copy in Sent), Maria and
+ * Carol answer; the last answer is unread. `parent` is the index of the message answered. The
+ * picture shows Maria's answer open.
+ */
+const CONVERSATION = {
+  subject: "Website relaunch",
+  open: "Maria Rossi",
+  messages: [
+    {
+      from: CAROL,
+      to: [ALICE_FROM],
+      cc: [DAVE, MARIA],
+      date: "Tue, 17 Nov 2026 09:12:00 +0100",
+      body: [
+        "Hi Alice, hi Dave, hi Maria,",
+        "the new website is on staging now. Could you take a last look at your pages before Friday? The checklist is in the shared folder; please tick off what you have checked.",
+        "Thanks,\nCarol",
+      ],
+    },
+    {
+      from: DAVE,
+      to: [CAROL],
+      cc: [ALICE_FROM, MARIA],
+      date: "Tue, 17 Nov 2026 11:47:00 +0100",
+      parent: 0,
+      body: ["Hi Carol,", "the product pages look good to me. Two images on the pricing page are still the old ones; I'll swap them this afternoon.", "Dave"],
+    },
+    {
+      from: ALICE_FROM,
+      to: [CAROL],
+      cc: [DAVE, MARIA],
+      date: "Wed, 18 Nov 2026 08:55:00 +0100",
+      parent: 0,
+      folder: "Sent",
+      body: ["Thanks, Carol. The contact form works, and the German pages read well. One thing: on small screens the cookie banner covers the links in the footer.", "Alice"],
+    },
+    {
+      from: MARIA,
+      to: [ALICE_FROM],
+      cc: [CAROL, DAVE],
+      date: "Wed, 18 Nov 2026 15:20:00 +0100",
+      parent: 2,
+      body: [
+        "Hi all,",
+        "I went through the blog and the help center on my phone and on a laptop:",
+        "- All 48 redirects from the old addresses work.\n- Search finds the help articles, but not the blog posts yet. I have opened a ticket for it.\n- Alice's point about the cookie banner is fixed on staging. Could you check it once more?",
+        "From my side we're good to go on Friday.",
+        "Maria",
+      ],
+    },
+    {
+      from: CAROL,
+      to: [ALICE_FROM],
+      cc: [DAVE, MARIA],
+      date: "Thu, 19 Nov 2026 10:05:00 +0100",
+      parent: 3,
+      unread: true,
+      body: ["Great work, everyone. The launch is set for Friday at 10:00; I'll let the support team know today.", "Carol"],
+    },
+  ],
+};
+
+/** Contact pictures: who gets which drawing (the senders above and Zoë, a row further down). */
+const PICTURES = [
+  { email: "carol@example.org", kind: "sun" },
+  { email: "dave@example.net", kind: "rings" },
+  { email: "maria.rossi@example.com", kind: "peaks" },
+  { email: "zoe@uni.example", kind: "bloom" },
+];
+
+const messageId = (index) => `<relaunch-${String(index + 1)}@shots.vicemail.test>`;
+
+/** The conversation's messages as .eml text, threaded through In-Reply-To and References. */
+function conversationEml(index) {
+  const message = CONVERSATION.messages[index];
+  const chain = [];
+  for (let at = message.parent; at !== undefined; at = CONVERSATION.messages[at].parent) chain.unshift(messageId(at));
+  return [
+    `Date: ${message.date}`,
+    `From: ${message.from}`,
+    `To: ${message.to.join(", ")}`,
+    `Cc: ${message.cc.join(", ")}`,
+    `Subject: ${message.parent === undefined ? "" : "Re: "}${CONVERSATION.subject}`,
+    `Message-ID: ${messageId(index)}`,
+    ...(chain.length > 0 ? [`In-Reply-To: ${chain.at(-1)}`, `References: ${chain.join(" ")}`] : []),
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 7bit",
+    "",
+    message.body.join("\n\n").replaceAll("\n", "\r\n"),
+    "",
+  ].join("\r\n");
+}
+
+/** Appends the conversation to alice's INBOX and Sent (before the account is added). */
+async function appendConversation() {
+  const files = CONVERSATION.messages.map((message, index) => {
+    const file = path.join(workDir, `relaunch-${String(index + 1)}.eml`);
+    fs.writeFileSync(file, conversationEml(index));
+    return { file, folder: message.folder ?? "INBOX", seen: !message.unread };
+  });
+  for (const folder of new Set(files.map((f) => f.folder))) {
+    for (const seen of [true, false]) {
+      const batch = files.filter((f) => f.folder === folder && f.seen === seen).map((f) => f.file);
+      if (batch.length > 0) report.notes.push(`appended: ${JSON.stringify(await appendMessages(folder, batch, { seen }))}`);
+    }
+  }
+}
+
+/**
+ * A clearly synthetic picture as a PNG: flat shapes on a gradient, drawn in a canvas of the page
+ * (no photo, no person). Bold enough to read at the 16 px of a child row.
+ */
+async function drawPicture(kind) {
+  const dataUrl = await browser.execute((k) => {
+    const size = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const g = canvas.getContext("2d");
+    const background = (top, bottom) => {
+      const gradient = g.createLinearGradient(0, 0, size * 0.3, size);
+      gradient.addColorStop(0, top);
+      gradient.addColorStop(1, bottom);
+      g.fillStyle = gradient;
+      g.fillRect(0, 0, size, size);
+    };
+    const circle = (x, y, r, fill) => {
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fillStyle = fill;
+      g.fill();
+    };
+    const polygon = (points, fill) => {
+      g.beginPath();
+      points.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+      g.closePath();
+      g.fillStyle = fill;
+      g.fill();
+    };
+    if (k === "sun") {
+      background("#f7d08a", "#ec8a6a");
+      circle(256, 226, 100, "#fff4e2");
+      g.beginPath();
+      g.moveTo(0, 350);
+      g.quadraticCurveTo(160, 262, 330, 342);
+      g.quadraticCurveTo(430, 388, 512, 330);
+      g.lineTo(512, 512);
+      g.lineTo(0, 512);
+      g.closePath();
+      g.fillStyle = "#3f8a7f";
+      g.fill();
+      g.beginPath();
+      g.moveTo(0, 432);
+      g.quadraticCurveTo(230, 336, 512, 418);
+      g.lineTo(512, 512);
+      g.lineTo(0, 512);
+      g.closePath();
+      g.fillStyle = "#2a5d58";
+      g.fill();
+    } else if (k === "rings") {
+      background("#4277b3", "#22406b");
+      circle(256, 256, 186, "#8cc0e8");
+      circle(256, 256, 124, "#eef6fc");
+      circle(256, 256, 60, "#f0a35e");
+    } else if (k === "peaks") {
+      background("#dccbf2", "#9780cf");
+      circle(384, 136, 50, "#fff6e8");
+      polygon([[-60, 512], [200, 190], [460, 512]], "#5b4b98");
+      polygon([[200, 190], [248, 250], [222, 240], [200, 258], [178, 242], [152, 250]], "#ffffff");
+      polygon([[120, 512], [340, 250], [580, 512]], "#382c69");
+      polygon([[340, 250], [386, 300], [362, 290], [342, 306], [320, 290], [298, 300]], "#f3efff");
+    } else {
+      background("#f5c4bd", "#d9787a");
+      for (let i = 0; i < 5; i += 1) {
+        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+        circle(256 + 92 * Math.cos(angle), 256 + 92 * Math.sin(angle), 74, "#fff3ea");
+      }
+      circle(256, 256, 56, "#e8a93e");
+    }
+    return canvas.toDataURL("image/png");
+  }, kind);
+  return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+}
+
+/**
+ * Gives the contact with this address a picture the way a file dropped on the window does
+ * (contacts.e2e.mjs): the drop is recorded, the core reads the file and its helper encodes it, the
+ * whole square is kept.
+ */
+async function setContactPicture(email, kind) {
+  const file = path.join(workDir, `${kind}.png`);
+  fs.writeFileSync(file, await drawPicture(kind));
+  await coreCall("e2e_drop_files", { paths: [file] });
+  const source = await coreCall("load_dropped_contact_picture", { path: file });
+  const size = Math.min(source.width, source.height);
+  const crop = { x: Math.floor((source.width - size) / 2), y: Math.floor((source.height - size) / 2), size };
+  await coreCall("set_contact_picture", { email, token: source.token, crop });
+}
 
 /** Settings of an account on the local test server (implicit TLS for IMAP and SMTP). */
 const accountSettings = (email, displayName) => ({
@@ -266,17 +479,6 @@ async function unfoldBundle(name) {
   }
 }
 
-/** Folds a bundle row again (the app keeps it unfolded until then). */
-async function foldBundle(name) {
-  await scrollListToTop();
-  const id = await revealRow(new RegExp(`^${name}\\b`));
-  const expanded = () => browser.execute((rowId) => document.getElementById(rowId)?.querySelector('[data-testid="bundle-row"]')?.dataset.expanded, id);
-  if ((await expanded()) === "true") {
-    await $(`[id="${id}"]`).click();
-    await browser.waitUntil(async () => (await expanded()) !== "true", { timeoutMsg: `the bundle ${name} did not fold` });
-  }
-}
-
 /** A real click on the first link of the mail frame whose text matches `text`. */
 async function clickFrameLink(text) {
   const point = await browser.execute((wanted) => {
@@ -339,6 +541,8 @@ describe("README screenshots (docs/images)", function () {
       { timeout: 10000, timeoutMsg: `the window is not ${WINDOW.width}×${WINDOW.height}` },
     );
 
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), "vicemail-shots-"));
+    await appendConversation();
     alice = await coreCall("add_account", { settings: accountSettings(ALICE.email, "Alice Archer"), password: ALICE.password });
     const bob = await coreCall("add_account", { settings: accountSettings(BOB.email, "Bob Baker"), password: BOB.password });
     await browser.waitUntil(
@@ -357,6 +561,19 @@ describe("README screenshots (docs/images)", function () {
         { timeout: 300000, interval: 500, timeoutMsg: `the prefetch of ${account.email} did not finish` },
       );
     }
+    // Every address becomes a contact in the background after the sync; then the pictures.
+    await browser.waitUntil(
+      async () => {
+        for (const { email } of PICTURES) {
+          const found = await coreCall("list_contacts", { query: email, cursor: null, limit: 5, filter: "all" });
+          if (!found.items.some((c) => c.email === email)) return false;
+        }
+        return true;
+      },
+      { timeout: 120000, interval: 1000, timeoutMsg: "the senders did not become contacts" },
+    );
+    for (const { email, kind } of PICTURES) await setContactPicture(email, kind);
+    report.notes.push(`pictures: ${JSON.stringify((await coreCall("list_contact_pictures")).map((p) => p.emails))}`);
     // The app's default; stated, because a list of rows per message would look different.
     await setConversations(true);
     // The first start asks once whether to check for updates (decision 0037); answered "No,
@@ -379,6 +596,7 @@ describe("README screenshots (docs/images)", function () {
     }
     const left = await coreCall("list_accounts").catch(() => []);
     for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
+    if (workDir) fs.rmSync(workDir, { recursive: true, force: true });
     if (display) {
       const removed = await display.stop();
       report.notes.push(removed ? "virtual display removed" : "the virtual display is still online; wake the display to remove it");
@@ -386,33 +604,20 @@ describe("README screenshots (docs/images)", function () {
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
   });
 
-  it("inbox-light.png and inbox-dark.png: the unified inbox with a newsletter open", async () => {
+  it("inbox-light.png and inbox-dark.png: the unified inbox with a conversation unfolded and one of its messages open", async () => {
     await showUnifiedInbox();
-    await unfoldBundle("Newsletters");
-    // The bundle's rows come in after it unfolds.
-    const isNewsletter = (r) => /^(Example News|Rust Users|Vereinsinfo)/.test(r.name);
-    let rows = [];
-    await browser
-      .waitUntil(
-        async () => {
-          rows = await rowNames();
-          return rows.some(isNewsletter);
-        },
-        { timeout: 10000 },
-      )
-      .catch(() => undefined);
-    const newsletter = rows.find(isNewsletter);
-    assert.ok(newsletter, `no newsletter row: ${JSON.stringify(rows.map((r) => r.name))}`);
-    report.notes.push(`newsletter: ${newsletter.name}`);
-    await $(`[id="${newsletter.id}"]`).click();
-    await testId("remote-content-bar").waitForExist({ timeout: 20000 });
-    await browser.pause(800);
     await scrollListToTop();
     // docs/DESIGN.md, "Nach den README-Bildern": a row without a preview (older than the prefetch)
-    // has its two lines in the middle of the fixed row height.
+    // has its two lines in the middle of the fixed row height. Measured before the conversation
+    // unfolds and pushes those rows down.
     const offsets = await browser.execute(() =>
       [...document.querySelectorAll('[data-testid="message-list"] :is([role="option"], [role="treeitem"])')]
-        .filter((option) => option.querySelector('[data-testid="row-preview"]') === null && !option.querySelector('[data-testid="bundle-row"]'))
+        .filter(
+          (option) =>
+            option.querySelector('[data-testid="row-preview"]') === null &&
+            !option.querySelector('[data-testid="bundle-row"]') &&
+            option.getAttribute("data-testid") !== "child-row",
+        )
         .map((option) => {
           const row = option.getBoundingClientRect();
           const content = option.querySelector("[aria-hidden] > span")?.getBoundingClientRect();
@@ -422,11 +627,71 @@ describe("README screenshots (docs/images)", function () {
     );
     report.notes.push(`rows without a preview, distance from the middle (px): ${JSON.stringify(offsets)}`);
     assert.ok(offsets.length > 0 && offsets.every((offset) => offset <= 2), JSON.stringify(offsets));
+
+    // The conversation unfolds with its pill ("4 replies"), as a click does.
+    const id = await revealRow(new RegExp(CONVERSATION.subject));
+    const row = () =>
+      browser.execute((rowId) => {
+        const item = document.getElementById(rowId);
+        return {
+          level: item?.getAttribute("aria-level") ?? null,
+          expanded: item?.getAttribute("aria-expanded") ?? null,
+          replies: item?.querySelector('[data-testid="row-replies"]')?.textContent ?? null,
+          children: [...document.querySelectorAll('[data-testid="message-list"] [data-testid="child-row"]')].map((child) => ({
+            id: child.id,
+            sender: child.querySelector('[data-testid="child-sender"]')?.textContent ?? "",
+            folder: child.querySelector('[data-testid="child-folder"]')?.textContent ?? null,
+          })),
+        };
+      }, id);
+    const folded = await row();
+    assert.equal(folded.level, "1", JSON.stringify(folded));
+    assert.equal(folded.replies, `${String(CONVERSATION.messages.length - 1)} replies`, JSON.stringify(folded));
+    if (folded.expanded !== "true") await $(`[id="${id}"] [data-testid="row-replies"]`).click();
+    await browser.waitUntil(async () => (await row()).children.length === CONVERSATION.messages.length, {
+      timeout: 15000,
+      timeoutMsg: `the conversation did not unfold: ${JSON.stringify(await row())}`,
+    });
+    const unfolded = await row();
+    report.notes.push(`conversation: ${JSON.stringify(unfolded)}`);
+    const child = unfolded.children.find((c) => c.sender === CONVERSATION.open);
+    assert.ok(child, JSON.stringify(unfolded.children));
+    // One of its messages open on the right, selected in the list.
+    await $(`[id="${child.id}"]`).click();
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          (childId, sender) =>
+            document.getElementById(childId)?.getAttribute("aria-selected") === "true" &&
+            Boolean(document.querySelector('[data-testid="reading-pane"] [data-testid="reading-from"]')?.textContent?.includes(sender)) &&
+            document.querySelector('[data-testid="reading-pane"] [data-testid="text-body"]') !== null,
+          child.id,
+          CONVERSATION.open,
+        ),
+      { timeout: 20000, timeoutMsg: `${CONVERSATION.open}'s message did not open` },
+    );
+    assert.equal(await browser.execute(() => document.querySelectorAll('[data-testid="message-card"]').length), 1, "one message on the right");
+    await scrollListToTop();
+    // Pictures instead of initials: at least two senders in view, each picture loaded.
+    const pictures = await browser.execute(() => {
+      const list = document.querySelector('[data-testid="message-list"]').getBoundingClientRect();
+      return [...document.querySelectorAll('[data-testid="message-list"] [data-testid="avatar-picture"]')]
+        .filter((img) => {
+          const r = img.getBoundingClientRect();
+          return r.top >= list.top && r.bottom <= list.bottom && img.complete && img.naturalWidth > 0;
+        })
+        .map((img) => img.getAttribute("src")?.slice(-24) ?? "");
+    });
+    report.notes.push(`pictures in the list: ${String(pictures.length)}, different: ${String(new Set(pictures).size)}`);
+    assert.ok(new Set(pictures).size >= 2, `pictures in view: ${JSON.stringify(pictures)}`);
+    await browser.pause(800);
     await shoot("inbox-light");
     await setTheme("dark");
     await shoot("inbox-dark");
     await setTheme("light");
-    await foldBundle("Newsletters");
+    // Folded again, so the later pictures show the list as it starts.
+    await $(`[id="${id}"] [data-testid="row-replies"]`).click();
+    await browser.waitUntil(async () => (await row()).children.length === 0, { timeout: 10000, timeoutMsg: "the conversation did not fold" });
   });
 
   it("composer.png: formatting, a signature and an attachment in the composer's own window", async () => {

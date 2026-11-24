@@ -3,8 +3,10 @@
 
     python3 testmail.py status                 alice's folders as JSON: {"INBOX": {"messages": n, "unseen": n}, ...}
     python3 testmail.py send SUBJECT           one message from bob to alice (SMTP submission, STARTTLS)
-    python3 testmail.py append FOLDER FILE...  creates FOLDER in alice's account and appends the .eml files
-                                               unchanged (reading.e2e.mjs: the hostile corpus)
+    python3 testmail.py append [--seen] FOLDER FILE...
+                                               creates FOLDER in alice's account and appends the .eml files
+                                               unchanged (reading.e2e.mjs: the hostile corpus); with
+                                               --seen they are stored as read
     python3 testmail.py copy-seed PREFIX FOLDER
                                                copies every seed message whose X-Vicemail-Seed starts with
                                                PREFIX (for example `broken/`) into a new FOLDER, server side
@@ -165,7 +167,7 @@ def internal_date(raw: bytes) -> float:
         return time.time()
 
 
-def append(folder: str, files: list[str]) -> dict:
+def append(folder: str, files: list[str], seen: bool = False) -> dict:
     env = load_env()
     imap = login(env)
     try:
@@ -176,7 +178,8 @@ def append(folder: str, files: list[str]) -> dict:
         appended = []
         for name in files:
             raw = Path(name).read_bytes()
-            check(*imap.append(quoted(folder), None, internal_date(raw), raw), f"APPEND {name}")
+            flags = "(\\Seen)" if seen else None
+            check(*imap.append(quoted(folder), flags, internal_date(raw), raw), f"APPEND {name}")
             appended.append(Path(name).name)
         check(*imap.select(quoted(folder), readonly=True), f"EXAMINE {folder}")
         count = len(check(*imap.search(None, "ALL"), "SEARCH")[0].split())
@@ -253,6 +256,9 @@ def main() -> int:
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "send":
         print(json.dumps(send(sys.argv[2])))
+        return 0
+    if len(sys.argv) >= 5 and sys.argv[1:3] == ["append", "--seen"]:
+        print(json.dumps(append(sys.argv[3], sys.argv[4:], seen=True)))
         return 0
     if len(sys.argv) >= 4 and sys.argv[1] == "append":
         print(json.dumps(append(sys.argv[2], sys.argv[3:])))

@@ -12,8 +12,9 @@ pnpm --dir app build:e2e
 README_SHOTS=1 scripts/e2e-gui.sh --spec ./tests/e2e/readme-shots.e2e.mjs
 ```
 
-`app/tests/e2e/readme-shots.e2e.mjs` resets the local test server, seeds it, adds alice and bob,
-sets each view up and writes the PNGs into this folder. It is not part of `pnpm test:e2e`:
+`app/tests/e2e/readme-shots.e2e.mjs` resets the local test server, seeds it, appends one
+conversation, adds alice and bob, gives four contacts a picture, sets each view up and writes the
+PNGs into this folder. It is not part of `pnpm test:e2e`:
 `app/wdio.conf.mjs` excludes it unless `README_SHOTS=1` is set. Like every desktop spec it needs a
 graphical login and takes the test-server lock; on macOS `scripts/e2e-gui.sh` runs it in the GUI
 session (see the script). A run takes about a minute. Check the pictures before committing
@@ -46,7 +47,12 @@ How the pictures differ from a screenshot taken by hand:
   `scripts/testmail.sh reset && scripts/testmail.sh start && scripts/testmail.sh seed 1000 --no-smtp`,
   then add `alice@vicemail.test` (password `alice-test-pw`, see `testmail/README.md`) and, for the
   unified inbox, `bob@vicemail.test`. `--no-smtp` leaves out the seven SMTP transport tests,
-  whose subjects ("SMTP test 1: submission with STARTTLS") would otherwise top the inbox. Nothing
+  whose subjects ("SMTP test 1: submission with STARTTLS") would otherwise top the inbox. The seed
+  has no recent conversation with several replies, so the spec appends one of its own before the
+  accounts are added: "Website relaunch", five plain-text mails between the seed's people (Carol,
+  Dave, Maria and Alice, her answer in Sent), 17 to 19 November 2026, the last one unread.
+  Contact pictures are flat shapes on gradients that the spec draws in a canvas, never photos
+  (Carol, Dave, Maria and Zoë); they reach the core the way a dropped file does. Nothing
   personal may be visible: no real names, addresses, folders, notifications, other windows, home
   or temp paths (Settings → AI over MCP shows the helper's path above the shared accounts: keep
   it out of the picture).
@@ -60,8 +66,8 @@ How the pictures differ from a screenshot taken by hand:
 
 | File | View | Notes |
 |---|---|---|
-| `inbox-light.png` | Unified inbox with the reading pane on the right, light mode | Conversations on, a newsletter open so the bar "remote images blocked" shows |
-| `inbox-dark.png` | The same in dark mode | Same message as above |
+| `inbox-light.png` | Unified inbox with a conversation unfolded in the list and one of its mails in the reading pane, light mode | Conversations on; "Website relaunch" unfolded, Maria's answer selected and open; senders with contact pictures in view |
+| `inbox-dark.png` | The same in dark mode | Same conversation and message |
 | `reading-links.png` | A message with the link check open | Click a link whose text and target differ, so the warning shows (the seed's `html/hostile` message) |
 | `composer.png` | Composer window with formatting, a signature and an attachment | A forward of a seed message, which keeps its attachment: an attachment of one's own needs a file dropped on the window, which WebDriver cannot do. Window 820 × 900 points, so the signature shows |
 | `search.png` | Search with operators and highlighted results | `has:attachment report` |

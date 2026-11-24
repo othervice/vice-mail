@@ -71,8 +71,11 @@ export const serverFolders = () => helper("status");
 /** Delivers one message from bob to alice over SMTP submission (STARTTLS, port 1587). */
 export const deliverMail = (subject) => helper("send", subject);
 
-/** Creates `folder` in alice's account and appends the .eml files unchanged (IMAP APPEND). */
-export const appendMessages = (folder, files) => helper("append", folder, ...files);
+/**
+ * Creates `folder` in alice's account and appends the .eml files unchanged (IMAP APPEND); with
+ * `seen` they are stored as read.
+ */
+export const appendMessages = (folder, files, { seen = false } = {}) => helper("append", ...(seen ? ["--seen"] : []), folder, ...files);
 
 /** SHA-256 and size of every attachment of an .eml file, decoded by Python's email package. */
 export const attachmentDigests = (file) => helper("attachments", file);
