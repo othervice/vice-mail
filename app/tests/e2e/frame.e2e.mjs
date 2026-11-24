@@ -254,7 +254,7 @@ describe("app frame (stage 1)", () => {
   it("edits the column's views (stage 17): hides one, moves one with the keyboard, the core keeps the choice", async () => {
     const was = await setSidebar(true);
     const columnViews = () =>
-      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map((el) => el.getAttribute("data-testid").replace("sidebar-view-", ""));
+      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map(async (el) => (await el.getAttribute("data-testid")).replace("sidebar-view-", ""));
     // From the palette, by keyboard; the focus starts on the first view.
     await browser.keys([MOD, "k"]);
     await testId("command-palette").waitForExist();

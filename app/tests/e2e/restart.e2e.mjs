@@ -40,7 +40,7 @@ describe("app restart (stage 1)", () => {
     assert.deepEqual(prefs.columnViews, previous.columnViews);
     const was = await setSidebar(true);
     const columnViews = () =>
-      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map((el) => el.getAttribute("data-testid").replace("sidebar-view-", ""));
+      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map(async (el) => (await el.getAttribute("data-testid")).replace("sidebar-view-", ""));
     const shown = previous.columnViews.filter((view) => view.shown).map((view) => view.id);
     assert.deepEqual(await columnViews(), shown);
     // The specs after this one expect every view: back to the default (what "Reset to default" stores).
