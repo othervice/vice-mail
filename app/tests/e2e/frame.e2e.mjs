@@ -27,7 +27,8 @@ import {
 
 const PRODUCT_NAME = "Vice Mail";
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
-// Mail views (MAIL_VIEW_IDS in src/stores/ui.ts), then activity, the outbox (stage 5) and settings.
+// The rail by default: the inbox, the column's views (COLUMN_VIEW_IDS), Sent to Folders, then
+// activity, the outbox (stage 5) and settings.
 const RAIL = [
   "inbox",
   "later",
@@ -38,8 +39,10 @@ const RAIL = [
   // SPEC "Markiert": the server's flag across folders.
   "flagged",
   "pinned",
-  // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent.
+  // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent;
+  // the contacts are one of them (decision 0050).
   "savedViews",
+  "contacts",
   "sent",
   "drafts",
   "archive",
@@ -131,7 +134,7 @@ describe("app frame (stage 1)", () => {
     );
     assert.deepEqual(report.column, [
       "rail-folders",
-      ...["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews"].map((id) => `sidebar-view-${id}`),
+      ...["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
       "rail-activity",
       "rail-outbox",
       "rail-settings",
@@ -273,14 +276,14 @@ describe("app frame (stage 1)", () => {
     await browser.keys(["Alt", "ArrowUp"]);
     await browser.keys(["Alt", "ArrowUp"]);
     assert.equal(await focused(), "edit-views-check-flagged");
-    const shown = ["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews"];
+    const shown = ["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews", "contacts"];
     await browser.waitUntil(async () => JSON.stringify(await columnViews()) === JSON.stringify(shown), {
       timeoutMsg: "the column does not show the chosen order",
     });
     await screenshot("edit-views-light");
     const expected = [
       { id: "later", shown: false },
-      ...["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews"].map((id) => ({ id, shown: true })),
+      ...shown.map((id) => ({ id, shown: true })),
     ];
     await browser.waitUntil(async () => JSON.stringify((await coreCall("get_ui_preferences")).columnViews) === JSON.stringify(expected), {
       timeoutMsg: "the core did not store the chosen views",
