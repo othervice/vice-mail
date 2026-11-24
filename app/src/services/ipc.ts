@@ -371,6 +371,15 @@ export const ipc = {
   /** Queues the creation of a folder; it appears with `mailboxesChanged` once the server made it. */
   createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null): Promise<ActionResult> =>
     call(() => commands.createMailbox(accountId, path, role)),
+  /**
+   * Stage 18: a new folder `name` below `parentId`, or at the top of the account (null), through
+   * the outbox; the core computes its path with the server's delimiter. It appears with
+   * `mailboxesChanged` once the server made it.
+   */
+  createFolder: (accountId: AccountId, parentId: MailboxId | null, name: string): Promise<ActionResult> =>
+    call(() => commands.createFolder(accountId, parentId, name)),
+  /** Stage 18: lists the account's folders on the server again now ("Reload folders from server"). */
+  reloadFolders: (accountId: AccountId): Promise<void> => done(call(() => commands.reloadFolders(accountId))),
   /** A folder of the user's own gets `name` (one level, within its parent) through the outbox. */
   renameMailbox: (accountId: AccountId, mailboxId: MailboxId, name: string): Promise<ActionResult> =>
     call(() => commands.renameMailbox(accountId, mailboxId, name)),

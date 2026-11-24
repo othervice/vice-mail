@@ -285,6 +285,25 @@ impl FakeServer {
         });
     }
 
+    /// Stage 18: a folder another program created (empty, no attributes).
+    pub(crate) fn add_mailbox(&self, name: &str) {
+        self.with(|s| {
+            s.next_validity += 1;
+            let uid_validity = s.next_validity;
+            s.mailboxes.insert(
+                name.to_owned(),
+                FakeMailbox {
+                    uid_validity,
+                    uid_next: 1,
+                    modseq: 1,
+                    attributes: Vec::new(),
+                    messages: BTreeMap::new(),
+                    changes: 0,
+                },
+            );
+        });
+    }
+
     /// Deletes and creates the mailbox again with the same messages under new UIDs and a new
     /// UIDVALIDITY (what servers do after a rebuild).
     pub(crate) fn recreate(&self, mailbox: &str) {

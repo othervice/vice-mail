@@ -400,7 +400,12 @@ Ausrufezeichen in `danger`), rechts die Summe der Ungelesenen in Posteingang und
 andere Ordner wiederholen). Name der Zeile und Tooltip: „Name (Adresse), n ungelesen“, bei Problemen
 dazu Zustand und Grund („offline: Die Verbindung zum Server wurde unterbrochen.“). Die Farbe steht nie
 allein. Ein Klick, Eingabe, Leertaste, ← und → klappen das Konto zu und auf; der Zustand gilt bis
-zum Beenden der App.
+zum Beenden der App. Seit Stufe 18 (Aufgabe D) hat auch die Zeile des Kontos ein „…“ wie die
+Ordner (über dem Zähler, Umschalt+F10 und Kontextmenütaste öffnen es): „Neuer Ordner …“ legt einen
+Ordner oben im Konto an (bei Servern, die alle Ordner unter `INBOX.` führen, dort), „Ordner vom
+Server neu laden“ liest die Ordnerliste des Servers sofort neu (sonst bei jedem vollen Abgleich,
+alle 3 Minuten), sodass Ordner, die ein anderes Programm angelegt oder gelöscht hat, ohne Neustart
+erscheinen bzw. verschwinden.
 
 **Ordner.** Rollen zuerst in fester Reihenfolge Posteingang, Entwürfe, Gesendet, Archiv, Spam,
 Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als Baum, je Ebene
@@ -410,6 +415,17 @@ Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen hal
 „…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
 und nimmt dem Namen keine Breite; sein Menü ist 12 rem breit, damit es auch in der schmalsten Spalte
 nicht abgeschnitten wird. Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+
+**Ordner anlegen (Stufe 18, Aufgabe D).** „Neuer Unterordner …“ im „…“ jedes Ordners, der Ordner
+enthalten darf (der Server hat ein Trennzeichen; `\Noinferiors` weist der Kern ab), dazu die
+Einträge „Neuer Ordner in „Konto“ …“, „Neuer Unterordner in „Ordner“ …“ (offener Ordner) und
+„Ordner von „Konto“ vom Server neu laden“ in der Befehlspalette. Ein schwebendes Feld wie beim
+Umbenennen fragt den Namen und prüft ihn wie der Kern: nicht leer, ohne das Trennzeichen des
+Servers, an dieser Stelle noch nicht vergeben („Hier gibt es schon einen Ordner „…“.“). Angelegt
+wird über die Outbox (`CreateMailbox`, IMAP und JMAP): ein Hinweis „Ordner „…“ wird angelegt“, der
+Vorgang in der Aktivität; sobald der Server ihn hat, steht er im Baum unter seinem Elternordner und
+nimmt Mails auf. Bei nur lesenden Konten bleiben die Einträge sichtbar, sind als nicht verfügbar
+markiert und sagen beim Klick warum (wie Umbenennen und Löschen); „Neu laden“ geht immer.
 
 **Abschnitte.** „Ansichten“, „Gespeicherte Suchen“ und „Favoriten“ haben ein leises Etikett (12 px,
 halbfett, `text-tertiary`), das die erste Zeile ihres Baums ist: Klick, Eingabe, ← und → klappen den

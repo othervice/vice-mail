@@ -525,6 +525,42 @@ async fn transient_connect_errors_back_off_and_retry_cuts_it_short() {
     assert_eq!(err.code(), ErrorCode::NotFound);
 }
 
+/// Stage 18 (task D): "Reload folders from server" lists the folders again at once: a folder
+/// another program created shows without waiting for the next poll; an unknown account is
+/// `not_found`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reloading_the_folders_shows_one_another_program_created() {
+    let server = FakeServer::new();
+    let mut h = Harness::new(Arc::clone(&server), sync_config()).await;
+    let id = h.add().await;
+    h.idle().await;
+    let listed = async |h: &Harness| {
+        h.core
+            .list_mailboxes(id)
+            .await
+            .expect("mailboxes")
+            .iter()
+            .any(|m| m.path == "Elsewhere")
+    };
+    server.add_mailbox("Elsewhere");
+    h.settle().await;
+    assert!(
+        !listed(&h).await,
+        "not before a full pass (the poll is 10 min)"
+    );
+    h.core.reload_folders(id).await.expect("reload");
+    h.event(|e| matches!(e, CoreEvent::MailboxesChanged { .. }))
+        .await;
+    assert!(listed(&h).await, "listed after the reload");
+    let err = h
+        .core
+        .reload_folders(AccountId::from_uuid(uuid::Uuid::new_v4()))
+        .await
+        .expect_err("unknown");
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    h.core.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn removing_an_account_mid_sync_stops_it_and_deletes_everything() {
     let server = FakeServer::new();

@@ -550,6 +550,25 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         Ok(self.recorded(&change))
     }
 
+    /// Stage 18: queues the creation of the folder `name` below `parent`, or at the top of the
+    /// account; the store checks the name and computes the path with the server's delimiter
+    /// ([`mail_store::Store::enqueue_create_folder`]). The folder appears in the folder list once
+    /// the server created it (`MailboxesChanged`).
+    pub async fn create_folder(
+        &self,
+        account: AccountId,
+        parent: Option<mail_model::MailboxId>,
+        name: String,
+    ) -> Result<ActionResult, CoreError> {
+        let change = self
+            .shared
+            .store
+            .enqueue_create_folder(account, parent, name, request_id())
+            .await?;
+        tracing::info!(%account, below = parent.is_some(), "folder creation recorded");
+        Ok(self.recorded(&change))
+    }
+
     /// Audit 24.11.2026: queues the rename of a folder of the user's own to `name` within its
     /// parent. The folder list changes once the server renamed it (`MailboxesChanged`).
     pub async fn rename_mailbox(

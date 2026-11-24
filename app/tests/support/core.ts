@@ -494,7 +494,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   let nextOperation = Math.max(0, ...operations.map((o) => o.info.id)) + 1;
   let nextBatch = Math.max(0, ...operations.map((o) => o.info.batch)) + 1;
   const requests = new Map<string, ActionResult>();
-  const creations: { accountId: string; path: string; role: MailboxRole | null }[] = [];
+  const creations: { accountId: string; path: string; role: MailboxRole | null; parentId?: number | null }[] = [];
 
   const reject = (code: IpcError["code"], detail: string | null = null) =>
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
@@ -719,6 +719,30 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         record(batch, account.id, "create_mailbox", "create_mailbox", { mailboxId: null, messageId: null }, () => undefined);
         creations.push({ accountId: account.id, path: args["path"] as string, role: args["role"] as MailboxRole | null });
         return { batch, queued: 1, cancelled: 0 };
+      }
+      // Stage 18: a new folder at the top of the account or below a folder, checked like the core.
+      case "create_folder": {
+        const account = accountOf(args["accountId"] as string);
+        if (!account) return reject("not_found");
+        if (!account.writesEnabled) return reject("read_only");
+        const parentId = args["parentId"] as number | null;
+        const parent = parentId === null ? null : mailboxOf(parentId);
+        if (parentId !== null && (!parent || parent.accountId !== account.id)) return reject("not_found");
+        const own = mailboxes.filter((m) => m.accountId === account.id);
+        const delimiter = parent ? parent.delimiter : (own.find((m) => m.role === "inbox")?.delimiter ?? null);
+        const name = (args["name"] as string).trim();
+        if (!name || (delimiter && name.includes(delimiter)) || (parent && !delimiter)) return reject("invalid_argument");
+        const path = parent ? `${parent.path}${delimiter ?? ""}${name}` : name;
+        if (path.toUpperCase() === "INBOX" || own.some((m) => m.path === path)) return reject("invalid_argument");
+        const batch = nextBatch++;
+        record(batch, account.id, "create_mailbox", "create_mailbox", { mailboxId: null, messageId: null }, () => undefined);
+        creations.push({ accountId: account.id, path, role: null, parentId: parent?.id ?? null });
+        return { batch, queued: 1, cancelled: 0 };
+      }
+      case "reload_folders": {
+        const account = accountOf(args["accountId"] as string);
+        if (!account) return reject("not_found");
+        return null;
       }
       // Audit 24.11.2026: folders of the user's own renamed and deleted through the outbox.
       case "rename_mailbox":
@@ -1148,6 +1172,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
             path: creation.path,
             role: creation.role ?? "custom",
             roleSource: creation.role ? "user" : "none",
+            parentId: creation.parentId ?? null,
           }),
         ];
       }

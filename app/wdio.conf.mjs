@@ -82,6 +82,9 @@ export const config = {
     // appends three messages to the inbox and moves two to Junk and back, after the specs that
     // count the seed.
     "./tests/e2e/contacts.e2e.mjs",
+    // Stage 18, task D: folders created in the app on the server, and the server's folders
+    // reloaded without a restart. Creates folders on the server and removes them again.
+    "./tests/e2e/folders.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.

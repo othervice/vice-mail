@@ -157,6 +157,18 @@ export const commands = {
 	/**  Queues the creation of a folder (for example the archive after `missing_mailbox`). */
 	createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_mailbox", { accountId, path, role }, options)),
 	/**
+	 *  Stage 18: queues a new folder `name` below `parentId`, or at the top of the account when
+	 *  null ("New folder…", "New subfolder…"); the core computes the path with the server's
+	 *  delimiter. Refused: `read_only`, `invalid_argument` (an empty or invalid name, one with the
+	 *  delimiter, a taken name, a parent that cannot hold folders), `not_found`.
+	 */
+	createFolder: (accountId: AccountId, parentId: MailboxId | null, name: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_folder", { accountId, parentId, name }, options)),
+	/**
+	 *  Stage 18: lists the account's folders on the server again now ("Reload folders from
+	 *  server"). `not_found` for an unknown account.
+	 */
+	reloadFolders: (accountId: AccountId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("reload_folders", { accountId }, options)),
+	/**
 	 *  Audit 24.11.2026: queues the rename of a folder of the user's own to `name` (one level,
 	 *  within its parent). Refused: `read_only`, `invalid_argument` (a role, a taken or invalid
 	 *  name, a change on its way), `unsupported_server` (JMAP), `not_found`.
@@ -829,9 +841,9 @@ export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 /* Types */
 /**
  *  Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
- *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
- *  (decision 0038). A value this version does not know (from a newer device) reads as the
- *  default.
+ *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "blue" (decision 0053; it was
+ *  the logo's orange under decision 0038, a stored choice stays). A value this version does not
+ *  know (from a newer device) reads as the default.
  */
 export type AccentTheme = "teal" | "blue" | "violet" | "rose" | "orange" | "green";
 

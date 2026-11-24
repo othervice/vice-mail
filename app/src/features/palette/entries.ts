@@ -42,7 +42,7 @@ import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useAiPaletteEntries } from "../ai/palette";
 import { useEmlPaletteEntries } from "../eml/palette";
-import { folderEditBlock, isEditableFolder } from "../mailboxes/FolderEdit";
+import { canHoldFolders, folderEditBlock, isEditableFolder, useReloadFolders } from "../mailboxes/FolderEdit";
 import { useMailboxes } from "../mailboxes/queries";
 import { useFolderEditStore } from "../../stores/folderEdit";
 import { useTemplates } from "../snippets/queries";
@@ -50,7 +50,7 @@ import { useTemplates } from "../snippets/queries";
 import { Star } from "lucide-react";
 import { useFavoriteMailboxes } from "../organize/queries";
 // Stage 16 (decision 0036): "Save all attachments" of the open message.
-import { FolderDown, Pencil, Trash2 } from "lucide-react";
+import { FolderDown, FolderPlus, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { saveAllCandidate, useSaveAllRequestStore } from "../reading/saveAllRequest";
 // Decision 0039: one row per conversation or per message.
 import { useConversationStore } from "../threads/preference";
@@ -236,6 +236,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const accountList = accounts.data ?? [];
   const noAccount = account ? undefined : t("palette.disabled.noAccount");
   const askFolderEdit = useFolderEditStore((state) => state.ask);
+  const reloadFolders = useReloadFolders();
 
   const inMailView = ui.view.kind === "mail" || ui.view.kind === "mailbox";
   const entries: PaletteEntry[] = [...useActionEntries({ platform, target, inMailView, account })];
@@ -394,6 +395,43 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
         },
       });
     }
+  }
+  // Stage 18 (task D): a new folder in the selected account (below the open folder too), and
+  // its folder list read again from the server.
+  if (account) {
+    const accountName = account.displayName || account.email;
+    const readOnly = account.writesEnabled ? undefined : t("folderEdit.createReadOnly");
+    entries.push({
+      key: `folder-create:${account.id}`,
+      group: "commands",
+      label: t("folderEdit.paletteCreate", { account: accountName }),
+      icon: FolderPlus,
+      ...(readOnly && { disabled: readOnly }),
+      run: () => {
+        askFolderEdit({ kind: "create", account, parent: null });
+      },
+    });
+    if (openFolder && canHoldFolders(openFolder)) {
+      entries.push({
+        key: `folder-create-sub:${String(openFolder.id)}`,
+        group: "commands",
+        label: t("folderEdit.paletteCreateSub", { name: openFolder.name }),
+        icon: FolderPlus,
+        ...(readOnly && { disabled: readOnly }),
+        run: () => {
+          askFolderEdit({ kind: "create", account, parent: openFolder });
+        },
+      });
+    }
+    entries.push({
+      key: `folders-reload:${account.id}`,
+      group: "commands",
+      label: t("folderEdit.paletteReload", { account: accountName }),
+      icon: RefreshCw,
+      run: () => {
+        reloadFolders(account);
+      },
+    });
   }
   if (accountList.length > 1) {
     for (const other of accountList) {

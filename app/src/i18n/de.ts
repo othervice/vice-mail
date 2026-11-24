@@ -3181,6 +3181,22 @@ export const de: Translation = {
     deleting: "wird gelöscht",
     paletteRename: "Ordner „{{name}}“ umbenennen …",
     paletteDelete: "Ordner „{{name}}“ löschen …",
+    // Stage 18: new folders, created on the server too, and the folder list read again.
+    create: "Neuer Ordner …",
+    createSub: "Neuer Unterordner …",
+    createTitle: "Neuer Ordner in „{{account}}“",
+    createSubTitle: "Neuer Ordner in „{{name}}“",
+    name: "Name",
+    nameTaken: "Hier gibt es schon einen Ordner „{{name}}“.",
+    createHint: "Der Ordner wird auch auf dem Server angelegt.",
+    createButton: "Anlegen",
+    createReadOnly: "Änderungen sind für dieses Konto ausgeschaltet. Schalte sie in den Kontoeinstellungen ein, um Ordner anzulegen.",
+    accountMenu: "Mehr für {{name}}",
+    reload: "Ordner vom Server neu laden",
+    reloading: "Die Ordner von {{account}} werden vom Server geladen …",
+    paletteCreate: "Neuer Ordner in „{{account}}“ …",
+    paletteCreateSub: "Neuer Unterordner in „{{name}}“ …",
+    paletteReload: "Ordner von „{{account}}“ vom Server neu laden",
   },
   // Audit 24.11.2026: the local database did not open at start (`getStartupProblem`).
   startupProblem: {

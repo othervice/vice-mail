@@ -29,6 +29,9 @@ pub(crate) enum Control {
     /// The outbox changed these mailboxes on the server: sync them now (its `SyncHook`).
     /// Ignored while not connected; the next session starts with a full pass anyway.
     SyncMailboxes(Vec<MailboxId>),
+    /// Stage 18: the user asked to list the folders on the server again: a full pass now (when
+    /// not connected, a reconnect, whose session starts with one).
+    ReloadFolders,
     /// The account is removed or the app quits.
     Stop,
 }
@@ -228,6 +231,14 @@ impl<C: MailConnector + 'static> Supervisor<C> {
                         // Idle: a pass now; syncing: one more pass afterwards; not
                         // connected: ignored by the machine.
                         SyncEvent::Changed
+                    }
+                    Some(Control::ReloadFolders) => {
+                        if let Some(session) = &session {
+                            session.mark_full();
+                            SyncEvent::Changed
+                        } else {
+                            SyncEvent::RetryNow
+                        }
                     }
                     Some(Control::Stop) | None => {
                         if let Some(session) = session.take() {

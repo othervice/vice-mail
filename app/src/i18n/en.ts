@@ -3196,6 +3196,22 @@ export const en = {
     deleting: "being deleted",
     paletteRename: "Rename folder “{{name}}”…",
     paletteDelete: "Delete folder “{{name}}”…",
+    // Stage 18: new folders, created on the server too, and the folder list read again.
+    create: "New folder…",
+    createSub: "New subfolder…",
+    createTitle: "New folder in “{{account}}”",
+    createSubTitle: "New folder in “{{name}}”",
+    name: "Name",
+    nameTaken: "A folder “{{name}}” exists here already.",
+    createHint: "The folder is created on the server too.",
+    createButton: "Create",
+    createReadOnly: "Changes are turned off for this account. Turn them on in the account settings to create folders.",
+    accountMenu: "More for {{name}}",
+    reload: "Reload folders from server",
+    reloading: "Loading the folders of {{account}} from the server…",
+    paletteCreate: "New folder in “{{account}}”…",
+    paletteCreateSub: "New subfolder in “{{name}}”…",
+    paletteReload: "Reload folders of “{{account}}” from server",
   },
   // Audit 24.11.2026: the local database did not open at start (`getStartupProblem`).
   startupProblem: {
