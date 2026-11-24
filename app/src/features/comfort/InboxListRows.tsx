@@ -4,7 +4,7 @@ import { cx } from "../../components/cx";
 import type { Address, MessageCategory } from "../../services/ipc";
 import { useLayoutStore } from "../../stores/layout";
 import { Avatar } from "../accounts/Avatar";
-import { useNarrowList } from "../messages/listLayout";
+import { useNarrowList, useTreeList } from "../messages/listLayout";
 import type { InboxBlock, InboxBundle } from "./inboxRows";
 
 const BLOCK_ICONS: Record<InboxBlock, LucideIcon> = {
@@ -82,6 +82,7 @@ const BUNDLE_TILES: Record<Exclude<MessageCategory, "person">, string> = {
 export function BundleRow({ bundle, expanded }: BundleRowProps) {
   const { t, i18n } = useTranslation();
   const narrow = useNarrowList();
+  const tree = useTreeList();
   // Compact narrow rows have two lines: the chips keep to one.
   const compact = useLayoutStore((state) => state.density === "compact");
   const wrap = narrow && !compact;
@@ -99,7 +100,8 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
     counter,
     ...senders.map((chip) => (chip.count > 1 ? `${senderName(chip.sender)} ${numbers.format(chip.count)}` : senderName(chip.sender))),
     more,
-    t(expanded ? "comfort.bundle.expanded" : "comfort.bundle.collapsed"),
+    // A tree item says it itself (`aria-expanded`, stage 17).
+    !tree && t(expanded ? "comfort.bundle.expanded" : "comfort.bundle.collapsed"),
   ]
     .filter(Boolean)
     .join(", ");

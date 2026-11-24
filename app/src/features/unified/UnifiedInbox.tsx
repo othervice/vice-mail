@@ -64,6 +64,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   };
   const query = source.query;
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
+  const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
   // Stage 8: the reading pane right, below or in place of the list.
   const layout = useReadingLayout(list);
@@ -119,14 +120,19 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
       </div>
       {single && account && layout.paneShown(open) && (
         <MixedReading
-          key={single.id}
+          // Stage 17: a conversation row keeps its pane while a newer message becomes the row's.
+          key={rowKey || single.id}
           account={account}
           item={single}
           focusRequest={focusRequest}
           platform={platform}
           list={list}
           layout={layout}
-          conversation={conversations}
+          conversation={conversations && !selection.childIds.has(single.id)}
+          ident={rowKey}
+          onShowMessage={(messageId) => {
+            list.current?.showInConversation(rowKey, messageId);
+          }}
         />
       )}
     </div>

@@ -60,10 +60,14 @@ export function asConversation(item: MessageListItem, info: ConversationInfo | u
   return { ...item, unread, flagged, hasAttachments };
 }
 
-/** What a conversation row adds: its size (when more than one) and its senders. */
+/**
+ * What a conversation row adds: its size (when more than one), its senders, and its thread (stage
+ * 17: the identity an unfolded conversation keeps while its newest message changes).
+ */
 export function conversationDecoration(info: ConversationInfo | undefined): RowDecoration | undefined {
-  if (!info || info.messageCount <= 1) return undefined;
-  return { threadCount: info.messageCount, participants: info.participants };
+  if (!info) return undefined;
+  if (info.messageCount <= 1) return { threadId: info.threadId };
+  return { threadCount: info.messageCount, participants: info.participants, threadId: info.threadId };
 }
 
 /**

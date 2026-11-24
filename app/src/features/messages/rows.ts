@@ -20,8 +20,28 @@ export type ListCard = "priority" | "bundle";
 
 export type ListRow =
   | { kind: "section"; key: string; section: Section }
-  /** `position` counts messages only (0-based), for `aria-posinset` and keyboard moves. */
-  | { kind: "message"; key: string; item: MessageListItem; position: number; card?: ListCard }
+  /**
+   * `position` counts messages only (0-based; in a conversation tree, child rows too), for
+   * `aria-posinset` and keyboard moves. `level`: depth in a conversation tree (stage 17), 1 unless
+   * the row is a member of an unfolded bundle (2).
+   */
+  | { kind: "message"; key: string; item: MessageListItem; position: number; card?: ListCard; level?: number }
+  /**
+   * Stage 17 (decision 0049): a message of an unfolded conversation, below the conversation's row
+   * (`parent`: its identity, `parentItem`: its message), one level deeper. `last`: the last one,
+   * where the conversation's line ends.
+   */
+  | {
+      kind: "child";
+      key: string;
+      item: MessageListItem;
+      parent: string;
+      parentItem: MessageListItem;
+      position: number;
+      level: number;
+      last: boolean;
+      card?: ListCard;
+    }
   /**
    * Stage 9: a row the list draws from its source (block heading, bundle, "Show all"), with the
    * height of a section heading or of a message row. Without `action` it is decoration that the
@@ -33,14 +53,21 @@ export type ListRow =
   | {
       kind: "extra";
       key: string;
-      size: "section" | "row";
+      /** `child`: the height of a child row (stage 17: loading, failed or cut conversations). */
+      size: "section" | "row" | "child";
       render: () => ReactNode;
       card?: ListCard;
       action?: { activate: () => void };
+      /** Depth in a conversation tree (default 1). */
+      level?: number;
+      /** A bundle in a conversation tree: whether it is unfolded (`aria-expanded`). */
+      expanded?: boolean;
+      /** Stage 17: the conversation a status row belongs to. */
+      parent?: string;
     };
 
 /** The rows of one folder's pages: headings and messages, never drawn-only rows. */
-export type FolderRow = Exclude<ListRow, { kind: "extra" }>;
+export type FolderRow = Extract<ListRow, { kind: "section" } | { kind: "message" }>;
 
 /** Local day boundaries in Unix milliseconds, computed once per day. */
 export interface DayBounds {

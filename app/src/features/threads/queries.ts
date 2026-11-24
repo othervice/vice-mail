@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
+import { queryOptions, useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import {
   searchIpc,
   type AccountId,
@@ -54,5 +54,21 @@ export function useThread(accountId: AccountId, messageId: MessageId, mailboxId:
   return useQuery({
     queryKey: threadQueryKey(accountId, messageId, mailboxId),
     queryFn: () => searchIpc.getThread(messageId, mailboxId),
+  });
+}
+
+/**
+ * Stage 17 (decision 0049): the messages of a conversation row, for its child rows and for the one
+ * message the reading pane opens. Keyed by the row's identity (`tree.ts`: its thread), not by its
+ * message: when a reply becomes the row's message, the unfolded children and the open message stay
+ * while they reload. Under `["thread", account]`, which core events reload (`search/events.ts`).
+ */
+export const conversationQueryKey = (accountId: AccountId, ident: string, mailboxId: MailboxId) =>
+  ["thread", accountId, "conversation", ident, mailboxId] as const;
+
+export function conversationQuery(item: MessageListItem, ident: string) {
+  return queryOptions({
+    queryKey: conversationQueryKey(item.accountId, ident, item.mailboxId),
+    queryFn: () => searchIpc.getThread(item.id, item.mailboxId),
   });
 }

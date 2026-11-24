@@ -36,4 +36,9 @@ export interface MessageListSource {
   accountName?: (item: MessageListItem) => string | undefined;
   /** Stage 7: what a row adds, such as its conversation size or the search highlights. */
   decorate?: (item: MessageListItem) => RowDecoration | undefined;
+  /**
+   * Stage 17 (decision 0049): the rows are conversations. The list is a tree then: a row with
+   * more than one message (`decorate` names its size and thread) unfolds its messages below it.
+   */
+  conversations?: boolean;
 }

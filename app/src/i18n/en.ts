@@ -1989,19 +1989,21 @@ export const en = {
     toggle: "Conversations",
     toggleOn: "Show conversations",
     toggleOff: "Show single messages",
-    rowLabel_one: "conversation with {{count}} message",
-    rowLabel_other: "conversation with {{count}} messages",
-    label_one: "Conversation with {{count}} message",
-    label_other: "Conversation with {{count}} messages",
-    show: "Show message from {{sender}}, {{date}}",
-    shown: "Shown below",
+    // Stage 17 (decision 0049): conversations unfold in the list like in Thunderbird.
+    replies_one: "{{count}} reply",
+    replies_other: "{{count}} replies",
+    expand: "Show the replies",
+    collapse: "Hide the replies",
+    inFolder: "in {{folder}}",
+    childrenLoading: "Loading the conversation",
+    childrenFailed: "The conversation could not be loaded. Try again",
     loadFailed: "The conversation could not be loaded",
     truncated: "Shows the newest {{shown}} of {{total}} messages.",
     // Decision 0039: the conversation view is a stored preference, on by default.
     setting: {
       title: "Conversations",
       description:
-        "Messages that answer each other are one row with their number. Opening the row shows all of them; actions on the row apply to the whole conversation.",
+        "Messages that answer each other are one row with the number of replies; its arrow shows them below it. The row opens its newest message (or the oldest unread one); actions on the row apply to the whole conversation.",
       label: "Lists show",
       on: "One row per conversation",
       off: "One row per message",

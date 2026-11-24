@@ -51,9 +51,11 @@ function taskNotice(mark: TaskMark | null, items: readonly MessageListItem[]): T
 export function useComfortActions(account: Account, expandRows?: ExpandRows) {
   const queryClient = useQueryClient();
   const push = useNoticeStore((state) => state.push);
-  const [snoozeItems, setSnoozeItems] = useState<readonly MessageListItem[] | null>(null);
-  /** The snooze menu was opened for one message of a conversation (the reading pane), not rows. */
-  const [snoozeExact, setSnoozeExact] = useState(false);
+  /**
+   * The messages the snooze menu is open for, and what they touch: their conversations (rows),
+   * or themselves (undefined: the reading pane's message, child rows of stage 17).
+   */
+  const [snoozing, setSnoozing] = useState<{ items: readonly MessageListItem[]; expand: ExpandRows | undefined } | null>(null);
 
   const reload = () => {
     void queryClient.invalidateQueries({ queryKey: ["messages", account.id] });
@@ -96,8 +98,7 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
       },
       openSnooze: (items) => {
         if (items.length === 0) return;
-        setSnoozeItems(items);
-        setSnoozeExact(expand === undefined && expandRows !== undefined);
+        setSnoozing({ items, expand });
       },
       unsnooze: (items) => {
         if (items.length === 0) return;
@@ -151,14 +152,13 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
 
   /** The choice of the snooze menu for the messages it was opened for. */
   const snooze = async (choice: SnoozeChoice): Promise<boolean> => {
-    const items = snoozeItems ?? [];
-    const exact = snoozeExact;
-    setSnoozeItems(null);
-    setSnoozeExact(false);
+    const items = snoozing?.items ?? [];
+    const expand = snoozing?.expand;
+    setSnoozing(null);
     if (items.length === 0) return false;
     return run("snooze", async () => {
       // Decision 0039: a conversation is snoozed with its messages in the listed folder.
-      const touched = expandRows && !exact ? await expandRows(items, { kind: "snooze" }) : items;
+      const touched = expand ? await expand(items, { kind: "snooze" }) : items;
       if (touched.length === 0) return null;
       const messageIds = touched.map((item) => item.id);
       const result = await comfortIpc.snoozeMessages(messageIds, choice);
@@ -171,11 +171,12 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     host: makeHost(expandRows),
     /** For the one message open in the reading pane. */
     exactHost: makeHost(undefined),
-    snoozeItems,
+    /** Stage 17: for what `expand` says (rows with child rows among them act per row). */
+    hostWith: makeHost,
+    snoozeItems: snoozing?.items ?? null,
     snooze,
     closeSnooze: () => {
-      setSnoozeItems(null);
-      setSnoozeExact(false);
+      setSnoozing(null);
     },
   };
 }

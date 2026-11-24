@@ -39,7 +39,8 @@ function setup(options: Parameters<typeof mockCore>[0] = {}) {
 
 /**
  * Opens the folder "Projekte" and turns the conversation view on (the fake core starts with it
- * off; the real default is on, decision 0039). The sorted inbox offers it too.
+ * off; the real default is on, decision 0039). The sorted inbox offers it too. Since stage 17 the
+ * list of conversations is a tree.
  */
 async function conversations(user: ReturnType<typeof renderApp>["user"]) {
   await screen.findByRole("listbox", { name: "Messages in Inbox" });
@@ -51,66 +52,76 @@ async function conversations(user: ReturnType<typeof renderApp>["user"]) {
   expect(toggle.getAttribute("aria-pressed")).toBe("false");
   await user.click(toggle);
   expect(toggle.getAttribute("aria-pressed")).toBe("true");
-  const list = await screen.findByRole("listbox", { name: "Messages in Projekte" });
+  const list = await screen.findByRole("tree", { name: "Messages in Projekte" });
   await waitFor(() => {
-    expect(within(list).getAllByRole("option")).toHaveLength(2);
+    expect(within(list).getAllByRole("treeitem")).toHaveLength(2);
   });
   return list;
 }
 
 describe("conversation view", () => {
-  it("shows one row per conversation with its size, from the core's thread list", async () => {
+  it("shows one row per conversation with its replies, from the core's thread list", async () => {
     const { core, user } = setup();
     const list = await conversations(user);
     expect(core.callsOf("list_threads")).toEqual([{ mailboxId: 5, cursor: null, limit: 200 }]);
-    const [thread, single] = within(list).getAllByRole("option");
-    expect(optionName(thread)).toContain("conversation with 3 messages");
-    expect(within(thread as HTMLElement).getByTestId("row-thread-count").textContent).toBe("3");
-    expect(optionName(single)).not.toContain("conversation");
-    expect(within(single as HTMLElement).queryByTestId("row-thread-count")).toBeNull();
+    const [thread, single] = within(list).getAllByRole("treeitem");
+    expect(optionName(thread)).toContain("2 replies");
+    expect(within(thread as HTMLElement).getByTestId("row-replies").textContent).toBe("2 replies");
+    expect(thread?.getAttribute("aria-expanded")).toBe("false");
+    expect(optionName(single)).not.toContain("repl");
+    expect(within(single as HTMLElement).queryByTestId("row-replies")).toBeNull();
+    expect(single?.hasAttribute("aria-expanded")).toBe(false);
 
-    // Off again: single messages.
+    // Off again: single messages in a list box.
     await user.click(screen.getByRole("button", { name: "Conversations" }));
     await waitFor(() => {
       expect(within(screen.getByRole("listbox", { name: "Messages in Projekte" })).getAllByRole("option")).toHaveLength(3);
     });
   });
 
-  it("opens the conversation by message id, oldest first, the first unread message open", async () => {
+  it("opens one message of the conversation, the first unread; the rest unfold below the row", async () => {
     const { core, user } = setup();
     const list = await conversations(user);
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    const row = within(list).getAllByRole("treeitem")[0] as HTMLElement;
+    await user.click(row);
 
-    const entries = await screen.findByRole("region", { name: "Conversation with 3 messages" });
-    expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 5 }]);
-    const buttons = within(entries).getAllByTestId("thread-entry");
-    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
-      expect.stringMatching(/^Show message from Anna, /),
-      expect.stringMatching(/^Show message from Ada Lovelace, /),
-      expect.stringMatching(/^Show message from Anna, .*, Unread$/),
-    ]);
-    // The unread answer is open below; the older ones are folded.
-    expect(buttons[2]?.getAttribute("aria-current")).toBe("true");
+    // The conversation is opened by message id; the pane shows its unread answer alone.
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto" });
+      expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 5 }]);
+    });
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toEqual([{ messageId: ANSWER.id, format: "auto" }]);
     });
     const pane = await screen.findByRole("region", { name: "Message" });
     expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    expect(screen.queryByTestId("thread-entries")).toBeNull();
 
-    // An older one: it opens instead. The reply lies in Sent, so the inbox's actions do not apply.
-    await user.click(buttons[1] as HTMLElement);
-    expect(buttons[1]?.getAttribute("aria-current")).toBe("true");
+    // Unfolded: every message, oldest first, the answer from Sent named by its folder.
+    await user.click(within(row).getByTestId("row-replies"));
+    await waitFor(() => {
+      expect(within(list).getAllByTestId("child-row")).toHaveLength(3);
+    });
+    const children = within(list).getAllByTestId("child-row");
+    expect(children.map((child) => optionName(child))).toEqual([
+      expect.stringMatching(/^Anna, Wie wäre es mit Montag\?, /),
+      expect.stringMatching(/^Ada Lovelace, in Sent, /),
+      expect.stringMatching(/^Unread, Anna, Montag passt, /),
+    ]);
+    expect(within(children[1] as HTMLElement).getByTestId("child-folder").textContent).toBe("Sent");
+
+    // A child row opens that message alone, with the actions of its own folder.
+    await user.click(children[1] as HTMLElement);
     await waitFor(() => {
       expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto" });
     });
     const replyPane = await screen.findByRole("region", { name: "Message" });
-    expect(within(replyPane).queryByRole("toolbar", { name: "Message actions" })).toBeNull();
+    expect(within(replyPane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
   });
 
-  it("says when the conversation cannot be loaded and still shows the message", async () => {
+  it("says when the conversation cannot be loaded and still shows the row's message", async () => {
     const { core, user } = setup({ failures: { get_thread: ipcError("database") } });
     const list = await conversations(user);
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("The conversation could not be loaded")).toBeTruthy();
     await waitFor(() => {
@@ -118,12 +129,12 @@ describe("conversation view", () => {
     });
   });
 
-  it("names how much of a very long conversation it shows", async () => {
+  it("names how much of a very long conversation it unfolds", async () => {
     const { user } = setup({
       search: { threads: { 5: THREADS }, threadViews: { [ANSWER.id]: { ...THREAD, total: 1500 } } },
     });
     const list = await conversations(user);
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
-    expect(await screen.findByText("Shows the newest 3 of 1500 messages.")).toBeTruthy();
+    await user.click(within(within(list).getAllByRole("treeitem")[0] as HTMLElement).getByTestId("row-replies"));
+    expect(await within(list).findByText("Shows the newest 3 of 1500 messages.")).toBeTruthy();
   });
 });

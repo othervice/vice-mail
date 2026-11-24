@@ -29,6 +29,7 @@ import { accountFill } from "../accounts/accountColor";
 import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
 import { isFirstSyncRunning, useSelectedAccount } from "../accounts/selection";
 import { ActionToolbar, QuickActions } from "../actions/ActionButtons";
+import type { ActionHost } from "../actions/registry";
 import { MissingMailboxPrompt } from "../actions/MissingMailboxPrompt";
 import { MovePicker, TagEditor } from "../actions/Pickers";
 import {
@@ -40,7 +41,7 @@ import {
   type ActionContext,
 } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
-import { useActionController, type ActionController } from "../actions/useActionController";
+import { useActionController, type Exactness } from "../actions/useActionController";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { AiPanelToggle } from "../ai/AiPanel";
 import { useAppInfo } from "../app-info/queries";
@@ -104,7 +105,8 @@ interface SelectionBarProps {
   selection: ListSelection;
   total: number;
   ctx: ActionContext;
-  controller: ActionController;
+  /** The actions for the selection (stage 17: child rows among it act alone). */
+  host: ActionHost;
   platform: ShortcutPlatform;
   list: RefObject<MessageListHandle | null>;
 }
@@ -115,7 +117,7 @@ interface SelectionBarProps {
  * everything loaded; loading the rest is a separate step, and one action takes at most
  * `MAX_ACTION_MESSAGES` messages.
  */
-function SelectionBar({ selection, total, ctx, controller, platform, list }: SelectionBarProps) {
+function SelectionBar({ selection, total, ctx, host, platform, list }: SelectionBarProps) {
   const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(false);
   const numbers = new Intl.NumberFormat(i18n.language);
@@ -171,7 +173,7 @@ function SelectionBar({ selection, total, ctx, controller, platform, list }: Sel
           {t("selection.clear")}
         </Button>
       </div>
-      <ActionToolbar ids={TOOLBAR_ACTIONS} ctx={ctx} host={controller.host} platform={platform} label={t("actions.toolbar")} />
+      <ActionToolbar ids={TOOLBAR_ACTIONS} ctx={ctx} host={host} platform={platform} label={t("actions.toolbar")} />
       {allLoadedSelected && selection.hasMore && notLoaded > 0 && !limited && (
         <p className="text-12 text-secondary" data-testid="selection-not-loaded">
           {t("selection.notLoaded", { count: notLoaded })}
@@ -240,9 +242,9 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   /**
    * A folder of another account asks first (decision 0033); one of this account moves at once.
    * Decision 0039: conversation rows move with their messages in this folder (`exact`: the one
-   * message of the reading pane).
+   * message of the reading pane; stage 17: a set names child rows, which move alone).
    */
-  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[], exact = false) => {
+  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[], exact: Exactness = false) => {
     if (target.accountId === account.id) {
       void controller.apply({ type: "move", target: target.id }, items, { detail: label(target), exact });
       return;
@@ -252,29 +254,45 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
     const ask = (moved: readonly MessageListItem[]) => {
       if (moved.length > 0) setTransferRequest({ items: moved, source: { account, mailbox }, target: { account: targetAccount, mailbox: target } });
     };
-    if (!conversations || exact) {
+    const own = exact === true ? items : exact === false ? [] : items.filter((item) => exact.has(item.id));
+    const rows = items.filter((item) => !own.includes(item));
+    if (!conversations || rows.length === 0) {
       ask(items);
       return;
     }
     conversationIpc
       .targets(
-        items.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
+        rows.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
         { kind: "action", action: { type: "move", target: target.id } },
       )
-      .then(ask, (error: unknown) => {
-        push({ kind: "error", context: "action", error: toCoreError(error) });
-      });
+      .then(
+        (targets) => {
+          ask([...own, ...targets]);
+        },
+        (error: unknown) => {
+          push({ kind: "error", context: "action", error: toCoreError(error) });
+        },
+      );
   };
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
   const controller = useActionController({ account, mailbox, list, conversations });
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
+  // Stage 17 (decision 0049): a message of an unfolded conversation opens and acts alone; a
+  // conversation row opens one message of its conversation (`ThreadPane`), and keeps it while it
+  // stays selected (`rowKey`: its identity, which outlives a newer message becoming the row's).
+  const singleIsChild = single !== null && selection.childIds.has(single.id);
+  const rowKey = selection.keys[0] ?? "";
+  const conversationOpen = single !== null && conversations && !singleIsChild;
+  const [shown, setShown] = useState<{ key: string; message: MessageListItem } | null>(null);
+  const opened = !single ? null : conversationOpen ? (shown?.key === rowKey ? shown.message : null) : single;
   const open = selection.items.length > 0;
   // Stage 8: the reading pane right, below or in place of the list.
   const layout = useReadingLayout(list);
 
   // In place of the list a message is open only once opened, not while the cursor rests on it.
-  useMarkReadOnOpen(account, layout.paneShown(open) ? single : null, controller);
+  // Stage 17: what is marked read is the message the pane shows, not the whole conversation.
+  useMarkReadOnOpen(account, layout.paneShown(open) ? opened : null, controller, { exact: conversations });
 
   const ctxFor = (items: readonly MessageListItem[]): ActionContext => ({
     account,
@@ -282,16 +300,25 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
     items,
     canUndo: controller.canUndo,
   });
-  // What a shortcut acts on: the selection, else the row with the cursor.
+  /** One message with the folder it lies in (a child row, the reading pane's message). */
+  const ctxForMessage = (message: MessageListItem): ActionContext => ({
+    ...ctxFor([message]),
+    mailbox: mailboxes?.find((m) => m.id === message.mailboxId) ?? mailbox,
+  });
+  // What a shortcut acts on: the selection, else the row with the cursor; child rows act alone.
   const targets = selection.items.length > 0 ? selection.items : selection.cursor ? [selection.cursor] : [];
+  const targetChildren: ReadonlySet<MessageId> =
+    selection.items.length > 0 ? selection.childIds : selection.cursorIsChild && selection.cursor ? new Set([selection.cursor.id]) : new Set();
+  const targetHost = controller.hostFor(targetChildren);
+  const targetCtx = targets.length === 1 && targetChildren.size === 1 && targets[0] ? ctxForMessage(targets[0]) : ctxFor(targets);
   // Stage 8: the command palette runs the same actions on the same messages.
   const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems);
-  useActionTarget({ ctx: pickerOpen ? null : ctxFor(targets), host: controller.host });
+  useActionTarget({ ctx: pickerOpen ? null : targetCtx, host: targetHost });
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || isEditableTarget(event.target)) return;
     if (controller.overlay || controller.comfort.snoozeItems) return;
-    const ctx = ctxFor(targets);
+    const ctx = targetCtx;
     for (const id of ACTION_IDS) {
       const definition = ACTIONS[id];
       // Stage 8: the user's assignment, read at the key press so a change works at once.
@@ -302,7 +329,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
       event.preventDefault();
       // Same explanation as the disabled buttons: why nothing happens, and where to change it.
       if (state.kind === "readOnly") push({ kind: "readOnly", accountId: account.id });
-      else definition.run(ctx, controller.host);
+      else definition.run(ctx, targetHost);
       return;
     }
   });
@@ -346,7 +373,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             selection={selection}
             total={mailbox.total}
             ctx={ctxFor(selection.items)}
-            controller={controller}
+            host={controller.hostFor(selection.childIds)}
             platform={platform}
             list={list}
           />
@@ -396,42 +423,51 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
-          renderQuickActions={(item) => (
-            <QuickActions ids={QUICK_ACTIONS} ctx={ctxFor([item])} host={controller.host} platform={platform} />
+          renderQuickActions={(item, _selected, child) => (
+            <QuickActions
+              ids={QUICK_ACTIONS}
+              ctx={child ? ctxForMessage(item) : ctxFor([item])}
+              host={child ? controller.hostFor(new Set([item.id])) : controller.host}
+              platform={platform}
+            />
           )}
-          onDragRows={(items) => {
+          onDragRows={(items, childIds) => {
             startDrag({
               accountId: account.id,
               sourceMailboxId: mailbox.id,
               count: items.length,
               drop: (target) => {
-                moveOrAsk(target, items);
+                moveOrAsk(target, items, childIds.size > 0 ? childIds : false);
               },
             });
           }}
           onDragEnd={endDrag}
         />
       </div>
-      {!layout.paneShown(open) ? null : single && conversations ? (
+      {!layout.paneShown(open) ? null : single && conversationOpen ? (
         <ThreadPane
-          key={single.id}
+          key={rowKey}
           account={account}
           item={single}
-          mailboxId={mailbox.id}
+          ident={rowKey}
           focusRequest={focusRequest}
-          // Actions only for messages of this folder; the controller works per folder. The
-          // toolbar acts on the open message, the row's actions on the whole conversation.
-          toolbarFor={(message) =>
-            message.mailboxId === mailbox.id && (
-              <ActionToolbar
-                ids={TOOLBAR_ACTIONS}
-                ctx={ctxFor([message])}
-                host={controller.messageHost}
-                platform={platform}
-                label={t("actions.toolbar")}
-              />
-            )
-          }
+          // The toolbar acts on the open message alone, with its own folder's actions; the row's
+          // actions act on the whole conversation.
+          toolbarFor={(message) => (
+            <ActionToolbar
+              ids={TOOLBAR_ACTIONS}
+              ctx={ctxForMessage(message)}
+              host={controller.messageHost}
+              platform={platform}
+              label={t("actions.toolbar")}
+            />
+          )}
+          onShown={(message) => {
+            setShown({ key: rowKey, message });
+          }}
+          onShowMessage={(messageId) => {
+            list.current?.showInConversation(rowKey, messageId);
+          }}
           onEscape={() => {
             layout.backToList(focusList);
           }}
@@ -449,8 +485,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           toolbar={
             <ActionToolbar
               ids={TOOLBAR_ACTIONS}
-              ctx={ctxFor([single])}
-              host={controller.host}
+              ctx={singleIsChild ? ctxForMessage(single) : ctxFor([single])}
+              host={singleIsChild ? controller.hostFor(new Set([single.id])) : controller.host}
               platform={platform}
               label={t("actions.toolbar")}
             />
@@ -474,7 +510,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           onConfirm={() => {
             const { items, exact } = overlay;
             controller.closeOverlay();
-            void controller.apply({ type: "deletePermanently" }, items, { exact: exact === true });
+            void controller.apply({ type: "deletePermanently" }, items, { exact: exact ?? false });
           }}
           onCancel={controller.closeOverlay}
           focusAfterConfirm={focusList}
@@ -500,7 +536,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           onChoose={(target) => {
             const items = fresh(overlay.ids);
             controller.closeOverlay();
-            moveOrAsk(target, items, overlay.exact === true);
+            moveOrAsk(target, items, overlay.exact ?? false);
           }}
           onClose={controller.closeOverlay}
           restoreFocus={focusList}
@@ -528,14 +564,14 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             controller.apply({ type: "addKeyword", keyword: tag }, fresh(overlay.ids), {
               detail: tag,
               ownErrors: ["invalid_keyword"],
-              exact: overlay.exact === true,
+              exact: overlay.exact ?? false,
             })
           }
           onRemove={(tag) =>
             controller.apply(
               { type: "removeKeyword", keyword: tag },
               fresh(overlay.ids).filter((item) => item.keywords.some((k) => k.toLowerCase() === tag.toLowerCase())),
-              { detail: tag, exact: overlay.exact === true },
+              { detail: tag, exact: overlay.exact ?? false },
             )
           }
           onClose={controller.closeOverlay}

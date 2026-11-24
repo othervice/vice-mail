@@ -1,6 +1,6 @@
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import type { Account, Mailbox, MessageListItem } from "../../services/ipc";
+import type { Account, Mailbox, MessageId, MessageListItem } from "../../services/ipc";
 import { ActionToolbar } from "../actions/ActionButtons";
 import { MissingMailboxPrompt } from "../actions/MissingMailboxPrompt";
 import { TOOLBAR_ACTIONS, type ActionId } from "../actions/registry";
@@ -13,6 +13,7 @@ import type { ReadingLayout } from "../layout/useReadingLayout";
 import type { MessageListHandle } from "../messages/MessageList";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 import { ThreadPane } from "../threads/ThreadPane";
+import { conversationIdent } from "../threads/tree";
 
 /**
  * Actions of the reading pane in a mixed list: those that need no picker or dialog of the folder
@@ -31,10 +32,15 @@ interface ReadingProps {
   /** Stage 8: where the pane sits; Escape and closing go through it (in place of the list). */
   layout?: Pick<ReadingLayout, "backToList" | "close">;
   /**
-   * Decision 0039: the row is a conversation: the pane shows all of its messages, the list's
-   * shortcuts act on the conversation, the toolbar on the open message.
+   * Decision 0039: the row is a conversation: the list's shortcuts act on the conversation, the
+   * toolbar on the open message. Stage 17 (decision 0049): the pane shows one message of it (the
+   * oldest unread, else the newest); a message chosen as a child row is no conversation row.
    */
   conversation?: boolean;
+  /** Stage 17: the conversation row's identity in the list (its thread). */
+  ident?: string;
+  /** Stage 17: a source of an AI answer among the conversation's messages: show it in the list. */
+  onShowMessage?: (messageId: MessageId) => void;
 }
 
 /** Escape and the close button of the pane, by the layout of the list it belongs to. */
@@ -68,12 +74,17 @@ function ReadingWithActions({
   list,
   layout,
   conversation = false,
+  ident,
+  onShowMessage,
 }: ReadingProps & { mailbox: Mailbox }) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id).data ?? [];
   const controller = useActionController({ account, mailbox, list, conversations: conversation });
-  // Like the folder view: mark as read on open, and the shortcuts of the toolbar's actions.
-  useMarkReadOnOpen(account, item, controller);
+  // Stage 17: a conversation row's pane names the message it shows once it knows it.
+  const [shown, setShown] = useState<MessageListItem | null>(null);
+  // Like the folder view: mark as read on open (the message shown), and the shortcuts of the
+  // toolbar's actions.
+  useMarkReadOnOpen(account, conversation ? shown : item, controller, { exact: true });
   useActionShortcuts({
     ctx: { account, mailbox, items: [item], canUndo: controller.canUndo },
     host: controller.host,
@@ -112,8 +123,10 @@ function ReadingWithActions({
         <ThreadPane
           account={account}
           item={item}
-          mailboxId={mailbox.id}
+          ident={ident ?? conversationIdent(item, undefined)}
           focusRequest={focusRequest}
+          onShown={setShown}
+          {...(onShowMessage && { onShowMessage })}
           // The open message's own actions, where it lies in the row's folder.
           toolbarFor={(message) =>
             message.mailboxId === mailbox.id && (
@@ -149,16 +162,19 @@ function ReadingWithActions({
  */
 export function MixedReading(props: ReadingProps) {
   const mailbox = useMailboxes(props.account.id).data?.find((m) => m.id === props.item.mailboxId);
-  if (mailbox) return <ReadingWithActions key={`${String(mailbox.id)}-${String(props.item.id)}`} {...props} mailbox={mailbox} />;
+  // A conversation row keeps its pane while a newer message becomes the row's (its identity).
+  const key = props.conversation && props.ident ? props.ident : String(props.item.id);
+  if (mailbox) return <ReadingWithActions key={`${String(mailbox.id)}-${key}`} {...props} mailbox={mailbox} />;
   const { onEscape, onClose } = paneExits(props.list, props.layout);
   if (props.conversation) {
     return (
       <ThreadPane
-        key={props.item.id}
+        key={key}
         account={props.account}
         item={props.item}
-        mailboxId={props.item.mailboxId}
+        ident={props.ident ?? key}
         focusRequest={props.focusRequest}
+        {...(props.onShowMessage && { onShowMessage: props.onShowMessage })}
         onEscape={onEscape}
         onClose={onClose}
       />

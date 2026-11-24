@@ -1,29 +1,27 @@
-import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { cx } from "../../components/cx";
-import { Avatar } from "../accounts/Avatar";
 import { ErrorNotice } from "../../components/ErrorNotice";
-import type { Account, MailboxId, MessageId, MessageListItem, ThreadEntry } from "../../services/ipc";
-import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
+import type { Account, MessageId, MessageListItem, ThreadEntry } from "../../services/ipc";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 import { useAiSourceFocus } from "../ai/sources";
-import { useThread } from "./queries";
+import { conversationQuery } from "./queries";
 
 interface ThreadPaneProps {
   account: Account;
-  /** The row the user opened: the newest message of the thread in the listed folder. */
+  /** The conversation row the user opened: its message is the newest in the listed folder. */
   item: MessageListItem;
-  /** The listed folder, so entries show their place there; null in mixed lists. */
-  mailboxId: MailboxId | null;
+  /** The row's identity in the list (its thread): the pane stays while a newer message becomes the row's. */
+  ident: string;
   focusRequest: FocusRequest | null;
-  /** Mail actions for the open message, if the view can act on it (its folder). */
+  /** Mail actions for the open message (its own folder's). */
   toolbarFor?: (message: MessageListItem) => ReactNode;
+  /** The message the pane shows, once it is known (marking as read on open is the view's job). */
+  onShown?: (message: MessageListItem) => void;
+  /** A source of an AI answer among the conversation's other messages: show it (in the list). */
+  onShowMessage?: (messageId: MessageId) => void;
   onEscape: () => void;
   onClose: () => void;
-}
-
-function sender(message: MessageListItem, unknown: string): string {
-  return message.from ? message.from.name?.trim() || message.from.email : unknown;
 }
 
 /** Which message is open first: the oldest unread one (reading goes on there), else the newest. */
@@ -32,82 +30,49 @@ export function initialEntry(entries: readonly ThreadEntry[], fallback: MessageI
 }
 
 /**
- * A conversation in the reading pane (stage 7): the subject as the title, then every message of
- * the thread, oldest first, as a card. The one being read is open (head, body, reply row); the
- * others are folded to one line with sender, the start of the text and the date, and open on a
- * click. Unread messages are marked and the first of them opens first. A thread is always opened
- * by a message id (thread ids change when threads merge).
+ * Stage 17 (decision 0049): the reading pane of a conversation row shows exactly one message: the
+ * conversation's oldest unread one, else its newest (in any folder, the user's own answer in Sent
+ * too). Which one is decided once, when the conversation is known, and kept while the row stays
+ * selected: marking it read, or a reply that becomes the row's message, do not switch the pane.
+ * The conversation's other messages are child rows in the list. The AI chips under the message
+ * work on the row's message (the panel's conversation), and a source of an AI answer among the
+ * conversation's messages is shown through the list (`onShowMessage`). A thread is always opened by
+ * a message id (thread ids change when threads merge).
  */
-export function ThreadPane({ account, item, mailboxId, focusRequest, toolbarFor, onEscape, onClose }: ThreadPaneProps) {
-  const { t, i18n } = useTranslation();
-  const thread = useThread(account.id, item.id, mailboxId);
+export function ThreadPane({ account, item, ident, focusRequest, toolbarFor, onShown, onShowMessage, onEscape, onClose }: ThreadPaneProps) {
+  const { t } = useTranslation();
+  const thread = useQuery(conversationQuery(item, ident));
   const entries = thread.data?.messages ?? [];
-  const [chosen, setChosen] = useState<MessageId | null>(null);
-  // The message that opened first stays open when the thread reloads (decision 0039: opening
-  // marks the conversation read, after which the first unread one would be another).
-  const [first, setFirst] = useState<MessageId | null>(null);
-  if (first === null && entries.length > 0) setFirst(initialEntry(entries, item.id));
-  // Stage 13: a source of an AI statement in the panel shows its mail here.
+  const [opened, setOpened] = useState<MessageListItem | null>(null);
+  if (opened === null && (thread.data || thread.isError)) {
+    const id = thread.data ? initialEntry(entries, item.id) : item.id;
+    setOpened(entries.find((entry) => entry.message.id === id)?.message ?? item);
+  }
+  // Its newest state (read, flagged) while it is part of the conversation, else as it was.
+  const current = opened ? (entries.find((entry) => entry.message.id === opened.id)?.message ?? opened) : null;
+
+  const shown = useEffectEvent((message: MessageListItem) => {
+    onShown?.(message);
+  });
+  useEffect(() => {
+    if (current) shown(current);
+  }, [current]);
+  // Stage 13: the conversation's messages count as shown here; another one of them is shown by
+  // selecting its row.
+  const currentId = current?.id ?? null;
+  const show = useCallback(
+    (messageId: MessageId) => {
+      if (messageId !== currentId) onShowMessage?.(messageId);
+    },
+    [currentId, onShowMessage],
+  );
   useAiSourceFocus(
     entries.map((entry) => entry.message.id),
-    setChosen,
+    show,
   );
-  const known = (id: MessageId | null): id is MessageId => id !== null && entries.some((entry) => entry.message.id === id);
-  const openId = known(chosen) ? chosen : known(first) ? first : initialEntry(entries, item.id);
-  const open = entries.find((entry) => entry.message.id === openId)?.message ?? item;
-  const total = thread.data?.total ?? entries.length;
-  const bounds = dayBounds(new Date(), 1);
-
-  const conversation =
-    entries.length > 1
-      ? (card: ReactNode) => (
-          <section aria-label={t("threads.label", { count: total })} className="flex flex-col gap-2" data-testid="thread-entries">
-            {total > entries.length && (
-              <p className="px-1 text-12 text-secondary">{t("threads.truncated", { shown: entries.length, total })}</p>
-            )}
-            <ol className="flex flex-col gap-2">
-              {entries.map((entry) => {
-                const message = entry.message;
-                const name = sender(message, t("list.unknownSender"));
-                const date = formatFullDate(message.date, i18n.language);
-                const current = message.id === openId;
-                return (
-                  <li key={message.id} className="flex flex-col">
-                    {/* The open one is its card below; its line stays (hidden) so the list keeps its entries. */}
-                    <button
-                      type="button"
-                      hidden={current}
-                      aria-current={current ? "true" : undefined}
-                      aria-label={[t("threads.show", { sender: name, date }), message.unread && t("list.unread")].filter(Boolean).join(", ")}
-                      onClick={() => {
-                        setChosen(message.id);
-                      }}
-                      className="flex h-12 w-full min-w-0 items-center gap-3 rounded-card border border-border-subtle bg-surface-raised px-3 text-start text-13 shadow-card transition-colors hover:bg-hover"
-                      data-testid="thread-entry"
-                    >
-                      <span className="relative flex shrink-0">
-                        <Avatar name={message.from?.name} email={message.from?.email ?? ""} accountColor={account.color} ring={false} />
-                        {message.unread && (
-                          <span aria-hidden className="absolute -start-1 -top-1 size-(--ui-dot) rounded-full bg-accent ring-2 ring-surface-raised" />
-                        )}
-                      </span>
-                      <span className={cx("w-(--ui-list-sender-width) max-w-1/3 shrink-0 truncate text-primary", message.unread ? "font-semibold" : "font-medium")}>
-                        {name}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-secondary">{message.preview?.trim() ?? ""}</span>
-                      <span className="shrink-0 text-12 text-tertiary tabular-nums">{formatListDate(message.date, bounds, i18n.language)}</span>
-                    </button>
-                    {current && card}
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        )
-      : undefined;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="thread-pane">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface" data-testid="thread-pane" aria-busy={current === null}>
       {thread.isError && (
         <div className="px-4 pt-3">
           <ErrorNotice
@@ -119,22 +84,21 @@ export function ThreadPane({ account, item, mailboxId, focusRequest, toolbarFor,
           />
         </div>
       )}
-      <ReadingPane
-        // One pane for the conversation: opening another of its messages keeps the list in place.
-        key={item.id}
-        account={account}
-        messageId={open.id}
-        title={item.subject}
-        draft={open.draft}
-        // The panel acts on the row's message: its chips belong under whichever message of the
-        // conversation is open.
-        aiMessageId={item.id}
-        focusRequest={focusRequest && focusRequest.messageId === item.id ? { ...focusRequest, messageId: open.id } : focusRequest}
-        toolbar={toolbarFor?.(open)}
-        onEscape={onEscape}
-        onClose={onClose}
-        {...(conversation && { conversation })}
-      />
+      {current && (
+        <ReadingPane
+          account={account}
+          messageId={current.id}
+          title={item.subject}
+          draft={current.draft}
+          // The AI panel works on the row's message (its conversation); its chips stand under
+          // whichever message of the conversation is open.
+          aiMessageId={item.id}
+          focusRequest={focusRequest && focusRequest.messageId === item.id ? { ...focusRequest, messageId: current.id } : focusRequest}
+          toolbar={toolbarFor?.(current)}
+          onEscape={onEscape}
+          onClose={onClose}
+        />
+      )}
     </div>
   );
 }

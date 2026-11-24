@@ -1978,19 +1978,21 @@ export const de: Translation = {
     toggle: "Konversationen",
     toggleOn: "Konversationen zeigen",
     toggleOff: "Einzelne Mails zeigen",
-    rowLabel_one: "Konversation mit {{count}} Mail",
-    rowLabel_other: "Konversation mit {{count}} Mails",
-    label_one: "Konversation mit {{count}} Mail",
-    label_other: "Konversation mit {{count}} Mails",
-    show: "Mail von {{sender}}, {{date}} zeigen",
-    shown: "Unten geöffnet",
+    // Stufe 17 (Entscheidung 0049): Konversationen klappen in der Liste auf wie in Thunderbird.
+    replies_one: "{{count}} Antwort",
+    replies_other: "{{count}} Antworten",
+    expand: "Antworten zeigen",
+    collapse: "Antworten ausblenden",
+    inFolder: "in {{folder}}",
+    childrenLoading: "Konversation wird geladen",
+    childrenFailed: "Die Konversation konnte nicht geladen werden. Erneut versuchen",
     loadFailed: "Die Konversation konnte nicht geladen werden",
     truncated: "Zeigt die neuesten {{shown}} von {{total}} Mails.",
     // Entscheidung 0039: die Konversationsansicht ist eine gespeicherte Einstellung, standardmäßig an.
     setting: {
       title: "Konversationen",
       description:
-        "Mails, die aufeinander antworten, stehen als eine Zeile mit ihrer Anzahl in der Liste. Die Zeile öffnet alle; Aktionen an der Zeile gelten für die ganze Konversation.",
+        "Mails, die aufeinander antworten, stehen als eine Zeile mit der Zahl der Antworten in der Liste; ihr Pfeil zeigt sie darunter. Die Zeile öffnet ihre neueste Mail (oder die älteste ungelesene); Aktionen an der Zeile gelten für die ganze Konversation.",
       label: "Listen zeigen",
       on: "Eine Zeile je Konversation",
       off: "Eine Zeile je Mail",

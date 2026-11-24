@@ -25,13 +25,23 @@ import { actionKind, leavesFolder, requiredRole, type ActionHost } from "./regis
 import { undoAction } from "./undo";
 
 /**
+ * Which of the messages an action is given act on themselves while the list's rows are
+ * conversations (decision 0039): `true` all of them (the one message of the reading pane), a set
+ * those (stage 17, decision 0049: messages chosen as child rows of an unfolded conversation, which
+ * stay in the list), `false` none (conversation rows act on their conversation).
+ */
+export type Exactness = boolean | ReadonlySet<MessageId>;
+
+const NO_IDS: ReadonlySet<MessageId> = new Set();
+
+/**
  * Overlays an action opens: the one dialog (permanent delete) and the two pickers. `exact`: opened
- * for the one message of the reading pane, not for conversation rows (decision 0039).
+ * for messages themselves, not for conversation rows (decision 0039).
  */
 export type ActionOverlay =
-  | { kind: "confirmDelete"; items: readonly MessageListItem[]; exact?: boolean }
-  | { kind: "move"; ids: readonly MessageId[]; exact?: boolean }
-  | { kind: "tags"; ids: readonly MessageId[]; exact?: boolean };
+  | { kind: "confirmDelete"; items: readonly MessageListItem[]; exact?: Exactness }
+  | { kind: "move"; ids: readonly MessageId[]; exact?: Exactness }
+  | { kind: "tags"; ids: readonly MessageId[]; exact?: Exactness };
 
 /** An action that found no folder for its role (`missing_mailbox`): the inline question. */
 export interface MissingMailbox {
@@ -40,8 +50,8 @@ export interface MissingMailbox {
   items: readonly MessageListItem[];
   /** A folder is being created for it; the action runs once it exists with the role. */
   creating: string | null;
-  /** Decision 0039: asked for the one message of the reading pane, not conversation rows. */
-  exact?: boolean;
+  /** Decision 0039: asked for messages themselves, not conversation rows. */
+  exact?: Exactness;
 }
 
 export interface ApplyOptions {
@@ -55,9 +65,10 @@ export interface ApplyOptions {
   errorContext?: "action" | "markRead";
   /**
    * Decision 0039: the messages themselves, also while the rows are conversations (the one
-   * message open in the reading pane, marking as read on open).
+   * message open in the reading pane, marking as read on open); stage 17: a set names those of
+   * `items` that are child rows (they act alone and stay in the list).
    */
-  exact?: boolean;
+  exact?: Exactness;
 }
 
 export type ApplyOutcome = { ok: true } | { ok: false; error: CoreError | null };
@@ -128,6 +139,20 @@ export function useActionController({ account, mailbox, list, conversations = fa
       items.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
       intent,
     );
+  /**
+   * What an action on `items` touches for an exactness: nothing to ask the core (undefined) while
+   * the rows are messages or all act on themselves; else the conversations of the rows, plus the
+   * messages that act on themselves (stage 17: child rows in a mixed selection).
+   */
+  const expandFor = (exact: Exactness) => {
+    if (!conversations || exact === true) return undefined;
+    if (exact === false || exact.size === 0) return expand;
+    return async (items: readonly MessageListItem[], intent: ConversationIntent): Promise<readonly MessageListItem[]> => {
+      const own = items.filter((item) => exact.has(item.id));
+      const rows = items.filter((item) => !exact.has(item.id));
+      return [...own, ...(rows.length > 0 ? await expand(rows, intent) : [])];
+    };
+  };
   // Stage 9: pins, snoozes and tasks (local marks, their own menu).
   const comfort = useComfortActions(account, conversations ? expand : undefined);
 
@@ -155,7 +180,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
     action: MailAction,
     items: readonly MessageListItem[],
     context: "action" | "markRead",
-    exact = false,
+    exact: Exactness = false,
   ) => {
     switch (error.code) {
       case "missing_mailbox": {
@@ -194,8 +219,12 @@ export function useActionController({ account, mailbox, list, conversations = fa
       if (!options.silent) push({ kind: "readOnly", accountId: account.id });
       return { ok: false, error: null };
     }
-    const rowIds = items.map((item) => item.id);
-    const leaves = leavesFolder(action, mailbox);
+    const exact = options.exact ?? false;
+    // Stage 17: messages acted on as child rows stay in the list (in another folder now, or still
+    // here); the list reloads them. Every other row may leave it at once.
+    const children = exact instanceof Set ? exact : NO_IDS;
+    const rowIds = items.filter((item) => !children.has(item.id)).map((item) => item.id);
+    const leaves = leavesFolder(action, mailbox) && rowIds.length > 0;
     if (leaves) {
       // The next mail takes the cursor before the rows go (DESIGN.md: focus on the next mail).
       list.current?.advancePast(rowIds);
@@ -204,20 +233,29 @@ export function useActionController({ account, mailbox, list, conversations = fa
     }
     // Decision 0039: conversation rows act on the messages the core names for the action.
     let targets: readonly MessageListItem[] = items;
-    if (conversations && !options.exact) {
+    const expander = expandFor(exact);
+    if (expander) {
       try {
-        targets = await expand(items, { kind: "action", action });
+        targets = await expander(items, { kind: "action", action });
       } catch (e) {
         if (leaves) hide(rowIds, false);
-        handleError(toCoreError(e), action, items, options.errorContext ?? "action", false);
+        handleError(toCoreError(e), action, items, options.errorContext ?? "action", exact);
         return { ok: false, error: toCoreError(e) };
       }
       if (targets.length === 0) {
         if (leaves) hide(rowIds, false);
         return { ok: false, error: null };
       }
+      // One message reached as a child row and through its conversation acts once per folder.
+      const seen = new Set<string>();
+      targets = targets.filter((item) => {
+        const key = `${String(item.mailboxId)}:${String(item.id)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
-    const ids = [...new Set([...rowIds, ...targets.map((item) => item.id)])];
+    const ids = [...new Set([...rowIds, ...targets.filter((item) => !children.has(item.id)).map((item) => item.id)])];
     if (leaves) hide(ids, true);
     const batches: BatchId[] = [];
     let done = 0;
@@ -247,7 +285,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
       });
     }
     if (failure && !options.ownErrors?.includes(failure.code)) {
-      handleError(failure, action, items, options.errorContext ?? "action", options.exact === true);
+      handleError(failure, action, items, options.errorContext ?? "action", exact);
     }
     if (leaves) {
       // The core changed its local state before it answered: the reloaded list no longer has
@@ -259,10 +297,13 @@ export function useActionController({ account, mailbox, list, conversations = fa
     return failure ? { ok: false, error: failure } : { ok: true };
   };
 
-  /** The actions for list rows (`exact` false) or for the one message of the reading pane. */
-  const makeHost = (exact: boolean): ActionHost => ({
+  /**
+   * The actions for list rows (`exact` false), for the one message of the reading pane (true), or
+   * for a selection with child rows (stage 17: those act alone).
+   */
+  const makeHost = (exact: Exactness): ActionHost => ({
     apply: (action, items) => {
-      void apply(action, items, exact ? { exact } : {});
+      void apply(action, items, exact === false ? {} : { exact });
     },
     confirmDeletePermanently: (items) => {
       if (!account.writesEnabled) {
@@ -286,11 +327,13 @@ export function useActionController({ account, mailbox, list, conversations = fa
     selectAll: () => {
       list.current?.selectAll();
     },
-    ...(exact ? comfort.exactHost : comfort.host),
+    ...comfort.hostWith(expandFor(exact)),
   });
   const host = makeHost(false);
   // Without conversations both act on what they are given.
   const messageHost = conversations ? makeHost(true) : host;
+  /** Stage 17: the actions for rows of which `childIds` are child rows of unfolded conversations. */
+  const hostFor = (childIds: ReadonlySet<MessageId>): ActionHost => (conversations && childIds.size > 0 ? makeHost(childIds) : host);
 
   /** The answer to `missing_mailbox`: this folder has the role from now on; then the action runs. */
   const chooseFolderForRole = async (target: Mailbox): Promise<CoreError | null> => {
@@ -303,7 +346,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
     }
     const { action, items, exact } = missing;
     setMissing(null);
-    await apply(action, items, { exact: exact === true });
+    await apply(action, items, { exact: exact ?? false });
     return null;
   };
 
@@ -326,7 +369,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
       return null; // cancelled by the user or the view closed
     }
     setMissing(null);
-    await apply(pending.action, pending.items, { exact: pending.exact === true });
+    await apply(pending.action, pending.items, { exact: pending.exact ?? false });
     return null;
   };
 
@@ -340,6 +383,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
     host,
     /** Decision 0039: the toolbar of the reading pane acts on its one message. */
     messageHost,
+    hostFor,
     /** Whether the rows are conversations (actions on them act on the conversation). */
     conversations,
     hiddenIds,

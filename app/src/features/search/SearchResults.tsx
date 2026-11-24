@@ -54,8 +54,10 @@ function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: 
       const hit = hitById.get(item.id);
       if (!hit) return undefined;
       const count = conversations ? hit.threadMessageCount : 1;
-      return { highlights: hit.highlights, ...(count > 1 && { threadCount: count }) };
+      return { highlights: hit.highlights, ...(count > 1 && { threadCount: count }), ...(conversations && { threadId: hit.threadId }) };
     },
+    // Stage 17: the conversations of the hits unfold in place.
+    ...(conversations && { conversations: true }),
   };
   return { source, hitById };
 }
@@ -87,6 +89,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
   const { source, hitById } = useHitSource(query, accounts);
   const conversations = useConversationsOn();
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
+  const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
   const open = Boolean(single && account);
   // Stage 8: the reading pane right, below or in place of the list.
@@ -136,14 +139,19 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
             </p>
           )}
           <MixedReading
-          key={single.id}
-          account={account}
-          item={single}
-          focusRequest={focusRequest}
-          platform={platform}
-          list={list}
-          layout={layout}
-          conversation={conversations}
+            // Stage 17: a conversation row keeps its pane while a newer hit becomes the row's.
+            key={rowKey || single.id}
+            account={account}
+            item={single}
+            focusRequest={focusRequest}
+            platform={platform}
+            list={list}
+            layout={layout}
+            conversation={conversations && !selection.childIds.has(single.id)}
+            ident={rowKey}
+            onShowMessage={(messageId) => {
+              list.current?.showInConversation(rowKey, messageId);
+            }}
           />
         </div>
       )}

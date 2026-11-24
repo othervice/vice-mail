@@ -13,6 +13,7 @@ import {
 } from "./support/ai";
 import { makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
+import { optionName } from "./support/names";
 import { renderApp } from "./support/render";
 import { singleThread } from "./support/search";
 
@@ -407,7 +408,7 @@ describe("AI panel from the palette", () => {
 });
 
 describe("AI panel in the conversation view", () => {
-  it("names each source by sender and date and shows it in the open conversation on click", async () => {
+  it("names each source by sender and date and shows it by unfolding the open conversation", async () => {
     const now = Date.now();
     const first = makeMessage({ id: 1000, mailboxId: 5, subject: "Plan", from: { name: "Anna", email: "anna@example.org" }, date: now - 3 * 3_600_000 });
     const answer = makeMessage({ id: 1200, mailboxId: 5, subject: "Re: Plan", from: { name: "Bob", email: "bob@example.org" }, date: now - 3_600_000 });
@@ -434,22 +435,34 @@ describe("AI panel in the conversation view", () => {
     await user.click(await screen.findByTestId("mailbox-5"));
     await screen.findByRole("listbox", { name: "Messages in Projekte" });
     await user.click(screen.getByRole("button", { name: "Conversations" }));
-    const list = await screen.findByRole("listbox", { name: "Messages in Projekte" });
+    const list = await screen.findByRole("tree", { name: "Messages in Projekte" });
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(1);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(1);
     });
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
-    const entries = await screen.findByRole("region", { name: "Conversation with 2 messages" });
-    const buttons = within(entries).getAllByTestId("thread-entry");
-    expect(buttons[1]?.getAttribute("aria-current")).toBe("true");
+    const row = within(list).getAllByRole("treeitem")[0] as HTMLElement;
+    await user.click(row);
+    // One message on the right: the newest, as nothing is unread.
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(within(pane).getByTestId("reading-from").textContent).toContain("bob@example.org");
+    });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
 
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
     await user.click(await within(panel).findByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     const source = await within(card).findByRole("button", { name: /^Show source: Anna, / });
     await user.click(source);
+    // Another message of the open conversation: the conversation unfolds, its row is selected
+    // and the pane shows it.
     await waitFor(() => {
-      expect(buttons[0]?.getAttribute("aria-current")).toBe("true");
+      expect(within(list).getAllByRole("treeitem").filter((item) => item.getAttribute("aria-selected") === "true").map(optionName)).toEqual([
+        expect.stringMatching(/^Anna, /),
+      ]);
+    });
+    expect(within(list).getAllByRole("treeitem")[0]?.getAttribute("aria-expanded")).toBe("true");
+    await waitFor(() => {
+      expect(within(screen.getByRole("region", { name: "Message" })).getByTestId("reading-from").textContent).toContain("anna@example.org");
     });
     expect(core.callsOf("ai_summarize_thread")).toEqual([{ requestId: expect.any(String) as string, messageId: answer.id }]);
   });

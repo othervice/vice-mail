@@ -311,11 +311,6 @@ interface ReadingPaneProps {
   onEscape: () => void;
   /** Closes the pane (the list gives up its selection). */
   onClose: () => void;
-  /**
-   * Stage 7: the conversation around the open message. Gets the open message's card and places
-   * it among the folded others; the pane keeps its title, scrolling and top bar.
-   */
-  conversation?: (card: ReactNode) => ReactNode;
   /** The title while the message itself is still loading (the conversation's subject). */
   title?: string;
   /** A draft: nothing to reply to or forward. */
@@ -323,8 +318,8 @@ interface ReadingPaneProps {
   /** In a message window of its own: no AI (the panel is in the main window), no "open in window". */
   inWindow?: boolean;
   /**
-   * The message the AI panel works on for this pane, if not `messageId`: in a conversation the
-   * list row's message, while the pane opens another one of the thread (the oldest unread).
+   * The message the AI panel works on for this pane, if not `messageId`: for a conversation row
+   * the row's message, while the pane opens another one of the thread (the oldest unread).
    */
   aiMessageId?: MessageId;
 }
@@ -344,7 +339,6 @@ export function ReadingPane({
   toolbar,
   onEscape,
   onClose,
-  conversation,
   title,
   draft = false,
   inWindow = false,
@@ -361,7 +355,6 @@ export function ReadingPane({
   const linkRequest = useUiStore((state) => state.linkRequest);
   const articleRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   const subjectId = useId();
   const handledFocus = useRef<number | null>(null);
   const view = query.data?.id === messageId ? query.data : undefined;
@@ -372,18 +365,6 @@ export function ReadingPane({
     handledFocus.current = focusRequest.seq;
     articleRef.current?.focus();
   }, [focusRequest, messageId]);
-
-  // In a conversation the open card comes into view when it is far down (or above).
-  const loadedId = view?.id ?? null;
-  const inConversation = conversation !== undefined;
-  useEffect(() => {
-    if (!inConversation || loadedId === null) return;
-    const scroller = scrollerRef.current;
-    const card = cardRef.current;
-    if (!scroller || !card) return;
-    const delta = card.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    if (delta < 0 || delta > scroller.clientHeight * 0.6) scroller.scrollTop += delta - 12;
-  }, [inConversation, loadedId]);
 
   // Not on this computer and the account was offline: ask again once it is connected.
   const { refetch } = query;
@@ -434,7 +415,7 @@ export function ReadingPane({
     card = <ErrorNotice context={t("reading.loadFailed")} error={query.error} onRetry={retry} data-testid="reading-error" />;
   } else if (!view) {
     card = (
-      <div ref={cardRef} className={CARD}>
+      <div className={CARD}>
         <div className="px-5 py-5">
           <Skeleton label={t("reading.loading")} visible={skeleton} />
         </div>
@@ -442,7 +423,7 @@ export function ReadingPane({
     );
   } else {
     card = (
-      <div ref={cardRef} className={CARD} data-testid="message-card">
+      <div className={CARD} data-testid="message-card">
         <div className="flex flex-col gap-4 px-4 pt-4 pb-2 min-[72rem]:px-5">
           <div className="flex flex-col gap-3">
             <MessageHeader
@@ -528,7 +509,7 @@ export function ReadingPane({
           className="mx-auto flex w-full max-w-(--ui-reading-column) flex-col gap-4 px-4 pt-5 pb-(--ui-reading-ask-room) focus-visible:-outline-offset-2 min-[72rem]:px-6 min-[72rem]:pt-6"
         >
           {subject !== undefined && <SubjectTitle subject={subject} subjectId={subjectId} />}
-          {conversation ? conversation(card) : card}
+          {card}
         </article>
       </div>
       {link && <LinkCard key={link.seq} request={link} onClosed={backToMessage} onReload={retry} />}

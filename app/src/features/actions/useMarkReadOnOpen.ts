@@ -7,9 +7,15 @@ import type { ActionController } from "./useActionController";
  * "Mark as read when opened" (Settings, Reading): right away, after `MARK_READ_DELAY_MS` of the
  * message staying open (a change of selection before cancels it), or never. Only for accounts
  * with writes on, and once per opening: a message the user marks unread while it is open stays
- * unread. An ordinary `markRead` action, without an undo notice.
+ * unread. An ordinary `markRead` action, without an undo notice. `exact` (stage 17, decision
+ * 0049): the message the reading pane shows, not the conversation of a row.
  */
-export function useMarkReadOnOpen(account: Account, item: MessageListItem | null, controller: ActionController) {
+export function useMarkReadOnOpen(
+  account: Account,
+  item: MessageListItem | null,
+  controller: ActionController,
+  { exact = false }: { exact?: boolean } = {},
+) {
   const preferences = useReadingPreferences();
   const mode = preferences.data?.markReadOnOpen;
   const handled = useRef<MessageId | null>(null);
@@ -17,7 +23,7 @@ export function useMarkReadOnOpen(account: Account, item: MessageListItem | null
   const unread = item?.unread ?? false;
   const writes = account.writesEnabled;
   const markRead = useEffectEvent(() => {
-    if (item) void controller.apply({ type: "markRead" }, [item], { silent: true, errorContext: "markRead" });
+    if (item) void controller.apply({ type: "markRead" }, [item], { silent: true, errorContext: "markRead", ...(exact && { exact }) });
   });
   useEffect(() => {
     if (id === null) {

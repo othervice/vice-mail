@@ -237,11 +237,11 @@ export function useUnreadSource(
         buildRows: dated,
         total: query.data?.pages[0]?.items.length ?? 0,
         empty: { icon: MailCheck, title: t("organize.unread.emptyTitle"), body: t("organize.unread.emptyBody") },
-        ...(conversations && { decorate: decorateConversations(onlyInfo) }),
+        ...(conversations && { decorate: decorateConversations(onlyInfo), conversations: true }),
       };
     }
     if (mode === "first") {
-      if (conversations) return { query: firstConversations, buildRows: grouped, decorate: decorateConversations(firstInfo) };
+      if (conversations) return { query: firstConversations, buildRows: grouped, decorate: decorateConversations(firstInfo), conversations: true };
       return { query: first, buildRows: grouped };
     }
     return undefined;

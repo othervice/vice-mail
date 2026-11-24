@@ -1,6 +1,7 @@
 // Decision 0039: the conversation view as a stored UI preference, conversation rows in the sorted
-// inbox, the unified inbox, the unread lists and search, the thread pane, and actions on
-// conversation rows through the core's `conversationTargets`.
+// inbox, the unified inbox, the unread lists and search, the reading pane of a conversation row
+// (one message since stage 17, decision 0049), and actions on conversation rows through the
+// core's `conversationTargets`. Unfolding conversations in the list: `conversation-tree.test.tsx`.
 import { act, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,10 +59,11 @@ function setup(options: Parameters<typeof mockCore>[0] = {}, preferences: UiPref
   return { core, ...renderApp() };
 }
 
+/** The inbox as conversations: a tree (stage 17) with the conversation and the single message. */
 async function inboxList() {
-  const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+  const list = await screen.findByRole("tree", { name: "Messages in Inbox" });
   await waitFor(() => {
-    expect(within(list).getAllByRole("option")).toHaveLength(2);
+    expect(within(list).getAllByRole("treeitem")).toHaveLength(2);
   });
   return list;
 }
@@ -222,13 +224,13 @@ describe("conversation rows in the lists", () => {
   it("the sorted inbox shows one row per conversation: size, senders, unread when any message is", async () => {
     setup();
     const list = await inboxList();
-    const [thread, single] = within(list).getAllByRole("option");
+    const [thread, single] = within(list).getAllByRole("treeitem");
     const name = optionName(thread);
-    // Label in name: the visible senders, subject and size, in reading order.
-    expect(name).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan, conversation with 3 messages, /);
-    expect(within(thread as HTMLElement).getByTestId("row-thread-count").textContent).toBe("3");
+    // Label in name: the visible senders, subject and replies, in reading order.
+    expect(name).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan, 2 replies, /);
+    expect(within(thread as HTMLElement).getByTestId("row-replies").textContent).toBe("2 replies");
     expect(within(thread as HTMLElement).getByTitle("Anna, Ada Lovelace, Bob")).toBeTruthy();
-    expect(optionName(single)).not.toContain("conversation");
+    expect(optionName(single)).not.toContain("repl");
   });
 
   it("shows a conversation of the priority block once", async () => {
@@ -246,12 +248,12 @@ describe("conversation rows in the lists", () => {
       conversations: { threadOf: { [vip.id]: 9, [reply.id]: 9 } },
       comfort: { inboxPages: { 1: [page] } },
     });
-    const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    const list = await screen.findByRole("tree", { name: "Messages in Inbox" });
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(1);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(1);
     });
-    expect(optionName(within(list).getByRole("option"))).toContain("Wichtig");
-    expect(optionName(within(list).getByRole("option"))).toContain("conversation with 2 messages");
+    expect(optionName(within(list).getByRole("treeitem"))).toContain("Wichtig");
+    expect(optionName(within(list).getByRole("treeitem"))).toContain("1 reply");
   });
 
   it("a bundle holds conversations: an unfolded member shows the size of its conversation", async () => {
@@ -278,15 +280,26 @@ describe("conversation rows in the lists", () => {
       conversations: { threadOf: { [failed.id]: 4, [earlier.id]: 4 } },
       comfort: { inboxPages: { 1: [page] } },
     });
-    const list = await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    const list = await screen.findByRole("tree", { name: "Messages in Inbox" });
+    const bundle = await within(list).findByRole("treeitem", { name: /^Notifications/ });
+    // In the tree the bundle says folded or unfolded itself, its members are one level deeper.
+    expect(bundle.getAttribute("aria-expanded")).toBe("false");
+    expect(optionName(bundle)).not.toContain("collapsed");
     await user.click(await within(list).findByTestId("bundle-row"));
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(3);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(3);
     });
+    expect(bundle.getAttribute("aria-expanded")).toBe("true");
     const members = within(list)
-      .getAllByRole("option")
+      .getAllByRole("treeitem")
       .filter((option) => optionName(option).includes("CI failed") || optionName(option).includes("Review"));
-    expect(members.map((option) => optionName(option).includes("conversation with 2 messages"))).toEqual([true, false]);
+    expect(members.map((option) => optionName(option).includes("1 reply"))).toEqual([true, false]);
+    expect(members.map((option) => [option.getAttribute("aria-level"), option.getAttribute("aria-posinset"), option.getAttribute("aria-setsize")])).toEqual([
+      ["2", "1", "2"],
+      ["2", "2", "2"],
+    ]);
+    // The member with a reply unfolds one level deeper still.
+    expect(members[0]?.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("Unread only and Unread first list conversations", async () => {
@@ -301,11 +314,11 @@ describe("conversation rows in the lists", () => {
         limit: 200,
       });
     });
-    const list = screen.getByRole("listbox", { name: "Messages in Inbox" });
+    const list = screen.getByRole("tree", { name: "Messages in Inbox" });
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(1);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(1);
     });
-    expect(optionName(within(list).getByRole("option"))).toContain("conversation with 3 messages");
+    expect(optionName(within(list).getByRole("treeitem"))).toContain("2 replies");
 
     await user.click(screen.getByRole("switch", { name: "Unread only" }));
     await user.click(screen.getByRole("button", { name: "List options" }));
@@ -337,25 +350,43 @@ describe("conversation rows in the lists", () => {
     await inboxList();
     await user.click(screen.getByRole("button", { name: "Search" }));
     await user.keyboard("Plan");
-    const results = await screen.findByRole("listbox", { name: "Messages in the search results for “Plan”" });
+    const results = await screen.findByRole("tree", { name: "Messages in the search results for “Plan”" });
     await waitFor(() => {
-      expect(within(results).getAllByRole("option")).toHaveLength(1);
+      expect(within(results).getAllByRole("treeitem")).toHaveLength(1);
     });
-    const row = within(results).getByRole("option");
-    expect(within(row).getByTestId("row-thread-count").textContent).toBe("3");
+    const row = within(results).getByRole("treeitem");
+    expect(within(row).getByTestId("row-replies").textContent).toBe("2 replies");
+    // One message on the right: the oldest unread one of the conversation.
     await user.click(row);
-    expect(await screen.findByRole("region", { name: "Conversation with 3 messages" })).toBeTruthy();
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(within(pane).getByTestId("reading-from").textContent).toContain(ANNA.email);
+    });
+    expect(screen.queryByTestId("thread-entries")).toBeNull();
+    // Its replies unfold in the results, from every folder.
+    await user.click(within(row).getByTestId("row-replies"));
+    await waitFor(() => {
+      expect(within(results).getAllByTestId("child-row")).toHaveLength(3);
+    });
   });
 });
 
 describe("opening a conversation", () => {
-  it("in the inbox shows the thread pane with every message", async () => {
+  it("in the inbox shows one message: the conversation's oldest unread one", async () => {
     const { core, user } = setup();
     const list = await inboxList();
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
-    const entries = await screen.findByRole("region", { name: "Conversation with 3 messages" });
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(within(pane).getByTestId("reading-from").textContent).toContain(ANNA.email);
+    });
     expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
-    expect(within(entries).getAllByTestId("thread-entry")).toHaveLength(3);
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toEqual([{ messageId: FIRST.id, format: "auto" }]);
+    });
+    // No stacked conversation: the pane holds one message card.
+    expect(screen.queryByTestId("thread-entries")).toBeNull();
+    expect(within(pane).getAllByTestId("message-card")).toHaveLength(1);
     expect(await seriousFindings()).toEqual([]);
   });
 
@@ -372,7 +403,7 @@ describe("opening a conversation", () => {
       },
     });
     const list = await inboxList();
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
     const pane = await screen.findByRole("region", { name: "Message" });
     await waitFor(() => {
       expect(within(pane).getByTestId("reading-from").textContent).toContain(ANNA.email);
@@ -384,7 +415,7 @@ describe("opening a conversation", () => {
     });
   });
 
-  it("in the unified inbox shows the thread pane of the row's account", async () => {
+  it("in the unified inbox shows one message of the row's conversation, with the row's account", async () => {
     const WORK = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work", color: 3 });
     const WORK_MAIL = makeMessage({ id: 2000, accountId: WORK.id, mailboxId: 20, subject: "Projekt", date: now - 120_000 });
     const { core, user } = setup({
@@ -393,23 +424,26 @@ describe("opening a conversation", () => {
       messages: { 1: [ANSWER, FIRST, SOLO], 2: [REPLY], 20: [WORK_MAIL] },
       views: Object.fromEntries([FIRST, REPLY, ANSWER, SOLO, WORK_MAIL].map((m) => [m.id, makeView(m)])),
     });
-    await screen.findByRole("listbox", { name: "Messages in Inbox" });
+    await screen.findByRole("tree", { name: "Messages in Inbox" });
     await user.click(await screen.findByRole("button", { name: /^Show the inbox of/ }));
     const choices = await screen.findByRole("list", { name: "Show the inbox of" });
     await user.click(within(choices).getByRole("button", { name: "All accounts" }));
-    const list = await screen.findByRole("listbox", { name: "Messages in All inboxes" });
+    const list = await screen.findByRole("tree", { name: "Messages in All inboxes" });
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(3);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(3);
     });
     expect(core.callsOf("list_inbox_conversations")).toContainEqual({ scope: { kind: "unified", view: { kind: "all" } }, cursor: null, limit: 200 });
     const projekt = within(list)
-      .getAllByRole("option")
+      .getAllByRole("treeitem")
       .find((option) => optionName(option).includes("Projekt"));
     await user.click(projekt as HTMLElement);
     await waitFor(() => {
       expect(core.callsOf("get_thread")).toContainEqual({ messageId: WORK_MAIL.id, mailboxId: 20 });
     });
     expect(await screen.findByTestId("thread-pane")).toBeTruthy();
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: WORK_MAIL.id, format: "auto" });
+    });
   });
 });
 
@@ -417,10 +451,10 @@ describe("actions on conversation rows", () => {
   const actionCalls = (core: ReturnType<typeof mockCore>) =>
     core.callsOf("apply_action") as { action: { type: string }; messages: { mailboxId: number; messageId: number }[] }[];
 
-  it("delete the whole conversation in this folder; the thread pane's toolbar acts on its one message", async () => {
+  it("delete the whole conversation in this folder; the reading pane's toolbar acts on its one message", async () => {
     const { core, user } = setup();
     const list = await inboxList();
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
     const pane = await screen.findByRole("region", { name: "Message" });
 
     // The toolbar: the open message only (the first unread one, Anna's question).
@@ -446,14 +480,14 @@ describe("actions on conversation rows", () => {
     ]);
     // Both leave the list at once; the other conversation stays.
     await waitFor(() => {
-      expect(within(list).getAllByRole("option")).toHaveLength(1);
+      expect(within(list).getAllByRole("treeitem")).toHaveLength(1);
     });
   });
 
   it("pin the conversation and snooze it with its messages in the folder", async () => {
     const { core, user } = setup();
     const list = await inboxList();
-    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
     list.focus();
     await user.keyboard("p");
     await waitFor(() => {

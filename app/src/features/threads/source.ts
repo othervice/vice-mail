@@ -21,5 +21,5 @@ export function useThreadSource(accountId: AccountId, mailboxId: MailboxId, enab
   const threads = useMemo(() => query.data?.pages.flatMap((page) => page.threads), [query.data]);
   const info = useThreadInfo(threads);
   if (!enabled) return undefined;
-  return { query, buildRows, decorate: decorateConversations(info) };
+  return { query, buildRows, decorate: decorateConversations(info), conversations: true };
 }

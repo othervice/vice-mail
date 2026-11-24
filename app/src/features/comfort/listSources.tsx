@@ -61,7 +61,8 @@ export function toListRows(rows: readonly InboxListRow[], options: ListRowsOptio
           item: row.item,
           position: position++,
           ...(row.block === "priority" && { card: "priority" as const }),
-          ...(row.bundle !== null && { card: "bundle" as const }),
+          // Stage 17: in a conversation tree, members of an unfolded bundle are one level deeper.
+          ...(row.bundle !== null && { card: "bundle" as const, level: 2 }),
         };
       case "block":
         return {
@@ -86,6 +87,7 @@ export function toListRows(rows: readonly InboxListRow[], options: ListRowsOptio
           key: row.key,
           size: "row",
           render: () => <BundleRow bundle={row.bundle} expanded={row.expanded} />,
+          expanded: row.expanded,
           ...(row.expanded && { card: "bundle" as const }),
           action: {
             activate: () => {
@@ -232,10 +234,14 @@ function useSortedInboxSource(
         query: conversations ? priorityConversations : priority,
         buildRows: priorityRows,
         empty: { icon: Zap, title: t("comfort.priority.empty.title"), body: t("comfort.priority.empty.body") },
-        ...(conversations && { decorate: decorateConversations(priorityInfo) }),
+        ...(conversations && { decorate: decorateConversations(priorityInfo), conversations: true }),
       };
     }
-    return { query: inbox, buildRows: inboxRows, ...(inboxInfo && { decorate: decorateConversations(inboxInfo) }) };
+    return {
+      query: inbox,
+      buildRows: inboxRows,
+      ...(inboxInfo && { decorate: decorateConversations(inboxInfo), conversations: true }),
+    };
   }, [priorityOnly, conversations, priorityConversations, priority, priorityRows, priorityInfo, inbox, inboxRows, inboxInfo, t]);
 }
 
