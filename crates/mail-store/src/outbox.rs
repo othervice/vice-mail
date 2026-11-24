@@ -99,10 +99,15 @@ pub(crate) const DELETE_LOCATION: &str =
 
 /// Puts a location back (revert) or adds it in a move's target (COPYUID). A location that is
 /// there already (same message or same UID) wins: the sync was faster.
+/// Stage 19 (decision 0061): with the sort keys from the message row (`sort_keys`).
 pub(crate) const INSERT_LOCATION_IF_FREE: &str = "
     INSERT OR IGNORE INTO message_location (mailbox_id, message_id, uid, seen, flagged,
-                                            answered, draft, deleted, keywords, modseq)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL)";
+                                            answered, draft, deleted, keywords, modseq,
+                                            sort_sender, sort_recipient, sort_subject, size)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL,
+           vm_sort_name(m.from_name, m.from_addr), vm_sort_recipient(m.to_addrs),
+           vm_sort_subject(m.subject), max(m.size, 0)
+    FROM message m WHERE m.id = ?2";
 
 macro_rules! select_operations {
     ($rest:literal) => {
@@ -496,7 +501,7 @@ pub(crate) fn reinsert_location(
     )
 }
 
-fn insert_location_if_free(
+pub(crate) fn insert_location_if_free(
     conn: &Connection,
     mailbox: MailboxId,
     message: MessageId,

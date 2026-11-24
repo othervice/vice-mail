@@ -320,7 +320,9 @@ fn configure_writer(conn: &Connection) -> Result<(), StoreError> {
         )));
     }
     conn.execute_batch(WRITER_PRAGMAS)
-        .map_err(StoreError::sqlite("configure write connection"))
+        .map_err(StoreError::sqlite("configure write connection"))?;
+    // Stage 19 (decision 0061): the sort keys, before the migration that fills them.
+    crate::sort_keys::register(conn).map_err(StoreError::sqlite("register SQL functions"))
 }
 
 fn open_reader(path: &Path) -> Result<Connection, StoreError> {

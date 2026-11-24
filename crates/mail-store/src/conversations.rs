@@ -47,7 +47,7 @@ fn location_condition(kind: InboxListKind, l: &str) -> String {
 
 /// What hides a message `m` from a list of `kind` (account UUID `?{a}`); `x` keeps the aliases
 /// of nested checks apart.
-fn hidden(kind: InboxListKind, m: &str, a: usize, x: &str) -> String {
+pub(crate) fn hidden(kind: InboxListKind, m: &str, a: usize, x: &str) -> String {
     let marks = match kind {
         InboxListKind::Rows => format!(
             "AND NOT EXISTS (SELECT 1 FROM snooze s{x}
