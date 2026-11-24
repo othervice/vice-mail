@@ -68,7 +68,7 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach Zähler der Konversation als Pille und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
-| Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, sonst Datum |
+| Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
 | Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Anpinnen, Verschieben, Später, Mehr |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
@@ -110,7 +110,8 @@ aus dem Logo (Blaugrün und die anderen Farbthemen bleiben wählbar); die Priori
 invertierter heller: eigene Flächenstufen, gedämpfter Akzent, Kontrast nach `docs/SPEC.md`.
 
 HTML-Mails werden auf ihrem eigenen Hintergrund gezeigt und im dunklen Modus nicht umgefärbt.
-Reine Textmails folgen dem Thema.
+Nennt eine HTML-Mail keine Schrift, steht sie in der Systemschrift der App statt in Times (siehe
+„Nach den README-Bildern“). Reine Textmails folgen dem Thema.
 
 ## Feinschliff 23.11.2026
 
@@ -288,6 +289,49 @@ ohne Breakpoints), sind durch Rasterstufen ersetzt: Die Befehlspalette klebte am
 Knöpfe und Reiter hatten keine feste Höhe. Die .eml-Ansicht steht in derselben mittigen Spalte wie
 der Lesebereich. Das blaue Löschkreuz der Engine im Suchfeld ist ausgeblendet (die App hat ein
 eigenes).
+
+## Nach den README-Bildern (23.11.2026)
+
+Die Bildschirmfotos für die README (`docs/images/`, `app/tests/e2e/readme-shots.e2e.mjs`) haben
+Mängel gezeigt, die so behoben sind:
+
+- **Schrift in HTML-Mails.** Jedes `srcdoc` bekommt nach der CSP einen Grundstil
+  (`mail_content::MAIL_DEFAULT_STYLE`): `font-family` wie `--ui-font-family`, als `:where(html)`
+  ohne Spezifität und vor dem Stil der Mail, die ihn so immer überschreibt. Sonst nichts (Größen,
+  Farben und Abstände bleiben die der WebView, mit denen Mail-Layouts rechnen).
+- **Zeilen ohne Vorschau.** Ältere Mails als die vorab geladenen haben keine Vorschau. In der
+  schmalen Liste stehen ihre zwei Zeilen mittig in der festen Höhe von 76 px (die Zeile richtet
+  ihren Inhalt mittig aus, das war schon so); kein Platzhalter wie „Keine Vorschau“, der in einer
+  langen älteren Liste in jeder Zeile stünde. Die feste Höhe der virtuellen Liste bleibt.
+- **Datum in der Zeile.** Vor diesem Jahr mit Jahr und Monatsnamen („6. Sept. 2025“ statt
+  „06.09.25“): eine Schreibweise, auch wo keine Monatsüberschrift darübersteht.
+- **Suchtreffer** stehen in einer Liste ohne Monatsüberschriften. Sie sind nach Datum geordnet,
+  aber über Jahre verteilt, und bekamen sonst oft jeder eine eigene Überschrift; jede Zeile nennt
+  ihr Datum.
+- **Leiste des Lesebereichs.** Ist kein Platz für das Wort „Nur lesend“, steht nur das Schloss,
+  mit Wort und Erklärung als Tooltip (für Screenreader bleibt der Text), statt „Nur l…“. Das Wort
+  wird gemessen, auch wenn es nur verborgen ist, damit die Leiste zwischen beiden Zuständen nicht
+  springt.
+- **KI-Panel.** Wartet ein Zustimmungsschritt (Zusammenfassung, Antwortvorschlag), ist das
+  Fragefeld darunter eingeklappt (es bleibt bestehen, eine angefangene Frage geht nicht verloren):
+  der Schritt hat die ganze Höhe des Panels. Host und Modell stehen nur in der Zeile „An wen“,
+  die Größe der Anfrage ohne sie. Chips, Panel und Befehlspalette benennen dieselbe Aktion gleich:
+  „Konversation zusammenfassen“ und „Antwort vorschlagen“ (englisch „Summarise conversation“ und
+  „Suggest a reply“). In einer Konversation stehen die Chips unter der geöffneten Mail, auch wenn
+  das nicht die Mail der Zeile ist; das Panel arbeitet mit der Konversation der Zeile.
+- **Signatur beim Verfassen.** Im Rich Text steht sie direkt unter dem Text, in der Schreibfläche,
+  mit ihrer Formatierung (fett, kursiv, Listen, Ausrichtung; Links als Text, ohne Bilder), aus dem
+  bereinigten HTML des Kerns als React-Elemente gebaut, nie als rohes HTML. Steht die Antwort über
+  dem Original, folgt das zitierte Original darunter in derselben Fläche: Text, Signatur und
+  Original scrollen als ein Dokument, statt dass die Schreibfläche zu einem kleinen eigenen
+  Scrollbereich schrumpft. Der Text hat dann mindestens 6 rem, die Fläche reicht weiter bis zur
+  Anhangsleiste; ein Klick in den leeren Teil setzt den Cursor ans Ende des Texts, und der
+  Fokusring umrahmt die ganze Fläche. Reiner Text zeigt Signatur und Original weiter unter dem Feld.
+- **KI über MCP.** Pfade im Benutzerordner (Hilfsprogramm, Verbindungspunkt) stehen ab `~/…`, damit
+  ein Bildschirmfoto oder eine geteilte Ansicht keinen Benutzernamen zeigt; „Ganzen Pfad kopieren“
+  kopiert den vollen Pfad.
+- **Befehlspalette.** „Gehe zu Alle Posteingänge“ / „Go to All inboxes“: der Name der Ansicht wie in
+  der Seitenspalte, wie bei den anderen „Gehe zu“-Einträgen.
 
 ## Seitenspalte: Konten und Ordner (23.11.2026)
 
