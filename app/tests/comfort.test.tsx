@@ -575,6 +575,24 @@ describe("settings", () => {
     });
     expect(screen.getByText(/Whether previews appear on the lock screen is decided by the system/)).toBeTruthy();
   });
+
+  it("Notifications: new mail as the app's popup (default) or as a system notification (stage 18)", async () => {
+    const { core, user } = setup(makeMessages(1));
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Notifications" }));
+    const group = await screen.findByRole("radiogroup", { name: "Show new mail as" });
+    const popup = within(group).getByRole("radio", { name: "Popup from Vice Mail" });
+    // Settings stored before stage 18 have no style: the popup is the default.
+    expect(popup.getAttribute("aria-checked")).toBe("true");
+    await user.click(within(group).getByRole("radio", { name: "System notification" }));
+    await waitFor(() => {
+      expect(core.comfort.notificationSettings.newMailStyle).toBe("system");
+    });
+    await user.click(popup);
+    await waitFor(() => {
+      expect(core.comfort.notificationSettings.newMailStyle).toBe("popup");
+    });
+  });
 });
 
 describe("notifications and events", () => {
@@ -593,6 +611,21 @@ describe("notifications and events", () => {
     await waitFor(() => {
       expect(core.comfort.notificationTexts?.newMessages).toBe("{count} neue Nachrichten");
     });
+  });
+
+  it("“N more” in the new-mail popup shows the inbox of the account, or the unified inbox", async () => {
+    setup(makeMessages(1));
+    await list();
+    act(() => {
+      useUiStore.getState().showMailView("later");
+    });
+    await emitCore({ type: "openInboxRequested", accountId: ADA.id });
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "inbox" });
+    expect(useUiStore.getState().selectedAccountId).toBe(ADA.id);
+    expect(useUiStore.getState().unifiedInbox).toBeNull();
+    await emitCore({ type: "openInboxRequested", accountId: null });
+    expect(useUiStore.getState().unifiedInbox).toEqual({ kind: "all" });
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "inbox" });
   });
 
   it("a skipped local rule is reported with its reason", async () => {

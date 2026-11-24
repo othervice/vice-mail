@@ -18,7 +18,8 @@ import { handleInboxChanged, refreshComfortListsOf } from "./queries";
  * (`openMessageRequested`) brings its folder to the front and opens the mail (decisions 0027,
  * 0028): in the thread pane when it shows the mail already, else selected in the folder's list
  * once that has loaded it, else in a window of its own (the list is paged; the mail may be on
- * no loaded page).
+ * no loaded page). "Read" in the new-mail popup asks the same way; its "N more"
+ * (`openInboxRequested`, stage 18) shows the inbox.
  */
 export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): void {
   switch (event.type) {
@@ -61,6 +62,18 @@ export function handleComfortEvent(queryClient: QueryClient, event: CoreEvent): 
           openMessageInWindow(accountId, messageId);
         },
       });
+      break;
+    }
+    case "openInboxRequested": {
+      // Stage 18 (decision 0051): "N more" in the new-mail popup. The main window shows the
+      // inbox of the cards' account, or the unified inbox when they came from several.
+      if (currentWindowRoute().kind !== "main") break;
+      const ui = useUiStore.getState();
+      if (event.accountId === null) ui.showUnifiedInbox({ kind: "all" });
+      else {
+        ui.selectAccount(event.accountId);
+        ui.showMailView("inbox");
+      }
       break;
     }
     default:

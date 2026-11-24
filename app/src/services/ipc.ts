@@ -1848,3 +1848,48 @@ export const oauthIpc = {
 export type { Protocol } from "../generated/bindings";
 /** Stage 14: a password, or an API token for a JMAP server (sent as a bearer token). */
 export type { CredentialKind } from "../generated/bindings";
+
+// ---- Stage 18 (decision 0051): the new-mail popup ----
+import {
+  commands as popupCommands,
+  events as popupEvents,
+  type NewMailAccount,
+  type NewMailCard,
+  type NewMailContent,
+  type NewMailPopup,
+  type NewMailStyle,
+  type PopupAppearance,
+} from "../generated/bindings";
+
+export type { NewMailAccount, NewMailCard, NewMailContent, NewMailPopup, NewMailStyle, PopupAppearance };
+
+/**
+ * The popup's window may call these commands and nothing else (the shell refuses the rest). Each
+ * change answers with the whole popup; `revision` orders answers and events.
+ */
+export const popupIpc = {
+  /** The cards (at most three, newest first), how many more wait, and the app's appearance. */
+  get: (): Promise<NewMailPopup> => call(() => popupCommands.getNewMailPopup()),
+  /** The card goes; the main window comes to the front with the message in its inbox. */
+  read: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.readFromPopup(messageId)),
+  /** The list's delete through the outbox into the trash; `read_only` for a read-only account. */
+  delete: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.deleteFromPopup(messageId)),
+  /** Undoes the deletion of a card. */
+  undo: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.undoPopupDelete(messageId)),
+  /** Closes one card, or every card (`null`, the popup hid itself). */
+  dismiss: (messageId: MessageId | null): Promise<NewMailPopup> => call(() => popupCommands.dismissPopup(messageId)),
+  /** "N more": everything closes, the main window shows the inbox. */
+  openInbox: (): Promise<NewMailPopup> => call(() => popupCommands.openInboxFromPopup()),
+  /** The page's height in CSS pixels: the window takes it at the bottom right of the screen. */
+  fit: (height: number): Promise<void> => done(call(() => popupCommands.fitNewMailPopup(height))),
+  /** Changes while the popup is open. Resolves once the listener is registered. */
+  onChanged: async (handler: (popup: NewMailPopup) => void): Promise<Unsubscribe> => {
+    try {
+      return await popupEvents.newMailPopupChanged.listen((e) => {
+        handler(e.payload);
+      });
+    } catch (e) {
+      throw toCoreError(e);
+    }
+  },
+};
