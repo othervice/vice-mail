@@ -42,13 +42,13 @@ Rust-SDK (`rmcp`) prüfen; Abhängigkeitsregel beachten. Der Unterbau ist vorgez
 
 ## Ergebnis
 
-Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten: Unterbau `crates/mail-mcp` in f56b94d,
-Verdrahtung in `AppCore`, Shell und Installer in edef962, Oberfläche in d68d985). Geprüft von der
-Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf 1ad3957 (878 Rust-, 780
-Vitest-Tests) und auf 5087aae (947 Rust-, 909 Vitest-Tests in 41 Dateien); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf c861351 (950
-Tests); auf 5087aae 1.021 von 1.022 grün, rot nur `ai::tests::qa::qa_set_with_a_real_model`, der ohne lokales Modell scheiterte (seit 0641b44 überspringt er sich ohne Modell); `pnpm --dir app test:e2e` grün auf 1ad3957 mit den
-Testständen aus 5087aae (9 Spec-Dateien, 61 Tests, darunter `mcp-sync.e2e.mjs`); auf 5087aae 58 von
+Ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten: Unterbau `crates/mail-mcp` in e7a1b5f,
+Verdrahtung in `AppCore`, Shell und Installer in 7fe859c, Oberfläche in 4dd8c47). Geprüft von der
+Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün auf 8c70d6e (878 Rust-, 780
+Vitest-Tests) und auf bd801aa (947 Rust-, 909 Vitest-Tests in 41 Dateien); alle Servertests
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) grün auf 2437cbb (950
+Tests); auf bd801aa 1.021 von 1.022 grün, rot nur `ai::tests::qa::qa_set_with_a_real_model`, der ohne lokales Modell scheiterte (seit d0fc8bf überspringt er sich ohne Modell); `pnpm --dir app test:e2e` grün auf 8c70d6e mit den
+Testständen aus bd801aa (9 Spec-Dateien, 61 Tests, darunter `mcp-sync.e2e.mjs`); auf bd801aa 58 von
 61 Tests grün, die Spec dieser Stufe eingeschlossen; rot sind dort drei Tests in `reading.e2e.mjs`
 (Stufe 3, Ursache offen). Gebaut: macOS-App und Disk-Image mit dem Hilfsprogramm in
 `Contents/MacOS/mail-mcp` (ad hoc signiert, `codesign --verify` ok, im Disk-Image),

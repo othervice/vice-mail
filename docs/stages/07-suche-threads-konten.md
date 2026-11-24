@@ -39,11 +39,11 @@ Posteingang über mehrere Konten. Die Leistungsziele aus `docs/SPEC.md` sind gem
 
 Ausgeführt am 22./23.11.2026 (Hauptsitzung mit Subagenten: Suchsprache und Threads als Grundstein,
 Store, Engine und Commands, Leistungsmessung, Oberfläche; letzte und gespeicherte Suchen in
-bd942bc). Geprüft am 23.11. von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün
-auf bd942bc (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für das Windows-Ziel, cargo
+e402edc). Geprüft am 23.11. von der Hauptsitzung in sauberen Worktrees: `scripts/check.sh` grün
+auf e402edc (998 Rust-, 1.111 Vitest-Tests in 55 Dateien, mit Clippy für das Windows-Ziel, cargo
 deny und pnpm audit); alle Servertests (`cargo test --workspace -- --include-ignored` gegen den
-lokalen Stalwart) grün auf bd942bc (1.076 Tests, darunter `bench_100k`, `bench_500k` und
-`full_seed_threads_like_its_references`); `pnpm --dir app test:e2e` grün auf bd942bc mit den
+lokalen Stalwart) grün auf e402edc (1.076 Tests, darunter `bench_100k`, `bench_500k` und
+`full_seed_threads_like_its_references`); `pnpm --dir app test:e2e` grün auf e402edc mit den
 Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, darunter
 `search.e2e.mjs` mit 5 von 5 Tests). Entscheidungen: 0013 (Suchsprache und Threads), 0017
 (Integration in Store und Engine), 0026 (gespeicherte und letzte Suchen). Messung:
@@ -79,7 +79,7 @@ Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, daru
 - Identitäten: `stage7_tests::identities_have_one_default_and_unique_addresses`,
   `search::tests::identities_and_the_reply_identity`, `compose::tests::identity_choice_order`;
   Oberfläche `account-groups-identities.test.tsx`.
-- Letzte und gespeicherte Suchen (neu in bd942bc, Migration 0012, in `check.sh` außer wo Stalwart
+- Letzte und gespeicherte Suchen (neu in e402edc, Migration 0012, in `check.sh` außer wo Stalwart
   genannt ist): Modell `saved_search::tests::names_are_cleaned_and_bounded`,
   `queries_are_trimmed_and_bounded`, `errors_have_their_own_codes`, `ids_are_uuids_on_the_wire`;
   Store `saved_searches::tests::saved_searches_keep_their_order_names_and_limit`,
@@ -103,8 +103,8 @@ Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, daru
   0,36 ms Median, p95 0,47 ms, Maximum 0,72 ms; Listenseite 0,10 ms, Thread-Liste 0,26 ms, Start bis
   zur ersten Seite 2 ms, Arbeitsspeicher im Leerlauf 21 MB. Großzügige Schwellen als automatischer
   Test `search::bench::small_data_meets_generous_thresholds` (in `check.sh`); `bench_100k` und
-  `bench_500k` liefen im Serverlauf auf bd942bc (Debug-Build) grün mit.
-- In der App (`search.e2e.mjs`, grün auf bd942bc): Treffer beim Tippen mit markierten Fundstellen,
+  `bench_500k` liefen im Serverlauf auf e402edc (Debug-Build) grün mit.
+- In der App (`search.e2e.mjs`, grün auf e402edc): Treffer beim Tippen mit markierten Fundstellen,
   ein kaputtes Datum wird an seiner Stelle erklärt, Suche auf dem Server, Konversationen in einem
   normalen Ordner (nicht im sortierten Posteingang) öffnen, Identitäten in den Kontoeinstellungen.
 - Oberfläche (Vitest `search.test.tsx`, `search-logic.test.ts`, `threads.test.tsx`): Cmd+F und `/`,
@@ -137,7 +137,7 @@ Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, daru
 - Leistung nur im Kern gemessen, nicht mit WebView und Rendern der Liste. Befund aus dem
   Desktop-Test: Nachdem alle 9.959 Zeilen des Posteingangs zweimal gerendert worden waren, wurde
   späteres Scrollen langsam (längster Frame rund 250 ms statt 25 ms); der Test misst das Scrollen
-  vorher (auf bd942bc längster Frame 24 ms während des Erstabgleichs). Der Befund wird gerade
+  vorher (auf e402edc längster Frame 24 ms während des Erstabgleichs). Der Befund wird gerade
   untersucht (Stufe 8/9). Die Nachmessung der Leistungswerte für Stufe 8 und 9 läuft (siehe
   `docs/testing/performance.md`).
 - Gespeicherte und letzte Suchen nur in Vitest und im Kern geprüft; `search.e2e.mjs` enthält sie
@@ -147,6 +147,6 @@ Testständen aus ab594b7 (16 Spec-Dateien, 89 Tests grün, 6 übersprungen, daru
 **Wartet auf**
 - Mensch: mit den eigenen Konten suchen. Findet die Suche, was erwartet wird? Sind Threads richtig
   zusammengeführt?
-- Mensch (Windows): Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus bd942bc,
+- Mensch (Windows): Prototyp `prototype-2026-11-23-2` (Gitea-Vorab-Release, gebaut aus e402edc,
   mit letzten und gespeicherten Suchen) nach `docs/testing/windows-checklist.md`, Abschnitt 12
   (Suche und mehrere Konten).

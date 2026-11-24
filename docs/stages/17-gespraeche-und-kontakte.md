@@ -77,13 +77,13 @@ Kontakte sind eine eigene, schön gestaltete Ansicht mit eigenen Bildern, guter 
 
 ### A — Gespräche in der Liste aufklappen
 
-**Stand vom 24.11.2026, 15:10** (Block A, eigene Sitzung). Commits: 5a19494 (Store- und
-Engine-Tests der Kinder), f56fc3a (Oberfläche: Baum, Kindzeilen, eine Mail rechts, Aktionen),
-e8732b6 (Desktop-Specs), 69f8aa1 (Entscheidung 0049, Nachtrag in 0039, `docs/DESIGN.md` Abschnitt
-„Gespräche aufklappen (Stufe 17, Entscheidung 0049)“, `docs/ARCHITECTURE.md`), 4ecccba (eine per ID
-verlangte Mail klappt ihr Gespräch auf), a28215d (schmale Kindzeilen, Spec auf Englisch), d73c421
-und 7edb9eb (weniger Arbeit je Nachladen in Listen einzelner Mails; Tastatur-Spec nimmt den Baum),
-0bbb77d (Tastatur-Spec zählt die Liste nicht zu den Bäumen der Spalte).
+**Stand vom 24.11.2026, 15:10** (Block A, eigene Sitzung). Commits: 7177509 (Store- und
+Engine-Tests der Kinder), 37424a7 (Oberfläche: Baum, Kindzeilen, eine Mail rechts, Aktionen),
+76e1414 (Desktop-Specs), 7e13816 (Entscheidung 0049, Nachtrag in 0039, `docs/DESIGN.md` Abschnitt
+„Gespräche aufklappen (Stufe 17, Entscheidung 0049)“, `docs/ARCHITECTURE.md`), 2ac5cd8 (eine per ID
+verlangte Mail klappt ihr Gespräch auf), 8b25248 (schmale Kindzeilen, Spec auf Englisch), 207014e
+und 07be093 (weniger Arbeit je Nachladen in Listen einzelner Mails; Tastatur-Spec nimmt den Baum),
+ece0a11 (Tastatur-Spec zählt die Liste nicht zu den Bäumen der Spalte).
 Kein neuer Command, keine Migration, Bindings unverändert.
 
 **Umgesetzt**
@@ -133,13 +133,13 @@ Kein neuer Command, keine Migration, Bindings unverändert.
   und Kindzeile; nur Tastatur → → ↓ ↓ ← ←; flüssiges Scrollen aufgeklappt: Median 17 ms, kein
   leeres Bild), angepasst `search.e2e.mjs` (Baum, „n replies“, eine Karte rechts),
   `keyboard.e2e.mjs` (Liste auch als Baum), `readme-shots.e2e.mjs` und `support/scroll.mjs` (lesen
-  Baumeinträge). Ganzer Desktop-Lauf auf 7edb9eb: **24 von 24 Spec-Dateien grün** (10:22 min); `keyboard.e2e.mjs` allein (frisches Datenverzeichnis, also
-  mit Gesprächen als Baum) auf dem Stand von 0bbb77d 4 von 4 grün.
+  Baumeinträge). Ganzer Desktop-Lauf auf 07be093: **24 von 24 Spec-Dateien grün** (10:22 min); `keyboard.e2e.mjs` allein (frisches Datenverzeichnis, also
+  mit Gesprächen als Baum) auf dem Stand von ece0a11 4 von 4 grün.
 - Flüssig beim Abgleich (`account-sync.e2e.mjs`, Liste einzelner Mails): Im ersten ganzen Lauf auf
-  a28215d schlug die Messung mit einem einzelnen Bild von 75 ms fehl (Grenze 50 ms). Gegenprobe
-  allein, abwechselnd gebaut: Stand vor Block A (f56fc3a^) 4 Läufe, 2 mit einem einzelnen langen
-  Block (77 und 56 ms), 2 grün (27 ms); d73c421 5 Läufe, 4 mit einem einzelnen Block von 60–75 ms.
-  Mit 7edb9eb (keine zusätzlichen Zuordnungen je Nachladen und Bildlauf in Listen einzelner Mails)
+  8b25248 schlug die Messung mit einem einzelnen Bild von 75 ms fehl (Grenze 50 ms). Gegenprobe
+  allein, abwechselnd gebaut: Stand vor Block A (37424a7^) 4 Läufe, 2 mit einem einzelnen langen
+  Block (77 und 56 ms), 2 grün (27 ms); 207014e 5 Läufe, 4 mit einem einzelnen Block von 60–75 ms.
+  Mit 07be093 (keine zusätzlichen Zuordnungen je Nachladen und Bildlauf in Listen einzelner Mails)
   3 von 3 grün (längstes Bild 33, 34, 28 ms; Median 17 ms; kein leeres Bild), im ganzen Lauf
   ebenfalls grün. Der einzelne lange Block tritt also auch ohne Block A auf (Rechner mit parallelen
   Builds anderer Sitzungen und einem iOS-Simulator, Last 4–16); die Ursache ist nicht geklärt.
@@ -157,10 +157,10 @@ Kein neuer Command, keine Migration, Bindings unverändert.
 
 ### B — Kontakte
 
-**Stand vom 24.11.2026, 16:00** (Block B, eigene Sitzung). Commits: 93ce385 (Kern), a8670d9
-(Oberfläche), 4ec7895 (Entscheidung 0050 und Dokumente), 293524a (Neustart im Kerntest), 899bd3e
-(Desktop-Spec, Feinschliff aus ihren Bildern), de4b577 (Datensätze eines anderen Geräts),
-f9ecd88 (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
+**Stand vom 24.11.2026, 16:00** (Block B, eigene Sitzung). Commits: 7d71735 (Kern), 0791cae
+(Oberfläche), 1034414 (Entscheidung 0050 und Dokumente), 38a05ec (Neustart im Kerntest), e72f1dc
+(Desktop-Spec, Feinschliff aus ihren Bildern), b51d064 (Datensätze eines anderen Geräts),
+d355c1a (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
 `docs/decisions/0050-kontakte-bilder-spam.md`, Migration 0020.
 
 **Umgesetzt**
@@ -217,18 +217,18 @@ f9ecd88 (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
   (16, auf die Ansicht umgestellt; Einstellungen mit Verweis und Doppelten), axe der Kontakte in
   Hell und Dunkel (`a11y.test.tsx`).
 - Desktop: `contacts.e2e.mjs` 3 von 3 grün, zweimal, über `scripts/e2e-gui.sh` im eigenen Worktree
-  (a8670d9 mit den Dateien von 899bd3e; App und Helfer als eigene Kopie): Absender, Cc und
+  (0791cae mit den Dateien von e72f1dc; App und Helfer als eigene Kopie): Absender, Cc und
   Antwort-an werden Kontakte; Suche nach Name, Adresse, Domain; ein gezogenes PNG öffnet den
   Zuschnitt mit der JPEG des Helfers, das Bild steht danach als `data:image/jpeg` in Seite, Liste
   und Posteingangszeile; „Als Spam markieren“ verschiebt beide Mails auf dem Server in den
   Spam-Ordner (Posteingang 9.962 → 9.960), „Rückgängig“ holt sie zurück; keine CSP-Verletzung.
-- `scripts/check.sh` im Haupt-Checkout grün: zuerst auf 899bd3e (1.350 Rust-Tests), zuletzt
-  gestartet auf f9ecd88: 1.351 Rust-Tests (102 ignoriert), 5 der Feature e2e, Clippy auch für
+- `scripts/check.sh` im Haupt-Checkout grün: zuerst auf e72f1dc (1.350 Rust-Tests), zuletzt
+  gestartet auf d355c1a: 1.351 Rust-Tests (102 ignoriert), 5 der Feature e2e, Clippy auch für
   Windows, 4.036 Vitest-Tests in 89 Dateien, Vite-Build, cargo deny, pnpm audit, Lizenzen. Der
-  Vitest-Schritt lief schon mit f1be6e3 einer anderen Sitzung (15 s je Test). Zwei Läufe dazwischen
+  Vitest-Schritt lief schon mit dcb2b05 einer anderen Sitzung (15 s je Test). Zwei Läufe dazwischen
   scheiterten an der Last der parallelen Sitzungen (Lastmittel 17): einmal fehlte in Clippy ein
   `objc2`-Artefakt im gemeinsamen `target`, einmal liefen drei Vitest-Tests in ihre Zeitgrenze
-  (einzeln grün; für den Kontakte-Test f9ecd88).
+  (einzeln grün; für den Kontakte-Test d355c1a).
 
 **Ungeprüft / offen**
 - Einstellungs-Sync zwischen zwei Geräten über den echten Transport (Ordner im Postfach) nicht mit
@@ -245,11 +245,11 @@ f9ecd88 (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
 
 ### C — Ansichten in der Spalte bearbeiten
 
-**Stand vom 24.11.2026, 15:45** (Block C, eigene Sitzung). Commits: c027e0e (Kern), 55ec9b9
-(Oberfläche), 01d868b (Escape bei verlorenem Fokus, vom Desktop-Test gefunden), cdef21e
-(Shell-Test), dd1954f, 1f82811, ada744d, 2897e5e (Desktop-Specs), d14315a (`docs/DESIGN.md`,
+**Stand vom 24.11.2026, 15:45** (Block C, eigene Sitzung). Commits: bfbe1ae (Kern), 8a7ebc9
+(Oberfläche), 59bb3bb (Escape bei verlorenem Fokus, vom Desktop-Test gefunden), d045f52
+(Shell-Test), 37305b7, 7f7fbfb, 2a23e5a, 9d5efe1 (Desktop-Specs), c78e1d0 (`docs/DESIGN.md`,
 Abschnitt „Ansichten bearbeiten (Stufe 17)“). Die Ansicht „Kontakte“ selbst (Seite, Palette
-„Gehe zu Kontakte“, `goContacts`) kam mit Block B in a8670d9 (Entscheidung 0050); sie steht als
+„Gehe zu Kontakte“, `goContacts`) kam mit Block B in 0791cae (Entscheidung 0050); sie steht als
 `contacts` in der einen Liste `COLUMN_VIEW_IDS` und ist damit in Spalte, Leiste und Editor, im
 Standard eingeblendet hinter den gespeicherten Ansichten. Keine neue Entscheidung: Die Stufe sah
 eine UI-Einstellung im Kern vor.
@@ -287,19 +287,19 @@ eine UI-Einstellung im Kern vor.
   den Kern, ausgeblendete Ansichten in Palette und Kürzel, leere Auswahl mit Hinweis, Ausblenden
   aus dem Zeilenmenü, axe ohne schwere Befunde (Dialog offen, leere Auswahl, Deutsch unter Windows).
   Angepasst: `frame.test.tsx`, `sidebar-keyboard.test.tsx` (Reihenfolge der Leiste).
-- Desktop (`scripts/e2e-gui.sh` im eigenen Worktree, mit Kontakten): auf 8b375b7 grün
+- Desktop (`scripts/e2e-gui.sh` im eigenen Worktree, mit Kontakten): auf e804e55 grün
   `frame.e2e.mjs` (13, darunter: aus der Palette öffnen, „Später“ per Klick ausblenden, „Markiert“
   mit Alt+↑ verschieben, der Kern hält die Auswahl, die Leiste zeigt sie zwischen Posteingang und
   Gesendet; Spalte und Leiste mit „Kontakte“), `restart.e2e.mjs` (4, die Auswahl ist nach dem
   Neustart da, danach zurück zum Standard), `keyboard.e2e.mjs` (4) und `a11y.e2e.mjs` (12).
 - Zwei Geräte gegen Stalwart: `shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay`
-  (`crates/mail-engine/tests/settings_sync.rs`, prüft jetzt auch `columnViews`) grün auf 8b375b7.
+  (`crates/mail-engine/tests/settings_sync.rs`, prüft jetzt auch `columnViews`) grün auf e804e55.
   Der erste Versuch direkt nach dem Desktop-Lauf scheiterte nach 0,04 s ohne sichtbaren Grund (die
   Ausgabe war gefiltert); mit frisch gestartetem Server und voller Ausgabe danach grün.
-- `scripts/check.sh` auf cdef21e in einem sauberen Worktree grün (in zwei Läufen, weil im ersten
+- `scripts/check.sh` auf d045f52 in einem sauberen Worktree grün (in zwei Läufen, weil im ersten
   ein paralleler Build im gemeinsamen `target` fremde Artefakte einschob): 1.326 Rust-Tests (102
   ignoriert), 5 der Feature e2e, 4.020 Vitest-Tests in 88 Dateien, Clippy auch für Windows.
-  Im Hauptcheckout auf 36db98a (ohne fremde offene Änderungen) am Ende: alle Schritte bis ESLint
+  Im Hauptcheckout auf f42169e (ohne fremde offene Änderungen) am Ende: alle Schritte bis ESLint
   grün (1.351 Rust-Tests, 102 ignoriert; 5 der Feature e2e; Clippy auch für Windows), Vitest im
   Lauf von `check.sh` mit 3 Zeitüberschreitungen (5 s) in `a11y.test.tsx` und `focus-ring.test.tsx`
   bei Systemlast 18 (parallele Agenten); danach einzeln 43 von 43 und die ganze Suite 4.036 von

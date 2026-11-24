@@ -48,7 +48,7 @@ aktuell und überstehen Netzabbrüche. Es wird nichts auf dem Server verändert.
 ## Ergebnis
 
 Ausgeführt am 22./23.11.2026; `scripts/check.sh` und `pnpm --dir app test:e2e` am 23.11. von der
-Hauptsitzung in einem sauberen Worktree (Commit 9ffdfb8) grün ausgeführt. (Hauptsitzung mit Subagenten: Grundstein, Speicher, IMAP-Adapter,
+Hauptsitzung in einem sauberen Worktree (Commit c025058) grün ausgeführt. (Hauptsitzung mit Subagenten: Grundstein, Speicher, IMAP-Adapter,
 Kontoerkennung/Schlüsselbund, Oberfläche, Engine, Desktop-Abnahme). Entscheidungen: 0007
 (Schnittstellen), 0008 (Abgleich-Engine).
 
@@ -78,7 +78,7 @@ Kontoerkennung/Schlüsselbund, Oberfläche, Engine, Desktop-Abnahme). Entscheidu
 
 **Nachtrag 23.11.2026:** Der Servertest `new_mail_flag_change_and_deletion_from_outside_arrive_by_idle`
 war ab dem Vorausladen aus Stufe 3 zeitabhängig rot (er hielt das Vorschau-Ereignis des Vorausladens
-für die Flag-Änderung); die Engine war korrekt. Seit `2f63aca` wartet der Test auf die Wirkung statt auf
+für die Flag-Änderung); die Engine war korrekt. Seit `3e7cd88` wartet der Test auf die Wirkung statt auf
 das nächste Ereignis; 8/8 Servertests mit `seed 10000` wieder grün.
 
 **Behobene Fehler aus der Abnahme**: Rahmen verrutschte durch versteckte Radix-Eingaben; veralteter

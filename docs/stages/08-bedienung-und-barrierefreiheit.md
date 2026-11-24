@@ -43,25 +43,25 @@ Mensch seit Stufe 5 gesammelt hat (Ergebnis-Abschnitte der Stufen 05 bis 07).
 ## Ergebnis
 
 **Stand vom 23.11.2026, 13:30.** Ausgeführt am 22./23.11.2026 (Hauptsitzung mit Subagenten).
-Gebaut in 3ac466d, e1097b4, 850917e, 5a19dab (Kern: Oberflächen-Einstellungen, Layout je Fenster,
-Mail- und Composer-Fenster), e0046af, 40590d4 und bd942bc (Oberfläche dazu), eed0334 (Zustand des
-KI-Panels), 0956418 (Fokusring, „Bewegung reduzieren“, Kontonamen, Zustände), e874bff (axe in der
-echten WebView, Diagnose der Scroll-Hänger), 0f763ee (Nachmessung und Behebung), e0db960 (Liste
-nach 0031), 0780273 und 3fb67ac (Namen von Ordnern und Zählern der Leiste enthalten den sichtbaren
+Gebaut in c7fd173, b73f180, 415667b, 9c8ed68 (Kern: Oberflächen-Einstellungen, Layout je Fenster,
+Mail- und Composer-Fenster), e7d7a5c, f19e8c9 und e402edc (Oberfläche dazu), 582bce8 (Zustand des
+KI-Panels), 0956418 (Fokusring, „Bewegung reduzieren“, Kontonamen, Zustände), 22ac22a (axe in der
+echten WebView, Diagnose der Scroll-Hänger), 874d7c5 (Nachmessung und Behebung), dfa4377 (Liste
+nach 0031), 0780273 und e2bb12f (Namen von Ordnern und Zählern der Leiste enthalten den sichtbaren
 Text). Entscheidungen: 0025 (Oberflächen-Einstellungen und Mailfenster), 0028 (Punkt 11 bis 13),
 0029 (Start ohne breites Lesen), 0030 („Bewegung reduzieren“ nur über das System), 0031
 (Feinschliff, darin die axe-Befunde der Liste). Geprüft von der Hauptsitzung in sauberen
-Worktrees: `scripts/check.sh` grün auf dfa77d9 (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit
+Worktrees: `scripts/check.sh` grün auf 3ad835d (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit
 Clippy für das Windows-Ziel, cargo deny und pnpm audit); alle Servertests
-(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) auf dfa77d9: 1.185 von
+(`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) auf 3ad835d: 1.185 von
 1.186 grün, der eine Fehler gehört zu Stufe 16 (zwei Servertests teilten sich bobs Konto, behoben in
-011629f); `pnpm --dir app test:e2e` grün auf 7ce21bd mit den Änderungen aus 0780273 (17
+13020c1); `pnpm --dir app test:e2e` grün auf b3a5f92 mit den Änderungen aus 0780273 (17
 Spec-Dateien, 99 Tests grün, 6 übersprungen, darunter `keyboard.e2e.mjs` 4 von 4,
 `windows.e2e.mjs` 3 von 3, `a11y.e2e.mjs` 10 von 10, `layouts.e2e.mjs` 7 grün und die 6 Fälle bei
 2560×1440 übersprungen, weil der Bildschirm hier 1920×1080 hat). Desktop-Lauf auf dem neuesten
-Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Prototypen: `prototype-2026-11-23-3` (7ce21bd, macOS) und
-`prototype-2026-11-23-3.1` (8b357c2, Windows) enthalten Stufe 8 ohne 0780273 und 3fb67ac;
-`prototype-2026-11-23-2` (bd942bc) den Stand vor 0956418; `prototype-2026-11-23-4` (4928d71, Windows
+Stand: grün auf 6a2724b mit den Testständen aus 7afaf44 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Prototypen: `prototype-2026-11-23-3` (b3a5f92, macOS) und
+`prototype-2026-11-23-3.1` (34c4132, Windows) enthalten Stufe 8 ohne 0780273 und e2bb12f;
+`prototype-2026-11-23-2` (e402edc) den Stand vor 0956418; `prototype-2026-11-23-4` (7afaf44, Windows
 und macOS) enthält den vollständigen Stand dieser Stufe.
 
 **Nachgewiesen**
@@ -92,14 +92,14 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   (`get_ui_preferences`), der Web-Storage hat keinen Schlüssel `vice-mail.ui.shortcuts` mehr.
   Kürzel und Schriftgröße gehen über den Einstellungs-Sync
   (`tests/settings_sync.rs::shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay`,
-  Stalwart, grün auf bd942bc und dfa77d9); zuletzt benutzte Befehle und Layouts bleiben auf dem
+  Stalwart, grün auf e402edc und 3ad835d); zuletzt benutzte Befehle und Layouts bleiben auf dem
   Gerät.
 - Ohne Maus (`keyboard.e2e.mjs`, echte App): Tab erreicht die Liste, Pos1 und Eingabe öffnen die
   neueste Mail, `r` antwortet mit dem Fokus im Text, Cmd+Enter sendet, Escape führt zurück, `e`
   archiviert und der Fokus steht auf der nächsten Mail, Cmd+K „Go to Archive“ zeigt die Mail im
   Archiv; auf dem Server ist die Antwort genau einmal gesendet und die Mail im Archiv. Grün auf
-  bd942bc und 7ce21bd. Auf dfa77d9 rot: „Tab never reached the message list“ (nach 40
-  Tastendrücken), die drei folgenden Fälle bauen darauf auf. Neuester Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+  e402edc und b3a5f92. Auf 3ad835d rot: „Tab never reached the message list“ (nach 40
+  Tastendrücken), die drei folgenden Fälle bauen darauf auf. Neuester Stand: grün auf 6a2724b mit den Testständen aus 7afaf44 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
 - Layouts (`layout.test.tsx`): Lesebereich rechts, unten oder anstelle der Liste (Escape führt
   zurück, eine Aktion setzt den Fokus auf die nächste Mail), kompakte Zeilen, Schriftgröße 80 bis
   150 Prozent, aufgeklappte Seitenleiste bleibt, j/k wie die Pfeiltasten, Wechsel über die Palette,
@@ -108,21 +108,21 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   `tests::window_layout_belongs_to_the_calling_window` (die Shell nimmt das aufrufende Fenster,
   nie ein Argument). In der echten App (`layouts.e2e.mjs`) bei 900×600 alle drei Positionen in
   beiden Dichten und 150 Prozent Schrift: nichts scrollt seitlich, Liste und Lesebereich liegen im
-  Fenster, die Knöpfe der Symbolleiste im Lesebereich, nichts abgeschnitten; grün auf bd942bc,
-  7ce21bd und dfa77d9 (je 7 Fälle), neuester Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Die Bildschirmfotos
+  Fenster, die Knöpfe der Symbolleiste im Lesebereich, nichts abgeschnitten; grün auf e402edc,
+  b3a5f92 und 3ad835d (je 7 Fälle), neuester Stand: grün auf 6a2724b mit den Testständen aus 7afaf44 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Die Bildschirmfotos
   (`layout-900x600-*.png`) und `layouts-report.json` entstehen beim Lauf unter
   `app/tests/e2e/screenshots/` (nicht im Repo, `.gitignore`).
 - Mail und Composer im eigenen Fenster: Kern
   `ui_prefs::tests::a_message_window_needs_a_message_of_the_account`; Shell
   `tests::message_window_opens_once_with_the_main_windows_permissions` (einmal je Mail bzw.
   Entwurf, Rechte wie das Hauptfenster, keine für fremde Labels, Mail- und Composer-Fenster dürfen
-  sich schließen, das Hauptfenster nicht; 40590d4),
+  sich schließen, das Hauptfenster nicht; f19e8c9),
   `windows::tests::message_windows_have_one_label_per_message`,
   `composer_windows_have_one_label_and_page_per_draft`; Oberfläche `windows.test.tsx` (Fenster aus
   der Query, unbekannte Query erklärt, Mail ohne Leiste und Liste, verschwundene Mail, mehrere
   Entwürfe in eigenen Fenstern, Rückgängig im selben Fenster, Schließen nach Senden oder
   Verwerfen); axe ohne schwere Befunde in beiden reduzierten Fenstern (`a11y.test.tsx`); in der
-  echten App (`windows.e2e.mjs`, grün auf bd942bc, 7ce21bd und dfa77d9) „In neuem Fenster öffnen“
+  echten App (`windows.e2e.mjs`, grün auf e402edc, b3a5f92 und 3ad835d) „In neuem Fenster öffnen“
   öffnet die Mail einmal ohne Leiste (ein zweiter Aufruf öffnet kein weiteres Fenster), zwei
   Entwürfe öffnen zwei Composer-Fenster; nach dem Verwerfen schließt sich jedes Fenster oder
   meldet, dass es fertig ist (der Test lässt beides zu).
@@ -160,27 +160,27 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
 - Screenreader: Die virtualisierte Liste meldet Position und Gesamtzahl (`aria-posinset`,
   `aria-setsize`; `message-list.test.tsx`). Seit 0031 sind Bündel und „Alle anzeigen“ Einträge der
   Liste und zählen mit; im Desktop-Test `account-sync.e2e.mjs` bis Position 10.053 von 10.053
-  (9.959 Mails und 94 Bündeleinträge, so viele Mails wie auf dem Server; grün auf 7ce21bd und
-  dfa77d9). Der Name einer Zeile kommt aus ihrem sichtbaren Inhalt plus den Zuständen, die sie nur
+  (9.959 Mails und 94 Bündeleinträge, so viele Mails wie auf dem Server; grün auf b3a5f92 und
+  3ad835d). Der Name einer Zeile kommt aus ihrem sichtbaren Inhalt plus den Zuständen, die sie nur
   als Symbol zeigt (0031). Statusmeldungen über `role="status"` (u. a. `status.test.tsx`,
   `actions.test.tsx`).
 - axe-core in Vitest (`a11y.test.tsx`): keine schweren oder kritischen Befunde in Posteingang,
   Lesebereich, Composer (auch mit allen Teilen der Stufe 10), Mail- und Composer-Fenster, allen
   Einstellungsabschnitten, Aktivität, Ausgang, Command Palette, Kürzelübersicht, Suchen und
   KI-Panel, jeweils hell und dunkel.
-- axe-core in der echten WebView (`a11y.e2e.mjs`, seit e874bff im Lauf): axe 4.14.0 unter der
+- axe-core in der echten WebView (`a11y.e2e.mjs`, seit 22ac22a im Lauf): axe 4.14.0 unter der
   unveränderten CSP mit allen Regeln, auch `color-contrast` an den gerenderten Farben; Posteingang,
   Lesebereich mit der neuesten Mail, Composer (neue Mail und Rückfrage vor dem Verwerfen), jeder
   Einstellungsabschnitt und Command Palette, jeweils hell und dunkel: keine schweren oder
-  kritischen Befunde, 10 von 10 grün auf 7ce21bd (mit 0780273) und auf dfa77d9 (Akzent Orange,
-  0038). Neuester Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Über diesen Test gefunden und behoben: Buttons in der Listbox
+  kritischen Befunde, 10 von 10 grün auf b3a5f92 (mit 0780273) und auf 3ad835d (Akzent Orange,
+  0038). Neuester Stand: grün auf 6a2724b mit den Testständen aus 7afaf44 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`). Über diesen Test gefunden und behoben: Buttons in der Listbox
   (`aria-required-children`) und Zeilennamen ohne ihren sichtbaren Text
-  (`label-content-name-mismatch`, beide 0031), der Knopf „Name bearbeiten“ der Kontakte (e874bff),
-  der Ordnername mit Zähler (0780273), die Zähler von Aktivität und Ausgang in der Leiste (3fb67ac).
+  (`label-content-name-mismatch`, beide 0031), der Knopf „Name bearbeiten“ der Kontakte (22ac22a),
+  der Ordnername mit Zähler (0780273), die Zähler von Aktivität und Ausgang in der Leiste (e2bb12f).
 - Checkliste für VoiceOver und Narrator: `docs/testing/screenreader-checklist.md`.
 - Leistung (`docs/testing/performance.md`, „Stufe 8/9 – Nachmessung 23.11.2026“, Release-Build,
   nur der Kern): Die Nachmessung fand eine Verschlechterung seit Stufe 7 (Start 13 statt 2 ms,
-  Leerlauf 98 statt 21 MB bei 100.000 Mails), Ursache und Behebung in 0029 (0f763ee). Danach bei 100.000 /
+  Leerlauf 98 statt 21 MB bei 100.000 Mails), Ursache und Behebung in 0029 (874d7c5). Danach bei 100.000 /
   500.000 Mails: Start bis zur ersten Seite 5 / 5 ms (Kern nach 4 ms gestartet), Leerlauf 25 / 25
   MB, erste Suchtreffer 0,24–5,27 / 0,25–21,0 ms im Median, Wechsel zwischen lokalen Mails 0,39 /
   0,37 ms; alle Ziele aus `docs/SPEC.md` eingehalten. Tests der Behebung (in `check.sh`):
@@ -188,9 +188,9 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   `stage9_tests::new_locations_take_the_category_without_the_trigger`,
   `comfort::tests::the_core_classifies_older_messages_after_its_start`,
   `search::tests::an_index_job_found_at_start_runs_after_the_start`; `bench_100k` und `bench_500k`
-  liefen im Serverlauf auf dfa77d9 (Debug-Build) grün mit.
+  liefen im Serverlauf auf 3ad835d (Debug-Build) grün mit.
 - Scrollen im Desktop-Test: Die Verlangsamung nach vielen gerenderten Zeilen kommt von WebKit im
-  nie sichtbaren Testfenster, nicht von der App. `diag-stall.e2e.mjs` (nicht im Lauf, e874bff)
+  nie sichtbaren Testfenster, nicht von der App. `diag-stall.e2e.mjs` (nicht im Lauf, 22ac22a)
   misst in diesem Fenster (`visibilityState` „hidden“) auf eigenen Elementen ohne App-Code: frisch
   nach dem Start längste Lücke 0 ms beim Scrollen von 2.000 festen Zeilen und 12 ms beim Austausch
   von 30 Zeilen je Frame; nach 40 s Leerlauf 90 bzw. 198 ms beim Scrollen und 210 ms beim
@@ -198,7 +198,7 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   Hauptthread wird also nicht angehalten; die Lücken entstehen in der Arbeit von WebKit zwischen
   zwei Schritten (Scrollen, Layout). Scrollen während des Erstabgleichs
   (`account-sync.e2e.mjs`, gemessen vor dem Rendern aller Zeilen): längster Frame 37 ms, Median
-  17 ms, grün auf 7ce21bd.
+  17 ms, grün auf b3a5f92.
 
 **Abweichungen und Annahmen**
 - axe in Vitest/jsdom rechnet keine Farben, deshalb ist dort `color-contrast` aus; Kontraste prüft
@@ -230,18 +230,18 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   Palette.
 
 **Ungeprüft / offen**
-- Desktop-Lauf auf dfa77d9 (12:58–13:09): 14 von 20 Spec-Dateien grün; rot waren
+- Desktop-Lauf auf 3ad835d (12:58–13:09): 14 von 20 Spec-Dateien grün; rot waren
   `keyboard.e2e.mjs` (siehe oben), `account-sync.e2e.mjs` (Scrollen während des Erstabgleichs:
   längster Frame 53 ms, Grenze 50 ms), `frame.e2e.mjs` (Liste der Leiste), `reading.e2e.mjs`
   (Öffnen eines Anhangs), `actions.e2e.mjs` (ein Fall) und `find-in-message.e2e.mjs` (Stufe 16).
-  Ergebnis auf dem neuesten Stand: grün auf 5b0c53b mit den Testständen aus 4928d71 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
+  Ergebnis auf dem neuesten Stand: grün auf 6a2724b mit den Testständen aus 7afaf44 (21 Spec-Dateien, 115 Tests, 6 Fälle bei 2560×1440 übersprungen; Log `r6-full2.log`).
 - Scrollen nach vielen gerenderten Zeilen in einem sichtbaren Fenster ist nicht gemessen; der
   Desktop-Test kann es im verborgenen Fenster nicht.
 - Fokusring in der echten WebView (WKWebView, WebView2) und im Mail-Frame; Schriftgröße 80 Prozent
   nur in Vitest.
 - Layouts bei 2560×1440: der Testfall ist geschrieben, braucht aber einen Bildschirm mit dieser
   Größe.
-- Der Zustand des KI-Panels (eed0334) ist nur in Vitest und im Kern geprüft, nicht im Desktop-Test.
+- Der Zustand des KI-Panels (582bce8) ist nur in Vitest und im Kern geprüft, nicht im Desktop-Test.
 - VoiceOver und Narrator: die Checkliste ist nie durchlaufen worden.
 - Windows zur Laufzeit: Strg-Kürzel, Mail- und Composer-Fenster unter WebView2, Fokusring und
   „Animationseffekte“ von Windows.
@@ -251,7 +251,7 @@ und macOS) enthält den vollständigen Stand dieser Stufe.
   Screenreader-Checkliste mit VoiceOver und Narrator, wenn gewünscht.
 - Mensch (Bildschirm 2560×1440): `pnpm --dir app test:e2e` an einem Bildschirm dieser Größe laufen
   lassen (die sechs Fälle in `layouts.e2e.mjs`) und die Bildschirmfotos ansehen.
-- Mensch (Windows): Prototyp `prototype-2026-11-23-3.1` (Gitea-Vorab-Release, 8b357c2) nach
+- Mensch (Windows): Prototyp `prototype-2026-11-23-3.1` (Gitea-Vorab-Release, 34c4132) nach
   `docs/testing/windows-checklist.md`, Abschnitt 15 (Bedienung): Palette mit Strg+K, ein Kürzel
   ändern, eine Mail in eigenem Fenster öffnen; dazu sehen, ob der Fokusring unter WebView2 überall
   erscheint und ob „Animationseffekte“ aus die Farbübergänge abschaltet.

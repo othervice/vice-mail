@@ -415,7 +415,7 @@ hätte `ring` als Entwicklungsabhängigkeit behalten.
   206 Unit-Tests (Kontoerkennung über HTTPS mit eigenem Server, externe Bilder, Outbox-, Lese- und
   Suchtests gegen den Testserver), `tests/server.rs` 8 von 8, `tests/actions.rs`. Die Lesetests
   gegen den Testserver zusätzlich mit `seed 1000`: 4 von 4.
-- Builds mit `aws-lc-rs` aus einem sauberen Worktree von `7cc343a` plus dieser Änderung (im
+- Builds mit `aws-lc-rs` aus einem sauberen Worktree von `9dee241` plus dieser Änderung (im
   Checkout kompilierten halbfertige Änderungen anderer Sitzungen gerade nicht), Abhängigkeiten außer
   dem TLS-Stapel schon übersetzt:
   - macOS, `cargo build -p mail-app --release` (fat LTO): 18.494.224 B in 1:36 min; zum Vergleich

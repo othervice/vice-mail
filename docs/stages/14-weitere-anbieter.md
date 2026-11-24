@@ -67,13 +67,13 @@ Domain, Datenschutzerklärung und Demo-Video.
 
 **Stand vom 23.11.2026, 13:30: Block A gebaut, Handprüfung an einem echten Gmail-Konto offen;
 Blöcke B, C und D nicht begonnen.** Block A ausgeführt am 23.11.2026 (Hauptsitzung mit Subagenten,
-in e0db960: Adapter, Speicher, Outbox, Abgleich und Oberfläche, Migration `0014_gmail.sql`).
+in dfa4377: Adapter, Speicher, Outbox, Abgleich und Oberfläche, Migration `0014_gmail.sql`).
 Entscheidung: 0034 (Gmail über IMAP). Geprüft von der Hauptsitzung in sauberen Worktrees:
-`scripts/check.sh` grün auf dfa77d9 (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit Clippy für
+`scripts/check.sh` grün auf 3ad835d (1.102 Rust-, 3.860 Vitest-Tests in 75 Dateien, mit Clippy für
 das Windows-Ziel, cargo deny und pnpm audit; darin alle Gmail-Tests, sie brauchen keinen Server);
 alle Servertests (`cargo test --workspace -- --include-ignored` gegen den lokalen Stalwart) auf
-dfa77d9: 1.185 von 1.186 grün (der eine Fehler gehört zu Stufe 16, behoben in 011629f). Die
-Prototypen `prototype-2026-11-23-3` (7ce21bd, macOS) und `prototype-2026-11-23-3.1` (8b357c2,
+3ad835d: 1.185 von 1.186 grün (der eine Fehler gehört zu Stufe 16, behoben in 13020c1). Die
+Prototypen `prototype-2026-11-23-3` (b3a5f92, macOS) und `prototype-2026-11-23-3.1` (34c4132,
 Windows) enthalten Block A.
 
 **Nachgewiesen (ohne echtes Gmail-Konto, in `check.sh`)**
@@ -157,9 +157,9 @@ Windows) enthalten Block A.
 **Stand vom 23.11.2026, abends: gebaut und lokal getestet, ohne die App-Registrierungen des
 Menschen; nicht gegen Microsoft oder Google geprüft.** Entscheidung: 0042 (OAuth 2.0 mit PKCE im
 System-Browser, IMAP und SMTP mit Token, für Block C IMAP mit OAuth statt Gmail-API). Commits:
-c4be714 (Adapter: `XOAUTH2`/`OAUTHBEARER`), abeffdd (Kern, Shell, Oberfläche, Tests), 4e2a174
-(Ende-zu-Ende-Test gegen Stalwart, `testmail/provision.py`), d080d81 (Dokumentation), c2231b6
-(Test der Profile), b66b477 (Einstellungs-Sync). Die Client-IDs sind Build-Konfiguration
+48c3a4f (Adapter: `XOAUTH2`/`OAUTHBEARER`), abeffdd (Kern, Shell, Oberfläche, Tests), 1dbf89d
+(Ende-zu-Ende-Test gegen Stalwart, `testmail/provision.py`), ada7f80 (Dokumentation), 1b01fd7
+(Test der Profile), 03e3996 (Einstellungs-Sync). Die Client-IDs sind Build-Konfiguration
 (`MAIL_APP_OAUTH_MICROSOFT_CLIENT_ID`, `MAIL_APP_OAUTH_GOOGLE_CLIENT_ID`,
 `MAIL_APP_OAUTH_GOOGLE_CLIENT_SECRET`); ohne sie sagt die Einrichtung bei Microsoft, dass dieser
 Build sich dort nicht anmelden kann, und bei Gmail bleibt das App-Passwort. Heutige Builds haben
@@ -175,7 +175,7 @@ keine.
   Rotation, `XOAUTH2` über STARTTLS und `OAUTHBEARER` über TLS (Mitschnitt), falsches Token
   `auth_failed`, SMTP-Anmeldung und Senden mit `XOAUTH2`, Widerruf beim Entfernen (das alte
   Refresh-Token ist danach tot), Stalwart verlangt den PKCE-Verifier. Grün vor dem Einchecken
-  (Worktree auf 382ea0f mit diesen Änderungen) und erneut auf de453a2 (alle Commits eingecheckt).
+  (Worktree auf ee59559 mit diesen Änderungen) und erneut auf e9716f7 (alle Commits eingecheckt).
 - Attrappe eines Autorisierungsservers im Testprozess mit Browser-Skript (`oauth::tests`, 12
   Tests): Microsoft- und Google-Profil, PKCE am Token-Endpunkt geprüft, Secret nur bei Google,
   untergeschobener `state` zuerst, nur falscher `state`, falscher Pfad, falscher Port (Zeitlimit),
@@ -197,10 +197,10 @@ keine.
   mit Abbrechen, Fehler mit Grund, nicht verfügbar; Google neben dem App-Passwort oder verborgen;
   Erkennung am Server; „Erneut anmelden“; deutsche Texte. Neue Fehlercodes in `ERROR_CODES` und
   `app/tests/ipc.test.ts`.
-- `scripts/check.sh` im Worktree (HEAD 382ea0f plus diese Änderungen vor dem Einchecken): grün,
+- `scripts/check.sh` im Worktree (HEAD ee59559 plus diese Änderungen vor dem Einchecken): grün,
   1.207 Rust-Tests (93 ignoriert), 3.956 Vitest-Tests in 83 Dateien, Clippy auch für Windows, cargo
   deny, pnpm audit, Lizenzliste. Im Hauptverzeichnis nach dem
-  Einchecken (alle Commits bis b66b477, dazu die nicht eingecheckten Änderungen der anderen
+  Einchecken (alle Commits bis 03e3996, dazu die nicht eingecheckten Änderungen der anderen
   Sitzungen): grün, 1.267 Rust-Tests (96 ignoriert), 3.961 Vitest-Tests in 84 Dateien.
 
 **Abweichungen und Annahmen**
@@ -245,10 +245,10 @@ keine.
 ### Block D — JMAP (23.11.2026)
 
 **Stand: gebaut und gegen den lokalen Stalwart geprüft; Fastmail und Windows ungeprüft.**
-Ausgeführt am 23.11.2026 (Subagent der Hauptsitzung), Commits ccda791 (Adapter `mail-jmap`,
+Ausgeführt am 23.11.2026 (Subagent der Hauptsitzung), Commits d11672a (Adapter `mail-jmap`,
 UID-Nummerierung, Protokoll am Konto, Migration `0017_jmap.sql`, Erkennung, Einstellungs-Sync,
-Testserver mit HTTPS), 7c0f0d8 (Protokollwahl in der Kontoeinrichtung, Desktop-Test), c8c0604
-(Clippy), b0b1858 (Desktop-Test unabhängig von der Systemsprache), dazu die Doku. Entscheidung: 0041 (JMAP hinter den IMAP-förmigen Traits).
+Testserver mit HTTPS), 1fd3a83 (Protokollwahl in der Kontoeinrichtung, Desktop-Test), 1b27a87
+(Clippy), e650683 (Desktop-Test unabhängig von der Systemsprache), dazu die Doku. Entscheidung: 0041 (JMAP hinter den IMAP-förmigen Traits).
 
 **Nachgewiesen**
 - Einheitentests ohne Server (in `check.sh`): `cargo test -p mail-jmap` (32 Tests: Parser mit
@@ -264,7 +264,7 @@ Testserver mit HTTPS), 7c0f0d8 (Protokollwahl in der Kontoeinrichtung, Desktop-T
   `autoconfig_files_may_list_jmap`, Modell `account::tests::jmap_settings_use_one_tls_server_and_imap_stays_the_default`.
   Oberfläche: `app/tests/jmap-setup.test.tsx` (4 Tests).
 - Servertests gegen Stalwart über HTTPS (`--include-ignored`, Sperre `jmap`):
-  im Worktree auf c8c0604 gegen den gemeinsamen Stalwart (der beim Start den HTTPS-Listener
+  im Worktree auf 1b27a87 gegen den gemeinsamen Stalwart (der beim Start den HTTPS-Listener
   bekam): `cargo test -p mail-jmap --test server` 2 von 2 grün (Erstabgleich von INBOX, Archive,
   `Projects/2026`, `Projects/Überprüfung` mit denselben Mails, Betreffs und Flags wie über IMAP und
   byte-gleichem Body; Push bei einer über JMAP gesendeten Mail; Flag-Änderung über IMAP als
@@ -278,15 +278,15 @@ Testserver mit HTTPS), 7c0f0d8 (Protokollwahl in der Kontoeinrichtung, Desktop-T
   Dazu `cargo test -p mail-imap -- --include-ignored` (alle Adapter- und Servertests, 107) grün
   nach der Änderung am Testserver.
 - Desktop-Test (WebdriverIO, echtes WKWebView, `scripts/e2e-gui.sh --spec ./tests/e2e/jmap.e2e.mjs`)
-  im eigenen Worktree auf c8c0604 mit der Spec aus b0b1858, Testserver dort frisch eingerichtet:
+  im eigenen Worktree auf 1b27a87 mit der Spec aus e650683, Testserver dort frisch eingerichtet:
   2 von 2 grün (JMAP in den Server-Einstellungen gewählt, Verbindungstest meldet Push, Konto
   hinzugefügt, Posteingang zeigt Bobs Mails, Konto nur lesend mit Protokoll `jmap`, keine
   CSP-Verstöße). Die übrigen Desktop-Specs wurden nicht erneut ausgeführt.
-- Im Worktree auf c8c0604 außerdem: `cargo test -p mail-jmap -p mail-model -p mail-store -p
+- Im Worktree auf 1b27a87 außerdem: `cargo test -p mail-jmap -p mail-model -p mail-store -p
   mail-engine --lib` (32, 153, 151, 407 grün), Clippy dieser Crates mit `-D warnings`, und
   TypeScript-Prüfung, ESLint und Vitest (84 Dateien, 3.961 Tests) grün.
 - Gesamtprüfung: `scripts/check.sh` im Hauptverzeichnis grün (23.11.2026 gegen 20:50 Uhr, auf
-  0d56b58 mit den unfertigen Änderungen anderer Sitzungen im Arbeitsverzeichnis): alle Schritte bis
+  80a6545 mit den unfertigen Änderungen anderer Sitzungen im Arbeitsverzeichnis): alle Schritte bis
   zur Lizenzliste, 1.283 Rust-Tests (96 Servertests ignoriert), 3.967 Vitest-Tests in 84 Dateien,
   Clippy auch für das Windows-Ziel.
 
@@ -319,8 +319,8 @@ Testserver mit HTTPS), 7c0f0d8 (Protokollwahl in der Kontoeinrichtung, Desktop-T
 
 **Stand: gebaut und gegen den lokalen Stalwart geprüft; Fastmail, Windows und ein Desktop-Test
 dieser Nachträge ungeprüft.** Ausgeführt am 24.11.2026 (Subagent der Hauptsitzung), Commits
-bfcb6ed (Anmeldung mit API-Token), 639cb28 (Servertest IMAP- und JMAP-Konto im vereinten
-Posteingang), 8a48662 (Sync-Ordner über JMAP), dazu die Doku. Entscheidung: 0041, Nachträge 1
+5fad2a8 (Anmeldung mit API-Token), 412f3bb (Servertest IMAP- und JMAP-Konto im vereinten
+Posteingang), 4ad8593 (Sync-Ordner über JMAP), dazu die Doku. Entscheidung: 0041, Nachträge 1
 und 2.
 
 **Nachgewiesen**
@@ -370,16 +370,16 @@ und 2.
   Eintrag; Ordner über IMAP geprüft; Konto bleibt nur lesend, Posteingang unverändert).
 - Servertests (Sperre `jmap2`, Server von mir gestartet und wieder gestoppt, weil ihn eine andere
   Sitzung gestoppt und ohne Seed neu aufgesetzt hatte), mit Binärdateien aus dem eigenen Worktree
-  (b0b3f4e plus diese Änderungen, vor dem Aufteilen in Commits): `jmap_accounts` 3 von 3 grün,
+  (3512aad plus diese Änderungen, vor dem Aufteilen in Commits): `jmap_accounts` 3 von 3 grün,
   `crates/mail-engine/tests/jmap.rs` 1 von 1, `oauth_server` 2 von 2; `crates/mail-jmap/tests/server.rs`
   1 von 2: `the_first_sync_sees_what_imap_sees` braucht alices Seed (`Projects/2026`), den der
   neu aufgesetzte Server nicht hatte; nicht mit Seed wiederholt.
-  Nach dem Einchecken noch einmal auf dem Stand 50375fb (im Worktree gebaut, Sperre `jmap2`):
+  Nach dem Einchecken noch einmal auf dem Stand a562cec (im Worktree gebaut, Sperre `jmap2`):
   `jmap_accounts` 3 von 3 und `crates/mail-engine/tests/jmap.rs` 1 von 1 grün.
 - Die drei Commits je im Worktree geprüft: Clippy des Workspace mit `-D warnings`, `cargo fmt
   --check`, Tests von `mail-model`, `mail-jmap`, `mail-store`, `mail-engine` (und `mail-mcp` für
-  bfcb6ed); für bfcb6ed TypeScript-Prüfung, ESLint und Vitest der betroffenen Dateien.
-- Gesamtprüfung: `scripts/check.sh` im Hauptverzeichnis grün (24.11.2026, auf 8a48662 mit den
+  5fad2a8); für 5fad2a8 TypeScript-Prüfung, ESLint und Vitest der betroffenen Dateien.
+- Gesamtprüfung: `scripts/check.sh` im Hauptverzeichnis grün (24.11.2026, auf 4ad8593 mit den
   unfertigen Änderungen anderer Sitzungen und dieser Doku im Arbeitsverzeichnis): alle Schritte,
   1.326 Rust-Tests (102 Servertests ignoriert), 3.988 Vitest-Tests in 86 Dateien, Clippy auch für
   das Windows-Ziel und mit Feature `e2e`, cargo deny, pnpm audit.

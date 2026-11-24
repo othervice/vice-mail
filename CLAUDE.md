@@ -77,7 +77,9 @@ Mensch.
 `origin` ist GitHub (`github.com/othervice/vice-mail`, öffentlich). `gitea` (privates Repo
 `vice-mail` im eigenen Gitea) bleibt als Sicherung: nach jedem Push auch `git push gitea main` und
 neue Tags. Ein Commit pro abgeschlossener Aufgabe, Push am Ende der Stufe. Autor-Adresse im Repo:
-`othervice@bitwaterlabs.com` (lokal in `.git/config` gesetzt). Nach GitHub gehen nur `main` und
+`othervice@bitwaterlabs.com` (lokal in `.git/config` gesetzt). Einziger Autor und Mitwirkender ist
+othervice: Commit-Messages enthalten **keine** `Co-Authored-By`- oder `Claude-Session`-Zeilen und
+keinen Hinweis auf Claude (Entscheidung des Menschen, 24.11.2026). Nach GitHub gehen nur `main` und
 Release-Tags `v*`, nie `--mirror` oder `--tags` (Prototyp-Tags bleiben im Gitea).
 
 ## Befehle
