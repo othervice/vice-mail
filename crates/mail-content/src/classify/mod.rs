@@ -32,7 +32,7 @@
 //! [`apply_user_rules`] (again when they change); [`classify`] does both.
 
 mod headers;
-mod patterns;
+pub(crate) mod patterns;
 mod rules;
 mod signals;
 

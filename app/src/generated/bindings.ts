@@ -338,9 +338,10 @@ export const commands = {
 	cleanPastedHtml: (html: string, options?: InvokeOptions) => typedError<CleanedPaste, IpcError>(__TAURI_INVOKE("clean_pasted_html", { html }, options)),
 	/**
 	 *  One page of the directory, highest ranked first (frequency and recency). `query` filters by
-	 *  word prefixes of names and addresses; `cursor` is the previous page's `next`; `limit` 1..200.
+	 *  word prefixes of names, addresses and domains; `cursor` is the previous page's `next`;
+	 *  `limit` 1..200; `filter` (stage 17) leaves out list and system addresses (`people`).
 	 */
-	listContacts: (query: string | null, cursor: string | null, limit: number, options?: InvokeOptions) => typedError<ContactPage, IpcError>(__TAURI_INVOKE("list_contacts", { query, cursor, limit }, options)),
+	listContacts: (query: string | null, cursor: string | null, limit: number, filter: ContactFilter, options?: InvokeOptions) => typedError<ContactPage, IpcError>(__TAURI_INVOKE("list_contacts", { query, cursor, limit, filter }, options)),
 	/**  The contact with this address (any of its addresses). */
 	getContact: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("get_contact", { email }, options)),
 	/**  Sets the name the user gives a contact, or with `null` goes back to the names seen in mail. */
@@ -356,6 +357,40 @@ export const commands = {
 	mergeContacts: (request: ContactMergeRequest, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("merge_contacts", { request }, options)),
 	/**  Takes an address out of a merged contact (the preferred address takes it apart entirely). */
 	separateContact: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("separate_contact", { email }, options)),
+	/**  Stage 17: sets the note of a contact, or with `null` (or empty text) removes it. */
+	setContactNote: (email: string, note: string | null, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("set_contact_note", { email, note }, options)),
+	/**
+	 *  Stage 17: asks for an image file in the system dialog; the core reads it and has the
+	 *  helper encode it for the cropper. `null` when the user cancelled.
+	 */
+	pickContactPicture: (options?: InvokeOptions) => typedError<ContactPictureSource | null, IpcError>(__TAURI_INVOKE("pick_contact_picture", undefined, options)),
+	/**
+	 *  Stage 17: an image dropped on the window: only a path of a drop the shell saw itself,
+	 *  shortly before (`invalid_argument` otherwise; see `drops.rs`).
+	 */
+	loadDroppedContactPicture: (path: string, options?: InvokeOptions) => typedError<ContactPictureSource, IpcError>(__TAURI_INVOKE("load_dropped_contact_picture", { path }, options)),
+	/**
+	 *  Stage 17: cuts the square `crop` out of the chosen image `token` and stores it as the
+	 *  contact's picture.
+	 */
+	setContactPicture: (email: string, token: string, crop: PictureCrop, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("set_contact_picture", { email, token, crop }, options)),
+	/**  Stage 17: removes the contact's picture (the initials show again). */
+	removeContactPicture: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("remove_contact_picture", { email }, options)),
+	/**  Stage 17: the picture of the contact with this address, `null` without one. */
+	getContactPicture: (email: string, options?: InvokeOptions) => typedError<ContactPicture | null, IpcError>(__TAURI_INVOKE("get_contact_picture", { email }, options)),
+	/**  Stage 17: which addresses show a picture. */
+	listContactPictures: (options?: InvokeOptions) => typedError<ContactPictureRef[], IpcError>(__TAURI_INVOKE("list_contact_pictures", undefined, options)),
+	/**  Stage 17: the newest messages from and to the contact, newest first (`limit` 1..50). */
+	listContactMessages: (email: string, limit: number, options?: InvokeOptions) => typedError<ContactMessages, IpcError>(__TAURI_INVOKE("list_contact_messages", { email, limit }, options)),
+	/**  Stage 17: marks the contact as spam: its addresses become blocked senders. */
+	markContactSpam: (email: string, options?: InvokeOptions) => typedError<SpamMark, IpcError>(__TAURI_INVOKE("mark_contact_spam", { email }, options)),
+	/**
+	 *  Stage 17: moves existing mail from the contact to junk, through the outbox, where the
+	 *  account may write.
+	 */
+	moveContactMailToJunk: (email: string, options?: InvokeOptions) => typedError<SpamMove, IpcError>(__TAURI_INVOKE("move_contact_mail_to_junk", { email }, options)),
+	/**  Stage 17: undoes "mark as spam" (unblocks, moves the mail back). */
+	undoContactSpam: (email: string, undo: SpamUndo, options?: InvokeOptions) => typedError<SpamUndone, IpcError>(__TAURI_INVOKE("undo_contact_spam", { email, undo }, options)),
 	/**  Every signature of the pool, in the user's order. */
 	listSignatures: (options?: InvokeOptions) => typedError<SignatureInfo[], IpcError>(__TAURI_INVOKE("list_signatures", undefined, options)),
 	/**
@@ -1800,10 +1835,14 @@ export type ContactAddressInfo = {
 	email: string,
 	/**  Messages the user sent to it. */
 	sent: number,
-	/**  Messages received from it (only from people, not newsletters or notifications). */
+	/**  Messages received from it (stage 17: also newsletters and notifications). */
 	received: number,
-	/**  Last message to or from it, Unix ms. */
+	/**  Stage 17: other messages it was in (copied, or as Reply-To). */
+	seen: number,
+	/**  Last message to, from or with it, Unix ms. */
 	lastUsed: number | null,
+	/**  Stage 17: new mail from it is blocked (marked as spam, or blocked in stage 16). */
+	blocked: boolean,
 };
 
 /**
@@ -1837,7 +1876,31 @@ export type ContactEntry = {
 	received: number,
 	/**  Unix ms. */
 	lastUsed: number | null,
+	/**  Stage 17: person, list or system address (of the preferred address). */
+	kind: ContactKind,
+	/**  Stage 17: the note the user wrote (synchronised). */
+	note: string | null,
+	/**  Stage 17: the revision of the contact's picture (`getContactPicture`), null without one. */
+	picture: number | null,
+	/**  Stage 17: at least one address is blocked (marked as spam). */
+	blocked: boolean,
 };
+
+/**  Stage 17: which contacts a page lists. */
+export type ContactFilter = 
+/**  People only: list and system addresses are left out. */
+"people" | 
+/**  Every contact. */
+"all";
+
+/**  What kind of correspondent an address is (stage 17). */
+export type ContactKind = 
+/**  A person: the user wrote to it, or it was seen in mail from a person. */
+"person" | 
+/**  Seen only in newsletters, notifications or list mail, or a newsletter address. */
+"list" | 
+/**  A program: nobody reads it (`noreply@`, `MAILER-DAEMON@`), or it sends notifications. */
+"system";
 
 /**  Merging contacts the user confirmed as one person. */
 export type ContactMergeRequest = {
@@ -1852,6 +1915,11 @@ export type ContactMergeRequest = {
 	confirmed: boolean,
 };
 
+/**  Stage 17: the newest messages from or to a contact (any of its addresses), newest first. */
+export type ContactMessages = {
+	items: MessageListItem[],
+};
+
 /**
  *  One page of the directory, highest ranked first (frequency and recency in one score:
  *  sent mail counts four times a received one, and every 30 days a message counts half).
@@ -1860,6 +1928,37 @@ export type ContactPage = {
 	items: ContactEntry[],
 	/**  Pass to `listContacts` for the next page; `null` at the end. Opaque. */
 	next: string | null,
+};
+
+/**  Stage 17: a contact's picture as the UI shows it. */
+export type ContactPicture = {
+	/**  `data:image/jpeg;base64,…`, written by the helper. */
+	dataUrl: string,
+	revision: number,
+};
+
+/**
+ *  Stage 17: which addresses show a picture: every address of a contact that has one, lower
+ *  case (as written and with the ASCII domain), and the picture's revision. `key` is the
+ *  contact's (for `getContactPicture`).
+ */
+export type ContactPictureRef = {
+	key: string,
+	emails: string[],
+	revision: number,
+};
+
+/**
+ *  Stage 17: an image the user chose for a contact, re-encoded in the helper and at most
+ *  [`CONTACT_PICTURE_SOURCE_SIZE`] pixels per side, for the cropper. `token` names it in
+ *  `setContactPicture` for a few minutes.
+ */
+export type ContactPictureSource = {
+	token: string,
+	/**  `data:image/jpeg;base64,…`, written by the helper. */
+	dataUrl: string,
+	width: number,
+	height: number,
 };
 
 /**  An autocomplete suggestion from addresses of earlier mail. */
@@ -1970,6 +2069,8 @@ export type ConversationSummary = {
  *  - `updateStatusChanged` (stage 15, decision 0037): the update state changed (checking, up
  *    to date, available, download progress, ready, installing, failed). The setting itself
  *    comes back from the command that changed it; reload `getUpdateInfo` for the rest.
+ *  - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
+ *    changed (here or by the settings sync). Reload the contacts and the picture list.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
@@ -1994,7 +2095,12 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  *  Stage 15 (decision 0037): the update state changed (a check, the download's progress,
  *  ready to install, a failure).
  */
-{ type: "updateStatusChanged"; status: UpdateStatus };
+{ type: "updateStatusChanged"; status: UpdateStatus } | 
+/**
+ *  Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
+ *  here or from another device. Reload the contacts and their pictures.
+ */
+{ type: "contactsChanged" };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -2481,7 +2587,13 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  *  resource at `/.well-known/jmap`, or one without mail), or it names its endpoints without
  *  encryption.
  */
-"jmap_unavailable";
+"jmap_unavailable" | 
+/**  Stage 17: the image for a contact picture is larger than the app reads. */
+"picture_too_large" | 
+/**  Stage 17: the file is not a PNG, JPEG, GIF or WebP image. */
+"picture_unsupported" | 
+/**  Stage 17: the image could not be decoded (damaged, or crafted). */
+"picture_damaged";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -3644,6 +3756,13 @@ export type OutgoingMail = {
 /**  `PARTSTAT` of an attendee. */
 export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "tentative" | "delegated";
 
+/**  Stage 17: the square the user cut out, in pixels of [`ContactPictureSource`]. */
+export type PictureCrop = {
+	x: number,
+	y: number,
+	size: number,
+};
+
 /**  A row of "Pinned attachments": the attachment as it was pinned, and its message. */
 export type PinnedAttachment = {
 	/**  The message, as a list row (in its inbox where it lies there). */
@@ -4497,6 +4616,57 @@ export type SnoozeTimes = {
 export type SoundPlatform = "macos" | "windows" | 
 /**  Neither: the system's notification sound, no choice. */
 "other";
+
+/**
+ *  Stage 17: existing mail of a contact marked as spam in one account: messages from its
+ *  addresses outside junk, trash, sent and drafts.
+ */
+export type SpamMailCount = {
+	accountId: AccountId,
+	count: number,
+	/**  The account may write (`writes_enabled`); otherwise the mail stays where it is. */
+	writesEnabled: boolean,
+};
+
+/**
+ *  Stage 17: what "Mark as spam" did: the contact's addresses are blocked now; `mail` is what
+ *  could be moved to junk (`moveContactMailToJunk`).
+ */
+export type SpamMark = {
+	contact: ContactEntry,
+	/**  The addresses blocked by this mark (not those blocked before), for undo. */
+	blocked: string[],
+	mail: SpamMailCount[],
+};
+
+/**  Stage 17: the moves to junk, one batch per account and chunk (each undoable). */
+export type SpamMove = {
+	batches: BatchId[],
+	/**  Messages queued for the move. */
+	moved: number,
+	/**  Accounts whose mail stayed: read-only, without a junk folder, or refused. */
+	kept: SpamMailCount[],
+};
+
+/**
+ *  Stage 17: undoing "Mark as spam": the addresses the mark blocked are unblocked and the
+ *  moves undone.
+ */
+export type SpamUndo = {
+	/**  Addresses blocked by the mark (`SpamMark.blocked`). */
+	addresses: string[],
+	/**  Batches of `SpamMove.batches`. */
+	batches: BatchId[],
+};
+
+/**
+ *  Stage 17: result of [`SpamUndo`]: the contact, and how many moves could not be undone
+ *  (finished on the server in a way that cannot be reversed).
+ */
+export type SpamUndone = {
+	contact: ContactEntry,
+	notUndone: number,
+};
 
 /**
  *  What kept the local database from opening at start (`getStartupProblem`). The core runs on

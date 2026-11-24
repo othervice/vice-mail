@@ -3554,6 +3554,7 @@ dependencies = [
  "apple-native-keyring-store",
  "hickory-resolver",
  "hmac 0.13.0",
+ "image",
  "jiff 1.0.2",
  "keyring-core",
  "mail-ai",

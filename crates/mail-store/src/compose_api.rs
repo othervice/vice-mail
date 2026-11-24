@@ -135,14 +135,23 @@ pub struct StoredContact {
     pub group: Option<i64>,
     pub sent: u32,
     pub received: u32,
+    /// Stage 17: other messages it was in (copied, Reply-To).
+    pub seen: u32,
     pub last_sent: Option<i64>,
     pub last_received: Option<i64>,
+    pub last_seen: Option<i64>,
     /// `mail_content::Rank::key` (`f64::NEG_INFINITY` for none).
     pub rank: f64,
     pub names: Vec<ContactNameRecord>,
     pub user_name: Option<String>,
     /// Folded search words, space-separated.
     pub search: String,
+    /// Stage 17: seen in the user's own mail or in mail from a person.
+    pub personal: bool,
+    /// Stage 17: `mail_model::ContactKind::code`.
+    pub kind: i64,
+    /// Stage 17: the user's note (never written by the directory job).
+    pub note: Option<String>,
 }
 
 /// The header data of a message whose addresses are not in the directory yet.
@@ -153,6 +162,11 @@ pub struct ContactSource {
     pub from: Option<Address>,
     pub to: Vec<Address>,
     pub cc: Vec<Address>,
+    /// Stage 17: Reply-To where the header block was fetched (`message.reply_to_addrs`).
+    pub reply_to: Vec<Address>,
+    /// Stage 17: read into the directory before (stage 10 rules): only what those left out
+    /// is added (the backfill).
+    pub backfill: bool,
     pub subject: String,
     pub list_id: Option<String>,
     pub list_unsubscribe: Option<String>,
@@ -502,5 +516,11 @@ impl Store {
     /// Messages whose addresses are not in the directory yet, oldest id first.
     pub async fn contacts_todo(&self, limit: u32) -> Result<Vec<ContactSource>, StoreError> {
         self.read(move |conn| contacts::todo(conn, limit)).await
+    }
+
+    /// Stage 17: messages read into the directory by the rules of stage 10, oldest id first
+    /// (`backfill` set), for the background backfill.
+    pub async fn contacts_backfill(&self, limit: u32) -> Result<Vec<ContactSource>, StoreError> {
+        self.read(move |conn| contacts::backfill(conn, limit)).await
     }
 }

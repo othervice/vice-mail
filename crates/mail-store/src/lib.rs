@@ -43,6 +43,7 @@ mod compose;
 mod compose_api;
 mod contacts;
 mod contacts_dir;
+mod contacts_view;
 mod conversations;
 mod diagnostics;
 mod error;
@@ -95,6 +96,7 @@ pub use contacts_dir::{
     ContactCursor, MAX_CONTACT_ROWS, MergeOutcome, SeparateOutcome, StoredContactGroup,
     StoredContactPage,
 };
+pub use contacts_view::{KindRow, SenderLocation, StoredPicture};
 pub use diagnostics::{AccountStats, DatabaseStats};
 pub use error::StoreError;
 pub use folders::MAX_FOLDER_NAME_CHARS;
@@ -138,6 +140,8 @@ mod body_tests;
 mod compose_tests;
 #[cfg(test)]
 mod contacts_dir_tests;
+#[cfg(test)]
+mod contacts_view_tests;
 #[cfg(test)]
 mod conversation_tests;
 #[cfg(test)]

@@ -478,8 +478,10 @@ pub(crate) fn content_of(
                 }
             }
         }
-        // Stage 10: the name the user gave and the merge (decision 0023).
+        // Stage 10: the name the user gave and the merge (decision 0023); stage 17 the note.
         "contact" => crate::contacts_dir::synced_content(conn, id)?,
+        // Stage 17 (decision 0050): the picture the user chose.
+        "contactPicture" => crate::contacts_view::synced_picture(conn, id)?,
         // Stage 16 (decision 0033).
         "readingList" | "mailboxPref" | "blockedSender" => {
             crate::parity::synced_content(conn, kind, id)?
@@ -1049,14 +1051,23 @@ fn put_table(
                 }
             })?;
         }
+        // Stage 17 (decision 0050): a picture needs no contact row; it shows once this device
+        // knows the address.
+        "contactPicture" => {
+            crate::contacts_view::apply_synced_picture(conn, id, Some(value)).map_err(|err| {
+                match err {
+                    StoreError::InvalidArgument(what) => refused(what),
+                    other => ApplyError::Store(other),
+                }
+            })?;
+        }
         "contact" => {
             // The name the user gave and the merge; a contact this device never saw has nothing
             // to name: the record waits in `sync_record` until the address appears.
             crate::contacts_dir::apply_synced(
                 conn,
                 id,
-                opt_text(value, "userName"),
-                opt_text(value, "mergedInto"),
+                crate::contacts_dir::SyncedContact::of(value),
             )?;
         }
         "device" => {
@@ -1136,7 +1147,12 @@ fn delete_table(
         "accountGroup" => conn
             .prepare_cached("DELETE FROM account_group WHERE uuid = ?1")?
             .execute([id])?,
-        "contact" => crate::contacts_dir::apply_synced(conn, id, None, None)?,
+        "contact" => crate::contacts_dir::apply_synced(
+            conn,
+            id,
+            crate::contacts_dir::SyncedContact::default(),
+        )?,
+        "contactPicture" => crate::contacts_view::apply_synced_picture(conn, id, None)?,
         "attachmentPin" => {
             crate::attachment_pins::apply_synced(conn, id, None).map_err(|err| match err {
                 StoreError::InvalidArgument(what) => refused(what),

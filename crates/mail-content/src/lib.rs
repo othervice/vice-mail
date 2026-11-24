@@ -29,6 +29,7 @@ mod attachment_preview;
 mod calendar;
 mod classify;
 mod compose;
+mod contact_picture;
 mod contacts;
 mod css;
 mod dom;
@@ -66,12 +67,13 @@ pub use compose::{
     receipt_subject, receipt_text, reply_recipients, reply_references, reply_subject,
     strip_subject_prefixes, text_to_editor_html,
 };
+pub use contact_picture::{PictureJpeg, is_jpeg, picture_crop, picture_source};
 pub use contacts::{
     Contact, ContactAddress, ContactBook, ContactError, ContactMatch, ContactMerge, Direction,
     DuplicateKind, DuplicateSuggestion, HALF_LIFE_SECS, MAX_NAME_CHARS, MAX_NAMES_PER_CONTACT,
     NormalizedAddress, Observation, PersonName, RECEIVED_WEIGHT, Rank, SENT_WEIGHT, SeenName,
-    Skipped, clean_display_name, fold, fold_german, normalize_address, normalize_domain,
-    observations, split_name, unicode_domain,
+    Skipped, clean_display_name, contact_kind, counted_before_stage17, fold, fold_german,
+    normalize_address, normalize_domain, observations, split_name, unicode_domain,
 };
 pub use filename::{
     FALLBACK_NAME, MAX_NAME_BYTES, attachment_file_name, is_executable_type, sanitize_filename,

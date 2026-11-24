@@ -5,6 +5,7 @@ mod ai;
 pub mod clock;
 pub mod comfort;
 pub mod compose;
+mod contacts_view;
 mod core;
 pub mod credentials;
 mod diagnostics;

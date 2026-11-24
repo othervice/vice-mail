@@ -64,9 +64,10 @@ pub(crate) const INSERT_MESSAGE: &str = "
                          to_addrs, cc_addrs, in_reply_to, references_hdr, list_id,
                          list_unsubscribe, auto_submitted, precedence, size, has_attachments,
                          thread_id, subject_key, category, category_auto, category_reason,
-                         important, sender_key, sender_domain, list_key, unsubscribe_one_click)
+                         important, sender_key, sender_domain, list_key, unsubscribe_one_click,
+                         reply_to_addrs)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)";
+            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)";
 
 /// A new message's location gets the category and important mark just classified (`?11`,
 /// `?12`), so the trigger `loc_category_new` (migration 0007) only runs where they are not
@@ -562,6 +563,11 @@ fn insert_message(
         Some(c) => (c.keys.clone(), c.one_click),
         None => (crate::categories::SenderKeys::default(), None),
     };
+    // Stage 17: Reply-To for the contacts, where the header block was fetched.
+    let reply_to = match category {
+        Some(c) if !c.reply_to.is_empty() => addresses_json(&c.reply_to)?,
+        _ => None,
+    };
     conn.prepare_cached(INSERT_MESSAGE)?
         .execute(params![
             id,
@@ -591,6 +597,7 @@ fn insert_message(
             keys.domain,
             keys.list_id,
             one_click,
+            reply_to,
         ])
         .map_err(StoreError::sqlite("insert message"))?;
     Ok(())

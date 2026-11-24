@@ -46,6 +46,7 @@ impl Classifier for ByLocalPart {
             category,
             reason: CategoryReason::NoBulkSignals,
             one_click: Some(email.starts_with("news")),
+            reply_to: Vec::new(),
         }
     }
 }

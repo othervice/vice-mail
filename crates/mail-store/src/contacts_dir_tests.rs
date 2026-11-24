@@ -30,6 +30,11 @@ fn contact(key: &str, rank: f64, name: &str) -> StoredContact {
         }],
         user_name: None,
         search: format!(" {} {key}", name.to_lowercase()),
+        seen: 0,
+        last_seen: None,
+        personal: true,
+        kind: 0,
+        note: None,
     }
 }
 
@@ -59,7 +64,7 @@ async fn pages_come_in_rank_order_and_continue_after_the_cursor() {
     seed(&f.store).await;
     let first = f
         .store
-        .contact_page(Vec::new(), None, 2)
+        .contact_page(Vec::new(), None, 2, false)
         .await
         .expect("page");
     assert_eq!(keys(&first), ["anna@x.example", "hans@x.example"]);
@@ -68,7 +73,7 @@ async fn pages_come_in_rank_order_and_continue_after_the_cursor() {
     assert_eq!(decoded, cursor);
     let rest = f
         .store
-        .contact_page(Vec::new(), Some(decoded), 10)
+        .contact_page(Vec::new(), Some(decoded), 10, false)
         .await
         .expect("page");
     assert_eq!(
@@ -78,7 +83,7 @@ async fn pages_come_in_rank_order_and_continue_after_the_cursor() {
     assert!(rest.next.is_none(), "end");
     let found = f
         .store
-        .contact_page(vec!["hans".into()], None, 10)
+        .contact_page(vec!["hans".into()], None, 10, false)
         .await
         .expect("search");
     assert_eq!(keys(&found), ["hans@x.example", "hans.mueller@y.example"]);
@@ -102,7 +107,7 @@ async fn a_merged_contact_is_listed_once_with_all_addresses_and_syncs_its_merge(
     );
     let page = f
         .store
-        .contact_page(Vec::new(), None, 10)
+        .contact_page(Vec::new(), None, 10, false)
         .await
         .expect("page");
     assert_eq!(
@@ -125,7 +130,7 @@ async fn a_merged_contact_is_listed_once_with_all_addresses_and_syncs_its_merge(
     // Searching by the merged address finds the group once too.
     let found = f
         .store
-        .contact_page(vec!["hans@x".into()], None, 10)
+        .contact_page(vec!["hans@x".into()], None, 10, false)
         .await
         .expect("search");
     assert_eq!(keys(&found), ["hans.mueller@y.example"]);
@@ -184,7 +189,7 @@ async fn a_merged_contact_is_listed_once_with_all_addresses_and_syncs_its_merge(
     );
     let page = f
         .store
-        .contact_page(Vec::new(), None, 10)
+        .contact_page(Vec::new(), None, 10, false)
         .await
         .expect("page");
     assert_eq!(page.groups.len(), 5);
@@ -324,7 +329,7 @@ async fn the_directory_queries_use_their_indexes() {
     f.store
         .read(|conn| {
             for words in [0, 2] {
-                let lines = plan(conn, &contacts_dir::page_sql(words));
+                let lines = plan(conn, &contacts_dir::page_sql(words, words == 1));
                 assert!(
                     lines
                         .iter()

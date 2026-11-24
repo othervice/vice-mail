@@ -168,6 +168,8 @@ pub struct ReadingPreferences {
 /// - `updateStatusChanged` (stage 15, decision 0037): the update state changed (checking, up
 ///   to date, available, download progress, ready, installing, failed). The setting itself
 ///   comes back from the command that changed it; reload `getUpdateInfo` for the rest.
+/// - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
+///   changed (here or by the settings sync). Reload the contacts and the picture list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -283,6 +285,9 @@ pub enum CoreEvent {
     UpdateStatusChanged {
         status: crate::UpdateStatus,
     },
+    /// Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
+    /// here or from another device. Reload the contacts and their pictures.
+    ContactsChanged,
 }
 
 #[cfg(test)]

@@ -184,8 +184,8 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     const ada = {
       ...makeContact({ email: "ada@example.org", name: "Ada" }),
       addresses: [
-        { email: "ada@example.org", sent: 4, received: 1, lastUsed: null },
-        { email: "ada@old.example.org", sent: 1, received: 1, lastUsed: null },
+        { email: "ada@example.org", sent: 4, received: 1, seen: 0, lastUsed: null, blocked: false },
+        { email: "ada@old.example.org", sent: 1, received: 1, seen: 0, lastUsed: null, blocked: false },
       ],
     };
     mockCore({

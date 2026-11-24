@@ -964,6 +964,10 @@ impl<C: Connector> AppCore<C> {
         if any(&["savedView"]) {
             self.emit_event(CoreEvent::SavedSearchesChanged);
         }
+        // Stage 17 (decision 0050): names, notes, merges, pictures and spam marks of contacts.
+        if any(&["contact", "contactPicture", "blockedSender"]) {
+            self.emit_event(CoreEvent::ContactsChanged);
+        }
         if any(&["senderRule"]) {
             self.comfort().kick_categories();
         }

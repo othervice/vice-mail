@@ -21,6 +21,7 @@ fn sent(book: &mut ContactBook, email: &str, name: Option<&str>, at: i64) {
         name,
         direction: Direction::Sent,
         at,
+        personal: true,
     })
     .expect("added");
 }
@@ -31,6 +32,7 @@ fn received(book: &mut ContactBook, email: &str, name: Option<&str>, at: i64) {
         name,
         direction: Direction::Received,
         at,
+        personal: true,
     })
     .expect("added");
 }
@@ -43,7 +45,7 @@ fn keys(matches: &[ContactMatch<'_>]) -> Vec<String> {
 }
 
 #[test]
-fn own_no_reply_and_invalid_addresses_are_left_out() {
+fn own_and_invalid_addresses_are_left_out_and_no_reply_ones_are_system_contacts() {
     let mut b = book();
     let observe = |b: &mut ContactBook, email: &str| {
         b.observe(Observation {
@@ -51,6 +53,7 @@ fn own_no_reply_and_invalid_addresses_are_left_out() {
             name: None,
             direction: Direction::Received,
             at: NOW,
+            personal: false,
         })
     };
     assert_eq!(
@@ -66,23 +69,47 @@ fn own_no_reply_and_invalid_addresses_are_left_out() {
         Err(Skipped::OwnAddress)
     );
     assert_eq!(
-        observe(&mut b, "noreply@dhl.example"),
-        Err(Skipped::NoReply)
-    );
-    assert_eq!(
-        observe(&mut b, "nicht-antworten@kasse.example"),
-        Err(Skipped::NoReply)
-    );
-    assert_eq!(
-        observe(&mut b, "MAILER-DAEMON@x.example"),
-        Err(Skipped::NoReply)
-    );
-    assert_eq!(
         observe(&mut b, "undisclosed-recipients:;"),
         Err(Skipped::InvalidAddress)
     );
     assert_eq!(observe(&mut b, ""), Err(Skipped::InvalidAddress));
     assert!(b.contacts().is_empty());
+    // Stage 17: addresses nobody reads are contacts too, marked as system addresses.
+    for email in [
+        "noreply@dhl.example",
+        "nicht-antworten@kasse.example",
+        "MAILER-DAEMON@x.example",
+    ] {
+        assert_eq!(observe(&mut b, email), Ok(()));
+        let contact = b.find(email).expect("recorded");
+        assert_eq!(contact.primary().kind(), mail_model::ContactKind::System);
+        assert_eq!(contact.primary().received, 1);
+        assert_eq!(
+            contact.rank(),
+            Rank::NONE,
+            "mail not from a person does not rank"
+        );
+    }
+    assert_eq!(b.contacts().len(), 3);
+}
+
+#[test]
+fn kinds_of_addresses() {
+    use mail_model::ContactKind::{List, Person, System};
+    let cases = [
+        // (address, seen in personal mail, sent to it, kind)
+        ("noreply@x.example", true, 3, System),
+        ("mailer-daemon@x.example", false, 0, System),
+        ("notifications@github.example", false, 0, System),
+        ("notifications@github.example", true, 1, Person),
+        ("newsletter@shop.example", true, 0, List),
+        ("dev@lists.example", false, 0, List),
+        ("hans@firma.example", true, 0, Person),
+        ("hans@firma.example", false, 2, Person),
+    ];
+    for (email, personal, sent, kind) in cases {
+        assert_eq!(contact_kind(email, personal, sent), kind, "{email}");
+    }
 }
 
 #[test]
@@ -465,31 +492,74 @@ fn observations_of_a_message() {
         bcc: vec![address("frank@example.net", None)],
         ..MessageHeaders::default()
     };
-    let sent: Vec<&str> = observations(&headers, Direction::Sent, MessageCategory::Person, NOW)
+    let headers = MessageHeaders {
+        reply_to: vec![address("help@example.org", Some("Help"))],
+        ..headers
+    };
+    let summary = |list: &[Observation<'_>]| -> Vec<(String, Direction, bool)> {
+        list.iter()
+            .map(|o| (o.email.to_owned(), o.direction, o.personal))
+            .collect()
+    };
+    let sent = observations(&headers, Direction::Sent, MessageCategory::Person, NOW);
+    let s = |e: &str, d: Direction| (e.to_owned(), d, true);
+    assert_eq!(
+        summary(&sent),
+        [
+            s("alice@vicemail.test", Direction::Sent),
+            s("dave@example.net", Direction::Sent),
+            s("erin@example.net", Direction::Sent),
+            s("frank@example.net", Direction::Sent),
+            s("help@example.org", Direction::Seen),
+        ]
+    );
+    // Stage 17: every address of a received message, the sender first.
+    let received = observations(&headers, Direction::Received, MessageCategory::Person, NOW);
+    assert_eq!(
+        summary(&received),
+        [
+            s("carol@example.org", Direction::Received),
+            s("alice@vicemail.test", Direction::Seen),
+            s("dave@example.net", Direction::Seen),
+            s("erin@example.net", Direction::Seen),
+            s("help@example.org", Direction::Seen),
+        ]
+    );
+    assert_eq!(received[0].name, Some("Carol"));
+    // Newsletters and notifications too, but not as personal observations.
+    for bulk in [MessageCategory::Newsletter, MessageCategory::Notification] {
+        let bulk = observations(&headers, Direction::Received, bulk, NOW);
+        assert_eq!(bulk.len(), 5);
+        assert!(bulk.iter().all(|o| !o.personal));
+    }
+    // What stage 10 counted: the recipients of sent mail and the sender of a person's mail.
+    let before: Vec<&str> = sent
         .iter()
+        .chain(&received)
+        .filter(|o| counted_before_stage17(o))
         .map(|o| o.email)
         .collect();
     assert_eq!(
-        sent,
+        before,
         [
             "alice@vicemail.test",
             "dave@example.net",
             "erin@example.net",
-            "frank@example.net"
+            "frank@example.net",
+            "carol@example.org"
         ]
     );
-    let received = observations(&headers, Direction::Received, MessageCategory::Person, NOW);
-    assert_eq!(received.len(), 1);
-    assert_eq!(received[0].name, Some("Carol"));
-    for bulk in [MessageCategory::Newsletter, MessageCategory::Notification] {
-        assert!(observations(&headers, Direction::Received, bulk, NOW).is_empty());
-    }
     // Fed into a book, the own address drops out.
     let mut b = book();
     for o in observations(&headers, Direction::Sent, MessageCategory::Person, NOW) {
         let _ = b.observe(o);
     }
-    assert_eq!(b.contacts().len(), 3);
+    assert_eq!(b.contacts().len(), 4);
+    let help = b.find("help@example.org").expect("reply-to");
+    assert_eq!((help.primary().seen, help.primary().sent), (1, 0));
+    assert_eq!(help.last_used(), Some(NOW));
+    assert_eq!(help.rank(), Rank::NONE, "a Reply-To address does not rank");
+    assert_eq!(help.primary().kind(), mail_model::ContactKind::Person);
 }
 
 #[test]

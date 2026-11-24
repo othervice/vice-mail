@@ -3392,6 +3392,19 @@ export const de: Translation = {
         title: "Unter dieser Adresse wurde kein JMAP-Dienst gefunden.",
         hint: "Prüfe Servername und Port. Ein JMAP-Server antwortet unter https://server/.well-known/jmap. Bietet dein Anbieter kein JMAP an, wähle IMAP und SMTP in den Server-Einstellungen.",
       },
+      // Stufe 17 (Entscheidung 0050): Kontaktbilder.
+      picture_too_large: {
+        title: "Das Bild ist zu groß.",
+        hint: "Wähle eine Bilddatei mit höchstens 20 MB und höchstens 64 Megapixeln.",
+      },
+      picture_unsupported: {
+        title: "Diese Datei lässt sich nicht als Bild verwenden.",
+        hint: "Wähle ein PNG-, JPEG-, GIF- oder WebP-Bild.",
+      },
+      picture_damaged: {
+        title: "Das Bild konnte nicht gelesen werden.",
+        hint: "Die Datei ist vielleicht beschädigt. Wähle ein anderes Bild.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

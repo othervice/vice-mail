@@ -19,8 +19,8 @@ const KIM_NAMES: ContactDuplicate = { reason: "names_differ", name: null, names:
 const MERGED: ContactEntry = {
   ...makeContact({ email: "ada@example.org", name: "Ada", sent: 5, received: 2 }),
   addresses: [
-    { email: "ada@example.org", sent: 4, received: 1, lastUsed: null },
-    { email: "ada@old.example.org", sent: 1, received: 1, lastUsed: null },
+    { email: "ada@example.org", sent: 4, received: 1, seen: 0, lastUsed: null, blocked: false },
+    { email: "ada@old.example.org", sent: 1, received: 1, seen: 0, lastUsed: null, blocked: false },
   ],
 };
 
@@ -64,7 +64,7 @@ describe("Settings, contacts: the directory", () => {
     await waitFor(() => {
       expect(names(panel)).toEqual(["Alan Turing"]);
     });
-    expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: "alan", cursor: null, limit: 50 });
+    expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: "alan", cursor: null, limit: 50, filter: "people" });
     await user.clear(within(panel).getByLabelText("Search contacts"));
     await user.type(within(panel).getByLabelText("Search contacts"), "nobody");
     expect((await within(panel).findByTestId("contacts-no-match")).textContent).toBe("No contact matches “nobody”.");
@@ -81,7 +81,7 @@ describe("Settings, contacts: the directory", () => {
     await waitFor(() => {
       expect(within(panel).getAllByTestId("contact-row")).toHaveLength(55);
     });
-    expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: null, cursor: "50", limit: 50 });
+    expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: null, cursor: "50", limit: 50, filter: "people" });
     expect(within(panel).queryByRole("button", { name: "Show more contacts" })).toBeNull();
   });
 

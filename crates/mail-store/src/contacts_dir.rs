@@ -95,10 +95,15 @@ fn word_conditions(alias: &str, words: usize, first: usize) -> String {
 }
 
 /// The page query: rows by rank (index `contact_rank`, keyset on rank and row id), only the
-/// best matching row of each group.
-pub(crate) fn page_sql(words: usize) -> String {
-    let c_words = word_conditions("c", words, 4);
-    let o_words = word_conditions("o", words, 4);
+/// best matching row of each group. Stage 17: `people_only` leaves out list and system
+/// addresses (`kind` 0 only).
+pub(crate) fn page_sql(words: usize, people_only: bool) -> String {
+    let mut c_words = word_conditions("c", words, 4);
+    let mut o_words = word_conditions("o", words, 4);
+    if people_only {
+        c_words.push_str(" AND c.kind = 0");
+        o_words.push_str(" AND o.kind = 0");
+    }
     format!(
         "SELECT c.id, {cols} FROM contact c INDEXED BY contact_rank
          WHERE c.rank <= ?1 AND (c.rank < ?1 OR c.id > ?2){c_words}
@@ -121,7 +126,7 @@ fn prefixed(alias: &str) -> String {
 
 pub(crate) const GROUP_MEMBERS: &str = "
     SELECT id, address_key, local_part, domain, contact_group, sent, received, last_sent,
-           last_received, rank, names, user_name, search
+           last_received, rank, names, user_name, search, seen, last_seen, personal, kind, note
     FROM contact INDEXED BY contact_group WHERE contact_group = ?1
     ORDER BY (id = contact_group) DESC, rank DESC, id";
 
@@ -158,6 +163,7 @@ pub(crate) fn page(
     words: &[String],
     after: Option<ContactCursor>,
     limit: u32,
+    people_only: bool,
 ) -> Result<StoredContactPage, StoreError> {
     let words: Vec<&String> = words
         .iter()
@@ -166,7 +172,7 @@ pub(crate) fn page(
         .collect();
     let (rank, row) = after.map_or((f64::MAX, i64::MIN), |c| (stored_rank(c.rank), c.row));
     let limit = limit.clamp(1, MAX_CONTACT_ROWS);
-    let sql = page_sql(words.len());
+    let sql = page_sql(words.len(), people_only);
     let mut stmt = conn.prepare_cached(&sql)?;
     let mut values: Vec<&dyn rusqlite::ToSql> = vec![&rank, &row, &limit];
     for word in &words {
@@ -422,26 +428,29 @@ pub(crate) fn dismissed(conn: &Connection) -> Result<Vec<(String, String)>, Stor
 
 // -- settings sync ----------------------------------------------------------------------------
 
-/// The synchronised content of the contact with address `key`: the name the user gave and the
-/// head it is merged into (`{userName?, mergedInto?}`), `None` without either.
+/// The synchronised content of the contact with address `key`: the name the user gave, the
+/// head it is merged into and (stage 17) the note (`{userName?, mergedInto?, note?}`), `None`
+/// without any.
 pub(crate) fn synced_content(conn: &Connection, key: &str) -> Result<Option<Value>, StoreError> {
     let found = conn
         .prepare_cached(
             "SELECT c.user_name,
                     (SELECT h.address_key FROM contact h
-                     WHERE h.id = c.contact_group AND h.id != c.id)
+                     WHERE h.id = c.contact_group AND h.id != c.id),
+                    c.note
              FROM contact c WHERE c.address_key = ?1",
         )?
         .query_row([key], |r| {
             Ok((
                 r.get::<_, Option<String>>(0)?,
                 r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
             ))
         })
         .optional()?;
     Ok(match found {
-        None | Some((None, None)) => None,
-        Some((name, merged)) => {
+        None | Some((None, None, None)) => None,
+        Some((name, merged, note)) => {
             let mut object = serde_json::Map::new();
             if let Some(name) = name {
                 object.insert("userName".into(), Value::String(name));
@@ -449,20 +458,46 @@ pub(crate) fn synced_content(conn: &Connection, key: &str) -> Result<Option<Valu
             if let Some(merged) = merged {
                 object.insert("mergedInto".into(), Value::String(merged));
             }
+            if let Some(note) = note {
+                object.insert("note".into(), Value::String(note));
+            }
             Some(Value::Object(object))
         }
     })
 }
 
+/// A synchronised contact record: what the user set on one address.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct SyncedContact<'a> {
+    pub user_name: Option<&'a str>,
+    pub merged_into: Option<&'a str>,
+    pub note: Option<&'a str>,
+}
+
+impl<'a> SyncedContact<'a> {
+    pub(crate) fn of(value: &'a Value) -> Self {
+        let text = |field: &str| value.get(field).and_then(Value::as_str);
+        Self {
+            user_name: text("userName"),
+            merged_into: text("mergedInto"),
+            note: text("note"),
+        }
+    }
+}
+
 /// Applies a synchronised contact record to the row with address `key` (if this device has
-/// it): the name, and the merge into the head with address `merged_into` (if this device has
-/// that one too), or no merge.
+/// it): the name, the note, and the merge into the head with address `merged_into` (if this
+/// device has that one too), or no merge.
 pub(crate) fn apply_synced(
     conn: &Connection,
     key: &str,
-    user_name: Option<&str>,
-    merged_into: Option<&str>,
+    record: SyncedContact<'_>,
 ) -> Result<usize, StoreError> {
+    let SyncedContact {
+        user_name,
+        merged_into,
+        note,
+    } = record;
     let Some((row, group)) = conn
         .prepare_cached(ROW_BY_KEY)?
         .query_row([key], |r| {
@@ -473,8 +508,8 @@ pub(crate) fn apply_synced(
         return Ok(0);
     };
     let mut changed = conn
-        .prepare_cached("UPDATE contact SET user_name = ?2 WHERE id = ?1")?
-        .execute(params![row, user_name])?;
+        .prepare_cached("UPDATE contact SET user_name = ?2, note = ?3 WHERE id = ?1")?
+        .execute(params![row, user_name, note])?;
     match merged_into {
         Some(head_key) if head_key != key => {
             let head = conn
@@ -525,9 +560,7 @@ pub(crate) fn apply_waiting_record(conn: &Connection, key: &str) -> Result<(), S
     let Ok(value) = serde_json::from_str::<Value>(&content) else {
         return Ok(());
     };
-    let name = value.get("userName").and_then(Value::as_str);
-    let merged = value.get("mergedInto").and_then(Value::as_str);
-    apply_synced(conn, key, name, merged)?;
+    apply_synced(conn, key, SyncedContact::of(&value))?;
     Ok(())
 }
 
@@ -542,8 +575,9 @@ impl Store {
         words: Vec<String>,
         after: Option<ContactCursor>,
         limit: u32,
+        people_only: bool,
     ) -> Result<StoredContactPage, StoreError> {
-        self.read(move |conn| page(conn, &words, after, limit))
+        self.read(move |conn| page(conn, &words, after, limit, people_only))
             .await
     }
 

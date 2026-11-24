@@ -107,8 +107,12 @@ pub use compose::{
     UnclearDecision,
 };
 pub use contacts::{
-    ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactPage,
-    ContactRequestError, DuplicateReason, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN,
+    CONTACT_PICTURE_SIZE, CONTACT_PICTURE_SOURCE_SIZE, ContactAddressInfo, ContactDuplicate,
+    ContactEntry, ContactFilter, ContactKind, ContactMergeRequest, ContactMessages, ContactPage,
+    ContactPicture, ContactPictureRef, ContactPictureSource, ContactRequestError, DuplicateReason,
+    MAX_CONTACT_MESSAGES, MAX_CONTACT_NOTE_CHARS, MAX_CONTACT_PAGE, MAX_CONTACT_PICTURE_BYTES,
+    MAX_CONTACT_PICTURE_FILE_BYTES, MAX_DUPLICATE_SCAN, PictureCrop, SpamMailCount, SpamMark,
+    SpamMove, SpamUndo, SpamUndone,
 };
 pub use diagnostics::{DiagnosticsError, DiagnosticsExportResult};
 pub use eml::{

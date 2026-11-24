@@ -3,13 +3,14 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use mail_model::MessageCategory;
+use mail_model::{ContactKind, MessageCategory};
 
 use super::address::{NormalizedAddress, normalize_address, unicode_domain};
 use super::fold::{fold, fold_german, words};
 use super::name::{MAX_NAME_CHARS, clean_display_name};
 use super::rank::{RECEIVED_WEIGHT, Rank, SENT_WEIGHT};
 use crate::classify::is_no_reply_address;
+use crate::classify::patterns::{SenderPattern, sender_pattern};
 use crate::parse::MessageHeaders;
 
 /// Display names remembered per contact (the least used are forgotten first).
@@ -17,11 +18,14 @@ pub const MAX_NAMES_PER_CONTACT: usize = 16;
 /// Largest group of contacts with the same name for which merges are suggested.
 const MAX_SAME_NAME_GROUP: usize = 10;
 
-/// Whether the user wrote to an address or received from it.
+/// How an address was in a message: the user wrote to it, it wrote to the user, or it was in
+/// the message otherwise (copied with the user, or as Reply-To).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     Sent,
     Received,
+    /// Stage 17: To or Cc of a received message, Reply-To of any, a second From.
+    Seen,
 }
 
 /// One address seen in one message.
@@ -33,22 +37,33 @@ pub struct Observation<'a> {
     pub direction: Direction,
     /// Date of the message (Unix seconds).
     pub at: i64,
+    /// Stage 17: the message is the user's own or from a person (category
+    /// [`MessageCategory::Person`]), not a newsletter, notification or list mail. Only such
+    /// observations make an address a person ([`ContactKind::Person`]); a received one counts
+    /// for the rank only then.
+    pub personal: bool,
 }
 
-/// The observations of one message: for a sent message every recipient (To, Cc, Bcc); for a
-/// received one the sender (first From), and only if the message is from a person (category
-/// [`MessageCategory::Person`]), so newsletters and notifications do not fill the directory.
+/// The observations of one message (stage 17: every address of From, To, Cc, Bcc and
+/// Reply-To). `direction` is the message's: [`Direction::Sent`] for the user's own (every
+/// recipient is [`Direction::Sent`], Reply-To is [`Direction::Seen`]),
+/// [`Direction::Received`] otherwise (the first From is [`Direction::Received`], every other
+/// address [`Direction::Seen`]). Own addresses are left out by [`ContactBook::observe`].
 pub fn observations<'a>(
     headers: &'a MessageHeaders,
     direction: Direction,
     category: MessageCategory,
     at: i64,
 ) -> Vec<Observation<'a>> {
-    let observe = |a: &'a mail_model::Address| Observation {
-        email: a.email.as_str(),
-        name: a.name.as_deref(),
-        direction,
-        at,
+    let personal = direction == Direction::Sent || category == MessageCategory::Person;
+    let observe = move |direction: Direction| {
+        move |a: &'a mail_model::Address| Observation {
+            email: a.email.as_str(),
+            name: a.name.as_deref(),
+            direction,
+            at,
+            personal,
+        }
     };
     match direction {
         Direction::Sent => headers
@@ -56,12 +71,51 @@ pub fn observations<'a>(
             .iter()
             .chain(&headers.cc)
             .chain(&headers.bcc)
-            .map(observe)
+            .map(observe(Direction::Sent))
+            .chain(headers.reply_to.iter().map(observe(Direction::Seen)))
             .collect(),
-        Direction::Received if category == MessageCategory::Person => {
-            headers.from.iter().take(1).map(observe).collect()
-        }
-        Direction::Received => Vec::new(),
+        Direction::Received | Direction::Seen => headers
+            .from
+            .iter()
+            .take(1)
+            .map(observe(Direction::Received))
+            .chain(
+                headers
+                    .from
+                    .iter()
+                    .skip(1)
+                    .chain(&headers.to)
+                    .chain(&headers.cc)
+                    .chain(&headers.reply_to)
+                    .map(observe(Direction::Seen)),
+            )
+            .collect(),
+    }
+}
+
+/// Whether the directory of stage 10 counted this observation already (a sent recipient, or
+/// the sender of a mail from a person, never an address nobody reads). The stage 17 backfill
+/// adds only the others of the messages read before (decision 0050).
+pub fn counted_before_stage17(observation: &Observation<'_>) -> bool {
+    let counted = match observation.direction {
+        Direction::Sent => true,
+        Direction::Received => observation.personal,
+        Direction::Seen => false,
+    };
+    counted && !is_no_reply_address(observation.email)
+}
+
+/// What kind of correspondent an address is (stage 17): nobody reads it, or a program sends
+/// from it and the user never wrote to it: [`ContactKind::System`]; a newsletter address or one
+/// only seen in mail that is not from a person: [`ContactKind::List`]; else a person.
+pub fn contact_kind(email: &str, personal: bool, sent: u32) -> ContactKind {
+    match sender_pattern(email) {
+        Some(SenderPattern::NoReply(_)) => ContactKind::System,
+        _ if sent > 0 => ContactKind::Person,
+        Some(SenderPattern::Automated(_)) => ContactKind::System,
+        Some(SenderPattern::Newsletter(_)) => ContactKind::List,
+        None if personal => ContactKind::Person,
+        None => ContactKind::List,
     }
 }
 
@@ -71,8 +125,6 @@ pub enum Skipped {
     InvalidAddress,
     /// One of the user's own addresses.
     OwnAddress,
-    /// An address nobody reads (`noreply@`): no way to answer.
-    NoReply,
 }
 
 /// One address of a contact and how it was used.
@@ -83,9 +135,21 @@ pub struct ContactAddress {
     pub sent: u32,
     /// Messages received from it.
     pub received: u32,
+    /// Stage 17: other messages it was in ([`Direction::Seen`]).
+    pub seen: u32,
     pub last_sent: Option<i64>,
     pub last_received: Option<i64>,
+    pub last_seen: Option<i64>,
     pub rank: Rank,
+    /// Stage 17: seen in a personal observation ([`Observation::personal`]).
+    pub personal: bool,
+}
+
+impl ContactAddress {
+    /// Stage 17: person, list or system address.
+    pub fn kind(&self) -> ContactKind {
+        contact_kind(&self.address.key, self.personal, self.sent)
+    }
 }
 
 /// A display name seen for a contact.
@@ -167,11 +231,11 @@ impl Contact {
         self.addresses.iter().map(|a| a.sent).sum()
     }
 
-    /// The newest message to or from any address.
+    /// The newest message to, from or with any address.
     pub fn last_used(&self) -> Option<i64> {
         self.addresses
             .iter()
-            .flat_map(|a| [a.last_sent, a.last_received])
+            .flat_map(|a| [a.last_sent, a.last_received, a.last_seen])
             .flatten()
             .max()
     }
@@ -446,9 +510,6 @@ impl ContactBook {
         {
             return Err(Skipped::OwnAddress);
         }
-        if is_no_reply_address(&address.key) {
-            return Err(Skipped::NoReply);
-        }
         let name = observation
             .name
             .and_then(|n| clean_display_name(n, &address.key));
@@ -462,9 +523,12 @@ impl ContactBook {
                         address: address.clone(),
                         sent: 0,
                         received: 0,
+                        seen: 0,
                         last_sent: None,
                         last_received: None,
+                        last_seen: None,
                         rank: Rank::NONE,
+                        personal: false,
                     }],
                     names: Vec::new(),
                     user_name: None,
@@ -482,7 +546,7 @@ impl ContactBook {
             .find(|a| a.address.key == address.key)
         {
             // The newest spelling of the local part is the one to write to.
-            let newest = [entry.last_sent, entry.last_received]
+            let newest = [entry.last_sent, entry.last_received, entry.last_seen]
                 .into_iter()
                 .flatten()
                 .max()
@@ -499,9 +563,17 @@ impl ContactBook {
                 Direction::Received => {
                     entry.received = entry.received.saturating_add(1);
                     entry.last_received = Some(entry.last_received.map_or(at, |l| l.max(at)));
-                    entry.rank = entry.rank.plus(Rank::of(RECEIVED_WEIGHT, at));
+                    // Stage 17: newsletters and notifications are listed, but do not rank.
+                    if observation.personal {
+                        entry.rank = entry.rank.plus(Rank::of(RECEIVED_WEIGHT, at));
+                    }
+                }
+                Direction::Seen => {
+                    entry.seen = entry.seen.saturating_add(1);
+                    entry.last_seen = Some(entry.last_seen.map_or(at, |l| l.max(at)));
                 }
             }
+            entry.personal |= observation.personal;
         }
         if let Some(name) = name {
             words_changed |= !contact.names.iter().any(|n| n.name == name);

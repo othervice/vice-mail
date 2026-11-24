@@ -62,6 +62,8 @@ mail-imap = { workspace = true, features = ["test-support"] }
 # Stage 14: the JMAP server tests log the methods each connection sends.
 mail-jmap = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
+# Stage 17: pictures for the contact picture tests.
+image.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
 # Local HTTPS and DNS servers in the discovery tests.
 rcgen.workspace = true

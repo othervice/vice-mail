@@ -32,6 +32,10 @@ fn main() -> ExitCode {
     if args.get(1).map(String::as_str) == Some(mail_mcp::preview::REENCODE_ARG) && args.len() == 2 {
         return mail_mcp::preview::run_reencode_child();
     }
+    // Stage 17 (decision 0050): pictures the user chose for contacts, decoded here as well.
+    if args.get(1).map(String::as_str) == Some(mail_mcp::preview::PICTURE_ARG) {
+        return mail_mcp::preview::run_picture_child(&args[2..]);
+    }
     if let Some(arg) = std::env::args().nth(1) {
         return match arg.as_str() {
             "--version" | "-V" => {

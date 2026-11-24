@@ -225,6 +225,10 @@ describe("error codes", () => {
     "diagnostics_write_failed",
     // Stage 14 (decision 0041): JMAP.
     "jmap_unavailable",
+    // Stage 17 (decision 0050): contact pictures.
+    "picture_too_large",
+    "picture_unsupported",
+    "picture_damaged",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

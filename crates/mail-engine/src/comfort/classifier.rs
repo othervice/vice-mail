@@ -64,10 +64,17 @@ impl Classifier for ContentClassifier {
         );
         let one_click = (!header.category_headers.is_empty())
             .then(|| super::unsubscribe::one_click_in(&header.category_headers));
+        // Stage 17: Reply-To only from the fetched block (the envelope's is not stored).
+        let reply_to = if header.category_headers.is_empty() {
+            Vec::new()
+        } else {
+            headers.reply_to
+        };
         Classified {
             category: decision.category,
             reason: decision.reason,
             one_click,
+            reply_to,
         }
     }
 }

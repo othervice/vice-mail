@@ -225,6 +225,10 @@ export const ERROR_CODES = [
   "diagnostics_write_failed",
   // Stage 14 (decision 0041): JMAP.
   "jmap_unavailable",
+  // Stage 17 (decision 0050): contact pictures.
+  "picture_too_large",
+  "picture_unsupported",
+  "picture_damaged",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1150,9 +1154,12 @@ export const snippetsIpc = {
 
 /** Stage 10: the local contact directory (ranked by frequency and recency). */
 export const contactsIpc = {
-  /** `limit` 1..`MAX_CONTACT_PAGE`; `cursor` from the previous page. */
-  listContacts: (query: string | null, cursor: string | null, limit: number): Promise<ContactPage> =>
-    call(() => stage10Commands.listContacts(query, cursor, limit)),
+  /**
+   * `limit` 1..`MAX_CONTACT_PAGE`; `cursor` from the previous page. Stage 17: `filter`
+   * `people` leaves out list and system addresses.
+   */
+  listContacts: (query: string | null, cursor: string | null, limit: number, filter: ContactFilter = "people"): Promise<ContactPage> =>
+    call(() => stage17Commands.listContacts(query, cursor, limit, filter)),
   getContact: (email: string): Promise<ContactEntry> => call(() => stage10Commands.getContact(email)),
   /** `null` = back to the name seen most in mail. */
   setContactName: (email: string, name: string | null): Promise<ContactEntry> =>
@@ -1164,6 +1171,59 @@ export const contactsIpc = {
   /** Only after the user confirmed in a dialog (`confirmed: true`), else `confirmation_required`. */
   mergeContacts: (request: ContactMergeRequest): Promise<ContactEntry> => call(() => stage10Commands.mergeContacts(request)),
   separateContact: (email: string): Promise<ContactEntry> => call(() => stage10Commands.separateContact(email)),
+  // Stage 17 (decision 0050): the contacts view.
+  /** `null` or empty text removes the note. */
+  setContactNote: (email: string, note: string | null): Promise<ContactEntry> =>
+    call(() => stage17Commands.setContactNote(email, note)),
+  /** The system dialog (in Rust); `null` when cancelled. The core reads the file, the helper encodes it. */
+  pickContactPicture: (): Promise<ContactPictureSource | null> => call(() => stage17Commands.pickContactPicture()),
+  /** Only a path of a drop the shell saw itself (`onFileDrop`). */
+  loadDroppedContactPicture: (path: string): Promise<ContactPictureSource> =>
+    call(() => stage17Commands.loadDroppedContactPicture(path)),
+  /** The square in pixels of the source; the token expires after a few minutes (`not_found`). */
+  setContactPicture: (email: string, token: string, crop: PictureCrop): Promise<ContactEntry> =>
+    call(() => stage17Commands.setContactPicture(email, token, crop)),
+  removeContactPicture: (email: string): Promise<ContactEntry> => call(() => stage17Commands.removeContactPicture(email)),
+  getContactPicture: (email: string): Promise<ContactPicture | null> => call(() => stage17Commands.getContactPicture(email)),
+  listContactPictures: (): Promise<ContactPictureRef[]> => call(() => stage17Commands.listContactPictures()),
+  /** Newest first; `limit` 1..50. */
+  listContactMessages: (email: string, limit: number): Promise<ContactMessages> =>
+    call(() => stage17Commands.listContactMessages(email, limit)),
+  markContactSpam: (email: string): Promise<SpamMark> => call(() => stage17Commands.markContactSpam(email)),
+  moveContactMailToJunk: (email: string): Promise<SpamMove> => call(() => stage17Commands.moveContactMailToJunk(email)),
+  undoContactSpam: (email: string, undo: SpamUndo): Promise<SpamUndone> => call(() => stage17Commands.undoContactSpam(email, undo)),
+};
+
+// ---- Stage 17 (decision 0050): the contacts view ----
+import {
+  commands as stage17Commands,
+  type ContactFilter,
+  type ContactKind,
+  type ContactMessages,
+  type ContactPicture,
+  type ContactPictureRef,
+  type ContactPictureSource,
+  type PictureCrop,
+  type SpamMailCount,
+  type SpamMark,
+  type SpamMove,
+  type SpamUndo,
+  type SpamUndone,
+} from "../generated/bindings";
+
+export type {
+  ContactFilter,
+  ContactKind,
+  ContactMessages,
+  ContactPicture,
+  ContactPictureRef,
+  ContactPictureSource,
+  PictureCrop,
+  SpamMailCount,
+  SpamMark,
+  SpamMove,
+  SpamUndo,
+  SpamUndone,
 };
 
 // ---- Stage 13 (AI in the app: settings, consent, request log, panel, writing help, open replies) ----

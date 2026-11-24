@@ -58,6 +58,8 @@ pub enum RecordKind {
     BlockedSender,
     /// A pinned attachment, by account, Message-ID and attachment index (stage 16, 0036).
     AttachmentPin,
+    /// The picture the user chose for a contact, by its normalised address (stage 17, 0050).
+    ContactPicture,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, "Settings sync").
@@ -122,7 +124,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 20] = [
+pub const REGISTRY: [KindSpec; 21] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -262,6 +264,7 @@ pub const REGISTRY: [KindSpec; 20] = [
         Removal::Apply,
         KIB,
     ),
+    // Stage 17 (decision 0050): with the note (at most 1,000 characters), 8 KiB.
     spec(
         RecordKind::Contact,
         "contact",
@@ -269,7 +272,7 @@ pub const REGISTRY: [KindSpec; 20] = [
         MergeRule::NewerWins,
         IdShape::Address,
         Removal::Apply,
-        4 * KIB,
+        8 * KIB,
     ),
     // Stage 16 (decision 0033): the reading list like tasks, mailbox favourites and colours by
     // decoded path (as local rules name a mailbox), blocked senders by normalised address.
@@ -309,6 +312,17 @@ pub const REGISTRY: [KindSpec; 20] = [
         IdShape::MailPart,
         Removal::Apply,
         2 * KIB,
+    ),
+    // Stage 17 (decision 0050): a contact picture, a JPEG of 256 × 256 px and at most 40 KiB
+    // in base64 (54,616 characters).
+    spec(
+        RecordKind::ContactPicture,
+        "contactPicture",
+        "contact_picture",
+        MergeRule::NewerWins,
+        IdShape::Address,
+        Removal::Apply,
+        56 * KIB,
     ),
 ];
 
@@ -368,7 +382,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -389,6 +403,7 @@ impl RecordKind {
         Self::MailboxPref,
         Self::BlockedSender,
         Self::AttachmentPin,
+        Self::ContactPicture,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -872,10 +887,27 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::Contact => {
             let contact =
                 ContactContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
-            if contact.user_name.is_none() && contact.merged_into.is_none() {
+            if contact.user_name.is_none()
+                && contact.merged_into.is_none()
+                && contact.note.is_none()
+            {
                 return Err(invalid(
-                    "a contact record has a name or a merge (delete it instead)".into(),
+                    "a contact record has a name, a merge or a note (delete it instead)".into(),
                 ));
+            }
+            if let Some(note) = &contact.note
+                && !crate::contacts_view::is_usable_note(note)
+            {
+                return Err(invalid("not a usable note".into()));
+            }
+        }
+        // Stage 17 (decision 0050): base64 of a JPEG within the stored size; shown on this
+        // device only after its own helper encoded it again (decision 0046).
+        RecordKind::ContactPicture => {
+            let picture = ContactPictureContent::deserialize(value)
+                .map_err(|err| invalid(err.to_string()))?;
+            if !crate::contacts_view::is_picture_record(&picture.jpeg) {
+                return Err(invalid("not the base64 of a JPEG of at most 40 KiB".into()));
             }
         }
         // Stage 7 (decision 0026): a saved search, checked like one saved here.
@@ -1186,8 +1218,8 @@ pub struct AccountGroupContent {
 pub struct EmptyContent {}
 
 /// Content of a contact record (by normalised address): the name the user gave it and, for an
-/// address the user merged into another contact, that contact's address (stage 10). At least
-/// one of the two.
+/// address the user merged into another contact, that contact's address (stage 10), and
+/// (stage 17) the user's note. At least one of the three.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContactContent {
@@ -1195,6 +1227,17 @@ pub struct ContactContent {
     pub user_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged_into: Option<String>,
+    /// Stage 17: the user's note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// Content of a contact picture record (stage 17, by normalised address): the JPEG in
+/// standard base64.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactPictureContent {
+    pub jpeg: String,
 }
 
 /// A record: content or tombstone, with the version that produced it.

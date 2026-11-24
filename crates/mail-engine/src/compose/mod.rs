@@ -1886,6 +1886,9 @@ fn contacts_job<C: Connector>(
         // its database held open by this task.
         tokio::time::sleep(delay).await;
         let mut first = true;
+        // Stage 17: the kinds of the rows of stage 10 are recomputed once per run, when the
+        // backfill first has work.
+        let mut kinds_done = false;
         loop {
             if !first {
                 tokio::select! {
@@ -1906,9 +1909,15 @@ fn contacts_job<C: Connector>(
                     }
                 };
                 match contacts::run_batch(&store, &own).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        tracing::debug!(messages = n, "contacts read");
+                    Ok((0, _)) => break,
+                    Ok((n, backfill)) => {
+                        tracing::debug!(messages = n, backfill, "contacts read");
+                        if backfill && !kinds_done {
+                            kinds_done = true;
+                            if let Err(err) = contacts::recompute_kinds(&store).await {
+                                tracing::warn!(error = %err, "contact kinds not recomputed");
+                            }
+                        }
                         tokio::task::yield_now().await;
                     }
                     Err(err) => {

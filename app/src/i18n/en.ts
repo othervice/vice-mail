@@ -3405,6 +3405,19 @@ export const en = {
         title: "No JMAP service was found at this address.",
         hint: "Check the server name and port. A JMAP server answers at https://server/.well-known/jmap. If your provider offers no JMAP, choose IMAP and SMTP in the server settings.",
       },
+      // Stage 17 (decision 0050): contact pictures.
+      picture_too_large: {
+        title: "The picture is too large.",
+        hint: "Choose an image file of at most 20 MB and at most 64 megapixels.",
+      },
+      picture_unsupported: {
+        title: "This file cannot be used as a picture.",
+        hint: "Choose a PNG, JPEG, GIF or WebP image.",
+      },
+      picture_damaged: {
+        title: "The picture could not be read.",
+        hint: "The file may be damaged. Choose another image.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.

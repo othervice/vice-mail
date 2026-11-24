@@ -7,18 +7,27 @@
 //! Stage 10 (decision 0023): the directory for the UI. Ranked pages (a merged contact once),
 //! names the user gives, duplicate suggestions from `mail_content::ContactBook`, merges only
 //! with the user's confirmation, and the commands on [`crate::AppCore`].
+//!
+//! Stage 17 (decision 0050): every address of From, To, Cc and Reply-To becomes a contact;
+//! list and system addresses get their kind and are left out of autocomplete and, by default,
+//! of the contacts view. Messages read by the rules of stage 10 are read again in the
+//! background (oldest first, never blocking the start), adding only what those rules left
+//! out, so ranks stay as they were; Reply-To of such a message comes from its stored body.
 
 use std::collections::{BTreeSet, HashMap};
 
+use std::collections::HashSet;
+
 use mail_content::{
     ClassifyHeaders, Contact, ContactAddress, ContactBook, Direction, DuplicateKind, LocalSignals,
-    MessageHeaders, NormalizedAddress, Rank, SeenName, classify_automatic, fold,
-    is_no_reply_address, normalize_address, observations, unicode_domain,
+    MessageHeaders, NormalizedAddress, Rank, SeenName, classify_automatic, counted_before_stage17,
+    fold, is_no_reply_address, normalize_address, observations, unicode_domain,
 };
 use mail_model::{
-    ContactAddressInfo, ContactDuplicate, ContactEntry, ContactMergeRequest, ContactNameRecord,
-    ContactPage, ContactRequestError, ContactSuggestion, CoreError, DuplicateReason, Flags,
-    MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN, MessageCategory, MessageHeader,
+    ContactAddressInfo, ContactDuplicate, ContactEntry, ContactFilter, ContactKind,
+    ContactMergeRequest, ContactNameRecord, ContactPage, ContactRequestError, ContactSuggestion,
+    CoreError, DuplicateReason, Flags, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN, MessageCategory,
+    MessageHeader,
 };
 use mail_store::{
     ContactCursor, ContactSource, MergeOutcome, SeparateOutcome, Store, StoredContact,
@@ -29,6 +38,12 @@ use crate::core::Connector;
 
 /// Messages read into the directory per transaction.
 pub(crate) const CONTACTS_BATCH: u32 = 500;
+
+/// Stage 17: the largest stored mail the backfill reads Reply-To from.
+const MAX_BACKFILL_BODY_BYTES: u64 = 1024 * 1024;
+
+/// Stage 17: contact rows per step when the kinds are recomputed.
+const KIND_BATCH: u32 = 2_000;
 
 fn to_contact(stored: &StoredContact) -> Contact {
     let local = stored
@@ -45,9 +60,12 @@ fn to_contact(stored: &StoredContact) -> Contact {
             },
             sent: stored.sent,
             received: stored.received,
+            seen: stored.seen,
             last_sent: stored.last_sent,
             last_received: stored.last_received,
+            last_seen: stored.last_seen,
             rank: Rank::from_key(stored.rank),
+            personal: stored.personal,
         }],
         names: stored
             .names
@@ -99,6 +117,12 @@ fn to_rows(contact: &Contact, groups: &HashMap<String, Option<i64>>) -> Vec<Stor
                 .collect(),
             user_name: contact.user_name.clone(),
             search: search.clone(),
+            seen: a.seen,
+            last_seen: a.last_seen,
+            personal: a.personal,
+            kind: a.kind().code(),
+            // The directory job never writes the user's note (`UPSERT_CONTACT`).
+            note: None,
         })
         .collect()
 }
@@ -108,6 +132,7 @@ fn headers_of(source: &ContactSource) -> MessageHeaders {
         from: source.from.iter().cloned().collect(),
         to: source.to.clone(),
         cc: source.cc.clone(),
+        reply_to: source.reply_to.clone(),
         subject: Some(source.subject.clone()),
         ..MessageHeaders::default()
     }
@@ -174,45 +199,121 @@ pub(crate) async fn own_addresses(store: &Store) -> Result<Vec<String>, CoreErro
     Ok(own)
 }
 
-/// Reads one batch of messages into the directory. Returns how many messages it read (0: done).
-pub(crate) async fn run_batch(store: &Store, own: &[String]) -> Result<usize, CoreError> {
-    let sources = store.contacts_todo(CONTACTS_BATCH).await?;
-    if sources.is_empty() {
-        return Ok(0);
+/// Stage 17: Reply-To of a message read before stage 17, from its stored mail (whole and at
+/// most [`MAX_BACKFILL_BODY_BYTES`]); empty otherwise.
+async fn stored_reply_to(
+    store: &Store,
+    message: mail_model::MessageId,
+) -> Vec<mail_model::Address> {
+    let Ok(Some(info)) = store.body_info(message).await else {
+        return Vec::new();
+    };
+    if !info.complete || info.raw_size > MAX_BACKFILL_BODY_BYTES {
+        return Vec::new();
     }
+    let Ok(Some(raw)) = store.load_message(message).await else {
+        return Vec::new();
+    };
+    let end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|p| p + 4)
+        .or_else(|| raw.windows(2).position(|w| w == b"\n\n").map(|p| p + 2))
+        .unwrap_or(raw.len());
+    tokio::task::spawn_blocking(move || ClassifyHeaders::from_raw(&raw[..end]).reply_to)
+        .await
+        .unwrap_or_default()
+}
+
+/// Stage 17: the kinds of every row, once per run of the backfill (rows of stage 10 that it
+/// never touches keep the kind they get here).
+pub(crate) async fn recompute_kinds(store: &Store) -> Result<(), CoreError> {
+    let mut after = 0;
+    loop {
+        let rows = store.contact_kind_rows(after, KIND_BATCH).await?;
+        let Some(last) = rows.last() else {
+            return Ok(());
+        };
+        after = last.0;
+        let changed: Vec<(i64, i64)> = rows
+            .iter()
+            .filter_map(|(row, key, personal, sent, kind)| {
+                let new = mail_content::contact_kind(key, *personal, *sent).code();
+                (new != *kind).then_some((*row, new))
+            })
+            .collect();
+        if !changed.is_empty() {
+            store.set_contact_kinds(changed).await?;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
+/// One address of a message as the directory job adds it: address, name, direction, personal.
+type Observed = (String, Option<String>, Direction, bool);
+
+/// What a batch adds: the keys of every address, and per message its date and observations.
+/// Stage 17: of a message read before (`backfill`), only what stage 10 left out.
+fn plan(
+    sources: &[ContactSource],
+    own: &[String],
+) -> (BTreeSet<String>, Vec<(i64, Vec<Observed>)>) {
+    let mut keys = BTreeSet::new();
+    let mut per_message = Vec::with_capacity(sources.len());
+    for source in sources {
+        let headers = headers_of(source);
+        let sent = source
+            .from
+            .as_ref()
+            .is_some_and(|from| is_own(&from.email, own));
+        let (direction, category) = if sent {
+            (Direction::Sent, MessageCategory::Person)
+        } else {
+            (Direction::Received, category_of(source, own))
+        };
+        let observed: Vec<Observed> = observations(&headers, direction, category, source.date)
+            .iter()
+            .filter(|o| !source.backfill || !counted_before_stage17(o))
+            .map(|o| {
+                (
+                    o.email.to_owned(),
+                    o.name.map(str::to_owned),
+                    o.direction,
+                    o.personal,
+                )
+            })
+            .collect();
+        for (email, ..) in &observed {
+            if let Some(address) = normalize_address(email) {
+                keys.insert(address.key);
+            }
+        }
+        per_message.push((source.date, observed));
+    }
+    (keys, per_message)
+}
+
+/// Reads one batch of messages into the directory: new messages first, then (stage 17) the
+/// backfill of messages read by the rules of stage 10. Returns how many messages it read (0:
+/// done) and whether they were the backfill's.
+pub(crate) async fn run_batch(store: &Store, own: &[String]) -> Result<(usize, bool), CoreError> {
+    let mut sources = store.contacts_todo(CONTACTS_BATCH).await?;
+    if sources.is_empty() {
+        sources = store.contacts_backfill(CONTACTS_BATCH).await?;
+        for source in sources.iter_mut().filter(|s| s.reply_to.is_empty()) {
+            source.reply_to = stored_reply_to(store, source.message).await;
+        }
+    }
+    if sources.is_empty() {
+        return Ok((0, false));
+    }
+    let backfill = sources.iter().any(|s| s.backfill);
     let own_owned = own.to_vec();
     let sources_for_work = sources.clone();
     // Classification and folding are CPU work.
-    let planned = tokio::task::spawn_blocking(move || {
-        let mut keys = BTreeSet::new();
-        let mut per_message = Vec::with_capacity(sources_for_work.len());
-        for source in &sources_for_work {
-            let headers = headers_of(source);
-            let sent = source
-                .from
-                .as_ref()
-                .is_some_and(|from| is_own(&from.email, &own_owned));
-            let (direction, category) = if sent {
-                (Direction::Sent, MessageCategory::Person)
-            } else {
-                (Direction::Received, category_of(source, &own_owned))
-            };
-            let observed: Vec<(String, Option<String>)> =
-                observations(&headers, direction, category, source.date)
-                    .iter()
-                    .map(|o| (o.email.to_owned(), o.name.map(str::to_owned)))
-                    .collect();
-            for (email, _) in &observed {
-                if let Some(address) = normalize_address(email) {
-                    keys.insert(address.key);
-                }
-            }
-            per_message.push((direction, source.date, observed));
-        }
-        (keys, per_message)
-    })
-    .await
-    .map_err(|err| CoreError::Internal(format!("contacts task failed: {err}")))?;
+    let planned = tokio::task::spawn_blocking(move || plan(&sources_for_work, &own_owned))
+        .await
+        .map_err(|err| CoreError::Internal(format!("contacts task failed: {err}")))?;
     let (keys, per_message) = planned;
     let stored = store.contacts_by_keys(keys.into_iter().collect()).await?;
     let groups: HashMap<String, Option<i64>> =
@@ -222,13 +323,14 @@ pub(crate) async fn run_batch(store: &Store, own: &[String]) -> Result<usize, Co
         let mut book =
             ContactBook::from_contacts(&own_owned, stored.iter().map(to_contact).collect());
         let mut touched = BTreeSet::new();
-        for (direction, at, observed) in &per_message {
-            for (email, name) in observed {
+        for (at, observed) in &per_message {
+            for (email, name, direction, personal) in observed {
                 let observation = mail_content::Observation {
                     email,
                     name: name.as_deref(),
                     direction: *direction,
                     at: *at,
+                    personal: *personal,
                 };
                 if book.observe(observation).is_ok()
                     && let Some(address) = normalize_address(email)
@@ -253,7 +355,7 @@ pub(crate) async fn run_batch(store: &Store, own: &[String]) -> Result<usize, Co
     .map_err(|err| CoreError::Internal(format!("contacts task failed: {err}")))?;
     let seen = sources.iter().map(|s| s.message).collect();
     store.record_contacts(rows, seen).await?;
-    Ok(sources.len())
+    Ok((sources.len(), backfill))
 }
 
 fn query_words(query: &str) -> Vec<String> {
@@ -280,7 +382,10 @@ pub(crate) async fn search(
     let mut groups_seen: BTreeSet<i64> = BTreeSet::new();
     let mut out = Vec::with_capacity(found.len());
     for stored in &found {
-        if is_no_reply_address(&stored.key) {
+        // Stage 17: list and system addresses the user never wrote to are no suggestions.
+        if is_no_reply_address(&stored.key)
+            || (stored.kind != ContactKind::Person.code() && stored.sent == 0)
+        {
             continue;
         }
         let Some(group) = stored.group else {
@@ -298,7 +403,7 @@ pub(crate) async fn search(
         let Some(merged) = store.contact_group(stored.key.clone()).await? else {
             continue;
         };
-        let entry = entry_of(&merged);
+        let entry = entry_of(&merged, &Extras::default());
         out.push(ContactSuggestion {
             name: entry.name,
             email: entry.email,
@@ -311,7 +416,7 @@ pub(crate) async fn search(
 // -- the directory (stage 10, decision 0023) ---------------------------------------------------
 
 /// The address to write to: the local part as last written, the Unicode domain.
-fn email_of(stored: &StoredContact) -> String {
+pub(crate) fn email_of(stored: &StoredContact) -> String {
     format!("{}@{}", stored.local_part, unicode_domain(&stored.domain))
 }
 
@@ -342,35 +447,69 @@ fn ms(seconds: Option<i64>) -> Option<i64> {
     seconds.map(|s| s.saturating_mul(1000))
 }
 
-fn entry_of(group: &StoredContactGroup) -> ContactEntry {
+/// Stage 17: what an entry shows besides its rows: the pictures (address key → revision) and
+/// the blocked addresses.
+#[derive(Debug, Default)]
+pub(crate) struct Extras {
+    pub(crate) pictures: HashMap<String, i64>,
+    pub(crate) blocked: HashSet<String>,
+}
+
+impl Extras {
+    pub(crate) async fn load(store: &Store) -> Result<Self, CoreError> {
+        Ok(Self {
+            pictures: store.contact_pictures().await?.into_iter().collect(),
+            blocked: store
+                .blocked_senders()
+                .await?
+                .into_iter()
+                .map(|b| b.address)
+                .collect(),
+        })
+    }
+}
+
+pub(crate) fn entry_of(group: &StoredContactGroup, extras: &Extras) -> ContactEntry {
     let contact = group_contact(group);
     let addresses: Vec<ContactAddressInfo> = group
         .members
         .iter()
-        .filter(|m| !is_no_reply_address(&m.key))
         .map(|m| ContactAddressInfo {
             email: email_of(m),
             sent: m.sent,
             received: m.received,
-            last_used: ms([m.last_sent, m.last_received].into_iter().flatten().max()),
+            seen: m.seen,
+            last_used: ms([m.last_sent, m.last_received, m.last_seen]
+                .into_iter()
+                .flatten()
+                .max()),
+            blocked: extras.blocked.contains(&m.key),
         })
         .collect();
+    let head = group.head();
     ContactEntry {
-        key: group.head().key.clone(),
+        key: head.key.clone(),
         name: contact.name().map(str::to_owned),
         user_name: contact.user_name.clone(),
-        email: email_of(group.head()),
+        email: email_of(head),
         sent: contact.sent(),
         received: contact.addresses.iter().map(|a| a.received).sum(),
         last_used: ms(contact.last_used()),
+        kind: ContactKind::from_code(head.kind).unwrap_or(ContactKind::Person),
+        note: group.members.iter().find_map(|m| m.note.clone()),
+        picture: group
+            .members
+            .iter()
+            .find_map(|m| extras.pictures.get(&m.key).copied()),
+        blocked: addresses.iter().any(|a| a.blocked),
         addresses,
     }
 }
 
-/// A contact is listed unless its preferred address is one nobody reads (rows stored before a
-/// pattern was known; new ones are never recorded).
-fn listable(group: &StoredContactGroup) -> bool {
-    !is_no_reply_address(&group.head().key)
+/// Stage 17: the duplicate check looks at people only (a newsletter and a shop's receipts
+/// with the same name are not one person).
+fn is_person(group: &StoredContactGroup) -> bool {
+    group.head().kind == ContactKind::Person.code()
 }
 
 fn key_of(email: &str) -> Result<String, CoreError> {
@@ -392,6 +531,7 @@ pub(crate) async fn list(
     query: Option<&str>,
     cursor: Option<&str>,
     limit: u32,
+    filter: ContactFilter,
 ) -> Result<ContactPage, CoreError> {
     let limit = limit.clamp(1, MAX_CONTACT_PAGE);
     let after = match cursor {
@@ -401,21 +541,24 @@ pub(crate) async fn list(
         })?),
     };
     let words = query.map(query_words).unwrap_or_default();
-    let page = store.contact_page(words, after, limit).await?;
+    let people_only = filter == ContactFilter::People;
+    let page = store.contact_page(words, after, limit, people_only).await?;
+    let extras = Extras::load(store).await?;
     Ok(ContactPage {
-        items: page
-            .groups
-            .iter()
-            .filter(|g| listable(g))
-            .map(entry_of)
-            .collect(),
+        items: page.groups.iter().map(|g| entry_of(g, &extras)).collect(),
         next: page.next.map(ContactCursor::encode),
     })
 }
 
 /// The contact with the address `email`.
 pub(crate) async fn get(store: &Store, email: &str) -> Result<ContactEntry, CoreError> {
-    Ok(entry_of(&group_by_email(store, email).await?))
+    let group = group_by_email(store, email).await?;
+    Ok(entry_of(&group, &Extras::load(store).await?))
+}
+
+/// Stage 17: the contact (all its rows) with the address `email`.
+pub(crate) async fn group_of(store: &Store, email: &str) -> Result<StoredContactGroup, CoreError> {
+    group_by_email(store, email).await
 }
 
 /// Sets (or with `None` clears) the name the user gives the contact with the address `email`.
@@ -457,9 +600,10 @@ pub(crate) async fn duplicates(store: &Store) -> Result<Vec<ContactDuplicate>, C
         .contact_groups(MAX_DUPLICATE_SCAN)
         .await?
         .into_iter()
-        .filter(listable)
+        .filter(is_person)
         .collect();
     let dismissed = store.dismissed_contact_pairs().await?;
+    let extras = Extras::load(store).await?;
     tokio::task::spawn_blocking(move || {
         let by_key: HashMap<String, &StoredContactGroup> =
             groups.iter().map(|g| (g.head().key.clone(), g)).collect();
@@ -470,7 +614,7 @@ pub(crate) async fn duplicates(store: &Store) -> Result<Vec<ContactDuplicate>, C
                 let contacts: Vec<ContactEntry> = suggestion
                     .contacts
                     .iter()
-                    .filter_map(|key| by_key.get(key).map(|g| entry_of(g)))
+                    .filter_map(|key| by_key.get(key).map(|g| entry_of(g, &extras)))
                     .collect();
                 if contacts.len() != suggestion.contacts.len() {
                     return None;
@@ -567,9 +711,10 @@ impl<C: Connector> crate::AppCore<C> {
         query: Option<String>,
         cursor: Option<String>,
         limit: u32,
+        filter: ContactFilter,
     ) -> Result<ContactPage, CoreError> {
         let store = &self.compose_ref()?.inner.store;
-        list(store, query.as_deref(), cursor.as_deref(), limit).await
+        list(store, query.as_deref(), cursor.as_deref(), limit, filter).await
     }
 
     /// The contact with this address (any of its addresses).
@@ -662,6 +807,7 @@ mod tests {
                 name: s.name,
                 direction: s.direction,
                 at: NOW - s.days_ago * DAY,
+                personal: true,
             });
         }
         let rows: Vec<StoredContact> = book
@@ -729,6 +875,7 @@ mod tests {
                     name: None,
                     direction: Direction::Sent,
                     at: NOW,
+                    personal: true,
                 })
                 .expect("observe");
                 book.into_contacts().remove(0)
@@ -743,8 +890,12 @@ mod tests {
             .record_contacts(old, Vec::new())
             .await
             .expect("record");
+        // Stage 17: the backfill recomputes the kinds of such rows.
+        recompute_kinds(&store).await.expect("kinds");
 
-        let page = list(&store, None, None, 50).await.expect("list");
+        let page = list(&store, None, None, 50, ContactFilter::People)
+            .await
+            .expect("list");
         assert_eq!(
             emails(&page),
             [
@@ -759,20 +910,42 @@ mod tests {
         assert_eq!(carol.name.as_deref(), Some("Carol Clark"));
         assert_eq!(carol.last_used, Some((NOW - DAY) * 1000));
         // Paging continues where the last page ended.
-        let first = list(&store, None, None, 2).await.expect("page");
-        assert_eq!(emails(&first), ["frank@x.example", "dave@x.example"]);
-        let rest = list(&store, None, first.next.as_deref(), 50)
+        let first = list(&store, None, None, 2, ContactFilter::People)
             .await
             .expect("page");
+        assert_eq!(emails(&first), ["frank@x.example", "dave@x.example"]);
+        let rest = list(
+            &store,
+            None,
+            first.next.as_deref(),
+            50,
+            ContactFilter::People,
+        )
+        .await
+        .expect("page");
         assert_eq!(emails(&rest), ["carol@x.example", "erin@x.example"]);
         assert!(rest.next.is_none());
+        // Stage 17: addresses nobody reads are contacts too, marked, and listed on request.
+        let all = list(&store, None, None, 50, ContactFilter::All)
+            .await
+            .expect("all");
+        let system: Vec<&str> = all
+            .items
+            .iter()
+            .filter(|c| c.kind == ContactKind::System)
+            .map(|c| c.email.as_str())
+            .collect();
+        assert_eq!(system.len(), 3, "{system:?}");
+        assert!(system.contains(&"donotreply@shop.example"));
         // Search and autocomplete leave out no-reply addresses as well.
-        let found = list(&store, Some("d"), None, 50).await.expect("search");
+        let found = list(&store, Some("d"), None, 50, ContactFilter::People)
+            .await
+            .expect("search");
         assert_eq!(emails(&found), ["dave@x.example"]);
         let suggestions = search(&store, "d", 10).await.expect("autocomplete");
         let suggested: Vec<_> = suggestions.iter().map(|s| s.email.as_str()).collect();
         assert_eq!(suggested, ["dave@x.example"]);
-        let err = list(&store, None, Some("nonsense"), 10)
+        let err = list(&store, None, Some("nonsense"), 10, ContactFilter::People)
             .await
             .expect_err("bad cursor");
         assert_eq!(err.code(), ErrorCode::InvalidArgument);
@@ -833,7 +1006,9 @@ mod tests {
         assert!(same_name.name.is_some());
 
         // Nothing is merged by suggesting.
-        let page = list(&store, None, None, 50).await.expect("list");
+        let page = list(&store, None, None, 50, ContactFilter::People)
+            .await
+            .expect("list");
         assert_eq!(page.items.len(), 5);
 
         dismiss(
@@ -871,7 +1046,9 @@ mod tests {
             ],
         )
         .await;
-        let before = list(&store, None, None, 50).await.expect("list");
+        let before = list(&store, None, None, 50, ContactFilter::People)
+            .await
+            .expect("list");
         let request = ContactMergeRequest {
             keep: "Hans.Mueller@x.example".into(),
             merge: vec!["hans@y.example".into()],
@@ -880,7 +1057,9 @@ mod tests {
         let err = merge(&store, &request).await.expect_err("not confirmed");
         assert_eq!(err.code(), ErrorCode::ConfirmationRequired);
         assert_eq!(
-            list(&store, None, None, 50).await.expect("list"),
+            list(&store, None, None, 50, ContactFilter::People)
+                .await
+                .expect("list"),
             before,
             "nothing changed"
         );
@@ -898,7 +1077,9 @@ mod tests {
         assert_eq!(merged.key, "hans.mueller@x.example");
         assert_eq!(merged.addresses.len(), 2);
         assert_eq!((merged.sent, merged.received), (2, 1));
-        let after = list(&store, None, None, 50).await.expect("list");
+        let after = list(&store, None, None, 50, ContactFilter::People)
+            .await
+            .expect("list");
         assert_eq!(emails(&after), ["hans.mueller@x.example"], "listed once");
         let suggestions = search(&store, "hans", 10).await.expect("search");
         assert_eq!(suggestions.len(), 1, "autocomplete shows the contact once");
@@ -944,7 +1125,7 @@ mod tests {
         let alone = separate(&store, "hans@y.example").await.expect("separate");
         assert_eq!(alone.addresses.len(), 1);
         assert_eq!(
-            list(&store, None, None, 50)
+            list(&store, None, None, 50, ContactFilter::People)
                 .await
                 .expect("list")
                 .items
@@ -1080,10 +1261,205 @@ mod tests {
                 ),
             ]
         );
-        let page = core.list_contacts(None, None, 10).await.expect("list");
+        let page = core
+            .list_contacts(None, None, 10, ContactFilter::People)
+            .await
+            .expect("list");
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.items[0].name.as_deref(), Some("Hans M."));
         core.shutdown().await;
+    }
+
+    fn source(
+        message: i64,
+        from: &str,
+        to: &[&str],
+        cc: &[&str],
+        reply_to: &[&str],
+        extra: &[(&str, &str)],
+    ) -> ContactSource {
+        let address = |email: &str| mail_model::Address {
+            name: Some(email.split('@').next().unwrap_or_default().to_uppercase()),
+            email: email.to_owned(),
+        };
+        let header = |name: &str| {
+            extra
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, v)| (*v).to_owned())
+        };
+        ContactSource {
+            message: mail_model::MessageId(message),
+            account: "00000000-0000-4000-8000-000000000001".parse().expect("id"),
+            from: Some(address(from)),
+            to: to.iter().map(|e| address(e)).collect(),
+            cc: cc.iter().map(|e| address(e)).collect(),
+            reply_to: reply_to.iter().map(|e| address(e)).collect(),
+            backfill: false,
+            subject: format!("Message {message}"),
+            list_id: header("List-Id"),
+            list_unsubscribe: header("List-Unsubscribe"),
+            auto_submitted: header("Auto-Submitted"),
+            precedence: header("Precedence"),
+            date: NOW - message * DAY,
+        }
+    }
+
+    fn observe_all(book: &mut ContactBook, planned: &[(i64, Vec<Observed>)]) {
+        for (at, observed) in planned {
+            for (email, name, direction, personal) in observed {
+                let _ = book.observe(mail_content::Observation {
+                    email,
+                    name: name.as_deref(),
+                    direction: *direction,
+                    at: *at,
+                    personal: *personal,
+                });
+            }
+        }
+    }
+
+    /// The contacts of a book by key: counts, dates, kind and the rank (rounded: the same
+    /// weights added in another order).
+    /// Key, sent, received, seen, last used, kind, rank.
+    type Summary = (String, u32, u32, u32, Option<i64>, i64, String);
+
+    fn summary(book: &ContactBook) -> Vec<Summary> {
+        let mut out: Vec<_> = book
+            .contacts()
+            .iter()
+            .map(|c| {
+                let a = c.primary();
+                (
+                    a.address.key.clone(),
+                    a.sent,
+                    a.received,
+                    a.seen,
+                    c.last_used(),
+                    a.kind().code(),
+                    format!("{:.9}", a.rank.key()),
+                )
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    /// Stage 17: every address of From, To, Cc and Reply-To; a message read by the rules of
+    /// stage 10 adds only what those left out, so stage 10 plus the backfill is what reading
+    /// the messages now gives.
+    #[test]
+    fn the_backfill_adds_what_stage_10_left_out() {
+        let own = vec!["me@example.org".to_owned()];
+        let sources = vec![
+            // A person writes to the user and others, with a Reply-To.
+            source(
+                1,
+                "carol@x.example",
+                &["me@example.org", "dave@x.example"],
+                &["erin@x.example"],
+                &["team@x.example"],
+                &[],
+            ),
+            // The user's own mail.
+            source(
+                2,
+                "me@example.org",
+                &["frank@y.example"],
+                &["dave@x.example"],
+                &[],
+                &[],
+            ),
+            // A newsletter.
+            source(
+                3,
+                "news@shop.example",
+                &["me@example.org"],
+                &[],
+                &["help@shop.example"],
+                &[
+                    ("List-Id", "<weekly.shop.example>"),
+                    ("List-Unsubscribe", "<https://shop.example/u>"),
+                    ("Precedence", "bulk"),
+                ],
+            ),
+            // A bounce.
+            source(
+                4,
+                "MAILER-DAEMON@x.example",
+                &["me@example.org"],
+                &[],
+                &[],
+                &[("Auto-Submitted", "auto-replied")],
+            ),
+        ];
+        let (keys, fresh) = plan(&sources, &own);
+        assert_eq!(
+            keys.iter().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "carol@x.example",
+                "dave@x.example",
+                "erin@x.example",
+                "frank@y.example",
+                "help@shop.example",
+                "mailer-daemon@x.example",
+                "me@example.org",
+                "news@shop.example",
+                "team@x.example",
+            ]
+        );
+        let mut now = ContactBook::new(&own);
+        observe_all(&mut now, &fresh);
+
+        // Stage 10 read the same messages: the sender of the person's mail and the
+        // recipients of the user's own.
+        let stage10: Vec<(i64, Vec<Observed>)> = fresh
+            .iter()
+            .map(|(at, observed)| {
+                let kept = observed
+                    .iter()
+                    .filter(|(email, name, direction, personal)| {
+                        counted_before_stage17(&mail_content::Observation {
+                            email,
+                            name: name.as_deref(),
+                            direction: *direction,
+                            at: *at,
+                            personal: *personal,
+                        })
+                    })
+                    .cloned()
+                    .collect();
+                (*at, kept)
+            })
+            .collect();
+        let mut before = ContactBook::new(&own);
+        observe_all(&mut before, &stage10);
+        assert_eq!(before.contacts().len(), 3, "carol, dave and frank");
+        let backfill: Vec<ContactSource> = sources
+            .iter()
+            .cloned()
+            .map(|s| ContactSource {
+                backfill: true,
+                ..s
+            })
+            .collect();
+        let (_, delta) = plan(&backfill, &own);
+        observe_all(&mut before, &delta);
+        assert_eq!(summary(&before), summary(&now));
+
+        let kinds: HashMap<String, i64> = summary(&now)
+            .into_iter()
+            .map(|(key, .., kind, _)| (key, kind))
+            .collect();
+        assert_eq!(kinds["news@shop.example"], ContactKind::List.code());
+        assert_eq!(kinds["help@shop.example"], ContactKind::List.code());
+        assert_eq!(kinds["mailer-daemon@x.example"], ContactKind::System.code());
+        assert_eq!(kinds["erin@x.example"], ContactKind::Person.code());
+        // Only the person's sender and the user's recipients rank.
+        let erin = now.find("erin@x.example").expect("erin");
+        assert_eq!((erin.primary().seen, erin.rank()), (1, Rank::NONE));
+        let dave = now.find("dave@x.example").expect("dave");
+        assert_eq!((dave.primary().sent, dave.primary().seen), (1, 1));
     }
 
     #[test]
@@ -1095,6 +1471,7 @@ mod tests {
             name: Some("Hans Müller"),
             direction: Direction::Sent,
             at: 1_764_000_000,
+            personal: true,
         })
         .expect("observe");
         let rows = to_rows(&book.contacts()[0], &HashMap::new());

@@ -318,11 +318,25 @@ async fn every_registered_kind_is_captured_when_it_changes() {
                 names: Vec::new(),
                 user_name: Some("Bobby".into()),
                 search: " bob bobby".into(),
+                seen: 0,
+                last_seen: None,
+                personal: true,
+                kind: 0,
+                note: None,
             }],
             Vec::new(),
         )
         .await
         .expect("contact");
+    // Stage 17: a picture the user chose for the contact (a JPEG the helper wrote).
+    store
+        .set_contact_picture(
+            "bob@friends.example".into(),
+            Vec::new(),
+            vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 16],
+        )
+        .await
+        .expect("contact picture");
     core.set_sync_device_name("Test Mac".into())
         .await
         .expect("device");
@@ -544,6 +558,16 @@ fn captured_content_of_every_table_passes_its_kind() {
             serde_json::json!({}),
         ),
         ("contact", "a@b", serde_json::json!({ "userName": "A" })),
+        (
+            "contact",
+            "a@b",
+            serde_json::json!({ "note": "Met at the fair" }),
+        ),
+        (
+            "contactPicture",
+            "a@b",
+            serde_json::json!({ "jpeg": "/9j/4AAQ" }),
+        ),
         (
             "attachmentPin",
             &format!("{account}/m/x@y/2"),

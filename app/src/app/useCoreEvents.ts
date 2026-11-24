@@ -4,6 +4,7 @@ import { applyAccountStatus, invalidateAccountData } from "../features/accounts/
 import { handleAiEvent } from "../features/ai/queries";
 import { handleComfortEvent } from "../features/comfort/events";
 import { handleComposeEvent } from "../features/composer/queries";
+import { handleContactsEvent } from "../features/contacts/queries";
 import { handleExtrasEvent } from "../features/extras/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
@@ -44,6 +45,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleUiPreferencesEvent(queryClient, event);
   // Stage 15 (decision 0037): update state; a new account may bring the update question.
   handleUpdateEvent(queryClient, event);
+  // Stage 17 (decision 0050): contacts, their pictures and spam marks.
+  handleContactsEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

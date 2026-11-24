@@ -1708,6 +1708,10 @@ async fn notifications_wait_for_the_shell_s_sink() {
 #[path = "parity_tests.rs"]
 mod parity;
 
+// Stage 17, block B: contacts with kinds, notes, pictures and "mark as spam" (decision 0050).
+#[path = "contacts_view_tests.rs"]
+mod contacts_view;
+
 // ---------------------------------------------------------------------------------------------
 // Decision 0039: the inbox as conversations
 

@@ -46,6 +46,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0018_draft_kept_original.sql")),
     // Audit 24.11.2026: folders renamed and deleted through the outbox.
     M::up(include_str!("../migrations/0019_folder_changes.sql")),
+    // Stage 17, block B: every address a contact, kinds, notes, pictures (decision 0050).
+    M::up(include_str!("../migrations/0020_contacts_view.sql")),
 ];
 
 /// All migrations this build knows.

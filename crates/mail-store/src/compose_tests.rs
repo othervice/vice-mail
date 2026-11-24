@@ -808,6 +808,11 @@ fn contact(key: &str, rank: f64, words: &str) -> StoredContact {
         }],
         user_name: None,
         search: format!(" {words}"),
+        seen: 0,
+        last_seen: None,
+        personal: true,
+        kind: 0,
+        note: None,
     }
 }
 
@@ -1060,9 +1065,15 @@ fn expected() -> Vec<(
         ),
         (
             "messages for the contacts",
-            contacts::CONTACTS_TODO.to_owned(),
+            contacts::contacts_todo_sql(),
             vec!["SCAN m USING INDEX message_contacts_todo"],
             Some("m USING INDEX message_contacts_todo"),
+        ),
+        (
+            "messages for the stage 17 backfill",
+            contacts::contacts_backfill_sql(),
+            vec!["SCAN m USING INDEX message_contacts_backfill"],
+            Some("m USING INDEX message_contacts_backfill"),
         ),
         (
             "mark contacts seen",

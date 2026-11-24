@@ -26,32 +26,50 @@ pub const MAX_SEARCH_WORDS: usize = 8;
 const NO_RANK: f64 = -1.0e308;
 
 pub(crate) const CONTACT_COLUMNS: &str = "address_key, local_part, domain, contact_group, sent, \
-     received, last_sent, last_received, rank, names, user_name, search";
+     received, last_sent, last_received, rank, names, user_name, search, seen, last_seen, \
+     personal, kind, note";
 
 pub(crate) const CONTACT_BY_KEY: &str = "
     SELECT address_key, local_part, domain, contact_group, sent, received, last_sent,
-           last_received, rank, names, user_name, search
+           last_received, rank, names, user_name, search, seen, last_seen, personal, kind, note
     FROM contact WHERE address_key = ?1";
 
+/// The directory job's write: everything but the user's fields (name, merge, note).
 pub(crate) const UPSERT_CONTACT: &str = "
     INSERT INTO contact (address_key, local_part, domain, contact_group, sent, received,
-                         last_sent, last_received, rank, names, user_name, search, updated_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                         last_sent, last_received, rank, names, user_name, search, updated_at,
+                         seen, last_seen, personal, kind)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
     ON CONFLICT (address_key) DO UPDATE SET
       local_part = excluded.local_part, domain = excluded.domain, sent = excluded.sent,
       received = excluded.received, last_sent = excluded.last_sent,
       last_received = excluded.last_received, rank = excluded.rank, names = excluded.names,
-      search = excluded.search, updated_at = excluded.updated_at";
+      search = excluded.search, updated_at = excluded.updated_at, seen = excluded.seen,
+      last_seen = excluded.last_seen, personal = excluded.personal, kind = excluded.kind";
+
+const SOURCE_COLUMNS: &str = "m.id, (SELECT a.uuid FROM account a WHERE a.id = m.account_id),
+    m.from_name, m.from_addr, m.to_addrs, m.cc_addrs, m.subject, m.list_id, m.list_unsubscribe,
+    m.auto_submitted, m.precedence, m.date, m.reply_to_addrs";
 
 /// Messages not yet read into the directory (`message_contacts_todo`), oldest id first.
-pub(crate) const CONTACTS_TODO: &str = "
-    SELECT m.id, (SELECT a.uuid FROM account a WHERE a.id = m.account_id), m.from_name,
-           m.from_addr, m.to_addrs, m.cc_addrs, m.subject, m.list_id, m.list_unsubscribe,
-           m.auto_submitted, m.precedence, m.date
-    FROM message m INDEXED BY message_contacts_todo
-    WHERE m.contacts_seen IS NULL ORDER BY m.id LIMIT ?1";
+pub(crate) fn contacts_todo_sql() -> String {
+    format!(
+        "SELECT {SOURCE_COLUMNS} FROM message m INDEXED BY message_contacts_todo
+         WHERE m.contacts_seen IS NULL ORDER BY m.id LIMIT ?1"
+    )
+}
 
-pub(crate) const MARK_CONTACTS_SEEN: &str = "UPDATE message SET contacts_seen = 1 WHERE id = ?1";
+/// Stage 17: messages read by the rules of stage 10 (`message_contacts_backfill`), oldest id
+/// first. `INDEXED BY` as with every partial index that a catch-up run empties.
+pub(crate) fn contacts_backfill_sql() -> String {
+    format!(
+        "SELECT {SOURCE_COLUMNS} FROM message m INDEXED BY message_contacts_backfill
+         WHERE m.contacts_seen = 1 ORDER BY m.id LIMIT ?1"
+    )
+}
+
+/// Stage 17: read by the rules of stage 17 (every address).
+pub(crate) const MARK_CONTACTS_SEEN: &str = "UPDATE message SET contacts_seen = 2 WHERE id = ?1";
 
 /// Stage 10: the text of the identity's default signature for new mails stands in for the
 /// stage 5 text signature.
@@ -115,6 +133,11 @@ pub(crate) fn contact_at(r: &Row<'_>, o: usize) -> rusqlite::Result<StoredContac
         names: names_at(r, o + 9)?,
         user_name: r.get(o + 10)?,
         search: r.get(o + 11)?,
+        seen: count_at(r, o + 12)?,
+        last_seen: r.get(o + 13)?,
+        personal: r.get(o + 14)?,
+        kind: r.get(o + 15)?,
+        note: r.get(o + 16)?,
     })
 }
 
@@ -157,6 +180,10 @@ pub(crate) fn record(
                 c.user_name,
                 c.search,
                 now,
+                c.seen,
+                c.last_seen,
+                c.personal,
+                c.kind,
             ])
             .map_err(StoreError::sqlite("write contact"))?;
     }
@@ -204,9 +231,14 @@ fn addresses_json(text: Option<String>) -> Vec<Address> {
         .unwrap_or_default()
 }
 
-pub(crate) fn todo(conn: &Connection, limit: u32) -> Result<Vec<ContactSource>, StoreError> {
+fn sources(
+    conn: &Connection,
+    sql: &str,
+    limit: u32,
+    backfill: bool,
+) -> Result<Vec<ContactSource>, StoreError> {
     Ok(conn
-        .prepare_cached(CONTACTS_TODO)?
+        .prepare_cached(sql)?
         .query_map([limit], |r| {
             let from_name: Option<String> = r.get(2)?;
             let from_addr: Option<String> = r.get(3)?;
@@ -219,6 +251,8 @@ pub(crate) fn todo(conn: &Connection, limit: u32) -> Result<Vec<ContactSource>, 
                 }),
                 to: addresses_json(r.get(4)?),
                 cc: addresses_json(r.get(5)?),
+                reply_to: addresses_json(r.get(12)?),
+                backfill,
                 subject: r.get(6)?,
                 list_id: r.get(7)?,
                 list_unsubscribe: r.get(8)?,
@@ -228,6 +262,14 @@ pub(crate) fn todo(conn: &Connection, limit: u32) -> Result<Vec<ContactSource>, 
             })
         })?
         .collect::<Result<Vec<_>, _>>()?)
+}
+
+pub(crate) fn todo(conn: &Connection, limit: u32) -> Result<Vec<ContactSource>, StoreError> {
+    sources(conn, &contacts_todo_sql(), limit, false)
+}
+
+pub(crate) fn backfill(conn: &Connection, limit: u32) -> Result<Vec<ContactSource>, StoreError> {
+    sources(conn, &contacts_backfill_sql(), limit, true)
 }
 
 pub(crate) fn compose_identities(

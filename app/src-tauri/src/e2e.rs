@@ -167,7 +167,8 @@ pub fn install(
             e2e_window_controls,
             e2e_native_mouse,
             e2e_opened,
-            e2e_invoked
+            e2e_invoked,
+            e2e_drop_files
         ]);
     let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
@@ -339,6 +340,15 @@ pub async fn e2e_native_mouse(
 #[tauri::command]
 pub fn e2e_opened() -> Vec<String> {
     OPENER.opened()
+}
+
+/// Stage 17: records `paths` as dropped on the window, as the window's `DragDrop` event does
+/// for a real drop (WebDriver cannot drag files from the Finder). The app's commands then take
+/// them like any drop (`drops.rs`).
+#[tauri::command]
+pub fn e2e_drop_files(drops: tauri::State<'_, crate::drops::DropRegistry>, paths: Vec<String>) {
+    let paths: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+    drops.record(&paths);
 }
 
 /// Every command name that reached the invoke handler since the app started, with its count.

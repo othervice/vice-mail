@@ -55,6 +55,9 @@ pub struct Classified {
     /// `List-Unsubscribe-Post: List-Unsubscribe=One-Click` was present; `None` when the
     /// headers were not fetched (stored header data only).
     pub one_click: Option<bool>,
+    /// Stage 17: the `Reply-To` addresses of the fetched header block (empty when not fetched),
+    /// stored with the message for the contacts (`message.reply_to_addrs`).
+    pub reply_to: Vec<Address>,
 }
 
 /// The category rules, supplied by the engine (`mail_content::classify`).
@@ -178,6 +181,8 @@ pub(crate) struct CategoryColumns {
     pub important: bool,
     pub keys: SenderKeys,
     pub one_click: Option<bool>,
+    /// Stage 17: `Classified::reply_to`.
+    pub reply_to: Vec<Address>,
 }
 
 pub(crate) const OWN_ADDRESSES: &str = "SELECT email FROM account UNION SELECT email FROM identity";
@@ -249,6 +254,7 @@ fn columns_of(rules: &RuleSet, keys: SenderKeys, classified: Classified) -> Cate
         important: effective.important.is_some(),
         keys,
         one_click: classified.one_click,
+        reply_to: classified.reply_to,
     }
 }
 

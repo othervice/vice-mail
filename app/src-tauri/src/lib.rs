@@ -169,6 +169,18 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::contacts::dismiss_contact_duplicate,
             commands::contacts::merge_contacts,
             commands::contacts::separate_contact,
+            // Stage 17 (decision 0050): the contacts view.
+            commands::contacts::set_contact_note,
+            commands::contacts::pick_contact_picture::<tauri::Wry>,
+            commands::contacts::load_dropped_contact_picture,
+            commands::contacts::set_contact_picture,
+            commands::contacts::remove_contact_picture,
+            commands::contacts::get_contact_picture,
+            commands::contacts::list_contact_pictures,
+            commands::contacts::list_contact_messages,
+            commands::contacts::mark_contact_spam,
+            commands::contacts::move_contact_mail_to_junk,
+            commands::contacts::undo_contact_spam,
             // Stage 10: signatures and templates (decision 0023).
             commands::snippets::list_signatures,
             commands::snippets::save_signature,
