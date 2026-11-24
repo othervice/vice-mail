@@ -21,7 +21,7 @@
   --ui-surface-raised: #ffffff;
   --ui-rail: #e5eaf0;
   --ui-rail-hover: #dbe1e9;
-  --ui-priority-tint: #fdf6e3;
+  --ui-priority-tint: #fafcff;
   --ui-selected: #dde8f8;
   --ui-hover: #edf1f6;
   /* Fill of small pills: conversation size, counters. */
@@ -30,7 +30,7 @@
   /* Lines. `border-subtle` separates panes and rows without drawing attention. */
   --ui-border: #d8dfe7;
   --ui-border-subtle: #e3e8ee;
-  --ui-priority-border: #efdcaa;
+  --ui-priority-border: #d9e2ee;
   --ui-border-strong: #737f8d;
   --ui-focus-ring: #2a72dc;
 
@@ -299,21 +299,21 @@
 
   /* Avatar tints: deep fills with light initials, the same hues as in light, each mixed into the
      cool base so none reads brown. */
-  --ui-avatar-1-bg: #21334d;
+  --ui-avatar-1-bg: #1f3454;
   --ui-avatar-1-text: #a9c8f8;
-  --ui-avatar-2-bg: #302e4d;
+  --ui-avatar-2-bg: #332e54;
   --ui-avatar-2-text: #c9b6f6;
-  --ui-avatar-3-bg: #3e283e;
+  --ui-avatar-3-bg: #46273f;
   --ui-avatar-3-text: #f0b0d8;
-  --ui-avatar-4-bg: #422c2e;
+  --ui-avatar-4-bg: #492b2e;
   --ui-avatar-4-text: #f6b4a6;
-  --ui-avatar-5-bg: #3d3523;
+  --ui-avatar-5-bg: #46391f;
   --ui-avatar-5-text: #f0c98a;
-  --ui-avatar-6-bg: #243b2c;
+  --ui-avatar-6-bg: #1f4030;
   --ui-avatar-6-text: #b4dd98;
-  --ui-avatar-7-bg: #1b3b42;
+  --ui-avatar-7-bg: #184048;
   --ui-avatar-7-text: #90dcde;
-  --ui-avatar-8-bg: #2b3442;
+  --ui-avatar-8-bg: #303946;
   --ui-avatar-8-text: #c3cedd;
 
   /* Shadows need more weight on dark surfaces */
