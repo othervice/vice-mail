@@ -501,3 +501,101 @@ async fn new_statements_use_their_indexes() {
         assert!(lines.iter().any(|l| l == expected), "{sql}\n{lines:#?}");
     }
 }
+
+/// Records from another device arrive through the pass's `apply_sync`: the name and note of a
+/// contact, its picture (stored, shown only after this device encoded it), and the picture's
+/// removal. Applying is not a local change: nothing is marked for the next pass.
+#[tokio::test]
+async fn a_note_and_a_picture_from_another_device_are_applied_and_removed() {
+    use crate::settings_sync::{SyncApply, SyncRecordRow, TableWrite};
+    let f = fixture().await;
+    f.store
+        .record_contacts(vec![contact("anna@x.example", 9.0, "Anna", 0)], Vec::new())
+        .await
+        .expect("record");
+    clear_dirty(&f.store).await;
+    let apply = |kind: &str, version: &str, content: Option<serde_json::Value>| {
+        let table = content.clone().map_or(TableWrite::Delete, TableWrite::Put);
+        SyncApply {
+            kind: kind.into(),
+            id: "anna@x.example".into(),
+            expected: None,
+            row: content.map(|content| SyncRecordRow {
+                kind: kind.into(),
+                id: "anna@x.example".into(),
+                version: version.into(),
+                synced_version: Some(version.into()),
+                content: Some(content),
+                deleted_version: None,
+            }),
+            table,
+            rekey_from: None,
+        }
+    };
+    let jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 7];
+    let outcome = f
+        .store
+        .apply_sync(
+            vec![
+                apply(
+                    "contact",
+                    "1764000000000-00000000-b",
+                    Some(serde_json::json!({ "userName": "Anna A.", "note": "From the laptop" })),
+                ),
+                apply(
+                    "contactPicture",
+                    "1764000000000-00000000-b",
+                    Some(serde_json::json!({ "jpeg": contacts_view::base64(&jpeg) })),
+                ),
+            ],
+            None,
+        )
+        .await
+        .expect("apply");
+    assert_eq!(outcome.applied.len(), 2, "{outcome:?}");
+    let row = f
+        .store
+        .contact_group("anna@x.example".into())
+        .await
+        .expect("read")
+        .expect("anna");
+    assert_eq!(row.head().user_name.as_deref(), Some("Anna A."));
+    assert_eq!(row.head().note.as_deref(), Some("From the laptop"));
+    let picture = f
+        .store
+        .contact_picture_of(vec!["anna@x.example".into()])
+        .await
+        .expect("read")
+        .expect("picture");
+    assert_eq!(picture.image, jpeg);
+    assert_eq!(
+        picture.display, None,
+        "not shown before this device encoded it"
+    );
+    assert!(
+        sync_kinds(&f.store).await.is_empty(),
+        "applying is no local change"
+    );
+
+    let outcome = f
+        .store
+        .apply_sync(
+            vec![SyncApply {
+                // The pass plans against the version it read.
+                expected: Some("1764000000000-00000000-b".into()),
+                ..apply("contactPicture", "", None)
+            }],
+            None,
+        )
+        .await
+        .expect("remove");
+    assert_eq!(outcome.applied.len(), 1, "{outcome:?}");
+    assert!(
+        f.store
+            .contact_picture_of(vec!["anna@x.example".into()])
+            .await
+            .expect("read")
+            .is_none()
+    );
+    assert!(sync_kinds(&f.store).await.is_empty());
+}
