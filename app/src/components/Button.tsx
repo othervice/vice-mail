@@ -14,7 +14,7 @@ interface ButtonProps {
   "data-testid"?: string;
 }
 
-// Design pass 23.11.2026: primary on the accent fill (the brand orange) with a hair of
+// Design pass 23.11.2026: primary on the accent fill (blue by default, decision 0053) with a hair of
 // elevation, secondary as a raised neutral button with a hairline, quiet as accent text.
 const VARIANTS = {
   primary: "bg-accent-fill text-on-accent shadow-row hover:bg-accent-fill/90",
