@@ -120,11 +120,18 @@ mod tests {
 
     #[test]
     fn only_file_urls_of_eml_files_count() {
+        // Only macOS hands over URLs, but the function runs anywhere: a file URL names a file
+        // only with an absolute path of the platform (on Windows one with a drive letter).
+        let home = if cfg!(windows) {
+            "file:///C:/Users/someone"
+        } else {
+            "file:///Users/someone"
+        };
         let urls: Vec<tauri::Url> = [
-            "file:///Users/someone/Mail%20export/Hello%20World.eml",
-            "file:///Users/someone/picture.png",
-            "mailto:bob@example.org",
-            "https://example.org/x.eml",
+            format!("{home}/Mail%20export/Hello%20World.eml"),
+            format!("{home}/picture.png"),
+            "mailto:bob@example.org".into(),
+            "https://example.org/x.eml".into(),
         ]
         .iter()
         .map(|u| tauri::Url::parse(u).expect("url"))
