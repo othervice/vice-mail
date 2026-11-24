@@ -11,18 +11,18 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
 
 ## Aufgaben
 
-- [ ] **Repo aufräumen.** Geschichte auf Geheimnisse und fremde Dateien prüfen (insbesondere `design-reference/` darf nie eingecheckt worden sein). Plan-Dokumente ins Englische übertragen oder als internes Archiv kennzeichnen.
-- [ ] **Dokumente.** `README.md` mit Bildschirmfotos, `docs/INSTALL.md`, `CONTRIBUTING.md`, `SECURITY.md` (wie man Lücken meldet), `CHANGELOG.md`, `docs/PROVIDERS.md`, `docs/SYNC.md`.
-- [ ] **Lizenzen.** Liste aller Bibliotheken mit Lizenz erzeugen und der App beilegen (Ansicht „Über“). `cargo deny` und eine Prüfung der npm-Pakete laufen im Prüfbefehl.
-- [ ] **Datenschutz.** Kurze, ehrliche Erklärung: welche Verbindungen die App aufbaut (Liste aus der Architektur), dass es keine Telemetrie gibt, was lokal unverschlüsselt liegt.
+- [x] **Repo aufräumen.** Geschichte auf Geheimnisse und fremde Dateien prüfen (insbesondere `design-reference/` darf nie eingecheckt worden sein). Plan-Dokumente ins Englische übertragen oder als internes Archiv kennzeichnen.
+- [x] **Dokumente.** `README.md` mit Bildschirmfotos, `docs/INSTALL.md`, `CONTRIBUTING.md`, `SECURITY.md` (wie man Lücken meldet), `CHANGELOG.md`, `docs/PROVIDERS.md`, `docs/SYNC.md`.
+- [x] **Lizenzen.** Liste aller Bibliotheken mit Lizenz erzeugen und der App beilegen (Ansicht „Über“). `cargo deny` und eine Prüfung der npm-Pakete laufen im Prüfbefehl.
+- [x] **Datenschutz.** Kurze, ehrliche Erklärung: welche Verbindungen die App aufbaut (Liste aus der Architektur), dass es keine Telemetrie gibt, was lokal unverschlüsselt liegt.
 - [ ] **CI.** Gitea Actions mit Runner auf dem Mac mini, und nach dem Umzug GitHub Actions mit gehosteten macOS- und Windows-Runnern. Beide rufen `scripts/check.sh` auf und bauen die Installer. Damit laufen Tests erstmals regelmäßig auf echtem Windows.
 - [ ] **Signierung.** Erste Releases ohne Signatur (0035): die Warnungen von Gatekeeper und SmartScreen in `docs/INSTALL.md` und im Release-Text ehrlich beschreiben. Später mit Zertifikaten: macOS signieren und notarisieren, Windows signieren.
   - *macOS vorbereitet am 23.11.2026 (0035, Nachtrag; noch nicht abgehakt):* Apple-Developer-Mitgliedschaft als Einzelperson beantragt, Aktivierung ausstehend. `scripts/apple-signing-setup.sh` (Schlüssel und CSR, Zertifikat importieren, notarytool-Profil `vicemail-notary`, `--check`); `scripts/build-macos.sh` signiert mit einer gefundenen Identität „Developer ID Application“ (Hardened Runtime, Zeitstempel, `mail-mcp` zuerst, leere `app/src-tauri/Entitlements.plist` mit Begründung), notarisiert App und Disk-Image, stapelt, prüft mit `codesign`, `spctl` und `stapler`, baut das Update-Archiv aus der gestapelten App und bricht ab, statt ad hoc weiterzumachen; ohne Identität bleibt der Ad-hoc-Build unverändert. Ablauf nach der Aktivierung, Erneuerung und Sicherung in `docs/RELEASING.md` („macOS signing and notarisation“), `docs/INSTALL.md` beschreibt signierte und unsignierte Builds. Getestet mit einem selbst signierten Testzertifikat (siehe Ergebnis).
   - *Offen:* Aktivierung, die Portal-Schritte des Menschen, der erste notarisierte Build und sein Test auf einem zweiten Mac. Windows bleibt unsigniert (0035).
-- [ ] **Updates.** Tauri-Updater mit Signaturprüfung. Der private Schlüssel liegt im Schlüsselbund des Build-Macs (0037; mit CI später als CI-Geheimnis, nie im Repo). Update-Beschreibung als statische Datei bei den Releases. Prüfung nur mit Zustimmung (0037: Standard aus). Rückweg: die vorherige Version bleibt herunterladbar, und die Datenbank-Sicherungen aus Stufe 1 erlauben das Zurückgehen.
+- [x] **Updates.** Tauri-Updater mit Signaturprüfung. Der private Schlüssel liegt im Schlüsselbund des Build-Macs (0037; mit CI später als CI-Geheimnis, nie im Repo). Update-Beschreibung als statische Datei bei den Releases. Prüfung nur mit Zustimmung (0037: Standard aus). Rückweg: die vorherige Version bleibt herunterladbar, und die Datenbank-Sicherungen aus Stufe 1 erlauben das Zurückgehen.
   - *Vorbereitet am 23.11.2026 (0037, noch nicht abgehakt):* `tauri-plugin-updater` =2.14.1 nur aus Rust; Schalter „Automatisch nach Updates suchen“ (aus), einmalige Frage nach dem ersten Konto, Tagesdrossel, „Jetzt suchen“, Download und „Neu starten und installieren“ nur nach Klick, Windows `passive`; Endpunkt `https://github.com/othervice/vice-mail/releases/latest/download/latest.json` in `tauri.conf.json`; Schlüssel `org.vicemail.updater` im Schlüsselbund erzeugt, öffentlicher Schlüssel in `tauri.conf.json`; `VICEMAIL_UPDATER=1` für `scripts/build-macos.sh`, `build-windows.sh`, `release-local.sh` (signierte Artefakte, Signaturprüfung, `latest.json` über `scripts/updater-manifest.mjs`); Ablauf, Sicherung und Wechsel des Schlüssels in `docs/RELEASING.md`. Getestet gegen einen lokalen Update-Server (Rust) und in Vitest; der Desktop-Test `app/tests/e2e/updates.e2e.mjs` lief im Desktop-Lauf auf a7dd759 mit 4 von 4 grün (siehe Ergebnis).
   - *Offen bis zur Veröffentlichung:* erstes Release mit `latest.json` auf GitHub, dann Update von einer Version auf die nächste auf echtem macOS und Windows (Abnahmepunkt 2). **Der Mensch sichert den privaten Schlüssel und sein Passwort** (`docs/RELEASING.md`, „Back it up now“).
-- [ ] **Sicherheitsprüfung.** `/security-review` über den gesamten Code. Bedrohungsmodell als `docs/SECURITY_MODEL.md`: was geschützt ist, was nicht, welche Grenzen es gibt. Zeitlich begrenztes Fuzzing von MIME-Parser-Anbindung und HTML-Pipeline. Befunde beheben oder begründet offen lassen.
+- [x] **Sicherheitsprüfung.** `/security-review` über den gesamten Code. Bedrohungsmodell als `docs/SECURITY_MODEL.md`: was geschützt ist, was nicht, welche Grenzen es gibt. Zeitlich begrenztes Fuzzing von MIME-Parser-Anbindung und HTML-Pipeline. Befunde beheben oder begründet offen lassen.
 - [x] **Erster Start.** Geführte Einrichtung für neue Nutzer: Konto, Thema, optional Sync und KI.
   - *Umgesetzt am 23.11.2026 (0044):* Eine neue Installation zeigt statt des Rahmens fünf Schritte auf einer Karte (Willkommen mit vier Zusagen, Konto mit dem vorhandenen Formular, Darstellung, Optional mit Einstellungs-Sync, KI und der Update-Frage aus 0037, Fertig mit dem Hinweis „liest nur“); „Einrichtung überspringen“ auf jedem Schritt; der Kern merkt sich das Ende je Gerät, Installationen mit Konto sehen ihn nie. Gestaltung in `docs/DESIGN.md` („Erster Start“), Prüfung siehe Ergebnis.
 - [x] **Diagnose.** „Diagnose exportieren“ packt Logs und Systemangaben in eine Datei; ein Test stellt sicher, dass keine Geheimnisse und keine Mail-Inhalte enthalten sind.
@@ -34,9 +34,9 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
 - [ ] Update von einer Version auf die nächste gelingt; eine manipulierte Update-Datei wird abgelehnt
 - [ ] Bau aus dem öffentlichen Repo nach `README.md` auf einem Rechner, der das Projekt nie gesehen hat
 - [ ] CI ist grün auf macOS und Windows
-- [ ] Lizenzliste vollständig; keine unverträgliche Lizenz
-- [ ] alle Befunde der Sicherheitsprüfung behoben oder mit Begründung dokumentiert
-- [ ] `scripts/check.sh` ist grün
+- [x] Lizenzliste vollständig; keine unverträgliche Lizenz
+- [x] alle Befunde der Sicherheitsprüfung behoben oder mit Begründung dokumentiert
+- [x] `scripts/check.sh` ist grün
 
 ## Nicht in dieser Stufe
 
@@ -49,7 +49,17 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
 
 ## Ergebnis
 
-**Vorbereitet (Stand 23.11.2026, 13:30; die Stufe ist nicht begonnen, nichts ist abgehakt).**
+**Stand 24.11.2026, morgens: alles, was ohne den Menschen geht, ist fertig.** Abgehakt sind
+Repo aufräumen, Dokumente, Lizenzen, Datenschutz, Updates, Sicherheitsprüfung, Erster Start und
+Diagnose. CI und Signierung sind zur Hälfte erledigt: die Gitea-CI läuft grün, der GitHub-Workflow
+liegt bereit, ist aber erst nach dem Umzug prüfbar; die ersten Releases sind ohne Signatur und das
+steht ehrlich in `docs/INSTALL.md`, die Signatur mit Developer ID ist vorbereitet und wartet auf
+Apple. Von der Abnahme offen sind nur Punkte, die die Veröffentlichung oder den Menschen brauchen
+(frische Installation auf Mac und Windows, Update von Version zu Version über GitHub, Bau aus dem
+öffentlichen Repo, CI auf Windows). Die Ergebnisse der finalen Prüfung und des finalen Builds
+stehen unten unter „Finaler Build“.
+
+Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
 - Entscheidungen: 0035 (GPL-3.0-or-later, öffentliches Repo unter `github.com/othervice`, erste
   Releases als Privatperson ohne Signatur, Name „Vice Mail“ mit eigenem Logo), 0037 (Updates, siehe
   Aufgabe „Updates“), 0038 (Orange aus dem Logo als Standardakzent).
@@ -209,6 +219,25 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
   nur in Vitest gegen den Fake-Kern geprüft), „Jetzt einrichten“ des Einstellungs-Sync in der echten
   App (nur Vitest), die Update-Frage in einem Release-Build mit echtem Endpunkt (der Desktop-Build
   hat einen Testendpunkt; der Schalter erscheint dort und blieb aus).
+
+**Finaler Build (24.11.2026)**
+- Finale Prüfung auf 25337ba im sauberen Worktree `../vm-check` (eigenes Build-Verzeichnis):
+  `scripts/check.sh` grün (1.326 Rust-, 3.988 Vitest-Tests); Servertests gegen den lokalen
+  Stalwart 1.423 von 1.423; Desktop-Tests über `scripts/e2e-gui.sh` 23 von 23 Spec-Dateien,
+  126 Tests. Ein erster Lauf auf dc89176 fand zwei Fehler, beide behoben: der Name der Knöpfe
+  „Copy full path“ enthielt den sichtbaren Text nicht (axe, c0fd4d2), und drei JMAP-Servertests
+  räumten parallel dasselbe Postfach auf (25337ba). Dazu kam ein liegengebliebener Eintrag
+  `org.vicemail.desktop.e2e` im Schlüsselbund aus einem abgebrochenen Lauf (entfernt).
+- `scripts/release-local.sh --force 0.1.0` aus 25337ba (Build-Datum 2026-11-24T07:38:21Z):
+  `Vice-Mail-0.1.0-macos-arm64.dmg` (21.451.133 Bytes, SHA-256
+  `594706c8cf9df021217d0b3d0e2f56a07de7f62a48179e5a703de6f1991d550a`; ad hoc signiert,
+  `codesign --verify` grün, `spctl` lehnt wie erwartet ab, Start aus dem Disk-Image grün) und
+  `Vice-Mail-0.1.0-windows-x64-setup.exe` (17.999.446 Bytes, SHA-256
+  `e73641ddabea49ff53ee66b5a38d344a779fb206205460390d5d4c7ea795697d`; unsigniert,
+  `mail-mcp.exe` im Installer). Ohne Update-Signatur: der Schlüssel liegt im Schlüsselbund, den
+  Terminal-Sitzungen seit dem Neustart nicht öffnen können; für 0.1.0 wird sie nicht gebraucht.
+  Veröffentlicht als Gitea-Release `v0.1.0` (privat). **Ungeprüft:** Installation unter Windows,
+  Installation über einen Prototyp, Start auf einem zweiten Mac.
 
 **Wartet auf**
 - Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows

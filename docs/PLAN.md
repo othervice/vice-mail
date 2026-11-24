@@ -32,9 +32,9 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 11 | [Einstellungs-Sync](stages/11-einstellungs-sync.md) | fertig | **Geräte gleichen sich über das Postfach ab** |
 | 12 | [KI über MCP](stages/12-ki-ueber-mcp.md) | fertig | eigene KI (Claude, Cursor, LM Studio …) per MCP anschließen |
 | 13 | [KI in der App (optional)](stages/13-ki-in-der-app.md) | fertig | Zusammenfassen, Vorschläge, Schreibhilfe, Fragen mit Quellen |
-| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | in Arbeit (Block A fertig) | Microsoft, Gmail-Eigenheiten, JMAP |
+| 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | wartet auf Mensch (Code fertig: A–D; B/C brauchen App-Registrierungen und Handprüfungen) | Microsoft, Gmail-Eigenheiten, JMAP |
 | 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | fertig | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
-| 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | offen (Updates vorbereitet) | öffentliches Repo, signierte Builds, Updates |
+| 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
 
@@ -103,41 +103,60 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 
 ## Letzter Lauf
 
-Lauf vom 22.11.2026 abends bis 23.11.2026 nachmittags, Hauptsitzung mit bis zu vier Subagenten
-gleichzeitig. Stand 23.11.2026, 14:00.
+Lauf vom 22.11.2026 abends bis 24.11.2026 morgens, Hauptsitzung mit bis zu vier Subagenten
+gleichzeitig; Unterbrechungen durch einen Stromausfall (23.11., 15:54) und zwei Nutzungslimits.
+Am 23.11. gegen 17:50 entschied der Mensch: keine Prototypen mehr, alles fertig machen, dann
+ein finaler Build. Stand 24.11.2026.
 
-**Fertig:** Stufen 00–05, 07–13 und 16. Jede mit grünem `scripts/check.sh` im sauberen Worktree,
-Servertests gegen den lokalen Stalwart und Desktop-Tests (WKWebView); Einzelheiten und offene
-Handprüfungen unter „Ergebnis“ der Stufendateien. Letzte Läufe: `check.sh` auf a7dd759 (1.102 Rust-,
-3.860 Vitest-Tests, mit Clippy für Windows, cargo deny, pnpm audit), Servertests 1.185 von 1.186 (der
-eine Fehlschlag war ein Wettlauf zweier Testgruppen, behoben in 1b457f1), Desktop-Tests auf fe5cdec
-mit den Testständen aus de1b915: 21 Spec-Dateien, 115 Tests, axe ohne schwere Befunde.
+**Fertig:** Stufen 00–05, 07–13 und 16; dazu von 14 und 15 alles, was ohne den Menschen geht.
+- Stufe 14: Gmail über IMAP (A), Anmeldung mit Microsoft und Google über OAuth mit PKCE (B, C;
+  Entscheidung 0042, getestet gegen den lokalen Stalwart und einen nachgebauten Anmeldeserver),
+  JMAP mit Passwort oder API-Token, Push und Einstellungs-Sync (D, 0041), IMAP- und JMAP-Konto
+  zusammen im vereinten Posteingang.
+- Stufe 15: Lizenzliste in App und Installern, Dokumente für die Veröffentlichung, Datenschutz,
+  Updates aus GitHub-Releases (0037), Sicherheitsprüfung mit Bedrohungsmodell
+  (`docs/SECURITY_MODEL.md`) und Fuzzing, geführter erster Start (0044), „Diagnose exportieren“,
+  CI auf dem privaten Gitea mit Runner auf dem Mac mini, GitHub-Workflow für macOS und Windows
+  vorbereitet, macOS-Signatur und Notarisierung vorbereitet.
+- Sicherheit: 9 Befunde in der Prüfung behoben, danach F1 (Server-Wechsel aus dem Sync wartet
+  auf Bestätigung, 0040), C-2 (Vorschauen in einem eigenen Prozess mit Zeit- und Speichergrenze,
+  0043), C-4 (jedes Bild einer Mail im selben Prozess neu kodiert, 0046) und elf kleinere (N-3, C-8, C-9, F2, V-02, V-07, F4, F5, N-4, C-6, G-1). Offen
+  mit Begründung: V-04, V-05, F3 (nur unter Windows prüfbar), N-1 (Änderung in async-imap),
+  C-5 (Leistung), N-3-Rest (Größe der Update-Beschreibung, liegt im Plugin).
+- Abgleich mit `docs/SPEC.md`: Ansicht „Markiert“, Ordner umbenennen und löschen, fremde
+  Entwürfe behalten ihre Bilder (0047), Hinweis bei nicht lesbarer Datenbank, „Gehe zu Ordner“.
+- Gestaltung: README-Bilder aus Testdaten (`docs/images/`, reproduzierbar mit
+  `README_SHOTS=1`), dabei gefundene Mängel behoben (KI-Bereich, Signatur, Suchergebnisse,
+  Schrift von Mails ohne eigene Schrift, Werkzeugleiste).
+- Leistung in der gebauten App gemessen (`docs/testing/performance.md`, 10.000 bis 500.000
+  Mails): alle Ziele erreicht, Speicher als Footprint gemessen (0048); eine langsame Abfrage
+  behoben.
 
-**In Arbeit:** 06 (braucht Läufe auf dem Windows-Rechner), 14 (Block A Gmail über IMAP fertig; B
-Microsoft und C Google-Anmeldung brauchen App-Registrierungen des Menschen), 15 (Veröffentlichung;
-Updates aus GitHub-Releases sind gebaut und lokal getestet).
-
-**Prototypen** (Gitea-Vorab-Releases): `prototype-2026-11-23` (Windows), `-2` (Windows und macOS),
-`-3` (Design und Logo), `-3.1` (Windows-Fix: Sicherung vor dem Datenbank-Umbau, „os error 5“),
-`-4` (de1b915: Stufe 16, Orange-Design, Anhangsvorschau, schärferes Taskleisten-Symbol).
-
-**Entscheidungen des Menschen in diesem Lauf:** KI über MCP zuerst (0010); Mailbird-Abgleich als
-Stufe 16, kein Zählpixel-Tracking, keine eingebetteten Fremd-Apps, Kalender nach Version 1 (0032);
-Open Source auf `github.com/othervice`, Name „Vice Mail“, eigenes Logo, erste Releases ohne Signatur
-(0035). Von Claude entschieden: Orange als Standard-Akzent (0038), Updates nur mit Zustimmung (0037).
+**Finale Prüfung** auf 25337ba im sauberen Worktree (24.11.2026, 08:40–09:05): `scripts/check.sh`
+grün (1.326 Rust-, 3.988 Vitest-Tests, Clippy auch für Windows, cargo deny, volles pnpm audit,
+Lizenzliste); Servertests gegen den lokalen Stalwart 1.423 von 1.423 grün; Desktop-Tests
+(WKWebView, über `scripts/e2e-gui.sh` in der grafischen Sitzung) 23 von 23 Spec-Dateien, 126 Tests
+grün. **Finaler Build** aus 25337ba: siehe Stufe 15, „Finaler Build“, und das Gitea-Release
+`v0.1.0`.
 
 **Wartet auf den Menschen:**
-- Prototyp 4 unter Windows testen (`docs/testing/windows-checklist.md`, Abschnitte 1–20), auch die
-  Installation über eine ältere Version und das Taskleisten-Symbol bei 125/150 %.
-- Den privaten Update-Schlüssel sichern (`docs/RELEASING.md`): er liegt nur im Schlüsselbund des Mac
-  mini; ohne ihn lassen sich installierte Versionen nie wieder aktualisieren.
-- Echtes Konto (bleibt nur lesend), Schreibzugriff für ein Nebenkonto, Gmail-Konto (Liste in 0034),
-  MCP mit einem echten Client, Einstellungs-Sync mit zwei Geräten, Ollama oder API-Schlüssel für die
-  KI in der App, Screenreader-Checkliste, Bildschirm mit 2560×1440.
-- Für Stufe 14: App-Registrierung bei Microsoft Entra bzw. Google (Client-ID); für Stufe 15 das leere
-  Repo unter `othervice` oder der Zugang über das angemeldete `gh`-Konto.
-- Optional: OpenSSH auf dem Windows-Rechner, damit Tests dort laufen können.
+- Den finalen Build unter Windows testen (`docs/testing/windows-checklist.md`), auch die
+  Installation über einen Prototyp und das Taskleisten-Symbol bei 125/150 %; damit wird Stufe 06
+  fertig. Den ersten Start einmal mit einem echten Konto durchgehen, auf Mac und Windows.
+- Den privaten Update-Schlüssel und sein Passwort sichern (`docs/RELEASING.md`, „Back it up now“).
+- Stufe 14: App-Registrierung bei Microsoft Entra und ein Google-Cloud-Projekt (genaue Angaben im
+  Ergebnis der Stufe 14); danach die Handprüfungen mit Outlook.com, Microsoft 365 und Gmail.
+  Fastmail mit API-Token ist ungetestet.
+- macOS-Signatur nach der Freischaltung des Apple-Kontos: die Schritte in `docs/RELEASING.md`.
+- Vor dem ersten Push auf GitHub: Autor-Adresse in der Geschichte und die Refs
+  (`docs/internal/history-audit.md`), Kontaktadresse in `SECURITY.md`, dann die Umstellung nach
+  `docs/internal/umstellung-bei-veroeffentlichung.md`.
+- Echtes Konto (bleibt nur lesend), Schreibzugriff für ein Nebenkonto, MCP mit einem echten
+  Client, Einstellungs-Sync mit zwei Geräten, Ollama oder API-Schlüssel für die KI in der App,
+  Screenreader-Checkliste, Bildschirm mit 2560×1440.
+- Offene Frage „Something else“ zu den Extras (Stufe 16).
 
-**Nächste Schritte:** Ordnerliste als ein Tab-Stopp (läuft), Rückmeldungen aus dem Windows-Test
-einarbeiten, dann Stufe 15 vorbereiten (Repo aufräumen, Übersetzung der Plan-Dokumente, Sicherheits-
-prüfung).
+**Nächste Schritte:** Rückmeldungen aus dem Windows-Test einarbeiten; nach den Registrierungen
+Stufe 14 abnehmen; nach den Entscheidungen zur Geschichte die Veröffentlichung auf GitHub
+(Stufe 15: erster Push, GitHub-CI auf macOS und Windows, erstes öffentliches Release mit
+Update-Signatur). Danach Kalender und Adressbuch-Abgleich (nach Version 1).
