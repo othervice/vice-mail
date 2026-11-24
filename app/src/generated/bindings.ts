@@ -89,6 +89,55 @@ export const commands = {
 	 *  `send_in_progress` once the submission started.
 	 */
 	cancelRedirect: (operationId: OperationId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("cancel_redirect", { operationId }, options)),
+	/**  Every contact group, by name, with the number of members. */
+	listContactLists: (options?: InvokeOptions) => typedError<ContactListSummary[], IpcError>(__TAURI_INVOKE("list_contact_lists", undefined, options)),
+	/**  One group with its members in the order added (the composer expands a group into these). */
+	getContactList: (id: ContactListId, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("get_contact_list", { id }, options)),
+	/**
+	 *  A new group, optionally with members. `invalid_argument` for an unusable name or beyond the
+	 *  limits, `invalid_address` for an address that cannot be one.
+	 */
+	createContactList: (name: string, members: Address[], options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("create_contact_list", { name, members }, options)),
+	renameContactList: (id: ContactListId, name: string, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("rename_contact_list", { id, name }, options)),
+	/**  Removes the group; its members' contacts stay. */
+	deleteContactList: (id: ContactListId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_contact_list", { id }, options)),
+	/**  Adds members at the end; addresses in the group already stay as they are. */
+	addContactListMembers: (id: ContactListId, members: Address[], options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("add_contact_list_members", { id, members }, options)),
+	/**  Removes the member with this address. */
+	removeContactListMember: (id: ContactListId, email: string, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("remove_contact_list_member", { id, email }, options)),
+	/**  Groups for the composer's autocomplete (every word of `query` starts a word of the name). */
+	suggestContactLists: (query: string, limit: number, options?: InvokeOptions) => typedError<ContactListSummary[], IpcError>(__TAURI_INVOKE("suggest_contact_lists", { query, limit }, options)),
+	/**
+	 *  Stage 19: "Import vCard…": the system's open dialog for a `.vcf` file, then the core reads
+	 *  it. `cancelled` when the user closes the dialog.
+	 */
+	importVcards: (options?: InvokeOptions) => typedError<VcardImportOutcome, IpcError>(__TAURI_INVOKE("import_vcards", undefined, options)),
+	/**  Stage 19: "Export as vCard…": the system's save dialog, then the core writes the file. */
+	exportVcards: (selection: ContactExport, version: VcardVersionChoice, options?: InvokeOptions) => typedError<VcardExportOutcome, IpcError>(__TAURI_INVOKE("export_vcards", { selection, version }, options)),
+	/**  "Export as mbox…": the system's save dialog, then the export runs in the background. */
+	exportMailboxMbox: (mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxStart, IpcError>(__TAURI_INVOKE("export_mailbox_mbox", { mailboxId }, options)),
+	/**
+	 *  "Import mbox…": the system's open dialog, then the import runs in the background through
+	 *  the outbox. `read_only` without writes on the folder's account (before the dialog).
+	 */
+	importMailboxMbox: (mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxStart, IpcError>(__TAURI_INVOKE("import_mailbox_mbox", { mailboxId }, options)),
+	/**  Stops a running export or import; the job reports `cancelled` once it stopped. */
+	cancelMboxJob: (id: MboxJobId, options?: InvokeOptions) => typedError<MboxJob, IpcError>(__TAURI_INVOKE("cancel_mbox_job", { id }, options)),
+	/**  The jobs of this session, running and finished. */
+	listMboxJobs: (options?: InvokeOptions) => __TAURI_INVOKE<MboxJob[]>("list_mbox_jobs", undefined, options),
+	/**  The profiles of Thunderbird at its usual place; empty when it is not installed there. */
+	listThunderbirdProfiles: (options?: InvokeOptions) => typedError<ThunderbirdProfile[], IpcError>(__TAURI_INVOKE("list_thunderbird_profiles", undefined, options)),
+	/**  Reads profile `index` of the list and shows what it holds. */
+	openThunderbirdProfile: (index: number, options?: InvokeOptions) => typedError<TakeoverPreview, IpcError>(__TAURI_INVOKE("open_thunderbird_profile", { index }, options)),
+	/**
+	 *  "Choose a profile folder…": the system's folder dialog, then the core reads the folder (a
+	 *  profile, or Thunderbird's own folder with its default profile).
+	 */
+	chooseThunderbirdProfile: (options?: InvokeOptions) => typedError<TakeoverOpen, IpcError>(__TAURI_INVOKE("choose_thunderbird_profile", undefined, options)),
+	/**  After the account was set up: Thunderbird's other identities and the signatures. */
+	applyThunderbirdAccount: (token: TakeoverToken, index: number, accountId: AccountId, options?: InvokeOptions) => typedError<TakeoverApplied, IpcError>(__TAURI_INVOKE("apply_thunderbird_account", { token, index, accountId }, options)),
+	/**  Imports a local folder of the profile into a folder through the outbox (an mbox job). */
+	importThunderbirdFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxJob, IpcError>(__TAURI_INVOKE("import_thunderbird_folder", { token, index, mailboxId }, options)),
 	/**  All accounts, oldest first, with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
@@ -757,6 +806,8 @@ export const DEFAULT_TEXT_SIZE = 100 as const;
 
 export const LARGE_ATTACHMENT_WARNING_BYTES = 15728640 as const;
 
+export const MANY_RECIPIENTS = 10 as const;
+
 export const MARK_READ_DELAY_MS = 2000 as const;
 
 export const MAX_ACTION_MESSAGES = 10000 as const;
@@ -768,6 +819,12 @@ export const MAX_ATTACHMENT_BYTES = 104857600 as const;
 export const MAX_COLUMN_VIEWS = 32 as const;
 
 export const MAX_COMMAND_ID_CHARS = 64 as const;
+
+export const MAX_CONTACT_LISTS = 500 as const;
+
+export const MAX_CONTACT_LIST_MEMBERS = 1000 as const;
+
+export const MAX_CONTACT_LIST_NAME_CHARS = 100 as const;
 
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 
@@ -1915,6 +1972,15 @@ export type ContactEntry = {
 	blocked: boolean,
 };
 
+/**  What a vCard export writes. */
+export type ContactExport = 
+/**  Every contact of the view (people, or every contact) and every group. */
+{ kind: "all"; peopleOnly: boolean } | 
+/**  One contact, by any of its addresses. */
+{ kind: "contact"; email: string } | 
+/**  One group: a card for the group and one for each member. */
+{ kind: "list"; id: ContactListId };
+
 /**  Stage 17: which contacts a page lists. */
 export type ContactFilter = 
 /**  People only: list and system addresses are left out. */
@@ -1930,6 +1996,33 @@ export type ContactKind =
 "list" | 
 /**  A program: nobody reads it (`noreply@`, `MAILER-DAEMON@`), or it sends notifications. */
 "system";
+
+/**  A group with its members, in the order added. */
+export type ContactList = {
+	id: ContactListId,
+	name: string,
+	members: ContactListMember[],
+};
+
+/**  A group's id: a lowercase hyphenated UUID, the same on every device. */
+export type ContactListId = string;
+
+/**  One member of a group. */
+export type ContactListMember = {
+	/**  The address as it was added. */
+	email: string,
+	/**  The name given with it, else the contact's name; null without either. */
+	name: string | null,
+	/**  The contact of the directory with this address (its key), if there is one. */
+	contact: string | null,
+};
+
+/**  A group as lists show it. */
+export type ContactListSummary = {
+	id: ContactListId,
+	name: string,
+	memberCount: number,
+};
 
 /**  Merging contacts the user confirmed as one person. */
 export type ContactMergeRequest = {
@@ -2101,7 +2194,10 @@ export type ConversationSummary = {
  *    to date, available, download progress, ready, installing, failed). The setting itself
  *    comes back from the command that changed it; reload `getUpdateInfo` for the rest.
  *  - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
- *    changed (here or by the settings sync). Reload the contacts and the picture list.
+ *    changed (here or by the settings sync). Reload the contacts and the picture list. Since
+ *    stage 19 (decision 0056) also contact groups and vCard imports.
+ *  - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
+ *    finished, was cancelled or failed; carries the whole job.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | { type: "composeRequested"; request: ComposeRequest } | { type: "mcpAccess"; entries: McpAccessEntry[] } | { type: "mcpStatusChanged"; status: McpStatus } | { type: "settingsSyncChanged"; status: SettingsSyncStatus } | 
 /**
@@ -2131,7 +2227,9 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  *  Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
  *  here or from another device. Reload the contacts and their pictures.
  */
-{ type: "contactsChanged" };
+{ type: "contactsChanged" } | 
+/**  Stage 19 (decision 0057): an mbox job changed. */
+{ type: "mboxJobChanged"; job: MboxJob };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -3035,6 +3133,42 @@ export type MarkScope =
 { kind: "group"; groupId: AccountGroupId } | 
 /**  One account (also a hidden one). */
 { kind: "account"; accountId: AccountId };
+
+/**  A job as the UI shows it; every change comes as `mboxJobChanged`. */
+export type MboxJob = {
+	id: MboxJobId,
+	kind: MboxJobKind,
+	accountId: AccountId,
+	mailboxId: MailboxId,
+	/**  The folder's decoded path. */
+	mailboxName: string,
+	/**  The file's name (never its folder). */
+	fileName: string,
+	state: MboxJobState,
+	/**  Export: the messages of the folder; import: unknown until the file was read (null). */
+	total: number | null,
+	/**  Export: messages written; import: messages the server took. */
+	done: number,
+	/**  Import: appends waiting in the outbox. */
+	queued: number,
+	/**
+	 *  Messages left out: no longer on the server (export), marked deleted by Thunderbird, too
+	 *  large, or refused by the server (import).
+	 */
+	skipped: number,
+	/**  Why it failed (`failed`). */
+	error: IpcError | null,
+};
+
+/**  A job's id: 32 lowercase hex digits from the operating system's random source. */
+export type MboxJobId = string;
+
+export type MboxJobKind = "export" | "import";
+
+export type MboxJobState = "running" | "done" | "cancelled" | "failed";
+
+/**  What starting a job answered: the user closed the dialog, or the job runs. */
+export type MboxStart = { kind: "cancelled" } | { kind: "started"; job: MboxJob };
 
 /**  One entry of the access log: metadata only, never arguments or content. */
 export type McpAccessEntry = {
@@ -4823,6 +4957,96 @@ export type SyncServerChange = {
 	smtp: ServerSettings,
 };
 
+export type TakeoverAccount = {
+	/**  Its position in the preview, to take it over. */
+	index: number,
+	kind: TakeoverAccountKind,
+	/**  The account's name in Thunderbird. */
+	name: string,
+	/**  The first identity's address and name: the new account's. */
+	email: string,
+	displayName: string,
+	/**
+	 *  Incoming server (IMAP accounts only); `security` is TLS or STARTTLS (a plain
+	 *  connection in Thunderbird becomes STARTTLS: the app never sends a password unencrypted).
+	 */
+	imap: ServerSettings | null,
+	smtp: ServerSettings | null,
+	/**  Thunderbird connected without encryption; the app will use STARTTLS. */
+	wasUnencrypted: boolean,
+	identities: TakeoverIdentity[],
+	/**  An account of the app has this address already. */
+	alreadySetUp: boolean,
+};
+
+/**  What kind of account Thunderbird had. */
+export type TakeoverAccountKind = "imap" | 
+/**
+ *  POP3 accounts cannot be taken over (the app speaks IMAP and JMAP); their identities
+ *  and signatures are shown.
+ */
+"pop3" | 
+/**  News, feeds and other kinds. */
+"other";
+
+/**  What taking over an account's identities and signatures did, after the account was set up. */
+export type TakeoverApplied = {
+	accountId: AccountId | null,
+	/**  Identities added (the account's own address is updated, not added). */
+	identities: number,
+	/**  Signatures created and set as the identities' defaults. */
+	signatures: number,
+};
+
+/**  A local folder of the profile (an mbox file). */
+export type TakeoverFolder = {
+	index: number,
+	/**  Path below "Local Folders", `/`-separated (`Archives/2025`). */
+	path: string,
+	/**  Size of the file in bytes. */
+	bytes: number,
+};
+
+export type TakeoverIdentity = {
+	email: string,
+	name: string,
+	replyTo: string | null,
+	signature: TakeoverSignature | null,
+	/**  A file signature that could not be read (missing, too large, not text). */
+	signatureUnreadable: boolean,
+};
+
+/**
+ *  What opening a profile answered: none at the usual place, the user closed the folder
+ *  dialog, or the preview.
+ */
+export type TakeoverOpen = { kind: "cancelled" } | { kind: "opened"; preview: TakeoverPreview };
+
+/**  What a profile holds that the app can take over. */
+export type TakeoverPreview = {
+	token: TakeoverToken,
+	/**  The profile's folder name (never its full path). */
+	profileName: string,
+	accounts: TakeoverAccount[],
+	folders: TakeoverFolder[],
+};
+
+/**  A signature of an identity, as text for the preview. */
+export type TakeoverSignature = {
+	/**  HTML (cleaned when it is saved) or plain text. */
+	html: boolean,
+	/**  The signature's text for the preview, at most 2,000 characters. */
+	preview: string,
+	/**  Read from a file the profile names (`sig_file`). */
+	fromFile: boolean,
+};
+
+/**
+ *  A parsed profile of this session: 32 lowercase hex digits from the random source. The UI
+ *  never sees a path.
+ */
+export type TakeoverToken = string;
+
 /**  Which tasks the "Aufgaben" view lists. */
 export type TaskFilter = "open" | "done" | "all";
 
@@ -4959,6 +5183,15 @@ export type ThreadView = {
 	 *  [`MAX_THREAD_MESSAGES`].
 	 */
 	total: number,
+};
+
+/**  A profile listed in Thunderbird's `profiles.ini` (at the system's usual place). */
+export type ThunderbirdProfile = {
+	/**  Its position in `profiles.ini`, to open it. */
+	index: number,
+	name: string,
+	/**  The profile Thunderbird starts with. */
+	isDefault: boolean,
 };
 
 /**  Copy or move to a mailbox of another account. */
@@ -5112,6 +5345,63 @@ export type UpdateStatus =
 { state: "installing"; version: string } | 
 /**  The last step failed. `version` is the update it concerned, if one was found. */
 { state: "failed"; version: string | null; error: IpcError };
+
+/**  What an export wrote; `cancelled` when the user closed the save dialog. */
+export type VcardExportOutcome = { kind: "cancelled" } | { kind: "saved"; path: string; cards: number };
+
+/**  The outcome of "Import vCard…": cancelled in the dialog, or the report. */
+export type VcardImportOutcome = { kind: "cancelled" } | { kind: "imported"; report: VcardImportReport };
+
+/**  One problem of an import, by the card's position in the file (0-based). */
+export type VcardImportProblem = {
+	card: number,
+	kind: VcardImportProblemKind,
+};
+
+/**  Why a card of an imported file was left out or changed. */
+export type VcardImportProblemKind = 
+/**  The file is larger than the reader takes; the rest was not read. */
+"too_large" | 
+/**  More cards than the reader takes; the rest was not read. */
+"too_many_cards" | 
+/**  A line or card could not be read. */
+"malformed" | 
+/**  A picture was too large, not an image the app shows, or a link (never loaded). */
+"picture_skipped" | 
+/**  A card without any usable address. */
+"no_address" | 
+/**  A group would get more members than allowed, or there are too many groups. */
+"too_many_members";
+
+/**
+ *  What a vCard import did. Contacts whose addresses were known already are merged into
+ *  (`updated`): their name and note are only filled where empty, the counts stay.
+ */
+export type VcardImportReport = {
+	/**  Cards read from the file. */
+	cards: number,
+	/**  New contacts. */
+	created: number,
+	/**  Known contacts that got a name, a note, a picture or more addresses. */
+	updated: number,
+	/**
+	 *  Addresses merged into one contact (several addresses on a card, or a card naming
+	 *  addresses of different contacts).
+	 */
+	merged: number,
+	/**  Groups created or extended. */
+	lists: number,
+	/**  Pictures set (re-encoded by the helper, only where the contact had none). */
+	pictures: number,
+	/**  Problems, at most 32. */
+	problems: VcardImportProblem[],
+};
+
+/**
+ *  The vCard version an export writes. 3.0 is read by every address book (macOS Contacts,
+ *  Outlook, Google); 4.0 (RFC 6350) is what Thunderbird writes.
+ */
+export type VcardVersionChoice = "v3" | "v4";
 
 /**
  *  The layout of one window, stored per window on this device (not synchronised: the screens

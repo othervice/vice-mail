@@ -81,12 +81,10 @@ async fn a_redirect_goes_out_unchanged_with_resent_fields_and_no_sent_copy() {
     assert_eq!(mail.draft_id, None, "a redirect has no draft");
     assert_eq!(mail.subject, subject);
     assert_eq!(mail.recipient_count, 2);
-    let sent = bed
-        .until("the redirect to be sent", || async {
-            (bed.outgoing(mail.operation_id).await.state == SendState::Sent).then_some(())
-        })
-        .await;
-    let () = sent;
+    bed.until("the redirect to be sent", || async {
+        (bed.outgoing(mail.operation_id).await.state == SendState::Sent).then_some(())
+    })
+    .await;
     bed.settled().await;
     let bytes = bed.sender.sent.lock().expect("sent")[0].clone();
     let text = String::from_utf8(bytes).expect("utf-8");

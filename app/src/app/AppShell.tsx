@@ -17,6 +17,7 @@ import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { EditViewsHost } from "../features/layout/EditViewsDialog";
 // Stage 19 (decision 0055): redirecting a message.
 import { RedirectHost } from "../features/redirect/RedirectDialog";
+import { MboxJobsHost } from "../features/mbox/MboxJobs";
 import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
@@ -123,6 +124,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       <EditViewsHost />
       {/* Stage 19: "Redirect" (from the actions, the card menu or the palette). */}
       <RedirectHost />
+      {/* Stage 19 (decision 0057): mbox exports and imports with their progress. */}
+      <MboxJobsHost />
     </div>
   );
 }

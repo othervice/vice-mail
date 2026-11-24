@@ -31,7 +31,7 @@ export function emptyServers(email: string): ServersDraft {
   return { imap: blank("imap"), smtp: blank("smtp") };
 }
 
-function fromSettings(settings: ServerSettings | null, kind: ServerKind, email: string): ServerDraft {
+export function fromSettings(settings: ServerSettings | null, kind: ServerKind, email: string): ServerDraft {
   if (!settings) return emptyServers(email)[kind];
   return {
     host: settings.host,

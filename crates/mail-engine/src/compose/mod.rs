@@ -36,7 +36,7 @@ mod stage10_tests;
 mod stage19_tests;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

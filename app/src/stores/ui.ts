@@ -66,7 +66,12 @@ export const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 /** What Settings → Accounts shows: the list, the setup form or one account. */
-export type AccountsPage = { kind: "list" } | { kind: "add" } | { kind: "account"; accountId: AccountId };
+export type AccountsPage =
+  | { kind: "list" }
+  | { kind: "add" }
+  | { kind: "account"; accountId: AccountId }
+  /** Stage 19 (decision 0057): taking over accounts and local folders from Thunderbird. */
+  | { kind: "thunderbird" };
 
 export type View =
   /** Stage 7: `savedSearchId` with `savedViews`: one saved search's results instead of the list. */
