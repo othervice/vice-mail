@@ -33,7 +33,7 @@ Signatur**; Signieren lässt sich später nachrüsten (0035).
 - [ ] Installation aus den veröffentlichten Dateien auf einem frischen Mac und einem frischen Windows
 - [ ] Update von einer Version auf die nächste gelingt; eine manipulierte Update-Datei wird abgelehnt
 - [ ] Bau aus dem öffentlichen Repo nach `README.md` auf einem Rechner, der das Projekt nie gesehen hat
-- [ ] CI ist grün auf macOS und Windows
+- [x] CI ist grün auf macOS und Windows
 - [x] Lizenzliste vollständig; keine unverträgliche Lizenz
 - [x] alle Befunde der Sicherheitsprüfung behoben oder mit Begründung dokumentiert
 - [x] `scripts/check.sh` ist grün
@@ -238,6 +238,17 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   Terminal-Sitzungen seit dem Neustart nicht öffnen können; für 0.1.0 wird sie nicht gebraucht.
   Veröffentlicht als Gitea-Release `v0.1.0` (privat). **Ungeprüft:** Installation unter Windows,
   Installation über einen Prototyp, Start auf einem zweiten Mac.
+
+**GitHub (24.11.2026)**
+- Privates Repo `github.com/othervice/vice-mail`; Geschichte umgeschrieben (Autor
+  `othervice@bitwaterlabs.com`, keine Co-Author-Zeilen). GitHub Actions auf `macos-latest` und
+  `windows-latest`: die ersten Windows-Läufe fanden 9 Fehler (CRLF im Checkout, ein Manifest für
+  die Testprogramme, Wettläufe in Tests, ein Protokolleintrag im MCP-Helfer), alle behoben. Lauf
+  45454828984 auf 253659e: `check.sh` grün auf macOS und Windows.
+- Release 0.1.0 aus 253659e mit Update-Signatur (`scripts/release-local.sh` mit
+  `VICEMAIL_UPDATER=1` in der grafischen Sitzung), im Gitea-Release `v0.1.0`; Dateien nach dem
+  Hochladen geladen und gegen `SHA256SUMS` geprüft. Das GitHub-Release folgt nach der Durchsicht
+  durch den Menschen und dem Umschalten auf öffentlich.
 
 **Wartet auf**
 - Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows
