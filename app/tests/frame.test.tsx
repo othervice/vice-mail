@@ -35,6 +35,8 @@ describe("app frame without an account", () => {
       // Stage 16
       "Reading list",
       "Pinned attachments",
+      // SPEC "Markiert"
+      "Flagged",
       "Pinned",
       "Sent",
       "Drafts",
