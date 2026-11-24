@@ -146,7 +146,7 @@ Ziele für aktuelle Hardware, gemessen in Stufe 7 und danach bei jeder Stufe mit
 | Suche bis erste Treffer | unter 200 ms bei 100.000 Mails |
 | Sichtbare Reaktion auf eine Aktion | unter 100 ms |
 | Scrollen | 60 Bilder pro Sekunde |
-| Arbeitsspeicher im Leerlauf | unter 250 MB |
+| Arbeitsspeicher im Leerlauf (Footprint der App samt WebView-Prozessen, 0048) | unter 250 MB |
 
 Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr langen Threads und großen Anhängen.
 
