@@ -1890,3 +1890,86 @@ async fn the_inbox_as_conversations_bundles_conversations_and_keeps_the_top() {
         .expect("unread first");
     assert_eq!(first.items.len(), 3);
 }
+
+/// Stage 17: an expanded conversation row lists every message of its conversation, oldest first,
+/// from every folder of the account (the user's own answer in Sent, an older one in Archive), and
+/// as many as the row's "n replies" promise. Children are the thread opened by the row's message
+/// in the row's folder (`get_thread`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_expanded_conversation_row_lists_its_messages_from_every_folder() {
+    let bob = "Bob Example <bob@friends.example>";
+    let me = "Alice <alice@fake.test>";
+    let server = FakeServer::new();
+    // Serials, and so Message-IDs `<n>@fake.test`, count over all folders in delivery order.
+    server.deliver_raw("Archive", &threaded(bob, "Plan", &[], ""));
+    server.deliver_raw("Sent", &threaded(me, "Re: Plan", &["1@fake.test"], ""));
+    server.deliver_raw(
+        "INBOX",
+        &threaded(bob, "Re: Plan", &["1@fake.test", "2@fake.test"], ""),
+    );
+    server.deliver_raw("INBOX", &threaded(bob, "Lunch?", &[], ""));
+    let h = Harness::new(server).await;
+    let inbox = h.mailbox(MailboxRole::Inbox).await;
+    let sent = h.mailbox(MailboxRole::Sent).await;
+    let archive = h.mailbox(MailboxRole::Archive).await;
+    let answer = h.by_subject("Re: Plan").await;
+
+    let page = h
+        .core
+        .list_inbox_conversations(h.scope(inbox), None, 50)
+        .await
+        .expect("conversations");
+    let summary = page
+        .conversations
+        .iter()
+        .find(|c| c.message_id == answer.id)
+        .cloned()
+        .expect("the conversation's row");
+    assert_eq!(summary.message_count, 3);
+
+    let children = h
+        .core
+        .get_thread(answer.id, Some(inbox))
+        .await
+        .expect("children");
+    let listed: Vec<(String, MailboxId)> = children
+        .messages
+        .iter()
+        .map(|c| (c.message.subject.clone(), c.message.mailbox_id))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("Plan".to_owned(), archive),
+            ("Re: Plan".to_owned(), sent),
+            ("Re: Plan".to_owned(), inbox),
+        ]
+    );
+    assert_eq!(children.total, summary.message_count);
+    assert_eq!(children.thread_id, summary.thread_id);
+    assert_eq!(
+        children.messages.last().map(|c| c.message.id),
+        Some(answer.id)
+    );
+
+    // The single message has itself as its only child; a message that is gone is `not_found`.
+    let lunch = h.by_subject("Lunch?").await;
+    let alone = h
+        .core
+        .get_thread(lunch.id, Some(inbox))
+        .await
+        .expect("children");
+    assert_eq!(
+        alone
+            .messages
+            .iter()
+            .map(|c| c.message.id)
+            .collect::<Vec<_>>(),
+        [lunch.id]
+    );
+    let gone = h.core.get_thread(MessageId(1), Some(inbox)).await;
+    assert_eq!(
+        gone.err().map(|e| mail_model::IpcError::from(e).code),
+        Some(mail_model::ErrorCode::NotFound)
+    );
+}

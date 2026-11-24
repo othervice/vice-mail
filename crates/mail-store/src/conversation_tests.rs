@@ -616,6 +616,163 @@ async fn targets_follow_the_reach() {
     assert!(matches!(none, Err(crate::StoreError::InvalidArgument(_))));
 }
 
+// ---------------------------------------------------------------------------------------------
+// The messages of an expanded conversation row (stage 17)
+
+#[tokio::test]
+async fn an_expanded_row_lists_every_message_of_its_conversation_oldest_first() {
+    let f = fixture().await;
+    store_in(
+        &f,
+        f.inbox,
+        vec![
+            seen(from(header(1, D, Some("k1@x")), "Kim")),
+            from(
+                reply(header(2, D + 200, Some("k3@x")), &["k1@x", "k2@x"]),
+                "Kim",
+            ),
+            from(header(3, D + 300, Some("solo@x")), "Uma"),
+        ],
+    )
+    .await;
+    // My own answer lies in Sent only.
+    store_in(
+        &f,
+        f.sent,
+        vec![seen(from(
+            reply(header(1, D + 100, Some("k2@x")), &["k1@x"]),
+            "Alice",
+        ))],
+    )
+    .await;
+    // The first message also lies in Archive: one child, at the listed folder's copy.
+    let mut copy = seen(from(header(1, D, Some("k1@x")), "Kim"));
+    copy.uid = 1;
+    store_in(&f, f.archive, vec![copy]).await;
+    let (k1, k2, k3) = (
+        id_of(&f.store, "k1@x").await,
+        id_of(&f.store, "k2@x").await,
+        id_of(&f.store, "k3@x").await,
+    );
+
+    let rows = all_rows(
+        &f.store,
+        InboxMailboxes::Mailbox(f.inbox),
+        InboxListKind::Rows,
+        50,
+    )
+    .await;
+    let row = rows
+        .iter()
+        .find(|r| r.message.id.0 == k3)
+        .expect("the conversation's row");
+    // The row's children: the thread opened by the row's message in the row's folder.
+    let children = f
+        .store
+        .thread(row.message.id, Some(row.message.mailbox_id))
+        .await
+        .expect("children");
+    let listed: Vec<(i64, MailboxId, bool)> = children
+        .messages
+        .iter()
+        .map(|c| (c.message.id.0, c.message.mailbox_id, c.message.unread))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (k1, f.inbox, false),
+            (k2, f.sent, false),
+            (k3, f.inbox, true)
+        ],
+        "oldest first, own mail from Sent, each at the listed folder where it lies there"
+    );
+    assert_eq!(children.messages[0].mailbox_ids, [f.inbox, f.archive]);
+    // "n replies" on the row and the children it unfolds agree.
+    assert_eq!(children.total, row.message_count);
+    assert_eq!(children.messages.len(), 3);
+    assert_eq!(children.thread_id, row.thread_id);
+    assert!(
+        children
+            .messages
+            .iter()
+            .all(|c| c.message.account_id == row.message.account_id)
+    );
+
+    // From Archive, the same conversation names the archived copy.
+    let from_archive = f
+        .store
+        .thread(MessageId(k1), Some(f.archive))
+        .await
+        .expect("children");
+    assert_eq!(from_archive.messages[0].message.mailbox_id, f.archive);
+
+    // A message without replies is its only child; a vanished row is an error the UI can show.
+    let solo = rows
+        .iter()
+        .find(|r| r.message_count == 1)
+        .expect("the single message");
+    let alone = f
+        .store
+        .thread(solo.message.id, Some(f.inbox))
+        .await
+        .expect("children");
+    assert_eq!(alone.messages.len(), 1);
+    assert_eq!(alone.total, 1);
+    let gone = f.store.thread(MessageId(1), Some(f.inbox)).await;
+    assert!(
+        matches!(gone, Err(crate::StoreError::NotFound(_))),
+        "{gone:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_expanded_row_of_a_very_long_conversation_holds_its_newest_messages() {
+    let f = fixture().await;
+    let n = i64::from(mail_model::MAX_THREAD_MESSAGES) + 5;
+    let mut headers = Vec::new();
+    for k in 0..n {
+        let uid = u32::try_from(k).expect("uid") + 1;
+        let mut h = header(uid, D + k * 60, Some(&format!("{k}@many")));
+        if k > 0 {
+            h = reply(h, &["0@many"]);
+        }
+        headers.push(seen(h));
+    }
+    store_in(&f, f.inbox, headers).await;
+    let rows = all_rows(
+        &f.store,
+        InboxMailboxes::Mailbox(f.inbox),
+        InboxListKind::Rows,
+        10,
+    )
+    .await;
+    assert_eq!(rows.len(), 1);
+    let children = f
+        .store
+        .thread(rows[0].message.id, Some(f.inbox))
+        .await
+        .expect("children");
+    assert_eq!(
+        children.messages.len(),
+        usize::try_from(mail_model::MAX_THREAD_MESSAGES).expect("max")
+    );
+    assert_eq!(i64::from(children.total), n);
+    assert_eq!(children.total, rows[0].message_count);
+    // The newest ones, still oldest first, ending with the row's message.
+    let first = id_of_owned(&f.store, "5@many".into()).await;
+    assert_eq!(children.messages[0].message.id.0, first);
+    assert_eq!(
+        children.messages.last().map(|c| c.message.id),
+        Some(rows[0].message.id)
+    );
+    assert!(
+        children
+            .messages
+            .windows(2)
+            .all(|w| w[0].message.id < w[1].message.id)
+    );
+}
+
 #[tokio::test]
 async fn search_hits_know_their_conversation() {
     let f = fixture().await;
