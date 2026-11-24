@@ -3,7 +3,7 @@
 //! Types only; the store keeps them, the engine applies them.
 //!
 //! Marks that travel between devices (pins, snoozes, tasks, rules) refer to a message by
-//! account UUID and Message-ID, never by a local id (`docs/ARCHITECTURE.md`, Datenmodell). A
+//! account UUID and Message-ID, never by a local id (`docs/ARCHITECTURE.md`, "Data model"). A
 //! message without a Message-ID can therefore not be pinned, snoozed or marked as a task.
 
 use serde::{Deserialize, Serialize};

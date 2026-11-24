@@ -1,5 +1,5 @@
-//! Synchronisation of accounts with their servers (`docs/ARCHITECTURE.md`, "Regeln der
-//! Mail-Engine", and decision 0002).
+//! Synchronisation of accounts with their servers (`docs/ARCHITECTURE.md`, "Mail engine
+//! rules", and decision 0002).
 //!
 //! One supervisor task per account ([`account`]) owns the account's [`SyncMachine`] and reacts
 //! to what it says. The sync never writes: every connection it opens is read-only (EXAMINE,

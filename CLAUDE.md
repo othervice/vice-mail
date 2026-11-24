@@ -9,7 +9,7 @@ Selbst hostbar, ohne eigenen Cloud-Dienst, ohne Telemetrie. „Vice Mail“ ist 
 |---|---|
 | `docs/PLAN.md` | Stufen, Status, welche Stufe dran ist |
 | `docs/stages/NN-*.md` | Auftrag der aktuellen Stufe |
-| `docs/ARCHITECTURE.md` | Stack, Modulgrenzen, Regeln der Mail-Engine, Entscheidungen |
+| `docs/ARCHITECTURE.md` | Stack, Modulgrenzen, Regeln der Mail-Engine, Entscheidungen (Englisch) |
 | `docs/SPEC.md` | Funktionsumfang und was ausdrücklich nicht dazugehört |
 | `docs/DESIGN.md` | Oberfläche (nur bei UI-Arbeit nötig) |
 
@@ -45,7 +45,7 @@ ausgeführt und geprüft wurde. Was nicht geprüft werden konnte, steht dort aus
   noch Datenbank. Keine zirkulären Abhängigkeiten.
 - Jede schreibende Mail-Aktion läuft über die Outbox (`operation`-Tabelle) und hat einen sichtbaren Zustand.
 - HTML aus E-Mails ist nicht vertrauenswürdig und wird nur über die Pipeline aus
-  `docs/ARCHITECTURE.md` (Abschnitt Sicherheitsgrenzen) angezeigt.
+  `docs/ARCHITECTURE.md` (Abschnitt „Security boundaries“) angezeigt.
 
 ## Echte Postfächer schützen
 

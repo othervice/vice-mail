@@ -4368,7 +4368,7 @@ export type SettingsSyncStatus = {
 
 /**
  *  One key combination. `mod` is Cmd on macOS and Ctrl on Windows; Option/Alt combinations do
- *  not exist (`docs/ARCHITECTURE.md`, Tastaturkürzel).
+ *  not exist (`docs/ARCHITECTURE.md`, "Keyboard shortcuts").
  */
 export type Shortcut = {
 	/**  The character the key produces (`event.key`), 1 to 20 characters. */

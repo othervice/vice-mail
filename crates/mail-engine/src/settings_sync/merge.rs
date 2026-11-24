@@ -1,4 +1,4 @@
-//! Merge rules per kind (`docs/ARCHITECTURE.md`, Einstellungs-Sync), as pure functions.
+//! Merge rules per kind (`docs/ARCHITECTURE.md`, "Settings sync"), as pure functions.
 //!
 //! [`resolve`] picks the winner among all known versions of one record. It depends only on the
 //! set of candidates, not on their order or on duplicates, so every device that sees the same

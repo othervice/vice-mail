@@ -13,7 +13,7 @@ import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
  * action directory (`actions/registry.ts`); this module only adds the user's overrides and the
  * rules for what may be assigned.
  *
- * Keyboard layouts (docs/ARCHITECTURE.md, "Tastaturkürzel"): shortcuts that stand for a
+ * Keyboard layouts (docs/ARCHITECTURE.md, "Keyboard shortcuts"): shortcuts that stand for a
  * character ("e", "#", "?", "/") match the character the key produces (`event.key`), so they
  * follow the layout. Nothing in the app is bound to a key position (`event.code`); if a shortcut
  * ever needs one (e.g. "the key left of 1"), it gets its own field instead of reusing `key`.

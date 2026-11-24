@@ -60,7 +60,7 @@ pub enum RecordKind {
     AttachmentPin,
 }
 
-/// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, Einstellungs-Sync).
+/// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, "Settings sync").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MergeRule {
     /// The newer version wins, a tombstone like any other version.

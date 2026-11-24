@@ -29,7 +29,7 @@ pub const MAX_COMMAND_ID_CHARS: usize = 64;
 pub const MAX_RECENT_COMMAND_CHARS: usize = 200;
 
 /// One key combination. `mod` is Cmd on macOS and Ctrl on Windows; Option/Alt combinations do
-/// not exist (`docs/ARCHITECTURE.md`, Tastaturkürzel).
+/// not exist (`docs/ARCHITECTURE.md`, "Keyboard shortcuts").
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Shortcut {
