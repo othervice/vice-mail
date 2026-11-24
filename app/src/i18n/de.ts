@@ -1076,6 +1076,14 @@ export const de: Translation = {
           found: "{{domain}} bietet auch JMAP an ({{host}}). Du kannst es in den Server-Einstellungen wählen.",
           testPush: "Neue Mails erscheinen sofort: Der Server meldet Änderungen von sich aus.",
           testNoPush: "Der Server meldet Änderungen nicht von sich aus, deshalb erscheinen neue Mails mit Verzögerung.",
+          signIn: "Anmelden mit",
+          signInOptions: {
+            password: "Passwort",
+            apiToken: "API-Token",
+          },
+          apiToken: "API-Token",
+          apiTokenHint:
+            "Manche Anbieter verlangen für JMAP ein API-Token statt deines Passworts. Bei Fastmail: Settings → Privacy & Security → Manage API tokens → New API token, mit Zugriff auf „Email“ und zum Senden „Email submission“. Die App bewahrt das Token nur im Schlüsselbund dieses Computers auf.",
         },
         test: "Verbindung testen",
         testing: "Testet …",
@@ -1173,6 +1181,16 @@ export const de: Translation = {
           saving: "Prüft …",
           saved: "Passwort gespeichert. Die App verbindet sich damit neu.",
           failed: "Das Passwort wurde nicht geändert.",
+        },
+        apiToken: {
+          title: "API-Token",
+          description:
+            "Dieses Konto meldet sich mit einem API-Token an. Hast du es beim Anbieter ersetzt oder widerrufen, gib hier das neue ein. Die App prüft es, bevor sie es speichert.",
+          label: "Neues API-Token",
+          save: "API-Token speichern",
+          saving: "Prüft …",
+          saved: "API-Token gespeichert. Die App verbindet sich damit neu.",
+          failed: "Das API-Token wurde nicht geändert.",
         },
         folders: {
           title: "Besondere Ordner",

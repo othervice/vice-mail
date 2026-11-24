@@ -258,6 +258,7 @@ async fn victim(server: &Arc<FakeServer>, folder: &Arc<Mutex<FolderState>>) -> V
     let account = core
         .add_account(
             AccountSettings {
+                credential: Default::default(),
                 email: "alice@fake.test".into(),
                 display_name: "Alice".into(),
                 imap: self::server("imap.fake.test", 993),
@@ -567,6 +568,7 @@ async fn an_account_matched_by_address_on_joining_keeps_its_servers() {
     let mine = core
         .add_account(
             AccountSettings {
+                credential: Default::default(),
                 email: "alice@fake.test".into(),
                 display_name: "Alice".into(),
                 imap: self::server("imap.fake.test", 993),

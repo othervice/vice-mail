@@ -53,7 +53,7 @@ describe("account setup: JMAP", () => {
     expect(within(server).getByLabelText("User name")).toHaveProperty("value", "bob@vicemail.test");
     expect(within(server).getByLabelText("Port")).toHaveProperty("value", "443");
     // No security choice: JMAP is always HTTPS.
-    expect(within(server).queryByRole("radiogroup")).toBeNull();
+    expect(within(server).queryByRole("radiogroup", { name: "Security" })).toBeNull();
     await user.type(within(server).getByLabelText("Server"), "localhost");
     await user.clear(within(server).getByLabelText("Port"));
     await user.type(within(server).getByLabelText("Port"), "18443");
@@ -119,5 +119,94 @@ describe("account setup: JMAP", () => {
     expect(await screen.findByText("JMAP server")).toBeTruthy();
     expect(screen.getByText("jmap.example.org, port 443, TLS")).toBeTruthy();
     expect(screen.queryByText("Incoming mail (IMAP)")).toBeNull();
+  });
+
+  // Stage 14: Fastmail's JMAP wants an API token (sent as a bearer token) instead of the password.
+  it("signs in with an API token instead of the password when chosen", async () => {
+    const core = mockCore({ capabilities: { ...CAPABILITIES, imap4rev1: false, jmap: true, idle: true } });
+    const { user } = await openSetup();
+    await user.type(screen.getByLabelText("Email address"), "me@fastmail.example");
+    const choice = await screen.findByRole("radiogroup", { name: "Protocol" });
+    // IMAP has no token choice.
+    expect(screen.queryByRole("radiogroup", { name: "Sign in with" })).toBeNull();
+    await user.click(within(choice).getByRole("radio", { name: "JMAP" }));
+    const server = screen.getByRole("group", { name: "JMAP server" });
+    const signIn = within(server).getByRole("radiogroup", { name: "Sign in with" });
+    expect(within(signIn).getByRole("radio", { name: "Password" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(server).queryByLabelText("API token")).toBeNull();
+    expect(screen.getByLabelText("Password")).toBeTruthy();
+
+    await user.click(within(signIn).getByRole("radio", { name: "API token" }));
+    // The token replaces the password field; the hint says where to create one.
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    const field = within(server).getByLabelText("API token");
+    expect(field.getAttribute("type")).toBe("password");
+    expect(server.textContent).toContain(
+      "At Fastmail: Settings → Privacy & Security → Manage API tokens → New API token, with access to “Email” and, for sending, “Email submission”.",
+    );
+    await user.type(within(server).getByLabelText("Server"), "api.fastmail.example");
+
+    // Nothing is sent without a token.
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(core.callsOf("test_connection")).toEqual([]);
+    expect(within(server).getByText("Required.")).toBeTruthy();
+
+    await user.type(field, "fmu1-secret-token");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await screen.findByTestId("test-result");
+    const jmapServer = { host: "api.fastmail.example", port: 443, security: "tls", username: "me@fastmail.example" };
+    const settings = {
+      email: "me@fastmail.example",
+      displayName: "",
+      imap: jmapServer,
+      smtp: jmapServer,
+      protocol: "jmap",
+      credential: "apiToken",
+    };
+    expect(core.callsOf("test_connection")).toEqual([{ settings, password: "fmu1-secret-token" }]);
+    await user.click(screen.getByRole("button", { name: "Add account" }));
+    await waitFor(() => {
+      expect(core.callsOf("add_account")).toEqual([{ settings, password: "fmu1-secret-token" }]);
+    });
+  });
+
+  it("goes back to the password field and leaves the token out", async () => {
+    const core = mockCore({ capabilities: { ...CAPABILITIES, imap4rev1: false, jmap: true, idle: true } });
+    const { user } = await openSetup();
+    await fillAddress(user, "me@fastmail.example");
+    await user.click(within(await screen.findByRole("radiogroup", { name: "Protocol" })).getByRole("radio", { name: "JMAP" }));
+    const server = screen.getByRole("group", { name: "JMAP server" });
+    const signIn = within(server).getByRole("radiogroup", { name: "Sign in with" });
+    await user.click(within(signIn).getByRole("radio", { name: "API token" }));
+    await user.type(within(server).getByLabelText("API token"), "fmu1-secret-token");
+    await user.click(within(signIn).getByRole("radio", { name: "Password" }));
+    await user.type(within(server).getByLabelText("Server"), "jmap.example.org");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await screen.findByTestId("test-result");
+    const call = core.callsOf("test_connection")[0] as { settings: Record<string, unknown>; password: string };
+    expect(call.password).toBe("secret-pw");
+    expect(call.settings).not.toHaveProperty("credential");
+  });
+
+  it("replaces the API token of an account that signs in with one", async () => {
+    const jmapServer = { host: "api.fastmail.example", port: 443, security: "tls" as const, username: "me@fastmail.example" };
+    const account = makeAccount({
+      email: "me@fastmail.example",
+      imap: jmapServer,
+      smtp: jmapServer,
+      protocol: "jmap",
+      credential: "apiToken",
+    });
+    const core = mockCore({ accounts: [account] });
+    const { user } = renderApp();
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Accounts" }));
+    await user.click(await screen.findByTestId(`account-row-${account.id}`));
+    const form = await screen.findByTestId("password-form");
+    expect(screen.getByText("This account signs in with an API token.", { exact: false })).toBeTruthy();
+    await user.type(within(form).getByLabelText("New API token"), "fmu1-new-token");
+    await user.click(within(form).getByRole("button", { name: "Save API token" }));
+    expect(await screen.findByText("API token saved. The app reconnects with it.")).toBeTruthy();
+    expect(core.callsOf("update_password")).toEqual([{ accountId: account.id, password: "fmu1-new-token" }]);
   });
 });

@@ -1,4 +1,4 @@
-import type { AccountSettings, DiscoveryResult, Security, ServerSettings } from "../../../services/ipc";
+import type { AccountSettings, CredentialKind, DiscoveryResult, Security, ServerSettings } from "../../../services/ipc";
 
 /** A server as the form edits it: the port is text until the form is submitted. */
 export interface ServerDraft {
@@ -136,10 +136,19 @@ export function jmapFromDiscovery(result: DiscoveryResult | undefined, email: st
   return { host: found.host, port: String(found.port), security: "tls", username: found.username || email.trim() };
 }
 
-/** Settings of a JMAP account: one server, always TLS; the core uses it for sending too. */
-export function toJmapSettings(email: string, displayName: string, draft: ServerDraft): AccountSettings | null {
+/**
+ * Settings of a JMAP account: one server, always TLS; the core uses it for sending too. Stage 14:
+ * `credential` says whether the secret is an API token (left out for a password).
+ */
+export function toJmapSettings(
+  email: string,
+  displayName: string,
+  draft: ServerDraft,
+  credential: CredentialKind = "password",
+): AccountSettings | null {
   const port = parsePort(draft.port);
   if (port === null || hasErrors(serverErrors(draft)) || !isEmail(email)) return null;
   const server: ServerSettings = { host: draft.host.trim(), port, security: "tls", username: draft.username.trim() };
-  return { email: email.trim(), displayName: displayName.trim(), imap: server, smtp: server, protocol: "jmap" };
+  const settings: AccountSettings = { email: email.trim(), displayName: displayName.trim(), imap: server, smtp: server, protocol: "jmap" };
+  return credential === "apiToken" ? { ...settings, credential } : settings;
 }

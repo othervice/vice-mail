@@ -211,6 +211,7 @@ fn settings(email: &str) -> AccountSettings {
         username: "alice".into(),
     };
     AccountSettings {
+        credential: Default::default(),
         protocol: Default::default(),
         email: email.into(),
         display_name: "Alice".into(),
@@ -670,4 +671,91 @@ async fn a_missing_keychain_entry_is_an_error_state() {
     let mut h = Harness::reopen(dir, server, keychain, sync_config()).await;
     let status = h.state(AccountState::Error).await;
     assert_eq!(status.error.map(|e| e.code), Some(ErrorCode::Keychain));
+}
+
+/// Stage 14: a JMAP account with an API token. The token is checked before it is stored, kept
+/// in the keychain under a `token:` reference, and every connection (setup, sync, after a token
+/// change and after a restart) sends it as a bearer token, never as a password. IMAP accounts
+/// cannot take a token.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_api_token_is_stored_like_a_password_and_always_sent_as_a_bearer_token() {
+    const TOKEN: &str = "fmu1-0123-api-token";
+    let server = FakeServer::new();
+    server.deliver("INBOX", 3, false);
+    server.with(|s| s.password = TOKEN.into());
+    let mut h = Harness::new(Arc::clone(&server), sync_config()).await;
+    let mut jmap = settings("alice@fake.test");
+    jmap.protocol = mail_model::Protocol::Jmap;
+    jmap.credential = mail_model::CredentialKind::ApiToken;
+
+    let mut imap = settings("alice@fake.test");
+    imap.credential = mail_model::CredentialKind::ApiToken;
+    let err = h
+        .core
+        .add_account(imap, Secret::new(TOKEN.into()))
+        .await
+        .expect_err("IMAP takes no token");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+    let err = h
+        .core
+        .add_account(jmap.clone(), Secret::new("fmu1-wrong".into()))
+        .await
+        .expect_err("wrong token");
+    assert_eq!(err.code(), ErrorCode::AuthFailed);
+    assert!(h.keychain.is_empty(), "nothing stored for a refused token");
+
+    let account = h
+        .core
+        .add_account(jmap, Secret::new(TOKEN.into()))
+        .await
+        .expect("add with the token");
+    assert_eq!(account.credential, mail_model::CredentialKind::ApiToken);
+    assert_eq!(account.oauth, None);
+    let id = account.id;
+    let key = CredentialRef::parse(&format!("token:{id}")).expect("reference");
+    let stored = Credentials::new(Arc::clone(&h.keychain))
+        .get(&key)
+        .await
+        .expect("read");
+    assert_eq!(stored.map(Secret::into_exposed).as_deref(), Some(TOKEN));
+    h.idle().await;
+    let listed = h.core.list_accounts().await.expect("accounts");
+    assert_eq!(listed[0].credential, mail_model::CredentialKind::ApiToken);
+
+    // A new token: checked as a bearer token, stored under the same reference.
+    server.with(|s| s.password = "fmu1-new-token".into());
+    let err = h
+        .core
+        .update_password(id, Secret::new(TOKEN.into()))
+        .await
+        .expect_err("the old token is refused now");
+    assert_eq!(err.code(), ErrorCode::AuthFailed);
+    h.core
+        .update_password(id, Secret::new("fmu1-new-token".into()))
+        .await
+        .expect("new token");
+    let stored = Credentials::new(Arc::clone(&h.keychain))
+        .get(&key)
+        .await
+        .expect("read");
+    assert_eq!(
+        stored.map(Secret::into_exposed).as_deref(),
+        Some("fmu1-new-token")
+    );
+    h.core.retry_account(id).await.expect("reconnect");
+    h.idle().await;
+
+    // After a restart the token comes from the keychain, still as a bearer token.
+    h.core.shutdown().await;
+    let (dir, keychain) = (h.dir, h.keychain);
+    drop(h.core);
+    let before = server.read(|s| s.auths.len());
+    let mut h = Harness::reopen(dir, Arc::clone(&server), keychain, sync_config()).await;
+    h.idle().await;
+    let auths = server.read(|s| s.auths.clone());
+    assert!(auths.len() > before, "logged in again after the restart");
+    assert!(
+        auths.iter().all(|a| *a == mail_model::LoginAuth::Bearer),
+        "{auths:?}"
+    );
 }

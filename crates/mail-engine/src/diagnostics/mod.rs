@@ -365,6 +365,10 @@ impl<C: Connector> AppCore<C> {
                     Some(mail_model::OAuthProvider::Google) => {
                         "Google sign-in (refresh token in the system keychain)"
                     }
+                    // Stage 14: a JMAP account's API token, kept like a password.
+                    None if account.credential == mail_model::CredentialKind::ApiToken => {
+                        "API token (system keychain)"
+                    }
                     None => "password (system keychain)",
                 },
             );

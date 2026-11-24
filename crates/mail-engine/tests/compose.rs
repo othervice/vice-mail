@@ -157,6 +157,7 @@ fn settings(
         username: account.address.clone(),
     };
     AccountSettings {
+        credential: Default::default(),
         protocol: Default::default(),
         email: account.address.clone(),
         display_name: name.to_owned(),

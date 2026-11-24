@@ -129,6 +129,7 @@ fn account_settings(env: &TestEnv, who: &str) -> (AccountSettings, Secret<String
     };
     (
         AccountSettings {
+            credential: Default::default(),
             protocol: Default::default(),
             email: account.address.clone(),
             display_name: who.to_owned(),

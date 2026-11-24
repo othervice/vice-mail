@@ -133,6 +133,7 @@ async fn categories_marks_and_invitations_on_the_test_server() {
     let account = core
         .add_account(
             AccountSettings {
+                credential: Default::default(),
                 protocol: Default::default(),
                 email: env.alice.address.clone(),
                 display_name: "Alice".into(),

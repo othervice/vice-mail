@@ -6,7 +6,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use mail_model::{
-    AccountId, AccountStatus, CoreError, CoreEvent, LoginAuth, MailConnector, MailboxId, Secret,
+    AccountId, AccountStatus, CoreError, CoreEvent, MailConnector, MailboxId, Secret,
 };
 use mail_store::StoredAccount;
 use tokio::sync::{mpsc, watch};
@@ -288,10 +288,12 @@ impl<C: MailConnector + 'static> Supervisor<C> {
     /// The login: the password handed in or the keychain's (kept), or (stage 14) an access
     /// token, asked for at every connect so it is always valid.
     async fn login(&mut self) -> Result<Login, CoreError> {
+        // Stage 14: a JMAP account's API token is kept like a password, sent as a bearer token.
+        let kept = crate::credentials::secret_auth(&self.account.credential_ref);
         if let Some(password) = &self.password {
             return Ok(Login {
                 secret: password.clone(),
-                auth: LoginAuth::Password,
+                auth: kept,
             });
         }
         let login = self
@@ -299,7 +301,7 @@ impl<C: MailConnector + 'static> Supervisor<C> {
             .credentials
             .login(&self.account.credential_ref, &self.account.imap, true)
             .await?;
-        if login.auth == LoginAuth::Password {
+        if login.auth == kept {
             self.password = Some(login.secret.clone());
         }
         Ok(login)

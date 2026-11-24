@@ -913,6 +913,9 @@ fn check_account_field(name: &str, value: &Value) -> Result<(), String> {
         "imap" | "smtp" => typed(StrictServerSettings::deserialize(value).map(drop)),
         // Stage 14 (decision 0041): only in records of JMAP accounts.
         "protocol" => typed(mail_model::Protocol::deserialize(value).map(drop)),
+        // Stage 14: only in records of JMAP accounts that sign in with an API token; the kind
+        // (`apiToken`), never the token. Not named "credential": that name marks a secret.
+        "signIn" => typed(mail_model::CredentialKind::deserialize(value).map(drop)),
         _ => Err(format!("unknown account field {name:?}")),
     }
 }
@@ -954,6 +957,13 @@ pub struct SyncedAccount {
     /// as before); fixed when the account is set up or taken over.
     #[serde(default, skip_serializing_if = "mail_model::Protocol::is_imap")]
     pub protocol: mail_model::Protocol,
+    /// Stage 14: only written for JMAP accounts that sign in with an API token; a device
+    /// taking the account over asks for the token (never in the record) instead of a password.
+    #[serde(
+        default,
+        skip_serializing_if = "mail_model::CredentialKind::is_password"
+    )]
+    pub sign_in: mail_model::CredentialKind,
 }
 
 impl SyncedAccount {
@@ -1577,6 +1587,28 @@ mod tests {
         assert!(SyncContent::from_fields(RecordKind::Account, &oauth).is_err());
         oauth.insert("oauth".to_owned(), field(json!({ "refreshToken": "x" })));
         assert!(SyncContent::from_fields(RecordKind::Account, &oauth).is_err());
+
+        // Stage 14: the kind of secret of an API-token account, never the token.
+        let mut token = fields.clone();
+        token.insert("protocol".to_owned(), field(json!("jmap")));
+        token.insert("signIn".to_owned(), field(json!("apiToken")));
+        token.insert("displayName".to_owned(), field(json!("")));
+        token.insert("color".to_owned(), field(json!(0)));
+        token.insert(
+            "smtp".to_owned(),
+            field(
+                json!({ "host": "imap.example.org", "port": 993, "security": "tls",
+                          "username": "a" }),
+            ),
+        );
+        let content = SyncContent::from_fields(RecordKind::Account, &token).expect("kind");
+        let synced = SyncedAccount::from_content(&content).expect("account");
+        assert_eq!(synced.sign_in, mail_model::CredentialKind::ApiToken);
+        assert_eq!(synced.protocol, mail_model::Protocol::Jmap);
+        token.insert("signIn".to_owned(), field(json!("fmu1-a-token")));
+        assert!(SyncContent::from_fields(RecordKind::Account, &token).is_err());
+        token.insert("signIn".to_owned(), field(json!({ "token": "x" })));
+        assert!(SyncContent::from_fields(RecordKind::Account, &token).is_err());
     }
 
     #[test]

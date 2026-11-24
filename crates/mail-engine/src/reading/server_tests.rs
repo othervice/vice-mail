@@ -91,6 +91,7 @@ impl Engine {
         let account = core
             .add_account(
                 AccountSettings {
+                    credential: Default::default(),
                     protocol: Default::default(),
                     email: env.alice.address.clone(),
                     display_name: "Alice".into(),

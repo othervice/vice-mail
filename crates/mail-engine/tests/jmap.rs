@@ -371,6 +371,7 @@ async fn a_jmap_account_syncs_acts_sends_and_keeps_its_numbers() {
         username: env.bob.address.clone(),
     };
     let settings = AccountSettings {
+        credential: Default::default(),
         email: env.bob.address.clone(),
         display_name: "Bob".into(),
         imap: jmap_server.clone(),

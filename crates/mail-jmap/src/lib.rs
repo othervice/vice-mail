@@ -9,7 +9,8 @@
 //!   `https://<host>[:<port>]/.well-known/jmap`; the API, download, upload and event source
 //!   addresses are the ones it names, and must be HTTPS too.
 //! - **Login:** HTTP Basic with the account's user name and the password from the keychain,
-//!   behind one place (`client::Auth`) where an OAuth bearer token can be added.
+//!   or `Authorization: Bearer` with an API token (Fastmail) when the configuration says
+//!   `LoginAuth::Bearer`; one place (`client::Auth`).
 //! - **UIDs:** JMAP has string ids and state strings; the engine wants UIDs, UIDVALIDITY and
 //!   mod-sequences. The adapter numbers the messages of each mailbox itself (`map`) and keeps
 //!   that numbering in the engine's store ([`mail_model::UidMapStore`]). Changes come from

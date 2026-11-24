@@ -22,6 +22,8 @@ use crate::{JmapConnector, JmapSender, TlsConfigFn};
 const ACCOUNT: &str = "u1";
 const USER: &str = "alice@example.test";
 const PASSWORD: &str = "alice-pw";
+/// Stage 14: an API token the fake accepts as `Authorization: Bearer`.
+const API_TOKEN: &str = "fmu1-alice-api-token";
 
 #[derive(Debug, Clone)]
 struct FakeEmail {
@@ -52,6 +54,8 @@ struct State {
     reject_submission: Option<Value>,
     submissions: Vec<Value>,
     push: bool,
+    /// The authorization scheme of every request (`basic`, `bearer`, `none`).
+    schemes: Vec<String>,
 }
 
 /// A small JMAP server: enough of RFC 8620/8621 for the adapter.
@@ -246,22 +250,29 @@ impl Fake {
             let request_line = lines.next().unwrap_or_default().to_owned();
             let mut length = 0usize;
             let mut authorized = false;
+            let mut scheme = "none".to_owned();
             let expected = format!(
-                "basic {}",
+                "Basic {}",
                 base64_encode(format!("{USER}:{PASSWORD}").as_bytes())
             );
+            let bearer = format!("Bearer {API_TOKEN}");
             for line in lines {
                 if let Some((name, value)) = line.split_once(':') {
                     if name.eq_ignore_ascii_case("content-length") {
                         length = value.trim().parse().unwrap_or(0);
                     }
-                    if name.eq_ignore_ascii_case("authorization")
-                        && value.trim().eq_ignore_ascii_case(&expected)
-                    {
-                        authorized = true;
+                    if name.eq_ignore_ascii_case("authorization") {
+                        let value = value.trim();
+                        scheme = value
+                            .split(' ')
+                            .next()
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        authorized = value == expected || value == bearer;
                     }
                 }
             }
+            self.lock().schemes.push(scheme);
             while buffer.len() < head_end + 4 + length {
                 let mut chunk = [0u8; 4096];
                 match stream.read(&mut chunk).await {
@@ -1421,6 +1432,76 @@ async fn wrong_password_and_missing_service_are_typed() {
         .err()
         .expect("refused");
     assert!(matches!(err, BackendError::ConnectionRefused), "{err:?}");
+}
+
+/// Stage 14: an API token goes as `Authorization: Bearer` on every request (session, method
+/// calls, downloads, uploads, sending), never as a Basic password; a wrong one is `auth_failed`
+/// without the token in the error.
+#[tokio::test]
+async fn an_api_token_goes_as_bearer_and_never_as_a_password() {
+    let fake = Fake::start().await;
+    fake.add("mi", 1, &[]);
+    let store = Arc::new(MemoryStore::default());
+    let token = |access, auth, token: &str| {
+        let mut config = config(&fake, access);
+        // The user name plays no part in a bearer login.
+        config.username = "ignored@example.test".into();
+        config.password = Secret::new(token.to_owned());
+        config.auth = auth;
+        config
+    };
+    let mut backend = connector(&store)
+        .connect_for(
+            &token(Access::ReadOnly, mail_model::LoginAuth::Bearer, API_TOKEN),
+            Some(account()),
+        )
+        .await
+        .expect("connect with the token");
+    let inbox = backend.open_mailbox("INBOX").await.expect("inbox");
+    let messages = backend
+        .fetch_messages(&inbox, &UidSet::from_uids([1]))
+        .await
+        .expect("download");
+    assert_eq!(messages.len(), 1);
+    let sender = JmapSender::new(tls()).insecure_loopback_for_tests();
+    let write = token(Access::ReadWrite, mail_model::LoginAuth::Bearer, API_TOKEN);
+    let envelope = Envelope {
+        from: USER.into(),
+        recipients: vec!["bob@example.test".into()],
+    };
+    let outcome = sender
+        .send(
+            &write,
+            &envelope,
+            b"From: alice@example.test\r\nTo: bob@example.test\r\nSubject: Hi\r\n\r\nHi\r\n",
+        )
+        .await
+        .expect("send with the token");
+    assert!(matches!(outcome, SendOutcome::Accepted(_)), "{outcome:?}");
+    let schemes = fake.lock().schemes.clone();
+    assert!(schemes.len() >= 5, "{schemes:?}");
+    assert!(schemes.iter().all(|s| s == "bearer"), "{schemes:?}");
+    let methods = fake.methods();
+    for request in ["GET /download/", "POST /upload/", "EmailSubmission/set"] {
+        assert!(
+            methods.iter().any(|m| m.starts_with(request)),
+            "{request}: {methods:?}"
+        );
+    }
+
+    // The token as a Basic password, and a wrong token: refused, the token never shows.
+    for (auth, secret) in [
+        (mail_model::LoginAuth::Password, API_TOKEN),
+        (mail_model::LoginAuth::Bearer, "fmu1-wrong-token"),
+    ] {
+        let err = connector(&store)
+            .connect(&token(Access::ReadOnly, auth, secret))
+            .await
+            .err()
+            .expect("refused");
+        assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
+        assert!(!format!("{err:?} {err}").contains(secret), "{err:?}");
+    }
 }
 
 #[tokio::test]

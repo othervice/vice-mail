@@ -74,6 +74,57 @@ impl Protocol {
     }
 }
 
+/// What the secret of an account is (stage 14). A password (or an app password) by default;
+/// JMAP servers may take an API token instead, which the adapter sends as
+/// `Authorization: Bearer` (Fastmail's JMAP API wants one). Fixed when the account is set up;
+/// kept in the keychain like a password, under a reference that starts with
+/// [`API_TOKEN_CREDENTIAL_PREFIX`].
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum CredentialKind {
+    #[default]
+    Password,
+    /// An API token for a JMAP server (only with [`Protocol::Jmap`]).
+    ApiToken,
+}
+
+impl CredentialKind {
+    pub const fn is_password(&self) -> bool {
+        matches!(self, Self::Password)
+    }
+
+    /// Text form in settings sync records (`password`, `apiToken`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Password => "password",
+            Self::ApiToken => "apiToken",
+        }
+    }
+
+    /// The kind of the secret behind a keychain reference.
+    pub fn of_credential_ref(credential_ref: &str) -> Self {
+        if is_api_token_credential_ref(credential_ref) {
+            Self::ApiToken
+        } else {
+            Self::Password
+        }
+    }
+}
+
+/// Keychain references of accounts whose secret is an API token start with this, followed by
+/// the account's own part: `token:<uuid>`, or `token:synced:<hex>` for an account taken over
+/// from the settings sync.
+pub const API_TOKEN_CREDENTIAL_PREFIX: &str = "token:";
+
+/// Whether a keychain reference holds an API token (see [`CredentialKind::ApiToken`]).
+pub fn is_api_token_credential_ref(credential_ref: &str) -> bool {
+    credential_ref
+        .strip_prefix(API_TOKEN_CREDENTIAL_PREFIX)
+        .is_some_and(|rest| !rest.is_empty())
+}
+
 /// Where and how to reach one server (IMAP or SMTP). No password: that lives in the keychain.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -100,6 +151,11 @@ pub struct AccountSettings {
     #[serde(default, skip_serializing_if = "Protocol::is_imap")]
     #[specta(optional)]
     pub protocol: Protocol,
+    /// Stage 14: what the secret argument is. An API token only for JMAP; left out for a
+    /// password.
+    #[serde(default, skip_serializing_if = "CredentialKind::is_password")]
+    #[specta(optional)]
+    pub credential: CredentialKind,
 }
 
 impl AccountSettings {
@@ -122,6 +178,10 @@ impl AccountSettings {
                 ));
             }
             self.smtp = self.imap.clone();
+        } else if self.credential == CredentialKind::ApiToken {
+            return Err(CoreError::InvalidArgument(
+                "an API token only works with JMAP; IMAP and SMTP take a password".into(),
+            ));
         }
         let at = self.email.find('@');
         if !at.is_some_and(|i| i > 0 && i + 1 < self.email.len()) || self.email.contains(' ') {
@@ -207,6 +267,11 @@ pub struct Account {
     /// Stage 14 (decision 0042): the provider this account signs in with instead of a
     /// password (Microsoft, Google); `null` for a password.
     pub oauth: Option<crate::OAuthProvider>,
+    /// Stage 14: `apiToken` for a JMAP account that signs in with an API token; left out for a
+    /// password (and for accounts that sign in with a provider).
+    #[serde(skip_serializing_if = "CredentialKind::is_password")]
+    #[specta(optional)]
+    pub credential: CredentialKind,
     /// `false` for every new account. Only the user turns it on (stage 4); until then the
     /// adapter opens mailboxes read-only and refuses every writing command.
     pub writes_enabled: bool,
@@ -416,6 +481,7 @@ mod tests {
             username: " alice@example.org ".into(),
         };
         AccountSettings {
+            credential: Default::default(),
             email: " alice@example.org".into(),
             display_name: "Alice ".into(),
             imap: server("imap.example.org", 993, Security::Tls),
@@ -475,6 +541,40 @@ mod tests {
             Some(Protocol::Imap)
         );
         assert_eq!(Protocol::parse("pop3"), None);
+    }
+
+    #[test]
+    fn api_tokens_are_for_jmap_only_and_named_by_their_keychain_reference() {
+        let mut token = settings();
+        token.credential = CredentialKind::ApiToken;
+        let err = token.clone().validated().expect_err("IMAP with a token");
+        assert_eq!(err.code(), crate::ErrorCode::InvalidArgument);
+        token.protocol = Protocol::Jmap;
+        assert_eq!(
+            token.clone().validated().expect("JMAP").credential,
+            CredentialKind::ApiToken
+        );
+        // Left out for a password, so old records and clients are unchanged.
+        let value = serde_json::to_value(settings()).expect("serialize");
+        assert!(value.get("credential").is_none());
+        let value = serde_json::to_value(&token).expect("serialize");
+        assert_eq!(value["credential"], json!("apiToken"));
+        let parsed: AccountSettings = serde_json::from_value(value).expect("parse");
+        assert_eq!(parsed.credential, CredentialKind::ApiToken);
+
+        assert!(is_api_token_credential_ref("token:0000-1"));
+        assert!(is_api_token_credential_ref("token:synced:abcd"));
+        assert!(!is_api_token_credential_ref("token:"));
+        assert!(!is_api_token_credential_ref("0000-1"));
+        assert!(!is_api_token_credential_ref("oauth:google:0000-1"));
+        assert_eq!(
+            CredentialKind::of_credential_ref("token:x"),
+            CredentialKind::ApiToken
+        );
+        assert_eq!(
+            CredentialKind::of_credential_ref("synced:x"),
+            CredentialKind::Password
+        );
     }
 
     #[test]

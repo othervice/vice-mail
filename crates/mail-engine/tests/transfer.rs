@@ -57,6 +57,7 @@ fn settings(env: &TestEnv, who: &TestAccount) -> AccountSettings {
         username: who.address.clone(),
     };
     AccountSettings {
+        credential: Default::default(),
         protocol: Default::default(),
         email: who.address.clone(),
         display_name: who.address.clone(),

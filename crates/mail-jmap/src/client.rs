@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use mail_model::{Access, BackendError, ConnectConfig, Secret};
+use mail_model::{Access, BackendError, ConnectConfig, LoginAuth, Secret};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -117,14 +117,33 @@ impl Responses {
     }
 }
 
-/// How requests prove who they are. HTTP Basic with the keychain password for now; an OAuth
-/// bearer token (decision 0042) is one more variant here.
+/// How requests prove who they are: HTTP Basic with the keychain password, or (stage 14) a
+/// bearer token, when the configuration says [`LoginAuth::Bearer`]: an API token from the
+/// keychain (Fastmail) or an OAuth access token. Both values are marked sensitive by reqwest
+/// and are never logged.
 #[derive(Clone)]
 enum Auth {
     Basic {
         username: String,
         password: Secret<String>,
     },
+    Bearer {
+        token: Secret<String>,
+    },
+}
+
+impl Auth {
+    fn of(config: &ConnectConfig) -> Self {
+        match config.auth {
+            LoginAuth::Password => Self::Basic {
+                username: config.username.clone(),
+                password: config.password.clone(),
+            },
+            LoginAuth::Bearer => Self::Bearer {
+                token: config.password.clone(),
+            },
+        }
+    }
 }
 
 /// An HTTP client for one connection.
@@ -165,10 +184,7 @@ impl Client {
                 .build()
                 .map_err(|err| BackendError::Tls(error::short(&format!("HTTP client: {err}"))))
         };
-        let auth = Auth::Basic {
-            username: config.username.clone(),
-            password: config.password.clone(),
-        };
+        let auth = Auth::of(config);
         Ok(Self {
             http: builder(Some(config.timeouts.read))?,
             stream: builder(None)?,
@@ -210,6 +226,7 @@ impl Client {
             Auth::Basic { username, password } => {
                 request.basic_auth(username, Some(password.expose_secret()))
             }
+            Auth::Bearer { token } => request.bearer_auth(token.expose_secret()),
         }
     }
 

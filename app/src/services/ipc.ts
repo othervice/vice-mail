@@ -1782,3 +1782,5 @@ export const oauthIpc = {
 
 // ---- Stage 14 (decision 0041): JMAP ----
 export type { Protocol } from "../generated/bindings";
+/** Stage 14: a password, or an API token for a JMAP server (sent as a bearer token). */
+export type { CredentialKind } from "../generated/bindings";

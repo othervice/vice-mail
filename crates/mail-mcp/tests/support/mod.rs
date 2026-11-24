@@ -56,6 +56,7 @@ fn account(n: u128, email: &str, name: &str) -> Account {
         smtp: server,
         // Stage 14 (decision 0042): a password account.
         oauth: None,
+        credential: Default::default(),
         writes_enabled: false,
         protocol: Default::default(),
         status: AccountStatus {

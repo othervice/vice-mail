@@ -612,3 +612,94 @@ async fn accounts_that_sign_in_with_a_provider_say_so_and_are_taken_over_as_such
         .expect("record");
     assert!(record.get("oauth").is_none(), "{record}");
 }
+
+/// Stage 14: a JMAP account that signs in with an API token says so in its record (never the
+/// token) and is taken over as such, under a `token:` reference of its own; the kind needs JMAP.
+#[tokio::test]
+async fn api_token_accounts_say_so_and_are_taken_over_as_such() {
+    let (_dir, store, _recorder) = open().await;
+    let apply = |id: String, content: Value| SyncApply {
+        kind: "account".into(),
+        id: id.clone(),
+        expected: None,
+        row: Some(SyncRecordRow {
+            kind: "account".into(),
+            id,
+            version: "1764000000000-00000000-x".into(),
+            synced_version: Some("1764000000000-00000000-x".into()),
+            content: Some(content.clone()),
+            deleted_version: None,
+        }),
+        table: TableWrite::Put(content),
+        rekey_from: None,
+    };
+    let server = json!({ "host": "api.fastmail.com", "port": 443, "security": "tls",
+                         "username": "ada@fastmail.com" });
+    let content = json!({ "email": "ada@fastmail.com", "displayName": "Ada", "color": 2,
+                          "imap": server, "smtp": server, "protocol": "jmap",
+                          "signIn": "apiToken" });
+    let outcome = store
+        .apply_sync(vec![apply(account_id(8).to_string(), content)], None)
+        .await
+        .expect("apply");
+    assert_eq!(outcome.accounts_added, [account_id(8)]);
+    let adopted = store
+        .account(account_id(8))
+        .await
+        .expect("read")
+        .expect("account");
+    assert!(
+        adopted.credential_ref.starts_with("token:synced:"),
+        "{}",
+        adopted.credential_ref
+    );
+    assert!(!adopted.writes_enabled);
+    let account = adopted.into_account(mail_model::AccountStatus::connecting());
+    assert_eq!(account.credential, mail_model::CredentialKind::ApiToken);
+    assert_eq!(account.protocol, mail_model::Protocol::Jmap);
+    assert_eq!(account.oauth, None);
+    let record = store
+        .sync_table_content("account", &account_id(8).to_string())
+        .await
+        .expect("content")
+        .expect("record");
+    assert_eq!(record["signIn"], "apiToken");
+    assert_eq!(record["protocol"], "jmap");
+
+    // Not for IMAP accounts, not with a provider sign-in, no unknown kinds: nothing is added.
+    for (n, extra) in [
+        (9, json!({ "signIn": "apiToken" })),
+        (
+            10,
+            json!({ "signIn": "apiToken", "protocol": "jmap", "oauth": "google" }),
+        ),
+        (
+            11,
+            json!({ "signIn": "clientCertificate", "protocol": "jmap" }),
+        ),
+    ] {
+        let mut bad = json!({ "email": format!("x{n}@example.org"), "displayName": "",
+                              "color": 0, "imap": server, "smtp": server });
+        for (key, value) in extra.as_object().expect("object") {
+            bad[key] = value.clone();
+        }
+        let outcome = store
+            .apply_sync(vec![apply(account_id(n).to_string(), bad)], None)
+            .await
+            .expect("apply");
+        assert!(outcome.accounts_added.is_empty(), "{n}");
+        assert!(store.account(account_id(n)).await.expect("read").is_none());
+    }
+
+    // A password account's record has no such field.
+    let password = store
+        .insert_account(new_account(3, "carol@example.org"))
+        .await
+        .expect("insert");
+    let record = store
+        .sync_table_content("account", &password.id.to_string())
+        .await
+        .expect("content")
+        .expect("record");
+    assert!(record.get("signIn").is_none(), "{record}");
+}

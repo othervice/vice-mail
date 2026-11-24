@@ -97,6 +97,7 @@ async fn qa(real: Option<(String, String)>) -> Qa {
     let account = core
         .add_account(
             AccountSettings {
+                credential: Default::default(),
                 protocol: Default::default(),
                 email: "alice@fake.test".into(),
                 display_name: "Alice".into(),

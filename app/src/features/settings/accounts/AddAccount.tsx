@@ -126,7 +126,9 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   // Stage 14 (decision 0041): JMAP instead of IMAP and SMTP, chosen in the server settings.
   const jmap = useJmapChoice(email, displayName, online.data);
   const settings = jmap.protocol === "jmap" ? jmap.settings : toSettings(email, displayName, servers);
-  const ready = settings !== null && password !== "";
+  // Stage 14: a JMAP server may take an API token instead of the password.
+  const secret = jmap.usesToken ? jmap.token : password;
+  const ready = settings !== null && secret !== "";
   // Stage 14: Gmail also by its server (Google Workspace domains, servers typed in by hand).
   const providerHint =
     suggestion?.providerHint ?? (online.data?.providerHint || null) ?? (isGmailHost(servers.imap.host) ? "gmail" : null);
@@ -134,6 +136,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
   // them. Microsoft accepts no password at all, so its accounts have no password field.
   const oauthProvider = oauthProviderFor(providerHint, servers.imap.host);
   const passwordless = oauthProvider === "microsoft";
+  const passwordField = !passwordless && !jmap.usesToken;
   const lookupSettled = isEmail(email) && debouncedEmail === email.trim() && (known.isSuccess || known.isError);
   const lookupDone = lookupSettled && known.isSuccess;
   // Address first: the server part appears once the lookup for it has answered.
@@ -184,21 +187,22 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
 
   const runTest = () => {
     setAttempted(true);
-    if (!settings || !password) return;
+    if (!settings || !secret) return;
     add.reset();
-    test.mutate({ settings, password });
+    test.mutate({ settings, password: secret });
   };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setAttempted(true);
-    if (!settings || !password) return;
+    if (!settings || !secret) return;
     test.reset();
     add.mutate(
-      { settings, password },
+      { settings, password: secret },
       {
         onSuccess: (account) => {
           setPassword("");
+          jmap.setToken("");
           selectAccount(account.id);
           showMailView("inbox");
           embedded?.onAdded(account);
@@ -247,7 +251,7 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
             autoComplete="name"
             data-testid="setup-name"
           />
-          {!passwordless && (
+          {passwordField && (
             <TextField
               type="password"
               label={t("settings.accounts.setup.password")}
@@ -354,6 +358,16 @@ export function AddAccount({ embedded }: AddAccountProps = {}) {
                 }}
                 showErrors={attempted}
                 warning={warningFor("jmap", jmap.draft.host)}
+                credential={jmap.credential}
+                onCredentialChange={(credential) => {
+                  jmap.setCredential(credential);
+                  changed();
+                }}
+                token={jmap.token}
+                onTokenChange={(token) => {
+                  jmap.setToken(token);
+                  changed();
+                }}
               />
             ) : (
               <>

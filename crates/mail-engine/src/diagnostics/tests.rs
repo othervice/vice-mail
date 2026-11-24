@@ -36,6 +36,10 @@ const LOGGED_KEY: &str = "sk-live-0123456789abcdefABCDEF";
 const OAUTH_EMAIL: &str = "grace.hopper@gmail.com";
 const REFRESH_TOKEN: &str = "1//0gRefresh-Token-Of-Grace-Hopper-COBOL";
 const ACCESS_TOKEN: &str = "ya29.a0Access-Token-Of-Grace-Hopper-1959";
+// Stage 14: a JMAP account with an API token in the keychain and in a careless log line.
+const TOKEN_EMAIL: &str = "katherine.johnson@fastmail.example";
+const TOKEN_HOST: &str = "api.orbital-mechanics.example";
+const API_TOKEN: &str = "fmu1-Api-Token-Of-Katherine-Johnson-1962";
 
 fn env(log_dir: Option<PathBuf>) -> DiagnosticsEnv {
     DiagnosticsEnv {
@@ -165,7 +169,38 @@ async fn seed(core: &AppCore) -> AccountId {
         .await
         .expect("body");
     seed_oauth(core).await;
+    seed_api_token(core).await;
     id
+}
+
+/// Stage 14: a third account, over JMAP with an API token.
+async fn seed_api_token(core: &AppCore) {
+    let id: AccountId = "00000000-0000-4000-8000-000000001962".parse().expect("id");
+    let key = CredentialRef::for_api_token_account(id);
+    let server = ServerSettings {
+        host: TOKEN_HOST.into(),
+        port: 443,
+        security: Security::Tls,
+        username: TOKEN_EMAIL.into(),
+    };
+    core.store_for_tests()
+        .insert_account_with_protocol(
+            NewAccount {
+                id,
+                email: TOKEN_EMAIL.into(),
+                display_name: String::new(),
+                imap: server.clone(),
+                smtp: server,
+                credential_ref: key.to_string(),
+            },
+            mail_model::Protocol::Jmap,
+        )
+        .await
+        .expect("account");
+    core.credentials_ref()
+        .set(&key, Secret::new(API_TOKEN.to_owned()))
+        .await
+        .expect("keychain");
 }
 
 /// Stage 14: a second account that signs in with Google, with its tokens.
@@ -228,6 +263,8 @@ fn leaky_lines() -> Vec<String> {
         format!("2026-11-23T08:00:07.000001Z  WARN main mail_engine::credentials: login password={PASSWORD}"),
         format!("2026-11-23T08:00:07.500001Z DEBUG main mail_engine::oauth: token refresh_token={REFRESH_TOKEN} access_token={ACCESS_TOKEN}"),
         format!("2026-11-23T08:00:07.600001Z  WARN main mail_imap: AUTHENTICATE XOAUTH2 user={OAUTH_EMAIL}\x01auth=Bearer {ACCESS_TOKEN}"),
+        format!("2026-11-23T08:00:07.700001Z DEBUG main mail_jmap::client: POST https://{TOKEN_HOST}/jmap/api/ authorization: Bearer {API_TOKEN}"),
+        format!("2026-11-23T08:00:07.800001Z  WARN main mail_engine::credentials: api token for {TOKEN_EMAIL} is {API_TOKEN}"),
         "2026-11-23T08:00:08.000001Z  INFO main mail_engine::sync: sync-pass-marker account=00000000-0000-4000-8000-000000001815".into(),
     ]
 }
@@ -278,6 +315,12 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         "Refresh-Token-Of",
         ACCESS_TOKEN,
         "Access-Token-Of",
+        TOKEN_EMAIL,
+        "katherine",
+        TOKEN_HOST,
+        "orbital-mechanics",
+        API_TOKEN,
+        "Api-Token-Of",
     ] {
         assert!(
             !text.to_lowercase().contains(&secret.to_lowercase()),
@@ -295,18 +338,19 @@ async fn the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content() {
         &format!("architecture: {}", std::env::consts::ARCH),
         "locale: de-DE",
         "web view: 621.1.15",
-        "count: 2",
+        "count: 3",
         &format!("({account}):"),
         "sign-in: Google sign-in (refresh token in the system keychain)",
         "provider: other",
         "sign-in: password (system keychain)",
+        "sign-in: API token (system keychain)",
         "incoming: tls, port 993",
         "outgoing: tls, port 465",
         "writing: off (read-only)",
         "folders: 2 (1 without a role, 1 fully synced)",
         "messages: 1",
         "stored bodies: 1",
-        "  account: 2",
+        "  account: 3",
         "  message: 1",
         "theme: system",
         "settings sync: off",

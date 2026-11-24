@@ -200,6 +200,7 @@ fn settings(env: &TestEnv, port: u16) -> AccountSettings {
         username: env.alice.address.clone(),
     };
     AccountSettings {
+        credential: Default::default(),
         protocol: Default::default(),
         email: env.alice.address.clone(),
         display_name: "Alice".into(),

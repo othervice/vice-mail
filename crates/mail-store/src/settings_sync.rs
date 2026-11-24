@@ -509,18 +509,26 @@ pub(crate) fn content_of(
     Ok(value)
 }
 
-/// Adds `"oauth": "<provider>"` to an account's content when its keychain entry is a sign-in.
+/// Adds `"oauth": "<provider>"` to an account's content when its keychain entry is a sign-in,
+/// and (stage 14) `"signIn": "apiToken"` when it holds an API token. Never the secret.
 fn with_sign_in(conn: &Connection, uuid: &str, mut value: Value) -> Result<Value, StoreError> {
     let credential_ref: Option<String> = conn
         .prepare_cached("SELECT credential_ref FROM account WHERE uuid = ?1")?
         .query_row([uuid], |r| r.get(0))
         .optional()?;
-    if let Some(provider) = credential_ref
-        .as_deref()
-        .and_then(mail_model::oauth_provider_of_credential_ref)
-        && let Some(map) = value.as_object_mut()
-    {
-        map.insert("oauth".into(), Value::String(provider.as_str().into()));
+    let Some(credential_ref) = credential_ref else {
+        return Ok(value);
+    };
+    if let Some(map) = value.as_object_mut() {
+        if let Some(provider) = mail_model::oauth_provider_of_credential_ref(&credential_ref) {
+            map.insert("oauth".into(), Value::String(provider.as_str().into()));
+        }
+        if mail_model::is_api_token_credential_ref(&credential_ref) {
+            map.insert(
+                "signIn".into(),
+                Value::String(mail_model::CredentialKind::ApiToken.as_str().into()),
+            );
+        }
     }
     Ok(value)
 }
@@ -729,6 +737,13 @@ fn put_table(
                     Some(p) if p == "imap" || p == "jmap" => p,
                     Some(_) => return Err(refused("account protocol")),
                 };
+                // Stage 14: an account that signs in with an API token (JMAP only) keeps doing
+                // so; this device asks for the token, never for a password.
+                let api_token = match opt_text(value, "signIn") {
+                    None | Some("password") => false,
+                    Some("apiToken") if protocol == "jmap" && sign_in.is_none() => true,
+                    Some(_) => return Err(refused("account sign-in kind")),
+                };
                 conn.prepare_cached(
                     "INSERT INTO account (uuid, email, display_name, color,
                                           imap_host, imap_port, imap_security, imap_username,
@@ -756,6 +771,12 @@ fn put_table(
                             provider.as_str()
                         )
                     ])?;
+                }
+                if api_token {
+                    conn.prepare_cached(
+                        "UPDATE account SET credential_ref = ?2 || credential_ref WHERE uuid = ?1",
+                    )?
+                    .execute(params![id, mail_model::API_TOKEN_CREDENTIAL_PREFIX])?;
                 }
                 outcome.accounts_added.push(account);
             }

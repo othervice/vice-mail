@@ -1,0 +1,554 @@
+//! Stage 14 follow-ups of the JMAP adapter (decision 0041) through `AppCore` with the product
+//! connector ([`AnyConnector`]) against the local test server (Stalwart):
+//!
+//! - **API token:** a JMAP account that signs in with a token (Fastmail's way) sends it as
+//!   `Authorization: Bearer`. Stalwart has no Fastmail-style API tokens; an OAuth access token
+//!   it issued for bob stands in for one (any bearer token of the account works there).
+//!
+//! Ignored by default. Take the shared lock, start the server (any seed):
+//!
+//! ```text
+//! scripts/testmail.sh lock jmap 60 && scripts/testmail.sh start
+//! cargo test -p mail-engine --test jmap_accounts -- --include-ignored --test-threads=1
+//! scripts/testmail.sh unlock jmap
+//! ```
+//!
+//! Works with messages `<...@jmap-accounts.test>` it appends itself; they are removed before
+//! and after.
+
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
+use mail_engine::credentials::{CredentialRef, Credentials, MemorySecretStore};
+use mail_engine::protocols::{AnyBackend, AnyConnector, AnyWriter};
+use mail_engine::sync_state::BackoffPolicy;
+use mail_engine::{AppCore, BuildInfo, CoreConfig, CoreServices, OutboxConfig, SyncConfig};
+use mail_imap::test_support::{TestAccount, TestEnv};
+use mail_imap::{ImapBackend, ImapConnector};
+use mail_model::{
+    Access, AccountId, AccountSettings, AccountState, BackendError, ConnectConfig, CoreEvent,
+    CredentialKind, ErrorCode, MailAction, MailBackend, MailConnector, MessageListItem, MessageRef,
+    OperationState, Protocol, Secret, Security, ServerSettings, SyncFolderConnector, UidSet,
+    UnifiedView, WriteConnector,
+};
+use tempfile::TempDir;
+use tokio::sync::broadcast;
+use tokio::time::Instant;
+use url::Url;
+
+const WAIT: Duration = Duration::from_secs(60);
+const DOMAIN: &str = "jmap-accounts.test";
+
+fn run() -> String {
+    format!("ja{}", std::process::id())
+}
+
+// ---------------------------------------------------------------------------------------------
+// The product connector, recording which protocol and user every connection was for.
+
+/// One connection the engine opened: `read` or `write`, its protocol and its user name.
+type Opened = (&'static str, Protocol, String);
+
+#[derive(Clone, Default)]
+struct Recording {
+    inner: AnyConnector,
+    opened: Arc<Mutex<Vec<Opened>>>,
+}
+
+impl Recording {
+    fn note(&self, what: &'static str, config: &ConnectConfig) {
+        self.opened
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((what, config.protocol, config.username.clone()));
+    }
+
+    fn writers(&self) -> Vec<(Protocol, String)> {
+        self.opened
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|(what, _, _)| *what == "write")
+            .map(|(_, protocol, user)| (*protocol, user.clone()))
+            .collect()
+    }
+}
+
+impl MailConnector for Recording {
+    type Backend = AnyBackend;
+
+    async fn connect(&self, config: &ConnectConfig) -> Result<AnyBackend, BackendError> {
+        self.note("read", config);
+        self.inner.connect(config).await
+    }
+
+    fn attach_uid_map_store(&self, store: Arc<dyn mail_model::UidMapStore>) {
+        self.inner.attach_uid_map_store(store);
+    }
+}
+
+impl WriteConnector for Recording {
+    type Writer = AnyWriter;
+
+    async fn connect_writer(&self, config: &ConnectConfig) -> Result<AnyWriter, BackendError> {
+        self.note("write", config);
+        self.inner.connect_writer(config).await
+    }
+}
+
+impl SyncFolderConnector for Recording {
+    type Folder = <AnyConnector as SyncFolderConnector>::Folder;
+
+    async fn connect_sync_folder(
+        &self,
+        config: &ConnectConfig,
+        folder: &str,
+    ) -> Result<Self::Folder, BackendError> {
+        self.inner.connect_sync_folder(config, folder).await
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The server, seen over IMAP
+
+async fn imap(env: &TestEnv, who: &TestAccount) -> ImapBackend {
+    ImapConnector::new()
+        .connect(&env.config(who, Security::Tls, Access::ReadWrite))
+        .await
+        .expect("IMAP session")
+}
+
+async fn raw(admin: &mut ImapBackend, line: &str) {
+    let reply = admin
+        .raw_command(line, |_| false)
+        .await
+        .unwrap_or_else(|err| panic!("{line}: {err}"));
+    assert!(reply.ok, "{line}: {}", reply.text);
+}
+
+/// Appends a message for `to` dated now, so it is near the top of the unified inbox.
+async fn append(admin: &mut ImapBackend, to: &str, subject: &str, id: &str) {
+    let date = jiff::Timestamp::now()
+        .strftime("%a, %d %b %Y %H:%M:%S +0000")
+        .to_string();
+    let body = format!(
+        "From: Mixed Accounts <writer@{DOMAIN}>\r\nTo: {to}\r\nSubject: {subject}\r\n\
+         Date: {date}\r\nMessage-ID: <{id}>\r\n\r\nFor {to}.\r\n"
+    );
+    raw(
+        admin,
+        &format!("APPEND \"INBOX\" () {{{}+}}\r\n{body}", body.len()),
+    )
+    .await;
+}
+
+/// The flags of the message in INBOX over IMAP: (seen, flagged); `None` if it is not there.
+async fn flags(admin: &mut ImapBackend, id: &str) -> Option<(bool, bool)> {
+    let opened = admin.open_mailbox("INBOX").await.expect("select");
+    let uids = admin.search_uids(&opened).await.expect("search");
+    if uids.is_empty() {
+        return None;
+    }
+    admin
+        .fetch_headers(&opened, &uids)
+        .await
+        .expect("fetch")
+        .into_iter()
+        .find(|h| h.message_id.as_deref() == Some(id))
+        .map(|h| (h.flags.seen, h.flags.flagged))
+}
+
+async fn clean(admin: &mut ImapBackend) {
+    let opened = admin.open_mailbox("INBOX").await.expect("select");
+    let uids = admin.search_uids(&opened).await.expect("search");
+    if uids.is_empty() {
+        return;
+    }
+    let mine: Vec<u32> = admin
+        .fetch_headers(&opened, &uids)
+        .await
+        .expect("fetch")
+        .into_iter()
+        .filter(|h| {
+            h.message_id
+                .as_deref()
+                .is_some_and(|id| id.ends_with(&format!("@{DOMAIN}")))
+        })
+        .map(|h| h.uid)
+        .collect();
+    if !mine.is_empty() {
+        let set = UidSet::from_uids(mine);
+        raw(admin, &format!("UID STORE {set} +FLAGS.SILENT (\\Deleted)")).await;
+        raw(admin, &format!("UID EXPUNGE {set}")).await;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The app
+
+fn sync_config(env: &TestEnv) -> SyncConfig {
+    let mut config = SyncConfig {
+        backoff: BackoffPolicy {
+            base: Duration::from_millis(100),
+            max: Duration::from_secs(1),
+            jitter: 0.5,
+        },
+        poll_interval: Duration::from_secs(600),
+        extra_root_ca: Some(env.extra_root()),
+        ..SyncConfig::default()
+    };
+    config.timeouts.read = Duration::from_secs(10);
+    config
+}
+
+async fn start(
+    env: &TestEnv,
+    dir: &TempDir,
+    keychain: &Arc<MemorySecretStore>,
+    connector: Recording,
+) -> AppCore<Recording> {
+    let mut services =
+        CoreServices::with_connector(Credentials::new(Arc::clone(keychain)), connector);
+    services.sync = sync_config(env);
+    let mut outbox = OutboxConfig::from_sync(&services.sync);
+    outbox.linger = Duration::from_millis(500);
+    services.outbox = Some(outbox);
+    AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().join("data"),
+            build: BuildInfo {
+                version: "0.0.0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        services,
+    )
+    .await
+}
+
+fn jmap_settings(env: &TestEnv, who: &TestAccount, username: &str) -> AccountSettings {
+    let server = ServerSettings {
+        host: env.tls_name.clone(),
+        port: env.https_port,
+        security: Security::Tls,
+        username: username.to_owned(),
+    };
+    AccountSettings {
+        email: who.address.clone(),
+        display_name: String::new(),
+        imap: server.clone(),
+        smtp: server,
+        protocol: Protocol::Jmap,
+        credential: CredentialKind::Password,
+    }
+}
+
+/// Waits until every account in `ids` is idle (synced) at the same time; fails on an error.
+async fn all_idle(core: &AppCore<Recording>, ids: &[AccountId]) {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let accounts = core.list_accounts().await.expect("accounts");
+        for account in &accounts {
+            assert_ne!(
+                account.status.state,
+                AccountState::Error,
+                "{}: {:?}",
+                account.email,
+                account.status
+            );
+        }
+        if ids.iter().all(|id| {
+            accounts
+                .iter()
+                .any(|a| a.id == *id && a.status.state == AccountState::Idle)
+        }) {
+            return;
+        }
+        assert!(Instant::now() < deadline, "idle: {accounts:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// The unified inbox, all pages.
+async fn unified(core: &AppCore<Recording>) -> Vec<MessageListItem> {
+    let mut items = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = core
+            .list_unified_inbox(UnifiedView::All, cursor, 500)
+            .await
+            .expect("unified inbox");
+        items.extend(page.items);
+        match page.next_cursor {
+            Some(next) => cursor = Some(next),
+            None => return items,
+        }
+    }
+}
+
+/// Polls the unified inbox until `subject` is there and `pred` holds for it.
+async fn until(
+    core: &AppCore<Recording>,
+    subject: &str,
+    pred: impl Fn(&MessageListItem) -> bool,
+) -> MessageListItem {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        if let Some(item) = unified(core)
+            .await
+            .into_iter()
+            .find(|i| i.subject == subject && pred(i))
+        {
+            return item;
+        }
+        assert!(Instant::now() < deadline, "{subject} as expected");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn settled(events: &mut broadcast::Receiver<CoreEvent>, batch: mail_model::BatchId) {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let event = tokio::time::timeout_at(deadline, events.recv())
+            .await
+            .expect("operation settled in time");
+        if let Ok(CoreEvent::OperationsChanged { operations, .. }) = event
+            && let Some(op) = operations.iter().find(|o| o.batch == batch)
+        {
+            match op.state {
+                OperationState::Confirmed => return,
+                OperationState::Conflict | OperationState::Failed => {
+                    panic!("operation ended {:?}: {op:?}", op.state)
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn at(item: &MessageListItem) -> MessageRef {
+    MessageRef {
+        mailbox_id: item.mailbox_id,
+        message_id: item.id,
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stalwart's OAuth, for a bearer token of bob
+
+fn http_port(env: &TestEnv) -> u16 {
+    let text =
+        std::fs::read_to_string(env.repo.join("testmail/accounts.env")).expect("accounts.env");
+    text.lines()
+        .find_map(|l| l.trim().strip_prefix("export TESTMAIL_HTTP_PORT="))
+        .and_then(|v| v.trim().parse().ok())
+        .expect("TESTMAIL_HTTP_PORT")
+}
+
+async fn post(url: Url, content_type: &str, body: String) -> (u16, serde_json::Value) {
+    let tls = mail_imap::tls::client_config(None).expect("tls");
+    let response = reqwest::Client::builder()
+        .tls_backend_preconfigured(Arc::unwrap_or_clone(tls))
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .build()
+        .expect("client")
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, content_type)
+        .body(body)
+        .send()
+        .await
+        .expect("request");
+    let status = response.status().as_u16();
+    let bytes = response.bytes().await.expect("answer");
+    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+}
+
+/// An access token Stalwart issues for `who` (authorization code with PKCE through its login
+/// API, as a person in the browser would). Stalwart accepts it as a bearer token over JMAP.
+async fn bearer_token(env: &TestEnv, who: &TestAccount) -> Secret<String> {
+    let base = Url::parse(&format!("http://127.0.0.1:{}", http_port(env))).expect("base");
+    let scope = "urn:ietf:params:oauth:scope:mail offline_access";
+    let redirect = "http://127.0.0.1:40997/";
+    let json = "application/json";
+    let (_, registered) = post(
+        base.join("/auth/register").expect("url"),
+        json,
+        serde_json::json!({
+            "client_name": "Vice Mail API token test",
+            "redirect_uris": [redirect],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "application_type": "native",
+            "scope": scope,
+        })
+        .to_string(),
+    )
+    .await;
+    let client_id = registered["client_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("client registration: {registered}"))
+        .to_owned();
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("client_id", &client_id)
+        .append_pair("response_type", "code")
+        .append_pair("redirect_uri", redirect)
+        .append_pair("scope", scope)
+        .append_pair("state", "api-token")
+        // RFC 7636, appendix B.
+        .append_pair(
+            "code_challenge",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        )
+        .append_pair("code_challenge_method", "S256")
+        .finish();
+    let api = base.join("/api/auth").expect("url");
+    let (_, mut answer) = post(
+        api.clone(),
+        json,
+        serde_json::json!({"type": "authCode", "accountName": who.address,
+                           "accountSecret": who.password.expose_secret(), "query": query})
+        .to_string(),
+    )
+    .await;
+    if answer["type"] == "consentRequired" {
+        answer = post(
+            api,
+            json,
+            serde_json::json!({"type": "authConsent", "token": answer["token"],
+                               "query": query, "consent": true})
+            .to_string(),
+        )
+        .await
+        .1;
+    }
+    let location = Url::parse(
+        answer["location"]
+            .as_str()
+            .unwrap_or_else(|| panic!("login: {answer}")),
+    )
+    .expect("location");
+    let code = location
+        .query_pairs()
+        .find(|(k, _)| k == "code")
+        .map(|(_, v)| v.into_owned())
+        .expect("code");
+    let form = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", &code)
+        .append_pair("redirect_uri", redirect)
+        .append_pair("client_id", &client_id)
+        .append_pair(
+            "code_verifier",
+            "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        )
+        .finish();
+    let (status, token) = post(
+        base.join("/auth/token").expect("url"),
+        "application/x-www-form-urlencoded",
+        form,
+    )
+    .await;
+    assert_eq!(status, 200, "token answer {token}");
+    Secret::new(
+        token["access_token"]
+            .as_str()
+            .expect("access token")
+            .to_owned(),
+    )
+}
+
+// ---------------------------------------------------------------------------------------------
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_jmap_account_signs_in_with_an_api_token_as_a_bearer_token() {
+    let env = TestEnv::require();
+    let run = run();
+    let mut bob = imap(&env, &env.bob).await;
+    clean(&mut bob).await;
+    let subject = format!("{run} token");
+    let id = format!("{run}-token@{DOMAIN}");
+    append(&mut bob, &env.bob.address, &subject, &id).await;
+    let token = bearer_token(&env, &env.bob).await;
+
+    let dir = TempDir::new().expect("temp dir");
+    let keychain: Arc<MemorySecretStore> = Arc::default();
+    let connector = Recording::default();
+    let core = start(&env, &dir, &keychain, connector.clone()).await;
+    let mut events = core.subscribe();
+    // A bearer token does not need the user name: one that does not exist proves the token
+    // signed in, not a user name and password.
+    let mut settings = jmap_settings(&env, &env.bob, "nobody@vicemail.test");
+    settings.credential = CredentialKind::ApiToken;
+
+    // The password is not a token, and a token is not a password.
+    let err = core
+        .test_connection(settings.clone(), env.bob.password.clone())
+        .await
+        .expect_err("a password as a bearer token");
+    assert_eq!(err.code(), ErrorCode::AuthFailed, "{err}");
+    let mut as_password = jmap_settings(&env, &env.bob, &env.bob.address);
+    as_password.credential = CredentialKind::Password;
+    let err = core
+        .test_connection(as_password, token.clone())
+        .await
+        .expect_err("a token as a password");
+    assert_eq!(err.code(), ErrorCode::AuthFailed, "{err}");
+    assert!(
+        !format!("{err:?} {err}").contains(token.expose_secret().as_str()),
+        "the token never shows in an error"
+    );
+
+    let tested = core
+        .test_connection(settings.clone(), token.clone())
+        .await
+        .expect("test with the token");
+    assert!(tested.capabilities.jmap && tested.capabilities.idle);
+    let account = core
+        .add_account(settings, token.clone())
+        .await
+        .expect("add with the token");
+    assert_eq!(account.credential, CredentialKind::ApiToken);
+    assert_eq!(account.protocol, Protocol::Jmap);
+    assert!(!account.writes_enabled);
+    let key = CredentialRef::for_api_token_account(account.id);
+    assert_eq!(
+        Credentials::new(Arc::clone(&keychain))
+            .get(&key)
+            .await
+            .expect("keychain")
+            .map(Secret::into_exposed)
+            .as_deref(),
+        Some(token.expose_secret().as_str()),
+        "the token is kept in the keychain like a password"
+    );
+    all_idle(&core, &[account.id]).await;
+    let item = until(&core, &subject, |_| true).await;
+    assert_eq!(item.account_id, account.id);
+
+    // Writing with the token: through the outbox to the server.
+    core.set_writes_enabled(account.id, true)
+        .await
+        .expect("writes on");
+    let flagged = core
+        .apply_action(MailAction::Flag, vec![at(&item)], "flag".into())
+        .await
+        .expect("flag");
+    settled(&mut events, flagged.batch.expect("batch")).await;
+    assert_eq!(flags(&mut bob, &id).await, Some((false, true)));
+    assert!(
+        connector
+            .writers()
+            .iter()
+            .all(|(p, user)| *p == Protocol::Jmap && user == "nobody@vicemail.test"),
+        "{:?}",
+        connector.writers()
+    );
+
+    core.shutdown().await;
+    clean(&mut bob).await;
+    bob.logout().await.ok();
+}

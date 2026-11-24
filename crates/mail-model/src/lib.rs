@@ -52,9 +52,10 @@ mod views;
 mod writer;
 
 pub use account::{
-    Account, AccountColor, AccountSettings, AccountState, AccountStatus, ConnectionTestResult,
-    DiscoveryResult, DiscoverySource, Identity, Protocol, ProviderHint, Security, ServerSettings,
-    ServerWarning, ServerWarnings, SyncProgress,
+    API_TOKEN_CREDENTIAL_PREFIX, Account, AccountColor, AccountSettings, AccountState,
+    AccountStatus, ConnectionTestResult, CredentialKind, DiscoveryResult, DiscoverySource,
+    Identity, Protocol, ProviderHint, Security, ServerSettings, ServerWarning, ServerWarnings,
+    SyncProgress, is_api_token_credential_ref,
 };
 pub use ai::{
     AI_REQUEST_MAX_ENTRIES, AI_REQUEST_RETENTION_DAYS, AiAccountCloud, AiAnswer, AiAvailability,

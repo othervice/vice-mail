@@ -530,7 +530,10 @@ impl<C: Connector> AppCore<C> {
     ) -> Result<ConnectionTestResult, CoreError> {
         let settings = settings.validated()?;
         if settings.protocol == mail_model::Protocol::Jmap {
-            let capabilities = self.check_jmap(&settings, password, true).await?;
+            let auth = secret_auth(settings.credential);
+            let capabilities = self
+                .check_jmap(&settings.imap, password, auth, true)
+                .await?;
             return Ok(ConnectionTestResult { capabilities });
         }
         let capabilities = self.check_login(&settings.imap, password.clone()).await?;
@@ -557,14 +560,20 @@ impl<C: Connector> AppCore<C> {
             return Err(CoreError::AccountExists(settings.email));
         }
         if settings.protocol == mail_model::Protocol::Jmap {
-            self.check_jmap(&settings, password.clone(), false).await?;
+            let auth = secret_auth(settings.credential);
+            self.check_jmap(&settings.imap, password.clone(), auth, false)
+                .await?;
         } else {
             self.check_login(&settings.imap, password.clone()).await?;
         }
 
         let _admin = self.inner.admin.lock().await;
         let id = AccountId::from_uuid(uuid::Uuid::new_v4());
-        let key = CredentialRef::for_account(id);
+        // Stage 14: an API token is kept like a password, under a reference that says so.
+        let key = match settings.credential {
+            mail_model::CredentialKind::Password => CredentialRef::for_account(id),
+            mail_model::CredentialKind::ApiToken => CredentialRef::for_api_token_account(id),
+        };
         self.inner.credentials.set(&key, password.clone()).await?;
         let new = NewAccount {
             id,
@@ -667,7 +676,14 @@ impl<C: Connector> AppCore<C> {
                 provider.name()
             )));
         }
-        self.check_login(&account.imap, password.clone()).await?;
+        // Stage 14: a JMAP account is checked over JMAP, with its API token as a bearer token.
+        if account.protocol == mail_model::Protocol::Jmap {
+            let auth = crate::credentials::secret_auth(&account.credential_ref);
+            self.check_jmap(&account.imap, password.clone(), auth, false)
+                .await?;
+        } else {
+            self.check_login(&account.imap, password.clone()).await?;
+        }
         let _admin = self.inner.admin.lock().await;
         let key = CredentialRef::parse(&account.credential_ref)?;
         self.inner.credentials.set(&key, password.clone()).await?;
@@ -1132,16 +1148,18 @@ impl<C: Connector> AppCore<C> {
     }
 
     /// Stage 14 (decision 0041): the login check of a JMAP account: the session resource with
-    /// the password, read-only; with `sending`, also that the account may submit mail. Own
-    /// task, as for IMAP.
+    /// the password (or an API token as a bearer token), read-only; with `sending`, also that
+    /// the account may submit mail. Own task, as for IMAP.
     async fn check_jmap(
         &self,
-        settings: &AccountSettings,
+        server: &ServerSettings,
         password: Secret<String>,
+        auth: mail_model::LoginAuth,
         sending: bool,
     ) -> Result<Capabilities, CoreError> {
-        let mut config = self.inner.sync.connect_config(&settings.imap, password);
+        let mut config = self.inner.sync.connect_config(server, password);
         config.protocol = mail_model::Protocol::Jmap;
+        config.auth = auth;
         let connector = Arc::clone(&self.inner.connector);
         let sender = Arc::clone(&self.inner.sender);
         let task = tokio::spawn(async move {
@@ -1611,4 +1629,12 @@ fn decode<T: DeserializeOwned + Default>(key: &str, json: &str) -> T {
         tracing::warn!(key, %err, "stored setting has an unknown value, using the default");
         T::default()
     })
+}
+
+/// How the secret of a new account is sent (stage 14): an API token as a bearer token.
+fn secret_auth(credential: mail_model::CredentialKind) -> mail_model::LoginAuth {
+    match credential {
+        mail_model::CredentialKind::Password => mail_model::LoginAuth::Password,
+        mail_model::CredentialKind::ApiToken => mail_model::LoginAuth::Bearer,
+    }
 }

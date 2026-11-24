@@ -18,6 +18,10 @@
 //! never be sent as a password; connections ask [`Credentials::login`], which hands out an
 //! access token for the provider's own servers only.
 //!
+//! Stage 14: JMAP accounts that sign in with an API token (Fastmail) have a reference
+//! `token:<id>`; the entry holds the token like a password, and [`Credentials::login`] hands it
+//! out as a bearer token ([`LoginAuth::Bearer`]), never as a password.
+//!
 //! No secret ever reaches a log line or an error text: values are only handled as
 //! [`Secret<String>`], and keychain errors are mapped to [`CoreError::Keychain`] without the
 //! data some platform errors carry (see [`keychain_error`]).
@@ -64,6 +68,11 @@ impl CredentialRef {
             mail_model::OAUTH_CREDENTIAL_PREFIX,
             provider.as_str()
         ))
+    }
+
+    /// Stage 14: the entry of a JMAP account whose secret is an API token, `token:<uuid>`.
+    pub fn for_api_token_account(id: AccountId) -> Self {
+        Self(format!("{}{id}", mail_model::API_TOKEN_CREDENTIAL_PREFIX))
     }
 
     /// The provider whose sign-in this entry holds; `None` for a password or another secret.
@@ -209,7 +218,7 @@ impl Credentials {
             })?;
             return Ok(Login {
                 secret: password,
-                auth: LoginAuth::Password,
+                auth: secret_auth(credential_ref),
             });
         };
         let service = self
@@ -368,6 +377,16 @@ impl Credentials {
         tokio::task::spawn_blocking(move || op(store.as_ref(), &key))
             .await
             .map_err(|err| CoreError::Internal(format!("keychain task failed: {err}")))?
+    }
+}
+
+/// How the secret stored under `credential_ref` is sent: an API token (stage 14) as a bearer
+/// token, anything else as a password. Sign-in entries never get here as a secret.
+pub(crate) fn secret_auth(credential_ref: &str) -> LoginAuth {
+    if mail_model::is_api_token_credential_ref(credential_ref) {
+        LoginAuth::Bearer
+    } else {
+        LoginAuth::Password
     }
 }
 

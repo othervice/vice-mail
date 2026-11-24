@@ -163,6 +163,8 @@ function ServerChangeNotice({ account }: { account: Account }) {
 
 function PasswordChange({ account }: { account: Account }) {
   const { t } = useTranslation();
+  // Stage 14: a JMAP account with an API token replaces its token here.
+  const texts = account.credential === "apiToken" ? "apiToken" : "password";
   const [password, setPassword] = useState("");
   const update = useUpdatePassword();
   const submit = (event: FormEvent) => {
@@ -178,11 +180,11 @@ function PasswordChange({ account }: { account: Account }) {
     );
   };
   return (
-    <Block title={t("settings.accounts.detail.password.title")} description={t("settings.accounts.detail.password.description")}>
+    <Block title={t(`settings.accounts.detail.${texts}.title`)} description={t(`settings.accounts.detail.${texts}.description`)}>
       <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-3" data-testid="password-form">
         <TextField
           type="password"
-          label={t("settings.accounts.detail.password.label")}
+          label={t(`settings.accounts.detail.${texts}.label`)}
           value={password}
           onChange={(next) => {
             setPassword(next);
@@ -192,11 +194,11 @@ function PasswordChange({ account }: { account: Account }) {
         />
         <div>
           <Button type="submit" variant="secondary" disabled={!password || update.isPending}>
-            {update.isPending ? t("settings.accounts.detail.password.saving") : t("settings.accounts.detail.password.save")}
+            {update.isPending ? t(`settings.accounts.detail.${texts}.saving`) : t(`settings.accounts.detail.${texts}.save`)}
           </Button>
         </div>
-        {update.isSuccess && <Notice tone="success" role="status" title={t("settings.accounts.detail.password.saved")} />}
-        {update.isError && <ErrorNotice context={t("settings.accounts.detail.password.failed")} error={update.error} />}
+        {update.isSuccess && <Notice tone="success" role="status" title={t(`settings.accounts.detail.${texts}.saved`)} />}
+        {update.isError && <ErrorNotice context={t(`settings.accounts.detail.${texts}.failed`)} error={update.error} />}
       </form>
     </Block>
   );

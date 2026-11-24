@@ -67,6 +67,7 @@ impl StoredAccount {
             display_name: self.display_name,
             color: self.color,
             oauth: mail_model::oauth_provider_of_credential_ref(&self.credential_ref),
+            credential: mail_model::CredentialKind::of_credential_ref(&self.credential_ref),
             imap: self.imap,
             smtp: self.smtp,
             writes_enabled: self.writes_enabled,

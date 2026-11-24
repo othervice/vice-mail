@@ -800,6 +800,11 @@ export type Account = {
 	 */
 	oauth: OAuthProvider | null,
 	/**
+	 *  Stage 14: `apiToken` for a JMAP account that signs in with an API token; left out for a
+	 *  password (and for accounts that sign in with a provider).
+	 */
+	credential?: CredentialKind,
+	/**
 	 *  `false` for every new account. Only the user turns it on (stage 4); until then the
 	 *  adapter opens mailboxes read-only and refuses every writing command.
 	 */
@@ -860,6 +865,11 @@ export type AccountSettings = {
 	 *  options. With JMAP, `imap` names the JMAP server and `smtp` is replaced by a copy of it.
 	 */
 	protocol?: Protocol,
+	/**
+	 *  Stage 14: what the secret argument is. An API token only for JMAP; left out for a
+	 *  password.
+	 */
+	credential?: CredentialKind,
 };
 
 /**  Coarse sync state of an account, for the status indicator. */
@@ -1972,6 +1982,17 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  *  ready to install, a failure).
  */
 { type: "updateStatusChanged"; status: UpdateStatus };
+
+/**
+ *  What the secret of an account is (stage 14). A password (or an app password) by default;
+ *  JMAP servers may take an API token instead, which the adapter sends as
+ *  `Authorization: Bearer` (Fastmail's JMAP API wants one). Fixed when the account is set up;
+ *  kept in the keychain like a password, under a reference that starts with
+ *  [`API_TOKEN_CREDENTIAL_PREFIX`].
+ */
+export type CredentialKind = "password" | 
+/**  An API token for a JMAP server (only with [`Protocol::Jmap`]). */
+"apiToken";
 
 export type DateSection = {
 	kind: DateSectionKind,

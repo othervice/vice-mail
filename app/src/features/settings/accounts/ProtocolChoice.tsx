@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChoiceGroup, type ChoiceOption } from "../../../components/ChoiceGroup";
 import { TextField } from "../../../components/TextField";
-import type { Protocol } from "../../../services/ipc";
+import type { CredentialKind, Protocol } from "../../../services/ipc";
 import { serverErrors, type ServerDraft } from "./serverDraft";
 
 interface ProtocolChoiceProps {
@@ -40,13 +40,34 @@ interface JmapFieldsProps {
   showErrors: boolean;
   /** Security review N-4: the warning for a server the online search found. */
   warning?: ReactNode;
+  /** Stage 14: the password (the field at the top) or an API token (the field here). */
+  credential: CredentialKind;
+  onCredentialChange: (credential: CredentialKind) => void;
+  token: string;
+  onTokenChange: (token: string) => void;
 }
 
-/** Host, port and user name of a JMAP server. Always HTTPS, so there is no security choice. */
-export function JmapFields({ draft, onChange, showErrors, warning }: JmapFieldsProps) {
+/**
+ * Host, port and user name of a JMAP server. Always HTTPS, so there is no security choice.
+ * Stage 14: the sign-in, with a password or an API token (Fastmail's JMAP wants one).
+ */
+export function JmapFields({
+  draft,
+  onChange,
+  showErrors,
+  warning,
+  credential,
+  onCredentialChange,
+  token,
+  onTokenChange,
+}: JmapFieldsProps) {
   const { t } = useTranslation();
   const errors = showErrors ? serverErrors(draft) : null;
   const host = draft.host.trim() || t("settings.accounts.setup.jmap.hostPlaceholder");
+  const signInOptions: ChoiceOption<CredentialKind>[] = [
+    { value: "password", label: t("settings.accounts.setup.jmap.signInOptions.password") },
+    { value: "apiToken", label: t("settings.accounts.setup.jmap.signInOptions.apiToken") },
+  ];
   return (
     <fieldset
       className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
@@ -87,6 +108,24 @@ export function JmapFields({ draft, onChange, showErrors, warning }: JmapFieldsP
         error={errors?.username ? t("settings.accounts.setup.required") : null}
         data-testid="jmap-username"
       />
+      <ChoiceGroup
+        label={t("settings.accounts.setup.jmap.signIn")}
+        value={credential}
+        options={signInOptions}
+        onChange={onCredentialChange}
+      />
+      {credential === "apiToken" && (
+        <TextField
+          type="password"
+          label={t("settings.accounts.setup.jmap.apiToken")}
+          description={t("settings.accounts.setup.jmap.apiTokenHint")}
+          value={token}
+          onChange={onTokenChange}
+          required
+          error={showErrors && !token ? t("settings.accounts.setup.required") : null}
+          data-testid="jmap-api-token"
+        />
+      )}
     </fieldset>
   );
 }
