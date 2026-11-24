@@ -365,7 +365,10 @@ export function MessageRowContent({
       className="flex h-5 max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 flex-wrap items-center justify-end gap-x-1 overflow-hidden"
       data-testid="row-account"
     >
-      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
+      {/* As tall as the label, so a name that wraps lands wholly on the hidden second line. */}
+      <span className="flex h-5 shrink-0 items-center">
+        <span aria-hidden className={cx("size-(--ui-dot) rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
+      </span>
       <span
         className="h-5 max-w-[calc(var(--ui-row-account-width)-var(--ui-dot)-var(--ui-space-1))] min-w-0 truncate text-12 leading-5 text-secondary"
         data-testid="row-account-name"
