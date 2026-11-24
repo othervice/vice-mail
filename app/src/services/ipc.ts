@@ -895,6 +895,8 @@ export const comfortIpc = {
     done(call(() => comfortCommands.setTask(messageIds, mark))),
   listSnoozed: (scope: MarkScope): Promise<MessageListItem[]> => call(() => comfortCommands.listSnoozed(scope)),
   listPinned: (scope: MarkScope): Promise<MessageListItem[]> => call(() => comfortCommands.listPinned(scope)),
+  /** Flagged on the server (`\Flagged`, JMAP `$flagged`) in any folder but Trash and Junk, newest first. */
+  listFlagged: (scope: MarkScope): Promise<MessageListItem[]> => call(() => comfortCommands.listFlagged(scope)),
   listTasks: (scope: MarkScope, filter: TaskFilter): Promise<MessageListItem[]> =>
     call(() => comfortCommands.listTasks(scope, filter)),
 

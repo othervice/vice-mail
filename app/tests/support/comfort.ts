@@ -97,6 +97,8 @@ export function createComfortFake(
     messagesIn: (mailboxId: number) => MessageListItem[];
     listMessages: (mailboxId: number, cursor: number | null, limit: number) => MessagePage;
     reject: (code: "invalid_argument" | "not_found") => Promise<never>;
+    /** The role of a mailbox, for the Flagged view (it leaves Trash and Junk out). */
+    roleOf?: (mailboxId: number) => string | undefined;
   },
 ): ComfortFake {
   let inboxSettings: InboxSettings = options.inboxSettings ?? {
@@ -249,6 +251,12 @@ export function createComfortFake(
           .sort((a, b) => (a.snooze?.until ?? 0) - (b.snooze?.until ?? 0));
       case "list_pinned":
         return all().filter((item) => item.pinned);
+      case "list_flagged": {
+        const left = new Set(["trash", "junk"]);
+        return all()
+          .filter((item) => item.flagged && !left.has(core.roleOf?.(item.mailboxId) ?? ""))
+          .sort((a, b) => b.date - a.date);
+      }
       case "list_tasks": {
         const filter = args["filter"] as "open" | "done" | "all";
         return all().filter((item) => item.task && (filter === "all" || (filter === "done") === item.task.done));

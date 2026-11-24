@@ -24,7 +24,7 @@ import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore, type MailViewId } from ".
 import { StatusGroup } from "./IconRail";
 
 /** Views of the column that belong to no single folder (the role folders are in each account). */
-const COLUMN_VIEWS = ["later", "tasks", "readingList", "pinnedAttachments", "pinned", "savedViews"] as const satisfies readonly MailViewId[];
+const COLUMN_VIEWS = ["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews"] as const satisfies readonly MailViewId[];
 
 /**
  * "Views": the views across folders, one tree (one Tab stop) under its label, which folds it. The

@@ -45,7 +45,8 @@ steht im Abschnitt „Feinschliff 23.11.2026“ und in `docs/decisions/0031-fein
 **Seitenspalte** (Standard, 240 px, siehe „Seitenspalte“): vereinter Posteingang, Ansichten,
 gespeicherte Suchen, Favoriten, dann jedes Konto mit seinen Ordnern, unten Aktivität, Ausgang,
 Einstellungen. Eingeklappt bleibt die **Icon-Leiste** (56 px). Von oben: vereinter Posteingang,
-Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Angepinnt, Gesendet,
+Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Markiert (die Markierung
+des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, Gesendet,
 Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf), gespeicherte Ansichten. Unten:
 Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
@@ -297,7 +298,7 @@ Die bisherige ausklappbare Seitenleiste ist dazu umgebaut (`app/src/app/SidebarC
 Fensterknöpfe), rechts der Knopf „Seitenleiste ausblenden“. Dann „Alle Posteingänge“ mit der Zahl
 der ungelesenen Mails aller nicht ausgeblendeten Konten, darunter die Kontogruppen (nur ab zwei
 Konten oder mit Gruppen). Dann „Ansichten“: Später, Aufgaben, Zum Lesen, Angeheftete Anhänge,
-Angepinnt, Gespeicherte Ansichten. Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
+Markiert, Angepinnt, Gespeicherte Ansichten. Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
 in jedem Konto: Der Kern kennt vereinte Ansichten nur für den Posteingang (`UnifiedView`). Dann
 gespeicherte Suchen, Favoriten, danach je Konto ein Baum. Unten, mit Haarlinie abgesetzt, Aktivität,
 Ausgang und Einstellungen mit ihren Zählern. Ohne Konto: Ansichten, der Hinweis „Noch kein Konto“

@@ -11,6 +11,7 @@ export const de: Translation = {
     readingList: "Zum Lesen",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Angeheftete Anhänge",
+    flagged: "Markiert",
     pinned: "Angepinnt",
     sent: "Gesendet",
     drafts: "Entwürfe",
@@ -2115,6 +2116,10 @@ export const de: Translation = {
       tasks: {
         emptyTitle: "Keine Aufgaben",
         emptyBody: "Markierst du eine Mail als Aufgabe, steht sie hier, bis du sie abhakst.",
+      },
+      flagged: {
+        emptyTitle: "Nichts markiert",
+        emptyBody: "Markierst du eine Mail, steht sie hier, aus jedem Ordner außer Papierkorb und Spam. Die Markierung liegt auf dem Server.",
       },
     },
     tasks: {

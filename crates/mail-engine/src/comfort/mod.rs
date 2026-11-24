@@ -940,6 +940,17 @@ impl<C: Connector> AppCore<C> {
         self.mark_view(MarkView::Pinned, scope).await
     }
 
+    /// "Markiert": messages flagged on the server (IMAP `\Flagged`, JMAP `$flagged`) in any
+    /// folder of the scope's accounts but Trash and Junk, the newest first, each once (at most
+    /// 1,000), shown in its inbox where it is flagged there.
+    pub async fn list_flagged(&self, scope: MarkScope) -> Result<Vec<MessageListItem>, CoreError> {
+        let (accounts, prefer) = self.mark_scope(scope).await?;
+        Ok(self
+            .store_ref()?
+            .flagged_view(accounts, prefer, MAX_MARK_VIEW)
+            .await?)
+    }
+
     /// "Aufgaben": task messages of the scope (open, done or all), the newest task first.
     pub async fn list_tasks(
         &self,

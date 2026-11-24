@@ -11,6 +11,8 @@ export const MAIL_VIEW_IDS = [
   "readingList",
   // Stage 16 (decision 0036): pinned attachments ("Angeheftete Anhänge"), next to it.
   "pinnedAttachments",
+  // SPEC "Markiert": what carries the server's flag, in every folder but Trash and Junk.
+  "flagged",
   "pinned",
   "sent",
   "drafts",

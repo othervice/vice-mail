@@ -210,6 +210,18 @@ pub async fn list_pinned(
     core.list_pinned(scope).await.map_err(to_ipc("list_pinned"))
 }
 
+/// "Markiert": messages flagged on the server in any folder but Trash and Junk, the newest first.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_flagged(
+    core: State<'_, AppCore>,
+    scope: MarkScope,
+) -> Result<Vec<MessageListItem>, IpcError> {
+    core.list_flagged(scope)
+        .await
+        .map_err(to_ipc("list_flagged"))
+}
+
 /// "Aufgaben": open, done or all tasks, the newest first.
 #[tauri::command]
 #[specta::specta]

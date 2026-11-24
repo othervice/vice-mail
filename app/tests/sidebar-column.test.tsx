@@ -108,6 +108,7 @@ describe("accounts-and-folders column", () => {
       "Tasks",
       "Reading list",
       "Pinned attachments",
+      "Flagged",
       "Pinned",
       "Saved views",
     ]);
@@ -227,7 +228,7 @@ describe("accounts-and-folders column", () => {
       label.focus();
     });
     await user.keyboard("{ArrowRight}");
-    expect(within(views).getAllByRole("treeitem")).toHaveLength(7);
+    expect(within(views).getAllByRole("treeitem")).toHaveLength(8);
     await user.keyboard("{ArrowDown}");
     expect(document.activeElement?.textContent).toBe("Later");
     await user.keyboard("{ArrowLeft}{ArrowLeft}");

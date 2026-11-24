@@ -811,6 +811,8 @@ export const APP_COMMAND_IDS = [
   // Stage 16 (decision 0036): pinned attachments; no shortcut of its own (Cmd/Ctrl+0 resets the
   // zoom in web views), the user can give it one.
   "goPinnedAttachments",
+  // SPEC "Markiert": flagged mail of every folder; no shortcut of its own either.
+  "goFlagged",
   // The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): open or fold it.
   "toggleSidebar",
 ] as const;
@@ -829,6 +831,7 @@ export const VIEW_COMMANDS = {
   goTrash: "trash",
   goReadingList: "readingList",
   goPinnedAttachments: "pinnedAttachments",
+  goFlagged: "flagged",
 } as const satisfies Partial<Record<AppCommandId, MailViewId>>;
 
 export type ViewCommandId = keyof typeof VIEW_COMMANDS;
@@ -876,6 +879,7 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   goTrash: viewCommand("goTrash", 8),
   goReadingList: viewCommand("goReadingList", 9),
   goPinnedAttachments: { id: "goPinnedAttachments", icon: MAIL_VIEW_ICONS.pinnedAttachments, shortcuts: both() },
+  goFlagged: { id: "goFlagged", icon: MAIL_VIEW_ICONS.flagged, shortcuts: both() },
   // Cmd/Ctrl+Shift+S ("sidebar"): with a modifier, so it also works from text fields and is no
   // type-ahead letter in the trees; the system claims neither.
   toggleSidebar: { id: "toggleSidebar", icon: PanelLeft, shortcuts: both({ key: "S", shift: true, mod: true }) },

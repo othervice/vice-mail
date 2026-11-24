@@ -239,6 +239,10 @@ einer klaren Meldung abgelehnt.
   über die eindeutigen Indizes von `pin` und `snooze`). Je Zeile zählen Anzahl und Ungelesene über
   alle Mails des Threads (`message_thread`, `loc_message` per `INDEXED BY`), Teilnehmer, Anhang und
   Markierung kommen aus den neuesten 200 Mails. Keine Migration.
+- Ansicht „Markiert“ (SPEC, 24.11.2026): `\Flagged` (JMAP `$flagged`) je Postfach der Konten außer
+  Papierkorb und Spam als Bereich des Teilindex `loc_flagged`, per `UNION ALL` gemischt; jede Mail
+  einmal, im Posteingang, wenn sie dort markiert ist, sonst im neuesten Ordner, in dem sie es ist;
+  höchstens 1.000 in einer Antwort wie die übrigen Markierungsansichten (`listFlagged`). Keine Migration.
 - Aus der Nachmessung Stufe 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): Abfragen auf
   einen Teilindex, der nach einem Nachholauf leer wird (`message_category_todo`,
   `message_contacts_todo`), nennen ihn per `INDEXED BY`. `PRAGMA optimize` beim Schließen hält

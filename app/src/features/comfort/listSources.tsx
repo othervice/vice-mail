@@ -1,5 +1,5 @@
 import { useInfiniteQuery, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { BookOpen, Clock, Inbox, ListTodo, Pin, Zap } from "lucide-react";
+import { BookOpen, Clock, Flag, Inbox, ListTodo, Pin, Zap } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
@@ -263,7 +263,7 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
   );
 
   const markKind: MarkListKind =
-    kind === "later" || kind === "pinned" || kind === "tasks" || kind === "readingList" ? kind : "later";
+    kind === "later" || kind === "pinned" || kind === "tasks" || kind === "readingList" || kind === "flagged" ? kind : "later";
   const marks = useInfiniteQuery({
     queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
     queryFn: async (): Promise<{ items: MessageListItem[] }> => {
@@ -272,6 +272,8 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
       if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
       // Stage 16: the reading list, most recently added first (at most 1,000 as well).
       if (markKind === "readingList") return { items: await parityIpc.listReadingList(markScope) };
+      // The server's flag in every folder but Trash and Junk (at most 1,000 as well).
+      if (markKind === "flagged") return { items: await comfortIpc.listFlagged(markScope) };
       return { items: await comfortIpc.listTasks(markScope, taskFilter) };
     },
     initialPageParam: null,
@@ -302,8 +304,9 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
         };
       case "later":
       case "pinned":
+      case "flagged":
       case "tasks": {
-        const icon = kind === "later" ? Clock : kind === "pinned" ? Pin : ListTodo;
+        const icon = kind === "later" ? Clock : kind === "pinned" ? Pin : kind === "flagged" ? Flag : ListTodo;
         const empty =
           kind === "tasks" && taskFilter !== "open"
             ? { icon, title: t(`comfort.tasks.empty.${taskFilter}`), body: t("comfort.views.tasks.emptyBody") }

@@ -10,6 +10,8 @@ export const en = {
     readingList: "Reading list",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Pinned attachments",
+    // SPEC "Markiert": the server's flag, in every folder but Trash and Junk.
+    flagged: "Flagged",
     pinned: "Pinned",
     sent: "Sent",
     drafts: "Drafts",
@@ -2119,6 +2121,10 @@ export const en = {
       tasks: {
         emptyTitle: "No tasks",
         emptyBody: "Mark a message as a task and it is listed here until you tick it off.",
+      },
+      flagged: {
+        emptyTitle: "Nothing flagged",
+        emptyBody: "Flag a message and it is listed here, from every folder except Trash and Junk. The flag is saved on the server.",
       },
     },
     tasks: {

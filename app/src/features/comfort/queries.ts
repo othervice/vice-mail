@@ -18,7 +18,7 @@ import {
  * key `["messages", accountId, mailboxId]`, so everything that reloads a folder's lists (the
  * action controller, `mailboxesChanged`) reloads them too.
  */
-export type MarkListKind = "later" | "pinned" | "tasks" | "readingList";
+export type MarkListKind = "later" | "pinned" | "tasks" | "readingList" | "flagged";
 
 export const inboxQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
   ["messages", accountId, mailboxId, "inbox"] as const;
@@ -42,6 +42,7 @@ const COMFORT_LIST_KINDS = new Set([
   "pinned",
   "tasks",
   "readingList",
+  "flagged",
   "unread",
   "unreadFirst",
   "blockedHidden",
@@ -60,7 +61,7 @@ export function refreshComfortLists(queryClient: QueryClient, accountId: Account
   for (const query of queries) refreshQuery(queryClient, query.queryKey);
 }
 
-const MARK_KINDS = new Set(["later", "pinned", "tasks", "readingList"]);
+const MARK_KINDS = new Set(["later", "pinned", "tasks", "readingList", "flagged"]);
 
 /**
  * After `messagesChanged` of one folder: its sorted inbox, and the mark views of the account

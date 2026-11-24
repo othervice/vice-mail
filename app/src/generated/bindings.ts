@@ -407,6 +407,8 @@ export const commands = {
 	listSnoozed: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_snoozed", { scope }, options)),
 	/**  "Angepinnt": the most recently pinned first. */
 	listPinned: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_pinned", { scope }, options)),
+	/**  "Markiert": messages flagged on the server in any folder but Trash and Junk, the newest first. */
+	listFlagged: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_flagged", { scope }, options)),
 	/**  "Aufgaben": open, done or all tasks, the newest first. */
 	listTasks: (scope: MarkScope, filter: TaskFilter, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_tasks", { scope, filter }, options)),
 	/**

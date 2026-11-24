@@ -536,3 +536,151 @@ async fn local_rules_are_checked_and_ordered() {
     assert!(f.store.delete_rule(a.id).await.expect("delete"));
     assert_eq!(f.store.rules().await.expect("rules").len(), 1);
 }
+
+/// The Flagged view (SPEC "Markiert"): `\Flagged` locations of every mailbox of the account
+/// except Trash and Junk, the newest first, each message once, shown in its inbox when it is
+/// flagged there, else where it is flagged; other accounts stay out.
+#[tokio::test]
+async fn the_flagged_view_lists_flagged_messages_of_every_folder_but_trash_and_junk() {
+    use crate::test_support::{new_account, remote};
+    const D: i64 = 1_700_000_000;
+    let f = fixture().await;
+    f.store
+        .sync_mailboxes(
+            f.account,
+            vec![
+                remote("INBOX", &[]),
+                remote("Archive", &["\\Archive"]),
+                remote("Sent", &["\\Sent"]),
+                remote("Trash", &["\\Trash"]),
+                remote("Junk", &["\\Junk"]),
+            ],
+        )
+        .await
+        .expect("mailboxes");
+    let boxes = f.store.mailboxes(f.account).await.expect("boxes");
+    let by_role = |role| {
+        boxes
+            .iter()
+            .find(|m| m.role == role)
+            .map(|m| m.id)
+            .expect("role")
+    };
+    let (trash, junk) = (
+        by_role(mail_model::MailboxRole::Trash),
+        by_role(mail_model::MailboxRole::Junk),
+    );
+    for mailbox in [trash, junk] {
+        f.store
+            .reset_mailbox(
+                mailbox,
+                crate::MailboxBaseline {
+                    uid_validity: UV,
+                    uid_next: 1,
+                    highest_modseq: None,
+                },
+            )
+            .await
+            .expect("reset");
+    }
+    let flagged = |uid, date, id: &str| {
+        let mut h = header(uid, date, Some(id));
+        h.flags.flagged = true;
+        h
+    };
+    let store = |mailbox, headers: Vec<MessageHeader>| {
+        let store = f.store.clone();
+        async move {
+            store
+                .store_headers(mailbox, UV, headers, None)
+                .await
+                .expect("store");
+        }
+    };
+    // a: flagged in the inbox and in the archive (the same message twice).
+    // b: flagged in the archive only, unflagged in the inbox.
+    // c: in the inbox, not flagged. d: flagged in Sent, the newest.
+    // t, j: flagged, but in Trash and Junk.
+    store(
+        f.inbox,
+        vec![
+            flagged(1, D + 100, "a@x"),
+            header(2, D + 200, Some("b@x")),
+            header(3, D + 300, Some("c@x")),
+        ],
+    )
+    .await;
+    store(
+        f.archive,
+        vec![flagged(1, D + 100, "a@x"), flagged(2, D + 200, "b@x")],
+    )
+    .await;
+    store(f.sent, vec![flagged(1, D + 400, "d@x")]).await;
+    store(trash, vec![flagged(1, D + 500, "t@x")]).await;
+    store(junk, vec![flagged(1, D + 600, "j@x")]).await;
+    // Another account's flagged mail is not this account's view.
+    let other = f
+        .store
+        .insert_account(new_account(2, "bob@example.org"))
+        .await
+        .expect("account")
+        .id;
+    f.store
+        .sync_mailboxes(other, vec![remote("INBOX", &[])])
+        .await
+        .expect("mailboxes");
+    let other_inbox = f.store.mailboxes(other).await.expect("boxes")[0].id;
+    f.store
+        .reset_mailbox(
+            other_inbox,
+            crate::MailboxBaseline {
+                uid_validity: UV,
+                uid_next: 1,
+                highest_modseq: None,
+            },
+        )
+        .await
+        .expect("reset");
+    store(other_inbox, vec![flagged(1, D + 700, "o@x")]).await;
+
+    let view = f
+        .store
+        .flagged_view(vec![f.account], vec![f.inbox], 100)
+        .await
+        .expect("flagged view");
+    let shown: Vec<(i64, mail_model::MailboxId, bool)> = view
+        .iter()
+        .map(|i| (i.date / 1000, i.mailbox_id, i.flagged))
+        .collect();
+    assert_eq!(
+        shown,
+        vec![
+            (D + 400, f.sent, true),
+            (D + 200, f.archive, true),
+            (D + 100, f.inbox, true),
+        ],
+        "newest first, once each, where flagged (the inbox first)"
+    );
+    // The limit counts messages, and both accounts together list both.
+    let one = f
+        .store
+        .flagged_view(vec![f.account], vec![f.inbox], 1)
+        .await
+        .expect("one");
+    assert_eq!(one.len(), 1);
+    let both = f
+        .store
+        .flagged_view(vec![f.account, other], vec![f.inbox, other_inbox], 100)
+        .await
+        .expect("both");
+    assert_eq!(both.len(), 4);
+    assert_eq!(both[0].account_id, other);
+    // Unflagged everywhere: gone from the view.
+    store(f.sent, vec![header(1, D + 400, Some("d@x"))]).await;
+    let after = f
+        .store
+        .flagged_view(vec![f.account], vec![f.inbox], 100)
+        .await
+        .expect("after");
+    assert_eq!(after.len(), 2);
+}

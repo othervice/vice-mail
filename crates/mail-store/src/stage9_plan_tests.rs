@@ -222,6 +222,22 @@ fn expected() -> Vec<Expected> {
     ] {
         out.push(merged(name, inbox::inbox_sql(kind, 3), &[required]));
     }
+    // The Flagged view: the account's mailboxes, then the flagged locations of each.
+    out.push(e(
+        "flagged view mailboxes",
+        crate::lists::FLAGGED_MAILBOXES,
+        &["SEARCH mailbox USING"],
+    ));
+    out.push(e(
+        "flagged view, one mailbox",
+        &crate::lists::flagged_sql(1),
+        &["SEARCH l USING COVERING INDEX loc_flagged (mailbox_id=?)"],
+    ));
+    out.push(merged(
+        "flagged view, three mailboxes",
+        crate::lists::flagged_sql(3),
+        &["SEARCH l USING COVERING INDEX loc_flagged (mailbox_id=?)"],
+    ));
     let m = |ids: &[i64]| ids.iter().map(|i| MailboxId(*i)).collect::<Vec<_>>();
     out.push(e(
         "search is:snoozed in a mailbox",

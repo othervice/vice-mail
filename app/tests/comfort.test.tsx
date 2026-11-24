@@ -1,6 +1,8 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_COMMAND_IDS, VIEW_COMMANDS } from "../src/features/actions/registry";
 import type { InboxPage, MessageCategoryInfo, MessageListItem } from "../src/services/ipc";
+import { useUiStore } from "../src/stores/ui";
 import { inboxSection, SNOOZE_TIMES } from "./support/comfort";
 import { ipcError, makeAccount, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
@@ -371,6 +373,69 @@ describe("Later, Pinned and Tasks", () => {
       expect(optionName(row(done, "Pay the bill"))).toContain("Task done");
     });
     expect(core.callsOf("list_tasks").at(-1)).toEqual({ scope: { kind: "account", accountId: ADA.id }, filter: "done" });
+  });
+});
+
+describe("Flagged", () => {
+  it("lists the server's flagged messages of every folder but Trash, in the rail, the column and the palette", async () => {
+    const inbox = [
+      makeMessage({ id: 40, subject: "Flagged in the inbox", flagged: true }),
+      makeMessage({ id: 41, subject: "Not flagged", flagged: false }),
+    ];
+    const project = makeMessage({ id: 42, mailboxId: 5, subject: "Flagged in a project", flagged: true });
+    const deleted = makeMessage({ id: 43, mailboxId: 4, subject: "Flagged but deleted", flagged: true });
+    const { core, user } = setup(inbox, { messages: { 1: inbox, 4: [deleted], 5: [project] } });
+
+    const button = await screen.findByRole("button", { name: "Flagged" });
+    await user.click(button);
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "flagged" });
+    expect(button.getAttribute("aria-current")).toBe("page");
+    const flagged = await list(/^Messages in Flagged/);
+    await waitFor(() => {
+      expect(within(flagged).getAllByRole("option")).toHaveLength(2);
+    });
+    expect(row(flagged, "Flagged in the inbox")).toBeTruthy();
+    expect(row(flagged, "Flagged in a project")).toBeTruthy();
+    expect(within(flagged).queryByText("Flagged but deleted")).toBeNull();
+    expect(within(flagged).queryByText("Not flagged")).toBeNull();
+    expect(core.callsOf("list_flagged")).toEqual([{ scope: { kind: "account", accountId: ADA.id } }]);
+
+    // A flag changed in any folder reloads the view (it gathers every folder).
+    const calls = core.callsOf("list_flagged").length;
+    await emitCore({ type: "messagesChanged", accountId: ADA.id, mailboxId: 5 });
+    await waitFor(() => {
+      expect(core.callsOf("list_flagged").length).toBeGreaterThan(calls);
+    });
+
+    // The column's Views tree has it too, and the palette goes there.
+    act(() => {
+      useUiStore.getState().showMailView("inbox");
+      useUiStore.setState({ sidebarExpanded: true, sidebarNarrow: false });
+    });
+    const entry = await screen.findByTestId("sidebar-view-flagged");
+    expect(entry.textContent).toBe("Flagged");
+    await user.click(entry);
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "flagged" });
+    act(() => {
+      useUiStore.getState().showMailView("inbox");
+    });
+    await user.keyboard("{Meta>}k{/Meta}");
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    await user.keyboard("go to flagged");
+    const option = within(palette)
+      .getAllByRole("option")
+      .find((o) => o.textContent.includes("Go to Flagged"));
+    expect(option).toBeTruthy();
+    await user.keyboard("{Enter}");
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "flagged" });
+  });
+
+  it("says so when nothing is flagged, and its “go to” command can get a shortcut", async () => {
+    setup([makeMessage({ subject: "Plain", flagged: false })]);
+    fireEvent.click(await screen.findByRole("button", { name: "Flagged" }));
+    expect(await screen.findByRole("heading", { name: "Nothing flagged" })).toBeTruthy();
+    expect(VIEW_COMMANDS.goFlagged).toBe("flagged");
+    expect(APP_COMMAND_IDS).toContain("goFlagged");
   });
 });
 

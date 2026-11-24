@@ -562,6 +562,7 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
     case "pinned":
     case "tasks":
     case "readingList":
+    case "flagged":
       return { kind: "mark", mark: mailView };
     case "pinnedAttachments":
     case "savedViews":

@@ -183,6 +183,102 @@ pub(crate) fn unified(
 }
 
 // ---------------------------------------------------------------------------------------------
+// Flagged
+
+/// The mailboxes the Flagged view looks into: every mailbox of the account (by row id) except
+/// Trash and Junk.
+pub(crate) const FLAGGED_MAILBOXES: &str = "SELECT id FROM mailbox
+     WHERE account_id = ?1 AND (role IS NULL OR role NOT IN ('trash', 'junk'))";
+
+/// One branch of the Flagged view: the newest flagged locations of mailbox `?{param}`, at most
+/// `?1` (the partial index `loc_flagged` holds exactly these, newest last).
+fn flagged_branch(param: usize) -> String {
+    format!(
+        "SELECT * FROM (SELECT l.message_id, l.mailbox_id FROM message_location l
+           WHERE l.mailbox_id = ?{param} AND l.flagged = 1
+           ORDER BY l.message_id DESC LIMIT ?1)"
+    )
+}
+
+/// `UNION ALL` of the flagged branches of `n` mailboxes (parameters `?2..`), newest first. A
+/// message flagged in several of them comes once per mailbox; [`flagged`] merges them.
+pub(crate) fn flagged_sql(n: usize) -> String {
+    if n == 1 {
+        return flagged_branch(2);
+    }
+    let branches: Vec<String> = (0..n).map(|i| flagged_branch(i + 2)).collect();
+    format!("{} ORDER BY 1 DESC", branches.join(" UNION ALL "))
+}
+
+/// "Flagged": messages with `\Flagged` (JMAP `$flagged`) in a mailbox of `accounts` other than
+/// Trash and Junk, the newest first, each once, at most `limit` (one answer like the mark views).
+/// A message is shown in the first of `prefer` (the inboxes) where it is flagged, else in the
+/// newest mailbox where it is; its row carries that location's flags.
+pub(crate) fn flagged(
+    conn: &Connection,
+    accounts: &[AccountId],
+    prefer: &[MailboxId],
+    limit: u32,
+) -> Result<Vec<MessageListItem>, StoreError> {
+    let mut mailboxes: Vec<i64> = Vec::new();
+    for account in accounts {
+        let row = match crate::accounts::row_id(conn, *account) {
+            Ok(row) => row,
+            Err(StoreError::NotFound(_)) => continue,
+            Err(err) => return Err(err),
+        };
+        let ids = conn
+            .prepare_cached(FLAGGED_MAILBOXES)?
+            .query_map([row], |r| r.get::<_, i64>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        mailboxes.extend(ids);
+    }
+    if mailboxes.is_empty() || limit == 0 {
+        return Ok(Vec::new());
+    }
+    let limit = limit.min(crate::MAX_MARK_VIEW);
+    let mut values: Vec<i64> = vec![i64::from(limit)];
+    values.extend(&mailboxes);
+    let rows = conn
+        .prepare(&flagged_sql(mailboxes.len()))?
+        .query_map(params_from_iter(values), |r| {
+            Ok((MessageId(r.get(0)?), MailboxId(r.get(1)?)))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut order: Vec<MessageId> = Vec::new();
+    let mut flagged_in: HashMap<MessageId, Vec<MailboxId>> = HashMap::new();
+    for (message, mailbox) in rows {
+        let places = flagged_in.entry(message).or_insert_with(|| {
+            order.push(message);
+            Vec::new()
+        });
+        places.push(mailbox);
+    }
+    let mut items = Vec::new();
+    for message in order {
+        if items.len() >= limit as usize {
+            break;
+        }
+        let places = flagged_in
+            .get(&message)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let Some(chosen) = prefer
+            .iter()
+            .find(|p| places.contains(p))
+            .or_else(|| places.first())
+            .copied()
+        else {
+            continue;
+        };
+        if let Some(found) = entry(conn, message, &[chosen])? {
+            items.push(found.item);
+        }
+    }
+    Ok(items)
+}
+
+// ---------------------------------------------------------------------------------------------
 // Threads
 
 /// One branch of a thread list: the newest message of each thread in mailbox `?{param}`,

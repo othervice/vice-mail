@@ -33,6 +33,8 @@ const RAIL = [
   // Stage 16: the reading list and the pinned attachments.
   "readingList",
   "pinnedAttachments",
+  // SPEC "Markiert": the server's flag across folders.
+  "flagged",
   "pinned",
   "sent",
   "drafts",
@@ -126,7 +128,7 @@ describe("app frame (stage 1)", () => {
     );
     assert.deepEqual(report.column, [
       "rail-folders",
-      ...["later", "tasks", "readingList", "pinnedAttachments", "pinned", "savedViews"].map((id) => `sidebar-view-${id}`),
+      ...["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews"].map((id) => `sidebar-view-${id}`),
       "rail-activity",
       "rail-outbox",
       "rail-settings",

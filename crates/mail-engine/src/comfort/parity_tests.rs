@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use mail_model::{
-    AccountColor, ErrorCode, InboxFilter, IpcError, MailboxRole, MarkScope, MessageRef,
+    AccountColor, ErrorCode, InboxFilter, IpcError, MailAction, MailboxRole, MarkScope, MessageRef,
     TransferMode, UnreadFirstCursor,
 };
 
@@ -406,4 +406,90 @@ async fn a_transfer_is_refused_before_anything_is_fetched_or_recorded() {
             .is_empty(),
         "nothing recorded"
     );
+}
+
+/// SPEC "Markiert": the Flagged view lists what carries `\Flagged` on the server, through the
+/// outbox like every flag, and drops it once unflagged; Trash stays out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_flagged_view_follows_the_server_flag() {
+    let mut h = Harness::new(server_with(&[LETTER])).await;
+    let letter = h.by_subject("A long letter").await;
+    let scope = MarkScope::Account {
+        account_id: h.account,
+    };
+    assert!(
+        h.core
+            .list_flagged(scope.clone())
+            .await
+            .expect("view")
+            .is_empty()
+    );
+
+    h.writes(true).await;
+    let at = vec![MessageRef {
+        mailbox_id: letter.mailbox_id,
+        message_id: letter.id,
+    }];
+    h.core
+        .apply_action(
+            MailAction::Flag,
+            at.clone(),
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .await
+        .expect("flag");
+    let listed = h.core.list_flagged(scope.clone()).await.expect("view");
+    assert_eq!(
+        listed.iter().map(|i| (i.id, i.flagged)).collect::<Vec<_>>(),
+        vec![(letter.id, true)]
+    );
+    eventually("the flag on the server", || async {
+        h.server.read(|s| {
+            s.mailboxes["INBOX"]
+                .messages
+                .values()
+                .any(|m| m.flags.flagged)
+        })
+    })
+    .await;
+
+    h.core
+        .apply_action(MailAction::Unflag, at, uuid::Uuid::new_v4().to_string())
+        .await
+        .expect("unflag");
+    assert!(
+        h.core
+            .list_flagged(scope.clone())
+            .await
+            .expect("view")
+            .is_empty()
+    );
+
+    // Flagged by another program in another folder: listed there once the sync saw it.
+    let uid = h.server.deliver_raw("Archive", SPAM);
+    h.server.set_flagged("Archive", uid, true);
+    // Other folders sync on the next full pass; reconnecting starts one.
+    h.core.network_changed();
+    let deadline = Instant::now() + WAIT;
+    let listed = loop {
+        let listed = h.core.list_flagged(scope.clone()).await.expect("view");
+        if !listed.is_empty() {
+            break listed;
+        }
+        assert!(Instant::now() < deadline, "the archived flag never showed");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].subject, "You won");
+    assert_ne!(listed[0].mailbox_id, letter.mailbox_id);
+    assert!(matches!(
+        h.core
+            .list_flagged(MarkScope::Account {
+                account_id: "00000000-0000-4000-8000-00000000abcd".parse().expect("id"),
+            })
+            .await
+            .map_err(code),
+        Err(ErrorCode::NotFound)
+    ));
+    h.core.shutdown().await;
 }

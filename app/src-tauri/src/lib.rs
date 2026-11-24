@@ -197,6 +197,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::comfort::set_task,
             commands::comfort::list_snoozed,
             commands::comfort::list_pinned,
+            commands::comfort::list_flagged,
             commands::comfort::list_tasks,
             // Stage 16 (decision 0033).
             commands::parity::set_reading_list,

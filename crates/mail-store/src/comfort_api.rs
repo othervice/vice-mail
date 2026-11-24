@@ -358,6 +358,19 @@ impl Store {
             .await
     }
 
+    /// "Flagged": messages with `\Flagged` in a mailbox of `accounts` other than Trash and
+    /// Junk, the newest first, each once, shown in one of `prefer` where it is flagged there
+    /// (see `lists::flagged`).
+    pub async fn flagged_view(
+        &self,
+        accounts: Vec<AccountId>,
+        prefer: Vec<MailboxId>,
+        limit: u32,
+    ) -> Result<Vec<MessageListItem>, StoreError> {
+        self.read(move |c| crate::lists::flagged(c, &accounts, &prefer, limit))
+            .await
+    }
+
     // ---------------------------------------------------------------------------------------
     // Local rules
 
