@@ -7,12 +7,10 @@ handled before anything else.
 
 **Please do not open a public issue, pull request or discussion for a security problem.**
 
-Report it privately in one of these ways:
-
-1. **GitHub private vulnerability reporting:** on the repository page open **Security → Report a
-   vulnerability** (<https://github.com/othervice/vice-mail/security/advisories/new>). This is the
-   preferred way.
-2. **Email:** `security@<domain>` <!-- TODO maintainer: replace with the real address before publishing -->
+Report it privately through **GitHub private vulnerability reporting:** on the repository page
+open **Security → Report a vulnerability**
+(<https://github.com/othervice/vice-mail/security/advisories/new>). Only the maintainer sees the
+report and the discussion until an advisory is published.
 
 Please include:
 

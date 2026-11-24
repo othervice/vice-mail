@@ -230,8 +230,6 @@ The app can update itself, but it never checks on its own unless you allow it:
   fetches it, and the app checks that it is signed with the project's update key and for exactly
   this version. A file that does not match is discarded ("The update could not be verified").
   **Restart to install** installs it and opens the app again.
-- Until the project is public on GitHub there is nothing to find there yet, and **Check now**
-  reports that it could not check. Install new versions by hand until then.
 
 ## Where the app keeps its data
 

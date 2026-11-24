@@ -103,8 +103,10 @@ key. It only checks if you turn that on (off by default) or click "Check now".
 
 ## Install
 
-There is no public release yet. Once there is, the files are on the
-[releases page](https://github.com/othervice/vice-mail/releases).
+Download the latest release from the
+[releases page](https://github.com/othervice/vice-mail/releases): a disk image for macOS, an
+installer for Windows and a `SHA256SUMS` file. The builds are not signed yet;
+[docs/INSTALL.md](docs/INSTALL.md) explains the warnings and how to get past them.
 
 | | Requirement |
 |---|---|

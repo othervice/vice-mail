@@ -66,13 +66,19 @@ ausgeführt und geprüft wurde. Was nicht geprüft werden konnte, steht dort aus
 
 ## Sprache
 
-Code, Bezeichner, Kommentare, Commit-Messages, README und die Basistexte der Oberfläche sind Englisch.
-Plan- und Entscheidungsdokumente unter `docs/` sind Deutsch, bis das Projekt veröffentlicht wird.
+Code, Bezeichner, Kommentare, Commit-Messages, README, `docs/ARCHITECTURE.md` und alle Dokumente
+für Nutzer und Mitwirkende sind Englisch, ebenso die Basistexte der Oberfläche. Das Projektprotokoll
+(`docs/PLAN.md`, `docs/stages/`, `docs/decisions/`, `docs/SPEC.md`, `docs/DESIGN.md`,
+`docs/testing/`) bleibt Deutsch; ob neue Stufen und Entscheidungen Englisch werden, entscheidet der
+Mensch.
 
 ## Git
 
-`origin` ist Gitea (privates Repo `vice-mail`, bis zur Veröffentlichung). Ein Commit pro abgeschlossener
-Aufgabe, Push am Ende der Stufe. Nichts nach GitHub pushen, bevor Stufe 15 das vorsieht.
+`origin` ist GitHub (`github.com/othervice/vice-mail`, öffentlich). `gitea` (privates Repo
+`vice-mail` im eigenen Gitea) bleibt als Sicherung: nach jedem Push auch `git push gitea main` und
+neue Tags. Ein Commit pro abgeschlossener Aufgabe, Push am Ende der Stufe. Autor-Adresse im Repo:
+`othervice@bitwaterlabs.com` (lokal in `.git/config` gesetzt). Nach GitHub gehen nur `main` und
+Release-Tags `v*`, nie `--mirror` oder `--tags` (Prototyp-Tags bleiben im Gitea).
 
 ## Befehle
 

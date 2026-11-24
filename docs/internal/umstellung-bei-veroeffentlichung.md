@@ -19,6 +19,23 @@ sind Deutsch, das Repo bleibt privat in Gitea.
   gepflegt.
 - Geschichte geprüft: `docs/internal/history-audit.md`.
 
+## Stand der Umstellung (24.11.2026)
+
+- 1 erledigt: Der Mensch hat entschieden, die Autor-Adresse auf `othervice@bitwaterlabs.com`
+  umzuschreiben (`git filter-repo --mailmap`, dazu `--replace-text` für die alte Adresse im Text
+  von `history-audit.md`). Alle Hashes sind neu, Gitea hat die umgeschriebene Geschichte
+  (Force-Push), die alte liegt als Bundle außerhalb des Repos. Verweise in den Dokumenten sind
+  nachgezogen.
+- 2 übertragen (englische Architektur ersetzt die deutsche).
+- 3 erledigt (`CLAUDE.md`: Sprache, Git mit `origin` GitHub und `gitea` als Sicherung).
+- 4 erledigt: nur GitHubs „Private vulnerability reporting“, keine Mailadresse (Entscheidung des
+  Menschen); einschalten, sobald das Repo öffentlich ist.
+- 5 erledigt (`docs/images/`, README).
+- 6 erledigt (`CHANGELOG.md` 0.1.0, README, INSTALL).
+- 7 erledigt bis auf die Erwähnung von Gitea in Entscheidungen und `docs/SPEC.md` (Geschichte).
+- 8 Repo zuerst privat (Entscheidung des Menschen), Durchsicht durch den Menschen, dann öffentlich,
+  dann Tag `v0.1.0` und Release mit Update-Signatur.
+
 ## Am Tag der Veröffentlichung
 
 1. **Entscheidungen aus der Prüfung der Geschichte** treffen (Autor-Adresse, welche Refs), siehe

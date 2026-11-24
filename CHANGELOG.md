@@ -7,9 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing has been released yet. This section describes what exists in `main` on the way to the first
-public release (0.1.0). Internal test builds were made for the maintainer only and were never
-published. How each part was built and tested is recorded per stage in `docs/stages/` (German).
+## [0.1.0] - 2026-11-24
+
+The first public release. Internal test builds before it were made for the maintainer only and
+were never published. How each part was built and tested is recorded per stage in `docs/stages/`
+(German).
 
 ### Added
 
@@ -156,4 +158,5 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Not planned for version 1: PGP and S/MIME, calendar and contact sync, POP3, encryption of the
   local database (use FileVault or BitLocker).
 
-[Unreleased]: https://github.com/othervice/vice-mail/commits/main
+[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/othervice/vice-mail/releases/tag/v0.1.0

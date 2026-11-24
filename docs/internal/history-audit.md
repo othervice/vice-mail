@@ -108,6 +108,13 @@ Kopfzeilen in den Quelldateien gibt es nicht, die GPL verlangt sie nicht.
 Keine Vorkommen von `<old-domain>` im Inhalt, keine Pfade `/Users/othervice` oder `C:\Users`, kein
 `secrets.env`, keine Hinweise auf Proxmox oder andere Rechner des Heimnetzes.
 
+## Entschieden (24.11.2026)
+
+Autor- und Committer-Adresse aller Commits umgeschrieben auf `othervice@bitwaterlabs.com`, die
+alte Adresse auch im Text dieser Datei durch einen Platzhalter ersetzt (`git filter-repo`). Nach
+GitHub gehen nur `main` und `v0.1.0`. Die Prüfung der Commits seit dieser Datei (bis d144b8b, Hash
+vor dem Umschreiben) fand keine Geheimnisse und keine neuen privaten Adressen.
+
 ## Was der Mensch vor dem ersten Push entscheidet
 
 1. **Autor-Adresse.** Zwei Wege:
