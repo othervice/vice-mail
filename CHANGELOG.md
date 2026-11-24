@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- New colours: the light mode is cool white and light blue-grey with blue, the dark mode uses
+  neutral, slightly bluish greys in the manner of GitHub's dark theme instead of warm browns.
+  Blue is the new default accent; a theme chosen before stays. Light, dark or system mode can be
+  switched from the command palette.
+
 ## [0.1.0] - 2026-11-24
 
 The first public release. Internal test builds before it were made for the maintainer only and
