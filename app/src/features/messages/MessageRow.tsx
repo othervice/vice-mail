@@ -356,15 +356,20 @@ export function MessageRowContent({
   // Stage 8: which account, in words, wherever the avatar ring's colour tells accounts apart.
   // Stage 17: the names come first; short of room the label gives way first, down to its colour
   // dot (a shrink factor a million times the names', see `RepliesToggle`; the dot as its smallest
-  // size); the name stays its tooltip and is part of the row's accessible name.
+  // size); the name stays its tooltip and is part of the row's accessible name. The name shows
+  // whole (an overlong one cut at the label's width) or not at all, never as a fragment: where it
+  // does not fit beside the dot it wraps onto a second line, which the label's height hides.
   const accountElement = decoration?.account ? (
     <span
       title={decoration.account}
-      className="flex max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 items-center gap-1 overflow-hidden"
+      className="flex h-5 max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 flex-wrap items-center justify-end gap-x-1 overflow-hidden"
       data-testid="row-account"
     >
       <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
-      <span className="min-w-0 truncate text-12 text-secondary" data-testid="row-account-name">
+      <span
+        className="h-5 max-w-[calc(var(--ui-row-account-width)-var(--ui-dot)-var(--ui-space-1))] min-w-0 truncate text-12 leading-5 text-secondary"
+        data-testid="row-account-name"
+      >
         {decoration.account}
       </span>
     </span>

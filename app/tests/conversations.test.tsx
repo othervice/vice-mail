@@ -491,6 +491,10 @@ describe("opening a conversation", () => {
     expect(label.className).toMatch(/\bshrink-1000000\b/);
     expect(label.className).toContain("min-w-(--ui-dot)");
     expect(label.className).toContain("overflow-hidden");
+    // The name whole or not at all: where it does not fit beside the dot it wraps out of sight.
+    expect(label.className).toMatch(/\bflex-wrap\b/);
+    expect(label.className).toMatch(/\bh-5\b/);
+    expect(within(label).getByTestId("row-account-name").className).toMatch(/\btruncate\b/);
     expect(optionName(projekt)).toContain("Account: Work");
     await user.click(projekt as HTMLElement);
     await waitFor(() => {

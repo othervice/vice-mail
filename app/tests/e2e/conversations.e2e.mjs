@@ -491,12 +491,21 @@ describe("stage 17: conversations unfold in the list, one message on the right",
           const dot = label?.querySelector('[data-testid="row-account-dot"]');
           if (!sender || !label || !dot) return [];
           // Cut by any fraction of a pixel (an ellipsis shows then).
-          const range = document.createRange();
-          range.selectNodeContents(sender);
+          const cut = (el) => {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            return range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.05;
+          };
+          const name = label.querySelector('[data-testid="row-account-name"]');
+          const box = label.getBoundingClientRect();
           return [
             {
               names: sender.textContent,
-              namesCut: range.getBoundingClientRect().width > sender.getBoundingClientRect().width + 0.05,
+              namesCut: cut(sender),
+              // The label's name on its visible line, and whether it is cut there.
+              nameShown: Boolean(name && name.getBoundingClientRect().top < box.bottom - 1),
+              nameCut: Boolean(name && cut(name)),
+              labelMax: Number.parseFloat(getComputedStyle(label).maxWidth),
               label: label.getAttribute("title"),
               labelWidth: label.getBoundingClientRect().width,
               dotWidth: dot.getBoundingClientRect().width,
@@ -512,6 +521,8 @@ describe("stage 17: conversations unfold in the list, one message on the right",
         assert.ok(row.rowName.includes(`Account: ${String(row.label)}`), `the row's name lacks the account: ${row.rowName}`);
         // Names cut only once the label is down to its dot.
         if (row.namesCut) assert.ok(row.labelWidth <= row.dotWidth + 1, `"${String(row.names)}" cut beside a label of ${String(row.labelWidth)} px`);
+        // The account's name whole or not at all; cut only when longer than the label's width.
+        if (row.nameShown && row.nameCut) assert.ok(row.labelWidth >= row.labelMax - 1, `"${String(row.label)}" cut to a fragment in ${String(row.labelWidth)} px`);
       }
     };
     const rows = await measure();
@@ -526,6 +537,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       squeezed.some((row) => row.labelWidth <= row.dotWidth + 1),
       `no label went down to its dot: ${JSON.stringify(squeezed.map((r) => r.labelWidth))}`,
     );
+    assert.ok(squeezed.some((row) => !row.nameShown), "no label hid its name");
     report.screenshots.push(await screenshot("conversations-unified-squeezed"));
     await narrowList(null);
     report.screenshots.push(await screenshot("conversations-unified-labels"));
