@@ -821,6 +821,8 @@ export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
 
 export const MAX_LIST_HEIGHT = 1600 as const;
 
+export const MAX_LIST_ORDERS = 1000 as const;
+
 export const MAX_LIST_WIDTH = 1600 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
@@ -838,6 +840,8 @@ export const MAX_PREVIEW_INPUT_BYTES = 33554432 as const;
 export const MAX_PREVIEW_PDF_PAGES = 200 as const;
 
 export const MAX_PREVIEW_TEXT_BYTES = 524288 as const;
+
+export const MAX_QUICK_FILTER_TEXT = 2048 as const;
 
 export const MAX_RECENT_COMMANDS = 5 as const;
 
@@ -869,6 +873,8 @@ export const MAX_SIGNATURE_IMAGES_BYTES = 131072 as const;
 
 export const MAX_SIGNATURE_IMAGE_BYTES = 65536 as const;
 
+export const MAX_TABLE_COLUMN_WIDTH = 800 as const;
+
 export const MAX_TEXT_SIZE = 150 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
@@ -884,6 +890,8 @@ export const MIN_LIST_WIDTH = 320 as const;
 export const MIN_SIDEBAR_WIDTH = 200 as const;
 
 export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
+
+export const MIN_TABLE_COLUMN_WIDTH = 48 as const;
 
 export const MIN_TEXT_SIZE = 80 as const;
 
@@ -3493,6 +3501,11 @@ export type MessageListItem = {
 	task?: TaskMark | null,
 	/**  Stage 16: on the reading list ("Zum Lesen"). Absent when not. */
 	readingList?: boolean,
+	/**
+	 *  Stage 19: the message's size in bytes (`RFC822.SIZE`), for the table's size column.
+	 *  Absent when unknown.
+	 */
+	size?: number,
 };
 
 /**  One page of a message list, newest first. */

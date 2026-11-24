@@ -346,6 +346,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // `applyAction` may cover (larger selections are split by the UI).
         .constant("MARK_READ_DELAY_MS", mail_model::MARK_READ_DELAY_MS)
         .constant("MAX_ACTION_MESSAGES", mail_model::MAX_ACTION_MESSAGES)
+        // Stage 19, task A: limits of the list views (decisions 0061, 0062).
+        .constant("MAX_LIST_ORDERS", mail_model::MAX_LIST_ORDERS)
+        .constant("MAX_QUICK_FILTER_TEXT", mail_model::MAX_QUICK_FILTER_TEXT)
+        .constant("MIN_TABLE_COLUMN_WIDTH", mail_model::MIN_TABLE_COLUMN_WIDTH)
+        .constant("MAX_TABLE_COLUMN_WIDTH", mail_model::MAX_TABLE_COLUMN_WIDTH)
         // Stage 16 (decision 0036): attachment previews and pins.
         .constant(
             "MAX_PREVIEW_INPUT_BYTES",

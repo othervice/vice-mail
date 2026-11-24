@@ -46,6 +46,10 @@ const COMFORT_LIST_KINDS = new Set([
   "unread",
   "unreadFirst",
   "blockedHidden",
+  // Stage 19: sorted and filtered views, their counts and tags.
+  "view",
+  "viewCount",
+  "viewTags",
 ]);
 
 /**

@@ -1914,3 +1914,71 @@ export const popupIpc = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Stage 19, task A (decisions 0061, 0062): sorting, the table and the quick filter.
+
+import {
+  commands as viewCommands,
+  MAX_LIST_ORDERS,
+  MAX_QUICK_FILTER_TEXT,
+  MAX_TABLE_COLUMN_WIDTH,
+  MIN_TABLE_COLUMN_WIDTH,
+  type ListOrder,
+  type ListPresentation,
+  type ListTableSettings,
+  type ListViewRequest,
+  type QuickFilter,
+  type SortKey,
+  type TableColumn,
+  type TableColumnId,
+  type ViewCursor,
+  type ViewMessagePage,
+  type ViewOrder,
+  type ViewThreadPage,
+} from "../generated/bindings";
+
+export type {
+  ListOrder,
+  ListPresentation,
+  ListTableSettings,
+  ListViewRequest,
+  QuickFilter,
+  SortKey,
+  TableColumn,
+  TableColumnId,
+  ViewCursor,
+  ViewMessagePage,
+  ViewOrder,
+  ViewThreadPage,
+};
+
+/** Limits of the list view contract. */
+export const VIEW_LIMITS = {
+  orders: MAX_LIST_ORDERS,
+  filterText: MAX_QUICK_FILTER_TEXT,
+  minColumnWidth: MIN_TABLE_COLUMN_WIDTH,
+  maxColumnWidth: MAX_TABLE_COLUMN_WIDTH,
+} as const;
+
+/**
+ * Stage 19: a view in another order than newest first or with the quick filter (pages with a
+ * cursor to pass back unchanged), the match count, the tags of a view, the order per view and
+ * the table presentation (device settings).
+ */
+export const viewIpc = {
+  listMessages: (request: ListViewRequest, cursor: ViewCursor | null, limit: number): Promise<ViewMessagePage> =>
+    call(() => viewCommands.listViewMessages(request, cursor, limit)),
+  /** One row per conversation, at the place of its newest message that matches. */
+  listConversations: (request: ListViewRequest, cursor: ViewCursor | null, limit: number): Promise<ViewThreadPage> =>
+    call(() => viewCommands.listViewConversations(request, cursor, limit)),
+  /** Messages of the view that match its quick filter. */
+  count: (request: ListViewRequest): Promise<number> => call(() => viewCommands.countListView(request)),
+  /** Keywords of the view's messages that are tags (not starting with `$`), sorted. */
+  tags: (scope: InboxScope): Promise<string[]> => call(() => viewCommands.listViewTags(scope)),
+  getOrders: (): Promise<ViewOrder[]> => call(() => viewCommands.getListOrders()),
+  /** `null` or newest first removes the view's order; answers every view's order. */
+  setOrder: (view: string, order: ListOrder | null): Promise<ViewOrder[]> => call(() => viewCommands.setListOrder(view, order)),
+  getTable: (): Promise<ListTableSettings> => call(() => viewCommands.getListTable()),
+  setTable: (settings: ListTableSettings): Promise<ListTableSettings> => call(() => viewCommands.setListTable(settings)),
+};

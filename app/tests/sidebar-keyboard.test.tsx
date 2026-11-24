@@ -378,8 +378,13 @@ describe("the Tab path to the message list", () => {
       "treeitem: Inbox, 3 unread",
       "button: Activity",
     ]);
-    expect(stops.slice(stops.indexOf("button: Activity") + 1, stops.indexOf("button: Activity") + 3)).toEqual(["switch: Unread only", "button: List options"]);
-    expect(stops.at(-1)).toBe("button: New message");
+    // Stage 19: the view menu, the options; the header's last button, then the quick filter (its
+    // switches are one toolbar, the text field another stop).
+    expect(stops.slice(stops.indexOf("button: Activity") + 1, stops.indexOf("button: Activity") + 3)).toEqual([
+      "button: Sorted by Date, Newest first",
+      "button: List options",
+    ]);
+    expect(stops.slice(-3)).toEqual(["button: New message", "button: Unread", "input: Filter by sender, subject and text"]);
   });
 
   it("stays short with two accounts, favourites, inboxes and saved searches", async () => {

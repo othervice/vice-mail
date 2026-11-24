@@ -310,7 +310,7 @@ describe("conversation rows in the lists", () => {
   it("Unread only and Unread first list conversations", async () => {
     const { core, user } = setup({ parity: {} });
     await inboxList();
-    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await user.click(screen.getByRole("button", { name: "Unread" }));
     await waitFor(() => {
       expect(core.callsOf("list_inbox_conversations_filtered")).toContainEqual({
         scope: { kind: "mailbox", mailboxId: 1 },
@@ -325,7 +325,7 @@ describe("conversation rows in the lists", () => {
     });
     expect(optionName(within(list).getByRole("treeitem"))).toContain("2 replies");
 
-    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await user.click(screen.getByRole("button", { name: "Unread" }));
     await user.click(screen.getByRole("button", { name: "List options" }));
     await user.click(await screen.findByRole("menuitem", { name: "Show unread first" }));
     await waitFor(() => {

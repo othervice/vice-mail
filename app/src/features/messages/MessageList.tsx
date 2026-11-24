@@ -34,7 +34,8 @@ import { conversationQuery } from "../threads/queries";
 import { childKey, conversationIdent, repliesOf, treePlaces, withChildren, type ChildrenState, type ChildStatus } from "../threads/tree";
 import { readListMetrics } from "./listMetrics";
 import type { MessageListSource } from "./listSource";
-import { ChildRowContent, ChildStatusRow, MessageRowContent, useChildLabel, useRowLabel, type RowDecoration } from "./MessageRow";
+import { ChildRowContent, ChildStatusRow, MessageRowContent, TableRowContent, useChildLabel, useRowLabel, type RowDecoration } from "./MessageRow";
+import { TableHeader, type ListTableConfig } from "../views/TableHeader";
 import { useMessagePages } from "./queries";
 import { ListLayoutContext, ListTreeContext } from "./listLayout";
 import { buildRows, dayBounds, firstDayOfWeek, formatFullDate, formatMonthSection, type DayBounds, type ListRow, type Section } from "./rows";
@@ -141,6 +142,11 @@ interface MessageListProps {
   selectScope?: ListSelectScope | undefined;
   /** A message was selected by id: the view opens it (in place of the list, too). */
   onSelectedById?: (messageId: MessageId) => void;
+  /**
+   * Stage 19 (decision 0061): the wide list as a table (column headers above it, rows in its
+   * columns); narrow lists draw rows as before.
+   */
+  table?: ListTableConfig | undefined;
 }
 
 /** DOM id of the option of a drawn row with an action (bundle, "Show all"). */
@@ -370,6 +376,7 @@ export function MessageList({
   source,
   selectScope,
   onSelectedById,
+  table,
 }: MessageListProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -393,6 +400,8 @@ export function MessageList({
     setMetrics(readListMetrics());
   }
   const [twoLine, setTwoLine] = useState(false);
+  /** Stage 19: the header's grid, which takes the table's columns like the rows. */
+  const [headerGrid, setHeaderGrid] = useState<HTMLDivElement | null>(null);
   const [state, setState] = useState<SelectionState>(EMPTY_STATE);
   /** Stage 17: identities of the unfolded conversations; they stay through reloads and new mail. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -693,6 +702,18 @@ export function MessageList({
     virtualizer.measure();
     keepCursorInView();
   }, [virtualizer, rowSize, metrics.childRow]);
+
+  // Stage 19: the table's columns for the header and every row, through the CSSOM (the CSP
+  // forbids style attributes). Narrow lists draw rows.
+  const tableMode = table !== undefined && !twoLine;
+  const template = tableMode ? table.template : null;
+  useLayoutEffect(() => {
+    for (const element of [scrollElement, headerGrid]) {
+      if (!element) continue;
+      if (template === null) element.style.removeProperty("--table-columns");
+      else element.style.setProperty("--table-columns", template);
+    }
+  }, [template, scrollElement, headerGrid]);
 
   // New rows above the first visible one (new mail while scrolled down) must not push the list.
   useLayoutEffect(() => {
@@ -1110,7 +1131,17 @@ export function MessageList({
     onDragRows(dragged, childIds);
   };
 
-  if (query.isPending) return <SkeletonRows label={t("list.loading")} />;
+  // Stage 19: the table keeps its header while its rows load or none match.
+  const tableHeader = tableMode && <TableHeader config={table} listLabel={t("list.label", { folder: folderName })} ref={setHeaderGrid} />;
+
+  if (query.isPending) {
+    return (
+      <>
+        {tableHeader}
+        <SkeletonRows label={t("list.loading")} />
+      </>
+    );
+  }
 
   if (query.isError && !query.data) {
     return (
@@ -1138,8 +1169,20 @@ export function MessageList({
         </div>
       );
     }
-    if (source?.empty) return <EmptyState icon={source.empty.icon} title={source.empty.title} body={source.empty.body} />;
-    return <EmptyState icon={Inbox} title={t("list.empty.title")} body={t("list.empty.body")} />;
+    if (source?.empty) {
+      return (
+        <>
+          {tableHeader}
+          <EmptyState icon={source.empty.icon} title={source.empty.title} body={source.empty.body} />
+        </>
+      );
+    }
+    return (
+      <>
+        {tableHeader}
+        <EmptyState icon={Inbox} title={t("list.empty.title")} body={t("list.empty.body")} />
+      </>
+    );
   }
 
   // Stage 9: a source's rows can hold messages that are no options (members of a closed bundle).
@@ -1169,6 +1212,7 @@ export function MessageList({
 
   return (
     <>
+      {tableHeader}
       {query.isRefetchError && (
         <div className="px-6 pt-4">
           <ErrorNotice
@@ -1206,6 +1250,8 @@ export function MessageList({
         data-testid="message-list"
         className={cx(
           "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list px-2",
+          // Stage 19: the header reserves the same gutter, so the columns line up.
+          tableMode && "[scrollbar-gutter:stable]",
           // The cursor row shows the focus ring; without one (nothing loaded yet) the list does.
           activeId ? "outline-none" : "focus-visible:-outline-offset-2",
         )}
@@ -1382,21 +1428,38 @@ export function MessageList({
                       edge && "list-card px-1",
                     )}
                   >
-                    <MessageRowContent
-                      item={row.item}
-                      accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
-                      bounds={bounds}
-                      showRecipients={showRecipients}
-                      twoLine={twoLine}
-                      selected={selected}
-                      cursor={isCursor}
-                      multiSelect={multiSelect}
-                      decoration={decoration}
-                      expanded={ident !== null ? open : undefined}
-                      // In the priority card the card says "important" already.
-                      omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
-                      actions={renderQuickActions?.(row.item, selected, false)}
-                    />
+                    {tableMode ? (
+                      <TableRowContent
+                        item={row.item}
+                        columns={table.columns.map((column) => column.id)}
+                        accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
+                        bounds={bounds}
+                        showRecipients={showRecipients}
+                        selected={selected}
+                        cursor={isCursor}
+                        multiSelect={multiSelect}
+                        decoration={decoration}
+                        expanded={ident !== null ? open : undefined}
+                        omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
+                        actions={renderQuickActions?.(row.item, selected, false)}
+                      />
+                    ) : (
+                      <MessageRowContent
+                        item={row.item}
+                        accountColor={source?.accountColor?.(row.item) ?? account?.color ?? 0}
+                        bounds={bounds}
+                        showRecipients={showRecipients}
+                        twoLine={twoLine}
+                        selected={selected}
+                        cursor={isCursor}
+                        multiSelect={multiSelect}
+                        decoration={decoration}
+                        expanded={ident !== null ? open : undefined}
+                        // In the priority card the card says "important" already.
+                        omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
+                        actions={renderQuickActions?.(row.item, selected, false)}
+                      />
+                    )}
                   </MessageOption>
                 );
               })}

@@ -2,26 +2,27 @@ import {
   AlarmClockOff,
   Archive,
   Clock,
-  ListTodo,
-  ListX,
-  Pin,
-  PinOff,
-  RotateCcw,
-  SquareCheck,
-  SquareCheckBig,
   Flag,
   FlagOff,
   FolderInput,
   ListChecks,
-  Search,
+  ListFilter,
+  ListTodo,
+  ListX,
+  type LucideIcon,
   Mail,
   MailOpen,
+  Pin,
+  PinOff,
+  RotateCcw,
+  Search,
   ShieldAlert,
   ShieldCheck,
+  SquareCheck,
+  SquareCheckBig,
   Tags,
   Trash2,
   Undo2,
-  type LucideIcon,
 } from "lucide-react";
 import type { Account, ActionKind, MailAction, Mailbox, MailboxRole, MessageListItem } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "./shortcuts";
@@ -817,6 +818,8 @@ export const APP_COMMAND_IDS = [
   "goContacts",
   // The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): open or fold it.
   "toggleSidebar",
+  // Stage 19 (decision 0062): into the quick filter's text field, like Thunderbird.
+  "quickFilter",
 ] as const;
 
 export type AppCommandId = (typeof APP_COMMAND_IDS)[number];
@@ -887,4 +890,6 @@ export const APP_COMMANDS: Record<AppCommandId, AppCommandDefinition> = {
   // Cmd/Ctrl+Shift+S ("sidebar"): with a modifier, so it also works from text fields and is no
   // type-ahead letter in the trees; the system claims neither.
   toggleSidebar: { id: "toggleSidebar", icon: PanelLeft, shortcuts: both({ key: "S", shift: true, mod: true }) },
+  // Cmd/Ctrl+Shift+K like Thunderbird's quick filter; with a modifier, so it works from fields.
+  quickFilter: { id: "quickFilter", icon: ListFilter, shortcuts: both({ key: "K", shift: true, mod: true }) },
 };

@@ -17,6 +17,7 @@ import { createConversationFake, type ConversationFakeOptions } from "./conversa
 import { createEmlFake, type EmlFakeOptions, type EmlFakeState } from "./eml";
 // Stage 16 (decision 0033): reading list, unread views, favourites, transfers, blocked senders.
 import { createParityFake, type ParityFakeOptions, type ParityFakeState } from "./parity";
+import { createViewsFake, type ViewsFakeOptions, type ViewsFakeState } from "./views";
 import { createParitySettingsFake, type ParitySettingsFakeOptions } from "./paritySettings";
 // Stage 16: read receipts (RFC 8098).
 import { createParityComposeFake, type ParityComposeFakeOptions, type ParityComposeFakeState } from "./parityCompose";
@@ -329,6 +330,8 @@ interface FakeCoreOptions {
   eml?: EmlFakeOptions;
   /** Stage 16: reading list, unread views, favourites and colours, transfers, blocked senders. */
   parity?: ParityFakeOptions;
+  /** Stage 19: orders per view, the table settings and which senders are contacts. */
+  listViews?: ViewsFakeOptions;
   /** Stage 16: the notification sounds of this system (default: macOS). */
   paritySettings?: ParitySettingsFakeOptions;
   /** Stage 16: read receipts by message id. */
@@ -393,6 +396,8 @@ export interface FakeCore {
   readonly eml: EmlFakeState;
   /** Stage 16: reading list, unread views, transfers and blocked senders as the fake holds them now. */
   readonly parity: ParityFakeState;
+  /** Stage 19: orders per view and the table settings as the fake holds them now. */
+  readonly listViews: ViewsFakeState;
   /** Stage 16: receipts the user sent or declined (only ever after a click). */
   readonly receipts: ParityComposeFakeState;
   /** Stage 16 (decision 0036): pins, preview pages asked for and "Save all" calls. */
@@ -867,6 +872,11 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     reject: (code, detail = null) => reject(code, detail),
   });
 
+  const viewsFake = createViewsFake(options.listViews ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    mailboxes: () => mailboxes,
+  });
+
   const attachmentsFake = createAttachmentsFake(options.attachments ?? {}, {
     messages: () => [...messages.values()].flat(),
     attachmentsOf: (messageId) => viewOf(messageId, "auto")?.attachments ?? [],
@@ -1076,6 +1086,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stages 12 and 11: AI over MCP and the settings sync.
           const mcpSyncAnswer = mcpSyncFake.handle(cmd, args);
           if (mcpSyncAnswer !== undefined) return mcpSyncAnswer;
+          // Stage 19: sorted and filtered views, orders, the table.
+          const viewsAnswer = viewsFake.handle(cmd, args);
+          if (viewsAnswer !== undefined) return viewsAnswer;
           // Stage 16 before stage 9: it answers `listInboxFiltered` with the unread filter.
           const parityAnswer = parityFake.handle(cmd, args);
           if (parityAnswer !== undefined) return parityAnswer;
@@ -1191,6 +1204,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     ui: uiFake.state,
     eml: emlFake.state,
     parity: parityFake.state,
+    listViews: viewsFake.state,
     receipts: parityComposeFake.state,
     attachments: attachmentsFake.state,
     updates: updatesFake.state,

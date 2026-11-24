@@ -69,6 +69,9 @@ import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
 import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
 // Stage 16: "Unread only" and "Unread first".
 import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
+// Stage 19: sorting, the table and the quick filter.
+import { useListView } from "../views/useListView";
+import { ListViewMenu } from "../views/ViewMenu";
 import type { InboxScope } from "../../services/ipc";
 // Stage 16: moving and copying into another account.
 import { TransferDialog, useOtherAccountFolders, useTransfer, type TransferRequest } from "../organize/transfer";
@@ -225,14 +228,23 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   // Stage 16: "Unread only" and "Unread first" replace the folder's or the inbox's own list.
   const unreadScope: InboxScope | null = kind === "folder" || kind === "inbox" ? { kind: "mailbox", mailboxId: mailbox.id } : null;
   const unreadMode = useUnreadMode(unreadScope && unreadViewKey(unreadScope));
-  const unreadSource = useUnreadSource(unreadScope, ["messages", account.id, mailbox.id], unreadMode, selection.items);
   const conversations = useConversationsOn() && (kind === "folder" || kind === "inbox");
-  const threadSource = useThreadSource(account.id, mailbox.id, conversations && kind === "folder" && !unreadSource);
-  const comfortSource = useListSource(unreadSource ? "folder" : kind, account, mailbox);
-  const source = unreadSource ?? threadSource ?? comfortSource;
+  // Stage 19 (decisions 0061, 0062): the view's order, its quick filter and the table.
+  const listView = useListView({
+    scope: unreadScope,
+    keyBase: ["messages", account.id, mailbox.id],
+    conversations,
+    kept: selection.items,
+    showRecipients: mailbox.role === "sent" || mailbox.role === "drafts",
+    mixedAccounts: false,
+  });
+  const unreadSource = useUnreadSource(unreadScope, ["messages", account.id, mailbox.id], listView.active ? null : unreadMode, selection.items);
+  const threadSource = useThreadSource(account.id, mailbox.id, conversations && kind === "folder" && !unreadSource && !listView.active);
+  const comfortSource = useListSource(unreadSource || listView.active ? "folder" : kind, account, mailbox);
+  const source = listView.source ?? unreadSource ?? threadSource ?? comfortSource;
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const mailboxes = useMailboxes(account.id).data;
-  const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations && !unreadSource);
+  const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations && !unreadSource && !listView.active);
   const label = useMailboxLabel();
   const push = useNoticeStore((state) => state.push);
   const startDrag = useDragStore((state) => state.start);
@@ -379,6 +391,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             list={list}
           />
         )}
+        {listView.bar}
         {source?.controls}
         {/* Stage 16 (decision 0036): mail of blocked senders the inbox leaves out. */}
         {kind === "inbox" && <BlockedHiddenNote scope={{ kind: "mailbox", mailboxId: mailbox.id }} accountId={account.id} />}
@@ -443,6 +456,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             });
           }}
           onDragEnd={endDrag}
+          table={listView.table}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}
@@ -745,6 +759,8 @@ export function MailView({ view }: MailViewProps) {
       : roleMailbox
         ? { kind: "mailbox", mailboxId: roleMailbox.id }
         : null;
+  const shownRole = (folder ?? roleMailbox)?.role;
+  const sentOrDrafts = !unifiedView && (shownRole === "sent" || shownRole === "drafts");
   const title = unifiedView
     ? unifiedName
     : view.kind === "mail"
@@ -811,6 +827,14 @@ export function MailView({ view }: MailViewProps) {
         <div className="flex min-w-0 items-center gap-3">
           {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
           <div className="flex shrink-0 items-center gap-1">
+            {/* Stage 19 (decision 0061): order, presentation and table columns of the view. */}
+            {account && unreadScope && (
+              <ListViewMenu
+                viewKey={unreadViewKey(unreadScope)}
+                showRecipients={sentOrDrafts}
+                mixedAccounts={Boolean(unifiedView) && accountList.length > 1}
+              />
+            )}
             {account && unreadScope && <UnreadControls viewKey={unreadViewKey(unreadScope)} />}
             {account && conversationsApply && <ConversationToggle />}
             {/* Stage 13: folds the AI panel in and out (only while AI is usable). */}
