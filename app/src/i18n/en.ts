@@ -3004,6 +3004,19 @@ export const en = {
       ask: "Ask about your mail",
     },
   },
+  // Audit 24.11.2026: the local database did not open at start (`getStartupProblem`).
+  startupProblem: {
+    title: "The app could not open its local data",
+    mailSafe: "Your mail is not lost: it stays on your mail server. Until this is solved, the app cannot show or change anything.",
+    tooNew: "Nothing was changed. Once the newer version of the app is installed, everything opens as before.",
+    backups_one: "Before every update of its data the app keeps a copy. There is {{count}} in {{folder}}; the newest is {{newest}}.",
+    backups_other: "Before every update of its data the app keeps a copy. There are {{count}} in {{folder}}; the newest is {{newest}}.",
+    noBackups: "There is no copy from an earlier update of the app's data yet.",
+    restore: "To go back to that copy: quit the app, move {{database}} somewhere safe, put the copy in its place under the name {{name}}, and start the app again.",
+    report: "If that does not help, export diagnostics in Settings → About and attach the file to a bug report. You can read the file before you send it.",
+    openAbout: "Open Settings → About",
+    database: "Database file: {{path}}",
+  },
   errors: {
     details: "Technical details",
     retry: "Try again",

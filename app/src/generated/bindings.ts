@@ -12,6 +12,11 @@ export const commands = {
 	/**  Version, commit, build date and platform of the running app. */
 	getAppInfo: (options?: InvokeOptions) => typedError<AppInfo, IpcError>(__TAURI_INVOKE("get_app_info", undefined, options)),
 	/**
+	 *  What kept the local database from opening at this start, if anything (the app shell shows
+	 *  it with what to do); `null` when it opened.
+	 */
+	getStartupProblem: (options?: InvokeOptions) => typedError<StartupProblem | null, IpcError>(__TAURI_INVOKE("get_startup_problem", undefined, options)),
+	/**
 	 *  Stage 15, "Export diagnostics…": the system's save dialog (Downloads, a dated name), then the
 	 *  core collects, redacts and writes the file. The shell only adds what the core cannot know:
 	 *  the product name, the app identifier, the log directory and the web view's version.
@@ -4424,6 +4429,21 @@ export type SnoozeTimes = {
 export type SoundPlatform = "macos" | "windows" | 
 /**  Neither: the system's notification sound, no choice. */
 "other";
+
+/**
+ *  What kept the local database from opening at start (`getStartupProblem`). The core runs on
+ *  without it: every call that needs the database fails with `error` until the next start, and
+ *  the app shell says what happened and what to do.
+ */
+export type StartupProblem = {
+	error: IpcError,
+	/**  The database file the app tried to open. */
+	databasePath: string,
+	/**  The folder with the copies the app takes before every update of the database. */
+	backupDir: string,
+	/**  Those copies, newest first (file names); empty if there are none. */
+	backups: string[],
+};
 
 /**  A device that takes part (each one writes a small record). */
 export type SyncDevice = {

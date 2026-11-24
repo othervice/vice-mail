@@ -1,5 +1,5 @@
 use mail_engine::{AppCore, DiagnosticsEnv};
-use mail_model::{AppInfo, DiagnosticsExportResult, IpcError};
+use mail_model::{AppInfo, DiagnosticsExportResult, IpcError, StartupProblem};
 use tauri::{AppHandle, Runtime, State, WebviewWindow};
 
 use super::to_ipc;
@@ -9,6 +9,14 @@ use super::to_ipc;
 #[specta::specta]
 pub fn get_app_info(core: State<'_, AppCore>) -> Result<AppInfo, IpcError> {
     Ok(core.app_info())
+}
+
+/// What kept the local database from opening at this start, if anything (the app shell shows
+/// it with what to do); `null` when it opened.
+#[tauri::command]
+#[specta::specta]
+pub fn get_startup_problem(core: State<'_, AppCore>) -> Result<Option<StartupProblem>, IpcError> {
+    Ok(core.startup_problem())
 }
 
 /// Stage 15, "Export diagnostics…": the system's save dialog (Downloads, a dated name), then the

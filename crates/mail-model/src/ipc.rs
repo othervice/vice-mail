@@ -39,6 +39,21 @@ pub struct AppInfo {
     pub platform: Platform,
 }
 
+/// What kept the local database from opening at start (`getStartupProblem`). The core runs on
+/// without it: every call that needs the database fails with `error` until the next start, and
+/// the app shell says what happened and what to do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupProblem {
+    pub error: IpcError,
+    /// The database file the app tried to open.
+    pub database_path: String,
+    /// The folder with the copies the app takes before every update of the database.
+    pub backup_dir: String,
+    /// Those copies, newest first (file names); empty if there are none.
+    pub backups: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemePreference {

@@ -64,6 +64,7 @@ import type {
   PrefetchStatus,
   RemoteContentScope,
   SaveAttachmentResult,
+  StartupProblem,
 } from "../../src/services/ipc";
 
 export const APP_INFO: AppInfo = {
@@ -256,6 +257,8 @@ const NOTHING: DiscoveryResult = { source: "none", imap: null, smtp: null, provi
 
 interface FakeCoreOptions {
   appInfo?: AppInfo;
+  /** What kept the database from opening at start (`getStartupProblem`); none by default. */
+  startupProblem?: StartupProblem | null;
   /** Stage 14: Gmail labels by message id; messages without an entry are not Gmail (null). */
   gmailLabels?: Record<number, string[]>;
   preferences?: Preferences;
@@ -877,6 +880,8 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       switch (cmd) {
         case "get_app_info":
           return appInfo;
+        case "get_startup_problem":
+          return options.startupProblem ?? null;
         // Stage 15: the core shows the save dialog and writes the file.
         case "export_diagnostics":
           return options.diagnostics ?? { kind: "saved", path: "/Users/test/Downloads/app-diagnostics-2026-11-23.txt" };

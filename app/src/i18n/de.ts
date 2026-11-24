@@ -2999,6 +2999,19 @@ export const de: Translation = {
       ask: "Frag deine Mails",
     },
   },
+  // Audit 24.11.2026: the local database did not open at start (`getStartupProblem`).
+  startupProblem: {
+    title: "Die App konnte ihre lokalen Daten nicht öffnen",
+    mailSafe: "Deine Mails sind nicht verloren: Sie bleiben auf deinem Mailserver. Bis das gelöst ist, kann die App nichts anzeigen oder ändern.",
+    tooNew: "Es wurde nichts verändert. Sobald die neuere Version der App installiert ist, öffnet sich alles wie vorher.",
+    backups_one: "Vor jeder Aktualisierung ihrer Daten legt die App eine Kopie an. In {{folder}} liegt {{count}}; die neueste ist {{newest}}.",
+    backups_other: "Vor jeder Aktualisierung ihrer Daten legt die App eine Kopie an. In {{folder}} liegen {{count}}; die neueste ist {{newest}}.",
+    noBackups: "Eine Kopie von einer früheren Aktualisierung der App-Daten gibt es noch nicht.",
+    restore: "Um zu dieser Kopie zurückzukehren: Beende die App, verschiebe {{database}} an einen sicheren Ort, lege die Kopie unter dem Namen {{name}} an ihre Stelle und starte die App neu.",
+    report: "Hilft das nicht, exportiere unter Einstellungen → Über die Diagnose und hänge die Datei an einen Fehlerbericht. Du kannst die Datei lesen, bevor du sie verschickst.",
+    openAbout: "Einstellungen → Über öffnen",
+    database: "Datenbankdatei: {{path}}",
+  },
   errors: {
     details: "Technische Details",
     retry: "Erneut versuchen",

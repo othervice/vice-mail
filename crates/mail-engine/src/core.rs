@@ -4,11 +4,11 @@ use std::sync::{Arc, Weak};
 use crate::protocols::AnyConnector;
 use mail_model::{
     Account, AccountId, AccountSettings, AccountStatus, ActionResult, AppInfo, BatchId, BodyFormat,
-    Capabilities, ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, LinkInfo,
+    Capabilities, ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, IpcError, LinkInfo,
     ListCursor, MailAction, MailBackend, MailConnector, Mailbox, MailboxId, MailboxRole, MessageId,
     MessagePage, MessageRef, MessageView, OpenAttachmentResult, OperationId, OperationInfo,
     OutboxCounts, Platform, Preferences, PrefetchSettings, PrefetchStatus, ReadingPreferences,
-    RemoteContentScope, RenderToken, Secret, ServerSettings, WriteConnector,
+    RemoteContentScope, RenderToken, Secret, ServerSettings, StartupProblem, WriteConnector,
 };
 use mail_store::{GLOBAL_SCOPE, NewAccount, Store, StoreOptions, StoredAccount};
 use serde::Serialize;
@@ -407,6 +407,27 @@ impl<C: Connector> AppCore<C> {
     /// The error that kept the database from opening, if any.
     pub fn startup_error(&self) -> Option<&CoreError> {
         self.inner.store.as_ref().err()
+    }
+
+    /// The same for the app shell: the error, where the database lies and the backups taken
+    /// before its updates (newest first), so the notice can say what to do. `None` when the
+    /// database opened.
+    pub fn startup_problem(&self) -> Option<StartupProblem> {
+        let error = self.startup_error()?;
+        let database = self.inner.data_dir.join(DATABASE_FILE);
+        let backups = mail_store::backup::list(&database)
+            .into_iter()
+            .rev()
+            .filter_map(|path| Some(path.file_name()?.to_string_lossy().into_owned()))
+            .collect();
+        Some(StartupProblem {
+            error: IpcError::from(error),
+            database_path: database.display().to_string(),
+            backup_dir: mail_store::backup::backup_dir(&database)
+                .display()
+                .to_string(),
+            backups,
+        })
     }
 
     /// Subscribes to the event stream. Events sent before subscribing are not replayed.

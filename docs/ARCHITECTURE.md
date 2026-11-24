@@ -180,7 +180,9 @@ nie über lokale IDs oder UIDs, sondern über Konto-UUID und Message-ID-Kopfzeil
 
 Migrationen sind nur vorwärts. Vor jeder Migration wird die Datenbankdatei kopiert; die letzten drei
 Kopien bleiben erhalten. Eine neuere Datenbank als die App kennt wird nicht geöffnet, sondern mit
-einer klaren Meldung abgelehnt.
+einer klaren Meldung abgelehnt. Was das Öffnen beim Start verhindert hat, holt die App-Hülle über
+`getStartupProblem` (Fehler, Datenbankdatei, Sicherungskopien, neueste zuerst) und zeigt es über
+jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren…“ (24.11.2026).
 
 **Schema und Abfragen (gemessen in Spike B, `docs/decisions/0003-sqlite-schema-und-suche.md`)**
 - `message.id` ist das Sortierdatum in Sekunden; ist die Zahl belegt, die nächste freie. Vergeben

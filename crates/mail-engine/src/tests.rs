@@ -113,6 +113,61 @@ async fn too_new_database_is_reported_by_every_storage_call() {
     assert_eq!(core.app_info().version, "1.2.3");
 }
 
+/// The app shell's notice: the error with where the database and its backups lie, the backups
+/// newest first; nothing when the database opened.
+#[tokio::test]
+async fn the_startup_problem_names_the_error_the_database_and_its_backups() {
+    let dir = TempDir::new().expect("temp dir");
+    let cfg = config(&dir);
+    let healthy = AppCore::start(config(&dir), services()).await;
+    assert_eq!(healthy.startup_problem(), None);
+    healthy.shutdown().await;
+    drop(healthy);
+
+    let db = cfg.data_dir.join(DATABASE_FILE);
+    let backups = mail_store::backup::backup_dir(&db);
+    std::fs::create_dir_all(&backups).expect("mkdir");
+    for name in [
+        "mail-000001700000000000-v15.sqlite3",
+        "mail-000001800000000000-v17.sqlite3",
+        "unrelated.txt",
+    ] {
+        std::fs::write(backups.join(name), b"copy").expect("backup");
+    }
+    write_newer_database(&db);
+
+    let core = AppCore::start(cfg, services()).await;
+    let problem = core.startup_problem().expect("a problem");
+    assert_eq!(problem.error.code, ErrorCode::DatabaseTooNew);
+    assert!(
+        problem.error.message.contains("newer version"),
+        "{}",
+        problem.error.message
+    );
+    assert_eq!(problem.database_path, db.display().to_string());
+    assert_eq!(problem.backup_dir, backups.display().to_string());
+    assert_eq!(
+        problem.backups,
+        vec![
+            "mail-000001800000000000-v17.sqlite3".to_owned(),
+            "mail-000001700000000000-v15.sqlite3".to_owned(),
+        ]
+    );
+    // A damaged file: a database error, also named.
+    drop(core);
+    std::fs::write(
+        &db,
+        b"this is not a database at all, but long enough to look like one",
+    )
+    .expect("damage");
+    for suffix in ["-wal", "-shm"] {
+        let _ = std::fs::remove_file(db.with_file_name(format!("{DATABASE_FILE}{suffix}")));
+    }
+    let core = AppCore::start(config(&dir), services()).await;
+    let problem = core.startup_problem().expect("a problem");
+    assert_eq!(problem.error.code, ErrorCode::Database);
+}
+
 /// Creates a current database, then patches its header so it claims schema version 999, as a
 /// newer app version would leave it. Bytes 60..64 of an SQLite file hold `user_version`.
 fn write_newer_database(path: &std::path::Path) {

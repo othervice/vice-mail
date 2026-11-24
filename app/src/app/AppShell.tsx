@@ -5,6 +5,7 @@ import { AiPanel } from "../features/ai/AiPanel";
 import { Notices } from "../features/actions/Notices";
 import { useNotificationTexts } from "../features/comfort/events";
 import { ActivityView } from "../features/activity/ActivityView";
+import { StartupNotice } from "../features/app-info/StartupNotice";
 import { ComposerHost } from "../features/composer/Composer";
 import { OutboxView } from "../features/composer/OutboxView";
 import { SendNotices } from "../features/composer/SendNotices";
@@ -79,6 +80,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       {overlay && <SidebarColumn overlay />}
       {/* Focusable (not in the Tab order): where the focus goes when what had it is gone (stage 8). */}
       <main tabIndex={-1} className="relative flex min-w-0 flex-1 flex-col bg-surface outline-none">
+        {/* The local database did not open at this start: what happened and what to do. */}
+        <StartupNotice />
         {eventsError && (
           <div className="px-6 pt-4">
             <ErrorNotice context={t("errors.context.events")} error={eventsError} />

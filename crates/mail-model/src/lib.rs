@@ -134,7 +134,7 @@ pub use inbox::{
 };
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
-    Preferences, ReadingPreferences, ThemePreference,
+    Preferences, ReadingPreferences, StartupProblem, ThemePreference,
 };
 pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,

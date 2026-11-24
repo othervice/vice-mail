@@ -70,6 +70,7 @@ import {
   type SaveAttachmentResult,
   type Security,
   type ServerSettings,
+  type StartupProblem,
   type SyncProgress,
   type TextSegment,
   type ThemePreference,
@@ -140,6 +141,7 @@ export type {
   SaveAttachmentResult,
   Security,
   ServerSettings,
+  StartupProblem,
   SyncProgress,
   TextSegment,
   ThemePreference,
@@ -293,6 +295,8 @@ export type Unsubscribe = () => void;
 
 export const ipc = {
   getAppInfo: (): Promise<AppInfo> => call(() => commands.getAppInfo()),
+  /** What kept the local database from opening at this start; `null` when it opened. */
+  getStartupProblem: (): Promise<StartupProblem | null> => call(() => commands.getStartupProblem()),
   getPreferences: (): Promise<Preferences> => call(() => commands.getPreferences()),
   setPreferences: (preferences: Preferences): Promise<Preferences> =>
     call(() => commands.setPreferences(preferences)),
