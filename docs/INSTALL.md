@@ -145,10 +145,13 @@ temporary place because it was never moved (App Translocation), cannot replace i
 **By hand:** quit the app, then drag the new version from its disk image onto Applications and
 replace the old one. Your accounts and mail stay.
 
-**From an unsigned to the first signed version:** macOS may ask once per account whether "Vice
-Mail" may use the password stored in your keychain, because the app's signature changed. Enter
-your Mac's password and choose **Always Allow**. Signed versions keep the same signature identity,
-so later updates should not ask again.
+**Keychain question after an update:** macOS ties the passwords in your keychain to the app's
+signature. Unsigned builds have no lasting signature identity, so after every update to an unsigned
+version, and once more on the move to the first signed version, macOS asks once per stored entry
+(one per account, plus the settings sync key and AI tokens if you use them) whether "Vice Mail" may
+use it. Enter your Mac's password and choose **Always Allow**. **Allow** lets only this one access
+through, and the app asks again at its next connection. Signed versions keep the same signature
+identity, so later updates should not ask again.
 
 Do not go back to an older version: once a newer version has upgraded the local database, an
 older one refuses to open it.
