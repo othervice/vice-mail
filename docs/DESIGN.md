@@ -744,6 +744,66 @@ Ohne Treffer: „Kein Kontakt passt zu „…“.“ Rechts ohne Auswahl „Wäh
 **Einstellungen → Kontakte** erklärt kurz, verweist mit „Kontakte öffnen“ auf die Ansicht und
 behält die Vorschläge für Doppelte.
 
+## Popup für neue Mails (Stufe 18, Entscheidung 0051)
+
+Wunsch vom 24.11.2026: Kommt neue Mail an, öffnet sich unten rechts am Bildschirmrand ein Popup
+mit Absender, kurzem Textausschnitt und den Knöpfen „Lesen“ und „Löschen“.
+
+**Fenster.** Ein eigenes Fenster ohne Rahmen, 360 px breit, 16 px über Dock bzw. Taskleiste und
+vom rechten Rand des Arbeitsbereichs, immer oben, auf jedem Space. Die Fläche ist
+`surface-raised`; Rundung 16 (`radius-panel`, auf macOS über die Inhaltsebene, unter Windows 11
+vom System) und der Schatten des Systems. Die Höhe folgt den Karten. Es nimmt nie den Fokus: kein
+Tastaturfokus, kein Aktivieren der App beim Erscheinen; der erste Klick trifft den Knopf.
+
+**Karte.** Eine je Mail, neueste oben, höchstens drei, getrennt durch Haarlinien
+(`border-subtle`), Innenabstand 12/16 px:
+
+```
+┌──────────────────────────────────────────────┐
+│ (AV)  Bob Example                   15:04  × │
+│       Mittagessen morgen?                    │
+│       Hallo Alice, hast du morgen Zeit für …│
+│       … zweite Zeile des Ausschnitts         │
+│       ● In Arbeit                            │
+│       [Lesen] [Löschen]                      │
+├──────────────────────────────────────────────┤
+│ 2 weitere im Posteingang                     │
+└──────────────────────────────────────────────┘
+```
+
+- Avatar 32 px wie in der Liste: das Bild des Kontakts (Stufe 17), sonst Initialen auf der Tönung
+  des Absenders; ohne Ring (die Kontozeile nennt das Konto).
+- Absender 14 px halbfett (Name, sonst Adresse, sonst „Unbekannter Absender“), Zeit 12 px
+  `text-secondary` mit Tabellenziffern wie die Zeitspalte, daneben Schließen (×, 24 px).
+- Betreff 13 px mittel, eine Zeile; Ausschnitt 13 px `text-secondary`, höchstens zwei Zeilen,
+  reiner Text; fehlt er noch, rückt er nach, sobald der Body da ist.
+- Nur bei mehreren Konten: Punkt in der Kontofarbe und „In <Konto>“ (12 px).
+- „Lesen“ ist der Hauptknopf, „Löschen“ der Zweitknopf (32 px). Nur lesendes Konto: „Löschen“
+  gesperrt, darunter in 12 px der Grund („Nur lesendes Konto: Zum Löschen musst du Änderungen
+  unter Einstellungen → Konten erlauben.“), mit dem Knopf über `aria-describedby` verbunden.
+- Gelöscht: die Karte wird eine Zeile „Gelöscht · <Betreff>“ mit „Rückgängig“ (leiser Knopf) und
+  Schließen und geht nach fünf Sekunden auf dem Bildschirm.
+- Verborgene Inhalte: Briefsymbol statt Avatar, „Neue Nachricht“, keine Zeile mit Betreff oder
+  Ausschnitt, nur „Lesen“; bei mehreren Konten das Konto.
+- Ein Fehler steht unter den Knöpfen in `danger` („Hat nicht geklappt: …“, `role="alert"`).
+
+**Mehr als drei.** Unter den Karten eine Zeile „N weitere im Posteingang“ (13 px, Akzent), die
+das Popup schließt und den Posteingang zeigt.
+
+**Zeit.** Nach zehn Sekunden auf dem Bildschirm blendet sich das Popup aus, nie, solange der
+Zeiger darauf ist; jede neue Mail beginnt die Zeit von vorn. Es zählt nur sichtbare Zeit: Liegt
+der Sperrbildschirm darüber oder schläft der Bildschirm, wartet das Popup auf den Menschen. Kommt eine Minute lang kein Zeichen vom Zeiger, gilt er als
+fort (ein Fenster, das nie Key wird, hört womöglich nicht jedes Verlassen). Keine eigene Bewegung: Karten erscheinen und gehen sofort
+(Entscheidung 0030).
+
+**Bildschirmleser.** Das Popup ist der Hauptbereich „Neue Mail“ (unsichtbare Überschrift erster
+Ebene), jede Karte ein `article`, benannt nach dem Absender; eine höfliche Live-Region sagt „Neue Nachricht von <Absender>: <Betreff>“
+(bei mehreren „N neue Nachrichten“, bei verborgenen Inhalten nur „Neue Nachricht“). Das Fenster
+nimmt den Fokus nicht; alles, was es anbietet, geht auch im Hauptfenster.
+
+**Einstellungen → Mitteilungen.** Unter „Neue Mails“ die Wahl „Neue Mails zeigen als“: „Popup von
+<Produkt>“ (Standard) oder „Mitteilung des Systems“.
+
 ## Regeln für Interaktion
 
 - Jede Aktion wirkt sofort in der Oberfläche; der Abgleich mit dem Server läuft dahinter.
