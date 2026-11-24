@@ -50,21 +50,27 @@ What exists today. See [CHANGELOG.md](CHANGELOG.md) for the details and what is 
 Fastmail or Posteo that use standard IMAP ([docs/PROVIDERS.md](docs/PROVIDERS.md) says which are
 tested). Several accounts at once, each with its own colour. Server settings are found from the
 address on request (DNS SRV and the domain's own autoconfiguration, no third-party directory).
-Outlook.com and Microsoft 365 need sign-in with Microsoft, which is planned but not there yet.
+JMAP servers with a password or an API token. Sign-in with Microsoft (Outlook.com, Microsoft 365)
+and with Google is built in and tested against a local server; a build needs the project's own
+client IDs for it, which the project has not registered yet. A short guided setup on the first start.
 
 **Inbox.** A unified inbox across accounts, account groups, conversations (can be switched off),
 categories without AI (people, notifications, newsletters, priority senders) with bundled rows,
-pins, snooze, tasks, a reading list, favourite folders and folder colours, unread-only and
-unread-first views, local rules, blocking senders, moving and copying between accounts.
+pins, snooze, tasks, a reading list, a flagged view, favourite folders and folder colours,
+creating, renaming and deleting folders, unread-only and unread-first views, local rules, blocking
+senders, moving and copying between accounts.
 
 **Reading.** HTML mail rendered through a sanitiser into a sandboxed frame with no scripts. Remote
 images and tracking pixels are blocked until you allow them once or for a sender. Every link
-shows its real target before it opens, with a warning when text and target differ. Attachment
-previews (images, PDF, text) are rendered by the Rust core. Calendar invitations, one-click
+shows its real target before it opens, with a warning when text and target differ. Images in
+mail and attachment previews (images, PDF, text) are decoded in a separate helper process with
+time and memory limits, so a crafted file cannot take the app down; saved attachments carry the
+system's "downloaded" mark. Calendar invitations, one-click
 unsubscribe, print and save as PDF, export and open `.eml` files, messages in their own window.
 
 **Writing.** Rich text and plain text, several identities, signatures, templates (with
-recipients), inline images, drafts saved locally and on the server, undo send, send later, inline
+recipients), inline images, drafts saved locally and on the server (drafts from other programs
+keep their images), undo send, send later, inline
 quick reply, "send and archive", contacts from your own mail, read receipts only by the standard
 (MDN, never without asking).
 
@@ -74,7 +80,8 @@ and continuing the search on the server.
 
 **Settings sync.** Accounts (without passwords), identities, signatures, templates, rules and
 settings are merged between your devices through a hidden folder in your own mailbox, encrypted
-with a passphrase ([age](https://age-encryption.org)). No server of ours.
+with a passphrase ([age](https://age-encryption.org)). No server of ours. A server change that
+arrives from another device waits for your confirmation, so a stored password never follows it.
 
 **AI, optional and off by default.**
 - A local [MCP](https://modelcontextprotocol.io) server lets an AI client of your choice (Claude
@@ -88,7 +95,8 @@ with a passphrase ([age](https://age-encryption.org)). No server of ours.
 **Everyday use.** Three layouts, full keyboard control with changeable shortcuts, a command
 palette (Cmd+K / Ctrl+K), screen-reader labels, text size from 80 to 150 percent, light and dark
 mode with six accent colours, native notifications, dock or taskbar badge, default mail app
-(`mailto:`), English and German.
+(`mailto:`), English and German. "Export diagnostics…" writes a readable text file without
+addresses, content or secrets, for bug reports.
 
 **Updates.** The app can update itself from the GitHub releases, signed with the project's update
 key. It only checks if you turn that on (off by default) or click "Check now".

@@ -26,6 +26,14 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Fast synchronisation with IDLE, CONDSTORE and QRESYNC where the server offers them; message
   bodies stored compressed on disk and prefetched for offline reading.
 - Passwords in the macOS keychain or the Windows Credential Manager only.
+- Sign-in with Microsoft (Outlook.com, Microsoft 365) and with Google: OAuth 2.0 with PKCE in the
+  system browser and a loopback redirect, refresh tokens in the keychain, XOAUTH2 or OAUTHBEARER
+  for IMAP and SMTP, revocation on removal where the provider offers it. Tested against a local
+  server; a build needs the project's client IDs (build variables) to offer it.
+- JMAP accounts (RFC 8620/8621) with a password or an API token (Bearer), push over EventSource,
+  the same outbox and read-only protection as IMAP; tested against Stalwart.
+- A guided first start: welcome, account, theme and accent, optional extras, done; skippable and
+  shown once.
 
 **Inbox**
 - Unified inbox across accounts, single accounts and account groups; accounts can be hidden.
@@ -33,8 +41,9 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Conversations, on by default and in every inbox view.
 - Categories without AI (people, notifications, newsletters) with a priority block, bundled rows
   and per-sender corrections.
-- Pins, snooze, tasks, a reading list, favourite folders, folder colours, "unread only" and
-  "unread first".
+- Pins, snooze, tasks, a reading list, a flagged view, favourite folders, folder colours,
+  "unread only" and "unread first".
+- Creating, renaming and deleting folders through the outbox (deleting asks first).
 - Local rules (conditions on sender, recipient, subject, list or account; actions such as move,
   mark read, category, pin), running while the app runs.
 - Blocking senders; moving and copying messages between accounts.
@@ -48,7 +57,11 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Every link shows its real target before it opens in the system browser, with a warning when
   text and target differ or the domain looks deceptive.
 - Attachments: save, save all, open with the system after a check; previews of images, PDF pages
-  and text rendered by the core; pinned attachments.
+  and text rendered by the core in a separate helper process with time and memory limits; pinned
+  attachments. Files written from attachments carry the system's quarantine or zone mark.
+- Every image in a mail is decoded and re-encoded in that helper before it is shown, so no bytes
+  from a sender reach the system's image decoders. Text-direction control characters are removed
+  from subjects and sender names.
 - Calendar invitations shown readably and handed to the system calendar.
 - One-click unsubscribe (RFC 8058) on request.
 - Print, save as PDF, export as `.eml`, open `.eml` files; messages in their own window; find in
@@ -66,7 +79,8 @@ published. How each part was built and tested is recorded per stage in `docs/sta
   Word or web pages is cleaned.
 - Several identities, signatures per identity, templates (optionally with recipients), inline
   images, attachments by picker or drag and drop.
-- Drafts saved locally and in the server's Drafts folder.
+- Drafts saved locally and in the server's Drafts folder; drafts written by other programs keep
+  their inline images, and an original that cannot be carried over is left untouched.
 - Undo send, send later (while the app runs), "send and archive", inline quick reply, composer in
   its own window.
 - Contacts collected from sent and received mail, ranked by use; names editable, duplicates merged.
@@ -82,7 +96,10 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Accounts (without passwords), identities, signatures, templates, rules, saved searches, settings
   and more merged between devices through a hidden folder in a mailbox of the user's choice.
 - Encrypted with age; the key is protected by a passphrase. The mail server sees only the number,
-  size and timing of entries. Format in `docs/SYNC.md`.
+  size and timing of entries. Format in `docs/SYNC.md`. The folder can be in an IMAP or a JMAP
+  account.
+- A server change for an account that arrives from another device waits for the user's
+  confirmation; the stored password is never sent to a server named only by a synced record.
 
 **AI (optional, off by default)**
 - Local MCP server: AI clients such as Claude Desktop, Claude Code, Cursor or LM Studio can search
@@ -108,6 +125,9 @@ published. How each part was built and tested is recorded per stage in `docs/sta
 - Native notifications per account with quiet hours, notification sounds, an unread badge on the
   dock or taskbar icon.
 - Default mail app for `mailto:` links.
+- "Export diagnostics…" (Settings → About): a readable text file with versions, system details,
+  counts and recent logs, without addresses, content, host names of the user's servers or
+  secrets.
 - English and German.
 
 **Installation and updates**
@@ -116,15 +136,20 @@ published. How each part was built and tested is recorded per stage in `docs/sta
   announced version. Checking only when the user turns it on (asked once, off by default) or
   clicks "Check now"; downloading and installing only on click.
 - Database backups before every migration; a database newer than the app is refused with a clear
-  message.
+  message, and a database that cannot be opened shows a notice with the way back to a backup.
+
+**Security**
+- A threat model (`docs/SECURITY_MODEL.md`) with the findings of the review before the first
+  release, what was fixed and what stays open and why, and a fuzzing campaign over the MIME,
+  HTML, image and PDF paths.
 
 ### Known gaps
 
 - The Windows build has not been tested on a Windows PC yet.
 - The Windows installer is not code-signed. macOS signing and notarisation are prepared and start
   once the Apple developer membership is active; until then macOS builds are only ad-hoc signed.
-- Outlook.com and Microsoft 365 (sign-in with Microsoft), "Sign in with Google" and JMAP are not
-  supported yet.
+- Sign-in with Microsoft and Google has not been tried with real accounts; it needs the project's
+  app registrations first. Fastmail over JMAP is untested.
 - Spell checking uses the system's and has not been checked on either platform.
 - Questions about mail in natural language are built and tested with a stand-in model only, not
   yet with a real one.
