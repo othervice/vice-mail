@@ -14,6 +14,9 @@ export default defineConfig({
     include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["./tests/setup.ts"],
     restoreMocks: true,
+    // The axe and focus tests take 1–2 s alone and over 5 s on a busy build machine or CI host
+    // (stage 17: three timeouts at load 18). A hang still fails, after 15 s.
+    testTimeout: 15_000,
     // Vitest blanks CSS imports by default; the token tests read tokens.css as raw text.
     css: { include: [/\.css(\?.*)?$/] },
   },
