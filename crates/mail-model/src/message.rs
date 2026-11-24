@@ -203,6 +203,16 @@ pub struct MessageListItem {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[specta(optional)]
     pub reading_list: bool,
+    /// Stage 19: the message's size in bytes (`RFC822.SIZE`), for the table's size column.
+    /// Absent when unknown.
+    #[serde(skip_serializing_if = "is_zero")]
+    #[specta(optional, type = Number)]
+    pub size: u32,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// Outbox state of a message as its list row shows it (stage 4). If several operations touch

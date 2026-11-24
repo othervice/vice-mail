@@ -39,7 +39,7 @@ use rusqlite::{Connection, params_from_iter};
 use crate::accounts;
 use crate::comfort_api::{InboxMailboxes, resolve};
 use crate::inbox::InboxListKind;
-use crate::lists::{item_at, list_columns};
+use crate::lists::{LIST_COLUMNS, item_at, list_columns};
 use crate::search::{SearchFilter, conditions_on};
 use crate::{Store, StoreError};
 
@@ -167,8 +167,8 @@ fn row_conditions(
 }
 
 /// One branch: mailbox `?{mailbox}` (account UUID `?{account}` for the inbox rules). Columns: the
-/// list columns (0..=13), the mailbox id (14), the sort value (15) and, for conversations, the
-/// thread id (16).
+/// list columns (0..=14), the mailbox id (15), the sort value (16) and, for conversations, the
+/// thread id (17).
 #[allow(clippy::too_many_arguments)]
 fn branch(
     order: &OrderSql,
@@ -302,7 +302,8 @@ pub(crate) fn statement(
         branches.remove(0)
     } else {
         let by = if order.column.is_some() {
-            format!("16 {dir}, 1 {dir}", dir = order.direction)
+            // 1-based: the sort value follows the list columns and the mailbox.
+            format!("{} {dir}, 1 {dir}", LIST_COLUMNS + 2, dir = order.direction)
         } else {
             format!("1 {}", order.direction)
         };
@@ -389,21 +390,25 @@ fn read_rows(
     let mut rows = conn
         .prepare_cached(&sql)?
         .query_map(params_from_iter(params.iter()), |r| {
-            let mailbox = MailboxId(r.get(14)?);
+            let mailbox = MailboxId(r.get(LIST_COLUMNS)?);
             let account = accounts
                 .get(&mailbox.0)
                 .copied()
-                .ok_or(rusqlite::Error::InvalidColumnIndex(14))?;
+                .ok_or(rusqlite::Error::InvalidColumnIndex(LIST_COLUMNS))?;
             let (text, number) = match (keyed, numeric) {
                 (false, _) => (None, None),
-                (true, true) => (None, Some(r.get::<_, i64>(15)?)),
-                (true, false) => (Some(r.get::<_, String>(15)?), None),
+                (true, true) => (None, Some(r.get::<_, i64>(LIST_COLUMNS + 1)?)),
+                (true, false) => (Some(r.get::<_, String>(LIST_COLUMNS + 1)?), None),
             };
             Ok(Read {
                 item: item_at(r, account, mailbox)?,
                 text,
                 number,
-                thread: if conversations { r.get(16)? } else { None },
+                thread: if conversations {
+                    r.get(LIST_COLUMNS + 2)?
+                } else {
+                    None
+                },
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

@@ -979,7 +979,7 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
                 filter(|q| q.attachment = true),
             ),
             (
-                "Von Kontakten (keiner im Generator: ganzer Ordner)".into(),
+                "Von Kontakten".into(),
                 SortKey::Date,
                 filter(|q| q.contacts = true),
             ),

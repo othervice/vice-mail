@@ -26,16 +26,19 @@ const ACTIVITY: &str =
             WHERE o.mailbox_id = l.mailbox_id AND o.uid = l.uid
               AND +o.message_id = l.message_id AND o.state <> 'confirmed')";
 
-/// Columns 0..=13 of every list row, as in `messages::LIST_PAGE`.
+/// How many columns [`list_columns`] has; a query's own columns follow from this index.
+pub(crate) const LIST_COLUMNS: usize = 15;
+
+/// Columns 0..=14 of every list row, as in `messages::LIST_PAGE` (stage 19: the size, 14).
 pub(crate) fn list_columns() -> String {
     format!(
         "l.message_id, l.seen, l.flagged, l.answered, l.draft, l.keywords,
            m.subject, m.from_name, m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview,
-           {ACTIVITY}"
+           {ACTIVITY}, m.size"
     )
 }
 
-/// A list row from columns 0..=13.
+/// A list row from columns 0..=14.
 pub(crate) fn item_at(
     r: &Row<'_>,
     account: AccountId,
@@ -69,7 +72,13 @@ pub(crate) fn item_at(
         snooze: None,
         task: None,
         reading_list: false,
+        size: size_at(r, 14)?,
     })
+}
+
+/// A message size column as the list item takes it (0 when negative, as never expected).
+pub(crate) fn size_at(r: &Row<'_>, index: usize) -> rusqlite::Result<u32> {
+    Ok(u32::try_from(r.get::<_, i64>(index)?.max(0)).unwrap_or(u32::MAX))
 }
 
 fn activity(state: Option<i64>) -> Option<MessageActivity> {
@@ -121,7 +130,7 @@ pub(crate) fn page<T>(
 // Unified inbox
 
 /// One branch of the unified list: the newest locations of mailbox `?{param}` below the cursor
-/// `?1`, at most `?2`, with the list columns and the mailbox id last.
+/// `?1`, at most `?2`, with the list columns and the mailbox id last ([`LIST_COLUMNS`]).
 fn unified_branch(param: usize) -> String {
     format!(
         "SELECT * FROM (SELECT {cols}, l.mailbox_id
@@ -169,11 +178,11 @@ pub(crate) fn unified(
     let rows = conn
         .prepare_cached(&sql)?
         .query_map(params_from_iter(values), |r| {
-            let mailbox = MailboxId(r.get(14)?);
+            let mailbox = MailboxId(r.get(LIST_COLUMNS)?);
             let account = accounts
                 .get(&mailbox.0)
                 .copied()
-                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(14))?;
+                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(LIST_COLUMNS))?;
             item_at(r, account, mailbox)
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -326,12 +335,15 @@ pub(crate) fn threads(
     let rows = conn
         .prepare_cached(&sql)?
         .query_map(params_from_iter(values), |r| {
-            let mailbox = MailboxId(r.get(15)?);
+            let mailbox = MailboxId(r.get(LIST_COLUMNS + 1)?);
             let account = accounts
                 .get(&mailbox.0)
                 .copied()
-                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(15))?;
-            Ok((item_at(r, account, mailbox)?, r.get::<_, Option<i64>>(14)?))
+                .ok_or_else(|| rusqlite::Error::InvalidColumnIndex(LIST_COLUMNS + 1))?;
+            Ok((
+                item_at(r, account, mailbox)?,
+                r.get::<_, Option<i64>>(LIST_COLUMNS)?,
+            ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let (rows, next_cursor) = page(rows, limit, |(item, _)| item.id);
@@ -403,7 +415,7 @@ pub(crate) fn thread_view(
 pub(crate) const MESSAGE_ROW: &str = "
     SELECT (SELECT a.uuid FROM account a WHERE a.id = m.account_id), m.subject, m.from_name,
            m.from_addr, m.to_addrs, m.date, m.has_attachments, m.preview,
-           (SELECT b.complete FROM message_body b WHERE b.message_id = m.id)
+           (SELECT b.complete FROM message_body b WHERE b.message_id = m.id), m.size
     FROM message m WHERE m.id = ?1";
 
 pub(crate) fn locations_sql() -> String {
@@ -438,6 +450,7 @@ pub(crate) fn entry(
         has_attachments: bool,
         preview: Option<String>,
         complete: Option<bool>,
+        size: u32,
     }
     let head = conn
         .prepare_cached(MESSAGE_ROW)?
@@ -456,6 +469,7 @@ pub(crate) fn entry(
                 has_attachments: r.get(6)?,
                 preview: r.get(7)?,
                 complete: r.get(8)?,
+                size: size_at(r, 9)?,
             })
         })
         .optional()?;
@@ -517,6 +531,7 @@ pub(crate) fn entry(
             snooze: None,
             task: None,
             reading_list: false,
+            size: head.size,
         },
         mailbox_ids,
         body_complete: head.complete == Some(true),

@@ -27,7 +27,8 @@ pub(crate) const LIST_PAGE: &str = "
            (SELECT max(CASE o.state WHEN 'failed' THEN 3 WHEN 'conflict' THEN 2 ELSE 1 END)
             FROM operation o
             WHERE o.mailbox_id = l.mailbox_id AND o.uid = l.uid
-              AND +o.message_id = l.message_id AND o.state <> 'confirmed')
+              AND +o.message_id = l.message_id AND o.state <> 'confirmed'),
+           m.size
     FROM message_location l CROSS JOIN message m ON m.id = l.message_id
     WHERE l.mailbox_id = ?1 AND l.message_id < ?2
     ORDER BY l.message_id DESC LIMIT ?3";
@@ -375,6 +376,7 @@ pub(crate) fn list(
                 snooze: None,
                 task: None,
                 reading_list: false,
+                size: crate::lists::size_at(r, 14)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
