@@ -12,6 +12,7 @@
 #   scripts/e2e-gui.sh                      # build the test app and run every spec (test:e2e)
 #   scripts/e2e-gui.sh --spec ./tests/e2e/frame.e2e.mjs   # no build, the given specs (test:e2e:run)
 #   README_SHOTS=1 scripts/e2e-gui.sh --spec ./tests/e2e/readme-shots.e2e.mjs   # README screenshots
+#   PERF=1 PERF_SEED=100000 scripts/e2e-gui.sh --spec ./tests/e2e/perf.e2e.mjs   # performance
 #
 # The output goes to the terminal and to $E2E_LOG (default: a file in $TMPDIR). The exit code is
 # the test run's.
@@ -44,7 +45,7 @@ runner="$work/run.sh"
   echo 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"'
   echo '[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"'
   echo 'export LANG=en_US.UTF-8 CARGO_INCREMENTAL=0'
-  for name in TESTMAIL_LOCK_NAME E2E_APP MAIL_APP_E2E_DATA_DIR README_SHOTS; do
+  for name in TESTMAIL_LOCK_NAME E2E_APP MAIL_APP_E2E_DATA_DIR README_SHOTS PERF PERF_SEED PERF_RUNS; do
     if [ -n "${!name:-}" ]; then echo "export $name=$(printf '%q' "${!name}")"; fi
   done
   printf '%q ' "${command[@]}"

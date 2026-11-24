@@ -14,6 +14,7 @@
 //!   start no other program; the test reads what would have been opened.
 //! - An optional extra root CA ([`EXTRA_CA_ENV`]), so the desktop test can set up the account
 //!   of the local test server, whose certificate the system does not trust.
+//! - An optional recorder for the performance measurement ([`PERF_ENV`]).
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -44,6 +45,11 @@ pub const LOOPBACK_IMAGES_ENV: &str = "MAIL_APP_E2E_LOOPBACK_IMAGES";
 /// e.g. `http://127.0.0.1:<port>/latest.json`. Optional; without it the shipped endpoint from
 /// `tauri.conf.json` applies. Plain HTTP is accepted only for loopback addresses.
 pub const UPDATE_ENDPOINT_ENV: &str = "MAIL_APP_E2E_UPDATE_ENDPOINT";
+
+/// `1` turns on the recorder of the performance measurement (`tests/e2e/perf.e2e.mjs`): the page
+/// records when the frame, the first message rows and the first opened message appear
+/// ([`PERF_RECORDER`]). Optional; off for every other spec.
+pub const PERF_ENV: &str = "MAIL_APP_E2E_PERF";
 
 /// The overriding update endpoint ([`UPDATE_ENDPOINT_ENV`]), if set and a valid URL.
 pub fn update_endpoint() -> Option<tauri::Url> {
@@ -84,6 +90,73 @@ document.addEventListener("securitypolicyviolation", (e) => {
 });
 "#;
 
+/// The performance recorder ([`PERF_ENV`]), at document start in the main frame. Marks are
+/// `{ t: performance.now(), wall: Date.now() }`; the test compares `wall` with the time it started
+/// the process. `frame`, `rows` and `opened` are the DOM changes; `…Painted` the end of the first
+/// frame drawn after them (a task posted from `requestAnimationFrame`), which only a page that
+/// renders frames reaches. "Usable inbox": as soon as the first rows are drawn, the first message
+/// row is clicked, and `opened` is when the reading pane shows that message with its body (or
+/// says that the body is not on this computer).
+const PERF_RECORDER: &str = r#"
+(() => {
+  const perf = { timeOrigin: performance.timeOrigin, marks: {}, opened: null };
+  window.__e2ePerf = perf;
+  const mark = (name) => {
+    if (!(name in perf.marks)) perf.marks[name] = { t: performance.now(), wall: Date.now() };
+  };
+  const afterPaint = (name, then) => {
+    if (document.visibilityState !== "visible") {
+      setTimeout(() => then?.(), 0);
+      return;
+    }
+    requestAnimationFrame(() => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        mark(name);
+        then?.();
+      };
+      channel.port2.postMessage(0);
+    });
+  };
+  mark("documentStart");
+  const firstRow = () => document.querySelector('[data-testid="message-list"] [data-testid="message-row"]');
+  const shown = () => {
+    const pane = document.querySelector('[data-testid="reading-pane"]');
+    const article = pane?.querySelector("article");
+    if (!article || article.getAttribute("aria-busy") !== "false") return false;
+    const subject = pane.querySelector('[data-testid="reading-subject"]')?.textContent.trim() ?? "";
+    const body = pane.querySelector('[data-testid="text-body"], [data-testid="mail-frame"], [data-testid="reading-unavailable"]');
+    return body !== null && subject !== "" && perf.opened.label.includes(subject);
+  };
+  let observer = null;
+  const check = () => {
+    if (!perf.marks.frame && document.querySelector('[data-testid="rail-settings"]')) {
+      mark("frame");
+      afterPaint("framePainted");
+    }
+    if (!perf.marks.rows) {
+      if (!firstRow()) return;
+      mark("rows");
+      afterPaint("rowsPainted", () => {
+        const row = firstRow();
+        if (!row) return;
+        perf.opened = { id: row.id, label: row.querySelector('[data-testid="row-name"]')?.textContent ?? "" };
+        mark("click");
+        row.click();
+        check();
+      });
+      return;
+    }
+    if (perf.opened && !perf.marks.opened && shown()) {
+      mark("opened");
+      afterPaint("openedPainted", () => observer.disconnect());
+    }
+  };
+  observer = new MutationObserver(check);
+  observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["aria-busy"] });
+})();
+"#;
+
 /// Adds the embedded WebDriver and the test commands to the app.
 pub fn install(
     builder: Builder<Wry>,
@@ -96,22 +169,34 @@ pub fn install(
             e2e_opened,
             e2e_invoked
         ]);
-    builder
+    let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
         .plugin(tauri_plugin_wdio_webdriver::init())
         .plugin(
             tauri::plugin::Builder::<Wry>::new("e2e-csp-recorder")
                 .js_init_script(CSP_RECORDER)
                 .build(),
-        )
-        .invoke_handler(move |invoke| {
-            record_invoke(invoke.message.command());
-            if invoke.message.command().starts_with(COMMAND_PREFIX) {
-                test_commands(invoke)
-            } else {
-                app_commands(invoke)
-            }
-        })
+        );
+    let builder = if switched_on(std::env::var_os(PERF_ENV)) {
+        builder.plugin(perf_plugin())
+    } else {
+        builder
+    };
+    builder.invoke_handler(move |invoke| {
+        record_invoke(invoke.message.command());
+        if invoke.message.command().starts_with(COMMAND_PREFIX) {
+            test_commands(invoke)
+        } else {
+            app_commands(invoke)
+        }
+    })
+}
+
+/// The recorder of the performance measurement ([`PERF_ENV`]).
+fn perf_plugin() -> tauri::plugin::TauriPlugin<Wry> {
+    tauri::plugin::Builder::<Wry>::new("e2e-perf")
+        .js_init_script(PERF_RECORDER)
+        .build()
 }
 
 fn record_invoke(command: &str) {
@@ -128,7 +213,7 @@ fn record_invoke(command: &str) {
 pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreError> {
     services.reading.opener = OPENER.clone();
     services.sync.extra_root_ca = test_ca(std::env::var_os(EXTRA_CA_ENV))?;
-    services.reading.remote.allow_loopback = loopback_images(std::env::var_os(LOOPBACK_IMAGES_ENV));
+    services.reading.remote.allow_loopback = switched_on(std::env::var_os(LOOPBACK_IMAGES_ENV));
     if services.reading.remote.allow_loopback {
         tracing::info!("desktop-test build: external images may load from loopback addresses");
     }
@@ -136,7 +221,7 @@ pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreErro
 }
 
 /// Only exactly `1` switches it on.
-fn loopback_images(value: Option<OsString>) -> bool {
+fn switched_on(value: Option<OsString>) -> bool {
     value.as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
@@ -469,8 +554,8 @@ mod tests {
     }
 
     #[test]
-    fn the_loopback_switch_needs_exactly_one() {
-        assert!(loopback_images(Some("1".into())));
+    fn the_switches_need_exactly_one() {
+        assert!(switched_on(Some("1".into())));
         for off in [
             None,
             Some(OsString::new()),
@@ -478,7 +563,7 @@ mod tests {
             Some("true".into()),
             Some("1 ".into()),
         ] {
-            assert!(!loopback_images(off.clone()), "{off:?}");
+            assert!(!switched_on(off.clone()), "{off:?}");
         }
     }
 

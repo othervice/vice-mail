@@ -25,6 +25,11 @@ const LOCK_NAME = process.env.TESTMAIL_LOCK_NAME || "desktop-e2e";
 // SMTP test messages) instead of the 10,000 the other specs use; without the variable the spec is
 // excluded, even when named.
 const README_SHOTS = process.env.README_SHOTS === "1";
+// PERF=1: the performance measurement (tests/e2e/perf.e2e.mjs, docs/testing/performance.md), taken
+// with `--spec`, on a seed of PERF_SEED messages (default 10,000) into alice's INBOX. Without the
+// variable the spec is excluded, even when named.
+const PERF = process.env.PERF === "1";
+const PERF_SEED = process.env.PERF_SEED || "10000";
 /** Whether this run took the lock (and so releases it); false if the caller held it already. */
 let ownLock = false;
 
@@ -73,7 +78,7 @@ export const config = {
     "./tests/e2e/updates.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
-  exclude: README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"],
+  exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],
   maxInstances: 1,
   capabilities: [
     {
@@ -130,7 +135,7 @@ export const config = {
       // Waits up to 30 minutes for another session's tests; prints "already held" if ours.
       ownLock = !testmailSync("lock", LOCK_NAME, "30").includes("already held");
       console.log(`test server lock: ${LOCK_NAME}${ownLock ? "" : " (held by the caller)"}`);
-      const seed = README_SHOTS ? ["1000", "--no-smtp"] : ["10000", "--filler-folder", "INBOX"];
+      const seed = README_SHOTS ? ["1000", "--no-smtp"] : [PERF ? PERF_SEED : "10000", "--filler-folder", "INBOX"];
       const ms = prepareTestServer({ seed });
       console.log(`test server ready with ${seed[0]} messages after ${ms} ms`);
     } catch (e) {

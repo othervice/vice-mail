@@ -39,6 +39,8 @@ const MARKERS = [
   "e2e_opened",
   "e2e_invoked",
   "__e2eCspViolations",
+  "__e2ePerf",
+  "MAIL_APP_E2E_PERF",
   DATA_DIR_ENV,
   EXTRA_CA_ENV,
   LOOPBACK_IMAGES_ENV,
