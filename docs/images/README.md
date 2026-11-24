@@ -1,7 +1,8 @@
 # Screenshots
 
-Images used by the top-level `README.md`. Every view in the table below exists except
-`windows-inbox.png`, which needs a Windows PC. A desktop spec takes them, so they can be taken
+The top-level `README.md` shows `inbox-light.png`; the other views are kept for documents and
+release notes. Every view in the table below exists except `windows-inbox.png`, which needs a
+Windows PC. A desktop spec takes them, so they can be taken
 again after the interface changes.
 
 ## Taking them again
