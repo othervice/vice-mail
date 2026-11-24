@@ -99,7 +99,8 @@ if cargo xwin --version >/dev/null 2>&1 && [[ -x "${LLVM_BIN:-/opt/homebrew/opt/
 else
   printf '\n==> Clippy (Windows target)\n    skipped: cargo-xwin, LLVM or the Rust target x86_64-pc-windows-msvc missing (docs/SETUP.md)\n'
 fi
-step "Rust tests" cargo test --workspace --locked
+# --no-fail-fast: one run shows every failing test binary (CI on Windows), not just the first.
+step "Rust tests" cargo test --workspace --locked --no-fail-fast
 step "Rust tests (feature e2e)" cargo test -p mail-app --locked --features e2e --lib e2e::
 
 # Frontend

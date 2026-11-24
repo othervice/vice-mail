@@ -16,7 +16,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     emit_git_commit();
     emit_build_date();
-    tauri_build::build();
+    build_tauri();
+}
+
+/// Tauri's code generation. On a Windows host the app manifest (`windows-app-manifest.xml`, the
+/// Common Controls v6 dependency, the same file tauri-build ships) goes into every binary of this
+/// crate through the linker: tauri-build embeds it in the app binary only, and the unit-test
+/// binary then does not start (`STATUS_ENTRYPOINT_NOT_FOUND`, found by the first CI run on
+/// Windows). This is the way tauri-build documents for `new_without_app_manifest`. Cross builds
+/// from the Mac (cargo-xwin, lld-link) keep tauri-build's own embedding; their test binaries are
+/// never run.
+fn build_tauri() {
+    let target_windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    if target_windows && cfg!(windows) {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
+        let windows = tauri_build::WindowsAttributes::new_without_app_manifest();
+        if let Err(err) =
+            tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
+        {
+            panic!("tauri-build failed: {err:#}");
+        }
+    } else {
+        tauri_build::build();
+    }
 }
 
 fn git(args: &[&str]) -> Option<String> {
