@@ -1,5 +1,20 @@
-# Test mails are RFC 5322 data with CRLF line endings; never convert them.
-*.eml -text
+# Text files are stored with LF and checked out with LF on every platform, whatever
+# core.autocrlf says (it is on by default on Windows, also on the CI runners). Generated files,
+# snapshots and shell scripts are compared or run byte for byte, so a Windows checkout must not
+# differ from a macOS one.
+* text=auto eol=lf
 
-# Snapshots of built mails keep their CRLF line endings.
+# Byte-exact data: never converted, whatever it contains.
+# Test mails are RFC 5322 data with CRLF line endings.
+*.eml -text
+# Snapshots of built mails (some keep CRLF) and of signatures and templates.
 crates/mail-content/src/compose/snapshots/*.html -text
+crates/mail-content/src/templates/snapshots/*.html -text
+# The signed update payload, its signature and the test key of the updater tests.
+app/src-tauri/src/updater/fixtures/** -text
+
+# Binary files (git detects them anyway; stated so a new file of these types is never converted).
+*.png binary
+*.ico binary
+*.icns binary
+*.pdf binary
