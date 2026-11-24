@@ -114,6 +114,11 @@ party, which is advisable before wide distribution.
   pre-check reads the HTML like html5ever's tokenizer (comments, attributes, raw text, SVG and
   MathML content, CDATA) and refuses what it cannot model; a differential fuzz test compares it
   with the parser (finding C-1).
+- **Contact pictures** (stage 17, decision 0050) take the same way: the file the user chose
+  (system dialog or a drop the shell saw, at most 20 MiB, read by the core) is decoded and
+  encoded again in the helper (`mail-mcp --contact-picture`, same limits and watchdog), first for
+  the cropper, then as the stored 256 px JPEG; a picture from the settings sync is encoded again by
+  this device's helper before it is shown. Never a picture from the network.
 - **Attachments are never rendered by the WebView.** Previews are decoded in Rust (images re-encoded,
   PDF rasterised by hayro without scripts or network, text cleaned), within pixel, page and byte
   limits; HTML, XHTML, XML and SVG are never previewed. A decoder panic becomes `preview_damaged`.

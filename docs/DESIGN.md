@@ -65,7 +65,7 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Element | Verhalten |
 |---|---|
 | Punkt links | ungelesen; beim Überfahren und bei Auswahl wird er zum Auswahlkästchen |
-| Avatar | 32 px, Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. |
+| Avatar | 32 px; das Bild, das der Nutzer für den Kontakt gewählt hat (Stufe 17, 0050), sonst Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. |
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
@@ -665,6 +665,65 @@ Schritt bleibt.
 **Geprüft** in Hell und Dunkel bei 1200 × 800 (Standardfenster der Desktop-Tests) und 900 × 600:
 nichts scrollt seitwärts, die Karte bleibt im Fenster, Fußzeile und „Einrichtung überspringen“
 bleiben sichtbar; bei 900 × 600 scrollen Willkommen, Konto und Optional in der Karte.
+
+## Kontakte (Stufe 17, Entscheidung 0050)
+
+Wunsch vom 24.11.2026: jede Adresse wird Kontakt, eigene Bilder statt nur Initialen („nett, aber
+nutzlos“), eine schön gestaltete Kontaktseite mit guter Suche, Spam-Adressen sperren.
+
+**Ansicht.** „Kontakte“ ist eine eigene Ansicht (Spalte nach „Gespeicherte Ansichten“, Leiste,
+Befehlspalette), über alle Konten, mit eigenem Kopf („Kontakte“, darunter „Aus den Mails auf diesem
+Gerät“). Links die Liste (22 rem, Fläche `surface-list`, Haarlinie zum Detail), rechts der gewählte
+Kontakt (Fläche `surface`, Inhalt höchstens `--ui-content-max-width`, 32 px Rand).
+
+**Suche und Filter.** Oben in der Liste ein Suchfeld mit Lupe („Name, Adresse oder Domain“, Label
+für Bildschirmleser „Kontakte durchsuchen“), sucht nach 120 ms Tipp-Pause; darunter das Kästchen
+„Listen und Systemadressen zeigen“ (aus: nur Personen). Pfeil runter springt vom Feld in die Liste,
+Escape leert das Feld.
+
+**Zeile.** 32-px-Avatar (Bild oder Initialen auf der Tönung des Absenders, ohne Kontoring), Name
+(14 px mittel) mit Pillen „Liste“/„System“ (`badge`) und „Spam“ (`danger` auf zartem Rot), darunter
+die Adresse (12 px `text-secondary`), rechts das Datum der letzten Mail (12 px, Tabellenziffern, wie
+die Zeitspalte der Mailliste). Gewählt `selected`, sonst beim Überfahren `hover`, abgerundet wie
+Listenzeilen. Die Liste ist eine `listbox` mit `aria-activedescendant`: Pfeiltasten, Pos1, Ende,
+Bild auf/ab wählen und zeigen den Kontakt, Eingabe setzt den Fokus auf seinen Namen. Am Ende
+„Weitere Kontakte zeigen“.
+
+**Kontakt.** Oben das Bild (96 px rund) mit „Bild wählen …“ bzw. „Bild ändern …“ und „Bild
+entfernen“ (12 px) und dem Hinweis „oder ein Bild hierher ziehen“; zieht man eine Datei über das
+Fenster, bekommt das Bild einen Akzentrand und der Hinweis heißt „Lass das Bild los, um es zu
+verwenden“. Daneben Name (20 px halbfett), Pillen, Adresse (14 px), bei Listen und Systemadressen
+ein Satz, was das heißt. Darunter eine Reihe Knöpfe: „Mail schreiben“ (Hauptknopf), „Alle Mails
+anzeigen“ (Suche `from:` über alle Konten), „Als Spam markieren“ bzw. „Kein Spam“, „Name
+bearbeiten“. Dann Abschnitte mit 14-px-Überschrift: „Adressen“ (Karte mit einer Zeile je Adresse:
+Adresse, darunter „12 gesendet · 30 empfangen · in 2 weiteren · zuletzt 20.11.2026“, „Trennen“ an
+zusammengeführten), „Notiz“ (Textfeld, „Notiz speichern“, Hinweis zum Sync) und „Letzte Mails“
+(Karte mit bis zu acht Mails, Betreff, Anfang, Datum; ein Klick öffnet die Mail im eigenen Fenster).
+
+**Zuschnitt.** Ersetzt den Kopf an Ort und Stelle, kein Fenster: Überschrift „Ausschnitt wählen“,
+Hinweis, ein Quadrat von 18 rem mit dem Bild, das der Helfer kodiert hat, und einer runden Maske
+(außen abgedunkelt mit `scrim`, Rand `surface-raised`), so wie der Avatar es zeigt. Das Quadrat
+bleibt, das Bild bewegt sich: ziehen mit der Maus, Pfeiltasten (Umschalt: viermal so weit), Plus
+und Minus zoomen, darunter Minus-Knopf, Zoom-Regler, Plus-Knopf; Eingabe speichert, Escape bricht
+ab. „Bild speichern“ (Hauptknopf) und „Abbrechen“. Fehler stehen an der Stelle („Das Bild konnte
+nicht verwendet werden.“ mit Grund aus `errors.codes`).
+
+**Bilder überall.** Der Avatar zeigt das Bild, wo heute Initialen stehen: Zeilen der Mailliste und
+der Konversationen, Kopf im Lesebereich, Chips der Empfänger im Composer (16 px, neu mit
+Mini-Avatar), Kontakte. Ohne Bild bleiben die Initialen auf der Tönung. Nie ein Bild aus dem Netz.
+
+**Als Spam markieren.** Sperrt sofort. Liegen Mails davon in Konten mit Schreibzugriff, fragt ein
+neutraler Dialog „Auch 3 vorhandene Mails in den Spam-Ordner verschieben?“ mit „In den
+Spam-Ordner“ und „Liegen lassen“ (Ausnahme von „ein Dialog nur bei endgültigem Löschen“ wie die
+Frage beim Verschieben zwischen Konten: es geht um viele Mails auf dem Server). Der Hinweis unten
+sagt, was geschah, und was in Konten ohne Schreibzugriff geblieben ist; „Rückgängig“ hebt Sperre
+und Verschieben auf.
+
+**Leer.** Ohne Kontakte: „Noch keine Kontakte“ mit dem Satz, woher sie kommen (keine Beispiele).
+Ohne Treffer: „Kein Kontakt passt zu „…“.“ Rechts ohne Auswahl „Wähle einen Kontakt“.
+
+**Einstellungen → Kontakte** erklärt kurz, verweist mit „Kontakte öffnen“ auf die Ansicht und
+behält die Vorschläge für Doppelte.
 
 ## Regeln für Interaktion
 

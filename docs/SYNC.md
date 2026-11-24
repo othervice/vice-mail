@@ -156,11 +156,12 @@ and `ui.unread_first` (the views that group unread mail on top) stay local.
 | `senderRule` | `address:<v>`, `domain:<v>` or `list_id:<v>` | newer wins | applied | 1 KiB | `sender_rule` |
 | `accountGroup` | UUID | newer wins, edit beats delete | applied | 16 KiB | `account_group` |
 | `remoteContent` | `<account uuid>/<address>` | newer wins | applied | 1 KiB | `remote_content_sender` |
-| `contact` | normalised address | newer wins | applied | 4 KiB | `contact.user_name`, `contact.contact_group` |
+| `contact` | normalised address | newer wins | applied | 8 KiB | `contact.user_name`, `contact.contact_group`, `contact.note` (stage 17, decision 0050) |
 | `readingList` | `<account uuid>/<Message-ID>` | newer wins | applied | 1 KiB | `reading_list` (stage 16, decision 0033) |
 | `mailboxPref` | `<account uuid>/<decoded mailbox path>` | newer wins | applied | 1 KiB | `mailbox_pref` (stage 16, decision 0033) |
 | `blockedSender` | normalised address | newer wins | applied | 1 KiB | `blocked_sender` (stage 16, decision 0033) |
 | `attachmentPin` | `<account uuid>/<Message-ID>/<attachment index>` | newer wins | applied | 2 KiB | `attachment_pin` (stage 16, decision 0036) |
+| `contactPicture` | normalised address | newer wins | applied | 56 KiB | `contact_picture.image` (stage 17, decision 0050) |
 
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
 ids or UIDs. A pinned attachment adds the attachment's index in the reading view as the last
@@ -186,7 +187,8 @@ that set "always as newsletter" for the same sender change the same record.
 | `mailboxPref` | `{favoritePosition?, color?}`, at least one (colour index 0 to 7 of the account palette) |
 | `blockedSender` | `{}` (that it exists is all) |
 | `attachmentPin` | `{pinnedAtMs, name, mimeType, size}`: the sanitised file name (not empty, no controls), the declared type and the size when it was pinned, so the list shows it without the body |
-| `contact` | `{userName?, mergedInto?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions stay on the device |
+| `contact` | `{userName?, mergedInto?, note?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10), and the user's note (stage 17: at most 1,000 characters, no controls but line breaks and tabs). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions, counts, ranks, names seen in mail and the kind stay on the device |
+| `contactPicture` | `{jpeg}`: standard base64 of a JPEG of at most 40 KiB (stage 17, decision 0050), the 256 × 256 picture the user chose for the contact with this address. Applied at once (no contact row needed); shown only after this device's helper encoded it again (`contact_picture.display`, not synchronised); a refused one is never shown |
 | `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
 | `device` | `{name, system, lastSeenMs}` |
 | `savedView` | `{name, query, position}`: a saved search of the sidebar (stage 7, decision 0026), checked like a local save (name 1 to 100 characters, query 1 to 2048 bytes, both trimmed, no control characters). Names are unique per device only where they are typed; records from other devices are taken over even with a name in use. Recent searches stay on the device |
