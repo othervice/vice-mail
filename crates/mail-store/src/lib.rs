@@ -97,6 +97,7 @@ pub use contacts_dir::{
 };
 pub use diagnostics::{AccountStats, DatabaseStats};
 pub use error::StoreError;
+pub use folders::MAX_FOLDER_NAME_CHARS;
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;
 pub use inbox::{ArrivedMessage, InboxListKind};
@@ -107,7 +108,6 @@ pub use mail_api::{
 pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
 pub use mcp::{NewMcpAccess, StoredMcpClient, StoredMcpState};
 pub use migrations::SCHEMA_VERSION;
-pub use folders::MAX_FOLDER_NAME_CHARS;
 pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
 pub use parity::{TransferItem, TransferPlan};
 pub use reading::{
