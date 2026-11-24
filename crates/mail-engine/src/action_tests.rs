@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mail_model::{
-    Access, AccountId, AccountSettings, AccountState, BackendError, CoreError, CoreEvent,
+    Access, AccountId, AccountSettings, AccountState, BackendError, BatchId, CoreError, CoreEvent,
     ErrorCode, MailAction, Mailbox, MailboxId, MailboxRole, MarkReadOnOpen, MessageActivity,
-    MessageListItem, MessageRef, OperationInfo, OperationState, OutboxCounts, ReadingPreferences,
-    Secret, Security, ServerSettings,
+    MessageListItem, MessageRef, OperationId, OperationInfo, OperationState, OutboxCounts,
+    ReadingPreferences, Secret, Security, ServerSettings,
 };
 use tempfile::TempDir;
 use tokio::sync::broadcast;
@@ -165,11 +165,7 @@ impl Harness {
 
     /// Waits for the operations of `batch`'s first operation id to reach `state`, from the
     /// `operationsChanged` events; returns them.
-    async fn operation_state(
-        &mut self,
-        op: mail_model::OperationId,
-        state: OperationState,
-    ) -> OperationInfo {
+    async fn operation_state(&mut self, op: OperationId, state: OperationState) -> OperationInfo {
         let (event, _) = self
             .event(|e| match e {
                 CoreEvent::OperationsChanged { operations, .. } => {
@@ -185,6 +181,31 @@ impl Harness {
             .into_iter()
             .find(|o| o.id == op)
             .expect("the operation")
+    }
+
+    /// The event that recorded `batch` (its operations queued) and the events before it.
+    /// The outbox worker runs on its own: if it reads the queue between the recording's commit
+    /// and that event, its own events (in flight, confirmed) come first. Events of two tasks
+    /// have no order (the UI reloads on each), so the event is looked for, not taken as the
+    /// first one.
+    async fn recording(&mut self, batch: BatchId) -> (Vec<OperationInfo>, Vec<CoreEvent>) {
+        let (event, before) = self
+            .event(|e| {
+                matches!(e, CoreEvent::OperationsChanged { operations, .. }
+                    if operations.iter().any(|o| o.batch == batch && o.state == OperationState::Queued))
+            })
+            .await;
+        let CoreEvent::OperationsChanged {
+            account_id,
+            operations,
+            removed,
+        } = event
+        else {
+            unreachable!()
+        };
+        assert_eq!(account_id, self.account);
+        assert!(removed.is_empty());
+        (operations, before)
     }
 
     async fn writes(&mut self, enabled: bool) {
@@ -308,6 +329,15 @@ fn code(result: Result<impl std::fmt::Debug, CoreError>) -> ErrorCode {
     result.expect_err("must be refused").code()
 }
 
+/// Whether one of `events` reports `op` in `state` (an event the worker sent before the
+/// recording's, see [`Harness::recording`]).
+fn reports(events: &[CoreEvent], op: OperationId, state: OperationState) -> bool {
+    events.iter().any(|e| {
+        matches!(e, CoreEvent::OperationsChanged { operations, .. }
+            if operations.iter().any(|o| o.id == op && o.state == state))
+    })
+}
+
 // ---------------------------------------------------------------------------------------------
 
 /// An account without write access refuses every action through `AppCore` with `read_only`,
@@ -364,24 +394,15 @@ async fn actions_need_write_access_and_the_sync_never_writes() {
     for m in &at[..2] {
         assert!(!h.item(*m).await.expect("listed").unread);
     }
-    let (event, _) = h
-        .event(|e| matches!(e, CoreEvent::OperationsChanged { .. }))
-        .await;
-    let CoreEvent::OperationsChanged {
-        account_id,
-        operations,
-        removed,
-    } = event
-    else {
-        unreachable!()
-    };
-    assert_eq!(account_id, h.account);
-    assert!(removed.is_empty());
+    // `writes(true)` started the worker, so it may report before the recording does.
+    let (operations, before) = h.recording(batch).await;
     assert_eq!(operations.len(), 2, "one event for the whole action");
     assert!(operations.iter().all(|o| o.batch == batch));
     assert!(operations.iter().all(|o| o.state == OperationState::Queued));
     let last = operations[1].id;
-    h.operation_state(last, OperationState::Confirmed).await;
+    if !reports(&before, last, OperationState::Confirmed) {
+        h.operation_state(last, OperationState::Confirmed).await;
+    }
 
     let serial = h.server.serial_of("INBOX", 1);
     let places = h.server.find(serial);
@@ -436,22 +457,19 @@ async fn archive_shows_at_once_the_hook_confirms_it_and_undo_moves_it_back() {
     let result = h.act(MailAction::Archive, &at[..1]).await.expect("archive");
     let batch = result.batch.expect("batch");
     assert!(h.item(at[0]).await.is_none(), "gone from the inbox at once");
-    let (event, before) = h
-        .event(|e| matches!(e, CoreEvent::OperationsChanged { .. }))
-        .await;
-    let CoreEvent::OperationsChanged { operations, .. } = event else {
-        unreachable!()
-    };
+    let (operations, mut before) = h.recording(batch).await;
     let op = operations[0].id;
     assert_eq!(operations[0].action, mail_model::ActionKind::Archive);
     let inbox = h.mailbox("INBOX").await.id;
-    let (_, _) = h
+    let (_, between) = h
         .event(
             |e| matches!(e, CoreEvent::MessagesChanged { mailbox_id, .. } if *mailbox_id == inbox),
         )
         .await;
-    drop(before);
-    h.operation_state(op, OperationState::Confirmed).await;
+    before.extend(between);
+    if !reports(&before, op, OperationState::Confirmed) {
+        h.operation_state(op, OperationState::Confirmed).await;
+    }
     assert_eq!(
         h.server
             .find(serial)
