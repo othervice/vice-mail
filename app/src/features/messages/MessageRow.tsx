@@ -49,6 +49,11 @@ export interface RowDecoration {
   /** Stage 8: the account's name, in lists that mix accounts; shown with the colour. */
   account?: string;
   /**
+   * Stage 17 (decision 0049): the conversation's subject, shown instead of the message's (its
+   * oldest message's without reply and forward prefixes, like Thunderbird).
+   */
+  subject?: string;
+  /**
    * Stage 17: the conversation's thread (null while not threaded): the identity of the row in a
    * conversation tree, which stays while a newer message becomes the row's.
    */
@@ -58,6 +63,18 @@ export interface RowDecoration {
 /** Where `trimmed` starts in `raw`, so ranges into `raw` still fit after trimming. */
 function leadingSpace(raw: string): number {
   return raw.length - raw.trimStart().length;
+}
+
+/**
+ * The subject a row shows (stage 17: a conversation's, else the message's), and where it starts
+ * in the message's subject, so the search highlights of that subject still fit; null when it is
+ * another text (the conversation's subject differs from the hit's).
+ */
+export function rowSubject(item: MessageListItem, decoration: RowDecoration | undefined): { text: string; offset: number | null } {
+  const shown = decoration?.subject?.trim();
+  if (shown === undefined) return { text: item.subject.trim(), offset: leadingSpace(item.subject) };
+  const own = item.subject.trimEnd();
+  return { text: shown, offset: shown && own.endsWith(shown) ? own.length - shown.length : null };
 }
 
 function addressName(address: Address): string {
@@ -101,7 +118,7 @@ export function useRowLabel(
   return [
     item.unread && t("list.unread"),
     who,
-    item.subject.trim() || t("list.noSubject"),
+    rowSubject(item, decoration).text || t("list.noSubject"),
     decoration?.account && t("presentation.rowAccount", { name: decoration.account }),
     threadCount > 1 && t("threads.replies", { count: threadCount - 1 }),
     item.hasAttachments && t("list.attachment"),
@@ -247,7 +264,8 @@ export function MessageRowContent({
   const who = useWho(item, showRecipients, decoration);
   // Search highlights mark the message's own sender, not a list of a conversation's senders.
   const ownSender = (decoration?.participants?.length ?? 0) <= 1;
-  const subject = item.subject.trim() || t("list.noSubject");
+  const shownSubject = rowSubject(item, decoration);
+  const subject = shownSubject.text || t("list.noSubject");
   const time = formatListDate(item.date, bounds, i18n.language);
   const activity = rowActivity(item);
   const highlights = decoration?.highlights;
@@ -293,11 +311,12 @@ export function MessageRowContent({
         className={cx(
           "min-w-0 truncate",
           twoLine ? "text-13" : "text-14",
-          !item.subject.trim() ? "text-tertiary" : item.unread ? "font-medium text-primary" : "text-primary",
+          !shownSubject.text ? "text-tertiary" : item.unread ? "font-medium text-primary" : "text-primary",
         )}
+        data-testid="row-subject"
       >
-        {highlights && item.subject.trim() ? (
-          <HighlightedText text={subject} ranges={highlights.subject} offset={leadingSpace(item.subject)} />
+        {highlights && shownSubject.text && shownSubject.offset !== null ? (
+          <HighlightedText text={subject} ranges={highlights.subject} offset={shownSubject.offset} />
         ) : (
           subject
         )}

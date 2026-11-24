@@ -2005,6 +2005,8 @@ export type ConversationSummary = {
 	participants: Address[],
 	hasAttachments: boolean,
 	flagged: boolean,
+	/**  Stage 17: [`ThreadListItem::subject`]. */
+	subject: string,
 };
 
 /**
@@ -4170,6 +4172,11 @@ export type SearchHit = {
 	 */
 	threadId: number | null,
 	threadMessageCount: number,
+	/**
+	 *  Stage 17 (decision 0049): the conversation's subject as its row shows it
+	 *  ([`ThreadListItem::subject`]). The search matched the message's own subject.
+	 */
+	conversationSubject: string,
 };
 
 /**  State of the full-text index. */
@@ -4849,6 +4856,12 @@ export type ThreadListItem = {
 	hasAttachments: boolean,
 	/**  Decision 0039: a message of the conversation is flagged (in any mailbox). */
 	flagged: boolean,
+	/**
+	 *  Stage 17 (decision 0049): the conversation's subject as its row shows it, like
+	 *  Thunderbird: the subject of its oldest message without reply and forward prefixes
+	 *  ([`crate::threading::display_subject`]). The row's own message keeps its subject.
+	 */
+	subject: string,
 };
 
 export type ThreadPage = {

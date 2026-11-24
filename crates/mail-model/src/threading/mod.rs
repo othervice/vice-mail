@@ -48,7 +48,9 @@ mod tests;
 use std::collections::BTreeSet;
 
 pub use memory::ThreadIndex;
-pub use subject::{NormalizedSubject, is_specific_subject, normalize_subject, subject_key};
+pub use subject::{
+    NormalizedSubject, display_subject, is_specific_subject, normalize_subject, subject_key,
+};
 
 use crate::{MessageHeader, MessageId, normalize_sender};
 

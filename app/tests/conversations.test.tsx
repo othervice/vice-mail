@@ -5,8 +5,10 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { rowSubject } from "../src/features/messages/MessageRow";
 import {
   asConversation,
+  conversationDecoration,
   conversationInboxPage,
   conversationKey,
   groupByThread,
@@ -90,6 +92,7 @@ describe("conversation rows (pure)", () => {
     participants: [ANNA, BOB],
     hasAttachments: true,
     flagged: true,
+    subject: "Plan",
     ...overrides,
   });
 
@@ -108,8 +111,8 @@ describe("conversation rows (pure)", () => {
       top: { pinned: [], returned: [], priority: [FIRST], priorityTotal: 1, priorityUnread: 1 },
       categories: true,
       conversations: [
-        { messageId: ANSWER.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false },
-        { messageId: FIRST.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false },
+        { messageId: ANSWER.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false, subject: "Plan" },
+        { messageId: FIRST.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false, subject: "Plan" },
       ],
     };
     const { page: swapped, info } = conversationInboxPage(page);
@@ -227,7 +230,9 @@ describe("conversation rows in the lists", () => {
     const [thread, single] = within(list).getAllByRole("treeitem");
     const name = optionName(thread);
     // Label in name: the visible senders, subject and replies, in reading order.
-    expect(name).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan, 2 replies, /);
+    // Stage 17: the conversation's subject, its oldest message's ("Plan"), not the newest one's.
+    expect(name).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies, /);
+    expect(within(thread as HTMLElement).getByTestId("row-subject").textContent).toBe("Plan");
     expect(within(thread as HTMLElement).getByTestId("row-replies").textContent).toBe("2 replies");
     expect(within(thread as HTMLElement).getByTitle("Anna, Ada Lovelace, Bob")).toBeTruthy();
     expect(optionName(single)).not.toContain("repl");
@@ -356,6 +361,11 @@ describe("conversation rows in the lists", () => {
     });
     const row = within(results).getByRole("treeitem");
     expect(within(row).getByTestId("row-replies").textContent).toBe("2 replies");
+    // Stage 17: the conversation's subject; the hit's highlight still marks the word in it.
+    const subject = within(row).getByTestId("row-subject");
+    expect(subject.textContent).toBe("Plan");
+    expect(within(subject).getByTestId("highlight").textContent).toBe("Plan");
+    expect(optionName(row)).toMatch(/, Plan, 2 replies, /);
     // One message on the right: the oldest unread one of the conversation.
     await user.click(row);
     const pane = await screen.findByRole("region", { name: "Message" });
@@ -368,6 +378,41 @@ describe("conversation rows in the lists", () => {
     await waitFor(() => {
       expect(within(results).getAllByTestId("child-row")).toHaveLength(3);
     });
+  });
+});
+
+describe("the subject of a conversation row (stage 17)", () => {
+  it("is the conversation's, with the hit's highlights only where they fit", () => {
+    const answer = makeMessage({ subject: "  Re: AW: Plan  " });
+    expect(rowSubject(answer, undefined)).toEqual({ text: "Re: AW: Plan", offset: 2 });
+    expect(rowSubject(answer, { subject: "Plan" })).toEqual({ text: "Plan", offset: 10 });
+    // A subject changed in the conversation: the root's is shown, the hit's marks are not.
+    const changed = makeMessage({ subject: "Re: Venue (was: Plan)" });
+    expect(rowSubject(changed, { subject: "Plan" })).toEqual({ text: "Plan", offset: null });
+    expect(rowSubject(changed, { subject: "" })).toEqual({ text: "", offset: null });
+    // A message alone keeps its own subject, prefix included.
+    expect(conversationDecoration({ threadId: 7, messageCount: 1, unreadCount: 0, participants: [], hasAttachments: false, flagged: false, subject: "x" })).toEqual({ threadId: 7 });
+  });
+
+  it("in search results drops the highlight when the hit's subject is another", async () => {
+    const VENUE = makeMessage({ id: 1300, mailboxId: 1, subject: "Re: Venue (was: Plan)", from: BOB, date: now - 60_000 });
+    const { user } = setup({
+      search: {
+        search: (request: SearchRequest) =>
+          request.query.includes("Venue")
+            ? searchPage({ hits: [makeHit(VENUE, ["Venue"], { threadId: 7, threadMessageCount: 4, conversationSubject: "Plan" })] })
+            : searchPage(),
+      },
+    });
+    await inboxList();
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.keyboard("Venue");
+    const results = await screen.findByRole("tree", { name: "Messages in the search results for “Venue”" });
+    const row = await within(results).findByRole("treeitem");
+    const subject = within(row).getByTestId("row-subject");
+    expect(subject.textContent).toBe("Plan");
+    expect(within(subject).queryByTestId("highlight")).toBeNull();
+    expect(subject.getAttribute("title")).toBe("Plan");
   });
 });
 

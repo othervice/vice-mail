@@ -54,7 +54,12 @@ function useHitSource(query: HitQuery, accounts: readonly Account[]): { source: 
       const hit = hitById.get(item.id);
       if (!hit) return undefined;
       const count = conversations ? hit.threadMessageCount : 1;
-      return { highlights: hit.highlights, ...(count > 1 && { threadCount: count }), ...(conversations && { threadId: hit.threadId }) };
+      return {
+        highlights: hit.highlights,
+        // Stage 17: a conversation shows its subject; the highlights stay where it is the hit's.
+        ...(count > 1 && { threadCount: count, subject: hit.conversationSubject }),
+        ...(conversations && { threadId: hit.threadId }),
+      };
     },
     // Stage 17: the conversations of the hits unfold in place.
     ...(conversations && { conversations: true }),

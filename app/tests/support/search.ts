@@ -1,6 +1,7 @@
 // Stage 7 part of the fake core: search, conversations, unified inbox, account groups, hidden
 // accounts and identities, with the rules of the stage 7 IPC contract.
 import { messageRow } from "./comfort";
+import { displaySubject } from "./conversations";
 import type {
   Account,
   AccountGroup,
@@ -109,6 +110,7 @@ export function makeHit(message: MessageListItem, words: readonly string[] = [],
     bodyLocal: true,
     threadId: null,
     threadMessageCount: 1,
+    conversationSubject: displaySubject(message.subject),
     ...overrides,
   };
 }
@@ -124,6 +126,7 @@ export function singleThread(message: MessageListItem, overrides: Partial<Thread
     participants: message.from ? [message.from] : [],
     hasAttachments: message.hasAttachments,
     flagged: message.flagged,
+    subject: displaySubject(message.subject),
     ...overrides,
   };
 }

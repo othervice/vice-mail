@@ -62,6 +62,14 @@ export function reachOf(intent: ConversationIntent): Reach {
   }
 }
 
+/**
+ * Stage 17: the subject a conversation row shows, as the core's `display_subject` makes it for
+ * the cases the tests use: leading reply and forward prefixes removed, the rest as it is.
+ */
+export function displaySubject(subject: string): string {
+  return subject.trim().replace(/^((re|aw|antw|sv|vs|fwd?|wg|tr)(\[\d+\]|\(\d+\))?\s*:\s*)+/iu, "").trim();
+}
+
 export function createConversationFake(options: ConversationFakeOptions, deps: Deps) {
   const threadOf = (id: number): number | null => options.threadOf?.[id] ?? null;
   const key = (item: MessageListItem) => threadOf(item.id) ?? -item.id;
@@ -98,6 +106,8 @@ export function createConversationFake(options: ConversationFakeOptions, deps: D
       participants,
       hasAttachments: all.some((m) => m.hasAttachments) || item.hasAttachments,
       flagged: all.some((m) => m.flagged) || item.flagged,
+      // The oldest message's subject (`all` is oldest first).
+      subject: displaySubject((all[0] ?? item).subject),
     };
   };
 
@@ -110,6 +120,7 @@ export function createConversationFake(options: ConversationFakeOptions, deps: D
     participants: item.participants,
     hasAttachments: item.hasAttachments,
     flagged: item.flagged,
+    subject: item.subject,
   });
 
   /** Keeps the newest message of each thread (lists come newest first). */

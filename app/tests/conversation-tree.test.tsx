@@ -62,7 +62,7 @@ async function inbox() {
   const conversation = () =>
     within(list)
       .getAllByRole("treeitem")
-      .find((item) => item.getAttribute("aria-level") === "1" && optionName(item).includes("Re: Plan")) as HTMLElement;
+      .find((item) => item.getAttribute("aria-level") === "1" && item.hasAttribute("aria-expanded")) as HTMLElement;
   const children = () => within(list).queryAllByTestId("child-row");
   return { list, conversation, children };
 }
@@ -74,7 +74,7 @@ function cursorName(list: HTMLElement): string {
 }
 
 /** Which row: the single message or the conversation, by its subject. */
-const subject = (item: HTMLElement) => (optionName(item).includes("Allein") ? "Allein" : "Re: Plan");
+const subject = (item: HTMLElement) => (optionName(item).includes("Allein") ? "Allein" : "Plan");
 
 const places = (items: readonly HTMLElement[]) =>
   items.map((item) => [item.getAttribute("aria-level"), item.getAttribute("aria-posinset"), item.getAttribute("aria-setsize")]);
@@ -220,10 +220,10 @@ describe("unfolding a conversation", () => {
       expect(cursorName(list)).toMatch(/^Uma, Allein/);
     });
     await user.keyboard("{ArrowDown}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     // → on a single message does nothing.
     await user.keyboard("{ArrowRight}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
 
     await user.keyboard("{ArrowRight}");
     await waitFor(() => {
@@ -243,7 +243,7 @@ describe("unfolding a conversation", () => {
 
     // ← from a message goes to its conversation's row, ← there folds it.
     await user.keyboard("{ArrowLeft}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     expect(conversation().getAttribute("aria-selected")).toBe("true");
     await user.keyboard("{ArrowLeft}");
     await waitFor(() => {
@@ -251,7 +251,7 @@ describe("unfolding a conversation", () => {
     });
     expect(conversation().getAttribute("aria-expanded")).toBe("false");
     await user.keyboard("{ArrowLeft}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     await user.keyboard("{ArrowUp}");
     expect(cursorName(list)).toMatch(/^Uma, Allein/);
   });
@@ -269,7 +269,7 @@ describe("unfolding a conversation", () => {
     await waitFor(() => {
       expect(children()).toHaveLength(0);
     });
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     expect(conversation().getAttribute("aria-selected")).toBe("true");
   });
 
@@ -285,9 +285,9 @@ describe("unfolding a conversation", () => {
     list.focus();
     await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
     await user.keyboard("{ArrowDown}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     await user.keyboard("{ArrowDown}");
-    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Re: Plan/);
+    expect(cursorName(list)).toMatch(/^Unread, Anna, Ada Lovelace, Bob, Plan, 2 replies/);
     await user.keyboard("{ArrowUp}");
     expect(cursorName(list)).toMatch(/^Uma, Allein/);
   });
@@ -313,7 +313,7 @@ describe("unfolding a conversation", () => {
   it("stays unfolded, and open on the right, through a new reply that changes the row and the order", async () => {
     const { core, threadViews, user } = setup();
     const { list, conversation, children } = await inbox();
-    expect(within(list).getAllByRole("treeitem").map(subject)).toEqual(["Allein", "Re: Plan"]);
+    expect(within(list).getAllByRole("treeitem").map(subject)).toEqual(["Allein", "Plan"]);
     await user.click(conversation());
     await waitFor(() => {
       expect(within(screen.getByRole("region", { name: "Message" })).getByTestId("reading-from").textContent).toContain(ANNA.email);
@@ -334,7 +334,7 @@ describe("unfolding a conversation", () => {
       expect(children()).toHaveLength(4);
     });
     const rows = within(list).getAllByRole("treeitem").filter((item) => item.getAttribute("aria-level") === "1");
-    expect(rows.map(subject)).toEqual(["Re: Plan", "Allein"]);
+    expect(rows.map(subject)).toEqual(["Plan", "Allein"]);
     expect(rows[0]?.getAttribute("aria-expanded")).toBe("true");
     expect(within(rows[0] as HTMLElement).getByTestId("row-replies").textContent).toBe("3 replies");
     // The children follow their row; the selected conversation stays selected and its pane open.

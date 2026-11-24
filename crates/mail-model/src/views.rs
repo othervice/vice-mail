@@ -227,6 +227,9 @@ pub struct SearchHit {
     pub thread_id: Option<i64>,
     #[specta(type = Number)]
     pub thread_message_count: u32,
+    /// Stage 17 (decision 0049): the conversation's subject as its row shows it
+    /// ([`ThreadListItem::subject`]). The search matched the message's own subject.
+    pub conversation_subject: String,
 }
 
 /// State of the full-text index.
@@ -320,6 +323,10 @@ pub struct ThreadListItem {
     pub has_attachments: bool,
     /// Decision 0039: a message of the conversation is flagged (in any mailbox).
     pub flagged: bool,
+    /// Stage 17 (decision 0049): the conversation's subject as its row shows it, like
+    /// Thunderbird: the subject of its oldest message without reply and forward prefixes
+    /// ([`crate::threading::display_subject`]). The row's own message keeps its subject.
+    pub subject: String,
 }
 
 /// Most senders a conversation row names ([`ThreadListItem::participants`]).
@@ -344,6 +351,8 @@ pub struct ConversationSummary {
     pub participants: Vec<Address>,
     pub has_attachments: bool,
     pub flagged: bool,
+    /// Stage 17: [`ThreadListItem::subject`].
+    pub subject: String,
 }
 
 impl ConversationSummary {
@@ -357,6 +366,7 @@ impl ConversationSummary {
             participants: item.participants.clone(),
             has_attachments: item.has_attachments,
             flagged: item.flagged,
+            subject: item.subject.clone(),
         }
     }
 }

@@ -152,6 +152,30 @@ pub fn subject_key(subject: &str) -> Option<String> {
     (!key.is_empty()).then_some(key)
 }
 
+/// The subject a conversation row shows (stage 17, decision 0049, like Thunderbird): `subject`
+/// without its leading reply and forward prefixes (`Re:`, `AW:`, `Fwd:`, `WG:`, `Re[2]:`, …, any
+/// number of them, also `Re: [list] AW:` where a tag sits between them) and without surrounding
+/// whitespace. Case, tags, inner whitespace and everything after the prefixes stay as they are;
+/// what remains is the end of `subject` (after trimming), so ranges into `subject` still fit.
+/// Empty if nothing but prefixes is left.
+pub fn display_subject(subject: &str) -> &str {
+    let mut rest = subject.trim();
+    let mut shown = rest;
+    for _ in 0..MAX_PREFIXES {
+        rest = rest.trim_start();
+        if let Some((after, _)) = strip_prefix(rest) {
+            rest = after;
+            shown = rest.trim_start();
+        } else if let Some(after) = strip_tag(rest) {
+            // A tag between prefixes stays only when no prefix follows it.
+            rest = after;
+        } else {
+            break;
+        }
+    }
+    shown
+}
+
 /// Whether two messages with this key may be threaded by subject alone: not empty, not in the
 /// list of generic subjects (`hallo`, `rechnung`, `quick question`, …), and either two words or
 /// one word of at least 12 characters.
@@ -313,6 +337,48 @@ mod tests {
         // Many prefixes stop after the limit without looping.
         let many = "Re: ".repeat(1000) + "x";
         assert!(normalize_subject(&many).key.starts_with("re:"));
+    }
+
+    #[test]
+    fn display_subjects_lose_their_prefixes_only() {
+        let cases: &[(&str, &str)] = &[
+            ("Website relaunch", "Website relaunch"),
+            ("Re: Website relaunch", "Website relaunch"),
+            ("RE: Re: AW: Website  relaunch ", "Website  relaunch"),
+            (
+                "Fwd: Re: Planning the 2026 offsite",
+                "Planning the 2026 offsite",
+            ),
+            ("WG: AW: Angebot", "Angebot"),
+            ("Re[2]: Angebot", "Angebot"),
+            ("RE : Offre", "Offre"),
+            ("回复：会议", "会议"),
+            ("  Re:\tGrüße aus Köln", "Grüße aus Köln"),
+            // Tags stay; a prefix behind a tag goes with the tag only when another prefix follows.
+            ("[rust-users] Async traits", "[rust-users] Async traits"),
+            ("Re: [rust-users] Async traits", "[rust-users] Async traits"),
+            ("Re: [rust-users] Re: Async traits", "Async traits"),
+            ("[rust-users] Re: Async traits", "Async traits"),
+            ("Re: [Ticket #123] Drucker", "[Ticket #123] Drucker"),
+            (
+                "Re: Planning the 2026 offsite (was: venue shortlist)",
+                "Planning the 2026 offsite (was: venue shortlist)",
+            ),
+            ("Reply needed", "Reply needed"),
+            ("Re-Design", "Re-Design"),
+            ("Rechnung: November", "Rechnung: November"),
+            ("Re:", ""),
+            ("Re: Re: ", ""),
+            ("", ""),
+        ];
+        for (subject, shown) in cases {
+            let got = display_subject(subject);
+            assert_eq!(got, *shown, "{subject:?}");
+            // Always the end of the trimmed subject: ranges into the subject still fit.
+            assert!(subject.trim_end().ends_with(got), "{subject:?}");
+        }
+        let many = "Re: ".repeat(1000) + "x";
+        assert!(display_subject(&many).starts_with("Re:"));
     }
 
     #[test]

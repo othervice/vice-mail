@@ -21,6 +21,8 @@ export interface ConversationInfo {
   participants: readonly Address[];
   hasAttachments: boolean;
   flagged: boolean;
+  /** Stage 17 (decision 0049): the conversation's subject, its oldest message's without prefixes. */
+  subject: string;
 }
 
 export function infoOfThread(thread: ThreadListItem): ConversationInfo {
@@ -31,6 +33,7 @@ export function infoOfThread(thread: ThreadListItem): ConversationInfo {
     participants: thread.participants,
     hasAttachments: thread.hasAttachments,
     flagged: thread.flagged,
+    subject: thread.subject,
   };
 }
 
@@ -42,6 +45,7 @@ export function infoOfSummary(summary: ConversationSummary): ConversationInfo {
     participants: summary.participants,
     hasAttachments: summary.hasAttachments,
     flagged: summary.flagged,
+    subject: summary.subject,
   };
 }
 
@@ -61,13 +65,14 @@ export function asConversation(item: MessageListItem, info: ConversationInfo | u
 }
 
 /**
- * What a conversation row adds: its size (when more than one), its senders, and its thread (stage
- * 17: the identity an unfolded conversation keeps while its newest message changes).
+ * What a conversation row adds: its size (when more than one), its senders, its subject (stage 17:
+ * the conversation's, like Thunderbird) and its thread (stage 17: the identity an unfolded
+ * conversation keeps while its newest message changes). A message alone keeps its own subject.
  */
 export function conversationDecoration(info: ConversationInfo | undefined): RowDecoration | undefined {
   if (!info) return undefined;
   if (info.messageCount <= 1) return { threadId: info.threadId };
-  return { threadCount: info.messageCount, participants: info.participants, threadId: info.threadId };
+  return { threadCount: info.messageCount, participants: info.participants, threadId: info.threadId, subject: info.subject };
 }
 
 /**

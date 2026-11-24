@@ -795,6 +795,116 @@ async fn search_hits_know_their_conversation() {
     assert_eq!(count, Some(2));
 }
 
+/// Stage 17 (decision 0049): a conversation row shows its oldest message's subject without reply
+/// and forward prefixes, like Thunderbird, in every list and in search results; the row's
+/// message keeps its own subject (search matches it).
+#[tokio::test]
+async fn a_conversation_row_shows_its_oldest_subject_without_prefixes() {
+    let f = fixture().await;
+    let mut root = from(header(1, D, Some("w1@x")), "Carol");
+    root.subject = "Website relaunch".into();
+    let mut answer = from(
+        reply(header(2, D + 200, Some("w3@x")), &["w1@x", "w2@x"]),
+        "Dave",
+    );
+    answer.subject = "Re: AW: Website relaunch".into();
+    let mut solo = from(header(3, D + 300, Some("s1@x")), "Uma");
+    solo.subject = "Re: our backup strategy".into();
+    store_in(&f, f.inbox, vec![root, answer, solo]).await;
+    let mut own = from(reply(header(1, D + 100, Some("w2@x")), &["w1@x"]), "Alice");
+    own.subject = "Fwd: Website relaunch (draft)".into();
+    store_in(&f, f.sent, vec![seen(own)]).await;
+    let (w3, s1) = (id_of(&f.store, "w3@x").await, id_of(&f.store, "s1@x").await);
+
+    let subjects = |rows: &[ThreadListItem]| -> BTreeMap<i64, (String, String)> {
+        rows.iter()
+            .map(|r| {
+                (
+                    r.message.id.0,
+                    (r.subject.clone(), r.message.subject.clone()),
+                )
+            })
+            .collect()
+    };
+    let expected = BTreeMap::from([
+        (
+            w3,
+            (
+                "Website relaunch".to_owned(),
+                "Re: AW: Website relaunch".to_owned(),
+            ),
+        ),
+        // A message alone is its own conversation: its subject without the prefix.
+        (
+            s1,
+            (
+                "our backup strategy".to_owned(),
+                "Re: our backup strategy".to_owned(),
+            ),
+        ),
+    ]);
+    // The sorted inbox's rows and their summaries.
+    let rows = all_rows(
+        &f.store,
+        InboxMailboxes::Mailbox(f.inbox),
+        InboxListKind::Rows,
+        50,
+    )
+    .await;
+    assert_eq!(subjects(&rows), expected);
+    let summary = mail_model::ConversationSummary::of(&rows[0]);
+    assert_eq!(summary.subject, rows[0].subject);
+    // A folder's thread list.
+    let threads = f
+        .store
+        .list_threads(f.inbox, None, 50)
+        .await
+        .expect("threads");
+    assert_eq!(subjects(&threads.items), expected);
+    // Sent: the same conversation, from its row there (the own answer).
+    let sent = f
+        .store
+        .list_threads(f.sent, None, 50)
+        .await
+        .expect("sent threads");
+    assert_eq!(sent.items.len(), 1);
+    assert_eq!(sent.items[0].subject, "Website relaunch");
+    assert_eq!(
+        sent.items[0].message.subject,
+        "Fwd: Website relaunch (draft)"
+    );
+    // Search hits: the conversation's subject beside the message's own.
+    let hits = f
+        .store
+        .search(
+            search::SearchFilter {
+                mailbox_sets: vec![vec![f.inbox]],
+                ..search::SearchFilter::default()
+            },
+            None,
+            50,
+        )
+        .await
+        .expect("search");
+    let found: BTreeMap<i64, (String, String)> = hits
+        .hits
+        .iter()
+        .map(|h| {
+            (
+                h.item.id.0,
+                (h.conversation_subject.clone(), h.item.subject.clone()),
+            )
+        })
+        .collect();
+    assert_eq!(found.get(&w3), expected.get(&w3));
+    assert_eq!(found.get(&s1), expected.get(&s1));
+    let w1 = id_of(&f.store, "w1@x").await;
+    assert_eq!(
+        found.get(&w1),
+        Some(&("Website relaunch".to_owned(), "Website relaunch".to_owned()))
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Query plans
 
@@ -878,6 +988,11 @@ fn expected() -> Vec<(String, String, bool, Vec<&'static str>)> {
                 "SEARCH m USING COVERING INDEX message_thread (thread_id=?)",
                 "SEARCH u USING INDEX loc_message (message_id=?)",
             ],
+        ),
+        (
+            "subject of a thread's oldest message",
+            conversations::THREAD_ROOT_SUBJECT,
+            vec!["SEARCH message USING INDEX message_thread (thread_id=?)"],
         ),
         (
             "newest messages of a thread",

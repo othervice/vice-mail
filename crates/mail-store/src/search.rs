@@ -64,6 +64,8 @@ pub struct StoredHit {
     /// Decision 0039: the message's thread (none while not threaded) and its message count.
     pub thread_id: Option<i64>,
     pub thread_message_count: u32,
+    /// Stage 17: the subject the hit's conversation row shows (`ThreadListItem::subject`).
+    pub conversation_subject: String,
 }
 
 /// Thread and message count of a hit (decision 0039).
@@ -361,12 +363,15 @@ pub(crate) fn search(
             let (thread_id, count): (Option<i64>, Option<i64>) =
                 conn.prepare_cached(HIT_THREAD)?
                     .query_row([*id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            let conversation_subject =
+                crate::conversations::conversation_subject(conn, thread_id, &item.subject)?;
             hits.push(StoredHit {
                 item,
                 mailbox_ids,
                 body_complete,
                 thread_id,
                 thread_message_count: u32::try_from(count.unwrap_or(1).max(1)).unwrap_or(u32::MAX),
+                conversation_subject,
             });
         }
     }

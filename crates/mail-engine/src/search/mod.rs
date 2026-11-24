@@ -241,6 +241,7 @@ fn hit(stored: StoredHit, terms: &[HighlightTerm]) -> SearchHit {
         body_local: stored.body_complete,
         thread_id: stored.thread_id,
         thread_message_count: stored.thread_message_count,
+        conversation_subject: stored.conversation_subject,
     }
 }
 

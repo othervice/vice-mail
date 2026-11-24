@@ -209,6 +209,30 @@ pub(crate) const THREAD_RECENT: &str = "
                    WHERE f.message_id = m.id AND f.flagged = 1)
     FROM message m WHERE m.thread_id = ?1 ORDER BY m.id DESC LIMIT ?2";
 
+/// Stage 17 (decision 0049): the subject of a thread's oldest message, which its row shows
+/// without reply and forward prefixes. One probe of `message_thread` (it holds the rowid, which
+/// is the id).
+pub(crate) const THREAD_ROOT_SUBJECT: &str = "
+    SELECT subject FROM message INDEXED BY message_thread WHERE thread_id = ?1
+    ORDER BY id LIMIT 1";
+
+/// The subject a conversation row shows (stage 17): its thread's oldest message's, else the
+/// message's own, without reply and forward prefixes.
+pub(crate) fn conversation_subject(
+    conn: &Connection,
+    thread: Option<i64>,
+    own: &str,
+) -> Result<String, StoreError> {
+    let root: Option<String> = match thread {
+        Some(thread) => conn
+            .prepare_cached(THREAD_ROOT_SUBJECT)?
+            .query_row([thread], |r| r.get(0))
+            .optional()?,
+        None => None,
+    };
+    Ok(mail_model::threading::display_subject(root.as_deref().unwrap_or(own)).to_owned())
+}
+
 /// The same for a message without a thread (not threaded yet).
 pub(crate) const MESSAGE_SUMMARY: &str = "
     SELECT m.from_name, m.from_addr, m.has_attachments,
@@ -286,6 +310,7 @@ pub(crate) fn summarize(
     let count = u32::try_from(count.max(1)).unwrap_or(u32::MAX);
     let unread = u32::try_from(unread.max(0)).unwrap_or(u32::MAX);
     let last = last.max(message.id.0);
+    let subject = conversation_subject(conn, thread, &message.subject)?;
     Ok(ThreadListItem {
         thread_id: thread,
         message_count: count.max(1),
@@ -295,6 +320,7 @@ pub(crate) fn summarize(
         participants,
         has_attachments: has_attachments || message.has_attachments,
         flagged: flagged || message.flagged,
+        subject,
         message,
     })
 }
