@@ -43,6 +43,7 @@ import { ComposerAttachments } from "./ComposerAttachments";
 import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { FIELD_ROW_FOCUS, RecipientField } from "./RecipientField";
+import { SignatureHtml } from "./SignaturePreview";
 import { WritingHelp } from "../ai/WritingHelp";
 // Stage 16: "Send and archive" in the menu next to the send button.
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
@@ -780,6 +781,15 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   };
   // The separator the core adds when it puts the message together (plain text, not translated).
   const signatureText = signature ? `-- \n${signature}` : "";
+  // Rich text: the signature with its formatting, right below the text inside the writing area;
+  // plain text (and the identity's text signature): as text under the text field.
+  const richSignature = fields.format === "html" && chosenSignature !== null && signature !== null && fields.includeSignature;
+  const signaturePreview = richSignature ? (
+    <div aria-label={t("composer.signature.preview")} className="px-2 pt-1 pb-3 text-13 text-secondary" data-testid="composer-signature">
+      <p className="whitespace-pre">{"-- "}</p>
+      <SignatureHtml html={chosenSignature.html} />
+    </div>
+  ) : undefined;
   const hasQuote = draft.quoteHtml !== null || draft.quoteText !== null;
   const refused = sendError?.code === "invalid_address" ? invalidAddressIn(sendError.detail, [fields.to, fields.cc, fields.bcc]) : null;
   const sendShortcut = formatShortcut({ key: "Enter", mod: true }, platform);
@@ -829,9 +839,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   );
 
   const recipients = (list: readonly Address[]) => [...list];
+  // In rich text with the answer above the original, the original follows the signature inside
+  // the writing area (one scrolling document); otherwise it stands as its own block.
+  const quoteInWriting = fields.format === "html" && fields.quotePosition === "above";
   const quoteBlock =
     hasQuote && fields.includeQuote ? (
-      <div className="mx-4 mb-3 rounded-card border border-border-subtle bg-canvas p-3" data-testid="composer-quote">
+      <div className={cx("mb-3 rounded-card border border-border-subtle bg-canvas p-3", quoteInWriting ? "mx-2" : "mx-4")} data-testid="composer-quote">
         {draft.quoteText !== null ? (
           <pre className="max-h-(--ui-picker-list-height) overflow-y-auto font-sans text-13 whitespace-pre-wrap text-secondary">
             {draft.quoteText}
@@ -841,6 +854,13 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         )}
       </div>
     ) : null;
+  const writingFooter =
+    signaturePreview !== undefined || (quoteInWriting && quoteBlock !== null) ? (
+      <>
+        {signaturePreview}
+        {quoteInWriting && quoteBlock}
+      </>
+    ) : undefined;
 
   return (
     <ComposerFrame
@@ -1128,6 +1148,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
                   result.kind !== "cleaned" || result.imagesRemoved > 0 || result.formattingSimplified;
                 setPasteNote(notable ? result : null);
               }}
+              footer={writingFooter}
             />
           </Suspense>
         ) : (
@@ -1152,7 +1173,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         )}
         {/* Stage 13: AI writing help on the selection (only while it is set up). */}
         <WritingHelp disabled={frozen} />
-        {signature && fields.includeSignature && (
+        {signature && fields.includeSignature && !richSignature && (
           <pre
             aria-label={t("composer.signature.preview")}
             className="mx-4 mb-3 font-sans text-13 whitespace-pre-wrap text-secondary"
@@ -1161,7 +1182,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             {signatureText}
           </pre>
         )}
-        {fields.quotePosition === "above" && quoteBlock}
+        {fields.quotePosition === "above" && !quoteInWriting && quoteBlock}
         {/* Stage 8: the signature choice is missing while the signatures cannot be loaded. */}
         {signatures.isError && (
           <div className="px-4 pb-3">

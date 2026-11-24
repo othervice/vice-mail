@@ -57,8 +57,12 @@ describe("focus ring", () => {
     const css = await compiledCss(["outline-none", "focus-visible:outline-2"]);
     expect(css).toContain("--tw-outline-style: none;");
     expect(css).toContain("outline-style: var(--tw-outline-style);");
-    // The editor's own stylesheet shows the ring instead of hiding it.
-    expect(composerCss).not.toMatch(/:focus-visible\s*\{\s*outline:\s*none/);
+    // The editor's own stylesheet shows the ring instead of hiding it: on the text, or, with the
+    // signature right below the text, around the whole writing area (and only there not on the text).
+    expect(composerCss).toMatch(/\.composer-prose:focus-visible\s*\{\s*outline:\s*2px solid var\(--ui-focus-ring\);/);
+    expect(composerCss).toMatch(/\.composer-writing:has\(\.composer-prose:focus-visible\)\s*\{\s*outline:\s*2px solid var\(--ui-focus-ring\);/);
+    const hidden = [...composerCss.matchAll(/([^{}\n]+):focus-visible\s*\{\s*outline:\s*none/g)].map((match) => match[1]?.trim());
+    expect(hidden).toEqual([".composer-with-footer .composer-prose"]);
   });
 
   it("shows on everything in the inbox: rail, header, search, list and its cursor row", async () => {

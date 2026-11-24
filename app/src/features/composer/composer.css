@@ -72,6 +72,26 @@
   min-height: max(12rem, 100%);
 }
 
+/* With the signature right below the text (README screenshots, 23.11.2026): the text takes a
+   few lines at least, the signature follows it instead of the area's bottom, and the ring frames
+   the scrolling area around both. */
+.composer-writing {
+  border-radius: var(--ui-radius-card);
+}
+
+.composer-with-footer .composer-prose {
+  min-height: 6rem;
+}
+
+.composer-with-footer .composer-prose:focus-visible {
+  outline: none;
+}
+
+.composer-writing:has(.composer-prose:focus-visible) {
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: -2px;
+}
+
 /* Stage 10: headings, code, strikethrough and inline images of the editor. */
 .composer-prose h1,
 .composer-prose h2,

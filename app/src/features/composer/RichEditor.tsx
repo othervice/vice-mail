@@ -19,7 +19,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
@@ -58,6 +58,11 @@ interface RichEditorProps {
   /** What happened to pasted HTML (images removed, formatting simplified, failure). */
   onPasteResult?: (result: PasteResult) => void;
   testId?: string;
+  /**
+   * Shown right below the text inside the writing area (the composer's signature), instead of
+   * under the area's full height; the area still reaches the attachment bar.
+   */
+  footer?: ReactNode;
 }
 
 type Mark =
@@ -151,6 +156,7 @@ export function RichEditor({
   handleRef,
   onPasteResult,
   testId = "composer-rich-body",
+  footer,
 }: RichEditorProps) {
   const { t } = useTranslation();
   const change = useRef(onChange);
@@ -491,7 +497,24 @@ export function RichEditor({
         </div>
       )}
       {/* Inset by 8 px, so the text still lines up with the fields above (16 px). */}
-      <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" />
+      {footer === undefined ? (
+        <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" />
+      ) : (
+        // The text, then the footer right below it; the area under both is part of the writing
+        // area: a press there puts the cursor at the end of the text (not on the footer itself).
+        <div
+          className="composer-writing min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+          onMouseDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            editor.commands.focus("end");
+          }}
+          data-testid="composer-writing"
+        >
+          <EditorContent editor={editor} className="composer-with-footer" />
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

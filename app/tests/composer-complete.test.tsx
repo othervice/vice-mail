@@ -300,10 +300,10 @@ describe("composer: signatures", () => {
       expect(within(choice).getByRole("option", { name: "Default: Work" })).toBeTruthy();
     });
     expect(choice.value).toBe("default");
-    expect(screen.getByTestId("composer-signature").textContent).toBe("-- \nAda, Analytical Engines");
+    expect(screen.getByTestId("composer-signature").textContent).toBe("-- Ada, Analytical Engines");
 
     await user.selectOptions(choice, "sig-short");
-    expect(screen.getByTestId("composer-signature").textContent).toBe("-- \nA.");
+    expect(screen.getByTestId("composer-signature").textContent).toBe("-- A.");
     await user.selectOptions(choice, "none");
     expect(screen.queryByTestId("composer-signature")).toBeNull();
     await user.click(screen.getByLabelText("Subject"));
@@ -323,8 +323,41 @@ describe("composer: signatures", () => {
     const { core } = setup({ compose: { drafts: [draft], identities }, snippets: { signatures: [work, short] } });
     await openRich(core, draft);
     await waitFor(() => {
-      expect(screen.getByTestId("composer-signature").textContent).toBe("-- \nA.");
+      expect(screen.getByTestId("composer-signature").textContent).toBe("-- A.");
     });
+  });
+
+  it("shows a rich signature with its formatting right below the text, inside the writing area", async () => {
+    const formatted = makeSignature({
+      id: "sig-formatted",
+      name: "Formatted",
+      html: '<p><strong>Ada</strong> Lovelace<br><em>Analytical Engines</em></p><ul><li>One</li></ul><p style="text-align: center">Centre</p><p><a href="https://example.org/">Site</a><img src="cid:logo@x" alt="Logo"></p>',
+      text: "Ada Lovelace\nAnalytical Engines",
+    });
+    const draft = richDraft({ kind: "reply", quoteText: "> Earlier text", quotePosition: "above", includeQuote: true });
+    const { core } = setup({
+      compose: { drafts: [draft], identities: { [ADA.id]: [makeIdentity({ id: 1, accountId: ADA.id, email: ADA.email, signatureReply: "sig-formatted" })] } },
+      snippets: { signatures: [formatted] },
+    });
+    await openRich(core, draft);
+    const signature = await screen.findByTestId("composer-signature");
+    expect(signature.querySelector("strong")?.textContent).toBe("Ada");
+    expect(signature.querySelector("em")?.textContent).toBe("Analytical Engines");
+    expect(signature.querySelectorAll("li")).toHaveLength(1);
+    expect(within(signature).getByText("Centre").className).toContain("text-center");
+    // A link is text in the preview, an image is left out, and no attribute of the HTML arrives.
+    expect(signature.querySelector("a")).toBeNull();
+    expect(signature.querySelector("img")).toBeNull();
+    expect(signature.querySelector("[style]")).toBeNull();
+    expect(signature.textContent).toBe("-- Ada LovelaceAnalytical EnginesOneCentreSite");
+    // Right below the text: in the writing area, after the editor, and the quoted original after
+    // it, so text, signature and original scroll as one document.
+    const area = screen.getByTestId("composer-writing");
+    expect(area.contains(signature)).toBe(true);
+    expect(area.contains(screen.getByTestId("composer-rich-body"))).toBe(true);
+    const quote = screen.getByTestId("composer-quote");
+    expect(area.contains(quote)).toBe(true);
+    expect(signature.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
