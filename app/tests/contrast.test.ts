@@ -7,7 +7,7 @@ import { ACCENT_THEMES } from "../src/features/preferences/accent";
  * The accent of the root values of tokens.css. Since decision 0038 the default theme (orange) is
  * set on the root like every other one, so the root keeps teal's values and teal's block repeats them.
  */
-const ROOT_ACCENT = "teal";
+const ROOT_ACCENT = "blue";
 
 // Contrast rules from docs/SPEC.md (Barrierefreiheit): text >= 4.5:1, controls and other
 // meaningful graphics >= 3:1, in both themes. The pairs below are the ones the UI uses.
