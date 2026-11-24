@@ -25,6 +25,14 @@ never leave the device.
   `SELECT`, `CREATE`, `UNSUBSCRIBE` and `APPEND` name exactly this folder, and
   `UID STORE <uids> +FLAGS.SILENT (\Deleted)`, `UID EXPUNGE <uids>` and `EXPUNGE` pass only
   while it is the selected mailbox. Everything else fails with `read_only`.
+- **On a JMAP account** (stage 14, decision 0041, addendum 2) the folder is a mailbox of the same
+  name, created without a role. An entry is uploaded and imported there (`Email/import`); the
+  listing reads the size and the two header fields (`Email/query`, `Email/get`); a body is the
+  downloaded message without its header, read up to 4 MiB at most. The connection is read-only
+  like over IMAP; its own writes are checked before they are sent: `Mailbox/set` only creates this
+  mailbox, `Email/import` only into it, `Email/set` only destroys messages listed in it (or takes
+  one that lies in other mailboxes too out of this one). Everything else fails with `read_only`.
+  The limits of a pass (below) are the same.
 - **One message per record version**: two header fields and the age ciphertext as the body.
   Changing a record means appending the new version, then deleting the old one. A crash in
   between leaves two versions; the next pass of any device removes the loser.

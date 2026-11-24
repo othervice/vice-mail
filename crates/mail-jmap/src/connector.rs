@@ -3,14 +3,15 @@
 use std::sync::Arc;
 
 use mail_model::{
-    Access, AccountId, BackendError, ConnectConfig, ExtraRootCa, MailConnector, UidMapStore,
-    WriteConnector,
+    Access, AccountId, BackendError, ConnectConfig, ExtraRootCa, MailConnector,
+    SyncFolderConnector, UidMapStore, WriteConnector,
 };
 
 use crate::backend::JmapBackend;
 use crate::client::Client;
 use crate::map::Maps;
 use crate::session;
+use crate::sync_folder::JmapSyncFolder;
 use crate::writer::JmapWriter;
 
 /// Builds the TLS client configuration (system trust store, plus the test CA in tests). The
@@ -107,5 +108,24 @@ impl WriteConnector for JmapConnector {
 
     async fn connect_writer(&self, config: &ConnectConfig) -> Result<JmapWriter, BackendError> {
         self.connect_writer_for(config, config.account).await
+    }
+}
+
+impl SyncFolderConnector for JmapConnector {
+    type Folder = JmapSyncFolder;
+
+    /// Stage 14: the settings sync folder on a JMAP account. The connection is read-only
+    /// whatever the configuration says; only the folder's own writes pass (see
+    /// `sync_folder`). It has no UID map of the account.
+    async fn connect_sync_folder(
+        &self,
+        config: &ConnectConfig,
+        folder: &str,
+    ) -> Result<JmapSyncFolder, BackendError> {
+        let mut config = config.clone();
+        config.access = Access::ReadOnly;
+        let client = Client::new(&config, &self.tls, self.insecure_loopback, self.log.clone())?;
+        let session = session::fetch(&client, &config).await?;
+        JmapSyncFolder::new(client, session, folder)
     }
 }

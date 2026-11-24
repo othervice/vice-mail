@@ -172,6 +172,26 @@ impl Fake {
         id
     }
 
+    /// A message with this raw form in these mailboxes (the settings sync folder tests).
+    fn add_raw(&self, mailboxes: &[&str], raw: Vec<u8>) -> String {
+        let id = {
+            let mut s = self.lock();
+            s.next_id += 1;
+            let id = format!("e{}", s.next_id);
+            let email = FakeEmail {
+                mailboxes: mailboxes.iter().map(|m| (*m).to_owned()).collect(),
+                keywords: BTreeSet::new(),
+                received: "2026-11-01T00:00:00Z".into(),
+                raw,
+            };
+            s.emails.insert(id.clone(), email);
+            Self::bump(&mut s, &id, Change::Created);
+            id
+        };
+        self.notify();
+        id
+    }
+
     fn set_keyword(&self, id: &str, keyword: &str, on: bool) {
         {
             let mut s = self.lock();
@@ -1432,6 +1452,155 @@ async fn wrong_password_and_missing_service_are_typed() {
         .err()
         .expect("refused");
     assert!(matches!(err, BackendError::ConnectionRefused), "{err:?}");
+}
+
+/// Stage 14: the settings sync folder over JMAP. Created at the top level without a role,
+/// entries imported there and listed with their size and header fields, bodies read without
+/// the header and bounded, deleting destroys what lies only there and takes the rest out of
+/// the folder. The state changes exactly when entries come or go. Nothing else is written.
+#[tokio::test]
+async fn the_settings_sync_folder_keeps_its_entries_in_one_mailbox() {
+    use mail_model::{SyncFolder, SyncFolderConnector};
+
+    let fake = Fake::start().await;
+    fake.add("mi", 1, &[]);
+    let store = Arc::new(MemoryStore::default());
+    // Asked for with writes allowed: the folder connection is read-only anyway.
+    let mut folder = connector(&store)
+        .connect_sync_folder(&config(&fake, Access::ReadWrite), "Settings-Sync")
+        .await
+        .expect("connect");
+    assert!(
+        folder.open(false).await.expect("look").is_none(),
+        "not there yet"
+    );
+    let empty = folder.open(true).await.expect("create").expect("state");
+    assert_eq!(empty.exists, 0);
+    let created = fake
+        .lock()
+        .mailboxes
+        .iter()
+        .find(|(_, name, _, _)| name == "Settings-Sync")
+        .cloned()
+        .expect("created");
+    assert_eq!((created.2, created.3), (None, None), "top level, no role");
+    let mailbox = created.0;
+
+    let entry = |id: &str, body: &str| {
+        format!(
+            "Date: Mon, 24 Nov 2026 06:00:00 +0000\r\nSubject: Settings sync data\r\n\
+             X-Settings-Sync-Id: {id}\r\nX-Settings-Sync-Version: v-{id}\r\n\r\n{body}\r\n"
+        )
+        .into_bytes()
+    };
+    let first = folder
+        .append(&entry("aaaa", "first body"))
+        .await
+        .expect("append")
+        .expect("uid");
+    let second = folder
+        .append(&entry("bbbb", "second body"))
+        .await
+        .expect("append")
+        .expect("uid");
+    assert_ne!(first, second);
+    assert!(folder.append(b"").await.is_err());
+    // Another client's message in the folder that lies in the inbox too.
+    let shared = fake.add_raw(&[&mailbox, "mi"], entry("cccc", "shared"));
+
+    let two = folder.open(false).await.expect("open").expect("state");
+    assert_eq!(two.exists, 3);
+    assert_ne!(two.highest_modseq, empty.highest_modseq);
+    let again = folder.open(false).await.expect("open").expect("state");
+    assert_eq!(again, two, "nothing changed, the same state");
+
+    let listed = folder
+        .list(&["X-Settings-Sync-Id", "X-Settings-Sync-Version"])
+        .await
+        .expect("list");
+    assert_eq!(listed.len(), 3);
+    let first_entry = listed.iter().find(|e| e.uid == first).expect("first");
+    let header = String::from_utf8(first_entry.header.clone()).expect("ascii");
+    assert!(
+        header.contains("X-Settings-Sync-Id: aaaa\r\n"),
+        "{header:?}"
+    );
+    assert!(
+        header.contains("X-Settings-Sync-Version: v-aaaa\r\n"),
+        "{header:?}"
+    );
+    assert!(!header.contains("Subject"), "only the fields asked for");
+    assert_eq!(first_entry.size as usize, entry("aaaa", "first body").len());
+    assert!(folder.list(&["Bad Field"]).await.is_err());
+
+    let bodies = folder
+        .read(&UidSet::from_uids([first, second, 999]))
+        .await
+        .expect("read");
+    assert_eq!(
+        bodies,
+        vec![
+            (first, b"first body\r\n".to_vec()),
+            (second, b"second body\r\n".to_vec())
+        ]
+    );
+
+    // Deleting: the folder's own message is destroyed, the shared one only leaves the folder.
+    let shared_uid = listed
+        .iter()
+        .find(|e| String::from_utf8_lossy(&e.header).contains("cccc"))
+        .map(|e| e.uid)
+        .expect("shared");
+    folder
+        .delete(&UidSet::from_uids([first, shared_uid]))
+        .await
+        .expect("delete");
+    {
+        let s = fake.lock();
+        assert_eq!(
+            s.emails
+                .values()
+                .filter(|e| e.mailboxes.contains(&mailbox))
+                .count(),
+            1
+        );
+        let kept = s.emails.get(&shared).expect("the shared message stays");
+        assert_eq!(kept.mailboxes, BTreeSet::from(["mi".to_owned()]));
+    }
+    let one = folder.open(false).await.expect("open").expect("state");
+    assert_eq!(one.exists, 1);
+    assert_ne!(one.highest_modseq, two.highest_modseq);
+
+    // A body larger than any record is not read into memory.
+    let big = fake.add_raw(
+        &[&mailbox],
+        vec![b'a'; crate::sync_folder::MAX_ENTRY_READ + 1],
+    );
+    let listed = folder.list(&["X-Settings-Sync-Id"]).await.expect("list");
+    let big_uid = listed
+        .iter()
+        .find(|e| e.size as usize > crate::sync_folder::MAX_ENTRY_READ)
+        .map(|e| e.uid)
+        .expect("big");
+    let err = folder
+        .read(&UidSet::from_uids([big_uid]))
+        .await
+        .expect_err("too large");
+    assert!(matches!(err, BackendError::Protocol(_)), "{err:?}");
+    assert!(fake.lock().emails.contains_key(&big));
+
+    // Only these writes reached the server.
+    let methods = fake.methods();
+    let writes: BTreeSet<&str> = methods
+        .iter()
+        .map(String::as_str)
+        .filter(|m| m.ends_with("/set") || m.ends_with("/import"))
+        .collect();
+    assert_eq!(
+        writes,
+        BTreeSet::from(["Email/import", "Email/set", "Mailbox/set"])
+    );
+    folder.logout().await.expect("logout");
 }
 
 /// Stage 14: an API token goes as `Authorization: Bearer` on every request (session, method

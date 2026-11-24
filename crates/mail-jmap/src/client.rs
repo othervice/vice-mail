@@ -248,9 +248,22 @@ impl Client {
         using: &[&str],
         calls: Vec<Call>,
     ) -> Result<Responses, BackendError> {
+        self.call_scoped(api, using, calls, |_, _| false).await
+    }
+
+    /// [`Client::call`] where `scope` may permit a writing call the allowlist refuses, after
+    /// looking at its arguments (the settings sync folder, `sync_folder`). Nothing is sent
+    /// unless every call is permitted.
+    pub(crate) async fn call_scoped(
+        &self,
+        api: &Url,
+        using: &[&str],
+        calls: Vec<Call>,
+        scope: impl Fn(&str, &Value) -> bool,
+    ) -> Result<Responses, BackendError> {
         if let Some((name, _, _)) = calls
             .iter()
-            .find(|(name, _, _)| !permitted(self.access, name))
+            .find(|(name, args, _)| !permitted(self.access, name) && !scope(name, args))
         {
             return Err(BackendError::ReadOnly((*name).to_owned()));
         }
@@ -283,6 +296,15 @@ impl Client {
 
     /// Downloads a blob (at most [`MAX_BLOB`] bytes). 404 means the blob is gone (`None`).
     pub(crate) async fn download(&self, url: &Url) -> Result<Option<Vec<u8>>, BackendError> {
+        self.download_limited(url, MAX_BLOB).await
+    }
+
+    /// [`Client::download`] of at most `limit` bytes; more is a protocol error.
+    pub(crate) async fn download_limited(
+        &self,
+        url: &Url,
+        limit: usize,
+    ) -> Result<Option<Vec<u8>>, BackendError> {
         self.check_url(url)?;
         self.record("download");
         let response = self
@@ -293,7 +315,7 @@ impl Client {
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        read_ok(response, MAX_BLOB).await.map(Some)
+        read_ok(response, limit).await.map(Some)
     }
 
     /// Uploads `data` (read-write connections only). Returns the blob id.
@@ -306,6 +328,26 @@ impl Client {
         if self.access != Access::ReadWrite {
             return Err(BackendError::ReadOnly("upload".into()));
         }
+        self.upload_unchecked(url, content_type, data).await
+    }
+
+    /// [`Client::upload`] on any connection: only for the settings sync folder, whose import of
+    /// the blob is then checked by its scope (a blob alone changes no mailbox).
+    pub(crate) async fn upload_for_folder(
+        &self,
+        url: &Url,
+        content_type: &str,
+        data: &[u8],
+    ) -> Result<String, BackendError> {
+        self.upload_unchecked(url, content_type, data).await
+    }
+
+    async fn upload_unchecked(
+        &self,
+        url: &Url,
+        content_type: &str,
+        data: &[u8],
+    ) -> Result<String, BackendError> {
         self.check_url(url)?;
         self.record("upload");
         let response = self

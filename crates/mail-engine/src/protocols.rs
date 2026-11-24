@@ -4,23 +4,23 @@
 //! takes from the account ([`for_account`]). [`AnySender`] does the same for sending (SMTP or
 //! JMAP submission).
 //!
-//! The settings sync keeps its records in an IMAP folder; a JMAP account cannot hold it
-//! ([`BackendError::Unsupported`]).
+//! The settings sync folder is an IMAP folder or, on a JMAP account, a JMAP mailbox
+//! ([`AnySyncFolder`]).
 
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
 use mail_imap::{ImapBackend, ImapConnector, ImapSyncFolder, ImapWriter, SmtpSender};
-use mail_jmap::{JmapBackend, JmapConnector, JmapSender, JmapWriter, TlsConfigFn};
+use mail_jmap::{JmapBackend, JmapConnector, JmapSender, JmapSyncFolder, JmapWriter, TlsConfigFn};
 use mail_model::search::ServerCriterion;
 use mail_model::{
     Access, AppendUid, BackendError, BodySection, Capabilities, ConnectConfig, Envelope,
     ExpungeOutcome, FetchedSection, Flag, FlagUpdate, IdleOutcome, MailBackend, MailConnector,
     MailSender, MailWriter, MailboxRole, MailboxStatus, MessageHeader, MessageStructure, ModSeq,
     MoveOutcome, Protocol, RawMessage, RemoteMailbox, SelectedMailbox, SendFuture, SendOutcome,
-    SmtpLimits, StoreMode, StoreOutcome, SyncFolderConnector, Uid, UidMapStore, UidSet,
-    WriteConnector,
+    SmtpLimits, StoreMode, StoreOutcome, SyncFolder, SyncFolderConnector, SyncFolderEntry,
+    SyncFolderState, Uid, UidMapStore, UidSet, WriteConnector,
 };
 use mail_store::StoredAccount;
 
@@ -276,19 +276,59 @@ impl WriteConnector for AnyConnector {
     }
 }
 
-impl SyncFolderConnector for AnyConnector {
-    type Folder = ImapSyncFolder;
+/// The settings sync folder of either adapter (see [`AnyBackend`] on the variants' sizes).
+#[allow(clippy::large_enum_variant)]
+pub enum AnySyncFolder {
+    Imap(ImapSyncFolder),
+    Jmap(JmapSyncFolder),
+}
 
+impl SyncFolder for AnySyncFolder {
+    async fn open(&mut self, create: bool) -> Result<Option<SyncFolderState>, BackendError> {
+        both!(self, f => f.open(create).await)
+    }
+
+    async fn list(&mut self, fields: &[&str]) -> Result<Vec<SyncFolderEntry>, BackendError> {
+        both!(self, f => f.list(fields).await)
+    }
+
+    async fn read(&mut self, uids: &UidSet) -> Result<Vec<(Uid, Vec<u8>)>, BackendError> {
+        both!(self, f => f.read(uids).await)
+    }
+
+    async fn append(&mut self, message: &[u8]) -> Result<Option<Uid>, BackendError> {
+        both!(self, f => f.append(message).await)
+    }
+
+    async fn delete(&mut self, uids: &UidSet) -> Result<(), BackendError> {
+        both!(self, f => f.delete(uids).await)
+    }
+
+    async fn logout(self) -> Result<(), BackendError> {
+        both!(self, f => f.logout().await)
+    }
+}
+
+impl SyncFolderConnector for AnyConnector {
+    type Folder = AnySyncFolder;
+
+    /// Stage 14: on a JMAP account the folder is a JMAP mailbox (`mail_jmap::JmapSyncFolder`).
     async fn connect_sync_folder(
         &self,
         config: &ConnectConfig,
         folder: &str,
-    ) -> Result<ImapSyncFolder, BackendError> {
+    ) -> Result<AnySyncFolder, BackendError> {
         match config.protocol {
-            Protocol::Imap => self.imap.connect_sync_folder(config, folder).await,
-            Protocol::Jmap => Err(BackendError::Unsupported(
-                "the settings sync on a JMAP account (choose an IMAP account for it)".into(),
-            )),
+            Protocol::Imap => self
+                .imap
+                .connect_sync_folder(config, folder)
+                .await
+                .map(AnySyncFolder::Imap),
+            Protocol::Jmap => self
+                .jmap
+                .connect_sync_folder(config, folder)
+                .await
+                .map(AnySyncFolder::Jmap),
         }
     }
 }
@@ -357,7 +397,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn jmap_refuses_read_only_writers_and_the_settings_sync_before_connecting() {
+    async fn jmap_refuses_read_only_writers_and_opens_the_settings_sync_over_jmap() {
         let connector = AnyConnector::new();
         for protocol in [Protocol::Imap, Protocol::Jmap] {
             let Err(err) = connector
@@ -371,11 +411,20 @@ mod tests {
                 "{protocol:?}: {err:?}"
             );
         }
+        // Stage 14: the settings sync folder of a JMAP account is opened over JMAP (HTTPS to
+        // the port, where nothing listens), no longer refused.
         let err = connector
             .connect_sync_folder(&config(Protocol::Jmap, Access::ReadOnly), "Settings-Sync")
             .await
-            .expect_err("refused");
-        assert!(matches!(err, BackendError::Unsupported(_)), "{err:?}");
+            .err()
+            .expect("nothing listens");
+        assert!(
+            matches!(
+                err,
+                BackendError::ConnectionRefused | BackendError::ConnectTimeout
+            ),
+            "{err:?}"
+        );
         let sender = AnySender::default();
         let envelope = Envelope {
             from: "a@example.test".into(),

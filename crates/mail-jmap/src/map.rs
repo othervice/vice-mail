@@ -675,7 +675,7 @@ impl AccountMap {
 }
 
 /// Every Email id of a mailbox, oldest first, and the total the server reported.
-async fn list_mailbox(
+pub(crate) async fn list_mailbox(
     client: &Client,
     session: &Session,
     mailbox: &str,

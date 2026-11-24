@@ -21,6 +21,8 @@
 //!   Writers come only from `connect_writer`, which refuses a read-only configuration.
 //! - **Push:** `idle` reads the server's event source (RFC 8620 section 7.3); without one the
 //!   capabilities say "no IDLE" and the engine polls.
+//! - **Settings sync folder:** [`JmapSyncFolder`] keeps the encrypted records as messages in
+//!   one mailbox, on a read-only connection whose only writes are into and out of that mailbox.
 //! - **Sending:** the message is uploaded, imported into Drafts and submitted with
 //!   `EmailSubmission/set`, which destroys the imported copy on success. The engine files its
 //!   Sent copy as for IMAP.
@@ -35,6 +37,7 @@ mod map;
 mod push;
 mod sender;
 mod session;
+mod sync_folder;
 mod writer;
 
 #[cfg(test)]
@@ -45,6 +48,7 @@ pub use client::MethodLog;
 pub use connector::{JmapConnector, TlsConfigFn};
 pub use sender::JmapSender;
 pub use session::{SessionProbe, probe};
+pub use sync_folder::JmapSyncFolder;
 pub use writer::JmapWriter;
 
 /// Capability URIs (RFC 8620, RFC 8621).

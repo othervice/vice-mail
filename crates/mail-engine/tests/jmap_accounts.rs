@@ -7,6 +7,9 @@
 //! - **Several providers at once:** alice over IMAP and bob over JMAP in one app. The unified
 //!   inbox shows both, every message belongs to its own account, actions go to the account's
 //!   own server over its own protocol, and read-only holds per account.
+//! - **Settings sync on a JMAP account:** two devices keep their settings in bob's
+//!   `Settings-Sync` mailbox over JMAP; the account stays read-only, and the folder is checked
+//!   over IMAP.
 //!
 //! Ignored by default. Take the shared lock, start the server (any seed):
 //!
@@ -16,8 +19,8 @@
 //! scripts/testmail.sh unlock jmap
 //! ```
 //!
-//! Works with messages `<...@jmap-accounts.test>` it appends itself; they are removed before
-//! and after.
+//! Works with messages `<...@jmap-accounts.test>` it appends itself and with bob's
+//! `Settings-Sync` folder; they are removed before and after.
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -30,8 +33,9 @@ use mail_imap::test_support::{TestAccount, TestEnv};
 use mail_imap::{ImapBackend, ImapConnector};
 use mail_model::{
     Access, AccountId, AccountSettings, AccountState, BackendError, ConnectConfig, CoreEvent,
-    CredentialKind, ErrorCode, IpcError, MailAction, MailBackend, MailConnector, MessageListItem,
-    MessageRef, OperationState, Protocol, Secret, Security, ServerSettings, SyncFolderConnector,
+    CredentialKind, ErrorCode, IpcError, LanguagePreference, MailAction, MailBackend,
+    MailConnector, MessageListItem, MessageRef, OperationState, Preferences, Protocol, Secret,
+    Security, ServerSettings, SettingsSyncState, SyncFolder, SyncFolderConnector, ThemePreference,
     UidSet, UnifiedView, WriteConnector,
 };
 use tempfile::TempDir;
@@ -713,5 +717,152 @@ async fn imap_and_jmap_accounts_share_the_unified_inbox_each_on_its_own_server()
     clean(&mut alice).await;
     clean(&mut bob).await;
     alice.logout().await.ok();
+    bob.logout().await.ok();
+}
+
+/// The entries of bob's settings sync folder over IMAP: (id, version) per entry, or `None` when
+/// there is no folder.
+async fn folder_over_imap(env: &TestEnv) -> Option<Vec<(String, String)>> {
+    let config = env.config(&env.bob, Security::Tls, Access::ReadOnly);
+    let mut folder = ImapConnector::new()
+        .connect_sync_folder(&config, "Settings-Sync")
+        .await
+        .expect("IMAP folder connection");
+    folder.open(false).await.expect("open")?;
+    let fields = ["X-Settings-Sync-Id", "X-Settings-Sync-Version"];
+    let entries = folder
+        .list(&fields)
+        .await
+        .expect("list")
+        .into_iter()
+        .map(|e| {
+            let text = String::from_utf8_lossy(&e.header).into_owned();
+            let value = |name: &str| {
+                text.lines()
+                    .find_map(|l| l.strip_prefix(&format!("{name}:")))
+                    .map(|v| v.trim().to_owned())
+                    .unwrap_or_default()
+            };
+            (value(fields[0]), value(fields[1]))
+        })
+        .collect();
+    folder.logout().await.ok();
+    Some(entries)
+}
+
+/// Removes bob's settings sync folder (a run before may have left it).
+async fn drop_folder(bob: &mut ImapBackend) {
+    let reply = bob
+        .raw_command("DELETE \"Settings-Sync\"", |_| false)
+        .await
+        .expect("DELETE");
+    // NO when there is none.
+    let _ = reply.ok;
+}
+
+async fn inbox_count(bob: &mut ImapBackend) -> u64 {
+    let opened = bob.open_mailbox("INBOX").await.expect("select");
+    bob.search_uids(&opened).await.expect("search").len()
+}
+
+/// One device: its own database and keychain, bob over JMAP.
+async fn device(env: &TestEnv) -> (TempDir, AppCore<Recording>, AccountId) {
+    let dir = TempDir::new().expect("temp dir");
+    let keychain: Arc<MemorySecretStore> = Arc::default();
+    let core = start(env, &dir, &keychain, Recording::default()).await;
+    let account = core
+        .add_account(
+            jmap_settings(env, &env.bob, &env.bob.address),
+            env.bob.password.clone(),
+        )
+        .await
+        .expect("bob over JMAP");
+    all_idle(&core, &[account.id]).await;
+    (dir, core, account.id)
+}
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn the_settings_sync_keeps_its_folder_in_a_jmap_account() {
+    let env = TestEnv::require();
+    let mut bob = imap(&env, &env.bob).await;
+    drop_folder(&mut bob).await;
+    let inbox_before = inbox_count(&mut bob).await;
+    let passphrase = || Secret::new("correct horse battery staple".to_owned());
+
+    // 1. Device A turns the sync on with bob's JMAP account: the folder is created over JMAP.
+    let (_a_dir, a, a_bob) = device(&env).await;
+    let status = a
+        .enable_settings_sync(a_bob, passphrase())
+        .await
+        .expect("enable on a JMAP account");
+    assert_eq!(status.state, SettingsSyncState::Active, "{status:?}");
+    a.set_preferences(Preferences {
+        theme: ThemePreference::Dark,
+        language: LanguagePreference::De,
+    })
+    .await
+    .expect("preferences");
+    let status = a.sync_settings_now().await.expect("pass");
+    assert_eq!(status.state, SettingsSyncState::Active, "{status:?}");
+    let entries = folder_over_imap(&env).await.expect("the folder exists");
+    assert!(entries.len() >= 2, "key record and settings: {entries:?}");
+    assert!(
+        entries
+            .iter()
+            .all(|(id, version)| !id.is_empty() && !version.is_empty()),
+        "{entries:?}"
+    );
+    // The account stays read-only; nothing outside the folder changed.
+    let accounts = a.list_accounts().await.expect("accounts");
+    assert!(accounts.iter().all(|x| !x.writes_enabled));
+    assert_eq!(inbox_count(&mut bob).await, inbox_before);
+
+    // 2. Device B sees the folder in bob's JMAP mailboxes and joins with the passphrase.
+    let (_b_dir, b, b_bob) = device(&env).await;
+    let status = b.get_settings_sync_status().await.expect("status");
+    assert!(
+        status.detected_accounts.contains(&b_bob),
+        "the folder was detected over JMAP: {status:?}"
+    );
+    b.preview_settings_sync_join(b_bob, passphrase())
+        .await
+        .expect("preview");
+    let status = b.join_settings_sync().await.expect("join");
+    assert_eq!(status.state, SettingsSyncState::Active, "{status:?}");
+    assert_eq!(
+        b.get_preferences().await.expect("preferences"),
+        Preferences {
+            theme: ThemePreference::Dark,
+            language: LanguagePreference::De,
+        },
+        "A's settings arrived over JMAP"
+    );
+
+    // 3. A change on B replaces its entry (import the new one, destroy the old one) and
+    //    reaches A.
+    b.set_preferences(Preferences {
+        theme: ThemePreference::Light,
+        language: LanguagePreference::De,
+    })
+    .await
+    .expect("preferences");
+    b.sync_settings_now().await.expect("pass B");
+    a.sync_settings_now().await.expect("pass A");
+    assert_eq!(
+        a.get_preferences().await.expect("preferences").theme,
+        ThemePreference::Light
+    );
+    let entries = folder_over_imap(&env).await.expect("the folder exists");
+    let mut ids: Vec<&String> = entries.iter().map(|(id, _)| id).collect();
+    let total = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), total, "one entry per record: {entries:?}");
+    assert_eq!(inbox_count(&mut bob).await, inbox_before);
+
+    a.shutdown().await;
+    b.shutdown().await;
+    drop_folder(&mut bob).await;
     bob.logout().await.ok();
 }
