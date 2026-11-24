@@ -1,5 +1,5 @@
 // Stage 16: accent themes (Settings → Appearance, a UI preference of the core synced between
-// devices since decision 0036, orange by default since decision 0038) and the notification
+// devices since decision 0036, blue by default since decision 0053) and the notification
 // sounds (Settings → Notifications, from the core's fixed list of this system).
 import { act, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
@@ -53,25 +53,26 @@ const lastAccent = (core: ReturnType<typeof mockCore>) =>
   (core.callsOf("set_ui_preferences").at(-1)?.["preferences"] as { accentTheme?: string } | undefined)?.accentTheme;
 
 describe("accent themes", () => {
-  it("offers six themes by name, orange marked as the default, and saves a choice to the core", async () => {
+  it("offers six themes by name, blue marked as the default, and saves a choice to the core", async () => {
     const core = mockCore();
     const { user } = renderApp();
     openSettings("appearance");
 
     const group = await screen.findByRole("radiogroup", { name: "Accent colour" });
     const radios = within(group).getAllByRole("radio");
-    expect(radios.map((radio) => radio.textContent)).toEqual(["Teal", "Blue", "Violet", "Rose", "Orange (default)", "Green"]);
-    expect(within(group).getByRole("radio", { name: "Orange (default)" }).getAttribute("aria-checked")).toBe("true");
-    // Decision 0038: the default is set on the root too (the root values of tokens.css are teal's).
-    expect(document.documentElement.dataset["accent"]).toBe("orange");
-
-    await user.click(within(group).getByRole("radio", { name: "Blue" }));
+    expect(radios.map((radio) => radio.textContent)).toEqual(["Teal", "Blue (default)", "Violet", "Rose", "Orange", "Green"]);
+    expect(within(group).getByRole("radio", { name: "Blue (default)" }).getAttribute("aria-checked")).toBe("true");
+    // Decision 0053: the default is set on the root too (its block repeats the root values).
     expect(document.documentElement.dataset["accent"]).toBe("blue");
+
+    // Orange, the default of decision 0038, stays a choice like the others.
+    await user.click(within(group).getByRole("radio", { name: "Orange" }));
+    expect(document.documentElement.dataset["accent"]).toBe("orange");
     await waitFor(() => {
-      expect(core.ui.preferences.accentTheme).toBe("blue");
+      expect(core.ui.preferences.accentTheme).toBe("orange");
     });
-    expect(lastAccent(core)).toBe("blue");
-    expect(within(group).getByRole("radio", { name: "Blue" }).getAttribute("aria-checked")).toBe("true");
+    expect(lastAccent(core)).toBe("orange");
+    expect(within(group).getByRole("radio", { name: "Orange" }).getAttribute("aria-checked")).toBe("true");
     // Nothing goes to the web view's storage any more.
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
 
@@ -98,7 +99,7 @@ describe("accent themes", () => {
     const core = mockCore();
     const { user } = renderApp();
     openSettings("appearance");
-    const orange = await screen.findByRole("radio", { name: "Orange (default)" });
+    const orange = await screen.findByRole("radio", { name: "Orange" });
     act(() => {
       orange.focus();
     });
@@ -121,7 +122,7 @@ describe("accent themes", () => {
     expect(document.documentElement.dataset["accent"]).toBe("rose");
     // A theme of a newer version reads as the default.
     await emitCore({ type: "uiPreferencesChanged", preferences: { ...DEFAULT_UI_PREFERENCES, accentTheme: "magenta" as AccentTheme } });
-    expect(document.documentElement.dataset["accent"]).toBe("orange");
+    expect(document.documentElement.dataset["accent"]).toBe("blue");
   });
 
   it("puts the previous theme back and says why when the core refuses the choice", async () => {
@@ -172,7 +173,7 @@ describe("moving the accent of the per-device fallback to the core, once", () =>
       expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
     expect(core.callsOf("set_ui_preferences")).toHaveLength(0);
-    expect(core.ui.preferences.accentTheme).toBe("orange");
+    expect(core.ui.preferences.accentTheme).toBe("blue");
   });
 
   it("keeps the local key for the next start when the core refuses it", async () => {

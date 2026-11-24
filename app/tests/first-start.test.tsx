@@ -131,11 +131,11 @@ describe("guided first start (decision 0044)", () => {
       expect(rootTheme()).toBe("dark");
     });
     expect(core.preferences.theme).toBe("dark");
-    await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByRole("radio", { name: "Violet" }));
     await waitFor(() => {
-      expect(document.documentElement.dataset["accent"]).toBe("blue");
+      expect(document.documentElement.dataset["accent"]).toBe("violet");
     });
-    expect(core.ui.preferences.accentTheme).toBe("blue");
+    expect(core.ui.preferences.accentTheme).toBe("violet");
     await next(user);
 
     // 4. Extras: sync offered, AI explained, the update switch off.
