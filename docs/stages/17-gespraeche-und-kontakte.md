@@ -224,7 +224,7 @@ f9ecd88 (axe-Test der Kontakte mit mehr Zeit unter Last). Entscheidung
   Spam-Ordner (Posteingang 9.962 → 9.960), „Rückgängig“ holt sie zurück; keine CSP-Verletzung.
 - `scripts/check.sh` im Haupt-Checkout grün: zuerst auf 899bd3e (1.350 Rust-Tests), zuletzt
   gestartet auf f9ecd88: 1.351 Rust-Tests (102 ignoriert), 5 der Feature e2e, Clippy auch für
-  Windows, 4.036 Vitest-Tests in 89 Dateien, Vite-Build, cargo deny, pnpm audit, Lizenzen. Den
+  Windows, 4.036 Vitest-Tests in 89 Dateien, Vite-Build, cargo deny, pnpm audit, Lizenzen. Der
   Vitest-Schritt lief schon mit f1be6e3 einer anderen Sitzung (15 s je Test). Zwei Läufe dazwischen
   scheiterten an der Last der parallelen Sitzungen (Lastmittel 17): einmal fehlte in Clippy ein
   `objc2`-Artefakt im gemeinsamen `target`, einmal liefen drei Vitest-Tests in ihre Zeitgrenze
