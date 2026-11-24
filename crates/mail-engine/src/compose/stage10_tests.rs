@@ -403,8 +403,12 @@ async fn offline_at_the_scheduled_time_it_goes_out_once_online() {
                 .await
                 .expect("outgoing")
                 .into_iter()
+                // The queued state between attempts, not the next attempt under load.
                 .find(|m| {
-                    m.operation_id == mail.operation_id && m.attempts >= 1 && m.error.is_some()
+                    m.operation_id == mail.operation_id
+                        && m.attempts >= 1
+                        && m.error.is_some()
+                        && m.state == SendState::Queued
                 })
         })
         .await;

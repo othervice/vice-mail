@@ -670,9 +670,11 @@ mod with_core {
             .expect("send");
         let operation = mail.operation_id;
         let waiting = bed
+            // Waiting between attempts: under load a poll can also land in the next attempt
+            // (`Sending`, the earlier error still set), so wait for the queued state itself.
             .until("a failed attempt", || async {
                 let m = bed.outgoing(operation).await;
-                (m.attempts >= 1 && m.error.is_some()).then_some(m)
+                (m.attempts >= 1 && m.error.is_some() && m.state == SendState::Queued).then_some(m)
             })
             .await;
         assert_eq!(waiting.state, SendState::Queued);
