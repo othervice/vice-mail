@@ -1983,6 +1983,9 @@ export const de: Translation = {
     // Stufe 17 (Entscheidung 0049): Konversationen klappen in der Liste auf wie in Thunderbird.
     replies_one: "{{count}} Antwort",
     replies_other: "{{count}} Antworten",
+    // Das Wort nach der Zahl in der Pille der Zeile; es weicht dem Betreff zuerst.
+    repliesWord_one: "Antwort",
+    repliesWord_other: "Antworten",
     expand: "Antworten zeigen",
     collapse: "Antworten ausblenden",
     inFolder: "in {{folder}}",

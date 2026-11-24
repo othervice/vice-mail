@@ -254,7 +254,6 @@ type ChildOptionProps = ComponentPropsWithRef<"div"> & {
   row: ChildRowEntry;
   dateId: string;
   bounds: DayBounds;
-  twoLine: boolean;
   selected: boolean;
   cursor: boolean;
   multiSelect: boolean;
@@ -267,7 +266,7 @@ type ChildOptionProps = ComponentPropsWithRef<"div"> & {
  * content like a message row (`useChildLabel`), with the folder where it lies outside the
  * conversation's folder (the user's own answer in Sent).
  */
-function ChildOption({ row, dateId, bounds, twoLine, selected, cursor, multiSelect, actions, ...rest }: ChildOptionProps) {
+function ChildOption({ row, dateId, bounds, selected, cursor, multiSelect, actions, ...rest }: ChildOptionProps) {
   const { t, i18n } = useTranslation();
   const elsewhere = row.item.mailboxId !== row.parentItem.mailboxId;
   const mailboxes = useMailboxes(elsewhere ? row.item.accountId : null).data;
@@ -286,7 +285,6 @@ function ChildOption({ row, dateId, bounds, twoLine, selected, cursor, multiSele
         item={row.item}
         folder={folder}
         bounds={bounds}
-        twoLine={twoLine}
         selected={selected}
         cursor={cursor}
         multiSelect={multiSelect}
@@ -1336,7 +1334,6 @@ export function MessageList({
                       row={row}
                       dateId={dateDomId(optionId)}
                       bounds={bounds}
-                      twoLine={twoLine}
                       selected={selected}
                       cursor={isCursor}
                       multiSelect={multiSelect}

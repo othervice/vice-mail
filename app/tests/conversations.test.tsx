@@ -481,6 +481,17 @@ describe("opening a conversation", () => {
     const projekt = within(list)
       .getAllByRole("treeitem")
       .find((option) => optionName(option).includes("Projekt"));
+    // Stage 17: the account label beside the names: its colour dot and name, the name as its
+    // tooltip and in the row's name; it gives way to the names first (large shrink factor, the
+    // dot as its smallest size; the layout itself is measured in conversations.e2e.mjs).
+    const label = within(projekt as HTMLElement).getByTestId("row-account");
+    expect(label.getAttribute("title")).toBe("Work");
+    expect(within(label).getByTestId("row-account-name").textContent).toBe("Work");
+    expect(within(label).getByTestId("row-account-dot").className).toContain("bg-account-4");
+    expect(label.className).toMatch(/\bshrink-1000\b/);
+    expect(label.className).toContain("min-w-(--ui-dot)");
+    expect(label.className).toContain("overflow-hidden");
+    expect(optionName(projekt)).toContain("Account: Work");
     await user.click(projekt as HTMLElement);
     await waitFor(() => {
       expect(core.callsOf("get_thread")).toContainEqual({ messageId: WORK_MAIL.id, mailboxId: 20 });

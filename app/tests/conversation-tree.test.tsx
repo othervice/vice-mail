@@ -350,6 +350,86 @@ describe("unfolding a conversation", () => {
   });
 });
 
+describe("the look (stage 17, after the screenshot pass)", () => {
+  /** jsdom lays nothing out: the classes that make the layout, measured in conversations.e2e.mjs. */
+  const classes = (element: Element | null | undefined) => (element?.getAttribute("class") ?? "").split(/\s+/);
+
+  it("the replies pill gives way to the subject first, down to chevron and number", async () => {
+    setup();
+    const { conversation } = await inbox();
+    const pill = within(conversation()).getByTestId("row-replies");
+    expect(pill.textContent).toBe("2 replies");
+    // Chevron, number and the word with its space in a column that may shrink to nothing.
+    expect(classes(pill)).toEqual(expect.arrayContaining(["grid", "shrink-1000", "grid-cols-[auto_auto_minmax(0,max-content)]"]));
+    expect(classes(pill)).not.toContain("shrink-0");
+    const word = within(pill).getByTestId("row-replies-word");
+    expect(word.textContent).toBe(" replies");
+    expect(classes(word)).toEqual(expect.arrayContaining(["min-w-0", "overflow-hidden", "text-ellipsis", "whitespace-pre"]));
+    expect(pill.textContent?.replace(word.textContent ?? "", "")).toBe("2");
+    // The subject shrinks only after it (shrink factor 1, no fixed width).
+    const subject = within(conversation()).getByTestId("row-subject");
+    expect(classes(subject)).toEqual(expect.arrayContaining(["min-w-0", "truncate"]));
+    expect(classes(subject).some((c) => c.startsWith("shrink") || c.startsWith("w-"))).toBe(false);
+  });
+
+  it("child rows size the sender to its name; the text takes the rest", async () => {
+    const { user } = setup();
+    const { conversation, children } = await inbox();
+    await user.click(within(conversation()).getByTestId("row-replies"));
+    await waitFor(() => {
+      expect(children()).toHaveLength(3);
+    });
+    for (const child of children()) {
+      const sender = within(child).getByTestId("child-sender");
+      expect(classes(sender)).toEqual(expect.arrayContaining(["max-w-1/3", "shrink-0", "truncate"]));
+      expect(classes(sender).some((c) => c.startsWith("w-"))).toBe(false);
+      expect(classes(within(child).getByTestId("child-text"))).toEqual(expect.arrayContaining(["min-w-0", "flex-1", "truncate"]));
+    }
+  });
+
+  for (const width of [1000, 400]) {
+    it(`the line leaves from under the conversation's avatar (${width === 400 ? "narrow" : "wide"} list)`, async () => {
+      // The list measures its width through a ResizeObserver: report one at once.
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(private readonly callback: ResizeObserverCallback) {}
+          observe() {
+            this.callback([], this);
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+      const { user } = setup();
+      const { conversation, children } = await inbox();
+      expect(within(conversation()).queryByTestId("tree-line")).toBeNull();
+      await user.click(within(conversation()).getByTestId("row-replies"));
+      await waitFor(() => {
+        expect(children()).toHaveLength(3);
+      });
+      // Narrow rows have the subject on a line of their own.
+      expect(conversation().querySelector(".flex-col") !== null).toBe(width === 400);
+      const line = within(conversation()).getByTestId("tree-line");
+      // From the row's middle (inside the avatar) to its bottom, under the avatar, which is
+      // positioned after it and so covers its start.
+      expect(classes(line)).toEqual(expect.arrayContaining(["absolute", "top-1/2", "bottom-0", "start-(--ui-tree-line-start)", "border-dotted"]));
+      const avatar = within(conversation()).getByTestId("avatar").parentElement;
+      expect(classes(avatar)).toContain("relative");
+      expect(line.compareDocumentPosition(avatar as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // On through every message, ending in the middle of the last.
+      const lines = children().map((child) => classes(within(child).getByTestId("tree-line")));
+      expect(lines.map((c) => [c.includes("top-0"), c.includes("bottom-0"), c.includes("h-1/2")])).toEqual([
+        [true, true, false],
+        [true, true, false],
+        [true, false, true],
+      ]);
+      vi.unstubAllGlobals();
+    });
+  }
+});
+
 describe("a message asked for by id (a notification, an AI source)", () => {
   it("unfolds its conversation and selects the message itself", async () => {
     const { core } = setup();

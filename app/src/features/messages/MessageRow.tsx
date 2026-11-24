@@ -6,6 +6,7 @@ import { HighlightedText } from "../../components/HighlightedText";
 import type { AccountColor, Address, MessageActivity, MessageListItem, SearchHighlights } from "../../services/ipc";
 import { useLayoutStore } from "../../stores/layout";
 import { Avatar } from "../accounts/Avatar";
+import { accountFill } from "../accounts/accountColor";
 import { RowMarks, useRowMarkLabels, type RowMark } from "../comfort/RowMarks";
 import { formatFullDate, formatListDate, type DayBounds } from "./rows";
 
@@ -189,17 +190,22 @@ function SelectionMark({ unread, selected, multiSelect }: { unread: boolean; sel
  * Thunderbird's; a click unfolds or folds the conversation below the row. A mouse target like the
  * selection box (`data-row-toggle`, handled by the list): the tree item says "expanded" or
  * "collapsed" itself, and → and ← do the same from the keyboard. Unfolded, it takes the accent.
+ *
+ * The subject takes the width first: short of room, the pill gives up its word before the
+ * subject loses a letter ("3 replies", "3 repl…", "3"), never its chevron and number. A grid whose
+ * word column may shrink to nothing (`minmax(0, max-content)`) makes chevron and number the pill's
+ * smallest size, and its large shrink factor makes the row's line take from it first.
  */
 function RepliesToggle({ replies, expanded }: { replies: number; expanded: boolean | undefined }) {
   const { t } = useTranslation();
-  const label = t("threads.replies", { count: replies });
   const foldable = expanded !== undefined;
   return (
     <span
       aria-hidden
-      {...(foldable && { "data-row-toggle": true, title: t(expanded ? "threads.collapse" : "threads.expand") })}
+      {...(foldable && { "data-row-toggle": true })}
+      title={foldable ? t(expanded ? "threads.collapse" : "threads.expand") : t("threads.replies", { count: replies })}
       className={cx(
-        "flex h-5 shrink-0 items-center gap-1 rounded-full text-12 font-medium whitespace-nowrap tabular-nums transition-colors",
+        "grid h-5 shrink-1000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-12 font-medium tabular-nums transition-colors",
         foldable ? "cursor-pointer ps-1 pe-2" : "px-2",
         expanded ? "bg-accent-soft text-accent" : "bg-badge text-secondary",
         foldable && !expanded && "hover:text-primary",
@@ -207,13 +213,16 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
       data-testid="row-replies"
       data-expanded={foldable ? expanded : undefined}
     >
-      {foldable && (
-        <ChevronRight
-          className={cx("size-3 shrink-0", expanded && "rotate-90")}
-          strokeWidth={2.25}
-        />
+      {foldable ? (
+        <ChevronRight className={cx("me-1 size-3", expanded && "rotate-90")} strokeWidth={2.25} />
+      ) : (
+        <span />
       )}
-      {label}
+      <span className="whitespace-nowrap">{replies}</span>
+      {/* The space belongs to the word, so it goes with it. */}
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre" data-testid="row-replies-word">
+        {` ${t("threads.repliesWord", { count: replies })}`}
+      </span>
     </span>
   );
 }
@@ -221,7 +230,10 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
 /**
  * Stage 17: the dotted line of an unfolded conversation, under the avatar column of its row: from
  * the avatar down in the conversation's row, through every child row, ending at the last one's
- * avatar. Decoration only.
+ * avatar. Decoration only. In the conversation's row it starts at the row's middle, which lies
+ * inside the avatar in every layout (one line: the avatar is centred; narrow: the avatar tops a
+ * block of at most twice its height that is centred), and the avatar, positioned after it, covers
+ * its start: it leaves the avatar's lower edge wherever that is.
  */
 function TreeLine({ from, to }: { from: "top" | "avatar"; to: "bottom" | "middle" }) {
   return (
@@ -229,7 +241,7 @@ function TreeLine({ from, to }: { from: "top" | "avatar"; to: "bottom" | "middle
       aria-hidden
       className={cx(
         "pointer-events-none absolute start-(--ui-tree-line-start) border-s border-dotted border-border-strong",
-        from === "top" ? "top-0" : "top-(--ui-tree-line-below-avatar)",
+        from === "top" ? "top-0" : "top-1/2",
         to === "bottom" ? "bottom-0" : "h-1/2",
       )}
       data-testid="tree-line"
@@ -281,7 +293,8 @@ export function MessageRowContent({
         "truncate text-14 text-primary",
         item.unread ? "font-semibold" : "font-medium",
         !twoLine && "w-(--ui-list-sender-width) shrink-0",
-        twoLine && "min-w-0 flex-1",
+        // Narrow: as wide as the names; the account label beside them gives way first.
+        twoLine && "min-w-0",
       )}
     >
       {highlights && !showRecipients && item.from && ownSender ? (
@@ -338,13 +351,19 @@ export function MessageRowContent({
     </>
   );
   // Stage 8: which account, in words, wherever the avatar ring's colour tells accounts apart.
+  // Stage 17: the names come first; short of room the label gives way first, down to its colour
+  // dot (large shrink factor, the dot as its smallest size); the name stays its tooltip and is part
+  // of the row's accessible name.
   const accountElement = decoration?.account ? (
     <span
       title={decoration.account}
-      className="max-w-(--ui-row-account-width) shrink-0 truncate text-12 text-secondary"
+      className="flex max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000 items-center gap-1 overflow-hidden"
       data-testid="row-account"
     >
-      {decoration.account}
+      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
+      <span className="min-w-0 truncate text-12 text-secondary" data-testid="row-account-name">
+        {decoration.account}
+      </span>
     </span>
   ) : null;
   const timeElement = (
@@ -356,9 +375,12 @@ export function MessageRowContent({
       {time}
     </time>
   );
-  // The account ring only where rows of several accounts mix (decision 0031).
+  // The account ring only where rows of several accounts mix (decision 0031). Positioned, so it
+  // covers the start of an unfolded conversation's line (stage 17, `TreeLine`).
   const avatar = (
-    <Avatar name={person?.name} email={person?.email ?? ""} accountColor={accountColor} ring={decoration?.account !== undefined} />
+    <span className="relative flex shrink-0">
+      <Avatar name={person?.name} email={person?.email ?? ""} accountColor={accountColor} ring={decoration?.account !== undefined} />
+    </span>
   );
 
   // Hidden from screen readers: the option is named by its visually hidden text (useRowLabel).
@@ -372,8 +394,8 @@ export function MessageRowContent({
         cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
       )}
     >
-      {/* Stage 17: one line rows lead the unfolded conversation's line down from the avatar. */}
-      {expanded && !twoLine && <TreeLine from="avatar" to="bottom" />}
+      {/* Stage 17: the unfolded conversation's line leaves from under the avatar. */}
+      {expanded && <TreeLine from="avatar" to="bottom" />}
       {twoLine ? (
         // Narrow: the dot sits on the first line, the avatar's top on the sender's.
         <span className="flex min-w-0 flex-1 items-start gap-3">
@@ -384,6 +406,7 @@ export function MessageRowContent({
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex h-5 min-w-0 items-center gap-2">
               {sender}
+              <span className="flex-1" />
               {marks}
               {accountElement}
               {timeElement}
@@ -427,7 +450,6 @@ interface ChildRowContentProps {
   /** The folder's name where the message lies outside the conversation row's folder. */
   folder: string | null;
   bounds: DayBounds;
-  twoLine: boolean;
   selected: boolean;
   cursor: boolean;
   multiSelect: boolean;
@@ -469,7 +491,7 @@ function childText(item: MessageListItem, noSubject: string): string {
  * start of the text, symbols, and the time. Same tokens, selection, focus and quick actions as a
  * message row.
  */
-export function ChildRowContent({ item, folder, bounds, twoLine, selected, cursor, multiSelect, last, actions }: ChildRowContentProps) {
+export function ChildRowContent({ item, folder, bounds, selected, cursor, multiSelect, last, actions }: ChildRowContentProps) {
   const { t, i18n } = useTranslation();
   const sender = item.from ? addressName(item.from) : t("list.unknownSender");
   const text = childText(item, t("list.noSubject"));
@@ -490,25 +512,23 @@ export function ChildRowContent({ item, folder, bounds, twoLine, selected, curso
         <span className="relative flex w-(--ui-avatar) shrink-0 justify-center">
           <Avatar name={item.from?.name} email={item.from?.email ?? ""} accountColor={0} ring={false} size="mini" />
         </span>
-        <span
-          title={item.from?.email ?? sender}
-          className={cx(
-            "truncate text-13 text-primary",
-            item.unread ? "font-semibold" : "font-regular",
-            // Narrow: as wide as the name, at most a third, so the text keeps room.
-            twoLine ? "max-w-1/3 shrink-0" : "w-(--ui-list-sender-width) shrink-0",
-          )}
-          data-testid="child-sender"
-        >
-          {sender}
-        </span>
-        {folder && (
-          <span title={folder} className="max-w-(--ui-row-account-width) shrink-0 truncate rounded-full bg-badge px-2 text-12 text-secondary" data-testid="child-folder">
-            {folder}
+        {/* As wide as they are: the sender's name (at most a third), the folder; the text the rest. */}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            title={item.from?.email ?? sender}
+            className={cx("max-w-1/3 shrink-0 truncate text-13 text-primary", item.unread ? "font-semibold" : "font-regular")}
+            data-testid="child-sender"
+          >
+            {sender}
           </span>
-        )}
-        <span title={text} className={cx("min-w-0 flex-1 truncate text-13", item.unread ? "text-secondary" : "text-tertiary")} data-testid="child-text">
-          {text}
+          {folder && (
+            <span title={folder} className="max-w-(--ui-row-account-width) shrink-0 truncate rounded-full bg-badge px-2 text-12 text-secondary" data-testid="child-folder">
+              {folder}
+            </span>
+          )}
+          <span title={text} className={cx("min-w-0 flex-1 truncate text-13", item.unread ? "text-secondary" : "text-tertiary")} data-testid="child-text">
+            {text}
+          </span>
         </span>
         {item.hasAttachments && <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />}
         {item.flagged && <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />}

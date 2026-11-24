@@ -191,11 +191,9 @@
   --ui-list-sender-width: 12rem;
   /* Stage 17 (decision 0049): the messages of an unfolded conversation are one line each (36 px,
      compact 28 px) in every list width. The conversation's dotted line runs under the avatar
-     column: past the row's inset, the selection column and the gap, half an avatar in; in the
-     conversation's own row it starts below the avatar. */
+     column: past the row's inset, the selection column and the gap, half an avatar in. */
   --ui-child-row-height: 2.25rem;
   --ui-tree-line-start: calc(var(--ui-space-3) * 2 + var(--ui-icon-small) + var(--ui-avatar) / 2);
-  --ui-tree-line-below-avatar: calc(50% + var(--ui-avatar) / 2);
   /* Stage 8: the account's name in rows of lists that mix accounts (unified inbox, search). */
   --ui-row-account-width: 8rem;
   /* Design pass 23.11.2026: distance of the command palette from the top of the window; the

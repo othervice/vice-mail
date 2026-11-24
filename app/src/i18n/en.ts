@@ -1994,6 +1994,9 @@ export const en = {
     // Stage 17 (decision 0049): conversations unfold in the list like in Thunderbird.
     replies_one: "{{count}} reply",
     replies_other: "{{count}} replies",
+    // The word after the number in the row's pill; it gives way to the subject first.
+    repliesWord_one: "reply",
+    repliesWord_other: "replies",
     expand: "Show the replies",
     collapse: "Hide the replies",
     inFolder: "in {{folder}}",
