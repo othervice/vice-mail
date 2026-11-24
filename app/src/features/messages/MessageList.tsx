@@ -536,13 +536,14 @@ export function MessageList({
   /** Row index of each conversation's row, by identity (stage 17). */
   const conversationRow = useMemo(() => {
     const map = new Map<string, number>();
+    if (!tree) return map;
     rows.forEach((row, index) => {
       if (row.kind !== "message") return;
       const ident = expandable(row);
       if (ident !== null && !map.has(ident)) map.set(ident, index);
     });
     return map;
-  }, [rows, expandable]);
+  }, [tree, rows, expandable]);
 
   const selectableAt = useCallback(
     (position: number): SelectableRow | undefined => {
