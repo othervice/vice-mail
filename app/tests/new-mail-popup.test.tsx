@@ -5,7 +5,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import axe from "axe-core";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DELETED_FOR_MS, HIDE_AFTER_MS, newer, PopupApp } from "../src/features/popup/PopupApp";
+import { DELETED_FOR_MS, HIDE_AFTER_MS, HOVER_STALE_MS, newer, PopupApp } from "../src/features/popup/PopupApp";
 import { createI18n, type Language } from "../src/i18n";
 import type { IpcError, NewMailCard, NewMailPopup, PopupAppearance } from "../src/services/ipc";
 
@@ -125,7 +125,8 @@ describe("the new-mail popup", () => {
     const [only] = await screen.findAllByTestId("popup-card");
     if (!only) throw new Error("no card");
     const article = within(only);
-    expect(screen.getByRole("region", { name: "New mail" })).toBeTruthy();
+    expect(screen.getByRole("main", { name: "New mail" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "New mail" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Sender 1" })).toBe(only);
     expect(article.getByTestId("popup-subject").textContent).toBe("Subject 1");
     expect(article.getByTestId("popup-snippet").textContent).toContain("Snippet of message 1");
@@ -227,6 +228,7 @@ describe("the new-mail popup", () => {
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     await screen.findByTestId("popup-deleted");
     expect(screen.getByTestId("popup-deleted").textContent).toBe("Deleted · Subject 1");
+    expect(within(screen.getByTestId("popup-card")).getByRole("button", { name: "Close" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Undo" }));
     await screen.findByRole("button", { name: "Delete" });
     expect(f.calls.filter((c) => c.cmd.includes("delete")).map((c) => [c.cmd, c.args])).toEqual([
@@ -302,6 +304,52 @@ describe("the new-mail popup", () => {
     await waitFor(() => {
       expect(cards()).toHaveLength(0);
     });
+  });
+
+  it("waits while the page is hidden (lock screen, sleeping display) and hides itself once seen", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const f = fake({ cards: [card(1)] });
+    renderPopup();
+    await screen.findByTestId("popup-card");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HIDE_AFTER_MS * 3);
+    });
+    expect(f.calls.some((c) => c.cmd === "dismiss_popup")).toBe(false);
+    visibility.mockReturnValue("visible");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HIDE_AFTER_MS - 500);
+    });
+    expect(f.calls.some((c) => c.cmd === "dismiss_popup")).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(f.calls.find((c) => c.cmd === "dismiss_popup")?.args).toEqual({ messageId: null });
+  });
+
+  it("counts a pointer that never said it left as gone after a minute without a sign of it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const f = fake({ cards: [card(1)] });
+    const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+    renderPopup();
+    const root = await screen.findByTestId("popup-root");
+    await user.hover(root);
+    expect(root.hasAttribute("data-hovered")).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HOVER_STALE_MS - 1_000);
+    });
+    expect(f.calls.some((c) => c.cmd === "dismiss_popup")).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(root.hasAttribute("data-hovered")).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HIDE_AFTER_MS + 100);
+    });
+    expect(f.calls.find((c) => c.cmd === "dismiss_popup")?.args).toEqual({ messageId: null });
   });
 
   it("follows the core's changes and keeps the newest revision", async () => {

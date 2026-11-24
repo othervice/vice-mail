@@ -12,10 +12,19 @@ import {
 import { applyTheme, DARK_SCHEME_QUERY, resolveTheme } from "../preferences/theme";
 import { cardTitle, NewMailPopupView, type CardState } from "./NewMailPopupView";
 
-/** The popup hides itself after this long without the pointer on it (docs/DESIGN.md). */
+/**
+ * The popup hides itself after this long on screen without the pointer on it (docs/DESIGN.md).
+ * Only visible time counts: while the system shows something else over it (the lock screen, a
+ * sleeping display) the page is hidden and the popup waits for the user.
+ */
 export const HIDE_AFTER_MS = 10_000;
 /** A deleted card offers "Undo" this long, then closes. */
 export const DELETED_FOR_MS = 5_000;
+/**
+ * Without any pointer event for this long the pointer counts as gone, even if no "leave" came
+ * (a window that is never key may not hear every mouse movement): the popup cannot stay forever.
+ */
+export const HOVER_STALE_MS = 60_000;
 
 /** The newer of two states of the popup (events and command answers can cross). */
 export function newer(current: NewMailPopup | null, next: NewMailPopup): NewMailPopup {
@@ -53,6 +62,21 @@ function useAppearance(appearance: PopupAppearance | undefined): void {
   }, [accent]);
 }
 
+/** Whether the page can be seen (WebKit and WebView2 say "hidden" under a lock screen). */
+function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
+  useEffect(() => {
+    const update = () => {
+      setVisible(document.visibilityState !== "hidden");
+    };
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  return visible;
+}
+
 /** What the live region says for cards that were not there before. */
 function useAnnouncement(popup: NewMailPopup | null): string {
   const { t } = useTranslation();
@@ -80,14 +104,17 @@ function useAnnouncement(popup: NewMailPopup | null): string {
 /**
  * Stage 18 (decision 0051): the page of the new-mail popup's window. It asks the core for the
  * cards, follows `newMailPopupChanged`, forwards the buttons, hides itself after
- * [`HIDE_AFTER_MS`] (not while the pointer is on it), closes deleted cards after
- * [`DELETED_FOR_MS`], and tells the shell its height so the window fits the cards at the bottom
- * right of the screen. It calls only the popup's own commands (`popupIpc`).
+ * [`HIDE_AFTER_MS`] on screen (not while the pointer is on it, not while the page is hidden),
+ * closes deleted cards after [`DELETED_FOR_MS`], and tells the shell its height so the window
+ * fits the cards at the bottom right of the screen. It calls only the popup's own commands
+ * (`popupIpc`).
  */
 export function PopupApp() {
   const [popup, setPopup] = useState<NewMailPopup | null>(null);
   const [states, setStates] = useState<ReadonlyMap<MessageId, CardState>>(new Map());
   const [hovered, setHovered] = useState(false);
+  const [pointerSeen, setPointerSeen] = useState(0);
+  const visible = usePageVisible();
   const [now, setNow] = useState(() => new Date());
   const root = useRef<HTMLDivElement>(null);
   const take = useCallback((next: NewMailPopup) => {
@@ -138,23 +165,34 @@ export function PopupApp() {
     };
   }, [popup]);
 
+  // The pointer rested so long without a sign that it is still there: it counts as gone.
+  useEffect(() => {
+    if (!hovered) return undefined;
+    const timer = window.setTimeout(() => {
+      setHovered(false);
+    }, HOVER_STALE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [hovered, pointerSeen]);
+
   // Hides itself after a while, never while the pointer is on it. Every change starts over.
   const revision = popup?.revision;
   const shown = (popup?.cards.length ?? 0) > 0;
   useEffect(() => {
-    if (!shown || hovered) return undefined;
+    if (!shown || hovered || !visible) return undefined;
     const timer = window.setTimeout(() => {
       void popupIpc.dismiss(null).then(take).catch(() => undefined);
     }, HIDE_AFTER_MS);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [shown, hovered, revision, take]);
+  }, [shown, hovered, visible, revision, take]);
 
   // A deleted card offers "Undo" for a few seconds, then goes.
   const deleted = popup?.cards.filter((card) => card.deleted).map((card) => card.messageId).join(",") ?? "";
   useEffect(() => {
-    if (!deleted || hovered) return undefined;
+    if (!deleted || hovered || !visible) return undefined;
     const ids = deleted.split(",").map(Number);
     const timer = window.setTimeout(() => {
       for (const id of ids) void popupIpc.dismiss(id).then(take).catch(() => undefined);
@@ -162,7 +200,7 @@ export function PopupApp() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [deleted, hovered, take]);
+  }, [deleted, hovered, visible, take]);
 
   const run = (card: NewMailCard, action: (id: MessageId) => Promise<NewMailPopup>) => {
     const id = card.messageId;
@@ -186,8 +224,14 @@ export function PopupApp() {
     <div
       ref={root}
       data-testid="popup-root"
+      data-hovered={hovered ? "" : undefined}
       onPointerEnter={() => {
         setHovered(true);
+        setPointerSeen(Date.now());
+      }}
+      onPointerMove={() => {
+        if (!hovered) setHovered(true);
+        setPointerSeen(Date.now());
       }}
       onPointerLeave={() => {
         setHovered(false);

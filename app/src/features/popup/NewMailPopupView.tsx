@@ -53,8 +53,12 @@ export function NewMailPopupView({
   const { t, i18n } = useTranslation();
   const language = i18n.language;
   const bounds = useMemo(() => dayBounds(now, firstDayOfWeek(language)), [now, language]);
+  const headingId = useId();
   return (
-    <section aria-label={t("popup.title")} data-testid="new-mail-popup" className="flex flex-col bg-surface-raised text-primary">
+    <main aria-labelledby={headingId} data-testid="new-mail-popup" className="flex flex-col bg-surface-raised text-primary">
+      <h1 id={headingId} className="sr-only">
+        {t("popup.title")}
+      </h1>
       <div role="status" aria-live="polite" className="sr-only" data-testid="popup-announce">
         {announcement}
       </div>
@@ -79,12 +83,12 @@ export function NewMailPopupView({
           type="button"
           onClick={onOpenInbox}
           data-testid="popup-more"
-          className="border-t border-border-subtle px-4 py-2.5 text-left text-13 font-medium text-accent transition-colors hover:bg-hover"
+          className="border-t border-border-subtle px-4 py-3 text-left text-13 font-medium text-accent transition-colors hover:bg-hover"
         >
           {t("popup.more", { count: popup.more })}
         </button>
       )}
-    </section>
+    </main>
   );
 }
 
@@ -131,6 +135,7 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
         <Button variant="quiet" onClick={() => { onUndo(card); }} disabled={busy} data-testid="popup-undo">
           {t("popup.undo")}
         </Button>
+        <CloseButton card={card} onClose={onClose} />
         {error && <ErrorLine error={error} />}
       </article>
     );
@@ -152,15 +157,7 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
           <time dateTime={new Date(card.date).toISOString()} title={fullTime} className="shrink-0 text-12 text-secondary tabular-nums">
             {time}
           </time>
-          <button
-            type="button"
-            aria-label={t("popup.close")}
-            onClick={() => { onClose(card); }}
-            data-testid="popup-close"
-            className="-my-1 -mr-2 flex size-7 shrink-0 items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary"
-          >
-            <X aria-hidden className="size-4" strokeWidth={1.75} />
-          </button>
+          <CloseButton card={card} onClose={onClose} />
         </div>
         {content && (
           <p className="truncate text-13 font-medium text-primary" data-testid="popup-subject">
@@ -173,7 +170,7 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
           </p>
         )}
         {card.account && (
-          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-12 text-secondary" data-testid="popup-account">
+          <p className="mt-1 flex min-w-0 items-center gap-2 text-12 text-secondary" data-testid="popup-account">
             <span aria-hidden className={cx("size-2 shrink-0 rounded-full", accountFill(card.account.color))} />
             <span className="truncate">{t("popup.account", { name: card.account.name })}</span>
           </p>
@@ -195,7 +192,7 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
           )}
         </div>
         {content && !card.writesEnabled && (
-          <p id={reasonId} className="mt-1.5 text-12 text-secondary" data-testid="popup-read-only">
+          <p id={reasonId} className="mt-1 text-12 text-secondary" data-testid="popup-read-only">
             {t("popup.readOnly")}
           </p>
         )}
@@ -205,10 +202,27 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
   );
 }
 
+function CloseButton({ card, onClose }: { card: NewMailCard; onClose: (card: NewMailCard) => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      aria-label={t("popup.close")}
+      onClick={() => {
+        onClose(card);
+      }}
+      data-testid="popup-close"
+      className="-my-1 -mr-2 flex size-6 shrink-0 items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary"
+    >
+      <X aria-hidden className="size-4" strokeWidth={1.75} />
+    </button>
+  );
+}
+
 function ErrorLine({ error }: { error: CoreError }) {
   const { t } = useTranslation();
   return (
-    <p role="alert" className="mt-1.5 text-12 text-danger" data-testid="popup-error" data-error-code={error.code}>
+    <p role="alert" className="mt-1 text-12 text-danger" data-testid="popup-error" data-error-code={error.code}>
       {t("popup.failed", { reason: t(`errors.codes.${error.code}.title`) })}
     </p>
   );

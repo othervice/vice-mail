@@ -53,7 +53,7 @@ pub const POPUP_WIDTH: f64 = 360.0;
 pub const POPUP_MARGIN: f64 = 16.0;
 
 /// The height the page may ask for (logical pixels); three cards and "N more" fit.
-const MIN_HEIGHT: f64 = 64.0;
+const MIN_HEIGHT: f64 = 48.0;
 const MAX_HEIGHT: f64 = 640.0;
 
 /// What the cards measure in the page before it measured itself (`docs/DESIGN.md`, "Popup für

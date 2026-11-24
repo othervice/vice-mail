@@ -201,6 +201,21 @@ mod on_windows {
 mod tests {
     use super::*;
 
+    /// Every name of the macOS list but `Default` is a system sound `NSSound` finds by name.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn every_macos_sound_exists() {
+        use objc2_app_kit::NSSound;
+        use objc2_foundation::NSString;
+        for name in mail_model::MACOS_SOUNDS.iter().filter(|n| **n != "Default") {
+            assert!(
+                NSSound::soundNamed(&NSString::from_str(name)).is_some(),
+                "{name}"
+            );
+        }
+        assert!(NSSound::soundNamed(&NSString::from_str("Fanfare")).is_none());
+    }
+
     #[test]
     fn toast_sounds_are_scheme_events() {
         for name in mail_model::WINDOWS_SOUNDS {
