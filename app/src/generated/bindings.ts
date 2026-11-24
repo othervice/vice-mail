@@ -2964,6 +2964,11 @@ export type McpConnectionTest = {
 export type McpHelperInfo = {
 	/**  Absolute path, as the client configurations contain it. */
 	path: string | null,
+	/**
+	 *  `path` with the user's home directory written as `~` (`~/Applications/…`), for showing
+	 *  on the settings page: a screenshot or a shared screen does not carry the user name.
+	 */
+	displayPath: string | null,
 	/**  The file exists. */
 	found: boolean,
 	/**
@@ -3029,6 +3034,11 @@ export type McpStatus = {
 	state: McpHostState,
 	/**  Where the app listens (socket path on macOS, pipe name on Windows); null until known. */
 	endpoint: string | null,
+	/**
+	 *  `endpoint` with the home directory written as `~`, for showing (see
+	 *  [`McpHelperInfo::display_path`]).
+	 */
+	endpointDisplay: string | null,
 	/**
 	 *  Why the endpoint could not be opened (`failed`); technical text from the app, never
 	 *  from a mail.

@@ -87,6 +87,9 @@ pub enum McpHostState {
 pub struct McpHelperInfo {
     /// Absolute path, as the client configurations contain it.
     pub path: Option<String>,
+    /// `path` with the user's home directory written as `~` (`~/Applications/…`), for showing
+    /// on the settings page: a screenshot or a shared screen does not carry the user name.
+    pub display_path: Option<String>,
     /// The file exists.
     pub found: bool,
     /// The app runs from a place that changes (a disk image, macOS App Translocation): the
@@ -103,6 +106,9 @@ pub struct McpStatus {
     pub state: McpHostState,
     /// Where the app listens (socket path on macOS, pipe name on Windows); null until known.
     pub endpoint: Option<String>,
+    /// `endpoint` with the home directory written as `~`, for showing (see
+    /// [`McpHelperInfo::display_path`]).
+    pub endpoint_display: Option<String>,
     /// Why the endpoint could not be opened (`failed`); technical text from the app, never
     /// from a mail.
     pub error: Option<String>,

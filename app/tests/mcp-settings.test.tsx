@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ipcError, makeAccount, mockCore } from "./support/core";
 import { emitCore } from "./support/events";
-import { makeAccessEntry, makeMcpClient, MCP_ENDPOINT, MCP_HELPER_PATH } from "./support/mcpSync";
+import { makeAccessEntry, makeMcpClient, MCP_ENDPOINT, MCP_ENDPOINT_SHOWN, MCP_HELPER_PATH } from "./support/mcpSync";
 import { renderApp } from "./support/render";
 
 const ADA = makeAccount();
@@ -52,8 +52,16 @@ describe("Settings, AI over MCP", () => {
     expect(core.callsOf("set_mcp_enabled")).toEqual([{ enabled: true }]);
     expect(within(panel).getByTestId("mcp-state").textContent).toBe("On. Waiting for AI clients on this computer.");
     expect(within(panel).getByText(/a cloud AI client sends what it reads to its provider/)).toBeTruthy();
-    expect(within(panel).getByText(MCP_ENDPOINT)).toBeTruthy();
-    expect(within(panel).getByText(MCP_HELPER_PATH)).toBeTruthy();
+    // A path in the home directory shows from "~" (no user name on screen); the button copies it whole.
+    const endpoint = within(panel).getByTestId("mcp-endpoint");
+    expect(within(endpoint).getByText(MCP_ENDPOINT_SHOWN)).toBeTruthy();
+    expect(endpoint.textContent).not.toContain("/Users/ada");
+    expect(within(panel).getByTestId("mcp-helper-path").textContent).toContain(MCP_HELPER_PATH);
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await user.click(within(endpoint).getByRole("button", { name: "Copy the full path of the connection point" }));
+    expect(writeText).toHaveBeenCalledWith(MCP_ENDPOINT);
+    expect(await within(endpoint).findByText("Full path copied.")).toBeTruthy();
   });
 
   it("stops all access with the emergency stop, also from the access view", async () => {
@@ -97,7 +105,7 @@ describe("Settings, AI over MCP", () => {
 
     await emitCore({
       type: "mcpStatusChanged",
-      status: { ...mcpOnStatus(), state: "failed", endpoint: null, error: "bind /tmp/x: permission denied" },
+      status: { ...mcpOnStatus(), state: "failed", endpoint: null, endpointDisplay: null, error: "bind /tmp/x: permission denied" },
     });
     await waitFor(() => {
       expect(within(panel).getByRole("switch", { name: "Allow AI clients" }).getAttribute("aria-checked")).toBe("true");
@@ -110,7 +118,7 @@ describe("Settings, AI over MCP", () => {
   it("asks to move the app first when it runs from a disk image, and says when the helper is missing", async () => {
     mockCore({
       accounts: [ADA],
-      mcpSync: { mcp: { enabled: true, status: { helper: { path: null, found: false, unstableLocation: true } } } },
+      mcpSync: { mcp: { enabled: true, status: { helper: { path: null, displayPath: null, found: false, unstableLocation: true } } } },
     });
     const { user } = renderApp();
     const panel = await openMcp(user);
@@ -469,7 +477,8 @@ function mcpOnStatus() {
     enabled: true,
     state: "listening" as const,
     endpoint: MCP_ENDPOINT,
+    endpointDisplay: MCP_ENDPOINT_SHOWN,
     error: null,
-    helper: { path: MCP_HELPER_PATH, found: true, unstableLocation: false },
+    helper: { path: MCP_HELPER_PATH, displayPath: MCP_HELPER_PATH, found: true, unstableLocation: false },
   };
 }

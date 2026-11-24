@@ -1357,6 +1357,11 @@ export const de: Translation = {
       helperMissingBody: "KI-Clients starten ein kleines Hilfsprogramm, das zur App gehört, und es wurde nicht gefunden. Installiere die App neu.",
       helperPath: "Hilfsprogramm:",
       endpoint: "Verbindungspunkt:",
+      copyPath: "Ganzen Pfad kopieren",
+      copyHelperPath: "Den ganzen Pfad des Hilfsprogramms kopieren",
+      copyEndpoint: "Den ganzen Pfad des Verbindungspunkts kopieren",
+      pathCopied: "Ganzer Pfad kopiert.",
+      pathCopyFailed: "Kopieren ging nicht. Markiere den Pfad und kopiere ihn selbst.",
     },
     accounts: {
       title: "Freigegebene Konten",

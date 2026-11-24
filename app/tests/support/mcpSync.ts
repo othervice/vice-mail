@@ -24,6 +24,8 @@ import {
 
 export const MCP_HELPER_PATH = "/Applications/Vice Mail.app/Contents/MacOS/mail-mcp";
 export const MCP_ENDPOINT = "/Users/ada/Library/Application Support/vice-mail/mcp/mail-mcp.sock";
+/** `MCP_ENDPOINT` as the core shows it, from the home directory. */
+export const MCP_ENDPOINT_SHOWN = "~/Library/Application Support/vice-mail/mcp/mail-mcp.sock";
 const KINDS: readonly McpClientKind[] = ["claude_desktop", "claude_code", "cursor", "lm_studio"];
 
 /** The four configurations as `mail_mcp::config` builds them, with `token` filled in. */
@@ -165,8 +167,9 @@ export function createMcpSyncFake(options: McpSyncFakeOptions, deps: Deps) {
   const status = (): McpStatus => ({
     state: enabled ? "listening" : "stopped",
     endpoint: enabled ? MCP_ENDPOINT : null,
+    endpointDisplay: enabled ? MCP_ENDPOINT_SHOWN : null,
     error: null,
-    helper: { path: MCP_HELPER_PATH, found: true, unstableLocation: false },
+    helper: { path: MCP_HELPER_PATH, displayPath: MCP_HELPER_PATH, found: true, unstableLocation: false },
     ...options.mcp?.status,
     enabled,
   });

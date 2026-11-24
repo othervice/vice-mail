@@ -31,6 +31,23 @@ pub(crate) const HELPER_FILE: &str = if cfg!(windows) {
     "mail-mcp"
 };
 
+/// `path` with the user's home directory written as `~` (`~/Library/…`, `~\AppData\…`), for
+/// the settings page: a screenshot or a shared screen does not show the user name. A path
+/// outside the home stays as it is, also one that only starts with the same letters.
+pub(crate) fn home_relative(path: &str, home: Option<&str>) -> String {
+    let Some(home) = home
+        .map(|home| home.trim_end_matches(['/', '\\']))
+        .filter(|home| !home.is_empty())
+    else {
+        return path.to_owned();
+    };
+    match path.strip_prefix(home) {
+        Some("") => "~".to_owned(),
+        Some(rest) if rest.starts_with(['/', '\\']) => format!("~{rest}"),
+        _ => path.to_owned(),
+    }
+}
+
 /// The endpoint for this data directory, or why there is none.
 pub(crate) async fn resolve(store: &Store, data_dir: &Path, now: i64) -> Result<Endpoint, String> {
     if cfg!(windows) {
@@ -153,5 +170,45 @@ mod tests {
         assert!(!unstable(Path::new(
             "/Applications/Mail.app/Contents/MacOS/mail-mcp"
         )));
+    }
+
+    #[test]
+    fn paths_in_the_home_directory_are_shown_from_tilde() {
+        let mac = Some("/Users/alice");
+        assert_eq!(
+            home_relative(
+                "/Users/alice/Library/Application Support/org.vicemail.desktop/mcp/mail-mcp.sock",
+                mac
+            ),
+            "~/Library/Application Support/org.vicemail.desktop/mcp/mail-mcp.sock"
+        );
+        assert_eq!(home_relative("/Users/alice", mac), "~");
+        assert_eq!(home_relative("/Users/alice/", Some("/Users/alice/")), "~/");
+        // Not inside the home: unchanged, also a neighbour that starts with the same letters.
+        assert_eq!(
+            home_relative("/Applications/Vice Mail.app/Contents/MacOS/mail-mcp", mac),
+            "/Applications/Vice Mail.app/Contents/MacOS/mail-mcp"
+        );
+        assert_eq!(home_relative("/Users/alicia/x", mac), "/Users/alicia/x");
+        assert_eq!(
+            home_relative("/var/folders/ab/T/mail-mcp-0/mail-mcp.sock", mac),
+            "/var/folders/ab/T/mail-mcp-0/mail-mcp.sock"
+        );
+        // Windows: the profile directory, and a pipe name, which is no path in it.
+        let windows = Some(r"C:\Users\Alice");
+        assert_eq!(
+            home_relative(
+                r"C:\Users\Alice\AppData\Local\Programs\Vice Mail\mail-mcp.exe",
+                windows
+            ),
+            r"~\AppData\Local\Programs\Vice Mail\mail-mcp.exe"
+        );
+        assert_eq!(
+            home_relative(r"\\.\pipe\vicemail-mcp-1f2e", windows),
+            r"\\.\pipe\vicemail-mcp-1f2e"
+        );
+        // Without a known home everything stays as it is.
+        assert_eq!(home_relative("/Users/alice/x", None), "/Users/alice/x");
+        assert_eq!(home_relative("/Users/alice/x", Some("")), "/Users/alice/x");
     }
 }

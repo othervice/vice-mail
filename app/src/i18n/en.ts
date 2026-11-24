@@ -1362,6 +1362,12 @@ export const en = {
       helperMissingBody: "AI clients start a small helper program that comes with the app, and it was not found. Reinstall the app.",
       helperPath: "Helper program:",
       endpoint: "Connection point:",
+      // Shown from "~" (no user name in a screenshot); the button copies the full path.
+      copyPath: "Copy full path",
+      copyHelperPath: "Copy the full path of the helper program",
+      copyEndpoint: "Copy the full path of the connection point",
+      pathCopied: "Full path copied.",
+      pathCopyFailed: "Could not copy. Select the path and copy it yourself.",
     },
     accounts: {
       title: "Shared accounts",

@@ -179,10 +179,14 @@ impl<C: Connector> McpState<C> {
 
     fn helper_info(&self) -> McpHelperInfo {
         let path = lock(&self.helper).clone();
+        let path_text = path.as_ref().map(|p| p.to_string_lossy().into_owned());
         McpHelperInfo {
             found: path.as_ref().is_some_and(|p| p.is_file()),
             unstable_location: path.as_deref().is_some_and(place::unstable),
-            path: path.map(|p| p.to_string_lossy().into_owned()),
+            display_path: path_text
+                .as_deref()
+                .map(|p| place::home_relative(p, crate::diagnostics::home_dir().as_deref())),
+            path: path_text,
         }
     }
 
@@ -218,6 +222,9 @@ impl<C: Connector> McpState<C> {
         McpStatus {
             enabled,
             state,
+            endpoint_display: endpoint
+                .as_deref()
+                .map(|e| place::home_relative(e, crate::diagnostics::home_dir().as_deref())),
             endpoint,
             error,
             helper: self.helper_info(),

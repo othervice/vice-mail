@@ -18,6 +18,9 @@ mod system;
 #[cfg(test)]
 mod tests;
 
+/// The user's home directory (also for the paths the MCP settings show as `~/…`).
+pub(crate) use system::home_dir;
+
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};

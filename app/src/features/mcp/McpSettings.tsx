@@ -101,6 +101,48 @@ function MasterSwitch({ settings }: { settings: McpSettingsInfo }) {
   );
 }
 
+/**
+ * A path of the status block: shown from "~" where it lies in the home directory (no user name in
+ * a screenshot or a shared screen), with a button that copies the full path.
+ */
+function PathLine({ term, shown, full, copyLabel, ...rest }: { term: string; shown: string; full: string; copyLabel: string; "data-testid": string }) {
+  const { t } = useTranslation();
+  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+  const copyFull = () => {
+    // Only on the user's click.
+    const clipboard = typeof navigator === "undefined" ? undefined : (navigator.clipboard as Clipboard | undefined);
+    if (!clipboard) {
+      setCopy("failed");
+      return;
+    }
+    clipboard.writeText(full).then(
+      () => {
+        setCopy("copied");
+      },
+      () => {
+        setCopy("failed");
+      },
+    );
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-x-2" data-testid={rest["data-testid"]}>
+      <dt>{term}</dt>
+      <dd className="font-mono break-all select-text" title={full === shown ? undefined : full}>
+        {shown}
+      </dd>
+      <dd className="flex items-center gap-2">
+        <button type="button" onClick={copyFull} aria-label={copyLabel} className="rounded-control px-1 font-medium text-accent hover:bg-hover">
+          {t("mcp.status.copyPath")}
+        </button>
+        <span role="status">
+          {copy === "copied" && t("mcp.status.pathCopied")}
+          {copy === "failed" && <span className="text-danger">{t("mcp.status.pathCopyFailed")}</span>}
+        </span>
+      </dd>
+    </div>
+  );
+}
+
 function StatusBlock({ status }: { status: McpStatus }) {
   const { t } = useTranslation();
   const { helper } = status;
@@ -137,16 +179,22 @@ function StatusBlock({ status }: { status: McpStatus }) {
       {(helper.path ?? status.endpoint) && (
         <dl className="flex flex-col gap-1 text-12 text-secondary">
           {helper.path && (
-            <div className="flex flex-wrap gap-x-2">
-              <dt>{t("mcp.status.helperPath")}</dt>
-              <dd className="font-mono break-all select-text">{helper.path}</dd>
-            </div>
+            <PathLine
+              term={t("mcp.status.helperPath")}
+              shown={helper.displayPath ?? helper.path}
+              full={helper.path}
+              copyLabel={t("mcp.status.copyHelperPath")}
+              data-testid="mcp-helper-path"
+            />
           )}
           {status.endpoint && (
-            <div className="flex flex-wrap gap-x-2">
-              <dt>{t("mcp.status.endpoint")}</dt>
-              <dd className="font-mono break-all select-text">{status.endpoint}</dd>
-            </div>
+            <PathLine
+              term={t("mcp.status.endpoint")}
+              shown={status.endpointDisplay ?? status.endpoint}
+              full={status.endpoint}
+              copyLabel={t("mcp.status.copyEndpoint")}
+              data-testid="mcp-endpoint"
+            />
           )}
         </dl>
       )}
