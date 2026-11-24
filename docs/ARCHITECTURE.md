@@ -423,7 +423,10 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   where it lies there (newest 1,000), exactly the set the row's count counts; loaded on
   unfolding, keyed by the row's thread. The reading pane shows one message (the oldest
   unread, else the newest); opening marks that message read. Actions on a child row act on
-  that message alone. No new command, no migration.
+  that message alone. No new command, no migration. A conversation row shows the
+  conversation's subject (its oldest message's without reply and forward prefixes,
+  `display_subject`), which thread lists, inbox summaries and search hits carry; the row's
+  message keeps its own subject, which search matches.
 
 **Gmail via IMAP (stage 14, block A, 0034)**
 - Detected by `X-GM-EXT-1` at every login (recorded in `account_server`), for Sent and

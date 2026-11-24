@@ -118,3 +118,28 @@ Gesprächszeile. Der Pfeil mit „n Antworten“ ist ein Ziel für die Maus wie 
   (Commit `cffffec`) zurückholen; der Baum in der Liste kann bleiben.
 - Gelesen markieren des ganzen Gesprächs beim Öffnen: in `MailView` und `MixedReading` die Zeile
   statt der gezeigten Mail an `useMarkReadOnOpen` geben, ohne `exact`.
+
+## Nachtrag 24.11.2026: Betreff des Gesprächs, Feinschliff nach den Bildern
+
+Ein Durchgang über die README-Bilder (`docs/images/inbox-light.png`) fand fünf Stellen.
+
+- **Betreff.** Die Gesprächszeile zeigte den Betreff ihrer neuesten Mail („Re: Website relaunch“).
+  Jetzt wie Thunderbird den des Gesprächs: den Betreff seiner ältesten Mail ohne Antwort- und
+  Weiterleitungs-Präfixe. Der Kern liefert ihn (`ThreadListItem.subject`,
+  `ConversationSummary.subject`, `SearchHit.conversationSubject`; eine Abfrage über
+  `message_thread` je Zeile), die Präfixe entfernt `mail_model::threading::display_subject` mit der
+  Liste, die auch das Threading nutzt. Nur Präfixe am Anfang fallen weg, der Rest bleibt wie er ist,
+  sodass der gezeigte Betreff das Ende des Betreffs ist und Fundstellen der Suche passen. Eine Mail
+  allein behält ihren Betreff samt Präfix. Die Suche findet weiter jeden
+  Betreff; ein Treffer zeigt den Betreff seines Gesprächs und markiert nur, wo das der eigene ist.
+  Verworfen: die Präfixe nur in der Oberfläche vom Betreff der neuesten Mail zu entfernen (ein
+  geänderter Betreff wie „(was: venue shortlist)“ stünde dann für das ganze Gespräch, und die
+  Präfixliste gäbe es zweimal).
+- **Pille, Kindzeilen, Linie, Konto.** Die Pille gibt dem Betreff zuerst nach, bis Pfeil und Zahl;
+  Absender der Kindzeilen so breit wie ihr Name; die Linie beginnt auch in der schmalen Liste am
+  Avatar; im vereinten Posteingang weicht das Konto-Etikett den Namen bis auf seinen Farbpunkt.
+  Einzelheiten in `docs/DESIGN.md`, gemessen in `conversations.e2e.mjs`.
+- **Tests:** `threading::subject::tests::display_subjects_lose_their_prefixes_only`,
+  `conversation_tests::a_conversation_row_shows_its_oldest_subject_without_prefixes` (Posteingang,
+  Ordner, Gesendet, Suche, Abfrageplan), Vitest `conversations.test.tsx` („the subject of a
+  conversation row“) und `conversation-tree.test.tsx` („the look“).

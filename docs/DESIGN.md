@@ -66,9 +66,10 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 |---|---|
 | Punkt links | ungelesen; beim Überfahren und bei Auswahl wird er zum Auswahlkästchen |
 | Avatar | 32 px; das Bild, das der Nutzer für den Kontakt gewählt hat (Stufe 17, 0050), sonst Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. |
-| Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel |
+| Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel; in schmaler Liste so breit wie die Namen |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
+| Konto | nur wo sich Konten mischen (vereinter Posteingang, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
 | Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Anpinnen, Verschieben, Später, Mehr |
 
@@ -531,10 +532,14 @@ Kerns und wird wie die Schriftgröße zwischen Geräten abgeglichen.
 
 **Zeile.** Steht an der neuesten Mail der Konversation im gezeigten Ordner. Absender-Spalte: bei
 mehreren Absendern ihre Namen in der Reihenfolge des Gesprächs („Anna, Ada Lovelace, Bob“), sonst
-der Absender. Nach dem Betreff seit Stufe 17 „n Antworten“ mit Pfeil (siehe „Gespräche
-aufklappen“). Ungelesen (Punkt, halbfett), Markierung und Büroklammer, sobald eine Mail der
-Konversation es ist bzw. hat. Der Name der Zeile enthält den sichtbaren Text in derselben
-Reihenfolge, „n Antworten“ eingeschlossen. Eine Konversation steht nur einmal in der Liste: Steht
+der Absender. Betreff seit Stufe 17 (Feinschliff 24.11.2026) wie in Thunderbird der des Gesprächs:
+der Betreff seiner ältesten Mail ohne Antwort- und Weiterleitungs-Präfixe („Re:“, „AW:“, „Fwd:“,
+„WG:“, „Re[2]:“ …; Etiketten wie „[liste]“ bleiben), nicht der der neuesten Antwort; eine Mail allein
+behält ihren Betreff samt Präfix. Die Suche findet weiter jeden Betreff; in Suchtreffern bleiben
+die Markierungen, wo der gezeigte Betreff der des Treffers ist, sonst fehlen sie im Betreff. Nach dem
+Betreff seit Stufe 17 „n Antworten“ mit Pfeil (siehe „Gespräche aufklappen“). Ungelesen (Punkt,
+halbfett), Markierung und Büroklammer, sobald eine Mail der Konversation es ist bzw. hat. Der Name
+der Zeile enthält den sichtbaren Text in derselben Reihenfolge, „n Antworten“ eingeschlossen. Eine Konversation steht nur einmal in der Liste: Steht
 sie im Block „Priorität“, wiederholt sie sich darunter nicht. Suchtreffer: der neueste Treffer einer
 Konversation ist ihre Zeile.
 
@@ -570,25 +575,33 @@ Tabellenziffern), 20 px hoch, rund, Fläche `badge`, Schrift `text-secondary`, b
 `accent-soft` mit Schrift `accent` (geprüft in `contrast.test.ts`). Der Pfeil dreht ohne Bewegung
 (nur Farbübergänge, `motion.test.ts`). Tooltip „Antworten zeigen“ bzw. „Antworten ausblenden“. Ein
 Klick klappt auf oder zu und wählt nichts; er ist ein Ziel für die Maus wie das Auswahlkästchen.
+Der Betreff geht vor (Feinschliff 24.11.2026): Fehlt Platz, gibt erst die Pille ihr Wort ab („3
+Antworten“, „3 Antw…“, „3“), dann erst wird der Betreff gekürzt; Pfeil und Zahl bleiben immer. Die
+Pille schiebt nie die Zeit (sie steht in der breiten Liste in der Betreffspalte, in der schmalen in
+der zweiten Zeile).
 
 **Kindzeilen.** Eine Zeile je Mail des Gesprächs, älteste zuerst, in jeder Listenbreite einzeilig:
 36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: die Auswahlspalte wie bei
 jeder Zeile (Punkt für ungelesen, beim Überfahren und bei Auswahl das Kästchen), in der
-Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der Linie, der Absender in der Spalte der
-Absender (13 px, halbfett wenn ungelesen, sonst normal; in der schmalen Liste so breit wie der
-Name, höchstens ein Drittel, damit der Text Platz behält), liegt die Mail in einem anderen Ordner
-als die Zeile, dessen Name als Pille (`badge`, 12 px, „Gesendet“, „Posteingang“, „Papierkorb“),
-dann der Anfang des Textes (13 px; `text-secondary` wenn ungelesen, sonst `text-tertiary`; ohne
-Vorschau der Betreff), Büroklammer, Markierung, ausstehende Änderung und die Zeit (12 px,
-Tabellenziffern, ungelesen mittel in Primärfarbe). In der breiten Liste stehen Absender und Text
-genau unter Absender und Betreff der Gesprächszeile. Fläche, Auswahl (`selected`), Überfahren
-(`hover`), Fokusring und Schnellaktionen wie bei jeder Zeile, auch in den Karten von Priorität und
-Bündeln.
+Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der Linie, der Absender, wo die Absender
+der Gesprächszeile beginnen (13 px, halbfett wenn ungelesen, sonst normal; in jeder Breite so breit
+wie der Name, höchstens ein Drittel), liegt die Mail in einem anderen Ordner als die Zeile, dessen
+Name als Pille (`badge`, 12 px, „Gesendet“, „Posteingang“, „Papierkorb“), dann der Anfang des
+Textes (13 px; `text-secondary` wenn ungelesen, sonst `text-tertiary`; ohne Vorschau der Betreff);
+Absender, Pille und Text mit 8 px Abstand, der Text nimmt den Rest bis zu Symbolen und Zeit und wird
+erst gekürzt, wenn er nicht mehr passt (Feinschliff 24.11.2026; vorher stand der Absender in der
+breiten Liste in der festen Spalte und kürzte den Text früh). Dann Büroklammer, Markierung,
+ausstehende Änderung und die Zeit (12 px, Tabellenziffern, ungelesen mittel in Primärfarbe).
+Fläche, Auswahl (`selected`), Überfahren (`hover`), Fokusring und Schnellaktionen wie bei jeder
+Zeile, auch in den Karten von Priorität und Bündeln.
 
 **Linie.** 1 px gepunktet in `border-strong` (Punkte wirken leiser als die Farbe), mittig unter der
-Avatar-Spalte (`--ui-tree-line-start`). In der aufgeklappten Zeile beginnt sie unter dem Avatar
-(einzeilige Liste), läuft durch jede Kindzeile und endet in der Mitte der letzten, unter deren
-Mini-Avatar. Ladezeilen und Hinweise liegen auf derselben Linie.
+Avatar-Spalte (`--ui-tree-line-start`). In der aufgeklappten Zeile beginnt sie sichtbar am unteren
+Rand des Avatars, in der breiten wie in der schmalen Liste (Feinschliff 24.11.2026; vorher in der
+schmalen erst an der ersten Kindzeile): Sie setzt in der Mitte der Zeile an, die in jeder Anordnung
+im Avatar liegt, und der Avatar deckt ihren Anfang. Sie läuft ohne Lücke durch jede Kindzeile und
+endet in der Mitte der letzten, unter deren Mini-Avatar. Ladezeilen und Hinweise liegen auf
+derselben Linie.
 
 **Laden und Fehler.** Die Mails laden beim Aufklappen. Solange: eine Kindzeile mit zwei ruhigen
 Balken (`badge`, `hover`) und für Bildschirmleser „Konversation wird geladen“; die Zeile ist
@@ -621,7 +634,11 @@ Zeile), Antwortzeile und Schnellantwort; eine KI-Quelle aus dem offenen Gespräc
 Liste auf und wählt ihre Zeile.
 
 **Geprüft** in den Desktop-Tests (`conversations.e2e.mjs`) hell und dunkel bei 1200 × 800, axe ohne
-schwere Befunde, Bildschirmfotos `conversations-*.png` (nicht eingecheckt).
+schwere Befunde, Bildschirmfotos `conversations-*.png` (nicht eingecheckt). Seit dem Feinschliff
+misst der Test in der breiten und der schmalen Liste: Betreff des Gesprächs, Betreff erst gekürzt,
+wenn das Wort der Pille weg ist, Zeit ganz in der Zeile, Linie vom Avatar bis zur letzten Mail ohne
+Lücke, Absender der Kindzeilen so breit wie ihr Name, Text bis zum Rand; im vereinten Posteingang
+mit zwei Konten Namen erst gekürzt, wenn das Konto nur noch Punkt ist.
 
 ## Erster Start (Stufe 15, Entscheidung 0044)
 
