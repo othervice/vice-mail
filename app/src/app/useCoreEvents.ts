@@ -75,8 +75,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       // For notifications (a later stage); the list itself follows `messagesChanged`.
       break;
     case "messageBodyAvailable":
-      messageBodyAvailable(queryClient, event.accountId, event.messageId, (key) => {
-        refreshQuery(queryClient, key);
+      messageBodyAvailable(queryClient, event.accountId, event.messageId, (key, stillWaits) => {
+        refreshQuery(queryClient, key, stillWaits);
       });
       break;
     case "messageBodyFailed":

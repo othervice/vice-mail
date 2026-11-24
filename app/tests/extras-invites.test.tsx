@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarInviteInfo, MessageExtras, MessageListItem } from "../src/services/ipc";
-import { ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
+import { holdFirstAnswer, ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { makeCalendarEvent, makeInvite, NO_UNSUBSCRIBE } from "./support/extras";
 import { renderApp } from "./support/render";
@@ -55,7 +55,7 @@ const MEETING = makeInvite([
   }),
 ]);
 
-function setup(invites: CalendarInviteInfo[], extra: Partial<MessageExtras> = {}, failures = {}) {
+function setup(invites: CalendarInviteInfo[], extra: Partial<MessageExtras> = {}, failures = {}, hold?: NonNullable<Parameters<typeof mockCore>[0]>["hold"]) {
   const items: MessageListItem[] = [MAIL];
   const core = mockCore({
     accounts: [ADA],
@@ -65,6 +65,7 @@ function setup(invites: CalendarInviteInfo[], extra: Partial<MessageExtras> = {}
     readingPreferences: { markReadOnOpen: "never" },
     extras: { extras: { [MAIL.id]: { unsubscribe: NO_UNSUBSCRIBE, invites, ...extra } } },
     failures,
+    ...(hold && { hold }),
   });
   return { core, ...renderApp() };
 }
@@ -192,6 +193,25 @@ describe("calendar invitations", () => {
 
     core.extras.setExtras(MAIL.id, { invites: [MEETING], bodyComplete: true });
     await emitCore({ type: "messageBodyAvailable", accountId: ADA.id, messageId: MAIL.id });
+    expect(await within(pane).findByTestId("invite-card")).toBeTruthy();
+    expect(core.callsOf("get_message_extras")).toHaveLength(2);
+  });
+
+  it("appears also when the body arrives while the first answer, read without it, is on its way", async () => {
+    // The core reads the extras before the body is stored, and its answer reaches the page only
+    // after `messageBodyAvailable` (a busy app). Waiting for that answer alone would keep it.
+    const { hold, release } = holdFirstAnswer("get_message_extras");
+    const { core, user } = setup([], { bodyComplete: false }, {}, hold);
+    const pane = await open(user);
+    await waitFor(() => {
+      expect(core.callsOf("get_message_extras")).toHaveLength(1);
+    });
+
+    core.extras.setExtras(MAIL.id, { invites: [MEETING], bodyComplete: true });
+    await emitCore({ type: "messageBodyAvailable", accountId: ADA.id, messageId: MAIL.id });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    release();
+
     expect(await within(pane).findByTestId("invite-card")).toBeTruthy();
     expect(core.callsOf("get_message_extras")).toHaveLength(2);
   });

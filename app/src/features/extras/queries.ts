@@ -58,6 +58,9 @@ export function useSetDefaultMailApp() {
   });
 }
 
+/** Extras read without the whole body (or not answered yet) have no invitations yet. */
+const extrasWaitForBody = (extras: MessageExtras | undefined): boolean => !extras?.bodyComplete;
+
 /**
  * Stage 9 part B events: a `mailto:` link the system opened with the app waits for the composer
  * (`composeRequested`); a body that arrived may bring calendar invitations
@@ -70,9 +73,12 @@ export function handleExtrasEvent(queryClient: QueryClient, event: CoreEvent): v
       if (currentWindowRoute().kind === "main") useMailtoStore.getState().enqueue([event.request]);
       break;
     case "messageBodyAvailable": {
+      // Never asked: the first ask finds the body. Asked, with the answer still on its way: the
+      // core may have read it before the body was stored, so it waits like one without the body.
       const key = messageExtrasQueryKey(event.accountId, event.messageId);
-      const extras = queryClient.getQueryData<MessageExtras>(key);
-      if (extras && !extras.bodyComplete) refreshQuery(queryClient, key);
+      if (queryClient.getQueryState(key) && extrasWaitForBody(queryClient.getQueryData<MessageExtras>(key))) {
+        refreshQuery(queryClient, key, extrasWaitForBody);
+      }
       break;
     }
     default:

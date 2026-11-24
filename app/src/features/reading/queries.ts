@@ -54,16 +54,17 @@ function waitsForBody(view: MessageView | undefined): boolean {
 /**
  * `messageBodyAvailable`: ask again for the views of that message that wait for their body.
  * Views that already show it stay as they are; asking again would render anew and reload the
- * frame (new render token), losing the reader's place.
+ * frame (new render token), losing the reader's place. A view still on its way is asked again only
+ * if it arrives without the body (`refresh` gets `waitsForBody` for that).
  */
 export function messageBodyAvailable(
   queryClient: QueryClient,
   accountId: AccountId,
   messageId: MessageId,
-  refresh: (queryKey: QueryKey) => void,
+  refresh: (queryKey: QueryKey, stillWaits: (view: MessageView | undefined) => boolean) => void,
 ): void {
   for (const query of viewQueries(queryClient, accountId, messageId)) {
-    if (waitsForBody(query.state.data as MessageView | undefined)) refresh(query.queryKey);
+    if (waitsForBody(query.state.data as MessageView | undefined)) refresh(query.queryKey, waitsForBody);
   }
 }
 

@@ -268,6 +268,12 @@ interface FakeCoreOptions {
   /** Commands whose answer never arrives (to see loading states). */
   hang?: readonly string[];
   /**
+   * Holds back an answer: it is made when the call comes (from the fake's state then) and reaches
+   * the page once the promise resolves, as a slow answer of the real core does. An event sent
+   * meanwhile reaches the page first.
+   */
+  hold?: (cmd: string, args: Record<string, unknown>) => Promise<void> | undefined;
+  /**
    * `remove_account` removes at once but answers only when this promise resolves. The real core
    * sends `accountsChanged` before it answers, so the list can refresh first.
    */
@@ -403,6 +409,29 @@ export interface FakeCore {
  * Stands in for the Rust core behind `invoke`, with the command names and argument shapes of the
  * IPC contract. Events are mocked too, so `emit("core-event", …)` reaches `listen` handlers.
  */
+/**
+ * For `hold`: holds back the first answer to `command` until `release` (a slow answer of the real
+ * core); later calls answer at once.
+ */
+export function holdFirstAnswer(command: string): { hold: NonNullable<FakeCoreOptions["hold"]>; release: () => void } {
+  let release: () => void = () => undefined;
+  const slow = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let asked = 0;
+  const hold = (cmd: string) => {
+    if (cmd !== command) return undefined;
+    asked += 1;
+    return asked === 1 ? slow : undefined;
+  };
+  return {
+    hold,
+    release: () => {
+      release();
+    },
+  };
+}
+
 export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   const appInfo = options.appInfo ?? APP_INFO;
   let preferences: Preferences = options.preferences ?? { theme: "system", language: "system" };
@@ -866,7 +895,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   mockIPC(
     (cmd, rawArgs) => {
       const answer = handleCommand(cmd, rawArgs);
-      return cmd.startsWith("list_") || cmd === "get_thread" ? markReadingList(answer) : answer;
+      const marked = cmd.startsWith("list_") || cmd === "get_thread" ? markReadingList(answer) : answer;
+      const held = options.hold?.(cmd, (rawArgs ?? {}) as Record<string, unknown>);
+      return held ? held.then(() => marked) : marked;
     },
     { shouldMockEvents: options.mockEvents ?? true },
   );

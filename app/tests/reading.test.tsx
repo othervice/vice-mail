@@ -5,6 +5,7 @@ import { MAIL_FRAME_SANDBOX } from "../src/features/reading/MessageBodyView";
 import { formatFullDate } from "../src/features/messages/rows";
 import type { BodyFormat, LinkInfo, MessageListItem, MessageView } from "../src/services/ipc";
 import {
+  holdFirstAnswer,
   htmlBody,
   ipcError,
   makeAccount,
@@ -291,6 +292,46 @@ describe("reading pane", () => {
     expect(await within(pane).findByTitle("Content of the message “Compiler notes”")).toBeTruthy();
     expect(core.callsOf("get_message")).toHaveLength(2);
     expect(within(pane).getByRole("article").getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("shows the body also when it arrives while the first answer, without it, is on its way", async () => {
+    // The core answers `loading`, the body is stored and announced, and only then does that
+    // answer reach the page (a busy app). Waiting for it alone would keep the pane loading.
+    const message = grace();
+    const { hold, release } = holdFirstAnswer("get_message");
+    const core = inbox([message], { [message.id]: makeView(message, { body: { kind: "loading" } }) }, { hold });
+    const { user } = renderApp();
+    const pane = await openMessage(user);
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toHaveLength(1);
+    });
+
+    core.setView(message.id, makeView(message, { body: htmlBody("<p>Arrived</p>") }));
+    await emitCore({ type: "messageBodyAvailable", accountId: ACCOUNT.id, messageId: message.id });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    release();
+
+    expect(await within(pane).findByTitle("Content of the message “Compiler notes”")).toBeTruthy();
+    expect(core.callsOf("get_message")).toHaveLength(2);
+  });
+
+  it("does not render again when the answer on its way already has the body", async () => {
+    const message = grace();
+    const { hold, release } = holdFirstAnswer("get_message");
+    const core = inbox([message], { [message.id]: makeView(message, { body: htmlBody("<p>Stored</p>") }) }, { hold });
+    const { user } = renderApp();
+    const pane = await openMessage(user);
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toHaveLength(1);
+    });
+
+    await emitCore({ type: "messageBodyAvailable", accountId: ACCOUNT.id, messageId: message.id });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    release();
+
+    expect(await within(pane).findByTitle("Content of the message “Compiler notes”")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(core.callsOf("get_message")).toHaveLength(1);
   });
 
   it("shows a failed fetch from messageBodyFailed with the error and a way to try again", async () => {
