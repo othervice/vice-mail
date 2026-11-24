@@ -45,9 +45,10 @@ steht im Abschnitt „Feinschliff 23.11.2026“ und in `docs/decisions/0031-fein
 **Seitenspalte** (Standard, 240 px, siehe „Seitenspalte“): vereinter Posteingang, Ansichten,
 gespeicherte Suchen, Favoriten, dann jedes Konto mit seinen Ordnern, unten Aktivität, Ausgang,
 Einstellungen. Eingeklappt bleibt die **Icon-Leiste** (56 px). Von oben: vereinter Posteingang,
+dann die Ansichten der Spalte in der gewählten Reihenfolge (Stufe 17, „Ansichten bearbeiten“; Standard:
 Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Markiert (die Markierung
-des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, Gesendet,
-Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf), gespeicherte Ansichten. Unten:
+des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, gespeicherte
+Ansichten), dann fest Gesendet, Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Unten:
 Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
@@ -344,7 +345,8 @@ Die bisherige ausklappbare Seitenleiste ist dazu umgebaut (`app/src/app/SidebarC
 Fensterknöpfe), rechts der Knopf „Seitenleiste ausblenden“. Dann „Alle Posteingänge“ mit der Zahl
 der ungelesenen Mails aller nicht ausgeblendeten Konten, darunter die Kontogruppen (nur ab zwei
 Konten oder mit Gruppen). Dann „Ansichten“: Später, Aufgaben, Zum Lesen, Angeheftete Anhänge,
-Markiert, Angepinnt, Gespeicherte Ansichten. Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
+Markiert, Angepinnt, Gespeicherte Ansichten; welche davon in welcher Reihenfolge, stellt jeder selbst
+zusammen (Stufe 17, „Ansichten bearbeiten“ unten). Gesendet, Entwürfe, Archiv und Papierkorb stehen nicht dort, sondern
 in jedem Konto: Der Kern kennt vereinte Ansichten nur für den Posteingang (`UnifiedView`). Dann
 gespeicherte Suchen, Favoriten, danach je Konto ein Baum. Unten, mit Haarlinie abgesetzt, Aktivität,
 Ausgang und Einstellungen mit ihren Zählern. Ohne Konto: Ansichten, der Hinweis „Noch kein Konto“
@@ -408,6 +410,58 @@ einem Konto kostet die Spalte 5 Stopps (Seitenleiste ausblenden, Griff, Ansichte
 Ordnern, untere Gruppe), einen mehr als die Seitenleiste vorher. Mit zwei Konten, Favoriten, Gruppen
 und gespeicherten Suchen sind es 8, gleich viele wie vorher: Der Kontoknopf über dem Ordnerbaum ist
 jetzt dessen Wurzel.
+
+## Ansichten bearbeiten (Stufe 17)
+
+Wunsch vom 24.11.2026: Die Ansichten der Spalte stellt jeder selbst zusammen, was er nicht braucht,
+fliegt raus. Code: `app/src/features/layout/columnViews.ts` (die eine Liste der Ansichten, Auflösung,
+Speichern), `EditViewsDialog.tsx`.
+
+**Zugänge.** Am Etikett „Ansichten“ ein „…“ (24 px, `OverflowMenu small`), sichtbar beim Überfahren
+und solange das Etikett den Fokus hat, wie der Pfeil daneben; nicht im Tab-Ablauf. Jede Ansicht hat
+das „…“ der Ordnerzeilen (über dem Zeilenende) mit „In der Seitenleiste ausblenden“ und „Ansichten
+bearbeiten …“. Umschalt+F10, Kontextmenütaste und Rechtsklick öffnen diese Menüs. Dazu die
+Befehlspalette (Gruppe Layout, „Ansichten bearbeiten …“). Nach „Ausblenden“ geht der Fokus zur
+nächsten Ansicht (sonst zur vorigen, sonst zum Etikett), ein Live-Bereich sagt „Später ausgeblendet.
+„Ansichten bearbeiten …“ blendet sie wieder ein.“
+
+**Dialog.** Wie Tastenübersicht und Palette: 12 % vom oberen Rand, abgedunkelter Hintergrund
+(`scrim`), Breite `--ui-dialog-width` (28 rem, wie der Bestätigungsdialog), `surface-raised`,
+Haarlinie `border`, Rundung 16, `shadow-panel`, Innenabstand 24 px. Kopf: Titel „Ansichten
+bearbeiten“ 16 px halbfett, darunter in 13 px `text-secondary`, was der Dialog tut und dass
+ausgeblendete Ansichten in der Befehlspalette bleiben und ihre Kürzel behalten; rechts ein X. Darunter
+die Liste, eine Zeile je Ansicht, 40 px hoch, Rundung 8, Überfahren `hover`: Griff (GripVertical,
+16 px, `text-tertiary`, Mauszeiger „greifen“), Kästchen im Akzent (`accent-accent`), Symbol 16 px
+und Name 13 px (ausgeblendet: Symbol `text-tertiary`, Name `text-secondary`), am Ende „nach oben“
+und „nach unten“ als 32-px-Symbolknöpfe (an den Enden abgeblendet). Die gezogene Zeile liegt auf
+`selected` mit `shadow-floating`. Unter der Liste ein Hinweis in 12 px `text-tertiary` („Zieh eine
+Ansicht am Griff oder drück ⌥↑ bzw. ⌥↓ …“, unter Windows „Alt+↑“). Fuß: links „Auf Standard
+zurücksetzen“ (Zweitknopf, abgeblendet, solange der Standard gilt), rechts „Fertig“ (Hauptknopf).
+Lehnt der Kern ab, steht die Fehlermeldung über der Liste und die vorige Auswahl gilt wieder.
+
+**Vorschau.** Jede Änderung wirkt sofort: Spalte und Leiste hinter dem Dialog sind die Vorschau.
+Beim Ziehen wandert die Ansicht in Dialog, Spalte und Leiste mit und wird beim Loslassen gespeichert;
+ein abgebrochenes Ziehen stellt die Reihenfolge wieder her. Gezogen wird mit Fensterereignissen statt
+Pointer-Capture (die Zeile wandert im DOM, das beendet eine Capture) und ohne HTML5-Drag-and-drop.
+
+**Tastatur.** Der Fokus beginnt auf der ersten Ansicht. Tab geht von Kästchen zu Kästchen (die
+Pfeilknöpfe sind nur für die Maus), Leertaste blendet ein und aus, Alt+↑/Alt+↓ verschiebt die
+Ansicht, der Fokus bleibt auf ihr und ein Live-Bereich sagt „Markiert, Platz 2 von 7“. Tab bleibt im
+Dialog, Escape, „Fertig“, X und ein Klick daneben schließen ihn; der Fokus kehrt zurück, wo er war
+(sonst zum Etikett „Ansichten“). Kürzel der Ansicht dahinter wirken nicht, solange er offen ist.
+
+**Leiste und leere Auswahl.** Die schmale Leiste zeigt dieselbe Auswahl in derselben Reihenfolge
+zwischen Posteingang und Gesendet; Posteingang, Gesendet, Entwürfe, Archiv, Papierkorb und Ordner
+bleiben fest. Ausgeblendete Ansichten bleiben über die Befehlspalette („Gehe zu …“) und ihre Kürzel
+erreichbar. Ist keine Ansicht eingeblendet, steht unter dem Etikett leise „Keine Ansicht
+eingeblendet.“ (12 px, `text-tertiary`) und ein leiser Knopf „Ansichten bearbeiten …“ im Akzent
+(ein Tab-Stopp mehr, nur in diesem Zustand) statt eines leeren Bands.
+
+**Gespeichert** als UI-Einstellung im Kern (`UiPreferences.columnViews`, Schlüssel `ui.column_views`,
+mit dem Einstellungs-Sync): alle Ansichten in der gewählten Reihenfolge mit `shown`; `[]` ist der
+Standard, auch nach „Auf Standard zurücksetzen“. Eine Ansicht, die eine spätere Version neu bringt,
+steht hinter der, der sie im Standard folgt, und ist eingeblendet; Einträge, die diese Version nicht
+kennt (ein neueres Gerät), bleiben beim Speichern erhalten.
 
 ## Tastatur: Tab-Stopps, Bäume und Leiste
 

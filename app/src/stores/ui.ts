@@ -2,7 +2,10 @@ import { create } from "zustand";
 import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "../services/ipc";
 import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } from "../services/ipc";
 
-/** Mail views of the icon rail, top to bottom (docs/DESIGN.md). Ids double as i18n keys in `nav`. */
+/**
+ * Mail views in their default order (docs/DESIGN.md), as the palette lists them. Ids double as i18n
+ * keys in `nav`. Stage 17: the rail shows the column's views as the user chose them (`IconRail`).
+ */
 export const MAIL_VIEW_IDS = [
   "inbox",
   "later",
