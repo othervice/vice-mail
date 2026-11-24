@@ -341,12 +341,13 @@ describe("the rail", () => {
     });
     await user.keyboard("{ArrowDown}");
     expect(focused()).toBe(screen.getByTestId("rail-later"));
+    // Stage 17: "Folders" is last; the chosen views stand between the inbox and Sent.
     await user.keyboard("{End}");
-    expect(focused()).toBe(screen.getByTestId("rail-savedViews"));
+    expect(focused()).toBe(screen.getByTestId("rail-folders"));
     await user.keyboard("{Home}{ArrowUp}");
     expect(focused()).toBe(screen.getByTestId("rail-inbox"));
     // Enter is the button's own: it opens the view, which becomes the tab stop.
-    await user.keyboard("{End}{ArrowUp}{ArrowUp}{Enter}");
+    await user.keyboard("{End}{ArrowUp}{Enter}");
     expect(heading()).toBe("Trash");
     expect(reachable(views)).toEqual([screen.getByTestId("rail-trash")]);
 

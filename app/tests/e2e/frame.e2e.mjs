@@ -17,6 +17,7 @@ import {
   openSettings,
   openView,
   overlaps,
+  pressTab,
   screenshot,
   setPreference,
   setSidebar,
@@ -25,6 +26,7 @@ import {
 } from "./support/app.mjs";
 
 const PRODUCT_NAME = "Vice Mail";
+const MOD = process.platform === "darwin" ? "Meta" : "Control";
 // Mail views (MAIL_VIEW_IDS in src/stores/ui.ts), then activity, the outbox (stage 5) and settings.
 const RAIL = [
   "inbox",
@@ -36,12 +38,13 @@ const RAIL = [
   // SPEC "Markiert": the server's flag across folders.
   "flagged",
   "pinned",
+  // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent.
+  "savedViews",
   "sent",
   "drafts",
   "archive",
   "trash",
   "folders",
-  "savedViews",
   "activity",
   "outbox",
   "settings",
@@ -248,6 +251,50 @@ describe("app frame (stage 1)", () => {
     await screenshot("settings-about-dark");
   });
 
+  it("edits the column's views (stage 17): hides one, moves one with the keyboard, the core keeps the choice", async () => {
+    const was = await setSidebar(true);
+    const columnViews = () =>
+      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map((el) => el.getAttribute("data-testid").replace("sidebar-view-", ""));
+    // From the palette, by keyboard; the focus starts on the first view.
+    await browser.keys([MOD, "k"]);
+    await testId("command-palette").waitForExist();
+    await browser.keys([..."Edit views"]);
+    await browser.keys("Enter");
+    await testId("edit-views").waitForExist();
+    const focused = () => browser.execute(() => document.activeElement?.getAttribute("data-testid") ?? null);
+    await browser.waitUntil(async () => (await focused()) === "edit-views-check-later", { timeoutMsg: "the focus is not on the first view" });
+    // Space hides "Later"; the column behind the dialog follows at once.
+    await browser.keys(" ");
+    await browser.waitUntil(async () => !(await columnViews()).includes("later"), { timeoutMsg: "Later is still in the column" });
+    // Four views on: Alt+Up twice moves "Flagged" above "Reading list"; the focus stays on it.
+    for (let i = 0; i < 4; i += 1) await pressTab();
+    assert.equal(await focused(), "edit-views-check-flagged");
+    await browser.keys(["Alt", "ArrowUp"]);
+    await browser.keys(["Alt", "ArrowUp"]);
+    assert.equal(await focused(), "edit-views-check-flagged");
+    const shown = ["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews"];
+    await browser.waitUntil(async () => JSON.stringify(await columnViews()) === JSON.stringify(shown), {
+      timeoutMsg: "the column does not show the chosen order",
+    });
+    await screenshot("edit-views-light");
+    const expected = [
+      { id: "later", shown: false },
+      ...["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews"].map((id) => ({ id, shown: true })),
+    ];
+    await browser.waitUntil(async () => JSON.stringify((await coreCall("get_ui_preferences")).columnViews) === JSON.stringify(expected), {
+      timeoutMsg: "the core did not store the chosen views",
+    });
+    report.columnViews = expected;
+    await browser.keys("Escape");
+    await testId("edit-views").waitForExist({ reverse: true });
+
+    // Folded: the rail shows the same choice between the inbox and Sent.
+    await setSidebar(false);
+    const rail = await $$('[data-testid="icon-rail"] [role="toolbar"] [data-testid^="rail-"]').map((el) => el.getAttribute("data-testid"));
+    assert.deepEqual(rail, ["inbox", ...shown, "sent", "drafts", "archive", "trash", "folders"].map((id) => `rail-${id}`));
+    await setSidebar(was);
+  });
+
   it("had no CSP violation besides the control while switching views, themes and languages", async () => {
     assert.deepEqual(await cspViolations(), report.cspControl);
   });
@@ -257,6 +304,7 @@ describe("app frame (stage 1)", () => {
     await setPreference("language", "de");
     const timeOrigin = await browser.execute(() => performance.timeOrigin);
     // wdio.conf.mjs quits the app after this spec (afterSession); the next one gets a new process.
-    writeState({ finishedAt: Date.now(), timeOrigin, expect: { theme: "dark", language: "de" } });
+    // Stage 17: the chosen views must come back after the restart too.
+    writeState({ finishedAt: Date.now(), timeOrigin, expect: { theme: "dark", language: "de" }, columnViews: report.columnViews });
   });
 });

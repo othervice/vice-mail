@@ -38,12 +38,13 @@ describe("app frame without an account", () => {
       // SPEC "Markiert"
       "Flagged",
       "Pinned",
+      // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent.
+      "Saved views",
       "Sent",
       "Drafts",
       "Archive",
       "Trash",
       "Folders",
-      "Saved views",
       "Activity",
       "Outbox",
       "Settings",

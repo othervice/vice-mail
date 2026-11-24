@@ -22,6 +22,7 @@ import { useAccentStore } from "../src/features/preferences/accent";
 import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequest";
 import { useBlockedFocusStore } from "../src/features/blocked/focus";
 import { useConversationStore } from "../src/features/threads/preference";
+import { useColumnViewsStore } from "../src/features/layout/columnViews";
 
 beforeEach(() => {
   installSystemFakes();
@@ -63,6 +64,8 @@ afterEach(() => {
   useBlockedFocusStore.setState(useBlockedFocusStore.getInitialState(), true);
   // Decision 0039: the conversation view, a UI preference of the core.
   useConversationStore.setState(useConversationStore.getInitialState(), true);
+  // Stage 17: the column's views, a UI preference of the core, and its editor.
+  useColumnViewsStore.setState(useColumnViewsStore.getInitialState(), true);
   delete document.documentElement.dataset["accent"];
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];

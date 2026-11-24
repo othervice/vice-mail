@@ -36,6 +36,8 @@ interface OverflowMenuProps {
    * off a wider one at the column's start (it may be only 200 px wide).
    */
   narrow?: boolean;
+  /** Stage 17: a 24 px button for a 24 px row (a section label of the column). */
+  small?: boolean;
   "data-testid"?: string;
 }
 
@@ -45,7 +47,7 @@ interface OverflowMenuProps {
  * item, Arrow Up on the last; arrows, Home and End move, Escape and Tab close it, a click outside
  * too. Choosing an item closes the menu and gives the focus back to the button first.
  */
-export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, narrow = false, ...rest }: OverflowMenuProps) {
+export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, narrow = false, small = false, ...rest }: OverflowMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -141,11 +143,12 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
           onKeyDown={onButtonKeyDown}
           data-testid={rest["data-testid"]}
           className={cx(
-            "flex size-8 items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary",
+            "flex items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary",
+            small ? "size-6" : "size-8",
             open && "bg-hover text-primary",
           )}
         >
-          <MoreHorizontal aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
+          <MoreHorizontal aria-hidden className={small ? "size-(--ui-icon-small)" : "size-(--ui-icon)"} strokeWidth={1.75} />
         </button>
       </Tooltip>
       {open && (

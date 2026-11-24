@@ -5,6 +5,7 @@ import { useAiPanelStore } from "../../stores/aiPanel";
 import { useLayoutStore } from "../../stores/layout";
 import { usePaletteStore } from "../../stores/palette";
 import { useShortcutStore } from "../../stores/shortcuts";
+import { useColumnViewsStore } from "../layout/columnViews";
 import { useAccentStore } from "../preferences/accent";
 import { useConversationStore } from "../threads/preference";
 import { migrateLocalAccent, migrateLocalFallback } from "./migrateLocal";
@@ -20,6 +21,8 @@ function applyUiPreferences(preferences: UiPreferences): void {
   useAccentStore.getState().applyStored(preferences.accentTheme);
   // Decision 0039: conversations or single messages in the lists of every window.
   useConversationStore.getState().applyStored(preferences.conversations);
+  // Stage 17: the views the column and the rail show, in the user's order.
+  useColumnViewsStore.getState().applyStored(preferences.columnViews);
 }
 
 /** `uiPreferencesChanged`: another window or (via the settings sync) another device saved them. */

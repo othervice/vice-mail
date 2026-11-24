@@ -1,62 +1,118 @@
-import { PanelLeftClose } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { EyeOff, PanelLeftClose, SlidersHorizontal } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
 import { useSelectedAccount } from "../features/accounts/selection";
+import { OverflowMenu, type OverflowItem } from "../features/actions/OverflowMenu";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
 import { useAppInfo } from "../features/app-info/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
+import { useColumnViews, useColumnViewsStore, useShownColumnViews, type ColumnViewId } from "../features/layout/columnViews";
 import { SECTION_KEY, SectionRow, useSection } from "../features/layout/SectionRow";
 import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
-import { FavoriteFolders } from "../features/organize/folders";
+import { FavoriteFolders, RowMenuSlot } from "../features/organize/folders";
 import { SavedSearchNav } from "../features/search/SavedSearchNav";
 import { UnifiedTree } from "../features/unified/UnifiedTree";
 import type { Account, MailboxId } from "../services/ipc";
 import { useBoundShortcuts } from "../stores/shortcuts";
-import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore, type MailViewId } from "../stores/ui";
+import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore } from "../stores/ui";
 import { StatusGroup } from "./IconRail";
 
-/** Views of the column that belong to no single folder (the role folders are in each account). */
-const COLUMN_VIEWS = ["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews"] as const satisfies readonly MailViewId[];
+/** A view row's "…": hide it from the column and the rail, or "Edit views…". */
+function ViewRowMenu({ id, onHide, returnFocus }: { id: ColumnViewId; onHide: () => void; returnFocus: () => void }) {
+  const { t } = useTranslation();
+  const openEditor = useColumnViewsStore((state) => state.openEditor);
+  const items: OverflowItem[] = [
+    { id: "hide", label: t("columnViews.hide"), icon: EyeOff, onSelect: onHide, "data-testid": `views-row-hide-${id}` },
+    { id: "edit", label: t("columnViews.edit"), icon: SlidersHorizontal, onSelect: openEditor, "data-testid": `views-row-edit-${id}` },
+  ];
+  return (
+    <OverflowMenu
+      label={t("columnViews.rowMenu", { name: t(`nav.${id}`) })}
+      items={items}
+      tabIndex={-1}
+      returnFocus={returnFocus}
+      narrow
+      data-testid={`views-row-menu-${id}`}
+    />
+  );
+}
 
 /**
  * "Views": the views across folders, one tree (one Tab stop) under its label, which folds it. The
  * folders with a role (inbox, sent, ...) are not repeated here: each account's tree has them.
+ * Stage 17: only the views the user chose, in the user's order ("Edit views…" on the label's
+ * "…", on each view's "…" and in the palette); none chosen, a quiet hint instead of an empty band.
  */
 function ViewsTree() {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
   const showMailView = useUiStore((state) => state.showMailView);
+  const views = useColumnViews();
+  const shown = useShownColumnViews();
+  const choose = useColumnViewsStore((state) => state.choose);
+  const openEditor = useColumnViewsStore((state) => state.openEditor);
+  const [hidden, setHidden] = useState<string | null>(null);
   const headingId = useId();
   const section = useSection("views", t("nav.viewsSection"));
   const currentId = view.kind === "mail" && !(view.mailView === "savedViews" && view.savedSearchId) ? view.mailView : null;
   const items = section.open
-    ? COLUMN_VIEWS.map((id, index) => ({ key: id, level: 2, posinset: index + 1, setsize: COLUMN_VIEWS.length, text: t(`nav.${id}`) }))
+    ? shown.map((id, index) => ({ key: id, level: 2, posinset: index + 1, setsize: shown.length, text: t(`nav.${id}`) }))
     : [];
   const nav = useTreeNavigation({
     items: [section.item, ...items],
     currentKey: currentId,
     onOpen: (key) => {
       if (key === SECTION_KEY) section.toggle();
-      const id = COLUMN_VIEWS.find((candidate) => candidate === key);
+      const id = shown.find((candidate) => candidate === key);
       if (id) showMailView(id);
     },
     onExpand: section.onExpand,
   });
+  const hide = (id: ColumnViewId) => {
+    const index = shown.indexOf(id);
+    // The focus goes to the view after it, else the one before, else the label.
+    const next = shown[index + 1] ?? shown[index - 1] ?? SECTION_KEY;
+    flushSync(() => {
+      choose(views.map((entry) => (entry.id === id ? { ...entry, shown: false } : entry)));
+    });
+    nav.focus(next);
+    setHidden(t("columnViews.hidden", { name: t(`nav.${id}`) }));
+  };
+  const labelMenu: OverflowItem[] = [
+    { id: "edit", label: t("columnViews.edit"), icon: SlidersHorizontal, onSelect: openEditor, "data-testid": "sidebar-views-edit" },
+  ];
   return (
     <section aria-labelledby={headingId} className="flex flex-col">
       <h2 id={headingId} className="sr-only">
         {t("nav.viewsSection")}
       </h2>
       <ul {...nav.treeProps} aria-labelledby={headingId} className="flex flex-col" data-testid="sidebar-views">
-        <SectionRow section={section} nav={nav} data-testid="sidebar-section-views" />
+        <SectionRow
+          section={section}
+          nav={nav}
+          menu={
+            <OverflowMenu
+              label={t("columnViews.menu")}
+              items={labelMenu}
+              tabIndex={-1}
+              returnFocus={() => {
+                nav.focus(SECTION_KEY);
+              }}
+              narrow
+              small
+              data-testid="sidebar-views-menu"
+            />
+          }
+          data-testid="sidebar-section-views"
+        />
         {items.map((item) => {
           const id = item.key;
           const Icon = MAIL_VIEW_ICONS[id];
@@ -67,18 +123,48 @@ function ViewsTree() {
               {...treeItemAria(item)}
               {...nav.itemProps(id)}
               aria-current={current ? "page" : undefined}
+              // The view's name, not the name of its "…" button too.
+              aria-label={item.text}
               onClick={() => {
                 showMailView(id);
               }}
-              className={sidebarRowClass(current, "gap-2 ps-3 pe-2")}
+              className={sidebarRowClass(current, "group/folder gap-2 ps-3 pe-2")}
               data-testid={`sidebar-view-${id}`}
             >
               <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />
               <span className="truncate">{item.text}</span>
+              <RowMenuSlot>
+                <ViewRowMenu
+                  id={id}
+                  onHide={() => {
+                    hide(id);
+                  }}
+                  returnFocus={() => {
+                    nav.focus(id);
+                  }}
+                />
+              </RowMenuSlot>
             </li>
           );
         })}
       </ul>
+      {/* Stage 17: every view hidden: a quiet hint, not an empty band. */}
+      {section.open && shown.length === 0 && (
+        <div className="flex flex-col items-start gap-1 ps-3 pe-2 pt-1" data-testid="sidebar-views-empty">
+          <p className="text-12 text-tertiary">{t("columnViews.empty")}</p>
+          <button
+            type="button"
+            onClick={openEditor}
+            data-testid="sidebar-views-empty-edit"
+            className="-ms-1 rounded-control px-1 text-12 font-medium text-accent transition-colors hover:bg-rail-hover"
+          >
+            {t("columnViews.edit")}
+          </button>
+        </div>
+      )}
+      <span aria-live="polite" className="sr-only">
+        {hidden}
+      </span>
     </section>
   );
 }

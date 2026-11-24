@@ -54,6 +54,9 @@ import { FolderDown, Pencil, Trash2 } from "lucide-react";
 import { saveAllCandidate, useSaveAllRequestStore } from "../reading/saveAllRequest";
 // Decision 0039: one row per conversation or per message.
 import { useConversationStore } from "../threads/preference";
+// Stage 17: "Edit views…" of the column and the rail.
+import { SlidersHorizontal } from "lucide-react";
+import { useColumnViewsStore } from "../layout/columnViews";
 
 export type PaletteGroup = "actions" | "commands" | "views" | "folders" | "accounts" | "settings" | "layout" | "search";
 
@@ -225,6 +228,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const favorites = useFavoriteMailboxes().data ?? [];
   const layout = useLayoutStore();
   const conversations = useConversationStore();
+  const openViewsEditor = useColumnViewsStore((state) => state.openEditor);
   const openSearch = useSearchStore((state) => state.openSearch);
   const setQuery = useSearchStore((state) => state.setQuery);
   const accountList = accounts.data ?? [];
@@ -449,6 +453,8 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
     ...(sidebarShortcut && { shortcut: sidebarShortcut }),
     run: ui.toggleSidebar,
   });
+  // Stage 17: which views the column and the rail show. Hidden ones stay above ("Go to …").
+  entries.push({ key: "layout:editViews", group: "layout", label: t("columnViews.edit"), icon: SlidersHorizontal, run: openViewsEditor });
 
   for (const id of SETTINGS_SECTION_IDS) {
     entries.push({

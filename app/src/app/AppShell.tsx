@@ -13,6 +13,7 @@ import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
 import { FolderEditHost } from "../features/mailboxes/FolderEdit";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
+import { EditViewsHost } from "../features/layout/EditViewsDialog";
 import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
@@ -112,6 +113,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       <KeyboardLayer />
       {/* Audit 24.11.2026: renaming or deleting a folder (from its menu or the palette). */}
       <FolderEditHost />
+      {/* Stage 17: "Edit views…" (from the column's "Views" or the palette). */}
+      <EditViewsHost />
     </div>
   );
 }

@@ -17,9 +17,10 @@ import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarSty
 import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
 import { useAppInfo } from "../features/app-info/queries";
+import { useShownColumnViews } from "../features/layout/columnViews";
 import { useBoundShortcuts } from "../stores/shortcuts";
 import type { Account, Mailbox } from "../services/ipc";
-import { MAIL_VIEW_IDS, useUiStore } from "../stores/ui";
+import { useUiStore, type MailViewId } from "../stores/ui";
 
 /** Roving focus of the rail group the entry belongs to (`useRovingFocus`). */
 type Roving = ReturnType<ReturnType<typeof useRovingFocus>["itemProps"]>;
@@ -30,6 +31,13 @@ const ACTIVITY_KEY = "activity";
 const OUTBOX_KEY = "outbox";
 const SETTINGS_KEY = "settings";
 const STATUS_KEYS = [ACTIVITY_KEY, OUTBOX_KEY, SETTINGS_KEY];
+
+/**
+ * Stage 17: the rail's fixed views around the ones the user chose for the column ("Edit views…"),
+ * which stand between the inbox and Sent in the user's order.
+ */
+const RAIL_TOP = ["inbox"] as const satisfies readonly MailViewId[];
+const RAIL_BOTTOM = ["sent", "drafts", "archive", "trash", "folders"] as const satisfies readonly MailViewId[];
 
 interface RailButtonProps {
   icon: LucideIcon;
@@ -334,7 +342,8 @@ export function StatusGroup({ accounts, expanded }: { accounts: readonly Account
 /**
  * The 56 px icon rail, shown while the accounts-and-folders column is folded (docs/DESIGN.md):
  * mail views on top, account switcher, activity, outbox and settings at the bottom. "Folders"
- * opens the column (in a narrow window over the content, `SidebarColumn`).
+ * opens the column (in a narrow window over the content, `SidebarColumn`). Stage 17: the views
+ * of the column's "Views" section show here as the user chose them, between the inbox and Sent.
  */
 export function IconRail() {
   const { t } = useTranslation();
@@ -346,8 +355,10 @@ export function IconRail() {
   const { accounts, account: selected } = useSelectedAccount();
   const accountList = accounts.data ?? [];
   const mailboxes = useMailboxes(selected?.id).data ?? [];
+  const chosen = useShownColumnViews();
+  const viewIds: MailViewId[] = [...RAIL_TOP, ...chosen, ...RAIL_BOTTOM];
   /** Rail views that take dragged rows: they move into the folder the view shows. */
-  const dropFolder = (id: (typeof MAIL_VIEW_IDS)[number]) =>
+  const dropFolder = (id: MailViewId) =>
     id === "inbox" || id === "archive" || id === "trash" ? mailboxWithRole(mailboxes, id) : undefined;
   // Stage 8: Cmd/Ctrl+1 to 8 open the views (as the user assigned them).
   const platform = shortcutPlatform(useAppInfo().data?.platform);
@@ -356,13 +367,13 @@ export function IconRail() {
     const first = shortcutsOf(command)[0];
     return first && { hint: formatShortcut(first, platform), aria: ariaShortcut(first, platform) };
   };
-  const viewShortcut = (id: (typeof MAIL_VIEW_IDS)[number]) => {
+  const viewShortcut = (id: MailViewId) => {
     const command = (Object.keys(VIEW_COMMANDS) as ViewCommandId[]).find((key) => VIEW_COMMANDS[key] === id);
     return command ? commandShortcut(command) : undefined;
   };
   // Stage 8, keyboard: the views and the bottom group are one Tab stop each (arrow keys inside),
   // so Tab goes rail views, bottom group, list instead of through every entry.
-  const views = useRovingFocus({ keys: MAIL_VIEW_IDS, activeKey: view.kind === "mail" ? view.mailView : null });
+  const views = useRovingFocus({ keys: viewIds, activeKey: view.kind === "mail" ? view.mailView : null });
 
   return (
     <nav
@@ -389,7 +400,7 @@ export function IconRail() {
         {/* Stage 8, keyboard: one Tab stop for the views, Up and Down move between them. */}
         <div role="toolbar" aria-label={t("nav.viewGroup")} {...views.groupProps} className="flex w-full flex-col">
           <ul className="flex w-full flex-col items-center gap-1">
-            {MAIL_VIEW_IDS.map((id) => (
+            {viewIds.map((id) => (
               <li key={id}>
                 {id === "folders" ? (
                   <RailButton

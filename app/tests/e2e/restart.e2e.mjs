@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, dataDir, documentState, readState, screenshot, testId } from "./support/app.mjs";
+import { $, $$, browser } from "@wdio/globals";
+import { attach, coreCall, cspViolations, dataDir, documentState, readState, screenshot, setSidebar, testId } from "./support/app.mjs";
 
 describe("app restart (stage 1)", () => {
   let previous;
@@ -32,6 +32,23 @@ describe("app restart (stage 1)", () => {
     assert.deepEqual(await coreCall("get_preferences"), previous.expect);
     assert.deepEqual(await cspViolations(), [], "CSP violations since the page started loading");
     await screenshot("frame-dark-de-after-restart");
+  });
+
+  it("keeps the column's views as frame.e2e.mjs chose them (stage 17), then goes back to the default", async () => {
+    assert.ok(previous.columnViews, "frame.e2e.mjs chose no views");
+    const prefs = await coreCall("get_ui_preferences");
+    assert.deepEqual(prefs.columnViews, previous.columnViews);
+    const was = await setSidebar(true);
+    const columnViews = () =>
+      $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map((el) => el.getAttribute("data-testid").replace("sidebar-view-", ""));
+    const shown = previous.columnViews.filter((view) => view.shown).map((view) => view.id);
+    assert.deepEqual(await columnViews(), shown);
+    // The specs after this one expect every view: back to the default (what "Reset to default" stores).
+    await coreCall("set_ui_preferences", { preferences: { ...prefs, columnViews: [] } });
+    await browser.waitUntil(async () => (await columnViews()).length === shown.length + previous.columnViews.filter((view) => !view.shown).length, {
+      timeoutMsg: "the column did not go back to every view",
+    });
+    await setSidebar(was);
   });
 
   it("keeps database and logs in the test's own directory", () => {
