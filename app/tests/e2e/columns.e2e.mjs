@@ -83,6 +83,9 @@ const split = () =>
     const handle = document.querySelector('[data-testid="list-resize"]');
     const list = handle ? document.getElementById(handle.getAttribute("aria-controls") ?? "") : null;
     const firstRow = document.querySelector('[data-testid="message-list"] [data-testid="message-row"]');
+    // The pane after the handle (stage 18, task F: inside a wrapper without a box of its own).
+    let pane = handle?.nextElementSibling ?? null;
+    while (pane && getComputedStyle(pane).display === "contents") pane = pane.firstElementChild;
     return {
       scale: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
       window: { width: innerWidth, height: innerHeight },
@@ -94,7 +97,7 @@ const split = () =>
       hovered: handle?.matches(":hover") ?? false,
       line: handle ? getComputedStyle(handle, "::after").backgroundColor : null,
       list: box(list),
-      pane: box(handle?.nextElementSibling ?? null),
+      pane: box(pane),
       container: box(handle?.parentElement ?? null),
       // Narrow rows lay their lines out in a column (MessageRowContent).
       narrowRows: firstRow ? firstRow.querySelector(".flex-col") !== null : null,

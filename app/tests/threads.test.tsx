@@ -86,11 +86,13 @@ describe("conversation view", () => {
     await user.click(row);
 
     // The conversation is opened by message id; the pane shows its unread answer alone.
+    // Stage 18 (task F): the folder opened with this row shown already (its top row).
     await waitFor(() => {
-      expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 5 }]);
+      expect(core.callsOf("get_thread")).toContainEqual({ messageId: ANSWER.id, mailboxId: 5 });
     });
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toEqual([{ messageId: ANSWER.id, format: "auto" }]);
+      // The inbox's top message (500) showed before the folder was opened.
+      expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== 500)).toEqual([{ messageId: ANSWER.id, format: "auto" }]);
     });
     const pane = await screen.findByRole("region", { name: "Message" });
     expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();

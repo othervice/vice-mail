@@ -134,7 +134,7 @@ describe("composer: writing and drafts", () => {
   it("closing saves the draft and hands it to the server copy", async () => {
     const { core, user } = setup();
     await openNew(user);
-    await user.type(screen.getByLabelText("Message"), "Bis morgen");
+    await user.type(within(screen.getByTestId("composer")).getByLabelText("Message"), "Bis morgen");
     await user.click(screen.getByRole("button", { name: "Close (the draft is kept)" }));
     await waitFor(() => {
       expect(screen.queryByTestId("composer")).toBeNull();
@@ -285,7 +285,7 @@ describe("composer: writing and drafts", () => {
     expect(offer?.textContent).toContain("1 unsent draft is waiting.");
     await user.click(within(offer).getByRole("button", { name: "Open the newest" }));
     expect((await screen.findByLabelText<HTMLInputElement>("Subject")).value).toBe("Angebot");
-    expect((screen.getByLabelText<HTMLInputElement>("Message")).value).toBe("Entwurf von gestern");
+    expect((within(screen.getByTestId("composer")).getByLabelText<HTMLInputElement>("Message")).value).toBe("Entwurf von gestern");
     expect(screen.queryByTestId("draft-restore")).toBeNull();
   });
 
@@ -335,8 +335,8 @@ describe("composer: writing and drafts", () => {
     expect(editor.querySelector("strong")?.textContent).toBe("Grace");
     expect(screen.getByRole("toolbar", { name: "Formatting" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Bold" })?.hasAttribute("aria-pressed")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Plain text" }));
-    expect((screen.getByLabelText<HTMLInputElement>("Message")).value).toBe("Hallo Grace\n- eins");
+    await user.click(within(screen.getByTestId("composer")).getByRole("button", { name: "Plain text" }));
+    expect((within(screen.getByTestId("composer")).getByLabelText<HTMLInputElement>("Message")).value).toBe("Hallo Grace\n- eins");
   });
 });
 
@@ -495,7 +495,7 @@ describe("composer: sending", () => {
     const { core, user } = setup();
     await openNew(user);
     await user.type(toField(), "grace@example.org,");
-    await user.type(screen.getByLabelText("Message"), "Kurz{Meta>}{Enter}{/Meta}");
+    await user.type(within(screen.getByTestId("composer")).getByLabelText("Message"), "Kurz{Meta>}{Enter}{/Meta}");
     await waitFor(() => {
       expect(core.callsOf("send_draft")).toHaveLength(1);
     });

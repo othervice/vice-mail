@@ -11,7 +11,7 @@ import { useUiStore } from "../src/stores/ui";
 import { htmlBody, ipcError, makeAccount, makeAttachment, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import type { AttachmentsFakeOptions } from "./support/attachments";
 import { emitCore } from "./support/events";
-import { renderApp } from "./support/render";
+import { closeOpenedMessage, renderApp } from "./support/render";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -448,6 +448,8 @@ describe("palette", () => {
       saveAll: { [String(message.id)]: { kind: "saved", folder: "/Users/ada/Downloads", saved: 2, renamed: 0 } },
     });
     await screen.findAllByRole("option");
+    // Stage 18 (task F): the folder opened with its top message; without one the entry waits.
+    await closeOpenedMessage(user);
     let palette = await openPalette(user);
     expect(entry(palette, "Save all attachments")?.getAttribute("aria-disabled")).toBe("true");
     expect(entry(palette, "Go to Pinned attachments")).toBeTruthy();

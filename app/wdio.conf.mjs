@@ -66,6 +66,9 @@ export const config = {
     // Stage 18: the border between list and reading pane, unfolding beside the quick actions
     // (real mouse events). Changes the stored layout and puts it back.
     "./tests/e2e/columns.e2e.mjs",
+    // Stage 18, task F (decision 0054): a folder opens with its top message, unread. Marks it
+    // read once and unread again.
+    "./tests/e2e/top-message.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",
