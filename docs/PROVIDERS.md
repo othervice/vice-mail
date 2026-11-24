@@ -2,12 +2,12 @@
 
 What Vice Mail supports per provider, and what it does not. "Tested" means: covered by automated
 tests in this repository. Where only a check on a real account can prove something, this page says
-so. Last updated 23 November 2026 (stage 14, blocks A to D; decisions
+so. Last updated 24 November 2026 (stage 14, blocks A to D; decisions
 `docs/decisions/0034-gmail-ueber-imap.md`, `docs/decisions/0041-jmap.md` and
 `docs/decisions/0042-anmeldung-mit-microsoft-und-google.md`).
 
 Vice Mail speaks IMAP and SMTP, with a password (or an app password) or, for Microsoft and Google,
-with the provider's own sign-in (OAuth 2.0), and JMAP with a password. It never talks to servers other than those of the
+with the provider's own sign-in (OAuth 2.0), and JMAP with a password or an API token. It never talks to servers other than those of the
 accounts you set up and, while you sign in, the provider's sign-in service.
 
 ## Overview
@@ -23,8 +23,8 @@ accounts you set up and, while you sign in, the provider's sign-in service.
 | Proton Mail | only through Proton Mail Bridge on the same computer | expected to work as plain IMAP; not tested |
 | Outlook.com, Hotmail, Microsoft 365 | "Sign in with Microsoft" (OAuth 2.0 in the system browser), IMAP and SMTP with the access token | **built, not yet usable**: needs the project's app registration at Microsoft (client ID) in the build; the whole sign-in is tested against a local OAuth server, not against Microsoft |
 | Gmail with "Sign in with Google" | OAuth 2.0 instead of an app password, IMAP and SMTP with the access token | **built, not yet usable**: needs the project's Google Cloud client in the build and, beyond 100 test users, Google's verification; tested against a local OAuth server, not against Google |
-| Any JMAP server (tested: Stalwart) | JMAP over HTTPS with a password, chosen in the server settings of the account setup | supported, tested against a local Stalwart server |
-| Fastmail over JMAP | JMAP instead of IMAP | **not tested**: Fastmail's JMAP API probably wants an API token instead of a password, which the app cannot use yet; use Fastmail over IMAP |
+| Any JMAP server (tested: Stalwart) | JMAP over HTTPS with a password or an API token, chosen in the server settings of the account setup | supported, tested against a local Stalwart server |
+| Fastmail over JMAP | JMAP with an API token instead of IMAP | **not tested**: the app can sign in with an API token as Fastmail documents it, but nobody has tried it with a Fastmail account; Fastmail over IMAP is the tried way (still "expected to work") |
 | POP3, Exchange (EWS, MAPI) | – | not supported, not planned |
 
 "Expected to work" means: these providers use standard IMAP and SMTP, the app knows their server
@@ -182,17 +182,39 @@ changes and sending, with new mail pushed by the server. Choose it in the accoun
 server settings ("Protocol: JMAP") and enter the server and port of the JMAP service; the app asks
 `https://<server>/.well-known/jmap` for the rest. The online search offers JMAP when the domain
 answers there, but IMAP and SMTP stay the default. The app logs in with the user name and password
-(HTTP Basic), always over HTTPS.
+(HTTP Basic), or with an API token (below), always over HTTPS.
+
+**API token.** Some JMAP providers do not take your password: under "Sign in with" choose "API
+token" and enter the token instead of the password. The app keeps it in the system keychain like a
+password and sends it as `Authorization: Bearer` to the account's own JMAP server only; it is never
+logged, never in a diagnostics file and never in the settings sync (another computer that gets the
+account through the settings sync asks for the token). If you replace or revoke the token with
+your provider, enter the new one in the account's settings ("API token").
+
+**Fastmail** documents that its JMAP API takes an API token as a bearer token (app passwords are
+for IMAP, SMTP and DAV). You create one in Fastmail under Settings → Privacy & Security → Manage
+API tokens → New API token; for this app it needs the access "Email" and, for sending, "Email
+submission" (Fastmail's names in its settings; in its developer documentation the scopes are
+`urn:ietf:params:jmap:mail` and `urn:ietf:params:jmap:submission`). Fastmail's documentation names
+the session resource `https://api.fastmail.com/jmap/session`; the app looks for it at
+`https://<server>/.well-known/jmap` (RFC 8620), so the server would be `api.fastmail.com`. **Not
+tested with a Fastmail account**: neither the token, nor the server name, nor push and sending
+there.
 
 **Tested** against a local Stalwart server (decision 0041): setup, the first sync of every folder
 (the same messages, subjects and flags as over IMAP), new mail by push, changes made by other
 clients, marking, moving, archiving and deleting through the app's outbox, conflicts, sending with
 the app's copy in Sent, read-only accounts that change nothing, and a restart that keeps the local
-numbering. Everything that works for IMAP accounts works for JMAP accounts, with these exceptions:
+numbering. Since 24 November 2026 also: signing in with a bearer token (an OAuth access token Stalwart
+issued stood in for an API token; Stalwart's own API keys were not tried), an IMAP account and a
+JMAP account side by side in the unified inbox (each message on its own account, actions on each
+account's own server, read-only per account), and the settings sync with its folder in a JMAP
+account (two devices). Everything that works for IMAP accounts works for JMAP accounts, with these
+exceptions:
 
-- The settings sync stores its data in an IMAP folder; choose an IMAP account to hold it.
 - Only the account's primary mail account on the server is used (no shared accounts).
 - New mail arrives by push only where the server offers an event source; otherwise the app asks
   every minute, as for IMAP servers without IDLE.
 
-**Not tested:** Fastmail and other JMAP providers with a real account, and Windows.
+**Not tested:** Fastmail and other JMAP providers with a real account (also not with an API
+token), and Windows.

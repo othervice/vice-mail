@@ -54,7 +54,7 @@ Domain, Datenschutzerklärung und Demo-Video.
 ## Abnahme
 
 - [ ] je umgesetztem Block: Tests wie beschrieben, Handprüfung an einem echten Konto im Ergebnis vermerkt
-- [ ] mehrere Anbieter parallel im vereinten Posteingang, jede Mail dem richtigen Konto zugeordnet
+- [x] mehrere Anbieter parallel im vereinten Posteingang, jede Mail dem richtigen Konto zugeordnet (24.11.2026: ein IMAP- und ein JMAP-Konto gegen Stalwart, `crates/mail-engine/tests/jmap_accounts.rs`; mit echten verschiedenen Anbietern ungeprüft)
 - [ ] `docs/PROVIDERS.md` nennt nur als unterstützt, was getestet ist
 - [ ] `scripts/check.sh` ist grün
 
@@ -258,7 +258,8 @@ Testserver mit HTTPS), 4cb49b6 (Protokollwahl in der Kontoeinrichtung, Desktop-T
   Nummerierung, `cannotCalculateChanges`, Schreiben, Konflikt über den Zählerstand, Push, Senden mit
   Ablehnung, Nur-Lese-Schutz ohne eine einzige Anfrage, `auth_failed`, `jmap_unavailable`,
   `connection_refused`), Speicher `jmap::tests::the_map_round_trips_changes_and_goes_with_the_account`,
-  Engine `protocols::tests::jmap_refuses_read_only_writers_and_the_settings_sync_before_connecting`,
+  Engine `protocols::tests::jmap_refuses_read_only_writers_and_the_settings_sync_before_connecting`
+  (seit 24.11.2026 `…_and_opens_the_settings_sync_over_jmap`),
   Erkennung `discovery::autoconfig::tests::jmap_is_found_at_the_well_known_address` und
   `autoconfig_files_may_list_jmap`, Modell `account::tests::jmap_settings_use_one_tls_server_and_imap_stays_the_default`.
   Oberfläche: `app/tests/jmap-setup.test.tsx` (4 Tests).
@@ -298,15 +299,113 @@ Testserver mit HTTPS), 4cb49b6 (Protokollwahl in der Kontoeinrichtung, Desktop-T
 - Der Testserver hat einen HTTPS-Listener (18443) mit `STALWART_PUBLIC_URL`; ein alter Datenbestand
   bekommt ihn beim nächsten `start`.
 - Kopfdaten kaputter Mails können sich zwischen IMAP und JMAP im Absender unterscheiden (0041).
-- Das Sync-Konto des Einstellungs-Syncs muss IMAP sprechen.
+- Das Sync-Konto des Einstellungs-Syncs muss IMAP sprechen (überholt am 24.11.2026, siehe
+  Nachträge unten).
 
 **Ungeprüft / offen**
 - Fastmail (vermutlich nur mit API-Token, also nach 0042 als Bearer) und andere JMAP-Anbieter an
   einem echten Konto.
 - Windows zur Laufzeit.
-- Mehrere Anbieter parallel im vereinten Posteingang mit einem JMAP-Konto: nicht eigens getestet.
-- Einstellungs-Sync auf einem JMAP-Konto (nicht umgesetzt, `unsupported_server`).
+- Mehrere Anbieter parallel im vereinten Posteingang mit einem JMAP-Konto: nicht eigens getestet
+  (erledigt am 24.11.2026, siehe Nachträge unten).
+- Einstellungs-Sync auf einem JMAP-Konto (nicht umgesetzt, `unsupported_server`; umgesetzt am
+  24.11.2026, siehe Nachträge unten).
 
 **Wartet auf**
 - Mensch: falls JMAP bei Fastmail gebraucht wird, ein Fastmail-Testkonto; dann zuerst klären, ob
   ein API-Token nötig ist.
+
+### Block D — Nachträge (24.11.2026): API-Token, mehrere Anbieter, Einstellungs-Sync über JMAP
+
+**Stand: gebaut und gegen den lokalen Stalwart geprüft; Fastmail, Windows und ein Desktop-Test
+dieser Nachträge ungeprüft.** Ausgeführt am 24.11.2026 (Subagent der Hauptsitzung), Commits
+f1043bf (Anmeldung mit API-Token), 5048bfe (Servertest IMAP- und JMAP-Konto im vereinten
+Posteingang), 74c0533 (Sync-Ordner über JMAP), dazu die Doku. Entscheidung: 0041, Nachträge 1
+und 2.
+
+**Nachgewiesen**
+- API-Token: Einrichtung bietet bei JMAP „Anmelden mit: Passwort / API-Token“; das Feld „API-Token“
+  ersetzt dann das Passwortfeld, mit dem Hinweis auf Fastmails Pfad (Settings → Privacy & Security
+  → Manage API tokens → New API token, Rechte „Email“ und „Email submission“; so in Fastmails
+  Hilfe und Entwicklerdoku, geprüft am 24.11.2026). Das Token liegt im Schlüsselbund unter
+  `token:<id>`, jede JMAP-Anfrage trägt `Authorization: Bearer`.
+  - ohne Server (in `check.sh`): `mail-jmap` `tests::an_api_token_goes_as_bearer_and_never_as_a_password`
+    (Bearer auf jeder Anfrage einschließlich Download, Upload und Senden; das Token als
+    Basic-Passwort und ein falsches Token sind `auth_failed`, das Token steht nicht im Fehler),
+    Engine `sync::tests::an_api_token_is_stored_like_a_password_and_always_sent_as_a_bearer_token`
+    (geprüft vor dem Speichern, nichts gespeichert bei Ablehnung, IMAP mit Token abgelehnt, jeder
+    Login als Bearer, auch nach Tokenwechsel und Neustart), Modell
+    `account::tests::api_tokens_are_for_jmap_only_and_named_by_their_keychain_reference`,
+    Datensätze `record::tests::account_content_has_only_the_listed_fields` und Speicher
+    `settings_sync_tests::api_token_accounts_say_so_and_are_taken_over_as_such` (`"signIn":
+    "apiToken"`, Übernahme als `token:synced:…`, ohne JMAP oder mit `oauth` abgelehnt),
+    Diagnose `diagnostics::tests::the_file_holds_facts_and_counts_but_no_secret_and_no_mail_content`
+    (um ein JMAP-Konto mit Token im Schlüsselbund und in Logzeilen erweitert: weder Token noch
+    Adresse noch Host im Export, „sign-in: API token (system keychain)“), Oberfläche
+    `jmap-setup.test.tsx` (3 neue Tests: Token statt Passwort, zurück zum Passwort ohne Token,
+    Token in den Kontoeinstellungen ersetzen).
+  - gegen Stalwart: `crates/mail-engine/tests/jmap_accounts.rs`
+    `a_jmap_account_signs_in_with_an_api_token_as_a_bearer_token`. Als API-Token dient ein
+    **OAuth-Access-Token**, das Stalwart für bob ausstellt (Code-Flow mit PKCE über seine
+    Login-API); Stalwarts eigene API-Keys wurden nicht probiert. Geprüft:
+    Bobs Passwort als Token und das Token als Passwort sind `auth_failed`; mit einem Benutzernamen,
+    den es nicht gibt, gelingen Verbindungstest (Push), Einrichtung, Abgleich und Markieren über
+    die Outbox mit dem Token; das Token liegt im Schlüsselbund unter `token:<id>`.
+- Mehrere Anbieter parallel: `jmap_accounts.rs`
+  `imap_and_jmap_accounts_share_the_unified_inbox_each_on_its_own_server` mit dem Produkt-Connector:
+  alice über IMAP, bob über JMAP; der vereinte Posteingang zeigt beide, jede Mail mit ihrem Konto
+  und dem Posteingang dieses Kontos; Schreiben nur für bob: alices Aktion `read_only` ohne
+  Verbindung, bobs Markierung auf seinem Server; Schreiben für beide: „gelesen“ erreicht beide
+  Server, jedes über sein Protokoll (Mitschnitt: jede Verbindung mit Protokoll und Benutzer des
+  eigenen Kontos).
+- Einstellungs-Sync über JMAP: `mail-jmap` `tests::the_settings_sync_folder_keeps_its_entries_in_one_mailbox`
+  (Anlegen ohne Rolle, Import, Liste mit Größe und Kopffeldern, Body ohne Kopf, Löschen,
+  Herausnehmen einer Mail, die auch woanders liegt, Zustand ändert sich genau bei neuen oder
+  entfernten Einträgen, Body über 4 MiB wird nicht gelesen, nur `Mailbox/set`, `Email/import`,
+  `Email/set` geschrieben), `sync_folder::tests` (Bereich der erlaubten Schreibzugriffe), Engine
+  `protocols::tests::jmap_refuses_read_only_writers_and_opens_the_settings_sync_over_jmap`; gegen
+  Stalwart `jmap_accounts.rs` `the_settings_sync_keeps_its_folder_in_a_jmap_account` (Gerät A
+  schaltet den Sync mit bobs JMAP-Konto ein, Gerät B erkennt den Ordner in den JMAP-Postfächern,
+  tritt bei und bekommt die Einstellungen von A, eine Änderung auf B erreicht A, je Datensatz ein
+  Eintrag; Ordner über IMAP geprüft; Konto bleibt nur lesend, Posteingang unverändert).
+- Servertests (Sperre `jmap2`, Server von mir gestartet und wieder gestoppt, weil ihn eine andere
+  Sitzung gestoppt und ohne Seed neu aufgesetzt hatte), mit Binärdateien aus dem eigenen Worktree
+  (a142d59 plus diese Änderungen, vor dem Aufteilen in Commits): `jmap_accounts` 3 von 3 grün,
+  `crates/mail-engine/tests/jmap.rs` 1 von 1, `oauth_server` 2 von 2; `crates/mail-jmap/tests/server.rs`
+  1 von 2: `the_first_sync_sees_what_imap_sees` braucht alices Seed (`Projects/2026`), den der
+  neu aufgesetzte Server nicht hatte; nicht mit Seed wiederholt.
+  Nach dem Einchecken noch einmal auf dem Stand 09258bf (im Worktree gebaut, Sperre `jmap2`):
+  `jmap_accounts` 3 von 3 und `crates/mail-engine/tests/jmap.rs` 1 von 1 grün.
+- Die drei Commits je im Worktree geprüft: Clippy des Workspace mit `-D warnings`, `cargo fmt
+  --check`, Tests von `mail-model`, `mail-jmap`, `mail-store`, `mail-engine` (und `mail-mcp` für
+  f1043bf); für f1043bf TypeScript-Prüfung, ESLint und Vitest der betroffenen Dateien.
+- Gesamtprüfung: `scripts/check.sh` im Hauptverzeichnis grün (24.11.2026, auf 74c0533 mit den
+  unfertigen Änderungen anderer Sitzungen und dieser Doku im Arbeitsverzeichnis): alle Schritte,
+  1.326 Rust-Tests (102 Servertests ignoriert), 3.988 Vitest-Tests in 86 Dateien, Clippy auch für
+  das Windows-Ziel und mit Feature `e2e`, cargo deny, pnpm audit.
+
+**Abweichungen und Annahmen**
+- Die Art des Geheimnisses steckt in der Schlüsselbund-Referenz (`token:`), wie bei 0042; keine
+  Migration. Im Sync-Datensatz heißt das Feld `signIn`, weil der Geheimnis-Filter Feldnamen mit
+  „credential“ ablehnt.
+- Ein abgelehntes Token wird nicht erneuert: `auth_failed` wie ein falsches Passwort.
+- `update_password` prüft JMAP-Konten jetzt über JMAP (vorher über IMAP, was bei JMAP-Konten
+  scheiterte).
+- Der Sync-Ordner über JMAP nummeriert seine Einträge je Verbindung, nicht in der gespeicherten
+  UID-Nummerierung des Kontos.
+- Kein Desktop-Test: der Lauf setzt den Testserver zurück und legt 10.000 Mails an; die Oberfläche
+  der Token-Wahl ist in Vitest geprüft, Einrichtung und Abgleich mit Token im Rust-Test gegen
+  Stalwart.
+
+**Ungeprüft / offen**
+- Fastmail mit einem echten Konto und API-Token: Server `api.fastmail.com` über
+  `/.well-known/jmap`, Abgleich, Push, Senden.
+- Windows zur Laufzeit.
+- Mehrere Anbieter mit echten, verschiedenen Anbietern (getestet sind ein IMAP- und ein JMAP-Konto
+  auf demselben Stalwart).
+- Einstellungs-Sync über JMAP bei einem echten Anbieter.
+
+**Wartet auf**
+- Mensch: falls JMAP bei Fastmail gebraucht wird, ein Fastmail-Testkonto mit API-Token (Rechte
+  „Email“ und „Email submission“) und die Handprüfung: Einrichtung mit Server `api.fastmail.com`,
+  Abgleich, Push, Senden nach Freischalten, Token ersetzen.

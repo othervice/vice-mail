@@ -2,8 +2,8 @@
 //! connector ([`AnyConnector`]) against the local test server (Stalwart):
 //!
 //! - **API token:** a JMAP account that signs in with a token (Fastmail's way) sends it as
-//!   `Authorization: Bearer`. Stalwart has no Fastmail-style API tokens; an OAuth access token
-//!   it issued for bob stands in for one (any bearer token of the account works there).
+//!   `Authorization: Bearer`. An OAuth access token Stalwart issues for bob stands in for an API
+//!   token; Stalwart's own API keys are not tried.
 //! - **Several providers at once:** alice over IMAP and bob over JMAP in one app. The unified
 //!   inbox shows both, every message belongs to its own account, actions go to the account's
 //!   own server over its own protocol, and read-only holds per account.

@@ -130,7 +130,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 
 | Tabelle | Inhalt | Klasse |
 |---|---|---|
-| `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled`; ab Stufe 14 (0042) heißt der Verweis bei Konten mit Anmeldung beim Anbieter `oauth:<microsoft\|google>:<id>` und der Eintrag hält das Refresh-Token | sync (ohne Geheimnisse) |
+| `account` | UUID, Typ, Adresse, Name, Farbe, Servereinstellungen, Verweis auf Schlüsselbund, `writes_enabled`; ab Stufe 14 (0042) heißt der Verweis bei Konten mit Anmeldung beim Anbieter `oauth:<microsoft\|google>:<id>` und der Eintrag hält das Refresh-Token; bei JMAP-Konten mit API-Token (0041, Nachtrag 1) `token:<id>`, der Eintrag hält das Token | sync (ohne Geheimnisse) |
 | `identity` | Absenderadresse, Name, Reply-To, Standard; ab Stufe 10 Standard-Signatur für neue Mails und für Antworten (UUIDs, 0023) | sync |
 | `mailbox` | Servername, Trenner, Eltern, Rolle (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
 | `message` | interne ID, Konto, Message-ID-Kopfzeile, Thread, Betreff, Absender, Empfänger, Daten, Größe, Vorschau, Kategorie (nach den Regeln des Nutzers; dazu das automatische Ergebnis mit Begründung, Wichtig-Markierung, normalisierte Absenderadresse, Domain und List-Id, Stufe 9), Verweis auf den Body | Cache |
@@ -378,7 +378,11 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
   `Identity/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` und Uploads
   scheitern mit `read_only`, bevor etwas gesendet wird. Writer und Sender lehnen eine nur lesende
   Konfiguration vor jeder Verbindung ab (Tests in `crates/mail-jmap/src/tests.rs`, Mitschnitt der
-  Methoden in `crates/mail-engine/tests/jmap.rs`).
+  Methoden in `crates/mail-engine/tests/jmap.rs`). Die Verbindung des Einstellungs-Syncs (0041,
+  Nachtrag 2) ist immer nur lesend; ihre eigenen Schreibzugriffe prüft ein Bereich vor dem Senden
+  an den Argumenten: `Mailbox/set` nur zum Anlegen des Sync-Ordners, `Email/import` nur in ihn,
+  `Email/set` nur Zerstören gelisteter Mails des Ordners oder Herausnehmen aus ihm
+  (`crates/mail-jmap/src/sync_folder.rs`).
 - Ausnahme, nur nach „Sync einschalten“ (Stufe 11, 0014, 0022): Die Verbindung des
   Einstellungs-Syncs darf in genau einen Ordner schreiben, den Sync-Ordner; jede andere
   schreibende Zeile lehnt der Adapter mit `read_only` ab, bevor sie gesendet wird
@@ -546,6 +550,10 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
   dass sie in Logs oder Fehlermeldungen landen; ein Test prüft das.
 - Stufe 14 (0042): OAuth-Refresh-Tokens ebenso (Eintrag `oauth:<Anbieter>:<id>`); Access-Tokens nur
   im Speicher. Der Diagnose-Export enthält keins von beiden (Test). Client-IDs sind keine Geheimnisse.
+- Stufe 14 (0041, Nachtrag 1): API-Tokens von JMAP-Konten (Fastmail) wie Passwörter (Eintrag
+  `token:<id>`), gesendet nur als `Authorization: Bearer` an den eigenen JMAP-Server, nie geloggt,
+  nicht im Diagnose-Export (Test), nicht im Einstellungs-Sync (der Datensatz sagt nur
+  `"signIn": "apiToken"`).
 - Konto entfernen löscht Schlüsselbund-Eintrag, lokale Daten und Dateien dieses Kontos; bei Google
   wird das Refresh-Token vorher widerrufen.
 
@@ -728,7 +736,7 @@ was allein die App kennt, und nutzt dafür das Postfach selbst als Ablage.
 | Ordnereinstellungen (Favorit, Farbe), blockierte Absender | je Ordner (Konto-UUID und Pfad) bzw. Adresse gewinnt die neuere Version (Stufe 16, 0033) |
 | Absender-Regeln, Bild-Freigaben, Kontaktnamen, Geräte | je Schlüssel gewinnt die neuere Version |
 | Identitäten, Signaturen (eigener Datensatz je Identität), Kontogruppen | wie Signaturen |
-| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040); das Protokoll (Feld `protocol`, nur bei JMAP-Konten) gilt nur beim Übernehmen eines Kontos, nie für ein vorhandenes (0041) |
+| Kontenliste | je Feld gewinnt die neuere Version; ein entferntes Konto wird auf anderen Geräten nicht still gelöscht, sondern der Nutzer wird gefragt; andere Server (Host, Port, Sicherheit, Benutzername) für ein vorhandenes Konto werden nicht übernommen, sondern warten auf den Nutzer (0040); das Protokoll (Feld `protocol`, nur bei JMAP-Konten) und die Art der Anmeldung (Feld `signIn`, nur bei API-Token) gelten nur beim Übernehmen eines Kontos, nie für ein vorhandenes (0041) |
 
 - **Neues Gerät:** Sync-Konto einrichten, Passphrase eingeben, Vorschau der zu übernehmenden Daten,
   zusammenführen. Übernommene Konten fragen einzeln nach ihrem Passwort.
