@@ -321,6 +321,9 @@ interface Conversation {
   replies: number;
 }
 
+/** Lists of single messages unfold nothing; one array, so nothing downstream changes per reload. */
+const NOTHING_UNFOLDED: readonly { ident: string; item: MessageListItem }[] = [];
+
 /** What the tree knows of the messages of one unfolded conversation, by its identity. */
 type ChildQueries = Readonly<Record<string, { status: "pending" | "error" | "success"; data: ThreadView | undefined }>>;
 
@@ -449,7 +452,7 @@ export function MessageList({
             const ident = expandable(row);
             return ident !== null && expanded.has(ident) ? [{ ident, item: row.item }] : [];
           })
-        : [],
+        : NOTHING_UNFOLDED,
     [tree, baseRows, expandable, expanded],
   );
   const combineChildren = useCallback(
@@ -457,10 +460,9 @@ export function MessageList({
       Object.fromEntries(results.map((result, index) => [unfolded[index]?.ident ?? "", { status: result.status, data: result.data }])),
     [unfolded],
   );
-  const childQueries = useQueries({
-    queries: unfolded.map(({ ident, item }) => conversationQuery(item, ident)),
-    combine: combineChildren,
-  });
+  // Stable options: the list re-renders on every scroll step, the queries only change with `unfolded`.
+  const childQueryOptions = useMemo(() => unfolded.map(({ ident, item }) => conversationQuery(item, ident)), [unfolded]);
+  const childQueries = useQueries({ queries: childQueryOptions, combine: combineChildren });
   const retryChildren = useCallback(
     (ident: string, item: MessageListItem) => {
       void queryClient.refetchQueries({ queryKey: conversationQuery(item, ident).queryKey });
@@ -504,11 +506,13 @@ export function MessageList({
 
   /** The selection key of every row ("" for rows that hold no message). */
   const rowKeys = useMemo(() => {
+    // Lists of single messages: a message is a row once (`buildRows` drops repeated ids).
+    if (!tree) return rows.map((row) => (row.kind === "message" ? `m${String(row.item.id)}` : ""));
     const taken = new Set<string>();
     return rows.map((row) => {
       if (row.kind === "child") return childKey(row.parent, row.item.id);
       if (row.kind !== "message") return "";
-      const ident = tree ? (conversationOf.get(row.item.id)?.ident ?? `m${String(row.item.id)}`) : `m${String(row.item.id)}`;
+      const ident = conversationOf.get(row.item.id)?.ident ?? `m${String(row.item.id)}`;
       // A conversation shown twice (never expected) keeps its message as key the second time.
       const key = taken.has(ident) ? `m${String(row.item.id)}` : ident;
       taken.add(key);
@@ -792,14 +796,15 @@ export function MessageList({
     }));
   }, [rows, rowKeys]);
   // After `loadAndSelectAll`: once the messages of the pages it loaded are in the list.
-  const loadedIds = useMemo(() => new Set(items.map((item) => item.id)), [items]);
   const selectAllNow = useEffectEvent(() => {
     setSelectAllRequest(null);
     selectAllRows();
   });
   useEffect(() => {
-    if (selectAllRequest && selectAllRequest.every((id) => loadedIds.has(id))) selectAllNow();
-  }, [selectAllRequest, loadedIds]);
+    if (!selectAllRequest) return;
+    const loaded = new Set(items.map((item) => item.id));
+    if (selectAllRequest.every((id) => loaded.has(id))) selectAllNow();
+  }, [selectAllRequest, items]);
 
   /** Stage 17: unfolds or folds a conversation. Folding moves a cursor inside to its row. */
   const setUnfolded = (ident: string, open: boolean) => {

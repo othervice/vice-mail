@@ -80,7 +80,8 @@ async function tabToList(limit = TAB_LIMIT) {
   const stops = [];
   for (let i = 0; i < limit; i += 1) {
     const now = await active();
-    if (now.role === "listbox" && now.testId === "message-list") {
+    // A list box of messages, or a tree of conversations (stage 17, the app's default).
+    if ((now.role === "listbox" || now.role === "tree") && now.testId === "message-list") {
       report.tabsToList = Math.max(report.tabsToList ?? 0, i);
       report.tabStops = stops;
       return { ...now, presses: i };
