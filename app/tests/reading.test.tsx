@@ -68,6 +68,8 @@ function link(overrides: Partial<LinkInfo> = {}): LinkInfo {
  */
 const READING_COMMANDS = new Set([
   "get_app_info",
+  // Audit 24.11.2026: whether the database opened at start (read-only, asked once).
+  "get_startup_problem",
   "get_preferences",
   "get_reading_preferences",
   // Stage 8: UI preferences and the layout of the window (nothing about mail).
