@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use mail_model::{AiAnswer, BodyFormat, SearchIndexState};
+use mail_model::{AiAnswer, BodyFormat, MessageBody, SearchIndexState};
 
 use super::*;
 
@@ -109,7 +109,7 @@ async fn qa(real: Option<(String, String)>) -> Qa {
         .await
         .expect("add account")
         .id;
-    // Every message synced, every body stored (opened once), the index built.
+    // Every message synced, every body stored, the index built.
     let deadline = Instant::now() + Duration::from_secs(60);
     let items = loop {
         let inbox = core
@@ -137,7 +137,33 @@ async fn qa(real: Option<(String, String)>) -> Qa {
         // (list rows carry milliseconds), and the serials follow the delivery order.
         let serial = usize::try_from((item.date / 1000 - 1_700_000_000) / 60).expect("serial");
         files.insert(item.id, names[serial - 1].clone());
-        let _ = core.get_message(item.id, BodyFormat::Text).await;
+    }
+    // Opening a message whose body is not stored yet starts its fetch and answers `Loading`;
+    // the index has the text once the body is stored. So every message is opened (all fetches
+    // start), then asked again until every body is there: on a slow machine the first questions
+    // ran before some fetches had finished.
+    let mut loading: Vec<MessageId> = items.iter().map(|item| item.id).collect();
+    while !loading.is_empty() {
+        let mut still = Vec::new();
+        for id in loading {
+            let view = core
+                .get_message(id, BodyFormat::Text)
+                .await
+                .expect("open message");
+            match view.body {
+                MessageBody::Loading => still.push(id),
+                MessageBody::Unavailable { reason, error } => {
+                    panic!("{}: body unavailable: {reason:?} {error:?}", files[&id])
+                }
+                MessageBody::Html { .. } | MessageBody::Text { .. } => {}
+            }
+        }
+        loading = still;
+        if !loading.is_empty() {
+            let names: Vec<&String> = loading.iter().map(|id| &files[id]).collect();
+            assert!(Instant::now() < deadline, "bodies not stored: {names:?}");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
     loop {
         let status = core.get_search_index_status().await.expect("index status");
