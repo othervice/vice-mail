@@ -126,6 +126,9 @@ export function ThreadPane({ account, item, mailboxId, focusRequest, toolbarFor,
         messageId={open.id}
         title={item.subject}
         draft={open.draft}
+        // The panel acts on the row's message: its chips belong under whichever message of the
+        // conversation is open.
+        aiMessageId={item.id}
         focusRequest={focusRequest && focusRequest.messageId === item.id ? { ...focusRequest, messageId: open.id } : focusRequest}
         toolbar={toolbarFor?.(open)}
         onEscape={onEscape}

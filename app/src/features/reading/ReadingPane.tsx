@@ -322,6 +322,11 @@ interface ReadingPaneProps {
   draft?: boolean;
   /** In a message window of its own: no AI (the panel is in the main window), no "open in window". */
   inWindow?: boolean;
+  /**
+   * The message the AI panel works on for this pane, if not `messageId`: in a conversation the
+   * list row's message, while the pane opens another one of the thread (the oldest unread).
+   */
+  aiMessageId?: MessageId;
 }
 
 /**
@@ -343,6 +348,7 @@ export function ReadingPane({
   title,
   draft = false,
   inWindow = false,
+  aiMessageId,
 }: ReadingPaneProps) {
   const { t } = useTranslation();
   // The chosen format belongs to its message: another message of the conversation starts on "auto".
@@ -473,7 +479,7 @@ export function ReadingPane({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3" data-print-hide>
           {draft ? <span /> : <ReplyRow messageId={view.id} sender={(sender && addressName(sender)) ?? t("list.unknownSender")} />}
-          {!inWindow && <QuickReplies account={account} messageId={view.id} />}
+          {!inWindow && <QuickReplies account={account} messageId={aiMessageId ?? view.id} />}
         </div>
         {/* Stage 16: the inline quick reply (the same drafts and outbox as the composer). */}
         {!draft && !inWindow && (

@@ -14,6 +14,7 @@ import {
 } from "../src/features/threads/conversationRows";
 import type { InboxPage, SearchRequest, ThreadView, UiPreferences } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
+import { makeAiProfile, makeTransfer } from "./support/ai";
 import { inboxSection, messageRow } from "./support/comfort";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
@@ -356,6 +357,31 @@ describe("opening a conversation", () => {
     expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
     expect(within(entries).getAllByTestId("thread-entry")).toHaveLength(3);
     expect(await seriousFindings()).toEqual([]);
+  });
+
+  it("offers the AI chips under the message it opens, which is not the row's message", async () => {
+    // The row stands for the newest message (Bob's answer); the pane opens the oldest unread one
+    // (Anna's question). The AI panel works on the row's message, the whole conversation.
+    const LOCAL = makeAiProfile();
+    const { core, user } = setup({
+      ai: {
+        enabled: true,
+        profiles: [LOCAL],
+        functions: { summary: LOCAL.id, reply_suggestion: LOCAL.id, writing_help: LOCAL.id, search: LOCAL.id },
+        summary: () => ({ keyPoints: [], openQuestions: [], deadlines: [], dropped: 0, transfer: makeTransfer() }),
+      },
+    });
+    const list = await inboxList();
+    await user.click(within(list).getAllByRole("option")[0] as HTMLElement);
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(within(pane).getByTestId("reading-from").textContent).toContain(ANNA.email);
+    });
+    const chips = await within(pane).findByRole("group", { name: "AI for this message" });
+    await user.click(within(chips).getByRole("button", { name: /^Summari[sz]e/ }));
+    await waitFor(() => {
+      expect(core.callsOf("ai_summarize_thread")).toEqual([expect.objectContaining({ messageId: ANSWER.id })]);
+    });
   });
 
   it("in the unified inbox shows the thread pane of the row's account", async () => {
