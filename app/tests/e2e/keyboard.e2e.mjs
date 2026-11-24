@@ -165,8 +165,8 @@ describe("stage 8: open, reply, send, archive without the mouse", () => {
     report.steps.tabPath = { presses: reached.presses, extra, stops: report.tabStops };
     // Every folder tree is one stop: the path does not grow with the account's folders.
     assert.ok(reached.presses <= SHORT_PATH + extra, `${String(reached.presses)} presses: ${report.tabStops.join(" | ")}`);
-    // One stop per tree, whatever it holds.
-    const trees = await browser.execute(() => document.querySelectorAll('[role="tree"]').length);
+    // One stop per tree, whatever it holds (the list of conversations is a tree too, the last stop).
+    const trees = await browser.execute(() => document.querySelectorAll('[role="tree"]:not([data-testid="message-list"])').length);
     assert.equal(report.tabStops.filter((stop) => stop.startsWith("treeitem")).length, trees, report.tabStops.join(" | "));
     await browser.keys("Home");
     const listFocus = await active();
