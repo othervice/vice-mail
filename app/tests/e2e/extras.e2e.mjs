@@ -14,6 +14,10 @@
 //    it would change the test machine's default).
 // 5. No CSP violation on the way.
 //
+// Stage 17 (decision 0049): the spec runs with conversations on, the app's default, whatever an
+// earlier spec on the same data directory left; rows are then tree items, not options. The mode
+// it found is restored at the end: later specs count on it.
+//
 // Not covered here, to be checked by hand (docs/stages/09, "Der Mensch prüft danach"): a mailto:
 // link from the browser opening the composer, setting the default on macOS and Windows, printing
 // and saving as PDF, `.eml` export through the save dialog.
@@ -21,11 +25,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openSettings, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSettings, screenshot, SCREENSHOT_DIR, setConversations, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
 let account;
+/** The conversation mode an earlier spec left, restored at the end. */
+let conversationsBefore = null;
+/** A row of the message list: an option, or a tree item in a list of conversations (stage 17). */
+const ROW = ':is([role="option"], [role="treeitem"])';
 
 async function onlyAccount() {
   const accounts = await coreCall("list_accounts");
@@ -45,8 +53,11 @@ async function openBySearch(query, subject) {
   await browser.waitUntil(
     async () => {
       id = await browser.execute(
-        (wanted) => [...document.querySelectorAll('[role="option"]')].find((el) => (el.querySelector('[data-testid="row-name"]')?.textContent ?? "").includes(wanted))?.id ?? null,
+        (wanted, row) =>
+          [...document.querySelectorAll(`[data-testid="message-list"] ${row}`)].find((el) => (el.querySelector('[data-testid="row-name"]')?.textContent ?? "").includes(wanted))?.id ??
+          null,
         subject,
+        ROW,
       );
       return Boolean(id);
     },
@@ -66,6 +77,8 @@ describe("stage 9 part B: unsubscribe, invitations, print, default mail app", ()
     await attach();
     // The steps use the English names (palette commands, labels); an earlier spec may have left German.
     await coreCall("set_preferences", { preferences: { theme: "light", language: "en" } });
+    conversationsBefore = (await coreCall("get_ui_preferences")).conversations;
+    await setConversations(true);
     await coreCall("add_account", {
       settings: {
         email: ALICE.email,
@@ -89,6 +102,7 @@ describe("stage 9 part B: unsubscribe, invitations, print, default mail app", ()
   });
 
   after(async () => {
+    if (conversationsBefore !== null) await setConversations(conversationsBefore).catch(() => undefined);
     const left = await coreCall("list_accounts").catch(() => []);
     for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch(() => undefined);
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -152,7 +166,7 @@ describe("stage 9 part B: unsubscribe, invitations, print, default mail app", ()
     report.steps.printRules = rules;
     assert.ok(rules.some((selector) => selector.includes(":has([data-print-root])")), "the print rules are missing from the build");
     // The search (and its reading pane) is closed: open the newest message of the inbox.
-    await (await $('[data-testid="message-list"] [role="option"]')).click();
+    await (await $(`[data-testid="message-list"] ${ROW}`)).click();
     await $("article[data-print-root]").waitForExist({ timeout: 10000, timeoutMsg: "no print root in the reading pane" });
   });
 
