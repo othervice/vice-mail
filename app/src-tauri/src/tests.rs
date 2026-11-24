@@ -686,7 +686,9 @@ fn ui_preference_commands_store_validate_and_emit() {
             // Decisions 0036 and 0038: synced, orange by default.
             "accentTheme": "orange",
             // Decision 0039: one row per conversation by default.
-            "conversations": true
+            "conversations": true,
+            // Stage 17: no choice of the column's views, every view in the UI's order.
+            "columnViews": []
         })
     );
 
@@ -702,11 +704,17 @@ fn ui_preference_commands_store_validate_and_emit() {
         "recentCommands": ["action:archive"],
         "aiPanel": "folded",
         "accentTheme": "violet",
-        "conversations": false
+        "conversations": false,
+        "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }]
     });
     let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
     assert_eq!(stored["accentTheme"], "violet");
     assert_eq!(stored["conversations"], false);
+    // Stage 17: in the user's order, not sorted.
+    assert_eq!(
+        stored["columnViews"],
+        json!([{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }])
+    );
     // Decision 0028: the AI panel's state is part of the preferences.
     assert_eq!(stored["aiPanel"], "folded");
     // Ordered by command, as stored.
