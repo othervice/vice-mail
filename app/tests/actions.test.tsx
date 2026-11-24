@@ -480,6 +480,9 @@ describe("read-only accounts", () => {
       "Open in new window",
       "Add to reading list",
       "Block sender",
+      // Stage 19: the source and editing as new (a local draft) change nothing either.
+      "View source",
+      "Edit as new",
     ]);
     // The primary buttons and those in "More actions" (hidden in the toolbar, same set).
     for (const button of within(toolbar).getAllByRole("button", { hidden: true })) {

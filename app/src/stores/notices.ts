@@ -40,7 +40,7 @@ export type NoticeContent =
   /** A command of the core failed right away. */
   | {
       kind: "error";
-      context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel" | "folder" | "transfer" | "appearance";
+      context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel" | "folder" | "transfer" | "appearance" | "source";
       error: IpcError;
     }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */

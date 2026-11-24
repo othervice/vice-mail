@@ -751,6 +751,10 @@ export const en = {
       addToReadingList: "Add to reading list",
       removeFromReadingList: "Remove from reading list",
       blockSender: "Block sender",
+      // Stage 19
+      viewSource: "View source",
+      redirect: "Redirect",
+      editAsNew: "Edit as new",
     },
     readOnly: {
       label: "Read-only",
@@ -822,6 +826,8 @@ export const en = {
       transfer: "The messages could not be moved to the other account.",
       // Stage 18: light, dark or system from the command palette.
       appearance: "The appearance could not be changed.",
+      // Stage 19
+      source: "The source could not be shown.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",
     operationFailed_other: "{{count, number}} changes could not be made on the server: {{action}}",
@@ -3968,6 +3974,46 @@ export const en = {
       openInbox: "Open inbox",
       start: "Start using {{product}}",
     },
+  },
+  // Stage 19 (decision 0055): the source window, all headers, redirecting.
+  source: {
+    title: "Source",
+    loading: "Loading the source…",
+    loadFailed: "The source could not be loaded.",
+    save: "Save as .eml",
+    saved: "Saved to {{path}}",
+    saveFailed: "The message could not be saved.",
+    wrap: "Wrap long lines",
+    close: "Close",
+    closeFailed: "Close this window with the close button of its title bar.",
+    size: "{{size}}",
+    truncatedTitle: "Only the first {{shown}} of {{total}} are shown",
+    truncatedBody: "The message is too large to show here in full. Save it as .eml to get all of it.",
+    allHeaders: {
+      show: "Show all headers",
+      hide: "Hide all headers",
+      title: "All headers",
+      loading: "Loading the headers…",
+      failed: "The headers could not be loaded.",
+      empty: "This message has no header fields.",
+    },
+  },
+  redirect: {
+    title: "Redirect message",
+    intro: "The message goes to the new recipients unchanged, as it came from {{sender}}. Your address is added as the one who redirected it.",
+    from: "From",
+    to: "To",
+    cc: "Cc",
+    bcc: "Bcc",
+    submit: "Redirect",
+    cancel: "Cancel",
+    close: "Close",
+    failed: "The message could not be redirected.",
+    noRecipients: "Add at least one recipient.",
+    tooMany: "A message can be redirected to at most {{count}} recipients.",
+    noticeSubject: "Redirect: {{subject}}",
+    redirected: "Message redirected",
+    readOnly: "Changes are turned off for this account, so it cannot redirect messages. Allow changes in Settings → Accounts.",
   },
 } as const;
 

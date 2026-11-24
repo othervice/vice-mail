@@ -6,6 +6,7 @@ import { en } from "../src/i18n/en";
 import type { MailAction, MailboxRole, MessageListItem } from "../src/services/ipc";
 import { useActionTargetStore } from "../src/stores/actionTarget";
 import { useComposerStore } from "../src/stores/composer";
+import { useRedirectStore } from "../src/stores/redirect";
 import { useSearchStore } from "../src/stores/search";
 import { useUiStore } from "../src/stores/ui";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
@@ -146,6 +147,20 @@ function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionC
     // Stage 8: the shell opens the window (the fake records the call even if it refuses).
     openInWindow: () => {
       expect(core.callsOf("open_message_window").at(-1)).toEqual({ accountId: ctx.account.id, messageId: 4242 });
+    },
+    // Stage 19
+    viewSource: () => {
+      expect(core.callsOf("open_source_window").at(-1)).toEqual({ accountId: ctx.account.id, messageId: 4242 });
+    },
+    redirect: () => {
+      expect(useRedirectStore.getState().target).toEqual({ accountId: ctx.account.id, messageId: 4242 });
+      // The dialog it opened closes again, so the next round can open the palette.
+      act(() => {
+        useRedirectStore.getState().close();
+      });
+    },
+    editAsNew: () => {
+      expect(useComposerStore.getState().session?.source).toEqual({ kind: "edit_as_new", messageId: 4242 });
     },
   };
   checks[id]();

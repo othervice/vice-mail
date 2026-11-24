@@ -23,7 +23,9 @@ export type ComposerSource =
   /** A local draft again: after "Undo" of a send, "Edit" of a failed one, or a restored draft. */
   | { kind: "draft"; draftId: DraftId; draft?: Draft }
   /** A message of the Drafts folder (also one written by another program). */
-  | { kind: "message"; messageId: MessageId };
+  | { kind: "message"; messageId: MessageId }
+  /** Stage 19: "edit as new": a new message with the recipients, text and attachments of this one. */
+  | { kind: "edit_as_new"; messageId: MessageId };
 
 export interface ComposerSession {
   /** New for every opening, so the composer starts fresh even for the same draft. */

@@ -6,6 +6,7 @@ import {
   composeIpc,
   composerIpc,
   ipc,
+  redirectIpc,
   toCoreError,
   type CoreError,
   type DraftSummary,
@@ -46,6 +47,19 @@ export async function reopenDraft(mail: OutgoingMail, context: "undo" | "edit"):
     return true;
   } catch (e) {
     store.report(context, toCoreError(e));
+    return false;
+  }
+}
+
+/** Stage 19: "Undo" of a redirect within the delay: it leaves the outbox, nothing is sent. */
+export async function cancelRedirect(mail: OutgoingMail): Promise<boolean> {
+  const store = useComposerStore.getState();
+  try {
+    await redirectIpc.cancel(mail.operationId);
+    store.dismiss(mail.operationId);
+    return true;
+  } catch (e) {
+    store.report("undo", toCoreError(e));
     return false;
   }
 }
@@ -148,7 +162,11 @@ function SendNotice({ send }: { send: TrackedSend }) {
     });
   };
   // Stage 16: a read receipt has no subject of the user's; it says what it is.
-  const subject = mail.readReceipt ? t("composer.send.receipt") : mail.subject.trim() || t("composer.noSubject");
+  const subject = mail.readReceipt
+    ? t("composer.send.receipt")
+    : mail.redirect
+      ? t("redirect.noticeSubject", { subject: mail.subject.trim() || t("composer.noSubject") })
+      : mail.subject.trim() || t("composer.noSubject");
   let icon: LucideIcon = Send;
   let tone: "calm" | "success" | "danger" | "warning" = "calm";
   let text: string;
@@ -168,7 +186,14 @@ function SendNotice({ send }: { send: TrackedSend }) {
       icon = Clock;
       text = seconds > 0 ? t("composer.send.scheduled", { count: seconds }) : t("composer.send.sending");
       if (seconds > 0)
-        buttons = [{ label: t("composer.send.undo"), run: act(() => reopenDraft(mail, "undo")), testId: "send-undo" }];
+        buttons = [
+          {
+            label: t("composer.send.undo"),
+            // Stage 19: a redirect has no draft to go back to; undoing takes it out of the outbox.
+            run: act(() => (mail.redirect ? cancelRedirect(mail) : reopenDraft(mail, "undo"))),
+            testId: "send-undo",
+          },
+        ];
       break;
     }
     case "queued":
@@ -186,7 +211,7 @@ function SendNotice({ send }: { send: TrackedSend }) {
     case "sent":
       icon = CircleCheck;
       tone = "success";
-      text = t("composer.send.sent");
+      text = mail.redirect ? t("redirect.redirected") : t("composer.send.sent");
       if (mail.notice === "no_sent_copy") detail = t("composer.send.noSentCopy");
       // Stage 16: "Send and archive" found no Archive folder; the original stayed where it was.
       if (mail.archive === "no_archive_mailbox") detail = [detail, t("composer.send.noArchive")].filter(Boolean).join(" ");

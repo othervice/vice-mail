@@ -1848,3 +1848,40 @@ export const oauthIpc = {
 export type { Protocol } from "../generated/bindings";
 /** Stage 14: a password, or an API token for a JMAP server (sent as a bearer token). */
 export type { CredentialKind } from "../generated/bindings";
+
+// ---- Stage 19 (decision 0055): source, all headers, redirect ----
+import {
+  commands as stage19Commands,
+  MAX_REDIRECT_RECIPIENTS,
+  MAX_SOURCE_BYTES,
+  type HeaderField,
+  type MessageSource,
+  type RedirectRequest,
+} from "../generated/bindings";
+
+export { MAX_REDIRECT_RECIPIENTS, MAX_SOURCE_BYTES };
+export type { HeaderField, MessageSource, RedirectRequest };
+
+/**
+ * Stage 19: a message's source in a window of its own (plain text, never markup; at most
+ * `MAX_SOURCE_BYTES`, the whole via "Save as .eml") and every header field for "all headers".
+ */
+export const sourceIpc = {
+  /** The source window of the message; an open one comes to the front. `not_found` opens nothing. */
+  openWindow: (accountId: AccountId, messageId: MessageId): Promise<void> =>
+    done(call(() => stage19Commands.openSourceWindow(accountId, messageId))),
+  getSource: (messageId: MessageId): Promise<MessageSource> => call(() => stage19Commands.getMessageSource(messageId)),
+  getHeaders: (messageId: MessageId): Promise<HeaderField[]> => call(() => stage19Commands.getMessageHeaders(messageId)),
+};
+
+/**
+ * Stage 19: redirecting a message unchanged with `Resent-*` fields. It goes through the outbox
+ * like a send (undo delay, send notices, outbox view); only for accounts with writes on.
+ */
+export const redirectIpc = {
+  /** `requestId` names one press: the same id twice queues once. */
+  redirect: (request: RedirectRequest, requestId: string): Promise<OutgoingMail> =>
+    call(() => stage19Commands.redirectMessage(request, requestId)),
+  /** "Undo" within the delay, or dropping a failed one. `send_in_progress` once it started. */
+  cancel: (operationId: OperationId): Promise<void> => done(call(() => stage19Commands.cancelRedirect(operationId))),
+};

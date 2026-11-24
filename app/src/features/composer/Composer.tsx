@@ -127,6 +127,8 @@ function loadDraft(source: ComposerSource, language: QuoteLanguage): Promise<Dra
       return source.draft ? Promise.resolve(source.draft) : composeIpc.getDraft(source.draftId);
     case "message":
       return composeIpc.openDraftFromMessage(source.messageId);
+    case "edit_as_new":
+      return composeIpc.createDraft({ kind: "edit_as_new", messageId: source.messageId });
   }
 }
 
@@ -216,6 +218,7 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
 function loadingTitle(kind: ComposerSource["kind"]): "new" | "reply" | "reply_all" | "forward" | "draft" {
   if (kind === "draft" || kind === "message") return "draft";
   if (kind === "forward_as_attachment") return "forward";
+  if (kind === "edit_as_new") return "new";
   return kind;
 }
 
