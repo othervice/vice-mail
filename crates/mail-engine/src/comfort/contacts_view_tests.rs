@@ -204,6 +204,25 @@ async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
     assert_eq!(refs.len(), 1);
     assert!(refs[0].emails.contains(&"carol@work.example".to_owned()));
 
+    // After a restart the picture and the note are still there.
+    let h = h.restart(0).await;
+    let again = h
+        .core
+        .get_contact_picture("carol@work.example".into())
+        .await
+        .expect("read")
+        .expect("kept");
+    assert_eq!(again, shown);
+    assert_eq!(
+        h.core
+            .get_contact("carol@work.example".into())
+            .await
+            .expect("contact")
+            .note
+            .as_deref(),
+        Some("Met at the fair")
+    );
+
     // What the user set travels through the settings sync; what the directory counts does not.
     let store = h.core.store_for_tests().clone();
     let records = store.sync_records().await.expect("records");
