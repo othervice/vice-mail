@@ -882,6 +882,14 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/* Stage 9: hints about the mailto: link this draft came from (blind copies first). */}
         {prefill && <MailtoNotices notices={prefill.notices} inReplyTo={prefill.inReplyTo !== null} />}
+        {/* Audit 24.11.2026: another program's draft the app could not take over completely. */}
+        {draft.originalKept && (
+          <div className="px-4 pt-3">
+            <Notice tone="info" title={t("composer.originalKept.title")} data-testid="composer-original-kept">
+              <p>{t("composer.originalKept.body")}</p>
+            </Notice>
+          </div>
+        )}
         {frozen && (
           <div className="p-4">
             <Notice tone="info" title={t("composer.frozen.title")} data-testid="composer-frozen">

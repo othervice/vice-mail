@@ -61,6 +61,9 @@ pub struct StoredDraft {
     pub archive_original: bool,
     /// Stage 16: ask for a read receipt.
     pub request_receipt: bool,
+    /// Made from another program's copy in the Drafts folder that stays there untouched (it
+    /// could not be taken over completely): that copy's Message-ID, `""` when it had none.
+    pub kept_original: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -103,6 +106,9 @@ pub struct NewDraftRow {
     /// A draft opened from the Drafts folder: that copy becomes the draft's server copy, so the
     /// first save replaces it.
     pub server_copy: Option<ServerCopy>,
+    /// A draft opened from the Drafts folder whose copy stays there (see
+    /// [`StoredDraft::kept_original`]); `None` for every other draft.
+    pub kept_original: Option<String>,
     /// Unix ms.
     pub now: i64,
 }
@@ -177,6 +183,17 @@ impl Store {
         message_id_header: String,
     ) -> Result<Option<StoredDraft>, StoreError> {
         self.read(move |conn| compose::draft_for_message(conn, account, &message_id_header))
+            .await
+    }
+
+    /// The draft made from the foreign copy with this Message-ID that stays in the Drafts
+    /// folder (`""` for one without), if there is one.
+    pub async fn draft_for_kept_original(
+        &self,
+        account: AccountId,
+        message_id_header: String,
+    ) -> Result<Option<StoredDraft>, StoreError> {
+        self.read(move |conn| compose::draft_for_kept_original(conn, account, &message_id_header))
             .await
     }
 

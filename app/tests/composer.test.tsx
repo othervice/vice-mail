@@ -306,6 +306,26 @@ describe("composer: writing and drafts", () => {
     expect(core.callsOf("cancel_send")[0]).toEqual({ draftId: frozen.id });
   });
 
+  it("a draft of another program whose original stays in Drafts says so; others do not", async () => {
+    const kept = makeDraft({ accountId: ADA.id, subject: "Logo", originalKept: true, format: "html", bodyHtml: "<p>Hallo</p>" });
+    const plain = makeDraft({ accountId: ADA.id, subject: "Ohne Logo", format: "html", bodyHtml: "<p>Hallo</p>" });
+    setup({ compose: { drafts: [kept, plain], fromMessage: { 41: kept } } });
+    await screen.findByRole("button", { name: "New message" });
+    act(() => {
+      useComposerStore.getState().open({ kind: "message", messageId: 41 });
+    });
+    const notice = await screen.findByTestId("composer-original-kept");
+    expect(notice.textContent).toContain("The original draft stays unchanged");
+    expect(notice.textContent).toContain("your version is saved next to it as a separate draft");
+    act(() => {
+      useComposerStore.getState().open({ kind: "draft", draftId: plain.id });
+    });
+    await waitFor(() => {
+      expect((screen.getByLabelText<HTMLInputElement>("Subject")).value).toBe("Ohne Logo");
+    });
+    expect(screen.queryByTestId("composer-original-kept")).toBeNull();
+  });
+
   it("rich text: the editor gets the draft's HTML and switching to plain text keeps the words", async () => {
     const rich = makeDraft({ accountId: ADA.id, format: "html", bodyHtml: "<p>Hallo <strong>Grace</strong></p><ul><li>eins</li></ul>" });
     const { user } = setup({ compose: { drafts: [rich] } });

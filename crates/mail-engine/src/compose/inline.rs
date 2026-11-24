@@ -18,10 +18,10 @@ use super::{Compose, blocking, files};
 use crate::core::Connector;
 
 /// Raster types an inline image may have.
-const TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
+pub(super) const TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /// The right side of new Content-IDs: the sender's domain in ASCII, else `inline`.
-fn content_id_domain(email: &str) -> String {
+pub(super) fn content_id_domain(email: &str) -> String {
     let domain = email
         .rsplit_once('@')
         .map(|(_, d)| d.trim().to_ascii_lowercase())

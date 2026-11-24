@@ -70,6 +70,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     outgoing: null,
     archiveOriginal: false,
     requestReadReceipt: false,
+    originalKept: false,
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     ...overrides,

@@ -14,6 +14,8 @@
 //! so hostile or very deep HTML cannot overflow the stack; HTML the guard refuses is read as
 //! text instead.
 
+use std::collections::HashMap;
+
 use url::Url;
 
 use crate::dom::{self, Descend, NodeData, Visit};
@@ -156,6 +158,11 @@ fn image_side(value: &str) -> Option<u32> {
 /// its style (what resizable editor images write).
 fn image_of(node: &dom::Handle) -> Option<Image> {
     let content_id = dom::attribute(node, "src").and_then(|src| content_id_of(&src))?;
+    Some(image_with(node, content_id))
+}
+
+/// The image element `node` with `content_id` as its source: size and alternative text.
+fn image_with(node: &dom::Handle, content_id: String) -> Image {
     let style = dom::attribute(node, "style").unwrap_or_default();
     let from_style = |name: &str| {
         style.split(';').find_map(|decl| {
@@ -177,12 +184,12 @@ fn image_of(node: &dom::Handle) -> Option<Image> {
         .filter(|c| !c.is_control())
         .take(200)
         .collect();
-    Some(Image {
+    Image {
         content_id,
         width: side("width"),
         height: side("height"),
         alt: alt.trim().to_owned(),
-    })
+    }
 }
 
 /// Text alignment the composer can set (stage 10); left is the default and not written.
@@ -256,6 +263,133 @@ pub fn editor_html(html: &str) -> String {
     let mut blocks = html_blocks_with(html, false);
     trim_paragraphs(&mut blocks);
     fragment(&blocks)
+}
+
+/// A draft another program saved, as editor HTML (see [`foreign_draft_html`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ForeignDraftHtml {
+    /// The allowlist of [`editor_html`], plus the draft's own inline images as `cid:` images
+    /// with the Content-IDs the caller gave them.
+    pub editor_html: String,
+    /// The Content-IDs, as the message names them, of the inline images `editor_html` shows,
+    /// in order, each once.
+    pub shown: Vec<String>,
+    /// Images and other media the editor cannot keep, which saving would lose: an image from
+    /// the web or a `data:` URL, a `cid:` of no part in the caller's map, an image in
+    /// preformatted text, inside a link or as a background, a video, an embedded object, an SVG
+    /// drawing. Also counted when the HTML had to be read as text.
+    pub dropped: usize,
+}
+
+/// Elements whose whole content is a picture or a player the editor cannot show.
+const MEDIA: &[&str] = &[
+    "picture", "video", "audio", "canvas", "object", "embed", "iframe",
+];
+
+/// HTML of a draft another program saved (opened from the Drafts folder), as editor HTML: the
+/// allowlist and the dropped empty paragraphs of [`editor_html`], but the draft's own inline
+/// images stay. `images` maps the Content-ID of each inline part the caller can keep (as the
+/// message names it, without `<>`) to the Content-ID it has in the draft (the same one, or a
+/// new valid one: other programs write ids this module would not accept, such as `ii_…` without
+/// `@`). A `cid:` URL is matched as the reading pane matches it: percent-decoded, exactly, else
+/// one case-insensitive match. What the editor cannot keep is counted in
+/// [`ForeignDraftHtml::dropped`], so the caller can leave the original alone.
+pub fn foreign_draft_html(html: &str, images: &HashMap<String, String>) -> ForeignDraftHtml {
+    if guard::check(html).is_err() {
+        let mut blocks = text_blocks(&guard::strip_tags(html));
+        trim_paragraphs(&mut blocks);
+        let lower = html.to_ascii_lowercase();
+        return ForeignDraftHtml {
+            editor_html: fragment(&blocks),
+            shown: Vec::new(),
+            dropped: lower.matches("<img").count()
+                + MEDIA
+                    .iter()
+                    .map(|m| lower.matches(&format!("<{m}")).count())
+                    .sum::<usize>(),
+        };
+    }
+    let dom = dom::parse_document(html);
+    let mut collector = Collector::new(false);
+    collector.foreign = Some(Foreign {
+        images: images.clone(),
+        shown: Vec::new(),
+        dropped: 0,
+    });
+    dom::walk(&dom.document, |visit| match visit {
+        Visit::Enter(node) => collector.enter(node),
+        Visit::Leave(node) => {
+            collector.leave(node);
+            Descend::Yes
+        }
+    });
+    let foreign = collector.foreign.take().unwrap_or_default();
+    let mut blocks = collector.finish();
+    trim_paragraphs(&mut blocks);
+    ForeignDraftHtml {
+        editor_html: fragment(&blocks),
+        shown: foreign.shown,
+        dropped: foreign.dropped,
+    }
+}
+
+/// Percent-decoding of a `cid:` URL (RFC 2392); invalid escapes stay as written.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| char::from(b).to_digit(16);
+        if bytes[i] == b'%'
+            && let (Some(Some(hi)), Some(Some(lo))) = (
+                bytes.get(i + 1).map(|b| hex(*b)),
+                bytes.get(i + 2).map(|b| hex(*b)),
+            )
+        {
+            out.push(u8::try_from(hi * 16 + lo).unwrap_or(b'?'));
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The inline images a foreign draft may keep, and what the walk found.
+#[derive(Debug, Default)]
+struct Foreign {
+    images: HashMap<String, String>,
+    shown: Vec<String>,
+    dropped: usize,
+}
+
+impl Foreign {
+    /// The (original, new) Content-ID of an image source, if it is one of `images`.
+    fn lookup(&self, src: &str) -> Option<(String, String)> {
+        let src = src.trim();
+        let rest = src
+            .get(..4)
+            .filter(|p| p.eq_ignore_ascii_case("cid:"))
+            .and_then(|_| src.get(4..))?;
+        let decoded = percent_decode(rest);
+        let key = decoded
+            .trim()
+            .trim_start_matches('<')
+            .trim_end_matches('>')
+            .trim();
+        if let Some((original, new)) = self.images.get_key_value(key) {
+            return Some((original.clone(), new.clone()));
+        }
+        let mut found = self
+            .images
+            .iter()
+            .filter(|(original, _)| original.eq_ignore_ascii_case(key));
+        match (found.next(), found.next()) {
+            (Some((original, new)), None) => Some((original.clone(), new.clone())),
+            _ => None,
+        }
+    }
 }
 
 /// Plain text as editor HTML (paragraphs, `>` quotes, links), for a text quote shown in the
@@ -571,6 +705,8 @@ struct Collector {
     pre_depth: usize,
     /// Empty `<p>`s are kept as empty lines.
     keep_empty: bool,
+    /// A draft of another program: its own inline images stay ([`foreign_draft_html`]).
+    foreign: Option<Foreign>,
 }
 
 impl Collector {
@@ -582,6 +718,14 @@ impl Collector {
             pre: String::new(),
             pre_depth: 0,
             keep_empty,
+            foreign: None,
+        }
+    }
+
+    /// Counts media of a foreign draft the editor cannot keep.
+    fn drop_media(&mut self) {
+        if let Some(foreign) = &mut self.foreign {
+            foreign.dropped += 1;
         }
     }
 
@@ -718,10 +862,23 @@ impl Collector {
             NodeData::Document => return Descend::Yes,
             _ => return Descend::Skip,
         }
-        // SVG and MathML: nothing to show.
+        // SVG and MathML: nothing to show (an SVG drawing of a foreign draft is lost).
         let Some(name) = dom::html_name(node) else {
+            if let NodeData::Element { name, .. } = &node.data
+                && &*name.local == "svg"
+            {
+                self.drop_media();
+            }
             return Descend::Skip;
         };
+        // A picture behind the content of a foreign draft (`background`, CSS `url(…)`).
+        if self.foreign.is_some()
+            && (dom::attribute(node, "background").is_some()
+                || dom::attribute(node, "style")
+                    .is_some_and(|style| style.to_ascii_lowercase().contains("url(")))
+        {
+            self.drop_media();
+        }
         // Word's list bullets and numbers (`<span style="mso-list:Ignore">·</span>`).
         if dom::attribute(node, "style").is_some_and(|style| {
             style
@@ -735,14 +892,38 @@ impl Collector {
         }
         if name == "img" && self.pre_depth == 0 {
             // Only editor content (the composer's own HTML, signatures) has inline images of
-            // its own; in HTML of any other origin (a received mail being quoted, a draft of
-            // another program, pasted content) a `cid:` points into someone else's message.
+            // its own; in HTML of any other origin (a received mail being quoted, pasted
+            // content) a `cid:` points into someone else's message. A draft of another program
+            // keeps the images of its own parts the caller named.
             if self.keep_empty
                 && let Some(image) = image_of(node)
             {
                 self.inline(Inline::Image(image));
+            } else if let Some(foreign) = &self.foreign {
+                let found = dom::attribute(node, "src").and_then(|src| foreign.lookup(&src));
+                let linked = self.marks().link.is_some();
+                match found {
+                    Some((original, new)) => {
+                        if let Some(foreign) = &mut self.foreign {
+                            if !foreign.shown.contains(&original) {
+                                foreign.shown.push(original);
+                            }
+                            // Shown, but the editor keeps no link on an image.
+                            if linked {
+                                foreign.dropped += 1;
+                            }
+                        }
+                        self.inline(Inline::Image(image_with(node, new)));
+                    }
+                    None => self.drop_media(),
+                }
             }
             return Descend::Skip;
+        }
+        if self.foreign.is_some()
+            && (MEDIA.contains(&name) || (name == "img" && self.pre_depth > 0))
+        {
+            self.drop_media();
         }
         if SKIPPED.contains(&name) {
             return Descend::Skip;

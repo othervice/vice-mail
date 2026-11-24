@@ -2099,6 +2099,13 @@ export type Draft = {
 	 *  sending identity's address, RFC 8098). The recipient decides whether to send one.
 	 */
 	requestReadReceipt: boolean,
+	/**
+	 *  Made from a draft another program saved in the Drafts folder, which the app could not
+	 *  take over completely (an image from the web, a part the editor cannot show, a message
+	 *  stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
+	 *  and this draft is saved next to it with a Message-ID of its own. The composer says so.
+	 */
+	originalKept: boolean,
 	/**  Unix milliseconds. */
 	createdAt: number,
 	updatedAt: number,

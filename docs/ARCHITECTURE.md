@@ -143,7 +143,7 @@ Server nicht kann, wird nicht vorgetäuscht, sondern ausgeblendet oder mit einem
 | `remote_content_sender` | Absender, deren externe Bilder immer geladen werden (Konto-UUID, normalisierte Adresse) | sync |
 | `message_fts` | FTS5-Index über Betreff, Absender, Empfänger, Text, Anhangnamen | Cache |
 | `operation` | Outbox: Art, Nutzdaten, Idempotenzschlüssel, Zustand, Versuche, letzter Fehler | Gerät |
-| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein und gewählte Signatur (Stufe 10), Anhänge und Inline-Bilder (mit Content-ID) als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018, 0023) | Gerät (Abgleich über IMAP) |
+| `draft` | UUID, Konto, Identität, Kopfzeilen, Message-ID (ab Anlage fest), Text, Zitat, Signatur ja/nein und gewählte Signatur (Stufe 10), Anhänge und Inline-Bilder (mit Content-ID) als Verweise auf eigene Kopien unter `compose/`, Zustand (`editing`/`sending`), Revision, Server-Kopie (Ordner, UIDVALIDITY, UID, Revision) (0018, 0023); `kept_original`: Message-ID eines fremden Entwurfs, der unberührt im Ordner bleibt, weil der Editor ihn nicht vollständig übernehmen konnte (0047) | Gerät (Abgleich über IMAP) |
 | `contact` | eine Zeile je Adresse: Schlüssel, Schreibweise, Zähler, zuletzt benutzt, Rang (REAL mit Index), Namen, `user_name`, gefaltete Suchwörter, `contact_group` für zusammengeführte Kontakte (0016, 0018, 0023) | Cache; Name und Zusammenführung sync |
 | `contact_dismissed` | abgelehnte Dubletten-Paare (Stufe 10, 0023) | Gerät |
 | `signature` | Pool aller Signaturen: Name, Editor-HTML, Text, kleine Bilder (Base64, als `cid:` versendet) (Stufe 10, 0023) | sync |
@@ -323,7 +323,9 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
   erneut gesendet wird nur auf seine ausdrückliche Entscheidung. Nach der Annahme folgen in
   derselben Transaktion Gesendet-Kopie (`append`), Entfernen der Entwurfskopie (`remove_copy`)
   und `\Answered`/`$Forwarded` am Original. Entwürfe gehen als `append` in den Entwürfe-Ordner
-  (neue Fassung anhängen, alte nur bei passender Message-ID entfernen).
+  (neue Fassung anhängen, alte nur bei passender Message-ID entfernen). Entwürfe anderer Programme
+  behalten ihre Inline-Bilder als Inline-Teile; was der Editor nicht darstellen kann, lässt das
+  Original unberührt, und die Fassung der App liegt mit eigener Message-ID daneben (0047).
 - Ab Stufe 10 (0023), **Später senden lokal:** eine `send`-Operation mit der gewählten Zeit als
   `not_before` (`SendJob::scheduled`), sofort gebaut und mit dieser Zeit datiert; gesendet wird
   nur, wenn die App dann läuft und online ist. Beim Start, bevor Outbox und Konten laufen,

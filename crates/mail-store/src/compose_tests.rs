@@ -75,6 +75,7 @@ async fn new_draft(f: &Fixture, n: u128) -> crate::StoredDraft {
                 content_id: None,
             }],
             server_copy: None,
+            kept_original: None,
             now: D * 1000,
         })
         .await
@@ -771,6 +772,7 @@ async fn a_draft_survives_a_store_that_was_never_closed() {
             quote_text: None,
             attachments: Vec::new(),
             server_copy: None,
+            kept_original: None,
             now: D * 1000,
         })
         .await
@@ -950,6 +952,12 @@ fn expected() -> Vec<(
             "draft by message id",
             compose::DRAFT_BY_MESSAGE_ID.to_owned(),
             vec!["SEARCH d USING INDEX draft_msgid (account_id=? AND message_id_hdr=?)"],
+            None,
+        ),
+        (
+            "draft by its kept original",
+            compose::DRAFT_BY_KEPT_ORIGINAL.to_owned(),
+            vec!["SEARCH d USING INDEX draft_kept_original (account_id=? AND kept_original=?)"],
             None,
         ),
         (

@@ -190,6 +190,10 @@ export const de: Translation = {
       confirm: "Verwerfen",
       cancel: "Weiter bearbeiten",
     },
+    originalKept: {
+      title: "Der ursprüngliche Entwurf bleibt unverändert",
+      body: "Diesen Entwurf hat ein anderes Programm geschrieben, und die App konnte ihn nicht vollständig übernehmen: Er enthält Teile, die der Editor nicht zeigen kann, etwa ein Bild aus dem Netz, oder keine Nachrichten-ID. Deshalb bleibt das Original genau so in den Entwürfen, und deine Fassung wird daneben als eigener Entwurf gesichert.",
+    },
     frozen: {
       title: "Diese Nachricht wartet auf das Senden.",
       body: "Solange sie im Ausgang liegt, lässt sie sich nicht ändern. Brich das Senden ab, um sie wieder zu bearbeiten.",

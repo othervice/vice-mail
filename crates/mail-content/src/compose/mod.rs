@@ -22,6 +22,8 @@ mod paste;
 mod reply;
 
 #[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
 mod tests;
 
 pub use address::{new_message_id, normalize_email};
@@ -30,8 +32,8 @@ pub use build::{
     build_message,
 };
 pub use html::{
-    MAX_CONTENT_ID_CHARS, editor_html, inline_image_ids, is_valid_content_id, mail_html,
-    text_to_editor_html,
+    ForeignDraftHtml, MAX_CONTENT_ID_CHARS, editor_html, foreign_draft_html, inline_image_ids,
+    is_valid_content_id, mail_html, text_to_editor_html,
 };
 pub use mdn::{
     DispositionReport, ReceiptRequest, ReceivedReport, is_receipt, parse_report, receipt_request,

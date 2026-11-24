@@ -45,10 +45,10 @@ use mail_model::{
     ComposeIdentity, ComposeSettings, ContactSuggestion, CoreError, CoreEvent, Draft, DraftError,
     DraftFile, DraftId, DraftKind, DraftServerState, DraftState, DraftSummary, DraftUpdate,
     IdentityId, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
-    MAX_DRAFT_BODY_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS, MailboxRole,
-    MessageBody, MessageId, NewDraft, OperationId, OperationPayload, OriginalRef, OutgoingMail,
-    QuoteLanguage, QuotePosition, SendJob, SendPhase, SentCopyMode, ServerCopy, TextSegment,
-    UnclearDecision,
+    MAX_DRAFT_BODY_BYTES, MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS,
+    MAX_SUBJECT_CHARS, MailboxRole, MessageBody, MessageId, NewDraft, OperationId,
+    OperationPayload, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition, SendJob, SendPhase,
+    SentCopyMode, ServerCopy, TextSegment, UnclearDecision,
 };
 use mail_store::{DraftContent, GLOBAL_SCOPE, NewDraftRow, Store, StoredDraft};
 use tokio::sync::{Notify, broadcast};
@@ -540,6 +540,7 @@ impl<C: Connector> Compose<C> {
             outgoing: draft.outgoing,
             archive_original: draft.archive_original,
             request_read_receipt: draft.request_receipt,
+            original_kept: draft.kept_original.is_some(),
             created_at: draft.created_at,
             updated_at: draft.updated_at,
         })
@@ -719,6 +720,7 @@ impl<C: Connector> Compose<C> {
             quote_text: None,
             attachments: Vec::new(),
             server_copy: None,
+            kept_original: None,
             now: now_ms(),
         };
         Ok(store.create_draft(row).await?)
@@ -804,6 +806,7 @@ impl<C: Connector> Compose<C> {
             quote_text: None,
             attachments: Vec::new(),
             server_copy: None,
+            kept_original: None,
             now: now_ms(),
         };
         Ok(store.create_draft(row).await?)
@@ -1024,6 +1027,7 @@ impl<C: Connector> Compose<C> {
             quote_text: (!as_attachment).then(|| prepared.text.clone()),
             attachments,
             server_copy: None,
+            kept_original: None,
             now: now_ms(),
         };
         Ok(store.create_draft(row).await?)
@@ -1077,9 +1081,14 @@ impl<C: Connector> Compose<C> {
     }
 
     /// Opens a message of the Drafts folder: the app's own draft with that Message-ID if there
-    /// is one, otherwise a new local draft made from it (also from other programs, as far as
-    /// the content allows: text, HTML through the allowlist, attachments). Saving it replaces
-    /// the server copy (by its Message-ID).
+    /// is one, otherwise a new local draft made from it (also from other programs: text, HTML
+    /// through the allowlist with the draft's own inline images, attachments).
+    ///
+    /// If the draft can be taken over completely, it keeps its Message-ID and saving replaces
+    /// the server copy. If not (an image from the web, a part the editor cannot show, a message
+    /// stored only in part or damaged, no Message-ID), the copy in the folder is never touched:
+    /// the draft gets a Message-ID of its own, is saved next to it, and says so
+    /// (`Draft::original_kept`); opening that copy again finds this draft.
     pub(crate) async fn open_from_message(&self, message: MessageId) -> Result<Draft, CoreError> {
         let store = &self.inner.store;
         let summary = store
@@ -1087,12 +1096,17 @@ impl<C: Connector> Compose<C> {
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("message {message}")))?;
         let account = summary.account_id;
-        if let Some(id) = &summary.message_id_header
-            && let Some(draft) = store.draft_for_message(account, id.clone()).await?
-        {
-            return self.info(draft).await;
+        if let Some(id) = &summary.message_id_header {
+            if let Some(draft) = store.draft_for_message(account, id.clone()).await? {
+                return self.info(draft).await;
+            }
+            if let Some(draft) = store.draft_for_kept_original(account, id.clone()).await? {
+                return self.info(draft).await;
+            }
         }
         let (raw, text) = self.original_raw(message).await?;
+        // Only part of the message could be had: what is missing would be lost.
+        let mut lossy = raw.is_none();
         let raw = match raw {
             Some(raw) => raw,
             None => synthetic_original(&summary, text.as_deref().unwrap_or("")),
@@ -1100,6 +1114,10 @@ impl<C: Connector> Compose<C> {
         let identities = store.identities(account).await?;
         let raw_for_work = raw.clone();
         let parsed = blocking(move || mail_content::parse(&raw_for_work)).await?;
+        lossy |= parsed
+            .problems
+            .iter()
+            .any(|p| !matches!(p, mail_content::ParseProblem::InvalidDate));
         let headers = &parsed.headers;
         let identity = mail_content::choose_identity(&identities, headers, &[])
             .map(|i| i.id)
@@ -1114,38 +1132,77 @@ impl<C: Connector> Compose<C> {
             .find(|i| i.id == identity)
             .map(|i| i.email.clone())
             .unwrap_or_default();
-        let message_id_header = kept_id
-            .clone()
-            .unwrap_or_else(|| mail_content::new_message_id(&sender_email, random_bytes()));
-        // The copy in the folder is replaced by the first save, if it is identifiable by its
-        // Message-ID (a copy without one stays; it is not the app's to delete).
-        let server_copy = match &kept_id {
-            Some(kept) => store
-                .message_locations(message)
-                .await?
-                .into_iter()
-                .filter(|l| l.selectable)
-                .find_map(|l| {
-                    Some(ServerCopy {
-                        mailbox: mail_model::TargetMailbox {
-                            mailbox_id: l.mailbox_id,
-                            name: l.mailbox_name.clone(),
-                        },
-                        uid_validity: l.uid_validity?,
-                        uid: l.uid,
-                        message_id_header: kept.clone(),
-                    })
-                }),
-            None => None,
+
+        // The draft's own inline images the editor can show keep their part: a raster image
+        // within the size limit. Ids other programs write that the editor does not accept (or
+        // the reader's own for unnamed body images) get a new one in the sender's domain.
+        let domain = inline::content_id_domain(&sender_email);
+        let mut images: HashMap<String, String> = HashMap::new();
+        let mut candidates: HashMap<String, &mail_content::InlinePart> = HashMap::new();
+        for part in &parsed.inline {
+            let fits = usize::try_from(MAX_INLINE_IMAGE_BYTES)
+                .is_ok_and(|max| part.bytes.len() <= max)
+                && inline::TYPES.contains(&part.mime);
+            if !fits || images.contains_key(&part.content_id) {
+                continue;
+            }
+            // The reader names body images without a Content-ID itself; only a header's id
+            // is the draft's own.
+            let own = mail_content::is_valid_content_id(&part.content_id)
+                && parsed.attachments.iter().any(|a| {
+                    a.part_id == part.part_id && a.content_id.as_deref() == Some(&part.content_id)
+                });
+            let content_id = if own {
+                part.content_id.clone()
+            } else {
+                format!("{:032x}@{domain}", random_u128())
+            };
+            images.insert(part.content_id.clone(), content_id);
+            candidates.insert(part.content_id.clone(), part);
+        }
+        let (format, body_html, body_text, shown) = match &parsed.html {
+            Some(html) => {
+                let html = html.clone();
+                let map = images.clone();
+                let converted =
+                    blocking(move || mail_content::foreign_draft_html(&html, &map)).await?;
+                lossy |= converted.dropped > 0;
+                (
+                    ComposeFormat::Html,
+                    converted.editor_html,
+                    String::new(),
+                    converted.shown,
+                )
+            }
+            None => (
+                ComposeFormat::Text,
+                String::new(),
+                parsed.display_text().into_owned(),
+                Vec::new(),
+            ),
         };
+        let shown_parts: Vec<&mail_content::InlinePart> = shown
+            .iter()
+            .filter_map(|original| candidates.get(original).copied())
+            .collect();
+        let inline_part_ids: Vec<u32> = shown_parts.iter().map(|p| p.part_id).collect();
+
         let lock = self.inner.outbox.files_lock();
         let held = lock.lock().await;
         let mut attachments = Vec::new();
-        for (n, part) in parsed.attachments.iter().enumerate() {
+        let mut next = 0u32;
+        for part in &parsed.attachments {
+            // An inline image the HTML shows is a part of its own below, not an attachment.
+            if inline_part_ids.contains(&part.part_id) {
+                continue;
+            }
             let Some(bytes) = mail_content::attachment_bytes(&raw, part.part_id) else {
+                // Cannot be copied: the draft would lose it, so the original stays.
+                lossy = true;
                 continue;
             };
-            let file_id = (n + 1).to_string();
+            next += 1;
+            let file_id = next.to_string();
             let root = self.inner.root.clone();
             let draft = id.clone();
             let fid = file_id.clone();
@@ -1162,17 +1219,63 @@ impl<C: Connector> Compose<C> {
                 content_id: None,
             });
         }
-        let (format, body_html, body_text) = match &parsed.html {
-            Some(html) => {
-                let html = html.clone();
-                let editor = blocking(move || mail_content::editor_html(&html)).await?;
-                (ComposeFormat::Html, editor, String::new())
-            }
-            None => (
-                ComposeFormat::Text,
-                String::new(),
-                parsed.display_text().into_owned(),
-            ),
+        for (n, part) in shown_parts.iter().enumerate() {
+            let Some(content_id) = images.get(&part.content_id).cloned() else {
+                continue;
+            };
+            next += 1;
+            let file_id = next.to_string();
+            let bytes = part.bytes.to_vec();
+            let root = self.inner.root.clone();
+            let draft = id.clone();
+            let fid = file_id.clone();
+            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+            let sha256 =
+                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
+            let file_name = parsed
+                .attachments
+                .iter()
+                .find(|a| a.part_id == part.part_id)
+                .map(|a| a.file_name.clone())
+                .unwrap_or_else(|| {
+                    let extension = part.mime.strip_prefix("image/").unwrap_or("png");
+                    format!("image-{}.{extension}", n + 1)
+                });
+            attachments.push(DraftFile {
+                id: file_id.clone(),
+                file_name,
+                mime: part.mime.to_owned(),
+                size,
+                sha256,
+                file: files::attachment_path(&id, &file_id),
+                content_id: Some(content_id),
+            });
+        }
+        let keep_original = lossy || kept_id.is_none();
+        let message_id_header = match (&kept_id, keep_original) {
+            (Some(kept), false) => kept.clone(),
+            _ => mail_content::new_message_id(&sender_email, random_bytes()),
+        };
+        // The copy in the folder is replaced by the first save when the draft took it over
+        // completely and it is identifiable by its Message-ID; otherwise it stays.
+        let server_copy = match (&kept_id, keep_original) {
+            (Some(kept), false) => store
+                .message_locations(message)
+                .await?
+                .into_iter()
+                .filter(|l| l.selectable)
+                .find_map(|l| {
+                    Some(ServerCopy {
+                        mailbox: mail_model::TargetMailbox {
+                            mailbox_id: l.mailbox_id,
+                            name: l.mailbox_name.clone(),
+                        },
+                        uid_validity: l.uid_validity?,
+                        uid: l.uid,
+                        message_id_header: kept.clone(),
+                    })
+                }),
+            _ => None,
         };
         let in_reply_to = headers.in_reply_to.first().cloned();
         let row = NewDraftRow {
@@ -1208,11 +1311,17 @@ impl<C: Connector> Compose<C> {
             quote_text: None,
             attachments,
             server_copy,
+            kept_original: keep_original.then(|| kept_id.clone().unwrap_or_default()),
             now: now_ms(),
         };
         let draft = store.create_draft(row).await?;
         drop(held);
-        tracing::info!(%account, "draft opened from the Drafts folder");
+        tracing::info!(
+            %account,
+            inline_images = shown_parts.len(),
+            original_kept = keep_original,
+            "draft opened from the Drafts folder"
+        );
         self.drafts_changed(account, vec![draft.id.clone()], Vec::new());
         self.info(draft).await
     }

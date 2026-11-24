@@ -51,7 +51,7 @@ macro_rules! select_drafts {
                     EXISTS (SELECT 1 FROM operation o
                              WHERE o.draft_id = d.id AND o.kind = 'append'
                                AND o.state IN ('queued', 'in_flight')),
-                    d.signature_uuid, d.archive_original, d.request_receipt
+                    d.signature_uuid, d.archive_original, d.request_receipt, d.kept_original
              FROM draft d ",
             $rest
         )
@@ -62,6 +62,10 @@ pub(crate) const DRAFT_BY_UUID: &str = select_drafts!("WHERE d.uuid = ?1");
 
 pub(crate) const DRAFT_BY_MESSAGE_ID: &str =
     select_drafts!("WHERE d.account_id = ?1 AND d.message_id_hdr = ?2");
+
+/// The draft made from a foreign original that stays in the Drafts folder (`kept_original`).
+pub(crate) const DRAFT_BY_KEPT_ORIGINAL: &str =
+    select_drafts!("WHERE d.account_id = ?1 AND d.kept_original = ?2 ORDER BY d.id LIMIT 1");
 
 /// The account's drafts, newest change first (`draft_account`, read backwards).
 pub(crate) const DRAFTS_OF_ACCOUNT: &str =
@@ -79,9 +83,10 @@ pub(crate) const INSERT_DRAFT: &str = "
                        bcc_addrs, subject, format, body_html, body_text, quote_html, quote_text,
                        include_quote, quote_position, include_signature, attachments, state,
                        revision, server_revision, server_mailbox_id, server_mailbox,
-                       server_uidvalidity, server_uid, created_at, updated_at, signature_uuid)
+                       server_uidvalidity, server_uid, created_at, updated_at, signature_uuid,
+                       kept_original)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-            ?20, ?21, ?22, 'editing', 1, ?23, ?24, ?25, ?26, ?27, ?28, ?28, ?29)";
+            ?20, ?21, ?22, 'editing', 1, ?23, ?24, ?25, ?26, ?27, ?28, ?28, ?29, ?30)";
 
 pub(crate) const UPDATE_DRAFT: &str = "
     UPDATE draft
@@ -221,6 +226,7 @@ fn draft_from_row(r: &Row<'_>) -> rusqlite::Result<StoredDraft> {
             .and_then(mail_model::SignatureId::parse),
         archive_original: r.get(36)?,
         request_receipt: r.get(37)?,
+        kept_original: r.get(38)?,
     })
 }
 
@@ -251,6 +257,19 @@ pub(crate) fn draft_for_message(
     let row = accounts::row_id(conn, account)?;
     Ok(conn
         .prepare_cached(DRAFT_BY_MESSAGE_ID)?
+        .query_row(params![row, message_id_header], draft_from_row)
+        .optional()?)
+}
+
+/// See [`crate::Store::draft_for_kept_original`].
+pub(crate) fn draft_for_kept_original(
+    conn: &Connection,
+    account: AccountId,
+    message_id_header: &str,
+) -> Result<Option<StoredDraft>, StoreError> {
+    let row = accounts::row_id(conn, account)?;
+    Ok(conn
+        .prepare_cached(DRAFT_BY_KEPT_ORIGINAL)?
         .query_row(params![row, message_id_header], draft_from_row)
         .optional()?)
 }
@@ -346,6 +365,7 @@ pub(crate) fn insert_draft(
                 .signature
                 .as_ref()
                 .map(mail_model::SignatureId::as_str),
+            new.kept_original,
         ])
         .map_err(StoreError::sqlite("insert draft"))?;
     require_draft(conn, &new.id)

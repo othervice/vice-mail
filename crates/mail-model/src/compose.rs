@@ -300,6 +300,11 @@ pub struct Draft {
     /// Stage 16: the message asks for a read receipt (`Disposition-Notification-To` with the
     /// sending identity's address, RFC 8098). The recipient decides whether to send one.
     pub request_read_receipt: bool,
+    /// Made from a draft another program saved in the Drafts folder, which the app could not
+    /// take over completely (an image from the web, a part the editor cannot show, a message
+    /// stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
+    /// and this draft is saved next to it with a Message-ID of its own. The composer says so.
+    pub original_kept: bool,
     /// Unix milliseconds.
     #[specta(type = Number)]
     pub created_at: i64,

@@ -193,6 +193,11 @@ export const en = {
       confirm: "Discard",
       cancel: "Keep editing",
     },
+    // Audit 24.11.2026: a draft of another program that stays in the Drafts folder as it was.
+    originalKept: {
+      title: "The original draft stays unchanged",
+      body: "This draft was written in another program, and the app could not take it over completely: it has parts the editor cannot show, such as an image from the web, or no message ID. So the original stays in Drafts exactly as it was, and your version is saved next to it as a separate draft.",
+    },
     frozen: {
       title: "This message is waiting to be sent.",
       body: "It cannot be changed while it is in the outbox. Cancel sending to edit it again.",

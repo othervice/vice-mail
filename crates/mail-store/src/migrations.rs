@@ -42,6 +42,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0016_account_server_change.sql")),
     // Stage 14, block D: JMAP accounts and the JMAP adapter's UID map (decision 0041).
     M::up(include_str!("../migrations/0017_jmap.sql")),
+    // Audit 24.11.2026: drafts of other programs whose original stays in the Drafts folder.
+    M::up(include_str!("../migrations/0018_draft_kept_original.sql")),
 ];
 
 /// All migrations this build knows.

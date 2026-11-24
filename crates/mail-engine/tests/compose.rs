@@ -1729,6 +1729,219 @@ async fn a_draft_of_another_program_opens_and_its_server_copy_is_replaced() {
     clean_server(env).await;
 }
 
+/// A draft as Apple Mail saves it: HTML in `multipart/related` with an inline image; `extra`
+/// goes into the HTML body.
+fn foreign_with_image(env: &TestEnv, subject: &str, message_id: &str, extra: &str) -> String {
+    format!(
+        "From: Bob <{bob}>\r\n\
+         To: Alice <{alice}>\r\n\
+         Subject: {subject}\r\n\
+         Message-ID: <{message_id}>\r\n\
+         Date: Tue, 24 Nov 2026 07:00:00 +0100\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: multipart/related; boundary=\"rel\"; type=\"text/html\"\r\n\
+         \r\n\
+         --rel\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\
+         \r\n\
+         <html><body><p>Hallo Alice, das Diagramm:</p>\
+         <p><img src=\"cid:chart@other.example\" width=\"120\" alt=\"Diagramm\"></p>{extra}</body></html>\r\n\
+         --rel\r\n\
+         Content-Type: image/png; name=\"chart.png\"\r\n\
+         Content-Disposition: inline; filename=\"chart.png\"\r\n\
+         Content-ID: <chart@other.example>\r\n\
+         Content-Transfer-Encoding: base64\r\n\
+         \r\n\
+         {image}\r\n\
+         --rel--\r\n",
+        bob = env.bob.address,
+        alice = env.alice.address,
+        image = base64_lines(PNG),
+    )
+}
+
+async fn append_foreign(env: &TestEnv, raw: &str) {
+    let mut imap = admin_session(env, &env.bob).await;
+    let reply = imap
+        .raw_command(
+            &format!(
+                "APPEND \"Drafts\" (\\Draft \\Seen) {{{}+}}\r\n{raw}",
+                raw.len()
+            ),
+            |_| false,
+        )
+        .await
+        .expect("append the foreign draft");
+    assert!(reply.ok, "{}", reply.text);
+    imap.logout().await.ok();
+}
+
+/// Audit 24.11.2026: the inline image of another program's draft survives opening, editing,
+/// saving (the new version replaces the original and carries the image as an inline part of
+/// `multipart/related`) and sending (alice receives it inline). A draft with an image from the
+/// web cannot be taken over completely: its original stays untouched in Drafts, the app's
+/// version is saved next to it under a Message-ID of its own.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn inline_images_of_a_foreign_draft_survive_saving_and_sending() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let run = run_id();
+    let subject = format!("{MARK}Diagramm {run}");
+    let edited = format!("{MARK}Diagramm {run} bearbeitet");
+    let message_id = format!("chart-{run}@other.example");
+    append_foreign(env, &foreign_with_image(env, &subject, &message_id, "")).await;
+
+    let item = bed.arrived(bed.bob, MailboxRole::Drafts, &subject).await;
+    let draft = bed
+        .core
+        .open_draft_from_message(item.id)
+        .await
+        .expect("open the foreign draft");
+    assert!(!draft.original_kept);
+    assert!(
+        draft.body_html.contains("cid:chart@other.example"),
+        "{}",
+        draft.body_html
+    );
+    assert_eq!(draft.attachments.len(), 1);
+    assert_eq!(
+        draft.attachments[0].content_id.as_deref(),
+        Some("chart@other.example")
+    );
+    let body = format!("<p>Hallo Alice, das neue Diagramm:</p>{}", draft.body_html);
+    bed.write(
+        &draft,
+        vec![person("Alice", &env.alice.address)],
+        Vec::new(),
+        &edited,
+        &body,
+    )
+    .await;
+    bed.core.close_draft(draft.id.clone()).await.expect("close");
+    until("only the edited version in Drafts", || async {
+        let found = copies(env, &env.bob, "Drafts", &message_id).await;
+        let subjects: Vec<String> = found
+            .iter()
+            .filter_map(|(_, raw)| mail_content::parse(raw).headers.subject)
+            .collect();
+        (subjects == vec![edited.clone()]).then_some(())
+    })
+    .await;
+    let found = copies(env, &env.bob, "Drafts", &message_id).await;
+    let saved = mail_content::parse(&found[0].1);
+    assert!(
+        String::from_utf8_lossy(&found[0].1).contains("multipart/related"),
+        "the saved version keeps the image inline"
+    );
+    assert!(
+        saved.html.as_deref().is_some_and(
+            |h| h.contains("das neue Diagramm") && h.contains("cid:chart@other.example")
+        ),
+        "{:?}",
+        saved.html
+    );
+    assert_eq!(saved.inline.len(), 1);
+    assert_eq!(&*saved.inline[0].bytes, PNG, "the same image");
+
+    // Sent: alice receives the image inline.
+    let mail = bed
+        .core
+        .send_draft(draft.id.clone(), uuid::Uuid::new_v4().to_string())
+        .await
+        .expect("send");
+    bed.sent(bed.bob, mail.operation_id).await;
+    let received = bed.arrived(bed.alice, MailboxRole::Inbox, &edited).await;
+    let raw = until("alice's copy", || async {
+        copies(env, &env.alice, "INBOX", &message_id)
+            .await
+            .into_iter()
+            .next()
+    })
+    .await;
+    let parsed = mail_content::parse(&raw.1);
+    assert_eq!(parsed.inline.len(), 1, "{:?}", received.subject);
+    assert_eq!(parsed.inline[0].content_id, "chart@other.example");
+    assert_eq!(&*parsed.inline[0].bytes, PNG);
+    bed.settled(bed.bob).await;
+
+    // An image from the web: the original stays as it is, the app's version is saved beside it.
+    let web_subject = format!("{MARK}Logo {run}");
+    let web_id = format!("logo-{run}@other.example");
+    let web_raw = foreign_with_image(
+        env,
+        &web_subject,
+        &web_id,
+        "<p><img src=\"https://cdn.example/logo.png\"></p>",
+    );
+    append_foreign(env, &web_raw).await;
+    let original = copies(env, &env.bob, "Drafts", &web_id).await;
+    assert_eq!(original.len(), 1);
+    let item = bed
+        .arrived(bed.bob, MailboxRole::Drafts, &web_subject)
+        .await;
+    let kept = bed
+        .core
+        .open_draft_from_message(item.id)
+        .await
+        .expect("open the incomplete draft");
+    assert!(kept.original_kept);
+    let changed = format!("{MARK}Logo {run} bearbeitet");
+    bed.write(
+        &kept,
+        vec![person("Alice", &env.alice.address)],
+        Vec::new(),
+        &changed,
+        &kept.body_html,
+    )
+    .await;
+    bed.core.close_draft(kept.id.clone()).await.expect("close");
+    bed.settled(bed.bob).await;
+    until("the app's version next to the original", || async {
+        let folder = bed
+            .core
+            .list_messages(
+                bed.core
+                    .list_mailboxes(bed.bob)
+                    .await
+                    .ok()?
+                    .into_iter()
+                    .find(|m| m.role == MailboxRole::Drafts)?
+                    .id,
+                None,
+                100,
+            )
+            .await
+            .ok()?;
+        folder
+            .items
+            .iter()
+            .any(|i| i.subject == changed)
+            .then_some(())
+    })
+    .await;
+    let still = copies(env, &env.bob, "Drafts", &web_id).await;
+    assert_eq!(still.len(), 1, "the original is not replaced");
+    assert_eq!(
+        sha256(&still[0].1),
+        sha256(&original[0].1),
+        "the original is untouched"
+    );
+    bed.core
+        .delete_draft(kept.id.clone())
+        .await
+        .expect("discard");
+    bed.settled(bed.bob).await;
+    assert_eq!(
+        copies(env, &env.bob, "Drafts", &web_id).await.len(),
+        1,
+        "discarding the app's version leaves the original"
+    );
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}
+
 /// Stage 16 (decision 0033, acceptance): a read-receipt request never leads to an SMTP
 /// submission without the user's answer. bob asks alice for a receipt; alice's core receives
 /// and shows the message, opens it again, and the SMTP wire tap sees no new `MAIL FROM`. Only

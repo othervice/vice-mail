@@ -55,13 +55,14 @@ pub use classify::{
     apply_user_rules, classify, classify_automatic, is_no_reply_address, normalize_key,
 };
 pub use compose::{
-    Attachment, BuiltMessage, ComposeError, DispositionReport, InlineImage, MAX_CONTENT_ID_CHARS,
-    MAX_REFERENCES, Original, OutgoingMessage, PastedHtml, PreparedDraft, QuoteLanguage,
-    QuoteOptions, ReceiptRequest, ReceivedReport, ReplyKind, build_draft_message, build_message,
-    choose_identity, clean_pasted_html, editor_html, forward_subject, inline_image_ids, is_receipt,
-    is_valid_content_id, mail_html, new_message_id, normalize_email, parse_report, prepare_forward,
-    prepare_reply, receipt_request, receipt_subject, receipt_text, reply_recipients,
-    reply_references, reply_subject, strip_subject_prefixes, text_to_editor_html,
+    Attachment, BuiltMessage, ComposeError, DispositionReport, ForeignDraftHtml, InlineImage,
+    MAX_CONTENT_ID_CHARS, MAX_REFERENCES, Original, OutgoingMessage, PastedHtml, PreparedDraft,
+    QuoteLanguage, QuoteOptions, ReceiptRequest, ReceivedReport, ReplyKind, build_draft_message,
+    build_message, choose_identity, clean_pasted_html, editor_html, foreign_draft_html,
+    forward_subject, inline_image_ids, is_receipt, is_valid_content_id, mail_html, new_message_id,
+    normalize_email, parse_report, prepare_forward, prepare_reply, receipt_request,
+    receipt_subject, receipt_text, reply_recipients, reply_references, reply_subject,
+    strip_subject_prefixes, text_to_editor_html,
 };
 pub use contacts::{
     Contact, ContactAddress, ContactBook, ContactError, ContactMatch, ContactMerge, Direction,

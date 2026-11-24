@@ -273,6 +273,7 @@ mod tests {
                 quote_text: None,
                 attachments: Vec::new(),
                 server_copy: None,
+                kept_original: None,
                 now: T - 60 * MIN,
             })
             .await

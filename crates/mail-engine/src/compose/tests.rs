@@ -1176,4 +1176,234 @@ Disposition: manual-action/MDN-sent-manually; displayed\r\n\r\n--b1--\r\n"
         assert_eq!(about.request, None);
         assert_eq!(bed.sender.attempts(), 0, "still nothing sent");
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Audit 24.11.2026: inline images of drafts written by other programs.
+
+    /// A 1×1 PNG, as base64 in a message and as bytes.
+    const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    fn png() -> Vec<u8> {
+        let raw = format!(
+            "Subject: x\r\nMIME-Version: 1.0\r\nContent-Type: image/png\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\n{PNG_BASE64}\r\n"
+        );
+        let part = mail_content::parse(raw.as_bytes())
+            .attachments
+            .first()
+            .map(|a| a.part_id)
+            .expect("part");
+        mail_content::attachment_bytes(raw.as_bytes(), part).expect("png bytes")
+    }
+
+    /// A draft as Apple Mail saves it: text, and HTML in `multipart/related` with an inline
+    /// image (`cid`); `extra` goes into the HTML body.
+    fn foreign_with_image(subject: &str, serial: u64, cid: &str, extra: &str) -> Vec<u8> {
+        format!(
+            "From: Alice <alice@fake.test>\r\n\
+             To: Bob <bob@friends.example>\r\n\
+             Subject: {subject}\r\n\
+             Message-ID: <{serial}@fake.test>\r\n\
+             Date: Mon, 23 Nov 2026 07:00:00 +0100\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: multipart/alternative; boundary=\"alt\"\r\n\
+             \r\n\
+             --alt\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\
+             \r\n\
+             Hello Bob, see the chart.\r\n\
+             --alt\r\n\
+             Content-Type: multipart/related; boundary=\"rel\"; type=\"text/html\"\r\n\
+             \r\n\
+             --rel\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             \r\n\
+             <html><body><p>Hello Bob, see the chart:</p>\
+             <p><img src=\"cid:{cid}\" width=\"120\" alt=\"Chart\"></p>{extra}</body></html>\r\n\
+             --rel\r\n\
+             Content-Type: image/png; name=\"chart.png\"\r\n\
+             Content-Disposition: inline; filename=\"chart.png\"\r\n\
+             Content-ID: <{cid}>\r\n\
+             Content-Transfer-Encoding: base64\r\n\
+             \r\n\
+             {PNG_BASE64}\r\n\
+             --rel--\r\n\
+             --alt--\r\n"
+        )
+        .into_bytes()
+    }
+
+    /// The image of a foreign draft stays an inline part from opening to sending: the editor
+    /// shows it (`cid:` with the part's bytes behind it), it is no attachment, the draft takes
+    /// over the copy in the folder, and the sent message carries it in `multipart/related`.
+    #[tokio::test]
+    async fn inline_images_of_a_foreign_draft_stay_inline_through_editing_and_sending() {
+        let server = drafts_server();
+        put_draft(
+            &server,
+            7101,
+            foreign_with_image("Chart for Monday", 7101, "chart@other.example", ""),
+        );
+        let bed = Bed::on(server).await;
+        let message = bed.synced("Chart for Monday").await;
+        let draft = bed
+            .core
+            .open_draft_from_message(message)
+            .await
+            .expect("open");
+        assert!(!draft.original_kept, "taken over completely");
+        assert_eq!(
+            draft.server,
+            DraftServerState::Saved,
+            "the folder copy is its own"
+        );
+        assert!(
+            draft
+                .body_html
+                .contains("<img src=\"cid:chart@other.example\" alt=\"Chart\" width=\"120\">"),
+            "{}",
+            draft.body_html
+        );
+        assert_eq!(draft.attachments.len(), 1, "{:?}", draft.attachments);
+        let image = &draft.attachments[0];
+        assert_eq!(image.content_id.as_deref(), Some("chart@other.example"));
+        assert_eq!(image.mime, "image/png");
+        assert_eq!(image.file_name, "chart.png");
+        assert_eq!(image.size, png().len() as u64);
+        let shown = bed
+            .core
+            .inline_image_data(draft.id.clone(), image.id.clone())
+            .await
+            .expect("the editor's image");
+        assert!(shown.starts_with("data:image/png;base64,"), "{shown}");
+
+        // Edited around the image, then sent.
+        let edited = format!("<p>Edited first.</p>{}", draft.body_html);
+        bed.core
+            .save_draft(
+                draft.id.clone(),
+                DraftUpdate {
+                    identity_id: draft.identity_id,
+                    to: draft.to.clone(),
+                    cc: Vec::new(),
+                    bcc: Vec::new(),
+                    subject: draft.subject.clone(),
+                    format: ComposeFormat::Html,
+                    body_html: edited,
+                    body_text: String::new(),
+                    include_quote: false,
+                    quote_position: QuotePosition::Above,
+                    include_signature: false,
+                    signature_id: None,
+                },
+            )
+            .await
+            .expect("save");
+        bed.core
+            .send_draft(draft.id.clone(), "req-inline-foreign".into())
+            .await
+            .expect("send");
+        let sent = bed
+            .until("the message submitted", || async {
+                bed.sender
+                    .sent
+                    .lock()
+                    .expect("sent")
+                    .iter()
+                    .find(|m| String::from_utf8_lossy(m).contains("Chart for Monday"))
+                    .cloned()
+            })
+            .await;
+        let text = String::from_utf8_lossy(&sent);
+        assert!(text.contains("multipart/related"), "{text}");
+        let parsed = mail_content::parse(&sent);
+        let html = parsed.html.clone().unwrap_or_default();
+        assert!(
+            html.contains("Edited first.") && html.contains("cid:chart@other.example"),
+            "{html}"
+        );
+        assert_eq!(parsed.inline.len(), 1);
+        assert_eq!(parsed.inline[0].content_id, "chart@other.example");
+        assert_eq!(&*parsed.inline[0].bytes, png().as_slice(), "the same image");
+        assert!(
+            parsed.attachments.iter().all(|a| a.inline),
+            "no attachment besides the inline image: {:?}",
+            parsed.attachments
+        );
+    }
+
+    /// What the editor cannot keep (here an image from the web) leaves the original alone: the
+    /// draft gets a Message-ID of its own and no server copy, says so, keeps the inline image
+    /// it can show, and opening the original again finds the same draft. Discarding it leaves
+    /// the original in the folder. An id another program writes (`ii_…`, no `@`) gets a new one.
+    #[tokio::test]
+    async fn a_foreign_draft_the_editor_cannot_keep_completely_leaves_its_original_alone() {
+        let server = drafts_server();
+        let uid = put_draft(
+            &server,
+            7102,
+            foreign_with_image(
+                "Logo from the web",
+                7102,
+                "ii_lk3j4h5g0",
+                "<p><img src=\"https://cdn.example/logo.png\"></p>",
+            ),
+        );
+        let bed = Bed::on(server).await;
+        let store = bed.core.store_for_tests();
+        let message = bed.synced("Logo from the web").await;
+        let draft = bed
+            .core
+            .open_draft_from_message(message)
+            .await
+            .expect("open");
+        assert!(draft.original_kept);
+        assert_eq!(
+            draft.server,
+            DraftServerState::Pending,
+            "saved next to the original"
+        );
+        let stored = store
+            .draft(draft.id.clone())
+            .await
+            .expect("store")
+            .expect("draft");
+        assert!(stored.server_copy.is_none());
+        assert_ne!(stored.message_id_header, "7102@fake.test");
+        assert_eq!(stored.kept_original.as_deref(), Some("7102@fake.test"));
+        // The inline image it can show stays, under a valid id of the sender's domain.
+        let image = draft.attachments.first().expect("the inline image");
+        let content_id = image.content_id.clone().expect("inline");
+        assert!(
+            content_id.ends_with("@fake.test") && mail_content::is_valid_content_id(&content_id),
+            "{content_id}"
+        );
+        assert!(
+            draft.body_html.contains(&format!("cid:{content_id}")),
+            "{}",
+            draft.body_html
+        );
+        assert!(!draft.body_html.contains("cdn.example"));
+
+        let again = bed
+            .core
+            .open_draft_from_message(message)
+            .await
+            .expect("open again");
+        assert_eq!(again.id, draft.id, "the same draft, not another copy");
+        assert_eq!(
+            bed.core
+                .list_drafts(Some(bed.account))
+                .await
+                .expect("drafts")
+                .len(),
+            1
+        );
+        bed.core
+            .delete_draft(draft.id.clone())
+            .await
+            .expect("discard");
+        bed.settled().await;
+        assert!(bed.on_server(uid), "the original is never removed");
+    }
 }
