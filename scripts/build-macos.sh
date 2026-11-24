@@ -71,10 +71,12 @@ unset APPLE_SIGNING_IDENTITY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_
 # second full build (docs/INSTALL.md, system requirements).
 [[ "$(uname -m)" == arm64 ]] || fail "this script builds for Apple silicon and must run on it"
 
-[[ -f "$HOME/.cargo/env" ]] || fail "Rust is not installed (~/.cargo/env missing); see docs/SETUP.md"
-# shellcheck source=/dev/null
-. "$HOME/.cargo/env"
-command -v cargo >/dev/null || fail "cargo not found after loading ~/.cargo/env"
+# Rust from rustup (~/.cargo/env) or already on PATH (CI runners install it there).
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.cargo/env"
+fi
+command -v cargo >/dev/null || fail "Rust is not installed (no cargo on PATH, no ~/.cargo/env); see docs/SETUP.md"
 [[ -x /usr/bin/clang ]] || fail "Xcode command line tools missing: xcode-select --install"
 for tool in codesign hdiutil plutil shasum security ditto tar; do
   command -v "$tool" >/dev/null || fail "$tool missing (part of macOS)"

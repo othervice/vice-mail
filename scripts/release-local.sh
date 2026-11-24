@@ -58,9 +58,12 @@ target_dir="${CARGO_TARGET_DIR:-$repo/target}"
 
 # --- Preconditions ---------------------------------------------------------------------------
 
-[[ -f "$HOME/.cargo/env" ]] || fail "Rust is not installed (~/.cargo/env missing); see docs/SETUP.md"
-# shellcheck source=/dev/null
-. "$HOME/.cargo/env"
+# Rust from rustup (~/.cargo/env) or already on PATH (CI runners install it there).
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.cargo/env"
+fi
+command -v cargo >/dev/null || fail "Rust is not installed (no cargo on PATH, no ~/.cargo/env); see docs/SETUP.md"
 command -v node >/dev/null || fail "node missing: brew install node"
 command -v git >/dev/null || fail "git missing"
 [[ -f "$conf" ]] || fail "$conf not found"

@@ -256,51 +256,18 @@ after reading Apple's notes there: a revocation can also stop published builds f
 
 ## CI
 
-`.gitea/workflows/ci.yml` runs on the private Gitea until the move to GitHub (decision 0035):
+`.github/workflows/ci.yml` runs on GitHub's hosted runners, on macOS and on Windows
+(`macos-latest`, `windows-latest`): `scripts/check.sh` on every push to `main` and every pull
+request, both installers on tags `v*` and on a manual start ("Run workflow"), unsigned and without
+update signature, kept as run artifacts for 14 days. Publishing stays the manual step below.
+On Windows the installer is built natively, the MCP helper first, as `scripts/build-windows.sh`
+does it with cargo-xwin on the Mac.
 
-- every push to `main` and every pull request: `scripts/check.sh`;
-- a tag `v*` or a manual start ("Run workflow"): also both installers, unsigned, without update
-  signature and without the macOS start test, kept as the run's artifact `installers` for 14 days.
-  Publishing stays the manual step below.
-
-The runner is the build Mac itself, in host mode (no containers), so a job sees the same tools as
-`docs/SETUP.md` installs:
-
-| What | Where |
-|---|---|
-| Runner | Homebrew `gitea-runner`, started at login by `brew services start gitea-runner` |
-| Configuration | `/opt/homebrew/etc/gitea-runner/config.yaml` (label `macos-arm64:host`, one job at a time; `config.reference.yaml` next to it lists every option) |
-| Registration | `/opt/homebrew/var/lib/gitea-runner/.runner`, for this repository only |
-| Logs | `/opt/homebrew/var/log/gitea-runner.{log,err}`, job logs in `gitea-runner-jobs/` next to them (14 days) |
-| Build cache | `~/.cache/vice-mail-ci/target` (`CARGO_TARGET_DIR`) and `~/.cache/vice-mail-ci/xwin` (`XWIN_CACHE_DIR`) |
-
-Jobs run as the logged-in user and can reach that user's keychain. That is acceptable only
-because the repository is private and only its owner pushes to it. On GitHub, pull requests from
-others must never run on this machine: there, hosted macOS and Windows runners take over (stage
-15), and this runner is unregistered.
-
-To register again (for example after a new Gitea), take a token from the repository's settings
-(Actions → Runners → Create new runner) and run, in `/opt/homebrew/var/lib/gitea-runner`:
-
-```sh
-gitea-runner -c /opt/homebrew/etc/gitea-runner/config.yaml register --no-interactive \
-  --instance <gitea URL> --token <token> --name <runner name>
-brew services restart gitea-runner
-```
-
-If the disk runs low, `~/.cache/vice-mail-ci/target` can be deleted at any time; the next run
-rebuilds it.
-
-### After the move to GitHub
-
-`.github/workflows/ci.yml` is ready and does the same on GitHub's hosted runners, on macOS and on
-Windows (`macos-latest`, `windows-latest`): `scripts/check.sh` on every push to `main` and every
-pull request, both installers on tags and on a manual start (Windows built natively, the MCP
-helper first, as `scripts/build-windows.sh` does it with cargo-xwin). Gitea ignores
-`.github/workflows` as long as `.gitea/workflows` exists. It has not run yet: the first push to
-GitHub is its first test, and on Windows the first time the tests run on the real platform.
-After the move, delete `.gitea/workflows/` and unregister the runner on the build Mac
-(`brew services stop gitea-runner`, then remove it under the repository's Actions → Runners).
+Before the move to GitHub (23–24 Nov 2026) a Gitea Actions runner on the build Mac did the same
+for the private repository. It is retired: the workflow file is gone, Actions are off for the Gitea
+repository, and the runner is stopped (`brew services stop gitea-runner`; its configuration is in
+`/opt/homebrew/etc/gitea-runner/`). Pull requests from others must never run on the build Mac,
+which can reach the maintainer's keychain.
 
 ## Building a release
 

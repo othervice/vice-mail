@@ -53,10 +53,12 @@ export XWIN_ARCH=x86_64
 
 # --- Preconditions ---------------------------------------------------------------------------
 
-[[ -f "$HOME/.cargo/env" ]] || fail "Rust is not installed (~/.cargo/env missing); see docs/SETUP.md"
-# shellcheck source=/dev/null
-. "$HOME/.cargo/env"
-command -v cargo >/dev/null || fail "cargo not found after loading ~/.cargo/env"
+# Rust from rustup (~/.cargo/env) or already on PATH (CI runners install it there).
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.cargo/env"
+fi
+command -v cargo >/dev/null || fail "Rust is not installed (no cargo on PATH, no ~/.cargo/env); see docs/SETUP.md"
 rustup target list --installed 2>/dev/null | grep -qx "$target" ||
   fail "Rust target $target missing: rustup target add $target"
 cargo xwin --version >/dev/null 2>&1 ||
