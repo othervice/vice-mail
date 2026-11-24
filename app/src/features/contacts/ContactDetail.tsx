@@ -16,7 +16,7 @@ import {
   type CoreError,
   type MessageListItem,
 } from "../../services/ipc";
-import { openComposer } from "../../stores/composer";
+import { openComposer, useComposerStore } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
 import { useUiStore } from "../../stores/ui";
 import { Avatar } from "../accounts/Avatar";
@@ -106,7 +106,9 @@ function PictureArea({ contact, name }: { contact: ContactEntry; name: string })
   // from the shell's own drop event; the core reads the file, the page never does).
   const onDrop = useEffectEvent((paths: string[]) => {
     const path = paths[0];
-    if (path !== undefined) void load(() => contactsIpc.loadDroppedContactPicture(path));
+    // A composer open over the view takes the drop as an attachment.
+    if (path === undefined || useComposerStore.getState().session !== null) return;
+    void load(() => contactsIpc.loadDroppedContactPicture(path));
   });
   useEffect(() => {
     let active = true;

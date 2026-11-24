@@ -266,7 +266,7 @@ export function ContactsView() {
                 onChange={(event) => {
                   setAll(event.target.checked);
                 }}
-                className="size-4 accent-accent-fill"
+                className="size-4 shrink-0 accent-accent"
                 data-testid="contacts-show-all"
               />
               {t("contacts.view.showAutomated")}

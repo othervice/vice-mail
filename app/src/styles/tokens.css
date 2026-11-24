@@ -178,6 +178,8 @@
   --ui-avatar-large: 6rem;
   --ui-contacts-list-width: 22rem;
   --ui-cropper-size: 18rem;
+  /* Outside the cropper's circle the image is dimmed this much, in both themes. */
+  --ui-cropper-mask: rgb(0 0 0 / 0.5);
   --ui-dot: 0.5rem;
   /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
      width rows get more lines: three comfortable (sender and time, subject, preview), two compact

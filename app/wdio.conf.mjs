@@ -75,6 +75,10 @@ export const config = {
     "./tests/e2e/mcp-sync.e2e.mjs",
     "./tests/e2e/ai.e2e.mjs",
     "./tests/e2e/a11y.e2e.mjs",
+    // Stage 17, block B (decision 0050): contacts: search, a dropped picture, spam and undo. It
+    // appends three messages to the inbox and moves two to Junk and back, after the specs that
+    // count the seed.
+    "./tests/e2e/contacts.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.

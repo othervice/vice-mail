@@ -164,7 +164,7 @@ export function PictureEditor({ source, name, saving, onSave, onCancel }: Pictur
           <image href={source.dataUrl} x={0} y={0} width={width} height={height} />
         </svg>
         {/* The round avatar the picture becomes; outside it the image is dimmed. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_100vmax_var(--ui-scrim)] ring-2 ring-surface-raised" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_100vmax_var(--ui-cropper-mask)] ring-2 ring-surface-raised" />
       </div>
       <div className="flex w-(--ui-cropper-size) items-center gap-2">
         <button
