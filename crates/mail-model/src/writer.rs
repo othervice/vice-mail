@@ -154,6 +154,30 @@ pub trait MailWriter: MailBackend {
         role: Option<MailboxRole>,
     ) -> impl Future<Output = Result<String, BackendError>> + Send;
 
+    /// Audit 24.11.2026: `RENAME` of the mailbox with this wire name to the decoded path
+    /// `new_path` (the adapter encodes it; subfolders move along). Returns the new wire name. A
+    /// missing mailbox is [`BackendError::MailboxNotFound`]. The default fails with
+    /// [`BackendError::Unsupported`] (adapters that cannot rename yet: JMAP, test fakes).
+    fn rename_mailbox(
+        &mut self,
+        name: &str,
+        new_path: &str,
+    ) -> impl Future<Output = Result<String, BackendError>> + Send {
+        let _ = (name, new_path);
+        std::future::ready(Err(BackendError::Unsupported("RENAME".into())))
+    }
+
+    /// Audit 24.11.2026: `DELETE` of the mailbox with this wire name, with its messages. A
+    /// missing mailbox is [`BackendError::MailboxNotFound`]. The default fails with
+    /// [`BackendError::Unsupported`].
+    fn delete_mailbox(
+        &mut self,
+        name: &str,
+    ) -> impl Future<Output = Result<(), BackendError>> + Send {
+        let _ = name;
+        std::future::ready(Err(BackendError::Unsupported("DELETE".into())))
+    }
+
     /// Stage 5: `APPEND` of `message` to the mailbox with this wire name, with `flags` (system
     /// flags only: `\Seen`, `\Draft`). Returns APPENDUID when the server has UIDPLUS. A missing
     /// mailbox is [`BackendError::MailboxNotFound`]. The default fails with

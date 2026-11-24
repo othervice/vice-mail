@@ -302,6 +302,17 @@ jeder Ansicht mit dem Weg zurück zu einer Kopie und zu „Diagnose exportieren�
   oberhalb der Marke gefunden ist, zeichnet dieselbe Transaktion im Quellkonto ein `expunge`
   auf; nach einem Absturz wird das `append` geprüft, nicht wiederholt (nie zwei Kopien, nie
   verloren). Servertest mit Fehlerinjektion in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
+- Ab 24.11.2026 (Abgleich mit SPEC), **Ordner umbenennen und löschen:** nur eigene Ordner (ohne
+  Rolle), nur mit Schreibzugriff, je Ordner eine Änderung zur Zeit; Löschen nur ohne Unterordner
+  und mit Rückfrage, die die hier gespeicherten Mails nennt. `rename_mailbox` und
+  `delete_mailbox` (Migration 0019) ändern lokal nichts, bis der Server bestätigt hat; die
+  Ordnerspalte zeigt die wartende Änderung. Nach `RENAME` übernehmen die Zeilen des Ordners und
+  seiner Unterordner den neuen Namen (Mails, UIDVALIDITY, Favorit und Farbe bleiben), dann wird
+  die Ordnerliste neu gelesen. Nach einem Absturz gilt ein `RENAME` als erledigt, wenn der alte
+  Name fehlt und der neue da ist, ein `DELETE`, wenn der Ordner fehlt. Vorher wird der Ordner
+  ohne EXPUNGE verlassen (`UNSELECT`, sonst `EXAMINE INBOX`, nie `CLOSE`). JMAP-Konten lehnt der
+  Kern mit `unsupported_server` ab, bevor etwas vermerkt wird: Der JMAP-Adapter bietet hinter den
+  Traits noch kein `Mailbox/set` zum Umbenennen oder Löschen.
 - Schlägt etwas fehl, wird der lokale Zustand zurückgenommen und der Fehler angezeigt. Bei einem
   Konflikt gilt der Serverzustand, und der Nutzer erfährt es.
 

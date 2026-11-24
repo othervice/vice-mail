@@ -674,7 +674,9 @@ fn revert(conn: &Connection, op: &StoredOperation) -> Result<Option<MailboxId>, 
         OperationPayload::CreateMailbox { .. }
         | OperationPayload::Send(_)
         | OperationPayload::Append { .. }
-        | OperationPayload::RemoveCopy { .. } => Ok(None),
+        | OperationPayload::RemoveCopy { .. }
+        | OperationPayload::RenameMailbox { .. }
+        | OperationPayload::DeleteMailbox { .. } => Ok(None),
     }
 }
 
@@ -733,7 +735,10 @@ impl<'a> Recorder<'a> {
                 batch,
                 self.action.as_str(),
                 payload.kind().as_str(),
-                source.map(|s| s.mailbox_id.0),
+                // A renamed or deleted folder stands in the source column, for its pending state.
+                source
+                    .map(|s| s.mailbox_id.0)
+                    .or_else(|| payload.changed_mailbox().map(|m| m.mailbox_id.0)),
                 source.map(|s| s.message_id.0),
                 source.map(|s| s.uid),
                 payload.target().map(|t| t.mailbox_id.0),
@@ -779,11 +784,14 @@ impl<'a> Recorder<'a> {
                 self.touched(mailbox);
                 Ok(())
             }
-            // Stage 5: their local effects (the frozen draft) are written by `compose`.
+            // Stage 5: their local effects (the frozen draft) are written by `compose`. Renamed
+            // and deleted folders change locally once the server confirmed.
             OperationPayload::CreateMailbox { .. }
             | OperationPayload::Send(_)
             | OperationPayload::Append { .. }
-            | OperationPayload::RemoveCopy { .. } => {
+            | OperationPayload::RemoveCopy { .. }
+            | OperationPayload::RenameMailbox { .. }
+            | OperationPayload::DeleteMailbox { .. } => {
                 self.insert(&payload)?;
                 Ok(())
             }
@@ -1106,7 +1114,9 @@ pub(crate) fn finish(
                     | OperationPayload::CreateMailbox { .. }
                     | OperationPayload::Send(_)
                     | OperationPayload::Append { .. }
-                    | OperationPayload::RemoveCopy { .. } => {}
+                    | OperationPayload::RemoveCopy { .. }
+                    | OperationPayload::RenameMailbox { .. }
+                    | OperationPayload::DeleteMailbox { .. } => {}
                 }
                 (OperationState::Confirmed, None, None, *notice)
             }
@@ -1278,6 +1288,16 @@ pub(crate) fn undo(
                     "a created folder is not removed automatically".into(),
                 )));
             }
+            (_, OperationPayload::RenameMailbox { .. }) => {
+                return Err(StoreError::Action(ActionError::NotUndoable(
+                    "a renamed folder is not renamed back automatically".into(),
+                )));
+            }
+            (_, OperationPayload::DeleteMailbox { .. }) => {
+                return Err(StoreError::Action(ActionError::NotUndoable(
+                    "a deleted folder cannot be brought back".into(),
+                )));
+            }
             (_, OperationPayload::Send(_)) => {
                 return Err(StoreError::Action(ActionError::NotUndoable(
                     "the message is being sent or was sent".into(),
@@ -1364,6 +1384,8 @@ pub(crate) fn retry(
             OperationPayload::Expunge { source }
         }
         create @ OperationPayload::CreateMailbox { .. } => create,
+        folder @ (OperationPayload::RenameMailbox { .. }
+        | OperationPayload::DeleteMailbox { .. }) => folder,
         OperationPayload::Send(mut job) => {
             // Unclear sends, and scheduled sends missed while the app was off (stage 10), are
             // only sent again on the user's explicit decision.

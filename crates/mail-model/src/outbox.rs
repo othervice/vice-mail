@@ -140,10 +140,13 @@ pub enum ActionKind {
     /// Stage 16: a message copied to another account (decision 0033). A move between
     /// accounts is recorded as `move`.
     Copy,
+    /// Audit 24.11.2026: a folder of the user's own renamed or deleted.
+    RenameMailbox,
+    DeleteMailbox,
 }
 
 impl ActionKind {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 22] = [
         Self::MarkRead,
         Self::MarkUnread,
         Self::Flag,
@@ -164,6 +167,8 @@ impl ActionKind {
         Self::AddLabel,
         Self::RemoveLabel,
         Self::Copy,
+        Self::RenameMailbox,
+        Self::DeleteMailbox,
     ];
 
     /// Text in the database, same as on the wire.
@@ -189,6 +194,8 @@ impl ActionKind {
             Self::AddLabel => "add_label",
             Self::RemoveLabel => "remove_label",
             Self::Copy => "copy",
+            Self::RenameMailbox => "rename_mailbox",
+            Self::DeleteMailbox => "delete_mailbox",
         }
     }
 
@@ -396,6 +403,10 @@ pub enum OperationKind {
     Append,
     /// Stage 5: removal of an own copy (an old draft version), checked by Message-ID.
     RemoveCopy,
+    /// Audit 24.11.2026: RENAME of a folder of the user's own (JMAP: not supported yet).
+    RenameMailbox,
+    /// Audit 24.11.2026: DELETE of a folder of the user's own, with its messages.
+    DeleteMailbox,
 }
 
 impl OperationKind {
@@ -408,6 +419,8 @@ impl OperationKind {
             Self::Send => "send",
             Self::Append => "append",
             Self::RemoveCopy => "remove_copy",
+            Self::RenameMailbox => "rename_mailbox",
+            Self::DeleteMailbox => "delete_mailbox",
         }
     }
 }
@@ -679,6 +692,21 @@ pub enum OperationPayload {
     /// Stage 5: remove an own copy (a draft's version), only if the UID still holds its
     /// Message-ID.
     RemoveCopy { copy: crate::ServerCopy },
+    /// Audit 24.11.2026: rename a folder of the user's own (no role) to `new_path` (decoded,
+    /// with the server's delimiter; its subfolders move along). Nothing changes locally until
+    /// the server confirmed; then the mailbox keeps its row under the new name. Repeating it
+    /// after a crash is success when the old name is gone and the new one exists.
+    RenameMailbox {
+        mailbox: TargetMailbox,
+        path: String,
+        new_path: String,
+    },
+    /// Audit 24.11.2026: delete a folder of the user's own (no role, no subfolders) with its
+    /// messages. Repeating it is success when the folder is gone.
+    DeleteMailbox {
+        mailbox: TargetMailbox,
+        path: String,
+    },
 }
 
 /// What an [`OperationPayload::Append`] appends.
@@ -720,6 +748,8 @@ impl OperationPayload {
             Self::Send(_) => OperationKind::Send,
             Self::Append { .. } => OperationKind::Append,
             Self::RemoveCopy { .. } => OperationKind::RemoveCopy,
+            Self::RenameMailbox { .. } => OperationKind::RenameMailbox,
+            Self::DeleteMailbox { .. } => OperationKind::DeleteMailbox,
         }
     }
 
@@ -731,7 +761,19 @@ impl OperationPayload {
             Self::CreateMailbox { .. }
             | Self::Send(_)
             | Self::Append { .. }
-            | Self::RemoveCopy { .. } => None,
+            | Self::RemoveCopy { .. }
+            | Self::RenameMailbox { .. }
+            | Self::DeleteMailbox { .. } => None,
+        }
+    }
+
+    /// Audit 24.11.2026: the folder a rename or delete changes.
+    pub fn changed_mailbox(&self) -> Option<&TargetMailbox> {
+        match self {
+            Self::RenameMailbox { mailbox, .. } | Self::DeleteMailbox { mailbox, .. } => {
+                Some(mailbox)
+            }
+            _ => None,
         }
     }
 
@@ -919,6 +961,24 @@ pub enum ActionError {
 
     #[error("{0:?} is not a valid label")]
     InvalidLabel(String),
+
+    /// Audit 24.11.2026: folders with a role (inbox, sent, drafts, ...) are neither renamed nor
+    /// deleted.
+    #[error("mailbox {0} has a role and is not renamed or deleted")]
+    MailboxHasRole(MailboxId),
+
+    /// Audit 24.11.2026: a folder with subfolders is not deleted (its subfolders first).
+    #[error("mailbox {0} has subfolders")]
+    MailboxHasSubfolders(MailboxId),
+
+    /// Audit 24.11.2026: another folder of the account has this name already.
+    #[error("a folder {0:?} exists already")]
+    MailboxExists(String),
+
+    /// Audit 24.11.2026: renaming and deleting folders is not supported for this kind of
+    /// account yet (JMAP).
+    #[error("folders of this account cannot be renamed or deleted from the app yet")]
+    FolderChangesUnsupported,
 }
 
 impl ActionError {
@@ -933,7 +993,12 @@ impl ActionError {
             Self::NotUndoable(_) => ErrorCode::NotUndoable,
             Self::InvalidKeyword(_) => ErrorCode::InvalidKeyword,
             Self::MessageNotFound(_) | Self::OperationNotFound(_) => ErrorCode::NotFound,
-            Self::LabelsUnsupported => ErrorCode::UnsupportedServer,
+            Self::LabelsUnsupported | Self::FolderChangesUnsupported => {
+                ErrorCode::UnsupportedServer
+            }
+            Self::MailboxHasRole(_) | Self::MailboxHasSubfolders(_) | Self::MailboxExists(_) => {
+                ErrorCode::InvalidArgument
+            }
             Self::InvalidLabel(_)
             | Self::InvalidTarget(_)
             | Self::MixedAccounts
@@ -961,6 +1026,12 @@ impl ActionError {
             Self::NotUndoable(_) => "This action cannot be undone.",
             Self::LabelsUnsupported => "Only Gmail accounts have labels.",
             Self::InvalidLabel(_) => "This label name cannot be used.",
+            Self::MailboxHasRole(_) => "Folders with a special role cannot be renamed or deleted.",
+            Self::MailboxHasSubfolders(_) => "Delete the subfolders of this folder first.",
+            Self::MailboxExists(_) => "A folder with this name exists already.",
+            Self::FolderChangesUnsupported => {
+                "Folders of this account cannot be renamed or deleted from the app yet."
+            }
         }
     }
 

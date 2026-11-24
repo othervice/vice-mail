@@ -11,6 +11,7 @@ import { OutboxView } from "../features/composer/OutboxView";
 import { SendNotices } from "../features/composer/SendNotices";
 import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
+import { FolderEditHost } from "../features/mailboxes/FolderEdit";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateNotices } from "../features/updates/UpdateNotices";
@@ -109,6 +110,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       <MailtoHost />
       {/* Stage 8: command palette, shortcut overview, layout of the window. */}
       <KeyboardLayer />
+      {/* Audit 24.11.2026: renaming or deleting a folder (from its menu or the palette). */}
+      <FolderEditHost />
     </div>
   );
 }

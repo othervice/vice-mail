@@ -4,8 +4,8 @@
 
 use mail_engine::AppCore;
 use mail_model::{
-    Account, AccountId, ActionResult, BatchId, IpcError, MailAction, MailboxRole, MessageRef,
-    OperationId, OperationInfo, OutboxCounts,
+    Account, AccountId, ActionResult, BatchId, IpcError, MailAction, MailboxId, MailboxRole,
+    MessageRef, OperationId, OperationInfo, OutboxCounts,
 };
 use tauri::State;
 
@@ -47,6 +47,36 @@ pub async fn create_mailbox(
     core.create_mailbox(account_id, path, role)
         .await
         .map_err(to_ipc("create_mailbox"))
+}
+
+/// Audit 24.11.2026: queues the rename of a folder of the user's own to `name` (one level,
+/// within its parent). Refused: `read_only`, `invalid_argument` (a role, a taken or invalid
+/// name, a change on its way), `unsupported_server` (JMAP), `not_found`.
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_mailbox(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    mailbox_id: MailboxId,
+    name: String,
+) -> Result<ActionResult, IpcError> {
+    core.rename_mailbox(account_id, mailbox_id, name)
+        .await
+        .map_err(to_ipc("rename_mailbox"))
+}
+
+/// Audit 24.11.2026: queues the deletion of a folder of the user's own without subfolders,
+/// with its messages. Refused like `renameMailbox`, and for a folder with subfolders.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_mailbox(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    mailbox_id: MailboxId,
+) -> Result<ActionResult, IpcError> {
+    core.delete_mailbox(account_id, mailbox_id)
+        .await
+        .map_err(to_ipc("delete_mailbox"))
 }
 
 /// The account's operations, newest first, below `before` (activity view). `limit` 1..500.

@@ -11,6 +11,7 @@ import { accountFill } from "../accounts/accountColor";
 import { indentClass, sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { useUiStore } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
+import { useOperations } from "../actions/queries";
 import { useMailboxes } from "./queries";
 import { buildMailboxTree, isRoleView, type MailboxNode } from "./tree";
 import { useDropTarget } from "./useDropTarget";
@@ -91,9 +92,13 @@ interface ItemProps {
   onActivate: (mailbox: Mailbox) => void;
   /** Stage 16: "Folder colour…" of the folder's menu. */
   onColor: (mailbox: Mailbox) => void;
+  /** Audit 24.11.2026: the account, for "Rename folder…" and "Delete folder…" in the menu. */
+  account: Account;
+  /** A rename or delete of the folder on its way to the server. */
+  pending: "rename" | "delete" | null;
 }
 
-function MailboxItem({ row, current, nav, onActivate, onColor }: ItemProps) {
+function MailboxItem({ row, current, nav, onActivate, onColor, account, pending }: ItemProps) {
   const { t } = useTranslation();
   const colorName = useColorName();
   const toggleMailbox = useUiStore((state) => state.toggleMailbox);
@@ -103,10 +108,13 @@ function MailboxItem({ row, current, nav, onActivate, onColor }: ItemProps) {
   const drop = useDropTarget(mailbox);
 
   // Stage 16: the colour is named with the folder, never shown alone.
-  const named =
+  const colored =
     mailbox.color === undefined || mailbox.color === null
       ? name
       : t("organize.favorites.withColor", { name, color: colorName(mailbox.color) });
+  // Audit 24.11.2026: a rename or delete on its way says so, in the name too.
+  const pendingText = pending === "rename" ? t("folderEdit.renaming") : pending === "delete" ? t("folderEdit.deleting") : null;
+  const named = pendingText ? `${colored}, ${pendingText}` : colored;
 
   return (
     <li
@@ -158,12 +166,18 @@ function MailboxItem({ row, current, nav, onActivate, onColor }: ItemProps) {
         <FolderIcon icon={isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder} current={current} />
         <span className={cx("truncate", mailbox.unread > 0 && "text-primary")}>{name}</span>
         <FolderColorDot color={mailbox.color} />
+        {pendingText && (
+          <span aria-hidden className="shrink-0 text-12 text-tertiary" data-testid={`folder-pending-${String(mailbox.id)}`}>
+            {pendingText}
+          </span>
+        )}
         <UnreadCount count={mailbox.unread} emphasis={mailbox.unread > 0 && mailbox.role === "inbox"} />
       </span>
       {mailbox.selectable && (
         <RowMenuSlot>
           <FolderMenu
             mailbox={mailbox}
+            account={account}
             onColor={() => {
               onColor(mailbox);
             }}
@@ -287,6 +301,18 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
     text: account.displayName || account.email,
   };
   const [coloring, setColoring] = useState<MailboxId | null>(null);
+  // Audit 24.11.2026: renames and deletes on their way (only where the account may write).
+  const operations = useOperations(account.id, account.writesEnabled && account.protocol !== "jmap").data;
+  const pendingOf = (mailbox: Mailbox): "rename" | "delete" | null => {
+    for (const page of operations?.pages ?? []) {
+      for (const op of page) {
+        if (op.mailboxId !== mailbox.id || (op.state !== "queued" && op.state !== "in_flight")) continue;
+        if (op.kind === "rename_mailbox") return "rename";
+        if (op.kind === "delete_mailbox") return "delete";
+      }
+    }
+    return null;
+  };
   const colored = coloring === null ? undefined : mailboxes.data?.find((mailbox) => mailbox.id === coloring);
   const nav = useTreeNavigation({
     items: [accountItem, ...rows],
@@ -331,6 +357,8 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
             onColor={(mailbox) => {
               setColoring(mailbox.id);
             }}
+            account={account}
+            pending={pendingOf(row.node.mailbox)}
           />
         ))}
       </ul>

@@ -156,6 +156,17 @@ export const commands = {
 	undoAction: (batch: BatchId, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("undo_action", { batch }, options)),
 	/**  Queues the creation of a folder (for example the archive after `missing_mailbox`). */
 	createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("create_mailbox", { accountId, path, role }, options)),
+	/**
+	 *  Audit 24.11.2026: queues the rename of a folder of the user's own to `name` (one level,
+	 *  within its parent). Refused: `read_only`, `invalid_argument` (a role, a taken or invalid
+	 *  name, a change on its way), `unsupported_server` (JMAP), `not_found`.
+	 */
+	renameMailbox: (accountId: AccountId, mailboxId: MailboxId, name: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("rename_mailbox", { accountId, mailboxId, name }, options)),
+	/**
+	 *  Audit 24.11.2026: queues the deletion of a folder of the user's own without subfolders,
+	 *  with its messages. Refused like `renameMailbox`, and for a folder with subfolders.
+	 */
+	deleteMailbox: (accountId: AccountId, mailboxId: MailboxId, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("delete_mailbox", { accountId, mailboxId }, options)),
 	/**  The account's operations, newest first, below `before` (activity view). `limit` 1..500. */
 	listOperations: (accountId: AccountId, before: OperationId | null, limit: number, options?: InvokeOptions) => typedError<OperationInfo[], IpcError>(__TAURI_INVOKE("list_operations", { accountId, before, limit }, options)),
 	/**  Queues a failed or conflicting operation again. */
@@ -898,7 +909,9 @@ export type ActionKind = "mark_read" | "mark_unread" | "flag" | "unflag" | "add_
  *  Stage 16: a message copied to another account (decision 0033). A move between
  *  accounts is recorded as `move`.
  */
-"copy";
+"copy" | 
+/**  Audit 24.11.2026: a folder of the user's own renamed or deleted. */
+"rename_mailbox" | "delete_mailbox";
 
 /**  Result of applying an action. */
 export type ActionResult = {
@@ -3497,7 +3510,11 @@ export type OperationKind = "set_flag" | "move" | "expunge" | "create_mailbox" |
 /**  Stage 5: APPEND of a draft version or of the copy of a sent message. */
 "append" | 
 /**  Stage 5: removal of an own copy (an old draft version), checked by Message-ID. */
-"remove_copy";
+"remove_copy" | 
+/**  Audit 24.11.2026: RENAME of a folder of the user's own (JMAP: not supported yet). */
+"rename_mailbox" | 
+/**  Audit 24.11.2026: DELETE of a folder of the user's own, with its messages. */
+"delete_mailbox";
 
 /**  Something the user should know about a confirmed operation. */
 export type OperationNotice = 

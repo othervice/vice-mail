@@ -11,6 +11,7 @@ import { accountShortNames } from "../accounts/accountName";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { FloatingPanel } from "../actions/Pickers";
 import { MAIL_VIEW_ICONS } from "../mail/views";
+import { useFolderEditItems } from "../mailboxes/FolderEdit";
 import { isRoleView } from "../mailboxes/tree";
 import { useDropTarget } from "../mailboxes/useDropTarget";
 import { SECTION_KEY, SectionRow, useSection } from "../layout/SectionRow";
@@ -104,6 +105,8 @@ export function FolderColorPicker({ mailbox, onClose, restoreFocus }: ColorPicke
 
 interface FolderMenuProps {
   mailbox: Mailbox;
+  /** Audit 24.11.2026: in the account's tree, "Rename folder…" and "Delete folder…" too. */
+  account?: Account;
   /** In the favourites list: its order, for "Move up" and "Move down". */
   order?: readonly MailboxId[];
   onColor: () => void;
@@ -115,8 +118,9 @@ interface FolderMenuProps {
 }
 
 /** The "…" of a folder in the sidebar: favourite on or off, its place among the favourites, colour. */
-export function FolderMenu({ mailbox, order, onColor, returnFocus }: FolderMenuProps) {
+export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: FolderMenuProps) {
   const { t } = useTranslation();
+  const editItems = useFolderEditItems(account, mailbox, returnFocus);
   const name = useFolderName()(mailbox);
   const change = useChangeFolder();
   const favorite = isFavorite(mailbox);
@@ -175,6 +179,7 @@ export function FolderMenu({ mailbox, order, onColor, returnFocus }: FolderMenuP
     });
   }
   items.push({ id: "color", label: t("organize.favorites.color"), icon: Palette, onSelect: onColor, "data-testid": "folder-color-open" });
+  items.push(...editItems);
   return (
     <OverflowMenu
       label={t("organize.favorites.menu", { name })}

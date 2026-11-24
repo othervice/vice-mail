@@ -187,6 +187,28 @@ impl<S: Transport> ImapWriter<S> {
         Ok(StoreOutcome::default())
     }
 
+    /// Closes `name` without expunging if it is the selected mailbox (audit 24.11.2026: before
+    /// it is renamed or deleted). UNSELECT where the server has it (RFC 3691), else a read-only
+    /// EXAMINE of the inbox; never CLOSE, which would expunge.
+    async fn leave(&mut self, name: &str) -> Result<(), BackendError> {
+        let open = self.backend.selected.as_ref().is_some_and(|m| {
+            m.name == name
+                || m.name.starts_with(&format!("{name}/"))
+                || m.name.starts_with(&format!("{name}."))
+        });
+        if !open {
+            return Ok(());
+        }
+        let line = if self.backend.caps.has("UNSELECT") {
+            "UNSELECT"
+        } else {
+            "EXAMINE INBOX"
+        };
+        self.backend.selected = None;
+        self.backend.conn.run(line, |_| false).await?.check(line)?;
+        Ok(())
+    }
+
     /// Whether LIST knows a mailbox with exactly this wire name.
     async fn exists(&mut self, name: &str) -> Result<bool, BackendError> {
         let mut found = false;
@@ -587,6 +609,59 @@ impl<S: Transport> MailWriter for ImapWriter<S> {
             tracing::debug!(response = %subscribed.text, "SUBSCRIBE after CREATE refused");
         }
         Ok(name)
+    }
+
+    /// Audit 24.11.2026: `RENAME` to the encoded `new_path`; the subscription follows. A refusal
+    /// while the old name no longer exists is [`BackendError::MailboxNotFound`].
+    async fn rename_mailbox(&mut self, name: &str, new_path: &str) -> Result<String, BackendError> {
+        let new_name = mutf7::encode(new_path);
+        let (from, to) = (quote(name)?, quote(&new_name)?);
+        self.leave(name).await?;
+        let tagged = self
+            .backend
+            .conn
+            .run(&format!("RENAME {from} {to}"), |_| false)
+            .await?;
+        if tagged.status != TaggedStatus::Ok {
+            if !self.exists(name).await? {
+                return Err(BackendError::MailboxNotFound(name.to_owned()));
+            }
+            return Err(BackendError::Rejected(format!("RENAME: {}", tagged.text)));
+        }
+        for line in [format!("UNSUBSCRIBE {from}"), format!("SUBSCRIBE {to}")] {
+            let reply = self.backend.conn.run(&line, |_| false).await?;
+            if reply.status != TaggedStatus::Ok {
+                tracing::debug!(response = %reply.text, "subscription after RENAME refused");
+            }
+        }
+        Ok(new_name)
+    }
+
+    /// Audit 24.11.2026: `DELETE` with the folder's messages, then `UNSUBSCRIBE`. A refusal
+    /// while the folder no longer exists is [`BackendError::MailboxNotFound`].
+    async fn delete_mailbox(&mut self, name: &str) -> Result<(), BackendError> {
+        let quoted = quote(name)?;
+        self.leave(name).await?;
+        let tagged = self
+            .backend
+            .conn
+            .run(&format!("DELETE {quoted}"), |_| false)
+            .await?;
+        if tagged.status != TaggedStatus::Ok {
+            if !self.exists(name).await? {
+                return Err(BackendError::MailboxNotFound(name.to_owned()));
+            }
+            return Err(BackendError::Rejected(format!("DELETE: {}", tagged.text)));
+        }
+        let reply = self
+            .backend
+            .conn
+            .run(&format!("UNSUBSCRIBE {quoted}"), |_| false)
+            .await?;
+        if reply.status != TaggedStatus::Ok {
+            tracing::debug!(response = %reply.text, "UNSUBSCRIBE after DELETE refused");
+        }
+        Ok(())
     }
 }
 

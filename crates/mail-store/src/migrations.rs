@@ -44,6 +44,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0017_jmap.sql")),
     // Audit 24.11.2026: drafts of other programs whose original stays in the Drafts folder.
     M::up(include_str!("../migrations/0018_draft_kept_original.sql")),
+    // Audit 24.11.2026: folders renamed and deleted through the outbox.
+    M::up(include_str!("../migrations/0019_folder_changes.sql")),
 ];
 
 /// All migrations this build knows.

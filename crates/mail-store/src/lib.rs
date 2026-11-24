@@ -46,6 +46,7 @@ mod contacts_dir;
 mod conversations;
 mod diagnostics;
 mod error;
+mod folders;
 mod fts;
 mod gmail;
 mod groups;
@@ -106,6 +107,7 @@ pub use mail_api::{
 pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
 pub use mcp::{NewMcpAccess, StoredMcpClient, StoredMcpState};
 pub use migrations::SCHEMA_VERSION;
+pub use folders::MAX_FOLDER_NAME_CHARS;
 pub use outbox_api::{MAX_OPERATIONS_PAGE, OperationResult, OutboxChange, StoredOperation};
 pub use parity::{TransferItem, TransferPlan};
 pub use reading::{
@@ -138,6 +140,8 @@ mod compose_tests;
 mod contacts_dir_tests;
 #[cfg(test)]
 mod conversation_tests;
+#[cfg(test)]
+mod folders_tests;
 #[cfg(test)]
 mod gmail_tests;
 #[cfg(test)]

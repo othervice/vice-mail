@@ -550,6 +550,38 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         Ok(self.recorded(&change))
     }
 
+    /// Audit 24.11.2026: queues the rename of a folder of the user's own to `name` within its
+    /// parent. The folder list changes once the server renamed it (`MailboxesChanged`).
+    pub async fn rename_mailbox(
+        &self,
+        account: AccountId,
+        mailbox: mail_model::MailboxId,
+        name: String,
+    ) -> Result<ActionResult, CoreError> {
+        let change = self
+            .shared
+            .store
+            .enqueue_rename_mailbox(account, mailbox, name, request_id())
+            .await?;
+        tracing::info!(%account, "folder rename recorded");
+        Ok(self.recorded(&change))
+    }
+
+    /// Audit 24.11.2026: queues the deletion of a folder of the user's own with its messages.
+    pub async fn delete_mailbox(
+        &self,
+        account: AccountId,
+        mailbox: mail_model::MailboxId,
+    ) -> Result<ActionResult, CoreError> {
+        let change = self
+            .shared
+            .store
+            .enqueue_delete_mailbox(account, mailbox, request_id())
+            .await?;
+        tracing::info!(%account, "folder deletion recorded");
+        Ok(self.recorded(&change))
+    }
+
     /// Undoes a batch (the "undo" of the notice after an action): cancels what is still
     /// queued, queues counter-operations for what was sent. Refused as a whole with
     /// [`mail_model::ActionError::NotUndoable`] if a part cannot be undone.

@@ -42,13 +42,15 @@ import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useAiPaletteEntries } from "../ai/palette";
 import { useEmlPaletteEntries } from "../eml/palette";
+import { folderEditBlock, isEditableFolder } from "../mailboxes/FolderEdit";
 import { useMailboxes } from "../mailboxes/queries";
+import { useFolderEditStore } from "../../stores/folderEdit";
 import { useTemplates } from "../snippets/queries";
 // Stage 16: favourite folders of every account.
 import { Star } from "lucide-react";
 import { useFavoriteMailboxes } from "../organize/queries";
 // Stage 16 (decision 0036): "Save all attachments" of the open message.
-import { FolderDown } from "lucide-react";
+import { FolderDown, Pencil, Trash2 } from "lucide-react";
 import { saveAllCandidate, useSaveAllRequestStore } from "../reading/saveAllRequest";
 // Decision 0039: one row per conversation or per message.
 import { useConversationStore } from "../threads/preference";
@@ -227,6 +229,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const setQuery = useSearchStore((state) => state.setQuery);
   const accountList = accounts.data ?? [];
   const noAccount = account ? undefined : t("palette.disabled.noAccount");
+  const askFolderEdit = useFolderEditStore((state) => state.ask);
 
   const inMailView = ui.view.kind === "mail" || ui.view.kind === "mailbox";
   const entries: PaletteEntry[] = [...useActionEntries({ platform, target, inMailView, account })];
@@ -363,6 +366,25 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
         icon: Folder,
         run: () => {
           ui.showMailbox(account.id, mailbox.id);
+        },
+      });
+    }
+  }
+  // Audit 24.11.2026: the open folder of the user's own can be renamed or deleted from here too.
+  const view = ui.view;
+  const openFolder = view.kind === "mailbox" && account && view.accountId === account.id ? mailboxes.find((m) => m.id === view.mailboxId) : undefined;
+  if (account && openFolder && isEditableFolder(openFolder)) {
+    const block = folderEditBlock(account);
+    const blocked = block === "readOnly" ? t("folderEdit.readOnly") : block === "jmap" ? t("folderEdit.jmap") : undefined;
+    for (const kind of ["rename", "delete"] as const) {
+      entries.push({
+        key: `folder-${kind}:${String(openFolder.id)}`,
+        group: "commands",
+        label: t(kind === "rename" ? "folderEdit.paletteRename" : "folderEdit.paletteDelete", { name: openFolder.name }),
+        icon: kind === "rename" ? Pencil : Trash2,
+        ...(blocked && { disabled: blocked }),
+        run: () => {
+          askFolderEdit({ kind, account, mailbox: openFolder });
         },
       });
     }

@@ -224,6 +224,14 @@ impl MailWriter for AnyWriter {
         both!(self, w => w.create_mailbox(path, role).await)
     }
 
+    async fn rename_mailbox(&mut self, name: &str, new_path: &str) -> Result<String, BackendError> {
+        both!(self, w => w.rename_mailbox(name, new_path).await)
+    }
+
+    async fn delete_mailbox(&mut self, name: &str) -> Result<(), BackendError> {
+        both!(self, w => w.delete_mailbox(name).await)
+    }
+
     async fn append(
         &mut self,
         mailbox: &str,

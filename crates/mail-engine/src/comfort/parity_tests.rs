@@ -493,3 +493,172 @@ async fn the_flagged_view_follows_the_server_flag() {
     ));
     h.core.shutdown().await;
 }
+
+/// Audit 24.11.2026: folders of the user's own are renamed and deleted through the outbox:
+/// refused while the account only reads, never for folders with a role; a rename keeps the
+/// folder's row and messages and moves its subfolder along; a folder with subfolders is not
+/// deleted, its leaf is, on the server too. JMAP accounts are refused before anything is
+/// recorded.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn folders_are_renamed_and_deleted_through_the_outbox() {
+    let server = server_with(&[LETTER]);
+    server.with(|s| {
+        for (name, validity) in [("Projekte", 801), ("Projekte/2026", 802)] {
+            s.mailboxes.insert(
+                name.to_owned(),
+                FakeMailbox {
+                    uid_validity: validity,
+                    uid_next: 1,
+                    modseq: 1,
+                    attributes: Vec::new(),
+                    messages: BTreeMap::new(),
+                    changes: 0,
+                },
+            );
+        }
+    });
+    server.deliver_raw("Projekte", SPAM);
+    let mut h = Harness::new(server).await;
+    async fn folders(h: &Harness) -> Vec<mail_model::Mailbox> {
+        h.core.list_mailboxes(h.account).await.expect("mailboxes")
+    }
+    let boxes = folders(&h).await;
+    let id = |boxes: &[mail_model::Mailbox], path: &str| {
+        boxes
+            .iter()
+            .find(|m| m.path == path)
+            .map(|m| m.id)
+            .expect(path)
+    };
+    let (projects, year) = (id(&boxes, "Projekte"), id(&boxes, "Projekte/2026"));
+    let sent = boxes
+        .iter()
+        .find(|m| m.role == MailboxRole::Sent)
+        .map(|m| m.id)
+        .expect("sent");
+
+    // Read-only (the default): refused, nothing recorded, nothing sent.
+    for result in [
+        h.core
+            .rename_mailbox(h.account, projects, "Kunden".into())
+            .await,
+        h.core.delete_mailbox(h.account, year).await,
+    ] {
+        assert_eq!(result.map_err(code).err(), Some(ErrorCode::ReadOnly));
+    }
+    assert_eq!(
+        h.core
+            .outbox_counts(h.account)
+            .await
+            .expect("counts")
+            .pending,
+        0
+    );
+    assert_eq!(h.server.read(|s| s.writer_attempts), 0);
+
+    h.writes(true).await;
+    // Never a folder with a role.
+    let err = h
+        .core
+        .rename_mailbox(h.account, sent, "Gesendet alt".into())
+        .await
+        .expect_err("role");
+    assert_eq!(code(err), ErrorCode::InvalidArgument);
+
+    // Renamed: same row, its message and its subfolder come along.
+    h.core
+        .rename_mailbox(h.account, projects, "Kunden".into())
+        .await
+        .expect("rename");
+    let deadline = Instant::now() + WAIT;
+    let boxes = loop {
+        let boxes = folders(&h).await;
+        if boxes.iter().any(|m| m.path == "Kunden") {
+            break boxes;
+        }
+        assert!(Instant::now() < deadline, "the rename never arrived");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(id(&boxes, "Kunden"), projects, "the folder keeps its row");
+    assert_eq!(id(&boxes, "Kunden/2026"), year, "and its subfolder");
+    assert!(!boxes.iter().any(|m| m.path.starts_with("Projekte")));
+    let kept = h
+        .core
+        .list_messages(projects, None, 10)
+        .await
+        .expect("list");
+    assert_eq!(kept.items.len(), 1, "its messages stay");
+    assert!(h.server.read(|s| s.mailboxes.contains_key("Kunden")
+        && s.mailboxes.contains_key("Kunden/2026")
+        && !s.mailboxes.contains_key("Projekte")));
+
+    // A folder with subfolders stays; the leaf goes, here and on the server.
+    let err = h
+        .core
+        .delete_mailbox(h.account, projects)
+        .await
+        .expect_err("subfolders");
+    assert_eq!(code(err), ErrorCode::InvalidArgument);
+    h.core
+        .delete_mailbox(h.account, year)
+        .await
+        .expect("delete");
+    let deadline = Instant::now() + WAIT;
+    while folders(&h).await.iter().any(|m| m.id == year) {
+        assert!(Instant::now() < deadline, "the deletion never arrived");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(h.server.read(|s| !s.mailboxes.contains_key("Kunden/2026")));
+    let ops = h
+        .core
+        .list_operations(h.account, None, 20)
+        .await
+        .expect("operations");
+    let done: Vec<_> = ops
+        .iter()
+        .filter(|o| {
+            matches!(
+                o.action,
+                mail_model::ActionKind::RenameMailbox | mail_model::ActionKind::DeleteMailbox
+            )
+        })
+        .map(|o| (o.action, o.state))
+        .collect();
+    assert_eq!(
+        done,
+        vec![
+            (
+                mail_model::ActionKind::DeleteMailbox,
+                mail_model::OperationState::Confirmed
+            ),
+            (
+                mail_model::ActionKind::RenameMailbox,
+                mail_model::OperationState::Confirmed
+            ),
+        ]
+    );
+
+    // JMAP: not supported yet, refused before anything is recorded.
+    let store = h.core.store_for_tests();
+    let jmap = store
+        .insert_account_with_protocol(
+            mail_store::NewAccount {
+                id: "00000000-0000-4000-8000-00000000beef".parse().expect("id"),
+                email: "jmap@fake.test".into(),
+                display_name: "JMAP".into(),
+                imap: settings().imap,
+                smtp: settings().smtp,
+                credential_ref: "jmap@fake.test".into(),
+            },
+            mail_model::Protocol::Jmap,
+        )
+        .await
+        .expect("jmap account");
+    let err = h
+        .core
+        .rename_mailbox(jmap.id, projects, "X".into())
+        .await
+        .expect_err("jmap");
+    assert_eq!(code(err), ErrorCode::UnsupportedServer);
+    h.core.shutdown().await;
+}

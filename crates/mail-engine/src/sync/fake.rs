@@ -801,6 +801,44 @@ impl MailWriter for FakeBackend {
         });
         Ok(path.to_owned())
     }
+
+    /// Audit 24.11.2026: RENAME, with the subfolders (the fake's delimiter is `/`).
+    async fn rename_mailbox(&mut self, name: &str, new_path: &str) -> Result<String, BackendError> {
+        self.write(None, "RENAME")?;
+        self.server.with(|s| {
+            if !s.mailboxes.contains_key(name) {
+                return Err(BackendError::MailboxNotFound(name.to_owned()));
+            }
+            if s.mailboxes.contains_key(new_path) {
+                return Err(BackendError::Rejected(format!("RENAME: {new_path} exists")));
+            }
+            let prefix = format!("{name}/");
+            let moved: Vec<String> = s
+                .mailboxes
+                .keys()
+                .filter(|k| k.as_str() == name || k.starts_with(&prefix))
+                .cloned()
+                .collect();
+            for old in moved {
+                if let Some(mailbox) = s.mailboxes.remove(&old) {
+                    let renamed = format!("{new_path}{}", &old[name.len()..]);
+                    s.mailboxes.insert(renamed, mailbox);
+                }
+            }
+            Ok(new_path.to_owned())
+        })
+    }
+
+    /// Audit 24.11.2026: DELETE, with the folder's messages.
+    async fn delete_mailbox(&mut self, name: &str) -> Result<(), BackendError> {
+        self.write(None, "DELETE")?;
+        self.server.with(|s| {
+            s.mailboxes
+                .remove(name)
+                .map(|_| ())
+                .ok_or_else(|| BackendError::MailboxNotFound(name.to_owned()))
+        })
+    }
 }
 
 impl MailBackend for FakeBackend {

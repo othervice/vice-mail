@@ -115,7 +115,9 @@ pub(crate) fn next_group(pending: &[StoredOperation]) -> Vec<StoredOperation> {
             | OperationPayload::CreateMailbox { .. }
             | OperationPayload::Send(_)
             | OperationPayload::Append { .. }
-            | OperationPayload::RemoveCopy { .. } => String::new(),
+            | OperationPayload::RemoveCopy { .. }
+            | OperationPayload::RenameMailbox { .. }
+            | OperationPayload::DeleteMailbox { .. } => String::new(),
         };
         Some(format!(
             "{}|{:?}|{}|{}|{}|{params}",
@@ -226,6 +228,18 @@ impl<W: MailWriter> Step<'_, W> {
             OperationPayload::CreateMailbox { .. } => {
                 for op in group {
                     self.create(op).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::RenameMailbox { .. } => {
+                for op in group {
+                    self.rename_folder(op).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::DeleteMailbox { .. } => {
+                for op in group {
+                    self.delete_folder(op).await?;
                 }
                 Ok(())
             }
@@ -770,6 +784,97 @@ impl<W: MailWriter> Step<'_, W> {
                 tracing::warn!(account = %self.account, error = %err, "role of the new mailbox not set");
             }
         }
+        self.confirm(&op, None, None, None);
+        Ok(())
+    }
+
+    // -- rename and delete (audit 24.11.2026) -------------------------------------------------
+
+    /// Whether the server lists a mailbox with this wire name.
+    async fn listed(&mut self, name: &str) -> Result<bool, StepError> {
+        let remote = self.conn.writer.list_mailboxes().await.map_err(lost)?;
+        Ok(remote.iter().any(|m| m.name == name))
+    }
+
+    /// The folder list from the server, into the store (the renamed or deleted folder's rows).
+    async fn refresh_folders(&mut self) -> Result<(), StepError> {
+        let remote = self.conn.writer.list_mailboxes().await.map_err(lost)?;
+        self.store.sync_mailboxes(self.account, remote).await?;
+        self.list_changed = true;
+        Ok(())
+    }
+
+    /// RENAME; after a crash (in flight) or a refusal it counts as done when the old name is
+    /// gone and the new one exists. The local rows take the new name before the folder list is
+    /// read again, so the folder keeps its messages.
+    async fn rename_folder(&mut self, op: StoredOperation) -> Result<(), StepError> {
+        let OperationPayload::RenameMailbox {
+            mailbox, new_path, ..
+        } = op.payload.clone()
+        else {
+            return Ok(());
+        };
+        let Some(op) = self.within_attempts(vec![op]).pop() else {
+            return Ok(());
+        };
+        let Some(op) = self.begin(vec![op]).await?.pop() else {
+            return Ok(());
+        };
+        // The connection must not keep the folder open while it changes.
+        self.conn.selected = None;
+        let new_name = match self
+            .conn
+            .writer
+            .rename_mailbox(&mailbox.name, &new_path)
+            .await
+        {
+            Ok(name) => name,
+            Err(err) => {
+                let error = refusal(err)?;
+                let remote = self.conn.writer.list_mailboxes().await.map_err(lost)?;
+                let done = remote
+                    .iter()
+                    .find(|m| m.path == new_path)
+                    .map(|m| m.name.clone());
+                match done {
+                    Some(name) if !remote.iter().any(|m| m.name == mailbox.name) => name,
+                    _ => {
+                        self.fail(&op, error);
+                        return Ok(());
+                    }
+                }
+            }
+        };
+        self.store
+            .rename_mailbox_rows(mailbox.mailbox_id, new_name, new_path)
+            .await?;
+        self.refresh_folders().await?;
+        tracing::info!(account = %self.account, operation = %op.id, "folder renamed");
+        self.confirm(&op, None, None, None);
+        Ok(())
+    }
+
+    /// DELETE; a folder that is gone already counts as deleted (a repeat after a crash).
+    async fn delete_folder(&mut self, op: StoredOperation) -> Result<(), StepError> {
+        let OperationPayload::DeleteMailbox { mailbox, .. } = op.payload.clone() else {
+            return Ok(());
+        };
+        let Some(op) = self.within_attempts(vec![op]).pop() else {
+            return Ok(());
+        };
+        let Some(op) = self.begin(vec![op]).await?.pop() else {
+            return Ok(());
+        };
+        self.conn.selected = None;
+        if let Err(err) = self.conn.writer.delete_mailbox(&mailbox.name).await {
+            let error = refusal(err)?;
+            if self.listed(&mailbox.name).await? {
+                self.fail(&op, error);
+                return Ok(());
+            }
+        }
+        self.refresh_folders().await?;
+        tracing::info!(account = %self.account, operation = %op.id, "folder deleted");
         self.confirm(&op, None, None, None);
         Ok(())
     }

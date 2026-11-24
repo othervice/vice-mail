@@ -691,6 +691,20 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         creations.push({ accountId: account.id, path: args["path"] as string, role: args["role"] as MailboxRole | null });
         return { batch, queued: 1, cancelled: 0 };
       }
+      // Audit 24.11.2026: folders of the user's own renamed and deleted through the outbox.
+      case "rename_mailbox":
+      case "delete_mailbox": {
+        const account = accountOf(args["accountId"] as string);
+        const mailbox = mailboxOf(args["mailboxId"] as number);
+        if (!account || !mailbox) return reject("not_found");
+        if (account.protocol === "jmap") return reject("unsupported_server");
+        if (!account.writesEnabled) return reject("read_only");
+        if (mailbox.role !== "custom") return reject("invalid_argument");
+        if (cmd === "delete_mailbox" && mailboxes.some((m) => m.parentId === mailbox.id)) return reject("invalid_argument");
+        const batch = nextBatch++;
+        record(batch, account.id, cmd, cmd, { mailboxId: mailbox.id, messageId: null }, () => undefined);
+        return { batch, queued: 1, cancelled: 0 };
+      }
       case "list_operations": {
         const before = args["before"] as number | null;
         return operations

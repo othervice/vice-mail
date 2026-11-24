@@ -29,11 +29,12 @@ export function useOutboxCounts(accounts: readonly Account[]): OutboxCounts[] {
 }
 
 /** The activity of one account, newest first, keyset-paged by the last operation id. */
-export function useOperations(accountId: AccountId) {
+export function useOperations(accountId: AccountId, enabled = true) {
   return useInfiniteQuery({
     queryKey: operationsQueryKey(accountId),
     queryFn: ({ pageParam }) => ipc.listOperations(accountId, pageParam, OPERATIONS_PAGE_SIZE),
     initialPageParam: null as OperationId | null,
+    enabled,
     getNextPageParam: (lastPage: OperationInfo[]) =>
       lastPage.length === OPERATIONS_PAGE_SIZE ? (lastPage[lastPage.length - 1]?.id ?? null) : null,
   });

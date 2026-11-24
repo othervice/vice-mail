@@ -367,6 +367,12 @@ export const ipc = {
   /** Queues the creation of a folder; it appears with `mailboxesChanged` once the server made it. */
   createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null): Promise<ActionResult> =>
     call(() => commands.createMailbox(accountId, path, role)),
+  /** A folder of the user's own gets `name` (one level, within its parent) through the outbox. */
+  renameMailbox: (accountId: AccountId, mailboxId: MailboxId, name: string): Promise<ActionResult> =>
+    call(() => commands.renameMailbox(accountId, mailboxId, name)),
+  /** A folder of the user's own without subfolders is deleted with its mail, through the outbox. */
+  deleteMailbox: (accountId: AccountId, mailboxId: MailboxId): Promise<ActionResult> =>
+    call(() => commands.deleteMailbox(accountId, mailboxId)),
   /** Activity view, newest first, keyset-paged by the last `id`. `limit` 1..500. */
   listOperations: (accountId: AccountId, before: OperationId | null, limit: number): Promise<OperationInfo[]> =>
     call(() => commands.listOperations(accountId, before, limit)),

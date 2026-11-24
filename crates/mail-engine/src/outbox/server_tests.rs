@@ -1186,6 +1186,104 @@ async fn a_missing_archive_is_a_typed_error_and_creating_one_an_operation() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Audit 24.11.2026: renaming and deleting folders of the user's own (RENAME, DELETE)
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn folders_are_renamed_with_their_mail_and_subfolders_and_deleted() {
+    let _server = SERVER.lock().await;
+    let mut bed = Bed::new("folders", 1, ImapConnector::new()).await;
+    let scratch = bed.scratch.clone();
+    let child = format!("{scratch}/Unter");
+    raw(&mut bed.admin, &format!("CREATE \"{child}\"")).await;
+    append(&mut bed.admin, &scratch, &bed.run.clone(), 2).await;
+    bed.resync().await;
+    let folder = bed.mailbox_named(&scratch).await;
+    let sub = bed.mailbox_named(&child).await;
+
+    // Renamed: the folder keeps its row, its message and its subfolder.
+    let renamed = format!("{scratch}-neu");
+    let result = bed
+        .outbox
+        .rename_mailbox(bed.account, folder, renamed.clone())
+        .await
+        .expect("rename");
+    bed.settled().await;
+    let ops = bed.batch_ops(result.batch.expect("batch")).await;
+    assert_eq!(ops[0].payload.kind(), OperationKind::RenameMailbox);
+    assert_eq!(ops[0].state, OperationState::Confirmed, "{:?}", ops[0]);
+    assert_eq!(bed.mailbox_named(&renamed).await, folder, "the same row");
+    assert_eq!(
+        bed.mailbox_named(&format!("{renamed}/Unter")).await,
+        sub,
+        "the subfolder came along"
+    );
+    assert_eq!(folders(&bed.server_places(2).await), [renamed.as_str()]);
+    let listed: Vec<String> = bed
+        .admin
+        .list_mailboxes()
+        .await
+        .expect("list")
+        .into_iter()
+        .map(|m| m.path)
+        .collect();
+    assert!(
+        listed.contains(&renamed) && !listed.contains(&scratch),
+        "{listed:?}"
+    );
+
+    // Deleted: refused while it has a subfolder; the subfolder, then the folder with its mail.
+    let err = bed
+        .outbox
+        .delete_mailbox(bed.account, folder)
+        .await
+        .expect_err("subfolder");
+    assert_eq!(
+        err,
+        CoreError::Action(ActionError::MailboxHasSubfolders(folder))
+    );
+    bed.outbox
+        .delete_mailbox(bed.account, sub)
+        .await
+        .expect("delete the subfolder");
+    bed.settled().await;
+    bed.outbox
+        .delete_mailbox(bed.account, folder)
+        .await
+        .expect("delete");
+    let ops = bed.settled().await;
+    assert!(
+        ops.iter().all(|op| op.state == OperationState::Confirmed),
+        "{ops:?}"
+    );
+    let listed: Vec<String> = bed
+        .admin
+        .list_mailboxes()
+        .await
+        .expect("list")
+        .into_iter()
+        .map(|m| m.path)
+        .collect();
+    assert!(
+        !listed.iter().any(|p| p.starts_with(&renamed)),
+        "{listed:?}"
+    );
+    assert!(
+        bed.server_places(2).await.is_empty(),
+        "its message went with it"
+    );
+    assert!(
+        !bed.store
+            .mailboxes(bed.account)
+            .await
+            .expect("mailboxes")
+            .iter()
+            .any(|m| m.id == folder || m.id == sub)
+    );
+    bed.finish().await;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Acceptance: for any sequence of actions the Message-IDs over all folders stay the same,
 // except for permanent deletes (random sequences with a fixed seed)
 
