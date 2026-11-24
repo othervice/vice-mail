@@ -15,6 +15,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   aiPanel: "open",
   accentTheme: "orange",
   conversations: false,
+  // Stage 17: no choice, every view of the column in its default order.
+  columnViews: [],
 };
 
 /** Decision 0039: the core's own default, the conversation view on. */
@@ -78,6 +80,16 @@ function problemOf(preferences: UiPreferences): string | null {
   }
   // Decision 0039: serde refuses anything but a boolean (a missing field too).
   if (typeof (preferences.conversations as unknown) !== "boolean") return "conversations is not a boolean";
+  // Stage 17: `validate_column_views`: at most 32, simple ids, none twice (a missing field is refused).
+  const columnViews = preferences.columnViews as unknown;
+  if (!Array.isArray(columnViews)) return "columnViews is not a list";
+  if (preferences.columnViews.length > 32) return `${String(preferences.columnViews.length)} column views, at most 32`;
+  const viewIds = new Set<string>();
+  for (const [index, view] of preferences.columnViews.entries()) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(view.id) || typeof (view.shown as unknown) !== "boolean") return `column view ${String(index)}: not valid`;
+    if (viewIds.has(view.id)) return `column view "${view.id}" appears twice`;
+    viewIds.add(view.id);
+  }
   const recent = preferences.recentCommands;
   if (recent.length > 5) return "at most 5 recent commands";
   if (new Set(recent).size !== recent.length) return "a recent command appears twice";

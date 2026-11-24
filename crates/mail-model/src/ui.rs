@@ -27,6 +27,10 @@ pub const MAX_SHORTCUT_OVERRIDES: usize = 100;
 pub const MAX_COMMAND_ID_CHARS: usize = 64;
 /// Longest palette entry key (`action:archive`, `folder:<account uuid>:<mailbox id>`).
 pub const MAX_RECENT_COMMAND_CHARS: usize = 200;
+/// Stage 17: most entries of [`UiPreferences::column_views`].
+pub const MAX_COLUMN_VIEWS: usize = 32;
+/// Stage 17: longest view id of the column (`later`, `pinnedAttachments`, `contacts`).
+pub const MAX_COLUMN_VIEW_ID_CHARS: usize = 64;
 
 /// One key combination. `mod` is Cmd on macOS and Ctrl on Windows; Option/Alt combinations do
 /// not exist (`docs/ARCHITECTURE.md`, "Keyboard shortcuts").
@@ -106,9 +110,21 @@ pub enum AccentTheme {
     Green,
 }
 
+/// Stage 17: one view of the column's "Views" section (and of the rail), in the user's order,
+/// shown or hidden. Which views exist is the UI's business, like the commands of the shortcuts:
+/// the core checks the form of the id only.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnView {
+    /// View id of the UI: 1 to 64 ASCII letters, digits, `_` or `-`.
+    pub id: String,
+    pub shown: bool,
+}
+
 /// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
-/// 16) the accent theme and (decision 0039) the conversation view are synchronised between devices; the recent commands and the AI
-/// panel's state stay on this device.
+/// 16) the accent theme, (decision 0039) the conversation view and (stage 17) the column's views
+/// are synchronised between devices; the recent commands and the AI panel's state stay on this
+/// device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
@@ -125,6 +141,11 @@ pub struct UiPreferences {
     /// Decision 0039: lists show one row per conversation (default) instead of one per message;
     /// synced like the text size.
     pub conversations: bool,
+    /// Stage 17: the views of the column's "Views" section and of the rail, in the user's order,
+    /// each shown or hidden; synced like the text size. Empty is the default: every view in the
+    /// UI's order. A view the list does not name (one added by a later version) keeps its default
+    /// place and visibility. At most 32 entries, no id twice.
+    pub column_views: Vec<ColumnView>,
 }
 
 impl Default for UiPreferences {
@@ -136,6 +157,7 @@ impl Default for UiPreferences {
             ai_panel: AiPanelState::Open,
             accent_theme: AccentTheme::Orange,
             conversations: true,
+            column_views: Vec::new(),
         }
     }
 }
@@ -186,6 +208,12 @@ pub enum UiPreferencesError {
         platform: &'static str,
         command: String,
     },
+    #[error("{0} column views, at most 32")]
+    TooManyColumnViews(usize),
+    #[error("column view {index}: {reason}")]
+    InvalidColumnView { index: usize, reason: &'static str },
+    #[error("column view {id:?} appears twice")]
+    DuplicateColumnView { id: String },
     /// The stored list would not fit into one settings sync record.
     #[error("{platform}: the shortcut changes take {bytes} bytes, at most {max}")]
     TooLarge {
@@ -202,9 +230,38 @@ impl UiPreferences {
             return Err(UiPreferencesError::TextSize(self.text_size));
         }
         validate_recent_commands(&self.recent_commands)?;
+        validate_column_views(&self.column_views)?;
         validate_overrides(ShortcutPlatform::Macos, &self.shortcuts.macos)?;
         validate_overrides(ShortcutPlatform::Windows, &self.shortcuts.windows)
     }
+}
+
+/// Stage 17: the column's views: at most 32, each id 1 to 64 ASCII letters, digits, `_` or `-`,
+/// no id twice.
+pub fn validate_column_views(views: &[ColumnView]) -> Result<(), UiPreferencesError> {
+    if views.len() > MAX_COLUMN_VIEWS {
+        return Err(UiPreferencesError::TooManyColumnViews(views.len()));
+    }
+    let mut seen = BTreeSet::new();
+    for (index, view) in views.iter().enumerate() {
+        let invalid = |reason| UiPreferencesError::InvalidColumnView { index, reason };
+        if view.id.is_empty() {
+            return Err(invalid("empty id"));
+        }
+        if view.id.len() > MAX_COLUMN_VIEW_ID_CHARS {
+            return Err(invalid("id longer than 64 characters"));
+        }
+        let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-');
+        if !view.id.chars().all(allowed) {
+            return Err(invalid("only ASCII letters, digits, '_' and '-'"));
+        }
+        if !seen.insert(view.id.as_str()) {
+            return Err(UiPreferencesError::DuplicateColumnView {
+                id: view.id.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The recent palette commands: at most 5, each 1 to 200 characters without control
@@ -441,6 +498,16 @@ mod tests {
             ai_panel: AiPanelState::Folded,
             accent_theme: AccentTheme::Rose,
             conversations: false,
+            column_views: vec![
+                ColumnView {
+                    id: "flagged".into(),
+                    shown: true,
+                },
+                ColumnView {
+                    id: "later".into(),
+                    shown: false,
+                },
+            ],
         };
         let wire = json!({
             "shortcuts": {
@@ -451,7 +518,8 @@ mod tests {
             "recentCommands": ["action:archive"],
             "aiPanel": "folded",
             "accentTheme": "rose",
-            "conversations": false
+            "conversations": false,
+            "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }]
         });
         assert_eq!(serde_json::to_value(&prefs).expect("json"), wire);
         assert_eq!(
@@ -516,7 +584,8 @@ mod tests {
                 "recentCommands": [],
                 "aiPanel": panel,
                 "accentTheme": "orange",
-                "conversations": true
+                "conversations": true,
+                "columnViews": []
             })
         };
         for (text, state) in [
@@ -535,6 +604,66 @@ mod tests {
         let mut missing = wire(json!("open"));
         missing.as_object_mut().expect("object").remove("aiPanel");
         assert!(serde_json::from_value::<UiPreferences>(missing).is_err());
+    }
+
+    /// Stage 17: no choice of the column's views by default (the UI's default order, all
+    /// shown); a choice is bounded, its ids are simple names, none twice.
+    #[test]
+    fn column_views_default_to_empty_and_are_checked() {
+        assert!(UiPreferences::default().column_views.is_empty());
+        let view = |id: &str, shown: bool| ColumnView {
+            id: id.into(),
+            shown,
+        };
+        let chosen = UiPreferences {
+            column_views: vec![
+                view("contacts", true),
+                view("later", false),
+                view("pinnedAttachments", true),
+                view("saved_views-2", false),
+            ],
+            ..UiPreferences::default()
+        };
+        assert!(chosen.validate().is_ok());
+        // Every view hidden is a choice too (the column shows a hint then).
+        let none_shown = UiPreferences {
+            column_views: vec![view("later", false), view("tasks", false)],
+            ..UiPreferences::default()
+        };
+        assert!(none_shown.validate().is_ok());
+
+        let at_most: Vec<ColumnView> = (0..MAX_COLUMN_VIEWS)
+            .map(|i| view(&format!("v{i}"), true))
+            .collect();
+        assert!(validate_column_views(&at_most).is_ok());
+        let too_many: Vec<ColumnView> = (0..=MAX_COLUMN_VIEWS)
+            .map(|i| view(&format!("v{i}"), true))
+            .collect();
+        assert_eq!(
+            validate_column_views(&too_many),
+            Err(UiPreferencesError::TooManyColumnViews(33))
+        );
+        assert_eq!(
+            validate_column_views(&[view("later", true), view("later", false)]),
+            Err(UiPreferencesError::DuplicateColumnView { id: "later".into() })
+        );
+        assert!(validate_column_views(&[view(&"a".repeat(64), true)]).is_ok());
+        for bad in ["", "a b", "später", "view:later", "a/b", &"a".repeat(65)] {
+            assert!(
+                matches!(
+                    validate_column_views(&[view(bad, true)]),
+                    Err(UiPreferencesError::InvalidColumnView { index: 0, .. })
+                ),
+                "{bad:?}"
+            );
+        }
+        // The wire form: `shown` is a boolean, the field itself is required like the others.
+        let mut wire = serde_json::to_value(UiPreferences::default()).expect("json");
+        assert_eq!(wire["columnViews"], json!([]));
+        wire["columnViews"] = json!([{ "id": "later", "shown": "no" }]);
+        assert!(serde_json::from_value::<UiPreferences>(wire.clone()).is_err());
+        wire.as_object_mut().expect("object").remove("columnViews");
+        assert!(serde_json::from_value::<UiPreferences>(wire).is_err());
     }
 
     #[test]

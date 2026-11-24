@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use mail_model::{
-    AiPanelState, CoreError, CoreEvent, Density, ErrorCode, PlatformShortcuts, ReadingPanePosition,
-    Shortcut, ShortcutOverride, UiPreferences, WindowLayout,
+    AiPanelState, ColumnView, CoreError, CoreEvent, Density, ErrorCode, PlatformShortcuts,
+    ReadingPanePosition, Shortcut, ShortcutOverride, UiPreferences, WindowLayout,
 };
 use mail_store::GLOBAL_SCOPE;
 use serde_json::{Value, json};
@@ -61,6 +61,16 @@ fn sample() -> UiPreferences {
         ai_panel: AiPanelState::Folded,
         accent_theme: mail_model::AccentTheme::Violet,
         conversations: false,
+        column_views: vec![
+            ColumnView {
+                id: "flagged".into(),
+                shown: true,
+            },
+            ColumnView {
+                id: "later".into(),
+                shown: false,
+            },
+        ],
     }
 }
 
@@ -226,6 +236,125 @@ async fn the_conversation_view_is_on_by_default_stored_and_synced() {
     assert!(core.get_ui_preferences().await.expect("read").conversations);
     assert!(RecordKey::setting(SettingScope::Global, "ui.conversations").is_ok());
     assert!(crate::settings_sync::SYNCED_SETTINGS.contains(&"ui.conversations"));
+}
+
+/// Stage 17: the column's views are a UI preference, the default (an empty list: every view in
+/// the UI's order) until the user chooses; the choice is stored in the user's order, survives a
+/// restart, is announced, synced like the text size, and a stored list this version cannot read
+/// or does not accept reads as the default. "Reset to default" stores the empty list again.
+#[tokio::test]
+async fn the_column_views_default_round_trip_and_sync() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    let mut events = core.subscribe();
+    assert!(
+        core.get_ui_preferences()
+            .await
+            .expect("read")
+            .column_views
+            .is_empty()
+    );
+    let view = |id: &str, shown: bool| ColumnView {
+        id: id.into(),
+        shown,
+    };
+    let chosen = vec![
+        view("contacts", true),
+        view("flagged", true),
+        view("later", false),
+        // A view of a later version: kept as it is.
+        view("someFutureView", true),
+    ];
+    let prefs = UiPreferences {
+        column_views: chosen.clone(),
+        ..UiPreferences::default()
+    };
+    let stored_prefs = core.set_ui_preferences(prefs).await.expect("store");
+    assert_eq!(
+        stored_prefs.column_views, chosen,
+        "the user's order, not sorted"
+    );
+    assert_eq!(
+        stored(&core, "ui.column_views").await,
+        Some(json!([
+            { "id": "contacts", "shown": true },
+            { "id": "flagged", "shown": true },
+            { "id": "later", "shown": false },
+            { "id": "someFutureView", "shown": true }
+        ]))
+    );
+    let announced = loop {
+        match tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("event in time")
+            .expect("event")
+        {
+            CoreEvent::UiPreferencesChanged { preferences } => break preferences,
+            _ => continue,
+        }
+    };
+    assert_eq!(announced.column_views, chosen);
+
+    // Survives a restart.
+    drop(core);
+    let core = self::core(&dir).await;
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").column_views,
+        chosen
+    );
+
+    // Refused at the bridge: an id twice, a bad id, too many.
+    for wrong in [
+        vec![view("later", true), view("later", false)],
+        vec![view("go to", true)],
+        (0..33).map(|i| view(&format!("v{i}"), true)).collect(),
+    ] {
+        let detail = invalid(
+            core.set_ui_preferences(UiPreferences {
+                column_views: wrong,
+                ..UiPreferences::default()
+            })
+            .await,
+        );
+        assert!(detail.contains("column view"), "{detail}");
+    }
+    assert_eq!(
+        core.get_ui_preferences().await.expect("read").column_views,
+        chosen,
+        "a refusal changes nothing"
+    );
+
+    // Unreadable or not accepted (a damaged value, other limits): the default.
+    for damaged in [
+        "\"later\"",
+        "[{\"id\":\"later\"}]",
+        "[{\"id\":\"a b\",\"shown\":true}]",
+        "null",
+    ] {
+        core.store_for_tests()
+            .put_settings(
+                GLOBAL_SCOPE,
+                vec![("ui.column_views".to_owned(), damaged.to_owned())],
+            )
+            .await
+            .expect("seed");
+        assert!(
+            core.get_ui_preferences()
+                .await
+                .expect("read")
+                .column_views
+                .is_empty(),
+            "{damaged}"
+        );
+    }
+
+    // "Reset to default": the empty list.
+    core.set_ui_preferences(UiPreferences::default())
+        .await
+        .expect("reset");
+    assert_eq!(stored(&core, "ui.column_views").await, Some(json!([])));
+    assert!(RecordKey::setting(SettingScope::Global, "ui.column_views").is_ok());
+    assert!(crate::settings_sync::SYNCED_SETTINGS.contains(&"ui.column_views"));
 }
 
 /// Decision 0028: the AI panel's state is a UI preference of this device: stored, announced,

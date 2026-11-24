@@ -6,6 +6,7 @@
 //! | `ui.text_size` | percent, 80 to 150 | synced |
 //! | `ui.accent_theme` | one of the six accent themes (stage 16, decision 0036) | synced |
 //! | `ui.conversations` | one row per conversation (default) or per message (decision 0039) | synced |
+//! | `ui.column_views` | the column's views in the user's order, shown or hidden (stage 17) | synced |
 //! | `ui.recent_commands` | palette entry keys, newest first | device |
 //! | `ui.ai_panel` | the AI panel unfolded or folded in (decision 0028) | device |
 //! | `ui.layout.<slot>` | [`WindowLayout`] of one kind of window | device |
@@ -16,9 +17,10 @@
 //! before they are stored, so a stored list always fits into a sync record.
 
 use mail_model::{
-    AccentTheme, AiPanelState, CoreError, CoreEvent, DEFAULT_TEXT_SIZE, PlatformShortcuts,
-    Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
-    validate_layout_slot, validate_overrides, validate_recent_commands,
+    AccentTheme, AiPanelState, ColumnView, CoreError, CoreEvent, DEFAULT_TEXT_SIZE,
+    PlatformShortcuts, Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences,
+    UiPreferencesError, WindowLayout, validate_column_views, validate_layout_slot,
+    validate_overrides, validate_recent_commands,
 };
 use mail_store::GLOBAL_SCOPE;
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,8 @@ pub(crate) const TEXT_SIZE_KEY: &str = "ui.text_size";
 pub(crate) const ACCENT_THEME_KEY: &str = "ui.accent_theme";
 /// Decision 0039: the conversation view, synced like the text size.
 pub(crate) const CONVERSATIONS_KEY: &str = "ui.conversations";
+/// Stage 17: the column's views, synced like the text size.
+pub(crate) const COLUMN_VIEWS_KEY: &str = "ui.column_views";
 pub(crate) const RECENT_COMMANDS_KEY: &str = "ui.recent_commands";
 /// Device only (decision 0028): AI in the app is set up per device (0024), and the panel is
 /// part of the window's layout, which stays on the device too (0025).
@@ -174,6 +178,22 @@ fn decode_conversations(json: &str) -> bool {
     })
 }
 
+/// A list this version cannot read or does not accept reads as the default (no choice: every
+/// view in the UI's order). Entries of views this version does not know stay; the UI keeps them.
+fn decode_column_views(json: &str) -> Vec<ColumnView> {
+    let parsed = serde_json::from_str::<Vec<ColumnView>>(json)
+        .map_err(|err| err.to_string())
+        .and_then(|list| {
+            validate_column_views(&list)
+                .map(|()| list)
+                .map_err(|err| err.to_string())
+        });
+    parsed.unwrap_or_else(|reason| {
+        tracing::warn!(key = COLUMN_VIEWS_KEY, %reason, "stored column views unreadable, using the default");
+        Vec::new()
+    })
+}
+
 fn decode_recent(json: &str) -> Vec<String> {
     match serde_json::from_str::<Vec<String>>(json) {
         Ok(list) if validate_recent_commands(&list).is_ok() => list,
@@ -267,6 +287,7 @@ impl<C: Connector> AppCore<C> {
                 TEXT_SIZE_KEY => prefs.text_size = decode_text_size(value),
                 ACCENT_THEME_KEY => prefs.accent_theme = decode_accent(value),
                 CONVERSATIONS_KEY => prefs.conversations = decode_conversations(value),
+                COLUMN_VIEWS_KEY => prefs.column_views = decode_column_views(value),
                 RECENT_COMMANDS_KEY => prefs.recent_commands = decode_recent(value),
                 AI_PANEL_KEY => prefs.ai_panel = decode_ai_panel(value),
                 _ => {}
@@ -305,6 +326,10 @@ impl<C: Connector> AppCore<C> {
                 encode(&preferences.conversations)?,
             ),
             (
+                COLUMN_VIEWS_KEY.to_owned(),
+                encode(&preferences.column_views)?,
+            ),
+            (
                 RECENT_COMMANDS_KEY.to_owned(),
                 encode(&preferences.recent_commands)?,
             ),
@@ -320,6 +345,7 @@ impl<C: Connector> AppCore<C> {
             text_size = stored.text_size,
             accent = ?stored.accent_theme,
             conversations = stored.conversations,
+            column_views = stored.column_views.len(),
             "UI preferences stored"
         );
         self.emit_event(CoreEvent::UiPreferencesChanged {

@@ -160,6 +160,11 @@ async fn every_registered_kind_is_captured_when_it_changes() {
         // Stage 16 (decision 0036): the accent theme is synced like the text size.
         accent_theme: mail_model::AccentTheme::Green,
         conversations: false,
+        // Stage 17: the column's views are synced like the text size.
+        column_views: vec![mail_model::ColumnView {
+            id: "later".into(),
+            shown: false,
+        }],
     })
     .await
     .expect("ui preferences");

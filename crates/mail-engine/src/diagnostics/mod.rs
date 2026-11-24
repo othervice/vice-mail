@@ -494,6 +494,17 @@ impl<C: Connector> AppCore<C> {
                 field(out, "text size", &format!("{}%", ui.text_size));
                 field(out, "accent colours", &wire(&ui.accent_theme));
                 field(out, "conversations", on(ui.conversations));
+                // Stage 17: the column's views as the default or the user's choice.
+                let hidden = ui.column_views.iter().filter(|view| !view.shown).count();
+                field(
+                    out,
+                    "column views",
+                    &if ui.column_views.is_empty() {
+                        "default".to_owned()
+                    } else {
+                        format!("chosen, {hidden} hidden")
+                    },
+                );
                 field(out, "AI panel", &wire(&ui.ai_panel));
                 field(
                     out,

@@ -131,7 +131,10 @@ keys in `SYNCED_SETTINGS`: `ui.theme`, `ui.language`, `reading.mark_read_on_open
 (80 to 150), since stage 16 (decision 0033) `compose.archive_on_reply` and
 `compose.read_receipts`, and (decision 0036) `ui.accent_theme` (one of `teal`, `blue`, `violet`,
 `rose`, `orange`, `green`; default `orange`, decision 0038; a value a device does not know reads
-as the default). Device settings such
+as the default), (decision 0039) `ui.conversations` (a boolean, default on) and since stage 17
+`ui.column_views` (the views of the column's "Views" section and of the rail in the user's order,
+a list of `{ id, shown }`; `[]` is the default, a view a list does not name keeps its default place,
+and entries of views a device does not know are kept). Device settings such
 as `prefetch.*` (what this machine keeps offline), `inbox.settings` (categories and bundles on
 this screen), `ui.recent_commands` (the palette's history), `ui.layout.<slot>` (window layouts)
 and `ui.unread_first` (the views that group unread mail on top) stay local.

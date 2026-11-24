@@ -9,6 +9,7 @@ import {
   uiIpc,
   type AccentTheme,
   type AiPanelState,
+  type ColumnView,
   type CoreWindowLayout,
   type PlatformShortcuts,
   type ShortcutOverride,
@@ -37,6 +38,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   accentTheme: "orange",
   // Decision 0039: one row per conversation.
   conversations: true,
+  // Stage 17: no choice, every view of the column in its default order.
+  columnViews: [],
 };
 
 export type PlatformOverrides = Record<ShortcutPlatform, ShortcutOverrides>;
@@ -105,6 +108,8 @@ export interface UiPreferencesChange {
   accentTheme?: AccentTheme;
   /** Decision 0039: one row per conversation or per message, synced like the text size. */
   conversations?: boolean;
+  /** Stage 17: the column's views in the user's order, shown or hidden; synced. */
+  columnViews?: readonly ColumnView[];
 }
 
 let saves: Promise<unknown> = Promise.resolve();
@@ -135,6 +140,7 @@ export function saveUiPreferences(change: UiPreferencesChange): Promise<UiPrefer
       aiPanel: change.aiPanel ?? previous.aiPanel,
       accentTheme: change.accentTheme ?? previous.accentTheme,
       conversations: change.conversations ?? previous.conversations,
+      columnViews: change.columnViews ? [...change.columnViews] : previous.columnViews,
     };
     await queryClient?.cancelQueries({ queryKey: uiPreferencesQueryKey });
     queryClient?.setQueryData(uiPreferencesQueryKey, next);

@@ -1376,10 +1376,13 @@ import {
 } from "../generated/bindings";
 // Stage 13 (decision 0028): the AI panel's state is a UI preference of this device.
 import type { AiPanelState } from "../generated/bindings";
+// Stage 17: the column's views (order, shown or hidden), synced like the text size.
+import { MAX_COLUMN_VIEWS, type ColumnView } from "../generated/bindings";
 
 export {
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
+  MAX_COLUMN_VIEWS,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
@@ -1394,6 +1397,7 @@ export {
 
 export type {
   AiPanelState,
+  ColumnView,
   CoreDensity,
   CoreReadingPanePosition,
   CoreShortcut,

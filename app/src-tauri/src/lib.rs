@@ -428,6 +428,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             "MAX_RECENT_COMMAND_CHARS",
             u32::try_from(mail_model::MAX_RECENT_COMMAND_CHARS).unwrap_or(u32::MAX),
         )
+        // Stage 17: the most entries of the column's views.
+        .constant(
+            "MAX_COLUMN_VIEWS",
+            u32::try_from(mail_model::MAX_COLUMN_VIEWS).unwrap_or(u32::MAX),
+        )
         // Stage 9 and 13 (decision 0027): the largest `.eml` file the app opens, and the most
         // ids one `getMessagesByIds` takes.
         .constant("MAX_EML_FILE_BYTES", mail_model::MAX_EML_FILE_BYTES)

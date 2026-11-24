@@ -1305,6 +1305,11 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         ai_panel: mail_model::AiPanelState::Folded,
         accent_theme: mail_model::AccentTheme::Green,
         conversations: false,
+        // Stage 17: the column's views are synced like the text size.
+        column_views: vec![mail_model::ColumnView {
+            id: "later".into(),
+            shown: false,
+        }],
     };
     a.core
         .set_ui_preferences(prefs.clone())
@@ -1328,6 +1333,8 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
     // Stage 16 (decision 0036): the accent theme goes along like the text size. Green, not
     // orange: orange is the default since decision 0038 and would prove nothing.
     assert_eq!(taken.accent_theme, mail_model::AccentTheme::Green);
+    // Stage 17: the column's views go along too.
+    assert_eq!(taken.column_views, prefs.column_views);
     assert!(
         taken.recent_commands.is_empty(),
         "the palette history stays on its device"

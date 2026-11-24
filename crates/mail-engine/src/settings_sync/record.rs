@@ -357,6 +357,8 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.accent_theme",
     // Decision 0039: the conversation view, like the text size.
     "ui.conversations",
+    // Stage 17: the column's views (order, shown or hidden), like the text size.
+    "ui.column_views",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the

@@ -705,6 +705,8 @@ export const MAX_ATTACHMENTS = 100 as const;
 
 export const MAX_ATTACHMENT_BYTES = 104857600 as const;
 
+export const MAX_COLUMN_VIEWS = 32 as const;
+
 export const MAX_COMMAND_ID_CHARS = 64 as const;
 
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
@@ -1694,6 +1696,17 @@ export type CleanedPaste = {
 	imagesRemoved: number,
 	/**  Colours, fonts, sizes, tables or headings were simplified. */
 	formattingSimplified: boolean,
+};
+
+/**
+ *  Stage 17: one view of the column's "Views" section (and of the rail), in the user's order,
+ *  shown or hidden. Which views exist is the UI's business, like the commands of the shortcuts:
+ *  the core checks the form of the id only.
+ */
+export type ColumnView = {
+	/**  View id of the UI: 1 to 64 ASCII letters, digits, `_` or `-`. */
+	id: string,
+	shown: boolean,
 };
 
 /**  Rich text (HTML from the editor, sent as `multipart/alternative`) or plain text only. */
@@ -4694,8 +4707,9 @@ export type TransferMode =
 
 /**
  *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
- *  16) the accent theme and (decision 0039) the conversation view are synchronised between devices; the recent commands and the AI
- *  panel's state stay on this device.
+ *  16) the accent theme, (decision 0039) the conversation view and (stage 17) the column's views
+ *  are synchronised between devices; the recent commands and the AI panel's state stay on this
+ *  device.
  */
 export type UiPreferences = {
 	shortcuts: PlatformShortcuts,
@@ -4715,6 +4729,13 @@ export type UiPreferences = {
 	 *  synced like the text size.
 	 */
 	conversations: boolean,
+	/**
+	 *  Stage 17: the views of the column's "Views" section and of the rail, in the user's order,
+	 *  each shown or hidden; synced like the text size. Empty is the default: every view in the
+	 *  UI's order. A view the list does not name (one added by a later version) keeps its default
+	 *  place and visibility. At most 32 entries, no id twice.
+	 */
+	columnViews: ColumnView[],
 };
 
 /**  The user's answer to an unclear send. */
