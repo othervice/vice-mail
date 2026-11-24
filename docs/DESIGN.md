@@ -71,7 +71,7 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Vorschau | gedämpft, abgeschnitten |
 | Konto | nur wo sich Konten mischen (vereinter Posteingang, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
-| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Anpinnen, Verschieben, Später, Mehr |
+| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
 Betreff, darunter die Vorschau (nur komfortabel).
@@ -593,6 +593,8 @@ Tabellenziffern), 20 px hoch, rund, Fläche `badge`, Schrift `text-secondary`, b
 `accent-soft` mit Schrift `accent` (geprüft in `contrast.test.ts`). Der Pfeil dreht ohne Bewegung
 (nur Farbübergänge, `motion.test.ts`). Tooltip „Antworten zeigen“ bzw. „Antworten ausblenden“. Ein
 Klick klappt auf oder zu und wählt nichts; er ist ein Ziel für die Maus wie das Auswahlkästchen.
+Die Schnellaktionen beim Überfahren liegen nie darüber (Stufe 18, Entscheidung 0052): Ein Klick auf
+die Pille klappt auch dann auf und zu, wenn die Maus über der Zeile steht.
 Der Betreff geht vor (Feinschliff 24.11.2026): Fehlt Platz, gibt erst die Pille ihr Wort ab („3
 Antworten“, „3 Antw…“, „3“), dann erst wird der Betreff gekürzt; Pfeil und Zahl bleiben immer. Die
 Pille schiebt nie die Zeit (sie steht in der breiten Liste in der Betreffspalte, in der schmalen in

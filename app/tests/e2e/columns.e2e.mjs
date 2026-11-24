@@ -1,13 +1,17 @@
 // Stage 18 in the real app, with real mouse events (`e2e_native_mouse_event`: NSEvents handed to
-// the WKWebView, decision 0005), docs/stages/18, task A:
+// the WKWebView, decision 0005), docs/stages/18, tasks A and B:
 // A. The border between the message list and the reading pane is a handle like the sidebar's.
 //    Dragged on the right it sets the list's width, below the list its height; the list's rows
 //    switch between one and several lines with its width; a window made smaller keeps the pane's
 //    minimum and the stored size; both sizes are stored with the window's layout and are back
 //    after the page reloads (the window's layout read again from the core).
+// B. Hovering a conversation row shows its quick actions beside the "n replies" toggle, never
+//    over it or the selection box: a real click at the toggle's visible centre, with the actions
+//    showing, unfolds and folds the conversation. In the wide one-line list and in the narrow
+//    list beside the reading pane, and on an unfolded message's row.
 //
-// In Archive, conversations on (turned off again at the end, like conversations.e2e.mjs). The
-// stored layout is put back at the end.
+// On the seed's thread "Planning the 2026 offsite" in Archive, conversations on (turned off again
+// at the end, like conversations.e2e.mjs). The stored layout is put back at the end.
 // Screenshots go to tests/e2e/screenshots/columns-*.png, the facts to columns-report.json.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -20,6 +24,7 @@ const report = { screenshots: [], steps: {} };
 let preferencesBefore = null;
 let layoutBefore = null;
 let sidebarBefore = null;
+let conversationId = null;
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 
 /** Runs a palette command by typing its label, as layouts.e2e.mjs does. */
@@ -48,6 +53,12 @@ const settle = () =>
   browser.execute(() => {
     for (const animation of document.getAnimations()) animation.finish();
   });
+
+/** A real click (down and up) at a point of the viewport. */
+async function click(point) {
+  const viewportHeight = await browser.execute(() => innerHeight);
+  return coreCall("e2e_native_mouse", { x: point.x, y: point.y, viewportHeight });
+}
 
 /** Presses on `from`, drags in steps to `to` and lets go there, like a hand on the mouse. */
 async function drag(from, to, steps = 8) {
@@ -100,7 +111,143 @@ async function openFirstRow() {
   await testId("list-resize").waitForExist({ timeout: 10000 });
 }
 
-describe("stage 18: the border between list and pane moves", () => {
+/** Where a conversation row's parts are, which of them the pointer is over, what shows. */
+const rowParts = (id) =>
+  browser.execute((rowId) => {
+    const row = document.getElementById(rowId);
+    const box = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const toggle = row?.querySelector('[data-testid="row-replies"]');
+    const actions = row?.querySelector('[data-testid="row-actions"]');
+    const check = row?.querySelector("[data-row-check]");
+    const t = box(toggle);
+    const at = t ? document.elementFromPoint(t.left + t.width / 2, t.top + t.height / 2) : null;
+    return {
+      hovered: row?.matches(":hover") ?? false,
+      expanded: row?.getAttribute("aria-expanded") ?? null,
+      narrow: Boolean(row?.querySelector(".flex-col")),
+      row: box(row),
+      toggle: t,
+      check: box(check),
+      actions: box(actions),
+      actionsShown: actions ? getComputedStyle(actions).display !== "none" && getComputedStyle(actions).visibility !== "hidden" : false,
+      targets: actions ? actions.querySelectorAll('[data-testid^="quick-"]').length : 0,
+      metaShown: (() => {
+        const time = row?.querySelector('[data-testid="row-meta"] time');
+        return time ? time.getClientRects().length > 0 : null;
+      })(),
+      // What a click at the toggle's centre reaches: the toggle itself.
+      atToggleCentre: at ? (at.closest("[data-row-toggle]") === toggle ? "toggle" : (at.closest("[data-testid]")?.getAttribute("data-testid") ?? at.tagName)) : null,
+      children: document.querySelectorAll('[data-testid="child-row"]').length,
+    };
+  }, id);
+
+const overlaps = (a, b) => Boolean(a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom);
+
+async function scrollRowIntoView(id) {
+  await browser.execute((rowId) => {
+    document.getElementById(rowId)?.scrollIntoView({ block: "center" });
+  }, id);
+  await browser.pause(150);
+}
+
+/**
+ * Hovers the conversation row with the real pointer (over its subject), checks that the quick
+ * actions show beside the toggle and that nothing clickable is under them, then clicks the
+ * toggle's visible centre to unfold and again to fold. Returns the facts.
+ */
+async function hoverAndToggle(where) {
+  await scrollRowIntoView(conversationId);
+  let parts = await rowParts(conversationId);
+  assert.equal(parts.expanded, "false", `${where}: the conversation is unfolded already`);
+  // Onto the row, left of the toggle: the row is hovered and shows its actions.
+  await mouse("move", { x: parts.toggle.left - 12, y: parts.toggle.top + parts.toggle.height / 2 });
+  await browser.waitUntil(async () => (await rowParts(conversationId)).actionsShown, { timeout: 5000, timeoutMsg: `${where}: no quick actions on hover` });
+  parts = await rowParts(conversationId);
+  const facts = { where, hoveredRow: parts.hovered, narrow: parts.narrow, toggle: parts.toggle, actions: parts.actions, targets: parts.targets };
+  assert.ok(parts.hovered, `${where}: the row is not hovered`);
+  assert.ok(parts.targets >= 4, `${where}: only ${String(parts.targets)} quick actions`);
+  assert.equal(parts.metaShown, false, `${where}: the time shows beside the quick actions`);
+  assert.ok(!overlaps(parts.actions, parts.toggle), `${where}: the quick actions cover the toggle ${JSON.stringify(parts)}`);
+  assert.ok(!overlaps(parts.actions, parts.check), `${where}: the quick actions cover the selection box`);
+  assert.ok(parts.actions.right <= parts.row.right + 0.5 && parts.actions.top >= parts.row.top - 0.5 && parts.actions.bottom <= parts.row.bottom + 0.5, `${where}: the quick actions leave the row`);
+  assert.equal(parts.atToggleCentre, "toggle", `${where}: at the toggle's centre is ${String(parts.atToggleCentre)}`);
+  report.screenshots.push(await screenshot(`columns-hover-${where}`));
+
+  // A real click at the toggle's visible centre while the actions show: unfolds.
+  const point = centre(parts.toggle);
+  facts.click = await click(point);
+  await browser.waitUntil(async () => (await rowParts(conversationId)).expanded === "true", { timeout: 10000, timeoutMsg: `${where}: the click did not unfold` });
+  await browser.waitUntil(async () => (await rowParts(conversationId)).children > 0, { timeout: 15000, timeoutMsg: `${where}: no messages below` });
+  parts = await rowParts(conversationId);
+  assert.ok(parts.actionsShown, `${where}: the quick actions went away under the pointer`);
+  assert.equal(parts.atToggleCentre, "toggle", `${where}: unfolded, at the toggle's centre is ${String(parts.atToggleCentre)}`);
+  report.screenshots.push(await screenshot(`columns-hover-${where}-unfolded`));
+
+  // An unfolded message's row: its actions in its line, clear of its selection box.
+  const child = await browser.execute(() => {
+    const row = document.querySelectorAll('[data-testid="child-row"]')[1];
+    if (!row) return null;
+    const r = row.getBoundingClientRect();
+    return { id: row.id, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  assert.ok(child, `${where}: no second message row`);
+  await mouse("move", child);
+  const childParts = await browser.execute((id) => {
+    const row = document.getElementById(id);
+    const box = (el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const actions = row.querySelector('[data-testid="row-actions"]');
+    return {
+      hovered: row.matches(":hover"),
+      shown: getComputedStyle(actions).display !== "none",
+      row: box(row),
+      actions: box(actions),
+      check: box(row.querySelector("[data-row-check]")),
+    };
+  }, child.id);
+  facts.child = childParts;
+  assert.ok(childParts.hovered && childParts.shown, `${where}: no quick actions on the message row`);
+  assert.ok(!overlaps(childParts.actions, childParts.check), `${where}: the message row's actions cover its selection box`);
+  assert.ok(childParts.actions.top >= childParts.row.top - 0.5 && childParts.actions.bottom <= childParts.row.bottom + 0.5, `${where}: the message row's actions leave the row`);
+
+  // Back on the conversation row, the same click folds it again.
+  await mouse("move", { x: point.x - 30, y: point.y });
+  parts = await rowParts(conversationId);
+  assert.ok(parts.actionsShown, `${where}: no quick actions on the way back`);
+  assert.equal(parts.atToggleCentre, "toggle");
+  await click(centre(parts.toggle));
+  await browser.waitUntil(async () => (await rowParts(conversationId)).expanded === "false", { timeout: 10000, timeoutMsg: `${where}: the click did not fold` });
+  await browser.waitUntil(async () => (await rowParts(conversationId)).children === 0, { timeout: 10000, timeoutMsg: `${where}: the messages stayed` });
+  facts.folded = true;
+  // Away from the list, so no row stays hovered.
+  await mouse("move", { x: 2, y: 2 });
+  return facts;
+}
+
+/** The offsite thread's row in Archive (its id changes when the page reloads). */
+async function findConversation() {
+  await browser.waitUntil(
+    async () => {
+      conversationId = await browser.execute(() => {
+        const rows = [...document.querySelectorAll('[data-testid="message-list"] [role="treeitem"][aria-level="1"]')].filter((row) =>
+          row.querySelector('[data-testid="row-replies"]'),
+        );
+        const offsite = rows.find((row) => row.querySelector('[data-testid="row-name"]')?.textContent.includes("Planning the 2026 offsite"));
+        return (offsite ?? rows[0])?.id ?? null;
+      });
+      return conversationId !== null;
+    },
+    { timeout: 20000, timeoutMsg: "no conversation row with replies in Archive" },
+  );
+}
+
+describe("stage 18: the border between list and pane moves; unfolding beside the quick actions", () => {
   before(async () => {
     await attach();
     preferencesBefore = await coreCall("get_preferences");
@@ -138,6 +285,7 @@ describe("stage 18: the border between list and pane moves", () => {
       timeout: 20000,
       timeoutMsg: "the list of conversations is no tree",
     });
+    await findConversation();
   });
 
   after(async () => {
@@ -280,6 +428,41 @@ describe("stage 18: the border between list and pane moves", () => {
     report.steps.reloadedRight = right;
     assert.equal(right.value, stored.listWidth);
     assert.ok(Math.abs(right.list.width - stored.listWidth) <= 1, `after the reload the list is ${String(right.list.width)} px wide`);
+    assert.deepEqual(await cspViolations(), [], "CSP violations");
+  });
+
+  it("B: a real click on the replies toggle unfolds and folds while the quick actions show", async () => {
+    await findConversation();
+    // Beside the reading pane: narrow rows, the actions on the first line, the toggle below.
+    await (await browser.$('[data-testid="message-list"] [role="treeitem"][aria-level="1"]:not([aria-expanded])')).click();
+    await testId("list-resize").waitForExist({ timeout: 10000 });
+    report.steps.narrow = await hoverAndToggle("narrow");
+    assert.equal(report.steps.narrow.narrow, true, "the list beside the pane is not narrow");
+
+    // A list dragged wider than 720 px (no sidebar): one line a row, the actions after the
+    // subject's part of the line.
+    const narrowWidth = (await split()).list.width;
+    await setSidebar(false);
+    const room = await split();
+    await drag(centre(room.handle), { x: room.list.left + 820, y: centre(room.handle).y });
+    await browser.waitUntil(async () => (await split()).narrowRows === false, { timeout: 5000, timeoutMsg: "rows kept several lines in a wide list" });
+    try {
+      report.steps.wide = await hoverAndToggle("wide");
+      assert.equal(report.steps.wide.narrow, false, "the wide list's row is not one line");
+      // Compact rows: the same in both widths.
+      await paletteCommand("Use compact rows");
+      report.steps.wideCompact = await hoverAndToggle("wide-compact");
+    } finally {
+      const wide = await split();
+      await drag(centre(wide.handle), { x: wide.list.left + narrowWidth, y: centre(wide.handle).y });
+      await setSidebar(true);
+    }
+    try {
+      await browser.waitUntil(async () => (await split()).narrowRows === true, { timeout: 5000, timeoutMsg: "rows kept one line in a narrow list" });
+      report.steps.narrowCompact = await hoverAndToggle("narrow-compact");
+    } finally {
+      await paletteCommand("Use comfortable rows");
+    }
     assert.deepEqual(await cspViolations(), [], "CSP violations");
   });
 });

@@ -14,7 +14,9 @@ import { ipcError, makeAccount, makeMessage, makeView, mockCore, standardMailbox
 import { emitCore } from "./support/events";
 import { optionName } from "./support/names";
 import { renderApp } from "./support/render";
+import { appStylesheet } from "./support/styles";
 import { CONVERSATION_PREFERENCES } from "./support/uiPrefs";
+import { useUiStore } from "../src/stores/ui";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -428,6 +430,103 @@ describe("the look (stage 17, after the screenshot pass)", () => {
       vi.unstubAllGlobals();
     });
   }
+});
+
+describe("quick actions beside the replies toggle (stage 18, decision 0052)", () => {
+  const classes = (element: Element | null | undefined) => (element?.getAttribute("class") ?? "").split(/\s+/);
+
+  for (const width of [1000, 400]) {
+    const narrow = width === 400;
+    it(`take the place of the row's meta in its line, never over the toggle (${narrow ? "narrow" : "wide"} list)`, async () => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(private readonly callback: ResizeObserverCallback) {}
+          observe() {
+            this.callback([], this);
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+      const { user } = setup();
+      const { list, conversation, children } = await inbox();
+      expect(conversation().querySelector(".flex-col") !== null).toBe(narrow);
+      const actions = within(conversation()).getByTestId("row-actions");
+      const toggle = within(conversation()).getByTestId("row-replies");
+      const meta = within(conversation()).getByTestId("row-meta");
+      // A flex item of a line of the row, not a layer over it.
+      expect(classes(actions)).not.toContain("absolute");
+      expect(classes(actions)).toEqual(expect.arrayContaining(["hidden", "group-hover/row:flex", "shrink-0"]));
+      const line = actions.parentElement as HTMLElement;
+      expect(line).toBe(within(conversation()).getByTestId("row-sender").parentElement);
+      expect(meta.parentElement).toBe(line);
+      expect(meta.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(meta).getByRole("time", { hidden: true })).toBeTruthy();
+      if (narrow) {
+        // Narrow: on the first line with sender and time; the toggle is on the subject's line.
+        expect(line.contains(toggle)).toBe(false);
+        expect(classes(actions)).toContain("self-end");
+        expect(classes(line)).toContain("h-5");
+      } else {
+        // Wide: after the subject's part of the line, which gives way to it.
+        const subjectPart = toggle.parentElement as HTMLElement;
+        expect(subjectPart.parentElement).toBe(line);
+        expect(subjectPart.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(classes(subjectPart)).toEqual(expect.arrayContaining(["min-w-0", "flex-1"]));
+      }
+      // 24 px targets, in a bar no higher than the smallest row.
+      for (const target of actions.querySelectorAll("[data-testid^='quick-']")) expect(classes(target)).toContain("size-6");
+
+      // At rest the meta shows and the bar is gone; on the keyboard cursor the bar takes its place.
+      let sheet = await appStylesheet();
+      expect(sheet.value(actions, "display")).toBe("none");
+      expect(sheet.value(meta, "display")).toBe("contents");
+      act(() => {
+        list.focus();
+      });
+      await user.keyboard("{ArrowDown}");
+      await waitFor(() => {
+        expect(list.getAttribute("aria-activedescendant")).toBe(conversation().id);
+      });
+      sheet = await appStylesheet();
+      expect(sheet.value(within(conversation()).getByTestId("row-actions"), "display")).toBe("flex");
+      expect(sheet.value(within(conversation()).getByTestId("row-meta"), "display")).toBe("none");
+
+      // The messages of the unfolded conversation do the same in their one line.
+      await user.click(within(conversation()).getByTestId("row-replies"));
+      await waitFor(() => {
+        expect(children()).toHaveLength(3);
+      });
+      for (const child of children()) {
+        const childActions = within(child).getByTestId("row-actions");
+        const childMeta = within(child).getByTestId("row-meta");
+        expect(classes(childActions)).not.toContain("absolute");
+        expect(childActions.parentElement).toBe(childMeta.parentElement);
+        expect(childMeta.compareDocumentPosition(childActions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(within(child).getByTestId("child-text").parentElement?.parentElement).toBe(childActions.parentElement);
+        expect(classes(within(child).getByTestId("child-text").parentElement)).toContain("overflow-hidden");
+      }
+      vi.unstubAllGlobals();
+    });
+  }
+
+  it("lists that mix accounts keep the account label with the time (no quick actions there)", async () => {
+    const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work" });
+    setup({ accounts: [ADA, work] });
+    act(() => {
+      useUiStore.getState().showUnifiedInbox({ kind: "all" });
+    });
+    const list = await screen.findByRole("tree", { name: "Messages in All inboxes" });
+    const rows = await within(list).findAllByRole("treeitem");
+    for (const row of rows) {
+      expect(within(row).queryByTestId("row-actions")).toBeNull();
+      const meta = within(row).getByTestId("row-meta");
+      expect(meta.contains(within(row).getByTestId("row-account"))).toBe(true);
+      expect(classes(meta)).toEqual(["contents"]);
+    }
+  });
 });
 
 describe("a message asked for by id (a notification, an AI source)", () => {
