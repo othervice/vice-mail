@@ -565,7 +565,7 @@ export const en = {
     },
     ai: {
       label: "AI for this message",
-      suggestReply: "Suggest reply",
+      suggestReply: "Suggest a reply",
       summarize: "Summarise conversation",
     },
     ask: {
@@ -2657,6 +2657,10 @@ export const en = {
       mails_one: "{{count, number}} mail, {{size}} to {{host}} ({{model}})",
       mails_other: "{{count, number}} mails, {{size}} to {{host}} ({{model}})",
       text: "{{size}} of text, no mail, to {{host}} ({{model}})",
+      // The consent step names host and model in its own line ("To whom").
+      amountMails_one: "{{count, number}} mail, {{size}}",
+      amountMails_other: "{{count, number}} mails, {{size}}",
+      amountText: "{{size}} of text, no mail",
       sent: "Sent: {{what}}",
       leftOut_one: "Shortened to fit: {{count, number}} mail was left out.",
       leftOut_other: "Shortened to fit: {{count, number}} mails were left out.",
@@ -2904,7 +2908,7 @@ export const en = {
       chooseThread: "Choose a conversation to summarise it or to get a reply suggestion.",
       thread: "AI for “{{subject}}”",
       about: "About: {{subject}}",
-      summarize: "Summarise",
+      summarize: "Summarise conversation",
       suggestReply: "Suggest a reply",
       notPermittedTitle: "This account's mail does not go to cloud providers",
       notPermittedBody: "Allow it for this account in the AI settings, or choose a local provider. Nothing was sent.",

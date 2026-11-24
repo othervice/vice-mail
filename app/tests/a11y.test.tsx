@@ -449,7 +449,7 @@ describe.each(["light", "dark"] as const)("axe, %s theme, stage 13 AI", (theme) 
     const options = await screen.findAllByRole("option");
     await user.click(options[0] as HTMLElement);
     await screen.findByTestId("open-reply-bar");
-    await user.click(await within(panel).findByRole("button", { name: "Summarise" }));
+    await user.click(await within(panel).findByRole("button", { name: "Summarise conversation" }));
     await within(panel).findByRole("article", { name: "Summary" });
     await user.click(within(panel).getByRole("button", { name: "Suggest a reply" }));
     await within(panel).findByRole("article", { name: "Reply suggestion" });

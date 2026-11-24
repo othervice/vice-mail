@@ -227,7 +227,7 @@ describe("focus ring", () => {
     await within(panel).findByRole("region", { name: "Maybe still open" });
     const options = await screen.findAllByRole("option");
     await user.click(options[0] as HTMLElement);
-    await user.click(await within(panel).findByRole("button", { name: "Summarise" }));
+    await user.click(await within(panel).findByRole("button", { name: "Summarise conversation" }));
     await within(panel).findByRole("article", { name: "Summary" });
     await user.click(within(panel).getByRole("button", { name: "Suggest a reply" }));
     await within(panel).findByRole("article", { name: "Reply suggestion" });

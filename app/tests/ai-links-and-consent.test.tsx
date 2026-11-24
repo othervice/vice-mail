@@ -101,7 +101,7 @@ describe("links in AI output (decision 0028)", () => {
       },
     );
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     // Text with links as elements of their own: no anchor that could navigate, no image.
     expect(card.querySelector("a")).toBeNull();
@@ -140,7 +140,7 @@ describe("links in AI output (decision 0028)", () => {
   it("says when the core no longer knows the links of a result, without a reload of a message", async () => {
     const { core, user } = setup({ enabled: true, profiles: [LOCAL], functions: ALL_LOCAL, summary: summaryWithLink });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     await user.click(within(card).getAllByRole("link")[0] as HTMLElement);
     const check = await within(panel).findByTestId("link-card");
@@ -188,7 +188,7 @@ describe("links in AI output (decision 0028)", () => {
       summary: (id) => ({ keyPoints: [{ text: "Nothing to click.", sources: [id] }], openQuestions: [], deadlines: [], dropped: 0, transfer: makeTransfer() }),
     });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     expect(within(card).queryAllByRole("link")).toEqual([]);
   });
@@ -213,18 +213,24 @@ describe("the exact size before consent (decision 0028)", () => {
         }),
     });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const consent = await within(panel).findByRole("group", { name: "Before the first request to OpenAI" });
     const exact = await within(consent).findByTestId("ai-consent-exact");
-    expect(exact.textContent).toContain("This request would send: 4 mails, 20 kB to api.openai.com:443 (gpt-5)");
+    expect(exact.textContent).toContain("This request would send: 4 mails, 20 kB");
+    // Host and model once, in the step's own line.
+    expect(exact.textContent).not.toContain("api.openai.com");
     expect(exact.textContent).toContain("Shortened to fit: 1 mail was left out.");
     expect(within(exact).getByText("Cloud")).toBeTruthy();
     expect(core.ai.dryRuns).toEqual([{ function: "summary", messageId: message.id }]);
     expect(core.ai.providerCalls).toEqual([]);
     expect(core.callsOf("set_ai_consent")).toEqual([]);
+    // The step has the panel's height: the question box is folded away while it waits.
+    const askArea = within(panel).getByTestId("ai-ask-area");
+    expect(askArea.hidden).toBe(true);
 
     await user.click(within(consent).getByRole("button", { name: "Agree and send" }));
     await within(panel).findByRole("article", { name: "Summary" });
+    expect(askArea.hidden).toBe(false);
     expect(core.ai.providerCalls).toHaveLength(1);
   });
 
@@ -247,12 +253,12 @@ describe("the exact size before consent (decision 0028)", () => {
     await user.click(within(panel).getByRole("button", { name: "Ask" }));
     const consent = await within(panel).findByRole("group", { name: "Before the first request to OpenAI" });
     const exact = await within(consent).findByTestId("ai-consent-exact");
-    expect(exact.textContent).toContain("This request would send: 900 bytes of text, no mail, to api.openai.com:443 (gpt-5)");
+    expect(exact.textContent).toContain("This request would send: 900 bytes of text, no mail");
     expect(exact.textContent).toContain("a second request sends the matching mails");
     expect(core.ai.dryRuns).toEqual([{ function: "search", question: "When is the meeting?" }]);
     await user.click(within(consent).getByRole("button", { name: "Not now" }));
 
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const again = await within(panel).findByRole("group", { name: "Before the first request to OpenAI" });
     expect(await within(again).findByTestId("ai-consent-exact-error")).toBeTruthy();
     expect(within(again).getByRole("button", { name: "Agree and send" })).toBeTruthy();

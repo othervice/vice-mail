@@ -113,9 +113,9 @@ describe("cloud permission per account", () => {
     await user.click(adaRow as HTMLElement);
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
     await within(panel).findByText("About: Privat");
-    expect(within(panel).getByRole("button", { name: "Summarise" }).hasAttribute("disabled")).toBe(true);
+    expect(within(panel).getByRole("button", { name: "Summarise conversation" }).hasAttribute("disabled")).toBe(true);
     expect(within(panel).getByRole("button", { name: "Suggest a reply" }).hasAttribute("disabled")).toBe(true);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     // A question over all accounts only covers the permitted one.
     await user.click(within(panel).getByRole("radio", { name: "All accounts" }));
     await user.type(within(panel).getByRole("textbox", { name: "Question" }), "What is new?");
@@ -129,7 +129,7 @@ describe("cloud permission per account", () => {
     const workRow = within(list).getAllByRole("option").find((o) => optionName(o).includes("Projekt"));
     await user.click(workRow as HTMLElement);
     await within(panel).findByText("About: Projekt");
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     await within(panel).findByRole("article", { name: "Summary" });
     expect(core.callsOf("ai_summarize_thread")).toEqual([{ requestId: expect.any(String) as string, messageId: WORK_MAIL.id }]);
     expect(core.ai.providerCalls.map((c) => c.cmd)).toEqual(["ai_ask", "ai_summarize_thread"]);

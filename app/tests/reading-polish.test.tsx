@@ -202,6 +202,47 @@ describe("reading toolbar in a very narrow pane", () => {
   });
 });
 
+describe("the read-only note in the toolbar", () => {
+  const READ_ONLY = makeAccount({ writesEnabled: false });
+  const layout = (width: number) => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+    // The word "Read-only" is 70 px wide, also while it is only visually hidden.
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(70);
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const width = this.hasAttribute("data-toolbar-separator") ? 1 : this.closest("[hidden]") ? 0 : 32;
+      return { width, height: 32, top: 0, left: 0, right: width, bottom: 32, x: 0, y: 0, toJSON: () => ({}) };
+    });
+  };
+
+  it("keeps the word where there is room for it", async () => {
+    layout(1000);
+    const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
+    const pane = await openMessage(user);
+    const note = await within(pane).findByTestId("read-only-actions");
+    await waitFor(() => {
+      expect(note.dataset.compact).toBeUndefined();
+    });
+    expect(note.querySelector("[data-read-only-label]")?.className).toBe("truncate");
+  });
+
+  it("shows only the lock with a tooltip in a narrow pane, never a word cut to “Read-…”", async () => {
+    layout(200);
+    const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
+    const pane = await openMessage(user);
+    const note = await within(pane).findByTestId("read-only-actions");
+    await waitFor(() => {
+      expect(note.dataset.compact).toBe("true");
+    });
+    // The word is still there for screen readers, and the toolbar is described by it.
+    const label = note.querySelector("[data-read-only-label]") as HTMLElement;
+    expect(label.className).toBe("sr-only");
+    expect(within(pane).getByRole("toolbar", { name: "Message actions" }).getAttribute("aria-describedby")).toBe(label.id);
+    await user.hover(within(note).getByTestId("read-only-lock"));
+    expect((await screen.findByRole("tooltip")).textContent).toContain("Read-only: Changes are turned off for this account");
+    expect(within(note).getByRole("button", { name: "Allow changes…" })).toBeTruthy();
+  });
+});
+
 describe("the open message", () => {
   it("is a card under its subject with a reply row; with AI off there are no AI chips and no ask bar", async () => {
     const { user } = setup({ enabled: false });
@@ -278,7 +319,7 @@ describe("the open message", () => {
     const pane = await openMessage(user);
     expect(screen.queryByRole("complementary", { name: "AI assistant" })).toBeNull();
     const chips = await within(pane).findByRole("group", { name: "AI for this message" });
-    await user.click(within(chips).getByRole("button", { name: "Suggest reply" }));
+    await user.click(within(chips).getByRole("button", { name: "Suggest a reply" }));
 
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
     const card = await within(panel).findByRole("article", { name: "Reply suggestion" });

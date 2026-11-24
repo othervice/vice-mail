@@ -56,14 +56,27 @@ function useRun(ctx: ActionContext, host: ActionHost) {
   };
 }
 
-/** "Read-only" next to disabled actions, with the way to the switch (Settings, Accounts). */
-export function ReadOnlyNote({ ctx, id }: { ctx: ActionContext; id: string }) {
+/**
+ * "Read-only" next to disabled actions, with the way to the switch (Settings, Accounts). Where the
+ * toolbar has no room for the word (`compact`), only the lock shows, with the word and the
+ * explanation as its tooltip; screen readers read the same text either way.
+ */
+export function ReadOnlyNote({ ctx, id, compact = false }: { ctx: ActionContext; id: string; compact?: boolean }) {
   const { t } = useTranslation();
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
+  const lock = <Lock aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />;
   return (
-    <div className="flex min-w-0 items-center gap-2 text-12 text-secondary" data-testid="read-only-actions">
-      <Lock aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-      <span id={id} className="truncate" title={t("actions.readOnly.explanation")}>
+    <div className="flex min-w-0 items-center gap-2 text-12 text-secondary" data-testid="read-only-actions" data-compact={compact || undefined}>
+      {compact ? (
+        <Tooltip label={`${t("actions.readOnly.label")}: ${t("actions.readOnly.explanation")}`}>
+          <span className="flex shrink-0 items-center" data-testid="read-only-lock">
+            {lock}
+          </span>
+        </Tooltip>
+      ) : (
+        lock
+      )}
+      <span id={id} className={compact ? "sr-only" : "truncate"} title={t("actions.readOnly.explanation")} data-read-only-label>
         <span aria-hidden>{t("actions.readOnly.label")}</span>
         <span className="sr-only">{t("actions.readOnly.explanation")}</span>
       </span>
@@ -81,11 +94,6 @@ export function ReadOnlyNote({ ctx, id }: { ctx: ActionContext; id: string }) {
   );
 }
 
-/**
- * The toolbar's own buttons, in groups with a thin line between them: respond, file away, mark.
- * At most seven show at once (the actions of a folder exclude each other within a group: Delete
- * or Delete permanently, Reply or Edit draft). Every other action is always in "More actions".
- */
 export const PRIMARY_GROUPS: readonly (readonly ActionId[])[] = [
   ["reply", "replyAll", "forward", "editDraft"],
   ["archive", "delete", "deletePermanently", "notSpam"],
@@ -140,13 +148,21 @@ export function fittingCount(available: number, button: number, gap: number, tot
   return Math.max(0, Math.floor((available - button) / (button + gap)));
 }
 
-/** What the read-only note keeps: lock and "Allow changes" always, its label up to 40 % of the room. */
-function noteRoom(note: HTMLElement, room: number): number {
+/**
+ * What the read-only note takes: lock and "Allow changes" always; the word "Read-only" too when it
+ * fits whole into 40 % of the room, else the note is compact (the word moves into the lock's
+ * tooltip) instead of being cut to "Read-…". The word's width is read from its own element, which
+ * keeps its full width when it is only visually hidden, so both states measure alike.
+ */
+function noteRoom(note: HTMLElement, room: number): { width: number; compact: boolean } {
   const inner = note.firstElementChild;
   const innerGap = inner ? Number.parseFloat(getComputedStyle(inner).columnGap) || 0 : 0;
   const lock = note.querySelector("svg")?.getBoundingClientRect().width ?? 0;
   const allow = note.querySelector("button")?.getBoundingClientRect().width ?? 0;
-  return Math.max(lock + allow + 2 * innerGap, Math.min(note.scrollWidth, room * 0.4));
+  const label = note.querySelector<HTMLElement>("[data-read-only-label]")?.scrollWidth ?? 0;
+  const base = lock + allow + innerGap;
+  const full = base + label + innerGap;
+  return full <= room * 0.4 ? { width: full, compact: false } : { width: base, compact: true };
 }
 
 /**
@@ -159,8 +175,9 @@ function useFitting(
   note: RefObject<HTMLDivElement | null>,
   total: number,
   readOnly: boolean,
-): number | null {
+): { fit: number | null; compactNote: boolean } {
   const [fit, setFit] = useState<number | null>(null);
+  const [compactNote, setCompactNote] = useState(false);
   useLayoutEffect(() => {
     const element = wrapper.current;
     if (!element || typeof ResizeObserver === "undefined") return undefined;
@@ -179,8 +196,11 @@ function useFitting(
       const style = getComputedStyle(bar);
       const gap = Number.parseFloat(style.columnGap) || 0;
       const outerGap = Number.parseFloat(getComputedStyle(element).columnGap) || 0;
-      // The read-only note gives way first: its label truncates (noteRoom).
-      const noteWidth = note.current ? noteRoom(note.current, element.clientWidth) + outerGap : 0;
+      // The read-only note gives way first: its word goes into the lock's tooltip (noteRoom).
+      const noteFit = note.current ? noteRoom(note.current, element.clientWidth) : null;
+      const noteWidth = noteFit ? noteFit.width + outerGap : 0;
+      const compact = noteFit?.compact ?? false;
+      setCompactNote((current) => (current === compact ? current : compact));
       // The lines between the groups and before "More" take room too.
       const line = bar.querySelector<HTMLElement>("[data-toolbar-separator]");
       const lineStyle = line ? getComputedStyle(line) : null;
@@ -198,7 +218,7 @@ function useFitting(
       observer.disconnect();
     };
   }, [wrapper, toolbar, note, total, readOnly]);
-  return fit;
+  return { fit, compactNote };
 }
 
 /**
@@ -226,7 +246,7 @@ export function ActionToolbar({ label, ...props }: ActionSurfaceProps & { label:
   const note = useRef<HTMLDivElement>(null);
   const readOnly = entries.some((entry) => entry.readOnly);
   const primaryCount = visibleEntries(entries).length;
-  const fit = useFitting(wrapper, toolbar, note, primaryCount, readOnly);
+  const { fit, compactNote } = useFitting(wrapper, toolbar, note, primaryCount, readOnly);
   const shown = visibleEntries(entries, fit);
   const shownIds = new Set(shown.map((entry) => entry.definition.id));
   const overflow = entries.filter((entry) => !shownIds.has(entry.definition.id));
@@ -320,7 +340,7 @@ export function ActionToolbar({ label, ...props }: ActionSurfaceProps & { label:
       </div>
       {readOnly && (
         <div ref={note} className="flex min-w-0">
-          <ReadOnlyNote ctx={props.ctx} id={noteId} />
+          <ReadOnlyNote ctx={props.ctx} id={noteId} compact={compactNote} />
         </div>
       )}
     </div>

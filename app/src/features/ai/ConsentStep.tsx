@@ -4,12 +4,13 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import type { AiFunction, AiProfileInfo, AiTransferInput, CoreError } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
 import { InlineConfirm } from "../mcp/InlineConfirm";
-import { LocalityBadge, TransferNotes, transferText } from "./AiTransfer";
+import { LocalityBadge, TransferNotes, transferAmount } from "./AiTransfer";
 import { useAiTransferPreview } from "./queries";
 
 /**
  * Decision 0028: the exact size of what the request would send, from the core's dry run
- * (mails, bytes, accounts, host, model, what was shortened). Nothing is sent for it.
+ * (mails, bytes, what was shortened); host and model are in the step's "To whom" line. Nothing is
+ * sent for it.
  */
 function ExactTransfer({ input }: { input: AiTransferInput }) {
   const { t, i18n } = useTranslation();
@@ -26,7 +27,7 @@ function ExactTransfer({ input }: { input: AiTransferInput }) {
   return (
     <div className="flex flex-col gap-1" data-testid="ai-consent-exact">
       <p className="flex flex-wrap items-center gap-2 font-medium text-primary">
-        <span>{t("ai.consent.exact", { what: transferText(transfer, t, i18n.language) })}</span>
+        <span>{t("ai.consent.exact", { what: transferAmount(transfer, t, i18n.language) })}</span>
         <LocalityBadge locality={transfer.locality} />
       </p>
       <TransferNotes transfer={transfer} />

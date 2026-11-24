@@ -33,6 +33,12 @@ export function transferText(transfer: AiTransfer, t: TFunction, language: strin
     : t("ai.transfer.text", { size, host: transfer.host, model: transfer.model });
 }
 
+/** How much would go out, without host and model (the consent step names them once, above). */
+export function transferAmount(transfer: AiTransfer, t: TFunction, language: string): string {
+  const size = formatSize(transfer.bytes, language);
+  return transfer.mails > 0 ? t("ai.transfer.amountMails", { count: transfer.mails, size }) : t("ai.transfer.amountText", { size });
+}
+
 /** Shortened, quotes left out, attachment names: what the user should know about the content sent. */
 export function TransferNotes({ transfer }: { transfer: AiTransfer }) {
   const { t } = useTranslation();

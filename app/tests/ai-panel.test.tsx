@@ -105,7 +105,7 @@ describe("AI panel", () => {
     const panel = await openPanelOn(user);
     expect(within(panel).queryByTestId("ai-no-thread")).toBeNull();
 
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     expect(core.callsOf("ai_summarize_thread")).toEqual([{ requestId: expect.any(String) as string, messageId: message.id }]);
 
@@ -139,13 +139,13 @@ describe("AI panel", () => {
   it("shows what is being sent while the request runs, and cancels it", async () => {
     const { core, user } = setup({ enabled: true, profiles: [LOCAL], functions: ALL_LOCAL, summary: (id) => summaryOf(id), hold: true });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const progress = await within(panel).findByTestId("ai-progress");
     await waitFor(() => {
       expect(within(progress).getByTestId("ai-progress-transfer").textContent).toContain("Sending 3 mails");
     });
     expect(within(progress).getByTestId("ai-progress-transfer").textContent).toContain("to localhost:11434 (llama3.2)");
-    expect(within(panel).getByRole("button", { name: "Summarise" }).hasAttribute("disabled")).toBe(true);
+    expect(within(panel).getByRole("button", { name: "Summarise conversation" }).hasAttribute("disabled")).toBe(true);
 
     await user.click(within(progress).getByRole("button", { name: "Cancel" }));
     expect(await within(panel).findByTestId("ai-cancelled")).toBeTruthy();
@@ -191,7 +191,7 @@ describe("AI panel", () => {
       summary: (id) => summaryOf(id, { transfer: makeTransfer({ host: "api.openai.com:443", locality: "internet", model: "gpt-5" }) }),
     });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const consent = await within(panel).findByRole("group", { name: "Before the first request to OpenAI" });
     expect(within(consent).getByTestId("ai-consent-what").textContent).toContain("the text of the mails in this conversation");
     expect(within(consent).getByTestId("ai-consent-what").textContent).toContain("Attachments are not sent, only their names");
@@ -206,7 +206,7 @@ describe("AI panel", () => {
     expect(core.callsOf("set_ai_consent")).toEqual([]);
     expect(providerCalls(core)).toEqual([]);
 
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     await user.click(await within(panel).findByRole("button", { name: "Agree and send" }));
     await within(panel).findByRole("article", { name: "Summary" });
     expect(core.callsOf("set_ai_consent")).toEqual([{ profileId: CLOUD_PROFILE_ID, granted: true }]);
@@ -226,7 +226,7 @@ describe("AI panel", () => {
       fail: (cmd) => (cmd === "ai_summarize_thread" ? { code: "ai_consent_required", message: "consent", detail: "OpenAI" } : undefined),
     });
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     expect(await within(panel).findByTestId("ai-consent")).toBeTruthy();
     expect(within(panel).queryByRole("alert")).toBeNull();
     expect(core.ai.providerCalls).toEqual([]);
@@ -242,7 +242,7 @@ describe("AI panel", () => {
     });
     const panel = await openPanelOn(user);
     expect(within(panel).getByTestId("ai-not-permitted").textContent).toContain("This account's mail does not go to cloud providers");
-    const summarise = within(panel).getByRole("button", { name: "Summarise" });
+    const summarise = within(panel).getByRole("button", { name: "Summarise conversation" });
     const reply = within(panel).getByRole("button", { name: "Suggest a reply" });
     expect(summarise.hasAttribute("disabled")).toBe(true);
     expect(reply.hasAttribute("disabled")).toBe(true);
@@ -271,7 +271,7 @@ describe("AI panel", () => {
       { fail: (cmd) => (cmd === "ai_summarize_thread" ? { code: "ai_unreachable", message: "connect", detail: null } : undefined) },
     );
     const panel = await openPanelOn(user);
-    await user.click(within(panel).getByRole("button", { name: "Summarise" }));
+    await user.click(within(panel).getByRole("button", { name: "Summarise conversation" }));
     const alert = await within(panel).findByRole("alert");
     expect(alert.getAttribute("data-error-code")).toBe("ai_unreachable");
     expect(within(alert).getByText("The summary did not work.")).toBeTruthy();
@@ -444,7 +444,7 @@ describe("AI panel in the conversation view", () => {
     expect(buttons[1]?.getAttribute("aria-current")).toBe("true");
 
     const panel = await screen.findByRole("complementary", { name: "AI assistant" });
-    await user.click(await within(panel).findByRole("button", { name: "Summarise" }));
+    await user.click(await within(panel).findByRole("button", { name: "Summarise conversation" }));
     const card = await within(panel).findByRole("article", { name: "Summary" });
     const source = await within(card).findByRole("button", { name: /^Show source: Anna, / });
     await user.click(source);

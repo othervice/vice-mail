@@ -333,11 +333,30 @@ function NotPermitted({ id }: { id: string }) {
   );
 }
 
-function ThreadTools({ item, account, availability, settings }: { item: MessageListItem; account: Account; availability: AiAvailability; settings: AiSettingsInfo | undefined }) {
+interface ThreadToolsProps {
+  item: MessageListItem;
+  account: Account;
+  availability: AiAvailability;
+  settings: AiSettingsInfo | undefined;
+  /** A consent step of this thread waits for the user (the panel folds its question box away). */
+  onConsentChange: (pending: boolean) => void;
+}
+
+function ThreadTools({ item, account, availability, settings, onConsentChange }: ThreadToolsProps) {
   const { t } = useTranslation();
   const blockedId = useId();
   const summary = useAiRun<AiSummary>("summary");
   const reply = useAiRun<AiReplySuggestion>("reply_suggestion");
+  const consentPending = summary.state.kind === "consent" || reply.state.kind === "consent";
+  useEffect(() => {
+    onConsentChange(consentPending);
+  }, [consentPending, onConsentChange]);
+  useEffect(
+    () => () => {
+      onConsentChange(false);
+    },
+    [onConsentChange],
+  );
   const summaryBlocked = cloudBlocked(settings, "summary", account.id);
   const replyBlocked = cloudBlocked(settings, "reply_suggestion", account.id);
   const blocked = (availability.summary && summaryBlocked) || (availability.replySuggestion && replyBlocked);
@@ -584,6 +603,9 @@ export function AiPanel() {
   const setOpen = useAiPanelStore((state) => state.setOpen);
   const bound = useBoundMessage();
   const inMail = view.kind === "mail" || view.kind === "mailbox";
+  // While a summary or reply waits for consent, the step gets the panel's height: the question
+  // box is folded away (kept mounted, so a question typed meanwhile stays).
+  const [threadConsent, setThreadConsent] = useState(false);
   // A thread command without a thread (the selection went away meanwhile) must not wait for the next one.
   const command = useAiPanelStore((state) => state.command);
   const clearCommand = useAiPanelStore((state) => state.clearCommand);
@@ -626,7 +648,14 @@ export function AiPanel() {
           />
         )}
         {bound ? (
-          <ThreadTools key={bound.item.id} item={bound.item} account={bound.account} availability={data} settings={settings.data} />
+          <ThreadTools
+            key={bound.item.id}
+            item={bound.item}
+            account={bound.account}
+            availability={data}
+            settings={settings.data}
+            onConsentChange={setThreadConsent}
+          />
         ) : (
           <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid="ai-no-thread">
             <MessagesSquare aria-hidden className="size-8 text-tertiary" strokeWidth={1.5} />
@@ -636,7 +665,7 @@ export function AiPanel() {
         {!bound && <OpenReplyHintList />}
       </div>
       {data.search && (
-        <div className="max-h-1/2 shrink-0 overflow-y-auto px-4 pb-4">
+        <div hidden={threadConsent} className="max-h-1/2 shrink-0 overflow-y-auto px-4 pb-4" data-testid="ai-ask-area">
           <AskBox account={bound?.account ?? null} settings={settings.data} />
         </div>
       )}
