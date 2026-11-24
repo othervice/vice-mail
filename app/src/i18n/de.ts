@@ -813,6 +813,7 @@ export const de: Translation = {
       aiPanel: "Ob das KI-Panel angezeigt wird, ließ sich nicht speichern.",
       folder: "Der Ordner konnte nicht geändert werden.",
       transfer: "Die Mails konnten nicht in das andere Konto übertragen werden.",
+      appearance: "Die Darstellung konnte nicht geändert werden.",
     },
     operationFailed_one: "Eine Änderung ließ sich auf dem Server nicht ausführen: {{action}}",
     operationFailed_other: "{{count, number}} Änderungen ließen sich auf dem Server nicht ausführen: {{action}}",
@@ -1300,6 +1301,11 @@ export const de: Translation = {
         system: "System",
         light: "Hell",
         dark: "Dunkel",
+        command: {
+          light: "Zum hellen Modus wechseln",
+          dark: "Zum dunklen Modus wechseln",
+          system: "Hell oder dunkel wie dein System",
+        },
       },
     },
     sync: {
