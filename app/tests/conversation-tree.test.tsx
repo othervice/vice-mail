@@ -419,7 +419,8 @@ describe("the look (stage 17, after the screenshot pass)", () => {
       // From the row's middle (inside the avatar) to its bottom, under the avatar, which is
       // positioned after it and so covers its start.
       expect(classes(line)).toEqual(expect.arrayContaining(["absolute", "top-1/2", "bottom-0", "start-(--ui-tree-line-start)", "border-dotted"]));
-      const avatar = within(conversation()).getByTestId("avatar").parentElement;
+      // Stage 21: the avatar's mark (avatar, selection box and unread dot) is the positioned box.
+      const avatar = within(conversation()).getByTestId("avatar").closest("[data-row-check]");
       expect(classes(avatar)).toContain("relative");
       expect(line.compareDocumentPosition(avatar as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       // On through every message, ending in the middle of the last.
