@@ -400,6 +400,8 @@ pub enum MouseEventKind {
     Drag,
     /// The left button comes up there.
     Up,
+    /// Stage 21: the right button goes down and up there (a secondary click: `contextmenu`).
+    RightClick,
 }
 
 /// Stage 18: one real mouse event at `x`/`y` (the same coordinates as [`e2e_native_mouse`]), for
@@ -737,6 +739,14 @@ mod macos {
             MouseEventKind::Up => {
                 let event = mouse(window, NSEventType::LeftMouseUp, location, 1, 1.0)?;
                 view.mouseUp(&event);
+            }
+            MouseEventKind::RightClick => {
+                // WebKit sends `contextmenu` with the press; the page's handler prevents the
+                // system's menu (were it not prevented, its tracking loop would hold the thread).
+                let down = mouse(window, NSEventType::RightMouseDown, location, 1, 1.0)?;
+                let up = mouse(window, NSEventType::RightMouseUp, location, 1, 1.0)?;
+                view.rightMouseDown(&down);
+                view.rightMouseUp(&up);
             }
         }
         Ok(format!(

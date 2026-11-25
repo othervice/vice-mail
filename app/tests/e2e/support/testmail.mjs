@@ -89,6 +89,12 @@ export const attachmentDigests = (file) => helper("attachments", file);
 /** Stage 19: the message in bob's INBOX whose subject contains `mark` (redirect test). */
 export const bobMessage = (mark) => helper("bob-message", mark);
 
+/** Stage 21: how many of alice's messages in `folder` have `mark` in their subject. */
+export const folderCount = (folder, mark) => helper("folder-count", folder, mark);
+
+/** Stage 21: appends .eml files unchanged to bob's INBOX. */
+export const appendToBob = (files) => helper("append-bob", ...files);
+
 /** Stage 20: bob answers alice's message with this subject (In-Reply-To its Message-ID). */
 export const replyTo = (subject) => helper("reply-to", subject);
 

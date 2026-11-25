@@ -7,6 +7,7 @@ import { IconButton } from "../../components/IconButton";
 import type { MessageId } from "../../services/ipc";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, matchesShortcut, shortcutPlatform, type Shortcut } from "../actions/shortcuts";
+import { usePrintRequest } from "../../stores/printRequest";
 import { useExportMessage, usePrintWindow } from "./queries";
 import "./print.css";
 
@@ -17,6 +18,11 @@ interface MessageToolsProps {
   messageId: MessageId;
   /** Stage 21: runs before printing (the reading pane switches an adapted mail to its original colours). */
   beforePrint?: () => Promise<void>;
+  /**
+   * Stage 21: the message is shown (head and body), so a print asked for from the context menu
+   * (`usePrintRequest`) can start.
+   */
+  shown?: boolean;
 }
 
 /**
@@ -26,12 +32,21 @@ interface MessageToolsProps {
  * prints the message too, instead of the whole window, while a message is open. The reading pane
  * keys it by message, so a result never stays with the next message.
  */
-export function MessageTools({ messageId, beforePrint }: MessageToolsProps) {
+export function MessageTools({ messageId, beforePrint, shown = false }: MessageToolsProps) {
   const { t } = useTranslation();
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const exportMessage = useExportMessage();
   const print = usePrintWindow(beforePrint);
   const { mutate: printMessage } = print;
+  const printAsked = usePrintRequest((state) => state.messageId === messageId);
+  const clearPrint = usePrintRequest((state) => state.clear);
+
+  // Stage 21 (decision 0064): "Print" from a row's context menu, once this message is shown.
+  useEffect(() => {
+    if (!printAsked || !shown) return;
+    clearPrint();
+    printMessage();
+  }, [printAsked, shown, clearPrint, printMessage]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

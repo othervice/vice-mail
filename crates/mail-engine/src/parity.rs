@@ -436,13 +436,14 @@ impl<C: Connector> AppCore<C> {
     // -----------------------------------------------------------------------------------------
     // Between accounts
 
-    /// Copies or moves messages to a folder of another account (decision 0033). The bytes of
-    /// each message are frozen first (the stored body if complete, else fetched whole), then
-    /// appended to the target through its outbox; a move removes the source only after the copy
-    /// was confirmed in the target by its Message-ID. Refused before anything is recorded:
+    /// Copies or moves messages to a folder of another account (decision 0033), or copies them
+    /// to another folder of their own account (stage 21, decision 0064). The bytes of each
+    /// message are frozen first (the stored body if complete, else fetched whole), then appended
+    /// to the target through its outbox; a move removes the source only after the copy was
+    /// confirmed in the target by its Message-ID. Refused before anything is recorded:
     /// `read_only` (the target account must write, and for a move the source account too),
-    /// `invalid_argument` (a message of the target's own account, no Message-ID, too many),
-    /// `not_found`. `request_id` as in `apply_action`.
+    /// `invalid_argument` (a move within the target's own account, a copy into the message's own
+    /// folder, no Message-ID, too many), `not_found`. `request_id` as in `apply_action`.
     pub async fn transfer_messages(
         &self,
         messages: Vec<MessageRef>,

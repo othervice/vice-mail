@@ -2,7 +2,6 @@ import { FolderX, Inbox, ListChecks, Search, SquarePen } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { Welcome } from "./Welcome";
@@ -11,8 +10,6 @@ import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
 import {
   MAX_ACTION_MESSAGES,
-  conversationIpc,
-  toCoreError,
   type Account,
   type Mailbox,
   type MessageId,
@@ -30,8 +27,9 @@ import { AccountErrorBanner, SyncStatus } from "../accounts/AccountStatus";
 import { isFirstSyncRunning, useSelectedAccount } from "../accounts/selection";
 import { ActionToolbar, QuickActions } from "../actions/ActionButtons";
 import type { ActionHost } from "../actions/registry";
-import { MissingMailboxPrompt } from "../actions/MissingMailboxPrompt";
-import { MovePicker, TagEditor } from "../actions/Pickers";
+import { FolderActionOverlays, FolderMissingPrompt, useFolderActions } from "../actions/FolderActions";
+import { tagsOf } from "../actions/keywords";
+import { folderMenuScope, MessageMenu, type MenuScope } from "../actions/MessageMenu";
 import {
   ACTION_IDS,
   ACTIONS,
@@ -41,22 +39,19 @@ import {
   type ActionContext,
 } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
-import { useActionController, type Exactness } from "../actions/useActionController";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { AiPanelToggle } from "../ai/AiPanel";
 import { useAppInfo } from "../app-info/queries";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
-import { SnoozePicker } from "../comfort/SnoozePicker";
-import { FollowUpPicker } from "../comfort/FollowUpPicker";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { usePreviewing } from "../reading/usePreviewing";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
-import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
+import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle, type RowMenuRequest } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 import { PinnedAttachmentsView } from "../reading/PinnedAttachmentsView";
@@ -77,8 +72,6 @@ import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from ".
 import { useListView } from "../views/useListView";
 import { ListViewMenu } from "../views/ViewMenu";
 import type { InboxScope } from "../../services/ipc";
-// Stage 16: moving and copying into another account.
-import { TransferDialog, useOtherAccountFolders, useTransfer, type TransferRequest } from "../organize/transfer";
 
 export type MailViewState = Extract<View, { kind: "mail" } | { kind: "mailbox" }>;
 
@@ -249,51 +242,16 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const mailboxes = useMailboxes(account.id).data;
   const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations && !unreadSource && !listView.active);
-  const label = useMailboxLabel();
   const push = useNoticeStore((state) => state.push);
   const startDrag = useDragStore((state) => state.start);
   const endDrag = useDragStore((state) => state.end);
-  const otherFolders = useOtherAccountFolders(account.id);
-  const transfer = useTransfer();
-  const [transferRequest, setTransferRequest] = useState<TransferRequest | null>(null);
-  /**
-   * A folder of another account asks first (decision 0033); one of this account moves at once.
-   * Decision 0039: conversation rows move with their messages in this folder (`exact`: the one
-   * message of the reading pane; stage 17: a set names child rows, which move alone).
-   */
-  const moveOrAsk = (target: Mailbox, items: readonly MessageListItem[], exact: Exactness = false) => {
-    if (target.accountId === account.id) {
-      void controller.apply({ type: "move", target: target.id }, items, { detail: label(target), exact });
-      return;
-    }
-    const targetAccount = otherFolders.find((entry) => entry.account.id === target.accountId)?.account;
-    if (!targetAccount || items.length === 0) return;
-    const ask = (moved: readonly MessageListItem[]) => {
-      if (moved.length > 0) setTransferRequest({ items: moved, source: { account, mailbox }, target: { account: targetAccount, mailbox: target } });
-    };
-    const own = exact === true ? items : exact === false ? [] : items.filter((item) => exact.has(item.id));
-    const rows = items.filter((item) => !own.includes(item));
-    if (!conversations || rows.length === 0) {
-      ask(items);
-      return;
-    }
-    conversationIpc
-      .targets(
-        rows.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id })),
-        { kind: "action", action: { type: "move", target: target.id } },
-      )
-      .then(
-        (targets) => {
-          ask([...own, ...targets]);
-        },
-        (error: unknown) => {
-          push({ kind: "error", context: "action", error: toCoreError(error) });
-        },
-      );
-  };
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
-  const controller = useActionController({ account, mailbox, list, conversations });
+  // Stage 21: the controller with moving and copying, shared with the context menu.
+  const actions = useFolderActions({ account, mailbox, list, conversations });
+  const { controller, moveOrAsk } = actions;
+  /** Stage 21 (decision 0064): the context menu asked for on rows of the list. */
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null);
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   // Stage 17 (decision 0049): a message of an unfolded conversation opens and acts alone; a
   // conversation row opens one message of its conversation (`ThreadPane`), and keeps it while it
@@ -365,29 +323,23 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
 
   const loaded = (source?.query.data ?? pages.data)?.pages.flatMap((page) => page.items) ?? [];
   const byId = new Map(loaded.map((item) => [item.id, item]));
-  const fresh = (ids: readonly MessageId[]) => ids.flatMap((id) => byId.get(id) ?? []);
-  const { overlay } = controller;
   const focusList = () => {
     list.current?.focus();
+  };
+  /** Stage 21: the menu acts like the selection bar: child rows alone, a single one in its folder. */
+  const menuScope = (request: RowMenuRequest): MenuScope => {
+    const one = request.items.length === 1 && request.childIds.size === 1 ? request.items[0] : undefined;
+    return folderMenuScope(actions, one ? ctxForMessage(one) : ctxFor(request.items), request.childIds);
   };
 
   return (
     <div className={layout.container} data-reading-pane={layout.position}>
+      {/* Floating or in a layer of their own, so their place here only matters for the commit:
+          before the list, a dialog closes while the list's handle is still attached, and its
+          focus goes back to the list. */}
+      <FolderActionOverlays actions={actions} mailboxes={mailboxes ?? []} loaded={loaded} focusList={focusList} />
       <div {...layout.listColumn(open)}>
-        {controller.missing && (
-          <MissingMailboxPrompt
-            key={`${controller.missing.role}-${String(controller.missing.items.length)}`}
-            account={account}
-            mailboxes={mailboxes ?? []}
-            missing={controller.missing}
-            onChoose={controller.chooseFolderForRole}
-            onCreate={controller.createFolderForRole}
-            onCancel={() => {
-              controller.cancelMissing();
-              focusList();
-            }}
-          />
-        )}
+        <FolderMissingPrompt actions={actions} mailboxes={mailboxes ?? []} focusList={focusList} />
         {selection.items.length > 1 && (
           <SelectionBar
             selection={selection}
@@ -467,6 +419,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           }}
           onDragEnd={endDrag}
           table={listView.table}
+          onRowMenu={setMenu}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}
@@ -533,92 +486,15 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           selection.items.length > 1 && <SelectionSummary count={selection.items.length} platform={platform} />
         )}
       </div>
-      {overlay?.kind === "confirmDelete" && (
-        <ConfirmDialog
-          title={t("actions.confirmDelete.title", { count: overlay.items.length })}
-          body={t("actions.confirmDelete.body")}
-          confirmLabel={t("actions.confirmDelete.confirm")}
-          cancelLabel={t("actions.confirmDelete.cancel")}
-          onConfirm={() => {
-            const { items, exact } = overlay;
-            controller.closeOverlay();
-            void controller.apply({ type: "deletePermanently" }, items, { exact: exact ?? false });
+      {menu && (
+        <MessageMenu
+          request={menu}
+          scopes={[menuScope(menu)]}
+          platform={platform}
+          knownTags={tagsOf([...loaded, ...menu.items])}
+          onClose={() => {
+            setMenu(null);
           }}
-          onCancel={controller.closeOverlay}
-          focusAfterConfirm={focusList}
-          data-testid="confirm-delete"
-        />
-      )}
-      {controller.comfort.snoozeItems && (
-        <SnoozePicker
-          count={controller.comfort.snoozeItems.length}
-          onChoose={(choice) => {
-            void controller.comfort.snooze(choice);
-          }}
-          onClose={controller.comfort.closeSnooze}
-          restoreFocus={focusList}
-        />
-      )}
-      {/* Stage 20 (decision 0059): "Remind me if no reply". */}
-      {controller.comfort.followUpItems && (
-        <FollowUpPicker
-          count={controller.comfort.followUpItems.length}
-          onChoose={(choice) => {
-            void controller.comfort.followUp(choice);
-          }}
-          onClose={controller.comfort.closeFollowUp}
-          restoreFocus={focusList}
-        />
-      )}
-      {overlay?.kind === "move" && (
-        <MovePicker
-          count={overlay.ids.length}
-          mailboxes={mailboxes ?? []}
-          current={mailbox}
-          otherAccounts={otherFolders}
-          onChoose={(target) => {
-            const items = fresh(overlay.ids);
-            controller.closeOverlay();
-            moveOrAsk(target, items, overlay.exact ?? false);
-          }}
-          onClose={controller.closeOverlay}
-          restoreFocus={focusList}
-        />
-      )}
-      {transferRequest && (
-        <TransferDialog
-          request={transferRequest}
-          onChoose={(mode) => {
-            const request = transferRequest;
-            setTransferRequest(null);
-            void transfer(request, mode);
-          }}
-          onCancel={() => {
-            setTransferRequest(null);
-          }}
-          focusAfter={focusList}
-        />
-      )}
-      {overlay?.kind === "tags" && (
-        <TagEditor
-          items={fresh(overlay.ids)}
-          known={loaded}
-          onAdd={(tag) =>
-            controller.apply({ type: "addKeyword", keyword: tag }, fresh(overlay.ids), {
-              detail: tag,
-              ownErrors: ["invalid_keyword"],
-              exact: overlay.exact ?? false,
-            })
-          }
-          onRemove={(tag) =>
-            controller.apply(
-              { type: "removeKeyword", keyword: tag },
-              fresh(overlay.ids).filter((item) => item.keywords.some((k) => k.toLowerCase() === tag.toLowerCase())),
-              { detail: tag, exact: overlay.exact ?? false },
-            )
-          }
-          onClose={controller.closeOverlay}
-          restoreFocus={focusList}
         />
       )}
     </div>

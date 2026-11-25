@@ -52,7 +52,8 @@ export type NoticeContent =
         | "transfer"
         | "appearance"
         | "source"
-        | "mbox";
+        | "mbox"
+        | "export";
       error: IpcError;
     }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */
@@ -65,6 +66,8 @@ export type NoticeContent =
     }
   /** Stage 18: the folders of an account are being listed on the server again. */
   | { kind: "foldersReloading"; account: string }
+  /** Stage 21: a message was saved as an `.eml` file from the context menu, at `path`. */
+  | { kind: "exported"; path: string }
   /** Stage 16: a copy or move into another account was recorded (its progress is in Activity). */
   | { kind: "transfer"; mode: "copy" | "move"; count: number; folder: string; account: string }
   /** Stage 9: pins, snoozes, tasks and skipped local rules (texts: `features/comfort/notices.ts`). */

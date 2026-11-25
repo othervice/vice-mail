@@ -100,6 +100,9 @@ function NoticeItem({ notice }: { notice: Notice }) {
     case "foldersReloading":
       text = t("folderEdit.reloading", { account: content.account });
       break;
+    case "exported":
+      text = t("extras.tools.exported", { path: content.path });
+      break;
     case "transfer":
       text =
         content.mode === "move"

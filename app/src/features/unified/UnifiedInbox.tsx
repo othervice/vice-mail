@@ -22,6 +22,7 @@ import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 import { useConversationsOn } from "../threads/preference";
 import { useListView } from "../views/useListView";
+import { useMixedActions } from "./MixedActions";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -76,6 +77,9 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
   };
   const query = source.query;
+  // Stage 21 (decision 0065): quick actions and the context menu with each row's own account.
+  const loaded = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
+  const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey: ["unified"], platform });
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
@@ -102,6 +106,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   return (
     <div className={layout.container} data-testid="unified-inbox" data-reading-pane={layout.position}>
       <div {...layout.listColumn(open)}>
+        {mixed.element}
         {/* Stage 16 (decision 0036): mail of blocked senders the unified inbox leaves out. */}
         <BlockedHiddenNote scope={unreadScope} accountId={null} />
         {listView.bar}
@@ -136,6 +141,9 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           // Stage 18 (task F): opening the unified inbox shows its top message.
           autoSelectFirst={layout.autoSelectFirst}
           table={listView.table}
+          hiddenIds={mixed.hiddenIds}
+          renderQuickActions={mixed.renderQuickActions}
+          onRowMenu={mixed.onRowMenu}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}

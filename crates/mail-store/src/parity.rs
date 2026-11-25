@@ -674,11 +674,12 @@ fn target_of(conn: &Connection, target: MailboxId) -> Result<(TargetMailbox, i64
     }
 }
 
-/// Checks a copy or move of `refs` to `target` in another account. Refused before anything is
-/// recorded: `read_only` (the target account, and for a move the source accounts, must write),
-/// an unknown or unselectable target, a message of the target's own account (a move within an
-/// account is an ordinary move), a message without Message-ID (the copy could not be
-/// confirmed).
+/// Checks a copy or move of `refs` to `target` in another account, or (stage 21, decision 0064)
+/// a copy to another folder of the same account. Refused before anything is recorded:
+/// `read_only` (the target account, and for a move the source accounts, must write), an unknown
+/// or unselectable target, a move of a message of the target's own account (that is an ordinary
+/// move), a copy into the folder the message lies in, a message without Message-ID (the copy
+/// could not be confirmed).
 pub(crate) fn check_transfer(
     conn: &Connection,
     refs: &[MessageRef],
@@ -698,10 +699,21 @@ pub(crate) fn check_transfer(
         let planned = location_for_plan(conn, *at)?
             .ok_or(StoreError::Action(ActionError::MessageNotFound(*at)))?;
         if planned.account_row == target_row {
-            return Err(StoreError::InvalidArgument(format!(
-                "message {} already belongs to the target's account; move it within the account",
-                at.message_id
-            )));
+            // Stage 21 (decision 0064): a copy into another folder of the same account takes the
+            // same way (the frozen bytes appended there); a move within an account is an
+            // ordinary move, and a copy into the message's own folder would only duplicate it.
+            if mode == TransferMode::Move {
+                return Err(StoreError::InvalidArgument(format!(
+                    "message {} already belongs to the target's account; move it within the account",
+                    at.message_id
+                )));
+            }
+            if at.mailbox_id == target {
+                return Err(StoreError::InvalidArgument(format!(
+                    "message {} already lies in the target folder",
+                    at.message_id
+                )));
+            }
         }
         if mode == TransferMode::Move {
             require_writes(conn, planned.account_row)?;

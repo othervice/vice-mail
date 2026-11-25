@@ -80,3 +80,10 @@ unverändert.
 
 Die Leiste wieder absolut über das Zeilenende legen (`RowActions` mit `absolute inset-y-0 end-2`,
 `RowMeta` immer sichtbar); dann liegt die Pille wieder unter ihr, sobald der Betreff lang ist.
+
+## Nachtrag 25.11.2026: auch in gemischten Listen
+
+Punkt 5 gilt nicht mehr: Seit Stufe 21 (Rückmeldung 6, Entscheidung 0065) haben der vereinte
+Posteingang und die Suchergebnisse dieselbe Leiste, mit dem Konto und Ordner jeder Zeile; Konto
+und Zeit weichen ihr wie die übrigen Angaben. Das Auswahlkästchen liegt seitdem an der Stelle des
+Avatars statt in einer eigenen Spalte; die Leiste liegt weiter nie darüber.

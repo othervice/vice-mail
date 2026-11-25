@@ -419,7 +419,8 @@ describe("the look (stage 17, after the screenshot pass)", () => {
       // From the row's middle (inside the avatar) to its bottom, under the avatar, which is
       // positioned after it and so covers its start.
       expect(classes(line)).toEqual(expect.arrayContaining(["absolute", "top-1/2", "bottom-0", "start-(--ui-tree-line-start)", "border-dotted"]));
-      const avatar = within(conversation()).getByTestId("avatar").parentElement;
+      // Stage 21: the avatar's mark (avatar, selection box and unread dot) is the positioned box.
+      const avatar = within(conversation()).getByTestId("avatar").closest("[data-row-check]");
       expect(classes(avatar)).toContain("relative");
       expect(line.compareDocumentPosition(avatar as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       // On through every message, ending in the middle of the last.
@@ -514,7 +515,8 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     });
   }
 
-  it("lists that mix accounts keep the account label with the time (no quick actions there)", async () => {
+  it("lists that mix accounts have them too: account label and time give way like the rest of the meta", async () => {
+    // Stage 21 (decision 0065, replaces 0052 point 5).
     const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work" });
     setup({ accounts: [ADA, work] });
     act(() => {
@@ -523,10 +525,12 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     const list = await screen.findByRole("tree", { name: "Messages in All inboxes" });
     const rows = await within(list).findAllByRole("treeitem");
     for (const row of rows) {
-      expect(within(row).queryByTestId("row-actions")).toBeNull();
       const meta = within(row).getByTestId("row-meta");
       expect(meta.contains(within(row).getByTestId("row-account"))).toBe(true);
-      expect(classes(meta)).toEqual(["contents"]);
+      const actions = await within(row).findByTestId("row-actions");
+      expect(actions.parentElement).toBe(meta.parentElement);
+      expect(classes(meta)).toEqual(expect.arrayContaining(["contents", "group-hover/row:hidden"]));
+      expect(within(actions).getByTestId("quick-archive")).toBeTruthy();
     }
   });
 });

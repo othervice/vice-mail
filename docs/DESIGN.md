@@ -66,14 +66,14 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 
 | Element | Verhalten |
 |---|---|
-| Punkt links | ungelesen; beim Überfahren und bei Auswahl wird er zum Auswahlkästchen |
-| Avatar | 32 px; das Bild, das der Nutzer für den Kontakt gewählt hat (Stufe 17, 0050), sonst Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. |
+| Punkt | ungelesen: 8 px in `accent` im Vorlauf der Zeile (`--ui-row-lead`, 16 px), 4 px vor dem Avatar, mittig zu ihm (schmale Liste: zur ersten Zeile); bleibt beim Überfahren und in der Auswahl, dazu halbfett. Keine eigene Spalte: eine gelesene Zeile beginnt mit dem Avatar (Stufe 21, Entscheidung 0065; vorher eine Spalte, die beim Überfahren zum Kästchen wurde) |
+| Avatar | 32 px; das Bild, das der Nutzer für den Kontakt gewählt hat (Stufe 17, 0050), sonst Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. Beim Überfahren und bei Mehrfachauswahl (dann in jeder Zeile) steht an seiner Stelle das Auswahlkästchen (16 px, wie bei Gmail; Stufe 21) |
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel; in schmaler Liste so breit wie die Namen |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
 | Konto | nur wo sich Konten mischen (vereinter Posteingang, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
-| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille |
+| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille. Seit Stufe 21 (Entscheidung 0065) auch im vereinten Posteingang und in Suchergebnissen, mit Konto und Ordner jeder Zeile (nur lesende Konten gesperrt mit Grund); das Konto weicht dann wie die Zeit |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
 Betreff, darunter die Vorschau (nur komfortabel).
@@ -677,9 +677,9 @@ Pille schiebt nie die Zeit (sie steht in der breiten Liste in der Betreffspalte,
 der zweiten Zeile).
 
 **Kindzeilen.** Eine Zeile je Mail des Gesprächs, älteste zuerst, in jeder Listenbreite einzeilig:
-36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: die Auswahlspalte wie bei
-jeder Zeile (Punkt für ungelesen, beim Überfahren und bei Auswahl das Kästchen), in der
-Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der Linie, der Absender, wo die Absender
+36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: der Punkt für ungelesen
+im Vorlauf wie bei jeder Zeile, in der Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der
+Linie (beim Überfahren und bei Mehrfachauswahl das Kästchen an seiner Stelle, Stufe 21), der Absender, wo die Absender
 der Gesprächszeile beginnen (13 px, halbfett wenn ungelesen, sonst normal; in jeder Breite so breit
 wie der Name, höchstens ein Drittel), liegt die Mail in einem anderen Ordner als die Zeile, dessen
 Name als Pille (`badge`, 12 px, „Gesendet“, „Posteingang“, „Papierkorb“), dann der Anfang des
@@ -933,7 +933,7 @@ absteigend). Sortierbare Köpfe sind Knöpfe; Markiert und Anhang zeigen nur ihr
 
 | Spalte | Breite (Standard) | Inhalt |
 |---|---|---|
-| Auswahlkästchen | wie in der Zeile | ungelesen-Punkt, wird beim Überfahren zum Kästchen |
+| Auswahlkästchen | 16 px | ungelesen-Punkt, wird beim Überfahren zum Kästchen (die Tabelle hat keinen Avatar, an dessen Stelle es treten könnte; Stufe 21) |
 | Markiert, Anhang | 32 px, fest | Fahne in `warning`, Büroklammer in `text-tertiary` |
 | Absender (Gesendet, Entwürfe: Empfänger) | 200 px | wie die Spalte Absender der Zeile, halbfett wenn ungelesen |
 | Empfänger | 200 px, aus | alle Empfänger, `text-secondary` |
@@ -976,6 +976,64 @@ Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
 - Tastatur: Chips und Schlagwort sind eine Werkzeugleiste (ein Tab-Stopp, ← →), Feld und
   „Zurücksetzen“ eigene Stopps; Escape im Feld leert den Text, ein zweites den Filter;
   Cmd/Ctrl+Shift+K setzt den Fokus ins Feld.
+
+## Kontextmenü der Mails (Stufe 21, Entscheidung 0064)
+
+Rechtsklick auf eine Zeile, die Kontextmenü-Taste oder Umschalt+F10 auf der Cursorzeile öffnen in
+jeder Liste (Ordner, vereinter Posteingang, Ansichten wie Später oder Markiert, Suchergebnisse,
+Tabelle) ein Menü in der Art von Thunderbird:
+
+```
+ ┌──────────────────────────────────┐
+ │  ↩   ▭   ⛉   🗑                  │  Antworten, Archivieren, Spam, Löschen (feste Plätze)
+ ├──────────────────────────────────┤
+ │ 👁 Öffnen                      › │  Im Lesebereich, In neuem Fenster
+ │ ↩ Antworten und Weiterleiten   › │  Antworten, Allen, Weiterleiten, Als Anhang, Umleiten
+ ├──────────────────────────────────┤
+ │ ✉ Als gelesen markieren     ⇧I   │
+ │ ⚑ Markieren                    › │  gelesen, ungelesen, markieren, Markierung entfernen
+ │ 📌 Anpinnen                      │
+ │ 🕓 Zurückstellen               › │  Zeiten wie im Auswahlfenster, Datum und Uhrzeit wählen …
+ │ ☑ Als Aufgabe markieren          │
+ │ 📖 Zum Lesen vormerken           │
+ │ ✉ Erinnern, wenn keine Antwort › │  (eigene Mails)
+ ├──────────────────────────────────┤
+ │ ⇥ Verschieben in               › │  Ordner wählen … (V), Ordner des Kontos, andere Konten ›
+ │ ⧉ Kopieren in                  › │  Ordner dieses und anderer Konten
+ │ 🏷 Schlagwörter                 › │  Schlagwörter der Ansicht mit Häkchen, bearbeiten …
+ ├──────────────────────────────────┤
+ │ Als neu bearbeiten · Quelltext anzeigen ⌘U · Als .eml-Datei speichern … · Drucken … │
+ ├──────────────────────────────────┤
+ │ 🔒 Nur lesend: …  Änderungen erlauben …  │  (nur bei einem Konto ohne Schreibzugriff)
+ └──────────────────────────────────┘
+```
+
+- **Ziel.** Die Auswahl, wenn die Zeile dazugehört, sonst die Zeile allein: Sie bekommt einen
+  gestrichelten Ring (`focus-ring`), die Auswahl bleibt, nichts wird geöffnet oder als gelesen
+  markiert. Kindzeilen wirken allein, Gesprächszeilen auf ihr Gespräch.
+- **Einträge** aus dem Aktionsverzeichnis wie die Symbolleiste: Was hier nicht passt, fehlt (in der
+  Symbolzeile bleibt es gesperrt an seinem Platz); was ein nur lesendes Konto nicht darf, steht
+  gesperrt mit dem Grund als Tooltip und Beschreibung, ein Untermenü, das nur Schreibendes enthält,
+  als Ganzes. Kürzel leise rechts (12 px, `text-tertiary`).
+- **Aussehen** wie die Menüs der App: `surface-raised`, Haarlinie `border`, `shadow-floating`,
+  Rundung 10, Innenabstand 4 px; Einträge 32 px, 13 px Text, Symbole 16 px in `text-secondary`,
+  Fokus und Überfahren `hover`, Häkchen in `accent`, Trennlinien `border-subtle`; Symbolzeile aus
+  32-px-Knöpfen mit 20-px-Symbolen. Breite 240 bis 352 px (`--ui-context-menu-width`, `-max-width`),
+  Unterordner 16 px je Ebene eingerückt.
+- **Lage.** Am Zeiger, nach links oder oben geklappt, wo es aus dem Fenster ragen würde, sonst an
+  den Rand geschoben (4 px Abstand); höher als das Fenster rollt es. Untermenüs neben ihrem Eintrag,
+  links, wo rechts kein Platz ist. Über allem anderen, per CSSOM platziert (CSP).
+
+| Taste | Wirkung im Menü |
+|---|---|
+| ↓ / ↑ | nächster / voriger Eintrag (die Symbolzeile ist ein Halt), mit Umlauf |
+| ← / → in der Symbolzeile | voriges / nächstes Symbol |
+| →, Eingabe, Leertaste auf „… ›“ | Untermenü öffnen, Fokus auf seinem ersten Eintrag |
+| ←, Escape im Untermenü | Untermenü schließen, Fokus auf seinem Eintrag |
+| Escape, Tab | Menü schließen, die Liste hat den Fokus wieder |
+| Pos1 / Ende | erster / letzter Eintrag |
+| Buchstabe | nächster Eintrag, der so beginnt (derselbe noch einmal: weiter) |
+| Eingabe, Leertaste | Eintrag ausführen (gesperrte tun nichts) |
 
 ## Regeln für Interaktion
 

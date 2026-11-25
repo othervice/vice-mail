@@ -768,6 +768,25 @@ export const de: Translation = {
       },
     },
   },
+  // Stufe 21 (Entscheidung 0064): das Kontextmenü der Mails in jeder Liste.
+  messageMenu: {
+    label_one: "Aktionen für diese Mail",
+    label_other: "Aktionen für {{count, number}} Mails",
+    iconRow: "Häufige Aktionen",
+    open: "Öffnen",
+    openHere: "Im Lesebereich",
+    openInWindow: "In neuem Fenster",
+    respond: "Antworten und Weiterleiten",
+    mark: "Markieren",
+    followUp: "Erinnern, wenn keine Antwort kommt",
+    pickTime: "Datum und Uhrzeit wählen …",
+    moveTo: "Verschieben in",
+    copyTo: "Kopieren in",
+    chooseFolder: "Ordner wählen …",
+    editTags: "Schlagwörter bearbeiten …",
+    saveEml: "Als .eml-Datei speichern …",
+    print: "Drucken …",
+  },
   actions: {
     toolbar: "Aktionen für Mails",
     more: "Weitere Aktionen",
@@ -890,6 +909,8 @@ export const de: Translation = {
       appearance: "Die Darstellung konnte nicht geändert werden.",
       // Stufe 19
       source: "Der Quelltext konnte nicht gezeigt werden.",
+      // Stufe 21
+      export: "Die Mail konnte nicht gespeichert werden.",
       mbox: "Export oder Import konnte nicht gestartet werden.",
       // Stufe 21
       markFolderRead: "Die Mails konnten nicht als gelesen markiert werden.",

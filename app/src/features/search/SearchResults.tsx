@@ -16,6 +16,7 @@ import type { FocusRequest } from "../reading/ReadingPane";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { useReadingLayout } from "../layout/useReadingLayout";
+import { useMixedActions } from "../unified/MixedActions";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
@@ -84,9 +85,9 @@ interface HitListProps {
 
 /**
  * Hits in the message list (same rows, keys and virtualization as a folder) and the selected one
- * in the reading pane, with the actions of the hit's own account and folder. Quick actions in the
- * rows and the list shortcuts stay with the folder view: a page of hits mixes folders and
- * accounts, and the action controller works per folder.
+ * in the reading pane, with the actions of the hit's own account and folder. Stage 21: the rows'
+ * quick actions and context menu too, through one action controller per folder among the hits
+ * (`useMixedActions`); the list's shortcuts stay with the reading pane's message.
  */
 function HitList({ query, accounts, label, platform, header, footer, onUse }: HitListProps) {
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
@@ -95,6 +96,9 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
   const { t } = useTranslation();
   const { source, hitById } = useHitSource(query, accounts);
   const conversations = useConversationsOn();
+  // Stage 21 (decision 0065): quick actions and the context menu with each hit's own folder.
+  const loaded = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
+  const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey: ["search"], platform });
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
@@ -105,6 +109,7 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
   return (
     <div className={layout.container} data-reading-pane={layout.position}>
       <div {...layout.listColumn(open)}>
+        {mixed.element}
         {header}
         <MessageList
           source={source}
@@ -135,6 +140,9 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
             layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
+          hiddenIds={mixed.hiddenIds}
+          renderQuickActions={mixed.renderQuickActions}
+          onRowMenu={mixed.onRowMenu}
         />
         {footer}
       </div>
