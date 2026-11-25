@@ -289,6 +289,8 @@ pub(crate) async fn plan_with(
         unread: compiled.unread,
         flagged: compiled.flagged,
         has_attachment: compiled.has_attachment,
+        size_at_least: compiled.size_at_least,
+        size_below: compiled.size_below,
         only: None,
         without_complete_body: false,
         snoozed: compiled.snoozed,

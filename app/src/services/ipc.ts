@@ -229,6 +229,8 @@ export const ERROR_CODES = [
   "picture_too_large",
   "picture_unsupported",
   "picture_damaged",
+  // Stage 20 (decision 0060): the mailbox on the server is full.
+  "over_quota",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1883,20 +1885,28 @@ export const reminderIpc = {
 import {
   commands as attachmentsViewCommands,
   MAX_ATTACHMENT_PAGE,
+  QUOTA_WARN_PERCENT,
   type AttachmentCursor,
   type AttachmentEntry,
   type AttachmentFilter,
   type AttachmentKind,
   type AttachmentPage,
+  type MailboxQuota,
 } from "../generated/bindings";
 
-export { MAX_ATTACHMENT_PAGE };
-/** Decision 0060: the attachments view across accounts. */
-export type { AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage };
+export { MAX_ATTACHMENT_PAGE, QUOTA_WARN_PERCENT };
+/** Decision 0060: the attachments view across accounts, and how full a mailbox is. */
+export type { AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage, MailboxQuota };
 
 /** Stage 20 (decision 0060): the attachments of stored mail across the accounts. */
 export const attachmentsViewIpc = {
   /** Newest message first; open, save and preview with the reading pane's commands and `index`. */
   list: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number): Promise<AttachmentPage> =>
     call(() => attachmentsViewCommands.listAttachments(filter, cursor, limit)),
+};
+
+/** Stage 20 (decision 0060): how full an account's mailbox on the server is. */
+export const quotaIpc = {
+  /** Kept by the core for 15 minutes unless `refresh`; `unknown` when it cannot be asked now. */
+  get: (accountId: AccountId, refresh: boolean): Promise<MailboxQuota> => call(() => attachmentsViewCommands.getAccountQuota(accountId, refresh)),
 };

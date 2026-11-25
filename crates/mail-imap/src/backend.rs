@@ -5,11 +5,12 @@ use std::future::Future;
 use std::time::Duration;
 
 use async_imap::Client;
+use async_imap::imap_proto::rfc2087::QuotaResourceName;
 use async_imap::imap_proto::{MailboxDatum, ResponseCode, StatusAttribute};
 use mail_model::{
     Access, BackendError, BodySection, Capabilities, ConnectConfig, FetchedSection, FlagUpdate,
     IdleOutcome, LoginAuth, MailBackend, MailboxStatus, MessageHeader, MessageStructure, ModSeq,
-    RawMessage, RemoteMailbox, Secret, SelectedMailbox, Uid, UidSet, UidValidity,
+    RawMessage, RemoteMailbox, Secret, SelectedMailbox, StorageQuota, Uid, UidSet, UidValidity,
 };
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
@@ -790,6 +791,44 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
         self.conn.idle(max.min(MAX_IDLE), stop).await
     }
 
+    /// Stage 20 (decision 0060): `GETQUOTAROOT INBOX` (RFC 9208) when the server announces
+    /// `QUOTA`; the `STORAGE` resource of the inbox's first quota root that has one, in units
+    /// of 1024 octets. A refusal or a root without `STORAGE` reports nothing.
+    async fn quota(&mut self) -> Result<Option<StorageQuota>, BackendError> {
+        if !has_quota(&self.caps) {
+            return Ok(None);
+        }
+        let mut roots: Vec<String> = Vec::new();
+        let mut storage: Vec<(String, u64, u64)> = Vec::new();
+        let tagged = self
+            .conn
+            .run("GETQUOTAROOT INBOX", |resp| match resp {
+                Response::QuotaRoot(root) => {
+                    roots.extend(root.quota_root_names.iter().map(ToString::to_string));
+                    true
+                }
+                Response::Quota(quota) => {
+                    for resource in &quota.resources {
+                        if resource.name == QuotaResourceName::Storage {
+                            storage.push((
+                                quota.root_name.to_string(),
+                                resource.usage,
+                                resource.limit,
+                            ));
+                        }
+                    }
+                    true
+                }
+                _ => false,
+            })
+            .await?;
+        if tagged.status != TaggedStatus::Ok {
+            tracing::debug!(text = %tagged.text, "GETQUOTAROOT refused; no quota reported");
+            return Ok(None);
+        }
+        Ok(storage_quota(&roots, &storage))
+    }
+
     async fn noop(&mut self) -> Result<(), BackendError> {
         self.conn.run("NOOP", |_| false).await?.check("NOOP")?;
         Ok(())
@@ -798,6 +837,31 @@ impl<S: Transport> MailBackend for ImapBackend<S> {
     async fn logout(self) -> Result<(), BackendError> {
         self.conn.logout().await
     }
+}
+
+/// Whether the server announces the QUOTA extension (RFC 9208: `QUOTA`, also with resource
+/// types like `QUOTA=RES-STORAGE`).
+pub(crate) fn has_quota(caps: &Capabilities) -> bool {
+    caps.names
+        .iter()
+        .any(|name| name == "QUOTA" || name.starts_with("QUOTA="))
+}
+
+/// The storage of the first quota root (in the order the server named them) that reports one,
+/// in bytes; else of any root reported.
+pub(crate) fn storage_quota(
+    roots: &[String],
+    storage: &[(String, u64, u64)],
+) -> Option<StorageQuota> {
+    let found = roots
+        .iter()
+        .find_map(|root| storage.iter().find(|(name, ..)| name == root))
+        .or_else(|| storage.first())?;
+    let (_, used, limit) = *found;
+    (limit > 0).then(|| StorageQuota {
+        used_bytes: used.saturating_mul(1024),
+        limit_bytes: limit.saturating_mul(1024),
+    })
 }
 
 pub(crate) fn mailbox_status(attrs: &[StatusAttribute]) -> MailboxStatus {

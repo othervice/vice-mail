@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, CircleExclamationPoint, CloudOff, Folder, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleExclamationPoint, CloudOff, Folder, HardDrive, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
+import { nearlyFullPercent, useAccountQuota } from "../accounts/quota";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { treeItemAria, useTreeNavigation, type TreeNavItem } from "../../components/useTreeNavigation";
 import type { Account, Mailbox, MailboxId } from "../../services/ipc";
@@ -194,7 +195,19 @@ function MailboxItem({ row, current, nav, onActivate, onColor, account, pending 
 /** Quiet mark next to an account that is offline or stopped; its reason is in the row's name. */
 export function AccountStatusMark({ account }: { account: Account }) {
   const state = account.status.state;
-  if (state !== "offline" && state !== "error") return null;
+  // Stage 20 (decision 0060): a mailbox at least 90 % full shows on the account.
+  const full = nearlyFullPercent(useAccountQuota(account.id).data);
+  if (state !== "offline" && state !== "error") {
+    if (full === null) return null;
+    return (
+      <HardDrive
+        aria-hidden
+        data-testid={`account-quota-mark-${account.id}`}
+        className="size-(--ui-icon-small) shrink-0 text-warning"
+        strokeWidth={1.75}
+      />
+    );
+  }
   const Icon = state === "error" ? CircleExclamationPoint : CloudOff;
   return (
     <Icon
@@ -210,13 +223,15 @@ export function AccountStatusMark({ account }: { account: Account }) {
  * An account's name for the column (accessible name and tooltip): name and address, its unread
  * total as shown, and what is wrong while it is offline or stopped (with the reason, if known).
  */
-export function useAccountRowLabel(): (account: Account, unread: number) => string {
+export function useAccountRowLabel(): (account: Account, unread: number, fullPercent?: number | null) => string {
   const { t, i18n } = useTranslation();
-  return (account, unread) => {
+  return (account, unread, fullPercent = null) => {
     const name = account.displayName || account.email;
     // The visible name and counter come first, together (WCAG 2.5.3, label in name), then the address.
     const shown = unread > 0 ? t("sidebar.folderUnread", { name, count: unread }) : name;
-    const label = name === account.email ? shown : t("nav.account", { name: shown, email: account.email });
+    const named = name === account.email ? shown : t("nav.account", { name: shown, email: account.email });
+    // Stage 20 (decision 0060): "mailbox 95 % full".
+    const label = fullPercent === null ? named : t("sidebar.quotaFull", { label: named, percent: fullPercent });
     const { state, error } = account.status;
     if (state !== "offline" && state !== "error") return label;
     const reasonKey = error ? `errors.codes.${error.code}.title` : null;
@@ -237,7 +252,8 @@ interface AccountRowProps {
 /** The account at the root of its tree: colour and name, its trouble, unread total; opens and closes. */
 function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
   const { i18n } = useTranslation();
-  const label = useAccountRowLabel()(account, unread);
+  const full = nearlyFullPercent(useAccountQuota(account.id).data);
+  const label = useAccountRowLabel()(account, unread, full);
   const Chevron = item.expanded ? ChevronDown : ChevronRight;
   return (
     <li

@@ -77,6 +77,8 @@ export const en = {
     loadFailed: "Folders could not be loaded.",
     // An account in trouble: its name, then what is wrong ("offline", "not syncing: reason").
     accountTrouble: "{{label}}, {{status}}",
+    // Stage 20 (decision 0060): the account's mailbox is at least 90 % full.
+    quotaFull: "{{label}}, mailbox {{percent}} % full",
     statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
@@ -1286,6 +1288,22 @@ export const en = {
           loadFailed: "The folders could not be loaded.",
           empty: "Folders appear after the first sync.",
         },
+        // Stage 20 (decision 0060): storage on the server.
+        quota: {
+          title: "Storage on the server",
+          checking: "Checking…",
+          refresh: "Check again",
+          used: "{{used}} of {{limit}} used ({{percent}} %)",
+          free: "{{free}} free",
+          meter: "Mailbox {{percent}} % full",
+          nearlyFull: "The mailbox is {{percent}} % full",
+          cleanUp:
+            "When it is full, the server refuses new mail and the app cannot save drafts or sent messages. Delete large messages you no longer need, then empty the trash.",
+          findLarge: "Find large messages",
+          notReported: "The server does not report storage.",
+          unknown: "The storage could not be checked now.",
+          failed: "The storage could not be checked.",
+        },
         remove: {
           title: "Remove account",
           description: "Removes the account and everything the app stored for it from this computer.",
@@ -1966,7 +1984,7 @@ export const en = {
       all: "All accounts",
     },
     hint: {
-      body: "Type words or a phrase in quotes. Filters: from:, to:, cc:, subject:, filename:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:. A - in front excludes a term, OR between words finds either.",
+      body: "Type words or a phrase in quotes. Filters: from:, to:, cc:, subject:, filename:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:, larger:10M. A - in front excludes a term, OR between words finds either.",
     },
     results: {
       label: "the search results for “{{query}}”",
@@ -2028,6 +2046,8 @@ export const en = {
         after: "After",
         older_than: "Older than",
         newer_than: "Newer than",
+        // Stage 20 (decision 0060).
+        larger: "Larger than",
       },
     },
     index: {
@@ -3602,6 +3622,11 @@ export const en = {
       picture_damaged: {
         title: "The picture could not be read.",
         hint: "The file may be damaged. Choose another image.",
+      },
+      // Stage 20 (decision 0060).
+      over_quota: {
+        title: "The mailbox on the server is full.",
+        hint: "Messages cannot be saved to Drafts or Sent until there is room. Search for larger:10M to find the largest messages, delete what you no longer need, then empty the trash.",
       },
     },
   },

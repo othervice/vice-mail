@@ -36,6 +36,7 @@ mod message;
 mod oauth;
 mod outbox;
 mod parity;
+mod quota;
 mod reading;
 mod role;
 mod saved_search;
@@ -181,6 +182,7 @@ pub use parity::{
     MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
     UnreadFirstThreadPage, UnreadPhase,
 };
+pub use quota::{MailboxQuota, QUOTA_WARN_PERCENT, StorageQuota};
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
     LinkWarning, MessageBody, MessageProblem, MessageView, MessageViewHeader, OpenAttachmentResult,

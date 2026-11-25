@@ -161,6 +161,10 @@ pub enum ErrorCode {
     PictureUnsupported,
     /// Stage 17: the image could not be decoded (damaged, or crafted).
     PictureDamaged,
+    /// Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
+    /// 9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
+    /// (search `larger:10M`) makes room.
+    OverQuota,
 }
 
 /// Error of a mail backend (IMAP adapter). Variants hold plain text so the type stays free of
@@ -246,6 +250,11 @@ pub enum BackendError {
     /// resource, no mail capability, or endpoints without TLS). Holds the reason.
     #[error("no JMAP service found: {0}")]
     JmapUnavailable(String),
+
+    /// Stage 20 (decision 0060): the mailbox is full; the server refused to store a message
+    /// (IMAP `NO [OVERQUOTA]`, JMAP `overQuota`). Holds the server's text.
+    #[error("the mailbox is full: {0}")]
+    OverQuota(String),
 }
 
 impl BackendError {
@@ -270,6 +279,7 @@ impl BackendError {
             Self::SendRejected { .. } => ErrorCode::SendRejected,
             Self::SendUnclear(_) => ErrorCode::SendUnclear,
             Self::JmapUnavailable(_) => ErrorCode::JmapUnavailable,
+            Self::OverQuota(_) => ErrorCode::OverQuota,
         }
     }
 
@@ -317,6 +327,7 @@ impl BackendError {
                 "The connection broke while sending; the message may have been sent."
             }
             Self::JmapUnavailable(_) => "No JMAP service was found at this address.",
+            Self::OverQuota(_) => "The mailbox on the server is full.",
         }
     }
 
@@ -342,7 +353,8 @@ impl BackendError {
             | Self::InvalidState(d)
             | Self::SendRejected { detail: d, .. }
             | Self::SendUnclear(d)
-            | Self::JmapUnavailable(d) => (!d.is_empty()).then(|| d.clone()),
+            | Self::JmapUnavailable(d)
+            | Self::OverQuota(d) => (!d.is_empty()).then(|| d.clone()),
         }
     }
 }
@@ -657,6 +669,7 @@ mod tests {
             (ErrorCode::PictureTooLarge, "picture_too_large"),
             (ErrorCode::PictureUnsupported, "picture_unsupported"),
             (ErrorCode::PictureDamaged, "picture_damaged"),
+            (ErrorCode::OverQuota, "over_quota"),
         ];
         for (code, wire) in codes {
             assert_eq!(serde_json::to_value(code).expect("serialize"), wire);
@@ -682,6 +695,8 @@ mod tests {
             ),
             (B::Protocol("x".into()), ErrorCode::Protocol, true),
             (B::Rejected("NO".into()), ErrorCode::ServerRejected, true),
+            // Stage 20: a full mailbox stays full until the user deletes something.
+            (B::OverQuota("full".into()), ErrorCode::OverQuota, false),
             (B::MailboxNotFound("X".into()), ErrorCode::NotFound, true),
             (
                 B::CertUntrusted("UnknownIssuer".into()),

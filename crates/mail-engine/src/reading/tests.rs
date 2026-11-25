@@ -1841,3 +1841,55 @@ async fn the_attachments_view_lists_stored_attachments_and_fetches_on_open() {
     assert_eq!(std::fs::read(saved).expect("read"), bytes);
 }
 
+/// Stage 20, task E (decision 0060): the quota over the reading connection, kept for a while,
+/// asked again on request; a server without one says so.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_quota_is_read_kept_and_refreshed() {
+    let server = FakeServer::new();
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    assert_eq!(
+        h.core
+            .get_account_quota(account, false)
+            .await
+            .expect("none"),
+        mail_model::MailboxQuota::NotReported
+    );
+    server.with(|s| {
+        s.quota = Some(mail_model::StorageQuota {
+            used_bytes: 950,
+            limit_bytes: 1000,
+        });
+    });
+    // Kept: the server is not asked again until a refresh.
+    assert_eq!(
+        h.core
+            .get_account_quota(account, false)
+            .await
+            .expect("kept"),
+        mail_model::MailboxQuota::NotReported
+    );
+    let fresh = h
+        .core
+        .get_account_quota(account, true)
+        .await
+        .expect("fresh");
+    assert_eq!(
+        fresh,
+        mail_model::MailboxQuota::Reported {
+            used_bytes: 950,
+            limit_bytes: 1000,
+            percent: 95,
+            nearly_full: true,
+        }
+    );
+    assert_eq!(server.with(|s| s.quota_asked), 2);
+    let unknown: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+    assert_eq!(
+        h.core
+            .get_account_quota(unknown, false)
+            .await
+            .map_err(|e| e.code()),
+        Err(ErrorCode::NotFound)
+    );
+}

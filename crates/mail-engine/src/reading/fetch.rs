@@ -211,6 +211,12 @@ impl<B: MailBackend> Held<B> {
         }
     }
 
+    /// Stage 20 (decision 0060): how full the mailbox is (`None`: not reported).
+    pub async fn quota(&mut self) -> Result<Option<mail_model::StorageQuota>, BackendError> {
+        let result = self.backend()?.quota().await;
+        self.checked(result)
+    }
+
     pub async fn structure(
         &mut self,
         mailbox: &SelectedMailbox,

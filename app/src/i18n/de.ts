@@ -73,6 +73,8 @@ export const de: Translation = {
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",
     loadFailed: "Die Ordner konnten nicht geladen werden.",
     accountTrouble: "{{label}}, {{status}}",
+    // Stufe 20 (Entscheidung 0060): das Postfach ist zu mindestens 90 % voll.
+    quotaFull: "{{label}}, Postfach zu {{percent}} % voll",
     statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
@@ -1275,6 +1277,22 @@ export const de: Translation = {
           loadFailed: "Die Ordner konnten nicht geladen werden.",
           empty: "Die Ordner erscheinen nach dem ersten Abgleich.",
         },
+        // Stufe 20 (Entscheidung 0060): Speicher auf dem Server.
+        quota: {
+          title: "Speicher auf dem Server",
+          checking: "Wird geprüft…",
+          refresh: "Erneut prüfen",
+          used: "{{used}} von {{limit}} belegt ({{percent}} %)",
+          free: "{{free}} frei",
+          meter: "Postfach zu {{percent}} % voll",
+          nearlyFull: "Das Postfach ist zu {{percent}} % voll",
+          cleanUp:
+            "Ist es voll, nimmt der Server keine neuen Mails mehr an, und die App kann keine Entwürfe und gesendeten Mails mehr ablegen. Lösche große Mails, die du nicht mehr brauchst, und leere dann den Papierkorb.",
+          findLarge: "Große Mails suchen",
+          notReported: "Der Server nennt keinen Speicherplatz.",
+          unknown: "Der Speicher ließ sich gerade nicht prüfen.",
+          failed: "Der Speicher ließ sich nicht prüfen.",
+        },
         remove: {
           title: "Konto entfernen",
           description: "Entfernt das Konto und alles, was die App dafür gespeichert hat, von diesem Computer.",
@@ -1953,7 +1971,7 @@ export const de: Translation = {
       all: "Allen Konten",
     },
     hint: {
-      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
+      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:, größer:10M. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
     },
     results: {
       label: "den Suchergebnissen für „{{query}}“",
@@ -2015,6 +2033,8 @@ export const de: Translation = {
         after: "Nach",
         older_than: "Älter als",
         newer_than: "Neuer als",
+        // Stage 20 (decision 0060).
+        larger: "Größer als",
       },
     },
     index: {
@@ -3587,6 +3607,11 @@ export const de: Translation = {
       picture_damaged: {
         title: "Das Bild konnte nicht gelesen werden.",
         hint: "Die Datei ist vielleicht beschädigt. Wähle ein anderes Bild.",
+      },
+      // Stufe 20 (Entscheidung 0060).
+      over_quota: {
+        title: "Das Postfach auf dem Server ist voll.",
+        hint: "Entwürfe und Gesendetes lassen sich erst wieder speichern, wenn Platz ist. Suche nach larger:10M, um die größten Mails zu finden, lösche, was du nicht mehr brauchst, und leere dann den Papierkorb.",
       },
     },
   },

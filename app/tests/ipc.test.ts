@@ -229,6 +229,8 @@ describe("error codes", () => {
     "picture_too_large",
     "picture_unsupported",
     "picture_damaged",
+    // Stage 20 (decision 0060).
+    "over_quota",
   ];
 
   it("ERROR_CODES holds exactly the codes of the contract", () => {

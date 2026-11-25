@@ -101,6 +101,9 @@ pub enum Filter {
     OlderThan(Age),
     /// `newer_than:7d`: at or after the instant 7 days ago.
     NewerThan(Age),
+    /// Stage 20 (decision 0060): `larger:10M`, the message is at least this many bytes
+    /// (RFC822.SIZE); `-larger:` smaller than that. Units `K`, `M`, `G` (1024-based), `B`.
+    Larger(u64),
 }
 
 /// Text to find. Passed to FTS5 as one quoted string: several words in it are a phrase.
@@ -430,6 +433,32 @@ enum Key {
     After,
     OlderThan,
     NewerThan,
+    Larger,
+}
+
+/// Stage 20: `10M`, `500k`, `2G`, `1,5M`/`1.5M`, `12345` (bytes), `20MB`: bytes, 1024-based;
+/// `None` for anything else or more than 1 TiB.
+fn parse_size(value: &str) -> Option<u64> {
+    let value = value.trim().to_ascii_lowercase().replace(',', ".");
+    let value = value.strip_suffix('b').unwrap_or(&value);
+    let (number, factor) = match value.chars().last()? {
+        'k' => (&value[..value.len() - 1], 1024_f64),
+        'm' => (&value[..value.len() - 1], 1024_f64 * 1024.0),
+        'g' => (&value[..value.len() - 1], 1024_f64 * 1024.0 * 1024.0),
+        c if c.is_ascii_digit() => (value, 1.0),
+        _ => return None,
+    };
+    if number.is_empty() || !number.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return None;
+    }
+    let amount: f64 = number.parse().ok()?;
+    let bytes = (amount * factor).round();
+    // Within 1 TiB, so the cast below is exact enough and never wraps.
+    (bytes.is_finite() && (0.0..=1_099_511_627_776.0).contains(&bytes)).then(|| {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let bytes = bytes as u64;
+        bytes
+    })
 }
 
 fn known_key(key: &str) -> Option<Key> {
@@ -447,6 +476,7 @@ fn known_key(key: &str) -> Option<Key> {
         "after" | "nach" => Key::After,
         "older_than" => Key::OlderThan,
         "newer_than" => Key::NewerThan,
+        "larger" | "größer" | "groesser" => Key::Larger,
         _ => return None,
     };
     Some(key)
@@ -561,6 +591,13 @@ fn term(
             } else {
                 Filter::After(date)
             }
+        }
+        Key::Larger => {
+            let Some(bytes) = parse_size(trimmed) else {
+                errors.push(invalid(SearchErrorKind::UnknownValue));
+                return None;
+            };
+            Filter::Larger(bytes)
         }
         Key::OlderThan | Key::NewerThan => {
             let Some(age) = parse_age(trimmed) else {

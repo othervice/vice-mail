@@ -18,6 +18,7 @@ pub mod mcp;
 pub mod oauth;
 pub mod parity;
 pub mod preferences;
+pub mod quota;
 pub mod reading;
 pub mod reminders;
 pub mod search;

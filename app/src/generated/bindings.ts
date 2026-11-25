@@ -736,6 +736,11 @@ export const commands = {
 	 *  sender and file name. `limit` 1..=500.
 	 */
 	listAttachments: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number, options?: InvokeOptions) => typedError<AttachmentPage, IpcError>(__TAURI_INVOKE("list_attachments", { filter, cursor, limit }, options)),
+	/**
+	 *  IMAP QUOTA (RFC 9208) or JMAP quotas (RFC 9425) of the account, over its read-only reading
+	 *  connection; kept for 15 minutes unless `refresh`.
+	 */
+	getAccountQuota: (accountId: AccountId, refresh: boolean, options?: InvokeOptions) => typedError<MailboxQuota, IpcError>(__TAURI_INVOKE("get_account_quota", { accountId, refresh }, options)),
 };
 
 /** Events */
@@ -835,6 +840,8 @@ export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
 export const MIN_TEXT_SIZE = 80 as const;
 
 export const MISSED_SEND_GRACE_MS = 3600000 as const;
+
+export const QUOTA_WARN_PERCENT = 90 as const;
 
 export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
@@ -2698,7 +2705,13 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 17: the file is not a PNG, JPEG, GIF or WebP image. */
 "picture_unsupported" | 
 /**  Stage 17: the image could not be decoded (damaged, or crafted). */
-"picture_damaged";
+"picture_damaged" | 
+/**
+ *  Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
+ *  9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
+ *  (search `larger:10M`) makes room.
+ */
+"over_quota";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -3076,6 +3089,22 @@ export type Mailbox = {
 
 /**  Local row id of a mailbox (`mailbox.id`). Not stable across devices. */
 export type MailboxId = number;
+
+/**  How full an account's mailbox is (`getAccountQuota`). */
+export type MailboxQuota = 
+/**  The server reports its storage. */
+{ kind: "reported"; usedBytes: number; limitBytes: number; 
+/**  0 to 100. */
+percent: number; 
+/**  At least [`QUOTA_WARN_PERCENT`]. */
+nearlyFull: boolean } | 
+/**
+ *  The server does not report storage (no QUOTA extension, no quota for mail, or no
+ *  storage limit).
+ */
+{ kind: "notReported" } | 
+/**  Could not be asked now (offline, a refusal); `error` says why. */
+{ kind: "unknown"; error: IpcError | null };
 
 /**  What a mailbox is for. At most one mailbox per account has each role except `custom`. */
 export type MailboxRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk" | 
@@ -4454,7 +4483,9 @@ export type SearchTermInfo = {
 };
 
 /**  What a term of the query is, for chips. */
-export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than";
+export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than" | 
+/**  Stage 20: `larger:`. */
+"larger";
 
 /**
  *  Transport security of a server connection. There is deliberately no plaintext option: a

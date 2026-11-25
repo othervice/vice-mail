@@ -908,6 +908,17 @@ impl<C: Connector> AppCore<C> {
         self.reading()?.load_remote_content(message, scope).await
     }
 
+    /// Stage 20 (decision 0060): how full the account's mailbox on the server is (IMAP QUOTA,
+    /// JMAP quotas), `notReported` when the server says nothing, `unknown` when it cannot be
+    /// asked now. Kept for 15 minutes unless `refresh`.
+    pub async fn get_account_quota(
+        &self,
+        account: AccountId,
+        refresh: bool,
+    ) -> Result<mail_model::MailboxQuota, CoreError> {
+        self.reading()?.quota(account, refresh).await
+    }
+
     /// Senders of the account whose external content always loads, sorted.
     pub async fn list_remote_content_senders(
         &self,

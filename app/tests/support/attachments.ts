@@ -5,6 +5,7 @@ import type {
   AttachmentEntry,
   AttachmentFilter,
   AttachmentInfo,
+  MailboxQuota,
   AttachmentPreview,
   InboxScope,
   IpcError,
@@ -28,6 +29,8 @@ export interface AttachmentsFakeOptions {
   blockedHidden?: Record<string, number>;
   /** Stage 20: the attachments view's entries, newest first (filtered here like the core). */
   attachmentEntries?: AttachmentEntry[];
+  /** Stage 20: `getAccountQuota` by account id; default: the server reports none. */
+  quotas?: Record<string, MailboxQuota>;
 }
 
 export interface AttachmentsFakeState {
@@ -140,6 +143,8 @@ export function createAttachmentsFake(options: AttachmentsFakeOptions, deps: Dep
         );
         return { items: items.slice(0, limit), nextCursor: null };
       }
+      case "get_account_quota":
+        return options.quotas?.[args["accountId"] as string] ?? { kind: "notReported" };
       default:
         return undefined;
     }

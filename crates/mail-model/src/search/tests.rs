@@ -62,6 +62,7 @@ fn describe_term(term: &Term) -> String {
         Filter::After(d) => out.push_str(&format!("after:{}", date(d))),
         Filter::OlderThan(age) => out.push_str(&format!("older_than:{}{:?}", age.amount, age.unit)),
         Filter::NewerThan(age) => out.push_str(&format!("newer_than:{}{:?}", age.amount, age.unit)),
+        Filter::Larger(bytes) => out.push_str(&format!("larger:{bytes}")),
     }
     out
 }
@@ -907,5 +908,42 @@ fn random_input_never_panics_and_never_injects() {
                 check_fts_syntax(expr);
             }
         }
+    }
+}
+
+/// Stage 20 (decision 0060): `larger:` finds the messages that fill the mailbox.
+#[test]
+fn larger_takes_sizes_with_units_and_compiles_to_bounds() {
+    let parsed = parse(
+        "larger:10M größer:500k -larger:2G larger:1,5m larger:12345",
+        &ctx(),
+    );
+    assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+    let terms: Vec<String> = parsed
+        .clauses
+        .iter()
+        .filter_map(|c| match c {
+            Clause::Term(t) => Some(describe_term(t)),
+            Clause::AnyOf(_) => None,
+        })
+        .collect();
+    assert_eq!(
+        terms,
+        [
+            "larger:10485760",
+            "larger:512000",
+            "-larger:2147483648",
+            "larger:1572864",
+            "larger:12345"
+        ]
+    );
+    let compiled = parsed.compile(&ctx(), CompileOptions::default());
+    assert_eq!(compiled.size_at_least, Some(10_485_760));
+    assert_eq!(compiled.size_below, Some(2_147_483_648));
+    assert!(compiled.conflicts.is_empty());
+    let conflict = parse("larger:5M -larger:1M", &ctx()).compile(&ctx(), CompileOptions::default());
+    assert_eq!(conflict.conflicts.len(), 1);
+    for bad in ["larger:big", "larger:5X", "larger:-3M", "larger:2T"] {
+        assert!(!parse(bad, &ctx()).errors.is_empty(), "{bad}");
     }
 }

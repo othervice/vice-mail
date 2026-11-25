@@ -84,6 +84,9 @@ use view::{Attachment, AttachmentSource, Content};
 /// Delay of the start-up sweep of body files.
 pub const SWEEP_DELAY: Duration = Duration::from_secs(5);
 
+/// Stage 20 (decision 0060): how long an answer about an account's quota is kept.
+pub const QUOTA_KEEP: Duration = Duration::from_secs(15 * 60);
+
 /// Stage 20 (decision 0058): setting key (global, synced, JSON boolean) of tracker blocking in
 /// images; missing means on.
 pub(crate) const BLOCK_TRACKERS_KEY: &str = "reading.block_trackers";
@@ -155,6 +158,8 @@ pub(crate) struct Reading<C: MailConnector> {
     /// Stage 20: whether links get cleaned, as last read from the settings (for the links of
     /// AI results, which are remembered without a store read).
     clean_links: AtomicBool,
+    /// Stage 20 (decision 0060): the last answer about each account's quota, and when.
+    quotas: Mutex<std::collections::HashMap<AccountId, (Instant, mail_model::MailboxQuota)>>,
 }
 
 impl<C: MailConnector> Drop for Reading<C> {
@@ -212,6 +217,7 @@ impl<C: MailConnector + 'static> Reading<C> {
             eml: eml::EmlFiles::default(),
             picture_sources: crate::contacts_view::PictureSources::default(),
             clean_links: AtomicBool::new(true),
+            quotas: Mutex::default(),
         });
         reading.sweep_later();
         let listener = reading.spawn_listener();
@@ -428,6 +434,53 @@ impl<C: MailConnector + 'static> Reading<C> {
             partial,
             problems,
         })
+    }
+
+    /// Stage 20 (decision 0060): how full the account's mailbox is, over the reading
+    /// connection (read-only). An answer is kept for [`QUOTA_KEEP`] unless `refresh`; a failure
+    /// (offline, a refusal) is `unknown` with the error and not kept.
+    pub(crate) async fn quota(
+        &self,
+        account: AccountId,
+        refresh: bool,
+    ) -> Result<mail_model::MailboxQuota, CoreError> {
+        let stored = self
+            .store
+            .account(account)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {account}")))?;
+        if !refresh {
+            let cached = self
+                .quotas
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&account)
+                .filter(|(at, _)| at.elapsed() < QUOTA_KEEP)
+                .map(|(_, quota)| quota.clone());
+            if let Some(quota) = cached {
+                return Ok(quota);
+            }
+        }
+        let asked = async {
+            let mut held = self.connections.hold(&stored).await?;
+            held.quota().await.map_err(CoreError::from)
+        }
+        .await;
+        let quota = match asked {
+            Ok(Some(quota)) => mail_model::MailboxQuota::reported(quota),
+            Ok(None) => mail_model::MailboxQuota::NotReported,
+            Err(err) => {
+                tracing::debug!(account = %account, code = ?err.code(), "quota unknown");
+                return Ok(mail_model::MailboxQuota::Unknown {
+                    error: Some(IpcError::from(err)),
+                });
+            }
+        };
+        self.quotas
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(account, (Instant::now(), quota.clone()));
+        Ok(quota)
     }
 
     /// Stage 20: the tracker settings as stored (missing or unreadable: on).
