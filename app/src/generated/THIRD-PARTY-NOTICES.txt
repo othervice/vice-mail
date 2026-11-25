@@ -1966,6 +1966,12 @@ Source: https://github.com/madsmtm/objc2
 Only on: macos
 Licence text: MIT
 ==============================================================================
+objc2-core-graphics 0.3.2 (Rust crate)
+Licence: MIT (declared: Zlib OR Apache-2.0 OR MIT)
+Source: https://github.com/madsmtm/objc2
+Only on: macos
+Licence text: MIT
+==============================================================================
 objc2-encode 4.1.0 (Rust crate)
 Licence: MIT
 Source: https://github.com/madsmtm/objc2
@@ -2946,6 +2952,12 @@ Source: https://github.com/tokio-rs/tracing
 Copyright (c) 2019 Tokio Contributors
 Licence text: MIT
 ==============================================================================
+tray-icon 0.25.1 (Rust crate)
+Licence: MIT (declared: MIT OR Apache-2.0)
+Source: https://github.com/tauri-apps/tray-icon
+Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
+Licence text: MIT #2; Notice #16
+==============================================================================
 try-lock 0.2.5 (Rust crate)
 Licence: MIT
 Source: https://github.com/seanmonstar/try-lock
@@ -2975,7 +2987,7 @@ typenum 1.20.1 (Rust crate)
 Licence: MIT (declared: MIT OR Apache-2.0)
 Source: https://github.com/paholg/typenum
 Copyright (c) 2014 Paho Lurie-Gregg
-Licence text: Notice #16; MIT #3
+Licence text: Notice #17; MIT #3
 ==============================================================================
 unic-langid 0.9.6 (Rust crate)
 Licence: MIT (declared: MIT OR Apache-2.0)
@@ -3040,13 +3052,13 @@ utf8_iter 1.1.0 (Rust crate)
 Licence: MIT (declared: Apache-2.0 OR MIT)
 Source: https://github.com/hsivonen/utf8_iter
 Copyright Mozilla Foundation
-Licence text: Notice #17; MIT
+Licence text: Notice #18; MIT
 ==============================================================================
 utf_types 1.0.0 (Rust crate)
 Licence: MIT (declared: Apache-2.0 OR MIT)
 Source: https://github.com/hsivonen/utf_types
 Copyright Mozilla Foundation
-Licence text: Notice #18; MIT
+Licence text: Notice #19; MIT
 ==============================================================================
 uuid 1.29.3 (Rust crate)
 Licence: MIT (declared: Apache-2.0 OR MIT)
@@ -3132,7 +3144,7 @@ window-vibrancy 0.8.1 (Rust crate)
 Licence: MIT (declared: Apache-2.0 OR MIT)
 Source: https://github.com/tauri-apps/tauri-plugin-vibrancy
 Copyright (c) 2020-2022 Tauri Programme within The Commons Conservancy
-Licence text: MIT #2; Notice #19
+Licence text: MIT #2; Notice #20
 ==============================================================================
 windows 0.62.2 (Rust crate)
 Licence: MIT (declared: MIT OR Apache-2.0)
@@ -3240,7 +3252,7 @@ wry 0.57.3 (Rust crate)
 Licence: MIT (declared: Apache-2.0 OR MIT)
 Source: https://github.com/tauri-apps/wry
 Copyright (c) 2020-2023 Ngo Iok Ui & Tauri Programme within The Commons Conservancy
-Licence text: MIT #2; Notice #20
+Licence text: MIT #2; Notice #21
 ==============================================================================
 x25519-dalek 2.0.1 (Rust crate)
 Licence: BSD-3-Clause
@@ -7081,10 +7093,34 @@ Creator: Person: Daniel Thompson-Yvetot
 Notice #16
 ------------------------------------------------------------------------------
 
-MIT OR Apache-2.0
+SPDXVersion: SPDX-2.1
+DataLicense: CC0-1.0
+PackageName: tray-icon
+DataFormat: SPDXRef-1
+PackageSupplier: Organization: The Tauri Programme in the Commons Conservancy
+PackageHomePage: https://tauri.app
+PackageLicenseDeclared: Apache-2.0
+PackageLicenseDeclared: MIT
+PackageCopyrightText: 2020-2022, The Tauri Programme in the Commons Conservancy
+PackageSummary: <text>Create tray icons for desktop applications.
+                </text>
+PackageComment: <text>The package includes the following libraries; see
+Relationship information.
+                </text>
+Created: 2022-12-05T09:00:00Z
+PackageDownloadLocation: git://github.com/tauri-apps/tray-icon
+PackageDownloadLocation: git+https://github.com/tauri-apps/tray-icon.git
+PackageDownloadLocation: git+ssh://github.com/tauri-apps/tray-icon.git
+Creator: Person: Daniel Thompson-Yvetot
 
 ------------------------------------------------------------------------------
 Notice #17
+------------------------------------------------------------------------------
+
+MIT OR Apache-2.0
+
+------------------------------------------------------------------------------
+Notice #18
 ------------------------------------------------------------------------------
 
 Licensed under the Apache License (Version 2.0), or the MIT license,
@@ -7129,7 +7165,7 @@ licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
 <LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
 
 ------------------------------------------------------------------------------
-Notice #18
+Notice #19
 ------------------------------------------------------------------------------
 
 Licensed under the Apache License (Version 2.0), or the MIT license,
@@ -7152,7 +7188,24 @@ Test code is dedicated to the Public Domain when so designated (see
 the individual files for PD/CC0-dedicated sections).
 
 ------------------------------------------------------------------------------
-Notice #19
+Notice #2
+------------------------------------------------------------------------------
+
+Copyrights in the Rand project are retained by their contributors. No
+copyright assignment is required to contribute to the Rand project.
+
+For full authorship information, see the version control history.
+
+Except as otherwise noted (below and/or in individual files), Rand is
+licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
+<http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+<LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
+
+The Rand project includes code from the Rust project
+published under these same licenses.
+
+------------------------------------------------------------------------------
+Notice #20
 ------------------------------------------------------------------------------
 
 SPDXVersion: SPDX-2.1
@@ -7176,24 +7229,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/window-vibrancy.git
 Creator: Person: Daniel Thompson-Yvetot
 
 ------------------------------------------------------------------------------
-Notice #2
-------------------------------------------------------------------------------
-
-Copyrights in the Rand project are retained by their contributors. No
-copyright assignment is required to contribute to the Rand project.
-
-For full authorship information, see the version control history.
-
-Except as otherwise noted (below and/or in individual files), Rand is
-licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
-<http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-<LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
-
-The Rand project includes code from the Rust project
-published under these same licenses.
-
-------------------------------------------------------------------------------
-Notice #20
+Notice #21
 ------------------------------------------------------------------------------
 
 SPDXVersion: SPDX-2.1
