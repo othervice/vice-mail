@@ -35,7 +35,7 @@ const PAYLOAD: &[u8] = include_bytes!("fixtures/update.bin");
 const SIGNATURE_0_2_0: &str = include_str!("fixtures/update-0.2.0.sig");
 
 /// The mock app's version (`tauri::test::mock_context`).
-const RUNNING: &str = "0.1.0";
+const RUNNING: &str = env!("CARGO_PKG_VERSION");
 
 const FAST: UpdateSchedule = UpdateSchedule {
     first_delay: Duration::from_millis(0),
