@@ -341,9 +341,11 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
       const now = event.timeStamp;
       const text = now - typed.current.at < 500 ? typed.current.text + event.key : event.key;
       typed.current = { text, at: now };
+      // The same letter again goes on to the next item with it, as in the sidebar's trees.
+      const query = [...text].every((char) => char === text[0]) ? event.key : text;
       const labels = items.map((item) => item.dataset["menuLabel"] ?? "");
-      const starts = (i: number) => labels[i]?.slice(0, text.length).localeCompare(text, undefined, { sensitivity: "base" }) === 0;
-      const order = [...items.keys()].map((offset) => (index + (text.length > 1 ? 0 : 1) + offset) % items.length);
+      const starts = (i: number) => labels[i]?.slice(0, query.length).localeCompare(query, undefined, { sensitivity: "base" }) === 0;
+      const order = [...items.keys()].map((offset) => (index + (query.length > 1 ? 0 : 1) + offset) % items.length);
       const found = order.find((i) => starts(i));
       if (found !== undefined) focusAt(found);
     }
@@ -407,7 +409,7 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
             aria-checked={entry.checked}
             tabIndex={-1}
             aria-disabled={entry.disabled || undefined}
-            aria-describedby={entry.describedBy}
+            aria-describedby={entry.describedBy ?? entry.note?.id}
             aria-keyshortcuts={entry.disabled ? undefined : entry.keyshortcuts}
             title={entry.title}
             data-menu-item

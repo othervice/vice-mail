@@ -184,7 +184,8 @@ export function createParityFake(options: ParityFakeOptions, deps: ParityDeps) {
         if (!target?.selectable) return deps.reject("invalid_argument", "target");
         if (messages.length === 0 || messages.length > 500) return deps.reject("invalid_argument", "messages");
         const sources = messages.map((ref) => deps.mailboxes().find((m) => m.id === ref.mailboxId));
-        if (sources.some((m) => !m || m.accountId === target.accountId)) {
+        // Stage 21 (decision 0064): a copy may go to another folder of the same account.
+        if (sources.some((m) => !m || (m.accountId === target.accountId && (mode === "move" || m.id === target.id)))) {
           return deps.reject("invalid_argument", "same account");
         }
         if (!deps.writesEnabled(target.accountId)) return deps.reject("read_only");
