@@ -12,7 +12,10 @@
 use jiff::civil::{Date, Time, Weekday};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, ZonedDateTime as Zoned};
-use mail_model::{CoreError, DateSection, DateSectionKind, SnoozeChoice, SnoozeTimes};
+use mail_model::{
+    CoreError, DateSection, DateSectionKind, FollowUpChoice, FollowUpTimes, SnoozeChoice,
+    SnoozeTimes,
+};
 
 /// Earliest snooze: a minute ahead (a time in the past would return at once).
 pub const MIN_SNOOZE_AHEAD_MS: i64 = 60_000;
@@ -145,6 +148,55 @@ pub fn until(choice: SnoozeChoice, now_ms: i64, zone: &TimeZone) -> Result<i64, 
         return Err(invalid("the time must be within five years"));
     }
     Ok(result)
+}
+
+/// Stage 20 (decision 0059): `at` is at least a minute and at most five years after `now_ms`
+/// (the bounds of a snooze).
+pub fn check_ahead(at: i64, now_ms: i64) -> Result<(), CoreError> {
+    if at < now_ms + MIN_SNOOZE_AHEAD_MS {
+        return Err(CoreError::InvalidArgument(
+            "reminder: the time must be at least a minute ahead".into(),
+        ));
+    }
+    if at > now_ms + MAX_SNOOZE_AHEAD_MS {
+        return Err(CoreError::InvalidArgument(
+            "reminder: the time must be within five years".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Stage 20 (decision 0059): when a reminder made at `now_ms` with `choice` is due, Unix ms:
+/// tomorrow at 08:00, in three days at 08:00, next Monday at 08:00, or the time picked.
+pub fn follow_up_due(
+    choice: FollowUpChoice,
+    now_ms: i64,
+    zone: &TimeZone,
+) -> Result<i64, CoreError> {
+    let due = match choice {
+        FollowUpChoice::Tomorrow => until(SnoozeChoice::Tomorrow, now_ms, zone)?,
+        FollowUpChoice::NextWeek => until(SnoozeChoice::NextWeek, now_ms, zone)?,
+        FollowUpChoice::InThreeDays => {
+            let invalid = || CoreError::InvalidArgument("reminder: out of range".into());
+            let today = zoned(now_ms, zone).ok_or_else(invalid)?.date();
+            let day = today.checked_add(3.days()).map_err(|_| invalid())?;
+            at_local(day, 8, zone).ok_or_else(invalid)?
+        }
+        FollowUpChoice::At { at } => at,
+    };
+    check_ahead(due, now_ms)?;
+    Ok(due)
+}
+
+/// Stage 20: the times the reminder menu offers at `now_ms`.
+pub fn follow_up_times(now_ms: i64, zone: &TimeZone) -> FollowUpTimes {
+    let at = |choice| follow_up_due(choice, now_ms, zone).ok();
+    let day = 24 * 3_600_000;
+    FollowUpTimes {
+        tomorrow: at(FollowUpChoice::Tomorrow).unwrap_or(now_ms + day),
+        in_three_days: at(FollowUpChoice::InThreeDays).unwrap_or(now_ms + 3 * day),
+        next_week: at(FollowUpChoice::NextWeek).unwrap_or(now_ms + 7 * day),
+    }
 }
 
 /// Minutes after local midnight at `now_ms` (for quiet hours).

@@ -12,6 +12,8 @@ export type WindowRoute =
   | { kind: "composer"; draftId: DraftId }
   /** Stage 9 (decision 0027): `?window=eml&fileId=<32 hex digits>`, an opened `.eml` file. */
   | { kind: "eml"; fileId: EmlFileId }
+  /** Stage 19 (decision 0055): `?window=source&accountId=<uuid>&messageId=<id>`, a message's source. */
+  | { kind: "source"; accountId: AccountId; messageId: MessageId }
   | { kind: "invalid" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,12 +22,12 @@ export function parseWindowRoute(search: string): WindowRoute {
   const params = new URLSearchParams(search);
   const kind = params.get("window");
   if (kind === null) return { kind: "main" };
-  if (kind === "message") {
+  if (kind === "message" || kind === "source") {
     const accountId = params.get("accountId") ?? "";
     const raw = params.get("messageId") ?? "";
     const messageId = /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : NaN;
     if (!UUID.test(accountId) || !Number.isSafeInteger(messageId)) return { kind: "invalid" };
-    return { kind: "message", accountId: accountId.toLowerCase(), messageId };
+    return { kind, accountId: accountId.toLowerCase(), messageId };
   }
   if (kind === "composer") {
     const draftId = params.get("draftId") ?? "";

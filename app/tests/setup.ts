@@ -24,6 +24,8 @@ import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequ
 import { useBlockedFocusStore } from "../src/features/blocked/focus";
 import { useConversationStore } from "../src/features/threads/preference";
 import { useColumnViewsStore } from "../src/features/layout/columnViews";
+// Stage 19: the redirect dialog of this window.
+import { useRedirectStore } from "../src/stores/redirect";
 
 beforeEach(() => {
   installSystemFakes();
@@ -41,6 +43,7 @@ afterEach(() => {
   useComposerStore.setState(useComposerStore.getInitialState(), true);
   // Stage 9: mailto: links waiting for the composer.
   useMailtoStore.setState(useMailtoStore.getInitialState(), true);
+  useRedirectStore.setState(useRedirectStore.getInitialState(), true);
   // Stage 8: shortcuts, layout and recent palette commands come from the core (decision 0025);
   // the web view's storage only holds old values to migrate and per-device UI flags.
   window.localStorage.clear();

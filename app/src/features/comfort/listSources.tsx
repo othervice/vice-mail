@@ -1,5 +1,5 @@
 import { useInfiniteQuery, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { BookOpen, Clock, Flag, Inbox, ListTodo, Pin, Zap } from "lucide-react";
+import { BookOpen, Clock, Flag, Inbox, ListTodo, MailClock, Pin, Zap } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
@@ -7,6 +7,7 @@ import {
   comfortIpc,
   conversationIpc,
   parityIpc,
+  reminderIpc,
   type Account,
   type InboxCursor,
   type InboxPage,
@@ -269,12 +270,16 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
   );
 
   const markKind: MarkListKind =
-    kind === "later" || kind === "pinned" || kind === "tasks" || kind === "readingList" || kind === "flagged" ? kind : "later";
+    kind === "later" || kind === "waiting" || kind === "pinned" || kind === "tasks" || kind === "readingList" || kind === "flagged"
+      ? kind
+      : "later";
   const marks = useInfiniteQuery({
     queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
     queryFn: async (): Promise<{ items: MessageListItem[] }> => {
       // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
       if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
+      // Stage 20 (decision 0059): the reminders if no reply comes (at most 1,000 as well).
+      if (markKind === "waiting") return { items: await reminderIpc.listFollowUps(markScope) };
       if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
       // Stage 16: the reading list, most recently added first (at most 1,000 as well).
       if (markKind === "readingList") return { items: await parityIpc.listReadingList(markScope) };
@@ -309,10 +314,12 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
           empty: { icon: BookOpen, title: t("organize.readingList.emptyTitle"), body: t("organize.readingList.emptyBody") },
         };
       case "later":
+      case "waiting":
       case "pinned":
       case "flagged":
       case "tasks": {
-        const icon = kind === "later" ? Clock : kind === "pinned" ? Pin : kind === "flagged" ? Flag : ListTodo;
+        const icon =
+          kind === "later" ? Clock : kind === "waiting" ? MailClock : kind === "pinned" ? Pin : kind === "flagged" ? Flag : ListTodo;
         const empty =
           kind === "tasks" && taskFilter !== "open"
             ? { icon, title: t(`comfort.tasks.empty.${taskFilter}`), body: t("comfort.views.tasks.emptyBody") }

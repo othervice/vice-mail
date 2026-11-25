@@ -12,6 +12,7 @@ import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { FloatingPanel } from "../actions/Pickers";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useFolderCreateItem, useFolderEditItems } from "../mailboxes/FolderEdit";
+import { useMboxItems } from "../mbox/MboxJobs";
 import { isRoleView } from "../mailboxes/tree";
 import { useDropTarget } from "../mailboxes/useDropTarget";
 import { SECTION_KEY, SectionRow, useSection } from "../layout/SectionRow";
@@ -123,6 +124,8 @@ export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: Fo
   const editItems = useFolderEditItems(account, mailbox, returnFocus);
   // Stage 18: "New subfolder…" in the account's tree.
   const createItems = useFolderCreateItem(account, mailbox, returnFocus);
+  // Stage 19 (decision 0057): the folder as an mbox file, an mbox file into the folder.
+  const mbox = useMboxItems(account, mailbox);
   const name = useFolderName()(mailbox);
   const change = useChangeFolder();
   const favorite = isFavorite(mailbox);
@@ -182,6 +185,7 @@ export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: Fo
   }
   items.push({ id: "color", label: t("organize.favorites.color"), icon: Palette, onSelect: onColor, "data-testid": "folder-color-open" });
   items.push(...createItems, ...editItems);
+  items.push(...mbox.items);
   return (
     <OverflowMenu
       label={t("organize.favorites.menu", { name })}

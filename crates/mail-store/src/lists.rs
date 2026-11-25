@@ -72,6 +72,7 @@ pub(crate) fn item_at(
         snooze: None,
         task: None,
         reading_list: false,
+        follow_up: None,
         size: size_at(r, 14)?,
     })
 }
@@ -531,6 +532,7 @@ pub(crate) fn entry(
             snooze: None,
             task: None,
             reading_list: false,
+            follow_up: None,
             size: head.size,
         },
         mailbox_ids,

@@ -64,6 +64,80 @@ export const commands = {
 	 *  `invalid_argument` for an id that is no UUID, `not_found` if the draft does not exist.
 	 */
 	openComposerWindow: (draftId: DraftId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_composer_window", { draftId }, options)),
+	/**
+	 *  Shows the source of one message in a window of its own (`?window=source&accountId=…&
+	 *  messageId=…`, capability `source-window`: it may close itself, nothing else). A second call
+	 *  for the same message focuses its window. `not_found` if the message does not exist or
+	 *  belongs to another account.
+	 */
+	openSourceWindow: (accountId: AccountId, messageId: MessageId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("open_source_window", { accountId, messageId }, options)),
+	/**
+	 *  The message as plain text (at most `MAX_SOURCE_BYTES`, cut at a line break; `truncated`
+	 *  says so and the window offers "Save as .eml" for the whole).
+	 */
+	getMessageSource: (messageId: MessageId, options?: InvokeOptions) => typedError<MessageSource, IpcError>(__TAURI_INVOKE("get_message_source", { messageId }, options)),
+	/**  Every header field of the message, in order, unfolded and decoded ("all headers"). */
+	getMessageHeaders: (messageId: MessageId, options?: InvokeOptions) => typedError<HeaderField[], IpcError>(__TAURI_INVOKE("get_message_headers", { messageId }, options)),
+	/**
+	 *  Redirects the message unchanged to new recipients; queued after the undo delay like a send
+	 *  (`requestId` names the press: the same id twice queues once). `read_only`,
+	 *  `invalid_address`, `invalid_argument`, `not_found` before anything is queued.
+	 */
+	redirectMessage: (request: RedirectRequest, requestId: string, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("redirect_message", { request, requestId }, options)),
+	/**
+	 *  "Undo" of a redirect within the delay, or dropping a failed one: nothing is sent.
+	 *  `send_in_progress` once the submission started.
+	 */
+	cancelRedirect: (operationId: OperationId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("cancel_redirect", { operationId }, options)),
+	/**  Every contact group, by name, with the number of members. */
+	listContactLists: (options?: InvokeOptions) => typedError<ContactListSummary[], IpcError>(__TAURI_INVOKE("list_contact_lists", undefined, options)),
+	/**  One group with its members in the order added (the composer expands a group into these). */
+	getContactList: (id: ContactListId, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("get_contact_list", { id }, options)),
+	/**
+	 *  A new group, optionally with members. `invalid_argument` for an unusable name or beyond the
+	 *  limits, `invalid_address` for an address that cannot be one.
+	 */
+	createContactList: (name: string, members: Address[], options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("create_contact_list", { name, members }, options)),
+	renameContactList: (id: ContactListId, name: string, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("rename_contact_list", { id, name }, options)),
+	/**  Removes the group; its members' contacts stay. */
+	deleteContactList: (id: ContactListId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("delete_contact_list", { id }, options)),
+	/**  Adds members at the end; addresses in the group already stay as they are. */
+	addContactListMembers: (id: ContactListId, members: Address[], options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("add_contact_list_members", { id, members }, options)),
+	/**  Removes the member with this address. */
+	removeContactListMember: (id: ContactListId, email: string, options?: InvokeOptions) => typedError<ContactList, IpcError>(__TAURI_INVOKE("remove_contact_list_member", { id, email }, options)),
+	/**  Groups for the composer's autocomplete (every word of `query` starts a word of the name). */
+	suggestContactLists: (query: string, limit: number, options?: InvokeOptions) => typedError<ContactListSummary[], IpcError>(__TAURI_INVOKE("suggest_contact_lists", { query, limit }, options)),
+	/**
+	 *  Stage 19: "Import vCard…": the system's open dialog for a `.vcf` file, then the core reads
+	 *  it. `cancelled` when the user closes the dialog.
+	 */
+	importVcards: (options?: InvokeOptions) => typedError<VcardImportOutcome, IpcError>(__TAURI_INVOKE("import_vcards", undefined, options)),
+	/**  Stage 19: "Export as vCard…": the system's save dialog, then the core writes the file. */
+	exportVcards: (selection: ContactExport, version: VcardVersionChoice, options?: InvokeOptions) => typedError<VcardExportOutcome, IpcError>(__TAURI_INVOKE("export_vcards", { selection, version }, options)),
+	/**  "Export as mbox…": the system's save dialog, then the export runs in the background. */
+	exportMailboxMbox: (mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxStart, IpcError>(__TAURI_INVOKE("export_mailbox_mbox", { mailboxId }, options)),
+	/**
+	 *  "Import mbox…": the system's open dialog, then the import runs in the background through
+	 *  the outbox. `read_only` without writes on the folder's account (before the dialog).
+	 */
+	importMailboxMbox: (mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxStart, IpcError>(__TAURI_INVOKE("import_mailbox_mbox", { mailboxId }, options)),
+	/**  Stops a running export or import; the job reports `cancelled` once it stopped. */
+	cancelMboxJob: (id: MboxJobId, options?: InvokeOptions) => typedError<MboxJob, IpcError>(__TAURI_INVOKE("cancel_mbox_job", { id }, options)),
+	/**  The jobs of this session, running and finished. */
+	listMboxJobs: (options?: InvokeOptions) => __TAURI_INVOKE<MboxJob[]>("list_mbox_jobs", undefined, options),
+	/**  The profiles of Thunderbird at its usual place; empty when it is not installed there. */
+	listThunderbirdProfiles: (options?: InvokeOptions) => typedError<ThunderbirdProfile[], IpcError>(__TAURI_INVOKE("list_thunderbird_profiles", undefined, options)),
+	/**  Reads profile `index` of the list and shows what it holds. */
+	openThunderbirdProfile: (index: number, options?: InvokeOptions) => typedError<TakeoverPreview, IpcError>(__TAURI_INVOKE("open_thunderbird_profile", { index }, options)),
+	/**
+	 *  "Choose a profile folder…": the system's folder dialog, then the core reads the folder (a
+	 *  profile, or Thunderbird's own folder with its default profile).
+	 */
+	chooseThunderbirdProfile: (options?: InvokeOptions) => typedError<TakeoverOpen, IpcError>(__TAURI_INVOKE("choose_thunderbird_profile", undefined, options)),
+	/**  After the account was set up: Thunderbird's other identities and the signatures. */
+	applyThunderbirdAccount: (token: TakeoverToken, index: number, accountId: AccountId, options?: InvokeOptions) => typedError<TakeoverApplied, IpcError>(__TAURI_INVOKE("apply_thunderbird_account", { token, index, accountId }, options)),
+	/**  Imports a local folder of the profile into a folder through the outbox (an mbox job). */
+	importThunderbirdFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxJob, IpcError>(__TAURI_INVOKE("import_thunderbird_folder", { token, index, mailboxId }, options)),
 	/**  All accounts, oldest first, with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
@@ -749,6 +823,33 @@ export const commands = {
 	/**  "Skip setup" or the last step: the first start does not show again on this device. */
 	finishFirstStart: (end: FirstStartEnd, options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("finish_first_start", { end }, options)),
 	/**
+	 *  Asked by the composer before it sends or schedules: the word of the user's own text that
+	 *  speaks of an attachment while the draft has none; null with the setting off or nothing to
+	 *  remind of. Never asked for sends of the outbox.
+	 */
+	checkAttachmentReminder: (draftId: DraftId, options?: InvokeOptions) => typedError<string | null, IpcError>(__TAURI_INVOKE("check_attachment_reminder", { draftId }, options)),
+	/**  Decision 0059: the times the "Remind me if no reply" menu offers now. */
+	getFollowUpTimes: (options?: InvokeOptions) => __TAURI_INVOKE<FollowUpTimes>("get_follow_up_times", undefined, options),
+	/**
+	 *  Sets or moves "remind me if no reply" on messages; answers the time and how many already
+	 *  have a reply.
+	 */
+	setFollowUp: (messageIds: MessageId[], choice: FollowUpChoice, options?: InvokeOptions) => typedError<FollowUpResult, IpcError>(__TAURI_INVOKE("set_follow_up", { messageIds, choice }, options)),
+	/**  Removes the reminders of messages. */
+	clearFollowUp: (messageIds: MessageId[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("clear_follow_up", { messageIds }, options)),
+	/**  "Waiting for reply": the reminders of the scope, the next due first. */
+	listFollowUps: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_follow_ups", { scope }, options)),
+	/**
+	 *  One page of the attachments of the scope's accounts, newest message first, filtered by kind,
+	 *  sender and file name. `limit` 1..=500.
+	 */
+	listAttachments: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number, options?: InvokeOptions) => typedError<AttachmentPage, IpcError>(__TAURI_INVOKE("list_attachments", { filter, cursor, limit }, options)),
+	/**
+	 *  IMAP QUOTA (RFC 9208) or JMAP quotas (RFC 9425) of the account, over its read-only reading
+	 *  connection; kept for 15 minutes unless `refresh`.
+	 */
+	getAccountQuota: (accountId: AccountId, refresh: boolean, options?: InvokeOptions) => typedError<MailboxQuota, IpcError>(__TAURI_INVOKE("get_account_quota", { accountId, refresh }, options)),
+	/**
 	 *  The popup as it is now: at most three cards (newest first), how many more wait, and the
 	 *  app's theme, language and accent.
 	 */
@@ -801,6 +902,8 @@ export const DEFAULT_TEXT_SIZE = 100 as const;
 
 export const LARGE_ATTACHMENT_WARNING_BYTES = 15728640 as const;
 
+export const MANY_RECIPIENTS = 10 as const;
+
 export const MARK_READ_DELAY_MS = 2000 as const;
 
 export const MAX_ACTION_MESSAGES = 10000 as const;
@@ -809,9 +912,17 @@ export const MAX_ATTACHMENTS = 100 as const;
 
 export const MAX_ATTACHMENT_BYTES = 104857600 as const;
 
+export const MAX_ATTACHMENT_PAGE = 500 as const;
+
 export const MAX_COLUMN_VIEWS = 32 as const;
 
 export const MAX_COMMAND_ID_CHARS = 64 as const;
+
+export const MAX_CONTACT_LISTS = 500 as const;
+
+export const MAX_CONTACT_LIST_MEMBERS = 1000 as const;
+
+export const MAX_CONTACT_LIST_NAME_CHARS = 100 as const;
 
 export const MAX_CONTACT_SUGGESTIONS = 50 as const;
 
@@ -849,6 +960,8 @@ export const MAX_RECENT_COMMAND_CHARS = 200 as const;
 
 export const MAX_RECENT_SEARCHES = 10 as const;
 
+export const MAX_REDIRECT_RECIPIENTS = 100 as const;
+
 export const MAX_SAVED_SEARCHES = 100 as const;
 
 export const MAX_SAVED_SEARCH_NAME_CHARS = 100 as const;
@@ -873,6 +986,8 @@ export const MAX_SIGNATURE_IMAGES_BYTES = 131072 as const;
 
 export const MAX_SIGNATURE_IMAGE_BYTES = 65536 as const;
 
+export const MAX_SOURCE_BYTES = 1048576 as const;
+
 export const MAX_TABLE_COLUMN_WIDTH = 800 as const;
 
 export const MAX_TEXT_SIZE = 150 as const;
@@ -896,6 +1011,8 @@ export const MIN_TABLE_COLUMN_WIDTH = 48 as const;
 export const MIN_TEXT_SIZE = 80 as const;
 
 export const MISSED_SEND_GRACE_MS = 3600000 as const;
+
+export const QUOTA_WARN_PERCENT = 90 as const;
 
 export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
@@ -1410,6 +1527,53 @@ export type ArchiveAfterSend =
  */
 "no_archive_mailbox";
 
+/**  Keyset position in the view: below this attachment. Opaque; pass it back unchanged. */
+export type AttachmentCursor = {
+	messageId: MessageId,
+	index: number,
+};
+
+/**  One attachment of the view. */
+export type AttachmentEntry = {
+	messageId: MessageId,
+	accountId: AccountId,
+	/**
+	 *  Where the message is shown ("Go to message"): its inbox location if it has one, else
+	 *  another folder (never Trash or Junk).
+	 */
+	mailboxId: MailboxId,
+	/**  The attachment's index in the reading pane (open, save, preview). */
+	index: number,
+	/**  Sanitised file name. */
+	name: string,
+	mimeType: string,
+	kind: AttachmentKind,
+	/**  Decoded bytes (estimated for attachments not downloaded yet). */
+	size: number,
+	/**  The bytes are on this computer; otherwise opening downloads them first. */
+	local: boolean,
+	/**  What the preview shows; null: no preview, open it in the system. */
+	preview: PreviewKind | null,
+	/**  A program or script: opening asks first. */
+	executable: boolean,
+	from: Address | null,
+	subject: string,
+	/**  The message's sort date, Unix milliseconds. */
+	date: number,
+};
+
+/**  What the view lists. */
+export type AttachmentFilter = {
+	/**  The accounts: all visible ones, a group's, or one. */
+	scope: MarkScope,
+	/**  Null: every kind. */
+	kind: AttachmentKind | null,
+	/**  Part of the sender's name or address (any case); null or empty: every sender. */
+	sender: string | null,
+	/**  Part of the file name (any case); null or empty: every name. */
+	query: string | null,
+};
+
 /**  One attachment in the reading pane. */
 export type AttachmentInfo = {
 	/**  Position for `saveAttachment`/`openAttachment`; stable for the message. */
@@ -1429,6 +1593,22 @@ export type AttachmentInfo = {
 	local: boolean,
 	/**  Stage 16 (decision 0036): what `previewAttachment` shows; null when it has no preview. */
 	preview: PreviewKind | null,
+};
+
+/**  The kinds the view filters by. */
+export type AttachmentKind = "image" | "pdf" | 
+/**  Text documents, presentations, plain text. */
+"document" | 
+/**  Spreadsheets and CSV. */
+"spreadsheet" | 
+/**  Zip, tar, 7z, rar, gzip … */
+"archive" | "other";
+
+/**  One page of the view, newest message first. */
+export type AttachmentPage = {
+	items: AttachmentEntry[],
+	/**  Pass to the next call to continue; null on the last page. */
+	nextCursor: AttachmentCursor | null,
 };
 
 /**
@@ -1886,6 +2066,12 @@ export type ComposeSettings = {
 	archiveOnReply?: boolean,
 	/**  Stage 16: how read-receipt requests of incoming mail are handled. Synced. */
 	readReceipts?: ReadReceiptPolicy,
+	/**
+	 *  Stage 20 (decision 0058): before sending, the composer asks "Send anyway?" when the
+	 *  user's own text speaks of an attachment but none is there (`checkAttachmentReminder`).
+	 *  On by default; synced. Left out by an older caller: on.
+	 */
+	attachmentReminder?: boolean,
 };
 
 /**
@@ -1971,6 +2157,15 @@ export type ContactEntry = {
 	blocked: boolean,
 };
 
+/**  What a vCard export writes. */
+export type ContactExport = 
+/**  Every contact of the view (people, or every contact) and every group. */
+{ kind: "all"; peopleOnly: boolean } | 
+/**  One contact, by any of its addresses. */
+{ kind: "contact"; email: string } | 
+/**  One group: a card for the group and one for each member. */
+{ kind: "list"; id: ContactListId };
+
 /**  Stage 17: which contacts a page lists. */
 export type ContactFilter = 
 /**  People only: list and system addresses are left out. */
@@ -1986,6 +2181,33 @@ export type ContactKind =
 "list" | 
 /**  A program: nobody reads it (`noreply@`, `MAILER-DAEMON@`), or it sends notifications. */
 "system";
+
+/**  A group with its members, in the order added. */
+export type ContactList = {
+	id: ContactListId,
+	name: string,
+	members: ContactListMember[],
+};
+
+/**  A group's id: a lowercase hyphenated UUID, the same on every device. */
+export type ContactListId = string;
+
+/**  One member of a group. */
+export type ContactListMember = {
+	/**  The address as it was added. */
+	email: string,
+	/**  The name given with it, else the contact's name; null without either. */
+	name: string | null,
+	/**  The contact of the directory with this address (its key), if there is one. */
+	contact: string | null,
+};
+
+/**  A group as lists show it. */
+export type ContactListSummary = {
+	id: ContactListId,
+	name: string,
+	memberCount: number,
+};
 
 /**  Merging contacts the user confirmed as one person. */
 export type ContactMergeRequest = {
@@ -2159,7 +2381,10 @@ export type ConversationSummary = {
  *    to date, available, download progress, ready, installing, failed). The setting itself
  *    comes back from the command that changed it; reload `getUpdateInfo` for the rest.
  *  - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
- *    changed (here or by the settings sync). Reload the contacts and the picture list.
+ *    changed (here or by the settings sync). Reload the contacts and the picture list. Since
+ *    stage 19 (decision 0056) also contact groups and vCard imports.
+ *  - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
+ *    finished, was cancelled or failed; carries the whole job.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | 
 /**
@@ -2194,7 +2419,9 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  *  Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
  *  here or from another device. Reload the contacts and their pictures.
  */
-{ type: "contactsChanged" };
+{ type: "contactsChanged" } | 
+/**  Stage 19 (decision 0057): an mbox job changed. */
+{ type: "mboxJobChanged"; job: MboxJob };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -2347,6 +2574,11 @@ export type Draft = {
 	 */
 	requestReadReceipt: boolean,
 	/**
+	 *  Stage 20 (decision 0059): "Remind me if no reply by …", Unix milliseconds; recorded as
+	 *  a reminder once the server accepted the message. Null: no reminder.
+	 */
+	followUpAt: number | null,
+	/**
 	 *  Made from a draft another program saved in the Drafts folder, which the app could not
 	 *  take over completely (an image from the web, a part the editor cannot show, a message
 	 *  stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
@@ -2389,6 +2621,11 @@ export type DraftSendOptions = {
 	archiveOriginal: boolean,
 	/**  See [`Draft::request_read_receipt`]. */
 	requestReadReceipt: boolean,
+	/**
+	 *  Stage 20: see [`Draft::follow_up_at`]; at least a minute ahead, at most 5 years. Left out
+	 *  by an older caller: none.
+	 */
+	followUpAt?: number | null,
 };
 
 /**  Where the draft's copy in the server's Drafts folder stands. */
@@ -2687,7 +2924,13 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 17: the file is not a PNG, JPEG, GIF or WebP image. */
 "picture_unsupported" | 
 /**  Stage 17: the image could not be decoded (damaged, or crafted). */
-"picture_damaged";
+"picture_damaged" | 
+/**
+ *  Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
+ *  9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
+ *  (search `larger:10M`) makes room.
+ */
+"over_quota";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -2738,6 +2981,54 @@ export type FirstStartOutcome =
  *  first start), so it was never shown.
  */
 "notNeeded";
+
+/**  When to remind. */
+export type FollowUpChoice = 
+/**  Tomorrow at 08:00. */
+{ kind: "tomorrow" } | 
+/**  In three days at 08:00. */
+{ kind: "inThreeDays" } | 
+/**  Next Monday at 08:00. */
+{ kind: "nextWeek" } | 
+/**  A time the user picked, Unix milliseconds; at least a minute ahead, at most 5 years. */
+{ kind: "at"; at: number };
+
+/**  A reminder on a list row (a message the user sent). */
+export type FollowUpMark = {
+	/**  When the reminder comes (or came) without an answer, Unix milliseconds. */
+	due: number,
+	/**  When the message was sent ("No reply since …"), Unix milliseconds. */
+	sentAt: number,
+	/**
+	 *  Due without an answer: it stands above the inbox until the user clears it or an answer
+	 *  comes.
+	 */
+	returned: boolean,
+};
+
+/**  What `setFollowUp` answers. */
+export type FollowUpResult = {
+	/**  When the reminder comes if no reply arrives, Unix milliseconds. */
+	due: number,
+	/**  Messages whose conversation already has a reply: they keep no reminder. */
+	answered: number,
+};
+
+/**  The times the reminder menu offers right now, Unix milliseconds, in the user's zone. */
+export type FollowUpTimes = {
+	tomorrow: number,
+	inThreeDays: number,
+	nextWeek: number,
+};
+
+/**
+ *  One header field as the reading pane's "all headers" lists it: the name as written, the
+ *  value unfolded with encoded words decoded.
+ */
+export type HeaderField = {
+	name: string,
+	value: string,
+};
 
 /**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
@@ -2864,6 +3155,13 @@ export type InboxTop = {
 	/**  All messages of important senders in the scope ("Alle anzeigen (n)"). */
 	priorityTotal: number,
 	priorityUnread: number,
+	/**
+	 *  Stage 20 (decision 0059): messages the user sent that got no reply by the time they
+	 *  asked to be reminded ("No reply since …"), most recently due first (at most
+	 *  [`crate::MAX_TOP_FOLLOW_UPS`]), each shown where it lies (usually Sent). They stay until
+	 *  the user clears the reminder or a reply comes.
+	 */
+	followUps: MessageListItem[],
 };
 
 /**  Stage 10: what adding inline images to a draft did. */
@@ -2900,6 +3198,11 @@ export type LinkInfo = {
 	warnings: LinkWarning[],
 	/**  Only `http`, `https` and `mailto` can be opened. */
 	openable: boolean,
+	/**
+	 *  Stage 20 (decision 0058): tracking parameters removed from `target` (as written, each
+	 *  once); opening uses the clean target. Empty when there were none or cleaning is off.
+	 */
+	trackingRemoved: string[],
 };
 
 /**
@@ -3052,6 +3355,22 @@ export type Mailbox = {
 /**  Local row id of a mailbox (`mailbox.id`). Not stable across devices. */
 export type MailboxId = number;
 
+/**  How full an account's mailbox is (`getAccountQuota`). */
+export type MailboxQuota = 
+/**  The server reports its storage. */
+{ kind: "reported"; usedBytes: number; limitBytes: number; 
+/**  0 to 100. */
+percent: number; 
+/**  At least [`QUOTA_WARN_PERCENT`]. */
+nearlyFull: boolean } | 
+/**
+ *  The server does not report storage (no QUOTA extension, no quota for mail, or no
+ *  storage limit).
+ */
+{ kind: "notReported" } | 
+/**  Could not be asked now (offline, a refusal); `error` says why. */
+{ kind: "unknown"; error: IpcError | null };
+
 /**  What a mailbox is for. At most one mailbox per account has each role except `custom`. */
 export type MailboxRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk" | 
 /**  Virtual folder with every message (Gmail "All Mail", `\All`). */
@@ -3126,6 +3445,42 @@ export type MarkScope =
 { kind: "group"; groupId: AccountGroupId } | 
 /**  One account (also a hidden one). */
 { kind: "account"; accountId: AccountId };
+
+/**  A job as the UI shows it; every change comes as `mboxJobChanged`. */
+export type MboxJob = {
+	id: MboxJobId,
+	kind: MboxJobKind,
+	accountId: AccountId,
+	mailboxId: MailboxId,
+	/**  The folder's decoded path. */
+	mailboxName: string,
+	/**  The file's name (never its folder). */
+	fileName: string,
+	state: MboxJobState,
+	/**  Export: the messages of the folder; import: unknown until the file was read (null). */
+	total: number | null,
+	/**  Export: messages written; import: messages the server took. */
+	done: number,
+	/**  Import: appends waiting in the outbox. */
+	queued: number,
+	/**
+	 *  Messages left out: no longer on the server (export), marked deleted by Thunderbird, too
+	 *  large, or refused by the server (import).
+	 */
+	skipped: number,
+	/**  Why it failed (`failed`). */
+	error: IpcError | null,
+};
+
+/**  A job's id: 32 lowercase hex digits from the operating system's random source. */
+export type MboxJobId = string;
+
+export type MboxJobKind = "export" | "import";
+
+export type MboxJobState = "running" | "done" | "cancelled" | "failed";
+
+/**  What starting a job answered: the user closed the dialog, or the job runs. */
+export type MboxStart = { kind: "cancelled" } | { kind: "started"; job: MboxJob };
 
 /**  One entry of the access log: metadata only, never arguments or content. */
 export type McpAccessEntry = {
@@ -3390,8 +3745,16 @@ export type MessageBody =
  *  replaced unless remote content was loaded.
  */
 { kind: "html"; srcdoc: string; renderToken: RenderToken; 
-/**  External images and styles that were blocked (0 when `remote_loaded`). */
-blockedRemote: number; remoteLoaded: boolean } | 
+/**
+ *  External images and styles that were blocked (0 when `remote_loaded`). Trackers
+ *  are not counted (stage 20): they never load.
+ */
+blockedRemote: number; remoteLoaded: boolean; 
+/**
+ *  Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
+ *  on; all zero when it is off).
+ */
+trackers: TrackerSummary } | 
 /**
  *  Plain text for the app's own theme. Links are separate segments, opened through the same
  *  check as HTML links (`describeLink` with this `render_token`).
@@ -3501,6 +3864,8 @@ export type MessageListItem = {
 	task?: TaskMark | null,
 	/**  Stage 16: on the reading list ("Zum Lesen"). Absent when not. */
 	readingList?: boolean,
+	/**  Stage 20 (decision 0059): a reminder if no reply comes. Absent when there is none. */
+	followUp?: FollowUpMark | null,
 	/**
 	 *  Stage 19: the message's size in bytes (`RFC822.SIZE`), for the table's size column.
 	 *  Absent when unknown.
@@ -3532,6 +3897,23 @@ export type MessageProblem =
 export type MessageRef = {
 	mailboxId: MailboxId,
 	messageId: MessageId,
+};
+
+/**
+ *  The source window's content: the message as plain text, never markup (control and direction
+ *  characters shown as visible symbols, bytes that are not UTF-8 as U+FFFD).
+ */
+export type MessageSource = {
+	accountId: AccountId,
+	messageId: MessageId,
+	/**  For the window's heading; empty without a subject. */
+	subject: string,
+	text: string,
+	/**  Size of the whole message in bytes. */
+	totalBytes: number,
+	/**  Bytes `text` shows: the whole message unless `truncated`. */
+	shownBytes: number,
+	truncated: boolean,
 };
 
 /**  What `getMessage` returns: everything the reading pane shows. */
@@ -3605,7 +3987,14 @@ export type NewDraft =
  *  new recipients; nothing quoted. Needs the complete original (`invalid_argument` for a
  *  large message stored only in part: forward it inline instead).
  */
-{ kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage };
+{ kind: "forward_as_attachment"; messageId: MessageId; language: QuoteLanguage } | 
+/**
+ *  Stage 19 (decision 0055): "edit as new": a new message with the recipients, subject,
+ *  text and attachments of `messageId` (also one from Sent), from the identity that sent it
+ *  or that it went to; no reply reference (no In-Reply-To, no References), a new
+ *  Message-ID, no signature added (the text has one already).
+ */
+{ kind: "edit_as_new"; messageId: MessageId };
 
 /**  The account of a card, named only when the app has more than one account. */
 export type NewMailAccount = {
@@ -3971,6 +4360,11 @@ export type OutgoingMail = {
 	 *  draft (`draftId` names no draft; there is nothing to edit).
 	 */
 	readReceipt: boolean,
+	/**
+	 *  Stage 19: this is a redirect of a received message (no draft; "undo" in the delay is
+	 *  `cancelRedirect`).
+	 */
+	redirect: boolean,
 	createdAt: number,
 	updatedAt: number,
 };
@@ -4227,6 +4621,17 @@ export type ReadingPanePosition =
  */
 export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
+	/**
+	 *  Stage 20 (decision 0058): tracking pixels and images on known tracking hosts never load,
+	 *  also not with "load images"; images with tracking parameters load without them; the
+	 *  reading pane counts them. On by default; synced. Left out by an older caller: on.
+	 */
+	blockTrackers?: boolean,
+	/**
+	 *  Stage 20: opening a link of a mail drops its tracking parameters (`utm_*`, `fbclid`,
+	 *  …); the link card shows the clean target. On by default; synced.
+	 */
+	cleanLinks?: boolean,
 };
 
 /**
@@ -4265,6 +4670,19 @@ export type RecentSearch = {
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly" | 
 /**  `SECONDLY`, `MINUTELY` or `HOURLY`: shown from `rule`. */
 "other";
+
+/**
+ *  "Redirect": the message unchanged to new recipients, with `Resent-*` fields, from one of the
+ *  account's identities (its default, or the identity the message went to, without
+ *  `identityId`).
+ */
+export type RedirectRequest = {
+	messageId: MessageId,
+	identityId: IdentityId | null,
+	to: Address[],
+	cc: Address[],
+	bcc: Address[],
+};
 
 /**  Scope of `loadRemoteContent`. */
 export type RemoteContentScope = 
@@ -4528,7 +4946,9 @@ export type SearchTermInfo = {
 };
 
 /**  What a term of the query is, for chips. */
-export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than";
+export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than" | 
+/**  Stage 20: `larger:`. */
+"larger";
 
 /**
  *  Transport security of a server connection. There is deliberately no plaintext option: a
@@ -5031,6 +5451,96 @@ export type TableColumnId =
 /**  The account, in lists that mix accounts. */
 "account" | "date" | "size";
 
+export type TakeoverAccount = {
+	/**  Its position in the preview, to take it over. */
+	index: number,
+	kind: TakeoverAccountKind,
+	/**  The account's name in Thunderbird. */
+	name: string,
+	/**  The first identity's address and name: the new account's. */
+	email: string,
+	displayName: string,
+	/**
+	 *  Incoming server (IMAP accounts only); `security` is TLS or STARTTLS (a plain
+	 *  connection in Thunderbird becomes STARTTLS: the app never sends a password unencrypted).
+	 */
+	imap: ServerSettings | null,
+	smtp: ServerSettings | null,
+	/**  Thunderbird connected without encryption; the app will use STARTTLS. */
+	wasUnencrypted: boolean,
+	identities: TakeoverIdentity[],
+	/**  An account of the app has this address already. */
+	alreadySetUp: boolean,
+};
+
+/**  What kind of account Thunderbird had. */
+export type TakeoverAccountKind = "imap" | 
+/**
+ *  POP3 accounts cannot be taken over (the app speaks IMAP and JMAP); their identities
+ *  and signatures are shown.
+ */
+"pop3" | 
+/**  News, feeds and other kinds. */
+"other";
+
+/**  What taking over an account's identities and signatures did, after the account was set up. */
+export type TakeoverApplied = {
+	accountId: AccountId | null,
+	/**  Identities added (the account's own address is updated, not added). */
+	identities: number,
+	/**  Signatures created and set as the identities' defaults. */
+	signatures: number,
+};
+
+/**  A local folder of the profile (an mbox file). */
+export type TakeoverFolder = {
+	index: number,
+	/**  Path below "Local Folders", `/`-separated (`Archives/2025`). */
+	path: string,
+	/**  Size of the file in bytes. */
+	bytes: number,
+};
+
+export type TakeoverIdentity = {
+	email: string,
+	name: string,
+	replyTo: string | null,
+	signature: TakeoverSignature | null,
+	/**  A file signature that could not be read (missing, too large, not text). */
+	signatureUnreadable: boolean,
+};
+
+/**
+ *  What opening a profile answered: none at the usual place, the user closed the folder
+ *  dialog, or the preview.
+ */
+export type TakeoverOpen = { kind: "cancelled" } | { kind: "opened"; preview: TakeoverPreview };
+
+/**  What a profile holds that the app can take over. */
+export type TakeoverPreview = {
+	token: TakeoverToken,
+	/**  The profile's folder name (never its full path). */
+	profileName: string,
+	accounts: TakeoverAccount[],
+	folders: TakeoverFolder[],
+};
+
+/**  A signature of an identity, as text for the preview. */
+export type TakeoverSignature = {
+	/**  HTML (cleaned when it is saved) or plain text. */
+	html: boolean,
+	/**  The signature's text for the preview, at most 2,000 characters. */
+	preview: string,
+	/**  Read from a file the profile names (`sig_file`). */
+	fromFile: boolean,
+};
+
+/**
+ *  A parsed profile of this session: 32 lowercase hex digits from the random source. The UI
+ *  never sees a path.
+ */
+export type TakeoverToken = string;
+
 /**  Which tasks the "Aufgaben" view lists. */
 export type TaskFilter = "open" | "done" | "all";
 
@@ -5167,6 +5677,31 @@ export type ThreadView = {
 	 *  [`MAX_THREAD_MESSAGES`].
 	 */
 	total: number,
+};
+
+/**  A profile listed in Thunderbird's `profiles.ini` (at the system's usual place). */
+export type ThunderbirdProfile = {
+	/**  Its position in `profiles.ini`, to open it. */
+	index: number,
+	name: string,
+	/**  The profile Thunderbird starts with. */
+	isDefault: boolean,
+};
+
+/**
+ *  Stage 20 (decision 0058): the trackers of one rendering of a mail, each image address once.
+ *  Pixels and images on known tracking hosts were never loaded; images with tracking
+ *  parameters load without them (after "load images").
+ */
+export type TrackerSummary = {
+	/**  Invisible images (at most 2 × 2 pixels, or hidden) that report the opening. */
+	pixels: number,
+	/**  Images on hosts known to serve tracking pixels. */
+	knownHosts: number,
+	/**  Images whose address carried tracking parameters (removed). */
+	parameters: number,
+	/**  Hosts of the blocked pixels and known trackers, each once, at most eight. */
+	hosts: string[],
 };
 
 /**  Copy or move to a mailbox of another account. */
@@ -5320,6 +5855,63 @@ export type UpdateStatus =
 { state: "installing"; version: string } | 
 /**  The last step failed. `version` is the update it concerned, if one was found. */
 { state: "failed"; version: string | null; error: IpcError };
+
+/**  What an export wrote; `cancelled` when the user closed the save dialog. */
+export type VcardExportOutcome = { kind: "cancelled" } | { kind: "saved"; path: string; cards: number };
+
+/**  The outcome of "Import vCard…": cancelled in the dialog, or the report. */
+export type VcardImportOutcome = { kind: "cancelled" } | { kind: "imported"; report: VcardImportReport };
+
+/**  One problem of an import, by the card's position in the file (0-based). */
+export type VcardImportProblem = {
+	card: number,
+	kind: VcardImportProblemKind,
+};
+
+/**  Why a card of an imported file was left out or changed. */
+export type VcardImportProblemKind = 
+/**  The file is larger than the reader takes; the rest was not read. */
+"too_large" | 
+/**  More cards than the reader takes; the rest was not read. */
+"too_many_cards" | 
+/**  A line or card could not be read. */
+"malformed" | 
+/**  A picture was too large, not an image the app shows, or a link (never loaded). */
+"picture_skipped" | 
+/**  A card without any usable address. */
+"no_address" | 
+/**  A group would get more members than allowed, or there are too many groups. */
+"too_many_members";
+
+/**
+ *  What a vCard import did. Contacts whose addresses were known already are merged into
+ *  (`updated`): their name and note are only filled where empty, the counts stay.
+ */
+export type VcardImportReport = {
+	/**  Cards read from the file. */
+	cards: number,
+	/**  New contacts. */
+	created: number,
+	/**  Known contacts that got a name, a note, a picture or more addresses. */
+	updated: number,
+	/**
+	 *  Addresses merged into one contact (several addresses on a card, or a card naming
+	 *  addresses of different contacts).
+	 */
+	merged: number,
+	/**  Groups created or extended. */
+	lists: number,
+	/**  Pictures set (re-encoded by the helper, only where the contact had none). */
+	pictures: number,
+	/**  Problems, at most 32. */
+	problems: VcardImportProblem[],
+};
+
+/**
+ *  The vCard version an export writes. 3.0 is read by every address book (macOS Contacts,
+ *  Outlook, Google); 4.0 (RFC 6350) is what Thunderbird writes.
+ */
+export type VcardVersionChoice = "v3" | "v4";
 
 /**
  *  Where a sorted list view continues: after the row with this key and message id. Pass the

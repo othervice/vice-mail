@@ -5,6 +5,8 @@ import { handleAiEvent } from "../features/ai/queries";
 import { handleComfortEvent } from "../features/comfort/events";
 import { handleComposeEvent } from "../features/composer/queries";
 import { handleContactsEvent } from "../features/contacts/queries";
+// Stage 19 (decision 0057): mbox exports and imports.
+import { handleMboxEvent } from "../features/mbox/MboxJobs";
 import { handleExtrasEvent } from "../features/extras/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
@@ -13,6 +15,7 @@ import { handleMcpEvent } from "../features/mcp/events";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
 import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
+import { refreshAttachmentsView } from "../features/reading/attachmentQueries";
 import { handleSettingsSyncEvent } from "../features/settings-sync/events";
 import { handleSearchEvent } from "../features/search/events";
 import { handleUiPreferencesEvent } from "../features/keyboard/useUiPreferencesSync";
@@ -47,6 +50,7 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleUpdateEvent(queryClient, event);
   // Stage 17 (decision 0050): contacts, their pictures and spam marks.
   handleContactsEvent(queryClient, event);
+  handleMboxEvent(event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.
@@ -70,6 +74,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       break;
     case "messagesChanged":
       refreshQuery(queryClient, messagesQueryKey(event.accountId, event.mailboxId));
+      // Stage 20 (decision 0060): stored bodies (prefetch, opening) add attachments to the view.
+      refreshAttachmentsView(queryClient);
       break;
     case "newMail":
       // For notifications (a later stage); the list itself follows `messagesChanged`.

@@ -68,6 +68,11 @@ function refreshAll(queryClient: QueryClient, prefix: QueryKey): void {
   for (const query of queryClient.getQueryCache().findAll({ queryKey: prefix })) refreshQuery(queryClient, query.queryKey);
 }
 
+/** Stage 20 (decision 0060): the attachments view, when stored mail changed. Only on screen. */
+export function refreshAttachmentsView(queryClient: QueryClient): void {
+  refreshAll(queryClient, ["attachmentsView"]);
+}
+
 /** After `inboxChanged` or `messagesChanged`: pins and the pinned list (a message may be gone). */
 export function refreshAttachmentPins(queryClient: QueryClient): void {
   refreshAll(queryClient, ["attachmentPins"]);

@@ -216,6 +216,33 @@ async function narrowList(width) {
   await browser.pause(100);
 }
 
+/**
+ * Stage 18 (task F, decision 0054): beside the reading pane the list keeps its reading width, open
+ * message or not; the wide one-line layout needs a list over 720 px. Widened like the drag handle
+ * does it (the size variable on the box of list and pane, through the CSSOM), with the pane's
+ * minimum lifted for the measurement; `false` puts both back.
+ */
+async function wideList(on) {
+  await browser.execute((wide) => {
+    const list = document.querySelector('[data-testid="message-list"]');
+    const column = list?.parentElement;
+    const box = column?.parentElement;
+    if (!column || !box) return;
+    if (wide) {
+      box.style.setProperty("--ui-list-width-reading", "50rem");
+      column.style.maxWidth = "none";
+    } else {
+      box.style.removeProperty("--ui-list-width-reading");
+      column.style.maxWidth = "";
+    }
+  }, on);
+  // The rows follow the list's width (its ResizeObserver): one line above 720 px.
+  await browser.waitUntil(
+    () => browser.execute((wide) => (document.querySelector('[data-testid="message-list"] [data-testid="message-row"] .flex-col') === null) === wide, on),
+    { timeout: 5000, timeoutMsg: on ? "the widened list kept narrow rows" : "the list did not get narrow again" },
+  );
+}
+
 async function runAxe() {
   const present = await browser.execute(() => typeof window.axe?.run === "function");
   if (!present) await browser.execute(`${AXE_SOURCE}\n;return typeof window.axe;`);
@@ -334,9 +361,10 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     // One line each, in the token's height, on a fine dotted line.
     assert.ok(open.children.every((child) => child.height === 36), JSON.stringify(open.children.map((c) => c.height)));
     assert.deepEqual(open.line, { style: "dotted", width: "1px" });
+    await wideList(true);
     const wide = await layout(conversationId);
     report.steps.layoutWide = { narrow: wide.narrow, subject: wide.subject, subjectCut: wide.subjectCut, word: wide.word, line: wide.line, avatar: wide.avatar };
-    assert.equal(wide.narrow, false, "the list beside no reading pane is wide");
+    assert.equal(wide.narrow, false, "the list wider than 720 px is wide");
     checkLayout(wide, "wide list");
     await setTheme("light");
     report.screenshots.push(await screenshot("conversations-unfolded-light"));
@@ -347,9 +375,12 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     const darkFindings = await runAxe();
     assert.deepEqual(darkFindings, [], `axe, dark: ${JSON.stringify(darkFindings)}`);
     await setTheme("light");
+    await wideList(false);
   });
 
   it("shows one message on the right: the conversation row one, a message row its own", async () => {
+    // At its reading width again (the step before widened it), also if that step failed.
+    await wideList(false);
     await (await browser.$(`[id="${conversationId}"]`)).click();
     await testId("thread-pane").waitForExist({ timeout: 10000 });
     await testId("message-card").waitForExist({ timeout: 10000 });

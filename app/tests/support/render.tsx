@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../../src/app/App";
 import { createQueryClient } from "../../src/app/queryClient";
@@ -15,4 +15,15 @@ export function renderApp(initialLanguage: Language = "en") {
 
 export function rootTheme(): string | undefined {
   return document.documentElement.dataset["theme"];
+}
+
+/**
+ * Stage 18 (task F): opening a folder shows its top message by itself. Tests that start from "no
+ * message open" close it first (the pane's close button clears the selection; the list keeps its
+ * size and the pane's place shows "No message selected").
+ */
+export async function closeOpenedMessage(user: { click: (element: Element) => Promise<void> }): Promise<void> {
+  const pane = await screen.findByRole("region", { name: "Message" });
+  await user.click(within(pane).getByRole("button", { name: "Close message" }));
+  await screen.findByTestId("reading-empty");
 }

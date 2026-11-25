@@ -60,6 +60,10 @@ pub enum RecordKind {
     AttachmentPin,
     /// The picture the user chose for a contact, by its normalised address (stage 17, 0050).
     ContactPicture,
+    /// A contact group with its members, by UUID (stage 19, 0056).
+    ContactList,
+    /// "Remind me if no reply", by account and Message-ID (stage 20, 0059).
+    FollowUp,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, "Settings sync").
@@ -124,7 +128,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 21] = [
+pub const REGISTRY: [KindSpec; 23] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -324,6 +328,27 @@ pub const REGISTRY: [KindSpec; 21] = [
         Removal::Apply,
         56 * KIB,
     ),
+    // Stage 19 (decision 0056): a contact group; at most 1,000 members of up to about 450
+    // bytes each (address, name, key).
+    spec(
+        RecordKind::ContactList,
+        "contactList",
+        "contact_list",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        512 * KIB,
+    ),
+    // Stage 20 (decision 0059): like a snooze, with the time of the sending.
+    spec(
+        RecordKind::FollowUp,
+        "followUp",
+        "follow_up",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -373,6 +398,11 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.conversations",
     // Stage 17: the column's views (order, shown or hidden), like the text size.
     "ui.column_views",
+    // Stage 20 (decision 0058): tracker protection in images and links, the attachment
+    // reminder.
+    "reading.block_trackers",
+    "reading.clean_links",
+    "compose.attachment_reminder",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the
@@ -382,7 +412,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -404,6 +434,8 @@ impl RecordKind {
         Self::BlockedSender,
         Self::AttachmentPin,
         Self::ContactPicture,
+        Self::ContactList,
+        Self::FollowUp,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -800,6 +832,9 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::Snooze => {
             SnoozeInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
+        RecordKind::FollowUp => {
+            FollowUpInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
         RecordKind::Pin => {
             PinInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
@@ -909,6 +944,13 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
             if !crate::contacts_view::is_picture_record(&picture.jpeg) {
                 return Err(invalid("not the base64 of a JPEG of at most 40 KiB".into()));
             }
+        }
+        // Stage 19 (decision 0056): a group as this device would store it: a usable name with
+        // its search words, members with usable addresses and their normalised keys.
+        RecordKind::ContactList => {
+            let list =
+                ContactListContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            crate::contact_lists::check_synced(&list).map_err(invalid)?;
         }
         // Stage 7 (decision 0026): a saved search, checked like one saved here.
         RecordKind::SavedView => {
@@ -1052,6 +1094,19 @@ pub struct DeviceInfo {
 pub struct SnoozeInfo {
     /// Unix ms when the message comes back.
     pub until_ms: i64,
+}
+
+/// Content of a reminder record (stage 20, decision 0059). Like a snooze, whether it came back
+/// is each device's own business; an answer ends it on the device that sees it first, and the
+/// removal travels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FollowUpInfo {
+    /// Unix ms when it comes back without an answer.
+    pub due_ms: i64,
+    /// Unix ms when the message was sent: a later message of the conversation from someone
+    /// else is the answer.
+    pub sent_at_ms: i64,
 }
 
 /// Content of a pin record.
@@ -1238,6 +1293,26 @@ pub struct ContactContent {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContactPictureContent {
     pub jpeg: String,
+}
+
+/// Stage 19 (decision 0056): content of a contact group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactListContent {
+    pub name: String,
+    /// The folded words of the name, as `contact_list.search`.
+    pub search: String,
+    pub members: Vec<ContactListMemberContent>,
+}
+
+/// One member of [`ContactListContent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactListMemberContent {
+    pub email: String,
+    pub name: Option<String>,
+    /// `mail_content::NormalizedAddress::key` of `email`.
+    pub key: String,
 }
 
 /// A record: content or tombstone, with the version that produced it.

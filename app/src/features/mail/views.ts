@@ -5,10 +5,12 @@ import {
   Bookmark,
   Clock,
   FilePen,
+  Files,
   Flag,
   Folder,
   Inbox,
   ListTodo,
+  MailClock,
   Paperclip,
   Pin,
   Send,
@@ -20,9 +22,13 @@ import type { MailViewId } from "../../stores/ui";
 export const MAIL_VIEW_ICONS: Record<MailViewId, LucideIcon> = {
   inbox: Inbox,
   later: Clock,
+  // Stage 20 (decision 0059).
+  waiting: MailClock,
   tasks: ListTodo,
   readingList: BookOpen,
   pinnedAttachments: Paperclip,
+  // Stage 20 (decision 0060).
+  attachments: Files,
   flagged: Flag,
   pinned: Pin,
   sent: Send,

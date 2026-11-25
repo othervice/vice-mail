@@ -4,6 +4,7 @@ import { blockedSendersQueryKey } from "../blocked/queries";
 import { refreshAttachmentPins } from "../reading/attachmentQueries";
 import {
   comfortIpc,
+  reminderIpc,
   type AccountId,
   type InboxSettings,
   type MailboxId,
@@ -18,7 +19,7 @@ import {
  * key `["messages", accountId, mailboxId]`, so everything that reloads a folder's lists (the
  * action controller, `mailboxesChanged`) reloads them too.
  */
-export type MarkListKind = "later" | "pinned" | "tasks" | "readingList" | "flagged";
+export type MarkListKind = "later" | "waiting" | "pinned" | "tasks" | "readingList" | "flagged";
 
 export const inboxQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
   ["messages", accountId, mailboxId, "inbox"] as const;
@@ -31,6 +32,7 @@ export const inboxSettingsQueryKey = ["comfort", "inboxSettings"] as const;
 export const senderRulesQueryKey = ["comfort", "senderRules"] as const;
 export const messageCategoryQueryKey = (messageId: MessageId) => ["comfort", "category", messageId] as const;
 export const snoozeTimesQueryKey = ["comfort", "snoozeTimes"] as const;
+export const followUpTimesQueryKey = ["comfort", "followUpTimes"] as const;
 export const notificationSettingsQueryKey = ["comfort", "notificationSettings"] as const;
 
 // Stage 16: the reading list, and the "Unread only" and "Unread first" lists of a folder; the
@@ -39,6 +41,7 @@ const COMFORT_LIST_KINDS = new Set([
   "inbox",
   "priority",
   "later",
+  "waiting",
   "pinned",
   "tasks",
   "readingList",
@@ -65,7 +68,7 @@ export function refreshComfortLists(queryClient: QueryClient, accountId: Account
   for (const query of queries) refreshQuery(queryClient, query.queryKey);
 }
 
-const MARK_KINDS = new Set(["later", "pinned", "tasks", "readingList", "flagged"]);
+const MARK_KINDS = new Set(["later", "waiting", "pinned", "tasks", "readingList", "flagged"]);
 
 /**
  * After `messagesChanged` of one folder: its sorted inbox, and the mark views of the account
@@ -162,6 +165,16 @@ export function useSnoozeTimes() {
   return useQuery({
     queryKey: snoozeTimesQueryKey,
     queryFn: () => comfortIpc.getSnoozeTimes(),
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/** Stage 20 (decision 0059): the reminder menu's times, asked anew each time it opens. */
+export function useFollowUpTimes() {
+  return useQuery({
+    queryKey: followUpTimesQueryKey,
+    queryFn: () => reminderIpc.getFollowUpTimes(),
     staleTime: 0,
     gcTime: 0,
   });

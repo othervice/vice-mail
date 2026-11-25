@@ -41,6 +41,11 @@ interface ReadingProps {
   ident?: string;
   /** Stage 17: a source of an AI answer among the conversation's messages: show it in the list. */
   onShowMessage?: (messageId: MessageId) => void;
+  /**
+   * Stage 18 (decision 0054): false while the pane shows the top message the list opened by
+   * itself and the user has not worked with it: "Mark as read when opened" waits.
+   */
+  markRead?: boolean;
 }
 
 /** Escape and the close button of the pane, by the layout of the list it belongs to. */
@@ -76,6 +81,7 @@ function ReadingWithActions({
   conversation = false,
   ident,
   onShowMessage,
+  markRead = true,
 }: ReadingProps & { mailbox: Mailbox }) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id).data ?? [];
@@ -84,7 +90,7 @@ function ReadingWithActions({
   const [shown, setShown] = useState<MessageListItem | null>(null);
   // Like the folder view: mark as read on open (the message shown), and the shortcuts of the
   // toolbar's actions.
-  useMarkReadOnOpen(account, conversation ? shown : item, controller, { exact: true });
+  useMarkReadOnOpen(account, !markRead ? null : conversation ? shown : item, controller, { exact: true });
   useActionShortcuts({
     ctx: { account, mailbox, items: [item], canUndo: controller.canUndo },
     host: controller.host,

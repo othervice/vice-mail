@@ -79,7 +79,13 @@ Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit o
 Betreff, darunter die Vorschau (nur komfortabel).
 
 **Lesebereich.** Öffnet rechts neben der Liste; die Liste wird schmaler und zweizeilig. Alternativ
-unten oder anstelle der Liste. Kopf mit Betreff, Absender, Empfängern, Zeit und Kontofarbe; Aktionen
+unten oder anstelle der Liste. Seit Stufe 18 (Aufgabe F, Entscheidung 0054) hat die Liste rechts
+und unten immer ihr Maß, auch ohne Auswahl, und das Öffnen eines Ordners oder einer Ansicht zeigt
+gleich die oberste Mail (bei einem Gespräch die, die ein Klick zeigen würde), ohne den Fokus zu
+bewegen. So gezeigt gilt sie noch nicht als geöffnet: „Beim Öffnen als gelesen markieren“ greift
+erst, wenn der Nutzer sie selbst wählt oder im Lesebereich mit ihr arbeitet. Ist nichts gewählt (leerer
+Ordner, nach „Schließen“), steht an der Stelle des Lesebereichs leise „Keine Mail ausgewählt“.
+Suchergebnisse wählen nichts von selbst. Kopf mit Betreff, Absender, Empfängern, Zeit und Kontofarbe; Aktionen
 als Symbolleiste. Immer genau eine Mail; die anderen Mails eines Gesprächs klappen in der Liste auf
 (Stufe 17, „Gespräche aufklappen“).
 

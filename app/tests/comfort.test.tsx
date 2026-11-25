@@ -6,7 +6,7 @@ import { useUiStore } from "../src/stores/ui";
 import { inboxSection, SNOOZE_TIMES } from "./support/comfort";
 import { ipcError, makeAccount, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
-import { renderApp } from "./support/render";
+import { closeOpenedMessage, renderApp } from "./support/render";
 import { toolbarAction } from "./support/reading";
 import { optionName } from "./support/names";
 
@@ -78,7 +78,7 @@ describe("the sorted inbox", () => {
       },
     ],
     nextCursor: null,
-    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 4, priorityUnread: 1 },
+    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 4, priorityUnread: 1 , followUps: []},
     categories: true,
     conversations: [],
   };
@@ -150,6 +150,9 @@ describe("the sorted inbox", () => {
     const { core, user } = setup(all, { comfort: { inboxPages: { 1: [page] } } });
     const listbox = await list();
     const bundle = () => within(listbox).getByRole("option", { name: /^Notifications/ });
+    // Stage 18 (task F): the inbox opened with its top message; the bundle changes nothing of that.
+    await closeOpenedMessage(user);
+    const opened = core.callsOf("get_message").length;
 
     await user.click(within(listbox).getByTestId("bundle-row"));
     expect(optionName(bundle())).toMatch(/, expanded$/);
@@ -161,7 +164,7 @@ describe("the sorted inbox", () => {
     await user.keyboard("{Enter}");
     expect(optionName(bundle())).toMatch(/, collapsed$/);
     expect(screen.queryByRole("region", { name: "Message" })).toBeNull();
-    expect(core.callsOf("get_message")).toHaveLength(0);
+    expect(core.callsOf("get_message")).toHaveLength(opened);
   });
 
   it("“Show all” lists the important senders' messages and leads back", async () => {

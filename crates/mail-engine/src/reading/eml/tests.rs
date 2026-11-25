@@ -80,6 +80,7 @@ async fn opened_files_go_through_the_reading_pipeline_and_never_into_the_store()
         render_token,
         blocked_remote,
         remote_loaded,
+        ..
     } = &view.body
     else {
         panic!("html expected: {:?}", view.body);

@@ -40,7 +40,7 @@ export type NoticeContent =
   /** A command of the core failed right away. */
   | {
       kind: "error";
-      context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel" | "folder" | "transfer" | "appearance";
+      context: "action" | "undo" | "markRead" | "window" | "emlFile" | "aiPanel" | "folder" | "transfer" | "appearance" | "source" | "mbox";
       error: IpcError;
     }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */
@@ -62,7 +62,10 @@ export type NoticeContent =
 export type ComfortNotice =
   | { type: "pinned" | "unpinned" | "unsnoozed" | "taskAdded" | "taskRemoved" | "taskDone" | "taskReopened"; count: number }
   | { type: "snoozed"; count: number; until: number; messageIds: readonly MessageId[] }
-  | { type: "failed"; what: "pin" | "snooze" | "unsnooze" | "task" | "readingList" | "block"; error: IpcError }
+  | { type: "failed"; what: "pin" | "snooze" | "unsnooze" | "task" | "readingList" | "block" | "followUp"; error: IpcError }
+  /** Stage 20 (decision 0059): a reminder if no reply comes; undo removes it again. */
+  | { type: "followUpSet"; count: number; due: number; answered: number; messageIds: readonly MessageId[] }
+  | { type: "followUpCleared"; count: number }
   /** Stage 16: the reading list, and senders blocked by the user (undo unblocks them). */
   | { type: "readingListAdded" | "readingListRemoved"; count: number }
   | { type: "sendersBlocked"; addresses: readonly string[] }

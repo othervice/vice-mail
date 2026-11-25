@@ -69,7 +69,7 @@ describe("composer: send and archive", () => {
       expect(core.callsOf("send_draft")).toHaveLength(1);
     });
     expect(core.callsOf("set_draft_send_options")).toEqual([
-      { draftId: draft.id, options: { archiveOriginal: true, requestReadReceipt: false } },
+      { draftId: draft.id, options: { archiveOriginal: true, requestReadReceipt: false, followUpAt: null } },
     ]);
     expect(order(core, "set_draft_send_options", "send_draft")).toEqual(["set_draft_send_options", "send_draft"]);
     // The usual undo notice; the send waits for archiving until the server accepted it.
@@ -87,7 +87,7 @@ describe("composer: send and archive", () => {
     await waitFor(() => {
       expect(core.callsOf("send_draft")).toHaveLength(1);
     });
-    expect(core.callsOf("set_draft_send_options")[0]?.["options"]).toEqual({ archiveOriginal: true, requestReadReceipt: false });
+    expect(core.callsOf("set_draft_send_options")[0]?.["options"]).toEqual({ archiveOriginal: true, requestReadReceipt: false, followUpAt: null });
   });
 
   it("Cmd+Enter alone sends without touching the send options", async () => {
@@ -133,7 +133,7 @@ describe("composer: send and archive", () => {
     await user.click(box);
     await waitFor(() => {
       expect(core.callsOf("set_draft_send_options")).toEqual([
-        { draftId: draft.id, options: { archiveOriginal: false, requestReadReceipt: true } },
+        { draftId: draft.id, options: { archiveOriginal: false, requestReadReceipt: true, followUpAt: null } },
       ]);
     });
     expect(core.compose.drafts.get(draft.id)?.requestReadReceipt).toBe(true);

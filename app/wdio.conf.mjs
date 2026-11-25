@@ -66,6 +66,9 @@ export const config = {
     // Stage 18: the border between list and reading pane, unfolding beside the quick actions
     // (real mouse events). Changes the stored layout and puts it back.
     "./tests/e2e/columns.e2e.mjs",
+    // Stage 18, task F (decision 0054): a folder opens with its top message, unread. Marks it
+    // read once and unread again.
+    "./tests/e2e/top-message.e2e.mjs",
     // Stage 19, task A (decisions 0061, 0062): sorting, the table and the quick filter on the
     // seed's inbox. Tags three messages for a moment and removes the tag again.
     "./tests/e2e/list-views.e2e.mjs",
@@ -91,10 +94,18 @@ export const config = {
     // Stage 18, task D: folders created in the app on the server, and the server's folders
     // reloaded without a restart. Creates folders on the server and removes them again.
     "./tests/e2e/folders.e2e.mjs",
+    // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a reply (it
+    // moves the app's clock forward), the attachments view, trackers and the quota (it sets and
+    // clears a storage limit for alice). Appends three messages to the inbox.
+    "./tests/e2e/stage20.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.
     "./tests/e2e/updates.e2e.mjs",
+    // Stage 19 (decisions 0055 to 0057): source, redirect (to bob), edit as new; groups, vCard,
+    // mbox into and out of Archive, the Thunderbird fixture. They append to INBOX and Archive.
+    "./tests/e2e/stage19-message-tools.e2e.mjs",
+    "./tests/e2e/stage19-contacts-folders.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

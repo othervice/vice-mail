@@ -9,8 +9,11 @@ import type {
 } from "../../services/ipc";
 import type { Section } from "../messages/rows";
 
-/** The blocks above the dated rows (decision 0020, "Oben"): pinned, returned snoozes, priority. */
-export type InboxBlock = "pinned" | "returned" | "priority";
+/**
+ * The blocks above the dated rows (decision 0020, "Oben"): pinned, returned snoozes, stage 20 sent
+ * mail without a reply by its reminder (decision 0059), priority.
+ */
+export type InboxBlock = "pinned" | "returned" | "followUps" | "priority";
 
 /** One bundle as the list shows it: the core's summary and every member loaded so far. */
 export interface InboxBundle {
@@ -48,7 +51,7 @@ export function sectionOfDate(section: DateSection): Section {
 }
 
 function topItems(top: InboxTop | null): MessageListItem[] {
-  return top ? [...top.pinned, ...top.returned, ...top.priority] : [];
+  return top ? [...top.pinned, ...top.returned, ...top.followUps, ...top.priority] : [];
 }
 
 /** Every message of one page in list order (blocks first, bundle members after their bundle). */
@@ -98,6 +101,7 @@ export function buildInboxRows(
     const blocks: [InboxBlock, MessageListItem[]][] = [
       ["pinned", top.pinned],
       ["returned", top.returned],
+      ["followUps", top.followUps],
       ["priority", top.priority],
     ];
     for (const [block, items] of blocks) {

@@ -2,9 +2,9 @@
 //! text, and the attachment names, parsed the same way the pane parses (`view::Content`).
 
 use mail_model::{FetchedSection, MessageStructure};
-use mail_store::{BodyText, BodyTextSource, ReceivedReceipt};
+use mail_store::{BodyText, BodyTextSource, IndexedAttachment, ReceivedReceipt};
 
-use super::view::Content;
+use super::view::{AttachmentSource, Content};
 
 /// The store's [`BodyTextSource`], backed by `mail-content`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -34,6 +34,20 @@ fn text_of(content: &Content) -> BodyText {
             .attachments
             .iter()
             .map(|a| a.info.name.clone())
+            .collect(),
+        // Stage 20 (decision 0060): the same list, with the pane's indexes, for the view.
+        attachment_index: content
+            .attachments
+            .iter()
+            .map(|a| IndexedAttachment {
+                name: a.info.name.clone(),
+                mime_type: a.info.mime_type.clone(),
+                size: u64::from(a.info.size),
+                part: match &a.source {
+                    AttachmentSource::Whole { .. } => None,
+                    AttachmentSource::Section { path } => Some(path.to_string()),
+                },
+            })
             .collect(),
         receipt: None,
     }

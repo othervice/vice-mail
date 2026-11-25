@@ -5,6 +5,7 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
+import { Switch } from "../../components/Switch";
 import type { Account, MarkReadOnOpen, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
@@ -214,6 +215,43 @@ function MarkReadBlock() {
   );
 }
 
+/**
+ * Stage 20 (decision 0058): tracker protection. Both on by default and synced; a message opened
+ * afterwards renders with the new setting.
+ */
+function TrackersBlock() {
+  const { t } = useTranslation();
+  const preferences = useReadingPreferences();
+  const save = useSetReadingPreferences();
+  return (
+    <Block divided title={t("settings.reading.trackers.title")} description={t("settings.reading.trackers.description")}>
+      {preferences.data && (
+        <>
+          <Switch
+            label={t("settings.reading.trackers.block")}
+            description={t("settings.reading.trackers.blockHint")}
+            checked={preferences.data.blockTrackers ?? true}
+            onChange={(blockTrackers) => {
+              save.mutate({ ...preferences.data, blockTrackers });
+            }}
+            data-testid="setting-block-trackers"
+          />
+          <Switch
+            label={t("settings.reading.trackers.cleanLinks")}
+            description={t("settings.reading.trackers.cleanLinksHint")}
+            checked={preferences.data.cleanLinks ?? true}
+            onChange={(cleanLinks) => {
+              save.mutate({ ...preferences.data, cleanLinks });
+            }}
+            data-testid="setting-clean-links"
+          />
+        </>
+      )}
+      {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
+    </Block>
+  );
+}
+
 function SenderList({ account }: { account: Account }) {
   const { t } = useTranslation();
   const senders = useRemoteSenders(account.id);
@@ -259,7 +297,10 @@ function SenderList({ account }: { account: Account }) {
   );
 }
 
-/** Settings → Reading: the read status, what is downloaded in advance, and whose external content loads. */
+/**
+ * Settings → Reading: the read status, conversations, tracker protection, what is downloaded in
+ * advance, and whose external content loads.
+ */
 export function ReadingSettings() {
   const { t } = useTranslation();
   const accounts = useAccounts();
@@ -268,6 +309,7 @@ export function ReadingSettings() {
     <SettingsSection title={t("settings.reading.title")}>
       <MarkReadBlock />
       <ConversationsBlock />
+      <TrackersBlock />
       <Block divided title={t("settings.reading.prefetch.title")} description={t("settings.reading.prefetch.description")}>
         <PrefetchBlock accounts={list} />
       </Block>

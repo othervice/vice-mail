@@ -7,10 +7,14 @@ export const de: Translation = {
     label: "Ansichten",
     inbox: "Posteingang",
     later: "Später",
+    // Stufe 20 (Entscheidung 0059).
+    waiting: "Warten auf Antwort",
     tasks: "Aufgaben",
     readingList: "Zum Lesen",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Angeheftete Anhänge",
+    // Stufe 20 (Entscheidung 0060).
+    attachments: "Anhänge",
     flagged: "Markiert",
     pinned: "Angepinnt",
     sent: "Gesendet",
@@ -69,6 +73,8 @@ export const de: Translation = {
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",
     loadFailed: "Die Ordner konnten nicht geladen werden.",
     accountTrouble: "{{label}}, {{status}}",
+    // Stufe 20 (Entscheidung 0060): das Postfach ist zu mindestens 90 % voll.
+    quotaFull: "{{label}}, Postfach zu {{percent}} % voll",
     statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
@@ -136,6 +142,15 @@ export const de: Translation = {
       readReceiptHint: "Das Mailprogramm des Empfängers fragt ihn, ob er eine sendet. Es wird nichts verfolgt.",
       failed: "Die Sendeoptionen konnten nicht geändert werden.",
     },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn keine Antwort kommt“ bei den Sendeoptionen.
+    followUp: {
+      label: "Erinnern, wenn keine Antwort kommt:",
+      none: "Nicht erinnern",
+      preset: "{{name}} ({{time}})",
+      custom: "Datum und Uhrzeit wählen…",
+      customLabel: "Datum und Uhrzeit der Erinnerung",
+      set: "Übernehmen",
+    },
     errors: {
       open: "Der Entwurf ließ sich nicht öffnen.",
       send: "Die Nachricht wurde nicht gesendet.",
@@ -164,6 +179,14 @@ export const de: Translation = {
       suggestions: "Vorschläge",
       showCc: "Cc-Empfänger hinzufügen",
       showBcc: "Bcc-Empfänger hinzufügen",
+      // Stufe 19 (Entscheidung 0056): Kontaktgruppen.
+      groupMembers_one: "Gruppe · {{count}} Mitglied",
+      groupMembers_other: "Gruppe · {{count}} Mitglieder",
+      groupFailed: "Die Gruppe konnte nicht hinzugefügt werden.",
+      manyTitle: "{{count}} Empfänger sehen die Adressen der anderen",
+      manyBody: "Für eine Gruppe ist Bcc oft besser: Dann sieht jeder Empfänger nur seine eigene Adresse.",
+      moveToBcc: "Gruppe nach Bcc verschieben",
+      keepRecipients: "So lassen",
     },
     format: {
       label: "Format",
@@ -204,6 +227,14 @@ export const de: Translation = {
       remove: "{{name}} entfernen",
       largeTitle: "Die Anhänge sind groß ({{size}}).",
       largeHint: "Viele Mailserver lehnen Nachrichten über etwa 20 MB ab. Große Dateien teilst du besser auf anderem Weg.",
+    },
+    // Stufe 20 (Entscheidung 0058): Rückfrage vor dem Senden.
+    attachmentReminder: {
+      title: "Ohne Anhang senden?",
+      body: "Deine Nachricht sagt „{{word}}“, aber es ist keine Datei angehängt.",
+      sendAnyway: "Trotzdem senden",
+      add: "Anhang hinzufügen",
+      cancel: "Weiterschreiben",
     },
     discard: {
       label: "Entwurf verwerfen",
@@ -293,6 +324,10 @@ export const de: Translation = {
       delayHint: "So lange wartet eine gesendete Nachricht, damit du sie noch zurückholen kannst.",
       archiveOnReply: "Ursprungsmail beim Antworten archivieren",
       archiveOnReplyHint: "Neue Antworten beginnen mit „Senden und archivieren“. Du kannst es in jeder Antwort ausschalten.",
+      // Stufe 20 (Entscheidung 0058).
+      attachmentReminder: "An fehlende Anhänge erinnern",
+      attachmentReminderHint:
+        "Vor dem Senden fragt die App nach, wenn dein Text einen Anhang erwähnt („Anhang“, „attached“ …), aber keiner dabei ist. Zitate und Signaturen werden nicht gelesen.",
       readReceipts: "Anforderungen von Lesebestätigungen",
       readReceiptsHint: "Wenn ein Absender eine Lesebestätigung anfordert. Ohne deinen Klick wird nie etwas gesendet.",
       readReceiptsPolicy: {
@@ -559,6 +594,11 @@ export const de: Translation = {
     },
   },
   reading: {
+    // Stage 18 (task F): the pane's place while no message is selected.
+    noneSelected: {
+      title: "Keine Mail ausgewählt",
+      body: "Wähle in der Liste eine Mail, um sie hier zu lesen.",
+    },
     region: "Nachricht",
     // Stufe 14 (Entscheidung 0034): Gmail-Labels unter dem Kopf einer Gmail-Mail.
     labels: {
@@ -655,12 +695,30 @@ export const de: Translation = {
       loading: "Wird geladen…",
       failed: "Die externen Inhalte konnten nicht geladen werden.",
     },
+    // Stufe 20 (Entscheidung 0058): Tracker-Schutz im Lesebereich.
+    trackers: {
+      blocked_one: "{{count}} Tracker blockiert",
+      blocked_other: "{{count}} Tracker blockiert",
+      explanation:
+        "Tracker verraten dem Absender, dass, wann und wo du diese Nachricht geöffnet hast. Die App hat sie nicht geladen, auch nicht, wenn du die Bilder lädst.",
+      pixels_one: "{{count}} Zählpixel: ein unsichtbares Bild, das das Öffnen meldet",
+      pixels_other: "{{count}} Zählpixel: unsichtbare Bilder, die das Öffnen melden",
+      knownHosts_one: "{{count}} Bild von einem bekannten Tracking-Dienst",
+      knownHosts_other: "{{count}} Bilder von bekannten Tracking-Diensten",
+      parameters_one: "{{count}} Bild mit Tracking-Parametern in der Adresse; es lädt ohne sie",
+      parameters_other: "{{count}} Bilder mit Tracking-Parametern in der Adresse; sie laden ohne sie",
+      hosts: "Von: {{hosts}}",
+      setting: "Du kannst das unter Einstellungen → Lesen abschalten.",
+    },
     link: {
       title: "Diesen Link öffnen?",
       mailtoTitle: "An diese Adresse schreiben?",
       notOpenableTitle: "Dieser Link lässt sich nicht öffnen",
       checking: "Link wird geprüft…",
       linkText: "Linktext: „{{text}}“",
+      // Stufe 20: Das angezeigte Ziel ist schon ohne sie.
+      trackingRemoved_one: "Tracking-Parameter entfernt: {{names}}",
+      trackingRemoved_other: "Tracking-Parameter entfernt: {{names}}",
       open: "Im Browser öffnen",
       openMailto: "In Mail-App öffnen",
       openAnyway: "Trotzdem öffnen",
@@ -728,6 +786,9 @@ export const de: Translation = {
       unpin: "Nicht mehr anpinnen",
       snooze: "Zurückstellen",
       unsnooze: "Nicht mehr zurückstellen",
+      // Stufe 20 (Entscheidung 0059)
+      followUp: "Erinnern, wenn keine Antwort kommt…",
+      clearFollowUp: "Erinnerung entfernen",
       addTask: "Als Aufgabe markieren",
       removeTask: "Aufgabe entfernen",
       completeTask: "Aufgabe erledigt",
@@ -745,6 +806,10 @@ export const de: Translation = {
       addToReadingList: "Zum Lesen vormerken",
       removeFromReadingList: "Aus „Zum Lesen“ entfernen",
       blockSender: "Absender blockieren",
+      // Stufe 19
+      viewSource: "Quelltext anzeigen",
+      redirect: "Umleiten",
+      editAsNew: "Als neu bearbeiten",
     },
     readOnly: {
       label: "Nur lesend",
@@ -814,6 +879,9 @@ export const de: Translation = {
       folder: "Der Ordner konnte nicht geändert werden.",
       transfer: "Die Mails konnten nicht in das andere Konto übertragen werden.",
       appearance: "Die Darstellung konnte nicht geändert werden.",
+      // Stufe 19
+      source: "Der Quelltext konnte nicht gezeigt werden.",
+      mbox: "Export oder Import konnte nicht gestartet werden.",
     },
     operationFailed_one: "Eine Änderung ließ sich auf dem Server nicht ausführen: {{action}}",
     operationFailed_other: "{{count, number}} Änderungen ließen sich auf dem Server nicht ausführen: {{action}}",
@@ -1229,6 +1297,22 @@ export const de: Translation = {
           loadFailed: "Die Ordner konnten nicht geladen werden.",
           empty: "Die Ordner erscheinen nach dem ersten Abgleich.",
         },
+        // Stufe 20 (Entscheidung 0060): Speicher auf dem Server.
+        quota: {
+          title: "Speicher auf dem Server",
+          checking: "Wird geprüft…",
+          refresh: "Erneut prüfen",
+          used: "{{used}} von {{limit}} belegt ({{percent}} %)",
+          free: "{{free}} frei",
+          meter: "Postfach zu {{percent}} % voll",
+          nearlyFull: "Das Postfach ist zu {{percent}} % voll",
+          cleanUp:
+            "Ist es voll, nimmt der Server keine neuen Mails mehr an, und die App kann keine Entwürfe und gesendeten Mails mehr ablegen. Lösche große Mails, die du nicht mehr brauchst, und leere dann den Papierkorb.",
+          findLarge: "Große Mails suchen",
+          notReported: "Der Server nennt keinen Speicherplatz.",
+          unknown: "Der Speicher ließ sich gerade nicht prüfen.",
+          failed: "Der Speicher ließ sich nicht prüfen.",
+        },
         remove: {
           title: "Konto entfernen",
           description: "Entfernt das Konto und alles, was die App dafür gespeichert hat, von diesem Computer.",
@@ -1280,6 +1364,16 @@ export const de: Translation = {
           paused: "Pausiert, solange offline",
           unknown: "Stand unbekannt",
         },
+      },
+      trackers: {
+        title: "Tracker",
+        description: "Schutz vor Absendern, die wissen wollen, ob, wann und wo du ihre Mail liest.",
+        block: "Tracker in Nachrichten blockieren",
+        blockHint:
+          "Zählpixel und Bilder bekannter Tracking-Dienste laden nie, auch nicht, wenn du die Bilder lädst. Die Nachricht zeigt, wie viele blockiert wurden.",
+        cleanLinks: "Tracking aus Links entfernen",
+        cleanLinksHint:
+          "Links öffnen ohne Tracking-Parameter wie utm_source oder fbclid. Umleitungen über Tracking-Dienste lassen sich nicht entfernen, ohne sie aufzurufen; die App lässt sie deshalb, wie sie sind.",
       },
       remote: {
         title: "Externe Inhalte",
@@ -1904,7 +1998,7 @@ export const de: Translation = {
       all: "Allen Konten",
     },
     hint: {
-      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
+      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:, größer:10M. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
     },
     results: {
       label: "den Suchergebnissen für „{{query}}“",
@@ -1966,6 +2060,8 @@ export const de: Translation = {
         after: "Nach",
         older_than: "Älter als",
         newer_than: "Neuer als",
+        // Stage 20 (decision 0060).
+        larger: "Größer als",
       },
     },
     index: {
@@ -2148,6 +2244,8 @@ export const de: Translation = {
     blocks: {
       pinned: "Angepinnt",
       returned: "Zurück aus „Später“",
+      // Stufe 20 (Entscheidung 0059).
+      followUps: "Noch keine Antwort",
       priority: "Priorität",
     },
     priority: {
@@ -2175,6 +2273,10 @@ export const de: Translation = {
       back: "Zurück",
       task: "Aufgabe",
       taskDone: "Aufgabe erledigt",
+      // Stufe 20 (Entscheidung 0059).
+      followUp: "Erinnerung, wenn keine Antwort kommt",
+      noReply: "Keine Antwort",
+      noReplySince: "Keine Antwort seit {{date}}",
     },
     views: {
       later: {
@@ -2188,6 +2290,11 @@ export const de: Translation = {
       tasks: {
         emptyTitle: "Keine Aufgaben",
         emptyBody: "Markierst du eine Mail als Aufgabe, steht sie hier, bis du sie abhakst.",
+      },
+      waiting: {
+        emptyTitle: "Du wartest auf keine Antwort",
+        emptyBody:
+          "Wähle beim Senden „Erinnern, wenn keine Antwort kommt“. Die Mail wartet hier; antwortet bis dahin niemand, erscheint sie wieder oben im Posteingang.",
       },
       flagged: {
         emptyTitle: "Nichts markiert",
@@ -2205,6 +2312,19 @@ export const de: Translation = {
         done: "Noch keine Aufgabe erledigt",
         all: "Keine Aufgaben",
       },
+    },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn bis … keine Antwort kommt“.
+    followUp: {
+      title_one: "Erinnern, wenn keine Antwort kommt",
+      title_other: "Bei {{count}} Mails erinnern, wenn keine Antwort kommt",
+      explanation: "Antwortet bis dahin niemand im Gespräch, erscheint die Mail wieder oben in deinem Posteingang.",
+      presets: "Erinnern am",
+      tomorrow: "Morgen",
+      inThreeDays: "In 3 Tagen",
+      nextWeek: "Nächste Woche",
+      custom: "Datum und Uhrzeit wählen",
+      submit: "Erinnern",
+      timesFailed: "Die Zeitpunkte für die Erinnerung ließen sich nicht laden.",
     },
     snooze: {
       title_one: "Mail zurückstellen",
@@ -2240,11 +2360,18 @@ export const de: Translation = {
       taskDone_other: "{{count, number}} Aufgaben erledigt",
       taskReopened_one: "Aufgabe wieder offen",
       taskReopened_other: "{{count, number}} Aufgaben wieder offen",
+      followUpSet_one: "Erinnerung am {{time}}, wenn keine Antwort kommt",
+      followUpSet_other: "{{count, number}} Erinnerungen am {{time}}, wenn keine Antwort kommt",
+      followUpAnswered_one: "Eine Mail hat schon eine Antwort und bekommt keine Erinnerung.",
+      followUpAnswered_other: "{{count, number}} Mails haben schon eine Antwort und bekommen keine Erinnerung.",
+      followUpCleared_one: "Erinnerung entfernt",
+      followUpCleared_other: "{{count, number}} Erinnerungen entfernt",
       failed: {
         pin: "Anpinnen hat nicht geklappt.",
         snooze: "Zurückstellen hat nicht geklappt.",
         unsnooze: "Die Mail ließ sich nicht zurückholen.",
         task: "Die Aufgabe ließ sich nicht ändern.",
+        followUp: "Die Erinnerung ließ sich nicht ändern.",
       },
       noMessageId: "Diese Mail hat keine Message-ID und lässt sich deshalb nicht markieren; auf anderen Geräten wäre die Markierung nicht zuzuordnen.",
       ruleSkipped_one: "Die lokale Regel „{{name}}“ hat {{count, number}} Mail übersprungen.",
@@ -3531,6 +3658,11 @@ export const de: Translation = {
         title: "Das Bild konnte nicht gelesen werden.",
         hint: "Die Datei ist vielleicht beschädigt. Wähle ein anderes Bild.",
       },
+      // Stufe 20 (Entscheidung 0060).
+      over_quota: {
+        title: "Das Postfach auf dem Server ist voll.",
+        hint: "Entwürfe und Gesendetes lassen sich erst wieder speichern, wenn Platz ist. Suche nach larger:10M, um die größten Mails zu finden, lösche, was du nicht mehr brauchst, und leere dann den Papierkorb.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.
@@ -3906,6 +4038,39 @@ export const de: Translation = {
       saved: "{{name}} gespeichert unter {{path}}",
       saveFailed: "Der Anhang konnte nicht gespeichert werden.",
     },
+    // Stufe 20 (Entscheidung 0060): die Anhänge-Ansicht über alle Konten.
+    view: {
+      listLabel: "Anhänge",
+      kinds: "Anhänge dieses Typs zeigen",
+      kind: {
+        all: "Alle",
+        image: "Bilder",
+        pdf: "PDF",
+        document: "Dokumente",
+        spreadsheet: "Tabellen",
+        archive: "Archive",
+        other: "Sonstige",
+      },
+      name: "Dateiname",
+      namePlaceholder: "Dateinamen durchsuchen",
+      sender: "Absender",
+      senderPlaceholder: "Name oder Adresse",
+      account: "Konto",
+      allAccounts: "Alle Konten",
+      scopeHint:
+        "Anhänge der Mails auf diesem Computer. Wie weit das zurückreicht, legst du unter Einstellungen → Lesen → Vorab laden fest; noch nicht geladene Anhänge werden beim Öffnen geladen.",
+      details: "{{type}}, {{size}} · {{sender}} · {{date}}",
+      noSubject: "(kein Betreff)",
+      unknownSender: "unbekannter Absender",
+      goToMessage: "Zur Mail von {{name}}",
+      open: "{{name}} öffnen",
+      save: "{{name}} sichern",
+      loadFailed: "Die Anhänge ließen sich nicht laden.",
+      emptyTitle: "Noch keine Anhänge",
+      emptyBody: "Anhänge der Mails auf diesem Computer erscheinen hier, die neuesten zuerst.",
+      noMatchTitle: "Kein Anhang passt",
+      noMatchBody: "Ändere den Typ, den Absender oder die Suche.",
+    },
     blockedHidden: {
       text_one: "{{count}} Nachricht von blockierten Absendern ausgeblendet",
       text_other: "{{count}} Nachrichten von blockierten Absendern ausgeblendet",
@@ -4072,5 +4237,169 @@ export const de: Translation = {
     announceHidden: "Neue Nachricht",
     announceMany: "{{count}} neue Nachrichten",
     failed: "Hat nicht geklappt: {{reason}}",
+  },
+  // Stufe 19 (Entscheidung 0055): Quelltext-Fenster, alle Kopfzeilen, Umleiten.
+  source: {
+    title: "Quelltext",
+    loading: "Quelltext wird geladen …",
+    loadFailed: "Der Quelltext konnte nicht geladen werden.",
+    save: "Als .eml sichern",
+    saved: "Gesichert unter {{path}}",
+    saveFailed: "Die Mail konnte nicht gesichert werden.",
+    wrap: "Lange Zeilen umbrechen",
+    close: "Schließen",
+    closeFailed: "Schließe dieses Fenster mit der Schließen-Taste in seiner Titelleiste.",
+    size: "{{size}}",
+    truncatedTitle: "Nur die ersten {{shown}} von {{total}} werden gezeigt",
+    truncatedBody: "Die Mail ist zu groß, um sie hier ganz zu zeigen. Sichere sie als .eml, um alles zu bekommen.",
+    allHeaders: {
+      show: "Alle Kopfzeilen zeigen",
+      hide: "Alle Kopfzeilen ausblenden",
+      title: "Alle Kopfzeilen",
+      loading: "Kopfzeilen werden geladen …",
+      failed: "Die Kopfzeilen konnten nicht geladen werden.",
+      empty: "Diese Mail hat keine Kopfzeilen.",
+    },
+  },
+  redirect: {
+    title: "Mail umleiten",
+    intro: "Die Mail geht unverändert an die neuen Empfänger, so wie sie von {{sender}} kam. Deine Adresse wird als die angegeben, die sie umgeleitet hat.",
+    from: "Von",
+    to: "An",
+    cc: "Cc",
+    bcc: "Bcc",
+    submit: "Umleiten",
+    cancel: "Abbrechen",
+    close: "Schließen",
+    failed: "Die Mail konnte nicht umgeleitet werden.",
+    noRecipients: "Füge mindestens einen Empfänger hinzu.",
+    tooMany: "Eine Mail lässt sich an höchstens {{count}} Empfänger umleiten.",
+    noticeSubject: "Umleitung: {{subject}}",
+    redirected: "Mail umgeleitet",
+    readOnly: "Für dieses Konto sind Änderungen ausgeschaltet, deshalb kann es keine Mails umleiten. Erlaube Änderungen unter Einstellungen → Konten.",
+  },
+  // Stufe 19 (Entscheidung 0056): Kontaktgruppen, vCard-Import und -Export.
+  contactGroups: {
+    tabs: {
+      label: "Zeigen",
+      contacts: "Personen",
+      groups: "Gruppen",
+    },
+    list: "Gruppen",
+    new: "Neue Gruppe",
+    nameLabel: "Name der Gruppe",
+    create: "Gruppe anlegen",
+    cancel: "Abbrechen",
+    save: "Sichern",
+    rename: "Gruppe umbenennen",
+    delete: "Gruppe löschen",
+    deleteTitle: "Die Gruppe „{{name}}“ löschen?",
+    deleteBody: "Die Gruppe wird auf diesem Gerät und, mit dem Einstellungs-Sync, auf deinen anderen Geräten gelöscht. Ihre Mitglieder bleiben in deinen Kontakten.",
+    createFailed: "Die Gruppe konnte nicht angelegt werden.",
+    changeFailed: "Die Gruppe konnte nicht geändert werden.",
+    loadFailed: "Die Gruppen konnten nicht geladen werden.",
+    empty: "Noch keine Gruppen. Mit einer Gruppe schreibst du mehreren Personen auf einmal: Tippe ihren Namen in An, Cc oder Bcc.",
+    members_one: "{{count}} Mitglied",
+    members_other: "{{count}} Mitglieder",
+    memberList: "Mitglieder",
+    noMembers: "Diese Gruppe hat noch keine Mitglieder.",
+    removeMember: "{{email}} aus der Gruppe entfernen",
+    addTitle: "Mitglieder hinzufügen",
+    addLabel: "Neu",
+    add: "Zur Gruppe hinzufügen",
+    noGroupTitle: "Keine Gruppe gewählt",
+    noGroupBody: "Lege links eine Gruppe an oder wähle eine.",
+    transfer: {
+      import: "vCard importieren …",
+      export: "Als vCard exportieren",
+      exportAll: "Alle Kontakte exportieren (vCard 3.0) …",
+      exportAllV4: "Alle Kontakte exportieren (vCard 4.0) …",
+      exportContact: "{{name}} exportieren …",
+      exportGroup: "Die Gruppe {{name}} exportieren …",
+      imported_one: "{{count}} Karte gelesen",
+      imported_other: "{{count}} Karten gelesen",
+      importDetail: "Neue Kontakte: {{created}}, ergänzt: {{updated}}, Gruppen: {{lists}}, Bilder: {{pictures}}.",
+      problems_one: "{{count}} Karte oder Zeile konnte nicht ganz übernommen werden.",
+      problems_other: "{{count}} Karten oder Zeilen konnten nicht ganz übernommen werden.",
+      exported_one: "{{count}} Karte gesichert",
+      exported_other: "{{count}} Karten gesichert",
+      dismiss: "Schließen",
+      importFailed: "Die vCard-Datei konnte nicht importiert werden.",
+      exportFailed: "Die Kontakte konnten nicht exportiert werden.",
+    },
+  },
+  // Stufe 19 (Entscheidung 0057): Ordner als mbox-Dateien.
+  mbox: {
+    export: "Als mbox exportieren …",
+    import: "mbox importieren …",
+    exportState: {
+      running: "„{{folder}}“ wird exportiert",
+      done: "„{{folder}}“ exportiert nach {{file}}",
+      cancelled: "Export von „{{folder}}“ abgebrochen",
+      failed: "Export von „{{folder}}“ fehlgeschlagen",
+    },
+    importState: {
+      running: "{{file}} wird in „{{folder}}“ importiert",
+      done: "{{file}} in „{{folder}}“ importiert",
+      cancelled: "Import nach „{{folder}}“ abgebrochen",
+      failed: "Import nach „{{folder}}“ fehlgeschlagen",
+    },
+    exportProgress: "{{done}} von {{total}} Mails geschrieben.",
+    importProgress: "{{done}} Mails auf dem Server, {{queued}} warten.",
+    skipped_one: "{{count}} ausgelassen.",
+    skipped_other: "{{count}} ausgelassen.",
+    failed: "Die Datei konnte nicht verarbeitet werden.",
+    cancel: "Abbrechen",
+    cancelFailed: "Der Vorgang konnte nicht abgebrochen werden.",
+    dismiss: "Schließen",
+  },
+  // Stufe 19 (Entscheidung 0057): Übernahme aus Thunderbird.
+  takeover: {
+    open: "Aus Thunderbird übernehmen …",
+    title: "Aus Thunderbird übernehmen",
+    intro: "Wähle ein Thunderbird-Profil. Du siehst, was es enthält, bevor etwas übernommen wird.",
+    noPasswordsTitle: "Passwörter bleiben in Thunderbird",
+    noPasswordsBody: "Die App liest die Passwörter von Thunderbird nie. Du tippst das Passwort jedes Kontos in der Einrichtung, und neue Konten lesen nur, bis du Änderungen erlaubst.",
+    profiles: "Thunderbird-Profile",
+    default: "(Standard)",
+    openProfile: "Zeigen",
+    choose: "Profilordner wählen …",
+    notFound: "Thunderbird wurde nicht am üblichen Ort gefunden. Wähle stattdessen seinen Profilordner.",
+    profilesFailed: "Die Thunderbird-Profile konnten nicht aufgelistet werden.",
+    openFailed: "Das Profil konnte nicht gelesen werden.",
+    backToProfiles: "Zurück zu den Profilen",
+    previewTitle: "Profil {{name}}",
+    previewBody: "Übernimm, was du brauchst. In Thunderbird ändert sich nichts.",
+    accounts: "Konten",
+    noAccounts: "Dieses Profil hat keine Mailkonten.",
+    identity: "{{name}} <{{email}}>",
+    server: "Eingang: {{host}}, Port {{port}}",
+    unsupported: {
+      pop3: "POP3-Konten lassen sich nicht übernehmen",
+      other: "Lässt sich nicht übernehmen",
+    },
+    unencrypted: "Thunderbird hat ohne Verschlüsselung verbunden; die App verschlüsselt immer (STARTTLS).",
+    identities: "Adressen",
+    signature: "Signatur: {{text}}",
+    signatureUnreadable: "Die Signaturdatei konnte nicht gelesen werden.",
+    setUp: "Einrichten …",
+    applyExisting: "Adressen und Signaturen übernehmen",
+    applied: "Adressen hinzugefügt: {{identities}}, Signaturen: {{signatures}}.",
+    applyFailed: "Adressen und Signaturen konnten nicht übernommen werden.",
+    backToPreview: "Zurück zum Profil",
+    setUpTitle: "{{email}} einrichten",
+    passwordTitle: "Tippe hier das Passwort",
+    passwordBody: "Die Server kommen aus Thunderbird, sein Passwort nicht. Nach der Einrichtung werden die weiteren Adressen und Signaturen des Kontos übernommen.",
+    addedTitle: "{{email}} ist eingerichtet",
+    addedBody: "Es liest vorerst nur: Auf dem Server ändert sich nichts, bis du es in den Einstellungen des Kontos erlaubst.",
+    folders: "Lokale Ordner",
+    noFolders: "Dieses Profil hat keine lokalen Ordner mit Mails.",
+    foldersBody: "Ein lokaler Ordner wird über den Postausgang in einen Ordner eines Kontos kopiert. Das Konto muss Änderungen erlauben.",
+    folderNeedsWrites: "Noch kein Konto erlaubt Änderungen. Erlaube sie in den Einstellungen eines Kontos, um dorthin zu importieren.",
+    intoAccount: "Konto",
+    intoFolder: "Ordner",
+    importFolder: "Importieren",
+    folderStarted: "Der Import läuft; sein Fortschritt steht unten links.",
+    folderFailed: "Der Ordner konnte nicht importiert werden.",
   },
 };

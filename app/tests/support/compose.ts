@@ -70,6 +70,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     outgoing: null,
     archiveOriginal: false,
     requestReadReceipt: false,
+    followUpAt: null,
     originalKept: false,
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
@@ -93,6 +94,7 @@ export function makeOutgoing(overrides: Partial<OutgoingMail> = {}): OutgoingMai
     notice: null,
     archive: null,
     readReceipt: false,
+    redirect: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -122,6 +124,11 @@ export interface ComposeFakeOptions {
   pickedImages?: DraftAttachment[];
   /** `cleanPastedHtml`; default: script, style, img and attributes other than href removed. */
   cleanPaste?: (html: string) => import("../../src/services/ipc").CleanedPaste;
+  /**
+   * Stage 20: what `checkAttachmentReminder` answers for a draft without attachments (the word
+   * the text uses), by draft id or for every draft (`*`). Default: nothing to remind of.
+   */
+  attachmentReminder?: Record<string, string>;
 }
 
 export interface ComposeFakeState {
@@ -186,7 +193,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
     const prepared = options.replies?.[request.messageId];
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (!prepared) return Promise.reject(composeError("not_found"));
-    const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind;
+    const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind === "edit_as_new" ? "new" : request.kind;
     // Stage 16: a new reply starts with the "send and archive" setting.
     const archiveOriginal = (kind === "reply" || kind === "reply_all") && Boolean(settings.archiveOnReply);
     return store(makeDraft({ kind, originalMessageId: request.messageId, archiveOriginal, ...prepared }));
@@ -227,6 +234,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       notice: null,
       archive: draft.archiveOriginal ? "waiting" : null,
       readReceipt: false,
+      redirect: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -367,8 +375,22 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
         if (!draft) return Promise.reject(composeError("not_found"));
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         if (draft.state === "sending") return Promise.reject(composeError("send_in_progress"));
-        const options = args["options"] as { archiveOriginal: boolean; requestReadReceipt: boolean };
-        return store({ ...draft, archiveOriginal: options.archiveOriginal, requestReadReceipt: options.requestReadReceipt });
+        const options = args["options"] as { archiveOriginal: boolean; requestReadReceipt: boolean; followUpAt?: number | null };
+        return store({
+          ...draft,
+          archiveOriginal: options.archiveOriginal,
+          requestReadReceipt: options.requestReadReceipt,
+          followUpAt: options.followUpAt ?? null,
+        });
+      }
+      // Stage 20 (decision 0058): asked before sending and scheduling.
+      case "check_attachment_reminder": {
+        const draft = get(args["draftId"]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!draft) return Promise.reject(composeError("not_found"));
+        if (draft.attachments.length > 0) return null;
+        const reminder = options.attachmentReminder;
+        return reminder?.[draft.id] ?? reminder?.["*"] ?? null;
       }
       case "cancel_send":
         return cancelSend(args["draftId"] as string);

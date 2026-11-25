@@ -5,10 +5,12 @@ import { refreshBlockedHidden } from "../reading/attachmentQueries";
 import {
   comfortIpc,
   parityIpc,
+  reminderIpc,
   toCoreError,
   type BlockedSender,
   type Account,
   type ConversationIntent,
+  type FollowUpChoice,
   type MessageListItem,
   type SnoozeChoice,
   type TaskMark,
@@ -16,7 +18,10 @@ import {
 import { useNoticeStore, type ComfortNotice } from "../../stores/notices";
 import type { ActionHost } from "../actions/registry";
 
-type ComfortHost = Pick<ActionHost, "setPinned" | "openSnooze" | "unsnooze" | "setTask" | "setReadingList" | "blockSenders">;
+type ComfortHost = Pick<
+  ActionHost,
+  "setPinned" | "openSnooze" | "unsnooze" | "openFollowUp" | "clearFollowUp" | "setTask" | "setReadingList" | "blockSenders"
+>;
 
 /**
  * Decision 0039: the messages an action on conversation rows touches (the core's answer to
@@ -56,6 +61,11 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
    * or themselves (undefined: the reading pane's message, child rows of stage 17).
    */
   const [snoozing, setSnoozing] = useState<{ items: readonly MessageListItem[]; expand: ExpandRows | undefined } | null>(null);
+  /**
+   * Stage 20 (decision 0059): the messages the reminder menu is open for. Always the messages
+   * themselves: a reminder belongs to the message the user sent, not to its conversation.
+   */
+  const [followingUp, setFollowingUp] = useState<readonly MessageListItem[] | null>(null);
 
   const reload = () => {
     void queryClient.invalidateQueries({ queryKey: ["messages", account.id] });
@@ -107,6 +117,17 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
           if (touched.length === 0) return null;
           await comfortIpc.unsnoozeMessages(touched.map((item) => item.id));
           return { type: "unsnoozed", count: items.length };
+        });
+      },
+      openFollowUp: (items) => {
+        if (items.length === 0) return;
+        setFollowingUp(items);
+      },
+      clearFollowUp: (items) => {
+        if (items.length === 0) return;
+        void run("followUp", async () => {
+          await reminderIpc.clearFollowUp(items.map((item) => item.id));
+          return { type: "followUpCleared", count: items.length };
         });
       },
       setTask: (items, mark) => {
@@ -166,6 +187,18 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     });
   };
 
+  /** Stage 20: the choice of the reminder menu for the messages it was opened for. */
+  const followUp = async (choice: FollowUpChoice): Promise<boolean> => {
+    const items = followingUp ?? [];
+    setFollowingUp(null);
+    if (items.length === 0) return false;
+    return run("followUp", async () => {
+      const messageIds = items.map((item) => item.id);
+      const result = await reminderIpc.setFollowUp(messageIds, choice);
+      return { type: "followUpSet", count: items.length, due: result.due, answered: result.answered, messageIds };
+    });
+  };
+
   return {
     /** For list rows: conversations act as a whole while the conversation view is on. */
     host: makeHost(expandRows),
@@ -177,6 +210,11 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     snooze,
     closeSnooze: () => {
       setSnoozing(null);
+    },
+    followUpItems: followingUp,
+    followUp,
+    closeFollowUp: () => {
+      setFollowingUp(null);
     },
   };
 }

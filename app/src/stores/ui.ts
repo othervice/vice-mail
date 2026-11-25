@@ -20,11 +20,15 @@ import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } fr
 export const MAIL_VIEW_IDS = [
   "inbox",
   "later",
+  // Stage 20 (decision 0059): sent mail with a reminder if no reply comes.
+  "waiting",
   "tasks",
   // Stage 16: the reading list ("Zum Lesen"), a local mark like Tasks.
   "readingList",
   // Stage 16 (decision 0036): pinned attachments ("Angeheftete Anhänge"), next to it.
   "pinnedAttachments",
+  // Stage 20 (decision 0060): every attachment of the stored mail, across the accounts.
+  "attachments",
   // SPEC "Markiert": what carries the server's flag, in every folder but Trash and Junk.
   "flagged",
   "pinned",
@@ -85,7 +89,12 @@ export const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 /** What Settings → Accounts shows: the list, the setup form or one account. */
-export type AccountsPage = { kind: "list" } | { kind: "add" } | { kind: "account"; accountId: AccountId };
+export type AccountsPage =
+  | { kind: "list" }
+  | { kind: "add" }
+  | { kind: "account"; accountId: AccountId }
+  /** Stage 19 (decision 0057): taking over accounts and local folders from Thunderbird. */
+  | { kind: "thunderbird" };
 
 export type View =
   /** Stage 7: `savedSearchId` with `savedViews`: one saved search's results instead of the list. */

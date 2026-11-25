@@ -13,12 +13,15 @@
 //!   quote of an [`Original`]; [`reply_subject`], [`forward_subject`],
 //!   [`strip_subject_prefixes`], [`reply_recipients`], [`choose_identity`],
 //!   [`reply_references`] on their own.
+//! - [`build_redirect`]: a message redirected to new recipients with `Resent-*` fields
+//!   (stage 19, decision 0055).
 
 mod address;
 mod build;
 mod html;
 mod mdn;
 mod paste;
+mod redirect;
 mod reply;
 
 #[cfg(test)]
@@ -40,6 +43,7 @@ pub use mdn::{
     receipt_subject, receipt_text,
 };
 pub use paste::{PastedHtml, clean_pasted_html};
+pub use redirect::{BuiltRedirect, Redirect, build_redirect};
 // The document model of mail HTML, for signatures and templates (`crate::templates`).
 pub(crate) use html::{
     Block, Inline, content_id_of, fragment, html_blocks, text_blocks, trim_paragraphs,

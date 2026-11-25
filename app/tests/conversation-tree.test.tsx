@@ -169,7 +169,9 @@ describe("unfolding a conversation", () => {
     expect(conversation().getAttribute("aria-expanded")).toBe("false");
     const solo = within(list).getAllByRole("treeitem")[0] as HTMLElement;
     expect(solo.hasAttribute("aria-expanded")).toBe(false);
-    expect(core.callsOf("get_thread")).toEqual([]);
+    // Stage 18 (task F): the top row (the single message) is shown; the conversation is not loaded.
+    const threadCalls = () => core.callsOf("get_thread").filter((call) => (call as { messageId: number }).messageId === ANSWER.id);
+    expect(threadCalls()).toEqual([]);
 
     const toggle = within(conversation()).getByTestId("row-replies");
     expect(toggle.textContent).toBe("2 replies");
@@ -180,8 +182,8 @@ describe("unfolding a conversation", () => {
     await waitFor(() => {
       expect(children()).toHaveLength(3);
     });
-    expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
-    expect(core.callsOf("get_message")).toEqual([]);
+    expect(threadCalls()).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
+    expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== SOLO.id)).toEqual([]);
     expect(conversation().getAttribute("aria-expanded")).toBe("true");
     expect(within(conversation()).getByTestId("row-replies").getAttribute("title")).toBe("Hide the replies");
     expect(children().map(optionName)).toEqual([
@@ -282,7 +284,7 @@ describe("unfolding a conversation", () => {
     const loading = await within(list).findByTestId("child-status-loading");
     expect(loading.textContent).toContain("Loading the conversation");
     expect(conversation().getAttribute("aria-busy")).toBe("true");
-    expect(core.callsOf("get_thread")).toHaveLength(1);
+    expect(core.callsOf("get_thread").filter((call) => (call as { messageId: number }).messageId === ANSWER.id)).toHaveLength(1);
     // The list goes on: the loading row is no stop for the keyboard.
     list.focus();
     await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);

@@ -311,7 +311,7 @@ fn build(message: &OutgoingMessage, draft: bool) -> Result<BuiltMessage, Compose
 /// A checked mailbox: display name (cleaned) and address (ASCII domain).
 type Mailbox = (Option<String>, String);
 
-fn mailbox(address: &Address) -> Result<Mailbox, ComposeError> {
+pub(super) fn mailbox(address: &Address) -> Result<Mailbox, ComposeError> {
     let email = normalize_email(&address.email)?;
     let name = address
         .name
@@ -326,7 +326,10 @@ fn mailboxes(addresses: &[Address]) -> Result<Vec<Mailbox>, ComposeError> {
 }
 
 /// Checked recipients, without those already in `seen` (compared without case).
-fn recipients(addresses: &[Address], seen: &mut Vec<String>) -> Result<Vec<Mailbox>, ComposeError> {
+pub(super) fn recipients(
+    addresses: &[Address],
+    seen: &mut Vec<String>,
+) -> Result<Vec<Mailbox>, ComposeError> {
     let mut out = Vec::new();
     for address in addresses {
         let checked = mailbox(address)?;
@@ -339,7 +342,7 @@ fn recipients(addresses: &[Address], seen: &mut Vec<String>) -> Result<Vec<Mailb
     Ok(out)
 }
 
-fn address_header(list: &[Mailbox]) -> HeaderType<'static> {
+pub(super) fn address_header(list: &[Mailbox]) -> HeaderType<'static> {
     let mut items: Vec<MbAddress<'static>> = list
         .iter()
         .map(|(name, email)| MbAddress::new_address(name.clone(), email.clone()))
@@ -384,7 +387,7 @@ fn attachment_type(mime: &str) -> String {
 }
 
 /// Line ends of raw bytes as CRLF (a stored message may have bare LF).
-fn crlf_bytes(bytes: &[u8]) -> Vec<u8> {
+pub(super) fn crlf_bytes(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() + bytes.len() / 32);
     let mut previous = 0u8;
     for &byte in bytes {

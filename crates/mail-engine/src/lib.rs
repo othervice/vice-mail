@@ -2,9 +2,11 @@
 //! stream through [`AppCore::subscribe`]. Everything here runs and is tested without a WebView.
 
 mod ai;
+mod attachments_view;
 pub mod clock;
 pub mod comfort;
 pub mod compose;
+mod contact_lists;
 mod contacts_view;
 mod core;
 pub mod credentials;
@@ -15,6 +17,7 @@ mod folders;
 mod gmail;
 mod list_views;
 pub mod logging;
+mod mbox;
 mod mcp;
 pub mod oauth;
 pub mod outbox;
@@ -25,8 +28,10 @@ pub mod search;
 pub mod settings_sync;
 pub mod sync;
 pub mod sync_state;
+mod takeover;
 mod ui_prefs;
 pub mod updates;
+mod vcard;
 
 pub use crate::clock::{Clock, SystemClock};
 pub use crate::core::{AppCore, BuildInfo, Connector, CoreConfig, CoreServices, DATABASE_FILE};

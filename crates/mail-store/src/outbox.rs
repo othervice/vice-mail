@@ -1403,8 +1403,8 @@ pub(crate) fn retry(
             if unclear {
                 return Err(StoreError::Draft(mail_model::DraftError::NeedsDecision(id)));
             }
-            // Stage 16: a read receipt has no draft.
-            if job.receipt_for.is_none() {
+            // Stage 16: a read receipt has no draft; stage 19: neither has a redirect.
+            if job.receipt_for.is_none() && !job.redirect {
                 crate::compose::require_frozen(conn, &job.draft)?;
             }
             job.phase = mail_model::SendPhase::Submit;

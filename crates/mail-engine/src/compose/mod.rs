@@ -21,18 +21,24 @@
 
 pub(crate) mod build;
 pub(crate) mod contacts;
+mod edit_as_new;
 pub mod files;
 mod inline;
 pub(crate) mod outgoing;
 mod receipts;
+mod redirect;
 mod schedule;
 pub(crate) mod snippets;
 mod stage10;
 #[cfg(test)]
 mod stage10_tests;
+#[cfg(test)]
+mod stage19_tests;
+#[cfg(test)]
+mod stage20_tests;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -67,6 +73,8 @@ const QUOTE_POSITION_KEY: &str = "compose.default_quote_position";
 const ARCHIVE_ON_REPLY_KEY: &str = "compose.archive_on_reply";
 /// Stage 16: how read-receipt requests are handled (`ask` or `never`).
 const READ_RECEIPTS_KEY: &str = "compose.read_receipts";
+/// Stage 20 (decision 0058): the attachment reminder before sending (JSON boolean).
+const ATTACHMENT_REMINDER_KEY: &str = "compose.attachment_reminder";
 /// Longest request id of a send (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
 /// How long creating a reply waits for the original's body to be fetched.
@@ -293,6 +301,16 @@ fn utc_offset_minutes() -> i32 {
 /// The composing service behind [`crate::AppCore`]'s compose commands.
 pub(crate) struct Compose<C: Connector> {
     inner: Arc<Inner<C>>,
+}
+
+/// What [`Compose::copy_content`] took over of a message.
+struct CopiedContent {
+    format: ComposeFormat,
+    body_html: String,
+    body_text: String,
+    attachments: Vec<DraftFile>,
+    inline_images: usize,
+    lossy: bool,
 }
 
 impl<C: Connector> Clone for Compose<C> {
@@ -540,6 +558,7 @@ impl<C: Connector> Compose<C> {
             outgoing: draft.outgoing,
             archive_original: draft.archive_original,
             request_read_receipt: draft.request_receipt,
+            follow_up_at: draft.follow_up_at,
             original_kept: draft.kept_original.is_some(),
             created_at: draft.created_at,
             updated_at: draft.updated_at,
@@ -638,6 +657,7 @@ impl<C: Connector> Compose<C> {
                 self.create_from_request(account_id, identity_id, request)
                     .await?
             }
+            NewDraft::EditAsNew { message_id } => self.create_edit_as_new(message_id).await?,
         };
         // Stage 16: "send and archive" as the compose setting says, for replies.
         let draft = if matches!(draft.kind, DraftKind::Reply | DraftKind::ReplyAll)
@@ -646,7 +666,12 @@ impl<C: Connector> Compose<C> {
         {
             self.inner
                 .store
-                .set_draft_send_options(draft.id.clone(), true, draft.request_receipt)
+                .set_draft_send_options(
+                    draft.id.clone(),
+                    true,
+                    draft.request_receipt,
+                    draft.follow_up_at,
+                )
                 .await?
         } else {
             draft
@@ -1133,124 +1158,17 @@ impl<C: Connector> Compose<C> {
             .map(|i| i.email.clone())
             .unwrap_or_default();
 
-        // The draft's own inline images the editor can show keep their part: a raster image
-        // within the size limit. Ids other programs write that the editor does not accept (or
-        // the reader's own for unnamed body images) get a new one in the sender's domain.
-        let domain = inline::content_id_domain(&sender_email);
-        let mut images: HashMap<String, String> = HashMap::new();
-        let mut candidates: HashMap<String, &mail_content::InlinePart> = HashMap::new();
-        for part in &parsed.inline {
-            let fits = usize::try_from(MAX_INLINE_IMAGE_BYTES)
-                .is_ok_and(|max| part.bytes.len() <= max)
-                && inline::TYPES.contains(&part.mime);
-            if !fits || images.contains_key(&part.content_id) {
-                continue;
-            }
-            // The reader names body images without a Content-ID itself; only a header's id
-            // is the draft's own.
-            let own = mail_content::is_valid_content_id(&part.content_id)
-                && parsed.attachments.iter().any(|a| {
-                    a.part_id == part.part_id && a.content_id.as_deref() == Some(&part.content_id)
-                });
-            let content_id = if own {
-                part.content_id.clone()
-            } else {
-                format!("{:032x}@{domain}", random_u128())
-            };
-            images.insert(part.content_id.clone(), content_id);
-            candidates.insert(part.content_id.clone(), part);
-        }
-        let (format, body_html, body_text, shown) = match &parsed.html {
-            Some(html) => {
-                let html = html.clone();
-                let map = images.clone();
-                let converted =
-                    blocking(move || mail_content::foreign_draft_html(&html, &map)).await?;
-                lossy |= converted.dropped > 0;
-                (
-                    ComposeFormat::Html,
-                    converted.editor_html,
-                    String::new(),
-                    converted.shown,
-                )
-            }
-            None => (
-                ComposeFormat::Text,
-                String::new(),
-                parsed.display_text().into_owned(),
-                Vec::new(),
-            ),
-        };
-        let shown_parts: Vec<&mail_content::InlinePart> = shown
-            .iter()
-            .filter_map(|original| candidates.get(original).copied())
-            .collect();
-        let inline_part_ids: Vec<u32> = shown_parts.iter().map(|p| p.part_id).collect();
-
         let lock = self.inner.outbox.files_lock();
         let held = lock.lock().await;
-        let mut attachments = Vec::new();
-        let mut next = 0u32;
-        for part in &parsed.attachments {
-            // An inline image the HTML shows is a part of its own below, not an attachment.
-            if inline_part_ids.contains(&part.part_id) {
-                continue;
-            }
-            let Some(bytes) = mail_content::attachment_bytes(&raw, part.part_id) else {
-                // Cannot be copied: the draft would lose it, so the original stays.
-                lossy = true;
-                continue;
-            };
-            next += 1;
-            let file_id = next.to_string();
-            let root = self.inner.root.clone();
-            let draft = id.clone();
-            let fid = file_id.clone();
-            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-            let sha256 =
-                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
-            attachments.push(DraftFile {
-                id: file_id.clone(),
-                file_name: part.file_name.clone(),
-                mime: part.mime.clone(),
-                size,
-                sha256,
-                file: files::attachment_path(&id, &file_id),
-                content_id: None,
-            });
-        }
-        for (n, part) in shown_parts.iter().enumerate() {
-            let Some(content_id) = images.get(&part.content_id).cloned() else {
-                continue;
-            };
-            next += 1;
-            let file_id = next.to_string();
-            let bytes = part.bytes.to_vec();
-            let root = self.inner.root.clone();
-            let draft = id.clone();
-            let fid = file_id.clone();
-            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-            let sha256 =
-                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
-            let file_name = parsed
-                .attachments
-                .iter()
-                .find(|a| a.part_id == part.part_id)
-                .map(|a| a.file_name.clone())
-                .unwrap_or_else(|| {
-                    let extension = part.mime.strip_prefix("image/").unwrap_or("png");
-                    format!("image-{}.{extension}", n + 1)
-                });
-            attachments.push(DraftFile {
-                id: file_id.clone(),
-                file_name,
-                mime: part.mime.to_owned(),
-                size,
-                sha256,
-                file: files::attachment_path(&id, &file_id),
-                content_id: Some(content_id),
-            });
-        }
+        let copied = self.copy_content(&id, &raw, &parsed, &sender_email).await?;
+        lossy |= copied.lossy;
+        let (format, body_html, body_text, attachments) = (
+            copied.format,
+            copied.body_html,
+            copied.body_text,
+            copied.attachments,
+        );
+        let inline_images = copied.inline_images;
         let keep_original = lossy || kept_id.is_none();
         let message_id_header = match (&kept_id, keep_original) {
             (Some(kept), false) => kept.clone(),
@@ -1318,12 +1236,152 @@ impl<C: Connector> Compose<C> {
         drop(held);
         tracing::info!(
             %account,
-            inline_images = shown_parts.len(),
+            inline_images,
             original_kept = keep_original,
             "draft opened from the Drafts folder"
         );
         self.drafts_changed(account, vec![draft.id.clone()], Vec::new());
         self.info(draft).await
+    }
+
+    /// The body and attachments of a parsed message as a draft's content (stage 9 drafts of
+    /// other programs, stage 19 "edit as new"): HTML converted for the editor with the inline
+    /// images it shows kept as parts (raster images within the size limit; ids the editor does
+    /// not accept get a new one in the sender's domain), plain text otherwise, every other part
+    /// copied as an attachment of draft `id`. `lossy` when something could not be taken over.
+    /// The caller holds the compose files lock.
+    async fn copy_content(
+        &self,
+        id: &DraftId,
+        raw: &[u8],
+        parsed: &mail_content::ParsedMessage,
+        sender_email: &str,
+    ) -> Result<CopiedContent, CoreError> {
+        let mut lossy = false;
+        // The draft's own inline images the editor can show keep their part: a raster image
+        // within the size limit. Ids other programs write that the editor does not accept (or
+        // the reader's own for unnamed body images) get a new one in the sender's domain.
+        let domain = inline::content_id_domain(sender_email);
+        let mut images: HashMap<String, String> = HashMap::new();
+        let mut candidates: HashMap<String, &mail_content::InlinePart> = HashMap::new();
+        for part in &parsed.inline {
+            let fits = usize::try_from(MAX_INLINE_IMAGE_BYTES)
+                .is_ok_and(|max| part.bytes.len() <= max)
+                && inline::TYPES.contains(&part.mime);
+            if !fits || images.contains_key(&part.content_id) {
+                continue;
+            }
+            // The reader names body images without a Content-ID itself; only a header's id
+            // is the draft's own.
+            let own = mail_content::is_valid_content_id(&part.content_id)
+                && parsed.attachments.iter().any(|a| {
+                    a.part_id == part.part_id && a.content_id.as_deref() == Some(&part.content_id)
+                });
+            let content_id = if own {
+                part.content_id.clone()
+            } else {
+                format!("{:032x}@{domain}", random_u128())
+            };
+            images.insert(part.content_id.clone(), content_id);
+            candidates.insert(part.content_id.clone(), part);
+        }
+        let (format, body_html, body_text, shown) = match &parsed.html {
+            Some(html) => {
+                let html = html.clone();
+                let map = images.clone();
+                let converted =
+                    blocking(move || mail_content::foreign_draft_html(&html, &map)).await?;
+                lossy |= converted.dropped > 0;
+                (
+                    ComposeFormat::Html,
+                    converted.editor_html,
+                    String::new(),
+                    converted.shown,
+                )
+            }
+            None => (
+                ComposeFormat::Text,
+                String::new(),
+                parsed.display_text().into_owned(),
+                Vec::new(),
+            ),
+        };
+        let shown_parts: Vec<&mail_content::InlinePart> = shown
+            .iter()
+            .filter_map(|original| candidates.get(original).copied())
+            .collect();
+        let inline_part_ids: Vec<u32> = shown_parts.iter().map(|p| p.part_id).collect();
+
+        let mut attachments = Vec::new();
+        let mut next = 0u32;
+        for part in &parsed.attachments {
+            // An inline image the HTML shows is a part of its own below, not an attachment.
+            if inline_part_ids.contains(&part.part_id) {
+                continue;
+            }
+            let Some(bytes) = mail_content::attachment_bytes(raw, part.part_id) else {
+                // Cannot be copied: the draft would lose it, so the original stays.
+                lossy = true;
+                continue;
+            };
+            next += 1;
+            let file_id = next.to_string();
+            let root = self.inner.root.clone();
+            let draft = id.clone();
+            let fid = file_id.clone();
+            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+            let sha256 =
+                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
+            attachments.push(DraftFile {
+                id: file_id.clone(),
+                file_name: part.file_name.clone(),
+                mime: part.mime.clone(),
+                size,
+                sha256,
+                file: files::attachment_path(id, &file_id),
+                content_id: None,
+            });
+        }
+        for (n, part) in shown_parts.iter().enumerate() {
+            let Some(content_id) = images.get(&part.content_id).cloned() else {
+                continue;
+            };
+            next += 1;
+            let file_id = next.to_string();
+            let bytes = part.bytes.to_vec();
+            let root = self.inner.root.clone();
+            let draft = id.clone();
+            let fid = file_id.clone();
+            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+            let sha256 =
+                blocking(move || files::write_attachment(&root, &draft, &fid, &bytes)).await??;
+            let file_name = parsed
+                .attachments
+                .iter()
+                .find(|a| a.part_id == part.part_id)
+                .map(|a| a.file_name.clone())
+                .unwrap_or_else(|| {
+                    let extension = part.mime.strip_prefix("image/").unwrap_or("png");
+                    format!("image-{}.{extension}", n + 1)
+                });
+            attachments.push(DraftFile {
+                id: file_id.clone(),
+                file_name,
+                mime: part.mime.to_owned(),
+                size,
+                sha256,
+                file: files::attachment_path(id, &file_id),
+                content_id: Some(content_id),
+            });
+        }
+        Ok(CopiedContent {
+            format,
+            body_html,
+            body_text,
+            attachments,
+            inline_images: shown_parts.len(),
+            lossy,
+        })
     }
 
     // -- editing ---------------------------------------------------------------------------
@@ -1610,6 +1668,8 @@ impl<C: Connector> Compose<C> {
             archive_original,
             archive_missing: false,
             receipt_for: None,
+            follow_up_at: draft.follow_up_at,
+            redirect: false,
         };
         let not_before = match at {
             Some(at) => Some(at),
@@ -1748,7 +1808,38 @@ impl<C: Connector> Compose<C> {
                 }
             }
         }
+        if let Some(stored) = settings.iter().find(|s| s.key == ATTACHMENT_REMINDER_KEY) {
+            match serde_json::from_str::<bool>(&stored.value) {
+                Ok(on) => out.attachment_reminder = on,
+                Err(err) => {
+                    tracing::warn!(%err, "stored attachment reminder unreadable; default used");
+                }
+            }
+        }
         Ok(out)
+    }
+
+    /// Stage 20 (decision 0058): the word of the draft's own text that speaks of an attachment
+    /// while the draft has none (inline images count as attached); `None` with the reminder off
+    /// or nothing to remind of. Quote and signature are kept apart by the composer and are not
+    /// read; quoted lines and quoted messages inside the text are left out by
+    /// `mail_content::attachment_mention`.
+    pub(crate) async fn attachment_reminder(
+        &self,
+        id: DraftId,
+    ) -> Result<Option<String>, CoreError> {
+        if !self.compose_settings().await?.attachment_reminder {
+            return Ok(None);
+        }
+        let draft = self.get(id).await?;
+        if !draft.attachments.is_empty() {
+            return Ok(None);
+        }
+        let own_text = match draft.format {
+            mail_model::ComposeFormat::Html => mail_content::html_to_text(&draft.body_html),
+            mail_model::ComposeFormat::Text => draft.body_text,
+        };
+        Ok(mail_content::attachment_mention(&own_text))
     }
 
     pub(crate) async fn set_compose_settings(
@@ -1780,6 +1871,10 @@ impl<C: Connector> Compose<C> {
                     (
                         READ_RECEIPTS_KEY.to_owned(),
                         format!("\"{}\"", settings.read_receipts.as_str()),
+                    ),
+                    (
+                        ATTACHMENT_REMINDER_KEY.to_owned(),
+                        settings.attachment_reminder.to_string(),
                     ),
                 ],
             )

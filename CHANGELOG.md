@@ -9,14 +9,65 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The border between the message list and the reading pane can be dragged, like the sidebar's
+  edge: the list's width with the pane on the right, its height with the pane below (keyboard,
+  screen reader and double click to reset as there). The size is kept with the window's layout;
+  a smaller window keeps the pane readable and the stored size.
+- New folders from the app: "New folder…" on an account and "New subfolder…" on a folder (menus
+  and command palette) create the folder on the server too. "Reload folders from server" on an
+  account shows folders another program created without waiting for the next sync.
+- View the source of a message in a window of its own (Cmd/Ctrl+U): the raw message as plain
+  text, very large messages cut with "Save as .eml" for the whole. "Show all headers" lists every
+  header field under the message head.
+- Redirect a message: it goes unchanged to new recipients with `Resent-*` header fields, through
+  the outbox with the undo delay. Only for accounts that allow changes.
+- Edit as new: a new draft with the recipients, subject, text and attachments of a message, also
+  from Sent, without the reply reference.
+- Contact groups on the contacts page: create, rename, add and remove members. The composer
+  suggests groups and expands them into their members, and suggests Bcc for many recipients.
+  Groups travel with the settings sync.
+- vCard import and export (`.vcf`, 3.0 and 4.0): single contacts, groups or everything. The
+  import merges duplicates; pictures are checked and encoded again in the isolated helper.
+- Export a folder as an mbox file, and import an mbox file into a folder through the outbox, with
+  progress and cancel.
+- Import from Thunderbird: choose a profile, see its accounts, addresses, signatures and local
+  folders, and take over what you pick. Passwords are never read; accounts go through the normal
+  setup and start read-only.
 - Sort a folder, an inbox or the unified inbox by date, sender, recipient (Sent and Drafts),
   subject or size, in either direction, remembered per view; conversations take the place of their
   newest message. The wide list can be shown as a table with sortable, resizable and selectable
   columns. A quick filter bar above the list narrows it to unread, flagged, with attachment, from
   contacts, a tag and text (search language), shows the number of matches and resets with one
   click (Cmd/Ctrl+Shift+K puts the focus into it). "Unread only" moved from the header into it.
+- Attachment reminder: when the text you wrote (not the quote or the signature) mentions an
+  attachment in English or German and none is there, the app asks before sending or scheduling,
+  with "Send anyway" and "Add attachment". Sends from the outbox never ask. Can be turned off under
+  Settings → Writing.
+- "Remind me if no reply by …": chosen in the composer (tomorrow, in 3 days, next week or a date)
+  or later on a sent message. Without a reply in the conversation, in any folder of the account,
+  the message comes back above the inbox with "No reply since …"; a reply ends the reminder. A
+  "Waiting for reply" view lists all reminders. Local and synced like snoozes.
+- "Attachments" view: the attachments of all messages stored on this computer across accounts,
+  with filters by kind, sender and account and a file-name search; preview, open, save and "Go to
+  message". Attachments not downloaded yet are fetched when opened.
+- Tracker protection made visible: tracking pixels, images of known tracking services and images
+  with tracking parameters are counted and never loaded, also after "Load images"; the reading pane
+  explains what was blocked. Links lose tracking parameters (`utm_*`, `fbclid`, `gclid`, `mc_eid`,
+  …) when they are shown and opened; redirects are never resolved. Both can be turned off under
+  Settings → Reading.
+- Mailbox storage: the used and available space per account (IMAP QUOTA, RFC 9208; JMAP Quota,
+  RFC 9425) in the account settings, with a notice from 90 % and a way to find large messages. A
+  full mailbox gets a clear message when Drafts or Sent cannot be saved.
+- Search filter `larger:` (for example `larger:10M`, German `größer:`; `-larger:` for smaller).
 
 ### Changed
+
+- Opening a folder or view with the reading pane on the right or below shows its top message at
+  once. It counts as read only once you choose it yourself or work with it; with nothing
+  selected, the list keeps its width and the pane says so quietly, instead of a list across the
+  window.
+- The quick actions of a hovered row no longer cover the "n replies" toggle: they take the place
+  of the time at the end of the row, and a click on the toggle unfolds the conversation.
 
 - New colours: the light mode is cool white and light blue-grey with blue, the dark mode uses
   neutral, slightly bluish greys in the manner of GitHub's dark theme instead of warm browns.

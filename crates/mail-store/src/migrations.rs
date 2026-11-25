@@ -48,6 +48,14 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0019_folder_changes.sql")),
     // Stage 17, block B: every address a contact, kinds, notes, pictures (decision 0050).
     M::up(include_str!("../migrations/0020_contacts_view.sql")),
+    // Stage 19, block C: contact groups, synchronised (decision 0056). The numbers 0021 and 0023
+    // are not used.
+    M::up(include_str!("../migrations/0022_contact_lists.sql")),
+    // Stage 20, task B: reminders when no reply comes (decision 0059).
+    M::up(include_str!("../migrations/0024_follow_up.sql")),
+    // Stage 20, task C: the attachments of stored bodies, for the view across accounts
+    // (decision 0060).
+    M::up(include_str!("../migrations/0025_attachment_index.sql")),
     // Stage 19, task A: sort keys of every location and their indexes (decision 0061). Uses the
     // functions of `sort_keys`, registered on the write connection before migrating.
     M::up(include_str!("../migrations/0026_list_sort.sql")),

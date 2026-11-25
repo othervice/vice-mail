@@ -210,11 +210,21 @@ describe("the quick filter", () => {
     expect(within(bar).getByRole("button", { name: "Flagged" }).getAttribute("aria-pressed")).toBe("true");
     expect(await within(bar).findByText("2 matches")).toBeTruthy();
     await user.click(within(bar).getByRole("button", { name: "Unread" }));
+    // Nothing matches. The open message (the top one, opened by the list since stage 18 F) stays
+    // in its place until the selection moves on, like stage 16's "Unread only".
+    await waitFor(() => {
+      expect(senders()).toEqual(["anna weber"]);
+    });
+    expect(await within(bar).findByText("0 matches")).toBeTruthy();
+    expect(core.callsOf("count_list_view").at(-1)).toMatchObject({ request: { filter: { flagged: true, unread: true } } });
+    // Without the open message, the list says that nothing matches.
+    await user.keyboard("{Escape}");
+    await user.click(within(bar).getByRole("button", { name: "Flagged" }));
+    await user.click(within(bar).getByRole("button", { name: "Flagged" }));
     await waitFor(() => {
       expect(senders()).toEqual([]);
     });
     expect(await screen.findByText("No matching mail")).toBeTruthy();
-    expect(core.callsOf("count_list_view").at(-1)).toMatchObject({ request: { filter: { flagged: true, unread: true } } });
     await user.click(within(bar).getByRole("button", { name: "Reset" }));
     await waitFor(() => {
       expect(senders()).toHaveLength(6);

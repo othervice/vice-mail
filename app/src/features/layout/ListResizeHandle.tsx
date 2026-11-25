@@ -24,8 +24,9 @@ function lengthAt100(value: string, scale: number): number {
  * small the list is drawn smaller and the stored value stays. The handle measures the same room,
  * so its value, End and a drag start from what shows.
  */
-export function ListResizeHandle({ layout, open }: { layout: ReadingLayout; open: boolean }) {
-  if (!open || layout.position === "replace") return null;
+export function ListResizeHandle({ layout }: { layout: ReadingLayout }) {
+  // Stage 18 (task F): there with nothing selected too; the list keeps its size then.
+  if (layout.position === "replace") return null;
   return <ListSplitter key={layout.position} vertical={layout.position === "right"} controls={layout.listId} />;
 }
 

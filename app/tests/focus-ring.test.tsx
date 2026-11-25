@@ -103,7 +103,7 @@ describe("focus ring", () => {
       views: { [message.id]: view },
       readingPreferences: { markReadOnOpen: "never" },
       links: {
-        [`${token}/0`]: { target: "https://example.org/docs", scheme: "https", host: "example.org", text: "docs", warnings: [], openable: true },
+        [`${token}/0`]: { target: "https://example.org/docs", scheme: "https", host: "example.org", text: "docs", warnings: [], openable: true, trackingRemoved: [] },
       },
     });
     const { user } = renderApp();

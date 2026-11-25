@@ -59,6 +59,7 @@ function link(overrides: Partial<LinkInfo> = {}): LinkInfo {
     text: "the docs",
     warnings: [],
     openable: true,
+    trackingRemoved: [],
     ...overrides,
   };
 }
@@ -180,10 +181,12 @@ describe("reading pane", () => {
     expect(srcdocs.map(([file]) => file)).toEqual(["../src/features/reading/MessageBodyView.tsx"]);
   });
 
-  it("makes the list narrower and its rows two lines while a message is open", async () => {
+  it("keeps the list at its reading width and its rows two lines, with a message open or none", async () => {
+    // Stage 18 (task F): beside the pane the list has its reading width whether or not a message
+    // is open; the folder opens with its top message, and closing it leaves a quiet pane.
     const observers = installManualResizeObserver();
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() =>
-      document.querySelector('[data-testid="reading-pane"]') ? 384 : 1000,
+      document.querySelector('[data-testid="message-list"]')?.parentElement?.className.includes("w-(--ui-list-width-reading)") ? 384 : 1000,
     );
     const message = grace();
     inbox([message, grace({ subject: "Second" })], { [message.id]: makeView(message) });
@@ -191,16 +194,18 @@ describe("reading pane", () => {
 
     const list = await screen.findByRole("listbox");
     observers.fire();
-    expect(within(list).getAllByRole("option")[0]?.className).toContain("h-(--ui-row-height)");
-    expect(list.parentElement?.className).toContain("flex-1");
-
-    await openMessage(user);
-    observers.fire();
-
+    expect(list.parentElement?.className).toContain("w-(--ui-list-width-reading)");
     await waitFor(() => {
       expect(within(list).getAllByRole("option")[0]?.className).toContain("h-(--ui-row-height-two-line)");
     });
+    expect(await screen.findByRole("region", { name: "Message" })).toBeTruthy();
+
+    await user.click(within(screen.getByRole("region", { name: "Message" })).getByRole("button", { name: "Close message" }));
+    expect(await screen.findByTestId("reading-empty")).toBeTruthy();
+    expect(screen.getByTestId("reading-empty").textContent).toContain("No message selected");
+    observers.fire();
     expect(list.parentElement?.className).toContain("w-(--ui-list-width-reading)");
+    expect(within(list).getAllByRole("option")[0]?.className).toContain("h-(--ui-row-height-two-line)");
   });
 
   it("shows a plain-text mail in the app's theme, as text, with links that go through the check", async () => {

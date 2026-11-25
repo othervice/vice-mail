@@ -13,6 +13,7 @@ import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } fro
 import { useSetWritesEnabled } from "../../actions/queries";
 import { useSendSettings } from "../../composer/queries";
 import { SpecialFolders } from "./SpecialFolders";
+import { QuotaBlock } from "./QuotaBlock";
 import { OAuthSignInAgain } from "./OAuthSignIn";
 import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
 import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
@@ -369,6 +370,8 @@ export function AccountDetail({ accountId }: { accountId: string }) {
       )}
       <ServerChangeNotice account={account} />
       <StatusBlock account={account} />
+      {/* Stage 20 (decision 0060): how full the mailbox on the server is. */}
+      <QuotaBlock account={account} />
       <WritesBlock account={account} />
       <Block title={t("settings.accounts.detail.servers")}>
         <dl className="flex flex-col gap-3">

@@ -70,7 +70,7 @@ describe("sorted inbox rows", () => {
       { kind: "bundle", summary: summary("newsletter", TODAY, 1), section: TODAY, members: [news] },
     ],
     nextCursor: { before: 1, bundles: "{}" },
-    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 5, priorityUnread: 2 },
+    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 5, priorityUnread: 2 , followUps: []},
     categories: true,
     conversations: [],
   };
@@ -132,7 +132,7 @@ describe("sorted inbox rows", () => {
         { kind: "message", item: n3, section: YESTERDAY },
       ],
       nextCursor: null,
-      top: { pinned: [], returned: [], priority: [], priorityTotal: 0, priorityUnread: 0 },
+      top: { pinned: [], returned: [], priority: [], priorityTotal: 0, priorityUnread: 0 , followUps: []},
       categories: false,
       conversations: [],
     };

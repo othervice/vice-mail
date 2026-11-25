@@ -11,6 +11,7 @@ import {
   composeIpc,
   composerIpc,
   parityIpc,
+  reminderIpc,
   snippetsIpc,
   toCoreError,
   type Address,
@@ -35,6 +36,8 @@ import { useSignatures, useTemplates } from "../snippets/queries";
 import { matchesShortcut } from "../actions/shortcuts";
 import type { PasteResult, RichEditorHandle } from "./RichEditor";
 import { SendLaterPicker } from "./SendLaterPicker";
+import { AttachmentReminder } from "./AttachmentReminder";
+import { FollowUpOption } from "./FollowUpOption";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
@@ -43,6 +46,9 @@ import { ComposerAttachments } from "./ComposerAttachments";
 import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { FIELD_ROW_FOCUS, RecipientField } from "./RecipientField";
+// Stage 19 (decision 0056): a group with many members suggests Bcc.
+import { MANY_RECIPIENTS } from "../../services/ipc";
+import { addAddresses, sameAddress } from "./addresses";
 import { SignatureHtml } from "./SignaturePreview";
 import { WritingHelp } from "../ai/WritingHelp";
 // Stage 16: "Send and archive" in the menu next to the send button.
@@ -127,6 +133,8 @@ function loadDraft(source: ComposerSource, language: QuoteLanguage): Promise<Dra
       return source.draft ? Promise.resolve(source.draft) : composeIpc.getDraft(source.draftId);
     case "message":
       return composeIpc.openDraftFromMessage(source.messageId);
+    case "edit_as_new":
+      return composeIpc.createDraft({ kind: "edit_as_new", messageId: source.messageId });
   }
 }
 
@@ -216,6 +224,7 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
 function loadingTitle(kind: ComposerSource["kind"]): "new" | "reply" | "reply_all" | "forward" | "draft" {
   if (kind === "draft" || kind === "message") return "draft";
   if (kind === "forward_as_attachment") return "forward";
+  if (kind === "edit_as_new") return "new";
   return kind;
 }
 
@@ -327,6 +336,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [editorKey, setEditorKey] = useState(0);
   const [showCc, setShowCc] = useState(initial.cc.length > 0);
   const [showBcc, setShowBcc] = useState(initial.bcc.length > 0);
+  // Stage 19: the members of the group just added to To or Cc, while the hint about Bcc shows.
+  const [groupHint, setGroupHint] = useState<{ field: "to" | "cc"; members: Address[] } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<CoreError | null>(null);
   const [sendError, setSendError] = useState<CoreError | null>(null);
@@ -351,11 +362,15 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [sendOptions, setSendOptions] = useState<DraftSendOptions>({
     archiveOriginal: initial.archiveOriginal,
     requestReadReceipt: initial.requestReadReceipt,
+    followUpAt: initial.followUpAt,
   });
   const optionsQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [laterOpen, setLaterOpen] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [laterError, setLaterError] = useState<CoreError | null>(null);
+  // Stage 20 (decision 0058): the text speaks of an attachment but none is there; `proceed`
+  // sends (or schedules) as the user first asked, without asking again.
+  const [attachmentAsk, setAttachmentAsk] = useState<{ word: string; proceed: () => void } | null>(null);
   const editorHandle = useRef<RichEditorHandle | null>(null);
   const textBody = useRef<HTMLTextAreaElement | null>(null);
   const requestedImages = useRef(new Set<string>());
@@ -418,6 +433,11 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   };
   const saveNow = () => {
     if (dirty.current) void flush().catch(() => undefined);
+  };
+  // Stage 19 (decision 0056): a group chosen in a recipient field becomes its members there.
+  const addGroup = (field: "to" | "cc" | "bcc", members: Address[]) => {
+    change({ [field]: addAddresses(latest.current[field], members) });
+    if (field !== "bcc") setGroupHint({ field, members });
   };
 
   // Replaced by another composer: save and hand the draft to the server copy. Not when the
@@ -603,7 +623,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     const run = optionsQueue.current.then(async () => {
       try {
         const saved = await parityIpc.setDraftSendOptions(draftId, next);
-        setDraft((d) => ({ ...d, archiveOriginal: saved.archiveOriginal, requestReadReceipt: saved.requestReadReceipt }));
+        setDraft((d) => ({
+          ...d,
+          archiveOriginal: saved.archiveOriginal,
+          requestReadReceipt: saved.requestReadReceipt,
+          followUpAt: saved.followUpAt,
+        }));
       } catch (e) {
         setSendOptions(previous);
         setActionError({ context: "sendOptions", error: toCoreError(e) });
@@ -614,8 +639,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     return run;
   };
 
-  /** Sends after the undo delay; `archive` first turns on "archive the original" (Send and archive). */
-  const send = async (archive = false) => {
+  /**
+   * Sends after the undo delay; `archive` first turns on "archive the original" (Send and archive).
+   * Stage 20: asks first when the text speaks of an attachment and none is there (`checked`: the
+   * user answered "Send anyway").
+   */
+  const send = async (archive = false, checked = false) => {
     if (sending || frozen) return;
     setSending(true);
     setSendError(null);
@@ -623,6 +652,19 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       dirty.current = true; // the final save, also when nothing changed since the last one
       await flush();
       await optionsQueue.current;
+      if (!checked) {
+        const word = await reminderIpc.checkAttachmentReminder(draftId);
+        if (word !== null) {
+          setSending(false);
+          setAttachmentAsk({
+            word,
+            proceed: () => {
+              void send(archive, true);
+            },
+          });
+          return;
+        }
+      }
       if (archive && !sendOptions.archiveOriginal) {
         const next = { ...sendOptions, archiveOriginal: true };
         await parityIpc.setDraftSendOptions(draftId, next);
@@ -716,14 +758,31 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     };
   }, [setInsertTemplate]);
 
-  /** "Send later": frozen like a send, sent at `sendAt` only if the app runs and is online then. */
-  const scheduleAt = async (sendAt: number) => {
+  /**
+   * "Send later": frozen like a send, sent at `sendAt` only if the app runs and is online then.
+   * Stage 20: the attachment reminder is asked now, while the user is here; the send itself later
+   * never asks.
+   */
+  const scheduleAt = async (sendAt: number, checked = false) => {
     if (scheduling || frozen) return;
     setScheduling(true);
     setLaterError(null);
     try {
       dirty.current = true;
       await flush();
+      if (!checked) {
+        const word = await reminderIpc.checkAttachmentReminder(draftId);
+        if (word !== null) {
+          setScheduling(false);
+          setAttachmentAsk({
+            word,
+            proceed: () => {
+              void scheduleAt(sendAt, true);
+            },
+          });
+          return;
+        }
+      }
       const mail = await composerIpc.scheduleSend(draftId, crypto.randomUUID(), { sendAt });
       finished.current = true;
       track(mail);
@@ -963,6 +1022,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           refused={refused}
           autoFocus={kind === "new" || kind === "forward"}
           disabled={frozen}
+          onGroup={(members) => {
+            addGroup("to", members);
+          }}
           trailing={
             <>
               {!showCc && (
@@ -1004,6 +1066,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             refused={refused}
             autoFocus={initial.cc.length === 0}
             disabled={frozen}
+            onGroup={(members) => {
+              addGroup("cc", members);
+            }}
             data-testid="composer-cc"
           />
         )}
@@ -1018,8 +1083,43 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             refused={refused}
             autoFocus={initial.bcc.length === 0}
             disabled={frozen}
+            onGroup={(members) => {
+              addGroup("bcc", members);
+            }}
             data-testid="composer-bcc"
           />
+        )}
+        {groupHint && fields.to.length + fields.cc.length >= MANY_RECIPIENTS && (
+          <div className="border-b border-border-subtle px-4 py-2" data-testid="composer-bcc-hint">
+            <Notice tone="info" title={t("composer.recipients.manyTitle", { count: fields.to.length + fields.cc.length })}>
+              <p>{t("composer.recipients.manyBody")}</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={frozen}
+                  onClick={() => {
+                    const { field, members } = groupHint;
+                    const moved = (list: readonly Address[]) => list.filter((a) => !members.some((m) => sameAddress(a, m)));
+                    change(field === "to" ? { to: moved(fields.to), bcc: addAddresses(fields.bcc, members) } : { cc: moved(fields.cc), bcc: addAddresses(fields.bcc, members) });
+                    setShowBcc(true);
+                    setGroupHint(null);
+                  }}
+                  data-testid="composer-move-to-bcc"
+                >
+                  {t("composer.recipients.moveToBcc")}
+                </Button>
+                <Button
+                  variant="quiet"
+                  onClick={() => {
+                    setGroupHint(null);
+                  }}
+                  data-testid="composer-keep-recipients"
+                >
+                  {t("composer.recipients.keepRecipients")}
+                </Button>
+              </div>
+            </Notice>
+          </div>
         )}
         <div className={cx("flex items-center gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)}>
           <label htmlFor={subjectId} className="w-12 shrink-0 text-13 text-tertiary">
@@ -1319,6 +1419,14 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             />
             {t("composer.sendOptions.readReceipt")}
           </label>
+          {/* Stage 20 (decision 0059): "Remind me if no reply by …". */}
+          <FollowUpOption
+            value={sendOptions.followUpAt ?? null}
+            disabled={frozen}
+            onChange={(followUpAt) => {
+              void applySendOptions({ ...sendOptions, followUpAt }).catch(() => undefined);
+            }}
+          />
         </div>
       </div>
       {addingImages && (
@@ -1436,6 +1544,23 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </Button>
         </div>
       </div>
+      {attachmentAsk && (
+        <AttachmentReminder
+          word={attachmentAsk.word}
+          onSendAnyway={() => {
+            const { proceed } = attachmentAsk;
+            setAttachmentAsk(null);
+            proceed();
+          }}
+          onAddAttachment={() => {
+            setAttachmentAsk(null);
+            void pick();
+          }}
+          onCancel={() => {
+            setAttachmentAsk(null);
+          }}
+        />
+      )}
       {confirmDiscard && (
         <ConfirmDialog
           title={t("composer.discard.title")}

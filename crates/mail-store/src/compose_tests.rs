@@ -104,6 +104,8 @@ fn job(draft: &DraftId, server_saves_sent: bool) -> SendJob {
         archive_original: false,
         archive_missing: false,
         receipt_for: None,
+        follow_up_at: None,
+        redirect: false,
     }
 }
 

@@ -42,6 +42,18 @@ use tokio::sync::broadcast;
 use tokio::time::Instant;
 
 const WAIT: Duration = Duration::from_secs(45);
+
+/// Stage 20: how far [`TestClock`] is ahead of the system clock (ms). Tests run one at a time.
+static CLOCK_OFFSET: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// The system clock plus [`CLOCK_OFFSET`].
+struct TestClock;
+
+impl mail_engine::Clock for TestClock {
+    fn now_ms(&self) -> i64 {
+        mail_engine::SystemClock.now_ms() + CLOCK_OFFSET.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
 const MARK: &str = "VMC ";
 
 /// The tests share bob's and alice's accounts: one at a time.
@@ -128,6 +140,8 @@ async fn start_core(
 ) -> AppCore<ImapConnector> {
     let mut services =
         CoreServices::with_connector(Credentials::new(Arc::clone(keychain)), ImapConnector::new());
+    // Stage 20: a clock the reminder test moves forward (offset 0 for every other test).
+    services.clock = Arc::new(TestClock);
     services.sync = sync_config(env);
     services.outbox = Some(outbox_config(env, sender));
     AppCore::start(
@@ -1980,6 +1994,7 @@ async fn a_read_receipt_goes_out_only_on_the_users_answer_smtp_capture() {
             mail_model::DraftSendOptions {
                 archive_original: false,
                 request_read_receipt: true,
+                follow_up_at: None,
             },
         )
         .await
@@ -2076,4 +2091,392 @@ async fn opened(core: &AppCore<ImapConnector>, id: mail_model::MessageId) {
         .then_some(())
     })
     .await;
+}
+
+/// Stage 20, task B (decision 0059), on the test server: bob sends with "Remind me if no reply";
+/// the reminder belongs to the copy in Sent (the real Message-ID), comes back above bob's inbox
+/// once the clock is past its time; alice's answer from this app (an own address here) does not
+/// end it, an answer from outside the app does.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_reminder_comes_back_with_an_advanced_clock_and_the_answer_ends_it() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Erinnerung {}", run_id());
+    let draft = bed.new_draft(bed.bob).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Alice Ärger", &env.alice.address)],
+            Vec::new(),
+            &subject,
+            "<p>Kannst du bis Freitag antworten?</p>",
+        )
+        .await;
+    let due = mail_engine::Clock::now_ms(&mail_engine::SystemClock) + 2 * 24 * 3_600_000;
+    let saved = bed
+        .core
+        .set_draft_send_options(
+            draft.id.clone(),
+            mail_model::DraftSendOptions {
+                archive_original: false,
+                request_read_receipt: false,
+                follow_up_at: Some(due),
+            },
+        )
+        .await
+        .expect("reminder");
+    assert_eq!(saved.follow_up_at, Some(due));
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("s20-reminder"))
+        .await
+        .expect("send");
+    bed.sent(bed.bob, outgoing.operation_id).await;
+    bed.settled(bed.bob).await;
+    let in_sent = bed.arrived(bed.bob, MailboxRole::Sent, &subject).await;
+    let waiting = until("the reminder in the view", || async {
+        bed.core
+            .list_follow_ups(mail_model::MarkScope::Account {
+                account_id: bed.bob,
+            })
+            .await
+            .expect("waiting")
+            .into_iter()
+            .find(|m| m.subject == subject)
+    })
+    .await;
+    assert_eq!(waiting.id, in_sent.id);
+    let mark = waiting.follow_up.expect("mark");
+    assert_eq!((mark.due, mark.returned), (due, false));
+
+    // Three days later (the computer slept): above bob's inbox, "no reply since".
+    CLOCK_OFFSET.store(3 * 24 * 3_600_000, std::sync::atomic::Ordering::SeqCst);
+    bed.core.resume();
+    let inbox = bed.mailbox(bed.bob, MailboxRole::Inbox).await;
+    let top = until("the reminder above the inbox", || async {
+        let page = bed
+            .core
+            .list_inbox(
+                mail_model::InboxScope::Mailbox { mailbox_id: inbox },
+                None,
+                50,
+            )
+            .await
+            .expect("inbox");
+        page.top
+            .map(|top| top.follow_ups)
+            .filter(|f| f.iter().any(|m| m.subject == subject))
+    })
+    .await;
+    assert!(top.iter().any(|m| m.follow_up.is_some_and(|f| f.returned)));
+
+    // alice answers from this app: her address is one of the user's own here (both accounts
+    // live in this core), so it is no answer and the reminder stays.
+    let original = bed.arrived(bed.alice, MailboxRole::Inbox, &subject).await;
+    let reply = bed
+        .core
+        .create_draft(NewDraft::Reply {
+            message_id: original.id,
+            language: QuoteLanguage::De,
+        })
+        .await
+        .expect("reply");
+    let reply_subject = reply.subject.clone();
+    let reply = bed
+        .write(
+            &reply,
+            reply.to.clone(),
+            Vec::new(),
+            &reply_subject,
+            "<p>Ja!</p>",
+        )
+        .await;
+    // Not `bed.sent`: the outbox purges finished operations by the (advanced) clock, so the
+    // operation is gone as soon as it is done. Its arrival is what counts.
+    bed.core
+        .send_draft(reply.id.clone(), uuid_like("s20-own-answer"))
+        .await
+        .expect("own answer");
+    bed.arrived(bed.bob, MailboxRole::Inbox, &reply_subject)
+        .await;
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    let still = bed
+        .core
+        .list_follow_ups(mail_model::MarkScope::Account {
+            account_id: bed.bob,
+        })
+        .await
+        .expect("waiting");
+    assert!(
+        still.iter().any(|m| m.subject == subject),
+        "an own address is no answer"
+    );
+
+    // Someone outside the app answers in the conversation: the reminder goes.
+    let mut imap = admin_session(env, &env.bob).await;
+    let opened = imap.open_mailbox("Sent").await.expect("Sent");
+    let uids = imap.search_uids(&opened).await.expect("search");
+    let sent_id = imap
+        .fetch_headers(&opened, &uids)
+        .await
+        .expect("headers")
+        .into_iter()
+        .find(|h| h.subject == subject)
+        .and_then(|h| h.message_id)
+        .expect("Message-ID of the sent copy");
+    let raw = format!(
+        "From: Carol Outside <carol@outside.example>\r\nTo: {bob}\r\n\
+         Subject: Re: {subject}\r\nMessage-ID: <answer.{run}@outside.example>\r\n\
+         In-Reply-To: <{sent_id}>\r\nReferences: <{sent_id}>\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\r\nGerne, bis Freitag.\r\n",
+        bob = env.bob.address,
+        run = run_id(),
+    );
+    let appended = imap
+        .raw_command(
+            &format!("APPEND \"INBOX\" () {{{}+}}\r\n{raw}", raw.len()),
+            |_| false,
+        )
+        .await
+        .expect("append the answer");
+    assert!(appended.ok, "{}", appended.text);
+    imap.logout().await.ok();
+    until("the answer ends the reminder", || async {
+        let left = bed
+            .core
+            .list_follow_ups(mail_model::MarkScope::Account {
+                account_id: bed.bob,
+            })
+            .await
+            .expect("waiting");
+        (!left.iter().any(|m| m.subject == subject)).then_some(())
+    })
+    .await;
+    CLOCK_OFFSET.store(0, std::sync::atomic::Ordering::SeqCst);
+    clean_server(env).await;
+}
+
+/// Stage 19 (decision 0055): bob writes to alice; alice redirects the message to admin. admin
+/// gets the original byte for byte (without the trace fields of alice's delivery) behind a block
+/// of `Resent-*` fields naming alice; alice's Sent folder gets no copy, her original is marked
+/// `$Forwarded`.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_redirect_arrives_unchanged_with_resent_fields() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Umleitung {}", run_id());
+    let draft = bed.new_draft(bed.bob).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Alice Ärger", &env.alice.address)],
+            Vec::new(),
+            &subject,
+            "<p>Bitte weiterleiten, unverändert. Grüße 🍞</p>",
+        )
+        .await;
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("redirect-original"))
+        .await
+        .expect("send");
+    bed.sent(bed.bob, outgoing.operation_id).await;
+    let received = bed.arrived(bed.alice, MailboxRole::Inbox, &subject).await;
+    let (_, original) = server_message(env, &env.alice, "INBOX", &subject)
+        .await
+        .expect("alice's copy");
+    let message_id = message_id_of(&original);
+
+    let redirect = bed
+        .core
+        .redirect_message(
+            mail_model::RedirectRequest {
+                message_id: received.id,
+                identity_id: None,
+                to: vec![person("Verwaltung", &env.admin.address)],
+                cc: Vec::new(),
+                bcc: Vec::new(),
+            },
+            uuid_like("redirect"),
+        )
+        .await
+        .expect("redirect");
+    assert!(redirect.redirect);
+    bed.sent(bed.alice, redirect.operation_id).await;
+    bed.settled(bed.alice).await;
+
+    let arrived = until("the redirect at admin", || async {
+        let found = copies(env, &env.admin, "INBOX", &message_id).await;
+        (!found.is_empty()).then_some(found)
+    })
+    .await;
+    assert_eq!(arrived.len(), 1);
+    let raw = &arrived[0].1;
+    let text = String::from_utf8_lossy(raw);
+    // The display name is encoded (RFC 2047); the address follows in angle brackets.
+    assert!(
+        text.contains("Resent-From: ") && text.contains(&format!("<{}>", env.alice.address)),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "Resent-To: \"Verwaltung\" <{}>",
+            env.admin.address
+        )),
+        "{text}"
+    );
+    assert!(text.contains("Resent-Date: "), "{text}");
+    assert!(text.contains("Resent-Message-ID: <"), "{text}");
+    // The original as alice's server delivered it, without that delivery's trace fields.
+    let unchanged: Vec<u8> = {
+        let lines: Vec<&[u8]> = original.split_inclusive(|b| *b == b'\n').collect();
+        let mut out = Vec::new();
+        let mut in_header = true;
+        let mut dropping = false;
+        for line in lines {
+            if in_header {
+                if line == b"\r\n" {
+                    in_header = false;
+                } else if !line.starts_with(b" ") && !line.starts_with(b"\t") {
+                    let lower = String::from_utf8_lossy(line).to_ascii_lowercase();
+                    dropping =
+                        lower.starts_with("return-path:") || lower.starts_with("delivered-to:");
+                }
+                if dropping {
+                    continue;
+                }
+            }
+            out.extend_from_slice(line);
+        }
+        out
+    };
+    assert!(
+        raw.windows(unchanged.len())
+            .any(|w| w == unchanged.as_slice()),
+        "the original must arrive unchanged:\n{text}"
+    );
+    // No copy in alice's Sent folder; the original carries $Forwarded.
+    assert!(
+        copies(env, &env.alice, "Sent", &message_id)
+            .await
+            .is_empty()
+    );
+    until("$Forwarded on the original", || async {
+        let item = bed.find(bed.alice, MailboxRole::Inbox, &subject).await?;
+        item.keywords
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case("$Forwarded"))
+            .then_some(())
+    })
+    .await;
+
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}
+
+/// Stage 19 (decision 0057): an mbox file imported into alice's INBOX through the outbox: every
+/// message arrives once, unchanged but for Thunderbird's status fields, with its flags; the one
+/// Thunderbird marked deleted is left out.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn an_mbox_file_imports_through_the_outbox() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let run = run_id();
+    let message = |n: u32, status: &str, body: &str| {
+        format!(
+            "From - Mon Nov 23 12:00:0{n} 2026\n\
+             X-Mozilla-Status: {status}\n\
+             X-Mozilla-Status2: 00000000\n\
+             From: Grace <grace@example.org>\n\
+             To: alice@vicemail.test\n\
+             Subject: {MARK}mbox {run} {n}\n\
+             Message-ID: <mbox.{run}.{n}@example.org>\n\
+             Date: Mon, 23 Nov 2026 12:00:0{n} +0000\n\
+             \n\
+             {body}\n\
+             \n"
+        )
+    };
+    let file = format!(
+        "{}{}{}",
+        message(1, "0005", "Read and flagged."),
+        message(2, "0000", "Unread.\n>From the archive, unquoted on import."),
+        message(3, "0009", "Deleted in Thunderbird.")
+    );
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("Inbox");
+    std::fs::write(&path, file).expect("write mbox");
+    let inbox = bed.mailbox(bed.alice, MailboxRole::Inbox).await;
+    let job = bed
+        .core
+        .start_mbox_import(inbox, path)
+        .await
+        .expect("import");
+    let job = until("the import to finish", || async {
+        bed.core
+            .list_mbox_jobs()
+            .into_iter()
+            .find(|j| j.id == job.id && j.state != mail_model::MboxJobState::Running)
+    })
+    .await;
+    assert_eq!(job.state, mail_model::MboxJobState::Done, "{job:?}");
+    assert_eq!((job.done, job.skipped), (2, 1), "{job:?}");
+    bed.settled(bed.alice).await;
+
+    let first = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.1@example.org"),
+    )
+    .await;
+    let second = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.2@example.org"),
+    )
+    .await;
+    let deleted = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.3@example.org"),
+    )
+    .await;
+    assert_eq!((first.len(), second.len(), deleted.len()), (1, 1, 0));
+    let text = String::from_utf8_lossy(&second[0].1).into_owned();
+    assert!(!text.contains("X-Mozilla"), "{text}");
+    assert!(
+        text.contains("\r\nFrom the archive, unquoted on import."),
+        "{text}"
+    );
+    // Flags as Thunderbird had them, read from the server.
+    let mut imap = admin_session(env, &env.alice).await;
+    let opened = imap.open_mailbox("INBOX").await.expect("open");
+    let headers = imap
+        .fetch_headers(&opened, &UidSet::from_uids([first[0].0, second[0].0]))
+        .await
+        .expect("headers");
+    imap.logout().await.ok();
+    let flags_of = |uid: Uid| {
+        headers
+            .iter()
+            .find(|h| h.uid == uid)
+            .map(|h| h.flags.clone())
+            .expect("header")
+    };
+    let read = flags_of(first[0].0);
+    assert!(read.seen && read.flagged, "{read:?}");
+    let unread = flags_of(second[0].0);
+    assert!(!unread.seen && !unread.flagged, "{unread:?}");
+
+    bed.core.shutdown().await;
+    clean_server(env).await;
 }

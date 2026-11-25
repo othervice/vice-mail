@@ -54,6 +54,8 @@ fn expected() -> Vec<Expected> {
         only: None,
         without_complete_body: false,
         snoozed: Some(true),
+        size_at_least: Some(1_000_000),
+        size_below: None,
     };
     let fts_only = SearchFilter {
         text: TextMatch::Match("\"rechnung\"".into()),

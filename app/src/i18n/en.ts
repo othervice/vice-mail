@@ -5,11 +5,15 @@ export const en = {
     label: "Views",
     inbox: "Inbox",
     later: "Later",
+    // Stage 20 (decision 0059): sent mail with a reminder if no reply comes.
+    waiting: "Waiting for reply",
     tasks: "Tasks",
     // Stage 16: the reading list (local, never on the server).
     readingList: "Reading list",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Pinned attachments",
+    // Stage 20 (decision 0060): every attachment of the stored mail, across the accounts.
+    attachments: "Attachments",
     // SPEC "Markiert": the server's flag, in every folder but Trash and Junk.
     flagged: "Flagged",
     pinned: "Pinned",
@@ -73,6 +77,8 @@ export const en = {
     loadFailed: "Folders could not be loaded.",
     // An account in trouble: its name, then what is wrong ("offline", "not syncing: reason").
     accountTrouble: "{{label}}, {{status}}",
+    // Stage 20 (decision 0060): the account's mailbox is at least 90 % full.
+    quotaFull: "{{label}}, mailbox {{percent}} % full",
     statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
@@ -140,6 +146,15 @@ export const en = {
       readReceiptHint: "The recipient's mail app asks them whether to send one. Nothing is tracked.",
       failed: "The send options could not be changed.",
     },
+    // Stage 20 (decision 0059): "Remind me if no reply by …" among the send options.
+    followUp: {
+      label: "Remind me if no reply:",
+      none: "Don't remind",
+      preset: "{{name}} ({{time}})",
+      custom: "Pick a date and time…",
+      customLabel: "Date and time of the reminder",
+      set: "Set",
+    },
     errors: {
       open: "The draft could not be opened.",
       send: "The message was not sent.",
@@ -168,6 +183,14 @@ export const en = {
       suggestions: "Suggestions",
       showCc: "Add Cc recipients",
       showBcc: "Add Bcc recipients",
+      // Stage 19 (decision 0056): contact groups.
+      groupMembers_one: "Group · {{count}} member",
+      groupMembers_other: "Group · {{count}} members",
+      groupFailed: "The group could not be added.",
+      manyTitle: "{{count}} recipients will see each other’s addresses",
+      manyBody: "For a group, Bcc is often better: every recipient then sees only their own address.",
+      moveToBcc: "Move the group to Bcc",
+      keepRecipients: "Keep as it is",
     },
     format: {
       label: "Format",
@@ -208,6 +231,14 @@ export const en = {
       remove: "Remove {{name}}",
       largeTitle: "The attachments are large ({{size}}).",
       largeHint: "Many mail servers refuse messages above about 20 MB. Consider sharing large files another way.",
+    },
+    // Stage 20 (decision 0058): asked before sending.
+    attachmentReminder: {
+      title: "Send without an attachment?",
+      body: "Your message says “{{word}}”, but no file is attached.",
+      sendAnyway: "Send anyway",
+      add: "Add attachment",
+      cancel: "Keep writing",
     },
     discard: {
       label: "Discard draft",
@@ -298,6 +329,10 @@ export const en = {
       delayHint: "How long a sent message waits, so you can still take it back.",
       archiveOnReply: "Archive the original when I reply",
       archiveOnReplyHint: "New replies start with “Send and archive”. You can turn it off in each reply.",
+      // Stage 20 (decision 0058).
+      attachmentReminder: "Remind me of missing attachments",
+      attachmentReminderHint:
+        "Before sending, the app asks when your text mentions an attachment (“attached”, “Anhang” …) but none is added. Quotes and signatures are not read.",
       readReceipts: "Read receipt requests",
       readReceiptsHint: "When a sender asks for a read receipt. Nothing is ever sent without your click.",
       readReceiptsPolicy: {
@@ -564,6 +599,11 @@ export const en = {
     },
   },
   reading: {
+    // Stage 18 (task F): the pane's place while no message is selected.
+    noneSelected: {
+      title: "No message selected",
+      body: "Choose a message in the list to read it here.",
+    },
     region: "Message",
     // Stage 14 (decision 0034): Gmail labels under the head of a Gmail message.
     labels: {
@@ -660,12 +700,30 @@ export const en = {
       loading: "Loading…",
       failed: "The external content could not be loaded.",
     },
+    // Stage 20 (decision 0058): tracker protection in the reading pane.
+    trackers: {
+      blocked_one: "{{count}} tracker blocked",
+      blocked_other: "{{count}} trackers blocked",
+      explanation:
+        "Trackers tell the sender that, when and where you opened this message. The app did not load them, not even when you load the images.",
+      pixels_one: "{{count}} tracking pixel: an invisible image that reports the opening",
+      pixels_other: "{{count}} tracking pixels: invisible images that report the opening",
+      knownHosts_one: "{{count}} image from a known tracking service",
+      knownHosts_other: "{{count}} images from known tracking services",
+      parameters_one: "{{count}} image with tracking parameters in its address; it loads without them",
+      parameters_other: "{{count}} images with tracking parameters in their address; they load without them",
+      hosts: "From: {{hosts}}",
+      setting: "You can turn this off under Settings → Reading.",
+    },
     link: {
       title: "Open this link?",
       mailtoTitle: "Write to this address?",
       notOpenableTitle: "This link cannot be opened",
       checking: "Checking the link…",
       linkText: "Link text: “{{text}}”",
+      // Stage 20: the target shown is already without them.
+      trackingRemoved_one: "Tracking parameter removed: {{names}}",
+      trackingRemoved_other: "Tracking parameters removed: {{names}}",
       open: "Open in browser",
       openMailto: "Open in mail app",
       openAnyway: "Open anyway",
@@ -733,6 +791,9 @@ export const en = {
       unpin: "Unpin",
       snooze: "Snooze",
       unsnooze: "Unsnooze",
+      // Stage 20 (decision 0059)
+      followUp: "Remind me if no reply…",
+      clearFollowUp: "Remove reminder",
       addTask: "Mark as task",
       removeTask: "Remove task",
       completeTask: "Mark task as done",
@@ -751,6 +812,10 @@ export const en = {
       addToReadingList: "Add to reading list",
       removeFromReadingList: "Remove from reading list",
       blockSender: "Block sender",
+      // Stage 19
+      viewSource: "View source",
+      redirect: "Redirect",
+      editAsNew: "Edit as new",
     },
     readOnly: {
       label: "Read-only",
@@ -822,6 +887,9 @@ export const en = {
       transfer: "The messages could not be moved to the other account.",
       // Stage 18: light, dark or system from the command palette.
       appearance: "The appearance could not be changed.",
+      // Stage 19
+      source: "The source could not be shown.",
+      mbox: "The export or import could not be started.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",
     operationFailed_other: "{{count, number}} changes could not be made on the server: {{action}}",
@@ -1240,6 +1308,22 @@ export const en = {
           loadFailed: "The folders could not be loaded.",
           empty: "Folders appear after the first sync.",
         },
+        // Stage 20 (decision 0060): storage on the server.
+        quota: {
+          title: "Storage on the server",
+          checking: "Checking…",
+          refresh: "Check again",
+          used: "{{used}} of {{limit}} used ({{percent}} %)",
+          free: "{{free}} free",
+          meter: "Mailbox {{percent}} % full",
+          nearlyFull: "The mailbox is {{percent}} % full",
+          cleanUp:
+            "When it is full, the server refuses new mail and the app cannot save drafts or sent messages. Delete large messages you no longer need, then empty the trash.",
+          findLarge: "Find large messages",
+          notReported: "The server does not report storage.",
+          unknown: "The storage could not be checked now.",
+          failed: "The storage could not be checked.",
+        },
         remove: {
           title: "Remove account",
           description: "Removes the account and everything the app stored for it from this computer.",
@@ -1291,6 +1375,16 @@ export const en = {
           paused: "Paused while offline",
           unknown: "Status unknown",
         },
+      },
+      trackers: {
+        title: "Trackers",
+        description: "Protection against senders who want to know whether, when and where you read their mail.",
+        block: "Block trackers in messages",
+        blockHint:
+          "Tracking pixels and images of known tracking services never load, not even when you load the images. The message says how many were blocked.",
+        cleanLinks: "Remove tracking from links",
+        cleanLinksHint:
+          "Links open without tracking parameters such as utm_source or fbclid. Redirects through tracking services cannot be removed without contacting them, so the app leaves them as they are.",
       },
       remote: {
         title: "External content",
@@ -1917,7 +2011,7 @@ export const en = {
       all: "All accounts",
     },
     hint: {
-      body: "Type words or a phrase in quotes. Filters: from:, to:, cc:, subject:, filename:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:. A - in front excludes a term, OR between words finds either.",
+      body: "Type words or a phrase in quotes. Filters: from:, to:, cc:, subject:, filename:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:, larger:10M. A - in front excludes a term, OR between words finds either.",
     },
     results: {
       label: "the search results for “{{query}}”",
@@ -1979,6 +2073,8 @@ export const en = {
         after: "After",
         older_than: "Older than",
         newer_than: "Newer than",
+        // Stage 20 (decision 0060).
+        larger: "Larger than",
       },
     },
     index: {
@@ -2161,6 +2257,8 @@ export const en = {
     blocks: {
       pinned: "Pinned",
       returned: "Back from Later",
+      // Stage 20 (decision 0059).
+      followUps: "No reply yet",
       priority: "Priority",
     },
     priority: {
@@ -2188,6 +2286,10 @@ export const en = {
       back: "Back",
       task: "Task",
       taskDone: "Task done",
+      // Stage 20 (decision 0059).
+      followUp: "Reminder if no reply",
+      noReply: "No reply",
+      noReplySince: "No reply since {{date}}",
     },
     views: {
       later: {
@@ -2201,6 +2303,11 @@ export const en = {
       tasks: {
         emptyTitle: "No tasks",
         emptyBody: "Mark a message as a task and it is listed here until you tick it off.",
+      },
+      waiting: {
+        emptyTitle: "Not waiting for any reply",
+        emptyBody:
+          "When you send a message, choose “Remind me if no reply”. It waits here; if nobody answers by then, it comes back to the top of the inbox.",
       },
       flagged: {
         emptyTitle: "Nothing flagged",
@@ -2236,6 +2343,19 @@ export const en = {
         tooFar: "Pick a time within the next five years.",
       },
     },
+    // Stage 20 (decision 0059): "Remind me if no reply by …".
+    followUp: {
+      title_one: "Remind me if no reply",
+      title_other: "Remind me if no reply to {{count}} messages",
+      explanation: "If nobody answers in the conversation by then, the message comes back to the top of your inbox.",
+      presets: "Remind me on",
+      tomorrow: "Tomorrow",
+      inThreeDays: "In 3 days",
+      nextWeek: "Next week",
+      custom: "Pick a date and time",
+      submit: "Remind me",
+      timesFailed: "The reminder times could not be loaded.",
+    },
     notices: {
       pinned_one: "Pinned",
       pinned_other: "{{count, number}} messages pinned",
@@ -2253,11 +2373,18 @@ export const en = {
       taskDone_other: "{{count, number}} tasks done",
       taskReopened_one: "Task reopened",
       taskReopened_other: "{{count, number}} tasks reopened",
+      followUpSet_one: "Reminder on {{time}} if no reply comes",
+      followUpSet_other: "{{count, number}} reminders on {{time}} if no reply comes",
+      followUpAnswered_one: "One message already has a reply and keeps no reminder.",
+      followUpAnswered_other: "{{count, number}} messages already have a reply and keep no reminder.",
+      followUpCleared_one: "Reminder removed",
+      followUpCleared_other: "{{count, number}} reminders removed",
       failed: {
         pin: "Pinning did not work.",
         snooze: "Snoozing did not work.",
         unsnooze: "The message could not be brought back.",
         task: "The task could not be changed.",
+        followUp: "The reminder could not be changed.",
       },
       noMessageId: "This message has no Message-ID, so it cannot be marked; the mark would not survive on other devices.",
       ruleSkipped_one: "Local rule “{{name}}” skipped {{count, number}} message.",
@@ -3546,6 +3673,11 @@ export const en = {
         title: "The picture could not be read.",
         hint: "The file may be damaged. Choose another image.",
       },
+      // Stage 20 (decision 0060).
+      over_quota: {
+        title: "The mailbox on the server is full.",
+        hint: "Messages cannot be saved to Drafts or Sent until there is room. Search for larger:10M to find the largest messages, delete what you no longer need, then empty the trash.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.
@@ -3921,6 +4053,39 @@ export const en = {
       saved: "{{name}} saved to {{path}}",
       saveFailed: "The attachment could not be saved.",
     },
+    // Stage 20 (decision 0060): the attachments view across the accounts.
+    view: {
+      listLabel: "Attachments",
+      kinds: "Show attachments of the type",
+      kind: {
+        all: "All",
+        image: "Images",
+        pdf: "PDF",
+        document: "Documents",
+        spreadsheet: "Spreadsheets",
+        archive: "Archives",
+        other: "Other",
+      },
+      name: "File name",
+      namePlaceholder: "Search file names",
+      sender: "Sender",
+      senderPlaceholder: "Name or address",
+      account: "Account",
+      allAccounts: "All accounts",
+      scopeHint:
+        "Attachments of the mail on this computer. How far back that goes is set under Settings → Reading → Download in advance; attachments not downloaded yet are fetched when you open them.",
+      details: "{{type}}, {{size}} · {{sender}} · {{date}}",
+      noSubject: "(no subject)",
+      unknownSender: "unknown sender",
+      goToMessage: "Go to the message of {{name}}",
+      open: "Open {{name}}",
+      save: "Save {{name}}",
+      loadFailed: "The attachments could not be loaded.",
+      emptyTitle: "No attachments yet",
+      emptyBody: "Attachments of the mail on this computer appear here, newest first.",
+      noMatchTitle: "No attachment matches",
+      noMatchBody: "Change the type, the sender or the search.",
+    },
     blockedHidden: {
       text_one: "{{count}} message from blocked senders hidden",
       text_other: "{{count}} messages from blocked senders hidden",
@@ -4087,6 +4252,170 @@ export const en = {
     announceHidden: "New message",
     announceMany: "{{count}} new messages",
     failed: "Didn’t work: {{reason}}",
+  },
+  // Stage 19 (decision 0055): the source window, all headers, redirecting.
+  source: {
+    title: "Source",
+    loading: "Loading the source…",
+    loadFailed: "The source could not be loaded.",
+    save: "Save as .eml",
+    saved: "Saved to {{path}}",
+    saveFailed: "The message could not be saved.",
+    wrap: "Wrap long lines",
+    close: "Close",
+    closeFailed: "Close this window with the close button of its title bar.",
+    size: "{{size}}",
+    truncatedTitle: "Only the first {{shown}} of {{total}} are shown",
+    truncatedBody: "The message is too large to show here in full. Save it as .eml to get all of it.",
+    allHeaders: {
+      show: "Show all headers",
+      hide: "Hide all headers",
+      title: "All headers",
+      loading: "Loading the headers…",
+      failed: "The headers could not be loaded.",
+      empty: "This message has no header fields.",
+    },
+  },
+  redirect: {
+    title: "Redirect message",
+    intro: "The message goes to the new recipients unchanged, as it came from {{sender}}. Your address is added as the one who redirected it.",
+    from: "From",
+    to: "To",
+    cc: "Cc",
+    bcc: "Bcc",
+    submit: "Redirect",
+    cancel: "Cancel",
+    close: "Close",
+    failed: "The message could not be redirected.",
+    noRecipients: "Add at least one recipient.",
+    tooMany: "A message can be redirected to at most {{count}} recipients.",
+    noticeSubject: "Redirect: {{subject}}",
+    redirected: "Message redirected",
+    readOnly: "Changes are turned off for this account, so it cannot redirect messages. Allow changes in Settings → Accounts.",
+  },
+  // Stage 19 (decision 0056): contact groups, vCard import and export.
+  contactGroups: {
+    tabs: {
+      label: "Show",
+      contacts: "People",
+      groups: "Groups",
+    },
+    list: "Groups",
+    new: "New group",
+    nameLabel: "Name of the group",
+    create: "Create group",
+    cancel: "Cancel",
+    save: "Save",
+    rename: "Rename group",
+    delete: "Delete group",
+    deleteTitle: "Delete the group “{{name}}”?",
+    deleteBody: "The group is deleted on this device and, with the settings sync, on your other devices. Its members stay in your contacts.",
+    createFailed: "The group could not be created.",
+    changeFailed: "The group could not be changed.",
+    loadFailed: "The groups could not be loaded.",
+    empty: "No groups yet. A group lets you write to several people at once: type its name in To, Cc or Bcc.",
+    members_one: "{{count}} member",
+    members_other: "{{count}} members",
+    memberList: "Members",
+    noMembers: "This group has no members yet.",
+    removeMember: "Remove {{email}} from the group",
+    addTitle: "Add members",
+    addLabel: "Add",
+    add: "Add to group",
+    noGroupTitle: "No group chosen",
+    noGroupBody: "Create a group on the left or choose one.",
+    transfer: {
+      import: "Import vCard…",
+      export: "Export as vCard",
+      exportAll: "Export all contacts (vCard 3.0)…",
+      exportAllV4: "Export all contacts (vCard 4.0)…",
+      exportContact: "Export {{name}}…",
+      exportGroup: "Export the group {{name}}…",
+      imported_one: "{{count}} card read",
+      imported_other: "{{count}} cards read",
+      importDetail: "New contacts: {{created}}, updated: {{updated}}, groups: {{lists}}, pictures: {{pictures}}.",
+      problems_one: "{{count}} card or line could not be taken over completely.",
+      problems_other: "{{count}} cards or lines could not be taken over completely.",
+      exported_one: "{{count}} card saved",
+      exported_other: "{{count}} cards saved",
+      dismiss: "Close",
+      importFailed: "The vCard file could not be imported.",
+      exportFailed: "The contacts could not be exported.",
+    },
+  },
+  // Stage 19 (decision 0057): folders as mbox files.
+  mbox: {
+    export: "Export as mbox…",
+    import: "Import mbox…",
+    exportState: {
+      running: "Exporting “{{folder}}”",
+      done: "“{{folder}}” exported to {{file}}",
+      cancelled: "Export of “{{folder}}” cancelled",
+      failed: "Export of “{{folder}}” failed",
+    },
+    importState: {
+      running: "Importing {{file}} into “{{folder}}”",
+      done: "{{file}} imported into “{{folder}}”",
+      cancelled: "Import into “{{folder}}” cancelled",
+      failed: "Import into “{{folder}}” failed",
+    },
+    exportProgress: "{{done}} of {{total}} messages written.",
+    importProgress: "{{done}} messages on the server, {{queued}} waiting.",
+    skipped_one: "{{count}} left out.",
+    skipped_other: "{{count}} left out.",
+    failed: "The file could not be processed.",
+    cancel: "Cancel",
+    cancelFailed: "The job could not be cancelled.",
+    dismiss: "Close",
+  },
+  // Stage 19 (decision 0057): taking over from Thunderbird.
+  takeover: {
+    open: "Import from Thunderbird…",
+    title: "Import from Thunderbird",
+    intro: "Choose a Thunderbird profile. You see what it holds before anything is taken over.",
+    noPasswordsTitle: "Passwords stay in Thunderbird",
+    noPasswordsBody: "The app never reads Thunderbird’s passwords. You type the password of each account in the setup, and new accounts only read until you allow changes.",
+    profiles: "Thunderbird profiles",
+    default: "(default)",
+    openProfile: "Show",
+    choose: "Choose a profile folder…",
+    notFound: "Thunderbird was not found at its usual place. Choose its profile folder instead.",
+    profilesFailed: "The Thunderbird profiles could not be listed.",
+    openFailed: "The profile could not be read.",
+    backToProfiles: "Back to the profiles",
+    previewTitle: "Profile {{name}}",
+    previewBody: "Take over what you need. Nothing changes in Thunderbird.",
+    accounts: "Accounts",
+    noAccounts: "This profile has no mail accounts.",
+    identity: "{{name}} <{{email}}>",
+    server: "Incoming: {{host}}, port {{port}}",
+    unsupported: {
+      pop3: "POP3 accounts cannot be taken over",
+      other: "Cannot be taken over",
+    },
+    unencrypted: "Thunderbird connected without encryption; the app always encrypts (STARTTLS).",
+    identities: "Addresses",
+    signature: "Signature: {{text}}",
+    signatureUnreadable: "The signature file could not be read.",
+    setUp: "Set up…",
+    applyExisting: "Take over addresses and signatures",
+    applied: "Addresses added: {{identities}}, signatures: {{signatures}}.",
+    applyFailed: "Addresses and signatures could not be taken over.",
+    backToPreview: "Back to the profile",
+    setUpTitle: "Set up {{email}}",
+    passwordTitle: "Type the password here",
+    passwordBody: "The servers come from Thunderbird; its password does not. After the setup, the account’s other addresses and signatures are taken over.",
+    addedTitle: "{{email}} is set up",
+    addedBody: "It only reads for now: nothing changes on the server until you allow it in the account’s settings.",
+    folders: "Local folders",
+    noFolders: "This profile has no local folders with mail.",
+    foldersBody: "A local folder is copied into a folder of an account through the outbox. The account must allow changes.",
+    folderNeedsWrites: "No account allows changes yet. Allow changes for an account in its settings to import into it.",
+    intoAccount: "Account",
+    intoFolder: "Folder",
+    importFolder: "Import",
+    folderStarted: "The import runs; its progress is shown at the bottom left.",
+    folderFailed: "The folder could not be imported.",
   },
 } as const;
 

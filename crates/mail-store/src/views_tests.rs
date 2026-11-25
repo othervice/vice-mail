@@ -552,6 +552,16 @@ async fn conversations_sort_by_their_newest_matching_message() {
         rows(order(SortKey::Sender, true), unread.clone()).await,
         [(D, 3), (D + 120, 1), (D + 240, 2)]
     );
+    // Stage 20's `-larger:` (size below 1,002 bytes) on the newer message of a thread too: Zed's
+    // (1,002) does not match, so Anna's (1,001) stands for thread A; B and C have none.
+    let small = ViewFilter {
+        search: SearchFilter {
+            size_below: Some(1_002),
+            ..SearchFilter::default()
+        },
+        ..ViewFilter::default()
+    };
+    assert_eq!(rows(order(SortKey::Sender, true), small).await, [(D, 3)]);
     // The count is of messages, not conversations.
     assert_eq!(
         f.store

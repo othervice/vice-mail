@@ -1,4 +1,10 @@
 import { AppWindow, CloudOff, FileX, Forward, LoaderCircle, Paperclip, Reply, ReplyAll, X } from "lucide-react";
+// Stage 19 (decision 0055): source, all headers, redirect, edit as new.
+import { CopyPlus, CornerUpRight, FileCode, ListTree } from "lucide-react";
+import { useNoticeStore } from "../../stores/notices";
+import { useRedirectStore } from "../../stores/redirect";
+import { openSourceInWindow } from "../windows/open";
+import { AllHeaders } from "./AllHeaders";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -29,6 +35,7 @@ import { MessageHeader, SubjectTitle } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
+import { TrackerNotice } from "./TrackerNotice";
 import { BlockedNote } from "../organize/BlockedNote";
 // Stage 16: find in the open message.
 import { FindBar, useFindShortcut } from "./FindBar";
@@ -135,6 +142,8 @@ function Body({ view, account, format, scrollerRef, onRetry }: BodyProps) {
       const sender = view.header.from.find((address) => address.email.trim())?.email.trim() ?? null;
       return (
         <>
+          {/* Stage 20 (decision 0058): the trackers the core blocked, with what that means. */}
+          <TrackerNotice trackers={body.trackers} />
           {body.blockedRemote > 0 && !body.remoteLoaded && (
             // Stage 9: a control, not part of the printed message.
             <div data-print-hide>
@@ -282,18 +291,37 @@ interface CardMenuProps {
   messageId: MessageId;
   inWindow: boolean;
   draft: boolean;
+  /** Stage 19: "all headers" is shown under the head. */
+  allHeaders: boolean;
+  onToggleAllHeaders: () => void;
 }
 
 /** The "…" of a message card: what else can be done with this one message. */
-function CardMenu({ account, messageId, inWindow, draft }: CardMenuProps) {
+function CardMenu({ account, messageId, inWindow, draft, allHeaders, onToggleAllHeaders }: CardMenuProps) {
   const { t } = useTranslation();
+  const openRedirect = useRedirectStore((state) => state.open);
+  const pushNotice = useNoticeStore((state) => state.push);
   const items: OverflowItem[] = [
     ...(draft
       ? []
       : [
           { id: "replyAll", label: t("actions.labels.replyAll"), icon: ReplyAll, onSelect: () => { openComposer({ kind: "reply_all", messageId }); } },
           { id: "forwardAsAttachment", label: t("actions.labels.forwardAsAttachment"), icon: Paperclip, onSelect: () => { openComposer({ kind: "forward_as_attachment", messageId }); } },
+          // Stage 19: a send, so it says why it does nothing on a read-only account.
+          {
+            id: "redirect",
+            label: account.writesEnabled ? t("actions.labels.redirect") : t("actions.readOnly.tooltip", { label: t("actions.labels.redirect") }),
+            icon: CornerUpRight,
+            inert: !account.writesEnabled,
+            onSelect: () => {
+              if (account.writesEnabled) openRedirect({ accountId: account.id, messageId });
+              else pushNotice({ kind: "readOnly", accountId: account.id });
+            },
+          },
         ]),
+    { id: "editAsNew", label: t("actions.labels.editAsNew"), icon: CopyPlus, onSelect: () => { openComposer({ kind: "edit_as_new", messageId }); } },
+    { id: "allHeaders", label: allHeaders ? t("source.allHeaders.hide") : t("source.allHeaders.show"), icon: ListTree, onSelect: onToggleAllHeaders },
+    { id: "viewSource", label: t("actions.labels.viewSource"), icon: FileCode, onSelect: () => { openSourceInWindow(account.id, messageId); } },
     ...(inWindow
       ? []
       : [{ id: "openInWindow", label: t("actions.labels.openInWindow"), icon: AppWindow, onSelect: () => { openMessageInWindow(account.id, messageId); } }]),
@@ -359,6 +387,9 @@ export function ReadingPane({
   const handledFocus = useRef<number | null>(null);
   const view = query.data?.id === messageId ? query.data : undefined;
   const skeleton = useDelayed(query.isPending, SKELETON_DELAY_MS);
+  // Stage 19: "all headers" belongs to its message, like the chosen format.
+  const [headersFor, setHeadersFor] = useState<MessageId | null>(null);
+  const allHeaders = headersFor === messageId;
 
   useEffect(() => {
     if (!focusRequest || focusRequest.messageId !== messageId || focusRequest.seq === handledFocus.current) return;
@@ -431,9 +462,28 @@ export function ReadingPane({
               account={account}
               subjectId={subjectId}
               showSubject={false}
-              menu={<CardMenu account={account} messageId={view.id} inWindow={inWindow} draft={draft} />}
+              menu={
+                <CardMenu
+                  account={account}
+                  messageId={view.id}
+                  inWindow={inWindow}
+                  draft={draft}
+                  allHeaders={allHeaders}
+                  onToggleAllHeaders={() => {
+                    setHeadersFor(allHeaders ? null : view.id);
+                  }}
+                />
+              }
               collapsible
             />
+            {allHeaders && (
+              <AllHeaders
+                messageId={view.id}
+                onHide={() => {
+                  setHeadersFor(null);
+                }}
+              />
+            )}
             {/* Stage 9: "Why here?" and "always as …" (not printed), as a quiet chip under the head. */}
             <div className="contents" data-print-hide>
               <CategoryPanel messageId={view.id} />

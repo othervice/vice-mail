@@ -23,6 +23,7 @@
 
 pub(crate) mod calendar;
 pub(crate) mod classifier;
+pub(crate) mod follow_up;
 pub mod notify;
 pub(crate) mod popup;
 pub(crate) mod rules;
@@ -48,17 +49,17 @@ use mail_model::{
     AccountId, BadgeMode, BundleItem, BundleOptions, BundleRow, BundleState, CategoryCorrection,
     CategoryDecision, ConversationIntent, ConversationSummary, CoreError, CoreEvent,
     DEFAULT_BUNDLE_CHIPS, DateSection, ErrorCode, ExtraRootCa, InboxCursor, InboxFilter, InboxPage,
-    InboxRow, InboxScope, InboxSettings, InboxTop, ListCursor, MAX_ACTION_MESSAGES, MAX_TOP_PINNED,
-    MAX_TOP_RETURNED, MailAction, MailRule, MailboxId, MarkScope, MessageCategory,
-    MessageCategoryInfo, MessageId, MessageListItem, MessagePage, MessageRef, NewMailStyle,
-    NotificationSettings, NotificationTexts, OperationId, PRIORITY_PREVIEW, RuleId, RuleInput,
-    RuleSkipReason, SendState, SenderKey, SenderRule, SnoozeChoice, SnoozeTimes, TaskFilter,
-    TaskMark, ThreadListItem, ThreadPage, UidSet, UnifiedView, UnsubscribeMethod,
-    UnsubscribeOptions, UnsubscribeOutcome, bundle_page,
+    InboxRow, InboxScope, InboxSettings, InboxTop, ListCursor, MAX_ACTION_MESSAGES,
+    MAX_TOP_FOLLOW_UPS, MAX_TOP_PINNED, MAX_TOP_RETURNED, MailAction, MailRule, MailboxId,
+    MarkScope, MessageCategory, MessageCategoryInfo, MessageId, MessageListItem, MessagePage,
+    MessageRef, NewMailStyle, NotificationSettings, NotificationTexts, OperationId,
+    PRIORITY_PREVIEW, RuleId, RuleInput, RuleSkipReason, SendState, SenderKey, SenderRule,
+    SnoozeChoice, SnoozeTimes, TaskFilter, TaskMark, ThreadListItem, ThreadPage, UidSet,
+    UnifiedView, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome, bundle_page,
 };
 use mail_store::{
     GLOBAL_SCOPE, InboxListKind, InboxMailboxes, MAX_MARK_VIEW, MarkView, MessageKey,
-    SenderRuleChange, Store,
+    SenderRuleChange, SettleScope, Store,
 };
 use tokio::sync::{Notify, broadcast, mpsc};
 use tokio::task::JoinHandle;
@@ -209,10 +210,7 @@ pub(crate) async fn start<C: Connector>(core: &AppCore<C>) -> bool {
         tracing::error!(error = %err, "categories: pending work unknown");
         false
     });
-    let next_snooze = store.next_snooze_due().await.unwrap_or_else(|err| {
-        tracing::error!(error = %err, "snoozes: next one unknown");
-        None
-    });
+    let next_snooze = next_due(store).await;
     let mut tasks = lock(&state.tasks);
     tasks.push(tokio::spawn(category_worker(
         core.downgrade(),
@@ -231,6 +229,22 @@ pub(crate) async fn start<C: Connector>(core: &AppCore<C>) -> bool {
         core.subscribe(),
     )));
     categories_pending
+}
+
+/// The next time the snooze timer has work: a snooze or (stage 20) a reminder due.
+async fn next_due(store: &Store) -> Option<i64> {
+    let snooze = store.next_snooze_due().await.unwrap_or_else(|err| {
+        tracing::error!(error = %err, "snoozes: next one unknown");
+        None
+    });
+    let follow_up = store.next_follow_up_due().await.unwrap_or_else(|err| {
+        tracing::error!(error = %err, "reminders: next one unknown");
+        None
+    });
+    match (snooze, follow_up) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
 }
 
 /// Waits for [`ComfortState::kick_categories`] (a kick before the wait is kept by the
@@ -295,8 +309,12 @@ async fn snooze_worker<C: Connector>(weak: WeakCore<C>, wake: Arc<Notify>, mut n
         if let Err(err) = core.return_due_snoozes().await {
             tracing::error!(code = ?err.code(), error = %err, "snoozes could not be returned");
         }
+        // Stage 20 (decision 0059): due reminders come back unless an answer came.
+        if let Err(err) = core.settle_follow_ups(SettleScope::Due).await {
+            tracing::error!(code = ?err.code(), error = %err, "reminders could not be settled");
+        }
         next = match core.store_ref() {
-            Ok(store) => store.next_snooze_due().await.ok().flatten(),
+            Ok(store) => next_due(store).await,
             Err(_) => return,
         };
     }
@@ -314,18 +332,45 @@ async fn arrival_worker<C: Connector>(
     }
 }
 
+/// Stage 20: after new mail of an account, its reminders are looked at once this long after
+/// the last change (a sync stores many windows in a row).
+const FOLLOW_UP_SETTLE_DELAY: Duration = Duration::from_secs(1);
+
 async fn event_worker<C: Connector>(weak: WeakCore<C>, mut events: broadcast::Receiver<CoreEvent>) {
+    // Stage 20 (decision 0059): accounts whose mail changed, for the answer check.
+    let mut pending: HashSet<AccountId> = HashSet::new();
     loop {
-        let event = match events.recv().await {
-            Ok(event) => event,
-            Err(broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(broadcast::error::RecvError::Closed) => return,
+        let received = if pending.is_empty() {
+            Some(events.recv().await)
+        } else {
+            tokio::time::timeout(FOLLOW_UP_SETTLE_DELAY, events.recv())
+                .await
+                .ok()
+        };
+        let event = match received {
+            None => {
+                let Some(core) = weak.upgrade() else { return };
+                for account in pending.drain() {
+                    core.settle_account_follow_ups(account).await;
+                }
+                continue;
+            }
+            Some(Ok(event)) => event,
+            Some(Err(broadcast::error::RecvError::Lagged(_))) => continue,
+            Some(Err(broadcast::error::RecvError::Closed)) => return,
         };
         let mails = match event {
             CoreEvent::OutgoingChanged { mails, .. } => mails,
             CoreEvent::SendNeedsDecision { mail, .. } => vec![mail],
-            // Stage 18: the popup's cards follow their messages and accounts.
-            CoreEvent::MessagesChanged { mailbox_id, .. } => {
+            CoreEvent::MessagesChanged {
+                account_id,
+                mailbox_id,
+                ..
+            } => {
+                // Stage 20 (decision 0059): the account's reminders are looked at once its
+                // changes settle.
+                pending.insert(account_id);
+                // Stage 18: the popup's cards follow their messages and accounts.
                 let Some(core) = weak.upgrade() else { return };
                 core.refresh_popup(mailbox_id).await;
                 continue;
@@ -518,6 +563,7 @@ impl<C: Connector> AppCore<C> {
         let store = self.store_ref()?;
         let settings = self.get_inbox_settings().await?;
         let mailboxes = mailboxes_of(scope);
+        let follow_up_scope = mailboxes.clone();
         let before = cursor.as_ref().map(|c| c.before);
         let mut summaries = Summaries::default();
         let (page_items, page_next) = if conversations {
@@ -578,12 +624,17 @@ impl<C: Connector> AppCore<C> {
             } else {
                 (Vec::new(), 0, 0)
             };
+            // Stage 20 (decision 0059): sent mail without an answer by the reminder's time.
+            let follow_ups = store
+                .inbox_follow_ups(follow_up_scope, MAX_TOP_FOLLOW_UPS)
+                .await?;
             Some(InboxTop {
                 pinned,
                 returned,
                 priority,
                 priority_total,
                 priority_unread,
+                follow_ups,
             })
         } else {
             None
@@ -1117,6 +1168,22 @@ impl<C: Connector> AppCore<C> {
                 tracing::warn!(code = ?err.code(), error = %err, keyword, "server keyword not queued");
                 false
             }
+        }
+    }
+
+    /// Stage 20: the answer check of one account's reminders, if it has any.
+    async fn settle_account_follow_ups(&self, account: AccountId) {
+        let Ok(store) = self.store_ref() else { return };
+        match store.has_follow_ups(account).await {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(err) => {
+                tracing::error!(error = %err, "reminders: unknown whether there are any");
+                return;
+            }
+        }
+        if let Err(err) = self.settle_follow_ups(SettleScope::Account(account)).await {
+            tracing::error!(code = ?err.code(), error = %err, "reminders could not be settled");
         }
     }
 

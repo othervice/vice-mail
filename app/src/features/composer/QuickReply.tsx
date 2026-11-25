@@ -7,6 +7,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { Tooltip } from "../../components/Tooltip";
 import {
   composeIpc,
+  reminderIpc,
   toCoreError,
   type Account,
   type CoreError,
@@ -19,6 +20,7 @@ import { openComposer, useComposerStore } from "../../stores/composer";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
+import { AttachmentReminder } from "./AttachmentReminder";
 
 /** Local save this long after the last key, like the composer (contract: about 3 s). */
 export const QUICK_REPLY_SAVE_DELAY_MS = 3000;
@@ -76,6 +78,8 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
   const [busy, setBusy] = useState<"send" | "expand" | "discard" | null>(null);
   const [error, setError] = useState<{ context: ErrorContext; error: CoreError } | null>(null);
   const [focused, setFocused] = useState(false);
+  // Stage 20 (decision 0058): the text speaks of an attachment; a quick reply has none.
+  const [attachmentWord, setAttachmentWord] = useState<string | null>(null);
 
   // Refs for saves that run after a render (debounce, unmount) and for the single creation.
   const latest = useRef({ text, includeQuote });
@@ -197,7 +201,8 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
     [],
   );
 
-  const send = async () => {
+  /** Stage 20: asks first when the text speaks of an attachment (`checked`: "Send anyway"). */
+  const send = async (checked = false) => {
     if (busy || latest.current.text.trim() === "") return;
     setBusy("send");
     setError(null);
@@ -205,6 +210,13 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
       dirty.current = true; // the final save, also when nothing changed since the last one
       await flush();
       const current = draftRef.current ?? (await ensureDraft());
+      if (!checked) {
+        const word = await reminderIpc.checkAttachmentReminder(current.id);
+        if (word !== null) {
+          setAttachmentWord(word);
+          return;
+        }
+      }
       const mail = await composeIpc.sendDraft(current.id, crypto.randomUUID());
       track(mail);
       reset();
@@ -400,6 +412,23 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
             </Tooltip>
           )}
         </div>
+      )}
+      {attachmentWord !== null && (
+        <AttachmentReminder
+          word={attachmentWord}
+          onSendAnyway={() => {
+            setAttachmentWord(null);
+            void send(true);
+          }}
+          onAddAttachment={() => {
+            // Attachments are added in the full composer, with the same draft.
+            setAttachmentWord(null);
+            void expand();
+          }}
+          onCancel={() => {
+            setAttachmentWord(null);
+          }}
+        />
       )}
     </div>
   );

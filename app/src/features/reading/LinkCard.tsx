@@ -1,4 +1,4 @@
-import { ExternalLink, LoaderCircle, TriangleExclamationPoint } from "lucide-react";
+import { ExternalLink, LoaderCircle, ShieldCheck, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -116,6 +116,13 @@ export function LinkCard({ request, onClosed, onReload, staleText }: LinkCardPro
         </p>
         {link.text && link.text !== link.target && (
           <p className="text-13 break-words text-secondary">{t("reading.link.linkText", { text: link.text })}</p>
+        )}
+        {link.trackingRemoved.length > 0 && (
+          // Stage 20 (decision 0058): the target above is already without them.
+          <p className="flex gap-2 text-13 break-words text-secondary" data-testid="link-tracking-removed">
+            <ShieldCheck aria-hidden className="size-(--ui-icon-small) shrink-0 text-success" strokeWidth={1.75} />
+            <span>{t("reading.link.trackingRemoved", { count: link.trackingRemoved.length, names: link.trackingRemoved.join(", ") })}</span>
+          </p>
         )}
         {warned && (
           <ul className="flex flex-col gap-2" data-testid="link-warnings">

@@ -12,9 +12,13 @@ import { saveUiPreferences } from "../keyboard/uiPreferences";
  */
 export const COLUMN_VIEW_IDS = [
   "later",
+  // Stage 20 (decision 0059): "Waiting for reply", after Later.
+  "waiting",
   "tasks",
   "readingList",
   "pinnedAttachments",
+  // Stage 20 (decision 0060): every attachment, after the pinned ones.
+  "attachments",
   "flagged",
   "pinned",
   "savedViews",

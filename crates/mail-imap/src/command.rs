@@ -74,6 +74,9 @@ const READ_ONLY_COMMANDS: &[&str] = &[
     "SEARCH",
     "IDLE",
     "DONE",
+    // Stage 20 (decision 0060): reading the quota (RFC 9208) changes nothing.
+    "GETQUOTAROOT",
+    "GETQUOTA",
 ];
 
 fn read_only_check(line: &str) -> Result<(), String> {
@@ -321,8 +324,25 @@ impl Tagged {
         }
     }
 
-    /// The tagged response if it is OK, otherwise [`BackendError::Rejected`] naming `what`.
+    /// A tagged response with this status and text (tests of the callers).
+    #[cfg(test)]
+    pub(crate) fn for_test(status: TaggedStatus, text: &str) -> Self {
+        Self {
+            status,
+            read_only: false,
+            copy_uid: None,
+            append_uid: None,
+            modified: None,
+            text: text.to_owned(),
+        }
+    }
+
+    /// The tagged response if it is OK, otherwise [`BackendError::Rejected`] naming `what`;
+    /// stage 20: `NO [OVERQUOTA]` (RFC 9208) is [`BackendError::OverQuota`].
     pub(crate) fn check(self, what: &str) -> Result<Self, BackendError> {
+        if self.status == TaggedStatus::No && self.bracket_code().as_deref() == Some("OVERQUOTA") {
+            return Err(BackendError::OverQuota(format!("{what}: NO {}", self.text)));
+        }
         match self.status {
             TaggedStatus::Ok => Ok(self),
             TaggedStatus::No => Err(BackendError::Rejected(format!("{what}: NO {}", self.text))),

@@ -51,6 +51,34 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::ui::set_window_layout::<tauri::Wry>,
             commands::ui::open_message_window::<tauri::Wry>,
             commands::ui::open_composer_window::<tauri::Wry>,
+            // Stage 19 (decision 0055): the source window and "all headers".
+            commands::source::open_source_window::<tauri::Wry>,
+            commands::source::get_message_source,
+            commands::source::get_message_headers,
+            commands::redirect::redirect_message,
+            commands::redirect::cancel_redirect,
+            // Stage 19 (decision 0056): contact groups.
+            commands::contact_lists::list_contact_lists,
+            commands::contact_lists::get_contact_list,
+            commands::contact_lists::create_contact_list,
+            commands::contact_lists::rename_contact_list,
+            commands::contact_lists::delete_contact_list,
+            commands::contact_lists::add_contact_list_members,
+            commands::contact_lists::remove_contact_list_member,
+            commands::contact_lists::suggest_contact_lists,
+            commands::contact_lists::import_vcards::<tauri::Wry>,
+            commands::contact_lists::export_vcards::<tauri::Wry>,
+            // Stage 19 (decision 0057): mbox export and import.
+            commands::mbox::export_mailbox_mbox::<tauri::Wry>,
+            commands::mbox::import_mailbox_mbox::<tauri::Wry>,
+            commands::mbox::cancel_mbox_job,
+            commands::mbox::list_mbox_jobs,
+            // Stage 19 (decision 0057): takeover from a Thunderbird profile.
+            commands::takeover::list_thunderbird_profiles::<tauri::Wry>,
+            commands::takeover::open_thunderbird_profile::<tauri::Wry>,
+            commands::takeover::choose_thunderbird_profile::<tauri::Wry>,
+            commands::takeover::apply_thunderbird_account,
+            commands::takeover::import_thunderbird_folder,
             commands::accounts::list_accounts,
             commands::accounts::discover_known_provider,
             commands::accounts::discover_online,
@@ -324,6 +352,15 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // Stage 15 (decision 0044): the guided first start.
             commands::first_start::get_first_start,
             commands::first_start::finish_first_start,
+            // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a
+            // reply, the attachments view, the mailbox quota.
+            commands::reminders::check_attachment_reminder,
+            commands::reminders::get_follow_up_times,
+            commands::reminders::set_follow_up,
+            commands::reminders::clear_follow_up,
+            commands::reminders::list_follow_ups,
+            commands::attachments_view::list_attachments,
+            commands::quota::get_account_quota,
             // Stage 18 (decision 0051): the new-mail popup, the only commands its window may
             // call (`popup::POPUP_COMMANDS`).
             commands::popup::get_new_mail_popup,
@@ -359,6 +396,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MAX_PREVIEW_TEXT_BYTES", mail_model::MAX_PREVIEW_TEXT_BYTES)
         .constant("MAX_PREVIEW_PDF_PAGES", mail_model::MAX_PREVIEW_PDF_PAGES)
         .constant("MAX_PINNED_ATTACHMENTS", mail_model::MAX_PINNED_ATTACHMENTS)
+        // Stage 20 (decision 0060): the attachments view's page.
+        .constant("MAX_ATTACHMENT_PAGE", mail_model::MAX_ATTACHMENT_PAGE)
+        // Stage 20 (decision 0060): from this share on, the account shows a notice.
+        .constant("QUOTA_WARN_PERCENT", mail_model::QUOTA_WARN_PERCENT)
         // Stage 7: the largest search, thread and unified page, and the most messages of a
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)
@@ -486,6 +527,24 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // ids one `getMessagesByIds` takes.
         .constant("MAX_EML_FILE_BYTES", mail_model::MAX_EML_FILE_BYTES)
         .constant("MAX_MESSAGES_BY_IDS", mail_model::MAX_MESSAGES_BY_IDS)
+        // Stage 19 (decision 0055): the most bytes the source window shows, the most recipients
+        // of a redirect.
+        .constant("MAX_SOURCE_BYTES", mail_model::MAX_SOURCE_BYTES)
+        // Stage 19 (decision 0056): contact groups and when the composer suggests Bcc.
+        .constant("MAX_CONTACT_LISTS", mail_model::MAX_CONTACT_LISTS)
+        .constant(
+            "MAX_CONTACT_LIST_MEMBERS",
+            mail_model::MAX_CONTACT_LIST_MEMBERS,
+        )
+        .constant(
+            "MAX_CONTACT_LIST_NAME_CHARS",
+            mail_model::MAX_CONTACT_LIST_NAME_CHARS,
+        )
+        .constant("MANY_RECIPIENTS", mail_model::MANY_RECIPIENTS)
+        .constant(
+            "MAX_REDIRECT_RECIPIENTS",
+            mail_model::MAX_REDIRECT_RECIPIENTS,
+        )
 }
 
 /// An `i64` constant below 2^53 (milliseconds), exported as a plain TypeScript number.

@@ -203,6 +203,10 @@ pub struct MessageListItem {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[specta(optional)]
     pub reading_list: bool,
+    /// Stage 20 (decision 0059): a reminder if no reply comes. Absent when there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub follow_up: Option<crate::FollowUpMark>,
     /// Stage 19: the message's size in bytes (`RFC822.SIZE`), for the table's size column.
     /// Absent when unknown.
     #[serde(skip_serializing_if = "is_zero")]

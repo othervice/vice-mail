@@ -128,9 +128,13 @@ pub enum MessageBody {
     Html {
         srcdoc: String,
         render_token: RenderToken,
-        /// External images and styles that were blocked (0 when `remote_loaded`).
+        /// External images and styles that were blocked (0 when `remote_loaded`). Trackers
+        /// are not counted (stage 20): they never load.
         blocked_remote: u32,
         remote_loaded: bool,
+        /// Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
+        /// on; all zero when it is off).
+        trackers: TrackerSummary,
     },
     /// Plain text for the app's own theme. Links are separate segments, opened through the same
     /// check as HTML links (`describeLink` with this `render_token`).
@@ -147,6 +151,30 @@ pub enum MessageBody {
         /// Details for `fetchFailed`, null otherwise.
         error: Option<IpcError>,
     },
+}
+
+/// Stage 20 (decision 0058): the trackers of one rendering of a mail, each image address once.
+/// Pixels and images on known tracking hosts were never loaded; images with tracking
+/// parameters load without them (after "load images").
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackerSummary {
+    /// Invisible images (at most 2 × 2 pixels, or hidden) that report the opening.
+    pub pixels: u32,
+    /// Images on hosts known to serve tracking pixels.
+    pub known_hosts: u32,
+    /// Images whose address carried tracking parameters (removed).
+    pub parameters: u32,
+    /// Hosts of the blocked pixels and known trackers, each once, at most eight.
+    pub hosts: Vec<String>,
+}
+
+impl TrackerSummary {
+    pub fn total(&self) -> u32 {
+        self.pixels
+            .saturating_add(self.known_hosts)
+            .saturating_add(self.parameters)
+    }
 }
 
 /// A piece of a text body.
@@ -240,6 +268,9 @@ pub struct LinkInfo {
     pub warnings: Vec<LinkWarning>,
     /// Only `http`, `https` and `mailto` can be opened.
     pub openable: bool,
+    /// Stage 20 (decision 0058): tracking parameters removed from `target` (as written, each
+    /// once); opening uses the clean target. Empty when there were none or cleaning is off.
+    pub tracking_removed: Vec<String>,
 }
 
 /// Why a link deserves a second look.
@@ -485,6 +516,12 @@ mod tests {
                 render_token: token(),
                 blocked_remote: 3,
                 remote_loaded: false,
+                trackers: TrackerSummary {
+                    pixels: 1,
+                    known_hosts: 0,
+                    parameters: 2,
+                    hosts: vec!["t.example".into()],
+                },
             },
             formats: vec![BodyFormat::Html, BodyFormat::Text],
             attachments: vec![AttachmentInfo {
@@ -511,7 +548,9 @@ mod tests {
                 "body": { "kind": "html",
                           "srcdoc": "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'\">",
                           "renderToken": "0123456789abcdef0011223344556677",
-                          "blockedRemote": 3, "remoteLoaded": false },
+                          "blockedRemote": 3, "remoteLoaded": false,
+                          "trackers": { "pixels": 1, "knownHosts": 0, "parameters": 2,
+                                        "hosts": ["t.example"] } },
                 "formats": ["html", "text"],
                 "attachments": [{ "index": 0, "name": "Rechnung.pdf", "mimeType": "application/pdf",
                                   "size": 12_345, "executable": false, "local": true,
@@ -605,6 +644,7 @@ mod tests {
                 LinkWarning::UnsupportedScheme,
             ],
             openable: true,
+            tracking_removed: vec!["utm_source".into()],
         };
         assert_eq!(
             serde_json::to_value(&info).expect("serialize"),
@@ -618,7 +658,8 @@ mod tests {
                     { "kind": "credentialsInUrl" },
                     { "kind": "unsupportedScheme" }
                 ],
-                "openable": true
+                "openable": true,
+                "trackingRemoved": ["utm_source"]
             })
         );
         assert_eq!(

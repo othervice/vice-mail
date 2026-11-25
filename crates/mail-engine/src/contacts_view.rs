@@ -226,7 +226,7 @@ impl<C: Connector> crate::AppCore<C> {
 
     /// One step of the picture pipeline: in the helper when the app has one (always in the
     /// release build), else on the blocking pool (tests and tools), like previews (0043, 0046).
-    async fn picture_step(
+    pub(crate) async fn picture_step(
         &self,
         bytes: Vec<u8>,
         step: PictureStep,

@@ -327,6 +327,7 @@ fn account_of(
 ) -> Option<AccountId> {
     match key.kind() {
         RecordKind::Snooze
+        | RecordKind::FollowUp
         | RecordKind::Pin
         | RecordKind::Task
         | RecordKind::ReadingList
@@ -965,18 +966,20 @@ impl<C: Connector> AppCore<C> {
             self.emit_event(CoreEvent::SavedSearchesChanged);
         }
         // Stage 17 (decision 0050): names, notes, merges, pictures and spam marks of contacts.
-        if any(&["contact", "contactPicture", "blockedSender"]) {
+        // Stage 19 (decision 0056): contact groups too.
+        if any(&["contact", "contactPicture", "blockedSender", "contactList"]) {
             self.emit_event(CoreEvent::ContactsChanged);
         }
         if any(&["senderRule"]) {
             self.comfort().kick_categories();
         }
-        if any(&["snooze"]) {
+        if any(&["snooze", "followUp"]) {
             self.comfort().wake_snoozes();
         }
         if any(&[
             "senderRule",
             "snooze",
+            "followUp",
             "pin",
             "task",
             "rule",

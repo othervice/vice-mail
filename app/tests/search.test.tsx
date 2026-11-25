@@ -126,6 +126,21 @@ describe("search field", () => {
     });
   });
 
+  it("opens no hit by itself while the query is typed (stage 18, task F)", async () => {
+    const { core, user } = setup();
+    const input = await openSearch(user);
+    const before = core.callsOf("get_message").length;
+    await user.type(input, "fir");
+    await user.type(input, "ma");
+    const results = await screen.findByRole("listbox", { name: "Messages in the search results for “firma”" });
+    await within(results).findByRole("option");
+    for (const option of within(results).getAllByRole("option")) expect(option.getAttribute("aria-selected")).toBe("false");
+    expect(await screen.findByTestId("reading-empty")).toBeTruthy();
+    expect(core.callsOf("get_message")).toHaveLength(before);
+    // The focus stays in the field.
+    expect(document.activeElement).toBe(input);
+  });
+
   it("opens a hit in the reading pane with its own account", async () => {
     const { core, user } = setup();
     const input = await openSearch(user);
@@ -135,7 +150,9 @@ describe("search field", () => {
     const pane = await screen.findByRole("region", { name: "Message" });
     await showHeaderDetails(user, pane);
     expect(within(pane).getByTestId("reading-account").textContent).toBe("Work (work@example.com)");
-    expect(core.callsOf("get_message")).toEqual([{ messageId: WORK_INVOICE.id, format: "auto" }]);
+    // Stage 18 (task F): the folder under the search showed its top message before; the click
+    // opened the hit.
+    expect(core.callsOf("get_message").at(-1)).toEqual({ messageId: WORK_INVOICE.id, format: "auto" });
     // The actions of the hit's own account and folder (read-only here: shown, but disabled).
     const toolbar = await within(pane).findByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).getByRole("button", { name: /^Archive/ }).getAttribute("aria-disabled")).toBe("true");
