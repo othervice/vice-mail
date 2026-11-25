@@ -138,7 +138,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `message.gm_msgid`, `message.gm_labels` | stage 14 (0034): Gmail's `X-GM-MSGID` (one mail across all labels) and `X-GM-LABELS` (JSON, decoded, supplemented with the label of the folder read); NULL for other servers | Cache |
 | `account_server` | stage 14 (0034): what the last login said about the server, `gmail` = `X-GM-EXT-1`; not on `account`, whose trigger feeds the sync | Device |
 | `thread` | account, normalised subject, last message, count, unread | Cache |
-| `attachment` | message, MIME part, file name, type, size, Content-ID | Cache |
+| `attachment` | from stage 20 (0060): the attachments of every message whose body (or, for a large message, its structure and text) is stored: message, index as in the reading pane, file name (also in lower case for the search), MIME type, kind (image, PDF, document, spreadsheet, archive, other), size, IMAP part of a partial body; written with the body's search index; feeds the "Attachments" view | Cache |
 | `message_body`, `message_body_part` | reference to the compressed body file (whole mail or individual parts of large mails), size, checksum | Cache |
 | `remote_content_sender` | senders whose external images are always loaded (account UUID, normalised address) | sync |
 | `message_fts` | FTS5 index over subject, sender, recipients, text, attachment names | Cache |
@@ -152,6 +152,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `recent_search` | recent searches of this device: query, last used; at most 10 (stage 7, 0026) | Device |
 | `sender_rule` | correction "always as …" and important marker per address, domain or list (stage 9) | sync |
 | `snooze`, `pin`, `task` | reference to the mail via account UUID and Message-ID, point in time; snooze with return time, task with done time (stage 9, 0020) | sync |
+| `follow_up` | "Remind me if no reply by …" (stage 20, 0059): account UUID and Message-ID of a sent mail, due time, time of sending; `returned_at` (this device only) once it came back without a reply; nothing on the server. `draft.follow_up_at` holds the choice made in the composer until the server accepted the mail | sync (`returned_at` Device) |
 | `reading_list` | reading list "Reading list": account UUID, Message-ID, added; no keyword on the server (stage 16, 0033) | sync |
 | `mailbox_pref` | favourite folders (position) and folder colour (index 0–7 of the account colours) per account UUID and decoded path; only while one of them is set (stage 16, 0033) | sync |
 | `blocked_sender`, `blocked_hidden` | blocked senders (normalised address); hidden mails of blocked senders on accounts without write access or without a spam folder (account UUID, Message-ID, sender) (stage 16, 0033) | sync and Device respectively |
@@ -160,6 +161,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `setting` | key, value, scope, version | sync, where registered as syncable |
 | `setting` `ai.settings` | AI in the app (stage 13, 0024): switch, provider profiles (kind, base URL, model), profile per function, cloud approval per account, consent per profile and host, notices of open replies; keys only in the keychain (`ai-profile:<id>`) | Device |
 | `setting` `ui.*` | UI (stage 8, 0025): changed shortcuts per platform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) and text size (`ui.text_size`) sync; recently used commands of the palette (`ui.recent_commands`), state of the AI panel (`ui.ai_panel`, 0028) and layout per window kind (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: reading pane, density, accounts-and-folders column visible (default yes) and its width 200–320 px, default 240) Device; plus `compose.default_quote_position` (position of the reply in new replies, sync like the send delay); from stage 16 (0033) `compose.archive_on_reply` and `compose.read_receipts` sync, `ui.unread_first` (views with "Unread first") Device, (0036) `ui.accent_theme` (colour theme, one of six, default blue per 0053, orange per 0038 before; a stored choice stays) sync, (0039) `ui.conversations` (conversation view, default on) sync, stage 17 `ui.column_views` (views of the column and the rail: order, shown or hidden; `[]` is the default) sync | sync and Device respectively |
+| `setting` `reading.block_trackers`, `reading.clean_links`, `compose.attachment_reminder` | stage 20 (0058): block tracking pixels and images of known tracking services (default on), strip tracking parameters from links when they are described and opened (default on), ask before sending when the text speaks of an attachment and none is there (default on) | sync |
 | `ai_request` | request log of the in-app AI, metadata only (function, profile, host, local, model, mails, bytes, result, error code, duration; 30 days, at most 10,000) (stage 13, 0024) | Device |
 | `open_reply_dismissal` | dismissed notices of open replies (stage 13, 0024) | Device |
 | `mcp_state`, `mcp_account`, `mcp_client`, `mcp_access` | AI via MCP (stage 12, 0021): main switch and Windows pipe name, approval per account, registered clients (key in the keychain, only the reference here), access log with metadata only (30 days, at most 10,000 entries) | Device |
@@ -253,6 +255,17 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   trash and spam as a range of the partial index `loc_flagged`, merged via `UNION ALL`; every mail
   once, in the inbox if it is flagged there, otherwise in the newest folder in which it is flagged;
   at most 1,000 in one answer like the other mark views (`listFlagged`). No migration.
+- Stage 20 (`docs/decisions/0059-erinnern-wenn-keine-antwort-kommt.md`,
+  `docs/decisions/0060-anhaenge-ansicht-und-postfach-speicher.md`): a reply to a mail with a
+  reminder is a message of its thread (via `thread_ref`, so also when the own copy is not stored)
+  in any folder of the account, sorted after the sending and not from an own address; checked one
+  second after the last `messagesChanged` of an account with reminders, when a reminder falls due
+  and when one is set. The "Attachments" view walks `attachment` backwards by primary key or by
+  `attachment_kind (kind, message_id)` with keyset `(message_id, idx)`; account, file name and sender
+  are filters on that walk, Trash and Junk are left out. Measured (debug build, 20,000 attachments):
+  a first page with any filter under 400 ms, a test checks the plan (no temporary B-tree).
+  The search language knows `larger:` (`größer:`; sizes with K, M, G, B; `-larger:` is smaller),
+  local only, over `message.size`.
 - From the re-measurement of stage 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): queries on
   a partial index that becomes empty after a catch-up run (`message_category_todo`,
   `message_contacts_todo`) name it via `INDEXED BY`. Otherwise `PRAGMA optimize` on close
@@ -383,7 +396,7 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   `crates/mail-imap/src/tests/gmail.rs`).
 - JMAP (stage 14, 0041): a read-only connection sends only methods of an allowlist
   (`Core/echo`, `*/get`, `*/query`, `*/changes`, `*/queryChanges`, `SearchSnippet/get`,
-  `Identity/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` and uploads
+  `Identity/get`, from stage 20 `Quota/get`); `Email/set`, `Email/import`, `Mailbox/set`, `EmailSubmission/set` and uploads
   fail with `read_only` before anything is sent. Writer and sender reject a read-only
   configuration before any connection (tests in `crates/mail-jmap/src/tests.rs`, wire-tap of the
   methods in `crates/mail-engine/tests/jmap.rs`). The connection of the settings sync (0041,
@@ -391,6 +404,11 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   before sending: `Mailbox/set` only to create the sync folder, `Email/import` only into it,
   `Email/set` only destroying listed mails of the folder or taking them out of it
   (`crates/mail-jmap/src/sync_folder.rs`).
+- Storage quota (stage 20, 0060): `GETQUOTAROOT` and `GETQUOTA` (RFC 9208) are on the read-only
+  allowlist; the reading connection asks `GETQUOTAROOT INBOX` only when the server announces
+  `QUOTA`, JMAP asks `Quota/get` (RFC 9425) only with `urn:ietf:params:jmap:quota`. The answer is
+  kept for 15 minutes. `NO [OVERQUOTA]` and the JMAP SetError `overQuota` become the error code
+  `over_quota` (not transient).
 - Exception, only after "Turn on sync" (stage 11, 0014, 0022): the connection of the
   settings sync may write to exactly one folder, the sync folder; every other
   writing line is rejected by the adapter with `read_only` before it is sent
@@ -505,6 +523,13 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
    happens via `setTimeout`, not via `requestAnimationFrame` (does not run in hidden windows).
 4. Approved external images are loaded by the Rust core: without cookies, without referrer, with a neutral
    identifier, with size and type limits.
+   Trackers (stage 20, 0058, setting `reading.block_trackers`, default on): the sanitiser counts
+   tracking pixels (external images of at most 2 × 2 px, a zero side, or hidden), images and CSS
+   images of known tracking services (`mail_content::trackers::KNOWN_TRACKER_HOSTS`) and images
+   with tracking parameters. Pixels and known services are never loaded, not even after "Load
+   once" or a sender approval: they are not listed as remote resources and keep the placeholder.
+   An image with tracking parameters loads, when approved, from its address without them. The
+   reading pane shows the count with an explanation.
 5. Links never open directly. A click shows the real target and warns on a mismatch with the
    link text or on suspicious domains. Opening happens in the system browser, only `http`, `https`, `mailto`.
    The only interception point is the navigation hook in Rust (`on_navigation`): in a frame
@@ -517,6 +542,10 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
    under a token of their own in the same register (at most 32 results alongside the 32
    renderings); the UI gets segments and opens a link only via
    `describeLink`/`openLink` with token and index, never with a URL.
+   From stage 20 (0058, setting `reading.clean_links`, default on) the core removes tracking
+   parameters (`utm_*`, `fbclid`, `gclid`, `mc_eid`, … in `mail_content::trackers`) from the target
+   it describes and opens; the other parameters keep their order and spelling. Redirect links of
+   tracking services are never resolved (that would call the service).
 6. For displaying mails, the app's CSP allows `style-src 'self' 'unsafe-inline'` (otherwise no
    mail CSS applies) and `frame-src 'self' http: https:` (otherwise WebKit discards link navigations before the
    hook sees them); scripts stay restricted to `'self'`. Under WebView2 it is open whether the hook
@@ -693,7 +722,8 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   the checked addresses. An exception, for loopback only, exists solely in tests
   (`RemoteConfig::allow_loopback`; in the desktop test build `MAIL_APP_E2E_LOOPBACK_IMAGES=1`, only with
   feature `e2e`). Limit: the `From` address can be forged; whoever forges an approved sender
-  gets their tracking pixels loaded, nothing more
+  gets their images loaded, nothing more (tracking pixels and known tracking services stay blocked
+  while `reading.block_trackers` is on, stage 20)
 - Links and attachments are opened not by the app but by the system (browser, mail program, default app),
   only after a click and a check, links only `http`, `https`, `mailto`
 - AI endpoints the user has set up and approved (stage 13, 0024): only the base URL
@@ -761,7 +791,7 @@ what only the app knows, and uses the mailbox itself as storage for it.
 |---|---|
 | Settings | per key the newer version wins |
 | Signatures, templates, rules, views | per record the newer version wins; editing beats simultaneous deletion |
-| Snooze, pins, tasks, reading list | per mail the newer version wins |
+| Snooze, pins, tasks, reading list, reminders without a reply (`followUp`, stage 20, 0059) | per mail the newer version wins; whether a reminder came back is decided by each device |
 | Pinned attachments | per attachment (account UUID, Message-ID, index) the newer version wins (stage 16, 0036) |
 | Folder settings (favourite, colour), blocked senders | per folder (account UUID and path) or address respectively the newer version wins (stage 16, 0033) |
 | Sender rules, image approvals, contact names and notes, contact pictures, devices | per key the newer version wins; contact pictures (stage 17, 0050) as their own kind `contactPicture`, shown only after this device's helper encoded them again |
@@ -919,6 +949,10 @@ Until the UI has been switched over, these values are still kept in the marked f
 
 | Decision | Reason | Way back |
 |---|---|---|
+| Trackers are counted and never loaded; links lose tracking parameters; redirects are not resolved (0058) | the user sees what the mail tried; the request for an approved image never carries tracking data; resolving a redirect would call the tracking service | turn off `reading.block_trackers` and `reading.clean_links` |
+| Reminders without a reply are local records like snoozes; any message of the thread from someone else ends them (0059) | no write on the server, works across folders and devices, stage 7 threading is exact | remove the `follow_up` table and the composer option |
+| The "Attachments" view lists the attachments of stored bodies (index written with the search index), not of every BODYSTRUCTURE (0060) | same index as the reading pane, no extra traffic in the sync; preloading decides how far back it reaches | read BODYSTRUCTURE in the header sync and write rows there |
+| Storage quota over the read-only connection, kept 15 minutes; cleanup via the search filter `larger:` (0060) | RFC 9208 / RFC 9425, nothing written; one cleanup path for both protocols | drop the block; the `over_quota` message stays |
 | Sync via a folder in the mailbox instead of our own server | only a few kilobytes to sync; no server, no login, no pairing, usable by everyone | second transport via `SettingsTransport` |
 | No database encryption in version 1 | FileVault and BitLocker protect the disk; SQLCipher costs speed and makes Windows builds harder | rusqlite can switch on SQLCipher via a feature |
 | rusqlite instead of SQLx | one process, one writer; synchronous is simpler and faster | storage access is encapsulated behind `mail-store` |
