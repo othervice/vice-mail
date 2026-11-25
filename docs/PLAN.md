@@ -38,6 +38,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | fertig (0.1.1) | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen, Hell mit Blau und Dunkel wie GitHub |
 | 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | fertig (0.1.1) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
 | 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
+| 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | sammelt (Mensch testet) | Rückmeldungen aus dem Test von 0.1.1, gebaut wird erst nach der vollständigen Liste |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
