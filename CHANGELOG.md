@@ -57,6 +57,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   display's scale (16 to 40 px) with pixel-exact digits ("99+" above 99), and the window's
   taskbar icon uses the icon's own drawing of that size. The macOS Dock badge stays current while
   no window is open.
+- Spacing pass over every view: the quick filter beside the reading pane is one row (its chips
+  show their icons, the names as tooltips) and ends level with the reading pane's toolbar; the AI
+  panel's header is as high as the others; icon and label are 8 px apart in buttons, menus, lists
+  and the palette (4 px in chips); section labels line up with the rows below them; attachment
+  cards are wider so names stay readable; the "n replies" pill never shows a cut-off ellipsis;
+  German menu entries keep their "…" on the same line. A test now rejects spacing, size, font and
+  radius classes that the design tokens do not define (they produced no CSS, which had left some
+  menus, fields and icons without their padding or size).
 
 ### Fixed
 
