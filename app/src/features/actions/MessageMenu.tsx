@@ -207,10 +207,13 @@ export function MessageMenu({ request, scopes, platform, knownTags, onClose }: M
   };
   const present = (entries: readonly (MenuEntry | null | false | undefined)[]): MenuEntry[] =>
     entries.filter((entry): entry is MenuEntry => Boolean(entry));
-  const submenu = (id: string, label: string, icon: LucideIcon, entries: readonly (MenuEntry | null | false | undefined)[]): SubmenuEntry | null => {
+  const submenu = (id: string, label: string, icon: LucideIcon, entries: readonly (MenuEntry | null | false | undefined)[]): SubmenuEntry | MenuItemEntry | null => {
     const shown = present(entries);
     // A submenu of separators and headings only offers nothing.
     if (!shown.some((entry) => entry.kind === "item" || entry.kind === "submenu")) return null;
+    // One whose every entry is disabled for a read-only account is disabled as a whole, with why.
+    const readOnly = shown.every((entry) => entry.kind !== "submenu" && (entry.kind !== "item" || entry.describedBy === noteId));
+    if (readOnly) return { kind: "item", id, label, icon, ...readOnlyProps(label), onSelect: () => undefined, testId: `menu-${id}` };
     return { kind: "submenu", id, label, icon, entries: shown, testId: `menu-${id}` };
   };
   /** A submenu whose every entry needs writes: disabled as a whole on a read-only account. */

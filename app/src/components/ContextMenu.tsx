@@ -335,6 +335,8 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
       }
       default:
     }
+    // No other key reaches the view while the menu has the focus ("#" would delete the selection).
+    event.stopPropagation();
     // Type-ahead: the next item whose label starts with what was typed.
     if (event.key.length === 1 && /\p{L}|\p{N}/u.test(event.key) && !event.altKey && !event.ctrlKey && !event.metaKey) {
       handled();

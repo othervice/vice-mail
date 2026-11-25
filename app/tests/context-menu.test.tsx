@@ -456,9 +456,17 @@ describe("the context menu of messages", () => {
       expect(item.getAttribute("aria-describedby")).toBe(noteId);
       expect(item.getAttribute("title")).toBe(`${name}: changes are turned off for this account`);
     }
-    const move = within(menu).getByRole("menuitem", { name: "Move to" });
-    expect(move.getAttribute("aria-disabled")).toBe("true");
-    expect(move.getAttribute("aria-haspopup")).toBeNull();
+    // Submenus whose every entry writes are disabled as a whole.
+    for (const name of ["Move to", "Tags", "Mark"]) {
+      const trigger = within(menu).getByRole("menuitem", { name });
+      expect(trigger.getAttribute("aria-disabled")).toBe("true");
+      expect(trigger.getAttribute("aria-describedby")).toBe(noteId);
+      expect(trigger.getAttribute("aria-haspopup")).toBeNull();
+    }
+    // Copying needs the target to write: no other account here, so nothing to copy to either.
+    expect(within(menu).getByRole("menuitem", { name: "Copy to" }).getAttribute("aria-disabled")).toBe("true");
+    // Answering writes a local draft (redirecting sends, it is disabled inside).
+    expect(within(menu).getByRole("menuitem", { name: "Reply and forward" }).getAttribute("aria-haspopup")).toBe("menu");
     // Local marks still work.
     expect(within(menu).getByRole("menuitem", { name: "Pin" }).getAttribute("aria-disabled")).toBeNull();
     await user.click(within(menu).getByRole("menuitem", { name: "Archive" }));
@@ -475,8 +483,10 @@ describe("the context menu of messages", () => {
       const { user } = setup({ theme, account: makeAccount({ writesEnabled: false }) });
       const listbox = await list();
       const menu = await rightClick(row(listbox, "Message 2"));
-      await user.click(within(menu).getByRole("menuitem", { name: "Mark" }));
-      await screen.findByRole("menu", { name: "Mark" });
+      // A submenu with a disabled entry and its reason (Redirect sends).
+      await user.click(within(menu).getByRole("menuitem", { name: "Reply and forward" }));
+      const sub = await screen.findByRole("menu", { name: "Reply and forward" });
+      expect(within(sub).getByRole("menuitem", { name: "Redirect" }).getAttribute("aria-disabled")).toBe("true");
       expect(document.documentElement.dataset["theme"]).toBe(theme);
       expect(await seriousFindings()).toEqual([]);
     });
