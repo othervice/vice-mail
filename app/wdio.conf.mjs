@@ -106,6 +106,8 @@ export const config = {
     // mbox into and out of Archive, the Thunderbird fixture. They append to INBOX and Archive.
     "./tests/e2e/stage19-message-tools.e2e.mjs",
     "./tests/e2e/stage19-contacts-folders.e2e.mjs",
+    // Stage 21: sets up alice (writable) and bob (read-only) itself and removes them again.
+    "./tests/e2e/context-menu.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

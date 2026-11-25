@@ -297,6 +297,33 @@ def bob_message(mark: str) -> dict:
         }
 
 
+def folder_count(folder: str, mark: str) -> dict:
+    """Stage 21: how many of alice's messages in `folder` have `mark` in their subject (EXAMINE)."""
+    env = load_env()
+    imap = login(env)
+    try:
+        check(*imap.select(quoted(folder), readonly=True), f"EXAMINE {folder}")
+        uids = check(*imap.uid("SEARCH", "SUBJECT", f'"{mark}"'), "SEARCH")[0].split()
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    return {"folder": folder, "count": len(uids)}
+
+
+def append_bob(files: list[str]) -> dict:
+    """Stage 21: appends .eml files unchanged to bob's INBOX (a second account in the unified inbox)."""
+    env = load_env()
+    with imaplib.IMAP4_SSL(
+        env["TESTMAIL_HOST"], int(env["TESTMAIL_IMAPS_PORT"]), ssl_context=tls_context(env), timeout=30
+    ) as imap:
+        imap.login(env["TESTMAIL_BOB_ADDRESS"], env["TESTMAIL_BOB_PASSWORD"])
+        for name in files:
+            raw = Path(name).read_bytes()
+            check(*imap.append("INBOX", None, internal_date(raw), raw), f"APPEND {name}")
+        return {"folder": "INBOX", "appended": [Path(name).name for name in files]}
+
+
 def selectable_folders(imap: imaplib.IMAP4_SSL) -> list[str]:
     """Selectable folder names (raw wire names; the seed's non-ASCII folder stays encoded)."""
     names = []
@@ -381,6 +408,12 @@ def main() -> int:
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "reply-to":
         print(json.dumps(reply_to(sys.argv[2])))
+        return 0
+    if len(sys.argv) == 4 and sys.argv[1] == "folder-count":
+        print(json.dumps(folder_count(sys.argv[2], sys.argv[3])))
+        return 0
+    if len(sys.argv) >= 3 and sys.argv[1] == "append-bob":
+        print(json.dumps(append_bob(sys.argv[2:])))
         return 0
     if len(sys.argv) == 4 and sys.argv[1] == "copy-seed":
         print(json.dumps(copy_seed(sys.argv[2], sys.argv[3])))
