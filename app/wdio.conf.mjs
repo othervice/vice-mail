@@ -98,6 +98,9 @@ export const config = {
     // moves the app's clock forward), the attachments view, trackers and the quota (it sets and
     // clears a storage limit for alice). Appends three messages to the inbox.
     "./tests/e2e/stage20.e2e.mjs",
+    // Stage 21, items 8 and 9 (decisions 0066, 0067): mails in the dark theme and colours in sent
+    // mail. Appends a newsletter to the inbox and sends one mail to alice.
+    "./tests/e2e/dark-mails.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.
