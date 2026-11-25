@@ -249,6 +249,10 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   `VICEMAIL_UPDATER=1` in der grafischen Sitzung), im Gitea-Release `v0.1.0`; Dateien nach dem
   Hochladen geladen und gegen `SHA256SUMS` geprüft. Das GitHub-Release folgt nach der Durchsicht
   durch den Menschen und dem Umschalten auf öffentlich.
+- Release 0.1.1 (Stufen 18–20) aus 79f9b33 am 25.11.2026 auf dieselbe Weise, Gitea-Release
+  `v0.1.1` (Vorabversion wie 0.1.0); Starttest der App aus dem DMG bestanden, Dateien nach dem
+  Hochladen gegen `SHA256SUMS` geprüft. Die App aus 0.1.0 findet es nicht von selbst, solange
+  GitHub privat ist (der Updater fragt nur GitHub).
 
 **Wartet auf**
 - Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows
