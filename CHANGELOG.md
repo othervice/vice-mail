@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-25
+
 ### Added
 
 - "Mark folder as read" in every folder's menu (also on a right click): every unread message of
@@ -299,6 +301,7 @@ were never published. How each part was built and tested is recorded per stage i
 - Not planned for version 1: PGP and S/MIME, calendar and contact sync, POP3, encryption of the
   local database (use FileVault or BitLocker).
 
-[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/othervice/vice-mail/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/othervice/vice-mail/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/othervice/vice-mail/releases/tag/v0.1.0

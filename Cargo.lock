@@ -3472,7 +3472,7 @@ dependencies = [
 
 [[package]]
 name = "mail-ai"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "getrandom 0.4.3",
  "mail-content",
@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "mail-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "mail-engine",
  "mail-model",
@@ -3532,7 +3532,7 @@ dependencies = [
 
 [[package]]
 name = "mail-content"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ammonia",
  "cssparser 0.38.0",
@@ -3551,7 +3551,7 @@ dependencies = [
 
 [[package]]
 name = "mail-engine"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "age",
  "apple-native-keyring-store",
@@ -3589,7 +3589,7 @@ dependencies = [
 
 [[package]]
 name = "mail-imap"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-imap",
  "lettre",
@@ -3607,7 +3607,7 @@ dependencies = [
 
 [[package]]
 name = "mail-jmap"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "mail-content",
  "mail-imap",
@@ -3625,7 +3625,7 @@ dependencies = [
 
 [[package]]
 name = "mail-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "getrandom 0.4.3",
  "hmac 0.13.0",
@@ -3646,7 +3646,7 @@ dependencies = [
 
 [[package]]
 name = "mail-model"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3671,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "mail-store"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "mail-model",
  "rusqlite",
@@ -7460,7 +7460,7 @@ dependencies = [
 
 [[package]]
 name = "webview2-guard"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tracing",
  "webview2-com",
