@@ -74,7 +74,10 @@ function BatchRow({ account, batch, mailboxes }: { account: Account; batch: Batc
 
   const states = new Set(operations.map((operation) => operation.state));
   const { icon: Icon, className } = stateIcon(states);
-  const messages = new Set(operations.flatMap((operation) => (operation.messageId === null ? [] : [operation.messageId]))).size;
+  // Stage 21: a folder marked as read is one operation for many messages.
+  const messages =
+    new Set(operations.flatMap((operation) => (operation.messageId === null ? [] : [operation.messageId]))).size +
+    operations.reduce((sum, operation) => sum + (operation.messageCount ?? 0), 0);
   const from = distinct(operations.map((operation) => folderName(operation.mailboxId)));
   const to = distinct(operations.map((operation) => folderName(operation.targetMailboxId)));
   const errors = distinct(operations.map((operation) => (operation.state === "failed" ? (operation.error?.code ?? null) : null)));

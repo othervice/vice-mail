@@ -66,6 +66,7 @@ impl StoredOperation {
             mailbox_id: self.mailbox_id,
             message_id: self.message_id,
             target_mailbox_id: self.target_mailbox_id,
+            message_count: self.payload.message_count(),
             attempts: self.attempts,
             error: self.last_error.clone(),
             conflict: self.conflict,

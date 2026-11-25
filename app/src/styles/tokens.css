@@ -173,9 +173,9 @@
   --ui-form-max-width: 36rem;
   /* The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): 15 rem by default; the
      drag handle at its edge sets it between 200 and 320 px on the column itself. The menu of its
-     rows fits into the narrowest column. */
+     rows is as wide as the column's rows, at most this (stage 21: `OverflowMenu narrow`). */
   --ui-sidebar-width: 15rem;
-  --ui-sidebar-menu-width: 12rem;
+  --ui-sidebar-menu-width: 16rem;
   /* Avatars: 32 px in rows and the rail, 16 px in the sender chips of bundles. */
   --ui-avatar: 2rem;
   --ui-avatar-mini: 1rem;

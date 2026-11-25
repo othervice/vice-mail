@@ -16,6 +16,10 @@
 //! **Cancelling.** A new flag operation whose value equals the `before` of a still queued one
 //! on the same location and flag removes that one instead of queueing a second (read, then
 //! unread before the server saw either: nothing to send).
+//!
+//! **Folder marks (stage 21, decision 0063).** `mark_mailbox` sets `\Seen` on a stored set of
+//! UIDs of one folder (`mark_read`). It is applied again after sync writes like a flag
+//! operation, in recorded order with them, and reverted, undone and retried as a whole.
 
 use std::collections::BTreeSet;
 
@@ -23,7 +27,7 @@ use mail_model::{
     AccountId, ActionError, ActionKind, BatchId, ConflictReason, CoreError, Flag, FlagUpdate,
     Flags, IpcError, MailAction, MailboxId, MailboxRole, MessageId, MessageRef, ModSeq,
     OperationId, OperationNotice, OperationPayload, OperationState, OutboxCounts, PlanLocation,
-    PlanMailbox, SourceLocation, TargetMailbox, Uid, UidValidity, plan_action,
+    PlanMailbox, SourceLocation, TargetMailbox, Uid, UidSet, UidValidity, plan_action,
 };
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -532,59 +536,106 @@ pub(crate) fn insert_location_if_free(
     Ok(inserted > 0)
 }
 
-/// Applies the pending flag operations of one location again, in order, skipping `except`.
+/// Applies one pending operation's local effect again: a flag operation on its location, a
+/// folder mark (stage 21) on its UIDs, or only on `only` when given.
+fn reapply(
+    conn: &Connection,
+    payload: &OperationPayload,
+    only: Option<Uid>,
+) -> Result<bool, StoreError> {
+    match payload {
+        OperationPayload::SetFlag {
+            source,
+            flag,
+            value,
+            ..
+        } => set_local_flag(conn, source, flag, *value),
+        OperationPayload::MarkMailbox {
+            mailbox,
+            uid_validity,
+            uids,
+            seen,
+        } => {
+            let one;
+            let uids = match only {
+                Some(uid) => {
+                    one = UidSet::from_uids([uid]);
+                    &one
+                }
+                None => uids,
+            };
+            Ok(
+                crate::mark_read::set_seen(conn, mailbox.mailbox_id, *uid_validity, uids, *seen)?
+                    > 0,
+            )
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Applies the pending flag operations of one location again, in order, skipping `except`;
+/// pending folder marks (stage 21) that cover the location take their place in that order.
 fn reapply_pending_at(
     conn: &Connection,
     mailbox: MailboxId,
     uid: Uid,
     except: Option<OperationId>,
 ) -> Result<bool, StoreError> {
-    let ops = conn
+    let mut ops = conn
         .prepare_cached(PENDING_FLAGS_AT)?
         .query_map(params![mailbox.0, uid], |r| {
             Ok((OperationId(r.get(0)?), payload_at(r, 2)?))
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    let marks = crate::mark_read::pending_marks(conn, mailbox)?;
+    if !marks.is_empty() {
+        ops.extend(marks.into_iter().filter(|(_, payload)| {
+            matches!(payload, OperationPayload::MarkMailbox { uids, .. } if uids.contains(uid))
+        }));
+        ops.sort_by_key(|(id, _)| *id);
+    }
     let mut changed = false;
     for (id, payload) in ops {
         if Some(id) == except {
             continue;
         }
-        if let OperationPayload::SetFlag {
-            source,
-            flag,
-            value,
-            ..
-        } = &payload
-        {
-            changed |= set_local_flag(conn, source, flag, *value)?;
-        }
+        changed |= reapply(conn, &payload, Some(uid))?;
     }
     Ok(changed)
 }
 
-/// After a sync write: the pending flag operations of `mailbox` win over what the server said
-/// until it confirmed them. One index probe when nothing is pending. Returns whether a location
-/// changed.
+/// After a sync write: the pending flag operations and folder marks of `mailbox` win over what
+/// the server said until it confirmed them, applied in recorded order. Two index probes when
+/// nothing is pending. Returns whether a location changed.
 pub(crate) fn reapply_pending_in_mailbox(
     conn: &Connection,
     mailbox: MailboxId,
 ) -> Result<bool, StoreError> {
-    let ops = conn
+    reapply_in_mailbox(conn, mailbox, None)
+}
+
+fn reapply_in_mailbox(
+    conn: &Connection,
+    mailbox: MailboxId,
+    except: Option<OperationId>,
+) -> Result<bool, StoreError> {
+    let mut ops = conn
         .prepare_cached(PENDING_FLAGS_IN)?
-        .query_map([mailbox.0], |r| payload_at(r, 2))?
+        .query_map([mailbox.0], |r| {
+            Ok((OperationId(r.get(0)?), payload_at(r, 2)?))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
+    let marks = crate::mark_read::pending_marks(conn, mailbox)?;
+    if !marks.is_empty() {
+        ops.extend(marks);
+        ops.sort_by_key(|(id, _)| *id);
+    }
     let mut changed = false;
-    for payload in ops {
-        if let OperationPayload::SetFlag {
-            source,
-            flag,
-            value,
-            ..
-        } = &payload
-        {
-            changed |= set_local_flag(conn, source, flag, *value)?;
+    for (id, payload) in ops {
+        if Some(id) == except {
+            continue;
         }
+        changed |= reapply(conn, &payload, None)?;
     }
     Ok(changed)
 }
@@ -674,6 +725,18 @@ fn revert(conn: &Connection, op: &StoredOperation) -> Result<Option<MailboxId>, 
         OperationPayload::Move { source, .. } | OperationPayload::Expunge { source } => {
             Ok(reinsert_location(conn, source)?.then_some(source.mailbox_id))
         }
+        // Stage 21: the folder's messages back as they were; later pending changes on top.
+        OperationPayload::MarkMailbox {
+            mailbox,
+            uid_validity,
+            uids,
+            seen,
+        } => {
+            let id = mailbox.mailbox_id;
+            let changed = crate::mark_read::set_seen(conn, id, *uid_validity, uids, !*seen)? > 0;
+            let reapplied = reapply_in_mailbox(conn, id, Some(op.id))?;
+            Ok((changed || reapplied).then_some(id))
+        }
         // A failed send keeps its draft frozen (retry sends exactly what failed); cancelling
         // releases it (`compose::release_draft`).
         OperationPayload::CreateMailbox { .. }
@@ -743,7 +806,9 @@ impl<'a> Recorder<'a> {
                 // A renamed or deleted folder stands in the source column, for its pending state.
                 source
                     .map(|s| s.mailbox_id.0)
-                    .or_else(|| payload.changed_mailbox().map(|m| m.mailbox_id.0)),
+                    .or_else(|| payload.changed_mailbox().map(|m| m.mailbox_id.0))
+                    // Stage 21: a folder mark names its folder, without a UID.
+                    .or_else(|| payload.marked_mailbox().map(|m| m.mailbox_id.0)),
                 source.map(|s| s.message_id.0),
                 source.map(|s| s.uid),
                 payload.target().map(|t| t.mailbox_id.0),
@@ -787,6 +852,21 @@ impl<'a> Recorder<'a> {
                     .execute(params![mailbox.0, message.0])
                     .map_err(StoreError::sqlite("remove location"))?;
                 self.touched(mailbox);
+                Ok(())
+            }
+            // Stage 21: the folder's messages change at once, like a flag operation's location.
+            OperationPayload::MarkMailbox {
+                ref mailbox,
+                uid_validity,
+                ref uids,
+                seen,
+            } => {
+                let id = mailbox.mailbox_id;
+                let changed = crate::mark_read::set_seen(self.conn, id, uid_validity, uids, seen)?;
+                self.insert(&payload)?;
+                if changed > 0 {
+                    self.touched(id);
+                }
                 Ok(())
             }
             // Stage 5: their local effects (the frozen draft) are written by `compose`. Renamed
@@ -1115,13 +1195,16 @@ pub(crate) fn finish(
                             touched.insert(target.mailbox_id);
                         }
                     }
+                    // Stage 21: a folder mark is in place locally already; the sync the outbox
+                    // asks for brings the new MODSEQs.
                     OperationPayload::Expunge { .. }
                     | OperationPayload::CreateMailbox { .. }
                     | OperationPayload::Send(_)
                     | OperationPayload::Append { .. }
                     | OperationPayload::RemoveCopy { .. }
                     | OperationPayload::RenameMailbox { .. }
-                    | OperationPayload::DeleteMailbox { .. } => {}
+                    | OperationPayload::DeleteMailbox { .. }
+                    | OperationPayload::MarkMailbox { .. } => {}
                 }
                 (OperationState::Confirmed, None, None, *notice)
             }
@@ -1158,6 +1241,12 @@ pub(crate) fn finish(
                         }
                     }
                     touched.insert(source.mailbox_id);
+                }
+                // Stage 21: a folder that was rebuilt or is gone on the server: its messages as
+                // they were (in the old generation only); the sync shows the server's state.
+                if let OperationPayload::MarkMailbox { mailbox, .. } = &op.payload {
+                    revert(conn, &op)?;
+                    touched.insert(mailbox.mailbox_id);
                 }
                 // Moves and deletes: the location stays removed, the server has it elsewhere
                 // or not at all; the next sync shows where.
@@ -1283,6 +1372,28 @@ pub(crate) fn undo(
                     "the move is being sent right now; try again in a moment".into(),
                 )));
             }
+            // Stage 21: `\Seen` back off the same UIDs (or on again, undoing an undo).
+            (
+                _,
+                OperationPayload::MarkMailbox {
+                    mailbox,
+                    uid_validity,
+                    uids,
+                    seen,
+                },
+            ) => {
+                if generation(conn, mailbox.mailbox_id)? != Some(*uid_validity) {
+                    return Err(StoreError::Action(ActionError::NotUndoable(
+                        "the folder was rebuilt on the server or no longer exists".into(),
+                    )));
+                }
+                steps.push(Step::Inverse(OperationPayload::MarkMailbox {
+                    mailbox: mailbox.clone(),
+                    uid_validity: *uid_validity,
+                    uids: uids.clone(),
+                    seen: !*seen,
+                }));
+            }
             (_, OperationPayload::Expunge { .. }) => {
                 return Err(StoreError::Action(ActionError::NotUndoable(
                     "the message was deleted for good".into(),
@@ -1389,6 +1500,22 @@ pub(crate) fn retry(
             OperationPayload::Expunge { source }
         }
         create @ OperationPayload::CreateMailbox { .. } => create,
+        // Stage 21: the same UIDs again, if the folder is still in that generation.
+        mark @ OperationPayload::MarkMailbox { .. } => {
+            if let OperationPayload::MarkMailbox {
+                mailbox,
+                uid_validity,
+                ..
+            } = &mark
+                && generation(conn, mailbox.mailbox_id)? != Some(*uid_validity)
+            {
+                return Err(StoreError::NotFound(format!(
+                    "mailbox {} in that generation",
+                    mailbox.mailbox_id
+                )));
+            }
+            mark
+        }
         folder @ (OperationPayload::RenameMailbox { .. }
         | OperationPayload::DeleteMailbox { .. }) => folder,
         OperationPayload::Send(mut job) => {

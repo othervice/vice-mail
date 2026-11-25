@@ -109,6 +109,22 @@ pub async fn delete_mailbox(
         .map_err(to_ipc("delete_mailbox"))
 }
 
+/// Stage 21: marks every unread message of these folders of one account as read ("Mark
+/// folder as read"; on the account its inbox and own folders). One undo for all (`batch`).
+/// `requestId` is a UUID per user action. Refused: `read_only`, `not_found`, `invalid_argument`.
+#[tauri::command]
+#[specta::specta]
+pub async fn mark_mailboxes_read(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    mailbox_ids: Vec<MailboxId>,
+    request_id: String,
+) -> Result<ActionResult, IpcError> {
+    core.mark_mailboxes_read(account_id, mailbox_ids, request_id)
+        .await
+        .map_err(to_ipc("mark_mailboxes_read"))
+}
+
 /// The account's operations, newest first, below `before` (activity view). `limit` 1..500.
 #[tauri::command]
 #[specta::specta]

@@ -144,7 +144,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `message_body`, `message_body_part` | reference to the compressed body file (whole mail or individual parts of large mails), size, checksum | Cache |
 | `remote_content_sender` | senders whose external images are always loaded (account UUID, normalised address) | sync |
 | `message_fts` | FTS5 index over subject, sender, recipients, text, attachment names | Cache |
-| `operation` | outbox: kind, payload, idempotency key, state, attempts, last error | Device |
+| `operation` | outbox: kind, payload, idempotency key, state, attempts, last error; from stage 21 (0063, migration 0027) also `mark_mailbox`: one row per folder marked as read, `mailbox_id` set and `uid` NULL, the UIDs as a sequence set in the payload | Device |
 | `draft` | UUID, account, identity, headers, Message-ID (fixed from creation), text, quote, signature yes/no and chosen signature (stage 10), attachments and inline images (with Content-ID) as references to our own copies under `compose/`, state (`editing`/`sending`), revision, server copy (folder, UIDVALIDITY, UID, revision) (0018, 0023); `kept_original`: Message-ID of another program's draft that stays untouched in the folder because the editor could not take it over completely (0047) | Device (reconciled via IMAP) |
 | `contact` | one row per address: key, spelling, counter, last used, rank (REAL with index), names, `user_name`, folded search words, `contact_group` for merged contacts (0016, 0018, 0023); from stage 17 (0050) `seen`/`last_seen` (copied, Reply-To), `personal`, `kind` (person, list, system) and the user's `note` | Cache; name, merging and note sync |
 | `contact_picture` | stage 17 (0050): the picture the user chose for a contact, per normalised address: `image` (JPEG, 256 × 256 px, at most 40 KiB, written by the helper), `display` (the JPEG this device's helper wrote; for a synced picture `NULL` until then), `revision` | sync (`image` only) |
@@ -362,6 +362,18 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   file is read line by line on the blocking pool, one message at a time (at most 64 MiB); at most 50
   appends wait at once. Background job with `mboxJobChanged` and cancel (the waiting appends leave the
   outbox). Only with write access, checked before anything is read.
+- From stage 21 (0063), **marking folders as read:** `markMailboxesRead(account, mailboxes)`
+  records one `mark_mailbox` operation per folder with unread mail, all in one batch: the
+  folder's UIDVALIDITY and the UIDs that were unread then (sequence-set text in the payload). The
+  same transaction marks exactly those locations read (counters drop at once); after sync writes
+  the folder's pending marks are applied again in recorded order with the per-message flag
+  operations. Executed as `UID STORE <set> +FLAGS (\Seen)` on the recorded UIDs only (never
+  `1:*`: mail that arrived later stays unread; no `UNCHANGEDSINCE`), in parts of at most 250
+  ranges and 5,000 UIDs; JMAP through the same `store_flags` (`Email/set` in `maxObjectsInSet`
+  batches). In flight after a crash it is simply sent again; a refused part fails it and reverts
+  the folder, another UIDVALIDITY or a missing folder is a conflict. Undo clears `\Seen` on the
+  same set (refused once the folder was rebuilt); retry sends the same set. The account's "Mark
+  all as read" passes its inbox and own folders, the unified inbox one call per account.
 - From 2026-11-24 (alignment with SPEC), **renaming and deleting folders:** only the user's own folders (without
   a role), only with write access, one change per folder at a time; deleting only without subfolders
   and with a confirmation that names the mails stored here. `rename_mailbox` and
@@ -1060,6 +1072,7 @@ Until the UI has been switched over, these values are still kept in the marked f
 | Images in mails only re-encoded, in the helper (0046) | the system's image decoders see no bytes from mails (C-4); one batch per rendering, cache in memory, about 20 ms per newsletter | re-encoding in the app process (same code, only without isolation) |
 | New mail in an app-owned popup window instead of a system notification (0051) | Read and Delete as real buttons, Undo, a disabled Delete with its reason, the contact picture and two lines of snippet; desktop notification actions only show as an "Options" menu on macOS and cannot be updated or removed | `newMailStyle: system` per user; remove `NewMailStyle` and the popup window |
 | Every address a contact, with a kind; pictures in the database, encoded in the helper; "mark as spam" is the stage 16 block (0050) | the user asked for every address, own pictures and spam marks; ranks stay as they were (only own and personal mail rank), one block list, pictures transactional and synced like the rest | `ContactFilter::People` hides lists and system addresses; pictures can be dropped without touching the rest |
+| "Mark folder as read" as one outbox operation per folder on the stored unread UIDs (0063) | thousands of unread mails would be thousands of `set_flag` rows and (with CONDSTORE) one STORE per MODSEQ; `1:*` would also mark mail the user never saw; undo stays exact | per-message `markRead` on all unread locations (capped at 10,000 per action) |
 | Gmail via IMAP with its extensions instead of the Gmail API (0034) | labels, one mail via `X-GM-MSGID` and archiving work with the existing adapter, without a Google project | Gmail API in block C |
 | Windows installer via cross-build from the Mac | no Windows build machine needed | build on real Windows or hosted runners in stage 15 |
 | Four crates instead of eleven | only draw boundaries once they have proven themselves | split as soon as a crate has two clearly separate tasks |

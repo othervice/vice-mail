@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- "Mark folder as read" in every folder's menu (also on a right click): every unread message of
+  the folder is marked as read at once and on the server, with "Undo". "Mark all as read" on an
+  account does the same for its inbox and its own folders, and on "All inboxes" or an account
+  group for the inboxes shown there. Mail that arrives meanwhile stays unread. Works with IMAP and
+  JMAP accounts; for accounts that only read, the entry says why it is unavailable.
+
 ### Changed
 
 - HTML mail in the dark theme is adapted instead of lying on a white page: the app turns light
@@ -18,6 +26,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sent mail carries no text or background colour and says it suits light and dark
   (`color-scheme: light dark`), so it reads well in the recipient's light or dark theme; code
   blocks get a grey line instead of a light grey background.
+
+### Fixed
+
+- The menu of a folder in the sidebar could stick out of the window on the left and leave the
+  whole column scrolled sideways with its labels cut off. Menus of the column now fit its width
+  and wrap long entries, the column never scrolls sideways, and every menu opens above its button
+  or moves back in when there is no room for it.
 
 ## [0.1.1] - 2026-11-25
 

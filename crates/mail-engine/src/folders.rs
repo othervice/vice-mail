@@ -4,6 +4,8 @@
 //! until the server confirmed. JMAP accounts cannot do either yet: the JMAP adapter has no
 //! `Mailbox/set` rename or destroy behind the writer trait, so the core refuses them with
 //! [`ActionError::FolderChangesUnsupported`] before anything is recorded.
+//!
+//! Stage 21 (decision 0063): marking folders as read, also on JMAP accounts.
 
 use mail_model::{AccountId, ActionError, ActionResult, CoreError, MailboxId, Protocol};
 
@@ -36,6 +38,24 @@ impl<C: Connector> AppCore<C> {
     ) -> Result<ActionResult, CoreError> {
         self.folder_changes_supported(account).await?;
         self.outbox_ref()?.delete_mailbox(account, mailbox).await
+    }
+
+    /// Stage 21 (decision 0063): marks every unread message of these folders of `account` as
+    /// read ("Mark folder as read", and "Mark all as read" on the account: its inbox and own
+    /// folders). Local at once, then one operation per folder with the UIDs that were unread, in
+    /// one batch for [`AppCore::undo_action`]; IMAP and JMAP alike. `request_id` as in
+    /// [`AppCore::apply_action`]. Refused before anything changes: `read_only`, `not_found` (a
+    /// folder of another account), `invalid_argument`.
+    pub async fn mark_mailboxes_read(
+        &self,
+        account: AccountId,
+        mailboxes: Vec<MailboxId>,
+        request_id: String,
+    ) -> Result<ActionResult, CoreError> {
+        crate::core::check_request_id(&request_id)?;
+        self.outbox_ref()?
+            .mark_read(account, mailboxes, request_id)
+            .await
     }
 
     async fn folder_changes_supported(&self, account: AccountId) -> Result<(), CoreError> {

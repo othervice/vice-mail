@@ -868,6 +868,9 @@ export const de: Translation = {
       save_draft_other: "{{count, number}} Entwürfe gespeichert",
       delete_draft_one: "Entwurf verworfen",
       delete_draft_other: "{{count, number}} Entwürfe verworfen",
+      // Stufe 21
+      mark_mailbox_read_one: "{{count, number}} Mail in {{detail}} als gelesen markiert",
+      mark_mailbox_read_other: "{{count, number}} Mails in {{detail}} als gelesen markiert",
     },
     undo: "Rückgängig",
     undone: "Rückgängig gemacht.",
@@ -888,6 +891,8 @@ export const de: Translation = {
       // Stufe 19
       source: "Der Quelltext konnte nicht gezeigt werden.",
       mbox: "Export oder Import konnte nicht gestartet werden.",
+      // Stufe 21
+      markFolderRead: "Die Mails konnten nicht als gelesen markiert werden.",
     },
     operationFailed_one: "Eine Änderung ließ sich auf dem Server nicht ausführen: {{action}}",
     operationFailed_other: "{{count, number}} Änderungen ließen sich auf dem Server nicht ausführen: {{action}}",
@@ -999,6 +1004,7 @@ export const de: Translation = {
       create_mailbox: "Ordner anlegen",
       rename_mailbox: "Ordner umbenennen",
       delete_mailbox: "Ordner löschen",
+      mark_mailbox_read: "Ordner als gelesen markieren",
       undo: "Rückgängig",
       send: "Senden",
       save_draft: "Entwurf speichern",
@@ -3309,6 +3315,14 @@ export const de: Translation = {
       suggestReply: "Antwort vorschlagen",
       ask: "Frag deine Mails",
     },
+  },
+  // Stufe 21 (Entscheidung 0063)
+  markRead: {
+    folder: "Ordner als gelesen markieren",
+    account: "Alle als gelesen markieren",
+    inboxes: "Alle als gelesen markieren",
+    menu: "Optionen für {{name}}",
+    readOnly: "Änderungen sind für dieses Konto ausgeschaltet.",
   },
   folderEdit: {
     rename: "Ordner umbenennen …",

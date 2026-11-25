@@ -336,14 +336,22 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
         </Tooltip>
       </div>
       {!overlay && <SidebarResizeHandle controls={contentId} />}
-      {/* Scrolls on its own, never sideways; the edges fade so a cut-off row reads as "more". */}
+      {/* Scrolls on its own, never sideways; the edges fade so a cut-off row reads as "more".
+          Stage 21: what is inside clips sideways (`overflow-x: clip` on the inner block, which
+          does not scroll), so nothing wider, a menu included, can make the column scroll
+          sideways; should anything still do it, it goes straight back. */}
       <div
         id={contentId}
+        onScroll={(event) => {
+          if (event.currentTarget.scrollLeft !== 0) event.currentTarget.scrollLeft = 0;
+        }}
         className={cx(
-          "flex min-h-0 flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-4 [scrollbar-width:thin]",
+          "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-1 pb-4 [scrollbar-width:thin]",
           "[mask-image:linear-gradient(to_bottom,transparent,black_var(--ui-space-2),black_calc(100%-var(--ui-space-2)),transparent)]",
         )}
+        data-testid="sidebar-scroll"
       >
+        <div className="flex shrink-0 flex-col gap-5 overflow-x-clip px-2">
         <UnifiedTree accounts={accountList} />
         <ViewsTree />
         {/* Stage 7: saved searches, right below the views. */}
@@ -364,6 +372,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
             <AccountFolders key={account.id} account={account} selected={account.id === selected?.id} />
           ))}
         </section>
+        </div>
       </div>
       <StatusGroup accounts={accountList} expanded />
     </nav>

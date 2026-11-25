@@ -601,6 +601,24 @@ impl<C: WriteConnector + 'static> Outbox<C> {
         Ok(self.recorded(&change))
     }
 
+    /// Stage 21 (decision 0063): marks every unread message of these folders of `account` as
+    /// read: at once locally, then one `mark_mailbox` operation per folder with the UIDs that were
+    /// unread, all in one batch for [`Outbox::undo`]. `request` as in [`Outbox::apply_request`].
+    pub async fn mark_read(
+        &self,
+        account: AccountId,
+        mailboxes: Vec<MailboxId>,
+        request: String,
+    ) -> Result<ActionResult, CoreError> {
+        let change = self
+            .shared
+            .store
+            .enqueue_mark_read(account, mailboxes, request)
+            .await?;
+        tracing::info!(%account, folders = change.operations.len(), "folders marked as read");
+        Ok(self.recorded(&change))
+    }
+
     /// Undoes a batch (the "undo" of the notice after an action): cancels what is still
     /// queued, queues counter-operations for what was sent. Refused as a whole with
     /// [`mail_model::ActionError::NotUndoable`] if a part cannot be undone.

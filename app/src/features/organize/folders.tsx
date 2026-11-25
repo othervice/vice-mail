@@ -12,6 +12,7 @@ import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { FloatingPanel } from "../actions/Pickers";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { useFolderCreateItem, useFolderEditItems } from "../mailboxes/FolderEdit";
+import { useMarkReadItem } from "../mailboxes/markRead";
 import { useMboxItems } from "../mbox/MboxJobs";
 import { isRoleView } from "../mailboxes/tree";
 import { useDropTarget } from "../mailboxes/useDropTarget";
@@ -108,6 +109,11 @@ interface FolderMenuProps {
   mailbox: Mailbox;
   /** Audit 24.11.2026: in the account's tree, "Rename folder…" and "Delete folder…" too. */
   account?: Account;
+  /**
+   * Stage 21: the folder's account where `account` is not given (the favourites), for "Mark
+   * folder as read" alone.
+   */
+  owner?: Account | undefined;
   /** In the favourites list: its order, for "Move up" and "Move down". */
   order?: readonly MailboxId[];
   onColor: () => void;
@@ -118,8 +124,12 @@ interface FolderMenuProps {
   returnFocus?: () => void;
 }
 
-/** The "…" of a folder in the sidebar: favourite on or off, its place among the favourites, colour. */
-export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: FolderMenuProps) {
+/**
+ * The "…" of a folder in the sidebar (also its right click, Shift+F10 and the context-menu key):
+ * "Mark folder as read" (stage 21), favourite on or off, its place among the favourites, colour,
+ * and in the account's tree new subfolder, rename, delete, mbox.
+ */
+export function FolderMenu({ mailbox, account, owner, order, onColor, returnFocus }: FolderMenuProps) {
   const { t } = useTranslation();
   const editItems = useFolderEditItems(account, mailbox, returnFocus);
   // Stage 18: "New subfolder…" in the account's tree.
@@ -127,6 +137,8 @@ export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: Fo
   // Stage 19 (decision 0057): the folder as an mbox file, an mbox file into the folder.
   const mbox = useMboxItems(account, mailbox);
   const name = useFolderName()(mailbox);
+  const markAccount = account ?? owner;
+  const markItems = useMarkReadItem("folder", markAccount ? [{ account: markAccount, mailboxes: [mailbox] }] : [], name);
   const change = useChangeFolder();
   const favorite = isFavorite(mailbox);
   const index = order?.indexOf(mailbox.id) ?? -1;
@@ -139,6 +151,7 @@ export function FolderMenu({ mailbox, account, order, onColor, returnFocus }: Fo
     change.mutate({ kind: "reorder", mailbox, order: next });
   };
   const items: OverflowItem[] = [
+    ...markItems,
     favorite
       ? {
           id: "favorite-remove",
@@ -209,7 +222,9 @@ export function RowMenuSlot({ children }: { children: ReactNode }) {
       onClick={(event) => {
         event.stopPropagation();
       }}
-      className="absolute inset-y-0 end-0 flex items-center opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100"
+      // Stage 21: also while its menu is open, wherever the focus is (a click on the menu's edge
+      // moves it to the page in WebKit; the open menu must not turn invisible).
+      className="absolute inset-y-0 end-0 flex items-center opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100"
     >
       {children}
     </div>
@@ -228,6 +243,8 @@ interface FavoriteRowProps {
   item: TreeNavItem;
   mailbox: Mailbox;
   order: readonly MailboxId[];
+  /** Stage 21: the folder's account ("Mark folder as read"). */
+  account: Account | undefined;
   accountName: string | undefined;
   current: boolean;
   nav: ReturnType<typeof useTreeNavigation>;
@@ -236,7 +253,7 @@ interface FavoriteRowProps {
   onMoved: (text: string) => void;
 }
 
-function FavoriteRow({ item, mailbox, order, accountName, current, nav, onColor, onMoved }: FavoriteRowProps) {
+function FavoriteRow({ item, mailbox, order, account, accountName, current, nav, onColor, onMoved }: FavoriteRowProps) {
   const { t, i18n } = useTranslation();
   const name = useFolderName()(mailbox);
   const colorName = useColorName();
@@ -303,6 +320,7 @@ function FavoriteRow({ item, mailbox, order, accountName, current, nav, onColor,
       <RowMenuSlot>
         <FolderMenu
           mailbox={mailbox}
+          owner={account}
           order={order}
           onColor={() => {
             onColor(mailbox);
@@ -380,6 +398,7 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
               item={item}
               mailbox={mailbox}
               order={order}
+              account={accounts.find((candidate) => candidate.id === mailbox.accountId)}
               accountName={names?.get(mailbox.accountId)}
               current={mailbox.id === currentId}
               nav={nav}
