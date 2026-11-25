@@ -5,8 +5,11 @@
 //!   what to announce ([`mail_engine::comfort`]); this sink only posts. A click (`tap`) is
 //!   reported by the plugin where the system reports it (macOS; Windows while the toast is on
 //!   screen): the app comes to the front and the core asks the UI to open the message.
-//! - **The counter** follows the core's events (debounced): `set_badge_count` on macOS, an
-//!   overlay icon with the number on the taskbar button on Windows. No `unsafe` here.
+//! - **The counter** follows the core's events (debounced): the Dock tile's own badge on macOS
+//!   (`NSDockTile.badgeLabel`, set on the app, so it stays current while no window is open), an
+//!   overlay icon with the number on the taskbar button on Windows, drawn for the window's
+//!   display scale (stage 21, [`crate::badge`]) and drawn again when the scale changes, and the
+//!   tray icon ([`crate::tray`]). No `unsafe` here.
 //! - **Sound** (stage 16): the core chooses it per notification (or none); [`plugin_sound`]
 //!   turns the name into what the plugin hands the system. Without a name a notification is
 //!   silent on both systems (macOS: no `soundName`; Windows: `<audio silent="true"/>`).
@@ -14,7 +17,7 @@
 //!   popup's window ([`crate::popup`]), which plays the sound itself.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -135,13 +138,10 @@ fn plugin_sound(name: &str) -> String {
     }
 }
 
-/// Brings the main window to the front (a click on a notification, "Read" in the popup).
+/// Brings the main window to the front (a click on a notification, "Read" in the popup), and
+/// opens it again if it was closed into the background (stage 21).
 pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    crate::lifecycle::show_main_window(app);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -195,8 +195,49 @@ pub(crate) async fn refresh_badge<R: Runtime>(app: &AppHandle<R>, core: &AppCore
     }
 }
 
-#[cfg(not(windows))]
+/// The last number shown (managed state), for drawing it again: a new main window, a new
+/// display scale, the tray menu.
+#[derive(Debug, Default)]
+pub(crate) struct Counter(AtomicU32);
+
+/// The number the counter shows now (0 before the first count).
+pub(crate) fn current_count<R: Runtime>(app: &AppHandle<R>) -> u32 {
+    app.try_state::<Counter>()
+        .map_or(0, |c| c.0.load(Ordering::Relaxed))
+}
+
 fn set_badge<R: Runtime>(app: &AppHandle<R>, count: u32) {
+    if let Some(counter) = app.try_state::<Counter>() {
+        counter.0.store(count, Ordering::Relaxed);
+    }
+    show_count(app, count);
+    crate::tray::refresh(app);
+}
+
+/// Draws the last number again (the main window is new, or its display scale changed).
+pub(crate) fn redraw_badge<R: Runtime>(app: &AppHandle<R>) {
+    show_count(app, current_count(app));
+}
+
+/// macOS: the Dock tile's badge, on the main thread (AppKit), independent of any window.
+#[cfg(target_os = "macos")]
+fn show_count<R: Runtime>(app: &AppHandle<R>, count: u32) {
+    let result = app.run_on_main_thread(move || {
+        let Some(mtm) = objc2::MainThreadMarker::new() else {
+            return;
+        };
+        let label = (count > 0).then(|| objc2_foundation::NSString::from_str(&count.to_string()));
+        objc2_app_kit::NSApplication::sharedApplication(mtm)
+            .dockTile()
+            .setBadgeLabel(label.as_deref());
+    });
+    if let Err(err) = result {
+        tracing::debug!(%err, "badge not set");
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn show_count<R: Runtime>(app: &AppHandle<R>, count: u32) {
     let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) else {
         return;
     };
@@ -206,110 +247,27 @@ fn set_badge<R: Runtime>(app: &AppHandle<R>, count: u32) {
     }
 }
 
+/// Windows: the overlay on the main window's taskbar button, drawn at the size Windows shows it
+/// for the window's display scale (16 logical pixels). Without a main window there is no taskbar
+/// button; the tray icon shows the number.
 #[cfg(windows)]
-fn set_badge<R: Runtime>(app: &AppHandle<R>, count: u32) {
+fn show_count<R: Runtime>(app: &AppHandle<R>, count: u32) {
     let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) else {
         return;
     };
-    let icon = (count > 0).then(|| overlay::badge(count));
-    let result = match &icon {
-        Some(rgba) => window.set_overlay_icon(Some(tauri::image::Image::new(
-            rgba,
-            overlay::SIZE,
-            overlay::SIZE,
-        ))),
-        None => window.set_overlay_icon(None),
+    let result = if count > 0 {
+        let size = crate::badge::overlay_size(window.scale_factor().unwrap_or(1.0));
+        let image = crate::badge::overlay(count, size);
+        window.set_overlay_icon(Some(tauri::image::Image::new_owned(
+            image.pixels,
+            image.width,
+            image.height,
+        )))
+    } else {
+        window.set_overlay_icon(None)
     };
     if let Err(err) = result {
         tracing::debug!(%err, "taskbar overlay not set");
-    }
-}
-
-/// The taskbar overlay of Windows: a red disc with the number (capped at 99).
-/// Drawn here from a 3×5 digit font, so no image files or font libraries are needed.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) mod overlay {
-    /// Pixels per side (Windows scales the overlay to 16×16 logical pixels).
-    pub const SIZE: u32 = 32;
-
-    const DIGITS: [[u8; 5]; 10] = [
-        [0b111, 0b101, 0b101, 0b101, 0b111],
-        [0b010, 0b110, 0b010, 0b010, 0b111],
-        [0b111, 0b001, 0b111, 0b100, 0b111],
-        [0b111, 0b001, 0b111, 0b001, 0b111],
-        [0b101, 0b101, 0b111, 0b001, 0b001],
-        [0b111, 0b100, 0b111, 0b001, 0b111],
-        [0b111, 0b100, 0b111, 0b101, 0b111],
-        [0b111, 0b001, 0b010, 0b010, 0b010],
-        [0b111, 0b101, 0b111, 0b101, 0b111],
-        [0b111, 0b101, 0b111, 0b001, 0b111],
-    ];
-
-    /// RGBA pixels of the overlay for `count` (> 0).
-    pub fn badge(count: u32) -> Vec<u8> {
-        let size = SIZE as usize;
-        let mut rgba = vec![0u8; size * size * 4];
-        let center = (size as f32 - 1.0) / 2.0;
-        let radius = size as f32 / 2.0;
-        for y in 0..size {
-            for x in 0..size {
-                let (dx, dy) = (x as f32 - center, y as f32 - center);
-                if dx * dx + dy * dy <= radius * radius {
-                    let i = (y * size + x) * 4;
-                    if let Some(px) = rgba.get_mut(i..i + 4) {
-                        px.copy_from_slice(&[0xD9, 0x30, 0x25, 0xFF]);
-                    }
-                }
-            }
-        }
-        let shown = count.min(99);
-        let digits: Vec<usize> = shown
-            .to_string()
-            .bytes()
-            .map(|b| usize::from(b - b'0'))
-            .collect();
-        // Each digit 3×5 cells of `scale` pixels, one cell apart.
-        let scale = if digits.len() == 1 { 4 } else { 3 };
-        let width = digits.len() * 3 * scale + (digits.len() - 1) * scale;
-        let left = (size - width) / 2;
-        let top = (size - 5 * scale) / 2;
-        for (n, digit) in digits.iter().enumerate() {
-            let x0 = left + n * 4 * scale;
-            for (row, bits) in DIGITS[*digit].iter().enumerate() {
-                for col in 0..3 {
-                    if bits & (0b100 >> col) == 0 {
-                        continue;
-                    }
-                    for py in 0..scale {
-                        for px in 0..scale {
-                            let x = x0 + col * scale + px;
-                            let y = top + row * scale + py;
-                            let i = (y * size + x) * 4;
-                            if let Some(p) = rgba.get_mut(i..i + 4) {
-                                p.copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        rgba
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn badges_have_the_size_and_white_digits() {
-            for count in [1, 7, 42, 99, 1_000] {
-                let rgba = badge(count);
-                assert_eq!(rgba.len(), (SIZE * SIZE * 4) as usize);
-                let white = rgba.chunks(4).filter(|p| *p == [0xFF; 4]).count();
-                assert!(white > 20, "{count}: digits drawn");
-            }
-            assert_eq!(badge(1_000), badge(99), "capped at 99");
-        }
     }
 }
 

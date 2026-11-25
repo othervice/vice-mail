@@ -41,13 +41,15 @@ serde_json.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 # Stage 18 (decision 0051): the new-mail popup's window (rounded corners through the content
 # view's layer, not in the Window menu, on every Space, never key) and its sound (NSSound,
-# NSBeep), through safe calls only. Test builds (feature `e2e`) add what reads the native window
+# NSBeep), through safe calls only. Stage 21 (decision 0068): the Dock tile's badge (NSDockTile),
+# set on the app so it stays current while no window is open. Test builds (feature `e2e`) add what reads the native window
 # buttons for the desktop test and sends it real mouse clicks (NSEvent).
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = [
     "std",
     "NSApplication",
     "NSColor",
+    "NSDockTile",
     "NSGraphics",
     "NSResponder",
     "NSSound",

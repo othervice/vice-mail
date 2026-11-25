@@ -11,6 +11,7 @@ pub mod compose;
 pub mod composer;
 pub mod contact_lists;
 pub mod contacts;
+pub mod desktop;
 pub mod eml;
 pub mod first_start;
 pub mod groups;

@@ -1,6 +1,10 @@
 //! Desktop shell: window, commands and wiring. All behaviour lives in `mail-engine`; this crate
 //! only forwards commands to [`AppCore`] and core events to the UI.
 
+mod autostart;
+// Drawn for Windows (taskbar overlay, notification area); tested everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod badge;
 pub mod commands;
 mod default_app;
 pub mod drops;
@@ -8,12 +12,14 @@ pub mod drops;
 mod e2e;
 mod eml_files;
 mod events;
+pub mod lifecycle;
 pub mod links;
 mod navigation;
 mod notifications;
 mod oauth;
 pub mod popup;
 mod sound;
+mod tray;
 mod updater;
 mod window_theme;
 pub mod windows;
@@ -370,10 +376,22 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::popup::dismiss_popup,
             commands::popup::open_inbox_from_popup::<tauri::Wry>,
             commands::popup::fit_new_mail_popup::<tauri::Wry>,
+            // Stage 21 (decisions 0069, 0070): running in the background, the pause, the login
+            // item, the tray menu's texts, the main window's lifecycle.
+            commands::desktop::get_background_settings,
+            commands::desktop::set_background_settings::<tauri::Wry>,
+            commands::desktop::get_autostart::<tauri::Wry>,
+            commands::desktop::set_autostart::<tauri::Wry>,
+            commands::desktop::get_notification_pause,
+            commands::desktop::pause_notifications,
+            commands::desktop::set_desktop_texts::<tauri::Wry>,
+            commands::desktop::main_window_ready::<tauri::Wry>,
+            commands::desktop::close_main_window::<tauri::Wry>,
         ])
         .events(collect_events![
             CoreEventMessage,
-            popup::NewMailPopupChanged
+            popup::NewMailPopupChanged,
+            lifecycle::CloseToBackgroundAsked
         ])
         .error_handling(ErrorHandlingMode::Result)
         // IPC types are one-way (arguments in, results and events out): one alias per type.
@@ -597,8 +615,14 @@ pub fn run() {
                 services,
             ));
             let theme = initial_theme(&core);
-            let theme_events = core.subscribe();
+            // Stage 21 (decisions 0069, 0070): the main window may come and go; the login item.
+            lifecycle::install(app.handle(), &core);
+            app.manage(AutostartState(autostart(app.handle())));
+            if let Some(state) = app.try_state::<AutostartState>() {
+                state.0.repair();
+            }
             // Stage 9: native notifications, the Dock/taskbar counter, mailto: links.
+            app.manage(notifications::Counter::default());
             core.set_notification_sink(notifications::NativeNotifications::install(app.handle()));
             notifications::follow_badge(app.handle().clone(), core.subscribe());
             app.manage(links::LinkQueue::default());
@@ -608,8 +632,13 @@ pub fn run() {
             // Stage 15 (decision 0037): the update source; it only checks with consent.
             start_updates(app.handle(), &core);
             attach_core(app.handle(), &specta, core);
-            let window = open_main_window(app.handle(), theme)?;
-            window_theme::follow(window, theme_events);
+            // Stage 21: started by the login item, the app runs without a window until asked.
+            if lifecycle::started_in_background(std::env::args().skip(1)) {
+                tracing::info!("started in the background");
+            } else {
+                open_main_window(app.handle(), theme, true)?;
+            }
+            tray::refresh(app.handle());
             // Stage 9: `.eml` files of the start (Windows passes them as arguments).
             let cwd = std::env::current_dir().ok();
             eml_files::open_files(
@@ -638,10 +667,126 @@ pub fn run() {
             }
             eml_files::open_files(handle, eml_files::eml_urls(urls));
         }
+        // Stage 21: a click on the Dock icon, or the app started again from the Finder, opens
+        // the main window again if it was closed into the background.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Reopen { .. } = &event
+            && !handle
+                .get_webview_window(MAIN_WINDOW)
+                .is_some_and(|w| w.is_visible().unwrap_or(false))
+        {
+            lifecycle::show_main_window(handle);
+        }
+        // Stage 21: the last window closed; with "keep running" the app stays (decision 0069).
+        if let RunEvent::ExitRequested { code, api, .. } = &event
+            && handle
+                .try_state::<lifecycle::Lifecycle>()
+                .is_some_and(|l| l.keeps_running(*code))
+        {
+            api.prevent_exit();
+        }
         if let RunEvent::Exit = event {
             before_exit(handle);
         }
     });
+}
+
+/// Stage 21 (decision 0070): the login item of this app (managed state).
+struct AutostartState(autostart::Autostart);
+
+/// The login item: the user's launch agent (macOS) or Run key (Windows); a launch agent in the
+/// test's own directory in desktop-test builds. Development builds do not register themselves.
+fn autostart<R: Runtime>(app: &AppHandle<R>) -> autostart::Autostart {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let identifier = app.config().identifier.clone();
+    #[cfg(feature = "e2e")]
+    {
+        let path = e2e::login_items_dir()
+            .unwrap_or_default()
+            .join(format!("{identifier}.plist"));
+        autostart::Autostart::new(
+            Box::new(autostart::LaunchAgent {
+                path,
+                label: identifier,
+            }),
+            exe,
+            None,
+        )
+    }
+    #[cfg(not(feature = "e2e"))]
+    {
+        let development = cfg!(debug_assertions).then_some("development build");
+        #[cfg(target_os = "macos")]
+        {
+            let path = app
+                .path()
+                .home_dir()
+                .unwrap_or_default()
+                .join("Library/LaunchAgents")
+                .join(format!("{identifier}.plist"));
+            let unavailable = development.or_else(|| {
+                autostart::translocated(&exe)
+                    .then_some("the app runs from a translocated copy; move it to Applications")
+            });
+            autostart::Autostart::new(
+                Box::new(autostart::LaunchAgent {
+                    path,
+                    label: identifier,
+                }),
+                exe,
+                unavailable,
+            )
+        }
+        #[cfg(windows)]
+        {
+            let _ = identifier;
+            let name = app
+                .config()
+                .product_name
+                .clone()
+                .unwrap_or_else(|| app.package_info().name.clone());
+            autostart::Autostart::new(Box::new(autostart::RunKey { name }), exe, development)
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
+        {
+            let _ = (identifier, development);
+            autostart::Autostart::new(
+                Box::new(autostart::LaunchAgent {
+                    path: std::path::PathBuf::new(),
+                    label: String::new(),
+                }),
+                exe,
+                Some("not supported on this system"),
+            )
+        }
+    }
+}
+
+/// Whether the app starts with the system (as the system has it).
+pub(crate) fn autostart_status<R: Runtime>(app: &AppHandle<R>) -> mail_model::Autostart {
+    app.try_state::<AutostartState>().map_or(
+        mail_model::Autostart {
+            enabled: false,
+            available: false,
+        },
+        |s| s.0.status(),
+    )
+}
+
+/// Switches the login item on or off.
+pub(crate) fn set_autostart<R: Runtime>(
+    app: &AppHandle<R>,
+    enabled: bool,
+) -> Result<mail_model::Autostart, mail_model::CoreError> {
+    let Some(state) = app.try_state::<AutostartState>() else {
+        return Err(mail_model::CoreError::Internal(
+            "no login item service".into(),
+        ));
+    };
+    state.0.set(enabled).map_err(|err| match err.kind() {
+        std::io::ErrorKind::Unsupported => mail_model::CoreError::InvalidArgument(err.to_string()),
+        _ => mail_model::CoreError::Internal(format!("login item: {err}")),
+    })
 }
 
 /// Ends the sync tasks (connections get a moment to log out) and flushes the log. On every
@@ -689,17 +834,18 @@ fn start_updates<R: Runtime>(app: &AppHandle<R>, core: &AppCore) {
 fn with_system_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     #[cfg(windows)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        // Stage 21: the login item while the app runs already changes nothing.
+        if lifecycle::started_in_background(argv.iter().skip(1).cloned()) {
+            return;
+        }
         let urls = default_app::mailto_arguments(argv.iter().skip(1).cloned());
         // Decision 0027: an `.eml` file double-clicked while the app runs.
         let files =
             eml_files::eml_arguments(argv.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
-        if urls.is_empty()
-            && files.is_empty()
-            && let Some(window) = app.get_webview_window(MAIN_WINDOW)
-        {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
+        // Stage 21: the app started again shows its window, also after it was closed into the
+        // background.
+        if urls.is_empty() && files.is_empty() {
+            lifecycle::show_main_window(app);
         }
         for url in urls {
             links::opened(app, &url);
@@ -826,10 +972,12 @@ fn initial_theme(core: &AppCore) -> Option<Theme> {
 }
 
 /// The window is declared in `tauri.conf.json` with `"create": false` and built here, after the
-/// core is managed.
-fn open_main_window<R: Runtime>(
+/// core is managed: at start, and again whenever it was closed into the background (stage 21,
+/// [`lifecycle::show_main_window`], which shows it once it has its old place: `visible` false).
+pub(crate) fn open_main_window<R: Runtime>(
     app: &AppHandle<R>,
     theme: Option<Theme>,
+    visible: bool,
 ) -> tauri::Result<WebviewWindow<R>> {
     let config = app
         .config()
@@ -841,12 +989,22 @@ fn open_main_window<R: Runtime>(
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
     // The only place that learns where a click in the mail frame goes (decision 0005), the
     // same for every window of the app (`windows::guard`, decision 0025).
-    let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?.theme(theme);
+    let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?
+        .theme(theme)
+        .visible(visible);
     let window = windows::guard(builder, app).build()?;
     // Stage 5: remember what the user drops on the window; on Windows the frame guard.
     windows::finish(app, &window)?;
-    // Stage 18: the new-mail popup closes with the main window.
-    popup::follow_main_window(app, &window);
+    // Stage 21: closing it keeps the app running; requests wait for its page; links of a new
+    // page are taken again; the counter is drawn on its taskbar button.
+    lifecycle::follow_main_window(app, &window);
+    if let Some(queue) = app.try_state::<links::LinkQueue>() {
+        queue.reset();
+    }
+    if let Some(core) = app.try_state::<AppCore>() {
+        window_theme::follow(window.clone(), core.subscribe());
+    }
+    notifications::redraw_badge(app);
     Ok(window)
 }
 

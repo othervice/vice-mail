@@ -163,8 +163,12 @@ fn apply<R: Runtime>(app: &AppHandle<R>, update: PopupUpdate) {
         }
         return;
     }
-    // Without the main window the app is closing: "Read" would have nowhere to go.
-    if app.get_webview_window(MAIN_WINDOW).is_none() {
+    // Stage 21: the popup also opens while the main window is closed into the background
+    // ("Read" opens it again), but not while the app quits.
+    if app
+        .try_state::<crate::lifecycle::Lifecycle>()
+        .is_some_and(|l| l.quitting())
+    {
         return;
     }
     if let Err(err) = open(app, &update.popup) {
@@ -327,18 +331,6 @@ pub fn fit<R: Runtime>(
     #[cfg(target_os = "macos")]
     macos::invalidate_shadow(window);
     Ok(())
-}
-
-/// Stage 18: when the main window goes (the app quits), so does the popup.
-pub(crate) fn follow_main_window<R: Runtime>(app: &AppHandle<R>, main: &WebviewWindow<R>) {
-    let app = app.clone();
-    main.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::Destroyed)
-            && let Some(window) = app.get_webview_window(POPUP_WINDOW)
-        {
-            let _ = window.destroy();
-        }
-    });
 }
 
 /// macOS: what Tauri does not offer, with safe AppKit calls on the main thread.

@@ -181,6 +181,15 @@ impl<C: Connector> AppCore<C> {
         Ok(pause)
     }
 
+    /// "New message" from the tray menu: asks the UI for an empty composer (`composeRequested`,
+    /// like a `mailto:` link without fields); the UI opens it from the selected account.
+    pub fn compose_new(&self) {
+        tracing::info!("new message requested from the tray");
+        self.emit_event(CoreEvent::ComposeRequested {
+            request: mail_model::ComposeRequest::default(),
+        });
+    }
+
     /// Whether notifications are paused at this moment (an unreadable setting counts as not).
     pub(crate) async fn notifications_paused(&self) -> bool {
         match self.desktop_value::<Option<i64>>(PAUSE_KEY).await {
@@ -366,6 +375,14 @@ mod tests {
             .expect("resume");
         assert_eq!(resumed, NotificationPause::default());
         assert!(!core.notifications_paused().await);
+
+        // "New message" from the tray: an empty composer request.
+        while events.try_recv().is_ok() {}
+        core.compose_new();
+        assert!(matches!(
+            events.recv().await,
+            Ok(CoreEvent::ComposeRequested { request }) if request == mail_model::ComposeRequest::default()
+        ));
 
         // None of it travels with the settings sync.
         let keys: Vec<String> = core
