@@ -72,7 +72,7 @@ export function FollowUpOption({ value, disabled, onChange, now = Date.now }: Fo
         onChange={(event) => {
           choose(event.target.value as Choice);
         }}
-        className="h-7 rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
+        className="h-8 rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
         data-testid="composer-follow-up-choice"
       >
         <option value={NONE}>{t("composer.followUp.none")}</option>
@@ -101,7 +101,7 @@ export function FollowUpOption({ value, disabled, onChange, now = Date.now }: Fo
               setProblem(null);
             }}
             data-testid="composer-follow-up-custom"
-            className="rounded-control border border-border bg-surface px-2 py-0.5 text-13 text-primary"
+            className="h-8 rounded-control border border-border bg-surface px-2 text-13 text-primary"
           />
           <Button variant="secondary" onClick={applyCustom} data-testid="composer-follow-up-set">
             {t("composer.followUp.set")}

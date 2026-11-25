@@ -88,7 +88,7 @@ export function ColorsToggle({ original, onChange }: ColorsToggleProps) {
           onChange(!original);
         }}
         data-testid="colors-original"
-        className="inline-flex h-6 items-center gap-1.5 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
+        className="inline-flex h-6 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
       >
         <Palette aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         {t("reading.colors.original")}

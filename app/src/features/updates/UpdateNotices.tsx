@@ -44,7 +44,7 @@ export function UpdateNotices() {
     }
   }
   if (!content) return null;
-  return <div className="pointer-events-none fixed start-20 bottom-6 z-30 flex flex-col gap-2">{content}</div>;
+  return <div className="pointer-events-none fixed start-[calc(var(--ui-rail-width)+var(--ui-space-6))] bottom-6 z-30 flex flex-col gap-2">{content}</div>;
 }
 
 function ConsentQuestion() {

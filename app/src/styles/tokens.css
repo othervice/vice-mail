@@ -241,6 +241,14 @@
   --ui-preview-width: 56rem;
   --ui-preview-max-height: 70vh;
   --ui-notice-width: 28rem;
+  /* Stage 21, item 4 (decision 0071): sizes that were written as steps the 4 px grid does not
+     have (and so had no CSS): a row of the attachments view (its virtualizer estimates 72 px),
+     progress bars and meters (update download, storage quota), a scrolling block of code in a
+     settings page (the MCP client configurations), the smallest width of a filter field. */
+  --ui-attachment-row-height: 4.5rem;
+  --ui-meter-width: 20rem;
+  --ui-code-max-height: 16rem;
+  --ui-field-min-width: 10rem;
   /* Stage 13: the AI panel on the right (docs/DESIGN.md: 380 px). */
   --ui-ai-panel-width: 23.75rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the

@@ -343,7 +343,7 @@ export function ThunderbirdTakeover() {
       </div>
       <Notice tone="info" title={t("takeover.noPasswordsTitle")}>
         <p className="flex items-start gap-2">
-          <KeyRound aria-hidden className="mt-0.5 size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
+          <KeyRound aria-hidden className="mt-[calc((var(--ui-line-height-14)-var(--ui-icon-small))/2)] size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
           {t("takeover.noPasswordsBody")}
         </p>
       </Notice>

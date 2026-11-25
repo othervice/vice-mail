@@ -56,7 +56,7 @@ export function QuotaBlock({ account }: { account: Account }) {
           optimum={0}
           value={data.percent}
           aria-label={t("settings.accounts.detail.quota.meter", { percent: data.percent })}
-          className="h-2 w-full max-w-96"
+          className="h-2 w-full max-w-(--ui-meter-width)"
         />
         <p className="text-13 text-secondary">{t("settings.accounts.detail.quota.free", { free })}</p>
         {data.nearlyFull && (

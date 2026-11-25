@@ -226,7 +226,7 @@ function AvatarMark({
         <span
           className={cx(
             "absolute end-full me-1 size-(--ui-dot) rounded-full bg-accent",
-            dot === "middle" ? "top-1/2 -translate-y-1/2" : "top-1.5",
+            dot === "middle" ? "top-1/2 -translate-y-1/2" : "top-[calc((var(--ui-line-height-14)-var(--ui-dot))/2)]",
           )}
           data-testid="row-unread-dot"
         />
@@ -303,7 +303,7 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
     <span
       aria-hidden
       className={cx(
-        "hidden shrink-0 items-center rounded-row bg-surface-list px-0.5 shadow-floating group-hover/row:flex",
+        "hidden shrink-0 items-center rounded-row bg-surface-list px-1 shadow-floating group-hover/row:flex",
         cursor && "group-focus-visible/list:flex",
         lifted && "self-end",
       )}

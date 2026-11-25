@@ -35,7 +35,7 @@ export function TrackerNotice({ trackers }: { trackers: TrackerSummary }) {
           setOpen((value) => !value);
         }}
         data-testid="tracker-notice-toggle"
-        className="flex w-fit items-center gap-2 rounded-control px-1 py-0.5 text-secondary hover:bg-hover hover:text-primary"
+        className="flex h-6 w-fit items-center gap-2 rounded-control px-1 text-secondary hover:bg-hover hover:text-primary"
       >
         <ShieldCheck aria-hidden className="size-(--ui-icon-small) shrink-0 text-success" strokeWidth={1.75} />
         <span>{t("reading.trackers.blocked", { count: total })}</span>

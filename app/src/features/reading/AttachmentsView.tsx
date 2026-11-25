@@ -247,7 +247,7 @@ export function AttachmentsView() {
           ))}
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex min-w-48 flex-1 flex-col gap-1">
+          <div className="flex min-w-(--ui-field-min-width) flex-1 flex-col gap-1">
             <label htmlFor={nameId} className="text-12 font-medium text-secondary">
               {t("attachments.view.name")}
             </label>
@@ -266,7 +266,7 @@ export function AttachmentsView() {
               />
             </div>
           </div>
-          <div className="flex min-w-40 flex-col gap-1">
+          <div className="flex min-w-(--ui-field-min-width) flex-col gap-1">
             <label htmlFor={senderId} className="text-12 font-medium text-secondary">
               {t("attachments.view.sender")}
             </label>
@@ -338,7 +338,7 @@ export function AttachmentsView() {
                   ref={virtualizer.measureElement}
                   data-index={virtualItem.index}
                   role="listitem"
-                  className="absolute top-0 left-0 h-18 w-full"
+                  className="absolute top-0 left-0 h-(--ui-attachment-row-height) w-full"
                 >
                   {entry ? (
                     <AttachmentRow

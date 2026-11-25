@@ -76,7 +76,7 @@ interface Box {
 }
 
 /** Start padding of items by tree depth (`indent`), 16 px a step. */
-const INDENT = ["", "ps-6", "ps-10", "ps-14"] as const;
+const INDENT = ["", "ps-6", "ps-10", "ps-[calc(var(--ui-space-1)*14)]"] as const;
 
 /** Room kept between a menu and the window's edges. */
 export const MENU_MARGIN = 4;
@@ -427,14 +427,13 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
             onClick={() => {
               choose(entry);
             }}
-            className={cx(itemClass(entry), entry.note && "h-auto min-h-8 items-start py-1.5", INDENT[Math.min(entry.indent ?? 0, INDENT.length - 1)])}
+            className={cx(itemClass(entry), entry.note && "h-auto min-h-8 items-start py-2", INDENT[Math.min(entry.indent ?? 0, INDENT.length - 1)])}
           >
             {Icon ? (
               <Icon
                 aria-hidden
                 className={cx(
                   "size-(--ui-icon-small) shrink-0",
-                  entry.note && "mt-0.5",
                   entry.checked ? "text-accent" : entry.disabled ? "opacity-50" : "text-secondary",
                 )}
                 strokeWidth={entry.checked ? 2.25 : 1.75}
@@ -443,7 +442,7 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
               <span aria-hidden className="w-(--ui-icon-small) shrink-0" />
             )}
             {entry.note ? (
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex min-w-0 flex-1 flex-col">
                 <span id={entry.note.id} aria-hidden className="text-12 text-secondary">
                   {entry.note.text}
                 </span>

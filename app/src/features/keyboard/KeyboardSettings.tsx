@@ -149,7 +149,7 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
             }}
             className="flex h-8 items-center gap-1 rounded-control px-2 text-12 font-medium text-accent hover:bg-hover"
           >
-            <Plus aria-hidden className="size-3.5" strokeWidth={2} />
+            <Plus aria-hidden className="size-3" strokeWidth={2} />
             {t("keyboard.settings.addShort")}
           </button>
         </Tooltip>
@@ -179,7 +179,7 @@ function CommandRow({ id, platform, recording, onRecord, onStatus }: RowProps) {
             }}
             className="flex h-8 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary hover:bg-hover hover:text-primary"
           >
-            <RotateCcw aria-hidden className="size-3.5" strokeWidth={2} />
+            <RotateCcw aria-hidden className="size-3" strokeWidth={2} />
             {t("keyboard.settings.resetShort")}
           </button>
         </Tooltip>

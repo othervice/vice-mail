@@ -213,7 +213,7 @@ function Progress({ status }: { status: Extract<UpdateStatus, { state: "download
         aria-label={t("updates.progress")}
         max={100}
         value={percent ?? undefined}
-        className="h-2 w-full max-w-80 appearance-none overflow-hidden rounded-full bg-hover accent-accent [&::-moz-progress-bar]:bg-accent [&::-webkit-progress-bar]:bg-hover [&::-webkit-progress-value]:bg-accent"
+        className="h-2 w-full max-w-(--ui-meter-width) appearance-none overflow-hidden rounded-full bg-hover accent-accent [&::-moz-progress-bar]:bg-accent [&::-webkit-progress-bar]:bg-hover [&::-webkit-progress-value]:bg-accent"
       />
     </div>
   );
