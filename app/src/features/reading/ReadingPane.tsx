@@ -543,7 +543,7 @@ export function ReadingPane({
           <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
         )}
         {/* Stage 9: save as .eml, print (the print styles show only the article below). */}
-        {view && <MessageTools key={view.id} messageId={view.id} />}
+        {view && <MessageTools key={view.id} messageId={view.id} shown={!query.isPending && body?.kind !== "loading"} />}
         <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
         <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
       </div>

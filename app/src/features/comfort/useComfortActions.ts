@@ -171,11 +171,11 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     };
   };
 
-  /** The choice of the snooze menu for the messages it was opened for. */
-  const snooze = async (choice: SnoozeChoice): Promise<boolean> => {
-    const items = snoozing?.items ?? [];
-    const expand = snoozing?.expand;
-    setSnoozing(null);
+  /**
+   * Snoozes `items` until `choice`; `expand` as for the host. Stage 21: the context menu's
+   * presets run it directly, without the snooze menu.
+   */
+  const snoozeNow = async (items: readonly MessageListItem[], choice: SnoozeChoice, expand: ExpandRows | undefined): Promise<boolean> => {
     if (items.length === 0) return false;
     return run("snooze", async () => {
       // Decision 0039: a conversation is snoozed with its messages in the listed folder.
@@ -187,16 +187,29 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     });
   };
 
-  /** Stage 20: the choice of the reminder menu for the messages it was opened for. */
-  const followUp = async (choice: FollowUpChoice): Promise<boolean> => {
-    const items = followingUp ?? [];
-    setFollowingUp(null);
+  /** The choice of the snooze menu for the messages it was opened for. */
+  const snooze = async (choice: SnoozeChoice): Promise<boolean> => {
+    const items = snoozing?.items ?? [];
+    const expand = snoozing?.expand;
+    setSnoozing(null);
+    return snoozeNow(items, choice, expand);
+  };
+
+  /** Stage 20: a reminder for `items` (stage 21: the context menu's presets run it directly). */
+  const followUpNow = async (items: readonly MessageListItem[], choice: FollowUpChoice): Promise<boolean> => {
     if (items.length === 0) return false;
     return run("followUp", async () => {
       const messageIds = items.map((item) => item.id);
       const result = await reminderIpc.setFollowUp(messageIds, choice);
       return { type: "followUpSet", count: items.length, due: result.due, answered: result.answered, messageIds };
     });
+  };
+
+  /** Stage 20: the choice of the reminder menu for the messages it was opened for. */
+  const followUp = async (choice: FollowUpChoice): Promise<boolean> => {
+    const items = followingUp ?? [];
+    setFollowingUp(null);
+    return followUpNow(items, choice);
   };
 
   return {
@@ -208,6 +221,8 @@ export function useComfortActions(account: Account, expandRows?: ExpandRows) {
     hostWith: makeHost,
     snoozeItems: snoozing?.items ?? null,
     snooze,
+    snoozeNow,
+    followUpNow,
     closeSnooze: () => {
       setSnoozing(null);
     },

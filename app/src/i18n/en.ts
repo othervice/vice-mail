@@ -767,6 +767,25 @@ export const en = {
       },
     },
   },
+  // Stage 21 (decision 0064): the context menu of messages in every list.
+  messageMenu: {
+    label_one: "Actions for this message",
+    label_other: "Actions for {{count, number}} messages",
+    iconRow: "Frequent actions",
+    open: "Open",
+    openHere: "In the reading pane",
+    openInWindow: "In a new window",
+    respond: "Reply and forward",
+    mark: "Mark",
+    followUp: "Remind me if no reply",
+    pickTime: "Pick a date and time…",
+    moveTo: "Move to",
+    copyTo: "Copy to",
+    chooseFolder: "Choose a folder…",
+    editTags: "Edit tags…",
+    saveEml: "Save as .eml file…",
+    print: "Print…",
+  },
   actions: {
     toolbar: "Message actions",
     more: "More actions",
@@ -889,6 +908,8 @@ export const en = {
       appearance: "The appearance could not be changed.",
       // Stage 19
       source: "The source could not be shown.",
+      // Stage 21
+      export: "The message could not be saved.",
       mbox: "The export or import could not be started.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",

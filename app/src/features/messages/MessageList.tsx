@@ -113,6 +113,26 @@ export interface ListSelection {
 
 export const NO_SELECTION: ListSelection = { cursor: null, cursorIsChild: false, items: [], childIds: new Set(), keys: [], loaded: 0, hasMore: false };
 
+/**
+ * Stage 21 (decision 0064): the context menu was asked for on a row (a right click, the
+ * context-menu key or Shift+F10 on the cursor row). The view shows the menu for `items`.
+ */
+export interface RowMenuRequest {
+  /** The selection if the row is part of it, else the row alone (in list order). */
+  items: readonly MessageListItem[];
+  /** Those of `items` that are child rows of unfolded conversations (they act alone). */
+  childIds: ReadonlySet<MessageId>;
+  /** Where the menu opens, in viewport pixels: the pointer, or the row for the keyboard. */
+  point: { x: number; y: number };
+  /** Opens the one message like Enter (selects its row first); null for several. */
+  open: (() => void) | null;
+  /**
+   * The menu closed: the row loses its ring; `refocus` gives the list the focus back (Escape, a
+   * choice), without selecting anything by that.
+   */
+  close: (refocus: boolean) => void;
+}
+
 interface MessageListProps {
   /** The folder's account and the folder; absent for lists that mix accounts (stage 7). */
   account?: Account | undefined;
@@ -160,6 +180,11 @@ interface MessageListProps {
    * (a notification) is on its way to this list.
    */
   autoSelectFirst?: boolean;
+  /**
+   * Stage 21 (decision 0064): a right click on a row, the context-menu key or Shift+F10 asks for
+   * the row's context menu; absent: the system's menu is still kept away from the rows.
+   */
+  onRowMenu?: (request: RowMenuRequest) => void;
 }
 
 /** DOM id of the option of a drawn row with an action (bundle, "Show all"). */
@@ -279,6 +304,7 @@ type ChildOptionProps = ComponentPropsWithRef<"div"> & {
   cursor: boolean;
   multiSelect: boolean;
   actions?: ReactNode;
+  contextTarget?: boolean;
   "data-index": number;
 };
 
@@ -287,7 +313,7 @@ type ChildOptionProps = ComponentPropsWithRef<"div"> & {
  * content like a message row (`useChildLabel`), with the folder where it lies outside the
  * conversation's folder (the user's own answer in Sent).
  */
-function ChildOption({ row, dateId, bounds, selected, cursor, multiSelect, actions, ...rest }: ChildOptionProps) {
+function ChildOption({ row, dateId, bounds, selected, cursor, multiSelect, actions, contextTarget = false, ...rest }: ChildOptionProps) {
   const { t, i18n } = useTranslation();
   const elsewhere = row.item.mailboxId !== row.parentItem.mailboxId;
   const mailboxes = useMailboxes(elsewhere ? row.item.accountId : null).data;
@@ -311,6 +337,7 @@ function ChildOption({ row, dateId, bounds, selected, cursor, multiSelect, actio
         multiSelect={multiSelect}
         last={row.last}
         actions={actions}
+        contextTarget={contextTarget}
       />
     </div>
   );
@@ -323,8 +350,7 @@ function SkeletonRows({ label }: { label: string }) {
         {label}
       </p>
       {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} aria-hidden className="flex h-(--ui-row-height) items-center gap-3 px-3">
-          <span className="w-4" />
+        <div key={i} aria-hidden className="flex h-(--ui-row-height) items-center gap-3 ps-(--ui-row-lead) pe-3">
           <span className="size-(--ui-avatar) shrink-0 rounded-full bg-badge" />
           <span className="h-3 w-(--ui-list-sender-width) shrink-0 rounded-full bg-badge" />
           <span className="h-3 flex-1 rounded-full bg-hover" />
@@ -393,6 +419,7 @@ export function MessageList({
   onSelectedById,
   autoSelectFirst = false,
   table,
+  onRowMenu,
 }: MessageListProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -427,6 +454,10 @@ export function MessageList({
   const [selectAllRequest, setSelectAllRequest] = useState<readonly MessageId[] | null>(null);
   /** A pointer press is about to focus the list: its click selects, not the focus handler. */
   const pointerPress = useRef(false);
+  /** Stage 21: the focus comes back from the context menu; it selects nothing by itself. */
+  const quietFocus = useRef(false);
+  /** Stage 21: the key of the row the context menu acts on outside the selection (its ring). */
+  const [menuTarget, setMenuTarget] = useState<string | null>(null);
   /** First visible row before an update, to keep it in place when rows are inserted above. */
   const anchor = useRef<{ key: string; offset: number } | null>(null);
 
@@ -1077,6 +1108,14 @@ export function MessageList({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Stage 21: the context-menu key and Shift+F10 open the cursor row's menu.
+    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+      if (openCursorMenu()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
     const page = Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? 0) / rowSize) - 1);
     const moves: Record<string, [number, 1 | -1]> = {
       ArrowDown: [cursorPosition + 1, 1],
@@ -1146,6 +1185,49 @@ export function MessageList({
       setState(only(cursor));
     }
     scrollRef.current?.focus({ preventScroll: true });
+  };
+
+  /**
+   * Stage 21 (decision 0064): the context menu for a row: the selection if the row belongs to it,
+   * else the row alone, which gets a ring while the menu is open (the selection stays as it is, so
+   * nothing opens or is marked read by asking for the menu).
+   */
+  const openRowMenu = (row: SelectableRow, point: { x: number; y: number }) => {
+    if (!onRowMenu) return;
+    const cursor = cursorOf(row);
+    const inSelection = selectedKeys.has(cursor.key);
+    const targets = inSelection ? selectedItems : [row.item];
+    const childIds = inSelection ? selection.childIds : new Set(row.kind === "child" ? [row.item.id] : []);
+    setMenuTarget(inSelection ? null : cursor.key);
+    onRowMenu({
+      items: targets,
+      childIds,
+      point,
+      open:
+        targets.length === 1
+          ? () => {
+              setState(only(cursor));
+              onOpen?.(row.item.id);
+            }
+          : null,
+      close: (refocus) => {
+        setMenuTarget(null);
+        if (!refocus) return;
+        quietFocus.current = true;
+        scrollRef.current?.focus({ preventScroll: true });
+        quietFocus.current = false;
+      },
+    });
+  };
+
+  /** The context menu of the cursor row from the keyboard, opened at the row's start. */
+  const openCursorMenu = (): boolean => {
+    if (!cursorSelectable || activeAction || !onRowMenu) return false;
+    const active = scrollRef.current?.getAttribute("aria-activedescendant");
+    const option = active ? document.getElementById(active) : null;
+    const box = option?.getBoundingClientRect();
+    openRowMenu(cursorSelectable, box ? { x: box.left + Math.min(box.width / 2, 56), y: box.top + box.height / 2 } : { x: 0, y: 0 });
+    return true;
   };
 
   const onRowDoubleClick = (event: MouseEvent, row: SelectableRow) => {
@@ -1278,8 +1360,9 @@ export function MessageList({
         onKeyDown={onKeyDown}
         onFocus={(event) => {
           // The list gets a cursor and a selected option with the focus: the first visible
-          // message, unless there is one already. A click selects its own row instead.
-          if (event.target !== event.currentTarget) return;
+          // message, unless there is one already. A click selects its own row instead, and the
+          // focus back from the context menu selects nothing (stage 21).
+          if (event.target !== event.currentTarget || quietFocus.current) return;
           if (pointerPress.current) {
             pointerPress.current = false;
             return;
@@ -1288,6 +1371,12 @@ export function MessageList({
           if (first) setState((current) => (current.cursor ? current : only(first)));
         }}
         onScroll={rememberAnchor}
+        onContextMenu={(event) => {
+          // Stage 21: never the web view's own menu over the list. A row opens its own (below);
+          // the list itself gets this from the keyboard (the context-menu key on Windows).
+          event.preventDefault();
+          if (event.target === event.currentTarget) openCursorMenu();
+        }}
         data-testid="message-list"
         className={cx(
           "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list px-2",
@@ -1312,9 +1401,8 @@ export function MessageList({
                       key={virtualItem.key}
                       {...common}
                       role="presentation"
-                      className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-3 px-3"
+                      className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-3 ps-(--ui-row-lead) pe-3"
                     >
-                      <span aria-hidden className="w-4" />
                       <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
                       <span className="text-13 text-tertiary">{t("list.loadingMore")}</span>
                     </div>
@@ -1409,7 +1497,15 @@ export function MessageList({
                     pointerPress.current = false;
                     onDragEnd?.();
                   },
+                  // Stage 21 (decision 0064): the row's context menu at the pointer.
+                  onContextMenu: (event: MouseEvent) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    pointerPress.current = false;
+                    openRowMenu(row, { x: event.clientX, y: event.clientY });
+                  },
                 };
+                const contextTarget = menuTarget !== null && menuTarget === key;
                 if (row.kind === "child") {
                   const optionId = childDomId(key);
                   return (
@@ -1425,6 +1521,7 @@ export function MessageList({
                       cursor={isCursor}
                       multiSelect={multiSelect}
                       actions={renderQuickActions?.(row.item, selected, true)}
+                      contextTarget={contextTarget}
                       aria-selected={selected}
                       {...treeAttributes(virtualItem.index)}
                       data-testid="child-row"
@@ -1483,6 +1580,7 @@ export function MessageList({
                         expanded={ident !== null ? open : undefined}
                         omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
                         actions={renderQuickActions?.(row.item, selected, false)}
+                        contextTarget={contextTarget}
                       />
                     ) : (
                       <MessageRowContent
@@ -1499,6 +1597,7 @@ export function MessageList({
                         // In the priority card the card says "important" already.
                         omitMarks={row.card === "priority" ? PRIORITY_CARD_MARKS : undefined}
                         actions={renderQuickActions?.(row.item, selected, false)}
+                        contextTarget={contextTarget}
                       />
                     )}
                   </MessageOption>

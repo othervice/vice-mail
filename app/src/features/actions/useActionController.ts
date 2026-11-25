@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   conversationIpc,
@@ -9,11 +9,13 @@ import {
   type BatchId,
   type ConversationIntent,
   type CoreError,
+  type FollowUpChoice,
   type MailAction,
   type Mailbox,
   type MailboxRole,
   type MessageId,
   type MessageListItem,
+  type SnoozeChoice,
 } from "../../services/ipc";
 import { useNoticeStore } from "../../stores/notices";
 import { accountsQueryKey } from "../accounts/queries";
@@ -83,6 +85,11 @@ interface ControllerOptions {
    * its newest message), unless it is `exact`.
    */
   conversations?: boolean;
+  /**
+   * Stage 21 (decision 0065): the query of a list that mixes folders or accounts (the unified
+   * inbox, search results), reloaded with the folder's own before rows that left it show again.
+   */
+  listKey?: QueryKey | undefined;
 }
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
@@ -124,7 +131,7 @@ function waitForRole(queryClient: QueryClient, account: Account, role: MailboxRo
  * once and the cursor moved to the next mail, the undo notice, and the answers to the core's
  * questions (which folder, delete for good?).
  */
-export function useActionController({ account, mailbox, list, conversations = false }: ControllerOptions) {
+export function useActionController({ account, mailbox, list, conversations = false, listKey }: ControllerOptions) {
   const queryClient = useQueryClient();
   const push = useNoticeStore((state) => state.push);
   const remember = useNoticeStore((state) => state.remember);
@@ -201,6 +208,7 @@ export function useActionController({ account, mailbox, list, conversations = fa
         return;
       case "not_found":
         void queryClient.invalidateQueries({ queryKey: messagesQueryKey(account.id, mailbox.id) });
+        if (listKey) void queryClient.invalidateQueries({ queryKey: listKey });
         push({ kind: "outdated" });
         return;
       default:
@@ -291,7 +299,10 @@ export function useActionController({ account, mailbox, list, conversations = fa
       // The core changed its local state before it answered: the reloaded list no longer has
       // the rows (or has them back after a failure), so hiding them is not needed any more.
       // Not exact: the folder's other lists (stage 9: sorted inbox, Later, Pinned, Tasks) too.
-      await queryClient.invalidateQueries({ queryKey: messagesQueryKey(account.id, mailbox.id) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: messagesQueryKey(account.id, mailbox.id) }),
+        ...(listKey ? [queryClient.invalidateQueries({ queryKey: listKey })] : []),
+      ]);
       hide(ids, false);
     }
     return failure ? { ok: false, error: failure } : { ok: true };
@@ -334,6 +345,14 @@ export function useActionController({ account, mailbox, list, conversations = fa
   const messageHost = conversations ? makeHost(true) : host;
   /** Stage 17: the actions for rows of which `childIds` are child rows of unfolded conversations. */
   const hostFor = (childIds: ReadonlySet<MessageId>): ActionHost => (conversations && childIds.size > 0 ? makeHost(childIds) : host);
+  /** Stage 21: snoozes rows (`exact` as for `apply`) without the snooze menu (context menu presets). */
+  const snoozeNow = (items: readonly MessageListItem[], choice: SnoozeChoice, exact: Exactness = false) => {
+    void comfort.snoozeNow(items, choice, expandFor(exact));
+  };
+  /** Stage 21: a reminder without the reminder menu (always the messages themselves, stage 20). */
+  const followUpNow = (items: readonly MessageListItem[], choice: FollowUpChoice) => {
+    void comfort.followUpNow(items, choice);
+  };
 
   /** The answer to `missing_mailbox`: this folder has the role from now on; then the action runs. */
   const chooseFolderForRole = async (target: Mailbox): Promise<CoreError | null> => {
@@ -384,6 +403,8 @@ export function useActionController({ account, mailbox, list, conversations = fa
     /** Decision 0039: the toolbar of the reading pane acts on its one message. */
     messageHost,
     hostFor,
+    snoozeNow,
+    followUpNow,
     /** Whether the rows are conversations (actions on them act on the conversation). */
     conversations,
     hiddenIds,
