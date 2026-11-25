@@ -314,7 +314,8 @@ export function AccountDetail({ accountId }: { accountId: string }) {
   const account = accounts.data?.find((a) => a.id === accountId);
 
   const back = (
-    <div>
+    // Stage 21 (decision 0071): the quiet button's arrow on the page's edge, not its padding.
+    <div className="-ms-3">
       <Button
         variant="quiet"
         onClick={() => {

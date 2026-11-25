@@ -58,7 +58,7 @@ export function SectionRow({ section, nav, menu, ...rest }: SectionRowProps) {
       aria-label={menu ? item.text : undefined}
       onClick={toggle}
       data-testid={rest["data-testid"]}
-      className="group/section flex h-6 min-w-0 items-center gap-1 rounded-control px-2 text-12 font-semibold text-tertiary transition-colors hover:text-secondary"
+      className="group/section flex h-6 min-w-0 items-center gap-1 rounded-control ps-3 pe-2 text-12 font-semibold text-tertiary transition-colors hover:text-secondary"
     >
       <span className="truncate">{item.text}</span>
       {menu && (

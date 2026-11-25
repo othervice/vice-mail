@@ -85,7 +85,7 @@ export function ReadOnlyNote({ ctx, id, compact = false }: { ctx: ActionContext;
         onClick={() => {
           showAccountsPage({ kind: "account", accountId: ctx.account.id });
         }}
-        className="shrink-0 rounded-control px-1 font-medium text-accent hover:bg-hover"
+        className="flex h-8 shrink-0 items-center rounded-control px-2 font-medium text-accent hover:bg-hover"
         data-testid="allow-changes"
       >
         {t("actions.readOnly.open")}

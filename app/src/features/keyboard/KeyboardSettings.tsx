@@ -209,6 +209,7 @@ export function KeyboardSettings() {
       <p id={descriptionId} className="text-13 text-secondary">
         {t("keyboard.settings.description")}
       </p>
+      {/* Stage 21 (decision 0071): the status beside the button, not on a line kept empty below it. */}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="secondary"
@@ -220,14 +221,14 @@ export function KeyboardSettings() {
         >
           {t("keyboard.settings.resetAll")}
         </Button>
+        <p
+          role="status"
+          className={cx("text-13", status?.tone === "problem" ? "text-danger" : "text-secondary")}
+          data-testid="shortcut-status"
+        >
+          {status?.text}
+        </p>
       </div>
-      <p
-        role="status"
-        className={cx("min-h-5 text-13", status?.tone === "problem" ? "text-danger" : "text-secondary")}
-        data-testid="shortcut-status"
-      >
-        {status?.text}
-      </p>
       {load.isError && (
         <ErrorNotice context={t("keyboard.settings.loadFailed")} error={load.error} onRetry={() => void load.refetch()} data-testid="shortcut-load-error" />
       )}

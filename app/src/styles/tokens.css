@@ -232,7 +232,8 @@
   --ui-reading-min-width: 22.5rem;
   --ui-reading-min-height: 15rem;
   --ui-reading-max-width: 46rem;
-  --ui-attachment-width: 16rem;
+  /* Stage 21 (decision 0071): 20 rem instead of 16, so the name keeps room beside four buttons. */
+  --ui-attachment-width: 20rem;
   /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)
      and the height of their lists, the undo notices at the bottom. */
   --ui-dialog-width: 28rem;

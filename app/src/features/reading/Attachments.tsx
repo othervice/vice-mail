@@ -136,7 +136,7 @@ function AttachmentItem({
   return (
     <li
       className={cx(
-        "flex w-(--ui-attachment-width) max-w-full items-center gap-3 self-stretch rounded-card border bg-canvas py-2 ps-3 pe-1",
+        "flex w-(--ui-attachment-width) max-w-full items-center gap-2 self-stretch rounded-card border bg-canvas py-2 ps-3 pe-1",
         attachment.executable || confirming ? "border-warning" : "border-border",
       )}
       data-testid="attachment"
@@ -148,7 +148,7 @@ function AttachmentItem({
           type="button"
           onClick={onPreview}
           aria-describedby={hintId}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-control text-start"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-control text-start"
           data-testid="attachment-card"
         >
           {text}
@@ -157,7 +157,7 @@ function AttachmentItem({
           </span>
         </button>
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3">{text}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">{text}</div>
       )}
       <div className="flex shrink-0">
         {previewable && (

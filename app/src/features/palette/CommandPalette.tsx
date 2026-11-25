@@ -142,7 +142,7 @@ function PalettePanel({ platform }: CommandPaletteProps) {
         {/* The field as a row with a search symbol; the ring sits on the row while the field has the
             keyboard focus, inside the panel instead of along its clipped edge. */}
         <div className="shrink-0 border-b border-border-subtle p-2">
-          <div className="flex h-10 items-center gap-3 rounded-row bg-track px-3 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-focus-ring">
+          <div className="flex h-10 items-center gap-2 rounded-row bg-track px-3 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-focus-ring">
             <Search aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
             <input
               type="text"
@@ -214,7 +214,7 @@ function PalettePanel({ platform }: CommandPaletteProps) {
                       if (!selected) setActive(index);
                     }}
                     className={cx(
-                      "flex min-h-10 items-center gap-3 rounded-row px-3 py-1 text-14",
+                      "flex min-h-10 items-center gap-2 rounded-row px-3 py-1 text-14",
                       selected ? "bg-selected" : "",
                       entry.disabled ? "text-tertiary" : "text-primary",
                     )}

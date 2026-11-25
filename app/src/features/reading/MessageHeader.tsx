@@ -246,7 +246,9 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
             {(account || header.date > 0) && (
               <time
                 dateTime={new Date(header.date).toISOString()}
-                className="shrink-0 text-12 text-secondary tabular-nums select-text"
+                // Stage 21 (decision 0071): on a line of its own in a narrow card it wraps instead of
+                // running past the card's edge.
+                className="min-w-0 text-12 text-secondary tabular-nums select-text"
                 data-testid="reading-date"
               >
                 {formatFullDate(header.date, i18n.language)}
