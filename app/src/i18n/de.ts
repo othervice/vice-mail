@@ -7,6 +7,8 @@ export const de: Translation = {
     label: "Ansichten",
     inbox: "Posteingang",
     later: "Später",
+    // Stufe 20 (Entscheidung 0059).
+    waiting: "Warten auf Antwort",
     tasks: "Aufgaben",
     readingList: "Zum Lesen",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
@@ -135,6 +137,15 @@ export const de: Translation = {
       readReceipt: "Lesebestätigung anfordern",
       readReceiptHint: "Das Mailprogramm des Empfängers fragt ihn, ob er eine sendet. Es wird nichts verfolgt.",
       failed: "Die Sendeoptionen konnten nicht geändert werden.",
+    },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn keine Antwort kommt“ bei den Sendeoptionen.
+    followUp: {
+      label: "Erinnern, wenn keine Antwort kommt:",
+      none: "Nicht erinnern",
+      preset: "{{name}} ({{time}})",
+      custom: "Datum und Uhrzeit wählen…",
+      customLabel: "Datum und Uhrzeit der Erinnerung",
+      set: "Übernehmen",
     },
     errors: {
       open: "Der Entwurf ließ sich nicht öffnen.",
@@ -758,6 +769,9 @@ export const de: Translation = {
       unpin: "Nicht mehr anpinnen",
       snooze: "Zurückstellen",
       unsnooze: "Nicht mehr zurückstellen",
+      // Stufe 20 (Entscheidung 0059)
+      followUp: "Erinnern, wenn keine Antwort kommt…",
+      clearFollowUp: "Erinnerung entfernen",
       addTask: "Als Aufgabe markieren",
       removeTask: "Aufgabe entfernen",
       completeTask: "Aufgabe erledigt",
@@ -2181,6 +2195,8 @@ export const de: Translation = {
     blocks: {
       pinned: "Angepinnt",
       returned: "Zurück aus „Später“",
+      // Stufe 20 (Entscheidung 0059).
+      followUps: "Noch keine Antwort",
       priority: "Priorität",
     },
     priority: {
@@ -2208,6 +2224,10 @@ export const de: Translation = {
       back: "Zurück",
       task: "Aufgabe",
       taskDone: "Aufgabe erledigt",
+      // Stufe 20 (Entscheidung 0059).
+      followUp: "Erinnerung, wenn keine Antwort kommt",
+      noReply: "Keine Antwort",
+      noReplySince: "Keine Antwort seit {{date}}",
     },
     views: {
       later: {
@@ -2221,6 +2241,11 @@ export const de: Translation = {
       tasks: {
         emptyTitle: "Keine Aufgaben",
         emptyBody: "Markierst du eine Mail als Aufgabe, steht sie hier, bis du sie abhakst.",
+      },
+      waiting: {
+        emptyTitle: "Du wartest auf keine Antwort",
+        emptyBody:
+          "Wähle beim Senden „Erinnern, wenn keine Antwort kommt“. Die Mail wartet hier; antwortet bis dahin niemand, erscheint sie wieder oben im Posteingang.",
       },
       flagged: {
         emptyTitle: "Nichts markiert",
@@ -2238,6 +2263,19 @@ export const de: Translation = {
         done: "Noch keine Aufgabe erledigt",
         all: "Keine Aufgaben",
       },
+    },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn bis … keine Antwort kommt“.
+    followUp: {
+      title_one: "Erinnern, wenn keine Antwort kommt",
+      title_other: "Bei {{count}} Mails erinnern, wenn keine Antwort kommt",
+      explanation: "Antwortet bis dahin niemand im Gespräch, erscheint die Mail wieder oben in deinem Posteingang.",
+      presets: "Erinnern am",
+      tomorrow: "Morgen",
+      inThreeDays: "In 3 Tagen",
+      nextWeek: "Nächste Woche",
+      custom: "Datum und Uhrzeit wählen",
+      submit: "Erinnern",
+      timesFailed: "Die Zeitpunkte für die Erinnerung ließen sich nicht laden.",
     },
     snooze: {
       title_one: "Mail zurückstellen",
@@ -2273,11 +2311,18 @@ export const de: Translation = {
       taskDone_other: "{{count, number}} Aufgaben erledigt",
       taskReopened_one: "Aufgabe wieder offen",
       taskReopened_other: "{{count, number}} Aufgaben wieder offen",
+      followUpSet_one: "Erinnerung am {{time}}, wenn keine Antwort kommt",
+      followUpSet_other: "{{count, number}} Erinnerungen am {{time}}, wenn keine Antwort kommt",
+      followUpAnswered_one: "Eine Mail hat schon eine Antwort und bekommt keine Erinnerung.",
+      followUpAnswered_other: "{{count, number}} Mails haben schon eine Antwort und bekommen keine Erinnerung.",
+      followUpCleared_one: "Erinnerung entfernt",
+      followUpCleared_other: "{{count, number}} Erinnerungen entfernt",
       failed: {
         pin: "Anpinnen hat nicht geklappt.",
         snooze: "Zurückstellen hat nicht geklappt.",
         unsnooze: "Die Mail ließ sich nicht zurückholen.",
         task: "Die Aufgabe ließ sich nicht ändern.",
+        followUp: "Die Erinnerung ließ sich nicht ändern.",
       },
       noMessageId: "Diese Mail hat keine Message-ID und lässt sich deshalb nicht markieren; auf anderen Geräten wäre die Markierung nicht zuzuordnen.",
       ruleSkipped_one: "Die lokale Regel „{{name}}“ hat {{count, number}} Mail übersprungen.",

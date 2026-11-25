@@ -9,6 +9,8 @@ import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } fr
 export const MAIL_VIEW_IDS = [
   "inbox",
   "later",
+  // Stage 20 (decision 0059): sent mail with a reminder if no reply comes.
+  "waiting",
   "tasks",
   // Stage 16: the reading list ("Zum Lesen"), a local mark like Tasks.
   "readingList",

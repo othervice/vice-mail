@@ -49,6 +49,7 @@ import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
+import { FollowUpPicker } from "../comfort/FollowUpPicker";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
@@ -312,12 +313,12 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const targetHost = controller.hostFor(targetChildren);
   const targetCtx = targets.length === 1 && targetChildren.size === 1 && targets[0] ? ctxForMessage(targets[0]) : ctxFor(targets);
   // Stage 8: the command palette runs the same actions on the same messages.
-  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems);
+  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems || controller.comfort.followUpItems);
   useActionTarget({ ctx: pickerOpen ? null : targetCtx, host: targetHost });
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || isEditableTarget(event.target)) return;
-    if (controller.overlay || controller.comfort.snoozeItems) return;
+    if (controller.overlay || controller.comfort.snoozeItems || controller.comfort.followUpItems) return;
     const ctx = targetCtx;
     for (const id of ACTION_IDS) {
       const definition = ACTIONS[id];
@@ -527,6 +528,17 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           restoreFocus={focusList}
         />
       )}
+      {/* Stage 20 (decision 0059): "Remind me if no reply". */}
+      {controller.comfort.followUpItems && (
+        <FollowUpPicker
+          count={controller.comfort.followUpItems.length}
+          onChoose={(choice) => {
+            void controller.comfort.followUp(choice);
+          }}
+          onClose={controller.comfort.closeFollowUp}
+          restoreFocus={focusList}
+        />
+      )}
       {overlay?.kind === "move" && (
         <MovePicker
           count={overlay.ids.length}
@@ -595,6 +607,7 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
     case "trash":
       return { kind: "role", role: mailView };
     case "later":
+    case "waiting":
     case "pinned":
     case "tasks":
     case "readingList":

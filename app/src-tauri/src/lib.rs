@@ -314,6 +314,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a
             // reply, the attachments view, the mailbox quota.
             commands::reminders::check_attachment_reminder,
+            commands::reminders::get_follow_up_times,
+            commands::reminders::set_follow_up,
+            commands::reminders::clear_follow_up,
+            commands::reminders::list_follow_ups,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)

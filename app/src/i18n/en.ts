@@ -5,6 +5,8 @@ export const en = {
     label: "Views",
     inbox: "Inbox",
     later: "Later",
+    // Stage 20 (decision 0059): sent mail with a reminder if no reply comes.
+    waiting: "Waiting for reply",
     tasks: "Tasks",
     // Stage 16: the reading list (local, never on the server).
     readingList: "Reading list",
@@ -139,6 +141,15 @@ export const en = {
       readReceipt: "Request a read receipt",
       readReceiptHint: "The recipient's mail app asks them whether to send one. Nothing is tracked.",
       failed: "The send options could not be changed.",
+    },
+    // Stage 20 (decision 0059): "Remind me if no reply by …" among the send options.
+    followUp: {
+      label: "Remind me if no reply:",
+      none: "Don't remind",
+      preset: "{{name}} ({{time}})",
+      custom: "Pick a date and time…",
+      customLabel: "Date and time of the reminder",
+      set: "Set",
     },
     errors: {
       open: "The draft could not be opened.",
@@ -763,6 +774,9 @@ export const en = {
       unpin: "Unpin",
       snooze: "Snooze",
       unsnooze: "Unsnooze",
+      // Stage 20 (decision 0059)
+      followUp: "Remind me if no reply…",
+      clearFollowUp: "Remove reminder",
       addTask: "Mark as task",
       removeTask: "Remove task",
       completeTask: "Mark task as done",
@@ -2194,6 +2208,8 @@ export const en = {
     blocks: {
       pinned: "Pinned",
       returned: "Back from Later",
+      // Stage 20 (decision 0059).
+      followUps: "No reply yet",
       priority: "Priority",
     },
     priority: {
@@ -2221,6 +2237,10 @@ export const en = {
       back: "Back",
       task: "Task",
       taskDone: "Task done",
+      // Stage 20 (decision 0059).
+      followUp: "Reminder if no reply",
+      noReply: "No reply",
+      noReplySince: "No reply since {{date}}",
     },
     views: {
       later: {
@@ -2234,6 +2254,11 @@ export const en = {
       tasks: {
         emptyTitle: "No tasks",
         emptyBody: "Mark a message as a task and it is listed here until you tick it off.",
+      },
+      waiting: {
+        emptyTitle: "Not waiting for any reply",
+        emptyBody:
+          "When you send a message, choose “Remind me if no reply”. It waits here; if nobody answers by then, it comes back to the top of the inbox.",
       },
       flagged: {
         emptyTitle: "Nothing flagged",
@@ -2269,6 +2294,19 @@ export const en = {
         tooFar: "Pick a time within the next five years.",
       },
     },
+    // Stage 20 (decision 0059): "Remind me if no reply by …".
+    followUp: {
+      title_one: "Remind me if no reply",
+      title_other: "Remind me if no reply to {{count}} messages",
+      explanation: "If nobody answers in the conversation by then, the message comes back to the top of your inbox.",
+      presets: "Remind me on",
+      tomorrow: "Tomorrow",
+      inThreeDays: "In 3 days",
+      nextWeek: "Next week",
+      custom: "Pick a date and time",
+      submit: "Remind me",
+      timesFailed: "The reminder times could not be loaded.",
+    },
     notices: {
       pinned_one: "Pinned",
       pinned_other: "{{count, number}} messages pinned",
@@ -2286,11 +2324,18 @@ export const en = {
       taskDone_other: "{{count, number}} tasks done",
       taskReopened_one: "Task reopened",
       taskReopened_other: "{{count, number}} tasks reopened",
+      followUpSet_one: "Reminder on {{time}} if no reply comes",
+      followUpSet_other: "{{count, number}} reminders on {{time}} if no reply comes",
+      followUpAnswered_one: "One message already has a reply and keeps no reminder.",
+      followUpAnswered_other: "{{count, number}} messages already have a reply and keep no reminder.",
+      followUpCleared_one: "Reminder removed",
+      followUpCleared_other: "{{count, number}} reminders removed",
       failed: {
         pin: "Pinning did not work.",
         snooze: "Snoozing did not work.",
         unsnooze: "The message could not be brought back.",
         task: "The task could not be changed.",
+        followUp: "The reminder could not be changed.",
       },
       noMessageId: "This message has no Message-ID, so it cannot be marked; the mark would not survive on other devices.",
       ruleSkipped_one: "Local rule “{{name}}” skipped {{count, number}} message.",

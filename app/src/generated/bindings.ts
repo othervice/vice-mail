@@ -720,6 +720,17 @@ export const commands = {
 	 *  remind of. Never asked for sends of the outbox.
 	 */
 	checkAttachmentReminder: (draftId: DraftId, options?: InvokeOptions) => typedError<string | null, IpcError>(__TAURI_INVOKE("check_attachment_reminder", { draftId }, options)),
+	/**  Decision 0059: the times the "Remind me if no reply" menu offers now. */
+	getFollowUpTimes: (options?: InvokeOptions) => __TAURI_INVOKE<FollowUpTimes>("get_follow_up_times", undefined, options),
+	/**
+	 *  Sets or moves "remind me if no reply" on messages; answers the time and how many already
+	 *  have a reply.
+	 */
+	setFollowUp: (messageIds: MessageId[], choice: FollowUpChoice, options?: InvokeOptions) => typedError<FollowUpResult, IpcError>(__TAURI_INVOKE("set_follow_up", { messageIds, choice }, options)),
+	/**  Removes the reminders of messages. */
+	clearFollowUp: (messageIds: MessageId[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("clear_follow_up", { messageIds }, options)),
+	/**  "Waiting for reply": the reminders of the scope, the next due first. */
+	listFollowUps: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_follow_ups", { scope }, options)),
 };
 
 /** Events */
@@ -2267,6 +2278,11 @@ export type Draft = {
 	 */
 	requestReadReceipt: boolean,
 	/**
+	 *  Stage 20 (decision 0059): "Remind me if no reply by …", Unix milliseconds; recorded as
+	 *  a reminder once the server accepted the message. Null: no reminder.
+	 */
+	followUpAt: number | null,
+	/**
 	 *  Made from a draft another program saved in the Drafts folder, which the app could not
 	 *  take over completely (an image from the web, a part the editor cannot show, a message
 	 *  stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
@@ -2309,6 +2325,11 @@ export type DraftSendOptions = {
 	archiveOriginal: boolean,
 	/**  See [`Draft::request_read_receipt`]. */
 	requestReadReceipt: boolean,
+	/**
+	 *  Stage 20: see [`Draft::follow_up_at`]; at least a minute ahead, at most 5 years. Left out
+	 *  by an older caller: none.
+	 */
+	followUpAt?: number | null,
 };
 
 /**  Where the draft's copy in the server's Drafts folder stands. */
@@ -2659,6 +2680,45 @@ export type FirstStartOutcome =
  */
 "notNeeded";
 
+/**  When to remind. */
+export type FollowUpChoice = 
+/**  Tomorrow at 08:00. */
+{ kind: "tomorrow" } | 
+/**  In three days at 08:00. */
+{ kind: "inThreeDays" } | 
+/**  Next Monday at 08:00. */
+{ kind: "nextWeek" } | 
+/**  A time the user picked, Unix milliseconds; at least a minute ahead, at most 5 years. */
+{ kind: "at"; at: number };
+
+/**  A reminder on a list row (a message the user sent). */
+export type FollowUpMark = {
+	/**  When the reminder comes (or came) without an answer, Unix milliseconds. */
+	due: number,
+	/**  When the message was sent ("No reply since …"), Unix milliseconds. */
+	sentAt: number,
+	/**
+	 *  Due without an answer: it stands above the inbox until the user clears it or an answer
+	 *  comes.
+	 */
+	returned: boolean,
+};
+
+/**  What `setFollowUp` answers. */
+export type FollowUpResult = {
+	/**  When the reminder comes if no reply arrives, Unix milliseconds. */
+	due: number,
+	/**  Messages whose conversation already has a reply: they keep no reminder. */
+	answered: number,
+};
+
+/**  The times the reminder menu offers right now, Unix milliseconds, in the user's zone. */
+export type FollowUpTimes = {
+	tomorrow: number,
+	inThreeDays: number,
+	nextWeek: number,
+};
+
 /**
  *  Local row id of an identity (`identity.id`). Not stable across devices (the settings sync
  *  uses the identity's UUID). Exported since stage 7 (identities in the settings).
@@ -2784,6 +2844,13 @@ export type InboxTop = {
 	/**  All messages of important senders in the scope ("Alle anzeigen (n)"). */
 	priorityTotal: number,
 	priorityUnread: number,
+	/**
+	 *  Stage 20 (decision 0059): messages the user sent that got no reply by the time they
+	 *  asked to be reminded ("No reply since …"), most recently due first (at most
+	 *  [`crate::MAX_TOP_FOLLOW_UPS`]), each shown where it lies (usually Sent). They stay until
+	 *  the user clears the reminder or a reply comes.
+	 */
+	followUps: MessageListItem[],
 };
 
 /**  Stage 10: what adding inline images to a draft did. */
@@ -3397,6 +3464,8 @@ export type MessageListItem = {
 	task?: TaskMark | null,
 	/**  Stage 16: on the reading list ("Zum Lesen"). Absent when not. */
 	readingList?: boolean,
+	/**  Stage 20 (decision 0059): a reminder if no reply comes. Absent when there is none. */
+	followUp?: FollowUpMark | null,
 };
 
 /**  One page of a message list, newest first. */

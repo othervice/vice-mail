@@ -309,6 +309,7 @@ impl FakeAccess {
             snooze: None,
             task: None,
             reading_list: false,
+            follow_up: None,
         }
     }
 

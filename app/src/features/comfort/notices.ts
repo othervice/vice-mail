@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { comfortIpc, contactsIpc, parityIpc, type BlockedSender } from "../../services/ipc";
+import { comfortIpc, contactsIpc, parityIpc, reminderIpc, type BlockedSender } from "../../services/ipc";
 import { blockedSendersQueryKey } from "../blocked/queries";
 import { refreshContacts } from "../contacts/queries";
 import type { ComfortNotice } from "../../stores/notices";
@@ -37,6 +37,28 @@ export function comfortNoticeText(t: TFunction, language: string, notice: Comfor
         },
       };
     }
+    // Stage 20 (decision 0059): "Remind me if no reply".
+    case "followUpSet": {
+      const { messageIds } = notice;
+      return {
+        text: t("comfort.notices.followUpSet", {
+          count: notice.count,
+          time: formatSnoozeTime(notice.due, Date.now(), language),
+        }),
+        detail: notice.answered > 0 ? t("comfort.notices.followUpAnswered", { count: notice.answered }) : null,
+        error: false,
+        undo: (queryClient) => {
+          void reminderIpc
+            .clearFollowUp([...messageIds])
+            .catch(() => undefined)
+            .finally(() => {
+              refreshComfortLists(queryClient, null);
+            });
+        },
+      };
+    }
+    case "followUpCleared":
+      return { text: t("comfort.notices.followUpCleared", { count: notice.count }), detail: null, error: false, undo: null };
     // Stage 16: the reading list and blocked senders (texts in `organize.notices`).
     case "readingListAdded":
     case "readingListRemoved":

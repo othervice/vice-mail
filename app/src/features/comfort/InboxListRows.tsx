@@ -1,4 +1,4 @@
-import { AlarmClockCheck, Bell, ChevronDown, ChevronRight, Newspaper, Pin, Zap, type LucideIcon } from "lucide-react";
+import { AlarmClockCheck, Bell, ChevronDown, ChevronRight, MailWarning, Newspaper, Pin, Zap, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import type { Address, MessageCategory } from "../../services/ipc";
@@ -10,6 +10,7 @@ import type { InboxBlock, InboxBundle } from "./inboxRows";
 const BLOCK_ICONS: Record<InboxBlock, LucideIcon> = {
   pinned: Pin,
   returned: AlarmClockCheck,
+  followUps: MailWarning,
   priority: Zap,
 };
 

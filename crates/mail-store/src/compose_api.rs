@@ -64,6 +64,8 @@ pub struct StoredDraft {
     /// Made from another program's copy in the Drafts folder that stays there untouched (it
     /// could not be taken over completely): that copy's Message-ID, `""` when it had none.
     pub kept_original: Option<String>,
+    /// Stage 20: remind at this time (Unix ms) if no reply comes; `None`: no reminder.
+    pub follow_up_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -249,10 +251,18 @@ impl Store {
         id: DraftId,
         archive_original: bool,
         request_receipt: bool,
+        follow_up_at: Option<i64>,
     ) -> Result<StoredDraft, StoreError> {
         let now = now_millis();
         self.write(move |tx| {
-            compose::set_send_options(tx, &id, archive_original, request_receipt, now)
+            compose::set_send_options(
+                tx,
+                &id,
+                archive_original,
+                request_receipt,
+                follow_up_at,
+                now,
+            )
         })
         .await
     }

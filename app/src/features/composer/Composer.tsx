@@ -37,6 +37,7 @@ import { matchesShortcut } from "../actions/shortcuts";
 import type { PasteResult, RichEditorHandle } from "./RichEditor";
 import { SendLaterPicker } from "./SendLaterPicker";
 import { AttachmentReminder } from "./AttachmentReminder";
+import { FollowUpOption } from "./FollowUpOption";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
@@ -353,6 +354,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [sendOptions, setSendOptions] = useState<DraftSendOptions>({
     archiveOriginal: initial.archiveOriginal,
     requestReadReceipt: initial.requestReadReceipt,
+    followUpAt: initial.followUpAt,
   });
   const optionsQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [laterOpen, setLaterOpen] = useState(false);
@@ -608,7 +610,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     const run = optionsQueue.current.then(async () => {
       try {
         const saved = await parityIpc.setDraftSendOptions(draftId, next);
-        setDraft((d) => ({ ...d, archiveOriginal: saved.archiveOriginal, requestReadReceipt: saved.requestReadReceipt }));
+        setDraft((d) => ({
+          ...d,
+          archiveOriginal: saved.archiveOriginal,
+          requestReadReceipt: saved.requestReadReceipt,
+          followUpAt: saved.followUpAt,
+        }));
       } catch (e) {
         setSendOptions(previous);
         setActionError({ context: "sendOptions", error: toCoreError(e) });
@@ -1358,6 +1365,14 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             />
             {t("composer.sendOptions.readReceipt")}
           </label>
+          {/* Stage 20 (decision 0059): "Remind me if no reply by …". */}
+          <FollowUpOption
+            value={sendOptions.followUpAt ?? null}
+            disabled={frozen}
+            onChange={(followUpAt) => {
+              void applySendOptions({ ...sendOptions, followUpAt }).catch(() => undefined);
+            }}
+          />
         </div>
       </div>
       {addingImages && (

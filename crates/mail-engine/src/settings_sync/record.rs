@@ -60,6 +60,8 @@ pub enum RecordKind {
     AttachmentPin,
     /// The picture the user chose for a contact, by its normalised address (stage 17, 0050).
     ContactPicture,
+    /// "Remind me if no reply", by account and Message-ID (stage 20, 0059).
+    FollowUp,
 }
 
 /// How concurrent versions of one record are merged (`docs/ARCHITECTURE.md`, "Settings sync").
@@ -124,7 +126,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 21] = [
+pub const REGISTRY: [KindSpec; 22] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -324,6 +326,16 @@ pub const REGISTRY: [KindSpec; 21] = [
         Removal::Apply,
         56 * KIB,
     ),
+    // Stage 20 (decision 0059): like a snooze, with the time of the sending.
+    spec(
+        RecordKind::FollowUp,
+        "followUp",
+        "follow_up",
+        MergeRule::NewerWins,
+        IdShape::Mail,
+        Removal::Apply,
+        KIB,
+    ),
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -387,7 +399,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -409,6 +421,7 @@ impl RecordKind {
         Self::BlockedSender,
         Self::AttachmentPin,
         Self::ContactPicture,
+        Self::FollowUp,
     ];
 
     pub const fn spec(self) -> &'static KindSpec {
@@ -805,6 +818,9 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
         RecordKind::Snooze => {
             SnoozeInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
+        RecordKind::FollowUp => {
+            FollowUpInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+        }
         RecordKind::Pin => {
             PinInfo::deserialize(value).map_err(|err| invalid(err.to_string()))?;
         }
@@ -1057,6 +1073,19 @@ pub struct DeviceInfo {
 pub struct SnoozeInfo {
     /// Unix ms when the message comes back.
     pub until_ms: i64,
+}
+
+/// Content of a reminder record (stage 20, decision 0059). Like a snooze, whether it came back
+/// is each device's own business; an answer ends it on the device that sees it first, and the
+/// removal travels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FollowUpInfo {
+    /// Unix ms when it comes back without an answer.
+    pub due_ms: i64,
+    /// Unix ms when the message was sent: a later message of the conversation from someone
+    /// else is the answer.
+    pub sent_at_ms: i64,
 }
 
 /// Content of a pin record.

@@ -98,3 +98,59 @@ async fn the_attachment_reminder_reads_only_the_users_own_text() {
         None
     );
 }
+
+/// Stage 20, task B (decision 0059): the reminder chosen in the composer counts once the server
+/// accepted the message; the Sent copy carries it.
+#[tokio::test]
+async fn a_reminder_chosen_when_sending_is_recorded_once_accepted() {
+    let bed = Bed::new().await;
+    let draft = bed.draft("Offer", "<p>What do you think?</p>").await;
+    let due = bed.now() + 3 * 24 * 3_600_000;
+    let options = mail_model::DraftSendOptions {
+        archive_original: false,
+        request_read_receipt: false,
+        follow_up_at: Some(due),
+    };
+    let saved = bed
+        .core
+        .set_draft_send_options(draft.id.clone(), options)
+        .await
+        .expect("options");
+    assert_eq!(saved.follow_up_at, Some(due));
+    // A time not ahead is refused.
+    let err = bed
+        .core
+        .set_draft_send_options(
+            draft.id.clone(),
+            mail_model::DraftSendOptions {
+                follow_up_at: Some(bed.now() - 1),
+                ..options
+            },
+        )
+        .await
+        .expect_err("past");
+    assert_eq!(err.code(), mail_model::ErrorCode::InvalidArgument);
+    assert!(
+        bed.core
+            .list_follow_ups(mail_model::MarkScope::All)
+            .await
+            .expect("waiting")
+            .is_empty(),
+        "nothing before the send"
+    );
+    bed.core
+        .send_draft(draft.id.clone(), "req-offer".into())
+        .await
+        .expect("send");
+    // The fake server names messages `<serial>@fake.test`, so its Sent copy does not carry the
+    // draft's Message-ID; the reminder is checked in the store here (the server test against
+    // the test server checks the Sent copy, `tests/compose.rs`).
+    let store = bed.core.store_ref().expect("store");
+    let recorded = bed
+        .until("the reminder of the sent message", || async {
+            store.next_follow_up_due().await.expect("due")
+        })
+        .await;
+    assert_eq!(recorded, due);
+    assert!(!bed.sender.sent_with("Offer").is_empty());
+}

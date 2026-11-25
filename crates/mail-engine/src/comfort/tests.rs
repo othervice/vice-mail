@@ -12,11 +12,11 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use mail_model::{
-    AccountId, AccountSettings, AccountState, CategoryReason, CoreEvent, ExtraRootCa, InboxFilter,
-    InboxRow, InboxScope, MailboxId, MailboxRole, MessageCategory, MessageId, MessageListItem,
-    NotificationSettings, RuleAction, RuleCondition, RuleInput, RuleSkipReason, Secret, Security,
-    SenderKey, ServerSettings, SnoozeChoice, TaskFilter, TaskMark, TextMatchOp, UnifiedView,
-    UnsubscribeMethod, UnsubscribeOutcome,
+    AccountId, AccountSettings, AccountState, CategoryReason, CoreEvent, ExtraRootCa,
+    FollowUpChoice, InboxFilter, InboxRow, InboxScope, MailboxId, MailboxRole, MarkScope,
+    MessageCategory, MessageId, MessageListItem, NotificationSettings, RuleAction, RuleCondition,
+    RuleInput, RuleSkipReason, Secret, Security, SenderKey, ServerSettings, SnoozeChoice,
+    TaskFilter, TaskMark, TextMatchOp, UnifiedView, UnsubscribeMethod, UnsubscribeOutcome,
 };
 use tempfile::TempDir;
 use tokio::sync::broadcast;
@@ -1975,5 +1975,206 @@ async fn an_expanded_conversation_row_lists_its_messages_from_every_folder() {
     assert_eq!(
         gone.err().map(|e| mail_model::IpcError::from(e).code),
         Some(mail_model::ErrorCode::NotFound)
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 20, task B (decision 0059): reminders when no reply comes, with the movable clock.
+
+async fn sent_items(h: &Harness) -> Vec<MessageListItem> {
+    let sent = h.mailbox(MailboxRole::Sent).await;
+    h.core
+        .list_messages(sent, None, 100)
+        .await
+        .expect("sent")
+        .items
+}
+
+async fn top_follow_ups(h: &Harness) -> Vec<MessageListItem> {
+    let inbox = h.mailbox(MailboxRole::Inbox).await;
+    h.core
+        .list_inbox(h.scope(inbox), None, 50)
+        .await
+        .expect("inbox")
+        .top
+        .expect("top")
+        .follow_ups
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_reminder_comes_back_without_a_reply_and_a_reply_ends_it() {
+    let bob = "Bob Example <bob@friends.example>";
+    let me = "Alice <alice@fake.test>";
+    let server = FakeServer::new();
+    // `<1@fake.test>` and `<2@fake.test>`: two messages the user sent.
+    server.deliver_raw("Sent", &threaded(me, "Proposal", &[], ""));
+    server.deliver_raw("Sent", &threaded(me, "Invoice", &[], ""));
+    server.deliver_raw("INBOX", &threaded(bob, "Hello", &[], ""));
+    let mut h = Harness::new(server).await;
+    let sent = sent_items(&h).await;
+    let proposal = sent
+        .iter()
+        .find(|i| i.subject == "Proposal")
+        .expect("proposal")
+        .clone();
+    let invoice = sent
+        .iter()
+        .find(|i| i.subject == "Invoice")
+        .expect("invoice")
+        .clone();
+
+    let times = h.core.follow_up_times();
+    assert!(times.tomorrow < times.in_three_days && times.in_three_days > h.clock.now_ms());
+    let result = h
+        .core
+        .set_follow_up(vec![proposal.id], FollowUpChoice::Tomorrow)
+        .await
+        .expect("remind");
+    assert_eq!((result.due, result.answered), (times.tomorrow, 0));
+    let mut waiting = h
+        .core
+        .list_follow_ups(MarkScope::All)
+        .await
+        .expect("waiting");
+    assert_eq!(waiting.len(), 1);
+    let mark = waiting.remove(0).follow_up.expect("mark");
+    assert!(!mark.returned);
+    assert_eq!(mark.due, result.due);
+    assert_eq!(mark.sent_at, proposal.date, "no reply since the sending");
+    assert!(top_follow_ups(&h).await.is_empty(), "not due yet");
+    // A time in the past is refused.
+    let err = h
+        .core
+        .set_follow_up(
+            vec![invoice.id],
+            FollowUpChoice::At {
+                at: h.clock.now_ms() - 1,
+            },
+        )
+        .await
+        .expect_err("past");
+    assert_eq!(err.code(), mail_model::ErrorCode::InvalidArgument);
+
+    // The clock moves past the time (the computer slept): it comes back above the inbox.
+    h.clock.advance(2 * 24 * 3_600_000);
+    h.core.resume();
+    eventually("the reminder comes back", || async {
+        top_follow_ups(&h).await.len() == 1
+    })
+    .await;
+    let top = top_follow_ups(&h).await;
+    assert_eq!(top[0].id, proposal.id);
+    assert!(top[0].follow_up.is_some_and(|m| m.returned));
+    assert_eq!(
+        top[0].mailbox_id,
+        h.mailbox(MailboxRole::Sent).await,
+        "shown in Sent"
+    );
+
+    // The user's own message in the conversation is no answer.
+    h.server
+        .deliver_raw("Sent", &threaded(me, "Re: Proposal", &["1@fake.test"], ""));
+    // Only the inbox is watched with IDLE; a pass after waking reads the other folders.
+    h.core.resume();
+    let sent_box = h.mailbox(MailboxRole::Sent).await;
+    eventually("the own follow-up is stored", || async {
+        h.core
+            .list_messages(sent_box, None, 100)
+            .await
+            .expect("sent")
+            .items
+            .len()
+            == 3
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(1_500)).await;
+    assert_eq!(top_follow_ups(&h).await.len(), 1, "still waiting for Bob");
+
+    // Bob answers (in the inbox): the reminder goes, also from the view.
+    h.deliver(&threaded(bob, "Re: Proposal", &["1@fake.test"], ""))
+        .await;
+    eventually("the answer ends the reminder", || async {
+        top_follow_ups(&h).await.is_empty()
+    })
+    .await;
+    assert!(
+        h.core
+            .list_follow_ups(MarkScope::All)
+            .await
+            .expect("waiting")
+            .is_empty()
+    );
+
+    // A reminder that gets its answer before the time never comes back.
+    h.core
+        .set_follow_up(vec![invoice.id], FollowUpChoice::InThreeDays)
+        .await
+        .expect("remind");
+    h.server.deliver_raw(
+        "Archive",
+        &threaded(bob, "Re: Invoice", &["2@fake.test"], ""),
+    );
+    h.core.resume();
+    eventually("an answer in another folder ends it", || async {
+        h.core
+            .list_follow_ups(MarkScope::All)
+            .await
+            .expect("waiting")
+            .is_empty()
+    })
+    .await;
+
+    // Setting one on a conversation that has its answer already keeps none.
+    let answered = h
+        .core
+        .set_follow_up(vec![proposal.id], FollowUpChoice::NextWeek)
+        .await
+        .expect("remind");
+    assert_eq!(answered.answered, 1);
+    assert!(
+        h.core
+            .list_follow_ups(MarkScope::All)
+            .await
+            .expect("waiting")
+            .is_empty()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_reminder_can_be_moved_and_cleared() {
+    let me = "Alice <alice@fake.test>";
+    let server = FakeServer::new();
+    server.deliver_raw("Sent", &threaded(me, "Question", &[], ""));
+    let h = Harness::new(server).await;
+    let question = sent_items(&h).await.remove(0);
+    let first = h
+        .core
+        .set_follow_up(vec![question.id], FollowUpChoice::Tomorrow)
+        .await
+        .expect("remind");
+    let moved = h
+        .core
+        .set_follow_up(vec![question.id], FollowUpChoice::NextWeek)
+        .await
+        .expect("move");
+    assert!(moved.due > first.due);
+    let marks: Vec<_> = sent_items(&h)
+        .await
+        .into_iter()
+        .filter_map(|i| i.follow_up)
+        .collect();
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].due, moved.due);
+    h.core
+        .clear_follow_up(vec![question.id])
+        .await
+        .expect("clear");
+    assert!(sent_items(&h).await.iter().all(|i| i.follow_up.is_none()));
+    assert!(
+        h.core
+            .list_follow_ups(MarkScope::All)
+            .await
+            .expect("waiting")
+            .is_empty()
     );
 }

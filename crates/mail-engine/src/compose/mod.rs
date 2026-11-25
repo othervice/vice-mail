@@ -544,6 +544,7 @@ impl<C: Connector> Compose<C> {
             outgoing: draft.outgoing,
             archive_original: draft.archive_original,
             request_read_receipt: draft.request_receipt,
+            follow_up_at: draft.follow_up_at,
             original_kept: draft.kept_original.is_some(),
             created_at: draft.created_at,
             updated_at: draft.updated_at,
@@ -650,7 +651,12 @@ impl<C: Connector> Compose<C> {
         {
             self.inner
                 .store
-                .set_draft_send_options(draft.id.clone(), true, draft.request_receipt)
+                .set_draft_send_options(
+                    draft.id.clone(),
+                    true,
+                    draft.request_receipt,
+                    draft.follow_up_at,
+                )
                 .await?
         } else {
             draft
@@ -1614,6 +1620,7 @@ impl<C: Connector> Compose<C> {
             archive_original,
             archive_missing: false,
             receipt_for: None,
+            follow_up_at: draft.follow_up_at,
         };
         let not_before = match at {
             Some(at) => Some(at),

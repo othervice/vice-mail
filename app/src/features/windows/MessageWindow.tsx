@@ -18,6 +18,7 @@ import { useActionShortcuts } from "../actions/useActionShortcuts";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { useAppInfo } from "../app-info/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
+import { FollowUpPicker } from "../comfort/FollowUpPicker";
 import { ComposerHost } from "../composer/Composer";
 import { SendNotices } from "../composer/SendNotices";
 import { useMailboxes } from "../mailboxes/queries";
@@ -62,7 +63,7 @@ function MessageWindowPane({ account, mailbox, item, onClose }: PaneProps) {
   const controller = useActionController({ account, mailbox, list });
   useMarkReadOnOpen(account, item, controller);
   const ctx: ActionContext = { account, mailbox, items: [item], canUndo: controller.canUndo };
-  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems || controller.missing);
+  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems || controller.comfort.followUpItems || controller.missing);
   useActionShortcuts({ ctx, host: controller.host, platform, allowed: ALLOWED, blocked: pickerOpen, inList: () => false });
   const { overlay } = controller;
   const article = () => {
@@ -121,6 +122,17 @@ function MessageWindowPane({ account, mailbox, item, onClose }: PaneProps) {
             void controller.comfort.snooze(choice);
           }}
           onClose={controller.comfort.closeSnooze}
+          restoreFocus={article}
+        />
+      )}
+      {/* Stage 20 (decision 0059): "Remind me if no reply". */}
+      {controller.comfort.followUpItems && (
+        <FollowUpPicker
+          count={controller.comfort.followUpItems.length}
+          onChoose={(choice) => {
+            void controller.comfort.followUp(choice);
+          }}
+          onClose={controller.comfort.closeFollowUp}
           restoreFocus={article}
         />
       )}

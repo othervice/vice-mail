@@ -1852,7 +1852,16 @@ export type { CredentialKind } from "../generated/bindings";
 // ---- Stage 20: attachment reminder, reminders without a reply, attachments view, trackers, quota ----
 /** Decision 0058: the trackers the core blocked in one rendering of a mail. */
 export type { TrackerSummary } from "../generated/bindings";
-import { commands as reminderCommands } from "../generated/bindings";
+import {
+  commands as reminderCommands,
+  type FollowUpChoice,
+  type FollowUpMark,
+  type FollowUpResult,
+  type FollowUpTimes,
+} from "../generated/bindings";
+
+/** Decision 0059: "Remind me if no reply by …". */
+export type { FollowUpChoice, FollowUpMark, FollowUpResult, FollowUpTimes };
 
 /** Stage 20: the attachment reminder and reminders when no reply comes (decision 0058). */
 export const reminderIpc = {
@@ -1861,5 +1870,13 @@ export const reminderIpc = {
    * an attachment while the draft has none, else null (also with the setting off).
    */
   checkAttachmentReminder: (draftId: DraftId): Promise<string | null> => call(() => reminderCommands.checkAttachmentReminder(draftId)),
+  /** The times the reminder menu offers now (tomorrow, in three days, next week). */
+  getFollowUpTimes: (): Promise<FollowUpTimes> => infallible(() => reminderCommands.getFollowUpTimes()),
+  /** Local only, synced; emits `inboxChanged`. Messages that already have a reply keep none. */
+  setFollowUp: (messageIds: MessageId[], choice: FollowUpChoice): Promise<FollowUpResult> =>
+    call(() => reminderCommands.setFollowUp(messageIds, choice)),
+  clearFollowUp: (messageIds: MessageId[]): Promise<void> => done(call(() => reminderCommands.clearFollowUp(messageIds))),
+  /** "Waiting for reply": the next due first, then the ones that came back (at most 1,000). */
+  listFollowUps: (scope: MarkScope): Promise<MessageListItem[]> => call(() => reminderCommands.listFollowUps(scope)),
 };
 

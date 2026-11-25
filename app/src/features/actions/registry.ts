@@ -15,6 +15,8 @@ import {
   ListChecks,
   Search,
   Mail,
+  MailCheck,
+  MailClock,
   MailOpen,
   ShieldAlert,
   ShieldCheck,
@@ -63,6 +65,9 @@ export const ACTION_IDS = [
   "unpin",
   "snooze",
   "unsnooze",
+  // Stage 20 (decision 0059): "Remind me if no reply" (local, like a snooze).
+  "followUp",
+  "clearFollowUp",
   "toggleTask",
   "addTask",
   "removeTask",
@@ -117,6 +122,9 @@ export interface ActionHost {
   setPinned: (items: readonly MessageListItem[], pinned: boolean) => void;
   openSnooze: (items: readonly MessageListItem[]) => void;
   unsnooze: (items: readonly MessageListItem[]) => void;
+  /** Stage 20: reminders if no reply comes (local, synced). */
+  openFollowUp: (items: readonly MessageListItem[]) => void;
+  clearFollowUp: (items: readonly MessageListItem[]) => void;
   setTask: (items: readonly MessageListItem[], mark: { done: boolean } | null) => void;
   /** Stage 16: the reading list (local only) and blocking the senders of these messages. */
   setReadingList: (items: readonly MessageListItem[], on: boolean) => void;
@@ -153,6 +161,15 @@ const someUnflagged = (ctx: ActionContext) => ctx.items.some((item) => !item.fla
 const someUnpinned = (ctx: ActionContext) => ctx.items.some((item) => !item.pinned);
 const somePinned = (ctx: ActionContext) => ctx.items.some((item) => item.pinned);
 const someSnoozed = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.snooze));
+// Stage 20: a reminder fits the user's own mail: in Sent, from the account's address, or one
+// that has a reminder already (to move it).
+const ownMail = (ctx: ActionContext) =>
+  ctx.items.length > 0 &&
+  (role(ctx) === "sent" ||
+    ctx.items.every(
+      (item) => Boolean(item.followUp) || item.from?.email.trim().toLowerCase() === ctx.account.email.trim().toLowerCase(),
+    ));
+const someFollowUp = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.followUp));
 const someNoTask = (ctx: ActionContext) => ctx.items.some((item) => !item.task);
 const someTask = (ctx: ActionContext) => ctx.items.some((item) => Boolean(item.task));
 const someOpenTask = (ctx: ActionContext) => ctx.items.some((item) => item.task?.done === false);
@@ -424,6 +441,30 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
     available: someSnoozed,
     run: (ctx, host) => {
       host.unsnooze(ctx.items.filter((item) => item.snooze));
+    },
+  },
+  followUp: {
+    id: "followUp",
+    label: () => "followUp",
+    icon: () => MailClock,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: ownMail,
+    run: (ctx, host) => {
+      host.openFollowUp(ctx.items);
+    },
+  },
+  clearFollowUp: {
+    id: "clearFollowUp",
+    label: () => "clearFollowUp",
+    icon: () => MailCheck,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: someFollowUp,
+    run: (ctx, host) => {
+      host.clearFollowUp(ctx.items.filter((item) => item.followUp));
     },
   },
   toggleTask: {
@@ -700,6 +741,8 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   "togglePin",
   "snooze",
   "unsnooze",
+  "followUp",
+  "clearFollowUp",
   "toggleTask",
   "toggleTaskDone",
   // Stage 16: the reading list and blocking the sender (in "More actions").

@@ -147,7 +147,8 @@ describe("stage 16 writing, focus ring", () => {
     expect(menu.checked).toBeGreaterThanOrEqual(2);
     const options = await focusRingReport(screen.getByTestId("composer-send-options"));
     expect(options.findings).toEqual([]);
-    expect(options.checked).toBe(2);
+    // Stage 20: and the reminder's choice (decision 0059).
+    expect(options.checked).toBe(3);
   });
 
   it("shows on the recipient fields of a template", async () => {

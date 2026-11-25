@@ -51,7 +51,8 @@ macro_rules! select_drafts {
                     EXISTS (SELECT 1 FROM operation o
                              WHERE o.draft_id = d.id AND o.kind = 'append'
                                AND o.state IN ('queued', 'in_flight')),
-                    d.signature_uuid, d.archive_original, d.request_receipt, d.kept_original
+                    d.signature_uuid, d.archive_original, d.request_receipt, d.kept_original,
+                    d.follow_up_at
              FROM draft d ",
             $rest
         )
@@ -118,7 +119,8 @@ pub(crate) const DELETE_DRAFT: &str = "DELETE FROM draft WHERE id = ?1";
 /// read-receipt request).
 pub(crate) const SET_DRAFT_SEND_OPTIONS: &str = "
     UPDATE draft
-    SET archive_original = ?2, request_receipt = ?3, revision = revision + 1, updated_at = ?4
+    SET archive_original = ?2, request_receipt = ?3, follow_up_at = ?5, revision = revision + 1,
+        updated_at = ?4
     WHERE id = ?1 AND state = 'editing'";
 
 /// Queued (not yet sent) appends of a draft (`operation_draft`).
@@ -227,6 +229,7 @@ fn draft_from_row(r: &Row<'_>) -> rusqlite::Result<StoredDraft> {
         archive_original: r.get(36)?,
         request_receipt: r.get(37)?,
         kept_original: r.get(38)?,
+        follow_up_at: r.get(39)?,
     })
 }
 
@@ -421,12 +424,22 @@ pub(crate) fn set_send_options(
     id: &DraftId,
     archive_original: bool,
     request_receipt: bool,
+    follow_up_at: Option<i64>,
     now: i64,
 ) -> Result<StoredDraft, StoreError> {
     let draft = require_editing(conn, id)?;
-    if draft.archive_original != archive_original || draft.request_receipt != request_receipt {
+    if draft.archive_original != archive_original
+        || draft.request_receipt != request_receipt
+        || draft.follow_up_at != follow_up_at
+    {
         conn.prepare_cached(SET_DRAFT_SEND_OPTIONS)?
-            .execute(params![draft.row, archive_original, request_receipt, now])
+            .execute(params![
+                draft.row,
+                archive_original,
+                request_receipt,
+                now,
+                follow_up_at
+            ])
             .map_err(StoreError::sqlite("set draft send options"))?;
     }
     require_draft(conn, id)
@@ -808,6 +821,10 @@ pub(crate) fn send_followups(
     }
     let recorded = recorder.change;
     merge_change(change, recorded);
+    // Stage 20 (decision 0059): "remind me if no reply" counts from the accepted message.
+    if let Some(due) = job.follow_up_at {
+        crate::follow_ups::record_sent(conn, account_row, &job.message_id_header, due, now)?;
+    }
     if job.archive_original
         && let Some(original) = &job.original
     {

@@ -78,7 +78,7 @@ describe("the sorted inbox", () => {
       },
     ],
     nextCursor: null,
-    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 4, priorityUnread: 1 },
+    top: { pinned: [pinned], returned: [back], priority: [vip], priorityTotal: 4, priorityUnread: 1 , followUps: []},
     categories: true,
     conversations: [],
   };

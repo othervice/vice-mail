@@ -48,6 +48,7 @@ mod conversations;
 mod diagnostics;
 mod error;
 mod folders;
+mod follow_ups;
 mod fts;
 mod gmail;
 mod groups;
@@ -100,6 +101,7 @@ pub use contacts_view::{KindRow, SenderLocation, StoredPicture};
 pub use diagnostics::{AccountStats, DatabaseStats};
 pub use error::StoreError;
 pub use folders::MAX_FOLDER_NAME_CHARS;
+pub use follow_ups::{MAX_FOLLOW_UP_VIEW, SettleScope, SettledFollowUps, StoredFollowUp};
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;
 pub use inbox::{ArrivedMessage, InboxListKind};
@@ -146,6 +148,8 @@ mod contacts_view_tests;
 mod conversation_tests;
 #[cfg(test)]
 mod folders_tests;
+#[cfg(test)]
+mod follow_up_tests;
 #[cfg(test)]
 mod gmail_tests;
 #[cfg(test)]

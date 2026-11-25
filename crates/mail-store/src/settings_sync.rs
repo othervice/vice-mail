@@ -488,6 +488,8 @@ pub(crate) fn content_of(
         }
         // Stage 16 (decision 0036).
         "attachmentPin" => crate::attachment_pins::synced_content(conn, id)?,
+        // Stage 20 (decision 0059).
+        "followUp" => crate::follow_ups::synced_content(conn, id)?,
         "device" => conn
             .prepare_cached(
                 "SELECT name, system, last_seen_ms FROM sync_device WHERE device_id = ?1",
@@ -1024,6 +1026,19 @@ fn put_table(
                 .execute(params![group, account])?;
             }
         }
+        "followUp" => {
+            if let Some((account, _)) = split_scoped(id)
+                && account_row(conn, account)?.is_none()
+            {
+                return Err(missing(format!("account {account}")));
+            }
+            crate::follow_ups::apply_synced(conn, id, Some(value), now).map_err(
+                |err| match err {
+                    StoreError::InvalidArgument(what) => refused(what),
+                    other => ApplyError::Store(other),
+                },
+            )?;
+        }
         "attachmentPin" => {
             if let Some((account, _)) = split_scoped(id)
                 && account_row(conn, account)?.is_none()
@@ -1153,6 +1168,12 @@ fn delete_table(
             crate::contacts_dir::SyncedContact::default(),
         )?,
         "contactPicture" => crate::contacts_view::apply_synced_picture(conn, id, None)?,
+        "followUp" => {
+            crate::follow_ups::apply_synced(conn, id, None, 0).map_err(|err| match err {
+                StoreError::InvalidArgument(what) => refused(what),
+                other => ApplyError::Store(other),
+            })?
+        }
         "attachmentPin" => {
             crate::attachment_pins::apply_synced(conn, id, None).map_err(|err| match err {
                 StoreError::InvalidArgument(what) => refused(what),
@@ -1190,6 +1211,7 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
         .execute([from, to])?;
     for table in [
         "snooze",
+        "follow_up",
         "pin",
         "task",
         "reading_list",
@@ -1220,7 +1242,7 @@ fn rekey_account(conn: &Connection, from: &str, to: &str) -> Result<(), ApplyErr
     conn.execute(
         "DELETE FROM sync_record WHERE (kind = 'account' AND id = ?1)
            OR (kind IN ('snooze', 'pin', 'task', 'readingList', 'mailboxPref', 'remoteContent',
-                        'attachmentPin', 'setting')
+                        'attachmentPin', 'followUp', 'setting')
                AND substr(id, 1, length(?1) + 1) = ?1 || '/')",
         [from],
     )?;

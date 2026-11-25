@@ -30,6 +30,8 @@ function fakeHost() {
     setPinned: vi.fn<ActionHost["setPinned"]>(),
     openSnooze: vi.fn<ActionHost["openSnooze"]>(),
     unsnooze: vi.fn<ActionHost["unsnooze"]>(),
+    openFollowUp: vi.fn<ActionHost["openFollowUp"]>(),
+    clearFollowUp: vi.fn<ActionHost["clearFollowUp"]>(),
     setTask: vi.fn<ActionHost["setTask"]>(),
     setReadingList: vi.fn<ActionHost["setReadingList"]>(),
     blockSenders: vi.fn<ActionHost["blockSenders"]>(),
@@ -38,7 +40,13 @@ function fakeHost() {
 
 /** A context in which the action can run: the folder and messages it needs. */
 function contextFor(id: ActionId): ActionContext {
-  const roles: Partial<Record<ActionId, MailboxRole>> = { deletePermanently: "trash", notSpam: "junk", editDraft: "drafts" };
+  const roles: Partial<Record<ActionId, MailboxRole>> = {
+    deletePermanently: "trash",
+    notSpam: "junk",
+    editDraft: "drafts",
+    // Stage 20: a reminder fits the user's own mail.
+    followUp: "sent",
+  };
   const role = roles[id] ?? "inbox";
   const items: Partial<Record<ActionId, Partial<MessageListItem>>> = {
     toggleRead: { unread: true },
@@ -49,6 +57,7 @@ function contextFor(id: ActionId): ActionContext {
     pin: { pinned: false },
     unpin: { pinned: true },
     unsnooze: { snooze: { until: Date.now() + 3_600_000, returned: false } },
+    clearFollowUp: { followUp: { due: Date.now() + 3_600_000, sentAt: Date.now(), returned: false } },
     addTask: {},
     removeTask: { task: { done: false } },
     toggleTaskDone: { task: { done: false } },
@@ -115,6 +124,8 @@ function expectRan(id: ActionId, host: ReturnType<typeof fakeHost>, ctx: ActionC
     unpin: () => expect(host.setPinned).toHaveBeenCalledWith(ctx.items, false),
     snooze: () => expect(host.openSnooze).toHaveBeenCalledWith(ctx.items),
     unsnooze: () => expect(host.unsnooze).toHaveBeenCalledWith(ctx.items),
+    followUp: () => expect(host.openFollowUp).toHaveBeenCalledWith(ctx.items),
+    clearFollowUp: () => expect(host.clearFollowUp).toHaveBeenCalledWith(ctx.items),
     toggleTask: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, { done: false }),
     addTask: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, { done: false }),
     removeTask: () => expect(host.setTask).toHaveBeenCalledWith(ctx.items, null),

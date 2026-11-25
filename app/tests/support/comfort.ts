@@ -18,6 +18,9 @@ import type {
   SnoozeChoice,
   SnoozeTimes,
   TaskMark,
+  FollowUpChoice,
+  FollowUpMark,
+  FollowUpTimes,
 } from "../../src/services/ipc";
 
 export interface ComfortFakeOptions {
@@ -34,6 +37,8 @@ export interface ComfortFakeOptions {
   categories?: Record<number, MessageCategoryInfo>;
   senderRules?: SenderRule[];
   snoozeTimes?: SnoozeTimes;
+  /** Stage 20: `getFollowUpTimes`; default [`FOLLOW_UP_TIMES`]. */
+  followUpTimes?: FollowUpTimes;
   notificationSettings?: NotificationSettings;
   rules?: MailRule[];
 }
@@ -42,6 +47,8 @@ export interface ComfortFake {
   handle: (cmd: string, args: Record<string, unknown>) => unknown;
   readonly pinned: ReadonlySet<number>;
   readonly snoozed: ReadonlyMap<number, { until: number; returned: boolean }>;
+  /** Stage 20: reminders if no reply comes, by message id. */
+  readonly followUps: ReadonlyMap<number, FollowUpMark>;
   readonly tasks: ReadonlyMap<number, TaskMark>;
   readonly notificationTexts: NotificationTexts | null;
   readonly inboxSettings: InboxSettings;
@@ -49,6 +56,13 @@ export interface ComfortFake {
   readonly senderRules: SenderRule[];
   readonly rules: MailRule[];
 }
+
+/** Stage 20: answers of `getFollowUpTimes` in tests. */
+export const FOLLOW_UP_TIMES: FollowUpTimes = {
+  tomorrow: Date.UTC(2026, 10, 24, 7, 0),
+  inThreeDays: Date.UTC(2026, 10, 26, 7, 0),
+  nextWeek: Date.UTC(2026, 10, 30, 7, 0),
+};
 
 /** Answers of `getSnoozeTimes` in tests: fixed, so the menu's times are known. */
 export const SNOOZE_TIMES: SnoozeTimes = {
@@ -112,17 +126,20 @@ export function createComfortFake(
   const pinned = new Set<number>();
   const snoozed = new Map<number, { until: number; returned: boolean }>();
   const tasks = new Map<number, TaskMark>();
+  const followUps = new Map<number, FollowUpMark>();
   let ruleId = 1;
   let rules: MailRule[] = [...(options.rules ?? [])];
 
   const marked = (item: MessageListItem): MessageListItem => {
     const snooze = snoozed.get(item.id);
     const task = tasks.get(item.id);
+    const followUp = followUps.get(item.id);
     return {
       ...item,
       pinned: item.pinned || pinned.has(item.id),
       ...(snooze && { snooze }),
       ...(task && { task }),
+      ...(followUp && { followUp }),
     };
   };
 
@@ -149,7 +166,7 @@ export function createComfortFake(
             returned: core.messagesIn(mailboxId).map(marked).filter((item) => item.snooze?.returned),
             priority: [],
             priorityTotal: 0,
-            priorityUnread: 0,
+            priorityUnread: 0, followUps: [],
           }
         : null;
     return {
@@ -228,6 +245,26 @@ export function createComfortFake(
         for (const id of ids(args)) snoozed.set(id, { until, returned: false });
         return { until };
       }
+      // Stage 20 (decision 0059): reminders if no reply comes.
+      case "get_follow_up_times":
+        return options.followUpTimes ?? FOLLOW_UP_TIMES;
+      case "set_follow_up": {
+        const choice = args["choice"] as FollowUpChoice;
+        const times = options.followUpTimes ?? FOLLOW_UP_TIMES;
+        const due = choice.kind === "at" ? choice.at : times[choice.kind];
+        for (const id of ids(args)) {
+          const item = all().find((m) => m.id === id);
+          followUps.set(id, { due, sentAt: item?.date ?? 0, returned: false });
+        }
+        return { due, answered: 0 };
+      }
+      case "clear_follow_up":
+        for (const id of ids(args)) followUps.delete(id);
+        return null;
+      case "list_follow_ups":
+        return all()
+          .filter((item) => item.followUp)
+          .sort((a, b) => (a.followUp?.due ?? 0) - (b.followUp?.due ?? 0));
       case "unsnooze_messages":
         for (const id of ids(args)) snoozed.delete(id);
         return null;
@@ -307,6 +344,7 @@ export function createComfortFake(
     handle,
     pinned,
     snoozed,
+    followUps,
     tasks,
     get notificationTexts() {
       return notificationTexts;

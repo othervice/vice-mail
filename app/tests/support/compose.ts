@@ -70,6 +70,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     outgoing: null,
     archiveOriginal: false,
     requestReadReceipt: false,
+    followUpAt: null,
     originalKept: false,
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
@@ -372,8 +373,13 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
         if (!draft) return Promise.reject(composeError("not_found"));
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         if (draft.state === "sending") return Promise.reject(composeError("send_in_progress"));
-        const options = args["options"] as { archiveOriginal: boolean; requestReadReceipt: boolean };
-        return store({ ...draft, archiveOriginal: options.archiveOriginal, requestReadReceipt: options.requestReadReceipt });
+        const options = args["options"] as { archiveOriginal: boolean; requestReadReceipt: boolean; followUpAt?: number | null };
+        return store({
+          ...draft,
+          archiveOriginal: options.archiveOriginal,
+          requestReadReceipt: options.requestReadReceipt,
+          followUpAt: options.followUpAt ?? null,
+        });
       }
       // Stage 20 (decision 0058): asked before sending and scheduling.
       case "check_attachment_reminder": {

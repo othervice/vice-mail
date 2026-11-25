@@ -247,6 +247,10 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_task(vec![message], Some(TaskMark { done: false }))
         .await
         .expect("task");
+    // Stage 20 (decision 0059): a reminder if no reply comes.
+    core.set_follow_up(vec![message], mail_model::FollowUpChoice::NextWeek)
+        .await
+        .expect("reminder");
     // Stage 16 (decision 0033): the reading list, a folder's favourite and colour and a
     // blocked sender are records; the views that group unread on top are not.
     core.set_reading_list(vec![message], true)
@@ -579,6 +583,11 @@ fn captured_content_of_every_table_passes_its_kind() {
             "device",
             account,
             serde_json::json!({ "name": "Mac", "system": "macOS", "lastSeenMs": 1 }),
+        ),
+        (
+            "followUp",
+            &format!("{account}/x@y"),
+            serde_json::json!({ "dueMs": 9, "sentAtMs": 1 }),
         ),
     ];
     for (kind, id, content) in cases {
