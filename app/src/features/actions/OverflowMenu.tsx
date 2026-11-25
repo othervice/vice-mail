@@ -209,14 +209,18 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
                   className={cx("size-(--ui-icon-small) shrink-0", (narrow || item.hint) && "mt-0.5", item.inert ? "opacity-50" : "text-secondary")}
                   strokeWidth={1.75}
                 />
-                <span className={cx("flex min-w-0 flex-1 flex-col", !narrow && !item.hint && "truncate")}>
-                  <span className={narrow ? "break-words" : "truncate"}>{item.label}</span>
-                  {item.hint && (
-                    <span id={hintId} className="text-12 text-secondary">
-                      {item.hint}
-                    </span>
-                  )}
-                </span>
+                {narrow || item.hint ? (
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className={narrow ? "break-words" : "truncate"}>{item.label}</span>
+                    {item.hint && (
+                      <span id={hintId} className="text-12 text-secondary">
+                        {item.hint}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                )}
                 {item.detail && (
                   <span aria-hidden className="shrink-0 text-12 text-tertiary">
                     {item.detail}
