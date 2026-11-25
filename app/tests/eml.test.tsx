@@ -131,6 +131,7 @@ describe(".eml files (decision 0027)", () => {
             text: "https://bank.example",
             warnings: [{ kind: "domainMismatch", shownDomain: "bank.example", targetDomain: "evil.example" }],
             openable: true,
+            trackingRemoved: [],
           },
         },
       },

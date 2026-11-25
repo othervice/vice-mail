@@ -373,6 +373,11 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.conversations",
     // Stage 17: the column's views (order, shown or hidden), like the text size.
     "ui.column_views",
+    // Stage 20 (decision 0058): tracker protection in images and links, the attachment
+    // reminder.
+    "reading.block_trackers",
+    "reading.clean_links",
+    "compose.attachment_reminder",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the

@@ -638,17 +638,18 @@ fn action_commands_answer_typed_results() {
     let err = invoke(&h, "discard_operation", json!({ "operationId": 999_999 })).expect_err("gone");
     assert_eq!(err["code"], "not_found", "{err}");
 
-    // Reading preferences.
+    // Reading preferences (stage 20: tracker blocking and link cleaning default to on, also
+    // when an older UI leaves them out).
     assert_eq!(
         invoke(&h, "get_reading_preferences", json!({})).expect("reading prefs"),
-        json!({ "markReadOnOpen": "afterDelay" })
+        json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true })
     );
-    let never = json!({ "markReadOnOpen": "never" });
+    let never = json!({ "markReadOnOpen": "never", "blockTrackers": true, "cleanLinks": false });
     assert_eq!(
         invoke(
             &h,
             "set_reading_preferences",
-            json!({ "preferences": never })
+            json!({ "preferences": { "markReadOnOpen": "never", "cleanLinks": false } })
         )
         .expect("set"),
         never

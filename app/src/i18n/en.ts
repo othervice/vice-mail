@@ -660,12 +660,30 @@ export const en = {
       loading: "Loading…",
       failed: "The external content could not be loaded.",
     },
+    // Stage 20 (decision 0058): tracker protection in the reading pane.
+    trackers: {
+      blocked_one: "{{count}} tracker blocked",
+      blocked_other: "{{count}} trackers blocked",
+      explanation:
+        "Trackers tell the sender that, when and where you opened this message. The app did not load them, not even when you load the images.",
+      pixels_one: "{{count}} tracking pixel: an invisible image that reports the opening",
+      pixels_other: "{{count}} tracking pixels: invisible images that report the opening",
+      knownHosts_one: "{{count}} image from a known tracking service",
+      knownHosts_other: "{{count}} images from known tracking services",
+      parameters_one: "{{count}} image with tracking parameters in its address; it loads without them",
+      parameters_other: "{{count}} images with tracking parameters in their address; they load without them",
+      hosts: "From: {{hosts}}",
+      setting: "You can turn this off under Settings → Reading.",
+    },
     link: {
       title: "Open this link?",
       mailtoTitle: "Write to this address?",
       notOpenableTitle: "This link cannot be opened",
       checking: "Checking the link…",
       linkText: "Link text: “{{text}}”",
+      // Stage 20: the target shown is already without them.
+      trackingRemoved_one: "Tracking parameter removed: {{names}}",
+      trackingRemoved_other: "Tracking parameters removed: {{names}}",
       open: "Open in browser",
       openMailto: "Open in mail app",
       openAnyway: "Open anyway",
@@ -1291,6 +1309,16 @@ export const en = {
           paused: "Paused while offline",
           unknown: "Status unknown",
         },
+      },
+      trackers: {
+        title: "Trackers",
+        description: "Protection against senders who want to know whether, when and where you read their mail.",
+        block: "Block trackers in messages",
+        blockHint:
+          "Tracking pixels and images of known tracking services never load, not even when you load the images. The message says how many were blocked.",
+        cleanLinks: "Remove tracking from links",
+        cleanLinksHint:
+          "Links open without tracking parameters such as utm_source or fbclid. Redirects through tracking services cannot be removed without contacting them, so the app leaves them as they are.",
       },
       remote: {
         title: "External content",

@@ -176,8 +176,8 @@ pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
     LinkWarning, MessageBody, MessageProblem, MessageView, MessageViewHeader, OpenAttachmentResult,
     PrefetchPeriod, PrefetchSettings, PrefetchState, PrefetchStatus, RemoteContentScope,
-    RenderToken, SaveAttachmentResult, TextSegment, link_placeholder, normalize_sender,
-    parse_link_placeholder,
+    RenderToken, SaveAttachmentResult, TextSegment, TrackerSummary, link_placeholder,
+    normalize_sender, parse_link_placeholder,
 };
 pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use saved_search::{

@@ -27,7 +27,7 @@ function mail(): MessageListItem {
 }
 
 function linkInfo(overrides: Partial<LinkInfo> = {}): LinkInfo {
-  return { target: "https://pay.example/x", scheme: "https", host: "pay.example", text: "https://pay.example/x", warnings: [], openable: true, ...overrides };
+  return { target: "https://pay.example/x", scheme: "https", host: "pay.example", text: "https://pay.example/x", warnings: [], openable: true, trackingRemoved: [], ...overrides };
 }
 
 /** A summary whose key point has a link, as the core returns it. */

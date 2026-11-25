@@ -1848,3 +1848,7 @@ export const oauthIpc = {
 export type { Protocol } from "../generated/bindings";
 /** Stage 14: a password, or an API token for a JMAP server (sent as a bearer token). */
 export type { CredentialKind } from "../generated/bindings";
+
+// ---- Stage 20: attachment reminder, reminders without a reply, attachments view, trackers, quota ----
+/** Decision 0058: the trackers the core blocked in one rendering of a mail. */
+export type { TrackerSummary } from "../generated/bindings";

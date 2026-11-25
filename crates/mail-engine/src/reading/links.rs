@@ -87,6 +87,18 @@ impl FoundLinks {
 pub(crate) struct Rendering {
     pub owner: RenderOwner,
     pub links: Vec<LinkTarget>,
+    /// Stage 20 (decision 0058): links of this rendering lose their tracking parameters before
+    /// they are checked, shown and opened (the setting when it was rendered).
+    pub clean_links: bool,
+}
+
+/// A link of a rendering, checked: the target as it opens (without tracking parameters when
+/// the rendering cleans links) and the parameters removed.
+#[derive(Debug, Clone)]
+pub(crate) struct CheckedLink {
+    pub link: LinkTarget,
+    pub check: LinkCheck,
+    pub removed: Vec<String>,
 }
 
 #[derive(Default)]
@@ -138,7 +150,12 @@ impl Renderings {
     }
 
     /// Remembers the links of an AI result under a new token; `None` when it has none.
-    pub fn insert_found(&self, found: FoundLinks, accounts: Vec<AccountId>) -> Option<RenderToken> {
+    pub fn insert_found(
+        &self,
+        found: FoundLinks,
+        accounts: Vec<AccountId>,
+        clean_links: bool,
+    ) -> Option<RenderToken> {
         if found.is_empty() {
             return None;
         }
@@ -148,6 +165,7 @@ impl Renderings {
             Rendering {
                 owner: RenderOwner::AiResult { accounts },
                 links: found.links,
+                clean_links,
             },
         );
         Some(token)
@@ -175,12 +193,10 @@ impl Renderings {
             .retain(|(_, r)| !matches!(&r.owner, RenderOwner::File(f) if f == file));
     }
 
-    /// Link `index` of the rendering `token`, checked.
-    pub fn link(
-        &self,
-        token: &RenderToken,
-        index: u32,
-    ) -> Result<(LinkTarget, LinkCheck), CoreError> {
+    /// Link `index` of the rendering `token`, checked (stage 20: without its tracking
+    /// parameters when the rendering cleans links; a redirect of a tracking service is never
+    /// followed).
+    pub fn link(&self, token: &RenderToken, index: u32) -> Result<CheckedLink, CoreError> {
         let rendering = self.get(token).ok_or_else(|| {
             CoreError::NotFound(format!("rendering {} (reload the message)", token.as_str()))
         })?;
@@ -190,8 +206,22 @@ impl Renderings {
             .find(|l| l.index == index)
             .cloned()
             .ok_or_else(|| CoreError::NotFound(format!("link {index} of the rendering")))?;
-        let check = mail_content::check_link(&link.text, &link.href);
-        Ok((link, check))
+        let cleaned = rendering
+            .clean_links
+            .then(|| mail_content::strip_tracking_parameters(&link.href))
+            .flatten();
+        let (check, removed) = match cleaned {
+            Some(cleaned) => (
+                mail_content::check_link(&link.text, &cleaned.url),
+                cleaned.removed,
+            ),
+            None => (mail_content::check_link(&link.text, &link.href), Vec::new()),
+        };
+        Ok(CheckedLink {
+            link,
+            check,
+            removed,
+        })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, VecDeque<(RenderToken, Arc<Rendering>)>> {
@@ -200,7 +230,12 @@ impl Renderings {
 }
 
 /// What `describeLink` answers for a checked link.
-pub(crate) fn link_info(link: &LinkTarget, check: &LinkCheck) -> LinkInfo {
+pub(crate) fn link_info(checked: &CheckedLink) -> LinkInfo {
+    let CheckedLink {
+        link,
+        check,
+        removed,
+    } = checked;
     fn push(warnings: &mut Vec<LinkWarning>, warning: LinkWarning) {
         // One warning for the host, however many reasons: the UI shows the ASCII form once.
         let duplicate = warnings.contains(&warning)
@@ -242,6 +277,7 @@ pub(crate) fn link_info(link: &LinkTarget, check: &LinkCheck) -> LinkInfo {
         text: link.text.clone(),
         warnings,
         openable: check.is_openable(),
+        tracking_removed: removed.clone(),
     }
 }
 
@@ -264,6 +300,7 @@ mod tests {
                     text: (*text).into(),
                 })
                 .collect(),
+            clean_links: true,
         }
     }
 
@@ -304,7 +341,7 @@ mod tests {
         let result = |accounts: Vec<AccountId>| {
             let mut found = FoundLinks::default();
             found.segments("see https://example.org/a");
-            register.insert_found(found, accounts).expect("token")
+            register.insert_found(found, accounts, true).expect("token")
         };
         let first = result(vec![account]);
         let mut last = first.clone();
@@ -321,7 +358,7 @@ mod tests {
             "AI results never push out mail"
         );
         assert_eq!(
-            register.insert_found(FoundLinks::default(), vec![account]),
+            register.insert_found(FoundLinks::default(), vec![account], true),
             None,
             "no links, no token"
         );
@@ -414,10 +451,7 @@ mod tests {
                 ("relative/path", "rel"),
             ]),
         );
-        let info = |i| {
-            let (link, check) = register.link(&token, i).expect("link");
-            link_info(&link, &check)
-        };
+        let info = |i| link_info(&register.link(&token, i).expect("link"));
         let first = info(0);
         assert_eq!(first.target, "https://evil.example/login");
         assert_eq!(first.host.as_deref(), Some("evil.example"));
@@ -454,5 +488,36 @@ mod tests {
         assert_eq!(mail.host, None);
         assert!(!info(6).openable);
         assert_eq!(info(6).warnings, [LinkWarning::UnsupportedScheme]);
+    }
+
+    #[test]
+    fn tracking_parameters_go_when_the_rendering_cleans_links() {
+        let register = Renderings::default();
+        let link = (
+            "https://shop.example/a?id=1&utm_source=news&fbclid=x",
+            "Shop",
+        );
+        let clean = Renderings::new_token();
+        register.insert(clean.clone(), rendering(&[link]));
+        let info = link_info(&register.link(&clean, 0).expect("link"));
+        assert_eq!(info.target, "https://shop.example/a?id=1");
+        assert_eq!(info.tracking_removed, ["utm_source", "fbclid"]);
+        let checked = register.link(&clean, 0).expect("link");
+        assert_eq!(
+            checked.check.open_url.as_deref(),
+            Some("https://shop.example/a?id=1")
+        );
+
+        let kept = Renderings::new_token();
+        register.insert(
+            kept.clone(),
+            Rendering {
+                clean_links: false,
+                ..rendering(&[link])
+            },
+        );
+        let info = link_info(&register.link(&kept, 0).expect("link"));
+        assert_eq!(info.target, link.0);
+        assert!(info.tracking_removed.is_empty());
     }
 }

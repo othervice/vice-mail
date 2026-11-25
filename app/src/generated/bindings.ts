@@ -817,9 +817,9 @@ export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 /* Types */
 /**
  *  Stage 16 (decision 0036): the accent colour family of the UI, in light and dark. Every one
- *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "orange", the logo's colour
- *  (decision 0038). A value this version does not know (from a newer device) reads as the
- *  default.
+ *  passes WCAG AA (`app/tests/contrast.test.ts`). The default is "blue" (decision 0053; it was
+ *  the logo's orange under decision 0038, a stored choice stays). A value this version does not
+ *  know (from a newer device) reads as the default.
  */
 export type AccentTheme = "teal" | "blue" | "violet" | "rose" | "orange" | "green";
 
@@ -2808,6 +2808,11 @@ export type LinkInfo = {
 	warnings: LinkWarning[],
 	/**  Only `http`, `https` and `mailto` can be opened. */
 	openable: boolean,
+	/**
+	 *  Stage 20 (decision 0058): tracking parameters removed from `target` (as written, each
+	 *  once); opening uses the clean target. Empty when there were none or cleaning is off.
+	 */
+	trackingRemoved: string[],
 };
 
 /**
@@ -3261,8 +3266,16 @@ export type MessageBody =
  *  replaced unless remote content was loaded.
  */
 { kind: "html"; srcdoc: string; renderToken: RenderToken; 
-/**  External images and styles that were blocked (0 when `remote_loaded`). */
-blockedRemote: number; remoteLoaded: boolean } | 
+/**
+ *  External images and styles that were blocked (0 when `remote_loaded`). Trackers
+ *  are not counted (stage 20): they never load.
+ */
+blockedRemote: number; remoteLoaded: boolean; 
+/**
+ *  Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
+ *  on; all zero when it is off).
+ */
+trackers: TrackerSummary } | 
 /**
  *  Plain text for the app's own theme. Links are separate segments, opened through the same
  *  check as HTML links (`describeLink` with this `render_token`).
@@ -3978,6 +3991,17 @@ export type ReadingPanePosition =
  */
 export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
+	/**
+	 *  Stage 20 (decision 0058): tracking pixels and images on known tracking hosts never load,
+	 *  also not with "load images"; images with tracking parameters load without them; the
+	 *  reading pane counts them. On by default; synced. Left out by an older caller: on.
+	 */
+	blockTrackers?: boolean,
+	/**
+	 *  Stage 20: opening a link of a mail drops its tracking parameters (`utm_*`, `fbclid`,
+	 *  …); the link card shows the clean target. On by default; synced.
+	 */
+	cleanLinks?: boolean,
 };
 
 /**
@@ -4879,6 +4903,22 @@ export type ThreadView = {
 	 *  [`MAX_THREAD_MESSAGES`].
 	 */
 	total: number,
+};
+
+/**
+ *  Stage 20 (decision 0058): the trackers of one rendering of a mail, each image address once.
+ *  Pixels and images on known tracking hosts were never loaded; images with tracking
+ *  parameters load without them (after "load images").
+ */
+export type TrackerSummary = {
+	/**  Invisible images (at most 2 × 2 pixels, or hidden) that report the opening. */
+	pixels: number,
+	/**  Images on hosts known to serve tracking pixels. */
+	knownHosts: number,
+	/**  Images whose address carried tracking parameters (removed). */
+	parameters: number,
+	/**  Hosts of the blocked pixels and known trackers, each once, at most eight. */
+	hosts: string[],
 };
 
 /**  Copy or move to a mailbox of another account. */

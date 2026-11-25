@@ -694,6 +694,7 @@ async fn links_are_checked_and_opened_only_through_the_core() {
         render_token,
         blocked_remote,
         remote_loaded,
+        ..
     } = &view.body
     else {
         panic!("html: {view:?}");
@@ -1572,3 +1573,136 @@ async fn editor_images_are_re_encoded_too() {
     assert_ne!(first, original, "never the original bytes");
     assert_eq!(shown[1], None);
 }
+
+/// Like [`counting_image_server`], recording the request path of every connection.
+async fn path_recording_image_server() -> (u16, Arc<std::sync::Mutex<Vec<String>>>) {
+    const PNG: &[u8] = &[
+        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I', b'H', b'D', b'R', 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89, 0, 0, 0, 0x0d, b'I', b'D',
+        b'A', b'T', 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0, 0x04, 0x85, 0x01, 0x80,
+        0x84, 0xa9, 0x8c, 0x21, 0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82,
+    ];
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let paths = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = Arc::clone(&paths);
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let seen = Arc::clone(&seen);
+            tokio::spawn(async move {
+                let mut buf = vec![0_u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let path = request
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                seen.lock().expect("paths").push(path);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    PNG.len()
+                );
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(PNG).await;
+            });
+        }
+    });
+    (port, paths)
+}
+
+const TRACKER_MAIL: &str = "From: News <news@shop.example>\r\nTo: alice@fake.test\r\n\
+Subject: Our offers\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+<p><a href=\"https://shop.example/offer?id=7&amp;utm_source=news&amp;utm_medium=email&amp;fbclid=x\">Offer</a></p>\
+<img src=\"http://127.0.0.1:PORT/open.gif?u=42\" width=\"1\" height=\"1\" alt=\"\">\
+<img src=\"http://127.0.0.1:PORT/banner.png?id=7&amp;utm_campaign=autumn\" width=\"600\" alt=\"Autumn\">\
+<img src=\"https://us5.list-manage.com/track/open.php?u=42\">\r\n";
+
+/// Stage 20 (decision 0058): the pixel and the known tracker are counted and never fetched,
+/// not even after "load images"; the banner loads without its tracking parameter; the link
+/// opens without its tracking parameters. With the settings off, everything is as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn trackers_are_counted_blocked_and_links_cleaned() {
+    let (port, paths) = path_recording_image_server().await;
+    let server = FakeServer::new();
+    server.deliver_raw(
+        "INBOX",
+        TRACKER_MAIL.replace("PORT", &port.to_string()).as_bytes(),
+    );
+    let mut h = Harness::new(
+        &server,
+        RemoteConfig {
+            allow_loopback: true,
+        },
+    )
+    .await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    let body = |view: &MessageView| match &view.body {
+        MessageBody::Html {
+            blocked_remote,
+            trackers,
+            render_token,
+            ..
+        } => (*blocked_remote, trackers.clone(), render_token.clone()),
+        other => panic!("{other:?}"),
+    };
+
+    let (blocked, trackers, token) = body(&h.open_fetched(message, BodyFormat::Auto).await);
+    // Only the banner waits for "load images"; the pixel and the known tracker never do.
+    assert_eq!(blocked, 1);
+    assert_eq!(
+        (trackers.pixels, trackers.known_hosts, trackers.parameters),
+        (1, 1, 1),
+        "{trackers:?}"
+    );
+    assert_eq!(trackers.total(), 3);
+    assert_eq!(trackers.hosts, ["127.0.0.1", "us5.list-manage.com"]);
+
+    let link = h.core.describe_link(&token, 0).expect("describe");
+    assert_eq!(link.target, "https://shop.example/offer?id=7");
+    assert_eq!(
+        link.tracking_removed,
+        ["utm_source", "utm_medium", "fbclid"]
+    );
+    h.core.open_link(&token, 0).await.expect("open");
+    assert_eq!(h.opener.opened(), ["https://shop.example/offer?id=7"]);
+
+    let loaded = h
+        .core
+        .load_remote_content(message, RemoteContentScope::Once)
+        .await
+        .expect("load");
+    let (blocked, trackers, _) = body(&loaded);
+    assert_eq!((blocked, trackers.total()), (0, 3));
+    assert_eq!(
+        *paths.lock().expect("paths"),
+        ["/banner.png?id=7"],
+        "the pixel never loads, the banner without its parameter"
+    );
+
+    // Off: no counting, the link and the images as written.
+    let prefs = h.core.get_reading_preferences().await.expect("prefs");
+    assert!(prefs.block_trackers && prefs.clean_links, "on by default");
+    h.core
+        .set_reading_preferences(mail_model::ReadingPreferences {
+            block_trackers: false,
+            clean_links: false,
+            ..prefs
+        })
+        .await
+        .expect("off");
+    let (blocked, trackers, token) = body(
+        &h.core
+            .get_message(message, BodyFormat::Auto)
+            .await
+            .expect("get"),
+    );
+    assert_eq!((blocked, trackers.total()), (3, 0));
+    let link = h.core.describe_link(&token, 0).expect("describe");
+    assert!(link.target.contains("utm_source=news"), "{}", link.target);
+    assert!(link.tracking_removed.is_empty());
+}
+

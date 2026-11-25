@@ -101,10 +101,33 @@ pub const MARK_READ_DELAY_MS: u32 = 2_000;
 
 /// Reading preferences stored in the `setting` table (stage 4). Separate from [`Preferences`],
 /// so the appearance settings keep their shape.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadingPreferences {
     pub mark_read_on_open: MarkReadOnOpen,
+    /// Stage 20 (decision 0058): tracking pixels and images on known tracking hosts never load,
+    /// also not with "load images"; images with tracking parameters load without them; the
+    /// reading pane counts them. On by default; synced. Left out by an older caller: on.
+    #[serde(default = "default_on")]
+    pub block_trackers: bool,
+    /// Stage 20: opening a link of a mail drops its tracking parameters (`utm_*`, `fbclid`,
+    /// …); the link card shows the clean target. On by default; synced.
+    #[serde(default = "default_on")]
+    pub clean_links: bool,
+}
+
+impl Default for ReadingPreferences {
+    fn default() -> Self {
+        Self {
+            mark_read_on_open: MarkReadOnOpen::default(),
+            block_trackers: true,
+            clean_links: true,
+        }
+    }
+}
+
+const fn default_on() -> bool {
+    true
 }
 
 /// The one event stream from the core to the UI. Internally tagged by `type`.
@@ -489,7 +512,17 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(ReadingPreferences::default()).expect("serialize"),
-            json!({ "markReadOnOpen": "afterDelay" })
+            json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true })
+        );
+        // Stage 20: an older caller that does not know the tracker settings keeps them on.
+        assert_eq!(
+            serde_json::from_value::<ReadingPreferences>(json!({ "markReadOnOpen": "never" }))
+                .expect("older"),
+            ReadingPreferences {
+                mark_read_on_open: MarkReadOnOpen::Never,
+                block_trackers: true,
+                clean_links: true,
+            }
         );
         for (value, wire) in [
             (MarkReadOnOpen::Immediately, "immediately"),

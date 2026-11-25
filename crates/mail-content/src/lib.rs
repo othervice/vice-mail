@@ -12,6 +12,8 @@
 //!   reader does not see (hidden by CSS or attributes), for models; [`strip_hidden_chars`]:
 //!   invisible Unicode characters out of any text for models.
 //! - [`check_link`]: what to warn about before a link opens; only `http`, `https`, `mailto`.
+//! - [`strip_tracking_parameters`], [`is_known_tracker_host`], [`is_pixel`]: tracker
+//!   protection (stage 20, decision 0058); [`render_html`] counts the trackers it blocks.
 //! - [`sanitize_filename`], [`is_executable_type`]: attachment names and open warnings.
 //! - [`preview_from_text`], [`preview_from_html`]: the list preview.
 //! - [`build_message`], [`mail_html`], [`prepare_reply`], [`prepare_forward`]: composing
@@ -45,6 +47,7 @@ mod preview;
 mod reencode;
 mod templates;
 mod text;
+mod trackers;
 mod visible;
 
 pub use attachment_preview::{preview_kind, render_preview};
@@ -107,6 +110,11 @@ pub use templates::{
 pub use text::{
     MAX_TEXT_BYTES, RenderedText, TextLine, TextSpan, html_to_text, html_to_visible_text,
     render_text,
+};
+pub use trackers::{
+    CleanedUrl, KNOWN_TRACKER_HOSTS, MAX_TRACKER_HOSTS, PIXEL_MAX, TRACKING_PARAMETER_PREFIXES,
+    TRACKING_PARAMETERS, TrackerKind, TrackerReport, is_known_tracker_host, is_pixel,
+    is_tracking_parameter, strip_tracking_parameters,
 };
 pub use visible::{
     HIDDEN_OPACITY, MATCH_BUDGET, MIN_BOX_PX, MIN_CONTRAST, MIN_FONT_PX, OFFSCREEN_PX,

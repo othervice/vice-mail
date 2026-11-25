@@ -59,6 +59,7 @@ function link(overrides: Partial<LinkInfo> = {}): LinkInfo {
     text: "the docs",
     warnings: [],
     openable: true,
+    trackingRemoved: [],
     ...overrides,
   };
 }

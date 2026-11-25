@@ -114,6 +114,7 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     .expect("preferences");
     core.set_reading_preferences(ReadingPreferences {
         mark_read_on_open: MarkReadOnOpen::Never,
+        ..ReadingPreferences::default()
     })
     .await
     .expect("reading");

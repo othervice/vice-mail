@@ -655,12 +655,30 @@ export const de: Translation = {
       loading: "Wird geladen…",
       failed: "Die externen Inhalte konnten nicht geladen werden.",
     },
+    // Stufe 20 (Entscheidung 0058): Tracker-Schutz im Lesebereich.
+    trackers: {
+      blocked_one: "{{count}} Tracker blockiert",
+      blocked_other: "{{count}} Tracker blockiert",
+      explanation:
+        "Tracker verraten dem Absender, dass, wann und wo du diese Nachricht geöffnet hast. Die App hat sie nicht geladen, auch nicht, wenn du die Bilder lädst.",
+      pixels_one: "{{count}} Zählpixel: ein unsichtbares Bild, das das Öffnen meldet",
+      pixels_other: "{{count}} Zählpixel: unsichtbare Bilder, die das Öffnen melden",
+      knownHosts_one: "{{count}} Bild von einem bekannten Tracking-Dienst",
+      knownHosts_other: "{{count}} Bilder von bekannten Tracking-Diensten",
+      parameters_one: "{{count}} Bild mit Tracking-Parametern in der Adresse; es lädt ohne sie",
+      parameters_other: "{{count}} Bilder mit Tracking-Parametern in der Adresse; sie laden ohne sie",
+      hosts: "Von: {{hosts}}",
+      setting: "Du kannst das unter Einstellungen → Lesen abschalten.",
+    },
     link: {
       title: "Diesen Link öffnen?",
       mailtoTitle: "An diese Adresse schreiben?",
       notOpenableTitle: "Dieser Link lässt sich nicht öffnen",
       checking: "Link wird geprüft…",
       linkText: "Linktext: „{{text}}“",
+      // Stufe 20: Das angezeigte Ziel ist schon ohne sie.
+      trackingRemoved_one: "Tracking-Parameter entfernt: {{names}}",
+      trackingRemoved_other: "Tracking-Parameter entfernt: {{names}}",
       open: "Im Browser öffnen",
       openMailto: "In Mail-App öffnen",
       openAnyway: "Trotzdem öffnen",
@@ -1280,6 +1298,16 @@ export const de: Translation = {
           paused: "Pausiert, solange offline",
           unknown: "Stand unbekannt",
         },
+      },
+      trackers: {
+        title: "Tracker",
+        description: "Schutz vor Absendern, die wissen wollen, ob, wann und wo du ihre Mail liest.",
+        block: "Tracker in Nachrichten blockieren",
+        blockHint:
+          "Zählpixel und Bilder bekannter Tracking-Dienste laden nie, auch nicht, wenn du die Bilder lädst. Die Nachricht zeigt, wie viele blockiert wurden.",
+        cleanLinks: "Tracking aus Links entfernen",
+        cleanLinksHint:
+          "Links öffnen ohne Tracking-Parameter wie utm_source oder fbclid. Umleitungen über Tracking-Dienste lassen sich nicht entfernen, ohne sie aufzurufen; die App lässt sie deshalb, wie sie sind.",
       },
       remote: {
         title: "Externe Inhalte",
