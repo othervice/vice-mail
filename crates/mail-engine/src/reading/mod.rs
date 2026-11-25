@@ -59,9 +59,9 @@ use std::time::Duration;
 use mail_content::{RemotePolicy, RenderOptions, render_html, render_text, sniff_image};
 use mail_model::{
     AccountId, AccountState, BodyFormat, BodySection, BodyUnavailableReason, CoreError, CoreEvent,
-    IpcError, LinkInfo, MailConnector, MailboxRole, MessageBody, MessageId, MessageView,
-    OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope, RenderToken,
-    TrackerSummary,
+    DarkMails, IpcError, LinkInfo, MailConnector, MailScheme, MailboxRole, MessageBody, MessageId,
+    MessageView, OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope,
+    RenderToken, TrackerSummary,
 };
 use mail_store::{GLOBAL_SCOPE, Store, StoredMessage};
 use tokio::sync::broadcast;
@@ -93,12 +93,17 @@ pub const QUOTA_KEEP: Duration = Duration::from_secs(15 * 60);
 pub(crate) const BLOCK_TRACKERS_KEY: &str = "reading.block_trackers";
 /// Stage 20: setting key of removing tracking parameters from links; missing means on.
 pub(crate) const CLEAN_LINKS_KEY: &str = "reading.clean_links";
+/// Stage 21 (decision 0066): setting key (global, synced, JSON `"adapted"` or `"light"`) of
+/// HTML mail in the dark theme; missing means adapted.
+pub(crate) const DARK_MAILS_KEY: &str = "reading.dark_mails";
 
-/// Stage 20: the tracker settings a rendering uses.
+/// Stage 20: the tracker settings a rendering uses; stage 21: and how it shows a mail's
+/// colours in the dark theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Privacy {
     pub block_trackers: bool,
     pub clean_links: bool,
+    pub dark_mails: DarkMails,
 }
 
 /// What reading gets from the shell. The default is the product's.
@@ -314,12 +319,13 @@ impl<C: MailConnector + 'static> Reading<C> {
         self: &Arc<Self>,
         message: MessageId,
         format: BodyFormat,
+        scheme: MailScheme,
     ) -> Result<MessageView, CoreError> {
         let summary = self.summary(message).await?;
         if let Some(content) = self.load_content(message).await? {
             self.backfill_preview(&summary, &content);
             return self
-                .render(summary, content, format, Remote::IfAllowed)
+                .render(summary, content, format, Remote::IfAllowed, scheme)
                 .await;
         }
         let body = self.body_missing(&summary).await?;
@@ -341,6 +347,7 @@ impl<C: MailConnector + 'static> Reading<C> {
         self: &Arc<Self>,
         message: MessageId,
         scope: RemoteContentScope,
+        scheme: MailScheme,
     ) -> Result<MessageView, CoreError> {
         let summary = self.summary(message).await?;
         let content = self.load_content(message).await?.ok_or_else(|| {
@@ -359,7 +366,7 @@ impl<C: MailConnector + 'static> Reading<C> {
                 .await?;
             tracing::info!(account = %summary.account_id, "remote content allowed for a sender");
         }
-        self.render(summary, content, BodyFormat::Html, Remote::Load)
+        self.render(summary, content, BodyFormat::Html, Remote::Load, scheme)
             .await
     }
 
@@ -399,6 +406,7 @@ impl<C: MailConnector + 'static> Reading<C> {
         content: Content,
         format: BodyFormat,
         remote: Remote,
+        scheme: MailScheme,
     ) -> Result<MessageView, CoreError> {
         let locations = self.store.message_locations(summary.id).await?;
         let own_mail = locations
@@ -424,7 +432,9 @@ impl<C: MailConnector + 'static> Reading<C> {
             account: summary.account_id,
             message: summary.id,
         };
-        let body = self.render_body(&content, format, load, owner).await?;
+        let body = self
+            .render_body(&content, format, load, owner, scheme)
+            .await?;
         Ok(MessageView {
             id: summary.id,
             account_id: summary.account_id,
@@ -489,10 +499,20 @@ impl<C: MailConnector + 'static> Reading<C> {
         let mut privacy = Privacy {
             block_trackers: true,
             clean_links: true,
+            dark_mails: DarkMails::Adapted,
         };
         match self.store.settings(GLOBAL_SCOPE).await {
             Ok(settings) => {
                 for setting in settings {
+                    if setting.key == DARK_MAILS_KEY {
+                        match serde_json::from_str::<DarkMails>(&setting.value) {
+                            Ok(dark_mails) => privacy.dark_mails = dark_mails,
+                            Err(err) => {
+                                tracing::warn!(key = %setting.key, %err, "dark mails setting unreadable; adapted");
+                            }
+                        }
+                        continue;
+                    }
                     let slot = match setting.key.as_str() {
                         BLOCK_TRACKERS_KEY => &mut privacy.block_trackers,
                         CLEAN_LINKS_KEY => &mut privacy.clean_links,
@@ -514,14 +534,16 @@ impl<C: MailConnector + 'static> Reading<C> {
     }
 
     /// The body of `content` in `format`: sanitised HTML (external images loaded by the core
-    /// when `load`, every image re-encoded; trackers blocked and counted per the setting) or
-    /// text, under a new render token whose links are remembered for `owner`.
+    /// when `load`, every image re-encoded; trackers blocked and counted per the setting;
+    /// stage 21: colours for `scheme` as the setting "Mails in the dark theme" says) or text,
+    /// under a new render token whose links are remembered for `owner`.
     async fn render_body(
         &self,
         content: &Content,
         format: BodyFormat,
         load: bool,
         owner: RenderOwner,
+        scheme: MailScheme,
     ) -> Result<MessageBody, CoreError> {
         let token = Renderings::new_token();
         let privacy = self.privacy().await;
@@ -529,6 +551,11 @@ impl<C: MailConnector + 'static> Reading<C> {
             let html = content.parsed.html.clone().unwrap_or_default();
             let mut options = RenderOptions::new(token.clone());
             options.block_trackers = privacy.block_trackers;
+            // Stage 21 (decision 0066): "always light" shows the mail as in the light theme.
+            options.scheme = match (scheme, privacy.dark_mails) {
+                (MailScheme::Dark, DarkMails::Adapted) => MailScheme::Dark,
+                _ => MailScheme::Light,
+            };
             options.inline = content.parsed.inline_images();
             // C-4: what is kept already; a message seen before renders once.
             options.images = self.images.known(options.inline.images());
@@ -580,6 +607,7 @@ impl<C: MailConnector + 'static> Reading<C> {
                         parameters: rendered.trackers.parameters,
                         hosts: rendered.trackers.hosts,
                     },
+                    colors: rendered.colors,
                 },
                 rendered.links,
             )

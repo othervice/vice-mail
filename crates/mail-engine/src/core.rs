@@ -4,11 +4,12 @@ use std::sync::{Arc, Weak};
 use crate::protocols::AnyConnector;
 use mail_model::{
     Account, AccountId, AccountSettings, AccountStatus, ActionResult, AppInfo, BatchId, BodyFormat,
-    Capabilities, ConnectionTestResult, CoreError, CoreEvent, DiscoveryResult, IpcError, LinkInfo,
-    ListCursor, MailAction, MailBackend, MailConnector, Mailbox, MailboxId, MailboxRole, MessageId,
-    MessagePage, MessageRef, MessageView, OpenAttachmentResult, OperationId, OperationInfo,
-    OutboxCounts, Platform, Preferences, PrefetchSettings, PrefetchStatus, ReadingPreferences,
-    RemoteContentScope, RenderToken, Secret, ServerSettings, StartupProblem, WriteConnector,
+    Capabilities, ConnectionTestResult, CoreError, CoreEvent, DarkMails, DiscoveryResult, IpcError,
+    LinkInfo, ListCursor, MailAction, MailBackend, MailConnector, MailScheme, Mailbox, MailboxId,
+    MailboxRole, MessageId, MessagePage, MessageRef, MessageView, OpenAttachmentResult,
+    OperationId, OperationInfo, OutboxCounts, Platform, Preferences, PrefetchSettings,
+    PrefetchStatus, ReadingPreferences, RemoteContentScope, RenderToken, Secret, ServerSettings,
+    StartupProblem, WriteConnector,
 };
 use mail_store::{GLOBAL_SCOPE, NewAccount, Store, StoreOptions, StoredAccount};
 use serde::Serialize;
@@ -488,6 +489,9 @@ impl<C: Connector> AppCore<C> {
                 crate::reading::CLEAN_LINKS_KEY => {
                     prefs.clean_links = decode_or(&setting.key, &setting.value, true);
                 }
+                crate::reading::DARK_MAILS_KEY => {
+                    prefs.dark_mails = decode_or(&setting.key, &setting.value, DarkMails::Adapted);
+                }
                 _ => {}
             }
         }
@@ -513,12 +517,17 @@ impl<C: Connector> AppCore<C> {
                 crate::reading::CLEAN_LINKS_KEY.to_owned(),
                 encode(&preferences.clean_links)?,
             ),
+            (
+                crate::reading::DARK_MAILS_KEY.to_owned(),
+                encode(&preferences.dark_mails)?,
+            ),
         ];
         self.store()?.put_settings(GLOBAL_SCOPE, entries).await?;
         tracing::info!(
             mark_read_on_open = ?preferences.mark_read_on_open,
             block_trackers = preferences.block_trackers,
             clean_links = preferences.clean_links,
+            dark_mails = ?preferences.dark_mails,
             "reading preferences stored"
         );
         Ok(preferences)
@@ -926,7 +935,19 @@ impl<C: Connector> AppCore<C> {
         message: MessageId,
         format: BodyFormat,
     ) -> Result<MessageView, CoreError> {
-        self.reading()?.get_message(message, format).await
+        self.get_message_for(message, format, MailScheme::Light)
+            .await
+    }
+
+    /// Stage 21 (decision 0066): [`Self::get_message`] for the theme the reading surface
+    /// shows: in the dark theme HTML mail is adapted unless the setting says "always light".
+    pub async fn get_message_for(
+        &self,
+        message: MessageId,
+        format: BodyFormat,
+        scheme: MailScheme,
+    ) -> Result<MessageView, CoreError> {
+        self.reading()?.get_message(message, format, scheme).await
     }
 
     /// Renders again with the external images, loaded by the core; `sender` also allows them
@@ -936,7 +957,20 @@ impl<C: Connector> AppCore<C> {
         message: MessageId,
         scope: RemoteContentScope,
     ) -> Result<MessageView, CoreError> {
-        self.reading()?.load_remote_content(message, scope).await
+        self.load_remote_content_for(message, scope, MailScheme::Light)
+            .await
+    }
+
+    /// Stage 21: [`Self::load_remote_content`] for the theme the reading surface shows.
+    pub async fn load_remote_content_for(
+        &self,
+        message: MessageId,
+        scope: RemoteContentScope,
+        scheme: MailScheme,
+    ) -> Result<MessageView, CoreError> {
+        self.reading()?
+            .load_remote_content(message, scope, scheme)
+            .await
     }
 
     /// Stage 20 (decision 0060): how full the account's mailbox on the server is (IMAP QUOTA,

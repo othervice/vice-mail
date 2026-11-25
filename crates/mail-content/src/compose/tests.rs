@@ -75,6 +75,10 @@ fn assert_allowlisted(html: &str) {
                 let attr_name = attr.name.local.to_string();
                 let ok = match (tag.as_str(), attr_name.as_str()) {
                     ("meta", "http-equiv" | "content") => true,
+                    // Stage 21 (decision 0067): the schemes the mail suits.
+                    ("meta", "name") => {
+                        ["color-scheme", "supported-color-schemes"].contains(&&*attr.value)
+                    }
                     ("a", "href") => ["http://", "https://", "mailto:"]
                         .iter()
                         .any(|p| attr.value.starts_with(p)),
@@ -1345,4 +1349,166 @@ fn headings_and_alignment_of_the_composer_survive() {
         editor_html("<h1 align=\"center\">Hi</h1><p style=\"text-align:center\">x</p>"),
         "<p><strong>Hi</strong></p>\n<p>x</p>\n"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 21 (decision 0067): no colours in outgoing mail
+
+/// Every colour a mail HTML sets for text or backgrounds: `color`, `background*` in styles,
+/// `bgcolor`, `color` and `text` attributes. The grey lines of quotes and code blocks are no
+/// text or background colour.
+fn text_and_background_colours(html: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let parsed = dom::parse_document(html);
+    dom::walk(&parsed.document, |visit| {
+        if let Visit::Enter(node) = visit
+            && let NodeData::Element { attrs, .. } = &node.data
+        {
+            for attr in attrs.borrow().iter() {
+                let name = attr.name.local.to_string();
+                if matches!(name.as_str(), "bgcolor" | "color" | "text") {
+                    found.push(format!("{name}={}", attr.value));
+                }
+                if name == "style" {
+                    for declaration in attr.value.split(';') {
+                        let property = declaration.split(':').next().unwrap_or("").trim();
+                        if property == "color" || property.starts_with("background") {
+                            found.push(declaration.trim().to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        Descend::Yes
+    });
+    found
+}
+
+/// Text copied from the app's own dark reading pane or composer, as WebKit puts it on the
+/// clipboard: the theme's light text and dark surface as inline styles.
+const PASTED_FROM_DARK_UI: &str = "<meta charset=\"utf-8\"><p style=\"color: rgb(230, 237, 243); \
+     background-color: rgb(33, 40, 48); font-family: -apple-system;\">Light text from the dark \
+     theme</p><span style=\"color:#e6edf3\">more</span><font color=\"#ffffff\">white</font>\
+     <div style=\"background:#0d1117;color:#b7c0ca\">panel</div>";
+
+#[test]
+fn outgoing_html_has_no_colour_the_user_did_not_choose_and_declares_both_schemes() {
+    for input in [
+        EDITOR_BASIC,
+        EDITOR_STRUCTURE,
+        EDITOR_LINKS,
+        EDITOR_HOSTILE,
+        EDITOR_UNICODE,
+        PASTED_FROM_DARK_UI,
+    ] {
+        let html = mail_html(input);
+        assert_eq!(
+            text_and_background_colours(&html),
+            Vec::<String>::new(),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"color-scheme\" content=\"light dark\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"supported-color-schemes\" content=\"light dark\">"),
+            "{html}"
+        );
+    }
+    // Code blocks: a line instead of the light grey background they had before.
+    let code = mail_html(EDITOR_STRUCTURE);
+    assert!(code.contains("<pre style=\"margin:0 0 1em 0;padding:8px;border:1px solid #cccccc;"));
+
+    // Pasting: the theme's colours (and every other) are gone, the text stays.
+    let pasted = clean_pasted_html(PASTED_FROM_DARK_UI).expect("paste");
+    assert_eq!(
+        text_and_background_colours(&pasted.html),
+        Vec::<String>::new()
+    );
+    assert!(
+        pasted.html.contains("Light text from the dark theme"),
+        "{}",
+        pasted.html
+    );
+    assert!(pasted.html.contains("panel"), "{}", pasted.html);
+
+    // The built message: its HTML part says the same.
+    let mut message = outgoing();
+    message.html = Some(PASTED_FROM_DARK_UI.to_owned());
+    let built = build_message(&message).expect("build");
+    let parsed = parse(&built.for_sending);
+    let html = parsed.html.expect("html part");
+    assert_eq!(
+        text_and_background_colours(&html),
+        Vec::<String>::new(),
+        "{html}"
+    );
+    assert!(
+        html.contains("<meta name=\"color-scheme\" content=\"light dark\">"),
+        "{html}"
+    );
+}
+
+const COLOURFUL_ORIGINAL: &[u8] = b"From: News <news@shop.example>\r\n\
+To: alice@example.org\r\n\
+Subject: Autumn offers\r\n\
+Date: Mon, 23 Nov 2026 14:05:00 +0000\r\n\
+Message-ID: <autumn@shop.example>\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: text/html; charset=utf-8\r\n\r\n\
+<html><head><style>.card{background:#fff8e1;color:#333333}</style></head>\
+<body bgcolor=\"#ffffff\"><table bgcolor=\"#f4f4f4\"><tr><td class=\"card\">\
+<p style=\"color:#222222\">Our <strong>autumn</strong> offers</p>\
+<font color=\"#000000\">Only this week</font></td></tr></table></body></html>\r\n";
+
+/// A reply to a mail the reading pane shows adapted for the dark theme quotes the original: its
+/// text, none of the colours the dark rendering wrote (the composer keeps no colours at all).
+#[test]
+fn a_reply_quotes_the_original_not_the_dark_rendering() {
+    let original = Original::parse(COLOURFUL_ORIGINAL);
+    let html = original.message.html.clone().expect("html");
+    let dark = crate::render_html(
+        &html,
+        &crate::RenderOptions {
+            scheme: mail_model::MailScheme::Dark,
+            ..crate::RenderOptions::new(mail_model::RenderToken::from_random(7))
+        },
+    );
+    assert_eq!(dark.colors, mail_model::MailColors::Adapted);
+    let adapted: Vec<&str> = dark
+        .srcdoc
+        .match_indices('#')
+        .filter_map(|(at, _)| dark.srcdoc.get(at..at + 7))
+        .filter(|hex| hex[1..].bytes().all(|b| b.is_ascii_hexdigit()))
+        .filter(|hex| !html.contains(hex))
+        .collect();
+    assert!(!adapted.is_empty(), "{}", dark.srcdoc);
+
+    let identities = [identity(1, "alice@example.org", true)];
+    for reply in [
+        prepare_reply(
+            &original,
+            ReplyKind::Sender,
+            &identities,
+            options(QuoteLanguage::English),
+        ),
+        prepare_forward(&original, &identities, options(QuoteLanguage::English)),
+    ] {
+        assert!(
+            reply.html.contains("<strong>autumn</strong> offers"),
+            "{}",
+            reply.html
+        );
+        assert!(reply.html.contains("Only this week"), "{}", reply.html);
+        for colour in &adapted {
+            assert!(!reply.html.contains(colour), "{colour} in {}", reply.html);
+        }
+        let mail = mail_html(&format!("<p>Thanks!</p>{}", reply.html));
+        assert_eq!(
+            text_and_background_colours(&mail),
+            Vec::<String>::new(),
+            "{mail}"
+        );
+    }
 }

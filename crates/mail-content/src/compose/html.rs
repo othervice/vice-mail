@@ -10,6 +10,13 @@
 //! other images, frames) or unwrapped (spans, divs, tables, headings become paragraph
 //! boundaries).
 //!
+//! Stage 21 (decision 0067): the mail carries no text or background colour (the editor offers
+//! none to choose, and colours of pasted or quoted HTML never get into the model), so it reads
+//! the same on a recipient's light or dark canvas; the only colour is the grey of the lines of
+//! quotes and code blocks, which shows on both. The document declares `color-scheme: light dark`
+//! (`<meta name="color-scheme">` and `supported-color-schemes`), so the recipient's program may
+//! show it in its dark theme without recolouring it.
+//!
 //! The walk over the parsed input is iterative and the nesting of quotes and lists is capped,
 //! so hostile or very deep HTML cannot overflow the stack; HTML the guard refuses is read as
 //! text instead.
@@ -37,7 +44,8 @@ const STYLE_ITEM: &str = "margin:0";
 const STYLE_H1: &str = "margin:0 0 0.5em 0;font-size:1.6em;font-weight:bold";
 const STYLE_H2: &str = "margin:0 0 0.5em 0;font-size:1.3em;font-weight:bold";
 const STYLE_H3: &str = "margin:0 0 0.5em 0;font-size:1.1em;font-weight:bold";
-const STYLE_PRE: &str = "margin:0 0 1em 0;padding:8px;background-color:#f4f4f4;\
+// Stage 21 (decision 0067): a line, not a light background, so the code reads on a dark canvas.
+const STYLE_PRE: &str = "margin:0 0 1em 0;padding:8px;border:1px solid #cccccc;\
                          font-family:Menlo,Consolas,'Courier New',monospace;font-size:13px;\
                          white-space:pre-wrap";
 
@@ -1074,11 +1082,14 @@ enum Context {
     Item,
 }
 
-/// A complete mail HTML document: doctype, charset, a wrapper with the font, the blocks.
+/// A complete mail HTML document: doctype, charset, the colour schemes it suits (stage 21), a
+/// wrapper with the font, the blocks.
 pub(crate) fn document(blocks: &[Block]) -> String {
     let mut out = String::from(
         "<!DOCTYPE html>\n<html>\n<head>\n\
          <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n\
+         <meta name=\"color-scheme\" content=\"light dark\">\n\
+         <meta name=\"supported-color-schemes\" content=\"light dark\">\n\
          </head>\n<body>\n",
     );
     out.push_str("<div style=\"");

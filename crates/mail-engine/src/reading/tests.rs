@@ -1897,3 +1897,78 @@ async fn the_quota_is_read_kept_and_refreshed() {
         Err(ErrorCode::NotFound)
     );
 }
+
+const COLORFUL_MAIL: &str = "From: News <news@shop.example>\r\nTo: alice@fake.test\r\n\
+Subject: Colours\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+<body bgcolor=\"#ffffff\"><p style=\"color:#333333;background:#fff8e1\">Hello</p>\
+<p><a href=\"https://shop.example/\">Shop</a></p></body>\r\n";
+
+/// Stage 21 (decision 0066): in the dark theme the core adapts the colours of an HTML mail
+/// (light backgrounds dark, dark text light); the light theme, the setting "always light" and
+/// "Show original colours" (the light scheme) give the mail as written. Links stay the same.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn html_mail_is_adapted_in_the_dark_theme_unless_the_setting_says_light() {
+    use mail_model::{DarkMails, MailColors, MailScheme};
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", COLORFUL_MAIL.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    let html = |view: &MessageView| match &view.body {
+        MessageBody::Html { srcdoc, colors, .. } => (srcdoc.clone(), *colors),
+        other => panic!("{other:?}"),
+    };
+    let (light, colors) = html(&h.open_fetched(message, BodyFormat::Auto).await);
+    assert_eq!(colors, MailColors::Original);
+    assert!(light.contains("bgcolor=\"#ffffff\""), "{light}");
+
+    let dark = |h: &Harness| {
+        let core = h.core.clone();
+        async move {
+            core.get_message_for(message, BodyFormat::Auto, MailScheme::Dark)
+                .await
+                .expect("dark")
+        }
+    };
+    let (adapted, colors) = html(&dark(&h).await);
+    assert_eq!(colors, MailColors::Adapted);
+    assert!(adapted.contains("bgcolor=\"#212830\""), "{adapted}");
+    assert!(
+        !adapted.contains("#333333") && !adapted.contains("#fff8e1"),
+        "{adapted}"
+    );
+    assert!(adapted.contains(mail_content::MAIL_DARK_STYLE));
+
+    // Loading external content keeps the scheme.
+    let loaded = h
+        .core
+        .load_remote_content_for(message, RemoteContentScope::Once, MailScheme::Dark)
+        .await
+        .expect("load");
+    assert_eq!(html(&loaded).1, MailColors::Adapted);
+
+    // "Always light": the dark theme shows the mail as written.
+    let prefs = h.core.get_reading_preferences().await.expect("prefs");
+    assert_eq!(prefs.dark_mails, DarkMails::Adapted, "adapted by default");
+    h.core
+        .set_reading_preferences(mail_model::ReadingPreferences {
+            dark_mails: DarkMails::Light,
+            ..prefs
+        })
+        .await
+        .expect("light");
+    let (always_light, colors) = html(&dark(&h).await);
+    assert_eq!(colors, MailColors::Original);
+    assert!(
+        always_light.contains("bgcolor=\"#ffffff\""),
+        "{always_light}"
+    );
+    assert_eq!(
+        h.core
+            .get_reading_preferences()
+            .await
+            .expect("prefs")
+            .dark_mails,
+        DarkMails::Light
+    );
+}

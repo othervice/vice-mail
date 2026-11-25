@@ -57,6 +57,7 @@ import type {
   LinkOpened,
   Mailbox,
   MailboxRole,
+  MailScheme,
   MessageBody,
   MessageListItem,
   MessagePage,
@@ -199,6 +200,7 @@ export function htmlBody(html: string, overrides: Partial<Extract<MessageBody, {
     blockedRemote: 0,
     remoteLoaded: false,
     trackers: { pixels: 0, knownHosts: 0, parameters: 0, hosts: [] },
+    colors: "original",
     ...overrides,
   };
 }
@@ -299,8 +301,11 @@ interface FakeCoreOptions {
   knownProviders?: Record<string, DiscoveryResult>;
   online?: Record<string, DiscoveryResult>;
   capabilities?: Capabilities;
-  /** `getMessage` answers by message id: one view, or one per asked format. Unknown: `not_found`. */
-  views?: Record<number, MessageView | ((format: BodyFormat) => MessageView)>;
+  /**
+   * `getMessage` answers by message id: one view, or one per asked format (and, stage 21, scheme).
+   * Unknown: `not_found`.
+   */
+  views?: Record<number, MessageView | ((format: BodyFormat, scheme: MailScheme) => MessageView)>;
   /** `loadRemoteContent` answers by message id. */
   remoteViews?: Record<number, MessageView>;
   /** `describeLink` answers by `<renderToken>/<index>`. Unknown: `not_found` (a forgotten rendering). */
@@ -373,7 +378,7 @@ export interface FakeCore {
   /** Calls of one command, with their arguments. */
   callsOf: (cmd: string) => Record<string, unknown>[];
   /** Replaces what `getMessage` answers for a message (a fetch finished); the test then emits. */
-  setView: (messageId: number, view: MessageView | ((format: BodyFormat) => MessageView)) => void;
+  setView: (messageId: number, view: MessageView | ((format: BodyFormat, scheme: MailScheme) => MessageView)) => void;
   remoteSenders: (accountId: string) => string[];
   readonly prefetchSettings: PrefetchSettings;
   // ---- Stage 4: actions and the outbox ----
@@ -467,9 +472,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   const senders = new Map(Object.entries(options.remoteSenders ?? {}).map(([id, list]) => [id, [...list]]));
   let prefetchSettings: PrefetchSettings = options.prefetchSettings ?? PREFETCH_DEFAULTS;
 
-  function viewOf(messageId: number, format: BodyFormat): MessageView | undefined {
+  function viewOf(messageId: number, format: BodyFormat, scheme: MailScheme = "light"): MessageView | undefined {
     const view = views.get(messageId);
-    return typeof view === "function" ? view(format) : view;
+    return typeof view === "function" ? view(format, scheme) : view;
   }
 
   function openAttachment(messageId: number, index: number, confirmed: boolean): OpenAttachmentResult | undefined {
@@ -1036,7 +1041,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         case "list_messages":
           return listMessages(args["mailboxId"] as number, args["cursor"] as number | null, args["limit"] as number);
         case "get_message": {
-          const view = viewOf(args["messageId"] as number, args["format"] as BodyFormat);
+          const view = viewOf(args["messageId"] as number, args["format"] as BodyFormat, (args["scheme"] as MailScheme | null) ?? "light");
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return view ?? Promise.reject(ipcError("not_found"));
         }

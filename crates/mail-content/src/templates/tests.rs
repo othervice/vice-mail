@@ -72,6 +72,10 @@ fn assert_allowlisted(html: &str) {
                 let attr_name = attr.name.local.to_string();
                 let ok = match (tag.as_str(), attr_name.as_str()) {
                     ("meta", "http-equiv" | "content") => true,
+                    // Stage 21 (decision 0067): the schemes the mail suits.
+                    ("meta", "name") => {
+                        ["color-scheme", "supported-color-schemes"].contains(&&*attr.value)
+                    }
                     ("a", "href") => ["http://", "https://", "mailto:"]
                         .iter()
                         .any(|p| attr.value.starts_with(p)),

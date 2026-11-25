@@ -52,7 +52,7 @@ use mail_model::{
     DraftFile, DraftId, DraftKind, DraftServerState, DraftState, DraftSummary, DraftUpdate,
     IdentityId, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
     MAX_DRAFT_BODY_BYTES, MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS,
-    MAX_SUBJECT_CHARS, MailboxRole, MessageBody, MessageId, NewDraft, OperationId,
+    MAX_SUBJECT_CHARS, MailScheme, MailboxRole, MessageBody, MessageId, NewDraft, OperationId,
     OperationPayload, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition, SendJob, SendPhase,
     SentCopyMode, ServerCopy, TextSegment, UnclearDecision,
 };
@@ -851,7 +851,7 @@ impl<C: Connector> Compose<C> {
         let view = self
             .inner
             .reading
-            .get_message(message, BodyFormat::Text)
+            .get_message(message, BodyFormat::Text, MailScheme::Light)
             .await?;
         if let MessageBody::Text { segments, .. } = &view.body {
             return Ok((
@@ -886,7 +886,7 @@ impl<C: Connector> Compose<C> {
                 let view = self
                     .inner
                     .reading
-                    .get_message(message, BodyFormat::Text)
+                    .get_message(message, BodyFormat::Text, MailScheme::Light)
                     .await?;
                 if let MessageBody::Text { segments, .. } = &view.body {
                     return Ok((None, Some(segments_text(segments))));
@@ -1068,7 +1068,7 @@ impl<C: Connector> Compose<C> {
         let view = self
             .inner
             .reading
-            .get_message(message, BodyFormat::Text)
+            .get_message(message, BodyFormat::Text, MailScheme::Light)
             .await?;
         let mut out = Vec::new();
         for (n, attachment) in view.attachments.iter().enumerate() {

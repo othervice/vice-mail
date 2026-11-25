@@ -107,6 +107,9 @@ describe("stage 3 commands", () => {
     const calls: Promise<unknown>[] = [
       ipc.getMessage(42, "text"),
       ipc.loadRemoteContent(42, "sender"),
+      // Stage 21 (decision 0066): the scheme the mail is shown on.
+      ipc.getMessage(42, "html", "dark"),
+      ipc.loadRemoteContent(42, "once", "dark"),
       ipc.listRemoteContentSenders(account.id),
       ipc.revokeRemoteContent(account.id, "news@shop.example"),
       ipc.describeLink("a".repeat(32), 3),
@@ -120,8 +123,10 @@ describe("stage 3 commands", () => {
     await Promise.allSettled(calls);
 
     expect(core.calls).toEqual([
-      { cmd: "get_message", args: { messageId: 42, format: "text" } },
-      { cmd: "load_remote_content", args: { messageId: 42, scope: "sender" } },
+      { cmd: "get_message", args: { messageId: 42, format: "text", scheme: "light" } },
+      { cmd: "load_remote_content", args: { messageId: 42, scope: "sender", scheme: "light" } },
+      { cmd: "get_message", args: { messageId: 42, format: "html", scheme: "dark" } },
+      { cmd: "load_remote_content", args: { messageId: 42, scope: "once", scheme: "dark" } },
       { cmd: "list_remote_content_senders", args: { accountId: account.id } },
       { cmd: "revoke_remote_content", args: { accountId: account.id, sender: "news@shop.example" } },
       { cmd: "describe_link", args: { renderToken: "a".repeat(32), index: 3 } },

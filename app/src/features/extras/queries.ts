@@ -39,8 +39,17 @@ export function useExportMessage() {
   return useMutation({ mutationFn: (messageId: MessageId) => extrasIpc.exportMessage(messageId) });
 }
 
-export function usePrintWindow() {
-  return useMutation({ mutationFn: () => extrasIpc.printWindow() });
+/**
+ * Prints the window. Stage 21 (decision 0066): `prepare` runs first, for example to show a mail
+ * adapted to the dark theme in its original colours (paper is white).
+ */
+export function usePrintWindow(prepare?: () => Promise<void>) {
+  return useMutation({
+    mutationFn: async () => {
+      await prepare?.();
+      await extrasIpc.printWindow();
+    },
+  });
 }
 
 export const defaultMailAppQueryKey = ["defaultMailApp"] as const;

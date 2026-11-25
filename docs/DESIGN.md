@@ -208,6 +208,17 @@ Gespräch (dessen andere Mails klappen in der Liste auf, „Gespräche aufklappe
 Zeilenhöhe 1,6; HTML-Mails auf ihrem weißen Blatt ohne eigenen Rahmen. Unter der Mail eine leise
 Zeile: Antworten, Allen antworten, Weiterleiten.
 
+**HTML-Mails im dunklen Design (Stufe 21, Entscheidung 0066).** Standard ist „angepasst“: Der Kern
+macht helle Hintergründe dunkel und dunkle Schrift hell (Farbton bleibt, Bilder bleiben, der
+Kontrast jedes Paars bleibt mindestens 4,5 : 1, wo er es war). Eine weiße Mail liegt dann genau auf
+der Karte (`surface-raised`, `#212830`), ihre Standardschrift ist `text-primary`, Links `accent`;
+Mail und Karte sind eine Fläche, wie bei Textmails. Mails mit eigenen dunklen Farben
+(`color-scheme: light dark`) behalten diese, Mails mit `only light` und die Einstellung „Immer auf
+weißem Grund“ (Einstellungen → Lesen) bekommen das weiße Blatt wie bisher. Über der Mail neben
+„HTML/Text“ der Umschalter „Originalfarben“ (Symbol Palette, gedrückt = weißes Blatt), nur im
+dunklen Design; er gehört zur Mail. Gedruckt wird eine angepasste Mail in Originalfarben. Die
+Hervorhebung der Suche nimmt auf dem dunklen Grund die Suchfarben des Designs.
+
 **Kopf der Karte.** Name und echte Adresse des Absenders bleiben immer sichtbar (gefälschte Namen
 zeigen so ihre Adresse), daneben Datum und „…“ (Allen antworten, Als Anhang weiterleiten, In neuem
 Fenster). Empfänger und Konto sind eine Zeile „an dich, Ethan Bennett +1“, bei mehreren Konten mit
@@ -235,6 +246,9 @@ Kontos gibt es weder Chips noch Leiste.
 **Verfassen.** Felder mit Haarlinien und gedämpften Beschriftungen, Empfänger als runde Chips,
 Rich Text/Text als kleiner Segmentschalter, Editor mindestens einige Absätze hoch (in niedrigen
 Fenstern scrollt der Bereich als Ganzes), Senden als Akzentbutton mit leisem Kürzel daneben.
+Gesendete Mails tragen keine Text- oder Hintergrundfarbe und sagen `color-scheme: light dark`
+(0067): Sie lesen sich beim Empfänger hell wie dunkel; Codeblöcke haben eine graue Linie statt
+eines hellgrauen Grunds.
 
 ## Gestaltungsdurchgang 23.11.2026 (Orange, alle Ansichten)
 

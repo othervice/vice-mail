@@ -427,7 +427,7 @@ describe("opening a conversation", () => {
     });
     expect(core.callsOf("get_thread")).toEqual([{ messageId: ANSWER.id, mailboxId: 1 }]);
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toEqual([{ messageId: FIRST.id, format: "auto" }]);
+      expect(core.callsOf("get_message")).toEqual([{ messageId: FIRST.id, format: "auto", scheme: "light" }]);
     });
     // No stacked conversation: the pane holds one message card.
     expect(screen.queryByTestId("thread-entries")).toBeNull();
@@ -502,7 +502,7 @@ describe("opening a conversation", () => {
     });
     expect(await screen.findByTestId("thread-pane")).toBeTruthy();
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: WORK_MAIL.id, format: "auto" });
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: WORK_MAIL.id, format: "auto", scheme: "light" });
     });
   });
 });

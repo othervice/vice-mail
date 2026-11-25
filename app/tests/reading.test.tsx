@@ -156,7 +156,7 @@ describe("reading pane", () => {
     expect(frame.className).toContain("bg-mail-canvas");
     expect(frame.className).toContain("scheme-light");
 
-    expect(core.callsOf("get_message")).toEqual([{ messageId: message.id, format: "auto" }]);
+    expect(core.callsOf("get_message")).toEqual([{ messageId: message.id, format: "auto", scheme: "light" }]);
     expect(core.calls.map((c) => c.cmd).filter((cmd) => !READING_COMMANDS.has(cmd))).toEqual([]);
   });
 
@@ -268,8 +268,8 @@ describe("reading pane", () => {
     expect(within(pane).queryByTitle(/Content of the message/)).toBeNull();
     expect(within(toggle).getByRole("button", { name: "Plain text" }).getAttribute("aria-pressed")).toBe("true");
     expect(core.callsOf("get_message")).toEqual([
-      { messageId: message.id, format: "auto" },
-      { messageId: message.id, format: "text" },
+      { messageId: message.id, format: "auto", scheme: "light" },
+      { messageId: message.id, format: "text", scheme: "light" },
     ]);
 
     await user.click(within(toggle).getByRole("button", { name: "HTML" }));
@@ -484,7 +484,7 @@ describe("external content", () => {
     await waitFor(() => {
       expect(within(pane).queryByTestId("remote-content-bar")).toBeNull();
     });
-    expect(core.callsOf("load_remote_content")).toEqual([{ messageId: message.id, scope: "once" }]);
+    expect(core.callsOf("load_remote_content")).toEqual([{ messageId: message.id, scope: "once", scheme: "light" }]);
     const frame = within(pane).getByTitle("Content of the message “Compiler notes”");
     expect(frame.getAttribute("srcdoc")).toBe(loaded.body.kind === "html" ? loaded.body.srcdoc : "");
     expect(core.remoteSenders(ACCOUNT.id)).toEqual([]);
@@ -502,7 +502,7 @@ describe("external content", () => {
     await waitFor(() => {
       expect(within(pane).queryByTestId("remote-content-bar")).toBeNull();
     });
-    expect(core.callsOf("load_remote_content")).toEqual([{ messageId: message.id, scope: "sender" }]);
+    expect(core.callsOf("load_remote_content")).toEqual([{ messageId: message.id, scope: "sender", scheme: "light" }]);
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("tab", { name: "Reading" }));

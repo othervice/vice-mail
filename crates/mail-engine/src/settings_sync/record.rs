@@ -403,6 +403,8 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "reading.block_trackers",
     "reading.clean_links",
     "compose.attachment_reminder",
+    // Stage 21 (decision 0066): HTML mail in the dark theme.
+    "reading.dark_mails",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the

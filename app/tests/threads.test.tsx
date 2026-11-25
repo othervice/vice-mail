@@ -92,7 +92,7 @@ describe("conversation view", () => {
     });
     await waitFor(() => {
       // The inbox's top message (500) showed before the folder was opened.
-      expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== 500)).toEqual([{ messageId: ANSWER.id, format: "auto" }]);
+      expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== 500)).toEqual([{ messageId: ANSWER.id, format: "auto", scheme: "light" }]);
     });
     const pane = await screen.findByRole("region", { name: "Message" });
     expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
@@ -114,7 +114,7 @@ describe("conversation view", () => {
     // A child row opens that message alone, with the actions of its own folder.
     await user.click(children[1] as HTMLElement);
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto" });
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto", scheme: "light" });
     });
     const replyPane = await screen.findByRole("region", { name: "Message" });
     expect(within(replyPane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
@@ -127,7 +127,7 @@ describe("conversation view", () => {
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("The conversation could not be loaded")).toBeTruthy();
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto" });
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto", scheme: "light" });
     });
   });
 

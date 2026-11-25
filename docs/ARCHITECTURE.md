@@ -537,6 +537,11 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   app's own editor content; their bytes are read by the core from files the user
   chose in the system dialog or dragged onto the window. Pasted HTML (Word, web pages) is cleaned by the core
   (`cleanPastedHtml`): no script, no style, no image, no external reference.
+- Stage 21 (0067): outgoing HTML carries no text or background colour (the editor offers none,
+  pasted and quoted colours never reach the model; code blocks have a grey line, not a light
+  background) and declares `<meta name="color-scheme" content="light dark">` and
+  `supported-color-schemes`. Quotes are built from the stored original, never from the reading
+  pane's rendering.
 
 **HTML from mails**
 0. A linear pre-check rejects HTML that would make html5ever quadratically slow or inflate the
@@ -569,6 +574,19 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
    once" or a sender approval: they are not listed as remote resources and keep the placeholder.
    An image with tracking parameters loads, when approved, from its address without them. The
    reading pane shows the count with an explanation.
+   Colours (stage 21, 0066): the colour pass (`mail_content::colors`) runs after steps 1–2, on the
+   sanitised stylesheet and on every sanitised attribute value, with the same CSS tokenizer. It may
+   change exactly three things: replace colour values (named, `#hex`, `rgb[a]()`, `hsl[a]()`) of
+   colour properties and of `bgcolor`/`color`/`text`/`link`/`vlink`/`alink` with colours it
+   writes itself (`#rrggbb` or `rgba(r, g, b, a)`), remove `color-scheme` and
+   `supported-color-schemes` declarations, and decide `@media (prefers-color-scheme: …)` queries
+   for the canvas (drop the condition or the whole block). Everything else is copied byte for byte;
+   it adds no property, selector, at-rule, attribute or URL, never looks into `url()`, and the
+   result still goes through the self-check of step 4 of the pipeline. Colours are only adapted for
+   the dark scheme the UI asks for (`getMessage(…, scheme)`), unless the mail declares dark
+   colours of its own or `only light`; the dark default style (`MAIL_DARK_STYLE`, after
+   `MAIL_DEFAULT_STYLE`, `:where()` only) sets the frame's scheme, canvas, text and link colour.
+   The hostile corpus and the fuzz test render every mail in both schemes.
 5. Links never open directly. A click shows the real target and warns on a mismatch with the
    link text or on suspicious domains. Opening happens in the system browser, only `http`, `https`, `mailto`.
    The only interception point is the navigation hook in Rust (`on_navigation`): in a frame

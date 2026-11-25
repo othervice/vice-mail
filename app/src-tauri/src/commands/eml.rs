@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use mail_engine::AppCore;
 use mail_model::{
-    BodyFormat, CoreError, EmlFileId, EmlMessageView, IpcError, OpenAttachmentResult,
+    BodyFormat, CoreError, EmlFileId, EmlMessageView, IpcError, MailScheme, OpenAttachmentResult,
     OpenEmlFileResult, SaveAttachmentResult,
 };
 use tauri::{AppHandle, Runtime, State, WebviewWindow};
@@ -53,8 +53,9 @@ pub async fn get_eml_message(
     core: State<'_, AppCore>,
     file_id: EmlFileId,
     format: BodyFormat,
+    scheme: Option<MailScheme>,
 ) -> Result<EmlMessageView, IpcError> {
-    core.get_eml_message(checked(file_id)?, format)
+    core.get_eml_message_for(checked(file_id)?, format, scheme.unwrap_or_default())
         .await
         .map_err(to_ipc("get_eml_message"))
 }
@@ -66,8 +67,9 @@ pub async fn get_eml_message(
 pub async fn load_eml_remote_content(
     core: State<'_, AppCore>,
     file_id: EmlFileId,
+    scheme: Option<MailScheme>,
 ) -> Result<EmlMessageView, IpcError> {
-    core.load_eml_remote_content(checked(file_id)?)
+    core.load_eml_remote_content_for(checked(file_id)?, scheme.unwrap_or_default())
         .await
         .map_err(to_ipc("load_eml_remote_content"))
 }

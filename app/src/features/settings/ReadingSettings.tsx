@@ -6,7 +6,7 @@ import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
-import type { Account, MarkReadOnOpen, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
+import type { Account, DarkMails, MarkReadOnOpen, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
 import { useReadingPreferences, useSetReadingPreferences } from "../actions/queries";
@@ -215,6 +215,40 @@ function MarkReadBlock() {
   );
 }
 
+const DARK_MAILS: readonly DarkMails[] = ["adapted", "light"];
+
+/**
+ * Stage 21 (decision 0066): HTML mail with colours of its own in the dark theme, adapted by the
+ * core (the default) or on its white canvas. Synced; a message opened afterwards shows it.
+ */
+function DarkMailsBlock() {
+  const { t } = useTranslation();
+  const preferences = useReadingPreferences();
+  const save = useSetReadingPreferences();
+  const options: ChoiceOption<DarkMails>[] = DARK_MAILS.map((value) => ({
+    value,
+    label: t(`settings.reading.darkMails.${value}`),
+  }));
+  return (
+    <Block divided title={t("settings.reading.darkMails.title")} description={t("settings.reading.darkMails.description")}>
+      {preferences.data && (
+        <div className="flex flex-col gap-2" data-testid="setting-dark-mails">
+          <ChoiceGroup
+            label={t("settings.reading.darkMails.label")}
+            value={preferences.data.darkMails ?? "adapted"}
+            options={options}
+            onChange={(darkMails) => {
+              save.mutate({ ...preferences.data, darkMails });
+            }}
+          />
+          <p className="text-13 text-secondary">{t("settings.reading.darkMails.hint")}</p>
+        </div>
+      )}
+      {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
+    </Block>
+  );
+}
+
 /**
  * Stage 20 (decision 0058): tracker protection. Both on by default and synced; a message opened
  * afterwards renders with the new setting.
@@ -298,8 +332,8 @@ function SenderList({ account }: { account: Account }) {
 }
 
 /**
- * Settings → Reading: the read status, conversations, tracker protection, what is downloaded in
- * advance, and whose external content loads.
+ * Settings → Reading: the read status, conversations, messages in the dark theme, tracker
+ * protection, what is downloaded in advance, and whose external content loads.
  */
 export function ReadingSettings() {
   const { t } = useTranslation();
@@ -309,6 +343,7 @@ export function ReadingSettings() {
     <SettingsSection title={t("settings.reading.title")}>
       <MarkReadBlock />
       <ConversationsBlock />
+      <DarkMailsBlock />
       <TrackersBlock />
       <Block divided title={t("settings.reading.prefetch.title")} description={t("settings.reading.prefetch.description")}>
         <PrefetchBlock accounts={list} />

@@ -114,6 +114,24 @@ pub struct ReadingPreferences {
     /// …); the link card shows the clean target. On by default; synced.
     #[serde(default = "default_on")]
     pub clean_links: bool,
+    /// Stage 21 (decision 0066): HTML mail in the dark theme, adapted (default) or always on
+    /// its white canvas. Synced. Left out by an older caller: adapted.
+    #[serde(default)]
+    pub dark_mails: DarkMails,
+}
+
+/// Stage 21 (decision 0066): how HTML mail with colours of its own is shown in the dark theme.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum DarkMails {
+    /// Light backgrounds become dark and dark text light, in the core while it prepares the
+    /// mail; images stay as they are. Mails with dark colours of their own keep them.
+    #[default]
+    Adapted,
+    /// As written, on a white canvas inside the dark card (the behaviour before stage 21).
+    Light,
 }
 
 impl Default for ReadingPreferences {
@@ -122,6 +140,7 @@ impl Default for ReadingPreferences {
             mark_read_on_open: MarkReadOnOpen::default(),
             block_trackers: true,
             clean_links: true,
+            dark_mails: DarkMails::Adapted,
         }
     }
 }
@@ -526,9 +545,11 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(ReadingPreferences::default()).expect("serialize"),
-            json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true })
+            json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true,
+                    "darkMails": "adapted" })
         );
-        // Stage 20: an older caller that does not know the tracker settings keeps them on.
+        // Stage 20: an older caller that does not know the tracker settings keeps them on; stage
+        // 21: and the adapted dark mails.
         assert_eq!(
             serde_json::from_value::<ReadingPreferences>(json!({ "markReadOnOpen": "never" }))
                 .expect("older"),
@@ -536,7 +557,12 @@ mod tests {
                 mark_read_on_open: MarkReadOnOpen::Never,
                 block_trackers: true,
                 clean_links: true,
+                dark_mails: DarkMails::Adapted,
             }
+        );
+        assert_eq!(
+            serde_json::to_value(DarkMails::Light).expect("serialize"),
+            json!("light")
         );
         for (value, wire) in [
             (MarkReadOnOpen::Immediately, "immediately"),

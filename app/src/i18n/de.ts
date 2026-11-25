@@ -617,6 +617,12 @@ export const de: Translation = {
     frameTitle: "Inhalt der Nachricht „{{subject}}“",
     frameTitleNoSubject: "Inhalt der Nachricht",
     textBody: "Text der Nachricht",
+    // Stage 21 (decision 0066): a mail's colours in the dark theme.
+    colors: {
+      original: "Originalfarben",
+      originalHint: "Diese Nachricht so zeigen, wie der Absender sie gestaltet hat, auf weißem Grund",
+      adaptedHint: "Diese Nachricht an das dunkle Design angepasst zeigen",
+    },
     replyRow: {
       label: "Antworten und weiterleiten",
       reply: "{{name}} antworten",
@@ -1364,6 +1370,16 @@ export const de: Translation = {
           paused: "Pausiert, solange offline",
           unknown: "Stand unbekannt",
         },
+      },
+      // Stage 21 (decision 0066)
+      darkMails: {
+        title: "Nachrichten im dunklen Design",
+        description:
+          "Viele Nachrichten bringen eigene Farben mit, gemacht für weißen Grund. Angepasst macht die App beim Aufbereiten ihre hellen Hintergründe dunkel und ihre dunkle Schrift hell; Bilder bleiben, wie sie sind, und Nachrichten mit eigenen dunklen Farben behalten diese.",
+        label: "Nachrichten mit eigenen Farben zeigen",
+        adapted: "An das dunkle Design angepasst",
+        light: "Immer auf weißem Grund",
+        hint: "„Originalfarben“ über einer Nachricht zeigt diese eine so, wie der Absender sie gestaltet hat.",
       },
       trackers: {
         title: "Tracker",

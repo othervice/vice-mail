@@ -2480,3 +2480,155 @@ async fn an_mbox_file_imports_through_the_outbox() {
     bed.core.shutdown().await;
     clean_server(env).await;
 }
+
+/// Stage 21, item 9 (decision 0067): what alice writes goes out without a text or background
+/// colour, even text pasted from the app's dark theme, and declares `color-scheme: light dark`;
+/// bob's dark reading pane shows it with its own (no) colours. A reply to a newsletter that
+/// alice's dark reading pane shows adapted quotes the original, never the adapted colours.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn sent_html_has_no_colours_and_a_reply_quotes_the_original_not_the_dark_rendering() {
+    use mail_model::{MailColors, MailScheme, MessageBody};
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Farben {}", run_id());
+
+    // Text copied from the dark reading pane carries the theme's colours as inline styles.
+    let draft = bed.new_draft(bed.alice).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Bob", &env.bob.address)],
+            Vec::new(),
+            &subject,
+            "<p style=\"color: rgb(230, 237, 243); background-color: rgb(33, 40, 48)\">Helle \
+             Schrift aus dem dunklen Design</p><p><span style=\"color:#e6edf3\">mehr</span></p>\
+             <pre><code>let x = 1;</code></pre>",
+        )
+        .await;
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("colors"))
+        .await
+        .expect("send");
+    bed.sent(bed.alice, outgoing.operation_id).await;
+    let item = bed.arrived(bed.bob, MailboxRole::Inbox, &subject).await;
+    let (_, raw) = server_message(env, &env.bob, "INBOX", &subject)
+        .await
+        .expect("on the server");
+    let html = mail_content::parse(&raw).html.expect("an HTML part");
+    assert!(
+        html.contains("<meta name=\"color-scheme\" content=\"light dark\">"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<meta name=\"supported-color-schemes\" content=\"light dark\">"),
+        "{html}"
+    );
+    assert!(!has_text_colour(&html), "{html}");
+    for theme_colour in ["rgb(", "#e6edf3", "#212830"] {
+        assert!(!html.contains(theme_colour), "{theme_colour} in {html}");
+    }
+    assert!(
+        html.contains("Helle Schrift aus dem dunklen Design"),
+        "{html}"
+    );
+
+    // bob reads it in the dark theme: it declares both schemes, so nothing is recoloured.
+    let view = until("bob's dark view", || async {
+        let view = bed
+            .core
+            .get_message_for(item.id, mail_model::BodyFormat::Html, MailScheme::Dark)
+            .await
+            .ok()?;
+        matches!(view.body, MessageBody::Html { .. }).then_some(view)
+    })
+    .await;
+    let MessageBody::Html { colors, .. } = view.body else {
+        unreachable!("checked above");
+    };
+    assert_eq!(colors, MailColors::OwnDark);
+
+    // A colourful newsletter for alice, shown adapted in her dark reading pane.
+    let news_subject = format!("{MARK}Herbst {}", run_id());
+    let newsletter = format!(
+        "From: Shop <news@shop.example>\r\n\
+         To: Alice <{alice}>\r\n\
+         Subject: {news_subject}\r\n\
+         Message-ID: <autumn-{run}@shop.example>\r\n\
+         Date: Tue, 24 Nov 2026 07:00:00 +0100\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\
+         \r\n\
+         <html><head><style>.card{{background:#fff8e1;color:#333333}}</style></head>\
+         <body bgcolor=\"#ffffff\"><table bgcolor=\"#f4f4f4\"><tr><td class=\"card\">\
+         <p style=\"color:#222222\">Unsere <strong>Herbst</strong>angebote</p>\
+         <font color=\"#000000\">Nur diese Woche</font></td></tr></table></body></html>\r\n",
+        alice = env.alice.address,
+        run = run_id(),
+    );
+    let mut imap = admin_session(env, &env.alice).await;
+    let reply = imap
+        .raw_command(
+            &format!("APPEND \"INBOX\" {{{}+}}\r\n{newsletter}", newsletter.len()),
+            |_| false,
+        )
+        .await
+        .expect("append the newsletter");
+    assert!(reply.ok, "{}", reply.text);
+    imap.logout().await.ok();
+    let news = bed
+        .arrived(bed.alice, MailboxRole::Inbox, &news_subject)
+        .await;
+    let view = until("alice's dark view", || async {
+        let view = bed
+            .core
+            .get_message_for(news.id, mail_model::BodyFormat::Html, MailScheme::Dark)
+            .await
+            .ok()?;
+        matches!(view.body, MessageBody::Html { .. }).then_some(view)
+    })
+    .await;
+    let MessageBody::Html { srcdoc, colors, .. } = view.body else {
+        unreachable!("checked above");
+    };
+    assert_eq!(colors, MailColors::Adapted);
+    let adapted: Vec<String> = srcdoc
+        .match_indices("bgcolor=\"#")
+        .filter_map(|(at, _)| srcdoc.get(at + 9..at + 16).map(str::to_owned))
+        .collect();
+    assert!(
+        !adapted.is_empty() && adapted.iter().all(|c| !newsletter.contains(c.as_str())),
+        "{adapted:?}"
+    );
+
+    let answer = bed
+        .core
+        .create_draft(NewDraft::Reply {
+            message_id: news.id,
+            language: QuoteLanguage::De,
+        })
+        .await
+        .expect("reply");
+    let quote = answer.quote_html.clone().expect("quote");
+    assert!(quote.contains("<strong>Herbst</strong>angebote"), "{quote}");
+    assert!(quote.contains("Nur diese Woche"), "{quote}");
+    for colour in &adapted {
+        assert!(!quote.contains(colour.as_str()), "{colour} in {quote}");
+    }
+    assert!(!has_text_colour(&quote), "{quote}");
+    clean_server(env).await;
+}
+
+/// Whether mail HTML sets a text or background colour (`color:` or `background` in a style,
+/// `bgcolor`, `<font color>`); the grey lines of quotes and code blocks do not count.
+fn has_text_colour(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    lower.contains("bgcolor")
+        || lower.contains("<font")
+        || lower.contains("background")
+        || lower
+            .match_indices("color:")
+            .any(|(at, _)| !lower[..at].ends_with("border-") && !lower[..at].ends_with('-'))
+}

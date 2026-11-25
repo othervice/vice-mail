@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use mail_engine::AppCore;
 use mail_model::{
-    AccountId, AttachmentPreview, BodyFormat, CoreError, IpcError, LinkInfo, MessageId,
+    AccountId, AttachmentPreview, BodyFormat, CoreError, IpcError, LinkInfo, MailScheme, MessageId,
     MessageView, OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope,
     RenderToken, SaveAllAttachmentsResult, SaveAttachmentResult,
 };
@@ -15,14 +15,16 @@ use tauri::{Manager, Runtime, State, WebviewWindow};
 use super::to_ipc;
 
 /// The reading pane's data. Served locally when the body is stored, else `loading` and a fetch starts.
+/// Stage 21 (decision 0066): `scheme` is the theme the pane shows (light when left out).
 #[tauri::command]
 #[specta::specta]
 pub async fn get_message(
     core: State<'_, AppCore>,
     message_id: MessageId,
     format: BodyFormat,
+    scheme: Option<MailScheme>,
 ) -> Result<MessageView, IpcError> {
-    core.get_message(message_id, format)
+    core.get_message_for(message_id, format, scheme.unwrap_or_default())
         .await
         .map_err(to_ipc("get_message"))
 }
@@ -34,8 +36,9 @@ pub async fn load_remote_content(
     core: State<'_, AppCore>,
     message_id: MessageId,
     scope: RemoteContentScope,
+    scheme: Option<MailScheme>,
 ) -> Result<MessageView, IpcError> {
-    core.load_remote_content(message_id, scope)
+    core.load_remote_content_for(message_id, scope, scheme.unwrap_or_default())
         .await
         .map_err(to_ipc("load_remote_content"))
 }

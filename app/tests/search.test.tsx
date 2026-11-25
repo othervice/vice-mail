@@ -158,7 +158,7 @@ describe("search field", () => {
     expect(within(pane).getByTestId("reading-account").textContent).toBe("Work (work@example.com)");
     // Stage 18 (task F): the folder under the search showed its top message before; the click
     // opened the hit.
-    expect(core.callsOf("get_message").at(-1)).toEqual({ messageId: WORK_INVOICE.id, format: "auto" });
+    expect(core.callsOf("get_message").at(-1)).toEqual({ messageId: WORK_INVOICE.id, format: "auto", scheme: "light" });
     // The actions of the hit's own account and folder (read-only here: shown, but disabled).
     const toolbar = await within(pane).findByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).getByRole("button", { name: /^Archive/ }).getAttribute("aria-disabled")).toBe("true");

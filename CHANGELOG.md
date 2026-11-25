@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- HTML mail in the dark theme is adapted instead of lying on a white page: the app turns light
+  backgrounds dark and dark text light while it prepares the message, keeps hues and images, and
+  keeps every readable text readable (contrast stays at least 4.5:1 where it was). Mails with dark
+  colours of their own keep them. "Original colours" above a message shows it as the sender
+  designed it; Settings → Reading → "Messages in the dark theme" can keep every message on a white
+  page. Printing uses the original colours.
+- Sent mail carries no text or background colour and says it suits light and dark
+  (`color-scheme: light dark`), so it reads well in the recipient's light or dark theme; code
+  blocks get a grey line instead of a light grey background.
+
 ## [0.1.1] - 2026-11-25
 
 ### Added

@@ -13,7 +13,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { Notice } from "../../components/Notice";
 import { Tooltip } from "../../components/Tooltip";
-import type { Account, BodyFormat, MessageId, MessageView } from "../../services/ipc";
+import type { Account, BodyFormat, MailScheme, MessageId, MessageView } from "../../services/ipc";
 import { openComposer } from "../../stores/composer";
 import { useBoundShortcuts } from "../../stores/shortcuts";
 import { useUiStore } from "../../stores/ui";
@@ -32,7 +32,8 @@ import { MessageTools } from "../extras/MessageTools";
 import { GmailLabels } from "./GmailLabels";
 import { addressName } from "./format";
 import { MessageHeader, SubjectTitle } from "./MessageHeader";
-import { HtmlBody, TextBody } from "./MessageBodyView";
+import { ColorsToggle, HtmlBody, mailScheme, TextBody, whenFrameShows } from "./MessageBodyView";
+import { useAppliedTheme } from "../preferences/theme";
 import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
 import { TrackerNotice } from "./TrackerNotice";
@@ -125,14 +126,16 @@ interface BodyProps {
   view: MessageView;
   account: Account;
   format: BodyFormat;
+  /** Stage 21: the scheme the view was asked in (loading external content keeps it). */
+  scheme: MailScheme;
   scrollerRef: RefObject<HTMLDivElement | null>;
   onRetry: () => void;
 }
 
 /** The body in its state: rendered (HTML or text), loading, or not available with the reason. */
-function Body({ view, account, format, scrollerRef, onRetry }: BodyProps) {
+function Body({ view, account, format, scheme, scrollerRef, onRetry }: BodyProps) {
   const { t } = useTranslation();
-  const remote = useLoadRemoteContent(account.id, view.id, format);
+  const remote = useLoadRemoteContent(account.id, view.id, format, scheme);
   const subject = view.header.subject.trim();
   const accountName = account.displayName || account.email;
   const { body } = view;
@@ -162,6 +165,7 @@ function Body({ view, account, format, scrollerRef, onRetry }: BodyProps) {
             srcdoc={body.srcdoc}
             title={subject ? t("reading.frameTitle", { subject }) : t("reading.frameTitleNoSubject")}
             scrollerRef={scrollerRef}
+            colors={body.colors}
           />
         </>
       );
@@ -379,7 +383,13 @@ export function ReadingPane({
   const setFormat = (next: BodyFormat) => {
     setChosenFormat({ messageId, format: next });
   };
-  const query = useMessageView(account.id, messageId, format);
+  // Stage 21 (decision 0066): in the dark theme the core adapts the mail's colours; "Original
+  // colours" belongs to its message, like the chosen format.
+  const theme = useAppliedTheme();
+  const [originalFor, setOriginalFor] = useState<MessageId | null>(null);
+  const showOriginal = originalFor === messageId;
+  const scheme = mailScheme(theme, showOriginal);
+  const query = useMessageView(account.id, messageId, format, scheme);
   const linkRequest = useUiStore((state) => state.linkRequest);
   const articleRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -409,6 +419,13 @@ export function ReadingPane({
   const renderToken = body?.kind === "html" || body?.kind === "text" ? body.renderToken : null;
   const shownFormat = body?.kind === "html" || body?.kind === "text" ? body.kind : null;
   const canToggle = view !== undefined && view.formats.includes("html") && view.formats.includes("text");
+  const canShowOriginal = theme === "dark" && body?.kind === "html" && (showOriginal || body.colors !== "original");
+  // Paper is white: an adapted mail prints in its original colours (and stays so on screen).
+  const beforePrint = async () => {
+    if (theme !== "dark" || body?.kind !== "html" || body.colors === "original") return;
+    setOriginalFor(messageId);
+    await whenFrameShows(articleRef.current, "original");
+  };
   const link = linkRequest && renderToken !== null && linkRequest.renderToken === renderToken ? linkRequest : null;
   const sender = view?.header.from.find((address) => address.email.trim() || address.name?.trim());
 
@@ -500,13 +517,22 @@ export function ReadingPane({
           <ReadReceipts account={account} messageId={view.id} bodyShown={shownFormat !== null} />
           <Problems view={view} />
           <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
-          {/* HTML or plain text: a small switch at the body it changes, not in the toolbar. */}
-          {canToggle && shownFormat && (
-            <div className="-mb-2 flex justify-end" data-print-hide>
-              <FormatToggle shown={shownFormat} onChange={setFormat} />
+          {/* HTML or plain text, and (stage 21) the original colours in the dark theme: small
+              switches at the body they change, not in the toolbar. */}
+          {((canToggle && shownFormat) || canShowOriginal) && (
+            <div className="-mb-2 flex flex-wrap justify-end gap-2" data-print-hide>
+              {canShowOriginal && (
+                <ColorsToggle
+                  original={showOriginal}
+                  onChange={(original) => {
+                    setOriginalFor(original ? messageId : null);
+                  }}
+                />
+              )}
+              {canToggle && shownFormat && <FormatToggle shown={shownFormat} onChange={setFormat} />}
             </div>
           )}
-          <Body view={view} account={account} format={format} scrollerRef={scrollerRef} onRetry={retry} />
+          <Body view={view} account={account} format={format} scheme={scheme} scrollerRef={scrollerRef} onRetry={retry} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3" data-print-hide>
           {draft ? <span /> : <ReplyRow messageId={view.id} sender={(sender && addressName(sender)) ?? t("list.unknownSender")} />}
@@ -543,7 +569,7 @@ export function ReadingPane({
           <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
         )}
         {/* Stage 9: save as .eml, print (the print styles show only the article below). */}
-        {view && <MessageTools key={view.id} messageId={view.id} />}
+        {view && <MessageTools key={view.id} messageId={view.id} beforePrint={beforePrint} />}
         <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
         <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
       </div>

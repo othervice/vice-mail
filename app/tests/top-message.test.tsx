@@ -49,7 +49,7 @@ describe("the top message when a folder opens", () => {
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });
     const pane = await screen.findByRole("region", { name: "Message" });
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toEqual([{ messageId: top.id, format: "auto" }]);
+      expect(core.callsOf("get_message")).toEqual([{ messageId: top.id, format: "auto", scheme: "light" }]);
     });
     expect(pane.textContent).toContain(top.subject);
     const option = within(list).getAllByRole("option")[0] as HTMLElement;

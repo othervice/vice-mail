@@ -15,6 +15,8 @@ export const PRINT_SHORTCUT: Shortcut = { key: "p", mod: true };
 
 interface MessageToolsProps {
   messageId: MessageId;
+  /** Stage 21: runs before printing (the reading pane switches an adapted mail to its original colours). */
+  beforePrint?: () => Promise<void>;
 }
 
 /**
@@ -24,11 +26,11 @@ interface MessageToolsProps {
  * prints the message too, instead of the whole window, while a message is open. The reading pane
  * keys it by message, so a result never stays with the next message.
  */
-export function MessageTools({ messageId }: MessageToolsProps) {
+export function MessageTools({ messageId, beforePrint }: MessageToolsProps) {
   const { t } = useTranslation();
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const exportMessage = useExportMessage();
-  const print = usePrintWindow();
+  const print = usePrintWindow(beforePrint);
   const { mutate: printMessage } = print;
 
   useEffect(() => {
