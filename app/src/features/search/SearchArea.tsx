@@ -45,9 +45,14 @@ interface SearchAreaProps {
   children: ReactNode;
 }
 
-/** Puts the focus back on the list of the view after the search closed. */
+/**
+ * Puts the focus back on the list of the view after the search closed, one frame later (once the
+ * field is gone). Not if the search opened again in that frame ("/" right after Escape): the
+ * field keeps the focus, or what is typed next would reach the list's shortcuts.
+ */
 function focusList() {
   window.requestAnimationFrame(() => {
+    if (useSearchStore.getState().open) return;
     document.querySelector<HTMLElement>("[data-testid='message-list']")?.focus({ preventScroll: true });
   });
 }
