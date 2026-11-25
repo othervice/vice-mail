@@ -38,7 +38,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | fertig (0.1.1) | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen, Hell mit Blau und Dunkel wie GitHub |
 | 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | fertig (0.1.1) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
 | 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
-| 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | in Arbeit (Liste vollständig seit 25.11., 11:20) | Rückmeldungen aus dem Test von 0.1.1; ergibt 0.1.2 |
+| 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | fertig (0.1.2), Punkt 1 wartet auf den Menschen | Rückmeldungen aus dem Test von 0.1.1; ergibt 0.1.2 |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
@@ -107,6 +107,20 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 - Jede Stufe endet mit grünem `scripts/check.sh` und einem Push.
 
 ## Letzter Lauf
+
+**Lauf vom 25.11.2026 (Version 0.1.2).** Der Mensch testete 0.1.1 und sammelte zehn
+Rückmeldungen (Stufe 21), dann „ok das ist es erstmal build“. Vier Subagenten in eigenen
+Worktrees (Spalte, Liste, Farben der Mails, System mit dem freigegebenen blauen Logo), danach ein
+fünfter für den Abstands-Durchgang auf dem zusammengeführten Stand. Gesamtprüfung auf `f346eec`:
+`scripts/check.sh` grün (1.592 Rust, 4.203 Vitest), Server-Tests 1.698 grün, Desktop 38/38
+Spec-Dateien (197 Tests, auf `f2eff37`). 0.1.2 liegt als Gitea-Release `v0.1.2`; GitHub bleibt
+privat.
+
+**Wartet auf den Menschen (neu):** Angaben zum Windows-Installer (Punkt 1 der Stufe 21); Test von
+0.1.2 auf Mac und Windows, besonders Infobereich, Hintergrundbetrieb, Autostart, Taskleisten-Zahl
+und die angepassten Mails im dunklen Design.
+
+### Lauf vom 24.11.2026 abends bis 25.11.2026 (0.1.1)
 
 **Lauf vom 24.11.2026 abends bis 25.11.2026 (Version 0.1.1).** Nach dem ersten Test von 0.1.0
 wünschte der Mensch Stufe 18 (Spaltengrenze, Schnellaktionen, Popup für neue Mails, Ordner
