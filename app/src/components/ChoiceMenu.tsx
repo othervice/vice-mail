@@ -151,14 +151,15 @@ export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = fal
           onKeyDown={onButtonKeyDown}
           data-testid={rest["data-testid"]}
           className={cx(
-            "flex items-center justify-center gap-1 transition-colors",
-            chip ? "h-8 rounded-full border px-3 text-13" : "h-8 rounded-control px-2 text-13",
+            "flex items-center justify-center transition-colors",
+            chip ? "h-8 rounded-full border text-13" : "h-8 rounded-control text-13",
+            // Without a visible text (an icon button; a chip of the compact quick filter) a square.
+            text === undefined ? "w-8" : chip ? "gap-1 px-3" : "gap-2 px-2",
             chip
               ? active
                 ? "border-accent bg-accent-soft font-medium text-accent"
                 : "border-border text-secondary hover:bg-hover hover:text-primary"
               : cx("text-secondary hover:bg-hover hover:text-primary", (open || active) && "bg-hover text-primary"),
-            text === undefined && !chip && "w-8 px-0",
           )}
         >
           <Icon aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />

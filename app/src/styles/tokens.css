@@ -195,6 +195,10 @@
   --ui-section-height: 2rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
+  /* Stage 21 (decision 0071): below this width the quick filter's chips show their symbol only
+     (labelled chips and the field need about 800 px for one row, in English and German), so
+     beside the reading pane the bar stays one row, level with the pane's toolbar. */
+  --ui-filter-compact-below: 50rem;
   /* Stage 21 (decision 0065): the row's start, before the avatar, holds the unread dot; there is
      no column of its own for the dot and the selection box (the box takes the avatar's place). */
   --ui-row-lead: var(--ui-space-4);
