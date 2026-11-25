@@ -421,8 +421,23 @@ Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als B
 16 px, Rollen mit eigenem Symbol. Zähler rechtsbündig mit Tabellenziffern; ein Ordner mit
 Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen halbfetten Zähler. Der
 „…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
-und nimmt dem Namen keine Breite; sein Menü ist 12 rem breit, damit es auch in der schmalsten Spalte
-nicht abgeschnitten wird. Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+und nimmt dem Namen keine Breite. Sein Menü ist seit Stufe 21 (Entscheidung 0063) so breit wie die
+Zeilen der Spalte, höchstens 16 rem, nie breiter; lange Einträge brechen um statt abgeschnitten zu
+werden (die Zeile wächst, mindestens 32 px). Die Spalte rollt nie waagerecht (`overflow-x: clip` im
+Bildlaufbereich). Wie jedes „…“-Menü bleibt es im sichtbaren Bereich: ohne Platz darunter öffnet es
+sich über dem Knopf, an den Seiten wird es zurückgeschoben, und passt es nirgends ganz, rollt es.
+Ein nicht verfügbarer Eintrag nennt seinen Grund als zweite Zeile (12 px, `text-secondary`).
+Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+
+**Als gelesen markieren (Stufe 21, Entscheidung 0063).** „Ordner als gelesen markieren“ ist der
+erste Eintrag im „…“ jedes Ordners (Baum und Favoriten; ebenso per Rechtsklick, Umschalt+F10 und
+Kontextmenütaste), „Alle als gelesen markieren“ der erste im „…“ der Kontozeile (Posteingang und
+eigene Ordner, was ihr Zähler zählt) und im neuen „…“ von „Alle Posteingänge“ und den Kontogruppen
+(die Posteingänge ihrer sichtbaren Konten). Symbol: Doppelhaken. Ohne ungelesene Mail fehlt der
+Eintrag; bei einem nur lesenden Konto bleibt er, als nicht verfügbar markiert, mit der zweiten Zeile
+„Änderungen sind für dieses Konto ausgeschaltet.“, und ein Klick zeigt den Hinweis mit „Änderungen
+erlauben …“. Der Zähler fällt sofort; der Hinweis „N Mails in Ordner als gelesen markiert“ hat
+„Rückgängig“. In der Aktivität steht der Vorgang mit der Zahl der Mails.
 
 **Ordner anlegen (Stufe 18, Aufgabe D).** „Neuer Unterordner …“ im „…“ jedes Ordners, der Ordner
 enthalten darf (der Server hat ein Trennzeichen; `\Noinferiors` weist der Kern ab), dazu die
