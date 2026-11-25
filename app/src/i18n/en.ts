@@ -868,6 +868,9 @@ export const en = {
       save_draft_other: "{{count, number}} drafts saved",
       delete_draft_one: "Draft discarded",
       delete_draft_other: "{{count, number}} drafts discarded",
+      // Stage 21: a folder, an account or the unified inbox marked as read.
+      mark_mailbox_read_one: "{{count, number}} message in {{detail}} marked as read",
+      mark_mailbox_read_other: "{{count, number}} messages in {{detail}} marked as read",
     },
     undo: "Undo",
     undone: "Undone.",
@@ -890,6 +893,8 @@ export const en = {
       // Stage 19
       source: "The source could not be shown.",
       mbox: "The export or import could not be started.",
+      // Stage 21
+      markFolderRead: "The messages could not be marked as read.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",
     operationFailed_other: "{{count, number}} changes could not be made on the server: {{action}}",
@@ -1001,6 +1006,7 @@ export const en = {
       create_mailbox: "Create folder",
       rename_mailbox: "Rename folder",
       delete_mailbox: "Delete folder",
+      mark_mailbox_read: "Mark folder as read",
       undo: "Undo",
       send: "Send",
       save_draft: "Save draft",
@@ -3306,6 +3312,15 @@ export const en = {
       suggestReply: "Suggest a reply",
       ask: "Ask about your mail",
     },
+  },
+  // Stage 21 (decision 0063): "Mark folder as read" in the menus of the column (outbox,
+  // `markMailboxesRead`).
+  markRead: {
+    folder: "Mark folder as read",
+    account: "Mark all as read",
+    inboxes: "Mark all as read",
+    menu: "Options for {{name}}",
+    readOnly: "Changes are turned off for this account.",
   },
   // Audit 24.11.2026: renaming and deleting folders of the user's own (outbox, `renameMailbox`,
   // `deleteMailbox`), from the folder's menu and the palette.

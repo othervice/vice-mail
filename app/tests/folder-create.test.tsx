@@ -52,7 +52,11 @@ describe("creating folders", () => {
   it("creates a folder at the top of the account from the account's menu, checked first", async () => {
     const { core, user } = setup();
     const menu = await accountMenu(user);
-    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["New folder…", "Reload folders from server"]);
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Mark all as read",
+      "New folder…",
+      "Reload folders from server",
+    ]);
     await user.click(within(menu).getByRole("menuitem", { name: "New folder…" }));
     const panel = await screen.findByRole("dialog", { name: "New folder in “Ada”" });
     const field = within(panel).getByRole("textbox", { name: "Name" });

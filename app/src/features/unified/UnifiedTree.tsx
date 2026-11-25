@@ -4,11 +4,14 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { treeItemAria, useTreeNavigation } from "../../components/useTreeNavigation";
-import { ipc, type Account, type AccountId, type UnifiedView } from "../../services/ipc";
+import { ipc, type Account, type AccountId, type Mailbox, type UnifiedView } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
+import { OverflowMenu } from "../actions/OverflowMenu";
 import { sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { mailboxesQueryKey } from "../mailboxes/queries";
 import { UnreadCount } from "../mailboxes/MailboxTree";
+import { useMarkReadItem, type MarkReadTarget } from "../mailboxes/markRead";
+import { RowMenuSlot } from "../organize/folders";
 import { useAccountGroups, useHiddenAccounts } from "./queries";
 
 function same(a: UnifiedView | null, b: UnifiedView): boolean {
@@ -16,16 +19,26 @@ function same(a: UnifiedView | null, b: UnifiedView): boolean {
   return a.kind === "all" || (b.kind === "group" && a.groupId === b.groupId);
 }
 
-/** Unread messages in the inboxes of these accounts (the same queries as their folder trees). */
-function useInboxUnread(accountIds: readonly AccountId[]): Map<AccountId, number> {
+/** The inboxes of these accounts, with their unread counters (the same queries as their folder trees). */
+function useInboxes(accountIds: readonly AccountId[]): Map<AccountId, Mailbox | undefined> {
   const results = useQueries({
     queries: accountIds.map((accountId) => ({
       queryKey: mailboxesQueryKey(accountId),
       queryFn: () => ipc.listMailboxes(accountId),
     })),
   });
-  return new Map(
-    accountIds.map((accountId, index) => [accountId, results[index]?.data?.find((mailbox) => mailbox.role === "inbox")?.unread ?? 0]),
+  return new Map(accountIds.map((accountId, index) => [accountId, results[index]?.data?.find((mailbox) => mailbox.role === "inbox")]));
+}
+
+/**
+ * Stage 21 (decision 0063): the "…" of the unified inbox or a group: "Mark all as read", the
+ * inboxes of its accounts that are shown. Nothing while they have no unread mail.
+ */
+function UnifiedRowMenu({ name, targets, returnFocus }: { name: string; targets: readonly MarkReadTarget[]; returnFocus: () => void }) {
+  const { t } = useTranslation();
+  const items = useMarkReadItem("inboxes", targets, name);
+  return (
+    <OverflowMenu label={t("markRead.menu", { name })} items={items} tabIndex={-1} returnFocus={returnFocus} narrow data-testid="unified-row-menu" />
   );
 }
 
@@ -41,13 +54,26 @@ export function UnifiedTree({ accounts }: { accounts: readonly Account[] }) {
   const showUnifiedInbox = useUiStore((state) => state.showUnifiedInbox);
   const groups = useAccountGroups().data ?? [];
   const hidden = new Set(useHiddenAccounts().data ?? []);
-  const unread = useInboxUnread(accounts.map((account) => account.id));
+  const inboxes = useInboxes(accounts.map((account) => account.id));
   const headingId = useId();
   const inInbox = view.kind === "mail" && view.mailView === "inbox";
-  const total = (ids: readonly AccountId[]) => ids.reduce((sum, id) => sum + (hidden.has(id) ? 0 : (unread.get(id) ?? 0)), 0);
-  const entries: { view: UnifiedView; name: string; key: string; unread: number }[] = [
-    { view: { kind: "all" }, name: t("unified.title"), key: "all", unread: total(accounts.map((account) => account.id)) },
-    ...groups.map((group) => ({ view: { kind: "group", groupId: group.id } as const, name: group.name, key: group.id, unread: total(group.accountIds) })),
+  const total = (ids: readonly AccountId[]) => ids.reduce((sum, id) => sum + (hidden.has(id) ? 0 : (inboxes.get(id)?.unread ?? 0)), 0);
+  // The inboxes an entry shows: of its accounts that are not hidden.
+  const targets = (ids: readonly AccountId[]): MarkReadTarget[] =>
+    accounts.flatMap((account) => {
+      const inbox = inboxes.get(account.id);
+      return ids.includes(account.id) && !hidden.has(account.id) && inbox ? [{ account, mailboxes: [inbox] }] : [];
+    });
+  const allIds = accounts.map((account) => account.id);
+  const entries: { view: UnifiedView; name: string; key: string; unread: number; targets: MarkReadTarget[] }[] = [
+    { view: { kind: "all" }, name: t("unified.title"), key: "all", unread: total(allIds), targets: targets(allIds) },
+    ...groups.map((group) => ({
+      view: { kind: "group", groupId: group.id } as const,
+      name: group.name,
+      key: group.id,
+      unread: total(group.accountIds),
+      targets: targets(group.accountIds),
+    })),
   ];
   const items = entries.map((entry, index) => ({ key: entry.key, level: 1, posinset: index + 1, setsize: entries.length, text: entry.name }));
   const nav = useTreeNavigation({
@@ -86,6 +112,15 @@ export function UnifiedTree({ accounts }: { accounts: readonly Account[] }) {
               <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />
               <span className="truncate">{entry.name}</span>
               <UnreadCount count={entry.unread} emphasis={index === 0} />
+              <RowMenuSlot>
+                <UnifiedRowMenu
+                  name={entry.name}
+                  targets={entry.targets}
+                  returnFocus={() => {
+                    nav.focus(entry.key);
+                  }}
+                />
+              </RowMenuSlot>
             </li>
           );
         })}

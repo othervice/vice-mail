@@ -223,7 +223,8 @@ describe("folder tree: keyboard model", () => {
     });
     await user.keyboard("{Shift>}{F10}{/Shift}");
     const menu = await screen.findByRole("menu", { name: "Options for Projekte" });
-    expect(focused()).toBe(within(menu).getByRole("menuitem", { name: "Add to favourites" }));
+    // Stage 21: "Mark folder as read" comes first while the folder has unread mail.
+    expect(focused()).toBe(within(menu).getByRole("menuitem", { name: "Mark folder as read" }));
     // Keys inside the menu stay in the menu (Enter there does not open the folder).
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();

@@ -15,6 +15,7 @@ import { MAIL_VIEW_ICONS } from "../mail/views";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { useOperations } from "../actions/queries";
 import { useFolderCreateItem, useReloadFoldersItem } from "./FolderEdit";
+import { accountReadScope, useMarkReadItem } from "./markRead";
 import { useMailboxes } from "./queries";
 import { buildMailboxTree, isRoleView, type MailboxNode } from "./tree";
 import { useDropTarget } from "./useDropTarget";
@@ -33,7 +34,7 @@ const ACCOUNT_KEY = "account";
  * Not junk, trash, sent or drafts, nor Gmail's "All mail" and "Flagged", which repeat the others.
  */
 export function accountUnread(mailboxes: readonly Mailbox[]): number {
-  return mailboxes.reduce((sum, mailbox) => (mailbox.role === "inbox" || mailbox.role === "custom" ? sum + mailbox.unread : sum), 0);
+  return accountReadScope(mailboxes).reduce((sum, mailbox) => sum + mailbox.unread, 0);
 }
 
 /**
@@ -245,6 +246,8 @@ export function useAccountRowLabel(): (account: Account, unread: number, fullPer
 
 interface AccountRowProps {
   account: Account;
+  /** The account's folders, for "Mark all as read". */
+  mailboxes: readonly Mailbox[];
   item: TreeNavItem;
   unread: number;
   nav: ReturnType<typeof useTreeNavigation>;
@@ -254,10 +257,14 @@ interface AccountRowProps {
 /**
  * Stage 18 (task D): the account's "…": "New folder…" at the top of the account and "Reload
  * folders from server". Out of the Tab order like a folder's (the row's context-menu key opens it).
+ * Stage 21 (decision 0063): first "Mark all as read": the inbox and the own folders, what the
+ * account's counter counts.
  */
-function AccountMenu({ account, returnFocus }: { account: Account; returnFocus: () => void }) {
+function AccountMenu({ account, mailboxes, returnFocus }: { account: Account; mailboxes: readonly Mailbox[]; returnFocus: () => void }) {
   const { t } = useTranslation();
-  const items: OverflowItem[] = [...useFolderCreateItem(account, null, returnFocus), useReloadFoldersItem(account)];
+  const name = account.displayName || account.email;
+  const markItems = useMarkReadItem("account", [{ account, mailboxes: accountReadScope(mailboxes) }], name);
+  const items: OverflowItem[] = [...markItems, ...useFolderCreateItem(account, null, returnFocus), useReloadFoldersItem(account)];
   return (
     <OverflowMenu
       label={t("folderEdit.accountMenu", { name: account.displayName || account.email })}
@@ -271,7 +278,7 @@ function AccountMenu({ account, returnFocus }: { account: Account; returnFocus: 
 }
 
 /** The account at the root of its tree: colour and name, its trouble, unread total; opens and closes. */
-function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
+function AccountRow({ account, mailboxes, item, unread, nav, onToggle }: AccountRowProps) {
   const full = nearlyFullPercent(useAccountQuota(account.id).data);
   const label = useAccountRowLabel()(account, unread, full);
   const Chevron = item.expanded ? ChevronDown : ChevronRight;
@@ -300,6 +307,7 @@ function AccountRow({ account, item, unread, nav, onToggle }: AccountRowProps) {
       <RowMenuSlot>
         <AccountMenu
           account={account}
+          mailboxes={mailboxes}
           returnFocus={() => {
             nav.focus(ACCOUNT_KEY);
           }}
@@ -379,6 +387,7 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
       <ul {...nav.treeProps} aria-label={t("sidebar.folders", { account: account.displayName || account.email })} className="flex flex-col">
         <AccountRow
           account={account}
+          mailboxes={mailboxes.data ?? []}
           item={accountItem}
           unread={accountUnread(mailboxes.data ?? [])}
           nav={nav}
