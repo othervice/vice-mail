@@ -188,11 +188,13 @@ async function shootBothThemes(name, probe = null, reopen = null) {
     // Stage 21 (decision 0066): in the dark theme the core renders an HTML mail again with adapted
     // colours, which replaces the frame's document and closes what was open on it (the link
     // card): `reopen` opens it again on the new rendering.
-    if (reopen && theme === "dark") await reopen();
+    if (reopen && theme === "dark") await reopen(theme);
     if (probe) seen.push(await browser.execute(probe));
     report.screenshots.push(await screenshot(`reading-${name}-${theme}`));
   }
   await setTheme("light");
+  // Back in the light theme the mail is rendered as written again: open what the caller had open.
+  if (reopen) await reopen("light");
   return seen;
 }
 
@@ -810,15 +812,17 @@ describe("reading mail (stage 3)", function () {
               rect: document.querySelector('[data-testid="link-card"]')?.getBoundingClientRect().toJSON() ?? null,
               active: document.activeElement?.tagName ?? null,
             }),
-            async () => {
+            async (theme) => {
               await browser.waitUntil(
                 () =>
-                  browser.execute(() => {
+                  browser.execute((dark) => {
                     const frame = document.querySelector('[data-testid="reading-pane"] [data-testid="mail-frame"]');
-                    return frame?.dataset.colors !== "original" && frame?.contentDocument?.readyState === "complete";
-                  }),
-                { timeout: 20000, timeoutMsg: "the mail was not rendered again for the dark theme" },
+                    return (frame?.dataset.colors === "original") !== dark && frame?.contentDocument?.readyState === "complete";
+                  }, theme === "dark"),
+                { timeout: 20000, timeoutMsg: `the mail was not rendered again for the ${theme} theme` },
               );
+              // The frame swaps its document right after the attribute changes.
+              await browser.pause(CLICK_SETTLE_MS);
               await clickLink("frame", i, true);
               await browser.pause(CLICK_SETTLE_MS);
             },

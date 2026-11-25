@@ -34,7 +34,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages, appendToBob } from "./support/testmail.mjs";
 
 const BOB = { email: "bob@vicemail.test", password: "bob-test-pw" };
@@ -804,7 +804,11 @@ describe("stage 21: the spacing pass over every view", () => {
       reading: await coreCall("get_reading_preferences"),
       sidebar,
       size: await browser.execute(() => ({ width: innerWidth, height: innerHeight })),
+      conversations: (await coreCall("get_ui_preferences")).conversations,
     };
+    // The conversation scene needs conversations on (the default); earlier specs of the full run
+    // may have left them off.
+    await setConversations(true);
     await setTheme("light");
     await appendMessages("INBOX", writeMessages(MESSAGES));
     await appendToBob(writeMessages([{ subject: `${MARK} for bob`, from: "Grace Hopper <grace@example.org>", to: "Bob Baker <bob@vicemail.test>", id: `b1-${RUN}` }]));
@@ -844,6 +848,7 @@ describe("stage 21: the spacing pass over every view", () => {
       await coreCall("set_reading_preferences", { preferences: restore.reading }).catch(() => undefined);
       await setSize(restore.size).catch(() => undefined);
       await setSidebar(restore.sidebar).catch(() => undefined);
+      await setConversations(restore.conversations).catch(() => undefined);
     }
     for (const account of [alice, bob]) {
       if (account) await coreCall("remove_account", { accountId: account.id }).catch((e) => console.log(`cleanup failed: ${e}`));
