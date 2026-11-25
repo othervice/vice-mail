@@ -330,7 +330,7 @@ describe("Contacts view in German", () => {
     expect(within(view).getByRole("checkbox", { name: "Listen und Systemadressen zeigen" })).toBeTruthy();
     expect(within(view).getByRole("button", { name: "Mail schreiben" })).toBeTruthy();
     expect(within(view).getByRole("button", { name: "Alle Mails anzeigen" })).toBeTruthy();
-    await user.click(within(view).getByRole("button", { name: "Bild wählen …" }));
+    await user.click(within(view).getByRole("button", { name: "Bild wählen\u00a0…" }));
     expect(await within(view).findByText("Ausschnitt wählen")).toBeTruthy();
     expect(within(view).getByRole("button", { name: "Bild speichern" })).toBeTruthy();
     await user.click(within(view).getByRole("button", { name: "Abbrechen" }));

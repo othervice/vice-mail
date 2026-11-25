@@ -499,7 +499,7 @@ describe("Edit views…, accessibility and languages", () => {
     const { user } = renderApp("de");
     const column = await screen.findByRole("navigation", { name: "Konten und Ordner" });
     await user.click(within(column).getByRole("button", { name: "Optionen für Ansichten" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Ansichten bearbeiten …" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Ansichten bearbeiten\u00a0…" }));
     const editor = await screen.findByRole("dialog", { name: "Ansichten bearbeiten" });
     expect(within(editor).getByRole("checkbox", { name: "Später" })).toBeTruthy();
     expect(within(editor).getByRole("button", { name: "„Später“ nach unten" })).toBeTruthy();

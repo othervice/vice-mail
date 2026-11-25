@@ -82,7 +82,7 @@ describe("Settings → About, diagnostics", () => {
 
     expect(within(panel).getByRole("heading", { name: "Diagnose" })).toBeTruthy();
     expect(panel.textContent).toContain("Sie enthält nie Passwörter");
-    await user.click(within(panel).getByRole("button", { name: "Diagnose exportieren …" }));
+    await user.click(within(panel).getByRole("button", { name: "Diagnose exportieren\u00a0…" }));
     expect((await within(panel).findByTestId("diagnostics-saved")).textContent).toBe(
       "Gespeichert als /Users/test/Downloads/app-diagnostics-2026-11-23.txt",
     );

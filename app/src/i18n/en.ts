@@ -332,7 +332,7 @@ export const en = {
       // Stage 20 (decision 0058).
       attachmentReminder: "Remind me of missing attachments",
       attachmentReminderHint:
-        "Before sending, the app asks when your text mentions an attachment (“attached”, “Anhang” …) but none is added. Quotes and signatures are not read.",
+        "Before sending, the app asks when your text mentions an attachment (“attached”, “Anhang”\u00a0…) but none is added. Quotes and signatures are not read.",
       readReceipts: "Read receipt requests",
       readReceiptsHint: "When a sender asks for a read receipt. Nothing is ever sent without your click.",
       readReceiptsPolicy: {
@@ -2127,7 +2127,7 @@ export const en = {
     server: {
       action: "Search on the server",
       description: "Also finds messages whose content is not stored on this computer.",
-      running: "Searching on the server …",
+      running: "Searching on the server\u00a0…",
       title: "Further results from the server",
       listName: "the results from the server",
       back: "Back to the results on this computer",
@@ -4271,14 +4271,14 @@ export const en = {
       tag: "Tag",
       tagChosen: "Tag: {{tag}}",
       tagsGroup: "Tags in this view",
-      tagsLoading: "Loading tags …",
+      tagsLoading: "Loading tags\u00a0…",
       noTags: "No tags in this view",
       anyTag: "No tag filter",
       textLabel: "Filter by sender, subject and text",
       textPlaceholder: "Filter these messages",
       count_one: "{{formatted}} match",
       count_other: "{{formatted}} matches",
-      counting: "Counting …",
+      counting: "Counting\u00a0…",
       countFailed: "Count not available",
       reset: "Reset",
       emptyTitle: "No matching mail",
