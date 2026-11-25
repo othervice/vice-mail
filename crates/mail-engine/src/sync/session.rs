@@ -266,6 +266,11 @@ impl Session {
         self.dirty.mark_mailboxes(ids);
     }
 
+    /// Stage 18: the next pass lists the folders again ("Reload folders from server").
+    pub(crate) fn mark_full(&self) {
+        self.dirty.mark_full();
+    }
+
     /// Asks the worker for a pass over what is marked dirty.
     pub(crate) fn request_pass(&self) {
         if let Some(passes) = &self.passes {

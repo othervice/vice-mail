@@ -127,6 +127,31 @@ fn to_rows(contact: &Contact, groups: &HashMap<String, Option<i64>>) -> Vec<Stor
         .collect()
 }
 
+/// Stage 19 (vCard import, decision 0056): the row of an address the directory does not know
+/// yet: no messages, a person, the name from the card as the user's name (so it is kept and
+/// synchronised like a name the user typed).
+pub(crate) fn imported_row(address: NormalizedAddress, user_name: Option<String>) -> StoredContact {
+    let contact = Contact {
+        addresses: vec![ContactAddress {
+            address,
+            sent: 0,
+            received: 0,
+            seen: 0,
+            last_sent: None,
+            last_received: None,
+            last_seen: None,
+            rank: Rank::NONE,
+            personal: true,
+        }],
+        names: Vec::new(),
+        user_name,
+    };
+    let mut rows = to_rows(&contact, &HashMap::new());
+    let mut row = rows.remove(0);
+    row.kind = ContactKind::Person.code();
+    row
+}
+
 fn headers_of(source: &ContactSource) -> MessageHeaders {
     MessageHeaders {
         from: source.from.iter().cloned().collect(),

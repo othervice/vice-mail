@@ -13,6 +13,14 @@ import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
 import { ContactBadges, ContactDetail } from "./ContactDetail";
 import { contactName } from "./names";
 import { useContactDirectory, useDebouncedQuery } from "./queries";
+// Stage 19 (decision 0056): contact groups, vCard import and export.
+import type { ContactListId } from "../../services/ipc";
+import { ContactsTransfer } from "./groups/ContactsTransfer";
+import { GroupDetail, GroupList, NoGroup } from "./groups/GroupsPane";
+import { useContactLists } from "./groups/queries";
+
+/** Stage 19: what the list column shows. */
+const CONTACT_TABS = ["contacts", "groups"] as const;
 
 /** Search over 10,000 contacts answers in a few ms; a short pause is enough. */
 const SEARCH_DEBOUNCE_MS = 120;
@@ -100,6 +108,12 @@ export function ContactsView() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState(0);
   const [listFocused, setListFocused] = useState(false);
+  // Stage 19: people or groups on the left.
+  const [tab, setTab] = useState<"contacts" | "groups">("contacts");
+  const [groupId, setGroupId] = useState<ContactListId | null>(null);
+  const groups = useContactLists().data ?? [];
+  const group = groups.find((g) => g.id === groupId) ?? groups[0];
+  const tabsId = useId();
 
   // The first contact is the choice until the user picks one (and again when it drops out).
   const picked = contacts.findIndex((c) => c.key === selectedKey);
@@ -232,12 +246,51 @@ export function ContactsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="contacts-view">
-      <ViewHeader title={t("nav.contacts")} subtitle={<span className="text-13 text-secondary">{t("contacts.view.subtitle")}</span>} dragRegion={dragRegion} />
+      <ViewHeader title={t("nav.contacts")} subtitle={<span className="text-13 text-secondary">{t("contacts.view.subtitle")}</span>} dragRegion={dragRegion}>
+        <ContactsTransfer
+          contact={tab === "contacts" && selected ? { email: selected.email, name: contactName(selected, selected.email) } : null}
+          group={tab === "groups" && group ? { id: group.id, name: group.name } : null}
+        />
+      </ViewHeader>
       <div className="flex min-h-0 flex-1">
         <section
           aria-label={t("contacts.view.listSection")}
           className="flex w-(--ui-contacts-list-width) min-w-0 shrink-0 flex-col border-r border-border-subtle bg-surface-list"
         >
+          <div role="tablist" aria-label={t("contactGroups.tabs.label")} className="flex gap-1 border-b border-border-subtle px-4 pt-3 pb-2">
+            {CONTACT_TABS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`${tabsId}-${id}`}
+                aria-selected={tab === id}
+                tabIndex={tab === id ? 0 : -1}
+                onClick={() => {
+                  setTab(id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                    event.preventDefault();
+                    const next = id === "contacts" ? "groups" : "contacts";
+                    setTab(next);
+                    document.getElementById(`${tabsId}-${next}`)?.focus();
+                  }
+                }}
+                className={cx(
+                  "rounded-control px-3 py-1 text-13 font-medium",
+                  tab === id ? "bg-selected text-primary" : "text-secondary hover:bg-hover hover:text-primary",
+                )}
+                data-testid={`contacts-tab-${id}`}
+              >
+                {t(`contactGroups.tabs.${id}`)}
+              </button>
+            ))}
+          </div>
+          {tab === "groups" ? (
+            <GroupList selected={group?.id ?? null} onSelect={setGroupId} />
+          ) : (
+          <>
           <div className="flex flex-col gap-2 border-b border-border-subtle px-4 py-3">
             <label htmlFor={searchId} className="sr-only">
               {t("contacts.search")}
@@ -275,9 +328,23 @@ export function ContactsView() {
           <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={directory.isFetching || undefined}>
             {list}
           </div>
+          </>
+          )}
         </section>
         <section aria-label={t("contacts.view.detailSection")} className="min-w-0 flex-1 overflow-y-auto bg-surface">
-          {selected ? (
+          {tab === "groups" ? (
+            group ? (
+              <GroupDetail
+                key={group.id}
+                id={group.id}
+                onDeleted={() => {
+                  setGroupId(null);
+                }}
+              />
+            ) : (
+              <NoGroup />
+            )
+          ) : selected ? (
             <ContactDetail key={selected.key} entry={selected} focusRequest={focusRequest} />
           ) : contacts.length === 0 && query === "" && !directory.isPending ? (
             <EmptyState icon={BookUser} title={t("contacts.view.noContactsTitle")} body={t("contacts.view.noContactsBody")} />

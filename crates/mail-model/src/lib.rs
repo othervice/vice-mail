@@ -19,6 +19,7 @@ mod calendar;
 mod capabilities;
 mod category;
 mod compose;
+mod contact_lists;
 mod contacts;
 mod diagnostics;
 mod eml;
@@ -31,11 +32,13 @@ mod inbox;
 mod ipc;
 mod mailbox;
 mod mailto;
+mod mbox;
 mod mcp;
 mod message;
 mod oauth;
 mod outbox;
 mod parity;
+mod popup;
 mod quota;
 mod reading;
 mod role;
@@ -45,6 +48,8 @@ mod secret;
 mod send;
 mod settings_sync;
 mod snippets;
+mod source;
+mod takeover;
 mod text;
 pub mod threading;
 mod ui;
@@ -113,6 +118,12 @@ pub use compose::{
     ReceivedReadReceipt, SendJob, SendLater, SendPhase, SendState, SentCopyMode, ServerCopy,
     UnclearDecision,
 };
+pub use contact_lists::{
+    ContactExport, ContactList, ContactListId, ContactListMember, ContactListSummary,
+    MANY_RECIPIENTS, MAX_CONTACT_LIST_MEMBERS, MAX_CONTACT_LIST_NAME_CHARS, MAX_CONTACT_LISTS,
+    MAX_VCARD_EXPORT_CONTACTS, VcardExportOutcome, VcardImportOutcome, VcardImportProblem,
+    VcardImportProblemKind, VcardImportReport, VcardVersionChoice,
+};
 pub use contacts::{
     CONTACT_PICTURE_SIZE, CONTACT_PICTURE_SOURCE_SIZE, ContactAddressInfo, ContactDuplicate,
     ContactEntry, ContactFilter, ContactKind, ContactMergeRequest, ContactMessages, ContactPage,
@@ -141,11 +152,11 @@ pub use inbox::{
     DefaultMailAppOutcome, InboxCursor, InboxFilter, InboxPage, InboxRow, InboxScope,
     InboxSettings, InboxTop, MACOS_SOUNDS, MAX_RULE_PARTS, MAX_RULE_TEXT, MAX_RULES,
     MAX_TOP_PINNED, MAX_TOP_RETURNED, MailRule, MarkScope, MessageCategoryInfo, MessageExtras,
-    NotificationSettings, NotificationSound, NotificationSoundChoices, NotificationTexts,
-    NotifyCategories, PRIORITY_PREVIEW, QuietHours, RuleAction, RuleCondition, RuleId, RuleInput,
-    RuleSkipReason, SenderRule, SnoozeChoice, SnoozeMark, SnoozeResult, SnoozeTimes, SoundPlatform,
-    TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod, UnsubscribeOptions, UnsubscribeOutcome,
-    WINDOWS_SOUNDS,
+    NewMailStyle, NotificationSettings, NotificationSound, NotificationSoundChoices,
+    NotificationTexts, NotifyCategories, PRIORITY_PREVIEW, QuietHours, RuleAction, RuleCondition,
+    RuleId, RuleInput, RuleSkipReason, SenderRule, SnoozeChoice, SnoozeMark, SnoozeResult,
+    SnoozeTimes, SoundPlatform, TaskFilter, TaskMark, TextMatchOp, UnsubscribeMethod,
+    UnsubscribeOptions, UnsubscribeOutcome, WINDOWS_SOUNDS,
 };
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
@@ -155,6 +166,10 @@ pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
 pub use mailto::{ComposeRequest, LinkOpened, MailtoField, MailtoNotice};
+pub use mbox::{
+    MAX_MBOX_JOB_MESSAGES, MBOX_IMPORT_WINDOW, MboxJob, MboxJobId, MboxJobKind, MboxJobState,
+    MboxStart,
+};
 pub use mcp::{
     MAX_MCP_ACCESS_PAGE, MAX_MCP_CLIENT_NAME_CHARS, MAX_MCP_CLIENTS, MCP_ACCESS_MAX_ENTRIES,
     MCP_ACCESS_RETENTION_DAYS, McpAccessEntry, McpAccessId, McpAccessOutcome, McpAccessPage,
@@ -181,6 +196,10 @@ pub use parity::{
     BlockedSender, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
     MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
     UnreadFirstThreadPage, UnreadPhase,
+};
+pub use popup::{
+    MAX_POPUP_CARDS, MAX_POPUP_QUEUE, NewMailAccount, NewMailCard, NewMailContent, NewMailPopup,
+    PopupAppearance,
 };
 pub use quota::{MailboxQuota, QUOTA_WARN_PERCENT, StorageQuota};
 pub use reading::{
@@ -213,15 +232,25 @@ pub use snippets::{
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
 };
+pub use source::{
+    HeaderField, MAX_HEADER_FIELDS, MAX_HEADER_VALUE_CHARS, MAX_REDIRECT_RECIPIENTS,
+    MAX_SOURCE_BYTES, MessageSource, RedirectRequest,
+};
+pub use takeover::{
+    MAX_SIGNATURE_FILE_BYTES, MAX_TAKEOVER_FOLDERS, TakeoverAccount, TakeoverAccountKind,
+    TakeoverApplied, TakeoverFolder, TakeoverIdentity, TakeoverOpen, TakeoverPreview,
+    TakeoverSignature, TakeoverToken, ThunderbirdProfile,
+};
 pub use text::{is_bidi_control, strip_bidi_controls};
 pub use ui::{
-    AccentTheme, AiPanelState, ColumnView, DEFAULT_SIDEBAR_WIDTH, DEFAULT_TEXT_SIZE, Density,
-    MAX_COLUMN_VIEW_ID_CHARS, MAX_COLUMN_VIEWS, MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS,
+    AccentTheme, AiPanelState, ColumnView, DEFAULT_LIST_HEIGHT, DEFAULT_LIST_WIDTH,
+    DEFAULT_SIDEBAR_WIDTH, DEFAULT_TEXT_SIZE, Density, MAX_COLUMN_VIEW_ID_CHARS, MAX_COLUMN_VIEWS,
+    MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS, MAX_LIST_HEIGHT, MAX_LIST_WIDTH,
     MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES,
-    MAX_SHORTCUTS_PER_COMMAND, MAX_SIDEBAR_WIDTH, MAX_TEXT_SIZE, MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE,
-    PlatformShortcuts, ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform,
-    UiPreferences, UiPreferencesError, WindowLayout, validate_column_views, validate_layout_slot,
-    validate_overrides, validate_recent_commands,
+    MAX_SHORTCUTS_PER_COMMAND, MAX_SIDEBAR_WIDTH, MAX_TEXT_SIZE, MIN_LIST_HEIGHT, MIN_LIST_WIDTH,
+    MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE, PlatformShortcuts, ReadingPanePosition, Shortcut,
+    ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
+    validate_column_views, validate_layout_slot, validate_overrides, validate_recent_commands,
 };
 pub use uid_map::{
     UidMapChanges, UidMapEntry, UidMapFuture, UidMapMailbox, UidMapSnapshot, UidMapStore,

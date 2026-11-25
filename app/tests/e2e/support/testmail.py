@@ -11,6 +11,8 @@
                                                copies every seed message whose X-Vicemail-Seed starts with
                                                PREFIX (for example `broken/`) into a new FOLDER, server side
     python3 testmail.py attachments FILE       SHA-256 and size of every attachment of an .eml file (no server)
+    python3 testmail.py bob-message MARK       stage 19: the message in bob's INBOX whose Subject contains
+                                               MARK, as JSON (its Resent-* fields and raw bytes in base64)
     python3 testmail.py reply-to SUBJECT       bob answers alice's message with SUBJECT (In-Reply-To and
                                                References name its Message-ID; stage 20)
 
@@ -269,6 +271,32 @@ def copy_seed(prefix: str, target: str) -> dict:
     return {"folder": target, "copied": sorted(copied, key=lambda c: c["key"])}
 
 
+def bob_message(mark: str) -> dict:
+    """Stage 19: a redirected message as bob's server stored it (read-only, EXAMINE)."""
+    env = load_env()
+    with imaplib.IMAP4_SSL(
+        env["TESTMAIL_HOST"], int(env["TESTMAIL_IMAPS_PORT"]), ssl_context=tls_context(env), timeout=30
+    ) as imap:
+        imap.login(env["TESTMAIL_BOB_ADDRESS"], env["TESTMAIL_BOB_PASSWORD"])
+        check(*imap.select("INBOX", readonly=True), "EXAMINE INBOX")
+        typ, data = imap.uid("SEARCH", "SUBJECT", f'"{mark}"')
+        uids = check(typ, data, "SEARCH")[0].split()
+        if not uids:
+            return {"found": False}
+        typ, data = imap.uid("FETCH", uids[-1], "(BODY.PEEK[])")
+        raw = next(part[1] for part in check(typ, data, "FETCH") if isinstance(part, tuple))
+        message = email.message_from_bytes(raw)
+        return {
+            "found": True,
+            "count": len(uids),
+            "resentFrom": message.get("Resent-From"),
+            "resentTo": message.get("Resent-To"),
+            "resentMessageId": message.get("Resent-Message-ID"),
+            "subject": message.get("Subject"),
+            "raw": base64.b64encode(raw).decode("ascii"),
+        }
+
+
 def selectable_folders(imap: imaplib.IMAP4_SSL) -> list[str]:
     """Selectable folder names (raw wire names; the seed's non-ASCII folder stays encoded)."""
     names = []
@@ -281,6 +309,36 @@ def selectable_folders(imap: imaplib.IMAP4_SSL) -> list[str]:
             continue
         names.append(unquote(match["name"]))
     return names
+
+
+def create_folder(folder: str) -> dict:
+    """Stage 18: a folder created by another program (CREATE), for "Reload folders from server"."""
+    env = load_env()
+    imap = login(env)
+    try:
+        check(*imap.create(quoted(folder)), f"CREATE {folder}")
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    return {"created": folder}
+
+
+def delete_folders(folders: list[str]) -> dict:
+    """Stage 18: removes test folders again (deepest first); missing ones are skipped."""
+    env = load_env()
+    imap = login(env)
+    deleted = []
+    try:
+        for folder in sorted(folders, key=len, reverse=True):
+            typ, _ = imap.delete(quoted(folder))
+            if typ == "OK":
+                deleted.append(folder)
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    return {"deleted": deleted}
 
 
 def attachments(path: str) -> list:
@@ -308,6 +366,15 @@ def main() -> int:
         return 0
     if len(sys.argv) >= 4 and sys.argv[1] == "append":
         print(json.dumps(append(sys.argv[2], sys.argv[3:])))
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "create-folder":
+        print(json.dumps(create_folder(sys.argv[2])))
+        return 0
+    if len(sys.argv) >= 3 and sys.argv[1] == "delete-folders":
+        print(json.dumps(delete_folders(sys.argv[2:])))
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "bob-message":
+        print(json.dumps(bob_message(sys.argv[2])))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "attachments":
         print(json.dumps(attachments(sys.argv[2])))

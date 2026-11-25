@@ -416,6 +416,11 @@ pub enum NewDraft {
         message_id: MessageId,
         language: QuoteLanguage,
     },
+    /// Stage 19 (decision 0055): "edit as new": a new message with the recipients, subject,
+    /// text and attachments of `messageId` (also one from Sent), from the identity that sent it
+    /// or that it went to; no reply reference (no In-Reply-To, no References), a new
+    /// Message-ID, no signature added (the text has one already).
+    EditAsNew { message_id: MessageId },
 }
 
 /// Where a sent message stands, for the outbox view ("Ausgang").
@@ -477,6 +482,9 @@ pub struct OutgoingMail {
     /// Stage 16: this is a read receipt (RFC 8098) the user chose to send, not a message of a
     /// draft (`draftId` names no draft; there is nothing to edit).
     pub read_receipt: bool,
+    /// Stage 19: this is a redirect of a received message (no draft; "undo" in the delay is
+    /// `cancelRedirect`).
+    pub redirect: bool,
     #[specta(type = Number)]
     pub created_at: i64,
     #[specta(type = Number)]
@@ -997,6 +1005,10 @@ pub struct SendJob {
     /// Sent; `$MDNSent` on the original once accepted).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_for: Option<String>,
+    /// Stage 19 (decision 0055): a redirect: the original's bytes with `Resent-*` fields, no
+    /// draft and no copy in Sent; `original` gets `$Forwarded` once accepted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub redirect: bool,
 }
 
 /// An attachment of a draft as stored (`draft.attachments`): the core's own copy of the bytes.

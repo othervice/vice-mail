@@ -1,0 +1,46 @@
+From - Sat Nov 22 10:00:00 2025
+X-Mozilla-Status: 0005
+X-Mozilla-Status2: 00000000
+X-Mozilla-Keys: $label1
+Message-ID: <tb-fixture-1@vicemail.test>
+Date: Sat, 22 Nov 2025 10:00:00 +0000
+From: Carol Example <carol@vicemail.test>
+To: Alice Example <alice@vicemail.test>
+Subject: TB fixture 1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+The first message of the fixture: read and flagged in Thunderbird.
+
+From - Sun Nov 23 11:30:00 2025
+X-Mozilla-Status: 0000
+X-Mozilla-Status2: 00000000
+Message-ID: <tb-fixture-2@vicemail.test>
+Date: Sun, 23 Nov 2025 11:30:00 +0000
+From: Dave Example <dave@vicemail.test>
+To: Alice Example <alice@vicemail.test>
+Subject: TB fixture 2
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+The second message quotes a line that starts with From:
+
+>From the archive, as it was written.
+Unread in Thunderbird.
+
+From - Mon Nov 24 09:15:00 2025
+X-Mozilla-Status: 0009
+X-Mozilla-Status2: 00000000
+Message-ID: <tb-fixture-3@vicemail.test>
+Date: Mon, 24 Nov 2025 09:15:00 +0000
+From: Erin Example <erin@vicemail.test>
+To: Alice Example <alice@vicemail.test>
+Subject: TB fixture 3
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Deleted in Thunderbird but not compacted yet: an import skips it.
+

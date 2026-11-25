@@ -31,6 +31,8 @@ export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = {
   density: "comfortable",
   sidebarExpanded: false,
   sidebarWidth: 240,
+  listWidth: 384,
+  listHeight: 320,
 };
 
 /** What Tauri answers a window command the capability does not allow (a plain string). */
@@ -139,9 +141,17 @@ export function createUiFake(options: UiFakeOptions, deps: Deps) {
         return layout;
       case "set_window_layout": {
         const next = args["layout"] as CoreWindowLayout;
-        // The core's `WindowLayout::validate`: the column is 200 to 320 px wide.
-        if (!Number.isInteger(next.sidebarWidth) || next.sidebarWidth < 200 || next.sidebarWidth > 320) {
-          return deps.reject("invalid_argument", `sidebar width ${String(next.sidebarWidth)} is outside 200 to 320 pixels`);
+        // The core's `WindowLayout::validate`: the column is 200 to 320 px wide; stage 18: the
+        // list 320 to 1600 px wide beside the pane, 160 to 1600 px high above it.
+        const sizes: [string, number, number, number][] = [
+          ["sidebar width", next.sidebarWidth, 200, 320],
+          ["list width", next.listWidth, 320, 1600],
+          ["list height", next.listHeight, 160, 1600],
+        ];
+        for (const [name, value, min, max] of sizes) {
+          if (!Number.isInteger(value) || value < min || value > max) {
+            return deps.reject("invalid_argument", `${name} ${String(value)} is outside ${String(min)} to ${String(max)} pixels`);
+          }
         }
         layout = next;
         return layout;

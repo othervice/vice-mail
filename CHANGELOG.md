@@ -9,6 +9,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The border between the message list and the reading pane can be dragged, like the sidebar's
+  edge: the list's width with the pane on the right, its height with the pane below (keyboard,
+  screen reader and double click to reset as there). The size is kept with the window's layout;
+  a smaller window keeps the pane readable and the stored size.
+- New folders from the app: "New folder…" on an account and "New subfolder…" on a folder (menus
+  and command palette) create the folder on the server too. "Reload folders from server" on an
+  account shows folders another program created without waiting for the next sync.
+- View the source of a message in a window of its own (Cmd/Ctrl+U): the raw message as plain
+  text, very large messages cut with "Save as .eml" for the whole. "Show all headers" lists every
+  header field under the message head.
+- Redirect a message: it goes unchanged to new recipients with `Resent-*` header fields, through
+  the outbox with the undo delay. Only for accounts that allow changes.
+- Edit as new: a new draft with the recipients, subject, text and attachments of a message, also
+  from Sent, without the reply reference.
+- Contact groups on the contacts page: create, rename, add and remove members. The composer
+  suggests groups and expands them into their members, and suggests Bcc for many recipients.
+  Groups travel with the settings sync.
+- vCard import and export (`.vcf`, 3.0 and 4.0): single contacts, groups or everything. The
+  import merges duplicates; pictures are checked and encoded again in the isolated helper.
+- Export a folder as an mbox file, and import an mbox file into a folder through the outbox, with
+  progress and cancel.
+- Import from Thunderbird: choose a profile, see its accounts, addresses, signatures and local
+  folders, and take over what you pick. Passwords are never read; accounts go through the normal
+  setup and start read-only.
+
+### Added
+
 - Attachment reminder: when the text you wrote (not the quote or the signature) mentions an
   attachment in English or German and none is there, the app asks before sending or scheduling,
   with "Send anyway" and "Add attachment". Sends from the outbox never ask. Can be turned off under
@@ -31,6 +58,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Search filter `larger:` (for example `larger:10M`, German `größer:`; `-larger:` for smaller).
 
 ### Changed
+
+- Opening a folder or view with the reading pane on the right or below shows its top message at
+  once. It counts as read only once you choose it yourself or work with it; with nothing
+  selected, the list keeps its width and the pane says so quietly, instead of a list across the
+  window.
+- The quick actions of a hovered row no longer cover the "n replies" toggle: they take the place
+  of the time at the end of the row, and a click on the toggle unfolds the conversation.
 
 - New colours: the light mode is cool white and light blue-grey with blue, the dark mode uses
   neutral, slightly bluish greys in the manner of GitHub's dark theme instead of warm browns.

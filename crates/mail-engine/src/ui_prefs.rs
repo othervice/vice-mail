@@ -215,7 +215,8 @@ fn decode_ai_panel(json: &str) -> AiPanelState {
 }
 
 /// A stored layout as older versions wrote it: fields missing then take the default (a layout
-/// stored before the column's width existed keeps its reading pane, density and sidebar).
+/// stored before the column's width or the list's size (stage 18) existed keeps its reading
+/// pane, density and sidebar).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredLayout {
@@ -227,6 +228,10 @@ struct StoredLayout {
     sidebar_expanded: bool,
     #[serde(default = "default_sidebar_width")]
     sidebar_width: u16,
+    #[serde(default = "default_list_width")]
+    list_width: u16,
+    #[serde(default = "default_list_height")]
+    list_height: u16,
 }
 
 fn default_sidebar_expanded() -> bool {
@@ -237,6 +242,14 @@ fn default_sidebar_width() -> u16 {
     mail_model::DEFAULT_SIDEBAR_WIDTH
 }
 
+fn default_list_width() -> u16 {
+    mail_model::DEFAULT_LIST_WIDTH
+}
+
+fn default_list_height() -> u16 {
+    mail_model::DEFAULT_LIST_HEIGHT
+}
+
 fn decode_layout(key: &str, json: &str) -> WindowLayout {
     let stored = match serde_json::from_str::<StoredLayout>(json) {
         Ok(stored) => stored,
@@ -245,15 +258,17 @@ fn decode_layout(key: &str, json: &str) -> WindowLayout {
             return WindowLayout::default();
         }
     };
-    let mut layout = WindowLayout {
+    let (layout, replaced) = WindowLayout {
         reading_pane: stored.reading_pane,
         density: stored.density,
         sidebar_expanded: stored.sidebar_expanded,
         sidebar_width: stored.sidebar_width,
-    };
-    if let Err(reason) = layout.validate() {
-        tracing::warn!(key, %reason, "stored sidebar width not accepted, using the default");
-        layout.sidebar_width = mail_model::DEFAULT_SIDEBAR_WIDTH;
+        list_width: stored.list_width,
+        list_height: stored.list_height,
+    }
+    .with_sizes_in_range();
+    for size in replaced {
+        tracing::warn!(key, size, "stored size not accepted, using the default");
     }
     layout
 }

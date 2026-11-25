@@ -31,8 +31,11 @@ import { Command, FilePen, Forward, Keyboard, Paperclip, Reply, ReplyAll, Square
 import { AppWindow, PanelLeft } from "lucide-react";
 // Stage 16: the reading list and blocked senders.
 import { BookOpen, BookX, UserX } from "lucide-react";
+// Stage 19: source, redirect, edit as new.
+import { CopyPlus, CornerUpRight, FileCode } from "lucide-react";
 import { openComposer } from "../../stores/composer";
-import { openMessageInWindow } from "../windows/open";
+import { useRedirectStore } from "../../stores/redirect";
+import { openMessageInWindow, openSourceInWindow } from "../windows/open";
 import type { MailViewId } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 
@@ -89,6 +92,10 @@ export const ACTION_IDS = [
   "addToReadingList",
   "removeFromReadingList",
   "blockSender",
+  // Stage 19 (decision 0055): the source in a window of its own, redirecting, editing as new.
+  "viewSource",
+  "redirect",
+  "editAsNew",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
@@ -708,6 +715,49 @@ export const ACTIONS: Record<ActionId, ActionDefinition> = {
       host.blockSenders(ctx.items);
     },
   },
+  // ---- Stage 19 (decision 0055). The source reads only; Cmd/Ctrl+U as in Thunderbird and most
+  // mail apps ("U" alone marks unread with Shift, Cmd/Ctrl+U is free and no system key). ----
+  viewSource: {
+    id: "viewSource",
+    label: () => "viewSource",
+    icon: () => FileCode,
+    shortcuts: both({ key: "u", mod: true }),
+    writes: false,
+    needsMessages: true,
+    available: oneMail,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openSourceInWindow(ctx.account.id, item.id);
+    },
+  },
+  // A send: only with writes on (the core refuses it otherwise, too).
+  redirect: {
+    id: "redirect",
+    label: () => "redirect",
+    icon: () => CornerUpRight,
+    shortcuts: both(),
+    writes: true,
+    needsMessages: true,
+    available: (ctx) => oneMail(ctx) && !ctx.items[0]?.draft,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) useRedirectStore.getState().open({ accountId: ctx.account.id, messageId: item.id });
+    },
+  },
+  // A local draft, like reply and forward: also on read-only accounts.
+  editAsNew: {
+    id: "editAsNew",
+    label: () => "editAsNew",
+    icon: () => CopyPlus,
+    shortcuts: both(),
+    writes: false,
+    needsMessages: true,
+    available: oneMail,
+    run: (ctx) => {
+      const item = ctx.items[0];
+      if (item) openComposer({ kind: "edit_as_new", messageId: item.id });
+    },
+  },
 };
 
 /** Quick actions of a row, in the order of docs/DESIGN.md. */
@@ -748,6 +798,10 @@ export const TOOLBAR_ACTIONS: readonly ActionId[] = [
   // Stage 16: the reading list and blocking the sender (in "More actions").
   "toggleReadingList",
   "blockSender",
+  // Stage 19: in "More actions".
+  "redirect",
+  "editAsNew",
+  "viewSource",
   // Stage 8: last, so the mail actions keep their places.
   "openInWindow",
 ];

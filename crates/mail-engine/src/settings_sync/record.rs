@@ -60,6 +60,8 @@ pub enum RecordKind {
     AttachmentPin,
     /// The picture the user chose for a contact, by its normalised address (stage 17, 0050).
     ContactPicture,
+    /// A contact group with its members, by UUID (stage 19, 0056).
+    ContactList,
     /// "Remind me if no reply", by account and Message-ID (stage 20, 0059).
     FollowUp,
 }
@@ -126,7 +128,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 22] = [
+pub const REGISTRY: [KindSpec; 23] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -326,6 +328,17 @@ pub const REGISTRY: [KindSpec; 22] = [
         Removal::Apply,
         56 * KIB,
     ),
+    // Stage 19 (decision 0056): a contact group; at most 1,000 members of up to about 450
+    // bytes each (address, name, key).
+    spec(
+        RecordKind::ContactList,
+        "contactList",
+        "contact_list",
+        MergeRule::EditBeatsDelete,
+        IdShape::Uuid,
+        Removal::Apply,
+        512 * KIB,
+    ),
     // Stage 20 (decision 0059): like a snooze, with the time of the sending.
     spec(
         RecordKind::FollowUp,
@@ -399,7 +412,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -421,6 +434,7 @@ impl RecordKind {
         Self::BlockedSender,
         Self::AttachmentPin,
         Self::ContactPicture,
+        Self::ContactList,
         Self::FollowUp,
     ];
 
@@ -931,6 +945,13 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
                 return Err(invalid("not the base64 of a JPEG of at most 40 KiB".into()));
             }
         }
+        // Stage 19 (decision 0056): a group as this device would store it: a usable name with
+        // its search words, members with usable addresses and their normalised keys.
+        RecordKind::ContactList => {
+            let list =
+                ContactListContent::deserialize(value).map_err(|err| invalid(err.to_string()))?;
+            crate::contact_lists::check_synced(&list).map_err(invalid)?;
+        }
         // Stage 7 (decision 0026): a saved search, checked like one saved here.
         RecordKind::SavedView => {
             let view =
@@ -1272,6 +1293,26 @@ pub struct ContactContent {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContactPictureContent {
     pub jpeg: String,
+}
+
+/// Stage 19 (decision 0056): content of a contact group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactListContent {
+    pub name: String,
+    /// The folded words of the name, as `contact_list.search`.
+    pub search: String,
+    pub members: Vec<ContactListMemberContent>,
+}
+
+/// One member of [`ContactListContent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContactListMemberContent {
+    pub email: String,
+    pub name: Option<String>,
+    /// `mail_content::NormalizedAddress::key` of `email`.
+    pub key: String,
 }
 
 /// A record: content or tombstone, with the version that produced it.

@@ -443,7 +443,7 @@ describe("stage 20, mailbox quota", () => {
       {},
       {
         attachments: { quotas: { [ADA.id]: nearlyFull } },
-        ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, sidebarExpanded: true } },
+        ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, sidebarExpanded: true } },
       },
     );
     const mark = await screen.findByTestId(`account-quota-mark-${ADA.id}`);

@@ -167,6 +167,10 @@ struct Inner<C: Connector> {
     ai: crate::ai::AiState,
     /// Stage 15 (decision 0037): in-app updates (source, state, background task).
     updates: crate::updates::UpdatesState,
+    /// Stage 19 (decision 0057): mbox exports and imports running in the background.
+    mbox: crate::mbox::MboxJobs,
+    /// Stage 19 (decision 0057): Thunderbird profiles opened for a takeover.
+    takeover: crate::takeover::TakeoverState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -351,6 +355,8 @@ impl<C: Connector> AppCore<C> {
                 settings_sync,
                 ai: crate::ai::AiState::default(),
                 updates: crate::updates::UpdatesState::default(),
+                mbox: crate::mbox::MboxJobs::default(),
+                takeover: crate::takeover::TakeoverState::default(),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -855,6 +861,31 @@ impl<C: Connector> AppCore<C> {
         role: Option<MailboxRole>,
     ) -> Result<ActionResult, CoreError> {
         self.outbox()?.create_mailbox(account, path, role).await
+    }
+
+    /// Stage 18: queues a new folder `name` below `parent`, or at the top of the account
+    /// ("New folder…", "New subfolder…"). Refused like the store says (read-only account,
+    /// invalid or taken name); it appears in the folder list once the server created it.
+    pub async fn create_folder(
+        &self,
+        account: AccountId,
+        parent: Option<MailboxId>,
+        name: String,
+    ) -> Result<ActionResult, CoreError> {
+        self.outbox()?.create_folder(account, parent, name).await
+    }
+
+    /// Stage 18: lists the account's folders on the server again now ("Reload folders from
+    /// server"), with a full pass; folders another program created or removed show at once
+    /// instead of at the next poll. Not connected: connects now (a new session starts with a
+    /// full pass).
+    pub async fn reload_folders(&self, account: AccountId) -> Result<(), CoreError> {
+        self.store()?;
+        if self.inner.accounts.send(account, Control::ReloadFolders) {
+            Ok(())
+        } else {
+            Err(CoreError::NotFound(format!("account {account}")))
+        }
     }
 
     /// The account's operations, newest first (activity view), keyset-paged below `before`.
@@ -1456,6 +1487,15 @@ impl<C: Connector> AppCore<C> {
     /// Stage 15 (`crate::updates`, decision 0037).
     pub(crate) fn updates(&self) -> &crate::updates::UpdatesState {
         &self.inner.updates
+    }
+
+    /// Stage 19 (`crate::mbox`, decision 0057).
+    pub(crate) fn mbox_jobs(&self) -> &crate::mbox::MboxJobs {
+        &self.inner.mbox
+    }
+
+    pub(crate) fn takeover(&self) -> &crate::takeover::TakeoverState {
+        &self.inner.takeover
     }
 
     /// A reference that does not keep the core alive (for background tasks).

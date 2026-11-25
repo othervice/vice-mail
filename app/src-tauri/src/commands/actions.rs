@@ -49,6 +49,36 @@ pub async fn create_mailbox(
         .map_err(to_ipc("create_mailbox"))
 }
 
+/// Stage 18: queues a new folder `name` below `parentId`, or at the top of the account when
+/// null ("New folder…", "New subfolder…"); the core computes the path with the server's
+/// delimiter. Refused: `read_only`, `invalid_argument` (an empty or invalid name, one with the
+/// delimiter, a taken name, a parent that cannot hold folders), `not_found`.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_folder(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    parent_id: Option<MailboxId>,
+    name: String,
+) -> Result<ActionResult, IpcError> {
+    core.create_folder(account_id, parent_id, name)
+        .await
+        .map_err(to_ipc("create_folder"))
+}
+
+/// Stage 18: lists the account's folders on the server again now ("Reload folders from
+/// server"). `not_found` for an unknown account.
+#[tauri::command]
+#[specta::specta]
+pub async fn reload_folders(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+) -> Result<(), IpcError> {
+    core.reload_folders(account_id)
+        .await
+        .map_err(to_ipc("reload_folders"))
+}
+
 /// Audit 24.11.2026: queues the rename of a folder of the user's own to `name` (one level,
 /// within its parent). Refused: `read_only`, `invalid_argument` (a role, a taken or invalid
 /// name, a change on its way), `unsupported_server` (JMAP), `not_found`.

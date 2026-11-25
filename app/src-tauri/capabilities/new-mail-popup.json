@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "new-mail-popup",
+  "description": "Stage 18 (decision 0051): the new-mail popup's own window. It may only listen to events (it is sent new-mail-popup-changed alone; the core's events are filtered out by the shell). No window, webview, plugin or other core permission. The app's commands are not governed by capabilities: the shell refuses every command from this window except the popup's own (popup::POPUP_COMMANDS).",
+  "windows": ["new-mail-popup"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

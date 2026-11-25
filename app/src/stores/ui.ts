@@ -1,5 +1,16 @@
 import { create } from "zustand";
-import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "../services/ipc";
+import { clampSize, type SizeLimits } from "../components/ResizeHandle";
+import {
+  DEFAULT_LIST_HEIGHT,
+  DEFAULT_LIST_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  MAX_LIST_HEIGHT,
+  MAX_LIST_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_LIST_HEIGHT,
+  MIN_LIST_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+} from "../services/ipc";
 import type { AccountId, MailboxId, RenderToken, SavedSearchId, UnifiedView } from "../services/ipc";
 
 /**
@@ -40,11 +51,19 @@ export type ShownMailViewId = Exclude<MailViewId, "folders">;
  * Width of the accounts-and-folders column in px at 100 % text size (it scales with the text).
  * The limits are the core's (`WindowLayout.sidebarWidth`, stored with the window's layout).
  */
-export const SIDEBAR_WIDTH = { min: MIN_SIDEBAR_WIDTH, default: DEFAULT_SIDEBAR_WIDTH, max: MAX_SIDEBAR_WIDTH, step: 16 } as const;
+export const SIDEBAR_WIDTH = { min: MIN_SIDEBAR_WIDTH, default: DEFAULT_SIDEBAR_WIDTH, max: MAX_SIDEBAR_WIDTH, step: 16 } as const satisfies SizeLimits;
 
 export function clampSidebarWidth(width: number): number {
-  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+  return clampSize(width, SIDEBAR_WIDTH);
 }
+
+/**
+ * Stage 18: the message list's width beside the reading pane and its height above it, in px at
+ * 100 % text size; the core's limits (`WindowLayout.listWidth`, `listHeight`). A window too small
+ * for them draws the list smaller and keeps these values (`ListResizeHandle`).
+ */
+export const LIST_WIDTH = { min: MIN_LIST_WIDTH, default: DEFAULT_LIST_WIDTH, max: MAX_LIST_WIDTH, step: 16 } as const satisfies SizeLimits;
+export const LIST_HEIGHT = { min: MIN_LIST_HEIGHT, default: DEFAULT_LIST_HEIGHT, max: MAX_LIST_HEIGHT, step: 16 } as const satisfies SizeLimits;
 
 export const SETTINGS_SECTION_IDS = [
   "general",
@@ -70,7 +89,12 @@ export const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 /** What Settings → Accounts shows: the list, the setup form or one account. */
-export type AccountsPage = { kind: "list" } | { kind: "add" } | { kind: "account"; accountId: AccountId };
+export type AccountsPage =
+  | { kind: "list" }
+  | { kind: "add" }
+  | { kind: "account"; accountId: AccountId }
+  /** Stage 19 (decision 0057): taking over accounts and local folders from Thunderbird. */
+  | { kind: "thunderbird" };
 
 export type View =
   /** Stage 7: `savedSearchId` with `savedViews`: one saved search's results instead of the list. */
@@ -108,7 +132,7 @@ interface UiState {
   unifiedInbox: UnifiedView | null;
   /**
    * The accounts-and-folders column is open (docs/DESIGN.md, "Seitenspalte"); folded, the narrow
-   * icon rail shows instead. Stored with the window's layout (`useStoredSidebar`).
+   * icon rail shows instead. Stored with the window's layout (`useStoredFrame`).
    */
   sidebarExpanded: boolean;
   /**
@@ -120,6 +144,9 @@ interface UiState {
   sidebarOverlay: boolean;
   /** Width of the column in px at 100 % text size, 200 to 320 (`SIDEBAR_WIDTH`). */
   sidebarWidth: number;
+  /** Stage 18: the list's width beside the reading pane (`LIST_WIDTH`), its height above it (`LIST_HEIGHT`). */
+  listWidth: number;
+  listHeight: number;
   /** The column should take the focus once it shows (`openSidebar`); it clears this then. */
   sidebarFocusRequested: boolean;
   /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
@@ -148,6 +175,8 @@ interface UiState {
   setSidebarNarrow: (narrow: boolean) => void;
   closeSidebarOverlay: () => void;
   setSidebarWidth: (width: number) => void;
+  setListWidth: (width: number) => void;
+  setListHeight: (height: number) => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
   toggleAccount: (accountId: AccountId) => void;
   toggleSection: (section: string) => void;
@@ -164,6 +193,8 @@ export const useUiStore = create<UiState>()((set) => ({
   sidebarNarrow: false,
   sidebarOverlay: false,
   sidebarWidth: SIDEBAR_WIDTH.default,
+  listWidth: LIST_WIDTH.default,
+  listHeight: LIST_HEIGHT.default,
   sidebarFocusRequested: false,
   collapsedMailboxes: new Set<MailboxId>(),
   collapsedAccounts: new Set<AccountId>(),
@@ -219,6 +250,12 @@ export const useUiStore = create<UiState>()((set) => ({
   },
   setSidebarWidth: (width) => {
     set({ sidebarWidth: clampSidebarWidth(width) });
+  },
+  setListWidth: (width) => {
+    set({ listWidth: clampSize(width, LIST_WIDTH) });
+  },
+  setListHeight: (height) => {
+    set({ listHeight: clampSize(height, LIST_HEIGHT) });
   },
   toggleMailbox: (mailboxId) => {
     set((state) => {

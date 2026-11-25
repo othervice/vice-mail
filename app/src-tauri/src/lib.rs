@@ -12,6 +12,8 @@ pub mod links;
 mod navigation;
 mod notifications;
 mod oauth;
+pub mod popup;
+mod sound;
 mod updater;
 mod window_theme;
 pub mod windows;
@@ -49,6 +51,34 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::ui::set_window_layout::<tauri::Wry>,
             commands::ui::open_message_window::<tauri::Wry>,
             commands::ui::open_composer_window::<tauri::Wry>,
+            // Stage 19 (decision 0055): the source window and "all headers".
+            commands::source::open_source_window::<tauri::Wry>,
+            commands::source::get_message_source,
+            commands::source::get_message_headers,
+            commands::redirect::redirect_message,
+            commands::redirect::cancel_redirect,
+            // Stage 19 (decision 0056): contact groups.
+            commands::contact_lists::list_contact_lists,
+            commands::contact_lists::get_contact_list,
+            commands::contact_lists::create_contact_list,
+            commands::contact_lists::rename_contact_list,
+            commands::contact_lists::delete_contact_list,
+            commands::contact_lists::add_contact_list_members,
+            commands::contact_lists::remove_contact_list_member,
+            commands::contact_lists::suggest_contact_lists,
+            commands::contact_lists::import_vcards::<tauri::Wry>,
+            commands::contact_lists::export_vcards::<tauri::Wry>,
+            // Stage 19 (decision 0057): mbox export and import.
+            commands::mbox::export_mailbox_mbox::<tauri::Wry>,
+            commands::mbox::import_mailbox_mbox::<tauri::Wry>,
+            commands::mbox::cancel_mbox_job,
+            commands::mbox::list_mbox_jobs,
+            // Stage 19 (decision 0057): takeover from a Thunderbird profile.
+            commands::takeover::list_thunderbird_profiles::<tauri::Wry>,
+            commands::takeover::open_thunderbird_profile::<tauri::Wry>,
+            commands::takeover::choose_thunderbird_profile::<tauri::Wry>,
+            commands::takeover::apply_thunderbird_account,
+            commands::takeover::import_thunderbird_folder,
             commands::accounts::list_accounts,
             commands::accounts::discover_known_provider,
             commands::accounts::discover_online,
@@ -84,6 +114,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::actions::apply_action,
             commands::actions::undo_action,
             commands::actions::create_mailbox,
+            commands::actions::create_folder,
+            commands::actions::reload_folders,
             commands::actions::rename_mailbox,
             commands::actions::delete_mailbox,
             commands::actions::list_operations,
@@ -320,8 +352,20 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::reminders::list_follow_ups,
             commands::attachments_view::list_attachments,
             commands::quota::get_account_quota,
+            // Stage 18 (decision 0051): the new-mail popup, the only commands its window may
+            // call (`popup::POPUP_COMMANDS`).
+            commands::popup::get_new_mail_popup,
+            commands::popup::read_from_popup::<tauri::Wry>,
+            commands::popup::delete_from_popup,
+            commands::popup::undo_popup_delete,
+            commands::popup::dismiss_popup,
+            commands::popup::open_inbox_from_popup::<tauri::Wry>,
+            commands::popup::fit_new_mail_popup::<tauri::Wry>,
         ])
-        .events(collect_events![CoreEventMessage])
+        .events(collect_events![
+            CoreEventMessage,
+            popup::NewMailPopupChanged
+        ])
         .error_handling(ErrorHandlingMode::Result)
         // IPC types are one-way (arguments in, results and events out): one alias per type.
         .disable_serde_phases()
@@ -429,6 +473,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MIN_SIDEBAR_WIDTH", mail_model::MIN_SIDEBAR_WIDTH)
         .constant("MAX_SIDEBAR_WIDTH", mail_model::MAX_SIDEBAR_WIDTH)
         .constant("DEFAULT_SIDEBAR_WIDTH", mail_model::DEFAULT_SIDEBAR_WIDTH)
+        // Stage 18: the list's width beside the reading pane and its height above it.
+        .constant("MIN_LIST_WIDTH", mail_model::MIN_LIST_WIDTH)
+        .constant("MAX_LIST_WIDTH", mail_model::MAX_LIST_WIDTH)
+        .constant("DEFAULT_LIST_WIDTH", mail_model::DEFAULT_LIST_WIDTH)
+        .constant("MIN_LIST_HEIGHT", mail_model::MIN_LIST_HEIGHT)
+        .constant("MAX_LIST_HEIGHT", mail_model::MAX_LIST_HEIGHT)
+        .constant("DEFAULT_LIST_HEIGHT", mail_model::DEFAULT_LIST_HEIGHT)
         .constant(
             "MAX_RECENT_COMMANDS",
             u32::try_from(mail_model::MAX_RECENT_COMMANDS).unwrap_or(u32::MAX),
@@ -462,6 +513,24 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         // ids one `getMessagesByIds` takes.
         .constant("MAX_EML_FILE_BYTES", mail_model::MAX_EML_FILE_BYTES)
         .constant("MAX_MESSAGES_BY_IDS", mail_model::MAX_MESSAGES_BY_IDS)
+        // Stage 19 (decision 0055): the most bytes the source window shows, the most recipients
+        // of a redirect.
+        .constant("MAX_SOURCE_BYTES", mail_model::MAX_SOURCE_BYTES)
+        // Stage 19 (decision 0056): contact groups and when the composer suggests Bcc.
+        .constant("MAX_CONTACT_LISTS", mail_model::MAX_CONTACT_LISTS)
+        .constant(
+            "MAX_CONTACT_LIST_MEMBERS",
+            mail_model::MAX_CONTACT_LIST_MEMBERS,
+        )
+        .constant(
+            "MAX_CONTACT_LIST_NAME_CHARS",
+            mail_model::MAX_CONTACT_LIST_NAME_CHARS,
+        )
+        .constant("MANY_RECIPIENTS", mail_model::MANY_RECIPIENTS)
+        .constant(
+            "MAX_REDIRECT_RECIPIENTS",
+            mail_model::MAX_REDIRECT_RECIPIENTS,
+        )
 }
 
 /// An `i64` constant below 2^53 (milliseconds), exported as a plain TypeScript number.
@@ -488,11 +557,13 @@ struct LogGuardState(Mutex<Option<LogGuard>>);
 
 pub fn run() {
     let specta = specta_builder::<tauri::Wry>();
+    // Stage 18 (decision 0051): the new-mail popup's window may call its own commands only.
+    let handler = popup::restrict(specta.invoke_handler());
     #[cfg(not(feature = "e2e"))]
-    let builder = tauri::Builder::default().invoke_handler(specta.invoke_handler());
+    let builder = tauri::Builder::default().invoke_handler(handler);
     // Desktop-test build: embedded WebDriver and the `e2e_*` test commands (decision 0005).
     #[cfg(feature = "e2e")]
-    let builder = e2e::install(tauri::Builder::default(), specta.invoke_handler());
+    let builder = e2e::install(tauri::Builder::default(), handler);
     let app = with_system_plugins(builder)
         .setup(move |app| {
             init_logging(app.handle());
@@ -760,6 +831,8 @@ fn open_main_window<R: Runtime>(
     let window = windows::guard(builder, app).build()?;
     // Stage 5: remember what the user drops on the window; on Windows the frame guard.
     windows::finish(app, &window)?;
+    // Stage 18: the new-mail popup closes with the main window.
+    popup::follow_main_window(app, &window);
     Ok(window)
 }
 

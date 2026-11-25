@@ -42,6 +42,7 @@ mod links;
 pub mod opener;
 mod prefetch;
 pub mod remote;
+mod source;
 mod view;
 
 #[cfg(test)]

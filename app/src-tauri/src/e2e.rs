@@ -6,7 +6,9 @@
 //! - A data directory of the test's own: [`DATA_DIR_ENV`] is required, so a test build never
 //!   reads or writes the user's real data or logs, not even by accident.
 //! - Test commands (`e2e_*`) for facts WebDriver cannot see, such as the native window buttons
-//!   that macOS draws over the web view, and for real (trusted) mouse clicks.
+//!   that macOS draws over the web view, the native state of a window (stage 18: the new-mail
+//!   popup never becomes key and sits at the bottom right), and for real (trusted) mouse
+//!   clicks.
 //! - A recorder for Content-Security-Policy violations from the first byte of the page on.
 //! - A recorder of every command that reaches the invoke handler (a script in a mail frame
 //!   that got hold of the IPC would show up there).
@@ -25,7 +27,7 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use mail_engine::CoreServices;
 use mail_engine::RecordingOpener;
 use mail_model::{CoreError, ExtraRootCa};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Invoke;
 use tauri::{AppHandle, Builder, Runtime, WebviewWindow, Wry};
 
@@ -165,11 +167,14 @@ pub fn install(
     let test_commands: Box<dyn Fn(Invoke<Wry>) -> bool + Send + Sync> =
         Box::new(tauri::generate_handler![
             e2e_window_controls,
+            e2e_window_state,
             e2e_native_mouse,
+            e2e_native_mouse_event,
             e2e_opened,
             e2e_invoked,
             e2e_drop_files,
-            e2e_advance_clock
+            e2e_advance_clock,
+            e2e_dialog_answers
         ]);
     let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
@@ -315,6 +320,51 @@ pub async fn e2e_window_controls(window: WebviewWindow) -> Result<WindowControls
     }
 }
 
+/// Stage 18: what macOS says about a window and the app (decision 0051).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeWindowState {
+    pub label: String,
+    /// The window has the keyboard focus.
+    pub key: bool,
+    /// The window could take it at all.
+    pub can_become_key: bool,
+    pub visible: bool,
+    /// `NSWindowLevel` (0 normal, 3 floating).
+    pub level: isize,
+    /// `NSWindowCollectionBehavior` bits.
+    pub collection_behavior: usize,
+    pub excluded_from_windows_menu: bool,
+    pub opaque: bool,
+    pub has_shadow: bool,
+    /// The content view's layer corner radius (0 without a layer).
+    pub corner_radius: f64,
+    /// The window's frame in screen points (origin bottom left): x, y, width, height.
+    pub frame: [f64; 4],
+    /// The visible frame of its screen (without menu bar and Dock), same coordinates.
+    pub visible_frame: [f64; 4],
+    /// For `screencapture -l`.
+    pub window_number: isize,
+    /// The app is the active one.
+    pub app_active: bool,
+}
+
+/// The native state of the window `label` (macOS only).
+#[tauri::command]
+pub async fn e2e_window_state(app: AppHandle, label: String) -> Result<NativeWindowState, String> {
+    let window = tauri::Manager::get_webview_window(&app, &label)
+        .ok_or_else(|| format!("no window {label}"))?;
+    #[cfg(target_os = "macos")]
+    {
+        macos::window_state(&window, label).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, label);
+        Err("the native window state is only read on macOS".into())
+    }
+}
+
 /// A real left click at `x`/`y` (CSS pixels in the main frame's viewport, as
 /// `getBoundingClientRect()` gives them; `viewport_height` is `innerHeight`, for the offset of a
 /// title bar above the viewport). WebDriver's own clicks are synthetic (`el.click()`): untrusted
@@ -334,6 +384,44 @@ pub async fn e2e_native_mouse(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (window, x, y, viewport_height);
+        Err("native mouse events are only implemented for macOS".into())
+    }
+}
+
+/// What one native mouse event does ([`e2e_native_mouse_event`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MouseEventKind {
+    /// The pointer moves there with no button down (hover).
+    Move,
+    /// The left button goes down there.
+    Down,
+    /// The pointer moves there with the left button down.
+    Drag,
+    /// The left button comes up there.
+    Up,
+}
+
+/// Stage 18: one real mouse event at `x`/`y` (the same coordinates as [`e2e_native_mouse`]), for
+/// what a click alone cannot show: hovering a row (`:hover`, its quick actions) and dragging a
+/// handle (down, drags, up, with pointer capture). The events are `NSEvent`s handed to the
+/// WKWebView like the mouse's own; a move in a window that is not key is sent so that WebKit
+/// still updates `:hover` (see `send_event`).
+#[tauri::command]
+pub async fn e2e_native_mouse_event(
+    window: WebviewWindow,
+    kind: MouseEventKind,
+    x: f64,
+    y: f64,
+    viewport_height: Option<f64>,
+) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::mouse_event(&window, kind, x, y, viewport_height).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, kind, x, y, viewport_height);
         Err("native mouse events are only implemented for macOS".into())
     }
 }
@@ -396,6 +484,28 @@ pub fn e2e_advance_clock(core: tauri::State<'_, mail_engine::AppCore>, ms: i64) 
     CLOCK.now_ms()
 }
 
+/// Stage 19: answers for the next file dialogs (open, save, folder), oldest first. The system's
+/// dialogs cannot be driven by WebDriver; a test queues the path the user would have chosen.
+static DIALOG_ANSWERS: Mutex<std::collections::VecDeque<PathBuf>> =
+    Mutex::new(std::collections::VecDeque::new());
+
+/// The path a test queued for the next file dialog, if any (desktop-test builds only).
+pub fn take_dialog_answer() -> Option<PathBuf> {
+    DIALOG_ANSWERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .pop_front()
+}
+
+/// Queues the answers of the next file dialogs (absolute paths), in order.
+#[tauri::command]
+pub fn e2e_dialog_answers(paths: Vec<String>) {
+    let mut answers = DIALOG_ANSWERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    answers.extend(paths.into_iter().map(PathBuf::from));
+}
+
 /// Every command name that reached the invoke handler since the app started, with its count.
 #[tauri::command]
 pub fn e2e_invoked() -> BTreeMap<String, u64> {
@@ -418,13 +528,49 @@ mod macos {
     use objc2_foundation::{NSPoint, NSProcessInfo};
     use tauri::WebviewWindow;
 
-    use super::{ControlRect, WindowControls};
+    use super::{ControlRect, MouseEventKind, WindowControls};
 
     /// Event numbers of the synthesized mouse events; any increasing value will do.
     static EVENT_NUMBER: AtomicIsize = AtomicIsize::new(1000);
 
     pub async fn window_controls(window: &WebviewWindow) -> Result<WindowControls, String> {
         on_main_window(window, measure).await
+    }
+
+    pub async fn window_state(
+        window: &WebviewWindow,
+        label: String,
+    ) -> Result<super::NativeWindowState, String> {
+        on_main_window(window, move |w| {
+            let mtm = MainThreadMarker::new().ok_or("not on the main thread")?;
+            let rect =
+                |r: objc2_foundation::NSRect| [r.origin.x, r.origin.y, r.size.width, r.size.height];
+            let visible_frame = w
+                .screen()
+                .map(|screen| rect(screen.visibleFrame()))
+                .unwrap_or_default();
+            let corner_radius = w
+                .contentView()
+                .and_then(|view| view.layer())
+                .map_or(0.0, |layer| layer.cornerRadius());
+            Ok(super::NativeWindowState {
+                label,
+                key: w.isKeyWindow(),
+                can_become_key: w.canBecomeKeyWindow(),
+                visible: w.isVisible(),
+                level: w.level(),
+                collection_behavior: w.collectionBehavior().bits(),
+                excluded_from_windows_menu: w.isExcludedFromWindowsMenu(),
+                opaque: w.isOpaque(),
+                has_shadow: w.hasShadow(),
+                corner_radius,
+                frame: rect(w.frame()),
+                visible_frame,
+                window_number: w.windowNumber(),
+                app_active: NSApplication::sharedApplication(mtm).isActive(),
+            })
+        })
+        .await
     }
 
     pub async fn click(
@@ -434,6 +580,16 @@ mod macos {
         viewport_height: Option<f64>,
     ) -> Result<String, String> {
         on_main_window(window, move |w| send_click(w, x, y, viewport_height)).await
+    }
+
+    pub async fn mouse_event(
+        window: &WebviewWindow,
+        kind: MouseEventKind,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        on_main_window(window, move |w| send_event(w, kind, x, y, viewport_height)).await
     }
 
     /// Runs `f` on the main thread with the `NSWindow` of `window`.
@@ -476,14 +632,13 @@ mod macos {
             .find_map(|sub| find_view(sub, class))
     }
 
-    /// Left button down and up at one point of the web view, delivered to the WKWebView
-    /// directly (`NSWindow.sendEvent` did not reach WebKit in Spike D).
-    fn send_click(
+    /// The WKWebView of `window` and `x`/`y` of its viewport in window coordinates.
+    fn web_view_point(
         window: &NSWindow,
         x: f64,
         y: f64,
         viewport_height: Option<f64>,
-    ) -> Result<String, String> {
+    ) -> Result<(Retained<NSView>, NSPoint), String> {
         let class = AnyClass::get(c"WKWebView").ok_or("WebKit is not loaded")?;
         let content = window
             .contentView()
@@ -499,30 +654,95 @@ mod macos {
             bounds.size.height - y
         };
         let location = view.convertPoint_toView(NSPoint::new(x, local_y), None);
-        let make = |kind: NSEventType| {
-            NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
-                kind,
-                location,
-                NSEventModifierFlags::empty(),
-                NSProcessInfo::processInfo().systemUptime(),
-                window.windowNumber(),
-                None,
-                EVENT_NUMBER.fetch_add(1, Ordering::Relaxed),
-                1,
-                1.0,
-            )
-            .ok_or_else(|| format!("could not create a {kind:?} event"))
-        };
-        let down = make(NSEventType::LeftMouseDown)?;
-        let up = make(NSEventType::LeftMouseUp)?;
+        Ok((view, location))
+    }
+
+    /// A mouse event of `kind` at `location` (window coordinates) of `window`.
+    fn mouse(
+        window: &NSWindow,
+        kind: NSEventType,
+        location: NSPoint,
+        clicks: isize,
+        pressure: f32,
+    ) -> Result<Retained<NSEvent>, String> {
+        NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+            kind,
+            location,
+            NSEventModifierFlags::empty(),
+            NSProcessInfo::processInfo().systemUptime(),
+            window.windowNumber(),
+            None,
+            EVENT_NUMBER.fetch_add(1, Ordering::Relaxed),
+            clicks,
+            pressure,
+        )
+        .ok_or_else(|| format!("could not create a {kind:?} event"))
+    }
+
+    /// Left button down and up at one point of the web view, delivered to the WKWebView
+    /// directly (`NSWindow.sendEvent` did not reach WebKit in Spike D).
+    fn send_click(
+        window: &NSWindow,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        let (view, location) = web_view_point(window, x, y, viewport_height)?;
+        let down = mouse(window, NSEventType::LeftMouseDown, location, 1, 1.0)?;
+        let up = mouse(window, NSEventType::LeftMouseUp, location, 1, 1.0)?;
         view.mouseDown(&down);
         view.mouseUp(&up);
+        let bounds = view.bounds();
         Ok(format!(
             "clicked at ({:.1}, {:.1}) in a {:.0}x{:.0} web view, key window: {}",
             location.x,
             location.y,
             bounds.size.width,
             bounds.size.height,
+            window.isKeyWindow()
+        ))
+    }
+
+    /// One move, press, drag or release at a point of the web view (stage 18).
+    fn send_event(
+        window: &NSWindow,
+        kind: MouseEventKind,
+        x: f64,
+        y: f64,
+        viewport_height: Option<f64>,
+    ) -> Result<String, String> {
+        let (view, location) = web_view_point(window, x, y, viewport_height)?;
+        match kind {
+            MouseEventKind::Move if window.isKeyWindow() => {
+                let event = mouse(window, NSEventType::MouseMoved, location, 0, 0.0)?;
+                view.mouseMoved(&event);
+            }
+            MouseEventKind::Move => {
+                // A window that is not key (a locked screen, another app in front) hit-tests a
+                // plain mouse move for its scroll bars only and leaves `:hover` as it was
+                // (WebKit, WebPage.cpp `handleMouseEvent`); a move that names a button gets the
+                // full hit test. No press came before it, so WebKit drags nothing and the page
+                // sees a `pointermove` without pressed buttons (`buttons` is the hardware's).
+                let event = mouse(window, NSEventType::LeftMouseDragged, location, 0, 0.0)?;
+                view.mouseDragged(&event);
+            }
+            MouseEventKind::Down => {
+                let event = mouse(window, NSEventType::LeftMouseDown, location, 1, 1.0)?;
+                view.mouseDown(&event);
+            }
+            MouseEventKind::Drag => {
+                let event = mouse(window, NSEventType::LeftMouseDragged, location, 1, 1.0)?;
+                view.mouseDragged(&event);
+            }
+            MouseEventKind::Up => {
+                let event = mouse(window, NSEventType::LeftMouseUp, location, 1, 1.0)?;
+                view.mouseUp(&event);
+            }
+        }
+        Ok(format!(
+            "{kind:?} at ({:.1}, {:.1}), key window: {}",
+            location.x,
+            location.y,
             window.isKeyWindow()
         ))
     }

@@ -11,6 +11,8 @@ import { useAccounts } from "../accounts/queries";
 import { SyncDetectedHint } from "../settings-sync/SyncDetectedHint";
 import { AccountDetail } from "./accounts/AccountDetail";
 import { AddAccount } from "./accounts/AddAccount";
+// Stage 19 (decision 0057): takeover from Thunderbird.
+import { ThunderbirdTakeover } from "./accounts/ThunderbirdTakeover";
 import { AccountGroupsSection } from "../unified/AccountGroupsSection";
 
 function AccountRow({ account }: { account: Account }) {
@@ -77,6 +79,19 @@ function AccountList() {
           />
         </div>
       )}
+      {accounts.data?.length === 0 && (
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              showAccountsPage({ kind: "thunderbird" });
+            }}
+            data-testid="accounts-thunderbird"
+          >
+            {t("takeover.open")}
+          </Button>
+        </div>
+      )}
       {accounts.data && accounts.data.length > 0 && (
         <>
           <ul
@@ -88,8 +103,18 @@ function AccountList() {
               <AccountRow key={account.id} account={account} />
             ))}
           </ul>
-          <div>
+          <div className="flex flex-wrap gap-2">
             <Button onClick={add}>{t("settings.accounts.add")}</Button>
+            {/* Stage 19 (decision 0057). */}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                showAccountsPage({ kind: "thunderbird" });
+              }}
+              data-testid="accounts-thunderbird"
+            >
+              {t("takeover.open")}
+            </Button>
           </div>
           {/* Stage 7: groups for the unified inbox. */}
           <AccountGroupsSection accounts={accounts.data} />
@@ -109,5 +134,7 @@ export function AccountsSettings() {
       return <AccountDetail accountId={page.accountId} />;
     case "list":
       return <AccountList />;
+    case "thunderbird":
+      return <ThunderbirdTakeover />;
   }
 }

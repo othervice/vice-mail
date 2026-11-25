@@ -259,3 +259,10 @@
   color: var(--ui-find-current-text);
   text-decoration: underline 2px;
 }
+
+/* Stage 18 (decision 0051): the new-mail popup's window (popup.html). The window is the card
+   stack: raised surface, rounded and shadowed by the system (docs/DESIGN.md, "Popup für neue
+   Mails"). No motion of its own (decision 0030): cards appear and go at once. */
+:root[data-window="popup"] body {
+  background-color: var(--ui-surface-raised);
+}

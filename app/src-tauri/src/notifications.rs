@@ -10,6 +10,8 @@
 //! - **Sound** (stage 16): the core chooses it per notification (or none); [`plugin_sound`]
 //!   turns the name into what the plugin hands the system. Without a name a notification is
 //!   silent on both systems (macOS: no `soundName`; Windows: `<audio silent="true"/>`).
+//! - **The new-mail popup** (stage 18, decision 0051): the core's popup updates go to the
+//!   popup's window ([`crate::popup`]), which plays the sound itself.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -17,7 +19,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use mail_engine::AppCore;
-use mail_engine::comfort::{Notification, NotificationSink};
+use mail_engine::comfort::{Notification, NotificationSink, PopupUpdate};
 use mail_model::{AccountId, CoreEvent, MailboxId, MessageId};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_notification::NotificationExt;
@@ -35,6 +37,8 @@ pub(crate) struct NativeNotifications<R: Runtime> {
     app: AppHandle<R>,
     next_id: AtomicI32,
     targets: Arc<Mutex<VecDeque<(i32, Target)>>>,
+    /// Stage 18: the window of the new-mail popup.
+    popup: crate::popup::PopupWindow,
 }
 
 impl<R: Runtime> NativeNotifications<R> {
@@ -44,6 +48,7 @@ impl<R: Runtime> NativeNotifications<R> {
             app: app.clone(),
             next_id: AtomicI32::new(1),
             targets: Arc::new(Mutex::new(VecDeque::new())),
+            popup: crate::popup::PopupWindow::install(app),
         });
         let targets = Arc::clone(&sink.targets);
         let handle = app.clone();
@@ -103,6 +108,10 @@ impl<R: Runtime> NotificationSink for NativeNotifications<R> {
             tracing::warn!(%err, kind = ?notification.kind, "notification not shown");
         }
     }
+
+    fn popup(&self, update: PopupUpdate) {
+        self.popup.show(update);
+    }
 }
 
 /// The sound name the plugin passes on (`notify-rust` `sound_name`) for a name of the core's
@@ -126,7 +135,8 @@ fn plugin_sound(name: &str) -> String {
     }
 }
 
-fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+/// Brings the main window to the front (a click on a notification, "Read" in the popup).
+pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
         let _ = window.unminimize();
         let _ = window.show();

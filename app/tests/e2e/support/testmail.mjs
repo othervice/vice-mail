@@ -77,8 +77,17 @@ export const deliverMail = (subject) => helper("send", subject);
  */
 export const appendMessages = (folder, files, { seen = false } = {}) => helper("append", ...(seen ? ["--seen"] : []), folder, ...files);
 
+/** Stage 18: creates `folder` in alice's account directly on the server (another program's folder). */
+export const createServerFolder = (folder) => helper("create-folder", folder);
+
+/** Stage 18: deletes alice's `folders` on the server again (deepest first; missing ones skipped). */
+export const deleteServerFolders = (folders) => helper("delete-folders", ...folders);
+
 /** SHA-256 and size of every attachment of an .eml file, decoded by Python's email package. */
 export const attachmentDigests = (file) => helper("attachments", file);
+
+/** Stage 19: the message in bob's INBOX whose subject contains `mark` (redirect test). */
+export const bobMessage = (mark) => helper("bob-message", mark);
 
 /** Stage 20: bob answers alice's message with this subject (In-Reply-To its Message-ID). */
 export const replyTo = (subject) => helper("reply-to", subject);

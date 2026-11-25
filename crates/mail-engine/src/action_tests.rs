@@ -580,6 +580,88 @@ async fn missing_folders_confirmation_and_bad_tags_have_their_own_codes() {
     h.core.shutdown().await;
 }
 
+/// Stage 18 (task D): "New folder…" and "New subfolder…" create the folder on the server
+/// through the outbox; it is listed once the server has it and takes messages (a move). Taken
+/// names and read-only accounts are refused before anything is recorded.
+#[tokio::test]
+async fn new_folders_are_created_on_the_server_and_take_messages() {
+    let mut h = Harness::new(2, 0, None).await;
+    let at = h.refs("INBOX").await;
+    let err = h
+        .core
+        .create_folder(h.account, None, "Kunden".into())
+        .await
+        .expect_err("read-only");
+    assert_eq!(err.code(), ErrorCode::ReadOnly);
+    h.writes(true).await;
+
+    let created = h
+        .core
+        .create_folder(h.account, None, " Kunden ".into())
+        .await
+        .expect("create");
+    assert_eq!(created.queued, 1);
+    h.until("listed", HasPath("Kunden")).await;
+    assert!(h.server.read(|s| s.mailboxes.contains_key("Kunden")));
+    let kunden = h.mailbox("Kunden").await.id;
+    h.core
+        .create_folder(h.account, Some(kunden), "2026".into())
+        .await
+        .expect("subfolder");
+    h.until("the subfolder listed", HasPath("Kunden/2026"))
+        .await;
+    assert!(h.server.read(|s| s.mailboxes.contains_key("Kunden/2026")));
+    let year = h.mailbox("Kunden/2026").await.id;
+    let listed = h.core.list_mailboxes(h.account).await.expect("mailboxes");
+    let sub = listed.iter().find(|m| m.id == year).expect("subfolder");
+    assert_eq!(sub.parent_id, Some(kunden));
+    assert_eq!(sub.name, "2026");
+
+    // Taken names, a name with the delimiter.
+    for (parent, name) in [(None, "Kunden"), (Some(kunden), "2026"), (None, "INBOX")] {
+        assert_eq!(
+            code(h.core.create_folder(h.account, parent, name.into()).await),
+            ErrorCode::InvalidArgument,
+            "{name}"
+        );
+    }
+    assert_eq!(
+        code(
+            h.core
+                .create_folder(h.account, Some(kunden), "a/b".into())
+                .await
+        ),
+        ErrorCode::InvalidArgument
+    );
+
+    // The new folder takes messages.
+    h.act(MailAction::Move { target: year }, &at[..1])
+        .await
+        .expect("move");
+    let deadline = Instant::now() + WAIT;
+    while h
+        .server
+        .read(|s| s.mailboxes["Kunden/2026"].messages.is_empty())
+    {
+        assert!(Instant::now() < deadline, "moved on the server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    h.core.shutdown().await;
+}
+
+struct HasPath(&'static str);
+
+impl AsyncFnPred for HasPath {
+    async fn check(&self, h: &Harness) -> bool {
+        h.core
+            .list_mailboxes(h.account)
+            .await
+            .expect("mailboxes")
+            .iter()
+            .any(|m| m.path == self.0)
+    }
+}
+
 struct HasRole(MailboxRole);
 
 impl AsyncFnPred for HasRole {

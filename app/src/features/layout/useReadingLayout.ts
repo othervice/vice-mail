@@ -1,16 +1,25 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { cx } from "../../components/cx";
 import { useLayoutStore, type ReadingPanePosition } from "../../stores/layout";
 import type { ListSelection, MessageListHandle } from "../messages/MessageList";
 
 export interface ReadingLayout {
   position: ReadingPanePosition;
-  /** Classes of the box that holds the list and the pane. */
+  /** Classes of the box that holds the list and the pane (and, between them, `ListResizeHandle`). */
   container: string;
+  /** Id of the list column, which the handle between list and pane resizes (stage 18). */
+  listId: string;
   /** Props of the list column, given whether something is selected. */
-  listColumn: (open: boolean) => { className: string; inert?: boolean; "aria-hidden"?: true };
+  listColumn: (open: boolean) => { id: string; className: string; inert?: boolean; "aria-hidden"?: true };
   /** Whether the pane (or the summary of a selection) is shown. */
   paneShown: (open: boolean) => boolean;
+  /**
+   * Stage 18 (task F): right of the list or below it, the pane's place stays while nothing is
+   * selected and shows a quiet note (`NoMessageSelected`) instead of a list across the window.
+   */
+  placeholderShown: (open: boolean) => boolean;
+  /** Stage 18 (decision 0054): the list selects its top message by itself (not in place of the list). */
+  autoSelectFirst: boolean;
   /** The list asked to open a message (Enter, double click). */
   onOpen: () => void;
   /**
@@ -27,7 +36,11 @@ export interface ReadingLayout {
 /**
  * Where the reading pane sits (stage 8, docs/DESIGN.md "Lesebereich"): right of the list (the
  * list gets narrower and its rows two lines), below it (the list keeps its width), or in place
- * of the list. In place of the list a message only shows once it is opened, because the list
+ * of the list. Stage 18: right of the list or below it, the border between them can be dragged
+ * (`ListResizeHandle`); the list's size is a variable on the box that holds both, and the pane
+ * keeps a minimum size, also when the window gets smaller. Task F: there the list keeps that size
+ * with nothing selected too (the pane's place shows a quiet note), and opening a folder shows
+ * its top message (decision 0054). In place of the list a message only shows once it is opened, because the list
  * selects a message as soon as it has the focus; Escape or the close button bring the list back
  * with its cursor and scroll position where they were. Meanwhile the list stays laid out but
  * invisible and inert (not `display: none`, which would lose the scroll position), and after an
@@ -57,24 +70,38 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
     setOpened(false);
   };
 
+  const listId = useId();
   // Decision 0031: the list column on its own slightly tinted surface, a hairline to the pane.
-  const column = "flex min-h-0 min-w-0 flex-col bg-surface-list";
+  const column = "flex flex-col bg-surface-list";
   return {
     position,
     container: cx("flex min-h-0 flex-1", position === "bottom" && "flex-col", replace && "relative"),
+    listId,
     listColumn: (open) => {
       if (replace && opened && open) {
-        return { className: cx(column, "invisible absolute inset-0"), inert: true, "aria-hidden": true };
+        return { id: listId, className: cx(column, "invisible absolute inset-0 min-h-0 min-w-0"), inert: true, "aria-hidden": true };
       }
-      if (!open || replace) return { className: cx(column, "flex-1") };
+      // Stage 18 (task F): beside or above the pane the list keeps its size, open or not.
+      if (replace) return { id: listId, className: cx(column, "min-h-0 min-w-0 flex-1") };
+      // Stage 18: the dragged size, never less than the list's minimum, never so much that the
+      // pane gets less than its own (the list gives way first when the window gets smaller).
       return {
+        id: listId,
         className:
           position === "bottom"
-            ? cx(column, "h-(--ui-list-height-reading) min-h-(--ui-list-min-height-reading) shrink-0 border-b border-border-subtle")
-            : cx(column, "w-(--ui-list-width-reading) max-w-(--ui-list-max-width-reading) shrink-0 border-e border-border-subtle"),
+            ? cx(
+                column,
+                "h-(--ui-list-height-reading) max-h-[calc(100%-var(--ui-reading-min-height))] min-h-(--ui-list-min-height-reading) min-w-0 shrink-0 border-b border-border-subtle",
+              )
+            : cx(
+                column,
+                "w-(--ui-list-width-reading) max-w-[calc(100%-var(--ui-reading-min-width))] min-w-(--ui-list-min-width-reading) min-h-0 shrink-0 border-e border-border-subtle",
+              ),
       };
     },
     paneShown: (open) => (replace ? opened && open : open),
+    placeholderShown: (open) => !replace && !open,
+    autoSelectFirst: !replace,
     onOpen: () => {
       if (replace) setOpened(true);
     },

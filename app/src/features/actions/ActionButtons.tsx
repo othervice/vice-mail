@@ -379,8 +379,9 @@ export function QuickActions(props: ActionSurfaceProps) {
           event.stopPropagation();
         }}
         data-testid={`quick-${entry.definition.id}`}
+        // Stage 18 (decision 0052): 24 px, so the bar fits the smallest row and narrow rows' first line.
         className={cx(
-          "flex size-8 items-center justify-center rounded-control text-secondary",
+          "flex size-6 items-center justify-center rounded-control text-secondary",
           entry.readOnly ? "cursor-default opacity-50" : "hover:bg-surface-raised hover:text-primary",
         )}
       >

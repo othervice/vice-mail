@@ -85,7 +85,11 @@ describe("motion", () => {
     await screen.findByRole("listbox", { name: /^Messages in/ });
     await screen.findAllByRole("option");
     const sheet = await appStylesheet();
-    const moving = [...document.body.querySelectorAll("[class*='transition']")];
+    // Elements with a transition of their own; one only on a pseudo-element (`after:transition-colors`
+    // of the drag handles, stage 18) is covered by the same rule (`*::after`) but not resolvable here.
+    const moving = [...document.body.querySelectorAll("[class*='transition']")].filter((element) =>
+      (element.getAttribute("class") ?? "").split(/\s+/).some((name) => name.includes("transition") && !/(^|:)(after|before):/.test(name)),
+    );
     expect(moving.length).toBeGreaterThan(5);
     for (const element of moving) {
       expect(sheet.resolved(element, "transition-duration")).toBe("var(--ui-duration-fast)");

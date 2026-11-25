@@ -2257,3 +2257,226 @@ async fn a_reminder_comes_back_with_an_advanced_clock_and_the_answer_ends_it() {
     CLOCK_OFFSET.store(0, std::sync::atomic::Ordering::SeqCst);
     clean_server(env).await;
 }
+
+/// Stage 19 (decision 0055): bob writes to alice; alice redirects the message to admin. admin
+/// gets the original byte for byte (without the trace fields of alice's delivery) behind a block
+/// of `Resent-*` fields naming alice; alice's Sent folder gets no copy, her original is marked
+/// `$Forwarded`.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_redirect_arrives_unchanged_with_resent_fields() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Umleitung {}", run_id());
+    let draft = bed.new_draft(bed.bob).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Alice Ärger", &env.alice.address)],
+            Vec::new(),
+            &subject,
+            "<p>Bitte weiterleiten, unverändert. Grüße 🍞</p>",
+        )
+        .await;
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("redirect-original"))
+        .await
+        .expect("send");
+    bed.sent(bed.bob, outgoing.operation_id).await;
+    let received = bed.arrived(bed.alice, MailboxRole::Inbox, &subject).await;
+    let (_, original) = server_message(env, &env.alice, "INBOX", &subject)
+        .await
+        .expect("alice's copy");
+    let message_id = message_id_of(&original);
+
+    let redirect = bed
+        .core
+        .redirect_message(
+            mail_model::RedirectRequest {
+                message_id: received.id,
+                identity_id: None,
+                to: vec![person("Verwaltung", &env.admin.address)],
+                cc: Vec::new(),
+                bcc: Vec::new(),
+            },
+            uuid_like("redirect"),
+        )
+        .await
+        .expect("redirect");
+    assert!(redirect.redirect);
+    bed.sent(bed.alice, redirect.operation_id).await;
+    bed.settled(bed.alice).await;
+
+    let arrived = until("the redirect at admin", || async {
+        let found = copies(env, &env.admin, "INBOX", &message_id).await;
+        (!found.is_empty()).then_some(found)
+    })
+    .await;
+    assert_eq!(arrived.len(), 1);
+    let raw = &arrived[0].1;
+    let text = String::from_utf8_lossy(raw);
+    // The display name is encoded (RFC 2047); the address follows in angle brackets.
+    assert!(
+        text.contains("Resent-From: ") && text.contains(&format!("<{}>", env.alice.address)),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "Resent-To: \"Verwaltung\" <{}>",
+            env.admin.address
+        )),
+        "{text}"
+    );
+    assert!(text.contains("Resent-Date: "), "{text}");
+    assert!(text.contains("Resent-Message-ID: <"), "{text}");
+    // The original as alice's server delivered it, without that delivery's trace fields.
+    let unchanged: Vec<u8> = {
+        let lines: Vec<&[u8]> = original.split_inclusive(|b| *b == b'\n').collect();
+        let mut out = Vec::new();
+        let mut in_header = true;
+        let mut dropping = false;
+        for line in lines {
+            if in_header {
+                if line == b"\r\n" {
+                    in_header = false;
+                } else if !line.starts_with(b" ") && !line.starts_with(b"\t") {
+                    let lower = String::from_utf8_lossy(line).to_ascii_lowercase();
+                    dropping =
+                        lower.starts_with("return-path:") || lower.starts_with("delivered-to:");
+                }
+                if dropping {
+                    continue;
+                }
+            }
+            out.extend_from_slice(line);
+        }
+        out
+    };
+    assert!(
+        raw.windows(unchanged.len())
+            .any(|w| w == unchanged.as_slice()),
+        "the original must arrive unchanged:\n{text}"
+    );
+    // No copy in alice's Sent folder; the original carries $Forwarded.
+    assert!(
+        copies(env, &env.alice, "Sent", &message_id)
+            .await
+            .is_empty()
+    );
+    until("$Forwarded on the original", || async {
+        let item = bed.find(bed.alice, MailboxRole::Inbox, &subject).await?;
+        item.keywords
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case("$Forwarded"))
+            .then_some(())
+    })
+    .await;
+
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}
+
+/// Stage 19 (decision 0057): an mbox file imported into alice's INBOX through the outbox: every
+/// message arrives once, unchanged but for Thunderbird's status fields, with its flags; the one
+/// Thunderbird marked deleted is left out.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn an_mbox_file_imports_through_the_outbox() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let run = run_id();
+    let message = |n: u32, status: &str, body: &str| {
+        format!(
+            "From - Mon Nov 23 12:00:0{n} 2026\n\
+             X-Mozilla-Status: {status}\n\
+             X-Mozilla-Status2: 00000000\n\
+             From: Grace <grace@example.org>\n\
+             To: alice@vicemail.test\n\
+             Subject: {MARK}mbox {run} {n}\n\
+             Message-ID: <mbox.{run}.{n}@example.org>\n\
+             Date: Mon, 23 Nov 2026 12:00:0{n} +0000\n\
+             \n\
+             {body}\n\
+             \n"
+        )
+    };
+    let file = format!(
+        "{}{}{}",
+        message(1, "0005", "Read and flagged."),
+        message(2, "0000", "Unread.\n>From the archive, unquoted on import."),
+        message(3, "0009", "Deleted in Thunderbird.")
+    );
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("Inbox");
+    std::fs::write(&path, file).expect("write mbox");
+    let inbox = bed.mailbox(bed.alice, MailboxRole::Inbox).await;
+    let job = bed
+        .core
+        .start_mbox_import(inbox, path)
+        .await
+        .expect("import");
+    let job = until("the import to finish", || async {
+        bed.core
+            .list_mbox_jobs()
+            .into_iter()
+            .find(|j| j.id == job.id && j.state != mail_model::MboxJobState::Running)
+    })
+    .await;
+    assert_eq!(job.state, mail_model::MboxJobState::Done, "{job:?}");
+    assert_eq!((job.done, job.skipped), (2, 1), "{job:?}");
+    bed.settled(bed.alice).await;
+
+    let first = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.1@example.org"),
+    )
+    .await;
+    let second = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.2@example.org"),
+    )
+    .await;
+    let deleted = copies(
+        env,
+        &env.alice,
+        "INBOX",
+        &format!("mbox.{run}.3@example.org"),
+    )
+    .await;
+    assert_eq!((first.len(), second.len(), deleted.len()), (1, 1, 0));
+    let text = String::from_utf8_lossy(&second[0].1).into_owned();
+    assert!(!text.contains("X-Mozilla"), "{text}");
+    assert!(
+        text.contains("\r\nFrom the archive, unquoted on import."),
+        "{text}"
+    );
+    // Flags as Thunderbird had them, read from the server.
+    let mut imap = admin_session(env, &env.alice).await;
+    let opened = imap.open_mailbox("INBOX").await.expect("open");
+    let headers = imap
+        .fetch_headers(&opened, &UidSet::from_uids([first[0].0, second[0].0]))
+        .await
+        .expect("headers");
+    imap.logout().await.ok();
+    let flags_of = |uid: Uid| {
+        headers
+            .iter()
+            .find(|h| h.uid == uid)
+            .map(|h| h.flags.clone())
+            .expect("header")
+    };
+    let read = flags_of(first[0].0);
+    assert!(read.seen && read.flagged, "{read:?}");
+    let unread = flags_of(second[0].0);
+    assert!(!unread.seen && !unread.flagged, "{unread:?}");
+
+    bed.core.shutdown().await;
+    clean_server(env).await;
+}

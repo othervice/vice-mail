@@ -251,6 +251,16 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_follow_up(vec![message], mail_model::FollowUpChoice::NextWeek)
         .await
         .expect("reminder");
+    // Stage 19 (decision 0056): a contact group.
+    core.create_contact_list(
+        "Team".into(),
+        vec![mail_model::Address {
+            name: Some("Bob".into()),
+            email: "bob@example.org".into(),
+        }],
+    )
+    .await
+    .expect("contact group");
     // Stage 16 (decision 0033): the reading list, a folder's favourite and colour and a
     // blocked sender are records; the views that group unread on top are not.
     core.set_reading_list(vec![message], true)

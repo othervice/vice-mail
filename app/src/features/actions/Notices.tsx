@@ -97,6 +97,9 @@ function NoticeItem({ notice }: { notice: Notice }) {
           ? t("organize.transfer.noMessageId")
           : t(`errors.codes.${content.error.code}.title`);
       break;
+    case "foldersReloading":
+      text = t("folderEdit.reloading", { account: content.account });
+      break;
     case "transfer":
       text =
         content.mode === "move"

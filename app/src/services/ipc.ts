@@ -373,6 +373,15 @@ export const ipc = {
   /** Queues the creation of a folder; it appears with `mailboxesChanged` once the server made it. */
   createMailbox: (accountId: AccountId, path: string, role: MailboxRole | null): Promise<ActionResult> =>
     call(() => commands.createMailbox(accountId, path, role)),
+  /**
+   * Stage 18: a new folder `name` below `parentId`, or at the top of the account (null), through
+   * the outbox; the core computes its path with the server's delimiter. It appears with
+   * `mailboxesChanged` once the server made it.
+   */
+  createFolder: (accountId: AccountId, parentId: MailboxId | null, name: string): Promise<ActionResult> =>
+    call(() => commands.createFolder(accountId, parentId, name)),
+  /** Stage 18: lists the account's folders on the server again now ("Reload folders from server"). */
+  reloadFolders: (accountId: AccountId): Promise<void> => done(call(() => commands.reloadFolders(accountId))),
   /** A folder of the user's own gets `name` (one level, within its parent) through the outbox. */
   renameMailbox: (accountId: AccountId, mailboxId: MailboxId, name: string): Promise<ActionResult> =>
     call(() => commands.renameMailbox(accountId, mailboxId, name)),
@@ -1416,9 +1425,15 @@ export const savedSearchIpc = {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   commands as stage8Commands,
+  DEFAULT_LIST_HEIGHT,
+  DEFAULT_LIST_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
+  MAX_LIST_HEIGHT,
+  MAX_LIST_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MIN_LIST_HEIGHT,
+  MIN_LIST_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,
@@ -1442,10 +1457,16 @@ import type { AiPanelState } from "../generated/bindings";
 import { MAX_COLUMN_VIEWS, type ColumnView } from "../generated/bindings";
 
 export {
+  DEFAULT_LIST_HEIGHT,
+  DEFAULT_LIST_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
   MAX_COLUMN_VIEWS,
+  MAX_LIST_HEIGHT,
+  MAX_LIST_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MIN_LIST_HEIGHT,
+  MIN_LIST_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_COMMAND_ID_CHARS,
   MAX_RECENT_COMMAND_CHARS,
@@ -1909,4 +1930,186 @@ export const attachmentsViewIpc = {
 export const quotaIpc = {
   /** Kept by the core for 15 minutes unless `refresh`; `unknown` when it cannot be asked now. */
   get: (accountId: AccountId, refresh: boolean): Promise<MailboxQuota> => call(() => attachmentsViewCommands.getAccountQuota(accountId, refresh)),
+};
+
+// ---- Stage 18 (decision 0051): the new-mail popup ----
+import {
+  commands as popupCommands,
+  events as popupEvents,
+  type NewMailAccount,
+  type NewMailCard,
+  type NewMailContent,
+  type NewMailPopup,
+  type NewMailStyle,
+  type PopupAppearance,
+} from "../generated/bindings";
+
+export type { NewMailAccount, NewMailCard, NewMailContent, NewMailPopup, NewMailStyle, PopupAppearance };
+
+/**
+ * The popup's window may call these commands and nothing else (the shell refuses the rest). Each
+ * change answers with the whole popup; `revision` orders answers and events.
+ */
+export const popupIpc = {
+  /** The cards (at most three, newest first), how many more wait, and the app's appearance. */
+  get: (): Promise<NewMailPopup> => call(() => popupCommands.getNewMailPopup()),
+  /** The card goes; the main window comes to the front with the message in its inbox. */
+  read: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.readFromPopup(messageId)),
+  /** The list's delete through the outbox into the trash; `read_only` for a read-only account. */
+  delete: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.deleteFromPopup(messageId)),
+  /** Undoes the deletion of a card. */
+  undo: (messageId: MessageId): Promise<NewMailPopup> => call(() => popupCommands.undoPopupDelete(messageId)),
+  /** Closes one card, or every card (`null`, the popup hid itself). */
+  dismiss: (messageId: MessageId | null): Promise<NewMailPopup> => call(() => popupCommands.dismissPopup(messageId)),
+  /** "N more": everything closes, the main window shows the inbox. */
+  openInbox: (): Promise<NewMailPopup> => call(() => popupCommands.openInboxFromPopup()),
+  /** The page's height in CSS pixels: the window takes it at the bottom right of the screen. */
+  fit: (height: number): Promise<void> => done(call(() => popupCommands.fitNewMailPopup(height))),
+  /** Changes while the popup is open. Resolves once the listener is registered. */
+  onChanged: async (handler: (popup: NewMailPopup) => void): Promise<Unsubscribe> => {
+    try {
+      return await popupEvents.newMailPopupChanged.listen((e) => {
+        handler(e.payload);
+      });
+    } catch (e) {
+      throw toCoreError(e);
+    }
+  },
+};
+
+// ---- Stage 19 (decision 0055): source, all headers, redirect ----
+import {
+  commands as stage19Commands,
+  MAX_REDIRECT_RECIPIENTS,
+  MAX_SOURCE_BYTES,
+  type HeaderField,
+  type MessageSource,
+  type RedirectRequest,
+} from "../generated/bindings";
+
+export { MAX_REDIRECT_RECIPIENTS, MAX_SOURCE_BYTES };
+export type { HeaderField, MessageSource, RedirectRequest };
+
+/**
+ * Stage 19: a message's source in a window of its own (plain text, never markup; at most
+ * `MAX_SOURCE_BYTES`, the whole via "Save as .eml") and every header field for "all headers".
+ */
+export const sourceIpc = {
+  /** The source window of the message; an open one comes to the front. `not_found` opens nothing. */
+  openWindow: (accountId: AccountId, messageId: MessageId): Promise<void> =>
+    done(call(() => stage19Commands.openSourceWindow(accountId, messageId))),
+  getSource: (messageId: MessageId): Promise<MessageSource> => call(() => stage19Commands.getMessageSource(messageId)),
+  getHeaders: (messageId: MessageId): Promise<HeaderField[]> => call(() => stage19Commands.getMessageHeaders(messageId)),
+};
+
+/**
+ * Stage 19: redirecting a message unchanged with `Resent-*` fields. It goes through the outbox
+ * like a send (undo delay, send notices, outbox view); only for accounts with writes on.
+ */
+export const redirectIpc = {
+  /** `requestId` names one press: the same id twice queues once. */
+  redirect: (request: RedirectRequest, requestId: string): Promise<OutgoingMail> =>
+    call(() => stage19Commands.redirectMessage(request, requestId)),
+  /** "Undo" within the delay, or dropping a failed one. `send_in_progress` once it started. */
+  cancel: (operationId: OperationId): Promise<void> => done(call(() => stage19Commands.cancelRedirect(operationId))),
+};
+
+// ---- Stage 19 (decisions 0056, 0057): contact groups, vCard, mbox, Thunderbird takeover ----
+import {
+  commands as stage19cCommands,
+  MANY_RECIPIENTS,
+  MAX_CONTACT_LIST_MEMBERS,
+  MAX_CONTACT_LIST_NAME_CHARS,
+  type ContactExport,
+  type ContactList,
+  type ContactListId,
+  type ContactListMember,
+  type ContactListSummary,
+  type MboxJob,
+  type MboxJobId,
+  type MboxStart,
+  type TakeoverAccount,
+  type TakeoverApplied,
+  type TakeoverFolder,
+  type TakeoverIdentity,
+  type TakeoverOpen,
+  type TakeoverPreview,
+  type TakeoverToken,
+  type ThunderbirdProfile,
+  type VcardExportOutcome,
+  type VcardImportOutcome,
+  type VcardImportProblemKind,
+  type VcardImportReport,
+  type VcardVersionChoice,
+} from "../generated/bindings";
+
+export { MANY_RECIPIENTS, MAX_CONTACT_LIST_MEMBERS, MAX_CONTACT_LIST_NAME_CHARS };
+export type {
+  ContactExport,
+  ContactList,
+  ContactListId,
+  ContactListMember,
+  ContactListSummary,
+  MboxJob,
+  MboxJobId,
+  MboxStart,
+  TakeoverAccount,
+  TakeoverApplied,
+  TakeoverFolder,
+  TakeoverIdentity,
+  TakeoverOpen,
+  TakeoverPreview,
+  TakeoverToken,
+  ThunderbirdProfile,
+  VcardExportOutcome,
+  VcardImportOutcome,
+  VcardImportProblemKind,
+  VcardImportReport,
+  VcardVersionChoice,
+};
+
+/**
+ * Stage 19: contact groups (distribution lists) on the contacts page and in the composer, and
+ * vCard import and export. Every change comes back as `contactsChanged` to every window.
+ */
+export const contactListIpc = {
+  list: (): Promise<ContactListSummary[]> => call(() => stage19cCommands.listContactLists()),
+  get: (id: ContactListId): Promise<ContactList> => call(() => stage19cCommands.getContactList(id)),
+  create: (name: string, members: Address[]): Promise<ContactList> => call(() => stage19cCommands.createContactList(name, members)),
+  rename: (id: ContactListId, name: string): Promise<ContactList> => call(() => stage19cCommands.renameContactList(id, name)),
+  remove: (id: ContactListId): Promise<void> => done(call(() => stage19cCommands.deleteContactList(id))),
+  addMembers: (id: ContactListId, members: Address[]): Promise<ContactList> =>
+    call(() => stage19cCommands.addContactListMembers(id, members)),
+  removeMember: (id: ContactListId, email: string): Promise<ContactList> =>
+    call(() => stage19cCommands.removeContactListMember(id, email)),
+  /** The composer's autocomplete: every word of the query starts a word of the group's name. */
+  suggest: (query: string, limit: number): Promise<ContactListSummary[]> => call(() => stage19cCommands.suggestContactLists(query, limit)),
+  /** The system's open dialog for a `.vcf` file, then the import. */
+  importVcards: (): Promise<VcardImportOutcome> => call(() => stage19cCommands.importVcards()),
+  /** The system's save dialog, then the export. */
+  exportVcards: (exported: ContactExport, version: VcardVersionChoice): Promise<VcardExportOutcome> =>
+    call(() => stage19cCommands.exportVcards(exported, version)),
+};
+
+/** Stage 19: a folder exported as mbox, an mbox file imported into a folder (through the outbox). */
+export const mboxIpc = {
+  exportFolder: (mailboxId: MailboxId): Promise<MboxStart> => call(() => stage19cCommands.exportMailboxMbox(mailboxId)),
+  importIntoFolder: (mailboxId: MailboxId): Promise<MboxStart> => call(() => stage19cCommands.importMailboxMbox(mailboxId)),
+  cancel: (id: MboxJobId): Promise<MboxJob> => call(() => stage19cCommands.cancelMboxJob(id)),
+  jobs: (): Promise<MboxJob[]> => infallible(() => stage19cCommands.listMboxJobs()),
+};
+
+/**
+ * Stage 19: taking over a Thunderbird profile. The core never reads passwords; an account goes
+ * through the normal setup (the user types the password there) and starts read-only.
+ */
+export const takeoverIpc = {
+  profiles: (): Promise<ThunderbirdProfile[]> => call(() => stage19cCommands.listThunderbirdProfiles()),
+  open: (index: number): Promise<TakeoverPreview> => call(() => stage19cCommands.openThunderbirdProfile(index)),
+  /** The system's folder dialog. */
+  choose: (): Promise<TakeoverOpen> => call(() => stage19cCommands.chooseThunderbirdProfile()),
+  applyAccount: (token: TakeoverToken, index: number, accountId: AccountId): Promise<TakeoverApplied> =>
+    call(() => stage19cCommands.applyThunderbirdAccount(token, index, accountId)),
+  importFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId): Promise<MboxJob> =>
+    call(() => stage19cCommands.importThunderbirdFolder(token, index, mailboxId)),
 };

@@ -63,6 +63,12 @@ export const config = {
     "./tests/e2e/search.e2e.mjs",
     // Stage 17 (decision 0049): conversations unfold in the list (the seed's offsite thread).
     "./tests/e2e/conversations.e2e.mjs",
+    // Stage 18: the border between list and reading pane, unfolding beside the quick actions
+    // (real mouse events). Changes the stored layout and puts it back.
+    "./tests/e2e/columns.e2e.mjs",
+    // Stage 18, task F (decision 0054): a folder opens with its top message, unread. Marks it
+    // read once and unread again.
+    "./tests/e2e/top-message.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",
@@ -79,6 +85,12 @@ export const config = {
     // appends three messages to the inbox and moves two to Junk and back, after the specs that
     // count the seed.
     "./tests/e2e/contacts.e2e.mjs",
+    // Stage 18, block C (decision 0051): the new-mail popup. It delivers messages of its own,
+    // deletes one into the trash and turns writes on for alice, then removes the account.
+    "./tests/e2e/new-mail-popup.e2e.mjs",
+    // Stage 18, task D: folders created in the app on the server, and the server's folders
+    // reloaded without a restart. Creates folders on the server and removes them again.
+    "./tests/e2e/folders.e2e.mjs",
     // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a reply (it
     // moves the app's clock forward), the attachments view, trackers and the quota (it sets and
     // clears a storage limit for alice). Appends three messages to the inbox.
@@ -87,6 +99,10 @@ export const config = {
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.
     "./tests/e2e/updates.e2e.mjs",
+    // Stage 19 (decisions 0055 to 0057): source, redirect (to bob), edit as new; groups, vCard,
+    // mbox into and out of Archive, the Thunderbird fixture. They append to INBOX and Archive.
+    "./tests/e2e/stage19-message-tools.e2e.mjs",
+    "./tests/e2e/stage19-contacts-folders.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

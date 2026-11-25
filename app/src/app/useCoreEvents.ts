@@ -5,6 +5,8 @@ import { handleAiEvent } from "../features/ai/queries";
 import { handleComfortEvent } from "../features/comfort/events";
 import { handleComposeEvent } from "../features/composer/queries";
 import { handleContactsEvent } from "../features/contacts/queries";
+// Stage 19 (decision 0057): mbox exports and imports.
+import { handleMboxEvent } from "../features/mbox/MboxJobs";
 import { handleExtrasEvent } from "../features/extras/queries";
 import { operationsQueryKey, outboxCountsQueryKey } from "../features/actions/queries";
 import { mailboxesQueryKey } from "../features/mailboxes/queries";
@@ -48,6 +50,7 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleUpdateEvent(queryClient, event);
   // Stage 17 (decision 0050): contacts, their pictures and spam marks.
   handleContactsEvent(queryClient, event);
+  handleMboxEvent(event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

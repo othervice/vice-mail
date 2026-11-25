@@ -168,8 +168,10 @@ const fn default_on() -> bool {
 ///   changed.
 /// - `ruleSkipped` (stage 9): a local rule's action did not run for `count` new messages
 ///   (`readOnly`: the account is read-only). Show a notice; nothing else happened.
-/// - `openMessageRequested` (stage 9): the user clicked a system notification; show the
-///   message (in `mailboxId` if given).
+/// - `openMessageRequested` (stage 9): the user clicked a system notification (or, stage 18,
+///   "Read" in the new-mail popup); show the message (in `mailboxId` if given).
+/// - `openInboxRequested` (stage 18): "N more" in the new-mail popup; show the account's inbox,
+///   or the unified inbox for `null`.
 /// - `composeRequested` (stage 9): the system opened a `mailto:` link with the app; open the
 ///   composer with these fields and show `request.notices` (a link that sets blind copies, or
 ///   tried to set headers that were ignored).
@@ -192,7 +194,10 @@ const fn default_on() -> bool {
 ///   to date, available, download progress, ready, installing, failed). The setting itself
 ///   comes back from the command that changed it; reload `getUpdateInfo` for the rest.
 /// - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
-///   changed (here or by the settings sync). Reload the contacts and the picture list.
+///   changed (here or by the settings sync). Reload the contacts and the picture list. Since
+///   stage 19 (decision 0056) also contact groups and vCard imports.
+/// - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
+///   finished, was cancelled or failed; carries the whole job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -270,6 +275,11 @@ pub enum CoreEvent {
         mailbox_id: Option<MailboxId>,
         message_id: MessageId,
     },
+    /// Stage 18 (decision 0051): "N more" in the new-mail popup: the main window shows the
+    /// inbox of this account, or the unified inbox (`null`, the cards came from several).
+    OpenInboxRequested {
+        account_id: Option<AccountId>,
+    },
     ComposeRequested {
         request: crate::ComposeRequest,
     },
@@ -311,6 +321,10 @@ pub enum CoreEvent {
     /// Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
     /// here or from another device. Reload the contacts and their pictures.
     ContactsChanged,
+    /// Stage 19 (decision 0057): an mbox job changed.
+    MboxJobChanged {
+        job: crate::MboxJob,
+    },
 }
 
 #[cfg(test)]

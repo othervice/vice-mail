@@ -67,7 +67,8 @@ describe("unified inbox", () => {
     const pane = await screen.findByRole("region", { name: "Message" });
     await showHeaderDetails(user, pane);
     expect(within(pane).getByTestId("reading-account").textContent).toBe("Work (work@example.com)");
-    expect(core.callsOf("get_message")).toEqual([{ messageId: WORK_MAIL.id, format: "auto" }]);
+    // Stage 18 (task F): the unified inbox showed its top message first; the click opened this one.
+    expect(core.callsOf("get_message").at(-1)).toEqual({ messageId: WORK_MAIL.id, format: "auto" });
   });
 
   it("acts on an opened row with the actions of its own account", async () => {

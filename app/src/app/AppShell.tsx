@@ -15,6 +15,9 @@ import { ContactsView } from "../features/contacts/ContactsView";
 import { FolderEditHost } from "../features/mailboxes/FolderEdit";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { EditViewsHost } from "../features/layout/EditViewsDialog";
+// Stage 19 (decision 0055): redirecting a message.
+import { RedirectHost } from "../features/redirect/RedirectDialog";
+import { MboxJobsHost } from "../features/mbox/MboxJobs";
 import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
@@ -119,6 +122,10 @@ export function AppShell({ eventsError }: AppShellProps) {
       <FolderEditHost />
       {/* Stage 17: "Edit views…" (from the column's "Views" or the palette). */}
       <EditViewsHost />
+      {/* Stage 19: "Redirect" (from the actions, the card menu or the palette). */}
+      <RedirectHost />
+      {/* Stage 19 (decision 0057): mbox exports and imports with their progress. */}
+      <MboxJobsHost />
     </div>
   );
 }

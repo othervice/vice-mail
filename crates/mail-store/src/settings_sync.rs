@@ -482,6 +482,8 @@ pub(crate) fn content_of(
         "contact" => crate::contacts_dir::synced_content(conn, id)?,
         // Stage 17 (decision 0050): the picture the user chose.
         "contactPicture" => crate::contacts_view::synced_picture(conn, id)?,
+        // Stage 19 (decision 0056): a contact group with its members.
+        "contactList" => crate::contact_lists::synced_content(conn, id)?,
         // Stage 16 (decision 0033).
         "readingList" | "mailboxPref" | "blockedSender" => {
             crate::parity::synced_content(conn, kind, id)?
@@ -1085,6 +1087,16 @@ fn put_table(
                 crate::contacts_dir::SyncedContact::of(value),
             )?;
         }
+        // Stage 19 (decision 0056): name, search words and members, checked by the engine.
+        "contactList" => {
+            let members = crate::contact_lists::synced_members(value);
+            crate::contact_lists::apply_synced(
+                conn,
+                id,
+                Some((text(value, "name")?, text(value, "search")?, &members)),
+                now,
+            )?;
+        }
         "device" => {
             conn.prepare_cached(
                 "INSERT INTO sync_device (device_id, name, system, last_seen_ms) VALUES (?1, ?2, ?3, ?4)
@@ -1168,6 +1180,7 @@ fn delete_table(
             crate::contacts_dir::SyncedContact::default(),
         )?,
         "contactPicture" => crate::contacts_view::apply_synced_picture(conn, id, None)?,
+        "contactList" => crate::contact_lists::apply_synced(conn, id, None, 0)?,
         "followUp" => {
             crate::follow_ups::apply_synced(conn, id, None, 0).map_err(|err| match err {
                 StoreError::InvalidArgument(what) => refused(what),

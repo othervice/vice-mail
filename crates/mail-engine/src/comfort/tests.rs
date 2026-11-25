@@ -29,6 +29,7 @@ use crate::sync::SyncConfig;
 use crate::sync::fake::{FakeConnector, FakeServer, PASSWORD};
 use crate::sync_state::BackoffPolicy;
 use crate::{AppCore, BuildInfo, CoreConfig, CoreServices, ReadingServices, RecordingOpener};
+use mail_model::NewMailStyle;
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -317,6 +318,15 @@ where
     while !cond().await {
         assert!(Instant::now() < deadline, "never: {what}");
         tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// Stage 18: new mail as system notifications (the popup is the default), for the tests of
+/// stage 9 that read what the system would show.
+fn system_style() -> NotificationSettings {
+    NotificationSettings {
+        new_mail_style: NewMailStyle::System,
+        ..NotificationSettings::default()
     }
 }
 
@@ -985,6 +995,10 @@ fn rule(name: &str, conditions: Vec<RuleCondition>, actions: Vec<RuleAction>) ->
 async fn rules_run_on_new_mail_in_order() {
     let mut h = Harness::new(FakeServer::new()).await;
     h.writes(true).await;
+    h.core
+        .set_notification_settings(system_style())
+        .await
+        .expect("system notifications");
     let account = h.account;
     // 1: the shop's mail goes to Archive, read, and is announced anyway.
     h.core
@@ -1131,6 +1145,10 @@ async fn rules_on_read_only_accounts_are_skipped_and_reported() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn notifications_follow_the_settings() {
     let mut h = Harness::new(FakeServer::new()).await;
+    h.core
+        .set_notification_settings(system_style())
+        .await
+        .expect("system notifications");
     // People: yes. Newsletters: not by default.
     h.deliver(PERSON).await;
     eventually("person announced", || async {
@@ -1156,7 +1174,7 @@ async fn notifications_follow_the_settings() {
     h.core
         .set_notification_settings(NotificationSettings {
             hide_content: true,
-            ..NotificationSettings::default()
+            ..system_style()
         })
         .await
         .expect("settings");
@@ -1177,7 +1195,7 @@ async fn notifications_follow_the_settings() {
             .iter()
             .all(|n| n.sound.as_deref() == Some("Default"))
     );
-    let mut silent = NotificationSettings::default();
+    let mut silent = system_style();
     silent.sound.windows = "Ping".into();
     assert!(matches!(
         h.core.set_notification_settings(silent.clone()).await,
@@ -1210,7 +1228,7 @@ async fn notifications_follow_the_settings() {
                 start_minute: minute.saturating_sub(5) % 1440,
                 end_minute: (minute + 5) % 1440,
             },
-            ..NotificationSettings::default()
+            ..system_style()
         })
         .await
         .expect("settings");
@@ -1225,7 +1243,7 @@ async fn notifications_follow_the_settings() {
     h.core
         .set_notification_settings(NotificationSettings {
             muted_accounts: vec![h.account],
-            ..NotificationSettings::default()
+            ..system_style()
         })
         .await
         .expect("settings");
@@ -1260,6 +1278,7 @@ async fn failed_sends_are_announced_once() {
         notice: None,
         archive: None,
         read_receipt: false,
+        redirect: false,
         created_at: 0,
         updated_at: 0,
     };
@@ -1711,6 +1730,10 @@ mod parity;
 // Stage 17, block B: contacts with kinds, notes, pictures and "mark as spam" (decision 0050).
 #[path = "contacts_view_tests.rs"]
 mod contacts_view;
+
+// Stage 18 (decision 0051): the new-mail popup.
+#[path = "popup_tests.rs"]
+mod popup;
 
 // ---------------------------------------------------------------------------------------------
 // Decision 0039: the inbox as conversations

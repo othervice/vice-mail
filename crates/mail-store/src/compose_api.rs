@@ -332,6 +332,28 @@ impl Store {
             .await
     }
 
+    /// Stage 19 (decision 0055): records the `send` of a redirect (`job.redirect`), executed
+    /// from `not_before` on (the undo delay). `ReadOnly` without writes; the same request twice
+    /// changes nothing.
+    pub async fn enqueue_redirect(
+        &self,
+        account: AccountId,
+        job: SendJob,
+        not_before: Option<i64>,
+        request: String,
+    ) -> Result<OutboxChange, StoreError> {
+        let now = now_millis();
+        self.write(move |tx| compose::enqueue_redirect(tx, account, job, not_before, &request, now))
+            .await
+    }
+
+    /// Stage 19: takes a redirect out of the outbox before it is sent ("undo" in the delay, or
+    /// a failed one). `TooLate` once the submission started or it was sent; `WrongState` for
+    /// an operation that is no redirect.
+    pub async fn cancel_redirect(&self, id: OperationId) -> Result<OutboxChange, StoreError> {
+        self.write(move |tx| compose::cancel_redirect(tx, id)).await
+    }
+
     /// Stage 16: the user declined the read receipt of the account's message with this
     /// Message-ID; `$MDNSent` goes on it where the account may write.
     pub async fn decline_receipt(

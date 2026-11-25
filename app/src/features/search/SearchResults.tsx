@@ -13,6 +13,8 @@ import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle }
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { buildRowsWithoutSections } from "../messages/rows";
 import type { FocusRequest } from "../reading/ReadingPane";
+import { ListResizeHandle } from "../layout/ListResizeHandle";
+import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
@@ -136,6 +138,10 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
         />
         {footer}
       </div>
+      {/* Stage 18: the border between list and pane can be dragged. */}
+      <ListResizeHandle layout={layout} />
+      {/* Stage 18 (task F): the list keeps its size; no result is opened by itself while typing. */}
+      {layout.placeholderShown(open) && <NoMessageSelected />}
       {single && account && layout.paneShown(open) && (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {hitById.get(single.id)?.bodyLocal === false && (

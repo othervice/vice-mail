@@ -230,6 +230,44 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
 }
 
 /**
+ * Stage 18 (decision 0052): the quick actions of a row, while the pointer is over it or the
+ * keyboard cursor is on it. They take the place of the row's meta (marks, account, time) at the
+ * end of its line, as a flex item of that line, not as a layer over it: the line's text gives way
+ * to them (the preview first, then the pill's word, then the subject; in narrow rows the sender
+ * on the first line), and nothing a click can reach (the selection box at the start, the
+ * replies toggle after the subject) is ever under them. Rather than a layer that needs room it
+ * cannot know, the row lays itself out again with the bar in it.
+ *
+ * 24 px targets (WCAG 2.5.8) in a bar as high as the smallest row allows (compact child rows,
+ * 28 px). In narrow rows the bar sits on the first line (sender and time) and reaches 4 px above
+ * it (`lifted`), never down into the subject's line with the toggle.
+ */
+function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: boolean; children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        "hidden shrink-0 items-center rounded-row bg-surface-list px-0.5 shadow-floating group-hover/row:flex",
+        cursor && "group-focus-visible/list:flex",
+        lifted && "self-end",
+      )}
+      data-testid="row-actions"
+    >
+      {children}
+    </span>
+  );
+}
+
+/** The row's meta (marks, account, time): in the line as before, gone while the quick actions show. */
+function RowMeta({ actions, cursor, children }: { actions: boolean; cursor: boolean; children: ReactNode }) {
+  return (
+    <span className={cx("contents", actions && "group-hover/row:hidden", actions && cursor && "group-focus-visible/list:hidden")} data-testid="row-meta">
+      {children}
+    </span>
+  );
+}
+
+/**
  * Stage 17: the dotted line of an unfolded conversation, under the avatar column of its row: from
  * the avatar down in the conversation's row, through every child row, ending at the last one's
  * avatar. Decoration only. In the conversation's row it starts at the row's middle, which lies
@@ -418,9 +456,17 @@ export function MessageRowContent({
             <span className="flex h-5 min-w-0 items-center gap-2">
               {sender}
               <span className="flex-1" />
-              {marks}
-              {accountElement}
-              {timeElement}
+              <RowMeta actions={Boolean(actions)} cursor={cursor}>
+                {marks}
+                {accountElement}
+                {timeElement}
+              </RowMeta>
+              {/* Stage 18: on the first line, clear of the subject's line with the toggle. */}
+              {actions && (
+                <RowActions cursor={cursor} lifted>
+                  {actions}
+                </RowActions>
+              )}
             </span>
             {subjectLine}
             {threeLine && previewElement}
@@ -432,25 +478,13 @@ export function MessageRowContent({
           {avatar}
           {sender}
           {subjectLine}
-          {marks}
-          {accountElement}
-          {timeElement}
+          <RowMeta actions={Boolean(actions)} cursor={cursor}>
+            {marks}
+            {accountElement}
+            {timeElement}
+          </RowMeta>
+          {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
         </span>
-      )}
-      {actions && (
-        // A small floating bar at the row's end (decision 0031), over the time column and, in
-        // narrow rows, the ends of the lines; it never covers the sender at the start.
-        <div
-          aria-hidden
-          className={cx(
-            "absolute inset-y-0 end-2 flex items-center",
-            "invisible group-hover/row:visible",
-            cursor && "group-focus-visible/list:visible",
-          )}
-          data-testid="row-actions"
-        >
-          <div className="flex items-center rounded-row bg-surface-list p-1 shadow-floating">{actions}</div>
-        </div>
       )}
     </div>
   );
@@ -523,8 +557,9 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
         <span className="relative flex w-(--ui-avatar) shrink-0 justify-center">
           <Avatar name={item.from?.name} email={item.from?.email ?? ""} accountColor={0} ring={false} size="mini" />
         </span>
-        {/* As wide as they are: the sender's name (at most a third), the folder; the text the rest. */}
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+        {/* As wide as they are: the sender's name (at most a third), the folder; the text the rest.
+            Clipped: with the quick actions in a narrow list the folder may not fit beside them. */}
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <span
             title={item.from?.email ?? sender}
             className={cx("max-w-1/3 shrink-0 truncate text-13 text-primary", item.unread ? "font-semibold" : "font-regular")}
@@ -541,26 +576,20 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
             {text}
           </span>
         </span>
-        {item.hasAttachments && <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />}
-        {item.flagged && <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />}
-        {activity && <ActivityIcon activity={activity} />}
-        <time
-          dateTime={new Date(item.date).toISOString()}
-          title={formatFullDate(item.date, i18n.language)}
-          className={cx("shrink-0 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
-        >
-          {formatListDate(item.date, bounds, i18n.language)}
-        </time>
+        <RowMeta actions={Boolean(actions)} cursor={cursor}>
+          {item.hasAttachments && <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />}
+          {item.flagged && <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />}
+          {activity && <ActivityIcon activity={activity} />}
+          <time
+            dateTime={new Date(item.date).toISOString()}
+            title={formatFullDate(item.date, i18n.language)}
+            className={cx("shrink-0 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+          >
+            {formatListDate(item.date, bounds, i18n.language)}
+          </time>
+        </RowMeta>
+        {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
       </span>
-      {actions && (
-        <div
-          aria-hidden
-          className={cx("absolute inset-y-0 end-2 flex items-center", "invisible group-hover/row:visible", cursor && "group-focus-visible/list:visible")}
-          data-testid="row-actions"
-        >
-          <div className="flex items-center rounded-row bg-surface-list p-1 shadow-floating">{actions}</div>
-        </div>
-      )}
     </div>
   );
 }

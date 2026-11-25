@@ -214,6 +214,11 @@ pub(crate) async fn ask_save_path<R: Runtime>(
     window: &WebviewWindow<R>,
     name: &str,
 ) -> Result<Option<PathBuf>, CoreError> {
+    // Stage 19: the desktop test answers the dialog itself (never in a shipped build).
+    #[cfg(feature = "e2e")]
+    if let Some(path) = crate::e2e::take_dialog_answer() {
+        return Ok(Some(path));
+    }
     let mut dialog = rfd::AsyncFileDialog::new()
         .set_file_name(name)
         .set_parent(window);

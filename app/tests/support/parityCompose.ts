@@ -81,6 +81,7 @@ export function createParityComposeFake(options: ParityComposeFakeOptions, deps:
           notice: null,
           archive: null,
           readReceipt: true,
+          redirect: false,
           createdAt: now,
           updatedAt: now,
         };

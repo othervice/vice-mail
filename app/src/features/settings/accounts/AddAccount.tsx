@@ -18,6 +18,7 @@ import {
   emptyServers,
   foundServerWarning,
   fromDiscovery,
+  fromSettings,
   isEmail,
   isGmailHost,
   toSettings,
@@ -82,6 +83,11 @@ interface AddAccountProps {
    * "Cancel", and reports the new account instead of opening the inbox.
    */
   embedded?: { onAdded: (account: Account) => void };
+  /**
+   * Stage 19 (decision 0057): an account taken over from Thunderbird: address, name and servers
+   * filled in; the user enters the password. Never a password.
+   */
+  prefill?: { email: string; displayName: string; imap: ServerSettings | null; smtp: ServerSettings | null };
 }
 
 /**
@@ -94,19 +100,23 @@ interface AddAccountProps {
  * review N-4). "Test connection" logs in without storing anything;
  * "Add account" checks the login again in the core and stores the account read-only.
  */
-export function AddAccount({ embedded }: AddAccountProps = {}) {
+export function AddAccount({ embedded, prefill }: AddAccountProps = {}) {
   const { t } = useTranslation();
   const titleId = useId();
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
   const showMailView = useUiStore((state) => state.showMailView);
   const selectAccount = useUiStore((state) => state.selectAccount);
 
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState(prefill?.email ?? "");
+  const [displayName, setDisplayName] = useState(prefill?.displayName ?? "");
   const [password, setPassword] = useState("");
   /** Server settings the user edited or an online search found; null follows the provider table. */
-  const [manual, setManual] = useState<ServersDraft | null>(null);
-  const [origin, setOrigin] = useState<ServerOrigin | null>(null);
+  const [manual, setManual] = useState<ServersDraft | null>(() =>
+    prefill?.imap
+      ? { imap: fromSettings(prefill.imap, "imap", prefill.email), smtp: fromSettings(prefill.smtp, "smtp", prefill.email) }
+      : null,
+  );
+  const [origin, setOrigin] = useState<ServerOrigin | null>(() => (prefill?.imap ? { kind: "user" } : null));
   /** Security review N-4: the online search's answer, for its warnings per found server. */
   const [foundOnline, setFoundOnline] = useState<DiscoveryResult | null>(null);
   const [editing, setEditing] = useState(false);
