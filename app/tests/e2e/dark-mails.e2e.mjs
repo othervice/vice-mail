@@ -94,8 +94,21 @@ async function openBySearch(query, subject) {
  * Not through the search: new mail arriving while the search shows its hits refreshes them.
  */
 async function openRow(subject) {
-  const row = await browser.$(`//*[@role="option" or @role="treeitem"][contains(., "${subject}")]`);
-  await row.waitForExist({ timeout: 60000 });
+  const selector = `//*[@role="option" or @role="treeitem"][contains(., "${subject}")]`;
+  // A newsletter of today shares today's "Newsletters" bundle with every other newsletter of
+  // today (in the full run stage20.e2e.mjs leaves one from the same sender), and a bundle of
+  // more than one member is a closed row: unfold closed bundles while waiting for the row.
+  await browser.waitUntil(
+    async () => {
+      if (await (await browser.$(selector)).isExisting()) return true;
+      await browser.execute(() => {
+        for (const bundle of document.querySelectorAll('[data-testid="message-list"] [data-testid="bundle-row"][data-expanded="false"]')) bundle.click();
+      });
+      return false;
+    },
+    { timeout: 60000, interval: 500, timeoutMsg: `no row for "${subject}" in the list` },
+  );
+  const row = await browser.$(selector);
   const id = await row.getAttribute("id");
   await row.click();
   await testId("reading-pane").waitForExist({ timeout: 20000 });

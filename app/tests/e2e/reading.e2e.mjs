@@ -181,10 +181,14 @@ async function setTheme(theme) {
  * Screenshots of the current state in light and dark; ends in light. `probe` (a page function)
  * is evaluated right before each picture and returned, to show what the picture should contain.
  */
-async function shootBothThemes(name, probe = null) {
+async function shootBothThemes(name, probe = null, reopen = null) {
   const seen = [];
   for (const theme of ["light", "dark"]) {
     await setTheme(theme);
+    // Stage 21 (decision 0066): in the dark theme the core renders an HTML mail again with adapted
+    // colours, which replaces the frame's document and closes what was open on it (the link
+    // card): `reopen` opens it again on the new rendering.
+    if (reopen && theme === "dark") await reopen();
     if (probe) seen.push(await browser.execute(probe));
     report.screenshots.push(await screenshot(`reading-${name}-${theme}`));
   }
@@ -799,11 +803,26 @@ describe("reading mail (stage 3)", function () {
           line.openable = info.openable;
         }
         if (file === "deceptive-links.eml" && i === 0) {
-          const seen = await shootBothThemes("link-card-warning", () => ({
-            card: window.__e2e.linkCard(),
-            rect: document.querySelector('[data-testid="link-card"]')?.getBoundingClientRect().toJSON() ?? null,
-            active: document.activeElement?.tagName ?? null,
-          }));
+          const seen = await shootBothThemes(
+            "link-card-warning",
+            () => ({
+              card: window.__e2e.linkCard(),
+              rect: document.querySelector('[data-testid="link-card"]')?.getBoundingClientRect().toJSON() ?? null,
+              active: document.activeElement?.tagName ?? null,
+            }),
+            async () => {
+              await browser.waitUntil(
+                () =>
+                  browser.execute(() => {
+                    const frame = document.querySelector('[data-testid="reading-pane"] [data-testid="mail-frame"]');
+                    return frame?.dataset.colors !== "original" && frame?.contentDocument?.readyState === "complete";
+                  }),
+                { timeout: 20000, timeoutMsg: "the mail was not rendered again for the dark theme" },
+              );
+              await clickLink("frame", i, true);
+              await browser.pause(CLICK_SETTLE_MS);
+            },
+          );
           report.linkCardShot = { clicked: click.card, seen };
           if (seen.some((x) => x.card === null)) fail(where, `the link card was gone when photographed: ${JSON.stringify(seen)}`);
         }
