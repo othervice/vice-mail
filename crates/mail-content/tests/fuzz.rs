@@ -688,14 +688,16 @@ fn composer_violations(html: &str, images: bool) -> Vec<String> {
     while let Some(node) = stack.pop() {
         if let NodeData::Element { name, attrs, .. } = &node.data {
             let tag = name.local.to_string();
-            // The document's own charset declaration (`mail_html` writes a whole document).
+            // The document's own charset declaration (`mail_html` writes a whole document) and,
+            // since stage 21 (decision 0067), the colour schemes it suits.
             let charset = tag == "meta"
                 && attrs.borrow().iter().all(|attr| {
                     let value = attr.value.to_ascii_lowercase();
                     match &*attr.name.local {
                         "http-equiv" => value == "content-type",
-                        "content" => value == "text/html; charset=utf-8",
+                        "content" => value == "text/html; charset=utf-8" || value == "light dark",
                         "charset" => value == "utf-8",
+                        "name" => value == "color-scheme" || value == "supported-color-schemes",
                         _ => false,
                     }
                 });
