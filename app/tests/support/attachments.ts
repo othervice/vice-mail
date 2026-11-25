@@ -2,6 +2,8 @@
 // attachments and the count of mail that blocked senders leave out of an inbox list, with the
 // command names and argument shapes of the IPC contract.
 import type {
+  AttachmentEntry,
+  AttachmentFilter,
   AttachmentInfo,
   AttachmentPreview,
   InboxScope,
@@ -24,6 +26,8 @@ export interface AttachmentsFakeOptions {
   pinned?: PinnedAttachment[];
   /** `countBlockedHidden` by scope (`JSON.stringify(scope)`); default 0. */
   blockedHidden?: Record<string, number>;
+  /** Stage 20: the attachments view's entries, newest first (filtered here like the core). */
+  attachmentEntries?: AttachmentEntry[];
 }
 
 export interface AttachmentsFakeState {
@@ -119,6 +123,23 @@ export function createAttachmentsFake(options: AttachmentsFakeOptions, deps: Dep
       }
       case "count_blocked_hidden":
         return hidden.get(JSON.stringify(args["scope"])) ?? 0;
+      // Stage 20 (decision 0060).
+      case "list_attachments": {
+        const filter = args["filter"] as AttachmentFilter;
+        const limit = args["limit"] as number;
+        const name = filter.query?.trim().toLowerCase() ?? "";
+        const sender = filter.sender?.trim().toLowerCase() ?? "";
+        const items = (options.attachmentEntries ?? []).filter(
+          (entry) =>
+            (filter.scope.kind !== "account" || entry.accountId === filter.scope.accountId) &&
+            (filter.kind === null || entry.kind === filter.kind) &&
+            entry.name.toLowerCase().includes(name) &&
+            (sender === "" ||
+              (entry.from?.email.toLowerCase().includes(sender) ?? false) ||
+              (entry.from?.name?.toLowerCase().includes(sender) ?? false)),
+        );
+        return { items: items.slice(0, limit), nextCursor: null };
+      }
       default:
         return undefined;
     }

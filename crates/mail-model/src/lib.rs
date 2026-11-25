@@ -11,6 +11,7 @@
 mod account;
 mod ai;
 mod attachments;
+mod attachments_view;
 mod backend;
 mod body;
 mod bundle;
@@ -72,6 +73,10 @@ pub use attachments::{
     AttachmentPreview, MAX_PINNED_ATTACHMENTS, MAX_PREVIEW_EDGE, MAX_PREVIEW_INPUT_BYTES,
     MAX_PREVIEW_PDF_PAGES, MAX_PREVIEW_PIXELS, MAX_PREVIEW_TEXT_BYTES, PinnedAttachment,
     PreviewError, PreviewKind, SaveAllAttachmentsResult,
+};
+pub use attachments_view::{
+    AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage,
+    MAX_ATTACHMENT_FILTER_CHARS, MAX_ATTACHMENT_PAGE,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,

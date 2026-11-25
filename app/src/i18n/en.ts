@@ -12,6 +12,8 @@ export const en = {
     readingList: "Reading list",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Pinned attachments",
+    // Stage 20 (decision 0060): every attachment of the stored mail, across the accounts.
+    attachments: "Attachments",
     // SPEC "Markiert": the server's flag, in every folder but Trash and Junk.
     flagged: "Flagged",
     pinned: "Pinned",
@@ -3973,6 +3975,39 @@ export const en = {
       count_other: "{{count}} pinned attachments",
       saved: "{{name}} saved to {{path}}",
       saveFailed: "The attachment could not be saved.",
+    },
+    // Stage 20 (decision 0060): the attachments view across the accounts.
+    view: {
+      listLabel: "Attachments",
+      kinds: "Show attachments of the type",
+      kind: {
+        all: "All",
+        image: "Images",
+        pdf: "PDF",
+        document: "Documents",
+        spreadsheet: "Spreadsheets",
+        archive: "Archives",
+        other: "Other",
+      },
+      name: "File name",
+      namePlaceholder: "Search file names",
+      sender: "Sender",
+      senderPlaceholder: "Name or address",
+      account: "Account",
+      allAccounts: "All accounts",
+      scopeHint:
+        "Attachments of the mail on this computer. How far back that goes is set under Settings → Reading → Download in advance; attachments not downloaded yet are fetched when you open them.",
+      details: "{{type}}, {{size}} · {{sender}} · {{date}}",
+      noSubject: "(no subject)",
+      unknownSender: "unknown sender",
+      goToMessage: "Go to the message of {{name}}",
+      open: "Open {{name}}",
+      save: "Save {{name}}",
+      loadFailed: "The attachments could not be loaded.",
+      emptyTitle: "No attachments yet",
+      emptyBody: "Attachments of the mail on this computer appear here, newest first.",
+      noMatchTitle: "No attachment matches",
+      noMatchBody: "Change the type, the sender or the search.",
     },
     blockedHidden: {
       text_one: "{{count}} message from blocked senders hidden",

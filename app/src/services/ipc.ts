@@ -1880,3 +1880,23 @@ export const reminderIpc = {
   listFollowUps: (scope: MarkScope): Promise<MessageListItem[]> => call(() => reminderCommands.listFollowUps(scope)),
 };
 
+import {
+  commands as attachmentsViewCommands,
+  MAX_ATTACHMENT_PAGE,
+  type AttachmentCursor,
+  type AttachmentEntry,
+  type AttachmentFilter,
+  type AttachmentKind,
+  type AttachmentPage,
+} from "../generated/bindings";
+
+export { MAX_ATTACHMENT_PAGE };
+/** Decision 0060: the attachments view across accounts. */
+export type { AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage };
+
+/** Stage 20 (decision 0060): the attachments of stored mail across the accounts. */
+export const attachmentsViewIpc = {
+  /** Newest message first; open, save and preview with the reading pane's commands and `index`. */
+  list: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number): Promise<AttachmentPage> =>
+    call(() => attachmentsViewCommands.listAttachments(filter, cursor, limit)),
+};

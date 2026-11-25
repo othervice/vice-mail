@@ -731,6 +731,11 @@ export const commands = {
 	clearFollowUp: (messageIds: MessageId[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("clear_follow_up", { messageIds }, options)),
 	/**  "Waiting for reply": the reminders of the scope, the next due first. */
 	listFollowUps: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_follow_ups", { scope }, options)),
+	/**
+	 *  One page of the attachments of the scope's accounts, newest message first, filtered by kind,
+	 *  sender and file name. `limit` 1..=500.
+	 */
+	listAttachments: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number, options?: InvokeOptions) => typedError<AttachmentPage, IpcError>(__TAURI_INVOKE("list_attachments", { filter, cursor, limit }, options)),
 };
 
 /** Events */
@@ -756,6 +761,8 @@ export const MAX_ACTION_MESSAGES = 10000 as const;
 export const MAX_ATTACHMENTS = 100 as const;
 
 export const MAX_ATTACHMENT_BYTES = 104857600 as const;
+
+export const MAX_ATTACHMENT_PAGE = 500 as const;
 
 export const MAX_COLUMN_VIEWS = 32 as const;
 
@@ -1342,6 +1349,53 @@ export type ArchiveAfterSend =
  */
 "no_archive_mailbox";
 
+/**  Keyset position in the view: below this attachment. Opaque; pass it back unchanged. */
+export type AttachmentCursor = {
+	messageId: MessageId,
+	index: number,
+};
+
+/**  One attachment of the view. */
+export type AttachmentEntry = {
+	messageId: MessageId,
+	accountId: AccountId,
+	/**
+	 *  Where the message is shown ("Go to message"): its inbox location if it has one, else
+	 *  another folder (never Trash or Junk).
+	 */
+	mailboxId: MailboxId,
+	/**  The attachment's index in the reading pane (open, save, preview). */
+	index: number,
+	/**  Sanitised file name. */
+	name: string,
+	mimeType: string,
+	kind: AttachmentKind,
+	/**  Decoded bytes (estimated for attachments not downloaded yet). */
+	size: number,
+	/**  The bytes are on this computer; otherwise opening downloads them first. */
+	local: boolean,
+	/**  What the preview shows; null: no preview, open it in the system. */
+	preview: PreviewKind | null,
+	/**  A program or script: opening asks first. */
+	executable: boolean,
+	from: Address | null,
+	subject: string,
+	/**  The message's sort date, Unix milliseconds. */
+	date: number,
+};
+
+/**  What the view lists. */
+export type AttachmentFilter = {
+	/**  The accounts: all visible ones, a group's, or one. */
+	scope: MarkScope,
+	/**  Null: every kind. */
+	kind: AttachmentKind | null,
+	/**  Part of the sender's name or address (any case); null or empty: every sender. */
+	sender: string | null,
+	/**  Part of the file name (any case); null or empty: every name. */
+	query: string | null,
+};
+
 /**  One attachment in the reading pane. */
 export type AttachmentInfo = {
 	/**  Position for `saveAttachment`/`openAttachment`; stable for the message. */
@@ -1361,6 +1415,22 @@ export type AttachmentInfo = {
 	local: boolean,
 	/**  Stage 16 (decision 0036): what `previewAttachment` shows; null when it has no preview. */
 	preview: PreviewKind | null,
+};
+
+/**  The kinds the view filters by. */
+export type AttachmentKind = "image" | "pdf" | 
+/**  Text documents, presentations, plain text. */
+"document" | 
+/**  Spreadsheets and CSV. */
+"spreadsheet" | 
+/**  Zip, tar, 7z, rar, gzip … */
+"archive" | "other";
+
+/**  One page of the view, newest message first. */
+export type AttachmentPage = {
+	items: AttachmentEntry[],
+	/**  Pass to the next call to continue; null on the last page. */
+	nextCursor: AttachmentCursor | null,
 };
 
 /**

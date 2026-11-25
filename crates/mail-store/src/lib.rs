@@ -32,6 +32,7 @@
 
 mod accounts;
 mod ai;
+mod attachment_index;
 mod attachment_pins;
 pub mod backup;
 mod bodies;
@@ -78,6 +79,7 @@ mod threads;
 mod workers;
 
 pub use ai::{NewAiRequest, OpenReplyRow};
+pub use attachment_index::{AttachmentQuery, AttachmentRows, IndexedAttachment, StoredAttachment};
 pub use attachment_pins::{AttachmentPinInput, PinnedAttachmentRow};
 pub use bodies::BodyInfo;
 pub use body_api::{BODY_PACK_LIMIT, SWEEP_MIN_AGE};
@@ -132,6 +134,8 @@ pub use signatures::{
 };
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 
+#[cfg(test)]
+mod attachment_index_tests;
 #[cfg(test)]
 mod bench;
 #[cfg(test)]

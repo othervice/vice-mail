@@ -318,6 +318,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::reminders::set_follow_up,
             commands::reminders::clear_follow_up,
             commands::reminders::list_follow_ups,
+            commands::attachments_view::list_attachments,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)
@@ -336,6 +337,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MAX_PREVIEW_TEXT_BYTES", mail_model::MAX_PREVIEW_TEXT_BYTES)
         .constant("MAX_PREVIEW_PDF_PAGES", mail_model::MAX_PREVIEW_PDF_PAGES)
         .constant("MAX_PINNED_ATTACHMENTS", mail_model::MAX_PINNED_ATTACHMENTS)
+        // Stage 20 (decision 0060): the attachments view's page.
+        .constant("MAX_ATTACHMENT_PAGE", mail_model::MAX_ATTACHMENT_PAGE)
         // Stage 7: the largest search, thread and unified page, and the most messages of a
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)

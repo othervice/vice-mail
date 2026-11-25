@@ -29,19 +29,31 @@ impl BodyTextSource for TestText {
     fn complete(&self, raw: &[u8]) -> BodyText {
         let text = String::from_utf8_lossy(raw);
         let (head, body) = text.split_once("\r\n\r\n").unwrap_or(("", &text));
+        let attachments: Vec<String> = head
+            .lines()
+            .filter_map(|l| l.strip_prefix("X-Attachment: "))
+            .map(str::to_owned)
+            .collect();
         BodyText {
             body: body.to_owned(),
-            attachments: head
-                .lines()
-                .filter_map(|l| l.strip_prefix("X-Attachment: "))
-                .map(str::to_owned)
+            // Stage 20: the same names for the attachments view.
+            attachment_index: attachments
+                .iter()
+                .map(|name| crate::IndexedAttachment {
+                    name: name.clone(),
+                    mime_type: "application/octet-stream".into(),
+                    size: 1,
+                    part: None,
+                })
                 .collect(),
+            attachments,
             receipt: None,
         }
     }
 
     fn partial(&self, structure: &MessageStructure, sections: &[FetchedSection]) -> BodyText {
         BodyText {
+            attachment_index: Vec::new(),
             body: sections
                 .iter()
                 .filter(|s| match &s.section {

@@ -844,10 +844,24 @@ impl<C: MailConnector + 'static> Reading<C> {
     // Attachments
     // -----------------------------------------------------------------------------------------
 
+    /// Attachment `index` of a message as the reading pane lists it. Stage 20 (decision 0060):
+    /// a body no longer stored (the attachments view lists what was stored once) is fetched
+    /// first, as opening the message would.
     async fn attachment(&self, message: MessageId, index: u32) -> Result<Attachment, CoreError> {
-        let content = self.load_content(message).await?.ok_or_else(|| {
-            CoreError::NotFound(format!("the body of message {message} is not stored"))
-        })?;
+        let content = match self.load_content(message).await? {
+            Some(content) => content,
+            None => {
+                let summary = self.summary(message).await?;
+                if !self.fetch_for_open(&summary).await? {
+                    return Err(CoreError::NotFound(format!(
+                        "message {message} is no longer on the server"
+                    )));
+                }
+                self.load_content(message).await?.ok_or_else(|| {
+                    CoreError::NotFound(format!("the body of message {message} is not stored"))
+                })?
+            }
+        };
         content
             .attachments
             .into_iter()

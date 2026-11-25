@@ -50,6 +50,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0020_contacts_view.sql")),
     // Stage 20, task B: reminders when no reply comes (decision 0059).
     M::up(include_str!("../migrations/0024_follow_up.sql")),
+    // Stage 20, task C: the attachments of stored bodies, for the view across accounts
+    // (decision 0060).
+    M::up(include_str!("../migrations/0025_attachment_index.sql")),
 ];
 
 /// All migrations this build knows.

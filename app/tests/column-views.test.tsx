@@ -120,6 +120,7 @@ describe("the column's views as the core stores them", () => {
       "tasks",
       "readingList",
       "pinnedAttachments",
+      "attachments",
       "flagged",
       "pinned",
       "savedViews",
@@ -144,6 +145,7 @@ describe("the column's views as the core stores them", () => {
       { id: "tasks", shown: true },
       { id: "readingList", shown: true },
       { id: "pinnedAttachments", shown: true },
+      { id: "attachments", shown: true },
       { id: "flagged", shown: true },
     ]);
     // Unknown ids (a newer device) and an id twice are left out of what the UI shows.
@@ -218,13 +220,14 @@ describe("Edit views…", () => {
     await user.click(within(dialog()).getByRole("checkbox", { name: "Later" }));
     await user.click(within(dialog()).getByRole("checkbox", { name: "Pinned" }));
     // The column behind the dialog is the preview.
-    expect(await columnIds()).toEqual(["waiting", "tasks", "readingList", "pinnedAttachments", "flagged", "savedViews", "contacts"]);
+    expect(await columnIds()).toEqual(["waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "savedViews", "contacts"]);
     expect(editorIds()).toEqual([
       "-later",
       "waiting",
       "tasks",
       "readingList",
       "pinnedAttachments",
+      "attachments",
       "flagged",
       "-pinned",
       "savedViews",
@@ -232,7 +235,7 @@ describe("Edit views…", () => {
     ]);
     await storedViews(core, all({ later: false, pinned: false }));
     await user.click(within(dialog()).getByRole("checkbox", { name: "Later" }));
-    expect(await columnIds()).toEqual(["later", "waiting", "tasks", "readingList", "pinnedAttachments", "flagged", "savedViews", "contacts"]);
+    expect(await columnIds()).toEqual(["later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "savedViews", "contacts"]);
     await storedViews(core, all({ pinned: false }));
     await user.click(within(dialog()).getByRole("button", { name: "Done" }));
 
@@ -248,6 +251,7 @@ describe("Edit views…", () => {
         "tasks",
         "readingList",
         "pinnedAttachments",
+        "attachments",
         "flagged",
         "savedViews",
         "contacts",
@@ -267,7 +271,7 @@ describe("Edit views…", () => {
     act(() => {
       flagged.focus();
     });
-    await user.keyboard("{Alt>}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{/Alt}");
+    await user.keyboard("{Alt>}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{/Alt}");
     expect(editorIds()).toEqual([
       "flagged",
       "later",
@@ -275,18 +279,19 @@ describe("Edit views…", () => {
       "tasks",
       "readingList",
       "pinnedAttachments",
+      "attachments",
       "pinned",
       "savedViews",
       "contacts",
     ]);
     expect(document.activeElement).toBe(within(dialog()).getByRole("checkbox", { name: "Flagged" }));
-    expect(screen.getByTestId("edit-views-announcement").textContent).toBe("Flagged, position 1 of 9");
+    expect(screen.getByTestId("edit-views-announcement").textContent).toBe("Flagged, position 1 of 10");
     // At the top it stays there.
     await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
     expect(editorIds()[0]).toBe("flagged");
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     expect(editorIds().slice(0, 2)).toEqual(["later", "flagged"]);
-    const moved = ["later", "flagged", "waiting", "tasks", "readingList", "pinnedAttachments", "pinned", "savedViews", "contacts"];
+    const moved = ["later", "flagged", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"];
     expect(await columnIds()).toEqual(moved);
     await storedViews(core, all({}, moved));
     // Space shows and hides the view with the focus; Tab goes on to the next view.
@@ -303,7 +308,7 @@ describe("Edit views…", () => {
     expect(editorIds().slice(-3)).toEqual(["savedViews", "pinned", "contacts"]);
     await storedViews(
       core,
-      all({}, ["later", "waiting", "tasks", "readingList", "pinnedAttachments", "flagged", "savedViews", "pinned", "contacts"]),
+      all({}, ["later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "savedViews", "pinned", "contacts"]),
     );
     expect(within(dialog()).getByRole<HTMLButtonElement>("button", { name: "Move “Later” up" }).disabled).toBe(true);
     expect(within(dialog()).getByRole<HTMLButtonElement>("button", { name: "Move “Contacts” down" }).disabled).toBe(true);
@@ -315,7 +320,7 @@ describe("Edit views…", () => {
       return new DOMRect(0, index * 40, 320, 40);
     });
     const saves = core.callsOf("set_ui_preferences").length;
-    fireEvent.pointerDown(screen.getByTestId("edit-views-handle-flagged"), { button: 0, clientY: 220 });
+    fireEvent.pointerDown(screen.getByTestId("edit-views-handle-flagged"), { button: 0, clientY: 260 });
     expect(screen.getByTestId("edit-views-row-flagged").dataset["dragging"]).toBe("true");
     act(() => {
       window.dispatchEvent(new PointerEvent("pointermove", { clientY: 50 }));
@@ -333,13 +338,13 @@ describe("Edit views…", () => {
     });
     await storedViews(
       core,
-      all({}, ["flagged", "later", "waiting", "tasks", "readingList", "pinnedAttachments", "savedViews", "pinned", "contacts"]),
+      all({}, ["flagged", "later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "savedViews", "pinned", "contacts"]),
     );
-    expect(screen.getByTestId("edit-views-announcement").textContent).toBe("Flagged, position 1 of 9");
+    expect(screen.getByTestId("edit-views-announcement").textContent).toBe("Flagged, position 1 of 10");
     expect(screen.getByTestId("edit-views-row-flagged").dataset["dragging"]).toBeUndefined();
 
     // A cancelled drag (the system took the pointer) puts the order back as it was.
-    fireEvent.pointerDown(screen.getByTestId("edit-views-handle-pinned"), { button: 0, clientY: 300 });
+    fireEvent.pointerDown(screen.getByTestId("edit-views-handle-pinned"), { button: 0, clientY: 340 });
     act(() => {
       window.dispatchEvent(new PointerEvent("pointermove", { clientY: 10 }));
     });
@@ -353,7 +358,7 @@ describe("Edit views…", () => {
 
   it("“Reset to default” shows every view again in the default order and stores no choice", async () => {
     const { core, user } = setup({ columnViews: all({ tasks: false, savedViews: false }, ["pinned", "later", "tasks", "readingList", "pinnedAttachments", "flagged", "savedViews"]) });
-    expect(await columnIds()).toEqual(["pinned", "later", "waiting", "readingList", "pinnedAttachments", "flagged", "contacts"]);
+    expect(await columnIds()).toEqual(["pinned", "later", "waiting", "readingList", "pinnedAttachments", "attachments", "flagged", "contacts"]);
     await openFromColumn(user);
     const reset = within(dialog()).getByRole("button", { name: "Reset to default" });
     await user.click(reset);
@@ -377,6 +382,7 @@ describe("Edit views…", () => {
       "tasks",
       "readingList",
       "pinnedAttachments",
+      "attachments",
       "flagged",
       "savedViews",
       "pinned",
@@ -388,7 +394,7 @@ describe("Edit views…", () => {
     cleanup();
     useUiStore.setState(useUiStore.getInitialState(), true);
     setup({ columnViews: [...first.core.ui.preferences.columnViews] });
-    expect(await columnIds()).toEqual(["later", "waiting", "tasks", "pinnedAttachments", "flagged", "savedViews", "pinned", "contacts"]);
+    expect(await columnIds()).toEqual(["later", "waiting", "tasks", "pinnedAttachments", "attachments", "flagged", "savedViews", "pinned", "contacts"]);
   });
 
   it("applies a choice made on another device (uiPreferencesChanged)", async () => {
@@ -399,7 +405,7 @@ describe("Edit views…", () => {
       preferences: { ...DEFAULT_UI_PREFERENCES, columnViews: all({ later: false }, ["savedViews", ...COLUMN_VIEW_IDS.filter((id) => id !== "savedViews")]) },
     });
     await waitFor(async () => {
-      expect(await columnIds()).toEqual(["savedViews", "waiting", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "contacts"]);
+      expect(await columnIds()).toEqual(["savedViews", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "pinned", "contacts"]);
     });
   });
 
@@ -420,7 +426,7 @@ describe("Edit views…", () => {
 describe("hidden views", () => {
   it("stay reachable through the palette and their shortcuts", async () => {
     const { user } = setup({ columnViews: all({ later: false, flagged: false }) });
-    expect(await columnIds()).toEqual(["waiting", "tasks", "readingList", "pinnedAttachments", "pinned", "savedViews", "contacts"]);
+    expect(await columnIds()).toEqual(["waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"]);
     await user.keyboard("{Meta>}k{/Meta}");
     const palette = await screen.findByRole("dialog", { name: "Command palette" });
     await user.keyboard("flagged");
@@ -458,7 +464,7 @@ describe("hidden views", () => {
     const tree = await viewsTree();
     await user.pointer({ keys: "[MouseRight]", target: within(tree).getByRole("treeitem", { name: "Tasks" }) });
     await user.click(await screen.findByRole("menuitem", { name: "Hide from the sidebar" }));
-    expect(await columnIds()).toEqual(["later", "waiting", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews", "contacts"]);
+    expect(await columnIds()).toEqual(["later", "waiting", "readingList", "pinnedAttachments", "attachments", "flagged", "pinned", "savedViews", "contacts"]);
     expect(document.activeElement).toBe(within(tree).getByRole("treeitem", { name: "Reading list" }));
     expect(within(tree.closest("section") ?? tree).getByText("Tasks hidden. “Edit views…” shows it again.")).toBeTruthy();
     await storedViews(core, all({ tasks: false }));

@@ -57,6 +57,7 @@ import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle }
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 import { PinnedAttachmentsView } from "../reading/PinnedAttachmentsView";
+import { AttachmentsView } from "../reading/AttachmentsView";
 import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { SavedSearchesView } from "../search/SavedSearchesView";
 import { SearchArea } from "../search/SearchArea";
@@ -615,6 +616,7 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
       return { kind: "mark", mark: mailView };
     // Stage 17 (decision 0050): the contacts are rendered by `AppShell` as a view of their own.
     case "pinnedAttachments":
+    case "attachments":
     case "savedViews":
     case "contacts":
       return null;
@@ -637,6 +639,10 @@ function MailBody({ view, account }: MailBodyProps) {
   // Stage 16 (decision 0036): pinned attachments of the account, like the reading list.
   if (view.kind === "mail" && view.mailView === "pinnedAttachments") {
     return <PinnedAttachmentsView scope={{ kind: "account", accountId: account.id }} />;
+  }
+  // Stage 20 (decision 0060): every attachment, across the accounts (it filters by account).
+  if (view.kind === "mail" && view.mailView === "attachments") {
+    return <AttachmentsView />;
   }
   const list = view.kind === "mail" ? mailViewList(view.mailView) : null;
   // The saved searches have a pane of their own, which `MailView` shows instead of this.

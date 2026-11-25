@@ -13,6 +13,8 @@ export const de: Translation = {
     readingList: "Zum Lesen",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Angeheftete Anhänge",
+    // Stufe 20 (Entscheidung 0060).
+    attachments: "Anhänge",
     flagged: "Markiert",
     pinned: "Angepinnt",
     sent: "Gesendet",
@@ -3958,6 +3960,39 @@ export const de: Translation = {
       count_other: "{{count}} angeheftete Anhänge",
       saved: "{{name}} gespeichert unter {{path}}",
       saveFailed: "Der Anhang konnte nicht gespeichert werden.",
+    },
+    // Stufe 20 (Entscheidung 0060): die Anhänge-Ansicht über alle Konten.
+    view: {
+      listLabel: "Anhänge",
+      kinds: "Anhänge dieses Typs zeigen",
+      kind: {
+        all: "Alle",
+        image: "Bilder",
+        pdf: "PDF",
+        document: "Dokumente",
+        spreadsheet: "Tabellen",
+        archive: "Archive",
+        other: "Sonstige",
+      },
+      name: "Dateiname",
+      namePlaceholder: "Dateinamen durchsuchen",
+      sender: "Absender",
+      senderPlaceholder: "Name oder Adresse",
+      account: "Konto",
+      allAccounts: "Alle Konten",
+      scopeHint:
+        "Anhänge der Mails auf diesem Computer. Wie weit das zurückreicht, legst du unter Einstellungen → Lesen → Vorab laden fest; noch nicht geladene Anhänge werden beim Öffnen geladen.",
+      details: "{{type}}, {{size}} · {{sender}} · {{date}}",
+      noSubject: "(kein Betreff)",
+      unknownSender: "unbekannter Absender",
+      goToMessage: "Zur Mail von {{name}}",
+      open: "{{name}} öffnen",
+      save: "{{name}} sichern",
+      loadFailed: "Die Anhänge ließen sich nicht laden.",
+      emptyTitle: "Noch keine Anhänge",
+      emptyBody: "Anhänge der Mails auf diesem Computer erscheinen hier, die neuesten zuerst.",
+      noMatchTitle: "Kein Anhang passt",
+      noMatchBody: "Ändere den Typ, den Absender oder die Suche.",
     },
     blockedHidden: {
       text_one: "{{count}} Nachricht von blockierten Absendern ausgeblendet",

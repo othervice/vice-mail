@@ -5,6 +5,7 @@ import {
   Bookmark,
   Clock,
   FilePen,
+  Files,
   Flag,
   Folder,
   Inbox,
@@ -26,6 +27,8 @@ export const MAIL_VIEW_ICONS: Record<MailViewId, LucideIcon> = {
   tasks: ListTodo,
   readingList: BookOpen,
   pinnedAttachments: Paperclip,
+  // Stage 20 (decision 0060).
+  attachments: Files,
   flagged: Flag,
   pinned: Pin,
   sent: Send,

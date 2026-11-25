@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod actions;
 pub mod ai;
 pub mod app;
+pub mod attachments_view;
 pub mod comfort;
 pub mod compose;
 pub mod composer;

@@ -17,6 +17,8 @@ export const COLUMN_VIEW_IDS = [
   "tasks",
   "readingList",
   "pinnedAttachments",
+  // Stage 20 (decision 0060): every attachment, after the pinned ones.
+  "attachments",
   "flagged",
   "pinned",
   "savedViews",

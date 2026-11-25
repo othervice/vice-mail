@@ -2,6 +2,7 @@
 //! stream through [`AppCore::subscribe`]. Everything here runs and is tested without a WebView.
 
 mod ai;
+mod attachments_view;
 pub mod clock;
 pub mod comfort;
 pub mod compose;

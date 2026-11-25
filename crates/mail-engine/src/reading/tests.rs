@@ -1019,13 +1019,15 @@ async fn attachments_are_saved_exactly_and_opened_only_after_confirmation() {
     let account = h.add().await;
     let message = h.items(h.inbox(account).await).await[0].id;
 
-    // Before the body is stored there is nothing to save.
-    let err = h
-        .core
-        .attachment_name(message, 0)
-        .await
-        .expect_err("not stored");
-    assert_eq!(err.code(), ErrorCode::NotFound);
+    // Before the body is stored, asking for an attachment fetches it first (stage 20, decision
+    // 0060: the attachments view lists bodies that may have left the cache since).
+    assert_eq!(
+        h.core
+            .attachment_name(message, 0)
+            .await
+            .expect("fetched on demand"),
+        "Datenfdp.bin"
+    );
 
     let view = h.open_fetched(message, BodyFormat::Auto).await;
     assert_eq!(view.attachments.len(), 2);
@@ -1704,5 +1706,138 @@ async fn trackers_are_counted_blocked_and_links_cleaned() {
     let link = h.core.describe_link(&token, 0).expect("describe");
     assert!(link.target.contains("utm_source=news"), "{}", link.target);
     assert!(link.tracking_removed.is_empty());
+}
+
+/// Stage 20, task C (decision 0060): the attachments view lists the attachments of stored
+/// bodies across the account with the pane's index; saving through the view gives the exact
+/// bytes, also after the body left the cache (it is fetched again).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_attachments_view_lists_stored_attachments_and_fetches_on_open() {
+    let (bytes, base64) = binary_attachment();
+    let first = with_parts(
+        "Invoice",
+        &[
+            part("application/pdf", "Invoice 42.pdf", "base64", &base64),
+            part("text/plain", "notes.txt", "7bit", "remember"),
+        ],
+    );
+    let second = with_parts(
+        "Photos",
+        &[part("image/png", "pixel.png", "base64", PIXEL_PNG)],
+    );
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", first.as_bytes());
+    server.deliver_raw("INBOX", second.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let items = h.items(h.inbox(account).await).await;
+    for item in &items {
+        h.open_fetched(item.id, BodyFormat::Auto).await;
+    }
+    let invoice = items
+        .iter()
+        .find(|i| i.subject == "Invoice")
+        .expect("invoice")
+        .id;
+
+    let filter = |kind, sender: Option<&str>, query: Option<&str>| mail_model::AttachmentFilter {
+        scope: mail_model::MarkScope::All,
+        kind,
+        sender: sender.map(str::to_owned),
+        query: query.map(str::to_owned),
+    };
+    let page = h
+        .core
+        .list_attachments(filter(None, None, None), None, 100)
+        .await
+        .expect("view");
+    let names: Vec<&str> = page.items.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+    assert!(names.contains(&"Invoice 42.pdf") && names.contains(&"pixel.png"));
+    let pdf = page
+        .items
+        .iter()
+        .find(|a| a.name == "Invoice 42.pdf")
+        .expect("pdf")
+        .clone();
+    assert_eq!(pdf.kind, mail_model::AttachmentKind::Pdf);
+    assert_eq!(pdf.message_id, invoice);
+    assert_eq!(pdf.account_id, account);
+    assert!(pdf.local);
+    assert_eq!(pdf.preview, Some(mail_model::PreviewKind::Pdf));
+    assert_eq!(pdf.subject, "Invoice");
+
+    let only = |page: mail_model::AttachmentPage| {
+        page.items.into_iter().map(|a| a.name).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(
+                    filter(Some(mail_model::AttachmentKind::Image), None, None),
+                    None,
+                    100
+                )
+                .await
+                .expect("images")
+        ),
+        ["pixel.png"]
+    );
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(filter(None, None, Some("  INVOICE ")), None, 100)
+                .await
+                .expect("by name")
+        ),
+        ["Invoice 42.pdf"]
+    );
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(filter(None, Some("nobody@"), None), None, 100)
+                .await
+                .expect("by sender")
+        ),
+        Vec::<String>::new()
+    );
+    let err = h
+        .core
+        .list_attachments(filter(None, None, None), None, 0)
+        .await
+        .expect_err("limit");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+
+    // Saved through the view's index: the exact bytes; again after the body left the cache.
+    let dir = TempDir::new().expect("dir");
+    let saved = h
+        .core
+        .save_attachment_to(invoice, pdf.index, dir.path().join("a.pdf"))
+        .await
+        .expect("save");
+    assert_eq!(std::fs::read(saved).expect("read"), bytes);
+    assert!(
+        h.core
+            .store_ref()
+            .expect("store")
+            .delete_body(invoice)
+            .await
+            .expect("evict")
+    );
+    let again = h
+        .core
+        .list_attachments(filter(None, None, Some("invoice")), None, 100)
+        .await
+        .expect("still listed");
+    assert!(
+        again.items.first().is_some_and(|a| !a.local),
+        "listed, not on this computer"
+    );
+    let saved = h
+        .core
+        .save_attachment_to(invoice, pdf.index, dir.path().join("b.pdf"))
+        .await
+        .expect("fetched and saved");
+    assert_eq!(std::fs::read(saved).expect("read"), bytes);
 }
 
