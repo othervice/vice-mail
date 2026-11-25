@@ -136,7 +136,7 @@ feste Farben oder Abstände.
 
 Startwerte (seit Entscheidung 0053): kühle Grautöne, hell Weiß und helles Blaugrau, dunkel
 neutrale, leicht bläuliche Grautöne in der Art des dunklen GitHub-Themas (Grund `#0d1117`); ein
-einzelner Akzent, Blau (Blaugrün, Violett, Rosé, das Orange aus dem Logo und Grün bleiben wählbar,
+einzelner Akzent, Blau (Blaugrün, Violett, Rosé, Orange und Grün bleiben wählbar,
 eine gespeicherte Wahl bleibt). Die Prioritätskarte ist in beiden Modi eine erhabene, kühle Karte;
 die Farbe trägt ihr Symbol. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus
 ist kein invertierter heller: eigene Flächenstufen, eigener Akzentton, Kontrast nach `docs/SPEC.md`.
@@ -289,8 +289,11 @@ mit je 18 rem ist.
 
 **Marke.** `components/Brand.tsx` enthält App-Symbol und Wortmarke aus `docs/brand/` als
 Inline-SVG (nur Attribute, kein `<style>`, kein Netz; die IDs der Verläufe bekommen je Instanz ein
-Präfix). „Vice“ der Wortmarke nimmt `brand-ink` (hell Ink `#1a1619`, dunkel Weiß), alles Orange
-bleibt unverändert. Der Name kommt immer aus `config/product.ts`.
+Präfix). „Vice“ der Wortmarke nimmt `brand-ink` (hell Ink `#1f2328`, dunkel Weiß), alles Blau
+bleibt unverändert. Seit 25.11.2026 ist das Logo blau statt orange (Entscheidung 0068, vom Menschen
+freigegeben): dieselben Formen in den Blautönen von GitHub, passend zur Farbwelt aus 0053. Die
+Farben von `Brand.tsx` müssen denen von `docs/brand/` gleichen (Test). Der Name kommt immer aus
+`config/product.ts`.
 
 - **Ohne Konto** (nach dem geführten ersten Start ohne Konto oder nach „Einrichtung überspringen“,
   siehe „Erster Start“): Wortmarke (48 px hoch), „Noch kein Konto“, Hauptknopf „Konto

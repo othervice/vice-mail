@@ -1,7 +1,9 @@
 # Vice Mail brand
 
-The mark is a bright orange V over a dark envelope. As the app icon it sits in a near-black
-rounded square with a glowing orange rim. Every file here is vector artwork drawn from one set of
+The mark is a bright blue V over a dark envelope. As the app icon it sits in a near-black
+rounded square with a glowing blue rim. The blues are GitHub's, the same family as the app's own
+colour scheme (decision 0053); the human approved the blue logo on 25 Nov 2026 (decision 0068),
+replacing the orange of the first artwork. Every file here is vector artwork drawn from one set of
 shapes in `make_svgs.py`. The script uses only the Python standard library, and its letters are
 drawn as outlines, so no font is involved.
 
@@ -9,29 +11,34 @@ drawn as outlines, so no font is involved.
 |---|---|
 | `icon.svg` | App icon, full detail, on the macOS icon grid (the same file as `app/src-tauri/icons/source.svg`) |
 | `mark.svg` | The envelope and V without the square, for headers, the website and documents |
-| `glyph-mono.svg` | Single-colour glyph (`currentColor`) for tray, notification or menu use. On macOS, export it as a black template image |
+| `glyph-mono.svg` | Single-colour glyph (`currentColor`) for tray, notification or menu use. The macOS menu-bar icon is this glyph as a black template image (`app/src-tauri/icons/tray/macos-template.png`) |
 | `wordmark-dark.svg` | Mark and "Vice Mail" for dark backgrounds ("Vice" white) |
 | `wordmark-light.svg` | Mark and "Vice Mail" for light backgrounds ("Vice" near-black) |
 | `make_svgs.py` | Writes all of the above plus the icon sources in `app/src-tauri/icons/` |
 
-To change anything, edit `make_svgs.py`, then run `app/src-tauri/icons/generate.sh`. That script
-runs `make_svgs.py` itself and then rebuilds every PNG, `icon.icns` and `icon.ico` from the SVGs.
+To change anything, edit `make_svgs.py`, then run `scripts/icons.sh`. That script runs
+`make_svgs.py` itself and then rebuilds every PNG, `icon.icns`, `icon.ico` and the menu-bar
+template from the SVGs. The app's inline copy of icon and wordmark
+(`app/src/components/Brand.tsx`) is updated by hand from `icon.svg` and the wordmark;
+`app/tests/brand.test.tsx` fails while its colours differ from the files here.
 
 ## Colours
 
 | Name | Hex | Where |
 |---|---|---|
-| Ember | `#FFC21F` | top of the V, outer edge of the rim |
-| Vice orange | `#FF7A00` | the V, the envelope outline, "Mail" (primary brand colour) |
-| Deep orange | `#F04E00` | bottom of the V and of the outlines |
-| Night | `#0E0A0B` | icon background |
-| Charcoal | `#1B1A1F` | envelope |
-| Steel | `#5C5D68` | top flap corners |
-| Ink | `#1A1619` | "Vice" on light backgrounds |
+| Sky | `#A5D6FF` | top of the V, outer edge of the rim |
+| Vice blue | `#4493F8` | the V, the envelope outline, "Mail" (primary brand colour) |
+| Deep blue | `#1F6FEB` | bottom of the V and of the outlines |
+| Night | `#0D1117` | icon background (GitHub dark) |
+| Charcoal | `#161B22` | envelope |
+| Steel | `#59636E` | top flap corners |
+| Ink | `#1F2328` | "Vice" on light backgrounds |
 | White | `#FFFFFF` | "Vice" on dark backgrounds |
 
-"Mail" runs from `#FF8C00` at the top to `#F45800` at the baseline. On flat media, such as
-one-colour print or embroidery, use Vice orange alone.
+"Mail" runs from `#4493F8` at the top to `#1F6FEB` at the baseline. On flat media, such as
+one-colour print or embroidery, use Vice blue alone. The gradients in between use GitHub's blue
+scale (`#CAE8FF`, `#B6E3FF`, `#79C0FF`, `#6CB6FF`, `#58A6FF`, `#388BFD`, `#2F81F7`, `#1A62DC`,
+`#1158C7`); `make_svgs.py` lists every stop.
 
 ## Clear space and minimum sizes
 
@@ -50,7 +57,9 @@ one-colour print or embroidery, use Vice orange alone.
   has its own source drawn on that size's pixel grid; a frame scaled from a neighbouring size
   looks blurry. The plate fills 87 to 92 % of the canvas (16 px: all of it), so the square sits
   in the taskbar at the optical size of the Windows 11 icons around it.
-- **Mono glyph:** 16 px or more.
+- **Mono glyph:** 16 px or more. In the macOS menu bar it is 18 pt high (36 px on Retina).
+- **Notification area (Windows):** the app icon's own 16, 20, 24 and 32 px entries, by display
+  scale, with the unread count drawn by the app (decision 0068).
 
 ## Do
 
@@ -65,12 +74,13 @@ one-colour print or embroidery, use Vice orange alone.
 - Don't set "Vice Mail" in a font. Use the outlined wordmark.
 - Don't add the smoke, heavy glows, outlines or drop shadows from the original sketches.
 - Don't stretch the files, rotate them, or put them on busy photos.
-- Don't put the wordmark on orange backgrounds, where "Mail" disappears.
+- Don't put the wordmark on blue backgrounds, where "Mail" disappears.
 
 ## Origin
 
 The artwork was redrawn on 23 Nov 2026 from the human's reference images, which stay outside the
-repository. Deliberate differences from those images:
+repository, and recoloured from orange to blue on 25 Nov 2026 (decision 0068; same shapes, every
+colour mapped to its GitHub counterpart). Deliberate differences from the reference images:
 
 - The icon follows the macOS grid (an 824 px body in 1024 px, continuous corners, a soft shadow),
   and the Windows icon fills 88 % of its canvas (94 % looked too heavy next to Windows 11 icons).

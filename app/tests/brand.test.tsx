@@ -1,5 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import brandSource from "../src/components/Brand.tsx?raw";
 import { AppIcon, Wordmark } from "../src/components/Brand";
 import { PRODUCT_NAME, PROJECT_URL, PUBLISHER } from "../src/config/product";
 import { mockCore } from "./support/core";
@@ -41,6 +45,21 @@ describe("brand artwork", () => {
       const target = /url\(#([^)]+)\)/.exec(element.getAttribute("fill") ?? "")?.[1] ?? "";
       expect(element.closest("svg")?.querySelector(`[id="${target}"]`), target).not.toBeNull();
     }
+  });
+
+  // Decision 0068: the artwork is generated (docs/brand/make_svgs.py, scripts/icons.sh); the
+  // inline copy must follow it, so a new colour scheme cannot leave the app behind.
+  it("uses exactly the colours of docs/brand", () => {
+    const colours = (text: string) => new Set([...text.matchAll(/#[0-9a-fA-F]{6}\b/g)].map(([hex]) => hex.toLowerCase()));
+    const inline = colours(brandSource);
+    // Outside the app's root, so read from disk rather than through Vite.
+    const brandDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "brand");
+    const read = (name: string) => readFileSync(join(brandDir, name), "utf8");
+    const artwork = colours(read("icon.svg") + read("wordmark-dark.svg"));
+    expect(inline.size).toBeGreaterThan(20);
+    expect([...inline].filter((hex) => !artwork.has(hex))).toEqual([]);
+    // "Vice" is `currentColor` inline; white only exists in the dark wordmark file.
+    expect([...artwork].filter((hex) => !inline.has(hex) && hex !== "#ffffff")).toEqual([]);
   });
 
   it("is named by the caller or hidden from screen readers", () => {
