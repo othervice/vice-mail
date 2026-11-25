@@ -164,7 +164,7 @@ impl LoginItems for LaunchAgent {
 // ---------------------------------------------------------------------------------------------
 // Windows: the Run key
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(any(not(windows), feature = "e2e"), allow(dead_code))]
 /// The command line of the Run value: the program quoted, then the arguments (ours never contain
 /// spaces or quotes).
 pub fn command_line(program: &Path, args: &[String]) -> String {
@@ -176,7 +176,7 @@ pub fn command_line(program: &Path, args: &[String]) -> String {
     line
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(any(not(windows), feature = "e2e"), allow(dead_code))]
 /// The program and arguments of a Run value (quoted program, or unquoted up to the first space).
 pub fn parse_command_line(line: &str) -> Option<(PathBuf, Vec<String>)> {
     let line = line.trim();
@@ -198,7 +198,7 @@ pub fn parse_command_line(line: &str) -> Option<(PathBuf, Vec<String>)> {
     ))
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(any(not(windows), feature = "e2e"), allow(dead_code))]
 /// Task Manager's state of a Run entry (`StartupApproved\Run`): an even first byte is enabled,
 /// an odd one disabled; no value means enabled.
 pub fn approved(state: Option<&[u8]>) -> bool {
@@ -207,14 +207,15 @@ pub fn approved(state: Option<&[u8]>) -> bool {
         .is_none_or(|first| first % 2 == 0)
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(any(not(windows), feature = "e2e"), allow(dead_code))]
 /// What this app writes to `StartupApproved\Run` when switched on: enabled, no time stamp.
 pub const APPROVED_ENABLED: [u8; 12] = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-#[cfg(windows)]
+// Desktop-test builds use a launch agent file in the test's folder on every system.
+#[cfg(all(windows, not(feature = "e2e")))]
 pub use run_key::RunKey;
 
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "e2e")))]
 mod run_key {
     use std::io;
     use std::path::Path;
