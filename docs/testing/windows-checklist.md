@@ -459,6 +459,52 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   zu hören (außer in Ruhezeiten). Jedes Farbthema ist in Hell und Dunkel gut lesbar.
 - **Ergebnis:**
 
+## 21. Hintergrund, Symbol im Infobereich, Autostart, scharfer Zähler (Stufe 21, 0068–0070)
+
+**21.1 Symbole und Zähler bei jeder Skalierung**
+- **Tun:** Unter Einstellungen → System → Anzeige die Skalierung nacheinander auf 100, 125, 150
+  und 200 % stellen. Jeweils: das App-Symbol in der Taskleiste, in der Titelleiste und im
+  Infobereich ansehen; eine neue Mail abwarten (oder eine als ungelesen markieren) und die Zahl am
+  Taskleisten-Knopf und am Symbol im Infobereich ansehen. Einmal mehr als 99 ungelesene Mails
+  (Testkonto).
+- **Erwartet:** Logo blau, scharf, ohne weiche Kanten, auch nach dem Wechsel der Skalierung bei
+  laufender App. Ziffern weiß auf Rot, jedes Pixel klar, keine grauen Ränder; über 99 steht „99+“.
+  Tooltip des Symbols: „Vice Mail: N ungelesen“.
+- **Ergebnis:** (Bildschirmfotos bei 100 und 150 % beilegen)
+
+**21.2 Fenster schließen, im Hintergrund weiter, wieder öffnen**
+- **Tun:** Das Hauptfenster mit dem X schließen. Im Hinweis „Weiterlaufen“ wählen. Eine Mail an das
+  Konto senden. Auf „Lesen“ im Popup klicken. Fenster erneut schließen, dann Linksklick auf das
+  Symbol im Infobereich; erneut schließen, dann Vice Mail aus dem Startmenü starten.
+- **Erwartet:** Der Hinweis kommt nur beim ersten Mal. Ohne Fenster ist kein Taskleisten-Knopf zu
+  sehen, das Symbol im Infobereich bleibt. Das Popup erscheint auch ohne Fenster; „Lesen“, der
+  Klick auf das Symbol und der zweite Start öffnen das Fenster an seinem alten Platz, „Lesen“ mit
+  der Mail. Task-Manager: nur ein Prozess „Vice Mail“ (plus WebView2), ohne Fenster deutlich
+  weniger Arbeitsspeicher (Spalte „Arbeitsspeicher (privater Arbeitssatz)“ vorher/nachher
+  notieren).
+- **Ergebnis:**
+
+**21.3 Menü des Symbols**
+- **Tun:** Rechtsklick auf das Symbol im Infobereich: „Neue Nachricht“; dann „Mitteilungen
+  pausieren › Für 1 Stunde“, eine Mail senden, „Mitteilungen fortsetzen“, noch eine senden;
+  zuletzt „Vice Mail beenden“.
+- **Erwartet:** Menü in der Sprache der App. „Neue Nachricht“ öffnet das Fenster mit einem leeren
+  Entwurf. Während der Pause kein Popup, kein Ton, die Zahl ändert sich trotzdem; im Menü steht
+  „Pausiert bis HH:MM“. Nach dem Fortsetzen kommt das Popup für die zweite Mail, nicht für die
+  erste. „Beenden“ beendet den Prozess (Task-Manager).
+- **Ergebnis:**
+
+**21.4 Mit dem System starten**
+- **Tun:** Einstellungen → Allgemein → „Mit dem System starten“ einschalten. Task-Manager →
+  Autostart-Apps ansehen. Abmelden und wieder anmelden. Dann dort im Task-Manager deaktivieren und
+  die Einstellung in der App erneut ansehen; in der App wieder einschalten. Zuletzt deinstallieren.
+- **Erwartet:** „Vice Mail“ steht unter Autostart-Apps als aktiviert. Nach der Anmeldung läuft die
+  App ohne Fenster (Symbol im Infobereich, Popup bei neuer Mail). Im Task-Manager deaktiviert zeigt
+  die App den Schalter aus; in der App eingeschaltet ist es im Task-Manager wieder aktiviert. Nach
+  dem Deinstallieren ist der Eintrag weg (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+  Ein Update (neuere Version drüber installieren) lässt den Eintrag stehen.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

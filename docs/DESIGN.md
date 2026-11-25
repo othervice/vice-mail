@@ -873,6 +873,48 @@ nimmt den Fokus nicht; alles, was es anbietet, geht auch im Hauptfenster.
 **Einstellungen → Mitteilungen.** Unter „Neue Mails“ die Wahl „Neue Mails zeigen als“: „Popup von
 <Produkt>“ (Standard) oder „Mitteilung des Systems“.
 
+## Im Hintergrund, Symbol und Zähler (Stufe 21, Entscheidungen 0068 bis 0070)
+
+**Fenster schließen.** Schließen (roter Knopf, ⌘W, Alt+F4) lässt die App weiterlaufen; das Fenster
+verschwindet ganz (unter Windows auch der Taskleisten-Knopf). Beim ersten Mal bleibt es einmal
+offen und erklärt im Dialog der App (`ConfirmDialog`, neutral, Symbol „Info“): Titel
+„Vice Mail läuft weiter“, ein Absatz je System (wie man das Fenster wieder öffnet und wie man
+beendet) und der Satz, wo man es ändert. Knöpfe: Abbrechen (Fokus, Escape), „Vice Mail beenden“
+(zweiter Knopf), „Weiterlaufen“ (Hauptknopf). Danach nie wieder auf diesem Gerät. Ein neues
+Fenster öffnet sich an Ort und Größe des alten (maximiert bleibt maximiert).
+
+**Symbol in der Menüleiste (macOS).** Die einfarbige Glyphe aus `docs/brand/glyph-mono.svg` als
+Vorlagenbild, 18 pt hoch: macOS färbt sie für helle und dunkle Menüleisten, sie folgt dem
+Hervorheben beim Klick. Die Zahl ungelesener Mails steht als Text rechts daneben (Systemschrift),
+ohne Zahl nur die Glyphe. Ein Klick öffnet das Menü.
+
+**Symbol im Infobereich (Windows).** Das farbige App-Symbol in seiner eigenen kleinen Größe
+(16/20/24/32 px bei 100–200 %), die Zahl in einem roten Abzeichen unten rechts: ein Kreis für eine
+Ziffer, darüber ein Rechteck mit runden Ecken, höchstens „99+“, mit einem Pixel Abstand vom Symbol
+ausgeschnitten. Ziffern weiß, pixelgenau, höchstens 36 % der Symbolhöhe hoch. Der Tooltip nennt die
+Zahl („Vice Mail: 3 ungelesen“). Linksklick öffnet das Fenster, Rechtsklick das Menü.
+
+**Menü.** „Vice Mail öffnen“, „Neue Nachricht“, Trenner, „Mitteilungen pausieren ›“ (Für
+1 Stunde, Bis morgen, Trenner, während einer Pause die graue Zeile „Pausiert bis 14:30“, dann
+„Mitteilungen fortsetzen“, nur während einer Pause wählbar), Trenner, „Vice Mail beenden“. Texte
+in der Sprache der Oberfläche (Englisch in Titel-Schreibung wie in macOS-Menüs), Uhrzeit im
+12- oder 24-Stunden-Format der Sprache.
+
+**Zähler auf dem Taskleisten-Knopf (Windows).** Roter Kreis (`#D93025`, weiße Ziffern 4,6:1) in
+genau der Größe, in der Windows ihn zeigt (16 logische Pixel: 16/20/24/28/32/40 px), Ziffern aus
+zwei Pixelschriften (3×5 und 5×7) in ganzzahliger Vergrößerung, so dass jede Ziffer auf vollem
+Rot steht und kein Pixel grau wird; die größte Schrift, die mit Rand passt. „99+“ in einem
+Rechteck so breit wie das Bild, wenn der Kreis nur kleinere Ziffern fasste. Bilder:
+`badge::tests::golden_16px`.
+
+**Einstellungen.** Allgemein → „Im Hintergrund“ (Überschrift 14 px wie „Standard-Mail-App“):
+Schalter „Weiterlaufen, wenn das Fenster geschlossen wird“ mit Beschreibung je System, unter
+macOS „Symbol in der Menüleiste zeigen“, unter Windows stattdessen ein Satz zum Symbol im
+Infobereich, „Mit dem System starten“ (in Entwicklungs-Builds gesperrt, mit Grund). Mitteilungen
+→ „Mitteilungen pausieren“ direkt unter dem Hauptschalter: Beschreibung, während einer Pause die
+Statuszeile mit durchgestrichener Glocke („Pausiert bis 14:30“, `role="status"`), Knöpfe „Für
+1 Stunde“, „Bis morgen früh“ (sekundär) und „Fortsetzen“ (leise, nur während einer Pause).
+
 ## Sortieren, Tabelle und Schnellfilter (Stufe 19, Entscheidungen 0061, 0062)
 
 Wunsch vom 24.11.2026 nach dem Vergleich mit Thunderbird: die Liste sortieren, als Tabelle zeigen

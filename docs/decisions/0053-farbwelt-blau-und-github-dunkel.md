@@ -109,3 +109,9 @@ zurückgenommen; dann erscheint ein Hinweis („Die Darstellung konnte nicht ge�
 
 Alle Werte sind Tokens in `tokens.css`; der Standard-Akzent ist eine Zeile im Kern
 (`#[default]` an `AccentTheme`) und eine in `accent.ts`, dazu die Werte der Wurzel.
+
+## Nachtrag 25.11.2026
+
+Das Logo folgt der Farbwelt: blau in den Tönen von GitHub, dieselben Formen (Entscheidung 0068,
+vom Menschen am 25.11.2026 freigegeben). Der Satz oben „Das Logo bleibt unverändert Orange“ gilt
+damit nicht mehr.

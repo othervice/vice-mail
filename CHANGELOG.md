@@ -7,6 +7,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Vice Mail keeps running when its window is closed: mail keeps arriving, new mail still shows
+  the popup and notifications, and the count stays current. The first close explains once how to
+  quit. Closing frees the window's web view; Dock, menu-bar icon, notification-area icon, starting
+  the app again, a notification or "Read" in the popup open the window again where it was.
+  Settings → General can switch this off.
+- An icon in the menu bar (macOS, can be hidden) or the notification area (Windows) with the
+  number of unread messages and a menu: Open, New Message, Pause Notifications, Quit.
+- Pause notifications for an hour or until tomorrow morning, from that menu or Settings →
+  Notifications; new mail stays quiet meanwhile and is not announced later.
+- "Start with the system" (Settings → General, off by default): the app starts in the background
+  at login, without a window.
+
+### Changed
+
+- The logo is blue now, in the GitHub blues of the app's colour scheme (same shapes); app icon,
+  Dock and taskbar icons, installer and disk-image icons, wordmark and the artwork in the app.
+- Sharper icons and counter on Windows: the number on the taskbar button is drawn for the
+  display's scale (16 to 40 px) with pixel-exact digits ("99+" above 99), and the window's
+  taskbar icon uses the icon's own drawing of that size. The macOS Dock badge stays current while
+  no window is open.
+
 ## [0.1.1] - 2026-11-25
 
 ### Added
