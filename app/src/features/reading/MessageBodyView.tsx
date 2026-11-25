@@ -1,5 +1,8 @@
+import { Palette } from "lucide-react";
 import { Fragment, useRef, type KeyboardEvent, type RefObject } from "react";
-import type { RenderToken, TextSegment } from "../../services/ipc";
+import { useTranslation } from "react-i18next";
+import { cx } from "../../components/cx";
+import type { MailColors, MailScheme, RenderToken, TextSegment } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
 import { useFrameHeight } from "./frameHeight";
 
@@ -15,22 +18,32 @@ interface HtmlBodyProps {
   srcdoc: string;
   title: string;
   scrollerRef: RefObject<HTMLElement | null>;
+  /** Stage 21 (decision 0066): how the core showed the mail's colours. */
+  colors: MailColors;
 }
 
 /**
- * HTML mail on its own white canvas, in the dark theme too (docs/DESIGN.md). Clicks on links
- * never reach this code: the core's navigation hook sees them and sends `linkActivated`.
+ * HTML mail. Shown as written it lies on its own white canvas, in the dark theme too; adapted
+ * to the dark theme (or with dark colours of its own) the core painted it on the dark card's
+ * surface, so frame and card are one (docs/DESIGN.md, decision 0066). Clicks on links never
+ * reach this code: the core's navigation hook sees them and sends `linkActivated`.
  */
-export function HtmlBody({ srcdoc, title, scrollerRef }: HtmlBodyProps) {
+export function HtmlBody({ srcdoc, title, scrollerRef, colors }: HtmlBodyProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   useFrameHeight(frameRef, scrollerRef);
+  const dark = colors !== "original";
   return (
     // Stage 8: the frame's own focus ring would be cut off by the rounded clip, so the card shows
     // it while the focus is in the mail (`:focus-within` reaches into the frame, `:focus-visible`
     // of the frame element is not the same in WebKit and WebView2).
     // No frame of its own: in the light theme the mail's white canvas is the card's surface; in
-    // the dark theme it is a white sheet inside the card.
-    <div className="overflow-hidden rounded-card bg-mail-canvas focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
+    // the dark theme it is a white sheet inside the card, or the card itself when adapted.
+    <div
+      className={cx(
+        "overflow-hidden rounded-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring",
+        dark ? "bg-surface-raised" : "bg-mail-canvas",
+      )}
+    >
       <iframe
         ref={frameRef}
         sandbox={MAIL_FRAME_SANDBOX}
@@ -38,11 +51,80 @@ export function HtmlBody({ srcdoc, title, scrollerRef }: HtmlBodyProps) {
         title={title}
         referrerPolicy="no-referrer"
         data-testid="mail-frame"
-        // Light scheme: the mail's default text is black on the white canvas in both themes.
-        className="block h-0 w-full border-0 bg-mail-canvas scheme-light"
+        data-colors={colors}
+        // The frame's scheme matches its document's (the core sets it): light for the white
+        // canvas, dark for the adapted mail.
+        className={cx("block h-0 w-full border-0", dark ? "bg-surface-raised scheme-dark" : "bg-mail-canvas scheme-light")}
       />
     </div>
   );
+}
+
+/** Stage 21 (decision 0066): the scheme to ask the core for, from the window's theme and the toggle. */
+export function mailScheme(theme: "light" | "dark", original: boolean): MailScheme {
+  return theme === "dark" && !original ? "dark" : "light";
+}
+
+interface ColorsToggleProps {
+  /** "Original colours" is on: the mail as written, on its white canvas. */
+  original: boolean;
+  onChange: (original: boolean) => void;
+}
+
+/**
+ * Stage 21 (decision 0066): in the dark theme, one message as the sender designed it (on its
+ * white canvas) or adapted again. A toggle button beside the HTML/text switch; it belongs to its
+ * message, the next one is adapted again.
+ */
+export function ColorsToggle({ original, onChange }: ColorsToggleProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="inline-flex shrink-0 rounded-card bg-hover p-1">
+      <button
+        type="button"
+        aria-pressed={original}
+        title={original ? t("reading.colors.adaptedHint") : t("reading.colors.originalHint")}
+        onClick={() => {
+          onChange(!original);
+        }}
+        data-testid="colors-original"
+        className="inline-flex h-6 items-center gap-1.5 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
+      >
+        <Palette aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {t("reading.colors.original")}
+      </button>
+    </div>
+  );
+}
+
+function frameReady(frame: HTMLIFrameElement | null | undefined, colors: MailColors): boolean {
+  try {
+    return frame?.dataset["colors"] === colors && frame.contentDocument?.readyState === "complete";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves once the mail frame in `root` shows the colours `colors` and its document has loaded
+ * (and been measured), or after `timeoutMs`. Printing waits for the original colours this way:
+ * paper is white (decision 0066).
+ */
+export function whenFrameShows(root: HTMLElement | null, colors: MailColors, timeoutMs = 3000): Promise<void> {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      const frame = root?.querySelector<HTMLIFrameElement>('[data-testid="mail-frame"]');
+      const ready = frameReady(frame, colors);
+      if (ready || Date.now() - started >= timeoutMs) {
+        // One more task for the frame's height (measured on load).
+        window.setTimeout(resolve, ready ? 50 : 0);
+        return;
+      }
+      window.setTimeout(check, 30);
+    };
+    check();
+  });
 }
 
 interface TextBodyProps {

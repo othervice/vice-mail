@@ -79,12 +79,12 @@ describe(".eml files (decision 0027)", () => {
     // External content: only "load once" (no account, so no sender list), loaded by the core.
     const bar = within(pane).getByTestId("remote-content-bar");
     expect(within(bar).queryByTestId("remote-sender")).toBeNull();
-    expect(core.callsOf("get_eml_message")).toEqual([{ fileId: FILE, format: "auto" }]);
+    expect(core.callsOf("get_eml_message")).toEqual([{ fileId: FILE, format: "auto", scheme: "light" }]);
     await user.click(within(bar).getByRole("button", { name: "Load once" }));
     await waitFor(() => {
       expect(within(pane).queryByTestId("remote-content-bar")).toBeNull();
     });
-    expect(core.callsOf("load_eml_remote_content")).toEqual([{ fileId: FILE }]);
+    expect(core.callsOf("load_eml_remote_content")).toEqual([{ fileId: FILE, scheme: "light" }]);
     // No mail actions: the message lies in no folder.
     expect(within(pane).queryByRole("toolbar")).toBeNull();
     // Nothing of an account's mail was asked for.

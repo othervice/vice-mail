@@ -89,8 +89,12 @@ export function useSetReadingPreferences() {
     onError: (_error, _next, context) => {
       if (context?.previous) queryClient.setQueryData(readingPreferencesQueryKey, context.previous);
     },
-    onSuccess: (saved) => {
+    onSuccess: (saved, _next, context) => {
       queryClient.setQueryData(readingPreferencesQueryKey, saved);
+      // Stage 21 (decision 0066): the open mail shows the new choice for the dark theme at once.
+      if ((context.previous?.darkMails ?? "adapted") !== (saved.darkMails ?? "adapted")) {
+        void queryClient.invalidateQueries({ queryKey: ["message"] });
+      }
     },
   });
 }

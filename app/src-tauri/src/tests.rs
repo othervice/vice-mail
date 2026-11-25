@@ -642,9 +642,12 @@ fn action_commands_answer_typed_results() {
     // when an older UI leaves them out).
     assert_eq!(
         invoke(&h, "get_reading_preferences", json!({})).expect("reading prefs"),
-        json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true })
+        json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true,
+                "darkMails": "adapted" })
     );
-    let never = json!({ "markReadOnOpen": "never", "blockTrackers": true, "cleanLinks": false });
+    // Stage 21: an older UI that leaves the dark mails out keeps them adapted.
+    let never = json!({ "markReadOnOpen": "never", "blockTrackers": true, "cleanLinks": false,
+                        "darkMails": "adapted" });
     assert_eq!(
         invoke(
             &h,

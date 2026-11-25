@@ -20,6 +20,7 @@ use mail_content::{
     LinkWarning, MAIL_CSP, ParseProblem, RemotePolicy, RenderOptions, check_link, parse,
     render_text,
 };
+use mail_model::MailScheme;
 
 /// A valid 1×1 PNG, standing in for every external image the user allowed.
 const PNG: &[u8] = &[
@@ -132,7 +133,30 @@ fn sanitised_corpus_contains_nothing_forbidden() {
                 },
             );
             written.extend(written_allowed);
-            for (policy, rendered) in [("blocked", &blocked), ("allowed", &allowed)] {
+            // Stage 21 (decision 0066): the colour pass of the dark theme adds nothing the
+            // checker would find, and changes neither links nor images.
+            let (dark, written_dark) = common::render_reencoded(
+                html,
+                &RenderOptions {
+                    inline: message.inline_images(),
+                    scheme: MailScheme::Dark,
+                    ..RenderOptions::new(common::token())
+                },
+            );
+            written.extend(written_dark);
+            assert_eq!(
+                dark.links, blocked.links,
+                "{name}: links depend on the scheme"
+            );
+            assert_eq!(
+                dark.remote_resources, blocked.remote_resources,
+                "{name}: images depend on the scheme"
+            );
+            for (policy, rendered) in [
+                ("blocked", &blocked),
+                ("allowed", &allowed),
+                ("dark", &dark),
+            ] {
                 assert_eq!(
                     rendered.fallback, None,
                     "{name} ({policy}): self-check fell back to text"

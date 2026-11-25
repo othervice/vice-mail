@@ -327,12 +327,15 @@ export const ipc = {
   listMessages: (mailboxId: MailboxId, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
     call(() => commands.listMessages(mailboxId, cursor, limit)),
 
-  /** Answers at once: a rendered body, `loading` (wait for `messageBodyAvailable`) or `unavailable`. */
-  getMessage: (messageId: MessageId, format: BodyFormat): Promise<MessageView> =>
-    call(() => commands.getMessage(messageId, format)),
+  /**
+   * Answers at once: a rendered body, `loading` (wait for `messageBodyAvailable`) or `unavailable`.
+   * Stage 21 (decision 0066): `scheme` is the theme the mail is shown on (light by default).
+   */
+  getMessage: (messageId: MessageId, format: BodyFormat, scheme: MailScheme = "light"): Promise<MessageView> =>
+    call(() => commands.getMessage(messageId, format, scheme)),
   /** The core fetches the external images itself and renders again. `sender` also remembers the sender. */
-  loadRemoteContent: (messageId: MessageId, scope: RemoteContentScope): Promise<MessageView> =>
-    call(() => commands.loadRemoteContent(messageId, scope)),
+  loadRemoteContent: (messageId: MessageId, scope: RemoteContentScope, scheme: MailScheme = "light"): Promise<MessageView> =>
+    call(() => commands.loadRemoteContent(messageId, scope, scheme)),
   listRemoteContentSenders: (accountId: AccountId): Promise<string[]> =>
     call(() => commands.listRemoteContentSenders(accountId)),
   revokeRemoteContent: (accountId: AccountId, sender: string): Promise<void> =>
@@ -1545,10 +1548,11 @@ export const emlIpc = {
   /** The system's open dialog; the file opens in its own window. `eml_too_large`, `eml_invalid`, `eml_unreadable`. */
   openFile: (): Promise<OpenEmlFileResult> => call(() => emlCommands.openEmlFile()),
   /** The view of this window's file; the error it was refused with; `not_found` once it was closed. */
-  getMessage: (fileId: EmlFileId, format: BodyFormat): Promise<EmlMessageView> =>
-    call(() => emlCommands.getEmlMessage(fileId, format)),
+  getMessage: (fileId: EmlFileId, format: BodyFormat, scheme: MailScheme = "light"): Promise<EmlMessageView> =>
+    call(() => emlCommands.getEmlMessage(fileId, format, scheme)),
   /** The HTML again with its external images, loaded by the core for this rendering only. */
-  loadRemoteContent: (fileId: EmlFileId): Promise<EmlMessageView> => call(() => emlCommands.loadEmlRemoteContent(fileId)),
+  loadRemoteContent: (fileId: EmlFileId, scheme: MailScheme = "light"): Promise<EmlMessageView> =>
+    call(() => emlCommands.loadEmlRemoteContent(fileId, scheme)),
   saveAttachment: (fileId: EmlFileId, index: number): Promise<SaveAttachmentResult> =>
     call(() => emlCommands.saveEmlAttachment(fileId, index)),
   openAttachment: (fileId: EmlFileId, index: number, confirmedExecutable: boolean): Promise<OpenAttachmentResult> =>
@@ -1875,6 +1879,11 @@ export type { CredentialKind } from "../generated/bindings";
 // ---- Stage 20: attachment reminder, reminders without a reply, attachments view, trackers, quota ----
 /** Decision 0058: the trackers the core blocked in one rendering of a mail. */
 export type { TrackerSummary } from "../generated/bindings";
+
+// ---- Stage 21 (decision 0066): mails in the dark theme ----
+/** The theme a mail is shown on; how the core showed its colours; the setting for dark mails. */
+export type { DarkMails, MailColors, MailScheme } from "../generated/bindings";
+import type { MailScheme } from "../generated/bindings";
 import {
   commands as reminderCommands,
   type FollowUpChoice,

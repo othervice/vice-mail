@@ -549,7 +549,7 @@ describe("a message asked for by id (a notification, an AI source)", () => {
     expect(conversation().getAttribute("aria-expanded")).toBe("true");
     expect(children()[2]?.getAttribute("aria-selected")).toBe("true");
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto" });
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: ANSWER.id, format: "auto", scheme: "light" });
     });
   });
 });
@@ -573,7 +573,7 @@ describe("the reading pane shows one message", () => {
     });
     await user.click(children()[1] as HTMLElement);
     await waitFor(() => {
-      expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto" });
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto", scheme: "light" });
     });
     const replyPane = await screen.findByRole("region", { name: "Message" });
     await waitFor(() => {

@@ -622,6 +622,12 @@ export const en = {
     frameTitle: "Content of the message “{{subject}}”",
     frameTitleNoSubject: "Content of the message",
     textBody: "Message text",
+    // Stage 21 (decision 0066): a mail's colours in the dark theme.
+    colors: {
+      original: "Original colours",
+      originalHint: "Show this message as the sender designed it, on a white page",
+      adaptedHint: "Show this message adapted to the dark theme",
+    },
     replyRow: {
       label: "Reply and forward",
       reply: "Reply to {{name}}",
@@ -1375,6 +1381,16 @@ export const en = {
           paused: "Paused while offline",
           unknown: "Status unknown",
         },
+      },
+      // Stage 21 (decision 0066)
+      darkMails: {
+        title: "Messages in the dark theme",
+        description:
+          "Many messages bring their own colours, made for a white page. Adapted, the app turns their light backgrounds dark and their dark text light while it prepares them; images stay as they are, and messages with dark colours of their own keep them.",
+        label: "Show messages with colours of their own",
+        adapted: "Adapted to the dark theme",
+        light: "Always on a white page",
+        hint: "“Original colours” above a message shows that one as the sender designed it.",
       },
       trackers: {
         title: "Trackers",

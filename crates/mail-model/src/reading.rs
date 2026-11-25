@@ -23,6 +23,41 @@ pub enum BodyFormat {
     Text,
 }
 
+/// Stage 21 (decision 0066): the theme of the surface the UI shows a mail on, as it asks
+/// `getMessage` for it.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum MailScheme {
+    /// The light theme, and "Show original colours" in the dark theme: the mail as written, on
+    /// its white canvas. Also what an older caller that names no scheme gets.
+    #[default]
+    Light,
+    /// The dark theme: the mail's colours as the setting "Mails in the dark theme" says
+    /// ([`crate::DarkMails`]).
+    Dark,
+}
+
+/// Stage 21 (decision 0066): how a rendering of an HTML body shows the mail's colours, so the UI
+/// can lay the matching canvas behind the frame and offer "Show original colours".
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum MailColors {
+    /// As written, on the light canvas: the light theme, "Show original colours", the setting
+    /// "always light", or a mail that asks for light only (`color-scheme: only light`).
+    #[default]
+    Original,
+    /// The core turned light backgrounds dark and dark text light (images untouched), on the
+    /// dark canvas.
+    Adapted,
+    /// The mail declares dark colours of its own (`color-scheme: light dark`): its dark styles
+    /// apply, nothing is recoloured, on the dark canvas.
+    OwnDark,
+}
+
 /// Opaque id of one rendering of a body: 32 lowercase hex digits (128 random bits), made by the
 /// core. Link placeholders of that rendering carry it (`https://link.invalid/<token>/<index>`);
 /// the real targets stay in the core under it. Unguessable, so a mail cannot point at the links
@@ -135,6 +170,9 @@ pub enum MessageBody {
         /// Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
         /// on; all zero when it is off).
         trackers: TrackerSummary,
+        /// Stage 21 (decision 0066): how the colours are shown; the canvas behind the frame
+        /// follows it (white for `original`, the dark card otherwise).
+        colors: MailColors,
     },
     /// Plain text for the app's own theme. Links are separate segments, opened through the same
     /// check as HTML links (`describeLink` with this `render_token`).
@@ -522,6 +560,7 @@ mod tests {
                     parameters: 2,
                     hosts: vec!["t.example".into()],
                 },
+                colors: MailColors::Adapted,
             },
             formats: vec![BodyFormat::Html, BodyFormat::Text],
             attachments: vec![AttachmentInfo {
@@ -550,7 +589,8 @@ mod tests {
                           "renderToken": "0123456789abcdef0011223344556677",
                           "blockedRemote": 3, "remoteLoaded": false,
                           "trackers": { "pixels": 1, "knownHosts": 0, "parameters": 2,
-                                        "hosts": ["t.example"] } },
+                                        "hosts": ["t.example"] },
+                          "colors": "adapted" },
                 "formats": ["html", "text"],
                 "attachments": [{ "index": 0, "name": "Rechnung.pdf", "mimeType": "application/pdf",
                                   "size": 12_345, "executable": false, "local": true,
@@ -560,6 +600,15 @@ mod tests {
             })
         );
         let back: MessageView = serde_json::from_value(wire).expect("deserialize");
+        // Stage 21: the schemes and colours on the wire.
+        assert_eq!(
+            serde_json::to_value(MailScheme::Dark).expect("scheme"),
+            json!("dark")
+        );
+        assert_eq!(
+            serde_json::to_value(MailColors::OwnDark).expect("colors"),
+            json!("ownDark")
+        );
         assert_eq!(back, view);
     }
 

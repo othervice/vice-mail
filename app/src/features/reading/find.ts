@@ -190,21 +190,36 @@ function highlightApi(doc: Document): { registry: Map<string, unknown>; make: (r
   return { registry, make: (ranges) => new Highlight(...ranges) };
 }
 
-/** The highlight colours of the app's tokens, for a mail frame (it cannot read the app's variables). */
-function frameStyleText(): string | null {
+/**
+ * The highlight colours of the app's tokens, for a mail frame (it cannot read the app's
+ * variables): the mail-* pair for a mail on its white canvas, the theme's own pair (with the
+ * current match's text colour) for a mail the core showed on the dark canvas (stage 21).
+ */
+function frameStyleText(dark: boolean): string | null {
   const style = getComputedStyle(document.documentElement);
-  const match = style.getPropertyValue("--ui-mail-find-match").trim();
-  const current = style.getPropertyValue("--ui-mail-find-current").trim();
+  const match = style.getPropertyValue(dark ? "--ui-find-match" : "--ui-mail-find-match").trim();
+  const current = style.getPropertyValue(dark ? "--ui-find-current" : "--ui-mail-find-current").trim();
+  const currentText = dark ? style.getPropertyValue("--ui-find-current-text").trim() : "";
   if (!match || !current) return null;
   return (
     `::highlight(${FIND_HIGHLIGHT}){background-color:${match};}` +
-    `::highlight(${FIND_CURRENT_HIGHLIGHT}){background-color:${current};text-decoration:underline 2px;}`
+    `::highlight(${FIND_CURRENT_HIGHLIGHT}){background-color:${current};${currentText ? `color:${currentText};` : ""}text-decoration:underline 2px;}`
   );
+}
+
+/** Whether the frame of `doc` shows its mail on the dark canvas (`data-colors` of HtmlBody). */
+function onDarkCanvas(doc: Document): boolean {
+  try {
+    const colors = doc.defaultView?.frameElement?.getAttribute("data-colors");
+    return colors === "adapted" || colors === "ownDark";
+  } catch {
+    return false;
+  }
 }
 
 function ensureFrameStyle(doc: Document): void {
   if (doc.querySelector(`style[${FRAME_STYLE_ATTRIBUTE}]`)) return;
-  const text = frameStyleText();
+  const text = frameStyleText(onDarkCanvas(doc));
   if (!text) return;
   const style = doc.createElement("style");
   style.setAttribute(FRAME_STYLE_ATTRIBUTE, "");

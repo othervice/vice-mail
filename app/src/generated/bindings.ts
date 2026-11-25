@@ -189,10 +189,13 @@ export const commands = {
 	 *  picks the folder the change is sent from. `requestId` is a fresh UUID per user action.
 	 */
 	setMessageLabel: (messageId: MessageId, label: string, add: boolean, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("set_message_label", { messageId, label, add, requestId }, options)),
-	/**  The reading pane's data. Served locally when the body is stored, else `loading` and a fetch starts. */
-	getMessage: (messageId: MessageId, format: BodyFormat, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("get_message", { messageId, format }, options)),
+	/**
+	 *  The reading pane's data. Served locally when the body is stored, else `loading` and a fetch starts.
+	 *  Stage 21 (decision 0066): `scheme` is the theme the pane shows (light when left out).
+	 */
+	getMessage: (messageId: MessageId, format: BodyFormat, scheme: MailScheme | null, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("get_message", { messageId, format, scheme }, options)),
 	/**  Renders again with the external images loaded by the core; `sender` also allows them for the sender. */
-	loadRemoteContent: (messageId: MessageId, scope: RemoteContentScope, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("load_remote_content", { messageId, scope }, options)),
+	loadRemoteContent: (messageId: MessageId, scope: RemoteContentScope, scheme: MailScheme | null, options?: InvokeOptions) => typedError<MessageView, IpcError>(__TAURI_INVOKE("load_remote_content", { messageId, scope, scheme }, options)),
 	/**  Senders whose external content is always loaded, for the settings. */
 	listRemoteContentSenders: (accountId: AccountId, options?: InvokeOptions) => typedError<string[], IpcError>(__TAURI_INVOKE("list_remote_content_senders", { accountId }, options)),
 	/**  Removes a sender from the remote-content allowlist. */
@@ -684,12 +687,12 @@ export const commands = {
 	 *  text). The typed error the file was refused with, if the system handed over a file that is
 	 *  no mail; `not_found` once the file was closed.
 	 */
-	getEmlMessage: (fileId: EmlFileId, format: BodyFormat, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("get_eml_message", { fileId, format }, options)),
+	getEmlMessage: (fileId: EmlFileId, format: BodyFormat, scheme: MailScheme | null, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("get_eml_message", { fileId, format, scheme }, options)),
 	/**
 	 *  Renders the file again with its external images, loaded by the core, for this rendering
 	 *  only (there is no sender list without an account).
 	 */
-	loadEmlRemoteContent: (fileId: EmlFileId, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("load_eml_remote_content", { fileId }, options)),
+	loadEmlRemoteContent: (fileId: EmlFileId, scheme: MailScheme | null, options?: InvokeOptions) => typedError<EmlMessageView, IpcError>(__TAURI_INVOKE("load_eml_remote_content", { fileId, scheme }, options)),
 	/**  Saves an attachment of the file where the user picks in the system dialog. */
 	saveEmlAttachment: (fileId: EmlFileId, index: number, options?: InvokeOptions) => typedError<SaveAttachmentResult, IpcError>(__TAURI_INVOKE("save_eml_attachment", { fileId, index }, options)),
 	/**  Opens a read-only copy of an attachment of the file; executables need `confirmedExecutable`. */
@@ -2434,6 +2437,16 @@ export type CredentialKind = "password" |
 /**  An API token for a JMAP server (only with [`Protocol::Jmap`]). */
 "apiToken";
 
+/**  Stage 21 (decision 0066): how HTML mail with colours of its own is shown in the dark theme. */
+export type DarkMails = 
+/**
+ *  Light backgrounds become dark and dark text light, in the core while it prepares the
+ *  mail; images stay as they are. Mails with dark colours of their own keep them.
+ */
+"adapted" | 
+/**  As written, on a white canvas inside the dark card (the behaviour before stage 21). */
+"light";
+
 export type DateSection = {
 	kind: DateSectionKind,
 	/**  Start of the section (local midnight) in Unix milliseconds. */
@@ -3306,6 +3319,27 @@ export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type:
 /**  Moves messages from the junk mailbox to the inbox; others are left alone. */
 { type: "notSpam" };
 
+/**
+ *  Stage 21 (decision 0066): how a rendering of an HTML body shows the mail's colours, so the UI
+ *  can lay the matching canvas behind the frame and offer "Show original colours".
+ */
+export type MailColors = 
+/**
+ *  As written, on the light canvas: the light theme, "Show original colours", the setting
+ *  "always light", or a mail that asks for light only (`color-scheme: only light`).
+ */
+"original" | 
+/**
+ *  The core turned light backgrounds dark and dark text light (images untouched), on the
+ *  dark canvas.
+ */
+"adapted" | 
+/**
+ *  The mail declares dark colours of its own (`color-scheme: light dark`): its dark styles
+ *  apply, nothing is recoloured, on the dark canvas.
+ */
+"ownDark";
+
 /**  A local rule: runs on new mail in the inbox while the app runs (labelled so in the UI). */
 export type MailRule = {
 	id: RuleId,
@@ -3320,6 +3354,22 @@ export type MailRule = {
 	/**  Order: lower runs first. */
 	position: number,
 };
+
+/**
+ *  Stage 21 (decision 0066): the theme of the surface the UI shows a mail on, as it asks
+ *  `getMessage` for it.
+ */
+export type MailScheme = 
+/**
+ *  The light theme, and "Show original colours" in the dark theme: the mail as written, on
+ *  its white canvas. Also what an older caller that names no scheme gets.
+ */
+"light" | 
+/**
+ *  The dark theme: the mail's colours as the setting "Mails in the dark theme" says
+ *  ([`crate::DarkMails`]).
+ */
+"dark";
 
 /**  A mailbox as the UI sees it (sidebar, folder tree). */
 export type Mailbox = {
@@ -3754,7 +3804,12 @@ blockedRemote: number; remoteLoaded: boolean;
  *  Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
  *  on; all zero when it is off).
  */
-trackers: TrackerSummary } | 
+trackers: TrackerSummary; 
+/**
+ *  Stage 21 (decision 0066): how the colours are shown; the canvas behind the frame
+ *  follows it (white for `original`, the dark card otherwise).
+ */
+colors: MailColors } | 
 /**
  *  Plain text for the app's own theme. Links are separate segments, opened through the same
  *  check as HTML links (`describeLink` with this `render_token`).
@@ -4632,6 +4687,11 @@ export type ReadingPreferences = {
 	 *  …); the link card shows the clean target. On by default; synced.
 	 */
 	cleanLinks?: boolean,
+	/**
+	 *  Stage 21 (decision 0066): HTML mail in the dark theme, adapted (default) or always on
+	 *  its white canvas. Synced. Left out by an older caller: adapted.
+	 */
+	darkMails?: DarkMails,
 };
 
 /**

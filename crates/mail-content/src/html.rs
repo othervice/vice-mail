@@ -14,6 +14,12 @@
 //! 4. The result is parsed again and checked against the same allowlist (a regression in the
 //!    sanitiser shows the mail as text instead of as HTML), and link texts are read.
 //! 5. The document starts with [`MAIL_CSP`] as a meta tag, before anything from the mail.
+//!
+//! Stage 21 (decision 0066): between 1 and 2, the colour schemes the mail declares decide how
+//! its colours are shown for [`RenderOptions::scheme`] ([`RenderedHtml::colors`]); the colour
+//! pass ([`crate::colors`]) then runs on the sanitised stylesheet and on every sanitised
+//! attribute value: it only replaces colour values, takes `color-scheme` out and decides
+//! `prefers-color-scheme` queries.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -22,6 +28,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use ammonia::UrlRelative;
 use url::Url;
 
+use crate::colors::{self, ColorPass, MAIL_DARK_STYLE};
 use crate::css;
 use crate::dom::{self, Descend, NodeData, Visit};
 use crate::guard;
@@ -29,7 +36,7 @@ use crate::image::{self, ImageBytes, PLACEHOLDER_PIXEL};
 use crate::reencode::ReencodedImages;
 use crate::text::html_to_text;
 use crate::trackers::{self, TrackerKind, TrackerReport};
-use mail_model::{RenderToken, link_placeholder, parse_link_placeholder};
+use mail_model::{MailColors, MailScheme, RenderToken, link_placeholder, parse_link_placeholder};
 
 /// Content Security Policy at the top of every `srcdoc` (decision 0005, point 2):
 ///
@@ -454,6 +461,10 @@ pub struct RenderOptions {
     /// address with tracking parameters is listed and looked up without them. Counted in
     /// [`RenderedHtml::trackers`]. Off: every external image is treated alike.
     pub block_trackers: bool,
+    /// Stage 21 (decision 0066): the canvas the mail is shown on. `Dark` adapts its colours
+    /// unless it declares dark colours of its own or asks for light only; the engine passes
+    /// `Light` for the setting "always light" and for "Show original colours".
+    pub scheme: MailScheme,
 }
 
 impl RenderOptions {
@@ -470,6 +481,7 @@ impl RenderOptions {
             max_total_image_bytes: 32 << 20,
             max_html_bytes: MAX_HTML_BYTES,
             block_trackers: false,
+            scheme: MailScheme::Light,
         }
     }
 }
@@ -506,6 +518,9 @@ pub struct RenderedHtml {
     pub truncated: bool,
     /// Set when the document shows the mail as text instead of as HTML, and why.
     pub fallback: Option<Fallback>,
+    /// Stage 21 (decision 0066): how the mail's colours are shown (the canvas the UI lays
+    /// behind the frame follows it).
+    pub colors: MailColors,
 }
 
 /// Why a mail is shown as text although it has HTML.
@@ -547,11 +562,17 @@ const LINK_TEXT_CHARS: usize = 200;
 pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
     let truncated = html.len() > options.max_html_bytes;
     let html = &html[..html.floor_char_boundary(options.max_html_bytes)];
+    // A mail shown as text is on the canvas of the theme.
+    let text_colors = match options.scheme {
+        MailScheme::Light => MailColors::Original,
+        MailScheme::Dark => MailColors::Adapted,
+    };
     if guard::check(html).is_err() {
         return RenderedHtml {
-            srcdoc: text_document(&guard::strip_tags(html)),
+            srcdoc: text_document(&guard::strip_tags(html), text_colors),
             truncated,
             fallback: Some(Fallback::TooComplex),
+            colors: text_colors,
             ..RenderedHtml::default()
         };
     }
@@ -559,6 +580,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
     let pipeline = Arc::new(Pipeline {
         options: options.clone(),
         state: Mutex::new(State::default()),
+        colors: Mutex::new(ColorPass::new(MailColors::Original)),
     });
 
     // 1. Style blocks and body attributes from a full document parse.
@@ -568,7 +590,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
     }
     let css_text = style_text(&document);
     let stylesheet = css::sanitize_stylesheet(&css_text, &mut |url| pipeline.css_image(url));
-    let mut body_attributes = String::new();
+    let mut kept_body_attributes = Vec::new();
     if let Some(body) = dom::find_element(&document.document, "body")
         && let NodeData::Element { attrs, .. } = &body.data
     {
@@ -578,21 +600,39 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
                 continue;
             }
             if let Some(value) = pipeline.attribute("body", name, &attr.value) {
-                body_attributes.push(' ');
-                body_attributes.push_str(name);
-                body_attributes.push_str("=\"");
-                escape_into(&value, &mut body_attributes);
-                body_attributes.push('"');
+                kept_body_attributes.push((name.to_owned(), value));
             }
         }
     }
+    // Stage 21: what the mail declares decides how its colours are shown; the colour pass then
+    // runs on what the sanitiser kept.
+    let mut facts = colors::document_facts(&document);
+    facts.merge(colors::css_facts(&stylesheet));
     drop(document);
+    let mail_colors = colors::decide(options.scheme, facts);
+    *pipeline.colors() = ColorPass::new(mail_colors);
+    let stylesheet = pipeline.colors().stylesheet(&stylesheet);
+    let mut body_attributes = String::new();
+    for (name, value) in kept_body_attributes {
+        let value = pipeline.colors().attribute("body", &name, value);
+        if value.is_empty() {
+            continue;
+        }
+        body_attributes.push(' ');
+        body_attributes.push_str(&name);
+        body_attributes.push_str("=\"");
+        escape_into(&value, &mut body_attributes);
+        body_attributes.push('"');
+    }
 
     // 2. and 3. ammonia with the rewriting attribute filter.
     let filter = Arc::clone(&pipeline);
     let body = ammonia_builder()
         .attribute_filter(move |element, attribute, value| {
-            filter.attribute(element, attribute, value).map(Cow::Owned)
+            let value = filter.attribute(element, attribute, value)?;
+            let value = filter.colors().attribute(element, attribute, value);
+            // A `style` that only held `color-scheme` is empty now.
+            (!value.is_empty() || attribute != "style").then_some(Cow::Owned(value))
         })
         .clean(html)
         .to_string();
@@ -605,9 +645,10 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
 
     if !verified {
         return RenderedHtml {
-            srcdoc: text_document(&html_to_text(html)),
+            srcdoc: text_document(&html_to_text(html), text_colors),
             truncated,
             fallback: Some(Fallback::SelfCheckFailed),
+            colors: text_colors,
             ..RenderedHtml::default()
         };
     }
@@ -620,6 +661,9 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
     srcdoc.push_str(MAIL_CSP);
     srcdoc.push_str("\"><meta name=\"referrer\" content=\"no-referrer\"><style>");
     srcdoc.push_str(MAIL_DEFAULT_STYLE);
+    if mail_colors != MailColors::Original {
+        srcdoc.push_str(MAIL_DARK_STYLE);
+    }
     srcdoc.push_str("</style>");
     if !stylesheet.is_empty() {
         srcdoc.push_str("<style>\n");
@@ -654,6 +698,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
         pending_images: state.pending,
         truncated,
         fallback: None,
+        colors: mail_colors,
     }
 }
 
@@ -707,13 +752,20 @@ fn escape_into(text: &str, out: &mut String) {
     }
 }
 
-/// The mail as preformatted text, for when the HTML is not shown.
-fn text_document(text: &str) -> String {
+/// The mail as preformatted text, for when the HTML is not shown; on the dark canvas for
+/// [`MailColors::Adapted`].
+fn text_document(text: &str, colors: MailColors) -> String {
     let mut out = String::from(
         "<!DOCTYPE html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"",
     );
     out.push_str(MAIL_CSP);
-    out.push_str("\"><meta name=\"referrer\" content=\"no-referrer\"></head><body><pre style=\"white-space:pre-wrap\">");
+    out.push_str("\"><meta name=\"referrer\" content=\"no-referrer\">");
+    if colors != MailColors::Original {
+        out.push_str("<style>");
+        out.push_str(MAIL_DARK_STYLE);
+        out.push_str("</style>");
+    }
+    out.push_str("</head><body><pre style=\"white-space:pre-wrap\">");
     escape_into(text, &mut out);
     out.push_str("</pre></body></html>");
     out
@@ -840,6 +892,8 @@ pub(crate) fn is_allowed_attribute(tag: &str, attribute: &str) -> bool {
 struct Pipeline {
     options: RenderOptions,
     state: Mutex<State>,
+    /// Stage 21: the colour pass, set once the mail's declared schemes are known.
+    colors: Mutex<ColorPass>,
 }
 
 #[derive(Default)]
@@ -872,6 +926,10 @@ enum Image {
 impl Pipeline {
     fn state(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn colors(&self) -> MutexGuard<'_, ColorPass> {
+        self.colors.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Value for an allowed attribute, `None` to drop it.
@@ -1575,5 +1633,173 @@ mod tests {
         };
         let r = render_html("<p>äöü äöü äöü</p>", &options);
         assert!(r.truncated);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Stage 21 (decision 0066): colours in the dark theme
+    // -----------------------------------------------------------------------------------------
+
+    fn dark(html: &str) -> RenderedHtml {
+        render_html(
+            html,
+            &RenderOptions {
+                scheme: MailScheme::Dark,
+                ..options()
+            },
+        )
+    }
+
+    const NEWSLETTER: &str = "<html><head><style>\
+        .card{background-color:#ffffff;color:#222222;border:1px solid #e5e5e5}\
+        .button{background:#1a73e8;color:#ffffff}\
+        </style></head>\
+        <body bgcolor=\"#f4f4f4\" text=\"#333333\" style=\"margin:0\">\
+        <table bgcolor=\"white\"><tr><td class=\"card\" style=\"color:#555;background:#fff8e1\">\
+        <font color=\"#000000\">Hello</font> <a class=\"button\" href=\"https://example.com\">Read</a>\
+        <img src=\"cid:none\" alt=\"x\" style=\"background:#ffffff url(cid:none)\"></td></tr></table>\
+        </body></html>";
+
+    #[test]
+    fn in_the_dark_theme_a_newsletters_colours_are_adapted() {
+        let light = render(NEWSLETTER);
+        assert_eq!(light.colors, MailColors::Original);
+        assert!(
+            light.srcdoc.contains("bgcolor=\"#f4f4f4\""),
+            "{}",
+            light.srcdoc
+        );
+        assert!(!light.srcdoc.contains(MAIL_DARK_STYLE));
+
+        let r = dark(NEWSLETTER);
+        assert_eq!(r.colors, MailColors::Adapted);
+        assert_eq!(r.fallback, None);
+        let doc = &r.srcdoc;
+        // The dark canvas and text as the default, after the font and before the mail's style.
+        let default_at = doc.find(MAIL_DARK_STYLE).expect("dark default style");
+        assert!(default_at < doc.find(".card{").unwrap(), "{doc}");
+        // No original light background or dark text is left; white became the card.
+        for gone in [
+            "background-color:#ffffff",
+            "background:#ffffff",
+            "#f4f4f4",
+            "#222222",
+            "#333333",
+            "#555",
+            "#000000",
+            "#fff8e1",
+            "\"white\"",
+        ] {
+            assert!(!doc.contains(gone), "{gone} is still in {doc}");
+        }
+        assert!(doc.contains("<table bgcolor=\"#212830\">"), "{doc}");
+        assert!(doc.contains("text=\"#e6edf3\""), "{doc}");
+        assert!(doc.contains("<font color=\"#e6edf3\">"), "{doc}");
+        // The button's mid blue stays a blue background with white text.
+        assert!(doc.contains(".button{background:#"), "{doc}");
+        assert!(
+            doc.contains("color:#ffffff}") || doc.contains("color:#ffffff;}"),
+            "{doc}"
+        );
+        // Links and the CSP are as in the light theme.
+        assert_eq!(r.links, light.links);
+        assert!(doc.starts_with(
+            "<!DOCTYPE html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:;"
+        ));
+    }
+
+    #[test]
+    fn a_mail_with_dark_colours_of_its_own_keeps_them() {
+        let html = "<html><head><meta name=\"color-scheme\" content=\"light dark\">\
+            <style>:root{color-scheme:light dark}body{background:#ffffff;color:#111111}\
+            @media (prefers-color-scheme: dark){body{background:#000000 !important;color:#eeeeee !important}}\
+            @media (prefers-color-scheme: light){.only-light{display:block}}</style></head>\
+            <body><p>Hi</p></body></html>";
+        let r = dark(html);
+        assert_eq!(r.colors, MailColors::OwnDark);
+        let doc = &r.srcdoc;
+        assert!(doc.contains(MAIL_DARK_STYLE), "{doc}");
+        // Its own colours stay, its dark rules always apply, its light-only rules never.
+        assert!(
+            doc.contains("body{background:#ffffff; color:#111111;}"),
+            "{doc}"
+        );
+        assert!(
+            doc.contains(
+                "@media all{\nbody{background:#000000 !important; color:#eeeeee !important;}"
+            ),
+            "{doc}"
+        );
+        assert!(!doc.contains("only-light"), "{doc}");
+        // The frame's scheme is the core's, not the mail's.
+        assert!(!doc.contains("color-scheme:light dark"), "{doc}");
+        // In the light theme the dark rules never apply.
+        let light = render(html);
+        assert_eq!(light.colors, MailColors::Original);
+        assert!(!light.srcdoc.contains("#000000"), "{}", light.srcdoc);
+        assert!(
+            light
+                .srcdoc
+                .contains("@media all{\n.only-light{display:block;}"),
+            "{}",
+            light.srcdoc
+        );
+    }
+
+    #[test]
+    fn a_mail_that_asks_for_light_only_stays_light() {
+        let html = "<html><head><meta name=\"color-scheme\" content=\"only light\"></head>\
+            <body style=\"background:#ffffff\"><p style=\"color:#000\">Hi</p></body></html>";
+        let r = dark(html);
+        assert_eq!(r.colors, MailColors::Original);
+        assert!(!r.srcdoc.contains(MAIL_DARK_STYLE));
+        assert!(r.srcdoc.contains("style=\"color:#000;\""), "{}", r.srcdoc);
+    }
+
+    #[test]
+    fn plain_html_and_text_fallbacks_follow_the_dark_theme() {
+        let r = dark("<p>Hello <b>world</b></p>");
+        assert_eq!(r.colors, MailColors::Adapted);
+        assert!(r.srcdoc.contains(&format!(
+            "<style>{MAIL_DEFAULT_STYLE}{MAIL_DARK_STYLE}</style>"
+        )));
+        assert!(
+            r.srcdoc
+                .ends_with("<body><p>Hello <b>world</b></p></body></html>")
+        );
+        let deep = format!("{}x{}", "<div>".repeat(50_000), "</div>".repeat(50_000));
+        let r = dark(&deep);
+        assert_eq!(r.fallback, Some(Fallback::TooComplex));
+        assert_eq!(r.colors, MailColors::Adapted);
+        assert!(r.srcdoc.contains(MAIL_DARK_STYLE));
+        assert!(!render(&deep).srcdoc.contains(MAIL_DARK_STYLE));
+    }
+
+    #[test]
+    fn the_colour_pass_adds_nothing_to_what_the_sanitiser_lets_through() {
+        // Hostile CSS around colours: the dark rendering holds nothing the light one does not,
+        // apart from the colours themselves.
+        let html = "<style>p{color:red;background:url(https://evil.example/a.png) #fff;\
+            width:expression(alert(1))}</style>\
+            <p style=\"color:#000;background-image:url('javascript:alert(1)');behavior:url(x.htc)\" \
+            bgcolor=\"#fff\" onclick=\"alert(1)\">x</p>\
+            <font color=\"#000;background:url(https://evil.example/)\">y</font>";
+        let light = render(html);
+        let r = dark(html);
+        assert_eq!(r.colors, MailColors::Adapted);
+        for absent in [
+            "evil.example",
+            "expression",
+            "javascript",
+            "behavior",
+            "onclick",
+            "url(https",
+        ] {
+            assert!(!r.srcdoc.contains(absent), "{absent}: {}", r.srcdoc);
+        }
+        assert_eq!(r.remote_resources, light.remote_resources);
+        assert_eq!(
+            r.srcdoc.matches("url(").count(),
+            light.srcdoc.matches("url(").count()
+        );
     }
 }

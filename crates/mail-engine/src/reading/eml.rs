@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use mail_content::{ParseProblem, ParsedMessage};
 use mail_model::{
     BodyFormat, CoreError, EmlError, EmlFile, EmlFileId, EmlMessageView, MAX_EML_FILE_BYTES,
-    MAX_OPEN_EML_FILES, MailConnector, MessageViewHeader, OpenAttachmentResult,
+    MAX_OPEN_EML_FILES, MailConnector, MailScheme, MessageViewHeader, OpenAttachmentResult,
 };
 
 use super::links::{RenderOwner, Renderings};
@@ -228,10 +228,17 @@ impl<C: MailConnector + 'static> Reading<C> {
         id: &EmlFileId,
         format: BodyFormat,
         load_remote: bool,
+        scheme: MailScheme,
     ) -> Result<EmlMessageView, CoreError> {
         let (file_name, _, content) = self.eml_content(id).await?;
         let body = self
-            .render_body(&content, format, load_remote, RenderOwner::File(id.clone()))
+            .render_body(
+                &content,
+                format,
+                load_remote,
+                RenderOwner::File(id.clone()),
+                scheme,
+            )
             .await?;
         Ok(EmlMessageView {
             file_id: id.clone(),
@@ -373,12 +380,26 @@ impl<C: Connector> AppCore<C> {
     }
 
     /// The opened file as the reading pane shows it; `not_found` once its window closed.
+    /// Colours as in the light theme ([`Self::get_eml_message_for`]).
     pub async fn get_eml_message(
         &self,
         id: EmlFileId,
         format: BodyFormat,
     ) -> Result<EmlMessageView, CoreError> {
-        self.reading_ref()?.eml_view(&id, format, false).await
+        self.get_eml_message_for(id, format, MailScheme::Light)
+            .await
+    }
+
+    /// Stage 21 (decision 0066): [`Self::get_eml_message`] for the theme the window shows.
+    pub async fn get_eml_message_for(
+        &self,
+        id: EmlFileId,
+        format: BodyFormat,
+        scheme: MailScheme,
+    ) -> Result<EmlMessageView, CoreError> {
+        self.reading_ref()?
+            .eml_view(&id, format, false, scheme)
+            .await
     }
 
     /// The HTML again, with its external images loaded by the core (this rendering only).
@@ -386,8 +407,18 @@ impl<C: Connector> AppCore<C> {
         &self,
         id: EmlFileId,
     ) -> Result<EmlMessageView, CoreError> {
+        self.load_eml_remote_content_for(id, MailScheme::Light)
+            .await
+    }
+
+    /// Stage 21: [`Self::load_eml_remote_content`] for the theme the window shows.
+    pub async fn load_eml_remote_content_for(
+        &self,
+        id: EmlFileId,
+        scheme: MailScheme,
+    ) -> Result<EmlMessageView, CoreError> {
         self.reading_ref()?
-            .eml_view(&id, BodyFormat::Html, true)
+            .eml_view(&id, BodyFormat::Html, true, scheme)
             .await
     }
 

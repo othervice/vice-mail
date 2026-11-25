@@ -30,7 +30,8 @@ use mail_content::{
     sanitize_filename, strip_hidden_chars,
 };
 use mail_model::{
-    AttachmentPreview, MAX_PREVIEW_EDGE, MAX_PREVIEW_TEXT_BYTES, PreviewError, PreviewKind,
+    AttachmentPreview, MAX_PREVIEW_EDGE, MAX_PREVIEW_TEXT_BYTES, MailScheme, PreviewError,
+    PreviewKind,
 };
 
 fn env_number(name: &str) -> Option<u64> {
@@ -181,18 +182,22 @@ fn check_message(raw: &[u8], what: &str) -> usize {
     }
     let mut documents = 0;
     if let Some(html) = &message.html {
-        let (rendered, written) = common::render_reencoded(
-            html,
-            &RenderOptions {
-                inline: message.inline_images(),
-                ..RenderOptions::new(common::token())
-            },
-        );
-        let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
-        assert!(found.is_empty(), "{what}: {found:?}");
-        let foreign = common::foreign_images(&rendered.srcdoc, &written);
-        assert!(foreign.is_empty(), "{what}: not re-encoded: {foreign:?}");
-        documents += 1;
+        // Stage 21: the dark theme's colour pass runs on the same output and must keep it clean.
+        for scheme in [MailScheme::Light, MailScheme::Dark] {
+            let (rendered, written) = common::render_reencoded(
+                html,
+                &RenderOptions {
+                    inline: message.inline_images(),
+                    scheme,
+                    ..RenderOptions::new(common::token())
+                },
+            );
+            let found = violations(&rendered.srcdoc, Mode::Output, MAIL_CSP);
+            assert!(found.is_empty(), "{what} ({scheme:?}): {found:?}");
+            let foreign = common::foreign_images(&rendered.srcdoc, &written);
+            assert!(foreign.is_empty(), "{what}: not re-encoded: {foreign:?}");
+            documents += 1;
+        }
     }
     documents
 }

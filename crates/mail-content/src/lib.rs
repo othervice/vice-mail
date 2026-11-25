@@ -7,6 +7,9 @@
 //!   CSS re-serialised token by token, every `href` a placeholder carrying the render token,
 //!   images only as `data:` URIs the core encoded again ([`reencode_images`], finding C-4), the
 //!   mandatory [`MAIL_CSP`] first.
+//!   Stage 21 (decision 0066): in the dark theme it adapts the mail's colours (light
+//!   backgrounds dark, dark text light, images untouched) in the same pass
+//!   ([`RenderOptions::scheme`], [`RenderedHtml::colors`]).
 //! - [`render_text`]: plain text as lines and link spans, never as HTML.
 //! - [`html_to_text`]: the text of an HTML body; [`html_to_visible_text`] without the text a
 //!   reader does not see (hidden by CSS or attributes), for models; [`strip_hidden_chars`]:
@@ -41,6 +44,7 @@ mod attachment_preview;
 mod attachment_reminder;
 mod calendar;
 mod classify;
+mod colors;
 mod compose;
 mod contact_picture;
 mod contacts;
@@ -75,6 +79,9 @@ pub use calendar::{
 pub use classify::{
     CLASSIFY_HEADER_FIELDS, ClassifyHeaders, LocalSignals, SenderIdentity, SenderRules,
     apply_user_rules, classify, classify_automatic, is_no_reply_address, normalize_key,
+};
+pub use colors::{
+    BACKGROUND_THRESHOLD, DARK_CANVAS, DARK_LINK, DARK_TEXT, MAIL_DARK_STYLE, TEXT_THRESHOLD,
 };
 pub use compose::{
     Attachment, BuiltMessage, BuiltRedirect, ComposeError, DispositionReport, ForeignDraftHtml,

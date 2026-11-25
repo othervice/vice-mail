@@ -953,12 +953,14 @@ async fn reading_preferences_default_to_the_delay_and_persist() {
             mark_read_on_open: MarkReadOnOpen::AfterDelay,
             block_trackers: true,
             clean_links: true,
+            dark_mails: mail_model::DarkMails::Adapted,
         }
     );
     let never = ReadingPreferences {
         mark_read_on_open: MarkReadOnOpen::Never,
         block_trackers: false,
         clean_links: true,
+        dark_mails: mail_model::DarkMails::Light,
     };
     assert_eq!(
         core.set_reading_preferences(never).await.expect("write"),

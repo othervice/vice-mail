@@ -5,7 +5,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { Notice } from "../../components/Notice";
-import type { BodyFormat, CoreError, EmlFileId, EmlMessageView } from "../../services/ipc";
+import type { BodyFormat, CoreError, EmlFileId, EmlMessageView, MailScheme } from "../../services/ipc";
 import { openComposer, useComposerStore } from "../../stores/composer";
 import { useMailtoStore } from "../../stores/mailto";
 import { useUiStore } from "../../stores/ui";
@@ -16,7 +16,8 @@ import { SendNotices } from "../composer/SendNotices";
 import { composerSourceFor } from "../extras/mailto";
 import { Attachments } from "../reading/Attachments";
 import { LinkCard } from "../reading/LinkCard";
-import { HtmlBody, TextBody } from "../reading/MessageBodyView";
+import { ColorsToggle, HtmlBody, mailScheme, TextBody } from "../reading/MessageBodyView";
+import { useAppliedTheme } from "../preferences/theme";
 import { MessageHeader } from "../reading/MessageHeader";
 import { FormatToggle, Problems } from "../reading/ReadingPane";
 import { RemoteContentBar } from "../reading/RemoteContentBar";
@@ -42,13 +43,14 @@ function useMailtoDrafts(): void {
 interface BodyProps {
   view: EmlMessageView;
   format: BodyFormat;
+  scheme: MailScheme;
   scrollerRef: RefObject<HTMLDivElement | null>;
 }
 
 /** The body as the reading pane shows it: sanitised HTML in the sandboxed frame, or text. */
-function EmlBody({ view, format, scrollerRef }: BodyProps) {
+function EmlBody({ view, format, scheme, scrollerRef }: BodyProps) {
   const { t } = useTranslation();
-  const remote = useLoadEmlRemoteContent(view.fileId, format);
+  const remote = useLoadEmlRemoteContent(view.fileId, format, scheme);
   const subject = view.header.subject.trim();
   const { body } = view;
   switch (body.kind) {
@@ -75,6 +77,7 @@ function EmlBody({ view, format, scrollerRef }: BodyProps) {
             srcdoc={body.srcdoc}
             title={subject ? t("reading.frameTitle", { subject }) : t("reading.frameTitleNoSubject")}
             scrollerRef={scrollerRef}
+            colors={body.colors}
           />
         </>
       );
@@ -101,7 +104,11 @@ interface EmlWindowProps {
 export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
   const { t } = useTranslation();
   const [format, setFormat] = useState<BodyFormat>("auto");
-  const query = useEmlView(fileId, format);
+  // Stage 21 (decision 0066): adapted in the dark theme, "Original colours" on request.
+  const theme = useAppliedTheme();
+  const [showOriginal, setShowOriginal] = useState(false);
+  const scheme = mailScheme(theme, showOriginal);
+  const query = useEmlView(fileId, format, scheme);
   const linkRequest = useUiStore((state) => state.linkRequest);
   const closing = useCloseThisWindow();
   const articleRef = useRef<HTMLElement>(null);
@@ -118,6 +125,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
   const renderToken = body?.kind === "html" || body?.kind === "text" ? body.renderToken : null;
   const shownFormat = body?.kind === "html" || body?.kind === "text" ? body.kind : null;
   const canToggle = view !== undefined && view.formats.includes("html") && view.formats.includes("text");
+  const canShowOriginal = theme === "dark" && body?.kind === "html" && (showOriginal || body.colors !== "original");
   const link = linkRequest && renderToken !== null && linkRequest.renderToken === renderToken ? linkRequest : null;
   const retry = () => {
     void query.refetch();
@@ -143,7 +151,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
         <MessageHeader header={view.header} fileName={view.fileName} subjectId={subjectId} />
         <Problems view={view} />
         <Attachments fileId={view.fileId} attachments={view.attachments} partial={false} />
-        <EmlBody view={view} format={format} scrollerRef={scrollerRef} />
+        <EmlBody view={view} format={format} scheme={scheme} scrollerRef={scrollerRef} />
       </>
     );
   }
@@ -169,6 +177,7 @@ export function EmlWindow({ fileId, eventsError }: EmlWindowProps) {
             {query.isFetching && view && (
               <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
             )}
+            {canShowOriginal && <ColorsToggle original={showOriginal} onChange={setShowOriginal} />}
             {canToggle && shownFormat && <FormatToggle shown={shownFormat} onChange={setFormat} />}
             <IconButton icon={X} label={t("eml.close")} onClick={closing.close} />
           </div>

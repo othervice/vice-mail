@@ -6,6 +6,7 @@ import {
   type BodyFormat,
   type EmlFileId,
   type IpcError,
+  type MailScheme,
   type MessageId,
   type MessageView,
   type PrefetchSettings,
@@ -25,18 +26,20 @@ const MESSAGE_VIEW_GC_MS = 30_000;
 export const messageViewsQueryKey = (accountId: AccountId, messageId: MessageId) =>
   ["message", accountId, messageId] as const;
 
-export const messageViewQueryKey = (accountId: AccountId, messageId: MessageId, format: BodyFormat) =>
-  [...messageViewsQueryKey(accountId, messageId), format] as const;
+export const messageViewQueryKey = (accountId: AccountId, messageId: MessageId, format: BodyFormat, scheme: MailScheme = "light") =>
+  [...messageViewsQueryKey(accountId, messageId), format, scheme] as const;
 
 /**
  * What the reading pane shows for one message in one format. The core answers at once: with a
  * rendering, with `loading` (a fetch started; `messageBodyAvailable` follows) or `unavailable`.
  * Switching the format keeps the previous rendering on screen until the new one is there.
+ * Stage 21 (decision 0066): `scheme` is the theme the mail is shown on ("light" also for
+ * "Original colours" in the dark theme); the core adapts the colours for "dark".
  */
-export function useMessageView(accountId: AccountId, messageId: MessageId, format: BodyFormat) {
+export function useMessageView(accountId: AccountId, messageId: MessageId, format: BodyFormat, scheme: MailScheme = "light") {
   return useQuery({
-    queryKey: messageViewQueryKey(accountId, messageId, format),
-    queryFn: () => ipc.getMessage(messageId, format),
+    queryKey: messageViewQueryKey(accountId, messageId, format, scheme),
+    queryFn: () => ipc.getMessage(messageId, format, scheme),
     gcTime: MESSAGE_VIEW_GC_MS,
     placeholderData: keepPreviousData,
   });
@@ -87,16 +90,16 @@ export const remoteSendersQueryKey = (accountId: AccountId) => ["remoteSenders",
  * new rendering of the same message, which replaces the shown one. `sender` also stores the
  * sender: other cached views of the account are then out of date and reload when shown next.
  */
-export function useLoadRemoteContent(accountId: AccountId, messageId: MessageId, format: BodyFormat) {
+export function useLoadRemoteContent(accountId: AccountId, messageId: MessageId, format: BodyFormat, scheme: MailScheme = "light") {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (scope: RemoteContentScope) => ipc.loadRemoteContent(messageId, scope),
+    mutationFn: (scope: RemoteContentScope) => ipc.loadRemoteContent(messageId, scope, scheme),
     onSuccess: async (view, scope) => {
       if (scope === "sender") {
         await queryClient.invalidateQueries({ queryKey: ["message", accountId], refetchType: "none" });
         await queryClient.invalidateQueries({ queryKey: remoteSendersQueryKey(accountId) });
       }
-      queryClient.setQueryData(messageViewQueryKey(accountId, messageId, format), view);
+      queryClient.setQueryData(messageViewQueryKey(accountId, messageId, format, scheme), view);
     },
   });
 }
