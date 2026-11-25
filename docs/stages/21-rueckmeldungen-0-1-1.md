@@ -6,7 +6,9 @@ bauen.
 **Anlass:** Test von 0.1.1 am 25.11.2026. Der Mensch hat entschieden: erst alle Rückmeldungen
 sammeln, dann umsetzen und neu bauen.
 
-**Stand:** Sammeln. Nichts wird gebaut, bis der Mensch sagt, dass die Liste vollständig ist.
+**Stand:** Liste vollständig („ok das ist es erstmal, build“, 25.11.2026, 11:18). Ergibt 0.1.2.
+Aufteilung: 2+3 (Spalte), 4a+5+6 (Liste), 8+9 (Farben der Mails), 7+10 (System), danach 4
+(Abstände) auf dem zusammengeführten Stand.
 
 ## Rückmeldungen
 
