@@ -4,7 +4,6 @@ import { ErrorNotice } from "../components/ErrorNotice";
 import { AiPanel } from "../features/ai/AiPanel";
 import { Notices } from "../features/actions/Notices";
 import { useNotificationTexts } from "../features/comfort/events";
-import { CloseHintHost } from "../features/desktop/CloseHint";
 import { useDesktopTexts } from "../features/desktop/queries";
 import { ActivityView } from "../features/activity/ActivityView";
 import { StartupNotice } from "../features/app-info/StartupNotice";
@@ -130,8 +129,6 @@ export function AppShell({ eventsError }: AppShellProps) {
       <RedirectHost />
       {/* Stage 19 (decision 0057): mbox exports and imports with their progress. */}
       <MboxJobsHost />
-      {/* Stage 21 (decision 0069): the one-time note when the window is first closed. */}
-      <CloseHintHost />
     </div>
   );
 }

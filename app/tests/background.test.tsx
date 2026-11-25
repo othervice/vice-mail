@@ -200,6 +200,20 @@ describe("closing the main window the first time", () => {
   });
 });
 
+describe("closing during the guided first start", () => {
+  it("the note shows there too, so the window can always be closed", async () => {
+    const core = mockCore({ firstStart: { pending: true } });
+    const { user } = renderApp();
+    await screen.findByTestId("first-start");
+    await closeRequested();
+    const dialog = await screen.findByRole("alertdialog", { name: `${PRODUCT_NAME} keeps running` });
+    await user.click(within(dialog).getByRole("button", { name: "Keep running" }));
+    await waitFor(() => {
+      expect(core.desktop.closes).toEqual([false]);
+    });
+  });
+});
+
 describe("tray texts and the ready signal", () => {
   it("sends the tray menu's texts in the UI's language and says once that the page listens", async () => {
     const core = mockCore();
