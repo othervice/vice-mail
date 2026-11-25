@@ -7,6 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A context menu on messages in every list (folders, All inboxes, views such as Later or Flagged,
+  search results, the table): right click, the context-menu key or Shift+F10. Reply, Archive, Spam
+  and Delete as icons on top, then Open, Reply and forward, read and unread, Mark, Pin, Snooze
+  (with its times), Task, Reading list, Remind me if no reply, Move to, Copy to, Tags, Edit as new,
+  View source, Save as .eml and Print. It acts on the selection when the row belongs to it, else
+  on that row alone, which gets a ring and stays unselected. On a read-only account what would
+  change mail on the server shows disabled with the reason and the way to allow changes. Full
+  keyboard use with submenus.
+- Copy to another folder of the same account (through the outbox, like copies between accounts).
+- The quick actions on hover now also show in All inboxes and in search results, acting with each
+  message's own account; read-only accounts show them disabled with the reason.
+
+### Changed
+
+- Message rows no longer keep an empty column left of the picture: the selection box takes the
+  picture's place on hover and while several messages are selected, and the unread dot sits
+  narrowly before the picture.
+
 ## [0.1.1] - 2026-11-25
 
 ### Added
