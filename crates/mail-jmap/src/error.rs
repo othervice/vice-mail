@@ -181,6 +181,8 @@ pub(crate) fn from_set_error(method: &str, error: &Value) -> BackendError {
     let text = set_error_text(method, error);
     match error.get("type").and_then(Value::as_str).unwrap_or("") {
         "forbidden" if method.starts_with("Email") => BackendError::Rejected(text),
+        // Stage 20 (decision 0060): the mailbox is full (RFC 8620 `overQuota`).
+        "overQuota" => BackendError::OverQuota(text),
         "invalidPatch" | "invalidProperties" => BackendError::Protocol(text),
         _ => BackendError::Rejected(text),
     }

@@ -105,9 +105,11 @@ describe("accounts-and-folders column", () => {
     expect(within(views).getAllByRole("treeitem").map((row) => row.textContent)).toEqual([
       "Views",
       "Later",
+      "Waiting for reply",
       "Tasks",
       "Reading list",
       "Pinned attachments",
+      "Attachments",
       "Flagged",
       "Pinned",
       "Saved views",
@@ -230,7 +232,7 @@ describe("accounts-and-folders column", () => {
       label.focus();
     });
     await user.keyboard("{ArrowRight}");
-    expect(within(views).getAllByRole("treeitem")).toHaveLength(9);
+    expect(within(views).getAllByRole("treeitem")).toHaveLength(11);
     await user.keyboard("{ArrowDown}");
     expect(document.activeElement?.textContent).toBe("Later");
     await user.keyboard("{ArrowLeft}{ArrowLeft}");

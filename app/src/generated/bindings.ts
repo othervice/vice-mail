@@ -801,6 +801,33 @@ export const commands = {
 	/**  "Skip setup" or the last step: the first start does not show again on this device. */
 	finishFirstStart: (end: FirstStartEnd, options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("finish_first_start", { end }, options)),
 	/**
+	 *  Asked by the composer before it sends or schedules: the word of the user's own text that
+	 *  speaks of an attachment while the draft has none; null with the setting off or nothing to
+	 *  remind of. Never asked for sends of the outbox.
+	 */
+	checkAttachmentReminder: (draftId: DraftId, options?: InvokeOptions) => typedError<string | null, IpcError>(__TAURI_INVOKE("check_attachment_reminder", { draftId }, options)),
+	/**  Decision 0059: the times the "Remind me if no reply" menu offers now. */
+	getFollowUpTimes: (options?: InvokeOptions) => __TAURI_INVOKE<FollowUpTimes>("get_follow_up_times", undefined, options),
+	/**
+	 *  Sets or moves "remind me if no reply" on messages; answers the time and how many already
+	 *  have a reply.
+	 */
+	setFollowUp: (messageIds: MessageId[], choice: FollowUpChoice, options?: InvokeOptions) => typedError<FollowUpResult, IpcError>(__TAURI_INVOKE("set_follow_up", { messageIds, choice }, options)),
+	/**  Removes the reminders of messages. */
+	clearFollowUp: (messageIds: MessageId[], options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("clear_follow_up", { messageIds }, options)),
+	/**  "Waiting for reply": the reminders of the scope, the next due first. */
+	listFollowUps: (scope: MarkScope, options?: InvokeOptions) => typedError<MessageListItem[], IpcError>(__TAURI_INVOKE("list_follow_ups", { scope }, options)),
+	/**
+	 *  One page of the attachments of the scope's accounts, newest message first, filtered by kind,
+	 *  sender and file name. `limit` 1..=500.
+	 */
+	listAttachments: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number, options?: InvokeOptions) => typedError<AttachmentPage, IpcError>(__TAURI_INVOKE("list_attachments", { filter, cursor, limit }, options)),
+	/**
+	 *  IMAP QUOTA (RFC 9208) or JMAP quotas (RFC 9425) of the account, over its read-only reading
+	 *  connection; kept for 15 minutes unless `refresh`.
+	 */
+	getAccountQuota: (accountId: AccountId, refresh: boolean, options?: InvokeOptions) => typedError<MailboxQuota, IpcError>(__TAURI_INVOKE("get_account_quota", { accountId, refresh }, options)),
+	/**
 	 *  The popup as it is now: at most three cards (newest first), how many more wait, and the
 	 *  app's theme, language and accent.
 	 */
@@ -862,6 +889,8 @@ export const MAX_ACTION_MESSAGES = 10000 as const;
 export const MAX_ATTACHMENTS = 100 as const;
 
 export const MAX_ATTACHMENT_BYTES = 104857600 as const;
+
+export const MAX_ATTACHMENT_PAGE = 500 as const;
 
 export const MAX_COLUMN_VIEWS = 32 as const;
 
@@ -952,6 +981,8 @@ export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
 export const MIN_TEXT_SIZE = 80 as const;
 
 export const MISSED_SEND_GRACE_MS = 3600000 as const;
+
+export const QUOTA_WARN_PERCENT = 90 as const;
 
 export const SETTINGS_SYNC_FOLDER = "Settings-Sync" as const;
 
@@ -1466,6 +1497,53 @@ export type ArchiveAfterSend =
  */
 "no_archive_mailbox";
 
+/**  Keyset position in the view: below this attachment. Opaque; pass it back unchanged. */
+export type AttachmentCursor = {
+	messageId: MessageId,
+	index: number,
+};
+
+/**  One attachment of the view. */
+export type AttachmentEntry = {
+	messageId: MessageId,
+	accountId: AccountId,
+	/**
+	 *  Where the message is shown ("Go to message"): its inbox location if it has one, else
+	 *  another folder (never Trash or Junk).
+	 */
+	mailboxId: MailboxId,
+	/**  The attachment's index in the reading pane (open, save, preview). */
+	index: number,
+	/**  Sanitised file name. */
+	name: string,
+	mimeType: string,
+	kind: AttachmentKind,
+	/**  Decoded bytes (estimated for attachments not downloaded yet). */
+	size: number,
+	/**  The bytes are on this computer; otherwise opening downloads them first. */
+	local: boolean,
+	/**  What the preview shows; null: no preview, open it in the system. */
+	preview: PreviewKind | null,
+	/**  A program or script: opening asks first. */
+	executable: boolean,
+	from: Address | null,
+	subject: string,
+	/**  The message's sort date, Unix milliseconds. */
+	date: number,
+};
+
+/**  What the view lists. */
+export type AttachmentFilter = {
+	/**  The accounts: all visible ones, a group's, or one. */
+	scope: MarkScope,
+	/**  Null: every kind. */
+	kind: AttachmentKind | null,
+	/**  Part of the sender's name or address (any case); null or empty: every sender. */
+	sender: string | null,
+	/**  Part of the file name (any case); null or empty: every name. */
+	query: string | null,
+};
+
 /**  One attachment in the reading pane. */
 export type AttachmentInfo = {
 	/**  Position for `saveAttachment`/`openAttachment`; stable for the message. */
@@ -1485,6 +1563,22 @@ export type AttachmentInfo = {
 	local: boolean,
 	/**  Stage 16 (decision 0036): what `previewAttachment` shows; null when it has no preview. */
 	preview: PreviewKind | null,
+};
+
+/**  The kinds the view filters by. */
+export type AttachmentKind = "image" | "pdf" | 
+/**  Text documents, presentations, plain text. */
+"document" | 
+/**  Spreadsheets and CSV. */
+"spreadsheet" | 
+/**  Zip, tar, 7z, rar, gzip … */
+"archive" | "other";
+
+/**  One page of the view, newest message first. */
+export type AttachmentPage = {
+	items: AttachmentEntry[],
+	/**  Pass to the next call to continue; null on the last page. */
+	nextCursor: AttachmentCursor | null,
 };
 
 /**
@@ -1942,6 +2036,12 @@ export type ComposeSettings = {
 	archiveOnReply?: boolean,
 	/**  Stage 16: how read-receipt requests of incoming mail are handled. Synced. */
 	readReceipts?: ReadReceiptPolicy,
+	/**
+	 *  Stage 20 (decision 0058): before sending, the composer asks "Send anyway?" when the
+	 *  user's own text speaks of an attachment but none is there (`checkAttachmentReminder`).
+	 *  On by default; synced. Left out by an older caller: on.
+	 */
+	attachmentReminder?: boolean,
 };
 
 /**
@@ -2444,6 +2544,11 @@ export type Draft = {
 	 */
 	requestReadReceipt: boolean,
 	/**
+	 *  Stage 20 (decision 0059): "Remind me if no reply by …", Unix milliseconds; recorded as
+	 *  a reminder once the server accepted the message. Null: no reminder.
+	 */
+	followUpAt: number | null,
+	/**
 	 *  Made from a draft another program saved in the Drafts folder, which the app could not
 	 *  take over completely (an image from the web, a part the editor cannot show, a message
 	 *  stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
@@ -2486,6 +2591,11 @@ export type DraftSendOptions = {
 	archiveOriginal: boolean,
 	/**  See [`Draft::request_read_receipt`]. */
 	requestReadReceipt: boolean,
+	/**
+	 *  Stage 20: see [`Draft::follow_up_at`]; at least a minute ahead, at most 5 years. Left out
+	 *  by an older caller: none.
+	 */
+	followUpAt?: number | null,
 };
 
 /**  Where the draft's copy in the server's Drafts folder stands. */
@@ -2784,7 +2894,13 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
 /**  Stage 17: the file is not a PNG, JPEG, GIF or WebP image. */
 "picture_unsupported" | 
 /**  Stage 17: the image could not be decoded (damaged, or crafted). */
-"picture_damaged";
+"picture_damaged" | 
+/**
+ *  Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
+ *  9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
+ *  (search `larger:10M`) makes room.
+ */
+"over_quota";
 
 /**  `STATUS` of an event. */
 export type EventStatus = "tentative" | "confirmed" | "cancelled";
@@ -2835,6 +2951,45 @@ export type FirstStartOutcome =
  *  first start), so it was never shown.
  */
 "notNeeded";
+
+/**  When to remind. */
+export type FollowUpChoice = 
+/**  Tomorrow at 08:00. */
+{ kind: "tomorrow" } | 
+/**  In three days at 08:00. */
+{ kind: "inThreeDays" } | 
+/**  Next Monday at 08:00. */
+{ kind: "nextWeek" } | 
+/**  A time the user picked, Unix milliseconds; at least a minute ahead, at most 5 years. */
+{ kind: "at"; at: number };
+
+/**  A reminder on a list row (a message the user sent). */
+export type FollowUpMark = {
+	/**  When the reminder comes (or came) without an answer, Unix milliseconds. */
+	due: number,
+	/**  When the message was sent ("No reply since …"), Unix milliseconds. */
+	sentAt: number,
+	/**
+	 *  Due without an answer: it stands above the inbox until the user clears it or an answer
+	 *  comes.
+	 */
+	returned: boolean,
+};
+
+/**  What `setFollowUp` answers. */
+export type FollowUpResult = {
+	/**  When the reminder comes if no reply arrives, Unix milliseconds. */
+	due: number,
+	/**  Messages whose conversation already has a reply: they keep no reminder. */
+	answered: number,
+};
+
+/**  The times the reminder menu offers right now, Unix milliseconds, in the user's zone. */
+export type FollowUpTimes = {
+	tomorrow: number,
+	inThreeDays: number,
+	nextWeek: number,
+};
 
 /**
  *  One header field as the reading pane's "all headers" lists it: the name as written, the
@@ -2970,6 +3125,13 @@ export type InboxTop = {
 	/**  All messages of important senders in the scope ("Alle anzeigen (n)"). */
 	priorityTotal: number,
 	priorityUnread: number,
+	/**
+	 *  Stage 20 (decision 0059): messages the user sent that got no reply by the time they
+	 *  asked to be reminded ("No reply since …"), most recently due first (at most
+	 *  [`crate::MAX_TOP_FOLLOW_UPS`]), each shown where it lies (usually Sent). They stay until
+	 *  the user clears the reminder or a reply comes.
+	 */
+	followUps: MessageListItem[],
 };
 
 /**  Stage 10: what adding inline images to a draft did. */
@@ -3006,6 +3168,11 @@ export type LinkInfo = {
 	warnings: LinkWarning[],
 	/**  Only `http`, `https` and `mailto` can be opened. */
 	openable: boolean,
+	/**
+	 *  Stage 20 (decision 0058): tracking parameters removed from `target` (as written, each
+	 *  once); opening uses the clean target. Empty when there were none or cleaning is off.
+	 */
+	trackingRemoved: string[],
 };
 
 /**
@@ -3120,6 +3287,22 @@ export type Mailbox = {
 
 /**  Local row id of a mailbox (`mailbox.id`). Not stable across devices. */
 export type MailboxId = number;
+
+/**  How full an account's mailbox is (`getAccountQuota`). */
+export type MailboxQuota = 
+/**  The server reports its storage. */
+{ kind: "reported"; usedBytes: number; limitBytes: number; 
+/**  0 to 100. */
+percent: number; 
+/**  At least [`QUOTA_WARN_PERCENT`]. */
+nearlyFull: boolean } | 
+/**
+ *  The server does not report storage (no QUOTA extension, no quota for mail, or no
+ *  storage limit).
+ */
+{ kind: "notReported" } | 
+/**  Could not be asked now (offline, a refusal); `error` says why. */
+{ kind: "unknown"; error: IpcError | null };
 
 /**  What a mailbox is for. At most one mailbox per account has each role except `custom`. */
 export type MailboxRole = "inbox" | "sent" | "drafts" | "archive" | "trash" | "junk" | 
@@ -3495,8 +3678,16 @@ export type MessageBody =
  *  replaced unless remote content was loaded.
  */
 { kind: "html"; srcdoc: string; renderToken: RenderToken; 
-/**  External images and styles that were blocked (0 when `remote_loaded`). */
-blockedRemote: number; remoteLoaded: boolean } | 
+/**
+ *  External images and styles that were blocked (0 when `remote_loaded`). Trackers
+ *  are not counted (stage 20): they never load.
+ */
+blockedRemote: number; remoteLoaded: boolean; 
+/**
+ *  Stage 20 (decision 0058): the trackers found in the mail (with tracker protection
+ *  on; all zero when it is off).
+ */
+trackers: TrackerSummary } | 
 /**
  *  Plain text for the app's own theme. Links are separate segments, opened through the same
  *  check as HTML links (`describeLink` with this `render_token`).
@@ -3606,6 +3797,8 @@ export type MessageListItem = {
 	task?: TaskMark | null,
 	/**  Stage 16: on the reading list ("Zum Lesen"). Absent when not. */
 	readingList?: boolean,
+	/**  Stage 20 (decision 0059): a reminder if no reply comes. Absent when there is none. */
+	followUp?: FollowUpMark | null,
 };
 
 /**  One page of a message list, newest first. */
@@ -4334,6 +4527,17 @@ export type ReadingPanePosition =
  */
 export type ReadingPreferences = {
 	markReadOnOpen: MarkReadOnOpen,
+	/**
+	 *  Stage 20 (decision 0058): tracking pixels and images on known tracking hosts never load,
+	 *  also not with "load images"; images with tracking parameters load without them; the
+	 *  reading pane counts them. On by default; synced. Left out by an older caller: on.
+	 */
+	blockTrackers?: boolean,
+	/**
+	 *  Stage 20: opening a link of a mail drops its tracking parameters (`utm_*`, `fbclid`,
+	 *  …); the link card shows the clean target. On by default; synced.
+	 */
+	cleanLinks?: boolean,
 };
 
 /**
@@ -4648,7 +4852,9 @@ export type SearchTermInfo = {
 };
 
 /**  What a term of the query is, for chips. */
-export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than";
+export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than" | 
+/**  Stage 20: `larger:`. */
+"larger";
 
 /**
  *  Transport security of a server connection. There is deliberately no plaintext option: a
@@ -5347,6 +5553,22 @@ export type ThunderbirdProfile = {
 	name: string,
 	/**  The profile Thunderbird starts with. */
 	isDefault: boolean,
+};
+
+/**
+ *  Stage 20 (decision 0058): the trackers of one rendering of a mail, each image address once.
+ *  Pixels and images on known tracking hosts were never loaded; images with tracking
+ *  parameters load without them (after "load images").
+ */
+export type TrackerSummary = {
+	/**  Invisible images (at most 2 × 2 pixels, or hidden) that report the opening. */
+	pixels: number,
+	/**  Images on hosts known to serve tracking pixels. */
+	knownHosts: number,
+	/**  Images whose address carried tracking parameters (removed). */
+	parameters: number,
+	/**  Hosts of the blocked pixels and known trackers, each once, at most eight. */
+	hosts: string[],
 };
 
 /**  Copy or move to a mailbox of another account. */

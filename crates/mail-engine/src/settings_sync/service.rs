@@ -327,6 +327,7 @@ fn account_of(
 ) -> Option<AccountId> {
     match key.kind() {
         RecordKind::Snooze
+        | RecordKind::FollowUp
         | RecordKind::Pin
         | RecordKind::Task
         | RecordKind::ReadingList
@@ -972,12 +973,13 @@ impl<C: Connector> AppCore<C> {
         if any(&["senderRule"]) {
             self.comfort().kick_categories();
         }
-        if any(&["snooze"]) {
+        if any(&["snooze", "followUp"]) {
             self.comfort().wake_snoozes();
         }
         if any(&[
             "senderRule",
             "snooze",
+            "followUp",
             "pin",
             "task",
             "rule",

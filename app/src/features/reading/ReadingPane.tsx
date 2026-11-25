@@ -35,6 +35,7 @@ import { MessageHeader, SubjectTitle } from "./MessageHeader";
 import { HtmlBody, TextBody } from "./MessageBodyView";
 import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
+import { TrackerNotice } from "./TrackerNotice";
 import { BlockedNote } from "../organize/BlockedNote";
 // Stage 16: find in the open message.
 import { FindBar, useFindShortcut } from "./FindBar";
@@ -141,6 +142,8 @@ function Body({ view, account, format, scrollerRef, onRetry }: BodyProps) {
       const sender = view.header.from.find((address) => address.email.trim())?.email.trim() ?? null;
       return (
         <>
+          {/* Stage 20 (decision 0058): the trackers the core blocked, with what that means. */}
+          <TrackerNotice trackers={body.trackers} />
           {body.blockedRemote > 0 && !body.remoteLoaded && (
             // Stage 9: a control, not part of the printed message.
             <div data-print-hide>

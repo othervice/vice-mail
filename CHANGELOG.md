@@ -34,6 +34,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   folders, and take over what you pick. Passwords are never read; accounts go through the normal
   setup and start read-only.
 
+### Added
+
+- Attachment reminder: when the text you wrote (not the quote or the signature) mentions an
+  attachment in English or German and none is there, the app asks before sending or scheduling,
+  with "Send anyway" and "Add attachment". Sends from the outbox never ask. Can be turned off under
+  Settings → Writing.
+- "Remind me if no reply by …": chosen in the composer (tomorrow, in 3 days, next week or a date)
+  or later on a sent message. Without a reply in the conversation, in any folder of the account,
+  the message comes back above the inbox with "No reply since …"; a reply ends the reminder. A
+  "Waiting for reply" view lists all reminders. Local and synced like snoozes.
+- "Attachments" view: the attachments of all messages stored on this computer across accounts,
+  with filters by kind, sender and account and a file-name search; preview, open, save and "Go to
+  message". Attachments not downloaded yet are fetched when opened.
+- Tracker protection made visible: tracking pixels, images of known tracking services and images
+  with tracking parameters are counted and never loaded, also after "Load images"; the reading pane
+  explains what was blocked. Links lose tracking parameters (`utm_*`, `fbclid`, `gclid`, `mc_eid`,
+  …) when they are shown and opened; redirects are never resolved. Both can be turned off under
+  Settings → Reading.
+- Mailbox storage: the used and available space per account (IMAP QUOTA, RFC 9208; JMAP Quota,
+  RFC 9425) in the account settings, with a notice from 90 % and a way to find large messages. A
+  full mailbox gets a clear message when Drafts or Sent cannot be saved.
+- Search filter `larger:` (for example `larger:10M`, German `größer:`; `-larger:` for smaller).
+
 ### Changed
 
 - Opening a folder or view with the reading pane on the right or below shows its top message at

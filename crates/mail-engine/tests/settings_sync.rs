@@ -487,6 +487,7 @@ async fn different_settings_on_two_devices_both_stay() {
     a.core
         .set_reading_preferences(mail_model::ReadingPreferences {
             mark_read_on_open: mail_model::MarkReadOnOpen::Never,
+            ..Default::default()
         })
         .await
         .expect("reading");
@@ -744,6 +745,7 @@ async fn a_modified_entry_is_rejected_and_reported_while_the_rest_syncs() {
     b.core
         .set_reading_preferences(mail_model::ReadingPreferences {
             mark_read_on_open: mail_model::MarkReadOnOpen::Immediately,
+            ..Default::default()
         })
         .await
         .expect("reading");

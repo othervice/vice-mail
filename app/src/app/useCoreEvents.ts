@@ -15,6 +15,7 @@ import { handleMcpEvent } from "../features/mcp/events";
 import { messagesQueryKey } from "../features/messages/queries";
 import { preferencesQueryKey } from "../features/preferences/queries";
 import { applyPrefetchStatus, messageBodyAvailable, messageBodyFailed } from "../features/reading/queries";
+import { refreshAttachmentsView } from "../features/reading/attachmentQueries";
 import { handleSettingsSyncEvent } from "../features/settings-sync/events";
 import { handleSearchEvent } from "../features/search/events";
 import { handleUiPreferencesEvent } from "../features/keyboard/useUiPreferencesSync";
@@ -73,6 +74,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
       break;
     case "messagesChanged":
       refreshQuery(queryClient, messagesQueryKey(event.accountId, event.mailboxId));
+      // Stage 20 (decision 0060): stored bodies (prefetch, opening) add attachments to the view.
+      refreshAttachmentsView(queryClient);
       break;
     case "newMail":
       // For notifications (a later stage); the list itself follows `messagesChanged`.

@@ -44,6 +44,9 @@ pub struct SearchFilter {
     pub unread: Option<bool>,
     pub flagged: Option<bool>,
     pub has_attachment: Option<bool>,
+    /// Stage 20 (decision 0060): the message's size (RFC822.SIZE) is at least / below this.
+    pub size_at_least: Option<u64>,
+    pub size_below: Option<u64>,
     /// Only these messages (server search: what the server found). Text conditions are then
     /// ignored: the server evaluated them.
     pub only: Option<Vec<MessageId>>,
@@ -112,6 +115,13 @@ fn conditions(
     }
     if let Some(has) = f.has_attachment {
         out.push(format!("+m.has_attachments = {}", i64::from(has)));
+    }
+    // Stage 20: numbers the parser produced, written into the SQL (no user text).
+    if let Some(bytes) = f.size_at_least {
+        out.push(format!("+m.size >= {bytes}"));
+    }
+    if let Some(bytes) = f.size_below {
+        out.push(format!("+m.size < {bytes}"));
     }
     let scope = f
         .mailbox_sets

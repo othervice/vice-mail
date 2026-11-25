@@ -56,4 +56,6 @@ pub mod capability {
     pub const CORE: &str = "urn:ietf:params:jmap:core";
     pub const MAIL: &str = "urn:ietf:params:jmap:mail";
     pub const SUBMISSION: &str = "urn:ietf:params:jmap:submission";
+    /// Stage 20 (decision 0060): quotas (RFC 9425).
+    pub const QUOTA: &str = "urn:ietf:params:jmap:quota";
 }

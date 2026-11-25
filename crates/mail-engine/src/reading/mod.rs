@@ -52,6 +52,7 @@ mod tests;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -60,8 +61,9 @@ use mail_model::{
     AccountId, AccountState, BodyFormat, BodySection, BodyUnavailableReason, CoreError, CoreEvent,
     IpcError, LinkInfo, MailConnector, MailboxRole, MessageBody, MessageId, MessageView,
     OpenAttachmentResult, PrefetchSettings, PrefetchStatus, RemoteContentScope, RenderToken,
+    TrackerSummary,
 };
-use mail_store::{Store, StoredMessage};
+use mail_store::{GLOBAL_SCOPE, Store, StoredMessage};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -82,6 +84,22 @@ use view::{Attachment, AttachmentSource, Content};
 
 /// Delay of the start-up sweep of body files.
 pub const SWEEP_DELAY: Duration = Duration::from_secs(5);
+
+/// Stage 20 (decision 0060): how long an answer about an account's quota is kept.
+pub const QUOTA_KEEP: Duration = Duration::from_secs(15 * 60);
+
+/// Stage 20 (decision 0058): setting key (global, synced, JSON boolean) of tracker blocking in
+/// images; missing means on.
+pub(crate) const BLOCK_TRACKERS_KEY: &str = "reading.block_trackers";
+/// Stage 20: setting key of removing tracking parameters from links; missing means on.
+pub(crate) const CLEAN_LINKS_KEY: &str = "reading.clean_links";
+
+/// Stage 20: the tracker settings a rendering uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Privacy {
+    pub block_trackers: bool,
+    pub clean_links: bool,
+}
 
 /// What reading gets from the shell. The default is the product's.
 pub struct ReadingServices {
@@ -138,6 +156,11 @@ pub(crate) struct Reading<C: MailConnector> {
     eml: eml::EmlFiles,
     /// Stage 17: images chosen for contact pictures, waiting for their square (0050).
     pub(crate) picture_sources: crate::contacts_view::PictureSources,
+    /// Stage 20: whether links get cleaned, as last read from the settings (for the links of
+    /// AI results, which are remembered without a store read).
+    clean_links: AtomicBool,
+    /// Stage 20 (decision 0060): the last answer about each account's quota, and when.
+    quotas: Mutex<std::collections::HashMap<AccountId, (Instant, mail_model::MailboxQuota)>>,
 }
 
 impl<C: MailConnector> Drop for Reading<C> {
@@ -194,6 +217,8 @@ impl<C: MailConnector + 'static> Reading<C> {
             listener: Mutex::default(),
             eml: eml::EmlFiles::default(),
             picture_sources: crate::contacts_view::PictureSources::default(),
+            clean_links: AtomicBool::new(true),
+            quotas: Mutex::default(),
         });
         reading.sweep_later();
         let listener = reading.spawn_listener();
@@ -412,9 +437,85 @@ impl<C: MailConnector + 'static> Reading<C> {
         })
     }
 
+    /// Stage 20 (decision 0060): how full the account's mailbox is, over the reading
+    /// connection (read-only). An answer is kept for [`QUOTA_KEEP`] unless `refresh`; a failure
+    /// (offline, a refusal) is `unknown` with the error and not kept.
+    pub(crate) async fn quota(
+        &self,
+        account: AccountId,
+        refresh: bool,
+    ) -> Result<mail_model::MailboxQuota, CoreError> {
+        let stored = self
+            .store
+            .account(account)
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {account}")))?;
+        if !refresh {
+            let cached = self
+                .quotas
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&account)
+                .filter(|(at, _)| at.elapsed() < QUOTA_KEEP)
+                .map(|(_, quota)| quota.clone());
+            if let Some(quota) = cached {
+                return Ok(quota);
+            }
+        }
+        let asked = async {
+            let mut held = self.connections.hold(&stored).await?;
+            held.quota().await.map_err(CoreError::from)
+        }
+        .await;
+        let quota = match asked {
+            Ok(Some(quota)) => mail_model::MailboxQuota::reported(quota),
+            Ok(None) => mail_model::MailboxQuota::NotReported,
+            Err(err) => {
+                tracing::debug!(account = %account, code = ?err.code(), "quota unknown");
+                return Ok(mail_model::MailboxQuota::Unknown {
+                    error: Some(IpcError::from(err)),
+                });
+            }
+        };
+        self.quotas
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(account, (Instant::now(), quota.clone()));
+        Ok(quota)
+    }
+
+    /// Stage 20: the tracker settings as stored (missing or unreadable: on).
+    pub(crate) async fn privacy(&self) -> Privacy {
+        let mut privacy = Privacy {
+            block_trackers: true,
+            clean_links: true,
+        };
+        match self.store.settings(GLOBAL_SCOPE).await {
+            Ok(settings) => {
+                for setting in settings {
+                    let slot = match setting.key.as_str() {
+                        BLOCK_TRACKERS_KEY => &mut privacy.block_trackers,
+                        CLEAN_LINKS_KEY => &mut privacy.clean_links,
+                        _ => continue,
+                    };
+                    match serde_json::from_str::<bool>(&setting.value) {
+                        Ok(on) => *slot = on,
+                        Err(err) => {
+                            tracing::warn!(key = %setting.key, %err, "tracker setting unreadable; on");
+                        }
+                    }
+                }
+            }
+            Err(err) => tracing::warn!(error = %err, "tracker settings unreadable; on"),
+        }
+        self.clean_links
+            .store(privacy.clean_links, Ordering::Relaxed);
+        privacy
+    }
+
     /// The body of `content` in `format`: sanitised HTML (external images loaded by the core
-    /// when `load`, every image re-encoded) or text, under a new render token whose links are
-    /// remembered for `owner`.
+    /// when `load`, every image re-encoded; trackers blocked and counted per the setting) or
+    /// text, under a new render token whose links are remembered for `owner`.
     async fn render_body(
         &self,
         content: &Content,
@@ -423,9 +524,11 @@ impl<C: MailConnector + 'static> Reading<C> {
         owner: RenderOwner,
     ) -> Result<MessageBody, CoreError> {
         let token = Renderings::new_token();
+        let privacy = self.privacy().await;
         let (body, links) = if content.shows_html(format) {
             let html = content.parsed.html.clone().unwrap_or_default();
             let mut options = RenderOptions::new(token.clone());
+            options.block_trackers = privacy.block_trackers;
             options.inline = content.parsed.inline_images();
             // C-4: what is kept already; a message seen before renders once.
             options.images = self.images.known(options.inline.images());
@@ -471,6 +574,12 @@ impl<C: MailConnector + 'static> Reading<C> {
                     render_token: token.clone(),
                     blocked_remote: rendered.blocked_count,
                     remote_loaded: load,
+                    trackers: TrackerSummary {
+                        pixels: rendered.trackers.pixels,
+                        known_hosts: rendered.trackers.known_hosts,
+                        parameters: rendered.trackers.parameters,
+                        hosts: rendered.trackers.hosts,
+                    },
                 },
                 rendered.links,
             )
@@ -485,7 +594,14 @@ impl<C: MailConnector + 'static> Reading<C> {
                 rendered.links,
             )
         };
-        self.renderings.insert(token, Rendering { owner, links });
+        self.renderings.insert(
+            token,
+            Rendering {
+                owner,
+                links,
+                clean_links: privacy.clean_links,
+            },
+        );
         Ok(body)
     }
 
@@ -709,7 +825,8 @@ impl<C: MailConnector + 'static> Reading<C> {
         found: FoundLinks,
         accounts: Vec<AccountId>,
     ) -> Option<RenderToken> {
-        self.renderings.insert_found(found, accounts)
+        self.renderings
+            .insert_found(found, accounts, self.clean_links.load(Ordering::Relaxed))
     }
 
     pub(crate) fn describe_link(
@@ -717,8 +834,7 @@ impl<C: MailConnector + 'static> Reading<C> {
         token: &RenderToken,
         index: u32,
     ) -> Result<LinkInfo, CoreError> {
-        let (link, check) = self.renderings.link(token, index)?;
-        Ok(links::link_info(&link, &check))
+        Ok(links::link_info(&self.renderings.link(token, index)?))
     }
 
     pub(crate) async fn open_link(
@@ -726,7 +842,7 @@ impl<C: MailConnector + 'static> Reading<C> {
         token: &RenderToken,
         index: u32,
     ) -> Result<mail_model::LinkOpened, CoreError> {
-        let (_, check) = self.renderings.link(token, index)?;
+        let links::CheckedLink { check, removed, .. } = self.renderings.link(token, index)?;
         let url = check.open_url.ok_or_else(|| {
             CoreError::InvalidArgument(format!(
                 "only http, https and mailto links open (this one is {:?})",
@@ -744,7 +860,12 @@ impl<C: MailConnector + 'static> Reading<C> {
         }
         let opener = Arc::clone(&self.opener);
         blocking(move || opener.open_url(&url)).await??;
-        tracing::info!(scheme = %check.scheme, host = check.host.as_deref(), "link opened in the system");
+        tracing::info!(
+            scheme = %check.scheme,
+            host = check.host.as_deref(),
+            tracking_removed = removed.len(),
+            "link opened in the system"
+        );
         Ok(mail_model::LinkOpened::Opened)
     }
 
@@ -777,10 +898,24 @@ impl<C: MailConnector + 'static> Reading<C> {
     // Attachments
     // -----------------------------------------------------------------------------------------
 
+    /// Attachment `index` of a message as the reading pane lists it. Stage 20 (decision 0060):
+    /// a body no longer stored (the attachments view lists what was stored once) is fetched
+    /// first, as opening the message would.
     async fn attachment(&self, message: MessageId, index: u32) -> Result<Attachment, CoreError> {
-        let content = self.load_content(message).await?.ok_or_else(|| {
-            CoreError::NotFound(format!("the body of message {message} is not stored"))
-        })?;
+        let content = match self.load_content(message).await? {
+            Some(content) => content,
+            None => {
+                let summary = self.summary(message).await?;
+                if !self.fetch_for_open(&summary).await? {
+                    return Err(CoreError::NotFound(format!(
+                        "message {message} is no longer on the server"
+                    )));
+                }
+                self.load_content(message).await?.ok_or_else(|| {
+                    CoreError::NotFound(format!("the body of message {message} is not stored"))
+                })?
+            }
+        };
         content
             .attachments
             .into_iter()

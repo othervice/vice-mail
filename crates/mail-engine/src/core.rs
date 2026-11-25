@@ -473,30 +473,54 @@ impl<C: Connector> AppCore<C> {
         Ok(preferences)
     }
 
-    /// Reading preferences (stage 4): when an opened message is marked as read. Defaults when
-    /// nothing is stored.
+    /// Reading preferences (stage 4): when an opened message is marked as read; stage 20
+    /// (decision 0058): tracker blocking in images and clean links. Defaults when nothing is
+    /// stored.
     pub async fn get_reading_preferences(&self) -> Result<ReadingPreferences, CoreError> {
         let settings = self.store()?.settings(GLOBAL_SCOPE).await?;
         let mut prefs = ReadingPreferences::default();
         for setting in settings {
-            if setting.key == MARK_READ_KEY {
-                prefs.mark_read_on_open = decode(&setting.key, &setting.value);
+            match setting.key.as_str() {
+                MARK_READ_KEY => prefs.mark_read_on_open = decode(&setting.key, &setting.value),
+                crate::reading::BLOCK_TRACKERS_KEY => {
+                    prefs.block_trackers = decode_or(&setting.key, &setting.value, true);
+                }
+                crate::reading::CLEAN_LINKS_KEY => {
+                    prefs.clean_links = decode_or(&setting.key, &setting.value, true);
+                }
+                _ => {}
             }
         }
         Ok(prefs)
     }
 
-    /// Stores the reading preferences and returns them.
+    /// Stores the reading preferences and returns them. A message opened afterwards renders
+    /// with the new tracker settings.
     pub async fn set_reading_preferences(
         &self,
         preferences: ReadingPreferences,
     ) -> Result<ReadingPreferences, CoreError> {
-        let entries = vec![(
-            MARK_READ_KEY.to_owned(),
-            encode(&preferences.mark_read_on_open)?,
-        )];
+        let entries = vec![
+            (
+                MARK_READ_KEY.to_owned(),
+                encode(&preferences.mark_read_on_open)?,
+            ),
+            (
+                crate::reading::BLOCK_TRACKERS_KEY.to_owned(),
+                encode(&preferences.block_trackers)?,
+            ),
+            (
+                crate::reading::CLEAN_LINKS_KEY.to_owned(),
+                encode(&preferences.clean_links)?,
+            ),
+        ];
         self.store()?.put_settings(GLOBAL_SCOPE, entries).await?;
-        tracing::info!(mark_read_on_open = ?preferences.mark_read_on_open, "reading preferences stored");
+        tracing::info!(
+            mark_read_on_open = ?preferences.mark_read_on_open,
+            block_trackers = preferences.block_trackers,
+            clean_links = preferences.clean_links,
+            "reading preferences stored"
+        );
         Ok(preferences)
     }
 
@@ -913,6 +937,17 @@ impl<C: Connector> AppCore<C> {
         scope: RemoteContentScope,
     ) -> Result<MessageView, CoreError> {
         self.reading()?.load_remote_content(message, scope).await
+    }
+
+    /// Stage 20 (decision 0060): how full the account's mailbox on the server is (IMAP QUOTA,
+    /// JMAP quotas), `notReported` when the server says nothing, `unknown` when it cannot be
+    /// asked now. Kept for 15 minutes unless `refresh`.
+    pub async fn get_account_quota(
+        &self,
+        account: AccountId,
+        refresh: bool,
+    ) -> Result<mail_model::MailboxQuota, CoreError> {
+        self.reading()?.quota(account, refresh).await
     }
 
     /// Senders of the account whose external content always loads, sorted.
@@ -1555,6 +1590,17 @@ impl<C: Connector> AppCore<C> {
         self.compose()?.send(id, request_id).await
     }
 
+    /// Stage 20 (decision 0058): asked by the composer before it sends or schedules a draft
+    /// (never for sends of the outbox): the word of the user's own text that speaks of an
+    /// attachment while the draft has none, so the composer can ask "Send anyway?". `None`
+    /// with the setting off or nothing to remind of.
+    pub async fn check_attachment_reminder(
+        &self,
+        id: mail_model::DraftId,
+    ) -> Result<Option<String>, CoreError> {
+        self.compose()?.attachment_reminder(id).await
+    }
+
     /// Undo of a send within the delay, or "edit" of a failed or unclear one: the draft is
     /// editable again; nothing was sent. `send_in_progress` once the submission started.
     pub async fn cancel_send(
@@ -1668,6 +1714,14 @@ fn decode<T: DeserializeOwned + Default>(key: &str, json: &str) -> T {
     serde_json::from_str(json).unwrap_or_else(|err| {
         tracing::warn!(key, %err, "stored setting has an unknown value, using the default");
         T::default()
+    })
+}
+
+/// Like [`decode`], with an explicit fallback.
+fn decode_or<T: DeserializeOwned>(key: &str, json: &str, fallback: T) -> T {
+    serde_json::from_str(json).unwrap_or_else(|err| {
+        tracing::warn!(key, %err, "stored setting has an unknown value, using the default");
+        fallback
     })
 }
 

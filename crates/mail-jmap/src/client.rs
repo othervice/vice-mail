@@ -35,6 +35,8 @@ const READ_ONLY_METHODS: &[&str] = &[
     "Thread/changes",
     "SearchSnippet/get",
     "Identity/get",
+    // Stage 20 (decision 0060): how full the mailbox is (RFC 9425).
+    "Quota/get",
 ];
 
 /// Whether `access` permits calling `method`.

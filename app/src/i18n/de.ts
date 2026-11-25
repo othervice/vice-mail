@@ -7,10 +7,14 @@ export const de: Translation = {
     label: "Ansichten",
     inbox: "Posteingang",
     later: "Später",
+    // Stufe 20 (Entscheidung 0059).
+    waiting: "Warten auf Antwort",
     tasks: "Aufgaben",
     readingList: "Zum Lesen",
     // Stage 16 (decision 0036): pinned attachments, next to the reading list.
     pinnedAttachments: "Angeheftete Anhänge",
+    // Stufe 20 (Entscheidung 0060).
+    attachments: "Anhänge",
     flagged: "Markiert",
     pinned: "Angepinnt",
     sent: "Gesendet",
@@ -69,6 +73,8 @@ export const de: Translation = {
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",
     loadFailed: "Die Ordner konnten nicht geladen werden.",
     accountTrouble: "{{label}}, {{status}}",
+    // Stufe 20 (Entscheidung 0060): das Postfach ist zu mindestens 90 % voll.
+    quotaFull: "{{label}}, Postfach zu {{percent}} % voll",
     statusWithReason: "{{status}}: {{reason}}",
   },
   roles: {
@@ -135,6 +141,15 @@ export const de: Translation = {
       readReceipt: "Lesebestätigung anfordern",
       readReceiptHint: "Das Mailprogramm des Empfängers fragt ihn, ob er eine sendet. Es wird nichts verfolgt.",
       failed: "Die Sendeoptionen konnten nicht geändert werden.",
+    },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn keine Antwort kommt“ bei den Sendeoptionen.
+    followUp: {
+      label: "Erinnern, wenn keine Antwort kommt:",
+      none: "Nicht erinnern",
+      preset: "{{name}} ({{time}})",
+      custom: "Datum und Uhrzeit wählen…",
+      customLabel: "Datum und Uhrzeit der Erinnerung",
+      set: "Übernehmen",
     },
     errors: {
       open: "Der Entwurf ließ sich nicht öffnen.",
@@ -212,6 +227,14 @@ export const de: Translation = {
       remove: "{{name}} entfernen",
       largeTitle: "Die Anhänge sind groß ({{size}}).",
       largeHint: "Viele Mailserver lehnen Nachrichten über etwa 20 MB ab. Große Dateien teilst du besser auf anderem Weg.",
+    },
+    // Stufe 20 (Entscheidung 0058): Rückfrage vor dem Senden.
+    attachmentReminder: {
+      title: "Ohne Anhang senden?",
+      body: "Deine Nachricht sagt „{{word}}“, aber es ist keine Datei angehängt.",
+      sendAnyway: "Trotzdem senden",
+      add: "Anhang hinzufügen",
+      cancel: "Weiterschreiben",
     },
     discard: {
       label: "Entwurf verwerfen",
@@ -301,6 +324,10 @@ export const de: Translation = {
       delayHint: "So lange wartet eine gesendete Nachricht, damit du sie noch zurückholen kannst.",
       archiveOnReply: "Ursprungsmail beim Antworten archivieren",
       archiveOnReplyHint: "Neue Antworten beginnen mit „Senden und archivieren“. Du kannst es in jeder Antwort ausschalten.",
+      // Stufe 20 (Entscheidung 0058).
+      attachmentReminder: "An fehlende Anhänge erinnern",
+      attachmentReminderHint:
+        "Vor dem Senden fragt die App nach, wenn dein Text einen Anhang erwähnt („Anhang“, „attached“ …), aber keiner dabei ist. Zitate und Signaturen werden nicht gelesen.",
       readReceipts: "Anforderungen von Lesebestätigungen",
       readReceiptsHint: "Wenn ein Absender eine Lesebestätigung anfordert. Ohne deinen Klick wird nie etwas gesendet.",
       readReceiptsPolicy: {
@@ -668,12 +695,30 @@ export const de: Translation = {
       loading: "Wird geladen…",
       failed: "Die externen Inhalte konnten nicht geladen werden.",
     },
+    // Stufe 20 (Entscheidung 0058): Tracker-Schutz im Lesebereich.
+    trackers: {
+      blocked_one: "{{count}} Tracker blockiert",
+      blocked_other: "{{count}} Tracker blockiert",
+      explanation:
+        "Tracker verraten dem Absender, dass, wann und wo du diese Nachricht geöffnet hast. Die App hat sie nicht geladen, auch nicht, wenn du die Bilder lädst.",
+      pixels_one: "{{count}} Zählpixel: ein unsichtbares Bild, das das Öffnen meldet",
+      pixels_other: "{{count}} Zählpixel: unsichtbare Bilder, die das Öffnen melden",
+      knownHosts_one: "{{count}} Bild von einem bekannten Tracking-Dienst",
+      knownHosts_other: "{{count}} Bilder von bekannten Tracking-Diensten",
+      parameters_one: "{{count}} Bild mit Tracking-Parametern in der Adresse; es lädt ohne sie",
+      parameters_other: "{{count}} Bilder mit Tracking-Parametern in der Adresse; sie laden ohne sie",
+      hosts: "Von: {{hosts}}",
+      setting: "Du kannst das unter Einstellungen → Lesen abschalten.",
+    },
     link: {
       title: "Diesen Link öffnen?",
       mailtoTitle: "An diese Adresse schreiben?",
       notOpenableTitle: "Dieser Link lässt sich nicht öffnen",
       checking: "Link wird geprüft…",
       linkText: "Linktext: „{{text}}“",
+      // Stufe 20: Das angezeigte Ziel ist schon ohne sie.
+      trackingRemoved_one: "Tracking-Parameter entfernt: {{names}}",
+      trackingRemoved_other: "Tracking-Parameter entfernt: {{names}}",
       open: "Im Browser öffnen",
       openMailto: "In Mail-App öffnen",
       openAnyway: "Trotzdem öffnen",
@@ -741,6 +786,9 @@ export const de: Translation = {
       unpin: "Nicht mehr anpinnen",
       snooze: "Zurückstellen",
       unsnooze: "Nicht mehr zurückstellen",
+      // Stufe 20 (Entscheidung 0059)
+      followUp: "Erinnern, wenn keine Antwort kommt…",
+      clearFollowUp: "Erinnerung entfernen",
       addTask: "Als Aufgabe markieren",
       removeTask: "Aufgabe entfernen",
       completeTask: "Aufgabe erledigt",
@@ -1249,6 +1297,22 @@ export const de: Translation = {
           loadFailed: "Die Ordner konnten nicht geladen werden.",
           empty: "Die Ordner erscheinen nach dem ersten Abgleich.",
         },
+        // Stufe 20 (Entscheidung 0060): Speicher auf dem Server.
+        quota: {
+          title: "Speicher auf dem Server",
+          checking: "Wird geprüft…",
+          refresh: "Erneut prüfen",
+          used: "{{used}} von {{limit}} belegt ({{percent}} %)",
+          free: "{{free}} frei",
+          meter: "Postfach zu {{percent}} % voll",
+          nearlyFull: "Das Postfach ist zu {{percent}} % voll",
+          cleanUp:
+            "Ist es voll, nimmt der Server keine neuen Mails mehr an, und die App kann keine Entwürfe und gesendeten Mails mehr ablegen. Lösche große Mails, die du nicht mehr brauchst, und leere dann den Papierkorb.",
+          findLarge: "Große Mails suchen",
+          notReported: "Der Server nennt keinen Speicherplatz.",
+          unknown: "Der Speicher ließ sich gerade nicht prüfen.",
+          failed: "Der Speicher ließ sich nicht prüfen.",
+        },
         remove: {
           title: "Konto entfernen",
           description: "Entfernt das Konto und alles, was die App dafür gespeichert hat, von diesem Computer.",
@@ -1300,6 +1364,16 @@ export const de: Translation = {
           paused: "Pausiert, solange offline",
           unknown: "Stand unbekannt",
         },
+      },
+      trackers: {
+        title: "Tracker",
+        description: "Schutz vor Absendern, die wissen wollen, ob, wann und wo du ihre Mail liest.",
+        block: "Tracker in Nachrichten blockieren",
+        blockHint:
+          "Zählpixel und Bilder bekannter Tracking-Dienste laden nie, auch nicht, wenn du die Bilder lädst. Die Nachricht zeigt, wie viele blockiert wurden.",
+        cleanLinks: "Tracking aus Links entfernen",
+        cleanLinksHint:
+          "Links öffnen ohne Tracking-Parameter wie utm_source oder fbclid. Umleitungen über Tracking-Dienste lassen sich nicht entfernen, ohne sie aufzurufen; die App lässt sie deshalb, wie sie sind.",
       },
       remote: {
         title: "Externe Inhalte",
@@ -1923,7 +1997,7 @@ export const de: Translation = {
       all: "Allen Konten",
     },
     hint: {
-      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
+      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:, größer:10M. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
     },
     results: {
       label: "den Suchergebnissen für „{{query}}“",
@@ -1985,6 +2059,8 @@ export const de: Translation = {
         after: "Nach",
         older_than: "Älter als",
         newer_than: "Neuer als",
+        // Stage 20 (decision 0060).
+        larger: "Größer als",
       },
     },
     index: {
@@ -2167,6 +2243,8 @@ export const de: Translation = {
     blocks: {
       pinned: "Angepinnt",
       returned: "Zurück aus „Später“",
+      // Stufe 20 (Entscheidung 0059).
+      followUps: "Noch keine Antwort",
       priority: "Priorität",
     },
     priority: {
@@ -2194,6 +2272,10 @@ export const de: Translation = {
       back: "Zurück",
       task: "Aufgabe",
       taskDone: "Aufgabe erledigt",
+      // Stufe 20 (Entscheidung 0059).
+      followUp: "Erinnerung, wenn keine Antwort kommt",
+      noReply: "Keine Antwort",
+      noReplySince: "Keine Antwort seit {{date}}",
     },
     views: {
       later: {
@@ -2207,6 +2289,11 @@ export const de: Translation = {
       tasks: {
         emptyTitle: "Keine Aufgaben",
         emptyBody: "Markierst du eine Mail als Aufgabe, steht sie hier, bis du sie abhakst.",
+      },
+      waiting: {
+        emptyTitle: "Du wartest auf keine Antwort",
+        emptyBody:
+          "Wähle beim Senden „Erinnern, wenn keine Antwort kommt“. Die Mail wartet hier; antwortet bis dahin niemand, erscheint sie wieder oben im Posteingang.",
       },
       flagged: {
         emptyTitle: "Nichts markiert",
@@ -2224,6 +2311,19 @@ export const de: Translation = {
         done: "Noch keine Aufgabe erledigt",
         all: "Keine Aufgaben",
       },
+    },
+    // Stufe 20 (Entscheidung 0059): „Erinnern, wenn bis … keine Antwort kommt“.
+    followUp: {
+      title_one: "Erinnern, wenn keine Antwort kommt",
+      title_other: "Bei {{count}} Mails erinnern, wenn keine Antwort kommt",
+      explanation: "Antwortet bis dahin niemand im Gespräch, erscheint die Mail wieder oben in deinem Posteingang.",
+      presets: "Erinnern am",
+      tomorrow: "Morgen",
+      inThreeDays: "In 3 Tagen",
+      nextWeek: "Nächste Woche",
+      custom: "Datum und Uhrzeit wählen",
+      submit: "Erinnern",
+      timesFailed: "Die Zeitpunkte für die Erinnerung ließen sich nicht laden.",
     },
     snooze: {
       title_one: "Mail zurückstellen",
@@ -2259,11 +2359,18 @@ export const de: Translation = {
       taskDone_other: "{{count, number}} Aufgaben erledigt",
       taskReopened_one: "Aufgabe wieder offen",
       taskReopened_other: "{{count, number}} Aufgaben wieder offen",
+      followUpSet_one: "Erinnerung am {{time}}, wenn keine Antwort kommt",
+      followUpSet_other: "{{count, number}} Erinnerungen am {{time}}, wenn keine Antwort kommt",
+      followUpAnswered_one: "Eine Mail hat schon eine Antwort und bekommt keine Erinnerung.",
+      followUpAnswered_other: "{{count, number}} Mails haben schon eine Antwort und bekommen keine Erinnerung.",
+      followUpCleared_one: "Erinnerung entfernt",
+      followUpCleared_other: "{{count, number}} Erinnerungen entfernt",
       failed: {
         pin: "Anpinnen hat nicht geklappt.",
         snooze: "Zurückstellen hat nicht geklappt.",
         unsnooze: "Die Mail ließ sich nicht zurückholen.",
         task: "Die Aufgabe ließ sich nicht ändern.",
+        followUp: "Die Erinnerung ließ sich nicht ändern.",
       },
       noMessageId: "Diese Mail hat keine Message-ID und lässt sich deshalb nicht markieren; auf anderen Geräten wäre die Markierung nicht zuzuordnen.",
       ruleSkipped_one: "Die lokale Regel „{{name}}“ hat {{count, number}} Mail übersprungen.",
@@ -3550,6 +3657,11 @@ export const de: Translation = {
         title: "Das Bild konnte nicht gelesen werden.",
         hint: "Die Datei ist vielleicht beschädigt. Wähle ein anderes Bild.",
       },
+      // Stufe 20 (Entscheidung 0060).
+      over_quota: {
+        title: "Das Postfach auf dem Server ist voll.",
+        hint: "Entwürfe und Gesendetes lassen sich erst wieder speichern, wenn Platz ist. Suche nach larger:10M, um die größten Mails zu finden, lösche, was du nicht mehr brauchst, und leere dann den Papierkorb.",
+      },
     },
   },
   // Stage 15 (decision 0037): in-app updates, opt-in.
@@ -3922,6 +4034,39 @@ export const de: Translation = {
       count_other: "{{count}} angeheftete Anhänge",
       saved: "{{name}} gespeichert unter {{path}}",
       saveFailed: "Der Anhang konnte nicht gespeichert werden.",
+    },
+    // Stufe 20 (Entscheidung 0060): die Anhänge-Ansicht über alle Konten.
+    view: {
+      listLabel: "Anhänge",
+      kinds: "Anhänge dieses Typs zeigen",
+      kind: {
+        all: "Alle",
+        image: "Bilder",
+        pdf: "PDF",
+        document: "Dokumente",
+        spreadsheet: "Tabellen",
+        archive: "Archive",
+        other: "Sonstige",
+      },
+      name: "Dateiname",
+      namePlaceholder: "Dateinamen durchsuchen",
+      sender: "Absender",
+      senderPlaceholder: "Name oder Adresse",
+      account: "Konto",
+      allAccounts: "Alle Konten",
+      scopeHint:
+        "Anhänge der Mails auf diesem Computer. Wie weit das zurückreicht, legst du unter Einstellungen → Lesen → Vorab laden fest; noch nicht geladene Anhänge werden beim Öffnen geladen.",
+      details: "{{type}}, {{size}} · {{sender}} · {{date}}",
+      noSubject: "(kein Betreff)",
+      unknownSender: "unbekannter Absender",
+      goToMessage: "Zur Mail von {{name}}",
+      open: "{{name}} öffnen",
+      save: "{{name}} sichern",
+      loadFailed: "Die Anhänge ließen sich nicht laden.",
+      emptyTitle: "Noch keine Anhänge",
+      emptyBody: "Anhänge der Mails auf diesem Computer erscheinen hier, die neuesten zuerst.",
+      noMatchTitle: "Kein Anhang passt",
+      noMatchBody: "Ändere den Typ, den Absender oder die Suche.",
     },
     blockedHidden: {
       text_one: "{{count}} Nachricht von blockierten Absendern ausgeblendet",

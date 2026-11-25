@@ -172,6 +172,17 @@ export function ComposeSettings() {
         }}
         data-testid="archive-on-reply"
       />
+      {/* Stage 20 (decision 0058): ask before sending when the text speaks of a missing attachment. */}
+      <Switch
+        label={t("composer.settings.attachmentReminder")}
+        description={t("composer.settings.attachmentReminderHint")}
+        checked={settings.data?.attachmentReminder ?? true}
+        disabled={!settings.data}
+        onChange={(attachmentReminder) => {
+          update({ attachmentReminder });
+        }}
+        data-testid="attachment-reminder-setting"
+      />
       <div className="flex flex-col gap-1">
         <label htmlFor={receiptsId} className="text-13 font-medium text-primary">
           {t("composer.settings.readReceipts")}

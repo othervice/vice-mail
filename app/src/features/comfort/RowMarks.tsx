@@ -1,8 +1,9 @@
-import { AlarmClockCheck, BookOpen, Clock, ListTodo, Pin, SquareCheckBig, Zap, type LucideIcon } from "lucide-react";
+import { AlarmClockCheck, BookOpen, Clock, ListTodo, MailClock, MailWarning, Pin, SquareCheckBig, Zap, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { MessageListItem } from "../../services/ipc";
 
-export type RowMark = "important" | "pinned" | "snoozed" | "returned" | "task" | "taskDone" | "readingList";
+export type RowMark = "important" | "pinned" | "snoozed" | "returned" | "task" | "taskDone" | "readingList" | "followUp" | "noReply";
 
 const MARK_ICONS: Record<RowMark, LucideIcon> = {
   important: Zap,
@@ -12,6 +13,8 @@ const MARK_ICONS: Record<RowMark, LucideIcon> = {
   task: ListTodo,
   taskDone: SquareCheckBig,
   readingList: BookOpen,
+  followUp: MailClock,
+  noReply: MailWarning,
 };
 
 /** Stage 9 marks of a row, in reading order: important, pinned, snoozed or back, task. */
@@ -23,14 +26,27 @@ export function rowMarks(item: MessageListItem): RowMark[] {
   if (item.task) marks.push(item.task.done ? "taskDone" : "task");
   // Stage 16: on the reading list (local, never on the server).
   if (item.readingList) marks.push("readingList");
+  // Stage 20 (decision 0059): a reminder if no reply comes, or none came by its time.
+  if (item.followUp) marks.push(item.followUp.returned ? "noReply" : "followUp");
   return marks;
+}
+
+/** "23 Nov" (with the year when it is not this year's): the day a reminded message was sent. */
+function sentDay(at: number, language: string): string {
+  const withYear = new Date(at).getFullYear() !== new Date().getFullYear();
+  return new Intl.DateTimeFormat(language, { day: "numeric", month: "short", ...(withYear && { year: "numeric" }) }).format(at);
+}
+
+function markLabel(mark: RowMark, item: MessageListItem, t: TFunction, language: string): string {
+  if (mark === "readingList") return t("organize.readingList.mark");
+  if (mark === "noReply" && item.followUp) return t("comfort.marks.noReplySince", { date: sentDay(item.followUp.sentAt, language) });
+  return t(`comfort.marks.${mark}`);
 }
 
 /** The marks as words for the row's accessible name. */
 export function useRowMarkLabels(): (item: MessageListItem) => string[] {
-  const { t } = useTranslation();
-  return (item) =>
-    rowMarks(item).map((mark) => (mark === "readingList" ? t("organize.readingList.mark") : t(`comfort.marks.${mark}`)));
+  const { t, i18n } = useTranslation();
+  return (item) => rowMarks(item).map((mark) => markLabel(mark, item, t, i18n.language));
 }
 
 /**
@@ -38,7 +54,7 @@ export function useRowMarkLabels(): (item: MessageListItem) => string[] {
  * returned), task. Hidden from screen readers; the row's name says the same.
  */
 export function RowMarks({ item, omit }: { item: MessageListItem; omit?: readonly RowMark[] | undefined }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const marks = rowMarks(item).filter((mark) => !omit?.includes(mark));
   if (marks.length === 0) return null;
   return (
@@ -58,7 +74,21 @@ export function RowMarks({ item, omit }: { item: MessageListItem; omit?: readonl
             </span>
           );
         }
-        const title = mark === "readingList" ? t("organize.readingList.mark") : t(`comfort.marks.${mark}`);
+        if (mark === "noReply") {
+          // Stage 20: like "Back", with the day it was sent.
+          return (
+            <span
+              key={mark}
+              title={markLabel(mark, item, t, i18n.language)}
+              data-testid="row-mark-noReply"
+              className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 text-12 font-semibold text-accent"
+            >
+              <Icon aria-hidden className="size-3" strokeWidth={2} />
+              <span aria-hidden>{markLabel(mark, item, t, i18n.language)}</span>
+            </span>
+          );
+        }
+        const title = markLabel(mark, item, t, i18n.language);
         return (
           <span key={mark} title={title} className="flex shrink-0" data-testid={`row-mark-${mark}`}>
             <Icon

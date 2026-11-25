@@ -191,7 +191,15 @@ export function renderToken(): string {
 }
 
 export function htmlBody(html: string, overrides: Partial<Extract<MessageBody, { kind: "html" }>> = {}): MessageBody {
-  return { kind: "html", srcdoc: MAIL_CSP + html, renderToken: renderToken(), blockedRemote: 0, remoteLoaded: false, ...overrides };
+  return {
+    kind: "html",
+    srcdoc: MAIL_CSP + html,
+    renderToken: renderToken(),
+    blockedRemote: 0,
+    remoteLoaded: false,
+    trackers: { pixels: 0, knownHosts: 0, parameters: 0, hosts: [] },
+    ...overrides,
+  };
 }
 
 export function textBody(segments: Extract<MessageBody, { kind: "text" }>["segments"], token = renderToken()): MessageBody {

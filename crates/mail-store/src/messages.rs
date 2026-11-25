@@ -368,6 +368,7 @@ pub(crate) fn list(
                 snooze: None,
                 task: None,
                 reading_list: false,
+                follow_up: None,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

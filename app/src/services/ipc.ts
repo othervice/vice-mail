@@ -229,6 +229,8 @@ export const ERROR_CODES = [
   "picture_too_large",
   "picture_unsupported",
   "picture_damaged",
+  // Stage 20 (decision 0060): the mailbox on the server is full.
+  "over_quota",
 ] as const satisfies readonly ErrorCode[];
 
 // Fails to compile when the core adds an error code that is missing above.
@@ -1869,6 +1871,66 @@ export const oauthIpc = {
 export type { Protocol } from "../generated/bindings";
 /** Stage 14: a password, or an API token for a JMAP server (sent as a bearer token). */
 export type { CredentialKind } from "../generated/bindings";
+
+// ---- Stage 20: attachment reminder, reminders without a reply, attachments view, trackers, quota ----
+/** Decision 0058: the trackers the core blocked in one rendering of a mail. */
+export type { TrackerSummary } from "../generated/bindings";
+import {
+  commands as reminderCommands,
+  type FollowUpChoice,
+  type FollowUpMark,
+  type FollowUpResult,
+  type FollowUpTimes,
+} from "../generated/bindings";
+
+/** Decision 0059: "Remind me if no reply by …". */
+export type { FollowUpChoice, FollowUpMark, FollowUpResult, FollowUpTimes };
+
+/** Stage 20: the attachment reminder and reminders when no reply comes (decision 0058). */
+export const reminderIpc = {
+  /**
+   * Asked before the composer sends or schedules: the word of the user's own text that speaks of
+   * an attachment while the draft has none, else null (also with the setting off).
+   */
+  checkAttachmentReminder: (draftId: DraftId): Promise<string | null> => call(() => reminderCommands.checkAttachmentReminder(draftId)),
+  /** The times the reminder menu offers now (tomorrow, in three days, next week). */
+  getFollowUpTimes: (): Promise<FollowUpTimes> => infallible(() => reminderCommands.getFollowUpTimes()),
+  /** Local only, synced; emits `inboxChanged`. Messages that already have a reply keep none. */
+  setFollowUp: (messageIds: MessageId[], choice: FollowUpChoice): Promise<FollowUpResult> =>
+    call(() => reminderCommands.setFollowUp(messageIds, choice)),
+  clearFollowUp: (messageIds: MessageId[]): Promise<void> => done(call(() => reminderCommands.clearFollowUp(messageIds))),
+  /** "Waiting for reply": the next due first, then the ones that came back (at most 1,000). */
+  listFollowUps: (scope: MarkScope): Promise<MessageListItem[]> => call(() => reminderCommands.listFollowUps(scope)),
+};
+
+import {
+  commands as attachmentsViewCommands,
+  MAX_ATTACHMENT_PAGE,
+  QUOTA_WARN_PERCENT,
+  type AttachmentCursor,
+  type AttachmentEntry,
+  type AttachmentFilter,
+  type AttachmentKind,
+  type AttachmentPage,
+  type MailboxQuota,
+} from "../generated/bindings";
+
+export { MAX_ATTACHMENT_PAGE, QUOTA_WARN_PERCENT };
+/** Decision 0060: the attachments view across accounts, and how full a mailbox is. */
+export type { AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage, MailboxQuota };
+
+/** Stage 20 (decision 0060): the attachments of stored mail across the accounts. */
+export const attachmentsViewIpc = {
+  /** Newest message first; open, save and preview with the reading pane's commands and `index`. */
+  list: (filter: AttachmentFilter, cursor: AttachmentCursor | null, limit: number): Promise<AttachmentPage> =>
+    call(() => attachmentsViewCommands.listAttachments(filter, cursor, limit)),
+};
+
+/** Stage 20 (decision 0060): how full an account's mailbox on the server is. */
+export const quotaIpc = {
+  /** Kept by the core for 15 minutes unless `refresh`; `unknown` when it cannot be asked now. */
+  get: (accountId: AccountId, refresh: boolean): Promise<MailboxQuota> => call(() => attachmentsViewCommands.getAccountQuota(accountId, refresh)),
+};
 
 // ---- Stage 18 (decision 0051): the new-mail popup ----
 import {

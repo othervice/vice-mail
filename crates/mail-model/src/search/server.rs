@@ -93,7 +93,7 @@ impl ParsedQuery {
                             let day = CivilDate::today(instant, context.time_zone);
                             Some(widened(day, false, positive))
                         }
-                        Filter::HasAttachment | Filter::Is(Status::Snoozed) => {
+                        Filter::HasAttachment | Filter::Is(Status::Snoozed) | Filter::Larger(_) => {
                             out.local_only.push(term.span);
                             None
                         }

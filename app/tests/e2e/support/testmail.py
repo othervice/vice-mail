@@ -13,6 +13,8 @@
     python3 testmail.py attachments FILE       SHA-256 and size of every attachment of an .eml file (no server)
     python3 testmail.py bob-message MARK       stage 19: the message in bob's INBOX whose Subject contains
                                                MARK, as JSON (its Resent-* fields and raw bytes in base64)
+    python3 testmail.py reply-to SUBJECT       bob answers alice's message with SUBJECT (In-Reply-To and
+                                               References name its Message-ID; stage 20)
 
 Host, ports, accounts and the CA come from testmail/accounts.env, as for every other client of
 the test server. Nothing here changes alice's mailbox except the delivery, the appended
@@ -137,6 +139,50 @@ def send(subject: str) -> dict:
         "startedAt": round(started * 1000),
         "acceptedAt": round(time.time() * 1000),
     }
+
+
+def reply_to(subject: str) -> dict:
+    """Stage 20: bob answers the message of alice's INBOX or Sent folder with this subject."""
+    env = load_env()
+    imap = login(env)
+    message_id = None
+    try:
+        for folder in ("INBOX", "Sent Items", "Sent"):
+            typ, _ = imap.select(quoted(folder), readonly=True)
+            if typ != "OK":
+                continue
+            typ, data = imap.search("UTF-8", "SUBJECT", quoted(subject))
+            ids = data[0].split() if typ == "OK" and data and data[0] else []
+            if not ids:
+                continue
+            _, fetched = imap.fetch(ids[-1], "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+            header = next((part[1] for part in fetched if isinstance(part, tuple)), b"")
+            found = re.search(rb"<[^>]+>", header)
+            if found:
+                message_id = found.group(0).decode()
+                break
+        imap.logout()
+    except BaseException:
+        imap.shutdown()
+        raise
+    if message_id is None:
+        raise SystemExit(f"no message {subject!r} in alice's INBOX or Sent")
+    reply = EmailMessage()
+    reply["From"] = f"Bob Example <{env['TESTMAIL_BOB_ADDRESS']}>"
+    reply["To"] = env["TESTMAIL_ALICE_ADDRESS"]
+    reply["Subject"] = f"Re: {subject}"
+    reply["Date"] = formatdate(localtime=True)
+    reply["Message-ID"] = make_msgid(domain=env["TESTMAIL_DOMAIN"])
+    reply["In-Reply-To"] = message_id
+    reply["References"] = message_id
+    reply.set_content("Yes, here is my answer.\n")
+    with smtplib.SMTP(
+        env["TESTMAIL_HOST"], int(env["TESTMAIL_SUBMISSION_PORT"]), local_hostname="localhost", timeout=30
+    ) as smtp:
+        smtp.starttls(context=tls_context(env))
+        smtp.login(env["TESTMAIL_BOB_ADDRESS"], env["TESTMAIL_BOB_PASSWORD"])
+        smtp.send_message(reply)
+    return {"inReplyTo": message_id, "messageId": reply["Message-ID"]}
 
 
 def login(env: dict[str, str]) -> imaplib.IMAP4_SSL:
@@ -332,6 +378,9 @@ def main() -> int:
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "attachments":
         print(json.dumps(attachments(sys.argv[2])))
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "reply-to":
+        print(json.dumps(reply_to(sys.argv[2])))
         return 0
     if len(sys.argv) == 4 and sys.argv[1] == "copy-seed":
         print(json.dumps(copy_seed(sys.argv[2], sys.argv[3])))

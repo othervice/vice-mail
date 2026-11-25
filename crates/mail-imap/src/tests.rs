@@ -1336,3 +1336,86 @@ async fn bearer_tokens_use_oauthbearer_where_only_that_is_offered() {
     assert!(matches!(err, BackendError::AuthFailed(_)), "{err:?}");
     drop(handle.await.expect("server"));
 }
+
+const LOGIN_OK_QUOTA: Step = Send(
+    "{tag} OK [CAPABILITY IMAP4rev1 IDLE CONDSTORE ENABLE QUOTA QUOTA=RES-STORAGE] logged in\r\n",
+);
+
+/// Stage 20 (decision 0060): `GETQUOTAROOT INBOX` on a read-only connection (RFC 9208), the
+/// `STORAGE` resource of the inbox's root in KiB; nothing without the capability or the
+/// resource; a refusal reports nothing and keeps the connection.
+#[tokio::test]
+async fn the_quota_of_the_inbox_root_is_read_only() {
+    let script = vec![
+        GREETING,
+        LOGIN,
+        LOGIN_OK_QUOTA,
+        ENABLE,
+        ENABLE_OK,
+        Expect("GETQUOTAROOT INBOX"),
+        Send(
+            "* QUOTAROOT INBOX \"\" \"user/alice\"\r\n* QUOTA \"\" (MESSAGE 12 1000)\r\n\
+             * QUOTA \"user/alice\" (STORAGE 950 1000 MESSAGE 12 1000)\r\n{tag} OK done\r\n",
+        ),
+        Expect("GETQUOTAROOT INBOX"),
+        Send("{tag} NO [NOPERM] not for you\r\n"),
+        Expect("NOOP"),
+        Send("{tag} OK fine\r\n"),
+    ];
+    let (backend, handle) = connect(Access::ReadOnly, Duration::from_secs(2), script).await;
+    let mut backend = backend.expect("login");
+    let quota = backend.quota().await.expect("quota").expect("reported");
+    assert_eq!(
+        (quota.used_bytes, quota.limit_bytes),
+        (950 * 1024, 1000 * 1024)
+    );
+    assert_eq!(quota.percent(), 95);
+    assert_eq!(backend.quota().await.expect("refused"), None);
+    backend.noop().await.expect("still usable");
+    let lines = finish(backend, handle).await;
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|l| l.contains("GETQUOTAROOT INBOX"))
+            .count(),
+        2
+    );
+
+    // Without the capability nothing is asked.
+    let (backend, inbox, handle) = opened(Access::ReadOnly, vec![]).await;
+    let _ = inbox;
+    let mut backend = backend;
+    assert_eq!(backend.quota().await.expect("none"), None);
+    let lines = finish(backend, handle).await;
+    assert!(!lines.iter().any(|l| l.contains("QUOTA")), "{lines:?}");
+}
+
+#[test]
+fn storage_of_the_named_root_wins_and_a_zero_limit_reports_nothing() {
+    use crate::backend::storage_quota;
+    let roots = vec!["b".to_owned(), "a".to_owned()];
+    let storage = vec![("a".to_owned(), 1, 10), ("b".to_owned(), 5, 20)];
+    let quota = storage_quota(&roots, &storage).expect("b");
+    assert_eq!((quota.used_bytes, quota.limit_bytes), (5 * 1024, 20 * 1024));
+    assert_eq!(storage_quota(&[], &[("x".to_owned(), 1, 0)]), None);
+    assert_eq!(storage_quota(&roots, &[]), None);
+}
+
+/// Stage 20: a full mailbox is typed, so the app can say what to do.
+#[tokio::test]
+async fn overquota_is_a_full_mailbox() {
+    let tagged = crate::command::Tagged::for_test(
+        crate::command::TaggedStatus::No,
+        "[OVERQUOTA] Quota exceeded",
+    );
+    assert!(matches!(
+        tagged.check("APPEND"),
+        Err(BackendError::OverQuota(text)) if text.contains("APPEND")
+    ));
+    let other =
+        crate::command::Tagged::for_test(crate::command::TaggedStatus::No, "[TRYCREATE] no");
+    assert!(matches!(
+        other.check("APPEND"),
+        Err(BackendError::Rejected(_))
+    ));
+}

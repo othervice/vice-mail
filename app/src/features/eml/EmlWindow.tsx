@@ -20,6 +20,7 @@ import { HtmlBody, TextBody } from "../reading/MessageBodyView";
 import { MessageHeader } from "../reading/MessageHeader";
 import { FormatToggle, Problems } from "../reading/ReadingPane";
 import { RemoteContentBar } from "../reading/RemoteContentBar";
+import { TrackerNotice } from "../reading/TrackerNotice";
 import { useCloseThisWindow } from "../windows/MessageWindow";
 import { useLoadEmlRemoteContent, useEmlView } from "./queries";
 
@@ -54,6 +55,8 @@ function EmlBody({ view, format, scrollerRef }: BodyProps) {
     case "html":
       return (
         <>
+          {/* Stage 20 (decision 0058): the trackers the core blocked, with what that means. */}
+          <TrackerNotice trackers={body.trackers} />
           {body.blockedRemote > 0 && !body.remoteLoaded && (
             <div data-print-hide>
               {/* No "always for this sender": the file belongs to no account. */}

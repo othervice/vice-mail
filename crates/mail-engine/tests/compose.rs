@@ -42,6 +42,18 @@ use tokio::sync::broadcast;
 use tokio::time::Instant;
 
 const WAIT: Duration = Duration::from_secs(45);
+
+/// Stage 20: how far [`TestClock`] is ahead of the system clock (ms). Tests run one at a time.
+static CLOCK_OFFSET: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// The system clock plus [`CLOCK_OFFSET`].
+struct TestClock;
+
+impl mail_engine::Clock for TestClock {
+    fn now_ms(&self) -> i64 {
+        mail_engine::SystemClock.now_ms() + CLOCK_OFFSET.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
 const MARK: &str = "VMC ";
 
 /// The tests share bob's and alice's accounts: one at a time.
@@ -128,6 +140,8 @@ async fn start_core(
 ) -> AppCore<ImapConnector> {
     let mut services =
         CoreServices::with_connector(Credentials::new(Arc::clone(keychain)), ImapConnector::new());
+    // Stage 20: a clock the reminder test moves forward (offset 0 for every other test).
+    services.clock = Arc::new(TestClock);
     services.sync = sync_config(env);
     services.outbox = Some(outbox_config(env, sender));
     AppCore::start(
@@ -1980,6 +1994,7 @@ async fn a_read_receipt_goes_out_only_on_the_users_answer_smtp_capture() {
             mail_model::DraftSendOptions {
                 archive_original: false,
                 request_read_receipt: true,
+                follow_up_at: None,
             },
         )
         .await
@@ -2076,6 +2091,171 @@ async fn opened(core: &AppCore<ImapConnector>, id: mail_model::MessageId) {
         .then_some(())
     })
     .await;
+}
+
+/// Stage 20, task B (decision 0059), on the test server: bob sends with "Remind me if no reply";
+/// the reminder belongs to the copy in Sent (the real Message-ID), comes back above bob's inbox
+/// once the clock is past its time; alice's answer from this app (an own address here) does not
+/// end it, an answer from outside the app does.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_reminder_comes_back_with_an_advanced_clock_and_the_answer_ends_it() {
+    let _serial = SERVER.lock().await;
+    let bed = Bed::new(SmtpSender::new(), None).await;
+    let env = &bed.env;
+    let subject = format!("{MARK}Erinnerung {}", run_id());
+    let draft = bed.new_draft(bed.bob).await;
+    let draft = bed
+        .write(
+            &draft,
+            vec![person("Alice Ärger", &env.alice.address)],
+            Vec::new(),
+            &subject,
+            "<p>Kannst du bis Freitag antworten?</p>",
+        )
+        .await;
+    let due = mail_engine::Clock::now_ms(&mail_engine::SystemClock) + 2 * 24 * 3_600_000;
+    let saved = bed
+        .core
+        .set_draft_send_options(
+            draft.id.clone(),
+            mail_model::DraftSendOptions {
+                archive_original: false,
+                request_read_receipt: false,
+                follow_up_at: Some(due),
+            },
+        )
+        .await
+        .expect("reminder");
+    assert_eq!(saved.follow_up_at, Some(due));
+    let outgoing = bed
+        .core
+        .send_draft(draft.id.clone(), uuid_like("s20-reminder"))
+        .await
+        .expect("send");
+    bed.sent(bed.bob, outgoing.operation_id).await;
+    bed.settled(bed.bob).await;
+    let in_sent = bed.arrived(bed.bob, MailboxRole::Sent, &subject).await;
+    let waiting = until("the reminder in the view", || async {
+        bed.core
+            .list_follow_ups(mail_model::MarkScope::Account {
+                account_id: bed.bob,
+            })
+            .await
+            .expect("waiting")
+            .into_iter()
+            .find(|m| m.subject == subject)
+    })
+    .await;
+    assert_eq!(waiting.id, in_sent.id);
+    let mark = waiting.follow_up.expect("mark");
+    assert_eq!((mark.due, mark.returned), (due, false));
+
+    // Three days later (the computer slept): above bob's inbox, "no reply since".
+    CLOCK_OFFSET.store(3 * 24 * 3_600_000, std::sync::atomic::Ordering::SeqCst);
+    bed.core.resume();
+    let inbox = bed.mailbox(bed.bob, MailboxRole::Inbox).await;
+    let top = until("the reminder above the inbox", || async {
+        let page = bed
+            .core
+            .list_inbox(
+                mail_model::InboxScope::Mailbox { mailbox_id: inbox },
+                None,
+                50,
+            )
+            .await
+            .expect("inbox");
+        page.top
+            .map(|top| top.follow_ups)
+            .filter(|f| f.iter().any(|m| m.subject == subject))
+    })
+    .await;
+    assert!(top.iter().any(|m| m.follow_up.is_some_and(|f| f.returned)));
+
+    // alice answers from this app: her address is one of the user's own here (both accounts
+    // live in this core), so it is no answer and the reminder stays.
+    let original = bed.arrived(bed.alice, MailboxRole::Inbox, &subject).await;
+    let reply = bed
+        .core
+        .create_draft(NewDraft::Reply {
+            message_id: original.id,
+            language: QuoteLanguage::De,
+        })
+        .await
+        .expect("reply");
+    let reply_subject = reply.subject.clone();
+    let reply = bed
+        .write(
+            &reply,
+            reply.to.clone(),
+            Vec::new(),
+            &reply_subject,
+            "<p>Ja!</p>",
+        )
+        .await;
+    // Not `bed.sent`: the outbox purges finished operations by the (advanced) clock, so the
+    // operation is gone as soon as it is done. Its arrival is what counts.
+    bed.core
+        .send_draft(reply.id.clone(), uuid_like("s20-own-answer"))
+        .await
+        .expect("own answer");
+    bed.arrived(bed.bob, MailboxRole::Inbox, &reply_subject)
+        .await;
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    let still = bed
+        .core
+        .list_follow_ups(mail_model::MarkScope::Account {
+            account_id: bed.bob,
+        })
+        .await
+        .expect("waiting");
+    assert!(
+        still.iter().any(|m| m.subject == subject),
+        "an own address is no answer"
+    );
+
+    // Someone outside the app answers in the conversation: the reminder goes.
+    let mut imap = admin_session(env, &env.bob).await;
+    let opened = imap.open_mailbox("Sent").await.expect("Sent");
+    let uids = imap.search_uids(&opened).await.expect("search");
+    let sent_id = imap
+        .fetch_headers(&opened, &uids)
+        .await
+        .expect("headers")
+        .into_iter()
+        .find(|h| h.subject == subject)
+        .and_then(|h| h.message_id)
+        .expect("Message-ID of the sent copy");
+    let raw = format!(
+        "From: Carol Outside <carol@outside.example>\r\nTo: {bob}\r\n\
+         Subject: Re: {subject}\r\nMessage-ID: <answer.{run}@outside.example>\r\n\
+         In-Reply-To: <{sent_id}>\r\nReferences: <{sent_id}>\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\r\nGerne, bis Freitag.\r\n",
+        bob = env.bob.address,
+        run = run_id(),
+    );
+    let appended = imap
+        .raw_command(
+            &format!("APPEND \"INBOX\" () {{{}+}}\r\n{raw}", raw.len()),
+            |_| false,
+        )
+        .await
+        .expect("append the answer");
+    assert!(appended.ok, "{}", appended.text);
+    imap.logout().await.ok();
+    until("the answer ends the reminder", || async {
+        let left = bed
+            .core
+            .list_follow_ups(mail_model::MarkScope::Account {
+                account_id: bed.bob,
+            })
+            .await
+            .expect("waiting");
+        (!left.iter().any(|m| m.subject == subject)).then_some(())
+    })
+    .await;
+    CLOCK_OFFSET.store(0, std::sync::atomic::Ordering::SeqCst);
+    clean_server(env).await;
 }
 
 /// Stage 19 (decision 0055): bob writes to alice; alice redirects the message to admin. admin

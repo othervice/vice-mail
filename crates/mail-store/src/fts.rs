@@ -43,6 +43,9 @@ pub struct BodyText {
     pub body: String,
     /// File names of the attachments.
     pub attachments: Vec<String>,
+    /// Stage 20 (decision 0060): the attachments as the reading pane lists them (their
+    /// position is the pane's index), for the "Attachments" view.
+    pub attachment_index: Vec<crate::IndexedAttachment>,
     /// Stage 16: the message is a read receipt (RFC 8098); recorded for the message it reports
     /// on when a complete body is stored.
     pub receipt: Option<crate::ReceivedReceipt>,
@@ -303,6 +306,7 @@ pub(crate) fn index_bodies(conn: &Connection, texts: &[(i64, BodyText)]) -> Resu
     for (message, text) in texts {
         if let Some((row, _)) = stored_row(conn, *message)? {
             rows.push((*message, row.with_text(text)));
+            crate::attachment_index::write(conn, *message, &text.attachment_index)?;
         }
     }
     write(conn, &targets, &mut rows)
@@ -358,7 +362,11 @@ pub(crate) fn write_batch(
             continue;
         }
         let row = match (fetched_now, text) {
-            (Some(_), Some(text)) => row.with_text(text),
+            (Some(_), Some(text)) => {
+                // Stage 20: the attachments of the stored body (bodies stored before 0025).
+                crate::attachment_index::write(conn, item.id, &text.attachment_index)?;
+                row.with_text(text)
+            }
             _ => row,
         };
         rows.push((item.id, row));

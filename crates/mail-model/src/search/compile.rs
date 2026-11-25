@@ -130,6 +130,9 @@ pub struct CompiledQuery {
     pub flagged: Option<bool>,
     pub snoozed: Option<bool>,
     pub has_attachment: Option<bool>,
+    /// Stage 20 (decision 0060): `larger:` (at least this many bytes) and `-larger:` (fewer).
+    pub size_at_least: Option<u64>,
+    pub size_below: Option<u64>,
     /// Terms that contradict earlier ones (`is:unread is:read`, `after:` later than `before:`,
     /// `in:inbox -in:inbox`). If any, the query has no results; the UI can mark these spans.
     pub conflicts: Vec<Span>,
@@ -210,6 +213,15 @@ impl ParsedQuery {
                     list.push(account.clone());
                 }
                 Filter::HasAttachment => conflict = !set(&mut out.has_attachment, positive),
+                Filter::Larger(bytes) => {
+                    if positive {
+                        out.size_at_least =
+                            Some(out.size_at_least.map_or(*bytes, |b| b.max(*bytes)));
+                    } else {
+                        out.size_below = Some(out.size_below.map_or(*bytes, |b| b.min(*bytes)));
+                    }
+                    conflict = matches!((out.size_at_least, out.size_below), (Some(low), Some(high)) if low >= high);
+                }
                 Filter::Is(Status::Unread) => conflict = !set(&mut out.unread, positive),
                 Filter::Is(Status::Read) => conflict = !set(&mut out.unread, !positive),
                 Filter::Is(Status::Flagged) => conflict = !set(&mut out.flagged, positive),

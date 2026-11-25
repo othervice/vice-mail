@@ -49,6 +49,7 @@ import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
+import { FollowUpPicker } from "../comfort/FollowUpPicker";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { usePreviewing } from "../reading/usePreviewing";
@@ -59,6 +60,7 @@ import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle }
 import { useMessagePages } from "../messages/queries";
 import { ReadingPane, type FocusRequest } from "../reading/ReadingPane";
 import { PinnedAttachmentsView } from "../reading/PinnedAttachmentsView";
+import { AttachmentsView } from "../reading/AttachmentsView";
 import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { SavedSearchesView } from "../search/SavedSearchesView";
 import { SearchArea } from "../search/SearchArea";
@@ -318,12 +320,12 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const targetHost = controller.hostFor(targetChildren);
   const targetCtx = targets.length === 1 && targetChildren.size === 1 && targets[0] ? ctxForMessage(targets[0]) : ctxFor(targets);
   // Stage 8: the command palette runs the same actions on the same messages.
-  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems);
+  const pickerOpen = Boolean(controller.overlay || controller.comfort.snoozeItems || controller.comfort.followUpItems);
   useActionTarget({ ctx: pickerOpen ? null : targetCtx, host: targetHost });
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || isEditableTarget(event.target)) return;
-    if (controller.overlay || controller.comfort.snoozeItems) return;
+    if (controller.overlay || controller.comfort.snoozeItems || controller.comfort.followUpItems) return;
     const ctx = targetCtx;
     for (const id of ACTION_IDS) {
       const definition = ACTIONS[id];
@@ -543,6 +545,17 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           restoreFocus={focusList}
         />
       )}
+      {/* Stage 20 (decision 0059): "Remind me if no reply". */}
+      {controller.comfort.followUpItems && (
+        <FollowUpPicker
+          count={controller.comfort.followUpItems.length}
+          onChoose={(choice) => {
+            void controller.comfort.followUp(choice);
+          }}
+          onClose={controller.comfort.closeFollowUp}
+          restoreFocus={focusList}
+        />
+      )}
       {overlay?.kind === "move" && (
         <MovePicker
           count={overlay.ids.length}
@@ -611,6 +624,7 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
     case "trash":
       return { kind: "role", role: mailView };
     case "later":
+    case "waiting":
     case "pinned":
     case "tasks":
     case "readingList":
@@ -618,6 +632,7 @@ function mailViewList(mailView: ShownMailViewId): { kind: "role"; role: RoleView
       return { kind: "mark", mark: mailView };
     // Stage 17 (decision 0050): the contacts are rendered by `AppShell` as a view of their own.
     case "pinnedAttachments":
+    case "attachments":
     case "savedViews":
     case "contacts":
       return null;
@@ -640,6 +655,10 @@ function MailBody({ view, account }: MailBodyProps) {
   // Stage 16 (decision 0036): pinned attachments of the account, like the reading list.
   if (view.kind === "mail" && view.mailView === "pinnedAttachments") {
     return <PinnedAttachmentsView scope={{ kind: "account", accountId: account.id }} />;
+  }
+  // Stage 20 (decision 0060): every attachment, across the accounts (it filters by account).
+  if (view.kind === "mail" && view.mailView === "attachments") {
+    return <AttachmentsView />;
   }
   const list = view.kind === "mail" ? mailViewList(view.mailView) : null;
   // The saved searches have a pane of their own, which `MailView` shows instead of this.

@@ -31,10 +31,13 @@ describe("app frame without an account", () => {
     expect(names).toEqual([
       "Inbox",
       "Later",
+      // Stage 20 (decisions 0059, 0060)
+      "Waiting for reply",
       "Tasks",
       // Stage 16
       "Reading list",
       "Pinned attachments",
+      "Attachments",
       // SPEC "Markiert"
       "Flagged",
       "Pinned",

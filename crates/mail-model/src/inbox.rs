@@ -101,6 +101,11 @@ pub struct InboxTop {
     /// All messages of important senders in the scope ("Alle anzeigen (n)").
     pub priority_total: u32,
     pub priority_unread: u32,
+    /// Stage 20 (decision 0059): messages the user sent that got no reply by the time they
+    /// asked to be reminded ("No reply since …"), most recently due first (at most
+    /// [`crate::MAX_TOP_FOLLOW_UPS`]), each shown where it lies (usually Sent). They stay until
+    /// the user clears the reminder or a reply comes.
+    pub follow_ups: Vec<MessageListItem>,
 }
 
 /// Messages of important senders shown in the "Priority" block.

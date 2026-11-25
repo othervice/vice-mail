@@ -19,12 +19,15 @@ account with us, no telemetry.
 
 - **Accounts:** IMAP/SMTP, Gmail with an app password, JMAP; several accounts in one unified inbox.
 - **Inbox:** conversations that unfold in the list, categories without AI, snooze, pins, tasks,
-  flagged view, local rules; views in the sidebar you choose yourself.
+  reminders when nobody replies, flagged view, an attachments view across accounts, local rules;
+  views in the sidebar you choose yourself.
 - **Contacts:** every address becomes a contact, with your own pictures, search and "mark as spam";
   contact groups for the composer, vCard import and export.
-- **Safe reading:** sanitised HTML in a sandbox, remote images blocked until allowed, every link
-  checked; images and previews decoded in an isolated helper process.
-- **Writing:** identities, signatures, templates, undo send, send later, redirect, edit as new.
+- **Safe reading:** sanitised HTML in a sandbox, remote images blocked until allowed, tracking
+  pixels counted and never loaded, tracking parameters removed from links, every link checked;
+  images and previews decoded in an isolated helper process.
+- **Writing:** identities, signatures, templates, undo send, send later, redirect, edit as new, a
+  reminder when the text mentions an attachment that is missing.
 - **Moving in:** take over accounts, signatures and local folders from Thunderbird (never its
   passwords); folders as mbox files in and out; the source of any message.
 - **Search:** offline full-text search with operators.

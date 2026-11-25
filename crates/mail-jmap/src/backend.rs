@@ -581,6 +581,38 @@ impl MailBackend for JmapBackend {
         ))
     }
 
+    /// Stage 20 (decision 0060): `Quota/get` (RFC 9425) when the session offers quotas; the
+    /// `octets` quota for mail, the account's own before a wider one.
+    async fn quota(&mut self) -> Result<Option<mail_model::StorageQuota>, BackendError> {
+        if !self
+            .session
+            .capabilities
+            .iter()
+            .any(|c| c == crate::capability::QUOTA)
+        {
+            return Ok(None);
+        }
+        let responses = self
+            .client
+            .call(
+                &self.session.api_url,
+                &[crate::capability::CORE, crate::capability::QUOTA],
+                vec![(
+                    "Quota/get",
+                    json!({ "accountId": self.session.account_id, "ids": null }),
+                    "q",
+                )],
+            )
+            .await?;
+        let list = responses
+            .get("q", "Quota/get")?
+            .get("list")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        Ok(storage_quota(&list))
+    }
+
     async fn noop(&mut self) -> Result<(), BackendError> {
         self.call(vec![("Core/echo", json!({}), "e")])
             .await?
@@ -621,5 +653,75 @@ mod tests {
             filter(&ServerCriterion::Flagged(false)),
             json!({"notKeyword": "$flagged"})
         );
+    }
+}
+
+/// Stage 20: the storage of a `Quota/get` list: `resourceType` `octets` for mail (`types`
+/// naming `Mail`, or none), the scope `account` before `domain` and `global`; `None` without
+/// one or without a limit.
+pub(crate) fn storage_quota(list: &[Value]) -> Option<mail_model::StorageQuota> {
+    let rank = |scope: Option<&str>| match scope {
+        Some("account") => 0,
+        Some("domain") => 1,
+        _ => 2,
+    };
+    list.iter()
+        .filter(|q| q.get("resourceType").and_then(Value::as_str) == Some("octets"))
+        .filter(|q| {
+            q.get("types")
+                .and_then(Value::as_array)
+                .is_none_or(|types| {
+                    types.is_empty() || types.iter().any(|t| t.as_str() == Some("Mail"))
+                })
+        })
+        .filter_map(|q| {
+            let used = q.get("used").and_then(Value::as_u64)?;
+            let limit = q
+                .get("hardLimit")
+                .and_then(Value::as_u64)
+                .filter(|l| *l > 0)?;
+            Some((rank(q.get("scope").and_then(Value::as_str)), used, limit))
+        })
+        .min_by_key(|(rank, ..)| *rank)
+        .map(|(_, used_bytes, limit_bytes)| mail_model::StorageQuota {
+            used_bytes,
+            limit_bytes,
+        })
+}
+
+#[cfg(test)]
+mod quota_tests {
+    use serde_json::json;
+
+    use super::storage_quota;
+
+    /// Stage 20 (decision 0060): RFC 9425 quotas: the account's octets quota for mail wins
+    /// over a domain one; counts, other types and quotas without a limit say nothing.
+    #[test]
+    fn the_accounts_octets_quota_for_mail() {
+        let list = vec![
+            json!({ "id": "d", "resourceType": "octets", "used": 900, "hardLimit": 1000,
+                    "scope": "domain", "types": ["Mail"], "name": "domain" }),
+            json!({ "id": "c", "resourceType": "count", "used": 5, "hardLimit": 10,
+                    "scope": "account", "types": ["Mail"], "name": "count" }),
+            json!({ "id": "a", "resourceType": "octets", "used": 300, "hardLimit": 400,
+                    "scope": "account", "types": ["Mail", "Calendar"], "name": "account" }),
+        ];
+        let quota = storage_quota(&list).expect("account quota");
+        assert_eq!((quota.used_bytes, quota.limit_bytes), (300, 400));
+        assert_eq!(
+            storage_quota(&[json!({ "resourceType": "octets", "used": 1, "scope": "account" })]),
+            None,
+            "no limit"
+        );
+        assert_eq!(
+            storage_quota(
+                &[json!({ "resourceType": "octets", "used": 1, "hardLimit": 9,
+                                    "scope": "account", "types": ["Contact"] })]
+            ),
+            None,
+            "not for mail"
+        );
+        assert_eq!(storage_quota(&[]), None);
     }
 }

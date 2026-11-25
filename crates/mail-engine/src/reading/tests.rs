@@ -698,6 +698,7 @@ async fn links_are_checked_and_opened_only_through_the_core() {
         render_token,
         blocked_remote,
         remote_loaded,
+        ..
     } = &view.body
     else {
         panic!("html: {view:?}");
@@ -1022,13 +1023,15 @@ async fn attachments_are_saved_exactly_and_opened_only_after_confirmation() {
     let account = h.add().await;
     let message = h.items(h.inbox(account).await).await[0].id;
 
-    // Before the body is stored there is nothing to save.
-    let err = h
-        .core
-        .attachment_name(message, 0)
-        .await
-        .expect_err("not stored");
-    assert_eq!(err.code(), ErrorCode::NotFound);
+    // Before the body is stored, asking for an attachment fetches it first (stage 20, decision
+    // 0060: the attachments view lists bodies that may have left the cache since).
+    assert_eq!(
+        h.core
+            .attachment_name(message, 0)
+            .await
+            .expect("fetched on demand"),
+        "Datenfdp.bin"
+    );
 
     let view = h.open_fetched(message, BodyFormat::Auto).await;
     assert_eq!(view.attachments.len(), 2);
@@ -1575,4 +1578,322 @@ async fn editor_images_are_re_encoded_too() {
     assert!(mail_content::is_reencoded_data_url(first), "{first}");
     assert_ne!(first, original, "never the original bytes");
     assert_eq!(shown[1], None);
+}
+
+/// Like [`counting_image_server`], recording the request path of every connection.
+async fn path_recording_image_server() -> (u16, Arc<std::sync::Mutex<Vec<String>>>) {
+    const PNG: &[u8] = &[
+        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I', b'H', b'D', b'R', 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89, 0, 0, 0, 0x0d, b'I', b'D',
+        b'A', b'T', 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0, 0x04, 0x85, 0x01, 0x80,
+        0x84, 0xa9, 0x8c, 0x21, 0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82,
+    ];
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let paths = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = Arc::clone(&paths);
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let seen = Arc::clone(&seen);
+            tokio::spawn(async move {
+                let mut buf = vec![0_u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let path = request
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                seen.lock().expect("paths").push(path);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    PNG.len()
+                );
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(PNG).await;
+            });
+        }
+    });
+    (port, paths)
+}
+
+const TRACKER_MAIL: &str = "From: News <news@shop.example>\r\nTo: alice@fake.test\r\n\
+Subject: Our offers\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+<p><a href=\"https://shop.example/offer?id=7&amp;utm_source=news&amp;utm_medium=email&amp;fbclid=x\">Offer</a></p>\
+<img src=\"http://127.0.0.1:PORT/open.gif?u=42\" width=\"1\" height=\"1\" alt=\"\">\
+<img src=\"http://127.0.0.1:PORT/banner.png?id=7&amp;utm_campaign=autumn\" width=\"600\" alt=\"Autumn\">\
+<img src=\"https://us5.list-manage.com/track/open.php?u=42\">\r\n";
+
+/// Stage 20 (decision 0058): the pixel and the known tracker are counted and never fetched,
+/// not even after "load images"; the banner loads without its tracking parameter; the link
+/// opens without its tracking parameters. With the settings off, everything is as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn trackers_are_counted_blocked_and_links_cleaned() {
+    let (port, paths) = path_recording_image_server().await;
+    let server = FakeServer::new();
+    server.deliver_raw(
+        "INBOX",
+        TRACKER_MAIL.replace("PORT", &port.to_string()).as_bytes(),
+    );
+    let mut h = Harness::new(
+        &server,
+        RemoteConfig {
+            allow_loopback: true,
+        },
+    )
+    .await;
+    let account = h.add().await;
+    let message = h.items(h.inbox(account).await).await[0].id;
+    let body = |view: &MessageView| match &view.body {
+        MessageBody::Html {
+            blocked_remote,
+            trackers,
+            render_token,
+            ..
+        } => (*blocked_remote, trackers.clone(), render_token.clone()),
+        other => panic!("{other:?}"),
+    };
+
+    let (blocked, trackers, token) = body(&h.open_fetched(message, BodyFormat::Auto).await);
+    // Only the banner waits for "load images"; the pixel and the known tracker never do.
+    assert_eq!(blocked, 1);
+    assert_eq!(
+        (trackers.pixels, trackers.known_hosts, trackers.parameters),
+        (1, 1, 1),
+        "{trackers:?}"
+    );
+    assert_eq!(trackers.total(), 3);
+    assert_eq!(trackers.hosts, ["127.0.0.1", "us5.list-manage.com"]);
+
+    let link = h.core.describe_link(&token, 0).expect("describe");
+    assert_eq!(link.target, "https://shop.example/offer?id=7");
+    assert_eq!(
+        link.tracking_removed,
+        ["utm_source", "utm_medium", "fbclid"]
+    );
+    h.core.open_link(&token, 0).await.expect("open");
+    assert_eq!(h.opener.opened(), ["https://shop.example/offer?id=7"]);
+
+    let loaded = h
+        .core
+        .load_remote_content(message, RemoteContentScope::Once)
+        .await
+        .expect("load");
+    let (blocked, trackers, _) = body(&loaded);
+    assert_eq!((blocked, trackers.total()), (0, 3));
+    assert_eq!(
+        *paths.lock().expect("paths"),
+        ["/banner.png?id=7"],
+        "the pixel never loads, the banner without its parameter"
+    );
+
+    // Off: no counting, the link and the images as written.
+    let prefs = h.core.get_reading_preferences().await.expect("prefs");
+    assert!(prefs.block_trackers && prefs.clean_links, "on by default");
+    h.core
+        .set_reading_preferences(mail_model::ReadingPreferences {
+            block_trackers: false,
+            clean_links: false,
+            ..prefs
+        })
+        .await
+        .expect("off");
+    let (blocked, trackers, token) = body(
+        &h.core
+            .get_message(message, BodyFormat::Auto)
+            .await
+            .expect("get"),
+    );
+    assert_eq!((blocked, trackers.total()), (3, 0));
+    let link = h.core.describe_link(&token, 0).expect("describe");
+    assert!(link.target.contains("utm_source=news"), "{}", link.target);
+    assert!(link.tracking_removed.is_empty());
+}
+
+/// Stage 20, task C (decision 0060): the attachments view lists the attachments of stored
+/// bodies across the account with the pane's index; saving through the view gives the exact
+/// bytes, also after the body left the cache (it is fetched again).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_attachments_view_lists_stored_attachments_and_fetches_on_open() {
+    let (bytes, base64) = binary_attachment();
+    let first = with_parts(
+        "Invoice",
+        &[
+            part("application/pdf", "Invoice 42.pdf", "base64", &base64),
+            part("text/plain", "notes.txt", "7bit", "remember"),
+        ],
+    );
+    let second = with_parts(
+        "Photos",
+        &[part("image/png", "pixel.png", "base64", PIXEL_PNG)],
+    );
+    let server = FakeServer::new();
+    server.deliver_raw("INBOX", first.as_bytes());
+    server.deliver_raw("INBOX", second.as_bytes());
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    let items = h.items(h.inbox(account).await).await;
+    for item in &items {
+        h.open_fetched(item.id, BodyFormat::Auto).await;
+    }
+    let invoice = items
+        .iter()
+        .find(|i| i.subject == "Invoice")
+        .expect("invoice")
+        .id;
+
+    let filter = |kind, sender: Option<&str>, query: Option<&str>| mail_model::AttachmentFilter {
+        scope: mail_model::MarkScope::All,
+        kind,
+        sender: sender.map(str::to_owned),
+        query: query.map(str::to_owned),
+    };
+    let page = h
+        .core
+        .list_attachments(filter(None, None, None), None, 100)
+        .await
+        .expect("view");
+    let names: Vec<&str> = page.items.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+    assert!(names.contains(&"Invoice 42.pdf") && names.contains(&"pixel.png"));
+    let pdf = page
+        .items
+        .iter()
+        .find(|a| a.name == "Invoice 42.pdf")
+        .expect("pdf")
+        .clone();
+    assert_eq!(pdf.kind, mail_model::AttachmentKind::Pdf);
+    assert_eq!(pdf.message_id, invoice);
+    assert_eq!(pdf.account_id, account);
+    assert!(pdf.local);
+    assert_eq!(pdf.preview, Some(mail_model::PreviewKind::Pdf));
+    assert_eq!(pdf.subject, "Invoice");
+
+    let only = |page: mail_model::AttachmentPage| {
+        page.items.into_iter().map(|a| a.name).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(
+                    filter(Some(mail_model::AttachmentKind::Image), None, None),
+                    None,
+                    100
+                )
+                .await
+                .expect("images")
+        ),
+        ["pixel.png"]
+    );
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(filter(None, None, Some("  INVOICE ")), None, 100)
+                .await
+                .expect("by name")
+        ),
+        ["Invoice 42.pdf"]
+    );
+    assert_eq!(
+        only(
+            h.core
+                .list_attachments(filter(None, Some("nobody@"), None), None, 100)
+                .await
+                .expect("by sender")
+        ),
+        Vec::<String>::new()
+    );
+    let err = h
+        .core
+        .list_attachments(filter(None, None, None), None, 0)
+        .await
+        .expect_err("limit");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+
+    // Saved through the view's index: the exact bytes; again after the body left the cache.
+    let dir = TempDir::new().expect("dir");
+    let saved = h
+        .core
+        .save_attachment_to(invoice, pdf.index, dir.path().join("a.pdf"))
+        .await
+        .expect("save");
+    assert_eq!(std::fs::read(saved).expect("read"), bytes);
+    assert!(
+        h.core
+            .store_ref()
+            .expect("store")
+            .delete_body(invoice)
+            .await
+            .expect("evict")
+    );
+    let again = h
+        .core
+        .list_attachments(filter(None, None, Some("invoice")), None, 100)
+        .await
+        .expect("still listed");
+    assert!(
+        again.items.first().is_some_and(|a| !a.local),
+        "listed, not on this computer"
+    );
+    let saved = h
+        .core
+        .save_attachment_to(invoice, pdf.index, dir.path().join("b.pdf"))
+        .await
+        .expect("fetched and saved");
+    assert_eq!(std::fs::read(saved).expect("read"), bytes);
+}
+
+/// Stage 20, task E (decision 0060): the quota over the reading connection, kept for a while,
+/// asked again on request; a server without one says so.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_quota_is_read_kept_and_refreshed() {
+    let server = FakeServer::new();
+    let mut h = Harness::new(&server, RemoteConfig::default()).await;
+    let account = h.add().await;
+    assert_eq!(
+        h.core
+            .get_account_quota(account, false)
+            .await
+            .expect("none"),
+        mail_model::MailboxQuota::NotReported
+    );
+    server.with(|s| {
+        s.quota = Some(mail_model::StorageQuota {
+            used_bytes: 950,
+            limit_bytes: 1000,
+        });
+    });
+    // Kept: the server is not asked again until a refresh.
+    assert_eq!(
+        h.core
+            .get_account_quota(account, false)
+            .await
+            .expect("kept"),
+        mail_model::MailboxQuota::NotReported
+    );
+    let fresh = h
+        .core
+        .get_account_quota(account, true)
+        .await
+        .expect("fresh");
+    assert_eq!(
+        fresh,
+        mail_model::MailboxQuota::Reported {
+            used_bytes: 950,
+            limit_bytes: 1000,
+            percent: 95,
+            nearly_full: true,
+        }
+    );
+    assert_eq!(server.with(|s| s.quota_asked), 2);
+    let unknown: AccountId = "6f9619ff-8b86-4d11-b42d-00c04fc964ff".parse().expect("id");
+    assert_eq!(
+        h.core
+            .get_account_quota(unknown, false)
+            .await
+            .map_err(|e| e.code()),
+        Err(ErrorCode::NotFound)
+    );
 }

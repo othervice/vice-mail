@@ -12,11 +12,14 @@
 //!   reader does not see (hidden by CSS or attributes), for models; [`strip_hidden_chars`]:
 //!   invisible Unicode characters out of any text for models.
 //! - [`check_link`]: what to warn about before a link opens; only `http`, `https`, `mailto`.
+//! - [`strip_tracking_parameters`], [`is_known_tracker_host`], [`is_pixel`]: tracker
+//!   protection (stage 20, decision 0058); [`render_html`] counts the trackers it blocks.
 //! - [`sanitize_filename`], [`is_executable_type`]: attachment names and open warnings.
 //! - [`preview_from_text`], [`preview_from_html`]: the list preview.
 //! - [`build_message`], [`mail_html`], [`prepare_reply`], [`prepare_forward`]: composing
 //!   (stage 5, module `compose`): the outgoing MIME message (mail-builder), mail HTML from the
 //!   editor, replies and forwards.
+//! - [`attachment_mention`]: whether the user's own text speaks of an attachment (stage 20).
 //! - [`parse_mailto`]: a `mailto:` link (RFC 6068) as the fields of a new draft, with hints.
 //! - [`source_text`], [`header_fields`]: a message's source and header fields as plain text
 //!   (stage 19); [`build_redirect`]: redirecting with `Resent-*` fields.
@@ -35,6 +38,7 @@
 //! bytes ([`RemotePolicy::Allow`]), the random part of a Message-ID too ([`new_message_id`]).
 
 mod attachment_preview;
+mod attachment_reminder;
 mod calendar;
 mod classify;
 mod compose;
@@ -57,10 +61,12 @@ mod source;
 mod templates;
 mod text;
 mod thunderbird;
+mod trackers;
 mod vcard;
 mod visible;
 
 pub use attachment_preview::{preview_kind, render_preview};
+pub use attachment_reminder::attachment_mention;
 pub use calendar::{
     CalendarPart, MAX_CALENDAR_ATTENDEES, MAX_CALENDAR_BYTES, MAX_CALENDAR_DESCRIPTION_BYTES,
     MAX_CALENDAR_EVENTS, MAX_CALENDAR_LINE_BYTES, MAX_CALENDAR_LINES, MAX_CALENDAR_PARTS,
@@ -129,6 +135,11 @@ pub use text::{
 pub use thunderbird::{
     PrefValue, TbAccount, TbIdentity, TbSecurity, TbServer, TbServerKind, TbSignature, TbSmtp,
     ThunderbirdProfileEntry, parse_prefs_js, parse_profiles_ini, thunderbird_accounts,
+};
+pub use trackers::{
+    CleanedUrl, KNOWN_TRACKER_HOSTS, MAX_TRACKER_HOSTS, PIXEL_MAX, TRACKING_PARAMETER_PREFIXES,
+    TRACKING_PARAMETERS, TrackerKind, TrackerReport, is_known_tracker_host, is_pixel,
+    is_tracking_parameter, strip_tracking_parameters,
 };
 pub use vcard::{
     MAX_VCARD_CARDS, MAX_VCARD_EMAILS, MAX_VCARD_FILE_BYTES, MAX_VCARD_LINE_BYTES,

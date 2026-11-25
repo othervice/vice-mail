@@ -307,10 +307,13 @@ pub(crate) const ROW_MARKS: &str = "
            (SELECT t.done_at IS NOT NULL FROM task t
             WHERE t.account_uuid = ?2 AND t.message_id_hdr = m.message_id_hdr),
            EXISTS (SELECT 1 FROM reading_list r
-                   WHERE r.account_uuid = ?2 AND r.message_id_hdr = m.message_id_hdr)
+                   WHERE r.account_uuid = ?2 AND r.message_id_hdr = m.message_id_hdr),
+           (SELECT json_array(f.due, f.sent_at, f.returned_at IS NOT NULL) FROM follow_up f
+            WHERE f.account_uuid = ?2 AND f.message_id_hdr = m.message_id_hdr)
     FROM message m WHERE m.id = ?1";
 
-/// Fills the stage-9 marks of list rows: category, important, pinned, snooze, task.
+/// Fills the stage-9 marks of list rows: category, important, pinned, snooze, task; stage 16
+/// the reading list, stage 20 the reminder if no reply comes.
 pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Result<(), StoreError> {
     if items.is_empty() {
         return Ok(());
@@ -327,10 +330,12 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
                     r.get::<_, Option<bool>>(4)?,
                     r.get::<_, Option<bool>>(5)?,
                     r.get::<_, bool>(6)?,
+                    r.get::<_, Option<String>>(7)?,
                 ))
             })
             .optional()?;
-        let Some((category, important, pinned, until, returned, done, reading)) = marks else {
+        let Some((category, important, pinned, until, returned, done, reading, follow_up)) = marks
+        else {
             continue;
         };
         item.category = category.and_then(mail_model::MessageCategory::from_code);
@@ -342,6 +347,7 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
         });
         item.task = done.map(|done| TaskMark { done });
         item.reading_list = reading;
+        item.follow_up = crate::follow_ups::mark_from_json(follow_up.as_deref());
     }
     Ok(())
 }

@@ -296,6 +296,17 @@ pub trait MailBackend: Send {
         )))
     }
 
+    /// Stage 20 (decision 0060): how full the mailbox is, `None` when the server does not
+    /// report storage (IMAP: no `QUOTA` capability, or no `STORAGE` resource for the inbox's
+    /// quota root; JMAP: no quota for mail). Read-only (`GETQUOTAROOT` is on the allowlist).
+    ///
+    /// The default reports nothing (test fakes).
+    fn quota(
+        &mut self,
+    ) -> impl Future<Output = Result<Option<crate::StorageQuota>, BackendError>> + Send {
+        std::future::ready(Ok(None))
+    }
+
     /// NOOP: checks that the connection is alive and collects pending server notices.
     fn noop(&mut self) -> impl Future<Output = Result<(), BackendError>> + Send;
 

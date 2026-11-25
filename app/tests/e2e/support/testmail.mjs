@@ -89,6 +89,16 @@ export const attachmentDigests = (file) => helper("attachments", file);
 /** Stage 19: the message in bob's INBOX whose subject contains `mark` (redirect test). */
 export const bobMessage = (mark) => helper("bob-message", mark);
 
+/** Stage 20: bob answers alice's message with this subject (In-Reply-To its Message-ID). */
+export const replyTo = (subject) => helper("reply-to", subject);
+
+/** Stage 20 (decision 0060): alice's storage limit so that her use is `percent` %, or none. */
+export async function setQuota(percent) {
+  const args = percent === null ? ["clear", "alice"] : ["fill", "alice", String(percent)];
+  const { stdout } = await run("python3", [path.join(REPO, "testmail", "quota.py"), ...args], { cwd: REPO, encoding: "utf8", timeout: 60000 });
+  return JSON.parse(stdout);
+}
+
 /** Copies every seed message whose X-Vicemail-Seed starts with `prefix` into a new `folder`. */
 export const copySeedMessages = (prefix, folder) => helper("copy-seed", prefix, folder);
 

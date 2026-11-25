@@ -165,6 +165,10 @@ macro_rules! backend_methods {
             both!(self, b => b.search_text(mailbox, criteria).await)
         }
 
+        async fn quota(&mut self) -> Result<Option<mail_model::StorageQuota>, BackendError> {
+            both!(self, b => b.quota().await)
+        }
+
         async fn noop(&mut self) -> Result<(), BackendError> {
             both!(self, b => b.noop().await)
         }

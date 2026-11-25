@@ -91,6 +91,9 @@ pub(crate) struct ServerState {
     /// UIDs whose whole body or sections were returned.
     pub body_fetches: usize,
     pub bodies_sent: Vec<Uid>,
+    /// Stage 20: what `quota` reports (`None`: no quota), and how often it was asked.
+    pub quota: Option<mail_model::StorageQuota>,
+    pub quota_asked: usize,
     /// Stage 19: the writer accepts APPEND (off by default: earlier tests rely on the fake
     /// refusing it, as the trait's default does).
     pub append: bool,
@@ -139,6 +142,8 @@ impl FakeServer {
             restarts: 0,
             next_validity: 100,
             next_serial: 1,
+            quota: None,
+            quota_asked: 0,
         };
         for (name, attributes) in [
             ("INBOX", vec![]),
@@ -1172,6 +1177,14 @@ impl MailBackend for FakeBackend {
                 })
                 .collect(),
         ))
+    }
+
+    async fn quota(&mut self) -> Result<Option<mail_model::StorageQuota>, BackendError> {
+        self.usable()?;
+        Ok(self.server.with(|s| {
+            s.quota_asked += 1;
+            s.quota
+        }))
     }
 
     async fn noop(&mut self) -> Result<(), BackendError> {

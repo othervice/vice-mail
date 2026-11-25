@@ -954,6 +954,7 @@ pub(crate) mod with_core {
                 mail_model::DraftSendOptions {
                     archive_original: true,
                     request_read_receipt: true,
+                    follow_up_at: None,
                 },
             )
             .await

@@ -108,7 +108,7 @@ describe("conversation rows (pure)", () => {
     const page: InboxPage = {
       rows: [messageRow(ANSWER)],
       nextCursor: null,
-      top: { pinned: [], returned: [], priority: [FIRST], priorityTotal: 1, priorityUnread: 1 },
+      top: { pinned: [], returned: [], priority: [FIRST], priorityTotal: 1, priorityUnread: 1 , followUps: []},
       categories: true,
       conversations: [
         { messageId: ANSWER.id, threadId: 7, messageCount: 3, unreadCount: 1, lastActivity: ANSWER.date, participants: [ANNA], hasAttachments: false, flagged: false, subject: "Plan" },
@@ -244,7 +244,7 @@ describe("conversation rows in the lists", () => {
     const page: InboxPage = {
       rows: [messageRow(reply)],
       nextCursor: null,
-      top: { pinned: [], returned: [], priority: [vip], priorityTotal: 1, priorityUnread: 0 },
+      top: { pinned: [], returned: [], priority: [vip], priorityTotal: 1, priorityUnread: 0 , followUps: []},
       categories: true,
       conversations: [],
     };

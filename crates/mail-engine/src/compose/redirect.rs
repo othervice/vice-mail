@@ -133,6 +133,8 @@ impl<C: Connector> Compose<C> {
             archive_missing: false,
             receipt_for: None,
             redirect: true,
+            // A redirect is not the user's own message: no reminder if no reply comes.
+            follow_up_at: None,
         };
         let delay = self.compose_settings().await?.send_delay_seconds;
         let not_before = (delay > 0).then(|| now + i64::from(delay) * 1000);

@@ -25,11 +25,11 @@ use crate::sync::fake::{FakeConnector, FakeServer, PASSWORD};
 use crate::sync_state::BackoffPolicy;
 use crate::{AppCore, BuildInfo, CoreConfig, CoreServices};
 
-const WAIT: Duration = Duration::from_secs(15);
-const MIN: i64 = 60 * 1000;
+pub(super) const WAIT: Duration = Duration::from_secs(15);
+pub(super) const MIN: i64 = 60 * 1000;
 
 #[derive(Debug, Default)]
-struct OffsetClock(AtomicI64);
+pub(super) struct OffsetClock(pub(super) AtomicI64);
 
 impl Clock for OffsetClock {
     fn now_ms(&self) -> i64 {
@@ -39,7 +39,7 @@ impl Clock for OffsetClock {
 
 /// Records what it submits; can be offline and announce a SIZE limit.
 #[derive(Debug, Default)]
-struct RecordingSender {
+pub(super) struct RecordingSender {
     sent: Mutex<Vec<Vec<u8>>>,
     offline: AtomicBool,
     attempts: AtomicI64,
@@ -47,11 +47,11 @@ struct RecordingSender {
 }
 
 impl RecordingSender {
-    fn sent(&self) -> Vec<Vec<u8>> {
+    pub(super) fn sent(&self) -> Vec<Vec<u8>> {
         self.sent.lock().expect("sent").clone()
     }
 
-    fn sent_with(&self, subject: &str) -> Vec<Vec<u8>> {
+    pub(super) fn sent_with(&self, subject: &str) -> Vec<Vec<u8>> {
         let needle = format!("Subject: {subject}\r\n");
         self.sent()
             .into_iter()
@@ -96,7 +96,7 @@ impl MailSender for RecordingSender {
     }
 }
 
-fn settings() -> AccountSettings {
+pub(super) fn settings() -> AccountSettings {
     let server = |host: &str, port| ServerSettings {
         host: host.into(),
         port,
@@ -113,19 +113,19 @@ fn settings() -> AccountSettings {
     }
 }
 
-struct Bed {
-    dir: TempDir,
-    server: Arc<FakeServer>,
-    keychain: Arc<MemorySecretStore>,
-    clock: Arc<OffsetClock>,
-    sender: Arc<RecordingSender>,
-    core: AppCore<FakeConnector>,
-    events: broadcast::Receiver<CoreEvent>,
-    account: AccountId,
+pub(super) struct Bed {
+    pub(super) dir: TempDir,
+    pub(super) server: Arc<FakeServer>,
+    pub(super) keychain: Arc<MemorySecretStore>,
+    pub(super) clock: Arc<OffsetClock>,
+    pub(super) sender: Arc<RecordingSender>,
+    pub(super) core: AppCore<FakeConnector>,
+    pub(super) events: broadcast::Receiver<CoreEvent>,
+    pub(super) account: AccountId,
 }
 
 impl Bed {
-    async fn new() -> Self {
+    pub(super) async fn new() -> Self {
         let server = FakeServer::new();
         let dir = TempDir::new().expect("temp dir");
         let mut bed =
@@ -151,7 +151,7 @@ impl Bed {
         bed
     }
 
-    async fn start(
+    pub(super) async fn start(
         dir: TempDir,
         server: Arc<FakeServer>,
         keychain: Arc<MemorySecretStore>,
@@ -219,7 +219,7 @@ impl Bed {
     }
 
     /// The same data, server, keychain and sender after the app was off for `off_ms`.
-    async fn restart(self, off_ms: i64) -> Self {
+    pub(super) async fn restart(self, off_ms: i64) -> Self {
         let Self {
             dir,
             server,
@@ -237,11 +237,11 @@ impl Bed {
         bed
     }
 
-    fn now(&self) -> i64 {
+    pub(super) fn now(&self) -> i64 {
         self.clock.now_ms()
     }
 
-    async fn idle(&mut self) {
+    pub(super) async fn idle(&mut self) {
         let deadline = Instant::now() + WAIT;
         loop {
             let accounts = self.core.list_accounts().await.expect("accounts");
@@ -256,7 +256,7 @@ impl Bed {
         }
     }
 
-    async fn draft(&self, subject: &str, html: &str) -> Draft {
+    pub(super) async fn draft(&self, subject: &str, html: &str) -> Draft {
         let draft = self
             .core
             .create_draft(NewDraft::New {
@@ -269,7 +269,7 @@ impl Bed {
         self.write(&draft, subject, html).await
     }
 
-    async fn write(&self, draft: &Draft, subject: &str, html: &str) -> Draft {
+    pub(super) async fn write(&self, draft: &Draft, subject: &str, html: &str) -> Draft {
         self.core
             .save_draft(
                 draft.id.clone(),
@@ -295,7 +295,7 @@ impl Bed {
             .expect("save")
     }
 
-    async fn until<T, F, Fut>(&self, what: &str, mut probe: F) -> T
+    pub(super) async fn until<T, F, Fut>(&self, what: &str, mut probe: F) -> T
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Option<T>>,
@@ -310,7 +310,7 @@ impl Bed {
         }
     }
 
-    async fn state_of(&self, operation: mail_model::OperationId) -> Option<SendState> {
+    pub(super) async fn state_of(&self, operation: mail_model::OperationId) -> Option<SendState> {
         self.core
             .list_outgoing(self.account, None, 100)
             .await

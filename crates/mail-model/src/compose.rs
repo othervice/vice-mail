@@ -300,6 +300,10 @@ pub struct Draft {
     /// Stage 16: the message asks for a read receipt (`Disposition-Notification-To` with the
     /// sending identity's address, RFC 8098). The recipient decides whether to send one.
     pub request_read_receipt: bool,
+    /// Stage 20 (decision 0059): "Remind me if no reply by …", Unix milliseconds; recorded as
+    /// a reminder once the server accepted the message. Null: no reminder.
+    #[specta(type = Option<Number>)]
+    pub follow_up_at: Option<i64>,
     /// Made from a draft another program saved in the Drafts folder, which the app could not
     /// take over completely (an image from the web, a part the editor cannot show, a message
     /// stored only in part) or which had no Message-ID: that copy stays in the folder unchanged,
@@ -322,6 +326,11 @@ pub struct DraftSendOptions {
     pub archive_original: bool,
     /// See [`Draft::request_read_receipt`].
     pub request_read_receipt: bool,
+    /// Stage 20: see [`Draft::follow_up_at`]; at least a minute ahead, at most 5 years. Left out
+    /// by an older caller: none.
+    #[serde(default)]
+    #[specta(type = Option<Number>)]
+    pub follow_up_at: Option<i64>,
 }
 
 /// A draft in a list (restoring drafts after a crash, the local drafts of an account).
@@ -602,6 +611,15 @@ pub struct ComposeSettings {
     /// Stage 16: how read-receipt requests of incoming mail are handled. Synced.
     #[serde(default)]
     pub read_receipts: ReadReceiptPolicy,
+    /// Stage 20 (decision 0058): before sending, the composer asks "Send anyway?" when the
+    /// user's own text speaks of an attachment but none is there (`checkAttachmentReminder`).
+    /// On by default; synced. Left out by an older caller: on.
+    #[serde(default = "attachment_reminder_default")]
+    pub attachment_reminder: bool,
+}
+
+const fn attachment_reminder_default() -> bool {
+    true
 }
 
 impl Default for ComposeSettings {
@@ -611,6 +629,7 @@ impl Default for ComposeSettings {
             default_quote_position: QuotePosition::default(),
             archive_on_reply: false,
             read_receipts: ReadReceiptPolicy::default(),
+            attachment_reminder: true,
         }
     }
 }
@@ -975,6 +994,10 @@ pub struct SendJob {
     /// Stage 16: archive the original once the send is accepted ("send and archive").
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub archive_original: bool,
+    /// Stage 20 (decision 0059): remind at this time (Unix ms) unless a reply comes; recorded
+    /// in the transaction that confirms the acceptance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up_at: Option<i64>,
     /// Stage 16: set when the send was accepted but the account had no archive mailbox.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub archive_missing: bool,
@@ -1082,6 +1105,7 @@ mod tests {
                 "sendDelaySeconds": 10,
                 "defaultQuotePosition": "above",
                 "archiveOnReply": false,
+                "attachmentReminder": true,
                 "readReceipts": "ask"
             })
         );
@@ -1094,6 +1118,7 @@ mod tests {
                 default_quote_position: QuotePosition::Above,
                 archive_on_reply: false,
                 read_receipts: ReadReceiptPolicy::Ask,
+                attachment_reminder: true,
             }
         );
         assert_eq!(

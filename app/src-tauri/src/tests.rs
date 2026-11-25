@@ -638,17 +638,18 @@ fn action_commands_answer_typed_results() {
     let err = invoke(&h, "discard_operation", json!({ "operationId": 999_999 })).expect_err("gone");
     assert_eq!(err["code"], "not_found", "{err}");
 
-    // Reading preferences.
+    // Reading preferences (stage 20: tracker blocking and link cleaning default to on, also
+    // when an older UI leaves them out).
     assert_eq!(
         invoke(&h, "get_reading_preferences", json!({})).expect("reading prefs"),
-        json!({ "markReadOnOpen": "afterDelay" })
+        json!({ "markReadOnOpen": "afterDelay", "blockTrackers": true, "cleanLinks": true })
     );
-    let never = json!({ "markReadOnOpen": "never" });
+    let never = json!({ "markReadOnOpen": "never", "blockTrackers": true, "cleanLinks": false });
     assert_eq!(
         invoke(
             &h,
             "set_reading_preferences",
-            json!({ "preferences": never })
+            json!({ "preferences": { "markReadOnOpen": "never", "cleanLinks": false } })
         )
         .expect("set"),
         never
@@ -1524,7 +1525,8 @@ fn the_popup_window_may_only_call_its_own_commands() {
     let empty = invoke_from(&popup, "get_new_mail_popup", json!({})).expect("own command");
     assert_eq!(empty["cards"], json!([]));
     assert_eq!(empty["more"], json!(0));
-    assert_eq!(empty["appearance"]["accent"], json!("orange"));
+    // The default accent since decision 0053.
+    assert_eq!(empty["appearance"]["accent"], json!("blue"));
     let dismissed = invoke_from(&popup, "dismiss_popup", json!({ "messageId": null }));
     assert!(dismissed.is_ok(), "{dismissed:?}");
     let gone = invoke_from(&popup, "read_from_popup", json!({ "messageId": 1 }))

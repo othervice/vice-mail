@@ -34,6 +34,8 @@ mod stage10;
 mod stage10_tests;
 #[cfg(test)]
 mod stage19_tests;
+#[cfg(test)]
+mod stage20_tests;
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -71,6 +73,8 @@ const QUOTE_POSITION_KEY: &str = "compose.default_quote_position";
 const ARCHIVE_ON_REPLY_KEY: &str = "compose.archive_on_reply";
 /// Stage 16: how read-receipt requests are handled (`ask` or `never`).
 const READ_RECEIPTS_KEY: &str = "compose.read_receipts";
+/// Stage 20 (decision 0058): the attachment reminder before sending (JSON boolean).
+const ATTACHMENT_REMINDER_KEY: &str = "compose.attachment_reminder";
 /// Longest request id of a send (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
 /// How long creating a reply waits for the original's body to be fetched.
@@ -554,6 +558,7 @@ impl<C: Connector> Compose<C> {
             outgoing: draft.outgoing,
             archive_original: draft.archive_original,
             request_read_receipt: draft.request_receipt,
+            follow_up_at: draft.follow_up_at,
             original_kept: draft.kept_original.is_some(),
             created_at: draft.created_at,
             updated_at: draft.updated_at,
@@ -661,7 +666,12 @@ impl<C: Connector> Compose<C> {
         {
             self.inner
                 .store
-                .set_draft_send_options(draft.id.clone(), true, draft.request_receipt)
+                .set_draft_send_options(
+                    draft.id.clone(),
+                    true,
+                    draft.request_receipt,
+                    draft.follow_up_at,
+                )
                 .await?
         } else {
             draft
@@ -1658,6 +1668,7 @@ impl<C: Connector> Compose<C> {
             archive_original,
             archive_missing: false,
             receipt_for: None,
+            follow_up_at: draft.follow_up_at,
             redirect: false,
         };
         let not_before = match at {
@@ -1797,7 +1808,38 @@ impl<C: Connector> Compose<C> {
                 }
             }
         }
+        if let Some(stored) = settings.iter().find(|s| s.key == ATTACHMENT_REMINDER_KEY) {
+            match serde_json::from_str::<bool>(&stored.value) {
+                Ok(on) => out.attachment_reminder = on,
+                Err(err) => {
+                    tracing::warn!(%err, "stored attachment reminder unreadable; default used");
+                }
+            }
+        }
         Ok(out)
+    }
+
+    /// Stage 20 (decision 0058): the word of the draft's own text that speaks of an attachment
+    /// while the draft has none (inline images count as attached); `None` with the reminder off
+    /// or nothing to remind of. Quote and signature are kept apart by the composer and are not
+    /// read; quoted lines and quoted messages inside the text are left out by
+    /// `mail_content::attachment_mention`.
+    pub(crate) async fn attachment_reminder(
+        &self,
+        id: DraftId,
+    ) -> Result<Option<String>, CoreError> {
+        if !self.compose_settings().await?.attachment_reminder {
+            return Ok(None);
+        }
+        let draft = self.get(id).await?;
+        if !draft.attachments.is_empty() {
+            return Ok(None);
+        }
+        let own_text = match draft.format {
+            mail_model::ComposeFormat::Html => mail_content::html_to_text(&draft.body_html),
+            mail_model::ComposeFormat::Text => draft.body_text,
+        };
+        Ok(mail_content::attachment_mention(&own_text))
     }
 
     pub(crate) async fn set_compose_settings(
@@ -1829,6 +1871,10 @@ impl<C: Connector> Compose<C> {
                     (
                         READ_RECEIPTS_KEY.to_owned(),
                         format!("\"{}\"", settings.read_receipts.as_str()),
+                    ),
+                    (
+                        ATTACHMENT_REMINDER_KEY.to_owned(),
+                        settings.attachment_reminder.to_string(),
                     ),
                 ],
             )

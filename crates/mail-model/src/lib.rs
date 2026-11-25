@@ -11,6 +11,7 @@
 mod account;
 mod ai;
 mod attachments;
+mod attachments_view;
 mod backend;
 mod body;
 mod bundle;
@@ -24,6 +25,7 @@ mod diagnostics;
 mod eml;
 mod error;
 mod first_start;
+mod follow_up;
 mod gmail;
 mod ids;
 mod inbox;
@@ -37,6 +39,7 @@ mod oauth;
 mod outbox;
 mod parity;
 mod popup;
+mod quota;
 mod reading;
 mod role;
 mod saved_search;
@@ -76,6 +79,10 @@ pub use attachments::{
     AttachmentPreview, MAX_PINNED_ATTACHMENTS, MAX_PREVIEW_EDGE, MAX_PREVIEW_INPUT_BYTES,
     MAX_PREVIEW_PDF_PAGES, MAX_PREVIEW_PIXELS, MAX_PREVIEW_TEXT_BYTES, PinnedAttachment,
     PreviewError, PreviewKind, SaveAllAttachmentsResult,
+};
+pub use attachments_view::{
+    AttachmentCursor, AttachmentEntry, AttachmentFilter, AttachmentKind, AttachmentPage,
+    MAX_ATTACHMENT_FILTER_CHARS, MAX_ATTACHMENT_PAGE,
 };
 pub use backend::{
     Access, ConnectConfig, ExtraRootCa, IdleOutcome, MailBackend, MailConnector, SelectedMailbox,
@@ -132,6 +139,9 @@ pub use eml::{
 };
 pub use error::{BackendError, CoreError, ErrorCode, IpcError};
 pub use first_start::{FirstStart, FirstStartEnd, FirstStartOutcome};
+pub use follow_up::{
+    FollowUpChoice, FollowUpMark, FollowUpResult, FollowUpTimes, MAX_TOP_FOLLOW_UPS,
+};
 pub use gmail::{
     GmailInfo, INBOX_LABEL, MAX_LABEL_LEN, SYSTEM_LABELS, is_gmail_host, is_system_folder,
     is_valid_label, label_of_mailbox, normalize_labels, system_label,
@@ -191,12 +201,13 @@ pub use popup::{
     MAX_POPUP_CARDS, MAX_POPUP_QUEUE, NewMailAccount, NewMailCard, NewMailContent, NewMailPopup,
     PopupAppearance,
 };
+pub use quota::{MailboxQuota, QUOTA_WARN_PERCENT, StorageQuota};
 pub use reading::{
     AttachmentInfo, BodyFormat, BodyUnavailableReason, LINK_PLACEHOLDER_HOST, LinkInfo,
     LinkWarning, MessageBody, MessageProblem, MessageView, MessageViewHeader, OpenAttachmentResult,
     PrefetchPeriod, PrefetchSettings, PrefetchState, PrefetchStatus, RemoteContentScope,
-    RenderToken, SaveAttachmentResult, TextSegment, link_placeholder, normalize_sender,
-    parse_link_placeholder,
+    RenderToken, SaveAttachmentResult, TextSegment, TrackerSummary, link_placeholder,
+    normalize_sender, parse_link_placeholder,
 };
 pub use role::{RoleAssignment, RoleInput, assign_roles};
 pub use saved_search::{

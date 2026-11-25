@@ -91,6 +91,10 @@ export const config = {
     // Stage 18, task D: folders created in the app on the server, and the server's folders
     // reloaded without a restart. Creates folders on the server and removes them again.
     "./tests/e2e/folders.e2e.mjs",
+    // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a reply (it
+    // moves the app's clock forward), the attachments view, trackers and the quota (it sets and
+    // clears a storage limit for alice). Appends three messages to the inbox.
+    "./tests/e2e/stage20.e2e.mjs",
     // Stage 14, block D (decision 0041): a JMAP account through the setup form.
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.

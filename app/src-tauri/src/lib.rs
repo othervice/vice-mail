@@ -343,6 +343,15 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // Stage 15 (decision 0044): the guided first start.
             commands::first_start::get_first_start,
             commands::first_start::finish_first_start,
+            // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a
+            // reply, the attachments view, the mailbox quota.
+            commands::reminders::check_attachment_reminder,
+            commands::reminders::get_follow_up_times,
+            commands::reminders::set_follow_up,
+            commands::reminders::clear_follow_up,
+            commands::reminders::list_follow_ups,
+            commands::attachments_view::list_attachments,
+            commands::quota::get_account_quota,
             // Stage 18 (decision 0051): the new-mail popup, the only commands its window may
             // call (`popup::POPUP_COMMANDS`).
             commands::popup::get_new_mail_popup,
@@ -373,6 +382,10 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant("MAX_PREVIEW_TEXT_BYTES", mail_model::MAX_PREVIEW_TEXT_BYTES)
         .constant("MAX_PREVIEW_PDF_PAGES", mail_model::MAX_PREVIEW_PDF_PAGES)
         .constant("MAX_PINNED_ATTACHMENTS", mail_model::MAX_PINNED_ATTACHMENTS)
+        // Stage 20 (decision 0060): the attachments view's page.
+        .constant("MAX_ATTACHMENT_PAGE", mail_model::MAX_ATTACHMENT_PAGE)
+        // Stage 20 (decision 0060): from this share on, the account shows a notice.
+        .constant("QUOTA_WARN_PERCENT", mail_model::QUOTA_WARN_PERCENT)
         // Stage 7: the largest search, thread and unified page, and the most messages of a
         // thread view.
         .constant("MAX_SEARCH_PAGE", mail_model::MAX_SEARCH_PAGE)

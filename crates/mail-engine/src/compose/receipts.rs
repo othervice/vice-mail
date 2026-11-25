@@ -41,6 +41,10 @@ impl<C: Connector> Compose<C> {
         id: DraftId,
         options: DraftSendOptions,
     ) -> Result<Draft, CoreError> {
+        // Stage 20 (decision 0059): the reminder's time within the bounds of a snooze.
+        if let Some(at) = options.follow_up_at {
+            crate::comfort::time::check_ahead(at, self.now())?;
+        }
         let draft = self
             .inner
             .store
@@ -48,6 +52,7 @@ impl<C: Connector> Compose<C> {
                 id.clone(),
                 options.archive_original,
                 options.request_read_receipt,
+                options.follow_up_at,
             )
             .await?;
         // The Drafts copy carries the read-receipt request: it is saved again after a pause.
@@ -322,6 +327,7 @@ impl<C: Connector> Compose<C> {
             archive_original: false,
             archive_missing: false,
             receipt_for: Some(original_id),
+            follow_up_at: None,
             redirect: false,
         };
         let lock = self.inner.outbox.files_lock();

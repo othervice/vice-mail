@@ -28,6 +28,7 @@ use crate::guard;
 use crate::image::{self, ImageBytes, PLACEHOLDER_PIXEL};
 use crate::reencode::ReencodedImages;
 use crate::text::html_to_text;
+use crate::trackers::{self, TrackerKind, TrackerReport};
 use mail_model::{RenderToken, link_placeholder, parse_link_placeholder};
 
 /// Content Security Policy at the top of every `srcdoc` (decision 0005, point 2):
@@ -448,11 +449,17 @@ pub struct RenderOptions {
     pub max_total_image_bytes: usize,
     /// Largest HTML input; longer input is cut.
     pub max_html_bytes: usize,
+    /// Stage 20 (decision 0058): tracker protection. Pixels and images on known tracking hosts
+    /// are never shown or listed for loading (not even under [`RemotePolicy::Allow`]); an image
+    /// address with tracking parameters is listed and looked up without them. Counted in
+    /// [`RenderedHtml::trackers`]. Off: every external image is treated alike.
+    pub block_trackers: bool,
 }
 
 impl RenderOptions {
     /// Defaults for one rendering: external images blocked, no inline images, nothing
-    /// re-encoded yet, 8 MiB per image, 32 MiB in total, [`MAX_HTML_BYTES`] of HTML.
+    /// re-encoded yet, 8 MiB per image, 32 MiB in total, [`MAX_HTML_BYTES`] of HTML, trackers
+    /// not told apart (the core turns that on per its setting).
     pub fn new(token: RenderToken) -> Self {
         Self {
             token,
@@ -462,6 +469,7 @@ impl RenderOptions {
             max_image_bytes: 8 << 20,
             max_total_image_bytes: 32 << 20,
             max_html_bytes: MAX_HTML_BYTES,
+            block_trackers: false,
         }
     }
 }
@@ -481,7 +489,10 @@ pub struct RenderedHtml {
     /// these after "load once" and renders again with [`RemotePolicy::Allow`].
     pub remote_resources: Vec<RemoteRef>,
     /// Number of external image references that were blocked (a URL can occur several times).
+    /// With [`RenderOptions::block_trackers`], trackers are not counted here: they never load.
     pub blocked_count: u32,
+    /// Stage 20: the trackers found (with [`RenderOptions::block_trackers`]), each address once.
+    pub trackers: TrackerReport,
     /// Images that could not be shown: unknown format, too large, over the total budget, refused
     /// by the re-encoder or not re-encoded yet.
     pub omitted_images: u32,
@@ -552,6 +563,9 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
 
     // 1. Style blocks and body attributes from a full document parse.
     let document = dom::parse_document(html);
+    if options.block_trackers {
+        pipeline.state().pixels = pixel_sources(&document);
+    }
     let css_text = style_text(&document);
     let stylesheet = css::sanitize_stylesheet(&css_text, &mut |url| pipeline.css_image(url));
     let mut body_attributes = String::new();
@@ -635,6 +649,7 @@ pub fn render_html(html: &str, options: &RenderOptions) -> RenderedHtml {
         inline_used: state.inline_used,
         remote_resources: state.remote,
         blocked_count: state.blocked,
+        trackers: state.trackers,
         omitted_images: state.omitted,
         pending_images: state.pending,
         truncated,
@@ -838,6 +853,11 @@ struct State {
     image_bytes: usize,
     pending: Vec<ImageBytes>,
     pending_seen: HashSet<ImageBytes>,
+    /// Stage 20: addresses of external `<img>` sources that are pixels ([`pixel_sources`]).
+    pixels: HashSet<String>,
+    trackers: TrackerReport,
+    /// Tracker addresses counted already (as written, before cleaning).
+    trackers_seen: HashSet<String>,
 }
 
 /// Outcome for one image URL.
@@ -946,6 +966,14 @@ impl Pipeline {
         let Some(remote) = remote_url(url) else {
             return Image::Unavailable;
         };
+        let remote = if self.options.block_trackers {
+            match self.tracker(remote) {
+                Ok(remote) => remote,
+                Err(blocked) => return blocked,
+            }
+        } else {
+            remote
+        };
         if let RemotePolicy::Allow(allowed) = &self.options.remote
             && let Some(bytes) = allowed.get(&remote)
         {
@@ -969,6 +997,38 @@ impl Pipeline {
             }
         }
         Image::Blocked
+    }
+
+    /// Stage 20: a pixel or an image on a known tracking host is blocked for good (`Err`);
+    /// otherwise the address to list and look up, without tracking parameters. Every tracker
+    /// address is counted once.
+    fn tracker(&self, remote: String) -> Result<String, Image> {
+        let host = Url::parse(&remote)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_owned));
+        let mut state = self.state();
+        let kind = if state.pixels.contains(&remote) {
+            Some(TrackerKind::Pixel)
+        } else if host.as_deref().is_some_and(trackers::is_known_tracker_host) {
+            Some(TrackerKind::KnownHost)
+        } else {
+            None
+        };
+        if let Some(kind) = kind {
+            if state.trackers_seen.insert(remote) {
+                state.trackers.add(kind, host.as_deref());
+            }
+            return Err(Image::Blocked);
+        }
+        match trackers::strip_tracking_parameters(&remote) {
+            Some(cleaned) => {
+                if state.trackers_seen.insert(remote) {
+                    state.trackers.add(TrackerKind::Parameters, host.as_deref());
+                }
+                Ok(cleaned.url)
+            }
+            None => Ok(remote),
+        }
     }
 
     /// The re-encoding of an image (C-4), never its own bytes. The size limits and the format
@@ -1019,6 +1079,33 @@ pub(crate) fn render_reencoded(html: &str, options: &RenderOptions) -> RenderedH
         }
     }
     render_html(html, &options)
+}
+
+/// Stage 20: the external addresses of `<img>` elements that are pixels or hidden
+/// ([`trackers::is_pixel`]), as [`remote_url`] writes them.
+fn pixel_sources(document: &dom::Dom) -> HashSet<String> {
+    let mut pixels = HashSet::new();
+    dom::walk(&document.document, |visit| {
+        if let Visit::Enter(node) = visit
+            && dom::html_name(node) == Some("img")
+            && let Some(src) = dom::attribute(node, "src").and_then(|src| remote_url(src.trim()))
+        {
+            let width = dom::attribute(node, "width");
+            let height = dom::attribute(node, "height");
+            let style = dom::attribute(node, "style");
+            let hidden = dom::attribute(node, "hidden").is_some();
+            if trackers::is_pixel(
+                width.as_deref(),
+                height.as_deref(),
+                style.as_deref(),
+                hidden,
+            ) {
+                pixels.insert(src);
+            }
+        }
+        Descend::Yes
+    });
+    pixels
 }
 
 /// The absolute `http(s)` URL of an image reference, `None` for anything else.
@@ -1374,6 +1461,95 @@ mod tests {
         assert!(!r.srcdoc.contains("onerror"), "{}", r.srcdoc);
         assert!(!r.srcdoc.contains("127.0.0.1"), "{}", r.srcdoc);
         assert_eq!(r.fallback, None);
+    }
+
+    fn tracking(html: &str) -> RenderedHtml {
+        render_html(
+            html,
+            &RenderOptions {
+                block_trackers: true,
+                ..options()
+            },
+        )
+    }
+
+    #[test]
+    fn trackers_are_counted_and_never_listed_for_loading() {
+        let html = "<img src='https://news.example/open.gif?u=1' width='1' height='1'>\
+             <img src='https://img.example/spacer.gif' style='display:none'>\
+             <img src='https://us5.list-manage.com/track/open.php?u=2'>\
+             <img src='https://img.example/banner.png?utm_source=news&amp;id=7' width='600'>\
+             <img src='https://img.example/photo.jpg' width='600'>\
+             <img src='https://news.example/open.gif?u=1' width='1' height='1'>";
+        let r = tracking(html);
+        assert_eq!(r.trackers.pixels, 2, "{:?}", r.trackers);
+        assert_eq!(r.trackers.known_hosts, 1);
+        assert_eq!(r.trackers.parameters, 1);
+        assert_eq!(r.trackers.total(), 4);
+        assert_eq!(
+            r.trackers.hosts,
+            ["news.example", "img.example", "us5.list-manage.com"]
+        );
+        // Only the content images can be loaded; the banner without its tracking parameter.
+        let urls: Vec<&str> = r.remote_resources.iter().map(|r| r.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            [
+                "https://img.example/banner.png?id=7",
+                "https://img.example/photo.jpg"
+            ]
+        );
+        assert_eq!(r.blocked_count, 2);
+        assert!(!r.srcdoc.contains("news.example") && !r.srcdoc.contains("list-manage"));
+
+        // Off: every external image is alike, nothing is counted.
+        let plain = render(html);
+        assert_eq!(plain.trackers, TrackerReport::default());
+        assert_eq!(plain.remote_resources.len(), 5);
+        assert_eq!(plain.blocked_count, 6);
+    }
+
+    #[test]
+    fn trackers_stay_blocked_when_images_are_allowed() {
+        let gif: ImageBytes = image::decode_data_url(PLACEHOLDER_PIXEL, 100)
+            .map(ImageBytes::from)
+            .expect("pixel");
+        let mut allowed = HashMap::new();
+        for url in [
+            "https://news.example/open.gif",
+            "https://us5.list-manage.com/track/open.php",
+            "https://img.example/banner.gif?id=7",
+        ] {
+            allowed.insert(url.to_owned(), gif.clone());
+        }
+        let options = RenderOptions {
+            block_trackers: true,
+            remote: RemotePolicy::Allow(allowed),
+            ..options()
+        };
+        let r = render_html(
+            "<img src='https://news.example/open.gif' width=1 height=1>\
+             <img src='https://us5.list-manage.com/track/open.php'>\
+             <img src='https://img.example/banner.gif?id=7&amp;utm_medium=email'>",
+            &options,
+        );
+        // The banner is looked up by its clean address (and waits for its re-encoding); the
+        // pixel and the known tracker are never asked for.
+        assert_eq!(r.pending_images.len(), 1);
+        assert!(r.remote_resources.is_empty(), "{:?}", r.remote_resources);
+        assert_eq!(r.trackers.total(), 3);
+    }
+
+    #[test]
+    fn css_images_of_known_trackers_are_counted() {
+        let r = tracking(
+            "<div style=\"background:url(https://t.sendgrid.net/wf/open?x=1)\">x</div>\
+             <table background='https://img.example/bg.png?fbclid=1'><tr><td>y</td></tr></table>",
+        );
+        assert_eq!(r.trackers.known_hosts, 1);
+        assert_eq!(r.trackers.parameters, 1);
+        assert_eq!(r.remote_resources.len(), 1);
+        assert_eq!(r.remote_resources[0].url, "https://img.example/bg.png");
     }
 
     #[test]

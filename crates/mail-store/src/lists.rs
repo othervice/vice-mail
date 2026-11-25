@@ -69,6 +69,7 @@ pub(crate) fn item_at(
         snooze: None,
         task: None,
         reading_list: false,
+        follow_up: None,
     })
 }
 
@@ -517,6 +518,7 @@ pub(crate) fn entry(
             snooze: None,
             task: None,
             reading_list: false,
+            follow_up: None,
         },
         mailbox_ids,
         body_complete: head.complete == Some(true),
