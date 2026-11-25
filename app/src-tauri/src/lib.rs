@@ -626,9 +626,6 @@ pub fn run() {
             core.set_notification_sink(notifications::NativeNotifications::install(app.handle()));
             notifications::follow_badge(app.handle().clone(), core.subscribe());
             app.manage(links::LinkQueue::default());
-            for url in default_app::mailto_arguments(std::env::args().skip(1)) {
-                links::opened(app.handle(), &url);
-            }
             // Stage 15 (decision 0037): the update source; it only checks with consent.
             start_updates(app.handle(), &core);
             attach_core(app.handle(), &specta, core);
@@ -637,6 +634,11 @@ pub fn run() {
                 tracing::info!("started in the background");
             } else {
                 open_main_window(app.handle(), theme, true)?;
+            }
+            // `mailto:` links of the start wait for the page (after the window exists, so a link
+            // never builds a second one).
+            for url in default_app::mailto_arguments(std::env::args().skip(1)) {
+                links::opened(app.handle(), &url);
             }
             tray::refresh(app.handle());
             // Stage 9: `.eml` files of the start (Windows passes them as arguments).

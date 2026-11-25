@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 // Shared by wdio.conf.mjs (launcher), the specs (workers) and check-release.mjs. Node only: no
 // @wdio/globals here, the launcher imports this file.
 
@@ -8,9 +10,11 @@ export const DATA_DIR_ENV = "MAIL_APP_E2E_DATA_DIR";
 export const WEBDRIVER_PORT = 4445;
 
 /**
- * Quits the app the way a user would, by closing its only window. Runs after WebdriverIO has
- * ended the test session (`afterSession`), so it opens a short session of its own on the
- * embedded WebDriver. Resolves once the app has exited.
+ * Quits the app the way a user would: "Quit" (the tray menu's, through the test command
+ * `e2e_quit`). Since stage 21 (decision 0069) closing the last window keeps the app running in
+ * the background, so closing windows is only the fallback for builds without that command. Runs
+ * after WebdriverIO has ended the test session (`afterSession`), so it opens a short session of
+ * its own on the embedded WebDriver. Resolves once the app has exited.
  */
 export async function quitApp() {
   const base = `http://127.0.0.1:${WEBDRIVER_PORT}`;
@@ -33,6 +37,37 @@ export async function quitApp() {
   const handles = await fetch(`${base}/session/${session}/window/handles`, { signal: AbortSignal.timeout(5000) })
     .then(async (res) => (await res.json()).value ?? [])
     .catch(() => []);
+  // Stage 21: "Quit" from any window (the popup's too; `e2e_*` commands pass its filter).
+  for (const handle of handles) {
+    const switched = await fetch(`${base}/session/${session}/window`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handle }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null);
+    if (!switched?.ok) continue;
+    const quit = await fetch(`${base}/session/${session}/execute/sync`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ script: "window.__TAURI_INTERNALS__.invoke('e2e_quit'); return true;", args: [] }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null);
+    if (quit?.ok) {
+      try {
+        await waitForAppExit();
+        return;
+      } catch {
+        break;
+      }
+    }
+  }
+  // No window at all (closed into the background): nothing can run the command. End the process
+  // that serves the WebDriver port.
+  if (handles.length === 0) {
+    terminateWebDriverHost();
+    await waitForAppExit();
+    return;
+  }
   const ordered = [...handles.filter((h) => h !== "main"), ...handles.filter((h) => h === "main")];
   for (const handle of ordered.length ? ordered : [null]) {
     if (handle !== null) {
@@ -47,6 +82,19 @@ export async function quitApp() {
     await fetch(`${base}/session/${session}/window`, { method: "DELETE", signal: AbortSignal.timeout(5000) }).catch(() => {});
   }
   await waitForAppExit();
+}
+
+/** SIGTERM to the process listening on the WebDriver port (the test app). */
+function terminateWebDriverHost() {
+  try {
+    const pids = execFileSync("lsof", ["-ti", `tcp:${WEBDRIVER_PORT}`, "-sTCP:LISTEN"], { encoding: "utf8" })
+      .split("\n")
+      .map((line) => Number(line.trim()))
+      .filter((pid) => pid > 0 && pid !== process.pid);
+    for (const pid of pids) process.kill(pid, "SIGTERM");
+  } catch {
+    // Nothing listens: already gone.
+  }
 }
 
 /** Resolves once nothing answers on the WebDriver port any more, i.e. the app has quit. */

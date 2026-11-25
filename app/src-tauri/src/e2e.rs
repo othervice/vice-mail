@@ -176,6 +176,7 @@ pub fn install(
             e2e_advance_clock,
             e2e_dialog_answers,
             e2e_quit,
+            e2e_close_window,
             e2e_tray,
             e2e_tray_action
         ]);
@@ -520,6 +521,18 @@ pub fn login_items_dir() -> io::Result<PathBuf> {
 #[tauri::command]
 pub fn e2e_quit(app: AppHandle) {
     crate::lifecycle::quit(&app);
+}
+
+/// Stage 21: asks window `label` to close as its close button does (`CloseRequested`, which the
+/// app may answer by keeping it open). Returns at once; WebDriver's own "close window" waits
+/// for the window to go and fails when the app keeps it for the one-time note.
+#[tauri::command]
+pub fn e2e_close_window(app: AppHandle, label: String) -> Result<(), String> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("no window {label}"))?;
+    window.close().map_err(|e| e.to_string())
 }
 
 /// Stage 21: the tray icon as built (whether it exists and shows) and the menu it has now. The
