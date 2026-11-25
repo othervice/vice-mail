@@ -195,6 +195,10 @@
   --ui-section-height: 2rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
+  /* Stage 21 (decision 0071): below this width the quick filter's chips show their symbol only
+     (labelled chips and the field need about 800 px for one row, in English and German), so
+     beside the reading pane the bar stays one row, level with the pane's toolbar. */
+  --ui-filter-compact-below: 50rem;
   /* Stage 21 (decision 0065): the row's start, before the avatar, holds the unread dot; there is
      no column of its own for the dot and the selection box (the box takes the avatar's place). */
   --ui-row-lead: var(--ui-space-4);
@@ -228,7 +232,8 @@
   --ui-reading-min-width: 22.5rem;
   --ui-reading-min-height: 15rem;
   --ui-reading-max-width: 46rem;
-  --ui-attachment-width: 16rem;
+  /* Stage 21 (decision 0071): 20 rem instead of 16, so the name keeps room beside four buttons. */
+  --ui-attachment-width: 20rem;
   /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)
      and the height of their lists, the undo notices at the bottom. */
   --ui-dialog-width: 28rem;
@@ -241,6 +246,14 @@
   --ui-preview-width: 56rem;
   --ui-preview-max-height: 70vh;
   --ui-notice-width: 28rem;
+  /* Stage 21, item 4 (decision 0071): sizes that were written as steps the 4 px grid does not
+     have (and so had no CSS): a row of the attachments view (its virtualizer estimates 72 px),
+     progress bars and meters (update download, storage quota), a scrolling block of code in a
+     settings page (the MCP client configurations), the smallest width of a filter field. */
+  --ui-attachment-row-height: 4.5rem;
+  --ui-meter-width: 20rem;
+  --ui-code-max-height: 16rem;
+  --ui-field-min-width: 10rem;
   /* Stage 13: the AI panel on the right (docs/DESIGN.md: 380 px). */
   --ui-ai-panel-width: 23.75rem;
   /* Height of the native title-bar area the window overlays on the content. 0 unless the

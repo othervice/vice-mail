@@ -246,7 +246,7 @@ export function ContactsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="contacts-view">
-      <ViewHeader title={t("nav.contacts")} subtitle={<span className="text-13 text-secondary">{t("contacts.view.subtitle")}</span>} dragRegion={dragRegion}>
+      <ViewHeader title={t("nav.contacts")} subtitle={t("contacts.view.subtitle")} dragRegion={dragRegion}>
         <ContactsTransfer
           contact={tab === "contacts" && selected ? { email: selected.email, name: contactName(selected, selected.email) } : null}
           group={tab === "groups" && group ? { id: group.id, name: group.name } : null}

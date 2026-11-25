@@ -129,7 +129,7 @@ feste Farben oder Abstände.
 | Konten | acht unterscheidbare Kontofarben, in beiden Modi geprüft |
 | Avatare | acht Tönungen `avatar-n-bg` / `avatar-n-text`, Wahl per Hash der Absenderadresse, Schrift auf Fläche ≥ 4,5:1 |
 | Schrift | Systemschrift (SF Pro, Segoe UI Variable); Größen 12, 13, 14, 16, 20, 28 (9 nur für das Initial im Mini-Avatar); Gewichte 400, 500, 600 |
-| Abstand | Raster aus 4 px: 4, 8, 12, 16, 20, 24, 32, 40, 48 |
+| Abstand | Raster aus 4 px: 4, 8, 12, 16, 20, 24, 32, 40, 48; andere Stufen erzeugen kein CSS und sind per Test verboten (Stufe 21, siehe „Abstände“) |
 | Rundung | 6 (Bedienelemente), 8 (Zeilen, Kacheln), 10 (Karten), 16 (Panels, Fenster in der App); Pillen rund |
 | Schatten | vier Stufen: Zeile (Haarbreite), Karte (Priorität, leere Zustände), schwebend (Menüs, Schnellaktionen), Panel |
 | Bewegung | 120, 180, 240 ms, weich auslaufend; bei „Bewegung reduzieren“ keine |
@@ -1000,7 +1000,7 @@ die Liste bleibt `listbox` oder Baum mit denselben Namen der Zeilen wie bisher. 
 Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
 
 **Schnellfilter.** Eine Leiste über der Liste derselben Ansichten, immer sichtbar, 40 px auf
-`surface-list` mit Haarlinie darunter, Innenabstand 4/16 px:
+`surface-list` mit Haarlinie (`border-subtle`) darunter, Innenabstand 4/16 px:
 
 ```
  (o Ungelesen) (o Markiert) (o Mit Anhang) (o Von Kontakten) (o Schlagwort ▾)  [o Diese Mails filtern     ]  12 Treffer  × Zurücksetzen
@@ -1016,7 +1016,12 @@ Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
 - Solange etwas gesetzt ist: die Trefferzahl (12 px, `text-secondary`, Tabellenziffern, höfliche
   Live-Region) und „Zurücksetzen“ (leiser Knopf in Akzentfarbe). Findet nichts: die leere Ansicht
   „Keine passenden Mails“ mit dem Hinweis, den Filter zu ändern oder zurückzusetzen.
-- Bricht in einem schmalen Fenster um (Chips oben, Feld darunter).
+- Schmaler als 800 px (`--ui-filter-compact-below`, etwa neben dem Lesebereich) zeigen die Chips
+  nur ihr Symbol: 32 × 32 px, rund, der Name bleibt ihr Name für Screenreader und steht als
+  Tooltip; das Feld ist dann mindestens 160 px breit (`--ui-field-min-width`), der Platzhalter
+  endet mit „…“. So bleibt die Leiste bei 384 px eine Zeile und endet auf einer Linie mit der
+  Symbolleiste des Lesebereichs (Stufe 21, Entscheidung 0071; vorher drei Zeilen). Noch schmaler
+  bricht das Feld in die nächste Zeile um.
 - „Nur ungelesene“ (Stufe 16) ist der Chip „Ungelesen“; der Schalter im Kopf entfällt.
 - Tastatur: Chips und Schlagwort sind eine Werkzeugleiste (ein Tab-Stopp, ← →), Feld und
   „Zurücksetzen“ eigene Stopps; Escape im Feld leert den Text, ein zweites den Filter;
@@ -1079,6 +1084,52 @@ Tabelle) ein Menü in der Art von Thunderbird:
 | Pos1 / Ende | erster / letzter Eintrag |
 | Buchstabe | nächster Eintrag, der so beginnt (derselbe noch einmal: weiter) |
 | Eingabe, Leertaste | Eintrag ausführen (gesperrte tun nichts) |
+
+## Abstände (Stufe 21, Entscheidung 0071)
+
+Rückmeldung zu 0.1.1: „stimmen da die Abstände überall, damit das Programm polished aussieht?“
+Ein Durchgang über alle Ansichten, hell und dunkel, bei 1280 × 800 und 900 × 600, gemessen und als
+Test festgehalten (`app/tests/e2e/spacing.e2e.mjs`, Bilder in `tests/e2e/screenshots/spacing-*`).
+
+**Nur Stufen, die es gibt.** Das Theme kennt nur das 4-px-Raster, die Schriftgrößen und die vier
+Rundungen. Eine Klasse mit einer anderen Stufe (`gap-1.5`, `h-7`, `ps-14`, `max-h-64`, ein
+blankes `rounded`) erzeugt kein CSS und fällt still weg; so fehlten Innenabstände, Höhen und
+Einzüge an 24 Stellen. `app/tests/spacing-scale.test.ts` fragt Tailwind mit `app.css`, welche
+Abstands-, Größen-, Schrift- und Rundungsklassen im Code CSS erzeugen, und nennt Datei und Zeile
+jeder anderen. Zwischenwerte, die es braucht, kommen aus Tokens (`calc()` mit `--ui-space-*` oder
+einem eigenen Token), nie als feste Pixel.
+
+**Leisten.** Was oben am Fenster steht, ist 56 px hoch (`--ui-header-height`): Kopf jeder
+Ansicht, Kopf der Seitenspalte, Kopf des Verfassens und des KI-Panels (vorher 48 px). Die Leisten
+direkt darunter, die nebeneinander stehen (Schnellfilter, Symbolleiste des Lesebereichs), sind
+gleich gebaut: 4 px, Bedienelemente 32 px, 4 px, Haarlinie `border-subtle`; sie enden auf einer
+Linie (vorher 48 px gegen drei Zeilen Filter). Alle Bedienelemente einer Leiste sind gleich hoch
+und teilen ihre Mitte, auch „Änderungen erlauben …“ in der Symbolleiste (32 px statt 16 px).
+Gerahmte Felder und Auswahllisten sind 32 px.
+
+**Symbol und Text.** 8 px zwischen Symbol und Beschriftung in Knöpfen, Menüeinträgen (Kontextmenü,
+„…“-Menüs, Auswahlmenüs), Zeilen der Seitenspalte und der Einstellungen, der Befehlspalette und den
+Zeitwahlen (vorher teils 12 px, im Sortierknopf 4 px). 4 px nur in runden Chips (Schnellfilter,
+KI-Chips, Pille „n Antworten“) und kleinen Knöpfen mit 12-px-Text.
+
+**Kanten.** Was in einer Spalte untereinander steht, beginnt auf einer Linie: in der Liste der
+Titel der Ansicht, die Abschnitte („Heute“) und die Avatare (24 px, Vorlauf der Zeile); in der
+Seitenspalte die Etiketten („Ansichten“) und die Symbole der Zeilen (20 px); in der Befehlspalette
+die Gruppen („Treffer“) und die Symbole; der Inhalt der Aktivität im Einzug des Kopfes (24 px).
+Ein leiser Knopf allein unter Text („← Alle Konten“, „Erneut prüfen“ beim Speicher) steht mit seinem
+Symbol oder Text auf der Kante, nicht mit seinem Innenabstand.
+
+**Nichts angeschnitten.** Text endet sichtbar mit „…“ oder gar nicht abgeschnitten; Chips und
+Pillen nie. Das Wort der Pille „n Antworten“ weicht wie bisher zuerst („3 Antworten“, „3 Antw…“,
+„3“), zeigt aber nie weniger als 2,5 em (vorher blieb ein Rest der Auslassungspunkte: „› 1 .“).
+Anhänge im Lesebereich sind Karten von 320 px (vorher 256 px, der Name hatte neben den vier Knöpfen
+kaum 60 px); das Datum im Kopf einer Mail bricht in einer schmalen Karte um, statt über ihren Rand
+zu laufen. Deutsche Einträge, die mit „…“ enden, haben davor ein geschütztes Leerzeichen, damit
+die Punkte nie allein in eine zweite Zeile rutschen.
+
+**Ecken.** Karten in einer Ecke des Fensters stehen 24 px von beiden Rändern: die Frage nach
+Updates und die mbox-Aufträge unten links (vorher am Rand bzw. 16 px), wie die Sendehinweise unten
+rechts.
 
 ## Regeln für Interaktion
 

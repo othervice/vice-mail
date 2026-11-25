@@ -99,7 +99,7 @@ function GroupHeading({ group }: { group: "unread" | "read" }) {
   const { t } = useTranslation();
   const Icon = group === "unread" ? MailCheck : MailOpen;
   return (
-    <div aria-hidden data-testid={`unread-group-${group}`} className="flex h-full items-end gap-2 px-3 pb-1 text-12 font-semibold text-tertiary">
+    <div aria-hidden data-testid={`unread-group-${group}`} className="flex h-full items-end gap-2 ps-(--ui-row-lead) pe-3 pb-1 text-12 font-semibold text-tertiary">
       <Icon className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
       <span className="truncate">{t(group === "unread" ? "organize.unread.unreadHeading" : "organize.unread.readHeading")}</span>
     </div>

@@ -166,7 +166,7 @@ function LicenseEntry({ pkg, texts }: { pkg: LicensePackage; texts: Record<strin
         <span className="shrink-0 rounded-full bg-badge px-2 text-12 font-medium text-secondary">{ecosystem}</span>
       </button>
       {open && (
-        <div id={detailsId} className="flex flex-col gap-4 px-4 pt-1 pb-4 ps-11" data-testid="about-license-details">
+        <div id={detailsId} className="flex flex-col gap-4 px-4 pt-1 pb-4 ps-[calc(var(--ui-space-4)+var(--ui-icon-small)+var(--ui-space-3))]" data-testid="about-license-details">
           <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-6 gap-y-2 text-13">
             <dt className="text-secondary">{t("settings.about.licenses.usedUnder")}</dt>
             <dd className="min-w-0 text-primary select-text">{pkg.license}</dd>
@@ -194,7 +194,7 @@ function LicenseEntry({ pkg, texts }: { pkg: LicensePackage; texts: Record<strin
           {pkg.notices.length > 0 && (
             <div className="flex flex-col gap-1">
               <h4 className="text-13 font-medium text-primary">{t("settings.about.licenses.copyright")}</h4>
-              <ul className="flex flex-col gap-0.5 text-13 text-secondary select-text">
+              <ul className="flex flex-col gap-1 text-13 text-secondary select-text">
                 {pkg.notices.map((notice) => (
                   <li key={notice}>{notice}</li>
                 ))}

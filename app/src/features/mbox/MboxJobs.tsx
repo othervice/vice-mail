@@ -143,7 +143,7 @@ export function MboxJobsHost() {
   const jobs = useMboxStore((state) => state.jobs);
   if (jobs.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 left-4 z-30 flex w-(--ui-notice-width) flex-col gap-2" data-testid="mbox-jobs">
+    <div className="pointer-events-none fixed start-6 bottom-6 z-30 flex w-(--ui-notice-width) flex-col gap-2" data-testid="mbox-jobs">
       {jobs.map((job) => (
         <JobNotice key={job.id} job={job} />
       ))}

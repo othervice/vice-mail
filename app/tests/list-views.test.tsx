@@ -232,6 +232,41 @@ describe("the quick filter", () => {
     expect(within(bar).queryByRole("button", { name: "Reset" })).toBeNull();
   });
 
+  // Stage 21 (decision 0071): beside the reading pane (narrower than --ui-filter-compact-below)
+  // the chips are their symbols, with the same names, so the bar stays one row.
+  for (const width of [1000, 384]) {
+    it(`shows the chips' names ${width < 800 ? "only to screen readers and as tooltips in a narrow bar" : "in a wide bar"}`, async () => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(private readonly callback: ResizeObserverCallback) {}
+          observe() {
+            this.callback([], this);
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+      const { user } = setup();
+      await list();
+      const bar = screen.getByRole("region", { name: "Quick filter" });
+      const narrow = width < 800;
+      expect(bar.hasAttribute("data-compact")).toBe(narrow);
+      const flagged = within(bar).getByRole("button", { name: "Flagged" });
+      expect(flagged.querySelector("span")?.classList.contains("sr-only")).toBe(narrow);
+      expect(flagged.classList.contains("w-8")).toBe(narrow);
+      const tag = within(bar).getByRole("button", { name: "Tag" });
+      expect(tag.textContent).toBe(narrow ? "" : "Tag");
+      expect(within(bar).getByRole("textbox").closest("label")?.classList.contains(narrow ? "min-w-(--ui-field-min-width)" : "min-w-(--ui-list-sender-width)")).toBe(true);
+      // Hovered, a symbol-only chip names itself.
+      await user.hover(flagged);
+      if (narrow) expect((await screen.findByRole("tooltip")).textContent).toBe("Flagged");
+      else expect(screen.queryByRole("tooltip")).toBeNull();
+      vi.unstubAllGlobals();
+    });
+  }
+
   it("filters by text after a pause and by tag; Escape clears the text, then the filter", async () => {
     const { core, user } = setup();
     await list();

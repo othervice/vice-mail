@@ -142,7 +142,7 @@ function PalettePanel({ platform }: CommandPaletteProps) {
         {/* The field as a row with a search symbol; the ring sits on the row while the field has the
             keyboard focus, inside the panel instead of along its clipped edge. */}
         <div className="shrink-0 border-b border-border-subtle p-2">
-          <div className="flex h-10 items-center gap-3 rounded-row bg-track px-3 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-focus-ring">
+          <div className="flex h-10 items-center gap-2 rounded-row bg-track px-3 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-focus-ring">
             <Search aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
             <input
               type="text"
@@ -180,13 +180,13 @@ function PalettePanel({ platform }: CommandPaletteProps) {
           </div>
         )}
         <div id={listId} role="listbox" aria-label={t("palette.list")} className="min-h-0 flex-1 overflow-y-auto p-2">
-          {flat.length === 0 && <p className="px-2 py-3 text-13 text-secondary">{t("palette.empty")}</p>}
+          {flat.length === 0 && <p className="px-3 py-3 text-13 text-secondary">{t("palette.empty")}</p>}
           {sections.map((section) => (
             <div key={section.id} role="group" aria-labelledby={`${id}-group-${section.id}`} className="flex flex-col">
               <div
                 id={`${id}-group-${section.id}`}
                 role="presentation"
-                className="px-2 pt-2 pb-1 text-12 font-medium text-secondary"
+                className="px-3 pt-2 pb-1 text-12 font-medium text-secondary"
               >
                 {t(`palette.groups.${section.id}`)}
               </div>
@@ -214,7 +214,7 @@ function PalettePanel({ platform }: CommandPaletteProps) {
                       if (!selected) setActive(index);
                     }}
                     className={cx(
-                      "flex min-h-10 items-center gap-3 rounded-row px-3 py-1 text-14",
+                      "flex min-h-10 items-center gap-2 rounded-row px-3 py-1 text-14",
                       selected ? "bg-selected" : "",
                       entry.disabled ? "text-tertiary" : "text-primary",
                     )}

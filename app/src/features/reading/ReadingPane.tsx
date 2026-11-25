@@ -563,7 +563,9 @@ export function ReadingPane({
       data-find-scope
       className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
     >
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border-subtle ps-3 pe-2">
+      {/* Stage 21 (decision 0071): as high as the quick filter beside it (4 px, 32 px controls, 4 px,
+          the hairline), so both end on one line under the view's header. */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle py-1 ps-3 pe-2">
         <div className="flex min-w-0 flex-1 items-center">{toolbar}</div>
         {query.isFetching && view && (
           <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />

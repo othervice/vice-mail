@@ -308,7 +308,7 @@ describe("Settings, contacts: duplicates", () => {
     const panel = screen.getByRole("tabpanel", { name: "Kontakte" });
     const card = await within(panel).findByTestId("contact-duplicate");
     expect(card.textContent).toContain("Eine Adresse ist die andere mit einem „+“-Zusatz.");
-    expect(within(card).getByRole("button", { name: "Zusammenführen …" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Zusammenführen\u00a0…" })).toBeTruthy();
     expect(within(panel).getByRole("button", { name: "Kontakte öffnen" })).toBeTruthy();
   });
 });

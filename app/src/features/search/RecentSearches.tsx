@@ -27,7 +27,7 @@ export function RecentSearches({ id, items, active, optionId, onPick, onClear, c
       className="absolute inset-x-0 top-full z-20 mt-1 flex flex-col overflow-hidden rounded-card border border-border-strong bg-surface-raised shadow-floating"
       data-testid="search-recent"
     >
-      <ul id={id} role="listbox" aria-label={t("savedSearches.recent.label")} className="flex max-h-72 flex-col overflow-y-auto py-1">
+      <ul id={id} role="listbox" aria-label={t("savedSearches.recent.label")} className="flex max-h-(--ui-picker-list-height) flex-col overflow-y-auto py-1">
         {items.map((item, index) => (
           <li
             key={item.query}

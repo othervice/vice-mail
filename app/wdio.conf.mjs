@@ -116,6 +116,10 @@ export const config = {
     "./tests/e2e/stage19-contacts-folders.e2e.mjs",
     // Stage 21: sets up alice (writable) and bob (read-only) itself and removes them again.
     "./tests/e2e/context-menu.e2e.mjs",
+    // Stage 21, item 4 (decision 0071): the spacing pass, every main view light and dark at
+    // 1280×800 and 900×600, measured. Sets up alice and bob itself, appends `Spacing <run>`
+    // messages, and leaves theme, density and the column as it found them.
+    "./tests/e2e/spacing.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

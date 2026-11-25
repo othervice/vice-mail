@@ -101,7 +101,7 @@ export function SettingsView({ section }: SettingsViewProps) {
                 key={id}
                 value={id}
                 data-testid={`settings-tab-${id}`}
-                className="group relative flex h-8 shrink-0 items-center gap-3 rounded-control px-3 text-left text-14 text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-selected data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-control data-[state=active]:before:bg-accent-fill"
+                className="group relative flex h-8 shrink-0 items-center gap-2 rounded-control px-3 text-left text-14 text-secondary transition-colors hover:bg-hover hover:text-primary data-[state=active]:bg-selected data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-control data-[state=active]:before:bg-accent-fill"
               >
                 <Icon
                   aria-hidden

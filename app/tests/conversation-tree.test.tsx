@@ -368,7 +368,13 @@ describe("the look (stage 17, after the screenshot pass)", () => {
     expect(classes(pill)).not.toContain("shrink-0");
     const word = within(pill).getByTestId("row-replies-word");
     expect(word.textContent).toBe(" replies");
-    expect(classes(word)).toEqual(expect.arrayContaining(["min-w-0", "overflow-hidden", "text-ellipsis", "whitespace-pre"]));
+    // Stage 21 (decision 0071): the column as wide as the word (its copy before it), the word over
+    // it with the ellipsis, hidden while less than 2.5 em of it would show.
+    expect(classes(word)).toEqual(expect.arrayContaining(["min-w-0", "overflow-hidden", "whitespace-pre", "before:content-[attr(data-word)]"]));
+    expect(word.getAttribute("data-word")).toBe(" replies");
+    const shown = word.querySelector(":scope > span > span");
+    expect(classes(shown?.parentElement)).toEqual(expect.arrayContaining(["absolute", "inset-0", "@container"]));
+    expect(classes(shown)).toEqual(expect.arrayContaining(["overflow-hidden", "text-ellipsis", "whitespace-pre", "@max-[2.5em]:invisible"]));
     expect(pill.textContent?.replace(word.textContent ?? "", "")).toBe("2");
     // The subject shrinks only after it (shrink factor 1, no fixed width).
     const subject = within(conversation()).getByTestId("row-subject");

@@ -44,7 +44,7 @@ function CopyButton({ text, label, "data-testid": testId }: { text: string; labe
 }
 
 const CONTENT_CLASS =
-  "max-h-64 overflow-auto rounded-control border border-border bg-canvas p-3 font-mono text-12 break-all whitespace-pre-wrap text-primary select-text";
+  "max-h-(--ui-code-max-height) overflow-auto rounded-control border border-border bg-canvas p-3 font-mono text-12 break-all whitespace-pre-wrap text-primary select-text";
 
 function ConfigPanel({ config }: { config: McpClientConfig }) {
   const { t } = useTranslation();

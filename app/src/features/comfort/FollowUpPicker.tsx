@@ -78,7 +78,7 @@ export function FollowUpPicker({ count, onChoose, onClose, restoreFocus, now = D
                   onChoose({ kind: preset.kind });
                 }}
                 data-testid={`follow-up-${preset.kind}`}
-                className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-start text-14 text-primary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus-ring"
+                className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-start text-14 text-primary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus-ring"
               >
                 <MailClock aria-hidden className="size-(--ui-icon-small) shrink-0 text-secondary" strokeWidth={1.75} />
                 <span className="flex-1">{t(`comfort.followUp.${preset.kind}`)}</span>

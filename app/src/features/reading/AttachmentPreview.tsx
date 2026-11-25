@@ -211,7 +211,7 @@ export function AttachmentPreviewDialog({ owner, attachment, onClose, onSave, on
             <ChevronLeft aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
             {t("attachments.preview.previousPage")}
           </Button>
-          <p aria-live="polite" className="min-w-24 text-center text-13 text-secondary tabular-nums" data-testid="preview-page">
+          <p aria-live="polite" className="min-w-[calc(var(--ui-space-12)*2)] text-center text-13 text-secondary tabular-nums" data-testid="preview-page">
             {t("attachments.preview.page", { page: current.page + 1, pages: current.pages })}
           </p>
           <Button

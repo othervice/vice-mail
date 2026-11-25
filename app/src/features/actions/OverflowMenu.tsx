@@ -200,7 +200,7 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
                 }}
                 data-testid={item["data-testid"]}
                 className={cx(
-                  "flex w-full shrink-0 gap-3 rounded-control px-2 text-start text-13 text-primary transition-colors hover:bg-hover focus-visible:bg-hover",
+                  "flex w-full shrink-0 gap-2 rounded-control px-2 text-start text-13 text-primary transition-colors hover:bg-hover focus-visible:bg-hover",
                   // Wrapping names: as high as they need (32 px for one line, on the 4 px grid).
                   narrow || item.hint ? "min-h-8 items-center py-1" : "h-8 items-center",
                   item.inert && "text-secondary",

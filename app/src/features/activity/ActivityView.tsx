@@ -243,7 +243,7 @@ export function ActivityView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ViewHeader title={t("activity.title")} subtitle={t("activity.subtitle")} dragRegion={dragRegion} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6" data-testid="activity-view">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6" data-testid="activity-view">
         {accounts.isError && (
           <ErrorNotice
             context={t("settings.accounts.loadFailed")}

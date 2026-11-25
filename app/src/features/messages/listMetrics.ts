@@ -22,15 +22,19 @@ function toPixels(value: string, rootPixels: number): number | null {
   return null;
 }
 
+/** A length token (rem or px) of the root in CSS pixels at the current text size, else `fallback`. */
+export function readTokenPixels(name: string, fallback: number): number {
+  const style = getComputedStyle(document.documentElement);
+  const rootPixels = Number.parseFloat(style.fontSize) || 16;
+  return toPixels(style.getPropertyValue(name).trim(), rootPixels) ?? fallback;
+}
+
 /**
  * Reads the row heights the virtualizer needs from the design tokens, so CSS and the list
  * geometry cannot drift apart. Rem values follow the root font size (text scaling).
  */
 export function readListMetrics(): ListMetrics {
-  const root = document.documentElement;
-  const style = getComputedStyle(root);
-  const rootPixels = Number.parseFloat(style.fontSize) || 16;
-  const read = (name: string, fallback: number) => toPixels(style.getPropertyValue(name).trim(), rootPixels) ?? fallback;
+  const read = readTokenPixels;
   return {
     row: read("--ui-row-height", DEFAULTS.row),
     twoLineRow: read("--ui-row-height-two-line", DEFAULTS.twoLineRow),

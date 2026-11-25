@@ -226,7 +226,7 @@ function AvatarMark({
         <span
           className={cx(
             "absolute end-full me-1 size-(--ui-dot) rounded-full bg-accent",
-            dot === "middle" ? "top-1/2 -translate-y-1/2" : "top-1.5",
+            dot === "middle" ? "top-1/2 -translate-y-1/2" : "top-[calc((var(--ui-line-height-14)-var(--ui-dot))/2)]",
           )}
           data-testid="row-unread-dot"
         />
@@ -257,6 +257,7 @@ function AvatarMark({
 function RepliesToggle({ replies, expanded }: { replies: number; expanded: boolean | undefined }) {
   const { t } = useTranslation();
   const foldable = expanded !== undefined;
+  const word = ` ${t("threads.repliesWord", { count: replies })}`;
   return (
     <span
       aria-hidden
@@ -277,9 +278,18 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
         <span />
       )}
       <span className="whitespace-nowrap">{replies}</span>
-      {/* The space belongs to the word, so it goes with it. */}
-      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre" data-testid="row-replies-word">
-        {` ${t("threads.repliesWord", { count: replies })}`}
+      {/* The space belongs to the word, so it goes with it. Stage 21 (decision 0071): the column is
+          as wide as the word (an invisible copy of it, `::before`) and shrinks like before; the
+          word lies over it and hides once less than 2.5 em of it would show, so a sliver of the
+          ellipsis ("3 .") never does. */}
+      <span
+        data-word={word}
+        className="relative min-w-0 self-stretch overflow-hidden whitespace-pre before:invisible before:block before:h-0 before:content-[attr(data-word)]"
+        data-testid="row-replies-word"
+      >
+        <span className="absolute inset-0 @container">
+          <span className="block overflow-hidden leading-5 text-ellipsis whitespace-pre @max-[2.5em]:invisible">{word}</span>
+        </span>
       </span>
     </span>
   );
@@ -303,7 +313,7 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
     <span
       aria-hidden
       className={cx(
-        "hidden shrink-0 items-center rounded-row bg-surface-list px-0.5 shadow-floating group-hover/row:flex",
+        "hidden shrink-0 items-center rounded-row bg-surface-list px-1 shadow-floating group-hover/row:flex",
         cursor && "group-focus-visible/list:flex",
         lifted && "self-end",
       )}

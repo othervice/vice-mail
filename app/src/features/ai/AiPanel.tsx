@@ -621,7 +621,7 @@ export function AiPanel() {
       className="flex w-(--ui-ai-panel-width) max-w-full shrink-0 flex-col border-s border-border bg-surface max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:end-0 max-[1100px]:z-10 max-[1100px]:shadow-panel"
       data-testid="ai-panel"
     >
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
+      <header className="flex h-(--ui-header-height) shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-4">
         <h2 className="flex items-center gap-2 text-14 font-semibold text-primary">
           <Sparkles aria-hidden className="size-(--ui-icon) text-accent" strokeWidth={1.75} />
           {t("ai.panel.title")}

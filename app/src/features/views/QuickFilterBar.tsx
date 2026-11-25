@@ -10,13 +10,15 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { ChoiceMenu, type ChoiceGroup } from "../../components/ChoiceMenu";
 import { cx } from "../../components/cx";
+import { Tooltip } from "../../components/Tooltip";
 import { useRovingFocus } from "../../components/useRovingFocus";
 import type { InboxScope, QuickFilter } from "../../services/ipc";
 import { isUserTag } from "../actions/keywords";
+import { readTokenPixels } from "../messages/listMetrics";
 import {
   isFiltering,
   useQuickFilterStore,
@@ -38,6 +40,33 @@ const SWITCHES: readonly { key: Switch; icon: LucideIcon }[] = [
   { key: "attachment", icon: Paperclip },
   { key: "contacts", icon: UserRound },
 ];
+
+/** `--ui-filter-compact-below` at the default text size, where no stylesheet is loaded (tests). */
+const COMPACT_BELOW = 800;
+
+/**
+ * Stage 21 (decision 0071): whether the bar is narrower than the labelled chips and the field need
+ * for one row (`--ui-filter-compact-below`), as beside the reading pane. Measured like the list
+ * measures its two-line width; 0 (not laid out, tests) counts as wide.
+ */
+function useCompact(bar: RefObject<HTMLElement | null>): boolean {
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!element || typeof ResizeObserver === "undefined") return undefined;
+    const update = () => {
+      const width = element.clientWidth;
+      setCompact(width > 0 && width < readTokenPixels("--ui-filter-compact-below", COMPACT_BELOW));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [bar]);
+  return compact;
+}
 
 interface QuickFilterBarProps {
   viewKey: string;
@@ -74,6 +103,8 @@ export function QuickFilterBar({
   const [tagsOpen, setTagsOpen] = useState(false);
   const tags = useViewTags(scope, keyBase, tagsOpen || filter.tag !== null);
   const field = useRef<HTMLInputElement>(null);
+  const bar = useRef<HTMLElement>(null);
+  const compact = useCompact(bar);
   const keys = [...SWITCHES.map((s) => s.key), TAG_KEY];
   const roving = useRovingFocus({
     keys,
@@ -96,6 +127,7 @@ export function QuickFilterBar({
     knownTags.unshift(filter.tag);
 
   const tagProps = roving.itemProps(TAG_KEY);
+  const tagText = filter.tag === null ? t("views.filter.tag") : t("views.filter.tagChosen", { tag: filter.tag });
   const tagGroup: ChoiceGroup = {
     id: TAG_KEY,
     label: tags.isPending
@@ -142,8 +174,10 @@ export function QuickFilterBar({
   return (
     <section
       aria-label={t("views.filter.label")}
-      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-surface-list px-4 py-1"
+      ref={bar}
+      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle bg-surface-list px-4 py-1"
       data-testid="quick-filter"
+      data-compact={compact || undefined}
     >
       <div
         role="toolbar"
@@ -152,41 +186,40 @@ export function QuickFilterBar({
         {...roving.groupProps}
       >
         {SWITCHES.map(({ key, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={filter[key]}
-            onClick={() => {
-              set(viewKey, { [key]: !filter[key] });
-            }}
-            {...roving.itemProps(key)}
-            data-testid={`quick-filter-${key}`}
-            className={cx(
-              "flex h-8 items-center gap-1 rounded-full border px-3 text-13 transition-colors",
-              filter[key]
-                ? "border-accent bg-accent-soft font-medium text-accent"
-                : "border-border text-secondary hover:bg-hover hover:text-primary",
-            )}
-          >
-            <Icon
-              aria-hidden
+          // Compact, the chip is its symbol: the name stays its accessible name and its tooltip.
+          <Tooltip key={key} label={t(`views.filter.${key}`)} disabled={!compact}>
+            <button
+              type="button"
+              aria-pressed={filter[key]}
+              onClick={() => {
+                set(viewKey, { [key]: !filter[key] });
+              }}
+              {...roving.itemProps(key)}
+              data-testid={`quick-filter-${key}`}
               className={cx(
-                "size-(--ui-icon-small) shrink-0",
-                key === "flagged" && filter[key] && "fill-current",
+                "flex h-8 items-center justify-center gap-1 rounded-full border text-13 transition-colors",
+                compact ? "w-8" : "px-3",
+                filter[key]
+                  ? "border-accent bg-accent-soft font-medium text-accent"
+                  : "border-border text-secondary hover:bg-hover hover:text-primary",
               )}
-              strokeWidth={1.75}
-            />
-            <span>{t(`views.filter.${key}`)}</span>
-          </button>
+            >
+              <Icon
+                aria-hidden
+                className={cx(
+                  "size-(--ui-icon-small) shrink-0",
+                  key === "flagged" && filter[key] && "fill-current",
+                )}
+                strokeWidth={1.75}
+              />
+              <span className={cx(compact && "sr-only")}>{t(`views.filter.${key}`)}</span>
+            </button>
+          </Tooltip>
         ))}
         <ChoiceMenu
           label={t("views.filter.tag")}
           icon={Tag}
-          text={
-            filter.tag === null
-              ? t("views.filter.tag")
-              : t("views.filter.tagChosen", { tag: filter.tag })
-          }
+          {...(compact ? { name: tagText } : { text: tagText })}
           active={filter.tag !== null}
           chip
           align="start"
@@ -199,7 +232,12 @@ export function QuickFilterBar({
           data-testid="quick-filter-tag"
         />
       </div>
-      <label className="flex h-8 min-w-(--ui-list-sender-width) flex-1 items-center gap-2 rounded-control border border-border bg-surface px-2 focus-within:outline-2 focus-within:outline-focus-ring">
+      <label
+        className={cx(
+          "flex h-8 flex-1 items-center gap-2 rounded-control border border-border bg-surface px-2 focus-within:outline-2 focus-within:outline-focus-ring",
+          compact ? "min-w-(--ui-field-min-width)" : "min-w-(--ui-list-sender-width)",
+        )}
+      >
         <Search
           aria-hidden
           className="size-(--ui-icon-small) shrink-0 text-tertiary"
@@ -219,7 +257,7 @@ export function QuickFilterBar({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
+          className="min-w-0 flex-1 bg-transparent text-13 text-ellipsis text-primary outline-none placeholder:text-tertiary"
           data-testid="quick-filter-text"
         />
       </label>
@@ -251,7 +289,7 @@ export function QuickFilterBar({
             reset(viewKey);
             field.current?.focus();
           }}
-          className="flex h-8 items-center gap-1 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
+          className="flex h-8 items-center gap-2 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
           data-testid="quick-filter-reset"
         >
           <X
