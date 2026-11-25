@@ -91,7 +91,11 @@ party, which is advisable before wide distribution.
   `base`, `meta refresh`, `link`, SVG and MathML anyway (defence in depth).
 - **No network access from mail content.** External URLs in `src`, `srcset`, `background`, CSS
   `url()`/`@import`/`image-set` are replaced by placeholders until the user allows remote content;
-  the CSS is rewritten token by token (no regex). Every document starts with the meta CSP
+  the CSS is rewritten token by token (no regex). In the dark theme (stage 21, decision 0066) a
+  colour pass runs on the already sanitised CSS and attributes and only replaces colour values
+  with colours it writes itself, removes `color-scheme` declarations and decides
+  `prefers-color-scheme` queries; it adds no property, selector, attribute or URL, and the hostile
+  corpus and the fuzz test render every mail in both schemes. Every document starts with the meta CSP
   `default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action
   'none'` and `referrer no-referrer`. Images are only `data:` URIs the core wrote: inline
   images, allowed remote images and `data:` URLs in the HTML (PNG, JPEG, GIF or WebP by their
