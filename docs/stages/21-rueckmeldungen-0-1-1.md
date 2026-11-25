@@ -15,6 +15,8 @@ sammeln, dann umsetzen und neu bauen.
 - Gemeldet: der neueste Installer (0.1.1) startet unter Windows nicht.
 - Geprüft: Die Datei im Gitea-Release ist vollständig und unverändert (SHA-256 wie in
   `SHA256SUMS`, 19.074.607 Bytes; die NSIS-eigene Prüfsumme ab Byte 512 stimmt, ebenso bei 0.1.0).
+- GitHub-CI auf dem Code von 0.1.1 (Lauf 45583550063 auf e9874ca): `check.sh` grün auf macOS und
+  auf echtem Windows.
 - NSIS zeigt genau diese Meldung nur, wenn der Installer seine eigene Datei nicht öffnen kann
   (`_LANG_CANTOPENSELF` in `Source/exehead/fileform.c`): Start aus einem Netzlaufwerk, einem
   Ordner, den OneDrive nur online hält, einem ZIP, direkt aus dem Download-Fenster, oder ein
