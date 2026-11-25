@@ -97,9 +97,17 @@ export function ColorsToggle({ original, onChange }: ColorsToggleProps) {
   );
 }
 
+/**
+ * Whether `frame` shows the rendering with `colors`, loaded: the attribute changes with the new
+ * `srcdoc` at once, the document only once it has loaded, so the document's own default style is
+ * checked too (the dark one names `color-scheme:dark`).
+ */
 function frameReady(frame: HTMLIFrameElement | null | undefined, colors: MailColors): boolean {
   try {
-    return frame?.dataset["colors"] === colors && frame.contentDocument?.readyState === "complete";
+    const doc = frame?.contentDocument;
+    if (frame?.dataset["colors"] !== colors || doc?.readyState !== "complete") return false;
+    const dark = [...doc.querySelectorAll("style")].some((style) => (style.textContent ?? "").includes("color-scheme:dark"));
+    return dark === (colors !== "original");
   } catch {
     return false;
   }
