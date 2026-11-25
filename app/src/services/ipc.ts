@@ -1852,3 +1852,14 @@ export type { CredentialKind } from "../generated/bindings";
 // ---- Stage 20: attachment reminder, reminders without a reply, attachments view, trackers, quota ----
 /** Decision 0058: the trackers the core blocked in one rendering of a mail. */
 export type { TrackerSummary } from "../generated/bindings";
+import { commands as reminderCommands } from "../generated/bindings";
+
+/** Stage 20: the attachment reminder and reminders when no reply comes (decision 0058). */
+export const reminderIpc = {
+  /**
+   * Asked before the composer sends or schedules: the word of the user's own text that speaks of
+   * an attachment while the draft has none, else null (also with the setting off).
+   */
+  checkAttachmentReminder: (draftId: DraftId): Promise<string | null> => call(() => reminderCommands.checkAttachmentReminder(draftId)),
+};
+

@@ -311,6 +311,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             // Stage 15 (decision 0044): the guided first start.
             commands::first_start::get_first_start,
             commands::first_start::finish_first_start,
+            // Stage 20 (decisions 0058 to 0060): attachment reminder, reminders without a
+            // reply, the attachments view, the mailbox quota.
+            commands::reminders::check_attachment_reminder,
         ])
         .events(collect_events![CoreEventMessage])
         .error_handling(ErrorHandlingMode::Result)

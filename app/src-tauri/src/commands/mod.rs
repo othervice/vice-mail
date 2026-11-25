@@ -18,6 +18,7 @@ pub mod oauth;
 pub mod parity;
 pub mod preferences;
 pub mod reading;
+pub mod reminders;
 pub mod search;
 pub mod settings_sync;
 pub mod snippets;

@@ -205,6 +205,14 @@ export const de: Translation = {
       largeTitle: "Die Anhänge sind groß ({{size}}).",
       largeHint: "Viele Mailserver lehnen Nachrichten über etwa 20 MB ab. Große Dateien teilst du besser auf anderem Weg.",
     },
+    // Stufe 20 (Entscheidung 0058): Rückfrage vor dem Senden.
+    attachmentReminder: {
+      title: "Ohne Anhang senden?",
+      body: "Deine Nachricht sagt „{{word}}“, aber es ist keine Datei angehängt.",
+      sendAnyway: "Trotzdem senden",
+      add: "Anhang hinzufügen",
+      cancel: "Weiterschreiben",
+    },
     discard: {
       label: "Entwurf verwerfen",
       title: "Diesen Entwurf verwerfen?",
@@ -293,6 +301,10 @@ export const de: Translation = {
       delayHint: "So lange wartet eine gesendete Nachricht, damit du sie noch zurückholen kannst.",
       archiveOnReply: "Ursprungsmail beim Antworten archivieren",
       archiveOnReplyHint: "Neue Antworten beginnen mit „Senden und archivieren“. Du kannst es in jeder Antwort ausschalten.",
+      // Stufe 20 (Entscheidung 0058).
+      attachmentReminder: "An fehlende Anhänge erinnern",
+      attachmentReminderHint:
+        "Vor dem Senden fragt die App nach, wenn dein Text einen Anhang erwähnt („Anhang“, „attached“ …), aber keiner dabei ist. Zitate und Signaturen werden nicht gelesen.",
       readReceipts: "Anforderungen von Lesebestätigungen",
       readReceiptsHint: "Wenn ein Absender eine Lesebestätigung anfordert. Ohne deinen Klick wird nie etwas gesendet.",
       readReceiptsPolicy: {

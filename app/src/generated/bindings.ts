@@ -714,6 +714,12 @@ export const commands = {
 	getFirstStart: (options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("get_first_start", undefined, options)),
 	/**  "Skip setup" or the last step: the first start does not show again on this device. */
 	finishFirstStart: (end: FirstStartEnd, options?: InvokeOptions) => typedError<FirstStart, IpcError>(__TAURI_INVOKE("finish_first_start", { end }, options)),
+	/**
+	 *  Asked by the composer before it sends or schedules: the word of the user's own text that
+	 *  speaks of an attachment while the draft has none; null with the setting off or nothing to
+	 *  remind of. Never asked for sends of the outbox.
+	 */
+	checkAttachmentReminder: (draftId: DraftId, options?: InvokeOptions) => typedError<string | null, IpcError>(__TAURI_INVOKE("check_attachment_reminder", { draftId }, options)),
 };
 
 /** Events */
@@ -1801,6 +1807,12 @@ export type ComposeSettings = {
 	archiveOnReply?: boolean,
 	/**  Stage 16: how read-receipt requests of incoming mail are handled. Synced. */
 	readReceipts?: ReadReceiptPolicy,
+	/**
+	 *  Stage 20 (decision 0058): before sending, the composer asks "Send anyway?" when the
+	 *  user's own text speaks of an attachment but none is there (`checkAttachmentReminder`).
+	 *  On by default; synced. Left out by an older caller: on.
+	 */
+	attachmentReminder?: boolean,
 };
 
 /**

@@ -19,6 +19,7 @@
 //! - [`build_message`], [`mail_html`], [`prepare_reply`], [`prepare_forward`]: composing
 //!   (stage 5, module `compose`): the outgoing MIME message (mail-builder), mail HTML from the
 //!   editor, replies and forwards.
+//! - [`attachment_mention`]: whether the user's own text speaks of an attachment (stage 20).
 //! - [`parse_mailto`]: a `mailto:` link (RFC 6068) as the fields of a new draft, with hints.
 //! - [`read_calendar`], [`calendar_parts`]: calendar invitations (`text/calendar`, `.ics`) for
 //!   the invitation card; time zones through a [`ZoneResolver`] the engine provides.
@@ -28,6 +29,7 @@
 //! bytes ([`RemotePolicy::Allow`]), the random part of a Message-ID too ([`new_message_id`]).
 
 mod attachment_preview;
+mod attachment_reminder;
 mod calendar;
 mod classify;
 mod compose;
@@ -51,6 +53,7 @@ mod trackers;
 mod visible;
 
 pub use attachment_preview::{preview_kind, render_preview};
+pub use attachment_reminder::attachment_mention;
 pub use calendar::{
     CalendarPart, MAX_CALENDAR_ATTENDEES, MAX_CALENDAR_BYTES, MAX_CALENDAR_DESCRIPTION_BYTES,
     MAX_CALENDAR_EVENTS, MAX_CALENDAR_LINE_BYTES, MAX_CALENDAR_LINES, MAX_CALENDAR_PARTS,

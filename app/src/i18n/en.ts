@@ -209,6 +209,14 @@ export const en = {
       largeTitle: "The attachments are large ({{size}}).",
       largeHint: "Many mail servers refuse messages above about 20 MB. Consider sharing large files another way.",
     },
+    // Stage 20 (decision 0058): asked before sending.
+    attachmentReminder: {
+      title: "Send without an attachment?",
+      body: "Your message says “{{word}}”, but no file is attached.",
+      sendAnyway: "Send anyway",
+      add: "Add attachment",
+      cancel: "Keep writing",
+    },
     discard: {
       label: "Discard draft",
       title: "Discard this draft?",
@@ -298,6 +306,10 @@ export const en = {
       delayHint: "How long a sent message waits, so you can still take it back.",
       archiveOnReply: "Archive the original when I reply",
       archiveOnReplyHint: "New replies start with “Send and archive”. You can turn it off in each reply.",
+      // Stage 20 (decision 0058).
+      attachmentReminder: "Remind me of missing attachments",
+      attachmentReminderHint:
+        "Before sending, the app asks when your text mentions an attachment (“attached”, “Anhang” …) but none is added. Quotes and signatures are not read.",
       readReceipts: "Read receipt requests",
       readReceiptsHint: "When a sender asks for a read receipt. Nothing is ever sent without your click.",
       readReceiptsPolicy: {

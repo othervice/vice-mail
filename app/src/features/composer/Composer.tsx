@@ -11,6 +11,7 @@ import {
   composeIpc,
   composerIpc,
   parityIpc,
+  reminderIpc,
   snippetsIpc,
   toCoreError,
   type Address,
@@ -35,6 +36,7 @@ import { useSignatures, useTemplates } from "../snippets/queries";
 import { matchesShortcut } from "../actions/shortcuts";
 import type { PasteResult, RichEditorHandle } from "./RichEditor";
 import { SendLaterPicker } from "./SendLaterPicker";
+import { AttachmentReminder } from "./AttachmentReminder";
 import { useUiStore } from "../../stores/ui";
 import { useAppInfo } from "../app-info/queries";
 import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
@@ -356,6 +358,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [laterOpen, setLaterOpen] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [laterError, setLaterError] = useState<CoreError | null>(null);
+  // Stage 20 (decision 0058): the text speaks of an attachment but none is there; `proceed`
+  // sends (or schedules) as the user first asked, without asking again.
+  const [attachmentAsk, setAttachmentAsk] = useState<{ word: string; proceed: () => void } | null>(null);
   const editorHandle = useRef<RichEditorHandle | null>(null);
   const textBody = useRef<HTMLTextAreaElement | null>(null);
   const requestedImages = useRef(new Set<string>());
@@ -614,8 +619,12 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     return run;
   };
 
-  /** Sends after the undo delay; `archive` first turns on "archive the original" (Send and archive). */
-  const send = async (archive = false) => {
+  /**
+   * Sends after the undo delay; `archive` first turns on "archive the original" (Send and archive).
+   * Stage 20: asks first when the text speaks of an attachment and none is there (`checked`: the
+   * user answered "Send anyway").
+   */
+  const send = async (archive = false, checked = false) => {
     if (sending || frozen) return;
     setSending(true);
     setSendError(null);
@@ -623,6 +632,19 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
       dirty.current = true; // the final save, also when nothing changed since the last one
       await flush();
       await optionsQueue.current;
+      if (!checked) {
+        const word = await reminderIpc.checkAttachmentReminder(draftId);
+        if (word !== null) {
+          setSending(false);
+          setAttachmentAsk({
+            word,
+            proceed: () => {
+              void send(archive, true);
+            },
+          });
+          return;
+        }
+      }
       if (archive && !sendOptions.archiveOriginal) {
         const next = { ...sendOptions, archiveOriginal: true };
         await parityIpc.setDraftSendOptions(draftId, next);
@@ -716,14 +738,31 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     };
   }, [setInsertTemplate]);
 
-  /** "Send later": frozen like a send, sent at `sendAt` only if the app runs and is online then. */
-  const scheduleAt = async (sendAt: number) => {
+  /**
+   * "Send later": frozen like a send, sent at `sendAt` only if the app runs and is online then.
+   * Stage 20: the attachment reminder is asked now, while the user is here; the send itself later
+   * never asks.
+   */
+  const scheduleAt = async (sendAt: number, checked = false) => {
     if (scheduling || frozen) return;
     setScheduling(true);
     setLaterError(null);
     try {
       dirty.current = true;
       await flush();
+      if (!checked) {
+        const word = await reminderIpc.checkAttachmentReminder(draftId);
+        if (word !== null) {
+          setScheduling(false);
+          setAttachmentAsk({
+            word,
+            proceed: () => {
+              void scheduleAt(sendAt, true);
+            },
+          });
+          return;
+        }
+      }
       const mail = await composerIpc.scheduleSend(draftId, crypto.randomUUID(), { sendAt });
       finished.current = true;
       track(mail);
@@ -1436,6 +1475,23 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           </Button>
         </div>
       </div>
+      {attachmentAsk && (
+        <AttachmentReminder
+          word={attachmentAsk.word}
+          onSendAnyway={() => {
+            const { proceed } = attachmentAsk;
+            setAttachmentAsk(null);
+            proceed();
+          }}
+          onAddAttachment={() => {
+            setAttachmentAsk(null);
+            void pick();
+          }}
+          onCancel={() => {
+            setAttachmentAsk(null);
+          }}
+        />
+      )}
       {confirmDiscard && (
         <ConfirmDialog
           title={t("composer.discard.title")}

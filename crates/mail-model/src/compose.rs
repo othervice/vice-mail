@@ -594,6 +594,15 @@ pub struct ComposeSettings {
     /// Stage 16: how read-receipt requests of incoming mail are handled. Synced.
     #[serde(default)]
     pub read_receipts: ReadReceiptPolicy,
+    /// Stage 20 (decision 0058): before sending, the composer asks "Send anyway?" when the
+    /// user's own text speaks of an attachment but none is there (`checkAttachmentReminder`).
+    /// On by default; synced. Left out by an older caller: on.
+    #[serde(default = "attachment_reminder_default")]
+    pub attachment_reminder: bool,
+}
+
+const fn attachment_reminder_default() -> bool {
+    true
 }
 
 impl Default for ComposeSettings {
@@ -603,6 +612,7 @@ impl Default for ComposeSettings {
             default_quote_position: QuotePosition::default(),
             archive_on_reply: false,
             read_receipts: ReadReceiptPolicy::default(),
+            attachment_reminder: true,
         }
     }
 }
@@ -1070,6 +1080,7 @@ mod tests {
                 "sendDelaySeconds": 10,
                 "defaultQuotePosition": "above",
                 "archiveOnReply": false,
+                "attachmentReminder": true,
                 "readReceipts": "ask"
             })
         );
@@ -1082,6 +1093,7 @@ mod tests {
                 default_quote_position: QuotePosition::Above,
                 archive_on_reply: false,
                 read_receipts: ReadReceiptPolicy::Ask,
+                attachment_reminder: true,
             }
         );
         assert_eq!(

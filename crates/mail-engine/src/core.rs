@@ -1539,6 +1539,17 @@ impl<C: Connector> AppCore<C> {
         self.compose()?.send(id, request_id).await
     }
 
+    /// Stage 20 (decision 0058): asked by the composer before it sends or schedules a draft
+    /// (never for sends of the outbox): the word of the user's own text that speaks of an
+    /// attachment while the draft has none, so the composer can ask "Send anyway?". `None`
+    /// with the setting off or nothing to remind of.
+    pub async fn check_attachment_reminder(
+        &self,
+        id: mail_model::DraftId,
+    ) -> Result<Option<String>, CoreError> {
+        self.compose()?.attachment_reminder(id).await
+    }
+
     /// Undo of a send within the delay, or "edit" of a failed or unclear one: the draft is
     /// editable again; nothing was sent. `send_in_progress` once the submission started.
     pub async fn cancel_send(
