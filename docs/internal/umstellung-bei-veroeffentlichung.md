@@ -33,8 +33,9 @@ sind Deutsch, das Repo bleibt privat in Gitea.
 - 5 erledigt (`docs/images/`, README).
 - 6 erledigt (`CHANGELOG.md` 0.1.0, README, INSTALL).
 - 7 erledigt bis auf die Erwähnung von Gitea in Entscheidungen und `docs/SPEC.md` (Geschichte).
-- 8 Repo zuerst privat (Entscheidung des Menschen), Durchsicht durch den Menschen, dann öffentlich,
-  dann Tag `v0.1.0` und Release mit Update-Signatur.
+- 8 erledigt (25.11.2026): nach der Durchsicht durch den Menschen öffentlich, Tags `v0.1.0` bis
+  `v0.1.2`, Releases mit Update-Signatur, 0.1.2 als „Latest“. Punkt 4 damit auch: „Private
+  vulnerability reporting“ ist an.
 
 ## Am Tag der Veröffentlichung
 

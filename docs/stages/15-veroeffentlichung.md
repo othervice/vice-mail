@@ -258,6 +258,23 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   bestanden, NSIS-Prüfsumme des Installers geprüft, Dateien nach dem Hochladen gegen
   `SHA256SUMS` geprüft. DMG `9f1e8f6a…6e24`, Installer `32344fde…a37d`.
 
+**GitHub öffentlich (25.11.2026)**
+- Freigabe des Menschen am 25.11. abends. Vorher die Geschichte von `main` (382 Commits) noch einmal
+  geprüft: Mustersuche wie in `docs/internal/history-audit.md` über alle Blobs und Commit-Texte,
+  dazu `gitleaks` 8.30.1 (7 Treffer, alle Testdaten wie `wrong-secret-4711` oder der
+  Vergleichstext in `scripts/apple-signing-setup.sh`); Autor überall `othervice`, keine
+  Co-Author- oder Session-Zeilen.
+- Repo öffentlich, „Private vulnerability reporting“ an (der Weg aus `SECURITY.md`), Themen
+  gesetzt. Nach GitHub gingen nur die Tags `v0.1.0`, `v0.1.1`, `v0.1.2`, einzeln benannt.
+- GitHub-Releases: `v0.1.0` (Dateien aus dem Gitea-Release, vorher gegen dessen `SHA256SUMS`
+  geprüft; `dist/0.1.0` ist ein älterer Stand) und `v0.1.1` als Vorabversionen, `v0.1.2` als
+  „Latest“, jeweils alle sieben Dateien.
+- Geprüft ohne Anmeldung: `releases/latest/download/latest.json` liefert 0.1.2 (gleich der Datei in
+  `dist/0.1.2`), alle Dateien von `v0.1.2` geladen und gegen `SHA256SUMS` geprüft, beide
+  Update-Signaturen mit `scripts/updater-manifest.mjs verify` gegen den Schlüssel in
+  `tauri.conf.json` bestätigt, Installer von 0.1.0 und 0.1.1 laden (HTTP 200).
+  **Ungeprüft:** ein echtes Update in der App (von 0.1.0 oder 0.1.1 auf 0.1.2).
+
 **Wartet auf**
 - Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows
   (frische Installation, z. B. ein neues Benutzerkonto des Systems); er erscheint nur, solange es

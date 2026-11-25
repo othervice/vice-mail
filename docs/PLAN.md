@@ -113,12 +113,16 @@ Rückmeldungen (Stufe 21), dann „ok das ist es erstmal build“. Vier Subagent
 Worktrees (Spalte, Liste, Farben der Mails, System mit dem freigegebenen blauen Logo), danach ein
 fünfter für den Abstands-Durchgang auf dem zusammengeführten Stand. Gesamtprüfung auf `f346eec`:
 `scripts/check.sh` grün (1.592 Rust, 4.203 Vitest), Server-Tests 1.698 grün, Desktop 38/38
-Spec-Dateien (197 Tests, auf `f2eff37`). 0.1.2 liegt als Gitea-Release `v0.1.2`; GitHub bleibt
-privat.
+Spec-Dateien (197 Tests, auf `f2eff37`). 0.1.2 liegt als Gitea-Release `v0.1.2`. Am Abend gab
+der Mensch GitHub frei („da können wir unseren ersten deploy auf github machen damit update
+funktioniert“): Repo öffentlich, Tags `v0.1.0` bis `v0.1.2`, GitHub-Releases (0.1.0 und 0.1.1 als
+Vorabversionen, 0.1.2 als „Latest“), Update-Manifest ohne Anmeldung geprüft (Stufe 15, Abschnitt
+„GitHub öffentlich“). Ab jetzt finden 0.1.0 und 0.1.1 neue Versionen über die App.
 
 **Wartet auf den Menschen (neu):** Angaben zum Windows-Installer (Punkt 1 der Stufe 21); Test von
 0.1.2 auf Mac und Windows, besonders Infobereich, Hintergrundbetrieb, Autostart, Taskleisten-Zahl
-und die angepassten Mails im dunklen Design.
+und die angepassten Mails im dunklen Design; einmal ein Update über die App (Einstellungen → Über →
+„Jetzt prüfen“) von einer älteren Version aus.
 
 ### Lauf vom 24.11.2026 abends bis 25.11.2026 (0.1.1)
 
@@ -187,14 +191,11 @@ grün. **Finaler Build** aus de8cad7: siehe Stufe 15, „Finaler Build“, und d
   Einzelperson am 24.11. abgebrochen und erstattet; die Anmeldung als Organisation ist am 24.11.
   eingereicht (Enrollment ID CMV992434U) und wartet auf Apples Prüfung der Zeichnungsberechtigung (`docs/RELEASING.md`, „Enrolling as an organisation“), dann die Schritte unter
   „After the membership is active“. 0.1.1 ist noch unsigniert; signiert wird die erste Version nach der Freischaltung.
-- GitHub: das private Repo durchsehen und freigeben; erst dann wird es öffentlich und bekommt die
-  Releases (Stand 25.11.: Code gepusht, privat, CI grün).
 - Echtes Konto (bleibt nur lesend), Schreibzugriff für ein Nebenkonto, MCP mit einem echten
   Client, Einstellungs-Sync mit zwei Geräten, Ollama oder API-Schlüssel für die KI in der App,
   Screenreader-Checkliste, Bildschirm mit 2560×1440.
 - Offene Frage „Something else“ zu den Extras (Stufe 16).
 
 **Nächste Schritte:** Rückmeldungen aus dem Windows-Test einarbeiten; nach den Registrierungen
-Stufe 14 abnehmen; nach den Entscheidungen zur Geschichte die Veröffentlichung auf GitHub
-(Stufe 15: erster Push, GitHub-CI auf macOS und Windows, erstes öffentliches Release mit
-Update-Signatur). Danach Kalender und Adressbuch-Abgleich (nach Version 1).
+Stufe 14 abnehmen; neue Versionen als GitHub-Release (`docs/RELEASING.md`, „Publishing“), das
+Gitea-Release bleibt die Sicherung. Danach Kalender und Adressbuch-Abgleich (nach Version 1).
