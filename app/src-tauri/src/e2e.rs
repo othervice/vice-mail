@@ -168,7 +168,8 @@ pub fn install(
             e2e_native_mouse,
             e2e_opened,
             e2e_invoked,
-            e2e_drop_files
+            e2e_drop_files,
+            e2e_advance_clock
         ]);
     let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
@@ -213,6 +214,8 @@ fn record_invoke(command: &str) {
 /// build never hands a link or a file to the system.
 pub fn with_test_ca(mut services: CoreServices) -> Result<CoreServices, CoreError> {
     services.reading.opener = OPENER.clone();
+    // Stage 20: a clock the test can move forward (reminders "with an advanced clock").
+    services.clock = Arc::clone(&*CLOCK) as Arc<dyn mail_engine::Clock>;
     services.sync.extra_root_ca = test_ca(std::env::var_os(EXTRA_CA_ENV))?;
     services.reading.remote.allow_loopback = switched_on(std::env::var_os(LOOPBACK_IMAGES_ENV));
     if services.reading.remote.allow_loopback {
@@ -368,6 +371,29 @@ pub fn e2e_drop_files(
             },
         )
         .map_err(|err| err.to_string())
+}
+
+/// Stage 20: the system clock plus an offset the desktop test moves forward
+/// ([`e2e_advance_clock`]), so reminders and snoozes come due without waiting.
+#[derive(Debug, Default)]
+pub struct OffsetClock(std::sync::atomic::AtomicI64);
+
+impl mail_engine::Clock for OffsetClock {
+    fn now_ms(&self) -> i64 {
+        mail_engine::SystemClock.now_ms() + self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+static CLOCK: LazyLock<Arc<OffsetClock>> = LazyLock::new(|| Arc::new(OffsetClock::default()));
+
+/// Stage 20: moves the core's clock `ms` forward and wakes the timers as after a sleep of the
+/// computer (`resume`). Returns the core's time afterwards.
+#[tauri::command]
+pub fn e2e_advance_clock(core: tauri::State<'_, mail_engine::AppCore>, ms: i64) -> i64 {
+    use mail_engine::Clock;
+    CLOCK.0.fetch_add(ms, std::sync::atomic::Ordering::SeqCst);
+    core.resume();
+    CLOCK.now_ms()
 }
 
 /// Every command name that reached the invoke handler since the app started, with its count.
