@@ -253,6 +253,10 @@ Frühere Einträge (Stand 23.11.2026, 13:30 und danach):
   `v0.1.1` (Vorabversion wie 0.1.0); Starttest der App aus dem DMG bestanden, Dateien nach dem
   Hochladen gegen `SHA256SUMS` geprüft. Die App aus 0.1.0 findet es nicht von selbst, solange
   GitHub privat ist (der Updater fragt nur GitHub).
+- Release 0.1.2 (Stufe 21) aus 9ef8c62 am 25.11.2026 auf dieselbe Weise, Gitea-Release `v0.1.2`
+  (Vorabversion); Starttest der App aus dem DMG mit leerem Datenordner (eigenes `HOME`)
+  bestanden, NSIS-Prüfsumme des Installers geprüft, Dateien nach dem Hochladen gegen
+  `SHA256SUMS` geprüft. DMG `9f1e8f6a…6e24`, Installer `32344fde…a37d`.
 
 **Wartet auf**
 - Mensch: den ersten Start einmal selbst durchgehen, mit einem echten Konto, auf macOS und Windows
