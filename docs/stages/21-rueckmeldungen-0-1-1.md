@@ -93,6 +93,8 @@ Aufteilung: 2+3 (Spalte), 4a+5+6 (Liste), 8+9 (Farben der Mails), 7+10 (System),
   48, 64, 256) und eigens gezeichneten kleinen Größen; macOS-Symbol entsprechend. Logo in den
   neuen Farben: Entwurf zur Freigabe durch den Menschen, dann `docs/brand/`, Symbole, Wortmarke;
   Entscheidung festhalten (löst das Orange aus `docs/brand/README.md` ab).
+- Entwurf am 25.11.2026 gezeigt (gleiche Form, Farben Blau und GitHub-Dunkel); vom Menschen
+  freigegeben: „Blau wie im Entwurf“.
 
 ### 8 — Mails mit hellem und mit dunklem Hintergrund
 
