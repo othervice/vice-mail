@@ -1,5 +1,15 @@
 import type { QueryKey } from "@tanstack/react-query";
-import { Flag, ListFilter, Mail, Paperclip, Search, Tag, UserRound, X, type LucideIcon } from "lucide-react";
+import {
+  Flag,
+  ListFilter,
+  Mail,
+  Paperclip,
+  Search,
+  Tag,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ChoiceMenu, type ChoiceGroup } from "../../components/ChoiceMenu";
@@ -7,7 +17,11 @@ import { cx } from "../../components/cx";
 import { useRovingFocus } from "../../components/useRovingFocus";
 import type { InboxScope, QuickFilter } from "../../services/ipc";
 import { isUserTag } from "../actions/keywords";
-import { isFiltering, useQuickFilterStore, type QuickFilterState } from "./quickFilter";
+import {
+  isFiltering,
+  useQuickFilterStore,
+  type QuickFilterState,
+} from "./quickFilter";
 import { useQuickFilterFocus } from "./focus";
 import { useViewCount, useViewTags } from "./source";
 
@@ -43,17 +57,29 @@ interface QuickFilterBarProps {
  * toolbar (one tab stop, ← and →); the text field and Reset are tab stops of their own. Escape in
  * the text field clears the text, a second Escape the whole filter.
  */
-export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: QuickFilterBarProps) {
+export function QuickFilterBar({
+  viewKey,
+  scope,
+  keyBase,
+  query,
+  filter,
+}: QuickFilterBarProps) {
   const { t, i18n } = useTranslation();
   const set = useQuickFilterStore((state) => state.set);
   const reset = useQuickFilterStore((state) => state.reset);
   const filtering = isFiltering(filter);
-  const count = useViewCount(scope, keyBase, query, filtering);
+  // The count follows the filter the list asks with (the text after its pause).
+  const counting = isFiltering({ ...filter, text: query.text ?? "" });
+  const count = useViewCount(scope, keyBase, query, counting);
   const [tagsOpen, setTagsOpen] = useState(false);
   const tags = useViewTags(scope, keyBase, tagsOpen || filter.tag !== null);
   const field = useRef<HTMLInputElement>(null);
   const keys = [...SWITCHES.map((s) => s.key), TAG_KEY];
-  const roving = useRovingFocus({ keys, activeKey: null, orientation: "horizontal" });
+  const roving = useRovingFocus({
+    keys,
+    activeKey: null,
+    orientation: "horizontal",
+  });
   const numbers = new Intl.NumberFormat(i18n.language);
 
   // Cmd/Ctrl+Shift+K (the command "Quick filter") puts the focus into the text field.
@@ -63,12 +89,20 @@ export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: Quick
   }, [focusRequest]);
 
   const knownTags = (tags.data ?? []).filter(isUserTag);
-  if (filter.tag !== null && !knownTags.some((tag) => tag.toLowerCase() === filter.tag?.toLowerCase())) knownTags.unshift(filter.tag);
+  if (
+    filter.tag !== null &&
+    !knownTags.some((tag) => tag.toLowerCase() === filter.tag?.toLowerCase())
+  )
+    knownTags.unshift(filter.tag);
 
   const tagProps = roving.itemProps(TAG_KEY);
   const tagGroup: ChoiceGroup = {
     id: TAG_KEY,
-    label: tags.isPending ? t("views.filter.tagsLoading") : knownTags.length === 0 ? t("views.filter.noTags") : t("views.filter.tagsGroup"),
+    label: tags.isPending
+      ? t("views.filter.tagsLoading")
+      : knownTags.length === 0
+        ? t("views.filter.noTags")
+        : t("views.filter.tagsGroup"),
     kind: "radio",
     items: [
       {
@@ -111,7 +145,12 @@ export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: Quick
       className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border bg-surface-list px-4 py-1.5"
       data-testid="quick-filter"
     >
-      <div role="toolbar" aria-label={t("views.filter.switches")} className="flex flex-wrap items-center gap-1.5" {...roving.groupProps}>
+      <div
+        role="toolbar"
+        aria-label={t("views.filter.switches")}
+        className="flex flex-wrap items-center gap-1.5"
+        {...roving.groupProps}
+      >
         {SWITCHES.map(({ key, icon: Icon }) => (
           <button
             key={key}
@@ -124,17 +163,30 @@ export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: Quick
             data-testid={`quick-filter-${key}`}
             className={cx(
               "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-13 transition-colors",
-              filter[key] ? "border-accent bg-accent-soft font-medium text-accent" : "border-border text-secondary hover:bg-hover hover:text-primary",
+              filter[key]
+                ? "border-accent bg-accent-soft font-medium text-accent"
+                : "border-border text-secondary hover:bg-hover hover:text-primary",
             )}
           >
-            <Icon aria-hidden className={cx("size-(--ui-icon-small) shrink-0", key === "flagged" && filter[key] && "fill-current")} strokeWidth={1.75} />
+            <Icon
+              aria-hidden
+              className={cx(
+                "size-(--ui-icon-small) shrink-0",
+                key === "flagged" && filter[key] && "fill-current",
+              )}
+              strokeWidth={1.75}
+            />
             <span>{t(`views.filter.${key}`)}</span>
           </button>
         ))}
         <ChoiceMenu
           label={t("views.filter.tag")}
           icon={Tag}
-          text={filter.tag === null ? t("views.filter.tag") : t("views.filter.tagChosen", { tag: filter.tag })}
+          text={
+            filter.tag === null
+              ? t("views.filter.tag")
+              : t("views.filter.tagChosen", { tag: filter.tag })
+          }
           active={filter.tag !== null}
           chip
           align="start"
@@ -148,7 +200,11 @@ export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: Quick
         />
       </div>
       <label className="flex h-7 min-w-(--ui-list-sender-width) flex-1 items-center gap-1.5 rounded-control border border-border bg-surface px-2 focus-within:outline-2 focus-within:outline-focus-ring">
-        <Search aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
+        <Search
+          aria-hidden
+          className="size-(--ui-icon-small) shrink-0 text-tertiary"
+          strokeWidth={1.75}
+        />
         <input
           ref={field}
           type="text"
@@ -167,29 +223,44 @@ export function QuickFilterBar({ viewKey, scope, keyBase, query, filter }: Quick
           data-testid="quick-filter-text"
         />
       </label>
+      {counting && (
+        <p
+          role="status"
+          className="flex items-center gap-1 text-12 text-secondary tabular-nums"
+          data-testid="quick-filter-count"
+        >
+          <ListFilter
+            aria-hidden
+            className="size-(--ui-icon-small) shrink-0"
+            strokeWidth={1.75}
+          />
+          {count.isError
+            ? t("views.filter.countFailed")
+            : count.data === undefined
+              ? t("views.filter.counting")
+              : t("views.filter.count", {
+                  count: count.data,
+                  formatted: numbers.format(count.data),
+                })}
+        </p>
+      )}
       {filtering && (
-        <>
-          <p role="status" className="flex items-center gap-1 text-12 text-secondary tabular-nums" data-testid="quick-filter-count">
-            <ListFilter aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-            {count.isError
-              ? t("views.filter.countFailed")
-              : count.data === undefined
-                ? t("views.filter.counting")
-                : t("views.filter.count", { count: count.data, formatted: numbers.format(count.data) })}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              reset(viewKey);
-              field.current?.focus();
-            }}
-            className="flex h-7 items-center gap-1 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
-            data-testid="quick-filter-reset"
-          >
-            <X aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-            {t("views.filter.reset")}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => {
+            reset(viewKey);
+            field.current?.focus();
+          }}
+          className="flex h-7 items-center gap-1 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
+          data-testid="quick-filter-reset"
+        >
+          <X
+            aria-hidden
+            className="size-(--ui-icon-small)"
+            strokeWidth={1.75}
+          />
+          {t("views.filter.reset")}
+        </button>
       )}
     </section>
   );

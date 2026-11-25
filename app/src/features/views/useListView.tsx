@@ -56,7 +56,8 @@ export function useListView({ scope, keyBase, conversations, kept, showRecipient
   const text = useDebounced(filter.text, FILTER_TYPING_DELAY_MS);
   const [monthFirst] = useState(() => monthFirstFor(navigator.language));
   const query = toQuickFilter(filter, text, monthFirst);
-  const active = scope !== null && (!isDefaultOrder(order) || beyondUnread(filter));
+  // The text counts once its pause is over: no list in between while the first letters come.
+  const active = scope !== null && (!isDefaultOrder(order) || beyondUnread({ ...filter, text }));
   const source = useViewSource({ scope, keyBase, order, filter: query, conversations, kept, enabled: active });
   const table = useListTableConfig({
     order,
