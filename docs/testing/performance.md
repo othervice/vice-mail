@@ -776,3 +776,133 @@ fällt weiter auf: Kostet jedes Nachladen mehr als 50 ms, sind es 13–14 lange 
 der von rund 250 ms aus Stufe 7 liegt über 100 ms; ein langsameres Rendern je Schritt hebt p95 über
 20 ms. Nicht mehr erkannt wird eine einmalige Verschlechterung auf 50–100 ms. `conversations.e2e.mjs`
 (Scrollen mit aufgeklapptem Gespräch, ohne laufenden Abgleich) behält die strenge Grenze von 50 ms.
+
+## Stufe 19, Aufgabe A: Sortieren, Tabelle, Schnellfilter – 25.11.2026
+
+**Frage:** Bleiben Listen und Abgleich schnell, wenn jede Ansicht nach Absender, Empfänger,
+Betreff oder Größe sortiert und schnell gefiltert werden kann (Entscheidungen 0061, 0062)? Was
+kosten die vier Sortschlüssel und ihre Indizes an Platz, beim Schreiben und als Migration?
+
+**Umgebung:** Mac mini M4, macOS 27.2.1, Release-Build. Kern-Benchmark
+(`crates/mail-engine/src/search/bench.rs`, Daten wie in Stufe 7: fünf Konten, 100.000 Mails) je
+zweimal im Wechsel auf dem Stand vorher (`2cbcbe3`, eigenes Quell- und Zielverzeichnis) und
+nachher, nachts bei Last 1,9–2,3 (andere Sitzungen ruhten). Ein erster Lauf unter Last 15–34 ist
+verworfen (vorher und nachher waren nicht vergleichbar).
+
+```text
+cargo test -p mail-engine --release --lib search::bench::bench_100k -- --ignored --nocapture --test-threads 1
+BENCH_MESSAGES=100000 cargo test -p mail-store --release --lib bench_migration -- --ignored --nocapture
+```
+
+### Schreiben, Platz, Migration
+
+| 100.000 Mails | vorher | nachher |
+|---|---:|---:|
+| `store_headers` je Fenster von 500 (Threads, Index, Kategorien) | 24,6 / 24,6 ms | 30,9 / 30,7 ms |
+| Abgleich im Kern, Mails je Sekunde | 19.165 / 19.138 | 15.255 / 15.354 |
+| Datenbank des Benchmarks | 98 MB | 118 MB |
+| Start bis erste Seite, Speicher im Leerlauf | 5–7 ms, 26–27 MB | 5 ms, 27–28 MB |
+
+- **Schreiben:** +6,2 ms je Fenster von 500 neuen Mails (+25 %): drei Funktionsaufrufe je Ort und
+  vier Indizes mehr. Für den laufenden Abgleich (wenige Mails) unter 0,1 ms; ein Erstabgleich von
+  100.000 Mails braucht rund 1,3 s Datenbankzeit mehr.
+- **Platz:** +20 MB bei 100.000 Mails (+20 %). Der eigene Migrations-Benchmark (kürzere Namen und
+  Betreffs) zerlegt es: Indizes 1,9 (Absender), 1,9 (Empfänger), 3,2 (Betreff), 1,5 MB (Größe) bei
+  100.000 Orten, bei 500.000 Orten 9,5 / 9,5 / 16,0 / 7,3 MB; dazu die Spalten in der Ortstabelle.
+- **Migration 0026** (einmal, beim ersten Start nach dem Update, die Sicherung vorher
+  eingeschlossen; gemessen unter Last 9 bzw. 32): 1,2 s bei 100.000 Mails (Datenbank 29 → 42 MB),
+  7,9 s bei 500.000 (144 → 207 MB, Sicherung 135 MB).
+- **Bestehende Listen unverändert** (gleiche Abfragen, eine Spalte mehr): Listenseite 0,19/0,20 ms,
+  vereinter Posteingang 0,73/0,75 ms, sortierter Posteingang als Gespräche 2,6 ms, vereint 4,6–4,8
+  ms, Suche 0,5–1,4 ms vorher wie nachher (Median, beide Läufe).
+
+### Sortierte und gefilterte Seiten (nachher, ms, Median / p95 aus zwei Läufen)
+
+| Größter Posteingang (rund 27.500 Mails), 100 Zeilen | Median | p95 |
+|---|---:|---:|
+| Datum, älteste zuerst | 0,27–0,31 | 0,38 |
+| Absender A–Z / Z–A | 0,30–0,34 | 0,53 |
+| Empfänger A–Z | 0,28–0,33 | 0,36 |
+| Betreff A–Z | 0,33–0,35 | 0,52 |
+| Größe, größte zuerst | 0,30–0,34 | 0,53 |
+| … nach Absender, Keyset ab Mitte | 0,33–0,34 | 0,54 |
+| nach Absender als Gespräche | 2,58–2,62 | 3,34 |
+| Vereinter Posteingang (5 Konten) nach Absender / als Gespräche | 1,11 / 4,32–4,40 | 1,68 / 5,72 |
+
+| Schnellfilter im größten Posteingang | erste Seite Median | Trefferzahl Median |
+|---|---:|---:|
+| Ungelesen, Datum (1.240 Treffer) | 0,30 | 0,42 |
+| Ungelesen, nach Absender | 0,96 | 0,41 |
+| Markiert, Datum / nach Absender (559) | 0,31 / 1,88 | 0,22 |
+| Mit Anhang, nach Betreff (4.135) | 0,65 | 12,3–13,0 |
+| Von Kontakten (25.617) | 0,34 | 17,5–18,5 |
+| Schlagwort ohne Treffer (ganzer Ordner) | 8,5 | 2,1 |
+| Text `rechnung`, Datum / nach Absender (4.517) | 1,88 / 2,04 | 4,9–5,0 |
+| beim Tippen `rech`, Datum | 1,85 | 4,9–5,0 |
+| seltenes Wort, Datum / nach Absender (14) | 0,15 / 6,8 | 0,09 |
+| Ungelesen + Anhang + `rechnung` (65) | 3,4 | 3,2–3,3 |
+| Schlagwörter der Ansicht (Menü) | 0,58 | |
+
+- Eine sortierte Seite kostet wie eine Seite „neueste zuerst“ und wächst nicht mit der Lage im
+  Ordner (Keyset ab Mitte gleich schnell); Gespräche kosten wie in 0039.
+- **Teuer ist nur, was selten trifft und gegen den Index läuft:** ein Schlagwort, das keine Mail
+  hat, liest den ganzen Ordner (8,5 ms), ein seltenes Wort in der Reihenfolge nach Absender 6,8 ms
+  (in Datumsreihenfolge geht SQLite über die Treffer des Volltextindex: 0,15 ms). Beides wächst
+  linear mit dem Ordner; bei 500.000 Mails in einem Ordner sind 40–50 ms zu erwarten (nicht
+  gemessen).
+- **Die Trefferzahl** zählt alle Treffer und braucht bei vielen Treffern, die eine Zeile von
+  `message` lesen müssen (Anhang, Kontakte), 12–18 ms; sie lädt neben der ersten Seite und hält
+  diese nicht auf.
+- Der automatische Test `search::bench::small_data_meets_generous_thresholds` (3.000 Mails, Debug)
+  prüft auch sortierte Seiten (100 ms), Gespräche (300 ms), Filter und Zahl (je 300 ms).
+- **Ungeprüft:** 500.000 Mails für die Seiten und Filter im Kern (nur die Migration ist bei 500.000
+  gemessen), Windows.
+
+### Desktop-App mit 100.000 Mails (25.11.2026)
+
+**Wie gemessen:** `app/tests/e2e/perf.e2e.mjs`, neuer Teil „sorts and filters the inbox (stage 19)“,
+allein (`--mochaOpts.grep "stage 19"`, er startet die App dann selbst) mit dem Release-Build des
+Testzugangs (`CI=true pnpm --dir app tauri build --no-bundle --features e2e --config
+src-tauri/tauri.e2e.conf.json`, Stand nach dem Zusammenführen mit `6492fa7`):
+
+```text
+PERF=1 PERF_SEED=100000 E2E_APP=<Release-Binary> scripts/e2e-gui.sh --spec ./tests/e2e/perf.e2e.mjs --mochaOpts.grep "stage 19"
+```
+
+Daten wie im Abschnitt „Desktop-App“ (alice 99.959 Mails im Posteingang, bob 23), Last 2–3,
+Bildschirm gesperrt (Seite über `keep-rendering.m` sichtbar). Gemessen vom Klick (Menüeintrag,
+Schalter der Leiste) bzw. vom letzten Zeichen bis die erste Zeile der neuen Reihenfolge oder des
+Filters gezeichnet ist und die Leiste die Zahl des Kerns zeigt. Jede Reihenfolge und jeder Filter
+einmal (ein zweites Mal käme die Liste aus dem Zwischenspeicher der Oberfläche); vor jedem Filter
+wird die Auswahl aufgehoben (seit Stufe 18 F öffnet die Liste ihre oberste Mail, und ein Filter
+lässt die geöffnete Mail an ihrem Platz). Werte aus dem letzten von drei Läufen, in Klammern die
+Spanne aller drei (die ersten beiden lagen für den „vereinten“ Teil versehentlich im Posteingang
+von alice).
+
+| ms bis gezeichnet | Vereinter Posteingang (2 Konten, Gespräche) | Posteingang alice (Mails) |
+|---|---:|---:|
+| nach Absender A–Z | 28 | 31 (28–39) |
+| nach Absender Z–A | 33 | 43 (25–43) |
+| nach Betreff A–Z | 26 | 41 (28–41) |
+| nach Größe, größte zuerst | 33 | 39 (32–39) |
+| Datum, älteste zuerst | 43 | 41 (23–41) |
+| Schnellfilter Ungelesen: Zeilen / Zahl | 14 / 34 | 39 / 39 |
+| … + Mit Anhang | 77 / 77 | – / 78 |
+| … + Markiert | 52 / 52 | 48 / 48 |
+| Text beim Tippen `rechnung` (ab letztem Zeichen, 150 ms Pause eingerechnet): Zeilen / Zahl | 274 / 224 | 227 / 227 (227–234) |
+| Text beim Tippen `budget` | 312 / 222 | 219 / 219 (213–223) |
+
+- **Sortieren und die Schalter** zeigen das Ergebnis in 14–78 ms: Ziel „sichtbare Reaktion unter
+  100 ms“ erfüllt. Die Zahl der Treffer steht gleichzeitig mit den Zeilen da oder kurz danach.
+- **Text:** 213–312 ms ab dem letzten Zeichen, davon 150 ms bewusste Pause (wie in der Suche,
+  `TYPING_DELAY_MS`); nach der Pause 63–162 ms, im vereinten Posteingang als Gespräche am
+  längsten. Die Suche brauchte in der Desktop-Messung vom 24.11.2026 beim Tippen 175–185 ms
+  (eine Liste von Treffern ohne Gespräche). Das Ziel „Suche bis erste Treffer unter 200 ms“ verfehlt der
+  Schnellfilter, wenn man die Pause mitzählt (wie bei der Suche war es dort schon knapp).
+  Nächster Schritt: die Pause des Filters auf 100 ms und die erste Seite kleiner (50 statt 200
+  Zeilen) laden, wie die Suche.
+- „Ungelesen“ allein im vereinten Posteingang: 14 ms, weil die oberste Zeile schon die neueste
+  ungelesene war (nur das Neuzeichnen). „Ungelesen + Mit Anhang“ in alices Posteingang: Zeilen nicht
+  gemessen (die zuvor geöffnete Mail blieb trotz Escape oben stehen), die Zahl in 78 ms.
+- **Ungeprüft:** 500.000 Mails auf dem Desktop, Windows, Retina-Bildschirm, die Tabellenansicht
+  (gleiche Abfragen, anderes Zeichnen; gemessen ist nur die Zeilenansicht).

@@ -107,6 +107,9 @@ const READING_COMMANDS = new Set([
   "count_blocked_hidden",
   "get_attachment_pins",
   "get_unread_first_views",
+  // Stage 19 (decision 0061): the order of each view and the table settings (device settings).
+  "get_list_orders",
+  "get_list_table",
   // Stage 15 (decision 0037): the update setting and state (local; nothing is requested).
   "get_update_info",
   // Stage 15 (decision 0044): whether to show the guided first start (a device setting, read-only).

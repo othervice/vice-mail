@@ -33,9 +33,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Import from Thunderbird: choose a profile, see its accounts, addresses, signatures and local
   folders, and take over what you pick. Passwords are never read; accounts go through the normal
   setup and start read-only.
-
-### Added
-
+- Sort a folder, an inbox or the unified inbox by date, sender, recipient (Sent and Drafts),
+  subject or size, in either direction, remembered per view; conversations take the place of their
+  newest message. The wide list can be shown as a table with sortable, resizable and selectable
+  columns. A quick filter bar above the list narrows it to unread, flagged, with attachment, from
+  contacts, a tag and text (search language), shows the number of matches and resets with one
+  click (Cmd/Ctrl+Shift+K puts the focus into it). "Unread only" moved from the header into it.
 - Attachment reminder: when the text you wrote (not the quote or the signature) mentions an
   attachment in English or German and none is there, the app asks before sending or scheduling,
   with "Send anyway" and "Add attachment". Sends from the outbox never ask. Can be turned off under

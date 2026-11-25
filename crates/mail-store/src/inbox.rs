@@ -143,17 +143,16 @@ pub(crate) fn list(
         values.push(mailbox.0.into());
         values.push(account.to_string().into());
     }
-    let rows = conn
-        .prepare_cached(&inbox_sql(kind, mailboxes.len()))?
-        .query_map(params_from_iter(values), |r| {
-            let mailbox = MailboxId(r.get(14)?);
-            let account = accounts
-                .get(&mailbox.0)
-                .copied()
-                .ok_or(rusqlite::Error::InvalidColumnIndex(14))?;
-            item_at(r, account, mailbox)
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+    let rows =
+        conn.prepare_cached(&inbox_sql(kind, mailboxes.len()))?
+            .query_map(params_from_iter(values), |r| {
+                let mailbox = MailboxId(r.get(crate::lists::LIST_COLUMNS)?);
+                let account = accounts.get(&mailbox.0).copied().ok_or(
+                    rusqlite::Error::InvalidColumnIndex(crate::lists::LIST_COLUMNS),
+                )?;
+                item_at(r, account, mailbox)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
     let (mut items, next_cursor) = page(rows, limit, |i| i.id);
     crate::marks::decorate(conn, &mut items)?;
     Ok(MessagePage { items, next_cursor })

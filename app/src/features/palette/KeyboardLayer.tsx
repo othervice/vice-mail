@@ -7,6 +7,7 @@ import { isEditableTarget, matchesShortcut, shortcutPlatform } from "../actions/
 import { useAppInfo } from "../app-info/queries";
 import { ShortcutOverview } from "../keyboard/ShortcutOverview";
 import { useStoredFrame } from "../layout/useStoredFrame";
+import { useQuickFilterFocus } from "../views/focus";
 import { CommandPalette } from "./CommandPalette";
 
 /**
@@ -21,6 +22,7 @@ export function KeyboardLayer() {
   const openOverview = usePaletteStore((state) => state.openOverview);
   const showMailView = useUiStore((state) => state.showMailView);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const focusQuickFilter = useQuickFilterFocus((state) => state.focus);
   useStoredFrame();
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
@@ -37,6 +39,13 @@ export function KeyboardLayer() {
     if (help && (help.mod || !isEditableTarget(event.target))) {
       event.preventDefault();
       openOverview();
+      return;
+    }
+    // Stage 19: Cmd/Ctrl+Shift+K into the quick filter of the list on screen.
+    const quickFilter = boundShortcuts("quickFilter", platform).find((s) => matchesShortcut(event, s, platform));
+    if (quickFilter && (quickFilter.mod || !isEditableTarget(event.target))) {
+      event.preventDefault();
+      focusQuickFilter();
       return;
     }
     const sidebar = boundShortcuts("toggleSidebar", platform).find((s) => matchesShortcut(event, s, platform));

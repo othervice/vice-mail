@@ -38,7 +38,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { browser } from "@wdio/globals";
+import { $, browser } from "@wdio/globals";
 import { attach, coreCall, dataDir, SCREENSHOT_DIR } from "./support/app.mjs";
 import { quitApp, WEBDRIVER_PORT } from "./support/lifecycle.mjs";
 import { measureScroll } from "./support/scroll.mjs";
@@ -270,6 +270,16 @@ function measure(spec) {
         const row = document.getElementById(id);
         return row !== null && row.innerHTML !== html;
       },
+      // Stage 19: the first row drawn is this message (rows sorted by their place on screen).
+      firstRow: ({ id }) => {
+        const first = [...document.querySelectorAll('[data-testid="message-list"] [role="option"], [data-testid="message-list"] [role="treeitem"]')].sort(
+          (a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top,
+        )[0];
+        return first !== undefined && first.id.endsWith(`-${String(id)}`);
+      },
+      // Stage 19: the quick filter's count says this number.
+      // (Digits only: the number is written in the UI's language.)
+      count: ({ text }) => (document.querySelector('[data-testid="quick-filter-count"]')?.textContent ?? "").replace(/\D/g, "") === text,
       hits: ({ query, needle, previous }) => {
         const list = [...document.querySelectorAll('[data-testid="message-list"]')].find((l) => (l.getAttribute("aria-label") ?? "").includes(query));
         const row = list?.querySelector('[data-testid="message-row"]');
@@ -283,6 +293,24 @@ function measure(spec) {
       t0 = now();
     };
     const triggers = {
+      // Stage 19: a click on the element `selector` (a menu item, a filter switch).
+      clickSelector: ({ selector }) => {
+        start();
+        document.querySelector(selector).click();
+      },
+      // Stage 19: typing into the quick filter, one character every `intervalMs`, measured from
+      // the last one.
+      filterType: ({ text, intervalMs }) => {
+        const input = document.querySelector('[data-testid="quick-filter-text"]');
+        let typed = 0;
+        const step = () => {
+          typed += 1;
+          if (typed === text.length) start();
+          setValue(input, text.slice(0, typed));
+          if (typed < text.length) setTimeout(step, intervalMs);
+        };
+        step();
+      },
       click: ({ id }) => {
         start();
         document.getElementById(id).click();
@@ -740,5 +768,165 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
   it("uses little memory when idle after the work", async () => {
     report.memory.afterWork = await idleMemory(current.pid);
     report.memory.afterWork.breakdown = footprintBreakdown(current.pid);
+  });
+
+  // Stage 19, task A (decisions 0061, 0062): another order and the quick filter, from the click to
+  // the first rows drawn in the new order, in the unified inbox (the start view, conversations)
+  // and in alice's inbox (messages). Each order and filter once: a list already loaded comes from
+  // the cache, so repeating one would measure the cache. After the memory measurement, so the
+  // numbers above stay comparable with earlier runs.
+  it("sorts and filters the inbox (stage 19)", async () => {
+    // Run alone (`--mochaOpts.grep "stage 19"`), no earlier test has started an app of its own.
+    if (!current) {
+      const binary = path.join(dataDir(), "perf-bin", "mail-app");
+      if (!fs.existsSync(binary)) {
+        fs.mkdirSync(path.dirname(binary), { recursive: true });
+        perfPy("copy", APP, binary);
+      }
+      await startMarks(launch(binary, "stage19"));
+      await attachBrowser();
+      await sleep(3000);
+    }
+    const unified = { kind: "unified", view: { kind: "all" } };
+    const none = { unread: false, flagged: false, attachment: false, contacts: false, tag: null, text: "", monthFirst: false };
+    const first = async (scope, order, filter, conversations) => {
+      const request = { request: { scope, order, filter }, cursor: null, limit: 1 };
+      const page = conversations ? await coreCall("list_view_conversations", request) : await coreCall("list_view_messages", request);
+      const item = page.items[0];
+      return item ? (conversations ? item.message.id : item.id) : null;
+    };
+    const openMenu = async () => {
+      if ((await $('[data-testid="list-view-menu"]').getAttribute("aria-expanded")) !== "true") await $('[data-testid="list-view-menu"]').click();
+      await $('[data-testid="list-view-menu-menu"]').waitForExist({ timeout: 5000 });
+    };
+    const results = { sort: {}, filter: {}, count: {} };
+    // Opened messages stay unread meanwhile: the counts must not move under the measurement.
+    const reading = await coreCall("get_reading_preferences");
+    await coreCall("set_reading_preferences", { preferences: { ...reading, markReadOnOpen: "never" } });
+    // Since stage 18 F the list opens its top message, and a filter keeps the open message in its
+    // place (stage 16): the selection goes first, so the first row is the filter's.
+    const clearSelection = async () => {
+      await browser.execute(() => {
+        const list = document.querySelector('[data-testid="message-list"]');
+        list?.focus();
+        list?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      });
+      await sleep(500);
+    };
+    /** What the bar and the first rows say, for a step that timed out. */
+    const shown = () =>
+      browser.execute(() => ({
+        count: document.querySelector('[data-testid="quick-filter-count"]')?.textContent ?? null,
+        first: [...document.querySelectorAll('[data-testid="message-list"] [role="option"], [data-testid="message-list"] [role="treeitem"]')]
+          .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+          .slice(0, 3)
+          .map((el) => el.id),
+      }));
+    const conversations = (await coreCall("get_ui_preferences")).conversations;
+    for (const [where, scope, viewKey, convs] of [
+      ["unified", unified, "unified:all", conversations],
+      ["alice inbox", null, null, false],
+    ]) {
+      let currentScope = scope;
+      let currentKey = viewKey;
+      if (where === "unified") {
+        // All inboxes, whatever view the app opened with (the header's inbox switcher).
+        if (!(await $('[data-testid="unified-inbox"]').isExisting())) {
+          await browser.execute(() => document.querySelector('[data-testid="inbox-scope"]')?.click());
+          await $('[data-testid="inbox-scope-all"]').waitForExist({ timeout: 10000 });
+          await browser.execute(() => document.querySelector('[data-testid="inbox-scope-all"]')?.click());
+          await $('[data-testid="unified-inbox"]').waitForExist({ timeout: 10000 });
+          await sleep(2000);
+        }
+      }
+      if (where === "alice inbox") {
+        const inbox = (await coreCall("list_mailboxes", { accountId: alice.id })).find((m) => m.role === "inbox");
+        currentScope = { kind: "mailbox", mailboxId: inbox.id };
+        currentKey = `mailbox:${String(inbox.id)}`;
+        if (conversations) await coreCall("set_ui_preferences", { preferences: { ...(await coreCall("get_ui_preferences")), conversations: false } });
+        // Alice's own inbox in the column (her account's tree comes first).
+        if ((await $('[data-testid="rail-folders"]').getAttribute("aria-expanded")) !== "true") await $('[data-testid="rail-folders"]').click();
+        await browser.waitUntil(
+          () => browser.execute(() => document.querySelector('[role="tree"][aria-label^="Folders of"] [data-folder-role="inbox"]') !== null),
+          { timeout: 10000, timeoutMsg: "no account tree with an inbox" },
+        );
+        await browser.execute(() => {
+          document.querySelector('[role="tree"][aria-label^="Folders of"] [data-folder-role="inbox"]')?.click();
+        });
+        await browser.waitUntil(async () => (await $('[data-testid="message-list"]').getAttribute("aria-label"))?.includes("Inbox") ?? false, { timeout: 10000 }).catch(() => undefined);
+        await sleep(2000);
+      }
+      for (const [key, ascending, item] of [
+        ["sender", true, "sort-key-sender"],
+        ["sender", false, "sort-descending"],
+        ["subject", true, "sort-key-subject"],
+        ["size", false, "sort-key-size"],
+        ["date", true, "sort-key-date"],
+      ]) {
+        const order = key === "date" ? { key, ascending: true } : { key, ascending };
+        // "Oldest first": the date key first, then the direction.
+        if (key === "date") {
+          await openMenu();
+          await $('[data-testid="sort-key-date"]').click();
+          await sleep(1500);
+        }
+        const id = await first(currentScope, order, none, convs);
+        await openMenu();
+        const result = await measure({
+          trigger: { kind: "clickSelector", selector: `[data-testid="${key === "date" ? "sort-ascending" : item}"]` },
+          until: [{ name: "rows", kind: "firstRow", id }],
+          timeoutMs: 20000,
+        });
+        results.sort[`${where}: ${key} ${ascending ? "asc" : "desc"}`] = flat(result, "rows");
+        await sleep(1000);
+      }
+      // Back to newest first through the menu (the window keeps the orders it has read): the
+      // key is date already, so the direction.
+      await openMenu();
+      await $('[data-testid="sort-descending"]').click();
+      await sleep(1500);
+      await coreCall("set_list_order", { view: currentKey, order: null });
+      for (const [name, filter, selector] of [
+        ["unread", { ...none, unread: true }, "quick-filter-unread"],
+        ["unread + attachment", { ...none, unread: true, attachment: true }, "quick-filter-attachment"],
+        ["unread + attachment + flagged", { ...none, unread: true, attachment: true, flagged: true }, "quick-filter-flagged"],
+      ]) {
+        const id = await first(currentScope, { key: "date", ascending: false }, filter, convs);
+        const count = await coreCall("count_list_view", { request: { scope: currentScope, order: { key: "date", ascending: false }, filter } });
+        const until = [{ name: "count", kind: "count", text: String(count) }];
+        if (id !== null) until.push({ name: "rows", kind: "firstRow", id });
+        await clearSelection();
+        const result = await measure({ trigger: { kind: "clickSelector", selector: `[data-testid="${selector}"]` }, until, timeoutMs: 20000 });
+        results.filter[`${where}: ${name}`] = id !== null ? flat(result, "rows") : null;
+        results.count[`${where}: ${name} (${String(count)})`] = flat(result, "count");
+        if (result.timedOut.length > 0) (results.shown ??= {})[`${where}: ${name}`] = { expected: id, count, ...(await shown()) };
+        await sleep(1000);
+      }
+      await $('[data-testid="quick-filter-reset"]').click();
+      await sleep(1500);
+      for (const text of ["rechnung", "budget"]) {
+        const filter = { ...none, text };
+        const id = await first(currentScope, { key: "date", ascending: false }, filter, convs);
+        const count = await coreCall("count_list_view", { request: { scope: currentScope, order: { key: "date", ascending: false }, filter } });
+        await clearSelection();
+        const result = await measure({
+          trigger: { kind: "filterType", text, intervalMs: 80 },
+          until: [
+            ...(id !== null ? [{ name: "rows", kind: "firstRow", id }] : []),
+            { name: "count", kind: "count", text: String(count) },
+          ],
+          timeoutMs: 20000,
+        });
+        results.filter[`${where}: typing ${text} (incl. 150 ms pause)`] = id !== null ? flat(result, "rows") : null;
+        results.count[`${where}: typing ${text} (${String(count)})`] = flat(result, "count");
+        if (result.timedOut.length > 0) (results.shown ??= {})[`${where}: typing ${text}`] = { expected: id, count, ...(await shown()) };
+        await $('[data-testid="quick-filter-reset"]').click();
+        await sleep(1500);
+      }
+    }
+    if (conversations) await coreCall("set_ui_preferences", { preferences: { ...(await coreCall("get_ui_preferences")), conversations: true } });
+    await coreCall("set_reading_preferences", { preferences: reading });
+    report.stage19 = results;
+    console.log(`stage 19: ${JSON.stringify(results)}`);
   });
 });

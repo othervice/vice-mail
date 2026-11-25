@@ -33,6 +33,7 @@ pub mod takeover;
 pub mod threads;
 pub mod ui;
 pub mod updates;
+pub mod views;
 
 use mail_model::{CoreError, IpcError};
 

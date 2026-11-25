@@ -21,6 +21,7 @@ import { accountShortNames } from "../accounts/accountName";
 import { BlockedHiddenNote } from "../blocked/BlockedHiddenNote";
 import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 import { useConversationsOn } from "../threads/preference";
+import { useListView } from "../views/useListView";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -56,12 +57,21 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   // Stage 16: "Unread only" and "Unread first" over the same accounts.
   const unreadScope: InboxScope = { kind: "unified", view };
   const unreadMode = useUnreadMode(unreadViewKey(unreadScope));
-  const unread = useUnreadSource(unreadScope, ["unified", view], unreadMode, selection.items);
-  const sorted = useUnifiedInboxSource(view, !unread);
   const conversations = useConversationsOn();
+  // Stage 19 (decisions 0061, 0062): the view's order, its quick filter and the table.
+  const listView = useListView({
+    scope: unreadScope,
+    keyBase: ["unified", view],
+    conversations,
+    kept: selection.items,
+    showRecipients: false,
+    mixedAccounts: accounts.length > 1,
+  });
+  const unread = useUnreadSource(unreadScope, ["unified", view], listView.active ? null : unreadMode, selection.items);
+  const sorted = useUnifiedInboxSource(view, !unread && !listView.active);
   const source: MessageListSource = {
     empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
-    ...(unread ?? sorted),
+    ...(listView.source ?? unread ?? sorted),
     accountColor,
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
   };
@@ -94,6 +104,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
       <div {...layout.listColumn(open)}>
         {/* Stage 16 (decision 0036): mail of blocked senders the unified inbox leaves out. */}
         <BlockedHiddenNote scope={unreadScope} accountId={null} />
+        {listView.bar}
         <MessageList
           source={source}
           folderName={name}
@@ -124,6 +135,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           }}
           // Stage 18 (task F): opening the unified inbox shows its top message.
           autoSelectFirst={layout.autoSelectFirst}
+          table={listView.table}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}

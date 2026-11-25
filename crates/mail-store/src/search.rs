@@ -105,23 +105,36 @@ fn conditions(
     params: &mut Vec<Value>,
     out: &mut Vec<String>,
 ) {
+    conditions_on(f, "m", account_rows, skip_first_set, params, out);
+}
+
+/// [`conditions`] on the message alias `m` (stage 19: the list views apply them to a newer
+/// message of a conversation as well, alias `n`).
+pub(crate) fn conditions_on(
+    f: &SearchFilter,
+    m: &str,
+    account_rows: Option<&[i64]>,
+    skip_first_set: bool,
+    params: &mut Vec<Value>,
+    out: &mut Vec<String>,
+) {
     // `+` keeps these terms off the indexes: the driver decides the order (newest first), an
     // index on `account_id` would read the account's messages and sort them.
     if let Some(rows) = account_rows {
         out.push(format!(
-            "+m.account_id IN ({})",
+            "+{m}.account_id IN ({})",
             ids_list(rows.iter().copied())
         ));
     }
     if let Some(has) = f.has_attachment {
-        out.push(format!("+m.has_attachments = {}", i64::from(has)));
+        out.push(format!("+{m}.has_attachments = {}", i64::from(has)));
     }
     // Stage 20: numbers the parser produced, written into the SQL (no user text).
     if let Some(bytes) = f.size_at_least {
-        out.push(format!("+m.size >= {bytes}"));
+        out.push(format!("+{m}.size >= {bytes}"));
     }
     if let Some(bytes) = f.size_below {
-        out.push(format!("+m.size < {bytes}"));
+        out.push(format!("+{m}.size < {bytes}"));
     }
     let scope = f
         .mailbox_sets
@@ -135,7 +148,7 @@ fn conditions(
         .unwrap_or_default();
     let location = |cond: &str, exists: bool| {
         format!(
-            "{}EXISTS (SELECT 1 FROM message_location fl WHERE fl.message_id = m.id AND {cond}{scope})",
+            "{}EXISTS (SELECT 1 FROM message_location fl WHERE fl.message_id = {m}.id AND {cond}{scope})",
             if exists { "" } else { "NOT " }
         )
     };
@@ -154,36 +167,35 @@ fn conditions(
             continue;
         }
         out.push(format!(
-            "EXISTS (SELECT 1 FROM message_location il WHERE il.message_id = m.id AND il.mailbox_id IN ({}))",
+            "EXISTS (SELECT 1 FROM message_location il WHERE il.message_id = {m}.id AND il.mailbox_id IN ({}))",
             ids_list(set.iter().map(|m| m.0))
         ));
     }
     if !f.excluded_mailboxes.is_empty() {
         out.push(format!(
-            "NOT EXISTS (SELECT 1 FROM message_location xl WHERE xl.message_id = m.id AND xl.mailbox_id IN ({}))",
+            "NOT EXISTS (SELECT 1 FROM message_location xl WHERE xl.message_id = {m}.id AND xl.mailbox_id IN ({}))",
             ids_list(f.excluded_mailboxes.iter().map(|m| m.0))
         ));
     }
     if let Some(snoozed) = f.snoozed {
         out.push(format!(
             "{}EXISTS (SELECT 1 FROM snooze sz
-                        WHERE sz.message_id_hdr = m.message_id_hdr AND sz.returned_at IS NULL
-                          AND sz.account_uuid = (SELECT a.uuid FROM account a WHERE a.id = m.account_id))",
+                        WHERE sz.message_id_hdr = {m}.message_id_hdr AND sz.returned_at IS NULL
+                          AND sz.account_uuid = (SELECT a.uuid FROM account a WHERE a.id = {m}.account_id))",
             if snoozed { "" } else { "NOT " }
         ));
     }
     if f.without_complete_body {
-        out.push(
-            "NOT EXISTS (SELECT 1 FROM message_body cb WHERE cb.message_id = m.id AND cb.complete = 1)"
-                .into(),
-        );
+        out.push(format!(
+            "NOT EXISTS (SELECT 1 FROM message_body cb WHERE cb.message_id = {m}.id AND cb.complete = 1)"
+        ));
     }
     if f.only.is_none()
         && let TextMatch::Exclude(expr) = &f.text
     {
         params.push(Value::Text(expr.clone()));
         out.push(format!(
-            "m.id NOT IN (SELECT rowid FROM message_fts WHERE message_fts MATCH ?{})",
+            "{m}.id NOT IN (SELECT rowid FROM message_fts WHERE message_fts MATCH ?{})",
             params.len()
         ));
     }

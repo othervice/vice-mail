@@ -1,9 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { ArrowUpNarrowWide, ListFilter, MailCheck, MailOpen, MessagesSquare } from "lucide-react";
+import { ArrowUpNarrowWide, MailCheck, MailOpen, MessagesSquare } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { create } from "zustand";
-import { cx } from "../../components/cx";
 import {
   comfortIpc,
   conversationIpc,
@@ -25,6 +23,8 @@ import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
 import { mergeInfo, threadRows, type ConversationInfoById } from "../threads/conversationRows";
 import { useConversationStore } from "../threads/preference";
 import { decorateConversations } from "../threads/source";
+import { isDefaultOrder, useListOrder } from "../views/order";
+import { useQuickFilterStore } from "../views/quickFilter";
 
 /** A page of conversations as message rows (decision 0039), with their info by row id. */
 interface ConversationListPage {
@@ -61,23 +61,6 @@ export function unreadViewKey(scope: InboxScope): string {
   return scope.view.kind === "all" ? "unified:all" : `group:${scope.view.groupId}`;
 }
 
-interface OnlyUnreadState {
-  /** Views that show their unread mail only, for this session (a filter, not a setting). */
-  views: ReadonlySet<string>;
-  toggle: (view: string) => void;
-}
-
-export const useOnlyUnreadStore = create<OnlyUnreadState>()((set) => ({
-  views: new Set<string>(),
-  toggle: (view) => {
-    set((state) => {
-      const next = new Set(state.views);
-      if (!next.delete(view)) next.add(view);
-      return { views: next };
-    });
-  },
-}));
-
 export const unreadFirstViewsQueryKey = ["parity", "unreadFirstViews"] as const;
 
 export function useUnreadFirstViews() {
@@ -103,7 +86,8 @@ export function useSetUnreadFirstView() {
 export type UnreadMode = "only" | "first" | null;
 
 export function useUnreadMode(viewKey: string | null): UnreadMode {
-  const only = useOnlyUnreadStore((state) => (viewKey ? state.views.has(viewKey) : false));
+  // Stage 19 (decision 0062): "Unread only" is the quick filter's "Unread".
+  const only = useQuickFilterStore((state) => (viewKey ? (state.views[viewKey]?.unread ?? false) : false));
   const first = useUnreadFirstViews().data?.includes(viewKey ?? "") ?? false;
   if (!viewKey) return null;
   if (only) return "only";
@@ -249,27 +233,29 @@ export function useUnreadSource(
 }
 
 /**
- * In the header of a folder or inbox view: the "Unread only" switch and the options menu with
- * "Unread first". Both name the view they change by being in its header.
+ * In the header of a folder or inbox view: the options menu with "Unread first" and the
+ * conversation view. Stage 19 (decision 0062): "Unread only" moved into the quick filter bar.
+ * "Unread first" groups the newest-first list; in another order it waits (inert, its label says
+ * so) until the view is newest first again.
  */
 export function UnreadControls({ viewKey }: { viewKey: string }) {
   const { t } = useTranslation();
-  const only = useOnlyUnreadStore((state) => state.views.has(viewKey));
-  const toggle = useOnlyUnreadStore((state) => state.toggle);
   const firstViews = useUnreadFirstViews();
   const setFirst = useSetUnreadFirstView();
   const first = firstViews.data?.includes(viewKey) ?? false;
+  const sorted = !isDefaultOrder(useListOrder(viewKey));
   // Decision 0039: the conversation view, a stored preference for every list.
   const conversations = useConversationStore((state) => state.on);
   const setConversations = useConversationStore((state) => state.setOn);
+  const firstLabel = first ? t("organize.unread.firstOff") : t("organize.unread.firstOn");
   const items: OverflowItem[] = [
     {
       id: "unread-first",
-      label: first ? t("organize.unread.firstOff") : t("organize.unread.firstOn"),
+      label: sorted ? t("organize.unread.firstOnlyByDate", { action: firstLabel }) : firstLabel,
       icon: ArrowUpNarrowWide,
-      ...(firstViews.isPending && { inert: true }),
+      ...((firstViews.isPending || sorted) && { inert: true }),
       onSelect: () => {
-        if (!firstViews.isPending) setFirst.mutate({ view: viewKey, enabled: !first });
+        if (!firstViews.isPending && !sorted) setFirst.mutate({ view: viewKey, enabled: !first });
       },
       "data-testid": "unread-first-toggle",
     },
@@ -285,36 +271,7 @@ export function UnreadControls({ viewKey }: { viewKey: string }) {
   ];
   return (
     <div className="flex shrink-0 items-center gap-1" data-testid="unread-controls">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={only}
-        onClick={() => {
-          toggle(viewKey);
-        }}
-        data-testid="only-unread"
-        className={cx(
-          "flex h-8 items-center gap-2 rounded-control px-2 text-13 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus-ring",
-          only ? "font-medium text-primary" : "text-secondary",
-        )}
-      >
-        <ListFilter aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-        <span>{t("organize.unread.only")}</span>
-        <span
-          aria-hidden
-          className={cx(
-            "relative flex h-4 w-8 shrink-0 items-center rounded-full border p-px transition-colors",
-            only ? "justify-end border-accent bg-accent" : "justify-start border-border-strong bg-track",
-          )}
-        >
-          <span className={cx("size-3 rounded-full", only ? "bg-surface-raised" : "bg-secondary")} />
-        </span>
-      </button>
-      <OverflowMenu
-        label={t("organize.unread.menu")}
-        data-testid="list-options"
-        items={items}
-      />
+      <OverflowMenu label={t("organize.unread.menu")} data-testid="list-options" items={items} />
     </div>
   );
 }

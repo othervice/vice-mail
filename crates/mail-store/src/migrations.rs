@@ -56,6 +56,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     // Stage 20, task C: the attachments of stored bodies, for the view across accounts
     // (decision 0060).
     M::up(include_str!("../migrations/0025_attachment_index.sql")),
+    // Stage 19, task A: sort keys of every location and their indexes (decision 0061). Uses the
+    // functions of `sort_keys`, registered on the write connection before migrating.
+    M::up(include_str!("../migrations/0026_list_sort.sql")),
 ];
 
 /// All migrations this build knows.
@@ -72,8 +75,11 @@ mod tests {
 
     #[test]
     fn migrations_are_valid() {
+        // Like `Migrations::validate`, on a connection with the store's SQL functions (0026).
+        let mut conn = rusqlite::Connection::open_in_memory().expect("open");
+        crate::sort_keys::register(&conn).expect("functions");
         migrations()
-            .validate()
+            .to_latest(&mut conn)
             .expect("migrations apply to an empty database");
     }
 }

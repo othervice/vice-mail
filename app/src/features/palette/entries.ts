@@ -28,6 +28,7 @@ import { useBoundShortcuts } from "../../stores/shortcuts";
 import { usePaletteStore } from "../../stores/palette";
 import { MAIL_VIEW_IDS, SETTINGS_SECTION_IDS, useUiStore, type MailViewId } from "../../stores/ui";
 import { useSelectedAccount } from "../accounts/selection";
+import { useQuickFilterFocus } from "../views/focus";
 import {
   ACTION_IDS,
   ACTIONS,
@@ -238,6 +239,7 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
   const askFolderEdit = useFolderEditStore((state) => state.ask);
   const reloadFolders = useReloadFolders();
 
+  const focusQuickFilter = useQuickFilterFocus((state) => state.focus);
   const inMailView = ui.view.kind === "mail" || ui.view.kind === "mailbox";
   const entries: PaletteEntry[] = [...useActionEntries({ platform, target, inMailView, account })];
 
@@ -254,6 +256,18 @@ export function usePaletteEntries(platform: ShortcutPlatform, query: string): Pa
       openSearch();
     },
   });
+  // Stage 19 (decision 0062): the quick filter of the list on screen.
+  const quickFilterShortcut = shortcutsOf("quickFilter")[0];
+  if (inMailView && !noAccount) {
+    entries.push({
+      key: "command:quickFilter",
+      group: "commands",
+      label: t("keyboard.commands.quickFilter"),
+      icon: APP_COMMANDS.quickFilter.icon,
+      ...(quickFilterShortcut && { shortcut: quickFilterShortcut }),
+      run: focusQuickFilter,
+    });
+  }
   const helpShortcut = shortcutsOf("shortcutHelp")[0];
   entries.push({
     key: "command:shortcutHelp",

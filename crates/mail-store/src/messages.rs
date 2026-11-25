@@ -27,7 +27,8 @@ pub(crate) const LIST_PAGE: &str = "
            (SELECT max(CASE o.state WHEN 'failed' THEN 3 WHEN 'conflict' THEN 2 ELSE 1 END)
             FROM operation o
             WHERE o.mailbox_id = l.mailbox_id AND o.uid = l.uid
-              AND +o.message_id = l.message_id AND o.state <> 'confirmed')
+              AND +o.message_id = l.message_id AND o.state <> 'confirmed'),
+           m.size
     FROM message_location l CROSS JOIN message m ON m.id = l.message_id
     WHERE l.mailbox_id = ?1 AND l.message_id < ?2
     ORDER BY l.message_id DESC LIMIT ?3";
@@ -73,10 +74,17 @@ pub(crate) const INSERT_MESSAGE: &str = "
 /// `?12`), so the trigger `loc_category_new` (migration 0007) only runs where they are not
 /// known here: a merged location, an unclassified message. Its UPDATE of the new row cost
 /// about 1.8 ms per window of 500 (`docs/testing/performance.md`, stage 8/9).
+///
+/// Stage 19 (decision 0061): the sort keys come from the message row (`sort_keys`), so the
+/// message must exist; nothing is inserted otherwise.
 pub(crate) const INSERT_LOCATION: &str = "
     INSERT INTO message_location (mailbox_id, message_id, uid, seen, flagged, answered, draft,
-                                  deleted, keywords, modseq, category, important)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
+                                  deleted, keywords, modseq, category, important,
+                                  sort_sender, sort_recipient, sort_subject, size)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+           vm_sort_name(m.from_name, m.from_addr), vm_sort_recipient(m.to_addrs),
+           vm_sort_subject(m.subject), max(m.size, 0)
+    FROM message m WHERE m.id = ?2";
 
 pub(crate) const REMOVE_UID_RANGE: &str =
     "DELETE FROM message_location WHERE mailbox_id = ?1 AND uid BETWEEN ?2 AND ?3";
@@ -369,6 +377,7 @@ pub(crate) fn list(
                 task: None,
                 reading_list: false,
                 follow_up: None,
+                size: crate::lists::size_at(r, 14)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -530,7 +539,8 @@ fn insert_location(
     modseq: Option<ModSeq>,
     category: Option<&crate::categories::CategoryColumns>,
 ) -> Result<(), StoreError> {
-    conn.prepare_cached(INSERT_LOCATION)?
+    let inserted = conn
+        .prepare_cached(INSERT_LOCATION)?
         .execute(params![
             mailbox.0,
             message,
@@ -546,6 +556,9 @@ fn insert_location(
             category.is_some_and(|c| c.important),
         ])
         .map_err(StoreError::sqlite("insert location"))?;
+    if inserted == 0 {
+        return Err(StoreError::NotFound(format!("message {message}")));
+    }
     Ok(())
 }
 

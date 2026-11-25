@@ -32,7 +32,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 
 use crate::StoreError;
 use crate::inbox::InboxListKind;
-use crate::lists::{entry, item_at, list_columns, page};
+use crate::lists::{LIST_COLUMNS, entry, item_at, list_columns, page};
 
 /// The location condition of `kind` besides mailbox and cursor, on location alias `l`.
 fn location_condition(kind: InboxListKind, l: &str) -> String {
@@ -47,7 +47,7 @@ fn location_condition(kind: InboxListKind, l: &str) -> String {
 
 /// What hides a message `m` from a list of `kind` (account UUID `?{a}`); `x` keeps the aliases
 /// of nested checks apart.
-fn hidden(kind: InboxListKind, m: &str, a: usize, x: &str) -> String {
+pub(crate) fn hidden(kind: InboxListKind, m: &str, a: usize, x: &str) -> String {
     let marks = match kind {
         InboxListKind::Rows => format!(
             "AND NOT EXISTS (SELECT 1 FROM snooze s{x}
@@ -69,7 +69,7 @@ fn hidden(kind: InboxListKind, m: &str, a: usize, x: &str) -> String {
 }
 
 /// One branch: mailbox `?{p}`, its account UUID `?{p + 1}`; cursor `?1`, limit `?2`, category
-/// code `?3`. Columns: the list columns (0..=13), the mailbox id (14), the thread id (15).
+/// code `?3`. Columns: the list columns (0..=14), the mailbox id (15), the thread id (16).
 fn branch(kind: InboxListKind, p: usize) -> String {
     let a = p + 1;
     // `INDEXED BY` as in `inbox`: without statistics the planner would walk the key and filter.
@@ -165,12 +165,15 @@ pub(crate) fn list(
     let rows = conn
         .prepare_cached(&conversations_sql(kind, mailboxes.len()))?
         .query_map(params_from_iter(values), |r| {
-            let mailbox = MailboxId(r.get(14)?);
+            let mailbox = MailboxId(r.get(LIST_COLUMNS)?);
             let account = accounts
                 .get(&mailbox.0)
                 .copied()
-                .ok_or(rusqlite::Error::InvalidColumnIndex(14))?;
-            Ok((item_at(r, account, mailbox)?, r.get::<_, Option<i64>>(15)?))
+                .ok_or(rusqlite::Error::InvalidColumnIndex(LIST_COLUMNS))?;
+            Ok((
+                item_at(r, account, mailbox)?,
+                r.get::<_, Option<i64>>(LIST_COLUMNS + 1)?,
+            ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let (rows, next_cursor) = page(rows, limit, |(item, _)| item.id);

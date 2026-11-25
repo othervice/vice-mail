@@ -17,7 +17,8 @@ import { useShortcutStore } from "../src/stores/shortcuts";
 import { installSystemFakes, resetSystem } from "./support/system";
 import { resetUiPreferencesForTests } from "../src/features/keyboard/uiPreferences";
 import { resetMigrationForTests } from "../src/features/keyboard/useUiPreferencesSync";
-import { useOnlyUnreadStore } from "../src/features/organize/unread";
+import { useQuickFilterStore } from "../src/features/views/quickFilter";
+import { useQuickFilterFocus } from "../src/features/views/focus";
 import { useAccentStore } from "../src/features/preferences/accent";
 import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequest";
 import { useBlockedFocusStore } from "../src/features/blocked/focus";
@@ -59,7 +60,8 @@ afterEach(() => {
   // Stage 9: lists that select messages by id, and a request waiting for one (decision 0028).
   resetListSelectForTests();
   // Stage 16: "Unread only" is a filter of this session.
-  useOnlyUnreadStore.setState(useOnlyUnreadStore.getInitialState(), true);
+  useQuickFilterStore.setState(useQuickFilterStore.getInitialState(), true);
+  useQuickFilterFocus.setState(useQuickFilterFocus.getInitialState(), true);
   // Stage 16 (decision 0036): the accent from the core, "Save all" requests of the palette and
   // the way from the inbox's note to the blocked senders.
   useAccentStore.setState(useAccentStore.getInitialState(), true);

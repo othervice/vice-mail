@@ -124,14 +124,14 @@ describe("the reading list", () => {
 });
 
 describe("unread only and unread first", () => {
-  it("the header switch shows only unread mail of the folder", async () => {
+  it("the quick filter's Unread shows only unread mail of the folder (stage 19: the header switch moved there)", async () => {
     const items = makeMessages(6); // every third one is unread
     const { core, user } = setup(items);
     await list();
-    const toggle = screen.getByRole("switch", { name: "Unread only" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const toggle = screen.getByRole("button", { name: "Unread" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
     await user.click(toggle);
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
     await waitFor(() => {
       expect(core.callsOf("list_inbox_filtered").at(-1)).toMatchObject({
         scope: { kind: "mailbox", mailboxId: 1 },
@@ -153,7 +153,7 @@ describe("unread only and unread first", () => {
     const items = makeMessages(6);
     const { core, user } = setup(items, { accounts: [makeAccount({ writesEnabled: true })] });
     await list();
-    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await user.click(screen.getByRole("button", { name: "Unread" }));
     const listbox = await list();
     await waitFor(() => {
       expect(subjects(listbox)).toHaveLength(2);
@@ -183,7 +183,7 @@ describe("unread only and unread first", () => {
     const items = makeMessages(3).map((item) => ({ ...item, unread: false }));
     const { user } = setup(items);
     await list();
-    await user.click(screen.getByRole("switch", { name: "Unread only" }));
+    await user.click(screen.getByRole("button", { name: "Unread" }));
     expect(await screen.findByText("No unread mail here")).toBeTruthy();
   });
 

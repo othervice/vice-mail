@@ -69,6 +69,9 @@ export const config = {
     // Stage 18, task F (decision 0054): a folder opens with its top message, unread. Marks it
     // read once and unread again.
     "./tests/e2e/top-message.e2e.mjs",
+    // Stage 19, task A (decisions 0061, 0062): sorting, the table and the quick filter on the
+    // seed's inbox. Tags three messages for a moment and removes the tag again.
+    "./tests/e2e/list-views.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",

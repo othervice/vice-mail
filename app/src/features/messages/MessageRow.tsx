@@ -3,11 +3,12 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { HighlightedText } from "../../components/HighlightedText";
-import type { AccountColor, Address, MessageActivity, MessageListItem, SearchHighlights } from "../../services/ipc";
+import type { AccountColor, Address, MessageActivity, MessageListItem, SearchHighlights, TableColumnId } from "../../services/ipc";
 import { useLayoutStore } from "../../stores/layout";
 import { Avatar } from "../accounts/Avatar";
 import { accountFill } from "../accounts/accountColor";
 import { RowMarks, useRowMarkLabels, type RowMark } from "../comfort/RowMarks";
+import { formatSize } from "../reading/format";
 import { formatFullDate, formatListDate, type DayBounds } from "./rows";
 
 interface MessageRowContentProps {
@@ -486,6 +487,141 @@ export function MessageRowContent({
           {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
         </span>
       )}
+    </div>
+  );
+}
+
+interface TableRowContentProps extends Omit<MessageRowContentProps, "twoLine"> {
+  /** The drawn columns, in order; their widths are the list's `--table-columns`. */
+  columns: readonly TableColumnId[];
+}
+
+/**
+ * Stage 19 (decision 0061): a message row of the table, the wide list's other presentation. The
+ * same option around it (named by `useRowLabel`, hidden content here), the same selection box,
+ * selection, focus ring, replies toggle and quick actions; the content in the table's columns
+ * (CSS grid on `--table-columns`, which the header uses too). The quick actions take the end of
+ * the subject's cell, so no column moves while they show.
+ */
+export function TableRowContent({
+  item,
+  columns,
+  accountColor,
+  bounds,
+  showRecipients,
+  selected,
+  cursor,
+  multiSelect,
+  actions,
+  decoration,
+  omitMarks,
+  expanded,
+}: TableRowContentProps) {
+  const { t, i18n } = useTranslation();
+  const who = useWho(item, showRecipients, decoration);
+  const shownSubject = rowSubject(item, decoration);
+  const subject = shownSubject.text || t("list.noSubject");
+  const activity = rowActivity(item);
+  const threadCount = decoration?.threadCount ?? 1;
+  const recipients = item.to.length > 0 ? item.to.map(addressName).join(", ") : "";
+  const cell = (id: TableColumnId) => {
+    switch (id) {
+      case "flag":
+        return (
+          <span key={id} className="flex justify-center" data-testid="cell-flag">
+            {item.flagged && <Flag className="size-(--ui-icon-small) fill-current text-warning" strokeWidth={1.75} />}
+          </span>
+        );
+      case "attachment":
+        return (
+          <span key={id} className="flex justify-center" data-testid="cell-attachment">
+            {item.hasAttachments && <Paperclip className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />}
+          </span>
+        );
+      case "correspondent":
+        return (
+          <span
+            key={id}
+            title={who}
+            className={cx("min-w-0 truncate pe-3 text-14 text-primary", item.unread ? "font-semibold" : "font-medium")}
+            data-testid="cell-correspondent"
+          >
+            {who}
+          </span>
+        );
+      case "recipient":
+        return (
+          <span key={id} title={recipients} className="min-w-0 truncate pe-3 text-13 text-secondary" data-testid="cell-recipient">
+            {recipients}
+          </span>
+        );
+      case "subject":
+        return (
+          <span key={id} className="flex min-w-0 items-center gap-2 pe-3" data-testid="cell-subject">
+            <span
+              title={subject}
+              className={cx(
+                "min-w-0 truncate text-14",
+                !shownSubject.text ? "text-tertiary" : item.unread ? "font-medium text-primary" : "text-primary",
+              )}
+            >
+              {subject}
+            </span>
+            {threadCount > 1 && <RepliesToggle replies={threadCount - 1} expanded={expanded} />}
+            <span className="flex-1" />
+            <RowMeta actions={Boolean(actions)} cursor={cursor}>
+              {activity && <ActivityIcon activity={activity} />}
+              <RowMarks item={item} omit={omitMarks} />
+            </RowMeta>
+            {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
+          </span>
+        );
+      case "account":
+        return (
+          <span key={id} title={decoration?.account} className="flex min-w-0 items-center gap-1 pe-3" data-testid="cell-account">
+            {decoration?.account && (
+              <>
+                <span className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} />
+                <span className="min-w-0 truncate text-12 text-secondary">{decoration.account}</span>
+              </>
+            )}
+          </span>
+        );
+      case "date":
+        return (
+          <time
+            key={id}
+            dateTime={new Date(item.date).toISOString()}
+            title={formatFullDate(item.date, i18n.language)}
+            className={cx("min-w-0 truncate pe-3 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+            data-testid="cell-date"
+          >
+            {formatListDate(item.date, bounds, i18n.language)}
+          </time>
+        );
+      case "size":
+        return (
+          <span key={id} className="min-w-0 truncate pe-3 text-end text-12 text-secondary tabular-nums" data-testid="cell-size">
+            {item.size !== undefined ? formatSize(item.size, i18n.language) : ""}
+          </span>
+        );
+    }
+  };
+  // Hidden from screen readers: the option is named by its visually hidden text (useRowLabel).
+  return (
+    <div
+      aria-hidden
+      className={cx(
+        "relative flex h-full items-center rounded-row px-3 transition-colors",
+        selected ? "bg-selected" : "group-hover/row:bg-hover",
+        cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
+      )}
+      data-testid="table-row"
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-3">
+        <SelectionMark unread={item.unread} selected={selected} multiSelect={multiSelect} />
+        <span className="grid min-w-0 flex-1 grid-cols-(--table-columns) items-center">{columns.map(cell)}</span>
+      </span>
     </div>
   );
 }

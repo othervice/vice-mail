@@ -310,6 +310,7 @@ impl FakeAccess {
             task: None,
             reading_list: false,
             follow_up: None,
+            size: 0,
         }
     }
 

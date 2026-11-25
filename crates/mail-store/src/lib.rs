@@ -76,8 +76,10 @@ mod search_api;
 mod settings;
 pub mod settings_sync;
 mod signatures;
+mod sort_keys;
 mod store;
 mod threads;
+mod views;
 mod workers;
 
 pub use ai::{NewAiRequest, OpenReplyRow};
@@ -137,6 +139,7 @@ pub use signatures::{
     TemplateRow,
 };
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
+pub use views::{ViewFilter, ViewQuery};
 
 #[cfg(test)]
 mod attachment_index_tests;
@@ -184,3 +187,5 @@ mod stage9_tests;
 mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod views_tests;

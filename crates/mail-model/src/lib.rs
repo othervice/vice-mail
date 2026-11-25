@@ -30,6 +30,7 @@ mod gmail;
 mod ids;
 mod inbox;
 mod ipc;
+mod list_view;
 mod mailbox;
 mod mailto;
 mod mbox;
@@ -161,6 +162,12 @@ pub use inbox::{
 pub use ipc::{
     AppInfo, CoreEvent, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen, Platform,
     Preferences, ReadingPreferences, StartupProblem, ThemePreference,
+};
+pub use list_view::{
+    ListOrder, ListPresentation, ListTableSettings, ListViewRequest, MAX_LIST_ORDERS,
+    MAX_QUICK_FILTER_TEXT, MAX_TABLE_COLUMN_WIDTH, MAX_VIEW_TAGS, MIN_TABLE_COLUMN_WIDTH,
+    QuickFilter, SORT_KEY_CHARS, SortKey, TableColumn, TableColumnId, ViewCursor, ViewMessagePage,
+    ViewOrder, ViewThreadPage, sender_sort_key, sort_text, subject_sort_key,
 };
 pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,

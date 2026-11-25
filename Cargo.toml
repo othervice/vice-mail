@@ -38,8 +38,9 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 tracing-appender = "0.2.5"
 
 # Database. rusqlite 0.41 (not 0.43) because rusqlite_migration 2.7.0 requires rusqlite ^0.41
-# and two rusqlite versions cannot coexist (both link the native `sqlite3`).
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+# and two rusqlite versions cannot coexist (both link the native `sqlite3`). `functions`: the
+# sort keys of stage 19 are computed in Rust and called from SQL (decision 0061).
+rusqlite = { version = "0.41.1", features = ["bundled", "functions"] }
 rusqlite_migration = "2.7.0"
 
 # Message bodies (stage 3, decision 0009): zstd level 3 with checksum, one file per fetch under

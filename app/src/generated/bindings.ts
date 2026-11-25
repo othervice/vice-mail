@@ -600,6 +600,28 @@ export const commands = {
 	 *  leave out, for the list's note.
 	 */
 	countBlockedHidden: (scope: InboxScope, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("count_blocked_hidden", { scope }, options)),
+	/**
+	 *  One page of a view in another order than newest first, or with the quick filter: one row per
+	 *  message. `limit` 1..=500; pass `nextCursor` back unchanged.
+	 */
+	listViewMessages: (request: ListViewRequest, cursor: ViewCursor | null, limit: number, options?: InvokeOptions) => typedError<ViewMessagePage, IpcError>(__TAURI_INVOKE("list_view_messages", { request, cursor, limit }, options)),
+	/**
+	 *  The same as conversations (decision 0039): one row per conversation, at the place of its
+	 *  newest message in the view that matches the filter.
+	 */
+	listViewConversations: (request: ListViewRequest, cursor: ViewCursor | null, limit: number, options?: InvokeOptions) => typedError<ViewThreadPage, IpcError>(__TAURI_INVOKE("list_view_conversations", { request, cursor, limit }, options)),
+	/**  How many messages of the view match the quick filter. */
+	countListView: (request: ListViewRequest, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("count_list_view", { request }, options)),
+	/**  The tags in the view's mailboxes, for the quick filter (keywords not starting with `$`). */
+	listViewTags: (scope: InboxScope, options?: InvokeOptions) => typedError<string[], IpcError>(__TAURI_INVOKE("list_view_tags", { scope }, options)),
+	/**  The views with an order of their own (device setting). */
+	getListOrders: (options?: InvokeOptions) => typedError<ViewOrder[], IpcError>(__TAURI_INVOKE("get_list_orders", undefined, options)),
+	/**  Sets the order of a view (null or newest first removes it); answers every view's order. */
+	setListOrder: (view: string, order: ListOrder | null, options?: InvokeOptions) => typedError<ViewOrder[], IpcError>(__TAURI_INVOKE("set_list_order", { view, order }, options)),
+	/**  The list's presentation (rows or table) and the table's columns on this device. */
+	getListTable: (options?: InvokeOptions) => typedError<ListTableSettings, IpcError>(__TAURI_INVOKE("get_list_table", undefined, options)),
+	/**  Stores the list's presentation and the table's columns; answers what is stored. */
+	setListTable: (settings: ListTableSettings, options?: InvokeOptions) => typedError<ListTableSettings, IpcError>(__TAURI_INVOKE("set_list_table", { settings }, options)),
 	listRules: (options?: InvokeOptions) => typedError<MailRule[], IpcError>(__TAURI_INVOKE("list_rules", undefined, options)),
 	createRule: (input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("create_rule", { input }, options)),
 	updateRule: (id: RuleId, input: RuleInput, options?: InvokeOptions) => typedError<MailRule, IpcError>(__TAURI_INVOKE("update_rule", { id, input }, options)),
@@ -910,6 +932,8 @@ export const MAX_INLINE_IMAGE_BYTES = 8388608 as const;
 
 export const MAX_LIST_HEIGHT = 1600 as const;
 
+export const MAX_LIST_ORDERS = 1000 as const;
+
 export const MAX_LIST_WIDTH = 1600 as const;
 
 export const MAX_MCP_ACCESS_PAGE = 500 as const;
@@ -927,6 +951,8 @@ export const MAX_PREVIEW_INPUT_BYTES = 33554432 as const;
 export const MAX_PREVIEW_PDF_PAGES = 200 as const;
 
 export const MAX_PREVIEW_TEXT_BYTES = 524288 as const;
+
+export const MAX_QUICK_FILTER_TEXT = 2048 as const;
 
 export const MAX_RECENT_COMMANDS = 5 as const;
 
@@ -962,6 +988,8 @@ export const MAX_SIGNATURE_IMAGE_BYTES = 65536 as const;
 
 export const MAX_SOURCE_BYTES = 1048576 as const;
 
+export const MAX_TABLE_COLUMN_WIDTH = 800 as const;
+
 export const MAX_TEXT_SIZE = 150 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
@@ -977,6 +1005,8 @@ export const MIN_LIST_WIDTH = 320 as const;
 export const MIN_SIDEBAR_WIDTH = 200 as const;
 
 export const MIN_SYNC_PASSPHRASE_CHARS = 8 as const;
+
+export const MIN_TABLE_COLUMN_WIDTH = 48 as const;
 
 export const MIN_TEXT_SIZE = 80 as const;
 
@@ -3204,6 +3234,43 @@ export type LinkWarning =
  */
 export type ListCursor = number;
 
+/**  The order of a list view: a key and its direction. The default is newest first. */
+export type ListOrder = {
+	key: SortKey,
+	/**  Ascending (A to Z, oldest first, smallest first); false: descending. */
+	ascending: boolean,
+};
+
+/**
+ *  How the wide list is drawn (decision 0061): rows (the default) or a table with columns.
+ *  Narrow lists (beside the reading pane) always draw rows.
+ */
+export type ListPresentation = "rows" | "table";
+
+/**
+ *  The list's presentation and the table's columns, stored on this device like the window's
+ *  layout sizes (decision 0025: screens differ).
+ */
+export type ListTableSettings = {
+	presentation: ListPresentation,
+	/**  Every column once, in the table's order ([`TableColumnId::ALL`]). */
+	columns: TableColumn[],
+};
+
+/**
+ *  One page request of a sorted or filtered list view: which view, in what order, with which
+ *  quick filter. The view's own list (newest first, no filter) has its own commands.
+ */
+export type ListViewRequest = {
+	/**
+	 *  A mailbox (a folder or an account's inbox) or a unified view. The inbox rules (waiting
+	 *  snoozes and blocked senders hidden, decision 0036) apply to inboxes and unified views.
+	 */
+	scope: InboxScope,
+	order: ListOrder,
+	filter?: QuickFilter,
+};
+
 /**  What the user asks for. One action on many messages is one batch ([`BatchId`]). */
 export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type: "flag" } | { type: "unflag" } | { type: "addKeyword"; keyword: string } | { type: "removeKeyword"; keyword: string } | 
 /**
@@ -3799,6 +3866,11 @@ export type MessageListItem = {
 	readingList?: boolean,
 	/**  Stage 20 (decision 0059): a reminder if no reply comes. Absent when there is none. */
 	followUp?: FollowUpMark | null,
+	/**
+	 *  Stage 19: the message's size in bytes (`RFC822.SIZE`), for the table's size column.
+	 *  Absent when unknown.
+	 */
+	size?: number,
 };
 
 /**  One page of a message list, newest first. */
@@ -4433,6 +4505,28 @@ export type ProviderHint =
  *  customer center, not the Telekom login password.
  */
 "tonline";
+
+/**
+ *  Stage 19 (decision 0062): the quick filter above a list. Every part that is set narrows the
+ *  list (AND). `text` is search language (decision 0013): words match sender, recipients,
+ *  subject and text as in the search, operators such as `from:` work too; its last word matches
+ *  as a prefix (search as you type).
+ */
+export type QuickFilter = {
+	unread?: boolean,
+	flagged?: boolean,
+	attachment?: boolean,
+	/**
+	 *  The sender is one of the user's contacts: a person the user has written to, or whose
+	 *  contact the user has named, noted or merged (decision 0062).
+	 */
+	contacts?: boolean,
+	/**  A tag (IMAP keyword) of the message in this view, compared without ASCII case. */
+	tag?: string | null,
+	text?: string,
+	/**  The user's region writes dates month first (as in [`crate::SearchRequest`]). */
+	monthFirst?: boolean,
+};
 
 /**
  *  Quiet hours: no sound and no banner between `start` and `end` (minutes after local
@@ -5194,6 +5288,19 @@ export type SnoozeTimes = {
 	nextWeek: number,
 };
 
+/**  What a list view sorts by (decision 0061). */
+export type SortKey = 
+/**  The sort date (the default). */
+"date" | 
+/**  The name the row shows for the sender (display name, else address). */
+"sender" | 
+/**  The first recipient, the same way (offered in Sent and Drafts). */
+"recipient" | 
+/**  The subject without reply and forward prefixes. */
+"subject" | 
+/**  The message's size in bytes. */
+"size";
+
 /**  The platform a list of notification sounds is for. */
 export type SoundPlatform = "macos" | "windows" | 
 /**  Neither: the system's notification sound, no choice. */
@@ -5317,6 +5424,32 @@ export type SyncServerChange = {
 	imap: ServerSettings,
 	smtp: ServerSettings,
 };
+
+/**  One column of the table: shown or not, and its width. */
+export type TableColumn = {
+	id: TableColumnId,
+	visible: boolean,
+	/**
+	 *  CSS pixels at 100 % text size, [`MIN_TABLE_COLUMN_WIDTH`] to [`MAX_TABLE_COLUMN_WIDTH`];
+	 *  the mark columns keep their own.
+	 */
+	width: number,
+};
+
+/**  A column of the table. */
+export type TableColumnId = 
+/**  Flag mark. */
+"flag" | 
+/**  Attachment mark. */
+"attachment" | 
+/**  Who the row names: the sender, in Sent and Drafts the recipients. */
+"correspondent" | 
+/**  The recipients. */
+"recipient" | 
+/**  Subject (takes the width that is left). */
+"subject" | 
+/**  The account, in lists that mix accounts. */
+"account" | "date" | "size";
 
 export type TakeoverAccount = {
 	/**  Its position in the preview, to take it over. */
@@ -5779,6 +5912,45 @@ export type VcardImportReport = {
  *  Outlook, Google); 4.0 (RFC 6350) is what Thunderbird writes.
  */
 export type VcardVersionChoice = "v3" | "v4";
+
+/**
+ *  Where a sorted list view continues: after the row with this key and message id. Pass the
+ *  page's `nextCursor` back unchanged.
+ */
+export type ViewCursor = {
+	/**  The row's sort key (sender, recipient, subject); null for date and size. */
+	text: string | null,
+	/**  The row's size (size order); null otherwise. */
+	number: number | null,
+	id: MessageId,
+};
+
+/**  One page of a sorted or filtered list view, one row per message. */
+export type ViewMessagePage = {
+	items: MessageListItem[],
+	/**  Null on the last page. */
+	nextCursor: ViewCursor | null,
+};
+
+/**
+ *  The order the user chose for one view (its key as for "Unread first": `mailbox:<id>`,
+ *  `unified:all`, `group:<id>`). Views not listed are newest first.
+ */
+export type ViewOrder = {
+	view: string,
+	order: ListOrder,
+};
+
+/**
+ *  One page of a sorted or filtered list view, one row per conversation (decision 0039): the
+ *  conversation's newest message in the view that matches the filter stands for it and gives it
+ *  its place in the order.
+ */
+export type ViewThreadPage = {
+	items: ThreadListItem[],
+	/**  Null on the last page. */
+	nextCursor: ViewCursor | null,
+};
 
 /**
  *  The layout of one window, stored per window on this device (not synchronised: the screens

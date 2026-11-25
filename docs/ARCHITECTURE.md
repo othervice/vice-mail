@@ -42,6 +42,7 @@ once it is large enough.
 | IDs | uuid | 1.29 | account IDs (UUID v4) |
 | Database | SQLite via rusqlite (bundled, FTS5, tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | one process, one writer: synchronous rusqlite is simpler and faster than SQLx; with 500,000 mails a list page takes 0.04 ms, first search hits under 0.2 ms (0003) |
 | Migrations | rusqlite_migration | 2.7.0 | small, uses `user_version`; pins rusqlite to ^0.41 (0006) |
+| SQL functions | rusqlite feature `functions` (stage 19, 0061) | with rusqlite | the sort keys of a location are computed in Rust (`mail_model::sort_text`) and called from the statements that insert locations and from migration 0026; registered on the write connection only |
 | IMAP | async-imap (Tokio, rustls) plus our own thin command layer in `mail-imap` | 0.12.0 | in continuous use at Delta Chat; connection, parser, IDLE come from the library. Status checking, response codes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS and modified UTF-7 via our own layer. 10,000 headers in 0.044 s over TLS (0002) |
 | JMAP | our own adapter `mail-jmap` over the workspace's reqwest (HTTP/1.1, rustls from `mail_imap::tls`) and serde_json | – | stage 14 (0041): RFC 8620/8621 are JSON over HTTPS; the few methods (session, `Mailbox/get`, `Email/query`, `/changes`, `/get`, `/set`, `/import`, `EmailSubmission/set`, blobs, EventSource) are slimmer than a library. No new dependency |
 | SMTP | lettre (protocol layer only, `smtp-transport` + `tokio1`) | 0.11.24 | the adapter does TLS, timeouts and STARTTLS itself, as with IMAP (platform verifier); lettre without its own TLS |
@@ -162,7 +163,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `receipt_answer`, `receipt_received` | read receipts (RFC 8098): the user's answer to an incoming request (`queued`, `sent`, `declined`) per account UUID and Message-ID; returned receipts per reported Message-ID and recipient, detected when the body is stored (stage 16, 0033) | Device and Cache respectively |
 | `setting` | key, value, scope, version | sync, where registered as syncable |
 | `setting` `ai.settings` | AI in the app (stage 13, 0024): switch, provider profiles (kind, base URL, model), profile per function, cloud approval per account, consent per profile and host, notices of open replies; keys only in the keychain (`ai-profile:<id>`) | Device |
-| `setting` `ui.*` | UI (stage 8, 0025): changed shortcuts per platform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) and text size (`ui.text_size`) sync; recently used commands of the palette (`ui.recent_commands`), state of the AI panel (`ui.ai_panel`, 0028) and layout per window kind (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: reading pane, density, accounts-and-folders column visible (default yes) and its width 200–320 px, default 240) Device; plus `compose.default_quote_position` (position of the reply in new replies, sync like the send delay); from stage 16 (0033) `compose.archive_on_reply` and `compose.read_receipts` sync, `ui.unread_first` (views with "Unread first") Device, (0036) `ui.accent_theme` (colour theme, one of six, default blue per 0053, orange per 0038 before; a stored choice stays) sync, (0039) `ui.conversations` (conversation view, default on) sync, stage 17 `ui.column_views` (views of the column and the rail: order, shown or hidden; `[]` is the default) sync | sync and Device respectively |
+| `setting` `ui.*` | UI (stage 8, 0025): changed shortcuts per platform (`ui.shortcuts.macos`, `ui.shortcuts.windows`) and text size (`ui.text_size`) sync; recently used commands of the palette (`ui.recent_commands`), state of the AI panel (`ui.ai_panel`, 0028) and layout per window kind (`ui.layout.main`, `ui.layout.message`, `ui.layout.composer`: reading pane, density, accounts-and-folders column visible (default yes) and its width 200–320 px, default 240) Device; plus `compose.default_quote_position` (position of the reply in new replies, sync like the send delay); from stage 16 (0033) `compose.archive_on_reply` and `compose.read_receipts` sync, `ui.unread_first` (views with "Unread first") Device, (0036) `ui.accent_theme` (colour theme, one of six, default blue per 0053, orange per 0038 before; a stored choice stays) sync, (0039) `ui.conversations` (conversation view, default on) sync, stage 17 `ui.column_views` (views of the column and the rail: order, shown or hidden; `[]` is the default) sync, stage 19 (0061) `ui.list_orders` (order per view; newest first is not stored) and `ui.list_table` (rows or table, columns shown and their widths) Device | sync and Device respectively |
 | `setting` `reading.block_trackers`, `reading.clean_links`, `compose.attachment_reminder` | stage 20 (0058): block tracking pixels and images of known tracking services (default on), strip tracking parameters from links when they are described and opened (default on), ask before sending when the text speaks of an attachment and none is there (default on) | sync |
 | `ai_request` | request log of the in-app AI, metadata only (function, profile, host, local, model, mails, bytes, result, error code, duration; 30 days, at most 10,000) (stage 13, 0024) | Device |
 | `open_reply_dismissal` | dismissed notices of open replies (stage 13, 0024) | Device |
@@ -253,6 +254,21 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   contact's mail and the "mark as spam" move use `message_sender` (sender key, id). The view's
   search is the directory's word-prefix search over names, addresses and domain labels: under
   10 ms at 10,000 contacts (debug build).
+- Sorted and filtered views (stage 19, `docs/decisions/0061-sortieren-und-tabellenansicht.md`,
+  `0062-schnellfilter.md`): `message_location` carries the sort keys of its mail (`sort_sender`,
+  `sort_recipient`, `sort_subject`, folded in Rust: lower case, Latin accents removed, leading
+  punctuation dropped, at most 40 characters; and `size`), each with an index
+  `(mailbox_id, key, message_id)` (migration 0026). A page in another order is a range of that
+  index (`INDEXED BY`, keyset over the row value `(key, message_id)`, ties by date in the same
+  direction); several mailboxes merge by `UNION ALL` as before. The quick filter is the search's
+  compiled filter (`search::conditions_on`, now with a message alias) plus tag and contacts,
+  checked per row; the text as `IN (… MATCH ?)`. Conversations: a location is its thread's row
+  when no newer mail of the thread in the mailbox matches the same filter. Inboxes and unified
+  views leave out waiting snoozes and blocked senders. Newest first without a filter keeps the
+  lists above (sections, bundles, priority, "Unread first"). Every list row reads `m.size` as
+  column 14 (`MessageListItem.size`). Commands: `listViewMessages`, `listViewConversations`
+  (cursor `ViewCursor`), `countListView`, `listViewTags`, `get/setListOrder(s)` (device setting
+  `ui.list_orders`), `get/setListTable` (device setting `ui.list_table`).
 - "Flagged" view (SPEC, 2026-11-24): `\Flagged` (JMAP `$flagged`) per mailbox of the accounts except
   trash and spam as a range of the partial index `loc_flagged`, merged via `UNION ALL`; every mail
   once, in the inbox if it is flagged there, otherwise in the newest folder in which it is flagged;

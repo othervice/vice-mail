@@ -15,6 +15,7 @@ pub mod discovery;
 mod first_start;
 mod folders;
 mod gmail;
+mod list_views;
 pub mod logging;
 mod mbox;
 mod mcp;

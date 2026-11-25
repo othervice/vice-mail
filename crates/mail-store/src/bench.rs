@@ -276,3 +276,156 @@ async fn bench_100k_headers_and_list_pages() {
         "list page target of decision 0003 missed"
     );
 }
+
+/// Stage 19 (decision 0061): what migration 0026 costs an existing database. `BENCH_MESSAGES`
+/// messages (default 100,000; 60 % inbox, 25 % archive, 15 % sent) are written with the schema
+/// before it (plain rows, as an older version left them), then the store opens with today's
+/// schema: backup, sort keys of every location, four indexes. Prints the times, the file sizes
+/// and the size of each new index (`dbstat`).
+///
+/// ```text
+/// BENCH_MESSAGES=500000 cargo test -p mail-store --release -- --ignored --nocapture bench_migration
+/// ```
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: cargo test -p mail-store --release -- --ignored --nocapture bench_migration"]
+async fn bench_migration_0026_sort_keys() {
+    use crate::migrations::MIGRATIONS;
+    use crate::store::Schema;
+    let total: u32 = std::env::var("BENCH_MESSAGES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(TOTAL);
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    let path = crate::test_support::db_path(&dir);
+    let before = Schema::from_vec(MIGRATIONS[..MIGRATIONS.len() - 1].to_vec());
+    let store = Store::open_with(&path, crate::StoreOptions::default(), &before).expect("open");
+    let account = store
+        .insert_account(crate::test_support::new_account(1, "alice@example.org"))
+        .await
+        .expect("account")
+        .id;
+    store
+        .sync_mailboxes(
+            account,
+            vec![
+                crate::test_support::remote("INBOX", &[]),
+                crate::test_support::remote("Archive", &["\\Archive"]),
+                crate::test_support::remote("Sent", &["\\Sent"]),
+            ],
+        )
+        .await
+        .expect("mailboxes");
+    let boxes: Vec<MailboxId> = store
+        .mailbox_sync_states(account)
+        .await
+        .expect("mailboxes")
+        .iter()
+        .map(|m| m.mailbox_id)
+        .collect();
+    let mut rng = Rng(0x0026);
+    let names = [
+        "Anna Weber",
+        "Bernd Älter",
+        "Zoë",
+        "Carl",
+        "Müller GmbH",
+        "Dora",
+    ];
+    let mut next_id = START;
+    let counts = [total * 60 / 100, total * 25 / 100, total - total * 85 / 100];
+    let started = Instant::now();
+    for (mailbox, n) in boxes.iter().zip(counts) {
+        let mailbox = *mailbox;
+        let mut rows = Vec::with_capacity(n as usize);
+        for uid in 1..=n {
+            next_id += 1 + i64::try_from(rng.below(600)).expect("fits");
+            let name = names[usize::try_from(rng.below(6)).expect("fits")];
+            rows.push((
+                next_id,
+                uid,
+                format!("Re: Betreff {} {}", rng.below(5_000), name),
+                name.to_owned(),
+                format!("{}@example.org", rng.below(3_000)),
+                format!(
+                    r#"[{{"name":"{name}","email":"to{}@example.org"}}]"#,
+                    rng.below(500)
+                ),
+                2_000 + i64::try_from(rng.below(100_000)).expect("fits"),
+            ));
+        }
+        for chunk in rows.chunks(5_000) {
+            let chunk = chunk.to_vec();
+            store
+                .write(move |tx| {
+                    let account: i64 =
+                        tx.query_row("SELECT account_id FROM mailbox WHERE id = ?1", [mailbox.0], |r| r.get(0))?;
+                    let mut message = tx.prepare_cached(
+                        "INSERT INTO message (id, account_id, date, subject, from_name, from_addr,
+                                              to_addrs, size)
+                         VALUES (?1, ?2, ?1, ?3, ?4, ?5, ?6, ?7)",
+                    )?;
+                    let mut location = tx.prepare_cached(
+                        "INSERT INTO message_location (mailbox_id, message_id, uid) VALUES (?1, ?2, ?3)",
+                    )?;
+                    for (id, uid, subject, name, addr, to, size) in &chunk {
+                        message.execute(rusqlite::params![id, account, subject, name, addr, to, size])?;
+                        location.execute(rusqlite::params![mailbox.0, id, uid])?;
+                    }
+                    Ok(())
+                })
+                .await
+                .expect("rows");
+        }
+    }
+    drop(store);
+    let file_mb = |p: &std::path::Path| std::fs::metadata(p).map_or(0.0, |m| m.len() as f64 / 1e6);
+    {
+        // Checkpoint, so the file holds everything before the migration.
+        let conn = rusqlite::Connection::open(&path).expect("open");
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .expect("checkpoint");
+    }
+    println!(
+        "\n{total} messages written with schema {} in {:.1} s; database {:.1} MB",
+        MIGRATIONS.len() - 1,
+        started.elapsed().as_secs_f64(),
+        file_mb(&path)
+    );
+    let started = Instant::now();
+    let store = Store::open(&path, crate::StoreOptions::default()).expect("migrate");
+    let migrated = started.elapsed();
+    let backup = store
+        .open_report()
+        .backup
+        .as_ref()
+        .map_or(0.0, |b| file_mb(b));
+    let sizes: Vec<(String, i64)> = store
+        .read(|c| {
+            let mut s = c.prepare(
+                "SELECT name, sum(pgsize) FROM dbstat
+                 WHERE name IN ('message_location', 'loc_sort_sender', 'loc_sort_recipient',
+                                'loc_sort_subject', 'loc_sort_size')
+                 GROUP BY name ORDER BY name",
+            )?;
+            let rows = s
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await
+        .expect("dbstat");
+    drop(store);
+    {
+        let conn = rusqlite::Connection::open(&path).expect("open");
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .expect("checkpoint");
+    }
+    println!(
+        "open with migration 0026 (backup of {backup:.1} MB included): {:.2} s; database afterwards {:.1} MB",
+        migrated.as_secs_f64(),
+        file_mb(&path)
+    );
+    for (name, bytes) in sizes {
+        println!("  {name}: {:.1} MB", bytes as f64 / 1e6);
+    }
+}
