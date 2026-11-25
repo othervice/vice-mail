@@ -60,6 +60,7 @@ mod jmap;
 mod lists;
 mod mail_api;
 mod mailboxes;
+mod mark_read;
 mod marks;
 mod mcp;
 mod messages;
@@ -117,6 +118,7 @@ pub use mail_api::{
     MAX_PAGE_SIZE, MailboxBaseline, MailboxListReport, MailboxSyncState, NewAccount, StoreReport,
     StoredAccount,
 };
+pub use mark_read::MAX_MARK_MAILBOXES;
 pub use marks::{MAX_MARK_VIEW, MarkView, MessageKey, ReturnedSnooze, StoredSnooze, StoredTask};
 pub use mcp::{NewMcpAccess, StoredMcpClient, StoredMcpState};
 pub use migrations::SCHEMA_VERSION;
@@ -165,6 +167,8 @@ mod follow_up_tests;
 mod gmail_tests;
 #[cfg(test)]
 mod mail_tests;
+#[cfg(test)]
+mod mark_read_tests;
 #[cfg(test)]
 mod outbox_tests;
 #[cfg(test)]

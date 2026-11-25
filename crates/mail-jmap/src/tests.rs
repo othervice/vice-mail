@@ -1237,6 +1237,48 @@ async fn writes_go_through_email_set_and_report_uids() {
     );
 }
 
+/// Stage 21 (decision 0063): "Mark folder as read" sends the folder's unread UIDs through
+/// `store_flags`: `Email/set` with `keywords/$seen` in batches of `maxObjectsInSet` (2 here),
+/// only on those messages; its undo clears `$seen` on the same set.
+#[tokio::test]
+async fn a_folder_mark_sets_seen_in_batches_and_its_undo_clears_the_same() {
+    let fake = Fake::start().await;
+    let ids: Vec<String> = (1..=5).map(|n| fake.add("mi", n, &[])).collect();
+    let store = Arc::new(MemoryStore::default());
+    let connector = connector(&store);
+    let mut writer = connector
+        .connect_writer_for(&config(&fake, Access::ReadWrite), Some(account()))
+        .await
+        .expect("writer");
+    writer.list_mailboxes().await.expect("list");
+    let inbox = writer.open_mailbox("INBOX").await.expect("open");
+    let sets = |fake: &Fake| fake.methods().iter().filter(|m| *m == "Email/set").count();
+    let seen = |fake: &Fake| -> Vec<bool> {
+        ids.iter()
+            .map(|id| fake.email(id).expect("email").keywords.contains("$seen"))
+            .collect()
+    };
+
+    let marked = UidSet::from_uids([1, 3, 4, 5]);
+    let before = sets(&fake);
+    let outcome = writer
+        .store_flags(&inbox, &marked, StoreMode::Add, &[Flag::Seen], None)
+        .await
+        .expect("mark");
+    assert_eq!(sets(&fake) - before, 2, "four messages, two per Email/set");
+    assert_eq!(outcome.updates.len(), 4);
+    assert!(outcome.modified.is_empty());
+    assert_eq!(seen(&fake), [true, false, true, true, true]);
+
+    let before = sets(&fake);
+    writer
+        .store_flags(&inbox, &marked, StoreMode::Remove, &[Flag::Seen], None)
+        .await
+        .expect("undo");
+    assert_eq!(sets(&fake) - before, 2);
+    assert_eq!(seen(&fake), [false; 5]);
+}
+
 #[tokio::test]
 async fn push_wakes_idle_and_stop_and_time_end_it() {
     let fake = Fake::start().await;

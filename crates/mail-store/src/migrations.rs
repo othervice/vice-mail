@@ -59,6 +59,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     // Stage 19, task A: sort keys of every location and their indexes (decision 0061). Uses the
     // functions of `sort_keys`, registered on the write connection before migrating.
     M::up(include_str!("../migrations/0026_list_sort.sql")),
+    // Stage 21: "Mark folder as read" as an operation of its own (decision 0063).
+    M::up(include_str!("../migrations/0027_mark_mailbox.sql")),
 ];
 
 /// All migrations this build knows.

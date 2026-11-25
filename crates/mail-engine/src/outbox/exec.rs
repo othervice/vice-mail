@@ -20,6 +20,11 @@
 //! copy and original both there (the COPY fallback broke before EXPUNGE) → only the expunge is
 //! repeated, never the copy; no copy and original there → sent again; neither → conflict.
 //!
+//! **Folder marks** (stage 21, decision 0063) set or clear `\Seen` on the UIDs the operation
+//! recorded, in parts of at most [`MARK_PART_RANGES`] ranges and [`MARK_PART_UIDS`] UIDs per
+//! command, without `UNCHANGEDSINCE`. In flight after a crash, they are simply sent again:
+//! setting a flag that is set already changes nothing, and UIDs that are gone are ignored.
+//!
 //! **Errors:** a refusal (NO/BAD, missing target) fails the operation and reverts its local
 //! change; a broken connection ends the step, operations stay in flight and are checked after
 //! reconnecting. Outcomes collected before a connection broke are stored anyway.
@@ -39,6 +44,14 @@ pub(crate) mod compose;
 
 /// Most operations sent in one command.
 pub(crate) const MAX_GROUP: usize = 500;
+
+/// Stage 21: most UID ranges in one STORE of a folder mark (a line of at most about 6 KB, below
+/// the 8,192 octets RFC 7162 asks clients to stay under).
+pub(crate) const MARK_PART_RANGES: usize = 250;
+
+/// Stage 21: most UIDs in one STORE of a folder mark, so one answer (a FETCH per message, or a
+/// JMAP `Email/get` of the changed ones) stays bounded.
+pub(crate) const MARK_PART_UIDS: u64 = 5_000;
 
 /// Why a step ended early.
 #[derive(Debug)]
@@ -117,7 +130,8 @@ pub(crate) fn next_group(pending: &[StoredOperation]) -> Vec<StoredOperation> {
             | OperationPayload::Append { .. }
             | OperationPayload::RemoveCopy { .. }
             | OperationPayload::RenameMailbox { .. }
-            | OperationPayload::DeleteMailbox { .. } => String::new(),
+            | OperationPayload::DeleteMailbox { .. }
+            | OperationPayload::MarkMailbox { .. } => String::new(),
         };
         Some(format!(
             "{}|{:?}|{}|{}|{}|{params}",
@@ -240,6 +254,12 @@ impl<W: MailWriter> Step<'_, W> {
             OperationPayload::DeleteMailbox { .. } => {
                 for op in group {
                     self.delete_folder(op).await?;
+                }
+                Ok(())
+            }
+            OperationPayload::MarkMailbox { .. } => {
+                for op in group {
+                    self.mark_mailbox(op).await?;
                 }
                 Ok(())
             }
@@ -699,6 +719,70 @@ impl<W: MailWriter> Step<'_, W> {
             },
             (None, None) => self.conflict(&op, ConflictReason::Gone, None),
         }
+        Ok(())
+    }
+
+    // -- folder marks (stage 21) -------------------------------------------------------------
+
+    /// `\Seen` on (or off) the recorded UIDs of one folder, in bounded parts. Queued or in
+    /// flight alike: repeating it is harmless.
+    async fn mark_mailbox(&mut self, op: StoredOperation) -> Result<(), StepError> {
+        let OperationPayload::MarkMailbox {
+            mailbox,
+            uid_validity,
+            uids,
+            seen,
+        } = op.payload.clone()
+        else {
+            return Ok(());
+        };
+        let Some(op) = self.within_attempts(vec![op]).pop() else {
+            return Ok(());
+        };
+        let opened = match self.conn.open(&mailbox.name).await {
+            Ok(opened) if opened.uid_validity == uid_validity => opened,
+            Ok(_) => {
+                self.conflict(&op, ConflictReason::MailboxReset, None);
+                self.server_mailboxes.insert(mailbox.mailbox_id);
+                return Ok(());
+            }
+            Err(BackendError::MailboxNotFound(_)) => {
+                self.conflict(&op, ConflictReason::MailboxGone, None);
+                return Ok(());
+            }
+            Err(err) => {
+                let error = refusal(err)?;
+                self.fail(&op, error);
+                return Ok(());
+            }
+        };
+        let Some(op) = self.begin(vec![op]).await?.pop() else {
+            return Ok(());
+        };
+        let mode = if seen {
+            StoreMode::Add
+        } else {
+            StoreMode::Remove
+        };
+        let parts = uids.split(MARK_PART_RANGES, MARK_PART_UIDS);
+        for part in &parts {
+            if let Err(err) = self
+                .conn
+                .writer
+                .store_flags(&opened, part, mode, &[Flag::Seen], None)
+                .await
+            {
+                // A part that was refused: the parts before it stay done on the server; the local
+                // change is reverted and the next sync shows what the server has.
+                let error = refusal(err)?;
+                self.server_mailboxes.insert(mailbox.mailbox_id);
+                self.fail(&op, error);
+                return Ok(());
+            }
+        }
+        tracing::info!(account = %self.account, operation = %op.id, messages = uids.len(), parts = parts.len(), seen, "folder marked");
+        self.server_mailboxes.insert(mailbox.mailbox_id);
+        self.confirm(&op, None, None, None);
         Ok(())
     }
 

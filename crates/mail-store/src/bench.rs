@@ -297,7 +297,8 @@ async fn bench_migration_0026_sort_keys() {
         .unwrap_or(TOTAL);
     let dir = tempfile::TempDir::new().expect("temp dir");
     let path = crate::test_support::db_path(&dir);
-    let before = Schema::from_vec(MIGRATIONS[..MIGRATIONS.len() - 1].to_vec());
+    // The 23 migrations before 0026 (0027 came after it).
+    let before = Schema::from_vec(MIGRATIONS[..23].to_vec());
     let store = Store::open_with(&path, crate::StoreOptions::default(), &before).expect("open");
     let account = store
         .insert_account(crate::test_support::new_account(1, "alice@example.org"))
@@ -387,7 +388,7 @@ async fn bench_migration_0026_sort_keys() {
     }
     println!(
         "\n{total} messages written with schema {} in {:.1} s; database {:.1} MB",
-        MIGRATIONS.len() - 1,
+        23,
         started.elapsed().as_secs_f64(),
         file_mb(&path)
     );

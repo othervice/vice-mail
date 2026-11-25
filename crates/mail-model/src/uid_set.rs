@@ -130,6 +130,71 @@ impl UidSet {
         (Self { ranges: high }, Self { ranges: rest })
     }
 
+    /// Stage 21 (decision 0063): the set in parts of at most `max_ranges` ranges and `max_uids`
+    /// UIDs each, ascending, so one command line and one answer stay small (a folder marked as
+    /// read can hold scattered UIDs). Both limits are at least 1.
+    pub fn split(&self, max_ranges: usize, max_uids: u64) -> Vec<Self> {
+        let max_ranges = max_ranges.max(1);
+        let max_uids = max_uids.max(1);
+        let mut parts = Vec::new();
+        let mut part = Self::new();
+        let mut count = 0_u64;
+        for &(start, end) in &self.ranges {
+            let mut first = start;
+            loop {
+                if part.ranges.len() >= max_ranges || count >= max_uids {
+                    parts.push(std::mem::take(&mut part));
+                    count = 0;
+                }
+                let room = max_uids - count;
+                let size = u64::from(end) - u64::from(first) + 1;
+                if size <= room {
+                    part.ranges.push((first, end));
+                    count += size;
+                    break;
+                }
+                // room < size <= 2^32, so the last UID of this piece fits into a UID.
+                let last = u32::try_from(u64::from(first) + room - 1).unwrap_or(end);
+                part.ranges.push((first, last));
+                count += room;
+                first = last + 1;
+            }
+        }
+        if !part.is_empty() {
+            parts.push(part);
+        }
+        parts
+    }
+
+    /// Stage 21 (decision 0063): reads IMAP sequence-set syntax as [`UidSet`]'s `Display`
+    /// writes it (`1:3,5,9:*`; an empty text is the empty set). `None` for anything else.
+    pub fn parse(text: &str) -> Option<Self> {
+        if text.is_empty() {
+            return Some(Self::new());
+        }
+        let number = |s: &str| -> Option<Uid> {
+            if s == "*" {
+                return Some(Uid::MAX);
+            }
+            if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            s.parse::<Uid>().ok().filter(|uid| *uid != 0)
+        };
+        let mut ranges = Vec::new();
+        for item in text.split(',') {
+            let (a, b) = match item.split_once(':') {
+                Some((a, b)) => (number(a)?, number(b)?),
+                None => {
+                    let uid = number(item)?;
+                    (uid, uid)
+                }
+            };
+            ranges.push((a, b));
+        }
+        Some(Self::from_ranges(ranges))
+    }
+
     /// UIDs in `self` but not in `other` (for example: stored locally, gone on the server).
     pub fn difference(&self, other: &Self) -> Self {
         let mut out = Self::new();
@@ -236,6 +301,62 @@ mod tests {
             remaining = rest;
         }
         assert_eq!(seen, set.iter().rev().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn parse_reads_what_display_writes() {
+        for set in [
+            UidSet::new(),
+            UidSet::from_uids([1, 2, 3, 5, 9, 10, 11, 12]),
+            UidSet::all(),
+            UidSet::range(7, Uid::MAX),
+            UidSet::from_uids([Uid::MAX - 1, 4]),
+        ] {
+            assert_eq!(UidSet::parse(&set.to_string()), Some(set.clone()), "{set}");
+        }
+        // Normalised like `from_ranges`: reversed and overlapping ranges.
+        assert_eq!(
+            UidSet::parse("9:5,1,2,4:6").map(|s| s.to_string()),
+            Some("1:2,4:9".into())
+        );
+        for bad in [
+            "0",
+            "1,,2",
+            ":3",
+            "3:",
+            "a",
+            "1:2:3",
+            " 1",
+            "-1",
+            "4294967296",
+            "1;2",
+        ] {
+            assert_eq!(UidSet::parse(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn split_keeps_every_uid_once_within_both_limits() {
+        let set = UidSet::from_ranges([(1, 10), (12, 12), (14, 15), (20, 40), (50, 50)]);
+        let parts = set.split(2, 8);
+        for part in &parts {
+            assert!(part.ranges().len() <= 2 && part.len() <= 8, "{part}");
+        }
+        let joined: Vec<Uid> = parts
+            .iter()
+            .flat_map(|p| p.iter().collect::<Vec<_>>())
+            .collect();
+        assert_eq!(joined, set.iter().collect::<Vec<_>>());
+        assert_eq!(
+            parts.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            ["1:8", "9:10,12", "14:15,20:25", "26:33", "34:40,50"]
+        );
+        assert!(UidSet::new().split(3, 3).is_empty());
+        assert_eq!(
+            set.split(0, 0).len(),
+            usize::try_from(set.len()).unwrap_or(0)
+        );
+        assert_eq!(UidSet::all().split(500, u64::MAX).len(), 1);
     }
 
     #[test]

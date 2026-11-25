@@ -1466,3 +1466,77 @@ async fn random_sequence(seed: u64, connector: ImapConnector) {
     );
     bed.finish().await;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 21 (decision 0063): a folder marked as read
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_folder_marked_read_is_seen_on_the_server_and_undone_on_the_same_messages() {
+    let _server = SERVER.lock().await;
+    let mut bed = Bed::new("markread", 8, ImapConnector::new()).await;
+    let inbox = bed.mailbox(MailboxRole::Inbox).await;
+    // Message 2 is read already; it stays read through the undo.
+    let two = bed.server_places(2).await;
+    let (_, uid_two, _) = two.first().cloned().expect("message 2 on the server");
+    bed.admin.open_mailbox("INBOX").await.expect("select");
+    raw(
+        &mut bed.admin,
+        &format!("UID STORE {uid_two} +FLAGS.SILENT (\\Seen)"),
+    )
+    .await;
+    bed.resync().await;
+    let run = bed.run.clone();
+    // Message 9 arrives after the last sync: the app never showed it, so it stays unread.
+    append(&mut bed.admin, "INBOX", &run, 9).await;
+
+    let result = bed
+        .outbox
+        .mark_read(bed.account, vec![inbox], format!("{run}-mark"))
+        .await
+        .expect("mark");
+    assert_eq!(result.queued, 1);
+    let batch = result.batch.expect("batch");
+    for n in 1..=8 {
+        assert!(!bed.local(n).await[0].2, "message {n} read locally at once");
+    }
+    let ops = bed.settled().await;
+    let op = ops.iter().find(|op| op.batch == batch).expect("operation");
+    assert_eq!(op.state, OperationState::Confirmed, "{op:?}");
+    let seen_on_server = |places: &Places| places.iter().all(|(_, _, f)| f.seen);
+    for n in 1..=8 {
+        let places = bed.server_places(n).await;
+        assert!(seen_on_server(&places), "message {n}: {places:?}");
+    }
+    assert!(
+        !seen_on_server(&bed.server_places(9).await),
+        "the late message stays unread"
+    );
+    // One STORE on the recorded UIDs: never `1:*`, never conditional.
+    let stores: Vec<String> = bed
+        .tap
+        .lines()
+        .into_iter()
+        .filter(|l| l.contains("UID STORE"))
+        .collect();
+    assert_eq!(stores.len(), 1, "{stores:?}");
+    assert!(
+        stores[0].contains("+FLAGS (\\Seen)")
+            && !stores[0].contains(":*")
+            && !stores[0].contains("UNCHANGEDSINCE"),
+        "{stores:?}"
+    );
+    assert!(
+        bed.hook.seen().contains(&inbox),
+        "the inbox is synced after"
+    );
+
+    let undone = bed.outbox.undo(batch).await.expect("undo");
+    assert_eq!(undone.queued, 1);
+    bed.settled().await;
+    for n in 1..=9 {
+        let places = bed.server_places(n).await;
+        assert_eq!(seen_on_server(&places), n == 2, "message {n}: {places:?}");
+    }
+    bed.finish().await;
+}

@@ -542,7 +542,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     accountId: string,
     action: ActionKind,
     kind: OperationKind,
-    ref: { mailboxId: number | null; messageId: number | null; target?: number | null },
+    ref: { mailboxId: number | null; messageId: number | null; target?: number | null; count?: number },
     revert: () => void,
   ) => {
     const now = Date.now();
@@ -556,6 +556,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       mailboxId: ref.mailboxId,
       messageId: ref.messageId,
       targetMailboxId: ref.target ?? null,
+      messageCount: ref.count ?? null,
       attempts: 0,
       error: null,
       conflict: null,
@@ -762,6 +763,42 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         const account = accountOf(args["accountId"] as string);
         if (!account) return reject("not_found");
         return null;
+      }
+      // Stage 21 (decision 0063): folders marked as read, one operation per folder with unread mail.
+      case "mark_mailboxes_read": {
+        const requestId = args["requestId"] as string;
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(requestId)) return reject("invalid_argument", "request id");
+        const account = accountOf(args["accountId"] as string);
+        if (!account) return reject("not_found");
+        if (!account.writesEnabled) return reject("read_only");
+        const ids = args["mailboxIds"] as number[];
+        if (ids.length === 0) return reject("invalid_argument");
+        const found = ids.map((id) => mailboxOf(id));
+        if (found.some((m) => !m || m.accountId !== account.id)) return reject("not_found");
+        const earlier = requests.get(requestId);
+        if (earlier) return { batch: earlier.batch, queued: 0, cancelled: 0 };
+        const batch = nextBatch;
+        let queued = 0;
+        for (const mailbox of new Set(found as Mailbox[])) {
+          if (mailbox.unread === 0) continue;
+          const before = mailbox.unread;
+          const unreadIds = (messages.get(mailbox.id) ?? []).filter((m) => m.unread).map((m) => m.id);
+          const setUnread = (count: number, unread: boolean) => {
+            const index = mailboxes.findIndex((m) => m.id === mailbox.id);
+            const current = mailboxes[index];
+            if (current) mailboxes[index] = { ...current, unread: count };
+            for (const id of unreadIds) replaceItem(mailbox.id, id, (m) => ({ ...m, unread }));
+          };
+          setUnread(0, false);
+          record(batch, account.id, "mark_mailbox_read", "mark_mailbox", { mailboxId: mailbox.id, messageId: null, count: before }, () => {
+            setUnread(before, true);
+          });
+          queued += 1;
+        }
+        const result: ActionResult = { batch: queued > 0 ? batch : null, queued, cancelled: 0 };
+        if (queued > 0) nextBatch += 1;
+        requests.set(requestId, result);
+        return result;
       }
       // Audit 24.11.2026: folders of the user's own renamed and deleted through the outbox.
       case "rename_mailbox":

@@ -372,6 +372,7 @@ function operation(overrides: Partial<OperationInfo>): OperationInfo {
     mailboxId: 1,
     messageId: 100,
     targetMailboxId: 7,
+    messageCount: null,
     attempts: 1,
     error: null,
     conflict: null,

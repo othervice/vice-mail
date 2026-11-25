@@ -489,6 +489,7 @@ mod tests {
             mailbox_id: Some(MailboxId(1)),
             message_id: Some(MessageId(1_764_000_000)),
             target_mailbox_id: Some(MailboxId(2)),
+            message_count: None,
             attempts: 1,
             error: Some(IpcError {
                 code: crate::ErrorCode::ServerRejected,
@@ -512,7 +513,7 @@ mod tests {
                 "id": 12, "batch": 11, "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
                 "action": "archive", "kind": "move", "state": "failed",
                 "mailboxId": 1, "messageId": 1_764_000_000, "targetMailboxId": 2,
-                "attempts": 1,
+                "messageCount": null, "attempts": 1,
                 "error": { "code": "server_rejected", "message": "The server refused the request.",
                            "detail": "NO [TRYCREATE]" },
                 "conflict": null, "notice": null,

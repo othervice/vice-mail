@@ -118,6 +118,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::actions::reload_folders,
             commands::actions::rename_mailbox,
             commands::actions::delete_mailbox,
+            commands::actions::mark_mailboxes_read,
             commands::actions::list_operations,
             commands::actions::retry_operation,
             commands::actions::discard_operation,

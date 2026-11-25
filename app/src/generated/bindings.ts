@@ -253,6 +253,12 @@ export const commands = {
 	 *  with its messages. Refused like `renameMailbox`, and for a folder with subfolders.
 	 */
 	deleteMailbox: (accountId: AccountId, mailboxId: MailboxId, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("delete_mailbox", { accountId, mailboxId }, options)),
+	/**
+	 *  Stage 21: marks every unread message of these folders of one account as read ("Mark
+	 *  folder as read"; on the account its inbox and own folders). One undo for all (`batch`).
+	 *  `requestId` is a UUID per user action. Refused: `read_only`, `not_found`, `invalid_argument`.
+	 */
+	markMailboxesRead: (accountId: AccountId, mailboxIds: MailboxId[], requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("mark_mailboxes_read", { accountId, mailboxIds, requestId }, options)),
 	/**  The account's operations, newest first, below `before` (activity view). `limit` 1..500. */
 	listOperations: (accountId: AccountId, before: OperationId | null, limit: number, options?: InvokeOptions) => typedError<OperationInfo[], IpcError>(__TAURI_INVOKE("list_operations", { accountId, before, limit }, options)),
 	/**  Queues a failed or conflicting operation again. */
@@ -1160,7 +1166,12 @@ export type ActionKind = "mark_read" | "mark_unread" | "flag" | "unflag" | "add_
  */
 "copy" | 
 /**  Audit 24.11.2026: a folder of the user's own renamed or deleted. */
-"rename_mailbox" | "delete_mailbox";
+"rename_mailbox" | "delete_mailbox" | 
+/**
+ *  Stage 21 (decision 0063): every unread message of a folder (or of several folders of one
+ *  account) marked as read.
+ */
+"mark_mailbox_read";
 
 /**  Result of applying an action. */
 export type ActionResult = {
@@ -4249,6 +4260,11 @@ export type OperationInfo = {
 	messageId: MessageId | null,
 	/**  Target of a move. */
 	targetMailboxId: MailboxId | null,
+	/**
+	 *  Stage 21 (decision 0063): the messages a folder-wide operation covers (`mark_mailbox`);
+	 *  null for an operation on one message or none.
+	 */
+	messageCount: number | null,
 	/**  Times the command was sent. */
 	attempts: number,
 	/**  Why it failed (`failed`), or the last transient error. */
@@ -4271,7 +4287,9 @@ export type OperationKind = "set_flag" | "move" | "expunge" | "create_mailbox" |
 /**  Audit 24.11.2026: RENAME of a folder of the user's own (JMAP: not supported yet). */
 "rename_mailbox" | 
 /**  Audit 24.11.2026: DELETE of a folder of the user's own, with its messages. */
-"delete_mailbox";
+"delete_mailbox" | 
+/**  Stage 21 (decision 0063): `\Seen` set or cleared on a stored set of UIDs of one folder. */
+"mark_mailbox";
 
 /**  Something the user should know about a confirmed operation. */
 export type OperationNotice = 

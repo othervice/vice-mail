@@ -987,3 +987,6 @@ async fn undo_and_opposites_cancel_before_anything_is_sent() {
 
 // Stage 14, block A: Gmail labels and archive (decision 0034).
 mod gmail;
+
+// Stage 21: marking folders as read (decision 0063).
+mod mark_read;

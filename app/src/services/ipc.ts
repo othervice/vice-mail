@@ -388,6 +388,13 @@ export const ipc = {
   /** A folder of the user's own without subfolders is deleted with its mail, through the outbox. */
   deleteMailbox: (accountId: AccountId, mailboxId: MailboxId): Promise<ActionResult> =>
     call(() => commands.deleteMailbox(accountId, mailboxId)),
+  /**
+   * Stage 21 (decision 0063): every unread message of these folders of one account marked as
+   * read, local at once, then one operation per folder; one batch for "Undo". `requestId` as in
+   * `applyAction`.
+   */
+  markMailboxesRead: (accountId: AccountId, mailboxIds: MailboxId[], requestId: string): Promise<ActionResult> =>
+    call(() => commands.markMailboxesRead(accountId, mailboxIds, requestId)),
   /** Activity view, newest first, keyset-paged by the last `id`. `limit` 1..500. */
   listOperations: (accountId: AccountId, before: OperationId | null, limit: number): Promise<OperationInfo[]> =>
     call(() => commands.listOperations(accountId, before, limit)),

@@ -35,6 +35,21 @@ const MARK_READ_KEY: &str = "reading.mark_read_on_open";
 /// Longest request id of an action (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
 
+/// A request id of a user action: 1 to 64 letters, digits, `-` or `_` (the UI sends a UUID).
+pub(crate) fn check_request_id(request_id: &str) -> Result<(), CoreError> {
+    if request_id.is_empty()
+        || request_id.len() > MAX_REQUEST_ID
+        || !request_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(CoreError::InvalidArgument(
+            "the request id must be 1 to 64 letters, digits, '-' or '_'".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Events buffered per subscriber before a slow subscriber starts missing events.
 const EVENT_CAPACITY: usize = 1024;
 
@@ -831,16 +846,7 @@ impl<C: Connector> AppCore<C> {
         request_id: String,
     ) -> Result<ActionResult, CoreError> {
         let outbox = self.outbox()?;
-        if request_id.is_empty()
-            || request_id.len() > MAX_REQUEST_ID
-            || !request_id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        {
-            return Err(CoreError::InvalidArgument(
-                "the request id must be 1 to 64 letters, digits, '-' or '_'".into(),
-            ));
-        }
+        check_request_id(&request_id)?;
         outbox.apply_request(action, messages, request_id).await
     }
 

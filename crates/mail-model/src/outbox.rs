@@ -23,7 +23,7 @@ use specta_typescript::Number;
 
 use crate::{
     AccountId, CoreEvent, ErrorCode, Flags, IpcError, MailboxId, MailboxRole, MessageId, ModSeq,
-    Uid, UidValidity,
+    Uid, UidSet, UidValidity,
 };
 
 /// Longest keyword the app sets. IMAP has no limit; this keeps a stray paste out of the server.
@@ -143,10 +143,13 @@ pub enum ActionKind {
     /// Audit 24.11.2026: a folder of the user's own renamed or deleted.
     RenameMailbox,
     DeleteMailbox,
+    /// Stage 21 (decision 0063): every unread message of a folder (or of several folders of one
+    /// account) marked as read.
+    MarkMailboxRead,
 }
 
 impl ActionKind {
-    const ALL: [Self; 22] = [
+    const ALL: [Self; 23] = [
         Self::MarkRead,
         Self::MarkUnread,
         Self::Flag,
@@ -169,6 +172,7 @@ impl ActionKind {
         Self::Copy,
         Self::RenameMailbox,
         Self::DeleteMailbox,
+        Self::MarkMailboxRead,
     ];
 
     /// Text in the database, same as on the wire.
@@ -196,6 +200,7 @@ impl ActionKind {
             Self::Copy => "copy",
             Self::RenameMailbox => "rename_mailbox",
             Self::DeleteMailbox => "delete_mailbox",
+            Self::MarkMailboxRead => "mark_mailbox_read",
         }
     }
 
@@ -407,6 +412,8 @@ pub enum OperationKind {
     RenameMailbox,
     /// Audit 24.11.2026: DELETE of a folder of the user's own, with its messages.
     DeleteMailbox,
+    /// Stage 21 (decision 0063): `\Seen` set or cleared on a stored set of UIDs of one folder.
+    MarkMailbox,
 }
 
 impl OperationKind {
@@ -421,6 +428,7 @@ impl OperationKind {
             Self::RemoveCopy => "remove_copy",
             Self::RenameMailbox => "rename_mailbox",
             Self::DeleteMailbox => "delete_mailbox",
+            Self::MarkMailbox => "mark_mailbox",
         }
     }
 }
@@ -507,6 +515,9 @@ pub struct OperationInfo {
     pub message_id: Option<MessageId>,
     /// Target of a move.
     pub target_mailbox_id: Option<MailboxId>,
+    /// Stage 21 (decision 0063): the messages a folder-wide operation covers (`mark_mailbox`);
+    /// null for an operation on one message or none.
+    pub message_count: Option<u32>,
     /// Times the command was sent.
     pub attempts: u32,
     /// Why it failed (`failed`), or the last transient error.
@@ -707,6 +718,34 @@ pub enum OperationPayload {
         mailbox: TargetMailbox,
         path: String,
     },
+    /// Stage 21 (decision 0063): set (`seen`) or clear `\Seen` on `uids` of one folder in the
+    /// generation `uid_validity`: "Mark folder as read" records the UIDs that were unread then,
+    /// its undo clears `\Seen` on the same set. Never `1:*` and never `UNCHANGEDSINCE`: mail
+    /// that arrived later stays unread, and repeating the STORE after a crash is harmless.
+    MarkMailbox {
+        mailbox: TargetMailbox,
+        uid_validity: UidValidity,
+        #[serde(with = "uid_set_text")]
+        uids: UidSet,
+        seen: bool,
+    },
+}
+
+/// A [`UidSet`] in an operation's payload as IMAP sequence-set text (`1:40,52`): compact for
+/// the thousands of UIDs a folder can hold.
+mod uid_set_text {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    use crate::UidSet;
+
+    pub(super) fn serialize<S: Serializer>(set: &UidSet, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(set)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<UidSet, D::Error> {
+        let text = String::deserialize(d)?;
+        UidSet::parse(&text).ok_or_else(|| D::Error::custom(format!("not a UID set: {text:?}")))
+    }
 }
 
 /// What an [`OperationPayload::Append`] appends.
@@ -750,6 +789,7 @@ impl OperationPayload {
             Self::RemoveCopy { .. } => OperationKind::RemoveCopy,
             Self::RenameMailbox { .. } => OperationKind::RenameMailbox,
             Self::DeleteMailbox { .. } => OperationKind::DeleteMailbox,
+            Self::MarkMailbox { .. } => OperationKind::MarkMailbox,
         }
     }
 
@@ -763,7 +803,24 @@ impl OperationPayload {
             | Self::Append { .. }
             | Self::RemoveCopy { .. }
             | Self::RenameMailbox { .. }
-            | Self::DeleteMailbox { .. } => None,
+            | Self::DeleteMailbox { .. }
+            | Self::MarkMailbox { .. } => None,
+        }
+    }
+
+    /// Stage 21 (decision 0063): the folder whose messages a folder-wide operation marks.
+    pub fn marked_mailbox(&self) -> Option<&TargetMailbox> {
+        match self {
+            Self::MarkMailbox { mailbox, .. } => Some(mailbox),
+            _ => None,
+        }
+    }
+
+    /// Stage 21: how many messages a folder-wide operation covers.
+    pub fn message_count(&self) -> Option<u32> {
+        match self {
+            Self::MarkMailbox { uids, .. } => Some(u32::try_from(uids.len()).unwrap_or(u32::MAX)),
+            _ => None,
         }
     }
 
@@ -1350,6 +1407,38 @@ mod tests {
         assert!(text.starts_with("{\"kind\":\"move\""), "{text}");
         let back: OperationPayload = serde_json::from_str(&text).expect("deserialize");
         assert_eq!(back, payload);
+        // Stage 21: a folder-wide mark keeps its UIDs as sequence-set text.
+        let mark = OperationPayload::MarkMailbox {
+            mailbox: TargetMailbox {
+                mailbox_id: MailboxId(3),
+                name: "INBOX".into(),
+            },
+            uid_validity: UidValidity(9),
+            uids: UidSet::from_uids([1, 2, 3, 7, 40]),
+            seen: true,
+        };
+        let value = serde_json::to_value(&mark).expect("serialize");
+        assert_eq!(value["kind"], "mark_mailbox");
+        assert_eq!(value["uids"], "1:3,7,40");
+        let back: OperationPayload = serde_json::from_value(value).expect("deserialize");
+        assert_eq!(back, mark);
+        assert_eq!(mark.kind(), OperationKind::MarkMailbox);
+        assert_eq!(mark.message_count(), Some(5));
+        assert!(mark.source().is_none());
+        assert_eq!(
+            mark.marked_mailbox().map(|m| m.mailbox_id),
+            Some(MailboxId(3))
+        );
+        assert!(
+            serde_json::from_value::<OperationPayload>(json!({
+                "kind": "mark_mailbox",
+                "mailbox": {"mailboxId": 3, "name": "INBOX"},
+                "uidValidity": 9,
+                "uids": "1:x",
+                "seen": true
+            }))
+            .is_err()
+        );
         let flag = OperationPayload::SetFlag {
             source: source(1, 9),
             flag: Flag::Keyword("$Junk".into()),

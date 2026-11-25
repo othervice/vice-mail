@@ -776,7 +776,8 @@ async fn the_migration_fills_the_keys_of_existing_locations() {
     use crate::store::Schema;
     let dir = tempfile::TempDir::new().expect("temp dir");
     let path = db_path(&dir);
-    let before = Schema::from_vec(MIGRATIONS[..MIGRATIONS.len() - 1].to_vec());
+    // The 23 migrations before 0026 (0027 came after it).
+    let before = Schema::from_vec(MIGRATIONS[..23].to_vec());
     let store = Store::open_with(&path, StoreOptions::default(), &before).expect("old schema");
     let account = store
         .insert_account(new_account(1, "alice@example.org"))
