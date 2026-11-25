@@ -113,6 +113,17 @@ sammeln, dann umsetzen und neu bauen.
   `color-scheme: light dark`, damit Programme der Empfänger selbst anpassen dürfen. Test: das
   gesendete HTML enthält ohne ausdrückliche Wahl keine Farbe.
 
+### 10 — Symbol im Infobereich, Weiterlaufen ohne Fenster, Autostart
+
+- Vom Menschen am 25.11. aus den Vorschlägen gewählt (nicht gewählt: Windows-11-Optik,
+  Einstellungen durchsuchen, Ziehen in Explorer/Finder).
+- Plan: Symbol im Infobereich (Windows) bzw. in der Menüleiste (macOS) mit der Zahl ungelesener
+  Mails und einem Menü (Öffnen, Neue Mail, Benachrichtigungen pausieren, Beenden). Fenster
+  schließen beendet die App nicht mehr, sondern lässt sie im Hintergrund weiterlaufen (Abgleich,
+  Popup, Benachrichtigungen); beim ersten Schließen ein einmaliger Hinweis, wie man ganz beendet.
+  Einstellung „Mit dem System starten“ (Standard aus), dann ohne Fenster im Hintergrund.
+  Speicherziel im Hintergrund (0048) prüfen: ohne Fenster kein WebView, wenn möglich.
+
 ## Ergebnis
 
 (offen, sammeln)
