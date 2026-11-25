@@ -53,7 +53,9 @@ Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Ico
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
 **Kopf der Liste.** Titel der Ansicht mit Auswahl von Konto oder Kontogruppe, darunter eine
-Unterzeile (z. B. „Fokussiert“ oder „Alle“). Rechts: Kategorien an/aus, Suche, Neue Mail.
+Unterzeile (z. B. „Fokussiert“ oder „Alle“). Rechts: Kategorien an/aus, Suche, Neue Mail. Seit
+Stufe 19 davor das Ansichtsmenü (Sortieren, Zeilen oder Tabelle, Spalten) und unter dem Kopf der
+Schnellfilter (siehe „Sortieren, Tabelle und Schnellfilter“).
 
 **Liste.** Abschnitt „Priorität“ auf getönter Fläche, höchstens drei Zeilen und „Alle anzeigen (n)“.
 Danach Abschnitte nach Datum: Heute, Gestern, Diese Woche, dann nach Monat. Bündel sind eine Zeile
@@ -861,6 +863,80 @@ nimmt den Fokus nicht; alles, was es anbietet, geht auch im Hauptfenster.
 
 **Einstellungen → Mitteilungen.** Unter „Neue Mails“ die Wahl „Neue Mails zeigen als“: „Popup von
 <Produkt>“ (Standard) oder „Mitteilung des Systems“.
+
+## Sortieren, Tabelle und Schnellfilter (Stufe 19, Entscheidungen 0061, 0062)
+
+Wunsch vom 24.11.2026 nach dem Vergleich mit Thunderbird: die Liste sortieren, als Tabelle zeigen
+und schnell filtern.
+
+**Ansichtsmenü im Kopf.** In Ordnern, Posteingängen und vereinten Ansichten steht vor dem Menü
+„Listenoptionen“ ein Knopf mit dem Pfeil der Richtung und dem Namen des Schlüssels („Datum“), sein
+Name sagt die ganze Reihenfolge („Sortiert nach Datum, Neueste zuerst“). Sein Menü (Menüknopf nach
+WAI-ARIA, `menuitemradio`/`menuitemcheckbox` in benannten Gruppen, Häkchen in Akzentfarbe):
+
+```
+ Sortieren nach        Reihenfolge          Breite Liste als     Spalten (nur Tabelle)
+ ✓ Datum               ✓ Neueste zuerst     ✓ Zeilen             ✓ Markiert
+   Absender              Älteste zuerst       Tabelle            ✓ Anhang
+   Empfänger (Gesendet, Entwürfe)                                ✓ Absender
+   Betreff               (Namen, Betreff: A bis Z / Z bis A;       Empfänger
+   Größe                  Größe: Größte / Kleinste zuerst)       ✓ Konto (gemischte Konten)
+                                                                 ✓ Datum  ✓ Größe
+```
+
+Ein anderer Schlüssel beginnt in seiner Richtung (Namen und Betreff A bis Z, Datum und Größe
+absteigend). Gespeichert je Ansicht auf diesem Gerät; „neueste zuerst“ ist der Standard. In einer
+anderen Reihenfolge hat die Liste keine Datumsabschnitte, keine Bündel und keinen Block oben;
+„Ungelesene oben“ steht im Menü „Listenoptionen“ dann gesperrt mit dem Zusatz „nur bei ‚Neueste
+zuerst‘“.
+
+**Tabelle.** Die breite Liste (ab 720 px, also nicht neben dem Lesebereich) als Tabelle. Über der
+Liste die Spaltenköpfe, 32 px hoch auf `surface-list` mit Haarlinie darunter, Text 12 px
+halbfett `text-tertiary`, der sortierte Kopf `text-primary` mit Pfeil (↑ aufsteigend, ↓
+absteigend). Sortierbare Köpfe sind Knöpfe; Markiert und Anhang zeigen nur ihr Symbol. Spalten:
+
+| Spalte | Breite (Standard) | Inhalt |
+|---|---|---|
+| Auswahlkästchen | wie in der Zeile | ungelesen-Punkt, wird beim Überfahren zum Kästchen |
+| Markiert, Anhang | 32 px, fest | Fahne in `warning`, Büroklammer in `text-tertiary` |
+| Absender (Gesendet, Entwürfe: Empfänger) | 200 px | wie die Spalte Absender der Zeile, halbfett wenn ungelesen |
+| Empfänger | 200 px, aus | alle Empfänger, `text-secondary` |
+| Betreff | der Rest, mindestens 160 px | Betreff, Pille „n Antworten“, Markierungen; beim Überfahren die Schnellaktionen am Ende der Zelle |
+| Konto | 120 px, nur wo sich Konten mischen | Punkt in der Kontofarbe und Kurzname |
+| Datum | 136 px | wie die Zeitspalte der Zeile |
+| Größe | 88 px | „12 kB“ in der Sprache der Oberfläche, rechtsbündig |
+
+Zeilenhöhe, Auswahl, Fokusring und Schnellaktionen wie bei den Zeilen; die Zellen sind ein
+CSS-Grid aus `--table-columns`, das Kopf und Zeilen teilen (per CSSOM gesetzt, CSP), beide mit
+demselben Rand für die Bildlaufleiste. Am Ende jeder ziehbaren Spalte ein Griff wie an der
+Grenze zum Lesebereich (8 px, Linie in `accent-fill` beim Überfahren und Ziehen; ← → 16 px, Pos1
+und Ende auf 48 bzw. 800 px, Doppelklick auf den Standard); gespeichert, sobald er 400 ms ruht.
+Für Bildschirmleser ist der Kopf eine Tabelle mit einer Kopfzeile (`columnheader`, `aria-sort`),
+die Liste bleibt `listbox` oder Baum mit denselben Namen der Zeilen wie bisher. Auch unter
+Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
+
+**Schnellfilter.** Eine Leiste über der Liste derselben Ansichten, immer sichtbar, 40 px auf
+`surface-list` mit Haarlinie darunter, Innenabstand 6/16 px:
+
+```
+ (o Ungelesen) (o Markiert) (o Mit Anhang) (o Von Kontakten) (o Schlagwort ▾)  [o Diese Mails filtern     ]  12 Treffer  × Zurücksetzen
+```
+
+- `o` steht für das Symbol (Lucide, 16 px): Brief, Fahne, Büroklammer, Person, Etikett, Lupe.
+- Schalter als Chips, 28 px hoch, rund (`rounded-full`), Haarlinie `border`; an: Akzentrand,
+  `accent-soft`, Text in `accent` mittel (`aria-pressed`). „Schlagwort“ ist ein Chip mit Menü: „Kein
+  Schlagwortfilter“ und die Schlagwörter der Ansicht; gewählt heißt der Chip „Schlagwort: Projekt“.
+- Textfeld 28 px, mindestens so breit wie die Absenderspalte, nimmt den Rest der Zeile: Lupe,
+  Platzhalter „Diese Mails filtern“, Name „Nach Absender, Betreff und Text filtern“. Suchsprache
+  wie in der Suche.
+- Solange etwas gesetzt ist: die Trefferzahl (12 px, `text-secondary`, Tabellenziffern, höfliche
+  Live-Region) und „Zurücksetzen“ (leiser Knopf in Akzentfarbe). Findet nichts: die leere Ansicht
+  „Keine passenden Mails“ mit dem Hinweis, den Filter zu ändern oder zurückzusetzen.
+- Bricht in einem schmalen Fenster um (Chips oben, Feld darunter).
+- „Nur ungelesene“ (Stufe 16) ist der Chip „Ungelesen“; der Schalter im Kopf entfällt.
+- Tastatur: Chips und Schlagwort sind eine Werkzeugleiste (ein Tab-Stopp, ← →), Feld und
+  „Zurücksetzen“ eigene Stopps; Escape im Feld leert den Text, ein zweites den Filter;
+  Cmd/Ctrl+Shift+K setzt den Fokus ins Feld.
 
 ## Regeln für Interaktion
 
