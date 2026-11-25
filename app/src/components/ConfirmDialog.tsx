@@ -1,4 +1,4 @@
-import { ArrowRightLeft, TriangleExclamationPoint } from "lucide-react";
+import { ArrowRightLeft, TriangleExclamationPoint, type LucideIcon } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
@@ -23,6 +23,8 @@ interface ConfirmDialogProps {
   secondary?: { label: string; onClick: () => void };
   /** `danger` (default: deleting for good) or `neutral` (a question without loss). */
   tone?: "danger" | "neutral";
+  /** Stage 21: the symbol of a neutral question (default: two arrows, moving between accounts). */
+  icon?: LucideIcon;
   "data-testid"?: string;
 }
 
@@ -44,6 +46,7 @@ export function ConfirmDialog({
   focusAfterConfirm,
   secondary,
   tone = "danger",
+  icon: NeutralIcon = ArrowRightLeft,
   ...rest
 }: ConfirmDialogProps) {
   const titleId = useId();
@@ -144,7 +147,7 @@ export function ConfirmDialog({
           {tone === "danger" ? (
             <TriangleExclamationPoint aria-hidden className="size-(--ui-icon) shrink-0 text-danger" strokeWidth={1.75} />
           ) : (
-            <ArrowRightLeft aria-hidden className="size-(--ui-icon) shrink-0 text-accent" strokeWidth={1.75} />
+            <NeutralIcon aria-hidden className="size-(--ui-icon) shrink-0 text-accent" strokeWidth={1.75} />
           )}
           <div className="flex min-w-0 flex-col gap-2">
             <h2 id={titleId} className="text-16 font-semibold text-primary">

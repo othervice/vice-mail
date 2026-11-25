@@ -2181,3 +2181,51 @@ export const takeoverIpc = {
   importFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId): Promise<MboxJob> =>
     call(() => stage19cCommands.importThunderbirdFolder(token, index, mailboxId)),
 };
+
+// ---------------------------------------------------------------------------------------------
+// Stage 21 (decisions 0069, 0070): running in the background, pausing notifications, starting
+// with the system, the tray menu's texts and the main window's lifecycle.
+
+import {
+  commands as desktopCommands,
+  events as desktopEvents,
+  type Autostart,
+  type BackgroundSettings,
+  type DesktopTexts,
+  type LocalTime,
+  type NotificationPause,
+  type PauseNotifications,
+} from "../generated/bindings";
+
+export type { Autostart, BackgroundSettings, DesktopTexts, LocalTime, NotificationPause, PauseNotifications };
+
+export const desktopIpc = {
+  /** Whether closing the main window keeps the app running, and the macOS menu-bar icon. */
+  getBackgroundSettings: (): Promise<BackgroundSettings> => call(() => desktopCommands.getBackgroundSettings()),
+  setBackgroundSettings: (settings: BackgroundSettings): Promise<BackgroundSettings> =>
+    call(() => desktopCommands.setBackgroundSettings(settings)),
+  /** Whether the app starts with the system, as the system has it; `available` false in development builds. */
+  getAutostart: (): Promise<Autostart> => infallible(() => desktopCommands.getAutostart()),
+  setAutostart: (enabled: boolean): Promise<Autostart> => call(() => desktopCommands.setAutostart(enabled)),
+  /** Whether notifications are paused now, and until when. */
+  getNotificationPause: (): Promise<NotificationPause> => call(() => desktopCommands.getNotificationPause()),
+  /** For an hour, until 08:00 tomorrow, or resume (`notificationPauseChanged`). */
+  pauseNotifications: (choice: PauseNotifications): Promise<NotificationPause> =>
+    call(() => desktopCommands.pauseNotifications(choice)),
+  /** The tray menu's texts in the UI's language; the core keeps them for a start in the background. */
+  setDesktopTexts: (texts: DesktopTexts): Promise<void> => done(call(() => desktopCommands.setDesktopTexts(texts))),
+  /** The main window's page listens to core events: requests that waited for it follow. */
+  mainWindowReady: (): Promise<void> => infallible(() => desktopCommands.mainWindowReady()).then(() => undefined),
+  /** The answer to the one-time note: into the background, or quit. */
+  closeMainWindow: (quit: boolean): Promise<void> => done(call(() => desktopCommands.closeMainWindow(quit))),
+  /** The user closed the main window for the first time: the page explains running in the background. */
+  onCloseToBackgroundAsked: async (handler: () => void): Promise<Unsubscribe> => {
+    try {
+      return await desktopEvents.closeToBackgroundAsked.listen(() => {
+        handler();
+      });
+    } catch (e) {
+      throw toCoreError(e);
+    }
+  },
+};

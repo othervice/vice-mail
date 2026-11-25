@@ -3,6 +3,7 @@ import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import type { LanguagePreference } from "../../services/ipc";
+import { BackgroundSettings } from "../desktop/BackgroundSettings";
 import { DefaultMailAppSettings } from "../extras/DefaultMailAppSettings";
 import { DEFAULT_PREFERENCES, usePreferences, useSetPreferences } from "../preferences/queries";
 
@@ -42,6 +43,8 @@ export function GeneralSettings() {
       {save.isError && <ErrorNotice context={t("errors.context.savePreferences")} error={save.error} />}
       {/* Stage 9: mailto: links open this app. */}
       <DefaultMailAppSettings />
+      {/* Stage 21 (decisions 0069, 0070): closing the window, the menu-bar icon, the login item. */}
+      <BackgroundSettings />
     </SettingsSection>
   );
 }
