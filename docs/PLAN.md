@@ -35,9 +35,9 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 14 | [Weitere Anbieter](stages/14-weitere-anbieter.md) | wartet auf Mensch (Code fertig: A–D; B/C brauchen App-Registrierungen und Handprüfungen) | Microsoft, Gmail-Eigenheiten, JMAP |
 | 16 | [Funktionsabgleich](stages/16-funktionsabgleich.md) | fertig | Lese-Liste, Ordnerfavoriten, Verschieben zwischen Konten, Schnellantwort, Lesebestätigung (0032) |
 | 17 | [Gespräche und Kontakte](stages/17-gespraeche-und-kontakte.md) | fertig | Gespräche aufklappen wie in Thunderbird, Kontakte mit Bildern, eigene Ansichten; vor dem ersten öffentlichen Release |
-| 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | in Arbeit | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen, Hell mit Blau und Dunkel wie GitHub |
-| 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | in Arbeit (B, C; A nach 18) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
-| 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | in Arbeit | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
+| 18 | [Spalten und Popup für neue Mails](stages/18-spalten-und-neue-mail-popup.md) | fertig (0.1.1) | Grenze Liste/Lesebereich ziehen, Aufklappen trotz Schnellaktionen, Popup mit Lesen/Löschen, Ordner anlegen, Hell mit Blau und Dunkel wie GitHub |
+| 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | fertig (0.1.1) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
+| 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
@@ -107,6 +107,23 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 
 ## Letzter Lauf
 
+**Lauf vom 24.11.2026 abends bis 25.11.2026 (Version 0.1.1).** Nach dem ersten Test von 0.1.0
+wünschte der Mensch Stufe 18 (Spaltengrenze, Schnellaktionen, Popup für neue Mails, Ordner
+anlegen, neue Farben, oberste Mail gleich offen), dazu aus dem Vergleich mit Thunderbird
+Stufe 19 und aus dem Vergleich mit Mailbird und anderen Programmen Stufe 20; alle drei zusammen
+ergeben 0.1.1 (Entscheidung des Menschen). Bis zu vier Subagenten in eigenen Worktrees;
+ein Nutzungslimit unterbrach den Lauf von etwa 01:00 bis 07:30. Gesamtprüfung auf `afeedc3`:
+`scripts/check.sh` grün (1.520 Rust, 4.144 Vitest), Desktop 33/33 Spec-Dateien (173 Tests),
+Server-Tests 1.613 grün (Updater-Tests danach eigens nachgeprüft). 0.1.1 liegt als Gitea-Release
+`v0.1.1` (Installation von Hand, weil die App Updates nur auf GitHub sucht). GitHub bleibt
+privat, bis der Mensch es nach Durchsicht freigibt (Antwort „Nein, erst ansehen“ vom 24.11.).
+
+**Wartet auf den Menschen (neu):** Test von 0.1.1 auf Mac und Windows, besonders das Popup
+(Ton, Ausblenden nach 10 s, Fokus, auf Windows auch Position über der Taskleiste); die
+Entscheidung, das GitHub-Repo öffentlich zu schalten (danach kommen Updates über die App).
+
+### Lauf vom 22. bis 24.11.2026
+
 Lauf vom 22.11.2026 abends bis 24.11.2026 morgens, Hauptsitzung mit bis zu vier Subagenten
 gleichzeitig; Unterbrechungen durch einen Stromausfall (23.11., 15:54) und zwei Nutzungslimits.
 Am 23.11. gegen 17:50 entschied der Mensch: keine Prototypen mehr, alles fertig machen, dann
@@ -154,10 +171,9 @@ grün. **Finaler Build** aus de8cad7: siehe Stufe 15, „Finaler Build“, und d
 - macOS-Signatur: Herausgeber ist BITWATER LLC (0035, Nachtrag 24.11.). Apple hat die Anmeldung als
   Einzelperson am 24.11. abgebrochen und erstattet; die Anmeldung als Organisation ist am 24.11.
   eingereicht (Enrollment ID CMV992434U) und wartet auf Apples Prüfung der Zeichnungsberechtigung (`docs/RELEASING.md`, „Enrolling as an organisation“), dann die Schritte unter
-  „After the membership is active“. Erste signierte Version: 0.1.1.
-- Vor dem ersten Push auf GitHub: Autor-Adresse in der Geschichte und die Refs
-  (`docs/internal/history-audit.md`), Kontaktadresse in `SECURITY.md`, dann die Umstellung nach
-  `docs/internal/umstellung-bei-veroeffentlichung.md`.
+  „After the membership is active“. 0.1.1 ist noch unsigniert; signiert wird die erste Version nach der Freischaltung.
+- GitHub: das private Repo durchsehen und freigeben; erst dann wird es öffentlich und bekommt die
+  Releases (Stand 25.11.: Code gepusht, privat, CI grün).
 - Echtes Konto (bleibt nur lesend), Schreibzugriff für ein Nebenkonto, MCP mit einem echten
   Client, Einstellungs-Sync mit zwei Geräten, Ollama oder API-Schlüssel für die KI in der App,
   Screenreader-Checkliste, Bildschirm mit 2560×1440.

@@ -7,8 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-25
+
 ### Added
 
+- New mail at the bottom right of the screen: a small window of the app shows the sender's
+  picture or initials, name, subject and two lines of text, with "Read" (opens the message in the
+  main window) and "Delete" (into the trash through the outbox, with "Undo"; disabled for
+  read-only accounts). Up to three cards, then "N more"; it hides after 10 seconds on screen,
+  never while the pointer rests on it, and never takes the focus from the app in front. The same
+  rules as before decide what is announced (quiet hours, muted accounts, categories, rules); the
+  sound plays as before. Settings → Notifications can switch back to the system's notifications.
 - The border between the message list and the reading pane can be dragged, like the sidebar's
   edge: the list's width with the pane on the right, its height with the pane below (keyboard,
   screen reader and double click to reset as there). The size is kept with the window's layout;
@@ -68,7 +77,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window.
 - The quick actions of a hovered row no longer cover the "n replies" toggle: they take the place
   of the time at the end of the row, and a click on the toggle unfolds the conversation.
-
 - New colours: the light mode is cool white and light blue-grey with blue, the dark mode uses
   neutral, slightly bluish greys in the manner of GitHub's dark theme instead of warm browns.
   Blue is the new default accent; a theme chosen before stays. Light, dark or system mode can be
@@ -225,5 +233,6 @@ were never published. How each part was built and tested is recorded per stage i
 - Not planned for version 1: PGP and S/MIME, calendar and contact sync, POP3, encryption of the
   local database (use FileVault or BitLocker).
 
-[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/othervice/vice-mail/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/othervice/vice-mail/releases/tag/v0.1.0

@@ -30,3 +30,6 @@ dist/
 # Desktop-test screenshots (pnpm --dir app test:e2e)
 /app/tests/e2e/screenshots/
 /testmail/.lock/
+
+# Python caches of the test-server helpers
+__pycache__/
