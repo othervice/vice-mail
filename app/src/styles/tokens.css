@@ -90,8 +90,11 @@
   --ui-avatar-8-bg: #e2e7ee;
   --ui-avatar-8-text: #435166;
 
-  /* Mail content. HTML mail is shown on its own white canvas, in the dark theme too: its colours
-     were made for white, and recolouring would break them (docs/DESIGN.md). Not redefined below. */
+  /* Mail content. HTML mail shown as written lies on its own white canvas, in the dark theme too
+     (setting "always on a white page", "Original colours", mails asking for light only). Adapted
+     to the dark theme the core paints it on the dark card instead (decision 0066; its colours are
+     `--ui-surface-raised`, `--ui-text-primary` and `--ui-accent` of the dark theme, kept equal by
+     a test in crates/mail-content/src/colors.rs). Not redefined below. */
   --ui-mail-canvas: #ffffff;
 
   /* Stage 16, find in the open message: every match, and the current one (also underlined, so
