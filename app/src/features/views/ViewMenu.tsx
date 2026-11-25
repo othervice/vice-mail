@@ -94,6 +94,7 @@ export function ListViewMenu({ viewKey, showRecipients, mixedAccounts }: ListVie
       name={t("views.sort.current", { key: name, direction: way })}
       text={name}
       active={!isDefaultOrder(order)}
+      tall
       groups={groups}
       data-testid="list-view-menu"
     />

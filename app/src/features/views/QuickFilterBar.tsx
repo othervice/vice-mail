@@ -142,13 +142,13 @@ export function QuickFilterBar({
   return (
     <section
       aria-label={t("views.filter.label")}
-      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border bg-surface-list px-4 py-1.5"
+      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-surface-list px-4 py-1"
       data-testid="quick-filter"
     >
       <div
         role="toolbar"
         aria-label={t("views.filter.switches")}
-        className="flex flex-wrap items-center gap-1.5"
+        className="flex flex-wrap items-center gap-1"
         {...roving.groupProps}
       >
         {SWITCHES.map(({ key, icon: Icon }) => (
@@ -162,7 +162,7 @@ export function QuickFilterBar({
             {...roving.itemProps(key)}
             data-testid={`quick-filter-${key}`}
             className={cx(
-              "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-13 transition-colors",
+              "flex h-8 items-center gap-1 rounded-full border px-3 text-13 transition-colors",
               filter[key]
                 ? "border-accent bg-accent-soft font-medium text-accent"
                 : "border-border text-secondary hover:bg-hover hover:text-primary",
@@ -199,7 +199,7 @@ export function QuickFilterBar({
           data-testid="quick-filter-tag"
         />
       </div>
-      <label className="flex h-7 min-w-(--ui-list-sender-width) flex-1 items-center gap-1.5 rounded-control border border-border bg-surface px-2 focus-within:outline-2 focus-within:outline-focus-ring">
+      <label className="flex h-8 min-w-(--ui-list-sender-width) flex-1 items-center gap-2 rounded-control border border-border bg-surface px-2 focus-within:outline-2 focus-within:outline-focus-ring">
         <Search
           aria-hidden
           className="size-(--ui-icon-small) shrink-0 text-tertiary"
@@ -251,7 +251,7 @@ export function QuickFilterBar({
             reset(viewKey);
             field.current?.focus();
           }}
-          className="flex h-7 items-center gap-1 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
+          className="flex h-8 items-center gap-1 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover"
           data-testid="quick-filter-reset"
         >
           <X

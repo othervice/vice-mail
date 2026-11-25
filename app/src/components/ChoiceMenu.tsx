@@ -41,8 +41,10 @@ interface ChoiceMenuProps {
   tabIndex?: number;
   onFocus?: () => void;
   "data-roving-key"?: string;
-  /** The button is small (a chip of the quick filter, 28 px). */
+  /** The button is a chip of the quick filter (rounded, with a hairline). */
   chip?: boolean;
+  /** A menu of several groups may take most of the window's height before it scrolls. */
+  tall?: boolean;
 }
 
 const ITEM_ROLES = '[role="menuitemradio"], [role="menuitemcheckbox"]';
@@ -54,7 +56,7 @@ const ITEM_ROLES = '[role="menuitemradio"], [role="menuitemcheckbox"]';
  * last; arrows, Home and End move, Escape and Tab close it, a click outside too. A radio item
  * closes the menu and gives the focus back to the button; a checkbox item stays open.
  */
-export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = false, align = "end", tabIndex, onFocus, chip = false, ...rest }: ChoiceMenuProps) {
+export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = false, align = "end", tabIndex, onFocus, chip = false, tall = false, ...rest }: ChoiceMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -149,8 +151,8 @@ export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = fal
           onKeyDown={onButtonKeyDown}
           data-testid={rest["data-testid"]}
           className={cx(
-            "flex items-center justify-center gap-1.5 transition-colors",
-            chip ? "h-7 rounded-full border px-2.5 text-13" : "h-8 rounded-control px-2 text-13",
+            "flex items-center justify-center gap-1 transition-colors",
+            chip ? "h-8 rounded-full border px-3 text-13" : "h-8 rounded-control px-2 text-13",
             chip
               ? active
                 ? "border-accent bg-accent-soft font-medium text-accent"
@@ -171,7 +173,8 @@ export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = fal
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           className={cx(
-            "absolute top-full z-30 mt-1 flex max-h-(--ui-picker-list-height) min-w-(--ui-reading-menu-width) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            "absolute top-full z-30 mt-1 flex min-w-(--ui-reading-menu-width) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            tall ? "max-h-[calc(100vh-var(--ui-space-12)*2)]" : "max-h-(--ui-picker-list-height)",
             align === "end" ? "end-0" : "start-0",
           )}
           data-testid={rest["data-testid"] && `${rest["data-testid"]}-menu`}
@@ -180,7 +183,7 @@ export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = fal
             const labelId = `${menuId}-${group.id}`;
             return (
               <div key={group.id} role="group" aria-labelledby={labelId} className={cx(groupIndex > 0 && "mt-1 border-t border-border pt-1")}>
-                <div id={labelId} className="px-2 pt-1 pb-0.5 text-12 font-semibold text-tertiary">
+                <div id={labelId} className="px-2 pt-1 text-12 font-semibold text-tertiary">
                   {group.label}
                 </div>
                 {group.items.map((item) => (

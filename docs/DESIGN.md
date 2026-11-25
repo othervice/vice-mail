@@ -884,7 +884,7 @@ WAI-ARIA, `menuitemradio`/`menuitemcheckbox` in benannten Gruppen, Häkchen in A
                                                                  ✓ Datum  ✓ Größe
 ```
 
-Ein anderer Schlüssel beginnt in seiner Richtung (Namen und Betreff A bis Z, Datum und Größe
+Das Menü darf fast die Höhe des Fensters nehmen, bevor es rollt. Ein anderer Schlüssel beginnt in seiner Richtung (Namen und Betreff A bis Z, Datum und Größe
 absteigend). Gespeichert je Ansicht auf diesem Gerät; „neueste zuerst“ ist der Standard. In einer
 anderen Reihenfolge hat die Liste keine Datumsabschnitte, keine Bündel und keinen Block oben;
 „Ungelesene oben“ steht im Menü „Listenoptionen“ dann gesperrt mit dem Zusatz „nur bei ‚Neueste
@@ -919,17 +919,17 @@ die Liste bleibt `listbox` oder Baum mit denselben Namen der Zeilen wie bisher. 
 Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
 
 **Schnellfilter.** Eine Leiste über der Liste derselben Ansichten, immer sichtbar, 40 px auf
-`surface-list` mit Haarlinie darunter, Innenabstand 6/16 px:
+`surface-list` mit Haarlinie darunter, Innenabstand 4/16 px:
 
 ```
  (o Ungelesen) (o Markiert) (o Mit Anhang) (o Von Kontakten) (o Schlagwort ▾)  [o Diese Mails filtern     ]  12 Treffer  × Zurücksetzen
 ```
 
 - `o` steht für das Symbol (Lucide, 16 px): Brief, Fahne, Büroklammer, Person, Etikett, Lupe.
-- Schalter als Chips, 28 px hoch, rund (`rounded-full`), Haarlinie `border`; an: Akzentrand,
+- Schalter als Chips, 32 px hoch (wie die Knöpfe des Kopfes), rund (`rounded-full`), Haarlinie `border`; an: Akzentrand,
   `accent-soft`, Text in `accent` mittel (`aria-pressed`). „Schlagwort“ ist ein Chip mit Menü: „Kein
   Schlagwortfilter“ und die Schlagwörter der Ansicht; gewählt heißt der Chip „Schlagwort: Projekt“.
-- Textfeld 28 px, mindestens so breit wie die Absenderspalte, nimmt den Rest der Zeile: Lupe,
+- Textfeld 32 px, mindestens so breit wie die Absenderspalte, nimmt den Rest der Zeile: Lupe,
   Platzhalter „Diese Mails filtern“, Name „Nach Absender, Betreff und Text filtern“. Suchsprache
   wie in der Suche.
 - Solange etwas gesetzt ist: die Trefferzahl (12 px, `text-secondary`, Tabellenziffern, höfliche

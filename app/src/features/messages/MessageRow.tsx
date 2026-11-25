@@ -578,7 +578,7 @@ export function TableRowContent({
         );
       case "account":
         return (
-          <span key={id} title={decoration?.account} className="flex min-w-0 items-center gap-1.5 pe-3" data-testid="cell-account">
+          <span key={id} title={decoration?.account} className="flex min-w-0 items-center gap-1 pe-3" data-testid="cell-account">
             {decoration?.account && (
               <>
                 <span className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} />
