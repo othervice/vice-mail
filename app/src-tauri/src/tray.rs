@@ -66,6 +66,16 @@ fn fill(text: &str, product: &str) -> String {
     text.replace("{product}", product)
 }
 
+/// The count next to the menu-bar icon (macOS): the exact number up to 999, then "999+", so the
+/// item stays narrow in a full menu bar. The tooltip keeps the exact number.
+fn menu_bar_count(unread: u32) -> String {
+    if unread > 999 {
+        "999+".to_owned()
+    } else {
+        unread.to_string()
+    }
+}
+
 /// The tray for `unread` messages (the counter's number) and the pause as it is.
 pub fn model(texts: &DesktopTexts, product: &str, unread: u32, pause: &NotificationPause) -> Model {
     let item = |id, text: &str, enabled| Entry::Item {
@@ -98,7 +108,7 @@ pub fn model(texts: &DesktopTexts, product: &str, unread: u32, pause: &Notificat
     };
     Model {
         tooltip,
-        title: (unread > 0).then(|| unread.to_string()),
+        title: (unread > 0).then(|| menu_bar_count(unread)),
         count: unread,
         menu: vec![
             item(ids::OPEN, &texts.open, true),
@@ -423,6 +433,29 @@ mod tests {
         assert_eq!(m.tooltip, "Vice Mail: 12 unread");
         assert_eq!(m.title.as_deref(), Some("12"));
         assert_eq!(m.count, 12);
+    }
+
+    #[test]
+    fn the_menu_bar_count_stops_at_999() {
+        let title = |n| {
+            model(
+                &DesktopTexts::default(),
+                "Vice Mail",
+                n,
+                &NotificationPause::default(),
+            )
+            .title
+        };
+        assert_eq!(title(999).as_deref(), Some("999"));
+        assert_eq!(title(1293).as_deref(), Some("999+"));
+        let m = model(
+            &DesktopTexts::default(),
+            "Vice Mail",
+            1293,
+            &NotificationPause::default(),
+        );
+        assert_eq!(m.tooltip, "Vice Mail: 1293 unread");
+        assert_eq!(m.count, 1293);
     }
 
     #[test]
