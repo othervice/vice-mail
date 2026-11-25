@@ -906,7 +906,10 @@ absteigend). Sortierbare Köpfe sind Knöpfe; Markiert und Anhang zeigen nur ihr
 | Datum | 136 px | wie die Zeitspalte der Zeile |
 | Größe | 88 px | „12 kB“ in der Sprache der Oberfläche, rechtsbündig |
 
-Zeilenhöhe, Auswahl, Fokusring und Schnellaktionen wie bei den Zeilen; die Zellen sind ein
+Zeilenhöhe, Auswahl, Fokusring und Schnellaktionen wie bei den Zeilen. Die Mails eines
+aufgeklappten Gesprächs bleiben einzeilige Kindzeilen (Stufe 17) und stehen nicht in den Spalten;
+Bündel und der Block oben (nur bei „neueste zuerst“ im Posteingang) werden wie in den Zeilen
+gezeichnet. Die Zellen sind ein
 CSS-Grid aus `--table-columns`, das Kopf und Zeilen teilen (per CSSOM gesetzt, CSP), beide mit
 demselben Rand für die Bildlaufleiste. Am Ende jeder ziehbaren Spalte ein Griff wie an der
 Grenze zum Lesebereich (8 px, Linie in `accent-fill` beim Überfahren und Ziehen; ← → 16 px, Pos1
