@@ -222,7 +222,9 @@ export function RowMenuSlot({ children }: { children: ReactNode }) {
       onClick={(event) => {
         event.stopPropagation();
       }}
-      className="absolute inset-y-0 end-0 flex items-center opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100"
+      // Stage 21: also while its menu is open, wherever the focus is (a click on the menu's edge
+      // moves it to the page in WebKit; the open menu must not turn invisible).
+      className="absolute inset-y-0 end-0 flex items-center opacity-0 group-hover/folder:opacity-100 group-focus-visible/folder:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100"
     >
       {children}
     </div>

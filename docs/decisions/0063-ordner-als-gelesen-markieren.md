@@ -85,7 +85,12 @@ Bildlaufleisten, nicht das Verschieben durch den Fokus (`focus()` scrollt das El
 sichtbaren Bereich) oder durch das Rad. Lösung:
 - Menüs der Spalte (`OverflowMenu narrow`) sind so breit wie die Zeilen der Spalte (Breite der
   Spalte minus ihr Rand, höchstens 16 rem) und nie breiter; Einträge brechen um statt abgeschnitten
-  zu werden, die Zeile wächst mit (mindestens 32 px).
+  zu werden, die Zeile wächst mit (eine Zeile 32 px, zwei 44 px, im 4-px-Raster). Höher als die
+  Liste einer Auswahl (18 rem) dürfen sie werden, damit alle Einträge ohne Rollen zu sehen sind,
+  wo das Fenster Platz hat.
+- Das „…“ einer Zeile bleibt sichtbar, solange sein Menü offen ist, auch ohne Fokus darin (ein
+  Klick auf den Rand des Menüs gibt den Fokus in WebKit an die Seite ab; vorher wurde das offene
+  Menü dann durchsichtig).
 - Im Bildlaufbereich der Spalte liegt ein Block mit `overflow-x: clip` (auf dem Bildlaufbereich
   selbst würde `clip` neben `overflow-y: auto` zu `hidden`): nichts darin trägt mehr zur
   waagerechten Breite bei; falls doch einmal verschoben, setzt `onScroll` `scrollLeft` auf 0. Der

@@ -423,7 +423,8 @@ Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen hal
 „…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
 und nimmt dem Namen keine Breite. Sein Menü ist seit Stufe 21 (Entscheidung 0063) so breit wie die
 Zeilen der Spalte, höchstens 16 rem, nie breiter; lange Einträge brechen um statt abgeschnitten zu
-werden (die Zeile wächst, mindestens 32 px). Die Spalte rollt nie waagerecht (`overflow-x: clip` im
+werden (die Zeile wächst: eine Zeile 32 px, zwei 44 px), und es zeigt alle Einträge, wo das
+Fenster Platz hat; das „…“ bleibt sichtbar, solange sein Menü offen ist. Die Spalte rollt nie waagerecht (`overflow-x: clip` im
 Bildlaufbereich). Wie jedes „…“-Menü bleibt es im sichtbaren Bereich: ohne Platz darunter öffnet es
 sich über dem Knopf, an den Seiten wird es zurückgeschoben, und passt es nirgends ganz, rollt es.
 Ein nicht verfügbarer Eintrag nennt seinen Grund als zweite Zeile (12 px, `text-secondary`).

@@ -168,13 +168,15 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           className={cx(
-            "absolute z-30 flex max-h-(--ui-picker-list-height) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            "absolute z-30 flex flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
             // Below the button; above it when `useMenuPlacement` finds no room below.
             "top-full mt-1 data-[side=above]:top-auto data-[side=above]:bottom-full data-[side=above]:mt-0 data-[side=above]:mb-1",
             narrow
               ? // The column sets --ui-sidebar-width on itself: the menu never gets wider than its rows.
-                "w-[min(var(--ui-sidebar-menu-width),calc(var(--ui-sidebar-width)-var(--ui-space-4)))]"
-              : "max-w-[calc(100vw-var(--ui-space-4))] min-w-(--ui-reading-menu-width)",
+                // Wrapped names make it higher: all of it shows where there is room (else the
+                // placement gives it the room there is, and it rolls).
+                "max-h-[calc(100vh-var(--ui-space-8))] w-[min(var(--ui-sidebar-menu-width),calc(var(--ui-sidebar-width)-var(--ui-space-4)))]"
+              : "max-h-(--ui-picker-list-height) max-w-[calc(100vw-var(--ui-space-4))] min-w-(--ui-reading-menu-width)",
             align === "end" ? "end-0" : "start-0",
           )}
           data-testid="overflow-menu"
@@ -199,14 +201,14 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
                 data-testid={item["data-testid"]}
                 className={cx(
                   "flex w-full shrink-0 gap-3 rounded-control px-2 text-start text-13 text-primary transition-colors hover:bg-hover focus-visible:bg-hover",
-                  // Wrapping names: as high as they need, the icon on the first line.
-                  narrow || item.hint ? "min-h-8 items-start py-1.5" : "h-8 items-center",
+                  // Wrapping names: as high as they need (32 px for one line, on the 4 px grid).
+                  narrow || item.hint ? "min-h-8 items-center py-1" : "h-8 items-center",
                   item.inert && "text-secondary",
                 )}
               >
                 <Icon
                   aria-hidden
-                  className={cx("size-(--ui-icon-small) shrink-0", (narrow || item.hint) && "mt-0.5", item.inert ? "opacity-50" : "text-secondary")}
+                  className={cx("size-(--ui-icon-small) shrink-0", item.inert ? "opacity-50" : "text-secondary")}
                   strokeWidth={1.75}
                 />
                 {narrow || item.hint ? (
