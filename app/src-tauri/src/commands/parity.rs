@@ -209,9 +209,9 @@ pub async fn list_blocked_senders(
         .map_err(to_ipc("list_blocked_senders"))
 }
 
-/// Copies or moves messages to a folder of another account through the outbox. A move removes
-/// the source only after the copy was confirmed in the target. `requestId` is a UUID per user
-/// action.
+/// Copies or moves messages to a folder of another account through the outbox, or (stage 21)
+/// copies them to another folder of their own account. A move removes the source only after the
+/// copy was confirmed in the target. `requestId` is a UUID per user action.
 #[tauri::command]
 #[specta::specta]
 pub async fn transfer_messages(

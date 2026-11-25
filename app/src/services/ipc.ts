@@ -1661,8 +1661,9 @@ export const parityIpc = {
   listFavoriteMailboxes: (): Promise<Mailbox[]> => call(() => parityCommands.listFavoriteMailboxes()),
   /**
    * Copy or move into a folder of another account (APPEND in the target, the source removed only
-   * after the copy is confirmed). `read_only` unless the target (and for a move the source) may
-   * write. `requestId` is a fresh UUID per user action.
+   * after the copy is confirmed); stage 21 (decision 0064): also a copy into another folder of the
+   * message's own account. `read_only` unless the target (and for a move the source) may write.
+   * `requestId` is a fresh UUID per user action.
    */
   transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string): Promise<ActionResult> =>
     call(() => parityCommands.transferMessages(messages, targetMailboxId, mode, requestId)),

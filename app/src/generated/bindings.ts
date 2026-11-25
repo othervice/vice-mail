@@ -581,9 +581,9 @@ export const commands = {
 	unblockSender: (address: string, options?: InvokeOptions) => typedError<BlockedSender[], IpcError>(__TAURI_INVOKE("unblock_sender", { address }, options)),
 	listBlockedSenders: (options?: InvokeOptions) => typedError<BlockedSender[], IpcError>(__TAURI_INVOKE("list_blocked_senders", undefined, options)),
 	/**
-	 *  Copies or moves messages to a folder of another account through the outbox. A move removes
-	 *  the source only after the copy was confirmed in the target. `requestId` is a UUID per user
-	 *  action.
+	 *  Copies or moves messages to a folder of another account through the outbox, or (stage 21)
+	 *  copies them to another folder of their own account. A move removes the source only after the
+	 *  copy was confirmed in the target. `requestId` is a UUID per user action.
 	 */
 	transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("transfer_messages", { messages, targetMailboxId, mode, requestId }, options)),
 	/**

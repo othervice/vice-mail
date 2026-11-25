@@ -753,7 +753,7 @@ async fn a_transfer_is_checked_recorded_in_the_target_and_removes_the_source_aft
         .set_writes_enabled(f.account, true)
         .await
         .expect("writes");
-    // No Message-ID: the copy could not be confirmed. Same account: not a transfer.
+    // No Message-ID: the copy could not be confirmed. Same account: a move is not a transfer.
     for (at, target) in [(without_id, kept), (with_id, f.archive)] {
         let err = f
             .store
@@ -762,6 +762,21 @@ async fn a_transfer_is_checked_recorded_in_the_target_and_removes_the_source_aft
             .expect_err("refused");
         assert_eq!(code(err), ErrorCode::InvalidArgument);
     }
+    // Stage 21 (decision 0064): a copy into another folder of the same account takes the same
+    // way; into the folder the message lies in it would only duplicate it.
+    let plan = f
+        .store
+        .check_transfer(vec![with_id], f.archive, TransferMode::Copy)
+        .await
+        .expect("a copy within the account");
+    assert_eq!(plan.target_account, f.account);
+    assert_eq!(plan.items.len(), 1);
+    let err = f
+        .store
+        .check_transfer(vec![with_id], f.inbox, TransferMode::Copy)
+        .await
+        .expect_err("a copy into its own folder");
+    assert_eq!(code(err), ErrorCode::InvalidArgument);
 
     let change = f
         .store
@@ -898,4 +913,66 @@ async fn a_transfer_is_checked_recorded_in_the_target_and_removes_the_source_aft
         .map(|i| i.subject)
         .collect();
     assert_eq!(left, ["Subject 2"], "removed locally with the expunge");
+}
+
+#[tokio::test]
+async fn a_copy_within_the_account_is_an_append_to_the_other_folder_that_leaves_the_source() {
+    use mail_model::{MessageRef, OperationPayload, TransferMode};
+
+    let f = fixture().await;
+    f.store
+        .store_headers(
+            f.inbox,
+            UV,
+            vec![header(1, 1_700_000_000, Some("c1@x"))],
+            None,
+        )
+        .await
+        .expect("store");
+    let item = f
+        .store
+        .list_messages(f.inbox, None, 10)
+        .await
+        .expect("list")
+        .items
+        .remove(0);
+    let at = MessageRef {
+        mailbox_id: f.inbox,
+        message_id: item.id,
+    };
+    f.store
+        .set_writes_enabled(f.account, true)
+        .await
+        .expect("writes");
+    let change = f
+        .store
+        .enqueue_transfer(
+            f.archive,
+            TransferMode::Copy,
+            vec![(at, "outgoing/c/transfer.eml".into())],
+            "req-copy".into(),
+            4,
+        )
+        .await
+        .expect("a copy within the account is recorded");
+    assert_eq!(change.account, f.account);
+    assert_eq!(change.operations.len(), 1);
+    assert!(matches!(
+        &change.operations[0].payload,
+        OperationPayload::Append {
+            target,
+            source: mail_model::AppendSource::Transfer { remove: None, .. },
+            ..
+        } if target.mailbox_id == f.archive
+    ));
+    // The source stays where it is.
+    assert_eq!(
+        f.store
+            .list_messages(f.inbox, None, 10)
+            .await
+            .expect("list")
+            .items
+            .len(),
+        1
+    );
 }
