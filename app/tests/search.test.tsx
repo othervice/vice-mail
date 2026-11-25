@@ -64,7 +64,10 @@ describe("search field", () => {
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await user.keyboard("{Meta>}f{/Meta}");
     const input = await screen.findByRole("searchbox", { name: "Search mail" });
-    expect(document.activeElement).toBe(input);
+    // The field takes the focus in an effect after it renders: wait for it (slow under load).
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
     // Empty: the folder stays, and a hint names the filters.
     expect(screen.getByRole("listbox", { name: "Messages in Inbox" })).toBeTruthy();
     expect(input.getAttribute("aria-describedby")).toBeTruthy();
@@ -74,7 +77,10 @@ describe("search field", () => {
     expect(screen.queryByRole("searchbox")).toBeNull();
     await user.click(screen.getByRole("listbox", { name: "Messages in Inbox" }));
     await user.keyboard("/");
-    expect(document.activeElement).toBe(await screen.findByRole("searchbox", { name: "Search mail" }));
+    const reopened = await screen.findByRole("searchbox", { name: "Search mail" });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(reopened);
+    });
   });
 
   it("searches while typing (prefix), then for the submitted text, and shows hits with their found places", async () => {
