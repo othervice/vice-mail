@@ -1914,3 +1914,140 @@ export const popupIpc = {
     }
   },
 };
+
+// ---- Stage 19 (decision 0055): source, all headers, redirect ----
+import {
+  commands as stage19Commands,
+  MAX_REDIRECT_RECIPIENTS,
+  MAX_SOURCE_BYTES,
+  type HeaderField,
+  type MessageSource,
+  type RedirectRequest,
+} from "../generated/bindings";
+
+export { MAX_REDIRECT_RECIPIENTS, MAX_SOURCE_BYTES };
+export type { HeaderField, MessageSource, RedirectRequest };
+
+/**
+ * Stage 19: a message's source in a window of its own (plain text, never markup; at most
+ * `MAX_SOURCE_BYTES`, the whole via "Save as .eml") and every header field for "all headers".
+ */
+export const sourceIpc = {
+  /** The source window of the message; an open one comes to the front. `not_found` opens nothing. */
+  openWindow: (accountId: AccountId, messageId: MessageId): Promise<void> =>
+    done(call(() => stage19Commands.openSourceWindow(accountId, messageId))),
+  getSource: (messageId: MessageId): Promise<MessageSource> => call(() => stage19Commands.getMessageSource(messageId)),
+  getHeaders: (messageId: MessageId): Promise<HeaderField[]> => call(() => stage19Commands.getMessageHeaders(messageId)),
+};
+
+/**
+ * Stage 19: redirecting a message unchanged with `Resent-*` fields. It goes through the outbox
+ * like a send (undo delay, send notices, outbox view); only for accounts with writes on.
+ */
+export const redirectIpc = {
+  /** `requestId` names one press: the same id twice queues once. */
+  redirect: (request: RedirectRequest, requestId: string): Promise<OutgoingMail> =>
+    call(() => stage19Commands.redirectMessage(request, requestId)),
+  /** "Undo" within the delay, or dropping a failed one. `send_in_progress` once it started. */
+  cancel: (operationId: OperationId): Promise<void> => done(call(() => stage19Commands.cancelRedirect(operationId))),
+};
+
+// ---- Stage 19 (decisions 0056, 0057): contact groups, vCard, mbox, Thunderbird takeover ----
+import {
+  commands as stage19cCommands,
+  MANY_RECIPIENTS,
+  MAX_CONTACT_LIST_MEMBERS,
+  MAX_CONTACT_LIST_NAME_CHARS,
+  type ContactExport,
+  type ContactList,
+  type ContactListId,
+  type ContactListMember,
+  type ContactListSummary,
+  type MboxJob,
+  type MboxJobId,
+  type MboxStart,
+  type TakeoverAccount,
+  type TakeoverApplied,
+  type TakeoverFolder,
+  type TakeoverIdentity,
+  type TakeoverOpen,
+  type TakeoverPreview,
+  type TakeoverToken,
+  type ThunderbirdProfile,
+  type VcardExportOutcome,
+  type VcardImportOutcome,
+  type VcardImportProblemKind,
+  type VcardImportReport,
+  type VcardVersionChoice,
+} from "../generated/bindings";
+
+export { MANY_RECIPIENTS, MAX_CONTACT_LIST_MEMBERS, MAX_CONTACT_LIST_NAME_CHARS };
+export type {
+  ContactExport,
+  ContactList,
+  ContactListId,
+  ContactListMember,
+  ContactListSummary,
+  MboxJob,
+  MboxJobId,
+  MboxStart,
+  TakeoverAccount,
+  TakeoverApplied,
+  TakeoverFolder,
+  TakeoverIdentity,
+  TakeoverOpen,
+  TakeoverPreview,
+  TakeoverToken,
+  ThunderbirdProfile,
+  VcardExportOutcome,
+  VcardImportOutcome,
+  VcardImportProblemKind,
+  VcardImportReport,
+  VcardVersionChoice,
+};
+
+/**
+ * Stage 19: contact groups (distribution lists) on the contacts page and in the composer, and
+ * vCard import and export. Every change comes back as `contactsChanged` to every window.
+ */
+export const contactListIpc = {
+  list: (): Promise<ContactListSummary[]> => call(() => stage19cCommands.listContactLists()),
+  get: (id: ContactListId): Promise<ContactList> => call(() => stage19cCommands.getContactList(id)),
+  create: (name: string, members: Address[]): Promise<ContactList> => call(() => stage19cCommands.createContactList(name, members)),
+  rename: (id: ContactListId, name: string): Promise<ContactList> => call(() => stage19cCommands.renameContactList(id, name)),
+  remove: (id: ContactListId): Promise<void> => done(call(() => stage19cCommands.deleteContactList(id))),
+  addMembers: (id: ContactListId, members: Address[]): Promise<ContactList> =>
+    call(() => stage19cCommands.addContactListMembers(id, members)),
+  removeMember: (id: ContactListId, email: string): Promise<ContactList> =>
+    call(() => stage19cCommands.removeContactListMember(id, email)),
+  /** The composer's autocomplete: every word of the query starts a word of the group's name. */
+  suggest: (query: string, limit: number): Promise<ContactListSummary[]> => call(() => stage19cCommands.suggestContactLists(query, limit)),
+  /** The system's open dialog for a `.vcf` file, then the import. */
+  importVcards: (): Promise<VcardImportOutcome> => call(() => stage19cCommands.importVcards()),
+  /** The system's save dialog, then the export. */
+  exportVcards: (exported: ContactExport, version: VcardVersionChoice): Promise<VcardExportOutcome> =>
+    call(() => stage19cCommands.exportVcards(exported, version)),
+};
+
+/** Stage 19: a folder exported as mbox, an mbox file imported into a folder (through the outbox). */
+export const mboxIpc = {
+  exportFolder: (mailboxId: MailboxId): Promise<MboxStart> => call(() => stage19cCommands.exportMailboxMbox(mailboxId)),
+  importIntoFolder: (mailboxId: MailboxId): Promise<MboxStart> => call(() => stage19cCommands.importMailboxMbox(mailboxId)),
+  cancel: (id: MboxJobId): Promise<MboxJob> => call(() => stage19cCommands.cancelMboxJob(id)),
+  jobs: (): Promise<MboxJob[]> => infallible(() => stage19cCommands.listMboxJobs()),
+};
+
+/**
+ * Stage 19: taking over a Thunderbird profile. The core never reads passwords; an account goes
+ * through the normal setup (the user types the password there) and starts read-only.
+ */
+export const takeoverIpc = {
+  profiles: (): Promise<ThunderbirdProfile[]> => call(() => stage19cCommands.listThunderbirdProfiles()),
+  open: (index: number): Promise<TakeoverPreview> => call(() => stage19cCommands.openThunderbirdProfile(index)),
+  /** The system's folder dialog. */
+  choose: (): Promise<TakeoverOpen> => call(() => stage19cCommands.chooseThunderbirdProfile()),
+  applyAccount: (token: TakeoverToken, index: number, accountId: AccountId): Promise<TakeoverApplied> =>
+    call(() => stage19cCommands.applyThunderbirdAccount(token, index, accountId)),
+  importFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId): Promise<MboxJob> =>
+    call(() => stage19cCommands.importThunderbirdFolder(token, index, mailboxId)),
+};

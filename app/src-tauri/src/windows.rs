@@ -29,6 +29,11 @@ pub(crate) const COMPOSER_WINDOW_PREFIX: &str = "composer-";
 /// message can look like one (those continue with a UUID without hyphens and a number).
 pub(crate) const EML_WINDOW_PREFIX: &str = "message-file-";
 
+/// Stage 19 (decision 0055): labels of source windows start with this. They match neither
+/// `message-*` nor `composer-*`: the capability `source-window` gives them only
+/// `core:window:allow-close`, no events and nothing else (the page reads the source once).
+pub(crate) const SOURCE_WINDOW_PREFIX: &str = "source-";
+
 /// Initial and smallest size of a message or composer window (logical pixels).
 const MESSAGE_WINDOW_SIZE: (f64, f64) = (900.0, 760.0);
 const COMPOSER_WINDOW_SIZE: (f64, f64) = (820.0, 720.0);
@@ -96,6 +101,43 @@ pub(crate) fn forget_eml_file<R: Runtime>(
         && app
             .try_state::<mail_engine::AppCore>()
             .is_some_and(|core| core.close_eml_file(file))
+}
+
+/// The label of the source window of one message: `source-<account uuid, simple>-<message id>`.
+pub fn source_window_label(account: AccountId, message: MessageId) -> String {
+    format!(
+        "{SOURCE_WINDOW_PREFIX}{}-{}",
+        account.as_uuid().simple(),
+        message.0
+    )
+}
+
+/// The page of a source window: `window=source`, `accountId`, `messageId`.
+pub fn source_window_path(account: AccountId, message: MessageId) -> String {
+    format!(
+        "index.html?window=source&accountId={}&messageId={}",
+        account.as_uuid().hyphenated(),
+        message.0
+    )
+}
+
+/// Opens the source window of one message (or focuses it), titled with the subject. Built like
+/// every window ([`guard`], [`finish`]); its capability allows closing itself and nothing else.
+pub fn open_source_window<R: Runtime>(
+    app: &AppHandle<R>,
+    account: AccountId,
+    message: MessageId,
+    subject: &str,
+    theme: Option<Theme>,
+) -> tauri::Result<WebviewWindow<R>> {
+    open_window(
+        app,
+        &source_window_label(account, message),
+        &source_window_path(account, message),
+        subject,
+        theme,
+        MESSAGE_WINDOW_SIZE,
+    )
 }
 
 /// The label of the composer window of one draft: `composer-<draft uuid>`.
@@ -341,6 +383,25 @@ mod tests {
         assert_eq!(
             eml_window_path(&file),
             "index.html?window=eml&fileId=0000000000000000000000000000feed"
+        );
+    }
+
+    #[test]
+    fn source_windows_have_their_own_label_page_and_no_layout() {
+        let (account, message) = ids();
+        let label = source_window_label(account, message);
+        assert_eq!(label, "source-6f9619ff8b864011b42d00c04fc964ff-42");
+        assert!(!label.starts_with(MESSAGE_WINDOW_PREFIX));
+        assert!(!label.starts_with(COMPOSER_WINDOW_PREFIX));
+        assert!(layout_slot(&label).is_err(), "no stored layout");
+        let base: tauri::Url = "tauri://localhost".parse().expect("base");
+        let url = base
+            .join(&source_window_path(account, message))
+            .expect("join");
+        assert_eq!(url.path(), "/index.html");
+        assert_eq!(
+            url.query(),
+            Some("window=source&accountId=6f9619ff-8b86-4011-b42d-00c04fc964ff&messageId=42")
         );
     }
 

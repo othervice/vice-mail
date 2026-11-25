@@ -1117,6 +1117,93 @@ fn message_window_opens_once_with_the_main_windows_permissions() {
     assert!(!decide(&"https://example.com/".parse().expect("url")));
 }
 
+/// Stage 19 (decision 0055): the source window under the shipped configuration: opened for a
+/// stored message, once per message, reads the source through the app's commands, may close
+/// itself and has no other permission (no events, unlike message windows).
+#[test]
+fn source_window_opens_once_and_may_only_close_itself() {
+    let dir = TempDir::new().expect("temp dir");
+    seed_account(dir.path());
+    let specta = specta_builder::<MockRuntime>();
+    let app = mock_builder()
+        .invoke_handler(specta.invoke_handler())
+        .build(context())
+        .expect("mock app with the real config");
+    let core = tauri::async_runtime::block_on(AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().to_owned(),
+            build: build_info(),
+        },
+        services(),
+    ));
+    attach_core(app.handle(), &specta, core);
+    let main = open_main_window(app.handle(), None).expect("open main window");
+    let mailboxes = invoke_from(
+        &main,
+        "list_mailboxes",
+        json!({ "accountId": SEEDED_ACCOUNT }),
+    )
+    .expect("mailboxes");
+    let inbox = mailboxes
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["path"] == "INBOX")
+        .map(|m| m["id"].clone())
+        .expect("inbox");
+    let page = invoke_from(
+        &main,
+        "list_messages",
+        json!({ "mailboxId": inbox, "cursor": null, "limit": 10 }),
+    )
+    .expect("list");
+    let message_id = page["items"][0]["id"].as_i64().expect("message id");
+    let label = windows::source_window_label(
+        SEEDED_ACCOUNT.parse().expect("id"),
+        mail_model::MessageId(message_id),
+    );
+    let args = json!({ "accountId": SEEDED_ACCOUNT, "messageId": message_id });
+    invoke_from(&main, "open_source_window", args.clone()).expect("open");
+    invoke_from(&main, "open_source_window", args).expect("again");
+    let window = app.get_webview_window(&label).expect("source window");
+    assert_eq!(app.webview_windows().len(), 2, "main and one source window");
+    assert_eq!(
+        window.url().expect("url").query(),
+        Some(format!("window=source&accountId={SEEDED_ACCOUNT}&messageId={message_id}").as_str())
+    );
+    // Another account's message: not found, no window.
+    let err = invoke_from(
+        &main,
+        "open_source_window",
+        json!({ "accountId": "6f9619ff-8b86-4011-b42d-00c04fc964ff", "messageId": message_id }),
+    )
+    .expect_err("other account");
+    assert_eq!(code_of(&err), Some("not_found"), "{err}");
+
+    let not_allowed = |r: &Result<Value, Value>| {
+        r.as_ref()
+            .err()
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.contains("not allowed"))
+    };
+    let listen = invoke_from(
+        &window,
+        "plugin:event|listen",
+        json!({ "event": CORE_EVENT_NAME, "target": { "kind": "Any" }, "handler": 7 }),
+    );
+    assert!(
+        not_allowed(&listen),
+        "no events in the source window: {listen:?}"
+    );
+    let drag = invoke_from(&window, "plugin:window|start_dragging", json!({}));
+    assert!(not_allowed(&drag), "no dragging: {drag:?}");
+    // No layout of its own.
+    let err = invoke_from(&window, "get_window_layout", json!({})).expect_err("no layout");
+    assert_eq!(code_of(&err), Some("invalid_argument"), "{err}");
+    let close = invoke_from(&window, "plugin:window|close", json!({ "label": label }));
+    assert!(!not_allowed(&close), "it may close itself: {close:?}");
+}
+
 /// Stage 7 (decision 0026): saved and recent searches through the real command handler, with
 /// the typed error codes on the wire.
 #[test]

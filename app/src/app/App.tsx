@@ -16,6 +16,8 @@ import { MessageWindow } from "../features/windows/MessageWindow";
 import { currentWindowRoute } from "../features/windows/route";
 // Stage 9 (decision 0027): an opened `.eml` file in a window of its own.
 import { EmlWindow } from "../features/eml/EmlWindow";
+// Stage 19 (decision 0055): a message's source; the window has no event permission.
+import { SourceRoot } from "../features/source/SourceWindow";
 // Stage 15 (decision 0044): the guided first start of a new installation.
 import { FirstStartGate } from "../features/first-start/FirstStartGate";
 import { AppShell } from "./AppShell";
@@ -65,6 +67,9 @@ function AppRoot() {
       return <ComposerWindow draftId={route.draftId} eventsError={eventsError} />;
     case "eml":
       return <EmlWindow fileId={route.fileId} eventsError={eventsError} />;
+    case "source":
+      // Routed by `App` before this root; it never subscribes to core events.
+      return null;
     case "invalid":
       return <InvalidWindow />;
   }
@@ -76,11 +81,13 @@ export interface AppProps {
 }
 
 export function App({ queryClient, i18n }: AppProps) {
+  const [route] = useState(currentWindowRoute);
   return (
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
         <Tooltip.Provider delayDuration={400}>
-          <AppRoot />
+          {/* Stage 19: a source window may not listen to core events (capability `source-window`). */}
+          {route.kind === "source" ? <SourceRoot accountId={route.accountId} messageId={route.messageId} /> : <AppRoot />}
         </Tooltip.Provider>
       </I18nextProvider>
     </QueryClientProvider>

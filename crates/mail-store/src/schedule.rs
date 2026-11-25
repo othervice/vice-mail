@@ -296,6 +296,7 @@ mod tests {
             archive_original: false,
             archive_missing: false,
             receipt_for: None,
+            redirect: false,
         };
         let change = f
             .store

@@ -18,6 +18,7 @@ mod calendar;
 mod capabilities;
 mod category;
 mod compose;
+mod contact_lists;
 mod contacts;
 mod diagnostics;
 mod eml;
@@ -29,6 +30,7 @@ mod inbox;
 mod ipc;
 mod mailbox;
 mod mailto;
+mod mbox;
 mod mcp;
 mod message;
 mod oauth;
@@ -43,6 +45,8 @@ mod secret;
 mod send;
 mod settings_sync;
 mod snippets;
+mod source;
+mod takeover;
 mod text;
 pub mod threading;
 mod ui;
@@ -107,6 +111,12 @@ pub use compose::{
     ReceivedReadReceipt, SendJob, SendLater, SendPhase, SendState, SentCopyMode, ServerCopy,
     UnclearDecision,
 };
+pub use contact_lists::{
+    ContactExport, ContactList, ContactListId, ContactListMember, ContactListSummary,
+    MANY_RECIPIENTS, MAX_CONTACT_LIST_MEMBERS, MAX_CONTACT_LIST_NAME_CHARS, MAX_CONTACT_LISTS,
+    MAX_VCARD_EXPORT_CONTACTS, VcardExportOutcome, VcardImportOutcome, VcardImportProblem,
+    VcardImportProblemKind, VcardImportReport, VcardVersionChoice,
+};
 pub use contacts::{
     CONTACT_PICTURE_SIZE, CONTACT_PICTURE_SOURCE_SIZE, ContactAddressInfo, ContactDuplicate,
     ContactEntry, ContactFilter, ContactKind, ContactMergeRequest, ContactMessages, ContactPage,
@@ -146,6 +156,10 @@ pub use mailbox::{
     Mailbox, MailboxRole, MailboxStatus, RemoteMailbox, RoleSource, is_selectable, leaf_name,
 };
 pub use mailto::{ComposeRequest, LinkOpened, MailtoField, MailtoNotice};
+pub use mbox::{
+    MAX_MBOX_JOB_MESSAGES, MBOX_IMPORT_WINDOW, MboxJob, MboxJobId, MboxJobKind, MboxJobState,
+    MboxStart,
+};
 pub use mcp::{
     MAX_MCP_ACCESS_PAGE, MAX_MCP_CLIENT_NAME_CHARS, MAX_MCP_CLIENTS, MCP_ACCESS_MAX_ENTRIES,
     MCP_ACCESS_RETENTION_DAYS, McpAccessEntry, McpAccessId, McpAccessOutcome, McpAccessPage,
@@ -206,6 +220,15 @@ pub use snippets::{
     MAX_TEMPLATES, SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
     TemplateInfo, TemplateInput,
+};
+pub use source::{
+    HeaderField, MAX_HEADER_FIELDS, MAX_HEADER_VALUE_CHARS, MAX_REDIRECT_RECIPIENTS,
+    MAX_SOURCE_BYTES, MessageSource, RedirectRequest,
+};
+pub use takeover::{
+    MAX_SIGNATURE_FILE_BYTES, MAX_TAKEOVER_FOLDERS, TakeoverAccount, TakeoverAccountKind,
+    TakeoverApplied, TakeoverFolder, TakeoverIdentity, TakeoverOpen, TakeoverPreview,
+    TakeoverSignature, TakeoverToken, ThunderbirdProfile,
 };
 pub use text::{is_bidi_control, strip_bidi_controls};
 pub use ui::{

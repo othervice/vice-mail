@@ -322,6 +322,7 @@ impl<C: Connector> Compose<C> {
             archive_original: false,
             archive_missing: false,
             receipt_for: Some(original_id),
+            redirect: false,
         };
         let lock = self.inner.outbox.files_lock();
         let held = lock.lock().await;

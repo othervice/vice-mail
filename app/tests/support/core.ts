@@ -15,6 +15,8 @@ import { createUiFake, type UiFakeOptions, type UiFakeState } from "./uiPrefs";
 import { createConversationFake, type ConversationFakeOptions } from "./conversations";
 // Stage 9 and 13 gaps (decision 0027): `.eml` files and messages by id.
 import { createEmlFake, type EmlFakeOptions, type EmlFakeState } from "./eml";
+// Stage 19 (decision 0055): source, all headers, redirect.
+import { createStage19Fake, type Stage19FakeOptions, type Stage19FakeState } from "./stage19";
 // Stage 16 (decision 0033): reading list, unread views, favourites, transfers, blocked senders.
 import { createParityFake, type ParityFakeOptions, type ParityFakeState } from "./parity";
 import { createParitySettingsFake, type ParitySettingsFakeOptions } from "./paritySettings";
@@ -327,6 +329,8 @@ interface FakeCoreOptions {
   ui?: UiFakeOptions;
   /** Decision 0027: opened `.eml` files and the open dialog. */
   eml?: EmlFakeOptions;
+  /** Stage 19: source window, all headers, redirect. */
+  stage19?: Stage19FakeOptions;
   /** Stage 16: reading list, unread views, favourites and colours, transfers, blocked senders. */
   parity?: ParityFakeOptions;
   /** Stage 16: the notification sounds of this system (default: macOS). */
@@ -391,6 +395,8 @@ export interface FakeCore {
   readonly ui: UiFakeState;
   /** Decision 0027: dialogs shown, attachments saved or opened, `getMessagesByIds` calls. */
   readonly eml: EmlFakeState;
+  /** Stage 19: what the source window and redirects did. */
+  readonly stage19: Stage19FakeState;
   /** Stage 16: reading list, unread views, transfers and blocked senders as the fake holds them now. */
   readonly parity: ParityFakeState;
   /** Stage 16: receipts the user sent or declined (only ever after a click). */
@@ -837,6 +843,12 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     reject: (code, detail = null) => reject(code, detail),
   });
 
+  const stage19Fake = createStage19Fake(options.stage19 ?? {}, {
+    messages: () => [...messages.values()].flat(),
+    accounts: () => accounts,
+    reject: (code, detail = null) => reject(code, detail),
+  });
+
   const uiFake = createUiFake(options.ui ?? {}, {
     accountOfMessage: (messageId) => [...messages.values()].flat().find((m) => m.id === messageId)?.accountId ?? null,
     hasDraft: (draftId) => composeFake.state.drafts.has(draftId),
@@ -1106,6 +1118,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Decision 0027: `.eml` files and messages by id.
           const emlAnswer = emlFake.handle(cmd, args);
           if (emlAnswer !== undefined) return emlAnswer;
+          // Stage 19 (decision 0055).
+          const stage19Answer = stage19Fake.handle(cmd, args);
+          if (stage19Answer !== undefined) return stage19Answer;
           // Stage 15 (decision 0037): in-app updates.
           const updatesAnswer = updatesFake.handle(cmd, args);
           if (updatesAnswer !== undefined) return updatesAnswer;
@@ -1190,6 +1205,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     ai: aiFake.state,
     ui: uiFake.state,
     eml: emlFake.state,
+    stage19: stage19Fake.state,
     parity: parityFake.state,
     receipts: parityComposeFake.state,
     attachments: attachmentsFake.state,

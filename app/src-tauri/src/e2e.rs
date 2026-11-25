@@ -172,7 +172,8 @@ pub fn install(
             e2e_native_mouse_event,
             e2e_opened,
             e2e_invoked,
-            e2e_drop_files
+            e2e_drop_files,
+            e2e_dialog_answers
         ]);
     let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
@@ -455,6 +456,28 @@ pub fn e2e_drop_files(
             },
         )
         .map_err(|err| err.to_string())
+}
+
+/// Stage 19: answers for the next file dialogs (open, save, folder), oldest first. The system's
+/// dialogs cannot be driven by WebDriver; a test queues the path the user would have chosen.
+static DIALOG_ANSWERS: Mutex<std::collections::VecDeque<PathBuf>> =
+    Mutex::new(std::collections::VecDeque::new());
+
+/// The path a test queued for the next file dialog, if any (desktop-test builds only).
+pub fn take_dialog_answer() -> Option<PathBuf> {
+    DIALOG_ANSWERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .pop_front()
+}
+
+/// Queues the answers of the next file dialogs (absolute paths), in order.
+#[tauri::command]
+pub fn e2e_dialog_answers(paths: Vec<String>) {
+    let mut answers = DIALOG_ANSWERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    answers.extend(paths.into_iter().map(PathBuf::from));
 }
 
 /// Every command name that reached the invoke handler since the app started, with its count.

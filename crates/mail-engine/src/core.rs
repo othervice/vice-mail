@@ -167,6 +167,10 @@ struct Inner<C: Connector> {
     ai: crate::ai::AiState,
     /// Stage 15 (decision 0037): in-app updates (source, state, background task).
     updates: crate::updates::UpdatesState,
+    /// Stage 19 (decision 0057): mbox exports and imports running in the background.
+    mbox: crate::mbox::MboxJobs,
+    /// Stage 19 (decision 0057): Thunderbird profiles opened for a takeover.
+    takeover: crate::takeover::TakeoverState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -351,6 +355,8 @@ impl<C: Connector> AppCore<C> {
                 settings_sync,
                 ai: crate::ai::AiState::default(),
                 updates: crate::updates::UpdatesState::default(),
+                mbox: crate::mbox::MboxJobs::default(),
+                takeover: crate::takeover::TakeoverState::default(),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -1446,6 +1452,15 @@ impl<C: Connector> AppCore<C> {
     /// Stage 15 (`crate::updates`, decision 0037).
     pub(crate) fn updates(&self) -> &crate::updates::UpdatesState {
         &self.inner.updates
+    }
+
+    /// Stage 19 (`crate::mbox`, decision 0057).
+    pub(crate) fn mbox_jobs(&self) -> &crate::mbox::MboxJobs {
+        &self.inner.mbox
+    }
+
+    pub(crate) fn takeover(&self) -> &crate::takeover::TakeoverState {
+        &self.inner.takeover
     }
 
     /// A reference that does not keep the core alive (for background tasks).

@@ -43,6 +43,9 @@ import { ComposerAttachments } from "./ComposerAttachments";
 import { MailtoNotices } from "../extras/MailtoNotices";
 import { useComposeIdentities } from "./queries";
 import { FIELD_ROW_FOCUS, RecipientField } from "./RecipientField";
+// Stage 19 (decision 0056): a group with many members suggests Bcc.
+import { MANY_RECIPIENTS } from "../../services/ipc";
+import { addAddresses, sameAddress } from "./addresses";
 import { SignatureHtml } from "./SignaturePreview";
 import { WritingHelp } from "../ai/WritingHelp";
 // Stage 16: "Send and archive" in the menu next to the send button.
@@ -127,6 +130,8 @@ function loadDraft(source: ComposerSource, language: QuoteLanguage): Promise<Dra
       return source.draft ? Promise.resolve(source.draft) : composeIpc.getDraft(source.draftId);
     case "message":
       return composeIpc.openDraftFromMessage(source.messageId);
+    case "edit_as_new":
+      return composeIpc.createDraft({ kind: "edit_as_new", messageId: source.messageId });
   }
 }
 
@@ -216,6 +221,7 @@ function Composer({ seq, source }: { seq: number; source: ComposerSource }) {
 function loadingTitle(kind: ComposerSource["kind"]): "new" | "reply" | "reply_all" | "forward" | "draft" {
   if (kind === "draft" || kind === "message") return "draft";
   if (kind === "forward_as_attachment") return "forward";
+  if (kind === "edit_as_new") return "new";
   return kind;
 }
 
@@ -327,6 +333,8 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [editorKey, setEditorKey] = useState(0);
   const [showCc, setShowCc] = useState(initial.cc.length > 0);
   const [showBcc, setShowBcc] = useState(initial.bcc.length > 0);
+  // Stage 19: the members of the group just added to To or Cc, while the hint about Bcc shows.
+  const [groupHint, setGroupHint] = useState<{ field: "to" | "cc"; members: Address[] } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<CoreError | null>(null);
   const [sendError, setSendError] = useState<CoreError | null>(null);
@@ -418,6 +426,11 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   };
   const saveNow = () => {
     if (dirty.current) void flush().catch(() => undefined);
+  };
+  // Stage 19 (decision 0056): a group chosen in a recipient field becomes its members there.
+  const addGroup = (field: "to" | "cc" | "bcc", members: Address[]) => {
+    change({ [field]: addAddresses(latest.current[field], members) });
+    if (field !== "bcc") setGroupHint({ field, members });
   };
 
   // Replaced by another composer: save and hand the draft to the server copy. Not when the
@@ -963,6 +976,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
           refused={refused}
           autoFocus={kind === "new" || kind === "forward"}
           disabled={frozen}
+          onGroup={(members) => {
+            addGroup("to", members);
+          }}
           trailing={
             <>
               {!showCc && (
@@ -1004,6 +1020,9 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             refused={refused}
             autoFocus={initial.cc.length === 0}
             disabled={frozen}
+            onGroup={(members) => {
+              addGroup("cc", members);
+            }}
             data-testid="composer-cc"
           />
         )}
@@ -1018,8 +1037,43 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
             refused={refused}
             autoFocus={initial.bcc.length === 0}
             disabled={frozen}
+            onGroup={(members) => {
+              addGroup("bcc", members);
+            }}
             data-testid="composer-bcc"
           />
+        )}
+        {groupHint && fields.to.length + fields.cc.length >= MANY_RECIPIENTS && (
+          <div className="border-b border-border-subtle px-4 py-2" data-testid="composer-bcc-hint">
+            <Notice tone="info" title={t("composer.recipients.manyTitle", { count: fields.to.length + fields.cc.length })}>
+              <p>{t("composer.recipients.manyBody")}</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={frozen}
+                  onClick={() => {
+                    const { field, members } = groupHint;
+                    const moved = (list: readonly Address[]) => list.filter((a) => !members.some((m) => sameAddress(a, m)));
+                    change(field === "to" ? { to: moved(fields.to), bcc: addAddresses(fields.bcc, members) } : { cc: moved(fields.cc), bcc: addAddresses(fields.bcc, members) });
+                    setShowBcc(true);
+                    setGroupHint(null);
+                  }}
+                  data-testid="composer-move-to-bcc"
+                >
+                  {t("composer.recipients.moveToBcc")}
+                </Button>
+                <Button
+                  variant="quiet"
+                  onClick={() => {
+                    setGroupHint(null);
+                  }}
+                  data-testid="composer-keep-recipients"
+                >
+                  {t("composer.recipients.keepRecipients")}
+                </Button>
+              </div>
+            </Notice>
+          </div>
         )}
         <div className={cx("flex items-center gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)}>
           <label htmlFor={subjectId} className="w-12 shrink-0 text-13 text-tertiary">

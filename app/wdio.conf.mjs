@@ -95,6 +95,10 @@ export const config = {
     "./tests/e2e/jmap.e2e.mjs",
     // Stage 15 (decision 0037): in-app updates against a local update server.
     "./tests/e2e/updates.e2e.mjs",
+    // Stage 19 (decisions 0055 to 0057): source, redirect (to bob), edit as new; groups, vCard,
+    // mbox into and out of Archive, the Thunderbird fixture. They append to INBOX and Archive.
+    "./tests/e2e/stage19-message-tools.e2e.mjs",
+    "./tests/e2e/stage19-contacts-folders.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

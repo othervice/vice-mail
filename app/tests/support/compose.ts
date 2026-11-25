@@ -93,6 +93,7 @@ export function makeOutgoing(overrides: Partial<OutgoingMail> = {}): OutgoingMai
     notice: null,
     archive: null,
     readReceipt: false,
+    redirect: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -186,7 +187,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
     const prepared = options.replies?.[request.messageId];
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (!prepared) return Promise.reject(composeError("not_found"));
-    const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind;
+    const kind = request.kind === "forward_as_attachment" ? "forward" : request.kind === "edit_as_new" ? "new" : request.kind;
     // Stage 16: a new reply starts with the "send and archive" setting.
     const archiveOriginal = (kind === "reply" || kind === "reply_all") && Boolean(settings.archiveOnReply);
     return store(makeDraft({ kind, originalMessageId: request.messageId, archiveOriginal, ...prepared }));
@@ -227,6 +228,7 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
       notice: null,
       archive: draft.archiveOriginal ? "waiting" : null,
       readReceipt: false,
+      redirect: false,
       createdAt: now,
       updatedAt: now,
     };

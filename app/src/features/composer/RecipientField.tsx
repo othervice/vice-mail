@@ -1,9 +1,10 @@
-import { X } from "lucide-react";
+import { UsersRound, X } from "lucide-react";
 import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
-import type { Address, ContactSuggestion } from "../../services/ipc";
+import { contactListIpc, toCoreError, type Address, type ContactListSummary, type ContactSuggestion, type CoreError } from "../../services/ipc";
 import { Avatar } from "../accounts/Avatar";
+import { useContactListSuggestions } from "../contacts/groups/queries";
 import { addAddresses, addressFull, addressLabel, looksLikeAddress, parseAddressList, sameAddress } from "./addresses";
 import { useContactSuggestions } from "./queries";
 
@@ -26,10 +27,19 @@ interface RecipientFieldProps {
   disabled?: boolean;
   /** Controls at the end of the row (e.g. "Cc", "Bcc" to show those fields). */
   trailing?: ReactNode;
+  /**
+   * Stage 19 (decision 0056): a contact group was chosen: the parent adds its members (to its
+   * newest list; they arrive from the core a moment later) and may suggest Bcc for many
+   * recipients. Without it, groups are not suggested.
+   */
+  onGroup?: (members: Address[]) => void;
   "data-testid"?: string;
 }
 
 const suggestionAddress = (s: ContactSuggestion): Address => ({ name: s.name, email: s.email });
+
+/** One entry of the suggestions: a contact group (stage 19) or a contact. */
+type Option = { kind: "group"; group: ContactListSummary } | { kind: "contact"; contact: ContactSuggestion };
 
 /**
  * Recipients as chips. Typing a comma, semicolon or Enter (or leaving the field) turns the text
@@ -47,6 +57,7 @@ export function RecipientField({
   autoFocus = false,
   disabled = false,
   trailing,
+  onGroup,
   ...rest
 }: RecipientFieldProps) {
   const { t } = useTranslation();
@@ -58,7 +69,14 @@ export function RecipientField({
   const [active, setActive] = useState(0);
   const [closed, setClosed] = useState(false);
   const suggestions = useContactSuggestions(text);
-  const options = (suggestions.data ?? []).filter((s) => !addresses.some((a) => sameAddress(a, suggestionAddress(s))));
+  const groupSuggestions = useContactListSuggestions(onGroup ? text : "");
+  const [groupError, setGroupError] = useState<CoreError | null>(null);
+  const options: Option[] = [
+    ...(onGroup ? (groupSuggestions.data ?? []).map((group): Option => ({ kind: "group", group })) : []),
+    ...(suggestions.data ?? [])
+      .filter((s) => !addresses.some((a) => sameAddress(a, suggestionAddress(s))))
+      .map((contact): Option => ({ kind: "contact", contact })),
+  ];
   const listOpen = !closed && text.trim() !== "" && options.length > 0;
   const invalid = addresses.filter((a) => !looksLikeAddress(a.email) || a.email.toLowerCase() === refused?.toLowerCase());
 
@@ -68,11 +86,23 @@ export function RecipientField({
     setText("");
     setActive(0);
   };
-  const take = (suggestion: ContactSuggestion) => {
-    onChange(addAddresses(addresses, [suggestionAddress(suggestion)]));
+  // Stage 19: a group becomes its members (the parent adds them when they arrived).
+  const takeGroup = (group: ContactListSummary) => {
+    setGroupError(null);
+    contactListIpc.get(group.id).then(
+      (list) => {
+        onGroup?.(list.members.map((m): Address => ({ name: m.name, email: m.email })));
+      },
+      (e: unknown) => {
+        setGroupError(toCoreError(e));
+      },
+    );
+  };
+  const take = (option: Option) => {
+    if (option.kind === "group") takeGroup(option.group);
+    else onChange(addAddresses(addresses, [suggestionAddress(option.contact)]));
     setText("");
     setActive(0);
-    input.current?.focus();
   };
   const remove = (address: Address) => {
     onChange(addresses.filter((a) => a !== address));
@@ -193,6 +223,11 @@ export function RecipientField({
         </li>
       </ul>
       {trailing && <div className="flex shrink-0 items-center gap-1">{trailing}</div>}
+      {groupError && (
+        <p role="alert" className="absolute inset-x-4 top-full z-10 mt-1 text-12 text-danger" data-testid="recipient-group-error">
+          {t("composer.recipients.groupFailed")}
+        </p>
+      )}
       {invalid.length > 0 && (
         <p id={invalidId} className="sr-only">
           {t("composer.recipients.invalid", { addresses: invalid.map((a) => a.email).join(", ") })}
@@ -209,7 +244,7 @@ export function RecipientField({
         {listOpen &&
           options.map((option, index) => (
             <li
-              key={option.email}
+              key={option.kind === "group" ? `group-${option.group.id}` : option.contact.email}
               id={`${listId}-${String(index)}`}
               role="option"
               aria-selected={index === Math.min(active, options.length - 1)}
@@ -219,15 +254,30 @@ export function RecipientField({
               }}
               onClick={() => {
                 take(option);
+                input.current?.focus();
               }}
               className={cx(
                 "flex cursor-default flex-col px-3 py-1",
                 index === Math.min(active, options.length - 1) ? "bg-selected" : "hover:bg-hover",
               )}
-              data-testid="recipient-suggestion"
+              data-testid={option.kind === "group" ? "recipient-group-suggestion" : "recipient-suggestion"}
             >
-              <span className="truncate text-13 text-primary">{option.name ?? option.email}</span>
-              {option.name && <span className="truncate text-12 text-secondary">{option.email}</span>}
+              {option.kind === "group" ? (
+                <>
+                  <span className="flex min-w-0 items-center gap-1 truncate text-13 text-primary">
+                    <UsersRound aria-hidden className="size-(--ui-icon-small) shrink-0 text-secondary" strokeWidth={1.75} />
+                    <span className="truncate">{option.group.name}</span>
+                  </span>
+                  <span className="truncate text-12 text-secondary">
+                    {t("composer.recipients.groupMembers", { count: option.group.memberCount })}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="truncate text-13 text-primary">{option.contact.name ?? option.contact.email}</span>
+                  {option.contact.name && <span className="truncate text-12 text-secondary">{option.contact.email}</span>}
+                </>
+              )}
             </li>
           ))}
       </ul>

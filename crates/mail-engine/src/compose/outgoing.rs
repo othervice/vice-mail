@@ -45,8 +45,8 @@ pub(crate) fn outgoing_mail(op: &StoredOperation, now: i64) -> Option<OutgoingMa
     Some(OutgoingMail {
         operation_id: op.id,
         account_id: op.account,
-        // A read receipt (stage 16) has no draft.
-        draft_id: (state != SendState::Sent && job.receipt_for.is_none())
+        // A read receipt (stage 16) and a redirect (stage 19) have no draft.
+        draft_id: (state != SendState::Sent && job.receipt_for.is_none() && !job.redirect)
             .then(|| job.draft.clone()),
         subject: job.subject.clone(),
         to: job.to.clone(),
@@ -63,6 +63,7 @@ pub(crate) fn outgoing_mail(op: &StoredOperation, now: i64) -> Option<OutgoingMa
             _ => ArchiveAfterSend::Waiting,
         }),
         read_receipt: job.receipt_for.is_some(),
+        redirect: job.redirect,
         created_at: op.created_at,
         updated_at: op.updated_at,
     })

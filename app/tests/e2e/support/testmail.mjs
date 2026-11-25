@@ -86,6 +86,9 @@ export const deleteServerFolders = (folders) => helper("delete-folders", ...fold
 /** SHA-256 and size of every attachment of an .eml file, decoded by Python's email package. */
 export const attachmentDigests = (file) => helper("attachments", file);
 
+/** Stage 19: the message in bob's INBOX whose subject contains `mark` (redirect test). */
+export const bobMessage = (mark) => helper("bob-message", mark);
+
 /** Copies every seed message whose X-Vicemail-Seed starts with `prefix` into a new `folder`. */
 export const copySeedMessages = (prefix, folder) => helper("copy-seed", prefix, folder);
 

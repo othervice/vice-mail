@@ -16,6 +16,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - New folders from the app: "New folder…" on an account and "New subfolder…" on a folder (menus
   and command palette) create the folder on the server too. "Reload folders from server" on an
   account shows folders another program created without waiting for the next sync.
+- View the source of a message in a window of its own (Cmd/Ctrl+U): the raw message as plain
+  text, very large messages cut with "Save as .eml" for the whole. "Show all headers" lists every
+  header field under the message head.
+- Redirect a message: it goes unchanged to new recipients with `Resent-*` header fields, through
+  the outbox with the undo delay. Only for accounts that allow changes.
+- Edit as new: a new draft with the recipients, subject, text and attachments of a message, also
+  from Sent, without the reply reference.
+- Contact groups on the contacts page: create, rename, add and remove members. The composer
+  suggests groups and expands them into their members, and suggests Bcc for many recipients.
+  Groups travel with the settings sync.
+- vCard import and export (`.vcf`, 3.0 and 4.0): single contacts, groups or everything. The
+  import merges duplicates; pictures are checked and encoded again in the isolated helper.
+- Export a folder as an mbox file, and import an mbox file into a folder through the outbox, with
+  progress and cancel.
+- Import from Thunderbird: choose a profile, see its accounts, addresses, signatures and local
+  folders, and take over what you pick. Passwords are never read; accounts go through the normal
+  setup and start read-only.
 
 ### Changed
 

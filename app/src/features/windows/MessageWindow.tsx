@@ -20,6 +20,7 @@ import { useAppInfo } from "../app-info/queries";
 import { SnoozePicker } from "../comfort/SnoozePicker";
 import { ComposerHost } from "../composer/Composer";
 import { SendNotices } from "../composer/SendNotices";
+import { RedirectHost } from "../redirect/RedirectDialog";
 import { useMailboxes } from "../mailboxes/queries";
 import { useMailboxLabel } from "../mail/MailView";
 import type { MessageListHandle } from "../messages/MessageList";
@@ -215,6 +216,7 @@ export function MessageWindow({ accountId, messageId, eventsError }: MessageWind
       </main>
       <Notices />
       <SendNotices />
+      <RedirectHost />
     </div>
   );
 }

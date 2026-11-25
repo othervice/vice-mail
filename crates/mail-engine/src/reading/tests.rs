@@ -100,7 +100,7 @@ impl Harness {
         }
     }
 
-    async fn add(&mut self) -> AccountId {
+    pub(super) async fn add(&mut self) -> AccountId {
         let id = self
             .core
             .add_account(settings(), Secret::new(PASSWORD.into()))
@@ -129,7 +129,7 @@ impl Harness {
         }
     }
 
-    async fn inbox(&self, account: AccountId) -> MailboxId {
+    pub(super) async fn inbox(&self, account: AccountId) -> MailboxId {
         self.core
             .list_mailboxes(account)
             .await
@@ -140,7 +140,7 @@ impl Harness {
             .id
     }
 
-    async fn items(&self, mailbox: MailboxId) -> Vec<MessageListItem> {
+    pub(super) async fn items(&self, mailbox: MailboxId) -> Vec<MessageListItem> {
         self.core
             .list_messages(mailbox, None, 500)
             .await
@@ -149,7 +149,11 @@ impl Harness {
     }
 
     /// Opens a message whose body is not stored and waits until it is.
-    async fn open_fetched(&mut self, message: MessageId, format: BodyFormat) -> MessageView {
+    pub(super) async fn open_fetched(
+        &mut self,
+        message: MessageId,
+        format: BodyFormat,
+    ) -> MessageView {
         let first = self.core.get_message(message, format).await.expect("get");
         if first.body != MessageBody::Loading {
             return first;

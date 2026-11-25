@@ -48,6 +48,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0019_folder_changes.sql")),
     // Stage 17, block B: every address a contact, kinds, notes, pictures (decision 0050).
     M::up(include_str!("../migrations/0020_contacts_view.sql")),
+    // Stage 19, block C: contact groups, synchronised (decision 0056). 0021 belongs to stage 20
+    // and comes before this one once both are merged.
+    M::up(include_str!("../migrations/0022_contact_lists.sql")),
 ];
 
 /// All migrations this build knows.

@@ -41,6 +41,7 @@ mod categories;
 mod comfort_api;
 mod compose;
 mod compose_api;
+mod contact_lists;
 mod contacts;
 mod contacts_dir;
 mod contacts_view;
@@ -51,6 +52,7 @@ mod folders;
 mod fts;
 mod gmail;
 mod groups;
+mod imports;
 mod inbox;
 mod jmap;
 mod lists;
@@ -91,6 +93,7 @@ pub use compose_api::{
     ContactSource, DraftContent, MAX_DRAFTS_PAGE, NewDraftRow, ReceivedReceipt, StoredContact,
     StoredDraft,
 };
+pub use contact_lists::{ListSummary, NewListMember, StoredContactList, StoredListMember};
 pub use contacts::MAX_SEARCH_WORDS;
 pub use contacts_dir::{
     ContactCursor, MAX_CONTACT_ROWS, MergeOutcome, SeparateOutcome, StoredContactGroup,
@@ -102,6 +105,7 @@ pub use error::StoreError;
 pub use folders::MAX_FOLDER_NAME_CHARS;
 pub use fts::{BodyText, BodyTextSource, MAX_BODY_TEXT_BYTES};
 pub use groups::MailboxName;
+pub use imports::ImportItem;
 pub use inbox::{ArrivedMessage, InboxListKind};
 pub use mail_api::{
     MAX_PAGE_SIZE, MailboxBaseline, MailboxListReport, MailboxSyncState, NewAccount, StoreReport,

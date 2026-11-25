@@ -148,6 +148,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `contact` | one row per address: key, spelling, counter, last used, rank (REAL with index), names, `user_name`, folded search words, `contact_group` for merged contacts (0016, 0018, 0023); from stage 17 (0050) `seen`/`last_seen` (copied, Reply-To), `personal`, `kind` (person, list, system) and the user's `note` | Cache; name, merging and note sync |
 | `contact_picture` | stage 17 (0050): the picture the user chose for a contact, per normalised address: `image` (JPEG, 256 × 256 px, at most 40 KiB, written by the helper), `display` (the JPEG this device's helper wrote; for a synced picture `NULL` until then), `revision` | sync (`image` only) |
 | `contact_dismissed` | rejected duplicate pairs (stage 10, 0023) | Device |
+| `contact_list`, `contact_list_member` | stage 19 (0056): contact groups: UUID, name, folded name words; members by normalised address key with the address as added, the name given with it and their order (at most 500 groups, 1,000 members each). Members need no contact row | sync (kind `contactList`) |
 | `signature` | pool of all signatures: name, editor HTML, text, small images (Base64, sent as `cid:`) (stage 10, 0023) | sync |
 | `template`, `rule`, `saved_view` | as named; `template` with subject and editor HTML with placeholders (0023), from stage 16 with To/CC/BCC for prefilling (0033); `rule` are the local rules (conditions and actions as JSON, order); `saved_view` are the saved searches of the bar: UUID, name, query in the search language (searches in all accounts), position (stage 7, 0026) | sync |
 | `recent_search` | recent searches of this device: query, last used; at most 10 (stage 7, 0026) | Device |
@@ -320,6 +321,18 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   `Mailbox/set`); the folder list is read right after. `reloadFolders(account)` asks the
   account's sync for a full pass now (folder list included; not connected: a reconnect), so
   folders made by other programs show without waiting for the 3-minute poll.
+- From stage 19 (0055), **redirecting:** the original's bytes with a `Resent-Date/-From/-To/-Cc/
+  -Message-ID` block in front (`Bcc`, `Delivered-To` and `Return-Path` of the original dropped,
+  no `Resent-Bcc`), from one of the account's identities, as a `send` without a draft
+  (`SendJob.redirect`) after the undo delay; `cancel_redirect` undoes it within the delay. No copy
+  in Sent; `$Forwarded` on the original once accepted. Only with write access.
+- From stage 19 (0057), **importing an mbox file:** every message is an `append` of the target
+  account (`AppendSource::Transfer` without a source to remove, frozen bytes, flags from Thunderbird's
+  `X-Mozilla-Status` or `Status`/`X-Status`, else seen), recorded as `copy`. A message without
+  Message-ID gets one in front (`<random>@mbox-import.invalid`) so the crash check can find it. The
+  file is read line by line on the blocking pool, one message at a time (at most 64 MiB); at most 50
+  appends wait at once. Background job with `mboxJobChanged` and cancel (the waiting appends leave the
+  outbox). Only with write access, checked before anything is read.
 - From 2026-11-24 (alignment with SPEC), **renaming and deleting folders:** only the user's own folders (without
   a role), only with write access, one change per folder at a time; deleting only without subfolders
   and with a confirmation that names the mails stored here. `rename_mailbox` and
@@ -587,6 +600,13 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   rank "Alternate", Mail stays the default; on Windows the installer enters the association).
   Files arrive via `RunEvent::Opened` (macOS), launch arguments and the second launch
   (`tauri-plugin-single-instance`, Windows) or the core's open dialog.
+- The source window of a message (stage 19, 0055): label `source-<account>-<message>`, page
+  `index.html?window=source&…`, built through `windows::guard`/`finish` like every window. Its own
+  capability `source-window` grants only `core:window:allow-close`: no events, no dragging, no
+  plugin. The page reads its preferences once and shows the raw message as one text node (control
+  and direction characters as visible symbols, at most 1 MiB, "Save as .eml" for the whole).
+- Desktop-test builds only: `e2e_dialog_answers` queues the paths the next file dialogs return
+  (stage 19), since WebDriver cannot drive the system's dialogs.
 
 **Secrets**
 - Passwords, tokens and API keys only in the system keychain. A type `Secret<T>` prevents
@@ -642,6 +662,19 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   as long as their window is open (at most 16 files). They are displayed via the same
   pipeline as HTML from mails (sanitising, mandatory CSP, sandbox frame, link placeholders with
   their own render token, attachments via the core).
+
+**Thunderbird takeover (stage 19, 0057)**
+- The core reads only `profiles.ini`, the chosen profile's `prefs.js` (at most 16 MiB), the
+  signature files its identities name (at most 64 KiB, text) and the mbox files under "Local Folders"
+  (no links followed). It never opens `logins.json` or `key4.db`; no password is read. The parsed
+  profile stays in memory under a random token; the UI sees no path. Accounts go through the normal
+  setup (password typed by the user, read-only start); a plain connection in Thunderbird becomes
+  STARTTLS.
+
+**vCard (stage 19, 0056)**
+- Read and written by the app's own reader in `mail-content` (no new dependency). Pictures only
+  from embedded bytes (never links), PNG/JPEG/GIF/WebP by their bytes, decoded and encoded again in
+  the helper like a chosen contact picture (centre square, 256 × 256 JPEG).
 
 **Contact pictures (stage 17, 0050)**
 - The user picks a file in the core's system dialog or drops it on the window (only paths the
@@ -790,6 +823,7 @@ what only the app knows, and uses the mailbox itself as storage for it.
 | Pinned attachments | per attachment (account UUID, Message-ID, index) the newer version wins (stage 16, 0036) |
 | Folder settings (favourite, colour), blocked senders | per folder (account UUID and path) or address respectively the newer version wins (stage 16, 0033) |
 | Sender rules, image approvals, contact names and notes, contact pictures, devices | per key the newer version wins; contact pictures (stage 17, 0050) as their own kind `contactPicture`, shown only after this device's helper encoded them again |
+| Contact groups (stage 19, 0056) | per group the newer version wins; editing beats simultaneous deletion; the receiving device checks name, search words and member keys before applying |
 | Identities, signatures (separate record per identity), account groups | like signatures |
 | Account list | per field the newer version wins; a removed account is not silently deleted on other devices, instead the user is asked; other servers (host, port, security, user name) for an existing account are not taken over but wait for the user (0040); the protocol (field `protocol`, only for JMAP accounts) and the kind of sign-in (field `signIn`, only with an API token) apply only when an account is adopted, never to an existing one (0041) |
 
@@ -913,7 +947,8 @@ the current binding, so a change takes effect immediately. Rules (`app/src/featu
   that are never available at the same time (Delete/Delete permanently, Junk/Not junk).
 - **Default:** e archives, # deletes, r/a/f reply and forward, c composes, / and
   Cmd/Ctrl+F search, j/k and arrows move, Enter opens, Esc closes, Cmd/Ctrl+K opens the
-  command palette, ? the overview, Cmd/Ctrl+1 to 8 the views of the icon bar. On layouts on
+  command palette, ? the overview, Cmd/Ctrl+1 to 8 the views of the icon bar, Cmd/Ctrl+U the
+  source of the message (stage 19). On layouts on
   which digits need Shift (AZERTY), Cmd/Ctrl+Shift+digit applies, because Shift does not count
   for characters.
 

@@ -54,6 +54,10 @@ export function refreshContacts(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["contacts"] });
   void queryClient.invalidateQueries({ queryKey: ["contact"] });
   void queryClient.invalidateQueries({ queryKey: ["contactPictures"] });
+  // Stage 19 (decision 0056): contact groups and the composer's group suggestions.
+  void queryClient.invalidateQueries({ queryKey: ["contactLists"] });
+  void queryClient.invalidateQueries({ queryKey: ["contactList"] });
+  void queryClient.invalidateQueries({ queryKey: ["contactListSuggestions"] });
 }
 
 /** Stage 17: names, notes, pictures, merges or spam marks changed (any window, any device). */

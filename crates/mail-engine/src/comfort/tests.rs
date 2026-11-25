@@ -1278,6 +1278,7 @@ async fn failed_sends_are_announced_once() {
         notice: None,
         archive: None,
         read_receipt: false,
+        redirect: false,
         created_at: 0,
         updated_at: 0,
     };

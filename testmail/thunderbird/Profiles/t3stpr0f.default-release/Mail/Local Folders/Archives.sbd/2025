@@ -1,0 +1,28 @@
+From - Mon Jan 06 08:00:00 2025
+X-Mozilla-Status: 0001
+X-Mozilla-Status2: 00000000
+Message-ID: <tb-archive-1@vicemail.test>
+Date: Mon, 06 Jan 2025 08:00:00 +0000
+From: Frank Example <frank@vicemail.test>
+To: Alice Example <alice@vicemail.test>
+Subject: TB archive 1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+The first archived message.
+
+From - Tue Feb 11 17:45:00 2025
+X-Mozilla-Status: 0003
+X-Mozilla-Status2: 00000000
+Message-ID: <tb-archive-2@vicemail.test>
+Date: Tue, 11 Feb 2025 17:45:00 +0000
+From: Grace Example <grace@vicemail.test>
+To: Alice Example <alice@vicemail.test>
+Subject: TB archive 2
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+The second archived message: read and replied.
+

@@ -171,7 +171,10 @@ pub struct ReadingPreferences {
 ///   to date, available, download progress, ready, installing, failed). The setting itself
 ///   comes back from the command that changed it; reload `getUpdateInfo` for the rest.
 /// - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
-///   changed (here or by the settings sync). Reload the contacts and the picture list.
+///   changed (here or by the settings sync). Reload the contacts and the picture list. Since
+///   stage 19 (decision 0056) also contact groups and vCard imports.
+/// - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
+///   finished, was cancelled or failed; carries the whole job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -295,6 +298,10 @@ pub enum CoreEvent {
     /// Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
     /// here or from another device. Reload the contacts and their pictures.
     ContactsChanged,
+    /// Stage 19 (decision 0057): an mbox job changed.
+    MboxJobChanged {
+        job: crate::MboxJob,
+    },
 }
 
 #[cfg(test)]
