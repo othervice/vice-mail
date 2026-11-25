@@ -355,8 +355,10 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
 
   const itemClass = (entry: { disabled?: boolean | undefined }) =>
     cx(
-      "flex h-8 w-full shrink-0 items-center gap-3 rounded-control px-2 text-start text-13 outline-none transition-colors",
-      "focus:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring",
+      "flex h-8 w-full shrink-0 items-center gap-3 rounded-control px-2 text-start text-13 transition-colors",
+      // Keyboard focus shows as the hover does, plus the ring inside (the menu scrolls, an outer
+      // ring would be cut); a menu opened with the mouse shows no focused item.
+      "hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring",
       entry.disabled ? "cursor-default text-secondary" : "text-primary",
     );
 
@@ -508,9 +510,9 @@ function MenuLayer({ depth, anchor, label, id, iconRow, entries, path, setPath, 
                     choose(entry);
                   }}
                   className={cx(
-                    "flex size-8 shrink-0 items-center justify-center rounded-control outline-none transition-colors",
-                    "focus:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring",
-                    entry.disabled ? "cursor-default text-secondary" : "text-secondary hover:text-primary focus:text-primary",
+                    "flex size-8 shrink-0 items-center justify-center rounded-control transition-colors",
+                    "hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring",
+                    entry.disabled ? "cursor-default text-secondary" : "text-secondary hover:text-primary focus-visible:text-primary",
                   )}
                 >
                   {Icon && <Icon aria-hidden className={cx("size-(--ui-icon)", entry.disabled && "opacity-50")} strokeWidth={1.75} />}

@@ -7,6 +7,7 @@ import { ContextMenu, placeMenu, type MenuCloseReason, type MenuEntry } from "..
 import type { MailAction, MessageListItem, ThemePreference } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
 import { makeAccount, makeMailbox, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
+import { focusRingReport } from "./support/focusRing";
 import { optionName } from "./support/names";
 import { renderApp } from "./support/render";
 
@@ -476,6 +477,17 @@ describe("the context menu of messages", () => {
     await waitFor(() => {
       expect(useUiStore.getState().view).toEqual({ kind: "settings", section: "accounts" });
     });
+  });
+
+  it("shows the focus ring on every entry of the menu and its submenu", async () => {
+    const { user } = setup();
+    const listbox = await list();
+    const menu = await rightClick(row(listbox, "Message 2"));
+    await user.click(within(menu).getByRole("menuitem", { name: "Move to" }));
+    await screen.findByRole("menu", { name: "Move to" });
+    const report = await focusRingReport(document.querySelector("[data-context-menu]") as HTMLElement);
+    expect(report.findings).toEqual([]);
+    expect(report.checked).toBeGreaterThan(20);
   });
 
   for (const theme of ["light", "dark"] as const) {
