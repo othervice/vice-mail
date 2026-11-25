@@ -180,13 +180,13 @@ function PalettePanel({ platform }: CommandPaletteProps) {
           </div>
         )}
         <div id={listId} role="listbox" aria-label={t("palette.list")} className="min-h-0 flex-1 overflow-y-auto p-2">
-          {flat.length === 0 && <p className="px-2 py-3 text-13 text-secondary">{t("palette.empty")}</p>}
+          {flat.length === 0 && <p className="px-3 py-3 text-13 text-secondary">{t("palette.empty")}</p>}
           {sections.map((section) => (
             <div key={section.id} role="group" aria-labelledby={`${id}-group-${section.id}`} className="flex flex-col">
               <div
                 id={`${id}-group-${section.id}`}
                 role="presentation"
-                className="px-2 pt-2 pb-1 text-12 font-medium text-secondary"
+                className="px-3 pt-2 pb-1 text-12 font-medium text-secondary"
               >
                 {t(`palette.groups.${section.id}`)}
               </div>

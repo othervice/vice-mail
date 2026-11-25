@@ -99,7 +99,8 @@ export function QuotaBlock({ account }: { account: Account }) {
         <h3 className="text-14 font-semibold text-primary">{t("settings.accounts.detail.quota.title")}</h3>
       </div>
       {body}
-      <div>
+      {/* Stage 21 (decision 0071): alone under the text, the quiet button starts on its edge. */}
+      <div className="-ms-3">
         <Button
           variant="quiet"
           disabled={checking}
