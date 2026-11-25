@@ -12,8 +12,9 @@
 //! scripts/testmail.sh stop && scripts/testmail.sh unlock stage16
 //! ```
 //!
-//! Uses folders `VmTransferCore-<pid>` in both accounts (alice's seed stays untouched) with
-//! messages `<...@transfer-core.test>` it appends itself; both are removed before and after.
+//! Uses folders `VmTransferCore-<pid>` in both accounts and `VmCopyCore-<pid>-a`/`-b` in alice's
+//! (her seed stays untouched) with messages `<...@transfer-core.test>` it appends itself; all are
+//! removed before and after.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -101,8 +102,14 @@ async fn subjects(admin: &mut ImapBackend, folder: &str) -> Vec<String> {
 }
 
 async fn clean(admin: &mut ImapBackend) {
+    clean_prefixed(admin, "VmTransferCore-").await;
+}
+
+/// Removes the folders whose names start with `prefix`, with their messages. Each test has its
+/// own prefix: the tests of this file run at the same time.
+async fn clean_prefixed(admin: &mut ImapBackend, prefix: &str) {
     for remote in admin.list_mailboxes().await.expect("list") {
-        if remote.name.starts_with("VmTransferCore-") {
+        if remote.name.starts_with(prefix) {
             if let Ok(opened) = admin.open_mailbox(&remote.name).await {
                 let uids = admin.search_uids(&opened).await.expect("search");
                 if !uids.is_empty() {
@@ -274,4 +281,118 @@ async fn a_move_to_another_account_through_the_core_appends_then_removes_the_sou
     clean(&mut bob).await;
     alice.logout().await.ok();
     bob.logout().await.ok();
+}
+
+/// Stage 21 (decision 0064): "Copy to" another folder of the same account takes the transfer's
+/// way: the copy is appended there through the outbox, the original stays where it was.
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_copy_within_the_account_appends_to_the_other_folder_and_keeps_the_source() {
+    let env = TestEnv::require();
+    let folder = format!("VmCopyCore-{}-a", std::process::id());
+    let other = format!("VmCopyCore-{}-b", std::process::id());
+    let subject = format!("Copy within the account {}", std::process::id());
+    let mut alice = admin(&env, &env.alice).await;
+    clean_prefixed(&mut alice, "VmCopyCore-").await;
+    raw(&mut alice, &format!("CREATE \"{folder}\"")).await;
+    raw(&mut alice, &format!("CREATE \"{other}\"")).await;
+    let body = format!(
+        "From: Writer <writer@{DOMAIN}>\r\nTo: alice@vicemail.test\r\nSubject: {subject}\r\n\
+         Date: Mon, 02 Nov 2026 10:00:00 +0000\r\nMessage-ID: <core-copy-1@{DOMAIN}>\r\n\r\nCopied.\r\n"
+    );
+    raw(
+        &mut alice,
+        &format!("APPEND \"{folder}\" (\\Seen) {{{}+}}\r\n{body}", body.len()),
+    )
+    .await;
+
+    let dir = TempDir::new().expect("temp dir");
+    let mut services = CoreServices::with_connector(
+        Credentials::new(Arc::new(MemorySecretStore::new())),
+        ImapConnector::new(),
+    );
+    services.sync = sync_config(&env);
+    let core = AppCore::start(
+        CoreConfig {
+            data_dir: dir.path().join("data"),
+            build: BuildInfo {
+                version: "0.0.0".into(),
+                commit: None,
+                build_date: None,
+            },
+        },
+        services,
+    )
+    .await;
+    let account = core
+        .add_account(settings(&env, &env.alice), env.alice.password.clone())
+        .await
+        .expect("account")
+        .id;
+    idle(&core, account).await;
+    core.set_writes_enabled(account, true)
+        .await
+        .expect("writes");
+    let folder_named = |name: String| {
+        let core = core.clone();
+        async move {
+            core.list_mailboxes(account)
+                .await
+                .ok()?
+                .into_iter()
+                .find(|m| m.path == name)
+        }
+    };
+    let source = until("the source folder", || folder_named(folder.clone())).await;
+    let target = until("the target folder", || folder_named(other.clone())).await;
+    let item = until("the message in the source folder", || async {
+        core.list_messages(source.id, None, 10)
+            .await
+            .ok()?
+            .items
+            .into_iter()
+            .find(|i| i.subject == subject)
+    })
+    .await;
+
+    let result = core
+        .transfer_messages(
+            vec![MessageRef {
+                mailbox_id: source.id,
+                message_id: item.id,
+            }],
+            target.id,
+            TransferMode::Copy,
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .await
+        .expect("copy within the account");
+    assert_eq!(result.queued, 1);
+    until("copied on the server", || async {
+        let mut session = admin(&env, &env.alice).await;
+        let (a, b) = (
+            subjects(&mut session, &folder).await,
+            subjects(&mut session, &other).await,
+        );
+        session.logout().await.ok();
+        (a == [subject.clone()] && b == [subject.clone()]).then_some(())
+    })
+    .await;
+    // Moving within the account stays an ordinary move.
+    let err = core
+        .transfer_messages(
+            vec![MessageRef {
+                mailbox_id: source.id,
+                message_id: item.id,
+            }],
+            target.id,
+            TransferMode::Move,
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .await
+        .expect_err("a move within the account");
+    assert_eq!(err.code(), mail_model::ErrorCode::InvalidArgument);
+    core.shutdown().await;
+    clean_prefixed(&mut alice, "VmCopyCore-").await;
+    alice.logout().await.ok();
 }

@@ -22,6 +22,8 @@
   gesperrte Einträge, Ziel und Auswahl, Umschalt+F10, Löschen mit Rückgängig, Verschieben, Kopieren
   im Konto, Schlagwörter, .eml, Drucken, Später, nur lesend, axe hell und dunkel),
   `stage16_tests::a_copy_within_the_account_is_an_append_to_the_other_folder_that_leaves_the_source`,
+  `mail-engine/tests/transfer.rs` (gegen den Testserver: die Kopie liegt in beiden Ordnern, ein
+  Verschieben im Konto wird abgelehnt),
   Desktop `context-menu.e2e.mjs` (echter Rechtsklick über `e2e_native_mouse_event`, Art
   `rightClick`)
 
