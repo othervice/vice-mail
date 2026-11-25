@@ -10,7 +10,8 @@
 //! - **Hidden content**: title "New message" (the UI's text) and no body. The lock-screen
 //!   preview itself is the system's choice (macOS: "Show previews"; Windows: notifications on
 //!   the lock screen); the app cannot tell the system which notification is private.
-//! - Quiet hours drop notifications (they are not delivered later).
+//! - Quiet hours drop notifications (they are not delivered later), and so does a pause (stage 21,
+//!   decision 0069: [`crate::AppCore::pause_notifications`]), checked by the callers.
 //! - **Sound** (stage 16): each notification carries the sound the settings choose for its
 //!   account on this platform (`NotificationSound::for_account`), or none (sounds off, a
 //!   silent account). No notification, no sound: quiet hours and muted accounts drop both.

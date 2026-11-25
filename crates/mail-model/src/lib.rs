@@ -21,6 +21,7 @@ mod category;
 mod compose;
 mod contact_lists;
 mod contacts;
+mod desktop;
 mod diagnostics;
 mod eml;
 mod error;
@@ -132,6 +133,10 @@ pub use contacts::{
     MAX_CONTACT_MESSAGES, MAX_CONTACT_NOTE_CHARS, MAX_CONTACT_PAGE, MAX_CONTACT_PICTURE_BYTES,
     MAX_CONTACT_PICTURE_FILE_BYTES, MAX_DUPLICATE_SCAN, PictureCrop, SpamMailCount, SpamMark,
     SpamMove, SpamUndo, SpamUndone,
+};
+pub use desktop::{
+    Autostart, BackgroundSettings, DesktopTexts, LocalTime, NotificationPause,
+    PAUSE_UNTIL_TOMORROW_HOUR, PauseNotifications,
 };
 pub use diagnostics::{DiagnosticsError, DiagnosticsExportResult};
 pub use eml::{

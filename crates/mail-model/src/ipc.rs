@@ -198,6 +198,8 @@ const fn default_on() -> bool {
 ///   stage 19 (decision 0056) also contact groups and vCard imports.
 /// - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
 ///   finished, was cancelled or failed; carries the whole job.
+/// - `notificationPauseChanged` (stage 21, decision 0069): notifications were paused or resumed
+///   (tray menu or Settings); carries the pause as it is now.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -324,6 +326,9 @@ pub enum CoreEvent {
     /// Stage 19 (decision 0057): an mbox job changed.
     MboxJobChanged {
         job: crate::MboxJob,
+    },
+    NotificationPauseChanged {
+        pause: crate::NotificationPause,
     },
 }
 

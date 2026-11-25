@@ -1084,6 +1084,8 @@ impl<C: Connector> AppCore<C> {
         let settings = self.get_notification_settings().await?;
         let texts = lock(&self.comfort().texts).clone();
         let minute = time::minute_of_day(now, &self.comfort().zone());
+        // Stage 21: the snoozes come back either way; a pause only keeps them quiet.
+        let paused = self.notifications_paused().await;
         let mut accounts = HashSet::new();
         for r in &returned {
             accounts.insert(r.snooze.key.account);
@@ -1111,7 +1113,8 @@ impl<C: Connector> AppCore<C> {
                 inbox,
                 message,
                 &subject,
-            ) {
+            ) && !paused
+            {
                 self.notify(n);
             }
         }
@@ -1347,6 +1350,11 @@ impl<C: Connector> AppCore<C> {
                 account_id: Some(arrival.account),
             });
         }
+        // Stage 21 (decision 0069): paused notifications drop new mail like quiet hours do.
+        if self.notifications_paused().await {
+            tracing::debug!("notifications paused: new mail not announced");
+            return Ok(());
+        }
         let settings = self.get_notification_settings().await?;
         let texts = lock(&self.comfort().texts).clone();
         let minute = time::minute_of_day(self.now_ms(), &self.comfort().zone());
@@ -1509,6 +1517,9 @@ impl<C: Connector> AppCore<C> {
         let Ok(settings) = self.get_notification_settings().await else {
             return;
         };
+        if self.notifications_paused().await {
+            return;
+        }
         let texts = lock(&self.comfort().texts).clone();
         let minute = time::minute_of_day(self.now_ms(), &self.comfort().zone());
         if let Some(n) = notify::send_failed(&settings, &texts, minute, account, subject) {

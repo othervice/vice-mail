@@ -2385,6 +2385,8 @@ export type ConversationSummary = {
  *    stage 19 (decision 0056) also contact groups and vCard imports.
  *  - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
  *    finished, was cancelled or failed; carries the whole job.
+ *  - `notificationPauseChanged` (stage 21, decision 0069): notifications were paused or resumed
+ *    (tray menu or Settings); carries the pause as it is now.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | 
 /**
@@ -2421,7 +2423,7 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  */
 { type: "contactsChanged" } | 
 /**  Stage 19 (decision 0057): an mbox job changed. */
-{ type: "mboxJobChanged"; job: MboxJob };
+{ type: "mboxJobChanged"; job: MboxJob } | { type: "notificationPauseChanged"; pause: NotificationPause };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -3271,6 +3273,14 @@ export type ListViewRequest = {
 	filter?: QuickFilter,
 };
 
+/**  A local time of day, for the shell's tray menu ("Paused until 14:30"). */
+export type LocalTime = {
+	hour: number,
+	minute: number,
+	/**  The time is on a later day than now ("tomorrow 08:00"). */
+	laterDay: boolean,
+};
+
 /**  What the user asks for. One action on many messages is one batch ([`BatchId`]). */
 export type MailAction = { type: "markRead" } | { type: "markUnread" } | { type: "flag" } | { type: "unflag" } | { type: "addKeyword"; keyword: string } | { type: "removeKeyword"; keyword: string } | 
 /**
@@ -4076,6 +4086,21 @@ export type NewMailStyle =
  *  messages of one sync are one notification.
  */
 "system";
+
+/**
+ *  Whether notifications are paused. While paused, new mail shows neither the popup nor a
+ *  notification and plays no sound, as in quiet hours; nothing is shown later. The counter in
+ *  the Dock, on the taskbar and on the tray icon goes on.
+ */
+export type NotificationPause = {
+	/**  Milliseconds since the epoch; `None` when not paused (or the pause is over). */
+	until: number | null,
+	/**
+	 *  Local wall-clock time of `until` (hour, minute) and whether it is on a later day than now,
+	 *  for the tray menu, which the shell builds without the UI.
+	 */
+	localTime: LocalTime | null,
+};
 
 /**  Notification settings (device settings). */
 export type NotificationSettings = {
