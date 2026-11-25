@@ -776,6 +776,17 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
   // the cache, so repeating one would measure the cache. After the memory measurement, so the
   // numbers above stay comparable with earlier runs.
   it("sorts and filters the inbox (stage 19)", async () => {
+    // Run alone (`--mochaOpts.grep "stage 19"`), no earlier test has started an app of its own.
+    if (!current) {
+      const binary = path.join(dataDir(), "perf-bin", "mail-app");
+      if (!fs.existsSync(binary)) {
+        fs.mkdirSync(path.dirname(binary), { recursive: true });
+        perfPy("copy", APP, binary);
+      }
+      await startMarks(launch(binary, "stage19"));
+      await attachBrowser();
+      await sleep(3000);
+    }
     const unified = { kind: "unified", view: { kind: "all" } };
     const none = { unread: false, flagged: false, attachment: false, contacts: false, tag: null, text: "", monthFirst: false };
     const first = async (scope, order, filter, conversations) => {
@@ -789,6 +800,28 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
       await $('[data-testid="list-view-menu-menu"]').waitForExist({ timeout: 5000 });
     };
     const results = { sort: {}, filter: {}, count: {} };
+    // Opened messages stay unread meanwhile: the counts must not move under the measurement.
+    const reading = await coreCall("get_reading_preferences");
+    await coreCall("set_reading_preferences", { preferences: { ...reading, markReadOnOpen: "never" } });
+    // Since stage 18 F the list opens its top message, and a filter keeps the open message in its
+    // place (stage 16): the selection goes first, so the first row is the filter's.
+    const clearSelection = async () => {
+      await browser.execute(() => {
+        const list = document.querySelector('[data-testid="message-list"]');
+        list?.focus();
+        list?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      });
+      await sleep(500);
+    };
+    /** What the bar and the first rows say, for a step that timed out. */
+    const shown = () =>
+      browser.execute(() => ({
+        count: document.querySelector('[data-testid="quick-filter-count"]')?.textContent ?? null,
+        first: [...document.querySelectorAll('[data-testid="message-list"] [role="option"], [data-testid="message-list"] [role="treeitem"]')]
+          .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+          .slice(0, 3)
+          .map((el) => el.id),
+      }));
     const conversations = (await coreCall("get_ui_preferences")).conversations;
     for (const [where, scope, viewKey, convs] of [
       ["unified", unified, "unified:all", conversations],
@@ -796,6 +829,16 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
     ]) {
       let currentScope = scope;
       let currentKey = viewKey;
+      if (where === "unified") {
+        // All inboxes, whatever view the app opened with (the header's inbox switcher).
+        if (!(await $('[data-testid="unified-inbox"]').isExisting())) {
+          await browser.execute(() => document.querySelector('[data-testid="inbox-scope"]')?.click());
+          await $('[data-testid="inbox-scope-all"]').waitForExist({ timeout: 10000 });
+          await browser.execute(() => document.querySelector('[data-testid="inbox-scope-all"]')?.click());
+          await $('[data-testid="unified-inbox"]').waitForExist({ timeout: 10000 });
+          await sleep(2000);
+        }
+      }
       if (where === "alice inbox") {
         const inbox = (await coreCall("list_mailboxes", { accountId: alice.id })).find((m) => m.role === "inbox");
         currentScope = { kind: "mailbox", mailboxId: inbox.id };
@@ -837,8 +880,10 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
         results.sort[`${where}: ${key} ${ascending ? "asc" : "desc"}`] = flat(result, "rows");
         await sleep(1000);
       }
+      // Back to newest first through the menu (the window keeps the orders it has read): the
+      // key is date already, so the direction.
       await openMenu();
-      await $('[data-testid="sort-key-date"]').click();
+      await $('[data-testid="sort-descending"]').click();
       await sleep(1500);
       await coreCall("set_list_order", { view: currentKey, order: null });
       for (const [name, filter, selector] of [
@@ -850,9 +895,11 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
         const count = await coreCall("count_list_view", { request: { scope: currentScope, order: { key: "date", ascending: false }, filter } });
         const until = [{ name: "count", kind: "count", text: String(count) }];
         if (id !== null) until.push({ name: "rows", kind: "firstRow", id });
+        await clearSelection();
         const result = await measure({ trigger: { kind: "clickSelector", selector: `[data-testid="${selector}"]` }, until, timeoutMs: 20000 });
         results.filter[`${where}: ${name}`] = id !== null ? flat(result, "rows") : null;
         results.count[`${where}: ${name} (${String(count)})`] = flat(result, "count");
+        if (result.timedOut.length > 0) (results.shown ??= {})[`${where}: ${name}`] = { expected: id, count, ...(await shown()) };
         await sleep(1000);
       }
       await $('[data-testid="quick-filter-reset"]').click();
@@ -861,6 +908,7 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
         const filter = { ...none, text };
         const id = await first(currentScope, { key: "date", ascending: false }, filter, convs);
         const count = await coreCall("count_list_view", { request: { scope: currentScope, order: { key: "date", ascending: false }, filter } });
+        await clearSelection();
         const result = await measure({
           trigger: { kind: "filterType", text, intervalMs: 80 },
           until: [
@@ -871,11 +919,13 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
         });
         results.filter[`${where}: typing ${text} (incl. 150 ms pause)`] = id !== null ? flat(result, "rows") : null;
         results.count[`${where}: typing ${text} (${String(count)})`] = flat(result, "count");
+        if (result.timedOut.length > 0) (results.shown ??= {})[`${where}: typing ${text}`] = { expected: id, count, ...(await shown()) };
         await $('[data-testid="quick-filter-reset"]').click();
         await sleep(1500);
       }
     }
     if (conversations) await coreCall("set_ui_preferences", { preferences: { ...(await coreCall("get_ui_preferences")), conversations: true } });
+    await coreCall("set_reading_preferences", { preferences: reading });
     report.stage19 = results;
     console.log(`stage 19: ${JSON.stringify(results)}`);
   });

@@ -857,3 +857,52 @@ BENCH_MESSAGES=100000 cargo test -p mail-store --release --lib bench_migration -
   prüft auch sortierte Seiten (100 ms), Gespräche (300 ms), Filter und Zahl (je 300 ms).
 - **Ungeprüft:** 500.000 Mails für die Seiten und Filter im Kern (nur die Migration ist bei 500.000
   gemessen), Windows.
+
+### Desktop-App mit 100.000 Mails (25.11.2026)
+
+**Wie gemessen:** `app/tests/e2e/perf.e2e.mjs`, neuer Teil „sorts and filters the inbox (stage 19)“,
+allein (`--mochaOpts.grep "stage 19"`, er startet die App dann selbst) mit dem Release-Build des
+Testzugangs (`CI=true pnpm --dir app tauri build --no-bundle --features e2e --config
+src-tauri/tauri.e2e.conf.json`, Stand nach dem Zusammenführen mit `6492fa7`):
+
+```text
+PERF=1 PERF_SEED=100000 E2E_APP=<Release-Binary> scripts/e2e-gui.sh --spec ./tests/e2e/perf.e2e.mjs --mochaOpts.grep "stage 19"
+```
+
+Daten wie im Abschnitt „Desktop-App“ (alice 99.959 Mails im Posteingang, bob 23), Last 2–3,
+Bildschirm gesperrt (Seite über `keep-rendering.m` sichtbar). Gemessen vom Klick (Menüeintrag,
+Schalter der Leiste) bzw. vom letzten Zeichen bis die erste Zeile der neuen Reihenfolge oder des
+Filters gezeichnet ist und die Leiste die Zahl des Kerns zeigt. Jede Reihenfolge und jeder Filter
+einmal (ein zweites Mal käme die Liste aus dem Zwischenspeicher der Oberfläche); vor jedem Filter
+wird die Auswahl aufgehoben (seit Stufe 18 F öffnet die Liste ihre oberste Mail, und ein Filter
+lässt die geöffnete Mail an ihrem Platz). Werte aus dem letzten von drei Läufen, in Klammern die
+Spanne aller drei (die ersten beiden lagen für den „vereinten“ Teil versehentlich im Posteingang
+von alice).
+
+| ms bis gezeichnet | Vereinter Posteingang (2 Konten, Gespräche) | Posteingang alice (Mails) |
+|---|---:|---:|
+| nach Absender A–Z | 28 | 31 (28–39) |
+| nach Absender Z–A | 33 | 43 (25–43) |
+| nach Betreff A–Z | 26 | 41 (28–41) |
+| nach Größe, größte zuerst | 33 | 39 (32–39) |
+| Datum, älteste zuerst | 43 | 41 (23–41) |
+| Schnellfilter Ungelesen: Zeilen / Zahl | 14 / 34 | 39 / 39 |
+| … + Mit Anhang | 77 / 77 | – / 78 |
+| … + Markiert | 52 / 52 | 48 / 48 |
+| Text beim Tippen `rechnung` (ab letztem Zeichen, 150 ms Pause eingerechnet): Zeilen / Zahl | 274 / 224 | 227 / 227 (227–234) |
+| Text beim Tippen `budget` | 312 / 222 | 219 / 219 (213–223) |
+
+- **Sortieren und die Schalter** zeigen das Ergebnis in 14–78 ms: Ziel „sichtbare Reaktion unter
+  100 ms“ erfüllt. Die Zahl der Treffer steht gleichzeitig mit den Zeilen da oder kurz danach.
+- **Text:** 213–312 ms ab dem letzten Zeichen, davon 150 ms bewusste Pause (wie in der Suche,
+  `TYPING_DELAY_MS`); nach der Pause 63–162 ms, im vereinten Posteingang als Gespräche am
+  längsten. Die Suche brauchte in der Desktop-Messung vom 24.11.2026 beim Tippen 175–185 ms
+  (eine Liste von Treffern ohne Gespräche). Das Ziel „Suche bis erste Treffer unter 200 ms“ verfehlt der
+  Schnellfilter, wenn man die Pause mitzählt (wie bei der Suche war es dort schon knapp).
+  Nächster Schritt: die Pause des Filters auf 100 ms und die erste Seite kleiner (50 statt 200
+  Zeilen) laden, wie die Suche.
+- „Ungelesen“ allein im vereinten Posteingang: 14 ms, weil die oberste Zeile schon die neueste
+  ungelesene war (nur das Neuzeichnen). „Ungelesen + Mit Anhang“ in alices Posteingang: Zeilen nicht
+  gemessen (die zuvor geöffnete Mail blieb trotz Escape oben stehen), die Zahl in 78 ms.
+- **Ungeprüft:** 500.000 Mails auf dem Desktop, Windows, Retina-Bildschirm, die Tabellenansicht
+  (gleiche Abfragen, anderes Zeichnen; gemessen ist nur die Zeilenansicht).
