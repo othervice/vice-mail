@@ -91,6 +91,8 @@ export const config = {
     // Stage 18, block C (decision 0051): the new-mail popup. It delivers messages of its own,
     // deletes one into the trash and turns writes on for alice, then removes the account.
     "./tests/e2e/new-mail-popup.e2e.mjs",
+    // Stage 21: closing the main window keeps the app running (after the popup spec).
+    "./tests/e2e/background.e2e.mjs",
     // Stage 18, task D: folders created in the app on the server, and the server's folders
     // reloaded without a restart. Creates folders on the server and removes them again.
     "./tests/e2e/folders.e2e.mjs",

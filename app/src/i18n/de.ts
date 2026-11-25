@@ -4289,6 +4289,66 @@ export const de: Translation = {
     announceMany: "{{count}} neue Nachrichten",
     failed: "Hat nicht geklappt: {{reason}}",
   },
+  // Stufe 21 (Entscheidungen 0069, 0070): Weiterlaufen im Hintergrund, Pause, Start mit dem
+  // System, der einmalige Hinweis beim Schließen und das Menü des Symbols (baut die Shell:
+  // `{product}`, `{count}` und `{time}` setzt sie ein).
+  desktop: {
+    background: {
+      title: "Im Hintergrund",
+      keepRunning: {
+        label: "Weiterlaufen, wenn das Fenster geschlossen wird",
+        macos: "Mails kommen weiter an, neue Mails zeigen weiter Popup und Mitteilungen. {{product}} bleibt im Dock; beenden mit ⌘Q oder über das Symbol in der Menüleiste.",
+        windows: "Mails kommen weiter an, neue Mails zeigen weiter Popup und Mitteilungen. {{product}} bleibt im Infobereich; beenden über sein Symbol dort.",
+      },
+      menuBarIcon: {
+        label: "Symbol in der Menüleiste zeigen",
+        description: "Mit der Zahl ungelesener Mails und einem Menü, um {{product}} zu öffnen, eine Mail zu schreiben, Mitteilungen zu pausieren oder zu beenden.",
+      },
+      trayNote: "Solange {{product}} läuft, zeigt sein Symbol im Infobereich die Zahl ungelesener Mails. Ein Klick öffnet das Fenster, die rechte Maustaste ein Menü zum Schreiben, Pausieren der Mitteilungen und Beenden.",
+      autostart: {
+        label: "Mit dem System starten",
+        description: "Bei der Anmeldung startet {{product}} im Hintergrund, ohne Fenster, und ruft Mails ab.",
+        unavailable: "Nur die installierte App kann mit dem System starten.",
+        failed: "Ob {{product}} mit dem System startet, konnte nicht geändert werden.",
+      },
+      loadFailed: "Die Einstellungen für den Hintergrund konnten nicht gelesen werden.",
+      saveFailed: "Die Einstellung konnte nicht gespeichert werden.",
+    },
+    pause: {
+      title: "Mitteilungen pausieren",
+      description: "Während der Pause zeigen neue Mails kein Popup und keine Mitteilung und spielen keinen Ton; nichts wird nachgeholt. Der Zähler bleibt.",
+      hour: "Für 1 Stunde",
+      tomorrow: "Bis morgen früh",
+      pausedUntil: "Pausiert bis {{time}}",
+      pausedUntilTomorrow: "Pausiert bis morgen, {{time}}",
+      resume: "Fortsetzen",
+      loadFailed: "Ob Mitteilungen pausiert sind, konnte nicht gelesen werden.",
+      failed: "Mitteilungen konnten nicht pausiert oder fortgesetzt werden.",
+    },
+    closeHint: {
+      title: "{{product}} läuft weiter",
+      macos: "Das Fenster schließt sich, aber {{product}} ruft weiter Mails ab und zeigt neue Mails an. Über das Dock oder das Symbol in der Menüleiste öffnest du es wieder. Zum Beenden ⌘Q drücken oder im Menü des Symbols „Beenden“ wählen.",
+      windows: "Das Fenster schließt sich, aber {{product}} ruft im Hintergrund weiter Mails ab und zeigt neue Mails an. Über sein Symbol im Infobereich öffnest du es wieder. Zum Beenden mit der rechten Maustaste auf das Symbol klicken und „Beenden“ wählen.",
+      settings: "Das lässt sich unter Einstellungen → Allgemein ändern.",
+      keepRunning: "Weiterlaufen",
+      quit: "{{product}} beenden",
+      cancel: "Abbrechen",
+      failed: "Das Fenster konnte nicht geschlossen werden.",
+    },
+    tray: {
+      open: "{product} öffnen",
+      newMessage: "Neue Nachricht",
+      pause: "Mitteilungen pausieren",
+      pauseHour: "Für 1 Stunde",
+      pauseTomorrow: "Bis morgen",
+      resume: "Mitteilungen fortsetzen",
+      pausedUntil: "Pausiert bis {time}",
+      pausedUntilTomorrow: "Pausiert bis morgen, {time}",
+      quit: "{product} beenden",
+      tooltip: "{product}",
+      tooltipUnread: "{product}: {count} ungelesen",
+    },
+  },
   // Stufe 19 (Entscheidung 0055): Quelltext-Fenster, alle Kopfzeilen, Umleiten.
   source: {
     title: "Quelltext",

@@ -20,6 +20,8 @@ import { EmlWindow } from "../features/eml/EmlWindow";
 import { SourceRoot } from "../features/source/SourceWindow";
 // Stage 15 (decision 0044): the guided first start of a new installation.
 import { FirstStartGate } from "../features/first-start/FirstStartGate";
+// Stage 21 (decision 0069): the one-time note when the main window is first closed.
+import { CloseHintHost } from "../features/desktop/CloseHint";
 import { AppShell } from "./AppShell";
 import { useCoreEvents } from "./useCoreEvents";
 
@@ -57,9 +59,13 @@ function AppRoot() {
   switch (route.kind) {
     case "main":
       return (
-        <FirstStartGate eventsError={eventsError}>
-          <AppShell eventsError={eventsError} />
-        </FirstStartGate>
+        <>
+          <FirstStartGate eventsError={eventsError}>
+            <AppShell eventsError={eventsError} />
+          </FirstStartGate>
+          {/* Outside the gate: the window can be closed during the first start too. */}
+          <CloseHintHost />
+        </>
       );
     case "message":
       return <MessageWindow accountId={route.accountId} messageId={route.messageId} eventsError={eventsError} />;

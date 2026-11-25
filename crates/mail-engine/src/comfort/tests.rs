@@ -1260,6 +1260,68 @@ async fn notifications_follow_the_settings() {
         .await;
 }
 
+/// Stage 21 (decision 0069): a pause drops new mail like quiet hours (no popup, no
+/// notification, nothing later); after it the next mail is announced again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_pause_keeps_new_mail_quiet_until_it_ends() {
+    let mut h = Harness::new(FakeServer::new()).await;
+    // The popup (the default style).
+    let pause = h
+        .core
+        .pause_notifications(mail_model::PauseNotifications::OneHour)
+        .await
+        .expect("pause");
+    assert!(pause.until.is_some());
+    h.deliver(PERSON).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(h.sink.popups().is_empty(), "no popup while paused");
+    // System notifications too.
+    h.core
+        .set_notification_settings(system_style())
+        .await
+        .expect("system notifications");
+    h.deliver(URGENT).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(h.sink.shown().is_empty(), "no notification while paused");
+
+    // The hour is over: announced again, and nothing from the pause comes late.
+    h.clock.advance(3_600_000);
+    assert_eq!(
+        h.core.notification_pause().await.expect("pause"),
+        mail_model::NotificationPause::default()
+    );
+    h.deliver(GITHUB).await;
+    let mut person2 = PERSON.to_vec();
+    person2.extend_from_slice(b"again\r\n");
+    h.deliver(&person2).await;
+    eventually("announced after the pause", || async {
+        !h.sink.shown().is_empty()
+    })
+    .await;
+    assert!(
+        h.sink.shown().iter().all(|n| n.body != "URGENT: contract"),
+        "the mail of the pause stays unannounced: {:?}",
+        h.sink.shown()
+    );
+
+    // Resumed early.
+    h.core
+        .pause_notifications(mail_model::PauseNotifications::UntilTomorrow)
+        .await
+        .expect("pause");
+    h.core
+        .pause_notifications(mail_model::PauseNotifications::Resume)
+        .await
+        .expect("resume");
+    let before = h.sink.shown().len();
+    h.deliver(b"From: Eve <eve@x.example>\r\nSubject: After\r\n\r\nx\r\n")
+        .await;
+    eventually("announced after resume", || async {
+        h.sink.shown().len() > before
+    })
+    .await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn failed_sends_are_announced_once() {
     let h = Harness::new(FakeServer::new()).await;

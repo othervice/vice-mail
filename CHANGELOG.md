@@ -25,6 +25,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Copy to another folder of the same account (through the outbox, like copies between accounts).
 - The quick actions on hover now also show in All inboxes and in search results, acting with each
   message's own account; read-only accounts show them disabled with the reason.
+- Vice Mail keeps running when its window is closed: mail keeps arriving, new mail still shows
+  the popup and notifications, and the count stays current. The first close explains once how to
+  quit. Closing frees the window's web view; Dock, menu-bar icon, notification-area icon, starting
+  the app again, a notification or "Read" in the popup open the window again where it was.
+  Settings → General can switch this off.
+- An icon in the menu bar (macOS, can be hidden) or the notification area (Windows) with the
+  number of unread messages and a menu: Open, New Message, Pause Notifications, Quit.
+- Pause notifications for an hour or until tomorrow morning, from that menu or Settings →
+  Notifications; new mail stays quiet meanwhile and is not announced later.
+- "Start with the system" (Settings → General, off by default): the app starts in the background
+  at login, without a window.
 
 ### Changed
 
@@ -40,6 +51,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Message rows no longer keep an empty column left of the picture: the selection box takes the
   picture's place on hover and while several messages are selected, and the unread dot sits
   narrowly before the picture.
+- The logo is blue now, in the GitHub blues of the app's colour scheme (same shapes); app icon,
+  Dock and taskbar icons, installer and disk-image icons, wordmark and the artwork in the app.
+- Sharper icons and counter on Windows: the number on the taskbar button is drawn for the
+  display's scale (16 to 40 px) with pixel-exact digits ("99+" above 99), and the window's
+  taskbar icon uses the icon's own drawing of that size. The macOS Dock badge stays current while
+  no window is open.
 
 ### Fixed
 

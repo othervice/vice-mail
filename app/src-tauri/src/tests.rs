@@ -282,7 +282,7 @@ fn shipped_config_window_and_capabilities() {
         "without stored preferences the frame follows the system"
     );
     attach_core(app.handle(), &specta, core);
-    open_main_window(app.handle(), theme).expect("open main window");
+    open_main_window(app.handle(), theme, true).expect("open main window");
     let window = app.get_webview_window(MAIN_WINDOW).expect("main window");
 
     assert!(invoke_from(&window, "get_app_info", json!({})).is_ok());
@@ -1026,7 +1026,7 @@ fn message_window_opens_once_with_the_main_windows_permissions() {
         services(),
     ));
     attach_core(app.handle(), &specta, core);
-    let main = open_main_window(app.handle(), None).expect("open main window");
+    let main = open_main_window(app.handle(), None, true).expect("open main window");
 
     let mailboxes = invoke_from(
         &main,
@@ -1218,7 +1218,7 @@ fn source_window_opens_once_and_may_only_close_itself() {
         services(),
     ));
     attach_core(app.handle(), &specta, core);
-    let main = open_main_window(app.handle(), None).expect("open main window");
+    let main = open_main_window(app.handle(), None, true).expect("open main window");
     let mailboxes = invoke_from(
         &main,
         "list_mailboxes",
@@ -1344,7 +1344,7 @@ fn eml_files_open_in_message_windows_and_messages_come_by_id() {
         services(),
     ));
     attach_core(app.handle(), &specta, core);
-    let main = open_main_window(app.handle(), None).expect("open main window");
+    let main = open_main_window(app.handle(), None, true).expect("open main window");
 
     let files = TempDir::new().expect("files");
     let good = files.path().join("Letter.eml");
@@ -1593,7 +1593,7 @@ fn the_popup_window_may_only_call_its_own_commands() {
         services(),
     ));
     attach_core(app.handle(), &specta, core);
-    let main = open_main_window(app.handle(), None).expect("open main window");
+    let main = open_main_window(app.handle(), None, true).expect("open main window");
     let popup = WebviewWindowBuilder::new(
         &app,
         popup::POPUP_WINDOW,
@@ -1711,4 +1711,76 @@ fn core_events_skip_the_popup() {
     assert!(!events::hears_core_events(&EventTarget::labeled(
         popup::POPUP_WINDOW
     )));
+}
+
+/// Stage 21 (decision 0069): a request for the main window that arrives while its page loads
+/// waits, and reaches the page once it says that it listens; then requests go straight through.
+#[test]
+fn requests_wait_for_the_main_window_s_page() {
+    let h = harness(|_| {});
+    h.app.manage(lifecycle::Lifecycle::new(
+        mail_model::BackgroundSettings::default(),
+        false,
+    ));
+    lifecycle::follow_main_window(h.app.handle(), &h.window);
+    let (tx, rx) = mpsc::channel::<Value>();
+    h.app.listen_any(CORE_EVENT_NAME, move |event| {
+        let payload: Value = serde_json::from_str(event.payload()).expect("JSON payload");
+        if payload["type"] == "composeRequested" {
+            let _ = tx.send(payload);
+        }
+    });
+    let core = h.app.state::<AppCore>();
+    core.compose_new();
+    assert!(
+        rx.recv_timeout(Duration::from_millis(500)).is_err(),
+        "the page does not listen yet: the request waits"
+    );
+    invoke(&h, "main_window_ready", json!({})).expect("ready");
+    let held = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the waiting request");
+    assert_eq!(held["request"]["to"], json!([]));
+    core.compose_new();
+    rx.recv_timeout(Duration::from_secs(5))
+        .expect("straight through now");
+}
+
+/// Stage 21: only the main window may close itself into the background through the command.
+#[test]
+fn only_the_main_window_answers_the_close_note() {
+    let h = harness(|_| {});
+    let other = WebviewWindowBuilder::new(&h.app, "message-x-1", Default::default())
+        .build()
+        .expect("window");
+    let request = InvokeRequest {
+        cmd: "close_main_window".into(),
+        callback: CallbackFn(0),
+        error: CallbackFn(1),
+        url: if cfg!(windows) {
+            "http://tauri.localhost"
+        } else {
+            "tauri://localhost"
+        }
+        .parse()
+        .expect("url"),
+        body: InvokeBody::Json(json!({ "quit": false })),
+        headers: Default::default(),
+        invoke_key: INVOKE_KEY.to_string(),
+    };
+    let err = get_ipc_response(&other, request).expect_err("refused");
+    assert_eq!(err["code"], "invalid_argument");
+    // The background settings and the pause cross the bridge with their defaults.
+    assert_eq!(
+        invoke(&h, "get_background_settings", json!({})).expect("settings"),
+        json!({ "keepRunning": true, "menuBarIcon": true })
+    );
+    assert_eq!(
+        invoke(&h, "get_notification_pause", json!({})).expect("pause"),
+        json!({ "until": null, "localTime": null })
+    );
+    let paused = invoke(&h, "pause_notifications", json!({ "choice": "oneHour" })).expect("pause");
+    assert!(paused["until"].is_number());
+    let autostart = invoke(&h, "get_autostart", json!({})).expect("autostart");
+    assert_eq!(autostart, json!({ "enabled": false, "available": false }));
 }

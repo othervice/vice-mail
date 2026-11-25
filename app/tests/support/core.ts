@@ -31,6 +31,8 @@ import { createUpdatesFake, type UpdatesFakeOptions, type UpdatesFakeState } fro
 import { createFirstStartFake, type FirstStartFakeOptions, type FirstStartFakeState } from "./firstStart";
 // Stage 14 (decision 0042): sign-in with Microsoft and Google.
 import { createOAuthFake, type OAuthFakeOptions, type OAuthFakeState } from "./oauth";
+// Stage 21 (decisions 0069, 0070): running in the background, the pause, the login item.
+import { createDesktopFake, type DesktopFakeOptions, type DesktopFakeState } from "./desktop";
 import {
   MAX_ACTION_MESSAGES,
   type ActionKind,
@@ -365,6 +367,8 @@ interface FakeCoreOptions {
   firstStart?: FirstStartFakeOptions;
   /** Stage 14 (decision 0042): sign-in with Microsoft and Google (default: not in this build). */
   oauth?: OAuthFakeOptions;
+  /** Stage 21: keep running, the pause, the login item (default: keep running, not registered). */
+  desktop?: DesktopFakeOptions;
 }
 
 export interface FakeCore {
@@ -427,6 +431,8 @@ export interface FakeCore {
   readonly firstStart: FirstStartFakeState;
   /** Stage 14 (decision 0042): sign-ins the UI started. */
   readonly oauth: OAuthFakeState;
+  /** Stage 21: background settings, the pause, the login item, tray texts and close answers. */
+  readonly desktop: DesktopFakeState;
 }
 
 /**
@@ -946,6 +952,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   });
 
   const updatesFake = createUpdatesFake(options.updates ?? {}, { reject: (code) => reject(code) });
+  const desktopFake = createDesktopFake(options.desktop ?? {}, { reject: (code) => reject(code) });
   // Stage 15 (decision 0044): the guided first start.
   const firstStartFake = createFirstStartFake(options.firstStart ?? {}, { accounts: () => accounts });
   // Stage 14 (decision 0042): the account appears read-only, like one added with a password.
@@ -1193,6 +1200,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
           // Stage 14 (decision 0042): sign-in with Microsoft and Google.
           const oauthAnswer = oauthFake.handle(cmd, args);
           if (oauthAnswer !== undefined) return oauthAnswer;
+          // Stage 21 (decisions 0069, 0070).
+          const desktopAnswer = desktopFake.handle(cmd, args);
+          if (desktopAnswer !== undefined) return desktopAnswer;
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject(`command ${cmd} not found`);
         }
@@ -1276,5 +1286,6 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     updates: updatesFake.state,
     firstStart: firstStartFake.state,
     oauth: oauthFake.state,
+    desktop: desktopFake.state,
   };
 }

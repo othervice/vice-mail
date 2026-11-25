@@ -118,6 +118,9 @@ const READING_COMMANDS = new Set([
   "list_blocked_senders",
   // Stage 17 (decision 0050): which senders have a contact picture (read-only, local).
   "list_contact_pictures",
+  // Stage 21 (decision 0069): the tray menu's texts (local) and "the page listens" (no mail).
+  "set_desktop_texts",
+  "main_window_ready",
   "plugin:event|listen",
   "plugin:event|unlisten",
 ]);

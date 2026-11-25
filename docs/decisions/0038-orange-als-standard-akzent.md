@@ -32,3 +32,8 @@ Eine Zeile: der Standardwert von `UiPreferences.accentTheme` (bzw. der Rückfall
 
 Standard-Akzent ist seit Entscheidung 0053 Blau; Orange bleibt wählbar, eine gespeicherte Wahl
 bleibt. Das Logo ist unverändert.
+
+## Nachtrag 25.11.2026
+
+Seit Entscheidung 0068 ist auch das Logo blau (vom Menschen freigegeben); Orange ist keine
+Markenfarbe mehr, bleibt aber als Akzent-Thema wählbar.

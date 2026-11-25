@@ -888,10 +888,38 @@ export const commands = {
 	 *  window (`invalid_argument` from any other).
 	 */
 	fitNewMailPopup: (height: number | null, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("fit_new_mail_popup", { height }, options)),
+	/**  Whether closing the main window keeps the app running, and the macOS menu-bar icon. */
+	getBackgroundSettings: (options?: InvokeOptions) => typedError<BackgroundSettings, IpcError>(__TAURI_INVOKE("get_background_settings", undefined, options)),
+	/**  Stores them; the shell follows at once (the next close, the menu-bar icon). */
+	setBackgroundSettings: (settings: BackgroundSettings, options?: InvokeOptions) => typedError<BackgroundSettings, IpcError>(__TAURI_INVOKE("set_background_settings", { settings }, options)),
+	/**  Whether the app starts with the system, as the system has it. */
+	getAutostart: (options?: InvokeOptions) => __TAURI_INVOKE<Autostart>("get_autostart", undefined, options),
+	/**
+	 *  Registers or removes the login item; `invalid_argument` where this build cannot register
+	 *  itself (a development build), `internal` when the system refuses.
+	 */
+	setAutostart: (enabled: boolean, options?: InvokeOptions) => typedError<Autostart, IpcError>(__TAURI_INVOKE("set_autostart", { enabled }, options)),
+	/**  Whether notifications are paused, and until when. */
+	getNotificationPause: (options?: InvokeOptions) => typedError<NotificationPause, IpcError>(__TAURI_INVOKE("get_notification_pause", undefined, options)),
+	/**  Pauses for an hour or until tomorrow 08:00, or resumes (`notificationPauseChanged`). */
+	pauseNotifications: (choice: PauseNotifications, options?: InvokeOptions) => typedError<NotificationPause, IpcError>(__TAURI_INVOKE("pause_notifications", { choice }, options)),
+	/**  The tray menu's texts in the UI's language; kept for a start in the background. */
+	setDesktopTexts: (texts: DesktopTexts, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("set_desktop_texts", { texts }, options)),
+	/**
+	 *  The main window's page listens to core events now: the requests that waited for it
+	 *  (`openMessageRequested`, `openInboxRequested`, `composeRequested`) follow. Other windows: no-op.
+	 */
+	mainWindowReady: (options?: InvokeOptions) => __TAURI_INVOKE<void>("main_window_ready", undefined, options),
+	/**
+	 *  The answer to the one-time note (`closeToBackgroundAsked`): the main window goes into the
+	 *  background (`quit` false) or the app quits. Only from the main window.
+	 */
+	closeMainWindow: (quit: boolean, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("close_main_window", { quit }, options)),
 };
 
 /** Events */
 export const events = {
+	closeToBackgroundAsked: makeEvent<CloseToBackgroundAsked, CloseToBackgroundAsked>("close-to-background-asked"),
 	coreEvent: makeEvent<CoreEvent, CoreEvent>("core-event"),
 	newMailPopupChanged: makeEvent<NewMailPopup, NewMailPopup>("new-mail-popup-changed"),
 };
@@ -1654,6 +1682,16 @@ export type AttendeeRole = "chair" |
 /**  `NON-PARTICIPANT` (for information only). */
 "non_participant";
 
+/**
+ *  "Start with the system": whether the app is registered to start at login, and whether this
+ *  build can register itself (development and test builds use a registration of their own or
+ *  none; see decision 0070).
+ */
+export type Autostart = {
+	enabled: boolean,
+	available: boolean,
+};
+
 /**  A newer version announced by the update manifest. */
 export type AvailableUpdate = {
 	version: string,
@@ -1661,6 +1699,21 @@ export type AvailableUpdate = {
 	notes: string | null,
 	/**  Publication date, RFC 3339, if the manifest has one. */
 	pubDate: string | null,
+};
+
+/**  What closing the main window does, and whether macOS shows the menu-bar icon. */
+export type BackgroundSettings = {
+	/**
+	 *  Closing the main window keeps the app running: sync, the new-mail popup and
+	 *  notifications go on; the window's web view is closed until it is opened again. Off: the
+	 *  app quits with its last window, as before stage 21.
+	 */
+	keepRunning?: boolean,
+	/**
+	 *  macOS: the icon in the menu bar. Windows always shows its icon in the notification area
+	 *  while the app runs (it is the way back to a closed window).
+	 */
+	menuBarIcon?: boolean,
 };
 
 /**  What the Dock (macOS) or taskbar (Windows) icon counts. */
@@ -2011,6 +2064,12 @@ export type CleanedPaste = {
 	/**  Colours, fonts, sizes, tables or headings were simplified. */
 	formattingSimplified: boolean,
 };
+
+/**
+ *  Stage 21: closing the main window keeps the app running; the page explains it once. Sent to
+ *  the main window only, which then asks for `close_main_window`.
+ */
+export type CloseToBackgroundAsked = null;
 
 /**
  *  Stage 17: one view of the column's "Views" section (and of the rail), in the user's order,
@@ -2399,6 +2458,8 @@ export type ConversationSummary = {
  *    stage 19 (decision 0056) also contact groups and vCard imports.
  *  - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
  *    finished, was cancelled or failed; carries the whole job.
+ *  - `notificationPauseChanged` (stage 21, decision 0069): notifications were paused or resumed
+ *    (tray menu or Settings); carries the pause as it is now.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | 
 /**
@@ -2435,7 +2496,7 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  */
 { type: "contactsChanged" } | 
 /**  Stage 19 (decision 0057): an mbox job changed. */
-{ type: "mboxJobChanged"; job: MboxJob };
+{ type: "mboxJobChanged"; job: MboxJob } | { type: "notificationPauseChanged"; pause: NotificationPause };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -2501,6 +2562,33 @@ export type DefaultMailAppOutcome =
 
 /**  Row height of the list: comfortable (default) or compact. */
 export type Density = "comfortable" | "compact";
+
+/**
+ *  The texts of the tray icon's menu and tooltip in the UI's language. The UI sends them at start
+ *  and after a language change (`setDesktopTexts`); the core keeps the last ones on this device,
+ *  so an app started in the background (without the UI) has them too. Until then the English
+ *  defaults apply. `{product}` is replaced by the product name, `{count}` by a number, `{time}`
+ *  by a time of day.
+ */
+export type DesktopTexts = {
+	open?: string,
+	newMessage?: string,
+	pause?: string,
+	pauseHour?: string,
+	pauseTomorrow?: string,
+	resume?: string,
+	/**  "Paused until {time}" (a menu entry that cannot be chosen). */
+	pausedUntil?: string,
+	/**  "Paused until tomorrow, {time}". */
+	pausedUntilTomorrow?: string,
+	quit?: string,
+	/**  Tooltip without unread mail: "{product}". */
+	tooltip?: string,
+	/**  Tooltip with unread mail: "{product}: {count} unread". */
+	tooltipUnread?: string,
+	/**  The UI's clock: 12-hour ("2:30 PM") or 24-hour ("14:30"). */
+	hour12?: boolean,
+};
 
 /**  Result of `exportDiagnostics`. */
 export type DiagnosticsExportResult = 
@@ -3293,6 +3381,14 @@ export type ListViewRequest = {
 	scope: InboxScope,
 	order: ListOrder,
 	filter?: QuickFilter,
+};
+
+/**  A local time of day, for the shell's tray menu ("Paused until 14:30"). */
+export type LocalTime = {
+	hour: number,
+	minute: number,
+	/**  The time is on a later day than now ("tomorrow 08:00"). */
+	laterDay: boolean,
 };
 
 /**  What the user asks for. One action on many messages is one batch ([`BatchId`]). */
@@ -4143,6 +4239,21 @@ export type NewMailStyle =
  */
 "system";
 
+/**
+ *  Whether notifications are paused. While paused, new mail shows neither the popup nor a
+ *  notification and plays no sound, as in quiet hours; nothing is shown later. The counter in
+ *  the Dock, on the taskbar and on the tray icon goes on.
+ */
+export type NotificationPause = {
+	/**  Milliseconds since the epoch; `None` when not paused (or the pause is over). */
+	until: number | null,
+	/**
+	 *  Local wall-clock time of `until` (hour, minute) and whether it is on a later day than now,
+	 *  for the tray menu, which the shell builds without the UI.
+	 */
+	localTime: LocalTime | null,
+};
+
 /**  Notification settings (device settings). */
 export type NotificationSettings = {
 	/**  Off: no notification at all. */
@@ -4444,6 +4555,15 @@ export type OutgoingMail = {
 
 /**  `PARTSTAT` of an attendee. */
 export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "tentative" | "delegated";
+
+/**  How long notifications pause (menu of the tray icon, Settings → Notifications). */
+export type PauseNotifications = 
+/**  For one hour from now. */
+"oneHour" | 
+/**  Until 08:00 of the next day, local time. */
+"untilTomorrow" | 
+/**  Not any more. */
+"resume";
 
 /**  Stage 17: the square the user cut out, in pixels of [`ContactPictureSource`]. */
 export type PictureCrop = {

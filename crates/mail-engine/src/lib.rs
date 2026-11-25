@@ -10,6 +10,7 @@ mod contact_lists;
 mod contacts_view;
 mod core;
 pub mod credentials;
+pub mod desktop;
 mod diagnostics;
 pub mod discovery;
 mod first_start;

@@ -14,6 +14,7 @@ import type {
   QuietHours,
 } from "../../services/ipc";
 import { useAccounts } from "../accounts/queries";
+import { NotificationPause } from "../desktop/NotificationPause";
 import { NotificationSoundSettings } from "./NotificationSound";
 import { useNotificationSettings, useSetNotificationSettings } from "./queries";
 
@@ -151,6 +152,8 @@ export function NotificationSettings() {
         }}
         data-testid="notify-enabled"
       />
+      {/* Stage 21 (decision 0069): pause for an hour or until tomorrow; also in the tray menu. */}
+      <NotificationPause disabled={off} />
       <fieldset className="flex flex-col gap-4" disabled={off}>
         <legend className="pb-2 text-14 font-semibold text-primary">{t("comfort.notifications.newMail.legend")}</legend>
         <Switch

@@ -20,7 +20,9 @@ import { handleSettingsSyncEvent } from "../features/settings-sync/events";
 import { handleSearchEvent } from "../features/search/events";
 import { handleUiPreferencesEvent } from "../features/keyboard/useUiPreferencesSync";
 import { handleUpdateEvent } from "../features/updates/queries";
-import { ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
+import { handleDesktopEvent } from "../features/desktop/queries";
+import { currentWindowRoute } from "../features/windows/route";
+import { desktopIpc, ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
 import { reportOwnFailures } from "../stores/notices";
 import { useUiStore } from "../stores/ui";
 import { refreshQuery } from "./refreshQuery";
@@ -48,6 +50,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleUiPreferencesEvent(queryClient, event);
   // Stage 15 (decision 0037): update state; a new account may bring the update question.
   handleUpdateEvent(queryClient, event);
+  // Stage 21 (decision 0069): the tray menu paused or resumed notifications.
+  handleDesktopEvent(queryClient, event);
   // Stage 17 (decision 0050): contacts, their pictures and spam marks.
   handleContactsEvent(queryClient, event);
   handleMboxEvent(event);
@@ -125,6 +129,8 @@ export function useCoreEvents(): CoreError | null {
         (stop) => {
           if (active) unsubscribe = stop;
           else stop();
+          // Stage 21: the main window's page listens now; requests that waited for it follow.
+          if (active && currentWindowRoute().kind === "main") void desktopIpc.mainWindowReady().catch(() => undefined);
         },
         (e: unknown) => {
           if (active) setError(toCoreError(e));

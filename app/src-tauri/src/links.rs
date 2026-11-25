@@ -21,6 +21,11 @@ impl LinkQueue {
         state.0 = true;
         std::mem::take(&mut state.1)
     }
+
+    /// Stage 21: a new main window was built; its page takes the links again.
+    pub fn reset(&self) {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).0 = false;
+    }
 }
 
 /// A link the system handed over: queued while the UI is not ready, else `composeRequested`.
@@ -39,6 +44,8 @@ pub(crate) fn opened<R: Runtime>(app: &AppHandle<R>, url: &str) {
         let mut state = queue.0.lock().unwrap_or_else(PoisonError::into_inner);
         if !state.0 {
             state.1.push(url.to_owned());
+            drop(state);
+            crate::lifecycle::show_main_window(app);
             return;
         }
     }
@@ -47,9 +54,6 @@ pub(crate) fn opened<R: Runtime>(app: &AppHandle<R>, url: &str) {
     {
         tracing::warn!(code = ?err.code(), "mailto link refused");
     }
-    if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    // Stage 21: also opens the main window again if it was closed into the background.
+    crate::lifecycle::show_main_window(app);
 }

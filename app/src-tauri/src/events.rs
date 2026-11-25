@@ -1,10 +1,11 @@
 //! Forwards the core's event stream to every window as the typed tauri-specta event
 //! `core-event`, except the new-mail popup's (stage 18, decision 0051): it hears only its own
-//! event.
+//! event. Stage 21 (decision 0069): requests for the main window wait while its page loads
+//! ([`crate::lifecycle::Lifecycle::hold`]), and a changed notification pause updates the tray.
 
 use mail_model::CoreEvent;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, EventTarget, Runtime};
+use tauri::{AppHandle, EventTarget, Manager, Runtime};
 use tauri_specta::Event;
 use tokio::sync::broadcast::{self, error::RecvError};
 
@@ -44,6 +45,15 @@ pub(crate) fn forward<R: Runtime>(app: AppHandle<R>, mut events: broadcast::Rece
         loop {
             match events.recv().await {
                 Ok(event) => {
+                    if matches!(event, CoreEvent::NotificationPauseChanged { .. }) {
+                        crate::tray::refresh(&app);
+                    }
+                    if app
+                        .try_state::<crate::lifecycle::Lifecycle>()
+                        .is_some_and(|lifecycle| lifecycle.hold(&event))
+                    {
+                        continue;
+                    }
                     if let Err(err) = CoreEventMessage(event).emit_filter(&app, hears_core_events) {
                         tracing::error!(%err, "could not emit core event to the UI");
                     }

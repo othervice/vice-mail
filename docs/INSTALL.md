@@ -218,6 +218,44 @@ Start menu or a desktop shortcut can keep showing the old one. To refresh it, tr
    lösen*), start the app, then pin it again (**Pin to taskbar**, *An Taskleiste anheften*).
 3. Sign out of Windows and back in, or restart the PC.
 
+## Running in the background and starting with the system
+
+Closing the main window does not quit Vice Mail: it keeps checking for mail, shows the popup for
+new mail and notifications, and keeps the unread count current. The first time you close the
+window, it explains this once and offers **Quit Vice Mail** instead.
+
+- **macOS:** the app stays in the Dock, as most Mac apps do, and shows an icon in the menu bar
+  with the number of unread messages. Click the Dock icon or choose **Open Vice Mail** in the
+  menu-bar icon's menu to open the window again. **Quit:** press **⌘Q**, choose **Quit Vice Mail**
+  in the menu-bar icon's menu, or right-click the Dock icon → **Quit**.
+- **Windows:** the window and its taskbar button go; the icon in the notification area (next to
+  the clock; it may sit behind the **^** arrow) shows the number of unread messages. Click it, or
+  start Vice Mail again, to open the window. **Quit:** right-click the icon → **Quit Vice Mail**
+  (*Vice Mail beenden*).
+
+The icon's menu also has **New Message** and **Pause Notifications** (for an hour, or until 08:00
+tomorrow; **Resume Notifications** ends the pause). Settings → Notifications offers the same
+pause.
+
+**Settings → General → In the background:**
+
+- **Keep running when the window is closed** (on by default). Off: closing the last window quits
+  the app, as in 0.1.1.
+- **Show the icon in the menu bar** (macOS, on by default). Windows always shows its icon while
+  the app runs.
+- **Start with the system** (off by default). On: when you log in, Vice Mail starts in the
+  background, without a window. It registers itself for your user only:
+  - macOS: the file `~/Library/LaunchAgents/org.vicemail.desktop.plist`. macOS 13 and later list
+    it under **System Settings → General → Login Items & Extensions → Allow in the Background**,
+    where you can switch it off as well; the switch in Vice Mail then shows it as off. If you
+    move the app, its next start updates the file. Dragging the app to the Trash leaves the file
+    behind; delete it, or turn the switch off before.
+  - Windows: the value `Vice Mail` under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`.
+    **Task Manager → Startup apps** (*Autostart-Apps*) and **Settings → Apps → Startup** show it
+    and can switch it off; the uninstaller removes it.
+
+  A build from source (`pnpm tauri dev`) does not register itself.
+
 ## Updates from the app
 
 The app can update itself, but it never checks on its own unless you allow it:
@@ -259,8 +297,10 @@ passwords behind.
 
 ### macOS
 
-1. Remove the accounts in the app (see above) and quit it.
-2. Drag `/Applications/Vice Mail.app` to the Trash.
+1. Remove the accounts in the app (see above), turn off **Start with the system**
+   (Settings → General) and quit it (**⌘Q**; closing the window keeps it running).
+2. Drag `/Applications/Vice Mail.app` to the Trash. If you skipped turning off **Start with the
+   system**, also delete `~/Library/LaunchAgents/org.vicemail.desktop.plist`.
 3. Delete the data folders from the table above. To find everything the app left in your Library:
 
    ```sh
@@ -277,7 +317,8 @@ passwords behind.
 
 ### Windows
 
-1. Remove the accounts in the app (see above) and close it.
+1. Remove the accounts in the app (see above) and quit it: right-click its icon in the
+   notification area → **Quit Vice Mail** (closing the window keeps it running).
 2. **Settings → Apps → Installed apps →** Vice Mail **→ Uninstall**. Tick **Delete the
    application data** to remove `%LOCALAPPDATA%\org.vicemail.desktop` as well. No administrator
    rights are needed.

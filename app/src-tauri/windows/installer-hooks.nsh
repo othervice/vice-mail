@@ -19,4 +19,10 @@
   DeleteRegKey HKCU "Software\${BUNDLEID}\Capabilities"
   DeleteRegKey /ifempty HKCU "Software\${BUNDLEID}"
   DeleteRegKey HKCU "Software\Classes\${BUNDLEID}.mailto"
+  ; Stage 21 (decision 0070): "Start with the system" is the value ${PRODUCTNAME} under the Run
+  ; key, which Tauri's own uninstaller removes (not on updates); Task Manager's state of it goes
+  ; too. An update keeps both, so the app still starts with the system afterwards.
+  ${If} $UpdateMode <> 1
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${PRODUCTNAME}"
+  ${EndIf}
 !macroend

@@ -4305,6 +4305,66 @@ export const en = {
     announceMany: "{{count}} new messages",
     failed: "Didn’t work: {{reason}}",
   },
+  // Stage 21 (decisions 0069, 0070): running in the background, the pause, starting with the
+  // system, the one-time note on closing, and the tray menu (built by the shell: `{product}`,
+  // `{count}` and `{time}` are filled in there).
+  desktop: {
+    background: {
+      title: "In the background",
+      keepRunning: {
+        label: "Keep running when the window is closed",
+        macos: "Mail keeps arriving, and new mail still shows its popup and notifications. {{product}} stays in the Dock; quit it with ⌘Q or from the menu-bar icon.",
+        windows: "Mail keeps arriving, and new mail still shows its popup and notifications. {{product}} stays in the notification area; quit it from its icon there.",
+      },
+      menuBarIcon: {
+        label: "Show the icon in the menu bar",
+        description: "With the number of unread messages and a menu to open {{product}}, write a message, pause notifications or quit.",
+      },
+      trayNote: "While {{product}} runs, its icon in the notification area shows the number of unread messages. A click opens the window; the right mouse button opens a menu to write a message, pause notifications or quit.",
+      autostart: {
+        label: "Start with the system",
+        description: "When you log in, {{product}} starts in the background, without a window, and checks for mail.",
+        unavailable: "Only the installed app can start with the system.",
+        failed: "Could not change whether {{product}} starts with the system.",
+      },
+      loadFailed: "The settings for running in the background could not be read.",
+      saveFailed: "The setting could not be saved.",
+    },
+    pause: {
+      title: "Pause notifications",
+      description: "While paused, new mail shows no popup and no notification and plays no sound; nothing is shown afterwards. The counter stays.",
+      hour: "For 1 hour",
+      tomorrow: "Until tomorrow morning",
+      pausedUntil: "Paused until {{time}}",
+      pausedUntilTomorrow: "Paused until tomorrow, {{time}}",
+      resume: "Resume",
+      loadFailed: "Whether notifications are paused could not be read.",
+      failed: "Notifications could not be paused or resumed.",
+    },
+    closeHint: {
+      title: "{{product}} keeps running",
+      macos: "The window closes, but {{product}} keeps checking for mail and shows new mail. Open it again from the Dock or the menu-bar icon. To quit, press ⌘Q or choose “Quit” in the menu-bar icon’s menu.",
+      windows: "The window closes, but {{product}} keeps checking for mail in the background and shows new mail. Open it again from its icon in the notification area. To quit, right-click that icon and choose “Quit”.",
+      settings: "You can change this under Settings → General.",
+      keepRunning: "Keep running",
+      quit: "Quit {{product}}",
+      cancel: "Cancel",
+      failed: "The window could not be closed.",
+    },
+    tray: {
+      open: "Open {product}",
+      newMessage: "New Message",
+      pause: "Pause Notifications",
+      pauseHour: "For 1 Hour",
+      pauseTomorrow: "Until Tomorrow",
+      resume: "Resume Notifications",
+      pausedUntil: "Paused until {time}",
+      pausedUntilTomorrow: "Paused until tomorrow, {time}",
+      quit: "Quit {product}",
+      tooltip: "{product}",
+      tooltipUnread: "{product}: {count} unread",
+    },
+  },
   // Stage 19 (decision 0055): the source window, all headers, redirecting.
   source: {
     title: "Source",

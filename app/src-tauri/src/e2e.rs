@@ -174,7 +174,11 @@ pub fn install(
             e2e_invoked,
             e2e_drop_files,
             e2e_advance_clock,
-            e2e_dialog_answers
+            e2e_dialog_answers,
+            e2e_quit,
+            e2e_close_window,
+            e2e_tray,
+            e2e_tray_action
         ]);
     let builder = builder
         // Listens on 127.0.0.1:$TAURI_WEBDRIVER_PORT (default 4445).
@@ -506,6 +510,67 @@ pub fn e2e_dialog_answers(paths: Vec<String>) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     answers.extend(paths.into_iter().map(PathBuf::from));
+}
+
+/// Stage 21: the test's own folder for the login item (a launch agent file on every system),
+/// never the user's `~/Library/LaunchAgents` or Run key.
+pub fn login_items_dir() -> io::Result<PathBuf> {
+    Ok(test_root(std::env::var_os(DATA_DIR_ENV))?.join("launch-agents"))
+}
+
+/// Stage 21: quits the app as "Quit" in the tray menu does. Closing the main window no longer
+/// quits (decision 0069), so the test harness ends the app this way.
+#[tauri::command]
+pub fn e2e_quit(app: AppHandle) {
+    crate::lifecycle::quit(&app);
+}
+
+/// Stage 21: asks window `label` to close as its close button does (`CloseRequested`, which the
+/// app may answer by keeping it open). Returns at once; WebDriver's own "close window" waits
+/// for the window to go and fails when the app keeps it for the one-time note.
+#[tauri::command]
+pub fn e2e_close_window(app: AppHandle, label: String) -> Result<(), String> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("no window {label}"))?;
+    window.close().map_err(|e| e.to_string())
+}
+
+/// Stage 21: the tray icon as built (whether it exists and shows) and the menu it has now. The
+/// menu bar itself cannot be read without accessibility rights; the model is what was applied.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayState {
+    pub exists: bool,
+    pub model: crate::tray::Model,
+}
+
+#[tauri::command]
+pub async fn e2e_tray(app: AppHandle) -> Result<TrayState, String> {
+    use tauri::Manager;
+    let core = app.try_state::<mail_engine::AppCore>().ok_or("no core")?;
+    let texts = core.desktop_texts().await.map_err(|e| e.to_string())?;
+    let pause = core.notification_pause().await.map_err(|e| e.to_string())?;
+    let product = app.config().product_name.clone().unwrap_or_default();
+    let model = crate::tray::model(
+        &texts,
+        &product,
+        crate::notifications::current_count(&app),
+        &pause,
+    );
+    Ok(TrayState {
+        exists: app.tray_by_id(crate::tray::TRAY_ID).is_some(),
+        model,
+    })
+}
+
+/// Stage 21: chooses the tray menu's entry `id`, as a click on it does.
+#[tauri::command]
+pub fn e2e_tray_action(app: AppHandle, id: String) -> Result<(), String> {
+    let action = crate::tray::action(&id).ok_or_else(|| format!("no tray action {id}"))?;
+    crate::tray::perform(&app, action);
+    Ok(())
 }
 
 /// Every command name that reached the invoke handler since the app started, with its count.

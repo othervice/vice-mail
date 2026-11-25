@@ -54,7 +54,7 @@
   /* Design pass 23.11.2026: the track of segmented controls and switches; the ink of "Vice" in
      the wordmark (docs/brand/README.md: Ink on light, white on dark). */
   --ui-track: #e5eaf0;
-  --ui-brand-ink: #1a1619;
+  --ui-brand-ink: #1f2328;
   /* Dims the window behind the command palette, the shortcut overview and dialogs. */
   --ui-scrim: rgb(16 24 36 / 0.28);
   --ui-success: #1a6d34;

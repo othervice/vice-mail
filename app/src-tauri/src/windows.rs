@@ -221,22 +221,48 @@ fn refuse_download(event: &DownloadEvent<'_>) -> bool {
 }
 
 /// What every window gets after it is built: dropped files are remembered (stage 5; the
-/// composer may attach exactly these), and on Windows the WebView2 frame guard.
+/// composer may attach exactly these), and on Windows the WebView2 frame guard and the window
+/// icon of its display scale (stage 21).
 pub(crate) fn finish<R: Runtime>(
     app: &AppHandle<R>,
     window: &WebviewWindow<R>,
 ) -> tauri::Result<()> {
     let drop_app = app.clone();
+    #[cfg(windows)]
+    let icon_window = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
             && let Some(registry) = drop_app.try_state::<drops::DropRegistry>()
         {
             registry.record(paths);
         }
+        #[cfg(windows)]
+        if let tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
+            set_window_icon(&icon_window, *scale_factor);
+        }
     });
     #[cfg(all(windows, feature = "webview2-frame-guard"))]
     crate::install_frame_guard(window)?;
+    #[cfg(windows)]
+    set_window_icon(window, window.scale_factor().unwrap_or(1.0));
     Ok(())
+}
+
+/// Stage 21 (decision 0068), Windows: Tauri sets one window icon, which Windows draws in the
+/// title bar and, without a separate large icon, on the taskbar button. Taken from the app
+/// icon's own entry for the taskbar's size at this scale (24 logical pixels: 24/30/36/48 px),
+/// so the taskbar shows that drawing unscaled instead of a 32 px one shrunk to 24.
+#[cfg(windows)]
+fn set_window_icon<R: Runtime>(window: &WebviewWindow<R>, scale: f64) {
+    let size = crate::badge::window_icon_size(scale);
+    match tauri::image::Image::from_app_icon_resource(size) {
+        Ok(icon) => {
+            if let Err(err) = window.set_icon(icon) {
+                tracing::debug!(%err, size, "window icon not set");
+            }
+        }
+        Err(err) => tracing::debug!(%err, size, "no app icon of this size"),
+    }
 }
 
 /// Brings the window with this label to the front if it is open; `false` if there is none.
