@@ -28,17 +28,19 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
  * Most Tab presses from the start of the window to the message list with the accounts-and-folders
  * column open (docs/DESIGN.md, "Seitenspalte"): the column's toggle (1) and its edge, a window
  * splitter (1), the views (1), the account with its folders, one tree since the account is the
- * tree's root (1), the bottom group (1), the list header (5: Unread only, List options,
- * Conversations, Search, New message) and the list itself make 11. Against the labelled sidebar before
+ * tree's root (1), the bottom group (1), the list header (5: the view menu, List options,
+ * Conversations, Search, New message), the quick filter (2: its switches as one toolbar, its text
+ * field; stage 19, decision 0062, "Unread only" moved there from the header) and the list itself
+ * make 13. Against the labelled sidebar before
  * (rail views, account button, folder tree, bottom group, 4 in the header: 9) the column adds one
  * (the account's button became the root of its tree, the toggle and the splitter are new) and the
  * header's "Conversations" switch (decision 0039) one. Trees another spec left behind
  * (favourites, inboxes, saved searches: 1 each) and the header's account choice may add up to 4.
  * Before the trees were single Tab stops it took 46.
  */
-const TAB_LIMIT = 16;
+const TAB_LIMIT = 18;
 /** The presses for the path above without trees left by other specs. */
-const SHORT_PATH = 11;
+const SHORT_PATH = 13;
 let account;
 let sidebarWas;
 

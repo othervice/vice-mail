@@ -66,6 +66,9 @@ export const config = {
     // Stage 18: the border between list and reading pane, unfolding beside the quick actions
     // (real mouse events). Changes the stored layout and puts it back.
     "./tests/e2e/columns.e2e.mjs",
+    // Stage 19, task A (decisions 0061, 0062): sorting, the table and the quick filter on the
+    // seed's inbox. Tags three messages for a moment and removes the tag again.
+    "./tests/e2e/list-views.e2e.mjs",
     "./tests/e2e/extras.e2e.mjs",
     "./tests/e2e/keyboard.e2e.mjs",
     "./tests/e2e/windows.e2e.mjs",
