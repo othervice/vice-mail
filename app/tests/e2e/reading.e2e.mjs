@@ -267,6 +267,8 @@ function installPageHelpers() {
           errorText: error?.textContent ?? null,
           problems: [...pane.querySelectorAll('[data-testid="reading-problems"] li')].map((li) => li.textContent),
           remoteBar: $('[data-testid="remote-content-bar"] p', pane)?.textContent ?? null,
+          // Stage 20 (decision 0058): trackers are counted in their own notice, never loadable.
+          trackers: Number($('[data-testid="tracker-notice"]', pane)?.getAttribute("data-total") ?? 0),
           attachments: pane.querySelectorAll('[data-testid="attachment"]').length,
         };
       },
@@ -693,6 +695,7 @@ describe("reading mail (stage 3)", function () {
         requests: hits.requests.map((q) => `${q.port}${q.path}`),
         scriptMarkers: d.messages.length + (d.frameMarker === null ? 0 : 1) + (d.title === APP_TITLE ? 0 : 1),
         remoteBar: p.remoteBar,
+        trackers: p.trackers,
         links: content ? content.anchors.length : null,
         clicks: [],
       };
@@ -734,11 +737,14 @@ describe("reading mail (stage 3)", function () {
         if (entry.check["data-images"] !== undefined && content.dataImages !== entry.check["data-images"]) {
           fail(where, `${content.dataImages} data: images, the corpus says ${entry.check["data-images"]}`);
         }
-        // The corpus counts distinct external addresses, the bar blocked elements (the same
-        // pixel twice is two): both zero or both not.
-        const blocked = Number(/^(\d+)/.exec(p.remoteBar ?? "")?.[1] ?? 0);
+        // The corpus counts distinct external addresses, the bar and the tracker notice blocked
+        // elements (the same pixel twice is two): both zero or both not. Since stage 20 a
+        // tracking pixel is counted in the tracker notice instead of the bar.
+        const blocked = Number(/^(\d+)/.exec(p.remoteBar ?? "")?.[1] ?? 0) + p.trackers;
         r.blocked = blocked;
-        if ((entry.check.remote ?? 0) > 0 !== blocked > 0) fail(where, `remote bar "${p.remoteBar}", the corpus lists ${entry.check.remote ?? 0} external addresses`);
+        if ((entry.check.remote ?? 0) > 0 !== blocked > 0) {
+          fail(where, `remote bar "${p.remoteBar}", ${p.trackers} trackers, the corpus lists ${entry.check.remote ?? 0} external addresses`);
+        }
       }
       if (entry.check.attachments !== undefined && p.attachments !== entry.check.attachments) {
         fail(where, `${p.attachments} attachments, the corpus says ${entry.check.attachments}`);

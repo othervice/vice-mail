@@ -27,9 +27,13 @@ let account;
 let boxes;
 
 /** Toolbar actions that change mail on the server (`writes: true` in src/features/actions/registry.ts). */
-const SERVER_ACTIONS = new Set(["archive", "delete", "deletePermanently", "toggleRead", "toggleFlag", "move", "tags", "spam", "notSpam"]);
+// Stage 19: redirecting sends the message through the account's server.
+const SERVER_ACTIONS = new Set(["archive", "delete", "deletePermanently", "toggleRead", "toggleFlag", "move", "tags", "spam", "notSpam", "redirect"]);
 /** Toolbar actions that change nothing on the server: they work on read-only accounts too. */
 const LOCAL_ACTIONS = new Set([
+  // Stage 19: a new local draft from the message, and its source in a window of its own.
+  "editAsNew",
+  "viewSource",
   "reply",
   "replyAll",
   "forward",

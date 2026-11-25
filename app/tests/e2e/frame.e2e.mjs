@@ -32,10 +32,14 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const RAIL = [
   "inbox",
   "later",
+  // Stage 20: the sent messages waiting for a reply.
+  "waiting",
   "tasks",
   // Stage 16: the reading list and the pinned attachments.
   "readingList",
   "pinnedAttachments",
+  // Stage 20: the attachments of every stored message.
+  "attachments",
   // SPEC "Markiert": the server's flag across folders.
   "flagged",
   "pinned",
@@ -134,7 +138,7 @@ describe("app frame (stage 1)", () => {
     );
     assert.deepEqual(report.column, [
       "rail-folders",
-      ...["later", "tasks", "readingList", "pinnedAttachments", "flagged", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
+      ...["later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
       "rail-activity",
       "rail-outbox",
       "rail-settings",
@@ -270,13 +274,13 @@ describe("app frame (stage 1)", () => {
     // checkbox is clicked; Vitest covers Space); the column behind the dialog follows at once.
     await testId("edit-views-check-later").click();
     await browser.waitUntil(async () => !(await columnViews()).includes("later"), { timeoutMsg: "Later is still in the column" });
-    // Four views on: Alt+Up twice moves "Flagged" above "Reading list"; the focus stays on it.
-    for (let i = 0; i < 4; i += 1) await pressTab();
+    // Six views on: Alt+Up twice moves "Flagged" above "Pinned attachments"; the focus stays on it.
+    for (let i = 0; i < 6; i += 1) await pressTab();
     assert.equal(await focused(), "edit-views-check-flagged");
     await browser.keys(["Alt", "ArrowUp"]);
     await browser.keys(["Alt", "ArrowUp"]);
     assert.equal(await focused(), "edit-views-check-flagged");
-    const shown = ["tasks", "flagged", "readingList", "pinnedAttachments", "pinned", "savedViews", "contacts"];
+    const shown = ["waiting", "tasks", "readingList", "flagged", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"];
     await browser.waitUntil(async () => JSON.stringify(await columnViews()) === JSON.stringify(shown), {
       timeoutMsg: "the column does not show the chosen order",
     });

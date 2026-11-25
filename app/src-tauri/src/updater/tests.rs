@@ -34,8 +34,9 @@ const PAYLOAD: &[u8] = include_bytes!("fixtures/update.bin");
 /// Signature of `update.bin`, bound to version 0.2.0 (`tauri signer sign --app-version 0.2.0`).
 const SIGNATURE_0_2_0: &str = include_str!("fixtures/update-0.2.0.sig");
 
-/// The mock app's version (`tauri::test::mock_context`).
-const RUNNING: &str = env!("CARGO_PKG_VERSION");
+/// The mock app's version: `tauri::test::mock_context` always reports 0.1.0, whatever the
+/// package's version is.
+const RUNNING: &str = "0.1.0";
 
 const FAST: UpdateSchedule = UpdateSchedule {
     first_delay: Duration::from_millis(0),
