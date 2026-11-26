@@ -689,7 +689,10 @@ async fn picture_records_of_an_older_version_are_ignored_quietly() {
         "kept on the server"
     );
     assert!(
-        b.state.records().keys().all(|key| key.kind() != RecordKind::Contact),
+        b.state
+            .records()
+            .keys()
+            .all(|key| key.kind() != RecordKind::Contact),
         "nothing applied"
     );
 }
