@@ -4,7 +4,8 @@
  * contains nothing else (no default palette), so a fixed colour or size has nowhere to come from.
  *
  * Light is the default. The dark theme is its own set of surface steps with a muted accent, not an
- * inverted light theme. tests/contrast.test.ts parses this file and checks every colour pair that
+ * inverted light theme. Stage 23 (decision 0083): both palettes are the approved draft's
+ * (docs/stages/23-rueckmeldungen-0-1-3.md, item 2; Mailbird and Canary as references). tests/contrast.test.ts parses this file and checks every colour pair that
  * the UI uses against docs/SPEC.md (text >= 4.5:1, controls >= 3:1) in both themes. Colour tokens
  * therefore stay plain six-digit hex values.
  */
@@ -12,48 +13,61 @@
 :root {
   color-scheme: light;
 
-  /* Surfaces. Feinschliff (decision 0031): three tonal steps from the frame inwards: the rail
-     darkest, the list column slightly tinted, the reading pane brightest; cards are raised.
-     Decision 0053: cool and clear, white and light blue-grey instead of the warm beige. */
-  --ui-canvas: #eef2f6;
-  --ui-surface: #fdfeff;
-  --ui-surface-list: #f6f8fb;
+  /* Surfaces. Stage 23 (decision 0083, replaces the tonal steps of 0031): the content, list and
+     reading pane, is one white surface; the sidebar (`rail`) and the toolbar are a cool grey
+     around it, a step darker in light and a step lighter in dark; date bands and the contact
+     panel lie between. Cards are white with a hairline (dark: a step above the content).
+     `canvas` is the frame and the well inside cards. Cool, never warm (decision 0053). */
+  --ui-canvas: #f6f7f9;
+  --ui-surface: #ffffff;
+  --ui-surface-list: #ffffff;
   --ui-surface-raised: #ffffff;
-  --ui-rail: #e5eaf0;
-  --ui-rail-hover: #dbe1e9;
-  --ui-priority-tint: #fafcff;
-  --ui-selected: #dde8f8;
-  --ui-hover: #edf1f6;
-  /* Fill of small pills: conversation size, counters. */
-  --ui-badge: #e5eaf0;
+  --ui-rail: #f2f4f7;
+  --ui-rail-hover: #e9edf2;
+  /* The entry of the sidebar shown right now: a neutral fill, its icon in the accent. */
+  --ui-rail-selected: #e2e8f1;
+  --ui-toolbar: #f7f8fa;
+  /* Date bands of the list ("Heute", "Gestern") and other section heads on the content. */
+  --ui-band: #f6f7f9;
+  /* The panel on the right (contact panel, stage 23 step 3). */
+  --ui-panel: #f8f9fb;
+  /* Fill of secondary buttons and of the grouped toolbar buttons, with `border`. */
+  --ui-button: #ffffff;
+  --ui-priority-tint: #f7f9fc;
+  --ui-selected: #e3ecfa;
+  --ui-hover: #f3f5f8;
+  /* Fill of small pills and chips: conversation size, counters, recipients. */
+  --ui-badge: #eef1f5;
 
-  /* Lines. `border-subtle` separates panes and rows without drawing attention. */
-  --ui-border: #d8dfe7;
-  --ui-border-subtle: #e3e8ee;
-  --ui-priority-border: #d9e2ee;
+  /* Lines. `border-subtle` separates panes and rows without drawing attention; `border` frames
+     buttons and fields that need no 3:1 (their label names them). */
+  --ui-border: #dde1e7;
+  --ui-border-subtle: #e5e8ec;
+  --ui-priority-border: #dbe3ee;
   --ui-border-strong: #737f8d;
-  --ui-focus-ring: #2a72dc;
+  --ui-focus-ring: #1463d8;
 
   /* Text: cool greys. */
-  --ui-text-primary: #19212c;
-  --ui-text-secondary: #444e5c;
-  --ui-text-tertiary: #566171;
+  --ui-text-primary: #131a24;
+  --ui-text-secondary: #455061;
+  --ui-text-tertiary: #5b6676;
   --ui-text-on-accent: #ffffff;
 
   /* Accent and status. The root holds blue's accent family, the default theme since decision
      0053; every accent theme (below) brings its own, and the root always carries the chosen one
      (accent.ts). `accent` is for text, icons, borders and small controls (>= 4.5:1 on every
      surface); `accent-fill` fills primary buttons and other marks that carry `text-on-accent`
-     (in the orange theme the pure brand orange). */
-  --ui-accent: #0b5cc2;
-  --ui-accent-fill: #1665d8;
-  --ui-accent-soft: #e0ebf9;
+     (in the orange theme the pure brand orange). Stage 23: the draft's blue; as text a hair
+     darker than its fill, so it keeps 4.5:1 on Windows' Mica too. */
+  --ui-accent: #1360d3;
+  --ui-accent-fill: #1463d8;
+  --ui-accent-soft: #e8f0fc;
   --ui-danger: #b42318;
   /* Label on the danger fill; not part of the accent family. */
   --ui-text-on-danger: #ffffff;
   /* Design pass 23.11.2026: the track of segmented controls and switches; the ink of "Vice" in
      the wordmark (docs/brand/README.md: Ink on light, white on dark). */
-  --ui-track: #e5eaf0;
+  --ui-track: #eef1f5;
   --ui-brand-ink: #1f2328;
   /* Dims the window behind the command palette, the shortcut overview and dialogs. */
   --ui-scrim: rgb(16 24 36 / 0.28);
@@ -70,6 +84,21 @@
   --ui-account-7: #0b7a80;
   --ui-account-8: #7a5f45;
 
+  /* Stage 23 (decision 0083): file types of attachment cards, a tinted card with a small badge
+     in the type's colour carrying `text-on-file` (PDF, documents, spreadsheets, images,
+     archives; anything else takes `badge`). The same badges in both modes. */
+  --ui-file-pdf: #dc2626;
+  --ui-file-pdf-tint: #fdeeee;
+  --ui-file-doc: #2563eb;
+  --ui-file-doc-tint: #e9f0fd;
+  --ui-file-sheet: #15803d;
+  --ui-file-sheet-tint: #e8f5ec;
+  --ui-file-image: #7c3aed;
+  --ui-file-image-tint: #f1ebfd;
+  --ui-file-archive: #b45309;
+  --ui-file-archive-tint: #fbf0e2;
+  --ui-text-on-file: #ffffff;
+
   /* Mail content. HTML mail shown as written lies on its own white canvas, in the dark theme too
      (setting "always on a white page", "Original colours", mails asking for light only). Adapted
      to the dark theme the core paints it on the dark card instead (decision 0066; its colours are
@@ -82,17 +111,30 @@
      it is written into the mail frame's own style sheet (features/reading/find.ts). */
   --ui-find-match: #f8e4a4;
   --ui-find-current: #efb43a;
-  --ui-find-current-text: #19212c;
+  --ui-find-current-text: #131a24;
   --ui-mail-find-match: #fbe7a6;
   --ui-mail-find-current: #f5b83d;
 
-  /* Type: system font (SF Pro on macOS, Segoe UI Variable on Windows 11). Segoe UI Variable comes
-     before system-ui, which WebView2 resolves to the older Segoe UI; Windows 10 falls back to
-     that. rem so text scaling works. */
+  /* Type. Stage 23 (decision 0083): the UI is set in Inter on macOS and Windows alike, shipped
+     with the app (app.css, `@font-face`; never loaded from the network), with the system font as
+     the fallback. The draft's character variants: single-storey a (cv11) and open digits (ss01).
+     Mail content keeps the system font (`font-family-mail`): HTML mail that names no font
+     (crates/mail-content, `MAIL_DEFAULT_STYLE`, the same list), the composer's writing area and
+     signatures, so what is written looks as it will be sent. System font: SF Pro on macOS,
+     Segoe UI Variable on Windows 11; Segoe UI Variable comes before system-ui, which WebView2
+     resolves to the older Segoe UI; Windows 10 falls back to that. rem so text scaling works. */
   --ui-font-family:
+    "InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable",
+    system-ui, "Segoe UI", sans-serif;
+  --ui-font-family-mail:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable", system-ui,
     "Segoe UI", sans-serif;
+  --ui-font-features: "cv11", "ss01";
   --ui-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  /* Stage 23 (decision 0083), the draft's scale: list rows 13 (sender, subject), preview 12,
+     time 11, section heads and bands 11 semibold, the reading pane's subject 26 bold. */
+  --ui-font-size-11: 0.6875rem;
+  --ui-line-height-11: 1rem;
   --ui-font-size-12: 0.75rem;
   --ui-line-height-12: 1rem;
   --ui-font-size-13: 0.8125rem;
@@ -103,11 +145,16 @@
   --ui-line-height-16: 1.5rem;
   --ui-font-size-20: 1.25rem;
   --ui-line-height-20: 1.75rem;
+  --ui-font-size-26: 1.625rem;
+  --ui-line-height-26: 2rem;
   --ui-font-size-28: 1.75rem;
   --ui-line-height-28: 2.25rem;
   --ui-font-weight-regular: 400;
   --ui-font-weight-medium: 500;
   --ui-font-weight-semibold: 600;
+  --ui-font-weight-bold: 700;
+  /* Large titles (the reading pane's subject) a little tighter, as in the draft. */
+  --ui-letter-spacing-title: -0.01em;
 
   /* Spacing: 4 px grid */
   --ui-space-1: 0.25rem;
@@ -120,16 +167,22 @@
   --ui-space-10: 2.5rem;
   --ui-space-12: 3rem;
 
-  /* Radius: controls, rows and icon tiles, cards, panels. Pills use `rounded-full`. */
-  --ui-radius-control: 6px;
-  --ui-radius-row: 8px;
+  /* Radius. Stage 23 (decision 0083), the draft's shapes: controls and the sidebar's entries 7;
+     rows of the message list none, their selection runs across the list's whole width; icon
+     tiles, the rail's entries and entries of floating lists 8; cards 10; floating cards
+     (dialogs, the palette, the composer card) 14. Pills use `rounded-full`. */
+  --ui-radius-control: 7px;
+  --ui-radius-row: 0px;
+  --ui-radius-tile: 8px;
   --ui-radius-card: 10px;
-  --ui-radius-panel: 16px;
+  --ui-radius-panel: 14px;
 
-  /* Elevation (decision 0031): soft shadows instead of hard borders. `card` lifts a block in the
-     list (priority) or a selected row by a hair; floating (menus, tooltips) and panel above it. */
-  --ui-shadow-card: 0 1px 2px rgb(16 24 36 / 0.06), 0 2px 8px rgb(16 24 36 / 0.05);
-  --ui-shadow-row: 0 1px 2px rgb(16 24 36 / 0.07);
+  /* Elevation. Stage 23 (decision 0083): a shadow only for what floats (menus, tooltips, the
+     quick actions, dialogs and panels over the content); cards, buttons and rows lie flat with a
+     hairline, as in the draft. `card` and `row` stay as names (their places may float later) and
+     draw nothing: a transparent shadow, as `none` would break Tailwind's shadow list. */
+  --ui-shadow-card: 0 0 #0000;
+  --ui-shadow-row: 0 0 #0000;
   --ui-shadow-floating: 0 4px 16px rgb(16 24 36 / 0.12), 0 1px 3px rgb(16 24 36 / 0.08);
   --ui-shadow-panel: 0 12px 40px rgb(16 24 36 / 0.14), 0 2px 6px rgb(16 24 36 / 0.06);
 
@@ -178,8 +231,10 @@
   /* Stage 22 (decision 0072): rows have no avatar. Every message row (list, table, conversation)
      starts after its lead with the mark column, as wide as the selection box: the unread dot,
      which turns into the box on hover and in a multiple selection. The lead puts the column on
-     the line of the list's title and section labels; the sender follows 8 px after it. */
-  --ui-row-lead: var(--ui-space-4);
+     the line of the list's title and section labels; the sender follows 8 px after it. Stage 23
+     (decision 0083): rows run across the list's whole width (no gutter), so the lead is the
+     title's inset, 24 px; inside the cards drawn by rows (app.css, `.list-card`) it stays 16 px. */
+  --ui-row-lead: var(--ui-space-6);
   --ui-row-mark: var(--ui-icon-small);
   /* Stage 17 (decision 0049): the messages of an unfolded conversation are one line each (36 px,
      compact 28 px) in every list width. The conversation's dotted line runs under the mark
@@ -247,39 +302,47 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces. Decision 0053: neutral, slightly bluish greys in the manner of GitHub's dark
-     theme instead of the warm browns; the steps of decision 0031 stay. */
-  --ui-canvas: #0d1117;
-  --ui-surface: #161c24;
-  --ui-surface-list: #12171e;
-  --ui-surface-raised: #212830;
-  --ui-rail: #090c11;
-  --ui-rail-hover: #1a2029;
-  --ui-priority-tint: #1a2230;
-  --ui-selected: #182638;
-  --ui-hover: #1d232c;
-  --ui-badge: #262d37;
+  /* Surfaces. Stage 23 (decision 0083): the approved dark draft, cool blue-greys (decision
+     0053). The content is the darkest step; sidebar and toolbar one above it, the contact panel
+     between; bands and cards one more; buttons and chips above those. The selected row is the
+     accent's fill mixed into the content (20 %), the soft accent 16 %. */
+  --ui-canvas: #14181e;
+  --ui-surface: #14181e;
+  --ui-surface-list: #14181e;
+  --ui-surface-raised: #1b2129;
+  --ui-rail: #1a1f27;
+  --ui-rail-hover: #222833;
+  --ui-rail-selected: #2a3341;
+  --ui-toolbar: #1a1f27;
+  --ui-band: #1b2129;
+  --ui-panel: #171c23;
+  --ui-button: #232a34;
+  --ui-priority-tint: #19212c;
+  --ui-selected: #172747;
+  --ui-hover: #1f252e;
+  --ui-badge: #252c37;
 
   /* Lines */
-  --ui-border: #30363d;
-  --ui-border-subtle: #21262d;
-  --ui-priority-border: #2e3b50;
+  --ui-border: #333b48;
+  --ui-border-subtle: #29303b;
+  --ui-priority-border: #2b3648;
   --ui-border-strong: #6e7681;
-  --ui-focus-ring: #58a6ff;
+  --ui-focus-ring: #6aa8ff;
 
   /* Text */
-  --ui-text-primary: #e6edf3;
-  --ui-text-secondary: #b7c0ca;
-  --ui-text-tertiary: #9198a1;
+  --ui-text-primary: #e8edf3;
+  --ui-text-secondary: #bcc5d0;
+  --ui-text-tertiary: #98a3b0;
   --ui-text-on-accent: #ffffff;
 
   /* Accent and status */
-  --ui-accent: #4493f8;
-  --ui-accent-fill: #1f6feb;
-  --ui-accent-soft: #1c2a3d;
+  --ui-accent: #6aa8ff;
+  --ui-accent-fill: #2563eb;
+  --ui-accent-soft: #17243f;
   --ui-danger: #fb6a60;
-  --ui-text-on-danger: #0d1117;
-  --ui-track: #0b0f14;
+  --ui-text-on-danger: #14181e;
+  /* Below the content, so the raised thumb of a segmented control stands out. */
+  --ui-track: #0f1217;
   --ui-brand-ink: #ffffff;
   --ui-scrim: rgb(1 4 9 / 0.6);
   --ui-success: #3fb950;
@@ -288,7 +351,14 @@
   /* Stage 16: find in the open message (the mail-* pair stays as in light, like the canvas) */
   --ui-find-match: #4f4110;
   --ui-find-current: #e3b341;
-  --ui-find-current-text: #0d1117;
+  --ui-find-current-text: #14181e;
+
+  /* Stage 23: file types, the tints on the dark content (badges as in light). */
+  --ui-file-pdf-tint: #3a2326;
+  --ui-file-doc-tint: #1b2a44;
+  --ui-file-sheet-tint: #1c3326;
+  --ui-file-image-tint: #2a2442;
+  --ui-file-archive-tint: #372b1d;
 
   /* Account colours */
   --ui-account-1: #7fa9f2;
@@ -300,9 +370,7 @@
   --ui-account-7: #55c3c9;
   --ui-account-8: #c4a98c;
 
-  /* Shadows need more weight on dark surfaces */
-  --ui-shadow-card: 0 1px 2px rgb(1 4 9 / 0.5), 0 2px 8px rgb(1 4 9 / 0.3);
-  --ui-shadow-row: 0 1px 2px rgb(1 4 9 / 0.45);
+  /* Shadows need more weight on dark surfaces (only floating ones, see above) */
   --ui-shadow-floating: 0 4px 16px rgb(1 4 9 / 0.5), 0 1px 3px rgb(1 4 9 / 0.4);
   --ui-shadow-panel: 0 12px 40px rgb(1 4 9 / 0.55), 0 2px 6px rgb(1 4 9 / 0.4);
 }
@@ -348,8 +416,9 @@
 :root {
   /* The column of message cards: wide enough for a mail, centred in wide panes. */
   --ui-reading-column: 54rem;
-  /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. */
-  --ui-reading-line-height: 1.6;
+  /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. Stage 23
+     (decision 0083): 1.65, the draft's mail text (14 px). */
+  --ui-reading-line-height: 1.65;
   /* Menus that unfold from a "…" button (reading toolbar, message card). */
   --ui-reading-menu-width: 15rem;
   /* Stage 21 (decision 0064): the context menu of messages and its submenus. */
@@ -368,27 +437,29 @@
    its theme inside the current mode), so blue's block repeats the root values.
    tests/contrast.test.ts checks every theme in both modes with the same pairs as the root and
    that the blue block equals it. In dark, the soft fill and the selected row of every theme are
-   its accent mixed into the cool surfaces (about 12 %), so no theme brings back a warm grey.
+   its accent mixed into the cool surfaces (about 12 %), so no theme brings back a warm grey;
+   blue, the default (stage 23, decision 0083), mixes its stronger fill into the content
+   instead (16 % soft, 20 % selected), close to the draft's filled selection.
    Orange (the default of decision 0038 until 0053) is the logo's "Vice orange" (#ff7a00,
    docs/brand/README.md): `accent-fill` is the pure brand orange in both modes, with the logo's
    near-black on it; `accent` (text, icons, switches) is a burnt tone of the same hue in light,
    so it reaches 4.5:1 on every surface, and a lighter one in dark. Blue fills primary buttons
    with a brighter blue than its text tone, white on it in both modes. */
 [data-accent="blue"] {
-  --ui-accent: #0b5cc2;
-  --ui-accent-fill: #1665d8;
-  --ui-accent-soft: #e0ebf9;
-  --ui-selected: #dde8f8;
-  --ui-focus-ring: #2a72dc;
+  --ui-accent: #1360d3;
+  --ui-accent-fill: #1463d8;
+  --ui-accent-soft: #e8f0fc;
+  --ui-selected: #e3ecfa;
+  --ui-focus-ring: #1463d8;
   --ui-text-on-accent: #ffffff;
 }
 :root[data-theme="dark"][data-accent="blue"],
 :root[data-theme="dark"] [data-accent="blue"] {
-  --ui-accent: #4493f8;
-  --ui-accent-fill: #1f6feb;
-  --ui-accent-soft: #1c2a3d;
-  --ui-selected: #182638;
-  --ui-focus-ring: #58a6ff;
+  --ui-accent: #6aa8ff;
+  --ui-accent-fill: #2563eb;
+  --ui-accent-soft: #17243f;
+  --ui-selected: #172747;
+  --ui-focus-ring: #6aa8ff;
   --ui-text-on-accent: #ffffff;
 }
 [data-accent="teal"] {

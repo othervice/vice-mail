@@ -100,10 +100,11 @@ describe("message rows without avatars", () => {
     const dot = within(unread as HTMLElement).getByTestId("row-unread-dot");
     expect(within(unread as HTMLElement).getByTestId("row-mark").contains(dot)).toBe(true);
     expect(classes(dot)).toContain("group-hover/row:hidden");
-    // Unread is also bold, so it never rests on the dot alone.
-    expect(classes(within(unread as HTMLElement).getByTestId("row-sender"))).toContain("font-semibold");
+    // Unread is also bolder, so it never rests on the dot alone (stage 23, decision 0083: the
+    // draft's weights, bold and semibold).
+    expect(classes(within(unread as HTMLElement).getByTestId("row-sender"))).toContain("font-bold");
     expect(within(read as HTMLElement).queryByTestId("row-unread-dot")).toBeNull();
-    expect(classes(within(read as HTMLElement).getByTestId("row-sender"))).toContain("font-medium");
+    expect(classes(within(read as HTMLElement).getByTestId("row-sender"))).toContain("font-semibold");
     expect(await seriousFindings()).toEqual([]);
   });
 

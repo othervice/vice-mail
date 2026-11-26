@@ -54,11 +54,18 @@ describe("licence data", () => {
       expect(p.license).not.toMatch(/GPL/);
     }
     // Stage 22 (decision 0080): the font of the unread count on Windows, with the OFL's text.
-    const font = data.packages.find((p) => p.ecosystem === "font");
-    expect(font?.license).toBe("OFL-1.1");
-    expect(font?.platforms).toEqual(["windows"]);
-    expect(font?.notices.join(" ")).toMatch(/Microsoft Corporation/);
+    const fonts = data.packages.filter((p) => p.ecosystem === "font");
+    const badge = fonts.find((p) => p.name.startsWith("Badge Digits"));
+    expect(badge?.license).toBe("OFL-1.1");
+    expect(badge?.platforms).toEqual(["windows"]);
+    expect(badge?.notices.join(" ")).toMatch(/Microsoft Corporation/);
     expect(data.texts["OFL-1.1"]).toMatch(/SIL OPEN FONT LICENSE Version 1\.1/);
+    // Stage 23 (decision 0083): the UI font, in every build, with its own copyright and the OFL.
+    const inter = fonts.find((p) => p.name === "Inter");
+    expect(inter).toMatchObject({ version: "4.1", license: "OFL-1.1", repository: "https://github.com/rsms/inter" });
+    expect(inter?.platforms).toBeUndefined();
+    expect(inter?.notices.join(" ")).toMatch(/The Inter Project Authors/);
+    for (const id of inter?.texts ?? []) expect(data.texts[id]).toMatch(/SIL OPEN FONT LICENSE Version 1\.1/);
   });
 
   it("rejects malformed data", () => {

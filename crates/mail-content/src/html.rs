@@ -56,8 +56,9 @@ use mail_model::{MailColors, MailScheme, RenderToken, link_placeholder, parse_li
 pub const MAIL_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
 /// Default style of every `srcdoc`, before anything from the mail: a mail that names no font gets
-/// the app's system font (SF Pro on macOS, Segoe UI Variable on Windows, as `--ui-font-family` in
-/// `app/src/styles/tokens.css`) instead of the web view's Times. `:where()` gives it no
+/// the system font (SF Pro on macOS, Segoe UI Variable on Windows, as `--ui-font-family-mail` in
+/// `app/src/styles/tokens.css`) instead of the web view's Times. Not the UI's own font (Inter,
+/// decision 0083): mail content keeps the system font, and the frame's CSP loads no fonts. `:where()` gives it no
 /// specificity and it comes first, so any font the mail sets wins. Only `font-family`: sizes,
 /// colours and margins stay the web view's defaults, which mail layouts assume.
 pub const MAIL_DEFAULT_STYLE: &str = ":where(html){font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI Variable Text\",\"Segoe UI Variable\",system-ui,\"Segoe UI\",sans-serif}";
@@ -1222,6 +1223,20 @@ mod tests {
         );
         assert!(MAIL_DEFAULT_STYLE.starts_with(":where(html){font-family:-apple-system,"));
         assert!(MAIL_DEFAULT_STYLE.ends_with("sans-serif}"));
+        // The same list as the app's mail font (decision 0083), not the UI's Inter.
+        let tokens = include_str!("../../../app/src/styles/tokens.css");
+        let start = tokens.find("--ui-font-family-mail:").unwrap() + "--ui-font-family-mail:".len();
+        let end = start + tokens[start..].find(';').unwrap();
+        let token: String = tokens[start..end]
+            .split(',')
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join(",");
+        assert_eq!(
+            MAIL_DEFAULT_STYLE,
+            format!(":where(html){{font-family:{token}}}")
+        );
+        assert!(!MAIL_DEFAULT_STYLE.contains("Inter"));
         // No specificity and first in the document: the mail's rules come after it and win.
         let styled = render(
             "<html><head><style>body{font-family:Georgia,serif}</style></head><body><p>t</p></body></html>",
@@ -1691,9 +1706,9 @@ mod tests {
         ] {
             assert!(!doc.contains(gone), "{gone} is still in {doc}");
         }
-        assert!(doc.contains("<table bgcolor=\"#212830\">"), "{doc}");
-        assert!(doc.contains("text=\"#e6edf3\""), "{doc}");
-        assert!(doc.contains("<font color=\"#e6edf3\">"), "{doc}");
+        assert!(doc.contains("<table bgcolor=\"#1b2129\">"), "{doc}");
+        assert!(doc.contains("text=\"#e8edf3\""), "{doc}");
+        assert!(doc.contains("<font color=\"#e8edf3\">"), "{doc}");
         // The button's mid blue stays a blue background with white text.
         assert!(doc.contains(".button{background:#"), "{doc}");
         assert!(

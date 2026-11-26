@@ -11,7 +11,7 @@
 // app/node_modules (`pnpm --dir app install --frozen-lockfile`).
 //
 // What counts as shipped:
-// - Files that are no package (ASSETS below): the font of the unread count on Windows.
+// - Files that are no package (ASSETS below): the UI font, the font of the unread count on Windows.
 // - Rust: the crates linked into the `mail-app` and `mail-mcp` binaries for the targets of
 //   deny.toml ([graph] targets): normal dependencies with default features, without build
 //   scripts' dependencies, dev-dependencies and proc-macros (they run in the compiler and are not
@@ -45,6 +45,18 @@ const NPM_EXTRA_ALLOW = [
 
 // Files the app embeds that come from no package manager, each with its licence file in `dir`.
 const ASSETS = [
+  {
+    // Stage 23 (decision 0083): the UI font, served by the app from app/src/assets/fonts. The
+    // unmodified InterVariable.woff2 of the release (Inter-4.1.zip, web/; SHA-256 checked by
+    // app/tests/font.test.ts), in every build.
+    ecosystem: "font",
+    name: "Inter",
+    version: "4.1",
+    declared: "OFL-1.1",
+    repository: "https://github.com/rsms/inter",
+    dir: join(APP, "src", "assets", "fonts"),
+    platforms: null,
+  },
   {
     // Decision 0080: the digits of the unread count on Windows (taskbar overlay, notification
     // area), a subset of Selawik Semibold written by scripts/badge-font.py, embedded in mail-app.

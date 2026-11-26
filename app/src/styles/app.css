@@ -2,6 +2,22 @@
 @import "./tokens.css";
 
 /*
+ * Stage 23 (decision 0083): Inter 4.1, the UI font (`--ui-font-family`), shipped with the app as
+ * the unmodified variable file of its release (assets/fonts, SIL Open Font License 1.1 in
+ * LICENSE.txt there; listed by scripts/licenses.mjs). Served by the app itself ('self' in the
+ * CSP), never from the network. One file for every weight and the optical sizes; upright only, as
+ * the UI sets nothing in italic (mail content keeps the system font). `block`: the file is local,
+ * so the first frame waits for it instead of flashing in the system font.
+ */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+}
+
+/*
  * The Tailwind theme consists of the design tokens only. `--*: initial` removes Tailwind's
  * defaults (palette, spacing scale, fonts, ...), so utilities like `bg-red-500` or `p-5` do not
  * exist and every class resolves to a token. `inline` makes utilities read the token variables
@@ -17,6 +33,11 @@
   --color-surface-raised: var(--ui-surface-raised);
   --color-rail: var(--ui-rail);
   --color-rail-hover: var(--ui-rail-hover);
+  --color-rail-selected: var(--ui-rail-selected);
+  --color-toolbar: var(--ui-toolbar);
+  --color-band: var(--ui-band);
+  --color-panel: var(--ui-panel);
+  --color-button: var(--ui-button);
   --color-priority-tint: var(--ui-priority-tint);
   --color-selected: var(--ui-selected);
   --color-hover: var(--ui-hover);
@@ -57,14 +78,35 @@
   --color-account-7: var(--ui-account-7);
   --color-account-8: var(--ui-account-8);
 
+  /* Stage 23: file types of attachment cards (`bg-file-pdf-tint`, `bg-file-pdf`, `text-on-file`) */
+  --color-file-pdf: var(--ui-file-pdf);
+  --color-file-pdf-tint: var(--ui-file-pdf-tint);
+  --color-file-doc: var(--ui-file-doc);
+  --color-file-doc-tint: var(--ui-file-doc-tint);
+  --color-file-sheet: var(--ui-file-sheet);
+  --color-file-sheet-tint: var(--ui-file-sheet-tint);
+  --color-file-image: var(--ui-file-image);
+  --color-file-image-tint: var(--ui-file-image-tint);
+  --color-file-archive: var(--ui-file-archive);
+  --color-file-archive-tint: var(--ui-file-archive-tint);
+  --color-on-file: var(--ui-text-on-file);
+
   /* Mail content: `bg-mail-canvas` behind HTML mail, in both themes */
   --color-mail-canvas: var(--ui-mail-canvas);
 
-  /* Type: `text-12` ... `text-28`, `font-regular|medium|semibold` */
+  /* Type: `text-11` ... `text-28`, `font-regular|medium|semibold|bold`, `tracking-title` */
   --font-sans: var(--ui-font-family);
+  --font-sans--font-feature-settings: var(--ui-font-features);
   --default-font-family: var(--ui-font-family);
+  --default-font-feature-settings: var(--ui-font-features);
+  /* Stage 23: `font-mail` for mail content in the app's own document (decision 0083). */
+  --font-mail: var(--ui-font-family-mail);
+  --font-mail--font-feature-settings: normal;
   --font-mono: var(--ui-font-family-mono);
+  --font-mono--font-feature-settings: normal;
   --default-mono-font-family: var(--ui-font-family-mono);
+  --text-11: var(--ui-font-size-11);
+  --text-11--line-height: var(--ui-line-height-11);
   --text-12: var(--ui-font-size-12);
   --text-12--line-height: var(--ui-line-height-12);
   --text-13: var(--ui-font-size-13);
@@ -75,11 +117,15 @@
   --text-16--line-height: var(--ui-line-height-16);
   --text-20: var(--ui-font-size-20);
   --text-20--line-height: var(--ui-line-height-20);
+  --text-26: var(--ui-font-size-26);
+  --text-26--line-height: var(--ui-line-height-26);
   --text-28: var(--ui-font-size-28);
   --text-28--line-height: var(--ui-line-height-28);
   --font-weight-regular: var(--ui-font-weight-regular);
   --font-weight-medium: var(--ui-font-weight-medium);
   --font-weight-semibold: var(--ui-font-weight-semibold);
+  --font-weight-bold: var(--ui-font-weight-bold);
+  --tracking-title: var(--ui-letter-spacing-title);
 
   /* Spacing: only the 4 px grid steps from DESIGN.md exist */
   --spacing-0: 0px;
@@ -93,9 +139,10 @@
   --spacing-10: var(--ui-space-10);
   --spacing-12: var(--ui-space-12);
 
-  /* Radius: `rounded-control`, `rounded-row`, `rounded-card`, `rounded-panel` */
+  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel` */
   --radius-control: var(--ui-radius-control);
   --radius-row: var(--ui-radius-row);
+  --radius-tile: var(--ui-radius-tile);
   --radius-card: var(--ui-radius-card);
   --radius-panel: var(--ui-radius-panel);
 
@@ -176,6 +223,7 @@
     background-color: var(--ui-canvas);
     color: var(--ui-text-primary);
     font-family: var(--ui-font-family);
+    font-feature-settings: var(--ui-font-features);
     font-size: var(--ui-font-size-14);
     line-height: var(--ui-line-height-14);
     -webkit-font-smoothing: antialiased;
@@ -247,6 +295,19 @@
     border-radius: var(--ui-radius-card);
     clip-path: none;
   }
+}
+
+/*
+ * Stage 23 (decision 0083): the rows of the message list run across its whole width, so a
+ * selected row is filled from edge to edge, as in the draft. The cards drawn by rows (priority,
+ * an unfolded bundle) keep an 8 px gutter on both sides and the old 16 px lead inside. Unlayered,
+ * so it wins over the row's `left-0 w-full`.
+ */
+.list-card {
+  inset-inline: var(--ui-space-2);
+  width: auto;
+  --ui-row-lead: var(--ui-space-4);
+  --ui-tree-line-start: calc(var(--ui-space-4) + var(--ui-row-mark) / 2);
 }
 
 /* Stage 16: find in the open message (features/reading/find.ts). The app's own text (head,

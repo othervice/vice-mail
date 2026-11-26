@@ -2,7 +2,11 @@
  * The rich text body of the composer. TipTap's injected stylesheet is off (the CSP allows no
  * `<style>` elements at runtime), so the rules ProseMirror needs are here, with tokens only.
  */
+/* Stage 23 (decision 0083): the writing area keeps the system font, not the UI's Inter: what is
+   written here is sent in it (crates/mail-content, compose). The feature settings below also
+   replace the UI font's character variants. */
 .composer-prose {
+  font-family: var(--ui-font-family-mail);
   line-height: var(--ui-reading-line-height);
   white-space: pre-wrap;
   word-wrap: break-word;

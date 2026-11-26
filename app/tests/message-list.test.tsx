@@ -182,7 +182,8 @@ describe("message list", () => {
     expect(optionName(first)).toBe("Unread, Grace Hopper, Compiler notes, Has attachment, Flagged, 9:05 AM");
     expect(screen.getByRole("option", { name: "Unread, Grace Hopper, Compiler notes, Has attachment, Flagged, 9:05 AM" })).toBe(first);
     expect(document.getElementById(first?.getAttribute("aria-describedby") ?? "")?.textContent).toBe(full);
-    expect(within(first as HTMLElement).getByText("Grace Hopper").className).toContain("font-semibold");
+    // Stage 23 (decision 0083): the draft's weights, unread sender bold, read sender semibold.
+    expect(within(first as HTMLElement).getByText("Grace Hopper").className).toContain("font-bold");
     expect(within(first as HTMLElement).getByText("Compiler notes")).toBeTruthy();
     expect(within(first as HTMLElement).getByText("9:05 AM").tagName).toBe("TIME");
     expect(first?.querySelector(".lucide-paperclip")).toBeTruthy();
@@ -190,7 +191,7 @@ describe("message list", () => {
     expect(second?.textContent).toContain("(Unknown sender)");
     expect(second?.textContent).toContain("(No subject)");
     expect(optionName(second)).not.toContain("Unread");
-    expect(within(second as HTMLElement).getByText("(Unknown sender)").className).toContain("font-medium");
+    expect(within(second as HTMLElement).getByText("(Unknown sender)").className).toContain("font-semibold");
   });
 
   it("shows the preview muted after the subject and names the row with it", async () => {
