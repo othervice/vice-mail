@@ -88,6 +88,9 @@ export const config = {
     // appends three messages to the inbox and moves two to Junk and back, after the specs that
     // count the seed.
     "./tests/e2e/contacts.e2e.mjs",
+    // Stage 22 (decision 0074): contacts in the search and search inside words. Appends four
+    // messages to the inbox; sets up and removes alice itself.
+    "./tests/e2e/search-contacts.e2e.mjs",
     // Stage 18, block C (decision 0051): the new-mail popup. It delivers messages of its own,
     // deletes one into the trash and turns writes on for alice, then removes the account.
     "./tests/e2e/new-mail-popup.e2e.mjs",
