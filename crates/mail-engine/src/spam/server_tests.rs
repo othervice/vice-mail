@@ -20,8 +20,9 @@ use std::time::Duration;
 use mail_imap::ImapConnector;
 use mail_imap::test_support::{TestEnv, send_mail};
 use mail_model::{
-    AccountSettings, AccountState, CoreEvent, MailAction, MailboxId, MailboxRole, MessageId,
-    MessageRef, Security, ServerSettings, SpamFilterMark, SpamFilterSettings,
+    Access, AccountSettings, AccountState, CoreEvent, MailAction, MailBackend, MailConnector,
+    MailboxId, MailboxRole, MessageId, MessageRef, Security, ServerSettings, SpamFilterMark,
+    SpamFilterSettings, UidSet,
 };
 use tempfile::TempDir;
 use tokio::sync::broadcast;
@@ -93,10 +94,54 @@ fn letter(tag: &str, n: u32) -> (String, String) {
     )
 }
 
+/// Removes the mail this test sends (any run's) from Alice's INBOX and Junk on the server, so the
+/// seed's counts stay as other server tests expect them (`mail-imap`'s folder test counts Junk).
+async fn remove_test_mail(env: &TestEnv) {
+    let mut admin = ImapConnector::new()
+        .connect(&env.config(&env.alice, Security::Tls, Access::ReadWrite))
+        .await
+        .expect("admin session");
+    for folder in ["INBOX", "Junk"] {
+        let Ok(opened) = admin.open_mailbox(folder).await else {
+            continue;
+        };
+        let uids = admin.search_uids(&opened).await.expect("search");
+        let ours: Vec<_> = if uids.is_empty() {
+            Vec::new()
+        } else {
+            admin
+                .fetch_headers(&opened, &uids)
+                .await
+                .expect("headers")
+                .into_iter()
+                .filter(|h| {
+                    h.subject.starts_with("CHEAP PILLS ") || h.subject.starts_with("Hiking trip ")
+                })
+                .map(|h| h.uid)
+                .collect()
+        };
+        if !ours.is_empty() {
+            let set = UidSet::from_uids(ours.iter().copied());
+            for line in [
+                format!("UID STORE {set} +FLAGS.SILENT (\\Deleted)"),
+                format!("UID EXPUNGE {set}"),
+            ] {
+                let reply = admin
+                    .raw_command(&line, |_| false)
+                    .await
+                    .unwrap_or_else(|err| panic!("{line}: {err}"));
+                assert!(reply.ok, "{line}: {}", reply.text);
+            }
+        }
+        admin.raw_command("UNSELECT", |_| false).await.ok();
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "needs the test server: see the module docs"]
 async fn new_spam_goes_to_junk_on_the_test_server_and_undo_brings_it_back() {
     let env = TestEnv::require();
+    remove_test_mail(&env).await;
     let dir = TempDir::new().expect("temp dir");
     let mut services = CoreServices::with_connector(
         Credentials::new(MemorySecretStore::new()),
@@ -293,4 +338,5 @@ async fn new_spam_goes_to_junk_on_the_test_server_and_undo_brings_it_back() {
         after.learned_spam, after.learned_ham
     );
     core.shutdown().await;
+    remove_test_mail(&env).await;
 }
