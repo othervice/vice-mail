@@ -83,7 +83,11 @@ nicht, und ein Eintrag fasst dort höchstens 2.560 Bytes (deshalb die Stücke la
   Downgrade wird ohnehin nicht unterstützt (die Datenbank verweigert ältere Versionen).
 - Schlüsselbundverwaltung zeigt einen Eintrag `vault` (oder `vault.<n>`) statt einem je Konto.
 - Die Desktop-Tests (Dienst `org.vicemail.desktop.e2e`) prüfen weiter, dass nach dem Entfernen
-  der Konten nichts übrig ist; der Sammel-Eintrag verschwindet mit dem letzten Geheimnis.
+  der Konten nichts übrig ist; der Sammel-Eintrag verschwindet mit dem letzten Geheimnis. Einen
+  Sammel-Eintrag, den ein abgebrochener Lauf hinterlassen hat, würde der nächste (neu gebaute)
+  Test-Build lesen und dabei auf eine Abfrage warten; `wdio.conf.mjs` entfernt deshalb vor dem
+  Start unter der Sperre des Testservers `vault*`-Einträge dieses Testdiensts
+  (`removeLeftoverVault`).
 
 ## Geprüft
 
@@ -98,6 +102,13 @@ nicht, und ein Eintrag fasst dort höchstens 2.560 Bytes (deshalb die Stücke la
 - Echter Schlüsselbund (Dienst `org.vicemail.desktop.e2e`, GUI-Sitzung, ein Build): drei alte
   Einträge übernommen und gelöscht, Liste der Namen über die Suche, nächste Generation, nach dem
   Löschen bleibt nichts.
+- Desktop-Test `account-sync.e2e.mjs` mit der Test-App (echter Schlüsselbund, Dienst
+  `org.vicemail.desktop.e2e`): grün; nach dem Anlegen eines Kontos gibt es einen Eintrag, nach dem
+  Entfernen keinen mehr.
+- Nebenbei beobachtet: Eine neu gebaute Test-App (andere Signatur) fand einen Sammel-Eintrag, den
+  der vorige Build hinterlassen hatte; `add_account` wartete daraufhin über zwei Minuten (der
+  SecurityAgent lief, also vermutlich die Abfrage auf dem Bildschirm, den niemand sah). Das passt
+  zu „eine Abfrage pro Update“; den Dialog selbst hat niemand gesehen.
 - **Ungeprüft:** wie oft macOS beim echten Update von 0.1.2 auf 0.1.3 und von 0.1.3 auf 0.1.4
   fragt, und ob es dabei alte Einträge löschen lässt. Das geht nur mit zwei verschieden signierten
   Builds und einem Menschen, der die Abfragen beantwortet.

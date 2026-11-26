@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA_DIR_ENV, WEBDRIVER_PORT, quitApp } from "./tests/e2e/support/lifecycle.mjs";
 import { SevereServiceError } from "webdriverio";
-import { CA_FILE, EXTRA_CA_ENV, LOOPBACK_IMAGES_ENV, prepareTestServer, testmailSync } from "./tests/e2e/support/testmail.mjs";
+import { CA_FILE, EXTRA_CA_ENV, LOOPBACK_IMAGES_ENV, prepareTestServer, removeLeftoverVault, testmailSync } from "./tests/e2e/support/testmail.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Built by `pnpm build:e2e`: debug profile, embedded assets, the production CSP.
@@ -179,6 +179,9 @@ export const config = {
       // Waits up to 30 minutes for another session's tests; prints "already held" if ours.
       ownLock = !testmailSync("lock", LOCK_NAME, "30").includes("already held");
       console.log(`test server lock: ${LOCK_NAME}${ownLock ? "" : " (held by the caller)"}`);
+      // Stage 22 (decision 0075): under the lock, so no other run's app is using the keychain.
+      const leftover = removeLeftoverVault();
+      if (leftover.length > 0) console.log(`removed keychain items an earlier run left: ${leftover.join(", ")}`);
       const seed = README_SHOTS ? ["1000", "--no-smtp"] : [PERF ? PERF_SEED : "10000", "--filler-folder", "INBOX"];
       const ms = prepareTestServer({ seed });
       console.log(`test server ready with ${seed[0]} messages after ${ms} ms`);
