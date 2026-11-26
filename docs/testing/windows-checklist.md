@@ -599,6 +599,31 @@ Touchpad) prüfen, nicht mit der Tastatur. Zwei Konten einrichten, beide mit Sch
   öffnet sich, Vice Mail bleibt, wie es war. Das PNG erscheint in der Signatur.
 - **Ergebnis:**
 
+## 24. Seitenleiste nach Konten (Stufe 23, 0085)
+
+Zwei oder drei Konten einrichten; Windows 11 mit Transparenzeffekten (Mica) und ohne.
+
+**24.1 Aufbau, Mica, Schrift**
+- **Tun:** Vice Mail öffnen, die Spalte links ansehen (hell und dunkel, ein anderes Farbthema).
+  „Mehr“ und „Weitere Ordner“ eines Kontos aufklappen, mit der Maus über Zeilen fahren. Das Fenster
+  schmal ziehen (Spalte wird zur Leiste) und wieder breit.
+- **Erwartet:** Oben „Alle Konten“ mit Posteingang (Zahl halbfett), Später, Markiert, Gesendet,
+  „Mehr“; dann „Favoriten“; je Konto ein Kopf mit farbigem Quadrat und Namen, Posteingang und
+  Gesendet mit Symbolen in der Kontofarbe, „Weitere Ordner“. Unten „Abgeglichen um …“, ein
+  Pfeilkreis und ein Zahnrad. Mica scheint durch die Spalte, der Text bleibt gut lesbar, Inter
+  sieht aus wie auf dem Mac. Die gewählte Zeile ist grau hinterlegt und halbfett, ohne blauen
+  Balken. In der schmalen Leiste stehen die ungelesenen Mails unter dem Punkt jedes Kontos.
+- **Ergebnis:**
+
+**24.2 Gemerkt, Abgleichen, Tastatur**
+- **Tun:** „Mehr“ öffnen, „Weitere Ordner“ eines Kontos öffnen, ein Konto zuklappen; Vice Mail
+  beenden und neu starten. „Jetzt abgleichen“ anklicken. Mit Tab durch die Spalte gehen, mit den
+  Pfeiltasten in „Alle Konten“ und in einem Konto bewegen, → und ← auf „Mehr“.
+- **Erwartet:** Nach dem Neustart ist alles so offen oder zu wie vorher. Nach „Jetzt abgleichen“
+  steht kurz „Gleicht ab …“, danach die neue Uhrzeit. Tab hält in „Alle Konten“, bei den Favoriten,
+  bei jedem Konto und im Fuß je einmal; → und ← klappen „Mehr“ auf und zu.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

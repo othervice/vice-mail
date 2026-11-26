@@ -52,7 +52,78 @@ nehmen wir.“). Umgesetzt in vier Schritten (Stufendatei 23, Punkt 2); Schritt 
 Was Schritt 1 schon anwendet: Kopf jeder Ansicht im Ton der Werkzeugleiste, Monatsabschnitte der
 Liste als Bänder, aktiver Eintrag der Seitenleiste auf neutraler Fläche (Symbol im Akzent),
 Zweitknöpfe auf `button`, KI-Panel auf `panel`. Was die Schritte 2 bis 4 umbauen, steht in
-Entscheidung 0083.
+Entscheidung 0083. Schritt 2, die Seitenleiste, steht unter „Seitenleiste nach Konten“.
+
+## Seitenleiste nach Konten (Stufe 23, Entscheidung 0085)
+
+Die Seitenspalte wie im freigegebenen Entwurf; Code `app/src/app/SidebarColumn.tsx`,
+`AllAccountsTree.tsx`, `SidebarFooter.tsx`, `features/mailboxes/MailboxTree.tsx`,
+`features/organize/folders.tsx` (Favoriten), `features/layout/sidebarFolds.ts`.
+
+```
+  (Kopf: Seitenleiste ausblenden; ab Schritt 3 in der Werkzeugleiste)
+  Alle Konten                     ← mit einem Konto „Ansichten“
+  ▭ Posteingang            18     ← vereint, nur ab zwei Konten; halbfett gezählt
+  ◷ Später                        ← Ansichten vor der Linie „Mehr“ (Standard: Später, Markiert)
+  ⚑ Markiert
+  ➤ Gesendet                      ← nur ab zwei Konten
+  › Mehr                          ← zu; darunter die übrigen Ansichten, Kontogruppen,
+                                    gespeicherte Suchen, Aktivität, Ausgang
+  Favoriten
+  ▭ Messe 2027              3     ← Symbol in der Farbe seines Kontos
+  ▪ Arbeit                        ← Kopf: Quadrat in der Kontofarbe, Listenname
+  ▭ Posteingang            12     ← Symbole in der Kontofarbe
+  ➤ Gesendet
+  › Weitere Ordner                ← zu; alle übrigen Ordner als Baum
+  ───────────────────────────────
+  Abgeglichen um 18:04     ⟳  ⚙
+```
+
+**Was „Alle Konten“ zeigt.** Der Posteingang ist der vereinte Posteingang. Später, Markiert und
+Gesendet zeigen wie bisher (und wie die schmale Leiste) das gewählte Konto; vereinte Listen dafür
+fehlen noch (Entscheidung 0085). Gesendet im Abschnitt eines Kontos öffnet bei mehreren Konten den
+Ordner selbst, damit nie zwei Zeilen zugleich als gezeigt gelten.
+
+**Maße.** Zeilen 28 px (`--ui-sidebar-row`), Text 13 px in `text-primary`, Symbol 16 px davor
+(8 px Abstand), Zähler am Ende 12 px mit Tabellenziffern: leise in `text-tertiary`, nur
+ungelesene Mails eines Posteingangs halbfett in `text-secondary`. Rundung 7 px, Innenabstand 8 px.
+Abschnittsköpfe 11 px halbfett in `text-tertiary`, 24 px hoch, ihr Pfeil erscheint beim Überfahren
+und bei Fokus (zugeklappt immer). 8 px zwischen den Abschnitten. Konten-Kopf: Quadrat 8 px
+(Rundung 2 px, `rounded-mark`) in der Kontofarbe, dann der Listenname (0078). „Mehr“ und „Weitere
+Ordner“: Pfeil an der Stelle des Symbols, Text `text-secondary`. Darunter 16 px Einzug je Ebene
+(erste Ebene 24 px); der Pfeil eines Ordners mit Unterordnern sitzt in den 16 px vor seinem Symbol.
+
+**Auswahl.** Die gezeigte Zeile liegt auf `rail-selected`, halbfett, ihr Symbol im Akzent (in den
+Abschnitten der Konten und bei den Favoriten bleibt es in der Kontofarbe); kein Balken am Anfang.
+Liegt die gezeigte Ansicht unter einem zugeklappten „Mehr“ oder „Weitere Ordner“, trägt diese Zeile
+die Fläche (ohne `aria-current`), und Tab kommt dort an. Überfahren: `rail-hover`.
+
+**Farben der Konten.** Symbole der Ordner eines Kontos und seiner Favoriten in der Kontofarbe
+(`accountText`), das Quadrat am Kopf, die Punkte der schmalen Leiste. Die Farbe steht nie allein:
+Der Kopf nennt das Konto, ein Favorit hat es im Namen; sichtbar steht der Kurzname des Kontos neben
+einem Favoriten nur, wenn ein anderer Favorit gleich heißt.
+
+**Zähler.** Posteingang aller Konten: ungelesene Mails der sichtbaren Konten. Konto zugeklappt: seine
+Summe am Kopf. „Weitere Ordner“ zugeklappt: die ungelesenen Mails der eigenen Ordner darin.
+Aktivität und Ausgang: wartend leise, was den Menschen braucht als rote Plakette; zugeklappt zeigt
+„Mehr“ (und der Kopf „Alle Konten“) die rote Zahl, damit Fehler nie verborgen sind.
+
+**Fuß.** Haarlinie (8 px vor den Rändern der Spalte), 11 px `text-tertiary`: „Abgeglichen um
+18:04“ (Ende des letzten vollen Abgleichs des Kontos, das am längsten nicht abgeglichen hat; nicht
+heute: „am 25.11. um 18:04“), während eines
+Abgleichs „Gleicht ab …“, ein Konto offline „Club: Offline“ (Wolke, `text-secondary`), eines ohne
+Abgleich „Arbeit: Kein Abgleich“ (Ausrufezeichen, `danger`), mehrere „2 Konten: …“, alle offline
+„Offline“; der Tooltip nennt die Konten. Daneben zwei 24-px-Symbolknöpfe, ein Tab-Stopp: „Jetzt
+abgleichen“ (jedes Konto einen vollen Durchgang, ein getrenntes verbindet sich neu; wie „Ordner vom
+Server neu laden“) und Einstellungen.
+
+**Gemerkt** auf diesem Gerät (`UiPreferences.sidebarFolds`): „Alle Konten“, „Mehr“, Favoriten, jedes
+Konto und seine „Weiteren Ordner“, offen oder zu; gespeichert wird nur, was vom Standard abweicht.
+
+**Schmale Leiste.** Gleiche Gliederung als Symbole: Posteingang, die Ansichten vor der Linie,
+Gesendet; Haarlinie; die Ansichten unter „Mehr“, Entwürfe, Archiv, Papierkorb, Ordner. Unten die
+Konten als Punkte, die Zahl ihrer ungelesenen Mails darunter (11 px, `text-secondary`, ab 1.000
+„999+“; das Zeichen für offline oder Fehler oben am Rand), Aktivität, Ausgang, Einstellungen. Aktiv: `rail-selected` und Symbol im Akzent, kein Balken.
 
 ## Aufbau
 
@@ -73,15 +144,18 @@ Entscheidung 0083.
 └────┴──────────────────────────────────────────────┴───────────────┘
 ```
 
-**Seitenspalte** (Standard, 240 px, siehe „Seitenspalte“): vereinter Posteingang, Ansichten,
-gespeicherte Suchen, Favoriten, dann jedes Konto mit seinen Ordnern, unten Aktivität, Ausgang,
+**Seitenspalte** (Standard, 240 px, siehe „Seitenspalte“ und seit Stufe 23 „Seitenleiste nach
+Konten“): „Alle Konten“ mit „Mehr“, Favoriten, je Konto ein Abschnitt, unten der Abgleich und
 Einstellungen. Eingeklappt bleibt die **Icon-Leiste** (56 px). Von oben: vereinter Posteingang,
-dann die Ansichten der Spalte in der gewählten Reihenfolge (Stufe 17, „Ansichten bearbeiten“; Standard:
-Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Markiert (die Markierung
-des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, gespeicherte
-Ansichten, Kontakte (Stufe 17, 0050)), dann fest Gesendet, Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Unten:
+dann die Ansichten vor der Linie „Mehr“ (Stufe 23; Standard Später, Markiert), Gesendet,
+Haarlinie, die Ansichten unter „Mehr“ in der gewählten Reihenfolge (Stufe 17, „Ansichten
+bearbeiten“; Standard: Warten auf Antwort, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16,
+0033 und 0036), Anhänge, Angepinnt, gespeicherte Ansichten, Kontakte (Stufe 17, 0050)), dann fest
+Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Markiert ist die Markierung des
+Servers aus allen Ordnern außer Papierkorb und Spam (24.11.2026). Unten:
 Konten-Umschalter (je Konto ein Punkt in seiner Farbe, 12 px, Name als Tooltip und zugänglicher Name;
-keine Initialen, Stufe 22, Entscheidung 0072), Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
+keine Initialen, Stufe 22, Entscheidung 0072; seit Stufe 23 mit der Zahl seiner ungelesenen Mails),
+Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
 **Kopf der Liste.** Titel der Ansicht mit Auswahl von Konto oder Kontogruppe, darunter eine
@@ -465,7 +539,8 @@ Mängel gezeigt, die so behoben sind:
 Wunsch: eine Spalte links mit den Konten und ihren Ordnern, wie Mailbird, Outlook oder Thunderbird.
 Die bisherige ausklappbare Seitenleiste ist dazu umgebaut (`app/src/app/SidebarColumn.tsx`).
 
-**Aufbau von oben.** Kopfzeile so hoch wie der Kopf der Liste (unter macOS liegen dort die
+**Aufbau von oben** (bis Stufe 22; seit Stufe 23 gilt „Seitenleiste nach Konten“ oben, die Regeln
+dieses Abschnitts für Konten, Ordner, Ziehen, Menüs und Breite gelten weiter). Kopfzeile so hoch wie der Kopf der Liste (unter macOS liegen dort die
 Fensterknöpfe), rechts der Knopf „Seitenleiste ausblenden“. Dann „Alle Posteingänge“ mit der Zahl
 der ungelesenen Mails aller nicht ausgeblendeten Konten, darunter die Kontogruppen (nur ab zwei
 Konten oder mit Gruppen). Dann „Ansichten“: Später, Aufgaben, Zum Lesen, Angeheftete Anhänge,
@@ -476,7 +551,9 @@ gespeicherte Suchen, Favoriten, danach je Konto ein Baum. Unten, mit Haarlinie a
 Ausgang und Einstellungen mit ihren Zählern. Ohne Konto: Ansichten, der Hinweis „Noch kein Konto“
 und die untere Gruppe; keine Zahlen.
 
-**Konto.** Die Zeile des Kontos ist die Wurzel seines Baums: Pfeil, Kontofarbe als Punkt, Name
+**Konto.** Die Zeile des Kontos ist die Wurzel seines Baums (seit Stufe 23 ein Kopf wie die
+Abschnitte: Quadrat in der Kontofarbe, Name 11 px; die Summe der Ungelesenen nur zugeklappt; darunter
+Posteingang, Gesendet und „Weitere Ordner“): Pfeil, Kontofarbe als Punkt, Name
 (halbfett), bei Problemen ein ruhiges Zeichen (offline: Wolke durchgestrichen, gedämpft; Fehler:
 Ausrufezeichen in `danger`), rechts die Summe der Ungelesenen in Posteingang und eigenen Ordnern
 (nicht Spam, Papierkorb, Gesendet, Entwürfe, nicht Gmails „Alle Nachrichten“ und „Markiert“, die
@@ -511,7 +588,10 @@ ihre Adresse, bis sie einen Namen bekommen.
 
 **Ordner.** Rollen zuerst in fester Reihenfolge Posteingang, Entwürfe, Gesendet, Archiv, Spam,
 Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als Baum, je Ebene
-16 px eingerückt (als Innenabstand, damit Fläche und Balken über die ganze Zeile gehen). Symbole
+16 px eingerückt (als Innenabstand, damit Fläche und Balken über die ganze Zeile gehen). Seit
+Stufe 23 stehen Posteingang und Gesendet allein, alle anderen unter „Weitere Ordner“ (Rollen
+zuerst, dann die eigenen Ordner; eigene Ordner unter Posteingang oder Gesendet, etwa bei Servern
+mit `INBOX.` vor allem, rücken dort zu den anderen eigenen Ordnern, der Pfad steht im Tooltip). Symbole
 16 px, Rollen mit eigenem Symbol. Zähler rechtsbündig mit Tabellenziffern; ein Ordner mit
 Ungelesenen hat den Namen in Primärfarbe, der Posteingang zusätzlich einen halbfetten Zähler. Der
 „…“-Knopf erscheint beim Überfahren und bei Tastaturfokus über dem Zähler (der so lange verschwindet)
@@ -561,16 +641,17 @@ Vorgang in der Aktivität; sobald der Server ihn hat, steht er im Baum unter sei
 nimmt Mails auf. Bei nur lesenden Konten bleiben die Einträge sichtbar, sind als nicht verfügbar
 markiert und sagen beim Klick warum (wie Umbenennen und Löschen); „Neu laden“ geht immer.
 
-**Abschnitte.** „Ansichten“, „Gespeicherte Suchen“ und „Favoriten“ haben ein leises Etikett (12 px,
+**Abschnitte.** „Ansichten“, „Gespeicherte Suchen“ und „Favoriten“ (seit Stufe 23 „Alle Konten“
+und „Favoriten“, 11 px, gemerkt auf dem Gerät) haben ein leises Etikett (12 px,
 halbfett, `text-tertiary`), das die erste Zeile ihres Baums ist: Klick, Eingabe, ← und → klappen den
 Abschnitt ein. Der Pfeil erscheint beim Überfahren und bei Fokus, eingeklappt immer (wie die
 Seitenleisten von macOS). So bleibt die Spalte kompakt, ohne zusätzliche Tab-Stopps. „Alle
 Posteingänge“ hat kein sichtbares Etikett (eine verborgene Überschrift für Screenreader).
 
-**Zeilen.** 32 px, Rundung 6, Text 13 px. Ruhend `text-secondary`, beim Überfahren `rail-hover`. Die
-gezeigte Zeile: `accent-soft`, Symbol im Akzent, Name in Primärfarbe, Balken in `accent-fill` am
-Zeilenanfang (nicht Farbe allein). Fläche der Spalte: `rail`, die dunkelste Stufe, Haarlinie zur
-Liste. Abstand zwischen Abschnitten 20 px, Kontobäume 12 px.
+**Zeilen.** Seit Stufe 23 (0085) 28 px, Text 13 px in Primärfarbe, die gezeigte Zeile auf
+`rail-selected`, halbfett, ohne Balken; Abstand zwischen allen Abschnitten 8 px (siehe
+„Seitenleiste nach Konten“). Bis Stufe 22: 32 px, Rundung 6, ruhend `text-secondary`, die gezeigte
+Zeile mit Balken in `accent-fill`, Abstand zwischen Abschnitten 20 px, Kontobäume 12 px.
 
 **Breite.** Standard 240 px, mit dem Griff am rechten Rand zwischen 200 und 320 px (Doppelklick:
 Standard). Der Griff ist ein Fenster-Trenner nach WAI-ARIA (`role="separator"`, Wert in px):
@@ -598,9 +679,8 @@ Nie eine waagrechte Bildlaufleiste; bei 900 × 600 bleibt alles erreichbar.
 
 **Tastatur.** Jeder Baum ist ein Tab-Stopp (siehe unten); Kopfknopf und Griff sind je einer. Mit
 einem Konto kostet die Spalte 5 Stopps (Seitenleiste ausblenden, Griff, Ansichten, Konto mit
-Ordnern, untere Gruppe), einen mehr als die Seitenleiste vorher. Mit zwei Konten, Favoriten, Gruppen
-und gespeicherten Suchen sind es 8, gleich viele wie vorher: Der Kontoknopf über dem Ordnerbaum ist
-jetzt dessen Wurzel.
+Ordnern, Fuß). Mit zwei Konten, Favoriten, Gruppen und gespeicherten Suchen sind es seit Stufe 23
+7 (vorher 8): Gruppen und gespeicherte Suchen stehen unter „Mehr“ im Baum „Alle Konten“.
 
 ## Ansichten bearbeiten (Stufe 17)
 
@@ -641,9 +721,17 @@ Ansicht, der Fokus bleibt auf ihr und ein Live-Bereich sagt „Markiert, Platz 2
 Dialog, Escape, „Fertig“, X und ein Klick daneben schließen ihn; der Fokus kehrt zurück, wo er war
 (sonst zum Etikett „Ansichten“). Kürzel der Ansicht dahinter wirken nicht, solange er offen ist.
 
-**Leiste und leere Auswahl.** Die schmale Leiste zeigt dieselbe Auswahl in derselben Reihenfolge
-zwischen Posteingang und Gesendet; Posteingang, Gesendet, Entwürfe, Archiv, Papierkorb und Ordner
-bleiben fest. Ausgeblendete Ansichten bleiben über die Befehlspalette („Gehe zu …“) und ihre Kürzel
+**Linie „Mehr“ (Stufe 23, Entscheidung 0085).** Die Liste hat einen Eintrag mehr: die Linie
+„Unter ‚Mehr‘“ (11 px halbfett, `text-tertiary`, mit Haarlinie, Griff und Pfeilknöpfen, kein
+Kästchen). Ansichten davor stehen in „Alle Konten“, danach unter „Mehr“; Standard: Später und
+Markiert davor. Mit der Maus lässt sich die Linie ziehen wie eine Ansicht, mit der Tastatur wandern
+die Ansichten über sie hinweg (Alt+↑/↓); die Ansage nennt die Seite („Markiert, unter „Mehr“,
+Platz 1 von 9“). Eine Liste von vor Stufe 23 (ohne Linie) behält Auswahl und Reihenfolge: Später
+und Markiert kommen nach vorn, alles andere unter „Mehr“.
+
+**Leiste und leere Auswahl.** Die schmale Leiste zeigt dieselbe Auswahl in derselben Reihenfolge,
+gegliedert wie die Spalte (siehe „Seitenleiste nach Konten“); Posteingang, Gesendet, Entwürfe,
+Archiv, Papierkorb und Ordner bleiben fest. Ausgeblendete Ansichten bleiben über die Befehlspalette („Gehe zu …“) und ihre Kürzel
 erreichbar. Ist keine Ansicht eingeblendet, steht unter dem Etikett leise „Keine Ansicht
 eingeblendet.“ (12 px, `text-tertiary`) und ein leiser Knopf „Ansichten bearbeiten …“ im Akzent
 (ein Tab-Stopp mehr, nur in diesem Zustand) statt eines leeren Bands.
@@ -700,7 +788,8 @@ dem Namen ist für die Maus (Tooltip „Unterordner … zeigen“); der „…�
 Gezogene Mails werden auf der Zeile selbst abgelegt.
 
 **Leiste.** Die Ansichten oben und die Gruppe unten (in der schmalen Leiste die Konten, dazu
-Aktivität, Ausgang, Einstellungen; in der Seitenspalte nur die drei) sind je eine senkrechte
+Aktivität, Ausgang, Einstellungen; in der Seitenspalte seit Stufe 23 der Fuß mit „Jetzt
+abgleichen“ und Einstellungen, waagerecht) sind je eine senkrechte
 Symbolleiste (`role="toolbar"`, `aria-orientation="vertical"`, „Mail-Ansichten“ und „Aktivität und
 Einstellungen“): ↑/↓ und Pos1/Ende bewegen, Eingabe und Leertaste wirken wie bei jedem Knopf. Tab
 kommt auf der aktiven Ansicht an, unten ohne aktive Ansicht auf dem gewählten Konto. Cmd/Strg+1 bis
