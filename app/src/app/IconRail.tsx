@@ -388,6 +388,8 @@ export function IconRail() {
       // Decision 0031: the darkest tonal step of the frame, a hairline to the list.
       className="flex h-full w-(--ui-rail-width) shrink-0 flex-col items-center border-r border-border-subtle bg-rail"
       data-testid="icon-rail"
+      // Decision 0079: chrome; Mica shows through it on Windows 11.
+      data-chrome
     >
       {/* Room for the window buttons that macOS draws over this corner. */}
       <div aria-hidden data-tauri-drag-region={dragRegion ? "deep" : undefined} className="h-(--ui-titlebar-inset) w-full shrink-0" />

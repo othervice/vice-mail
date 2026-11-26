@@ -1,6 +1,6 @@
 use mail_engine::{AppCore, DiagnosticsEnv};
-use mail_model::{AppInfo, DiagnosticsExportResult, IpcError, StartupProblem};
-use tauri::{AppHandle, Runtime, State, WebviewWindow};
+use mail_model::{AppInfo, DiagnosticsExportResult, IpcError, StartupProblem, WindowBackdrop};
+use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
 
 use super::to_ipc;
 
@@ -9,6 +9,21 @@ use super::to_ipc;
 #[specta::specta]
 pub fn get_app_info(core: State<'_, AppCore>) -> Result<AppInfo, IpcError> {
     Ok(core.app_info())
+}
+
+/// Stage 22 (decision 0079): what the system draws where the calling window's page is
+/// transparent: `mica` for the main window on Windows 11 (unless transparency effects are off or
+/// a contrast theme is on), `none` everywhere else. The UI leaves its chrome transparent only
+/// for `mica`.
+#[tauri::command]
+#[specta::specta]
+pub fn get_window_backdrop<R: Runtime>(
+    window: WebviewWindow<R>,
+) -> Result<WindowBackdrop, IpcError> {
+    Ok(window
+        .try_state::<crate::backdrop::Backdrops>()
+        .map(|backdrops| backdrops.get(window.label()))
+        .unwrap_or_default())
 }
 
 /// What kept the local database from opening at this start, if anything (the app shell shows

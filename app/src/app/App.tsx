@@ -5,8 +5,10 @@ import { useState } from "react";
 import { I18nextProvider, useTranslation } from "react-i18next";
 import { FileX } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
-import { useAppInfo } from "../features/app-info/queries";
+import { useAppInfo, useWindowBackdrop } from "../features/app-info/queries";
 import { usePlatformAttribute } from "../features/app-info/usePlatformAttribute";
+// Stage 22 (decision 0079): Mica behind the chrome on Windows 11.
+import { useBackdropAttribute } from "../features/app-info/useBackdropAttribute";
 import { DEFAULT_PREFERENCES, usePreferences } from "../features/preferences/queries";
 import { usePreferenceEffects } from "../features/preferences/usePreferenceEffects";
 // Stage 8: UI preferences and layout from the core; message and composer windows.
@@ -51,11 +53,14 @@ function AppRoot() {
   // While loading (or after a load error) the defaults apply: follow the system.
   usePreferenceEffects(preferences.data ?? DEFAULT_PREFERENCES);
   usePlatformAttribute(appInfo.data?.platform);
+  const backdrop = useWindowBackdrop();
+  useBackdropAttribute(backdrop.data);
 
-  // Both answers are local and take milliseconds. Waiting for the first one avoids showing the
-  // frame in the wrong theme, language or title-bar layout. Errors are shown inside the frame,
-  // and a retry from there must not unmount it again.
-  if (!hasSettled(preferences) || !hasSettled(appInfo) || !ui.settled) return null;
+  // All answers are local and take milliseconds. Waiting for the first one avoids showing the
+  // frame in the wrong theme, language, title-bar layout or backdrop. Errors are shown inside
+  // the frame (a failed backdrop question just leaves every surface opaque), and a retry from
+  // there must not unmount it again.
+  if (!hasSettled(preferences) || !hasSettled(appInfo) || !hasSettled(backdrop) || !ui.settled) return null;
   switch (route.kind) {
     case "main":
       return (

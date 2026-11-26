@@ -57,6 +57,7 @@ import {
   type OperationState,
   type OutboxCounts,
   type Platform,
+  type WindowBackdrop,
   type Preferences,
   type PrefetchPeriod,
   type PrefetchSettings,
@@ -128,6 +129,7 @@ export type {
   OperationState,
   OutboxCounts,
   Platform,
+  WindowBackdrop,
   Preferences,
   PrefetchPeriod,
   PrefetchSettings,
@@ -297,6 +299,8 @@ export type Unsubscribe = () => void;
 
 export const ipc = {
   getAppInfo: (): Promise<AppInfo> => call(() => commands.getAppInfo()),
+  /** Stage 22 (decision 0079): `mica` when Windows 11 draws Mica behind this window's chrome. */
+  getWindowBackdrop: (): Promise<WindowBackdrop> => call(() => commands.getWindowBackdrop()),
   /** What kept the local database from opening at this start; `null` when it opened. */
   getStartupProblem: (): Promise<StartupProblem | null> => call(() => commands.getStartupProblem()),
   getPreferences: (): Promise<Preferences> => call(() => commands.getPreferences()),

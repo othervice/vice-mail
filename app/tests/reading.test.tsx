@@ -70,6 +70,8 @@ function link(overrides: Partial<LinkInfo> = {}): LinkInfo {
  */
 const READING_COMMANDS = new Set([
   "get_app_info",
+  // Stage 22 (decision 0079): whether Mica lies behind the window (asked the shell once).
+  "get_window_backdrop",
   // Audit 24.11.2026: whether the database opened at start (read-only, asked once).
   "get_startup_problem",
   "get_preferences",

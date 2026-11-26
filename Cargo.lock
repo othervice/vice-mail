@@ -3503,6 +3503,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "skrifa 0.49.0",
  "specta",
  "specta-typescript",
  "tauri",

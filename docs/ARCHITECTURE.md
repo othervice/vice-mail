@@ -55,6 +55,7 @@ once it is large enough.
 | Notifications, single instance | tauri-plugin-notification, tauri-plugin-single-instance (Windows only) | 2.8.1 / 2.5.5 | stage 9 (0020): native notifications only from Rust (no capability for the UI), clicks via the plugin's action handler; on Windows a second launch (`mailto:` link) passes its arguments on to the running app; since stage 21 (0069) a second launch without arguments opens the main window again, also after it was closed into the background. Since stage 18 (0051) new mail shows in the app's own popup window by default; failed sends and returned snoozes stay native. Both Apache-2.0 OR MIT |
 | Popup window and sound (stage 18, 0051) | objc2, objc2-app-kit, objc2-foundation, objc2-quartz-core (macOS); windows, windows-registry (Windows) | 0.6.5 / 0.3.2 / 0.3.2 / 0.3.2; 0.62.2 / 0.6.1 | the versions Tauri, wry and hickory already build with, now direct dependencies of `mail-app`, safe calls only: on macOS the new-mail popup's `NSWindow` (never key, rounded content layer, not in the Window menu, every Space) and its sound (`NSSound`, `NSBeep`); on Windows the toast sound's file from the sound scheme (registry) played with WinRT's `MediaPlayer`. Before, objc2 was only in the desktop-test build. objc2 MIT, objc2-app-kit and objc2-quartz-core Zlib OR Apache-2.0 OR MIT, objc2-foundation MIT, windows and windows-registry MIT OR Apache-2.0 |
 | Tray icon, running in the background (stage 21, 0069, 0070) | Tauri feature `tray-icon` (crate tray-icon), objc2-app-kit feature `NSDockTile`; own login items via windows-registry (Run key) and a launch agent file | 0.25.1 / 0.3.2 / 0.6.1 | the icon in the menu bar (macOS, a template image) or the notification area (Windows) with the unread count and a menu; tray-icon is Tauri's own crate (also builds muda), released 2026-09-16, MIT OR Apache-2.0, already in the lock file as Tauri's optional dependency. The Dock badge is set on `NSDockTile` (safe binding) so it stays current without a window. Not `tauri-plugin-autostart` (2.7.0, Apache-2.0 OR MIT): it brings `auto-launch` 0.6 with `smappservice-rs` and `os_info`, offers its commands to the UI, and its macOS main-app login item cannot pass `--background`; `objc2-service-management` (for `SMAppService`) had no release in the last 12 months (0.3.2 of 2025-10-04). The Run key and the plist are ~150 lines in `autostart.rs`, tested with a fake |
+| Unread count on Windows, drawn from a font (stage 22, 0080) | skrifa; font Selawik Semibold (subset "Badge Digits", `app/src-tauri/fonts`) | 0.49.0 / 1.01 | the digits of the taskbar overlay and the notification-area badge are real glyphs, auto-hinted by skrifa (Google fontations) at exactly the pixel size Windows shows and filled by a small scanline rasteriser in `badge.rs`. skrifa was already linked through hayro at this version and with these features (released 2026-10-21, MIT OR Apache-2.0), so nothing new is compiled. Selawik is Microsoft's open-source stand-in for Segoe UI under the SIL Open Font License 1.1, which allows bundling and embedding with any software; the subset (3.6 kB, digits and the capitals the hinter measures) is renamed as the OFL asks and listed as a `font` entry by `scripts/licenses.mjs`. Not ab_glyph_rasterizer (in the tree too, last release August 2025) and not Segoe UI from the system (not testable on the Mac, different per Windows version) |
 | In-app updates | tauri-plugin-updater | =2.14.1 | stage 15 (0037): manifest, signature verification (minisign/Ed25519, `requireSignedVersion`), replacing the app bundle (macOS) and NSIS installer in `passive` mode (Windows); only from Rust, no capability for the UI. Without default features (no `ring`, no system proxy, no zip), TLS via our reqwest/rustls through `configure_client`, hence pinned exactly. Released 2026-10-28, Apache-2.0 OR MIT. `tauri-plugin-process` not needed (`AppHandle::request_restart`) |
 | WebView2 access | webview2-com (only in `webview2-guard`) | =0.39.1 | subscribe to `FrameNavigationStarting`, which wry does not offer (0011) |
 | Keychain | keyring-core with apple-native-keyring-store and windows-native-keyring-store | 1.1 / 1.0 / 1.1 | macOS keychain (login keychain) and Windows credentials; recommended for apps by the `keyring` project, without a global default store and without Linux D-Bus. Service name = bundle ID, account name = account UUID; accounts adopted from the settings sync get a random name `synced:<hex>` (0040). Since stage 22 (0075) on macOS one item (`vault`, `vault.<n>`) holds every entry; its names are listed with the store's search (attributes only, no dialog) |
@@ -737,11 +738,27 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   icon, `badge::on_icon`, and in the tooltip), menu Open, New Message, Pause Notifications (1 h,
   until 08:00 tomorrow, resume), Quit. The texts come from the UI (`setDesktopTexts`) and are kept
   by the core. No capability: the UI cannot reach the tray.
-- The counter (stage 9, redrawn in stage 21, 0068): macOS `NSDockTile.badgeLabel` on the app
-  (current without a window); Windows the taskbar overlay drawn at 16 logical pixels for the
-  window's scale (`badge::overlay`, pixel-exact digits, "99+") and drawn again on
-  `ScaleFactorChanged`; every window's icon is the app icon's own entry for the taskbar size of
-  its scale (24 logical pixels, `Image::from_app_icon_resource`).
+- The counter (stage 9, redrawn in stage 21, 0068, digits from a font since stage 22, 0080):
+  macOS `NSDockTile.badgeLabel` on the app (current without a window); Windows the taskbar
+  overlay drawn at 16 logical pixels for the window's scale (`badge::overlay`, "99+") and drawn
+  again on `ScaleFactorChanged`; every window's icon is the app icon's own entry for the taskbar
+  size of its scale (24 logical pixels, `Image::from_app_icon_resource`). The digits are glyphs of
+  the embedded Selawik subset, auto-hinted by skrifa (strongest mode: zones, stem edges and
+  widths on whole pixels) and filled by `badge.rs`'s own scanline rasteriser; every count with as
+  many glyphs gets the same size, the largest that stands on solid red with a rim. `overlay` and
+  `on_icon` return `BadgeError` (never with the embedded font; the callers log it). The installer
+  hook tells the shell after install and update that the icon changed (`SHChangeNotify`), so
+  pinned shortcuts drop the icon Windows cached for the replaced exe.
+- The Windows 11 look (stage 22, 0079, `backdrop.rs`): when a window is built on Windows 11
+  (build 22000+) with transparency effects on and no contrast theme (read from the registry),
+  it gets Tauri's `Mica` effect (window-vibrancy; follows the window's dark mode, which
+  `window_theme` keeps on the app's choice), so the native title bar is drawn in the material.
+  The main window is also built transparent (`transparent(true)`); `get_window_backdrop` tells
+  its page `mica`, the UI sets `data-backdrop` and `app.css` leaves the page and its chrome
+  (`data-chrome`: frame, icon rail, docked folder column) transparent, only under
+  `prefers-reduced-transparency: no-preference` and `forced-colors: none`. Content surfaces stay
+  opaque. Other windows: Mica in the title bar only. Native caption buttons stay (snap layouts).
+  No `unsafe`; elsewhere (macOS, Windows 10, settings off) nothing changes.
 - Start with the system (stage 21, 0070): `autostart.rs`, a launch agent of the user
   (`~/Library/LaunchAgents/<id>.plist`, `RunAtLoad`, the executable with `--background`) or the
   Run key value `<product name>` (plus Task Manager's `StartupApproved` state) on Windows; the
@@ -1149,6 +1166,8 @@ Until the UI has been switched over, these values are still kept in the marked f
 |---|---|---|
 | Logo in blue (0068), approved by the human on 2026-11-25; icons from one script (`scripts/icons.sh`) | the GitHub blues of the colour scheme (0053); every size from its own source, so a new artwork is one command | swap the colours back in `make_svgs.py` and `Brand.tsx`, run the script |
 | The counter drawn for the display scale, window icon from the icon's own entry (0068) | Windows shows the overlay at 16 logical pixels; a 32 px image shrunk to 16 blurs the digits | the stage 9 overlay (32 px, one size) |
+| The counter's digits from an embedded font (Selawik subset, OFL), auto-hinted at the exact pixel size; installer refreshes the shell's icons (0080) | the bitmap fonts of 0068 were sharp but blocky ("pixelated"); pinned shortcuts kept the cached orange icon after the update | the bitmap fonts of 0068 (`badge.rs` of stage 21) |
+| Mica on Windows 11: title bar of every window, behind the main window's chrome; native caption buttons (0079) | the human chose the Windows 11 look; Tauri's effects need no `unsafe`; content stays on opaque surfaces for contrast | `backdrop::choose` returns `None`: no effect, opaque window, as in 0.1.2 |
 | Closing the main window keeps the app running, web view destroyed, tray icon (0069) | the human chose it after the test of 0.1.1; no idle web view in the background (0048) | switch "keep running" off; without it the app quits with its last window as before |
 | Own login item (launch agent, Run key) instead of `tauri-plugin-autostart` or `SMAppService` (0070) | starts hidden with `--background`, no new dependency, testable with a fake | the plugin, or `SMAppService` once a maintained binding exists |
 | Trackers are counted and never loaded; links lose tracking parameters; redirects are not resolved (0058) | the user sees what the mail tried; the request for an approved image never carries tracking data; resolving a redirect would call the tracking service | turn off `reading.block_trackers` and `reading.clean_links` |

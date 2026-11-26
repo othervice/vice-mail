@@ -1505,6 +1505,7 @@ export const de: Translation = {
         ecosystem: {
           rust: "Rust",
           npm: "npm",
+          font: "Schrift",
         },
         usedUnder: "Lizenz",
         declared: "Angabe der Bibliothek",

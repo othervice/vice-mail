@@ -105,6 +105,11 @@ icu_properties = { version = "2.4.0", default-features = false, features = ["com
 # the standard fonts and CMaps embedded. Both Apache-2.0 OR MIT.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 hayro = "0.9.0"
+# Stage 22 (decision 0080): the unread count on Windows is drawn from a font (a Selawik subset in
+# app/src-tauri/fonts): skrifa reads and auto-hints the outlines (mail-app rasterises them
+# itself). In the tree through hayro already, at this version and with these features, so nothing
+# new is compiled or shipped; released 2026-10-21, MIT OR Apache-2.0.
+skrifa = "0.49.0"
 
 # Sending (stage 5). mail-builder writes the MIME message in mail-content; without default
 # features, so it never reads the host name (it would go into generated Message-IDs; we always

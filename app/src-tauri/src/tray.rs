@@ -235,14 +235,16 @@ fn icon<R: Runtime>(app: &AppHandle<R>, count: u32) -> Option<tauri::image::Imag
             return app.default_window_icon().cloned().map(|i| i.to_owned());
         }
     };
-    let drawn = crate::badge::on_icon(
-        &crate::badge::Rgba {
-            width: base.width(),
-            height: base.height(),
-            pixels: base.rgba().to_vec(),
-        },
-        count,
-    );
+    let plain = crate::badge::Rgba {
+        width: base.width(),
+        height: base.height(),
+        pixels: base.rgba().to_vec(),
+    };
+    let drawn = crate::badge::on_icon(&plain, count).unwrap_or_else(|err| {
+        // Never with the font the app is built with (badge tests); the tooltip names the count.
+        tracing::warn!(%err, "count not drawn on the tray icon");
+        plain
+    });
     Some(tauri::image::Image::new_owned(
         drawn.pixels,
         drawn.width,

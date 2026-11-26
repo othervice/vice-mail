@@ -83,8 +83,9 @@ export function AppShell({ eventsError }: AppShellProps) {
   }, [docked]);
 
   return (
-    // `data-sidebar` lets app.css move header titles clear of the macOS window buttons.
-    <div className="relative flex h-full bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"}>
+    // `data-sidebar` lets app.css move header titles clear of the macOS window buttons;
+    // `data-chrome`: with Mica (Windows 11, decision 0079) the frame is left transparent.
+    <div className="relative flex h-full bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"} data-chrome>
       {docked ? <SidebarColumn overlay={false} /> : <IconRail />}
       {overlay && <SidebarColumn overlay />}
       {/* Focusable (not in the Tab order): where the focus goes when what had it is gone (stage 8). */}

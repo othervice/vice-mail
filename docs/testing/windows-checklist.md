@@ -469,7 +469,7 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   (Testkonto).
 - **Erwartet:** Logo blau, scharf, ohne weiche Kanten, auch nach dem Wechsel der Skalierung bei
   laufender App. Ziffern weiß auf Rot, jedes Pixel klar, keine grauen Ränder; über 99 steht „99+“.
-  Tooltip des Symbols: „Vice Mail: N ungelesen“.
+  Tooltip des Symbols: „Vice Mail: N ungelesen“. (Ab 0.1.3 sehen die Ziffern anders aus: 22.1.)
 - **Ergebnis:** (Bildschirmfotos bei 100 und 150 % beilegen)
 
 **21.2 Fenster schließen, im Hintergrund weiter, wieder öffnen**
@@ -503,6 +503,58 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   die App den Schalter aus; in der App eingeschaltet ist es im Task-Manager wieder aktiviert. Nach
   dem Deinstallieren ist der Eintrag weg (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
   Ein Update (neuere Version drüber installieren) lässt den Eintrag stehen.
+- **Ergebnis:**
+
+## 22. Windows-11-Optik und Zähler mit echter Schrift (Stufe 22, 0079, 0080)
+
+**22.1 Zähler: Ziffern wie Segoe UI, scharf**
+- **Tun:** Wie 21.1 bei 100, 125, 150 und 200 %: eine, zwei und mehr als 99 ungelesene Mails
+  (z. B. 7, 42, 100+), am Taskleisten-Knopf und am Symbol im Infobereich; jeweils mit der
+  Bildschirmlupe (Win+Plus) vergrößert ansehen. Dazu die Vergleichsbilder vom Mac danebenlegen.
+- **Erwartet:** Echte Ziffern (Form wie Segoe UI, halbfett), weiß auf Rot, gerade Striche voll
+  weiß ohne graue Spalte, nur Bögen und Schrägen mit weichen Pixeln; Ziffern mittig, mit rotem
+  Rand rundherum. Taskleiste: eine Ziffer im Kreis, zwei Ziffern und „99+“ in einem Rechteck mit
+  runden Ecken. Infobereich: Kreis oder Pille unten rechts, eine Ziffer nicht kleiner als zwei.
+  Die Zahl springt beim Wechsel von 41 auf 42 nicht in der Größe. Nach dem Wechsel der Skalierung
+  bei laufender App sofort wieder scharf.
+- **Ergebnis:** (Bildschirmfotos bei 100 und 150 % beilegen)
+
+**22.2 Symbol nach dem Update blau**
+- **Tun:** Vorher notieren, welche Version läuft (Einstellungen → Über) und ob Vice Mail an die
+  Taskleiste angeheftet ist. 0.1.3 über die laufende Version installieren (Update in der App oder
+  Installer). Danach Taskleiste, Startmenü, Desktop-Verknüpfung und Alt+Tab ansehen, ohne
+  abzumelden.
+- **Erwartet:** Überall das blaue Symbol, auch an der angehefteten Verknüpfung, spätestens wenige
+  Sekunden nach dem Installieren. Falls die angeheftete noch orange ist: lösen und neu anheften,
+  und notieren, dass `SHChangeNotify` nicht gereicht hat (dann hilft `ie4uinit.exe -show`).
+- **Ergebnis:** Version vorher: ____ · angeheftet: ja/nein · Symbol danach: ____
+
+**22.3 Mica, Titelleiste, Andock-Layouts**
+- **Tun:** Unter Einstellungen → Personalisierung → Farben „Transparenzeffekte“ einschalten. Vice
+  Mail öffnen, in der App Darstellung Hell, dann Dunkel, dann System wählen; das Fenster über ein
+  helles, ein dunkles und ein buntes Hintergrundbild schieben. Die Spalte der Konten und Ordner
+  einklappen und wieder aufklappen, das Fenster schmal ziehen, bis die Spalte über dem Inhalt
+  liegt. Die Maus über den Maximieren-Knopf halten. Eine Mail in eigenem Fenster und einen
+  Entwurf im Fenster öffnen.
+- **Erwartet:** Titelleiste und linker Rand (Rahmen, schmale Leiste oder Spalte) sind ein Stück
+  Mica, ohne Naht, hell oder dunkel wie die App und beim Umschalten sofort mit ihr. Liste,
+  Lesebereich, Menüs und Dialoge undurchsichtig wie bisher; über der Liste liegende Spalte
+  undurchsichtig. Text in der Spalte gut lesbar über jedem Hintergrundbild. Beim Größenändern kein
+  Flackern, keine schwarzen oder weißen Ränder. Am Maximieren-Knopf erscheinen die Andock-Layouts.
+  Mail- und Entwurfsfenster: Titelleiste in Mica, Inhalt wie bisher. Popup für neue Mails
+  unverändert.
+- **Ergebnis:** (Bildschirmfotos hell und dunkel beilegen)
+
+**22.4 Ohne Transparenz, mit Kontrastdesign**
+- **Tun:** Bei offenem Fenster „Transparenzeffekte“ ausschalten und ansehen; Vice Mail schließen
+  und neu öffnen. Dann unter Barrierefreiheit → Kontrastdesigns eines wählen (z. B. „Wüste“) und
+  wieder „Keines“.
+- **Erwartet:** Ohne Transparenz sofort feste Flächen in den Farben der App (die Titelleiste in
+  einer festen Farbe von Windows; gibt WebView2 die Einstellung nicht weiter, ist auch die Spalte
+  in dieser festen Farbe, nicht durchsichtig: bitte notieren, welches von beiden), nach dem
+  Neustart wie in 0.1.2. Im Kontrastdesign die Farben
+  des Designs, nichts durchsichtig, alles lesbar. Wieder eingeschaltet: im nächsten Fenster
+  wieder Mica.
 - **Ergebnis:**
 
 ## Notizen und „Wartet auf“
