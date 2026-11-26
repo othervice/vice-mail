@@ -19,7 +19,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, $$, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, invoke, openSettings, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, invoke, openSettings, openSidebarParts, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, REPO, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const RUN = Date.now().toString(36);
@@ -49,6 +49,8 @@ async function folderMenu(name) {
     await testId("rail-folders").click();
     await column.waitForExist({ timeout: 10000 });
   }
+  // Stage 23 (decision 0085): folders other than the inbox and Sent are under "More folders".
+  await openSidebarParts();
   const button = await $(`button[aria-label="Options for ${name}"]`);
   await button.waitForExist({ timeout: 20000 });
   await button.click();

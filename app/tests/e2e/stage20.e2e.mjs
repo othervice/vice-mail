@@ -21,7 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, invoke, openSettings, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, invoke, openSettings, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages, replyTo, setQuota } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -307,9 +307,11 @@ describe("stage 20: reminders, attachments view, trackers, quota", () => {
     await testId("account-quota-warning").waitForExist();
     report.screenshots.push(await screenshot("stage20-quota"));
     report.steps.quota.percent = percent;
-    // The account in the column carries the mark.
+    // The account in the column carries the mark (the column open, whatever earlier specs left).
     await openView("inbox");
+    const sidebarWas = await setSidebar(true);
     await testId(`account-quota-mark-${account.id}`).waitForExist({ timeout: 20000 });
+    await setSidebar(sidebarWas);
 
     // Without a limit the server reports nothing, and the app says so.
     await setQuota(null);
