@@ -18,7 +18,7 @@ interface ButtonProps {
 // elevation, secondary as a raised neutral button with a hairline, quiet as accent text.
 const VARIANTS = {
   primary: "bg-accent-fill text-on-accent shadow-row hover:bg-accent-fill/90",
-  secondary: "border border-border bg-surface-raised text-primary shadow-row hover:bg-hover",
+  secondary: "border border-border bg-button text-primary shadow-row hover:bg-hover",
   danger: "bg-danger text-on-danger shadow-row hover:bg-danger/90",
   quiet: "text-accent hover:bg-hover",
 } as const;

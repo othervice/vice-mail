@@ -2,8 +2,8 @@ import { cx } from "../../components/cx";
 
 /**
  * Shared look of the accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): 32 px rows;
- * the entry shown right now sits on the accent's soft fill with a bar at its start (not colour
- * alone). Every tree of the column uses these, so they read as one column. Section labels:
+ * the entry shown right now sits on the column's neutral selected fill (stage 23, decision 0083:
+ * `rail-selected`, its icon in the accent) with a bar at its start (not colour alone). Every tree of the column uses these, so they read as one column. Section labels:
  * `SectionRow`.
  *
  * A row of a column tree; `extra` adds padding, indentation and drop states.
@@ -12,7 +12,7 @@ export function sidebarRowClass(current: boolean, extra?: string | false): strin
   return cx(
     "relative flex h-8 min-w-0 items-center rounded-control text-13 transition-colors",
     current
-      ? "bg-accent-soft font-medium text-primary before:absolute before:inset-y-2 before:start-0 before:w-1 before:rounded-control before:bg-accent-fill"
+      ? "bg-rail-selected font-medium text-primary before:absolute before:inset-y-2 before:start-0 before:w-1 before:rounded-control before:bg-accent-fill"
       : "text-secondary hover:bg-rail-hover hover:text-primary",
     extra,
   );

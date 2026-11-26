@@ -33,6 +33,11 @@
   --color-surface-raised: var(--ui-surface-raised);
   --color-rail: var(--ui-rail);
   --color-rail-hover: var(--ui-rail-hover);
+  --color-rail-selected: var(--ui-rail-selected);
+  --color-toolbar: var(--ui-toolbar);
+  --color-band: var(--ui-band);
+  --color-panel: var(--ui-panel);
+  --color-button: var(--ui-button);
   --color-priority-tint: var(--ui-priority-tint);
   --color-selected: var(--ui-selected);
   --color-hover: var(--ui-hover);
@@ -72,6 +77,19 @@
   --color-account-6: var(--ui-account-6);
   --color-account-7: var(--ui-account-7);
   --color-account-8: var(--ui-account-8);
+
+  /* Stage 23: file types of attachment cards (`bg-file-pdf-tint`, `bg-file-pdf`, `text-on-file`) */
+  --color-file-pdf: var(--ui-file-pdf);
+  --color-file-pdf-tint: var(--ui-file-pdf-tint);
+  --color-file-doc: var(--ui-file-doc);
+  --color-file-doc-tint: var(--ui-file-doc-tint);
+  --color-file-sheet: var(--ui-file-sheet);
+  --color-file-sheet-tint: var(--ui-file-sheet-tint);
+  --color-file-image: var(--ui-file-image);
+  --color-file-image-tint: var(--ui-file-image-tint);
+  --color-file-archive: var(--ui-file-archive);
+  --color-file-archive-tint: var(--ui-file-archive-tint);
+  --color-on-file: var(--ui-text-on-file);
 
   /* Mail content: `bg-mail-canvas` behind HTML mail, in both themes */
   --color-mail-canvas: var(--ui-mail-canvas);

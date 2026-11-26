@@ -1706,9 +1706,9 @@ mod tests {
         ] {
             assert!(!doc.contains(gone), "{gone} is still in {doc}");
         }
-        assert!(doc.contains("<table bgcolor=\"#212830\">"), "{doc}");
-        assert!(doc.contains("text=\"#e6edf3\""), "{doc}");
-        assert!(doc.contains("<font color=\"#e6edf3\">"), "{doc}");
+        assert!(doc.contains("<table bgcolor=\"#1b2129\">"), "{doc}");
+        assert!(doc.contains("text=\"#e8edf3\""), "{doc}");
+        assert!(doc.contains("<font color=\"#e8edf3\">"), "{doc}");
         // The button's mid blue stays a blue background with white text.
         assert!(doc.contains(".button{background:#"), "{doc}");
         assert!(

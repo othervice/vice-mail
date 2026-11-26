@@ -97,7 +97,7 @@ export function UnsubscribeBar({ messageId, accountId, options }: UnsubscribeBar
           onClick={() => {
             setAsking(true);
           }}
-          className="inline-flex h-8 items-center rounded-control border border-border bg-surface-raised px-3 text-13 font-medium text-primary shadow-row hover:bg-hover"
+          className="inline-flex h-8 items-center rounded-control border border-border bg-button px-3 text-13 font-medium text-primary shadow-row hover:bg-hover"
           data-testid="unsubscribe-open"
         >
           {t("extras.unsubscribe.open")}

@@ -32,7 +32,7 @@ export function OpenSourceLicenses() {
             setOpen((value) => !value);
           }}
           data-testid="about-licenses-toggle"
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border bg-surface-raised px-3 text-13 font-medium text-primary shadow-row transition-colors hover:bg-hover"
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border bg-button px-3 text-13 font-medium text-primary shadow-row transition-colors hover:bg-hover"
         >
           <ChevronRight
             aria-hidden

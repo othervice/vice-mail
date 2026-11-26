@@ -196,7 +196,7 @@ function CancelButton({ ref, label, onClick }: { ref: Ref<HTMLButtonElement>; la
       type="button"
       onClick={onClick}
       data-testid="confirm-dialog-cancel"
-      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border bg-surface-raised px-3 text-13 font-medium text-primary shadow-row transition-colors hover:bg-hover"
+      className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-control border border-border bg-button px-3 text-13 font-medium text-primary shadow-row transition-colors hover:bg-hover"
     >
       {label}
     </button>

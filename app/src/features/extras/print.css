@@ -59,18 +59,24 @@
      (tests/extras-tools.test.tsx keeps these equal to the light values in tokens.css). */
   :root[data-theme="dark"] {
     color-scheme: light;
-    --ui-canvas: #eef2f6;
-    --ui-surface: #fdfeff;
+    --ui-canvas: #f6f7f9;
+    --ui-surface: #ffffff;
     --ui-surface-raised: #ffffff;
-    --ui-surface-list: #f6f8fb;
-    --ui-badge: #e5eaf0;
-    --ui-border: #d8dfe7;
-    --ui-border-subtle: #e3e8ee;
+    --ui-surface-list: #ffffff;
+    --ui-badge: #eef1f5;
+    --ui-border: #dde1e7;
+    --ui-border-subtle: #e5e8ec;
     --ui-border-strong: #737f8d;
-    --ui-text-primary: #19212c;
-    --ui-text-secondary: #444e5c;
-    --ui-text-tertiary: #566171;
-    --ui-accent: #0b5cc2;
-    --ui-accent-soft: #e0ebf9;
+    --ui-text-primary: #131a24;
+    --ui-text-secondary: #455061;
+    --ui-text-tertiary: #5b6676;
+    --ui-accent: #1360d3;
+    --ui-accent-soft: #e8f0fc;
+    /* Stage 23: attachment cards on the light tints of their file types. */
+    --ui-file-pdf-tint: #fdeeee;
+    --ui-file-doc-tint: #e9f0fd;
+    --ui-file-sheet-tint: #e8f5ec;
+    --ui-file-image-tint: #f1ebfd;
+    --ui-file-archive-tint: #fbf0e2;
   }
 }

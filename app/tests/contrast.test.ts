@@ -46,8 +46,24 @@ const accentThemes = Object.fromEntries(
 );
 const themes: Record<string, Tokens> = { light, dark, ...accentThemes };
 
-// Decision 0031: `surface-list` is the list column's own tinted surface.
-const SURFACES = ["canvas", "surface", "surface-list", "surface-raised", "rail", "priority-tint", "selected", "hover"];
+// Decision 0031: `surface-list` is the list column's own surface. Stage 23 (decision 0083): the
+// sidebar's selected entry, the toolbar, the date bands, the contact panel and buttons.
+const SURFACES = [
+  "canvas",
+  "surface",
+  "surface-list",
+  "surface-raised",
+  "rail",
+  "priority-tint",
+  "selected",
+  "hover",
+  "rail-selected",
+  "toolbar",
+  "band",
+  "panel",
+  "button",
+];
+const FILE_TYPES = ["pdf", "doc", "sheet", "image", "archive"];
 const ACCOUNTS = Array.from({ length: 8 }, (_, i) => `account-${i + 1}`);
 
 const TEXT_PAIRS: [string, string][] = [
@@ -98,6 +114,15 @@ const TEXT_PAIRS: [string, string][] = [
   ["text-primary", "track"],
   ["text-secondary", "track"],
   ["text-primary", "surface-raised"],
+  // Stage 23 (decision 0083). Counts and labels on the chips (`badge`); accent text on the
+  // toolbar, bands, panel, buttons and the sidebar's hover ("Cc", links, quiet buttons).
+  // Attachment cards: name and size on the type's tint, the badge's label on its fill.
+  ["text-tertiary", "badge"],
+  ...["toolbar", "band", "panel", "button", "rail-hover"].map((bg): [string, string] => ["accent", bg]),
+  ...FILE_TYPES.flatMap((type) =>
+    ["text-primary", "text-secondary", "text-tertiary"].map((fg): [string, string] => [fg, `file-${type}-tint`]),
+  ),
+  ...FILE_TYPES.map((type): [string, string] => ["text-on-file", `file-${type}`]),
 ];
 
 const CONTROL_PAIRS: [string, string][] = [
@@ -149,6 +174,13 @@ const CONTROL_PAIRS: [string, string][] = [
   // off knob on the track.
   ["accent", "track"],
   ["text-secondary", "track"],
+  // Stage 23: the icon of the sidebar's selected entry in the accent; account colours as icons
+  // and squares in the sidebar (on its hover and selected fills too) and as the stripe of rows on
+  // the bands; field borders on the toolbar and panel.
+  ["accent", "rail-selected"],
+  ...ACCOUNTS.flatMap((account) => ["rail-hover", "rail-selected", "band", "toolbar"].map((bg): [string, string] => [account, bg])),
+  ...["toolbar", "panel", "button", "band"].map((bg): [string, string] => ["border-strong", bg]),
+  ...["toolbar", "button", "rail-selected", "band", "panel"].map((bg): [string, string] => ["focus-ring", bg]),
 ];
 
 describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
@@ -184,6 +216,9 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       "badge",
       "border-subtle",
       "priority-border",
+      // Stage 23 (decision 0083)
+      ...FILE_TYPES.flatMap((type) => [`file-${type}`, `file-${type}-tint`]),
+      "text-on-file",
     ];
     for (const name of expected) expect(tokens, name).toHaveProperty(name);
   });
@@ -215,12 +250,33 @@ it("dark theme has its own surface steps instead of reusing light ones", () => {
   for (const name of [...SURFACES, "rail-hover", "badge"]) expect(dark[name], name).not.toBe(light[name]);
 });
 
-it("orders the surfaces as decision 0031 says: rail darkest, list column tinted, reading pane brightest", () => {
-  // Light: lower luminance is darker. Dark: the rail is the darkest step too.
-  expect(luminance(light["rail"] ?? "")).toBeLessThan(luminance(light["surface-list"] ?? ""));
-  expect(luminance(light["surface-list"] ?? "")).toBeLessThan(luminance(light["surface"] ?? ""));
-  expect(luminance(dark["rail"] ?? "")).toBeLessThan(luminance(dark["surface-list"] ?? ""));
-  expect(luminance(dark["surface-list"] ?? "")).toBeLessThan(luminance(dark["surface"] ?? ""));
+it("orders the surfaces as decision 0083 says: one content surface, the chrome a step apart, bands between", () => {
+  // Stage 23 replaces the three steps of decision 0031 (rail darkest, list tinted, reading pane
+  // brightest) with the approved draft: list and reading pane are one surface; sidebar and
+  // toolbar are a step darker in light and a step lighter in dark; the content is the extreme.
+  for (const tokens of [light, dark]) {
+    expect(tokens["surface-list"]).toBe(tokens["surface"]);
+    expect(tokens["toolbar"], "toolbar").not.toBe(tokens["surface"]);
+  }
+  const l = (tokens: Tokens, name: string) => luminance(tokens[name] ?? "");
+  for (const name of ["rail", "toolbar", "band", "panel", "rail-selected"]) {
+    expect(l(light, name), `light ${name}`).toBeLessThan(l(light, "surface"));
+    expect(l(dark, name), `dark ${name}`).toBeGreaterThan(l(dark, "surface"));
+  }
+  // The selected entry of the sidebar stands out from the sidebar and its hover.
+  expect(l(light, "rail-selected")).toBeLessThan(l(light, "rail-hover"));
+  expect(l(light, "rail-hover")).toBeLessThan(l(light, "rail"));
+  expect(l(dark, "rail-selected")).toBeGreaterThan(l(dark, "rail-hover"));
+  expect(l(dark, "rail-hover")).toBeGreaterThan(l(dark, "rail"));
+});
+
+it("uses the approved draft's colours (stage 23, decision 0083)", () => {
+  const draft = {
+    light: { surface: "#ffffff", rail: "#f2f4f7", band: "#f6f7f9", "border-subtle": "#e5e8ec", "text-primary": "#131a24", "text-secondary": "#455061", "text-tertiary": "#5b6676", "accent-fill": "#1463d8", "rail-selected": "#e2e8f1", badge: "#eef1f5", toolbar: "#f7f8fa", button: "#ffffff", border: "#dde1e7", panel: "#f8f9fb" },
+    dark: { surface: "#14181e", rail: "#1a1f27", toolbar: "#1a1f27", band: "#1b2129", "border-subtle": "#29303b", "text-primary": "#e8edf3", "text-secondary": "#bcc5d0", "text-tertiary": "#98a3b0", accent: "#6aa8ff", "accent-fill": "#2563eb", "rail-selected": "#2a3341", badge: "#252c37", button: "#232a34", border: "#333b48", "surface-raised": "#1b2129", panel: "#171c23" },
+  };
+  expect(Object.fromEntries(Object.keys(draft.light).map((k) => [k, light[k]]))).toEqual(draft.light);
+  expect(Object.fromEntries(Object.keys(draft.dark).map((k) => [k, dark[k]]))).toEqual(draft.dark);
 });
 
 it("keeps the neutrals cool in both themes, never warm (decision 0053)", () => {
@@ -235,6 +291,11 @@ it("keeps the neutrals cool in both themes, never warm (decision 0053)", () => {
     "badge",
     "track",
     "priority-tint",
+    "rail-selected",
+    "toolbar",
+    "band",
+    "panel",
+    "button",
     "priority-border",
     "border",
     "border-subtle",
@@ -298,6 +359,7 @@ it("the contrast check itself is calibrated (black on white is 21:1)", () => {
  * over a given wallpaper is for the check on Windows (docs/testing/windows-checklist.md).
  */
 const MICA = { light: "#e6e6e6", dark: "#282828" } as const;
+// Stage 23: the sidebar's hover and selected fills stay opaque on Mica, so they are not here.
 const ON_CHROME = new Set(["rail", "canvas"]);
 
 describe.each(Object.entries(themes))("%s theme on Mica", (name, tokens) => {

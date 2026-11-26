@@ -618,7 +618,7 @@ export function AiPanel() {
   return (
     <aside
       aria-label={t("ai.panel.title")}
-      className="flex w-(--ui-ai-panel-width) max-w-full shrink-0 flex-col border-s border-border bg-surface max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:end-0 max-[1100px]:z-10 max-[1100px]:shadow-panel"
+      className="flex w-(--ui-ai-panel-width) max-w-full shrink-0 flex-col border-s border-border bg-panel max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:end-0 max-[1100px]:z-10 max-[1100px]:shadow-panel"
       data-testid="ai-panel"
     >
       <header className="flex h-(--ui-header-height) shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-4">

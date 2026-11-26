@@ -1472,7 +1472,7 @@ export function MessageList({
                       role="presentation"
                       aria-hidden
                       data-testid="list-section"
-                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-end ps-(--ui-row-lead) pe-3 pb-1 text-12 font-semibold text-tertiary"
+                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-center border-b border-border-subtle bg-band ps-(--ui-row-lead) pe-3 text-12 font-semibold text-tertiary"
                     >
                       <SectionLabel section={row.section} bounds={bounds} />
                     </div>

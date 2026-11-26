@@ -94,7 +94,7 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     : cx(
         "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
         active
-          ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
+          ? "bg-rail-selected font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
           : "text-secondary hover:bg-rail-hover hover:text-primary",
         drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
         drop.refused && DROP_REFUSED_CLASS,

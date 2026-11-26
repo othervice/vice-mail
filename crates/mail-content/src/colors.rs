@@ -58,12 +58,12 @@ use crate::dom::{self, Descend, Visit};
 
 /// The canvas of an adapted mail: the dark theme's raised card (`--ui-surface-raised` in
 /// `app/src/styles/tokens.css`), so the mail and its card are one surface.
-pub const DARK_CANVAS: [u8; 3] = [0x21, 0x28, 0x30];
+pub const DARK_CANVAS: [u8; 3] = [0x1b, 0x21, 0x29];
 /// Text of an adapted mail without a colour of its own, and the lightest text the pass writes
 /// (`--ui-text-primary` of the dark theme).
-pub const DARK_TEXT: [u8; 3] = [0xe6, 0xed, 0xf3];
+pub const DARK_TEXT: [u8; 3] = [0xe8, 0xed, 0xf3];
 /// Links without a colour of their own in an adapted mail (`--ui-accent` of the dark theme).
-pub const DARK_LINK: [u8; 3] = [0x44, 0x93, 0xf8];
+pub const DARK_LINK: [u8; 3] = [0x6a, 0xa8, 0xff];
 /// Backgrounds with a higher relative luminance become dark.
 pub const BACKGROUND_THRESHOLD: f64 = 0.14;
 /// Text with a lower relative luminance becomes light.
@@ -72,7 +72,7 @@ pub const TEXT_THRESHOLD: f64 = 0.24;
 /// Default style of a frame on the dark canvas, after [`crate::html::MAIL_DEFAULT_STYLE`]:
 /// the scheme, the canvas, the text and link colours of [`DARK_CANVAS`], [`DARK_TEXT`] and
 /// [`DARK_LINK`]. `:where()` gives it no specificity, so every colour of the mail wins.
-pub const MAIL_DARK_STYLE: &str = ":where(html){color-scheme:dark;background-color:#212830;color:#e6edf3}:where(a:link){color:#4493f8}";
+pub const MAIL_DARK_STYLE: &str = ":where(html){color-scheme:dark;background-color:#1b2129;color:#e8edf3}:where(a:link){color:#6aa8ff}";
 
 /// Chroma (OKLab) below which a colour counts as grey and takes the theme's tint.
 const NEUTRAL_CHROMA: f64 = 0.04;
@@ -1428,9 +1428,9 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "color:{text}; background-color:{canvas}; border-color:rgba(33, 40, 48, 0.5); \
-                 outline-color:{canvas}; text-decoration-color:rgba(230, 237, 243, 0.25); \
-                 column-rule-color:{canvas}; caret-color:rgba(230, 237, 243, 0.502);",
+                "color:{text}; background-color:{canvas}; border-color:rgba(27, 33, 41, 0.5); \
+                 outline-color:{canvas}; text-decoration-color:rgba(232, 237, 243, 0.25); \
+                 column-rule-color:{canvas}; caret-color:rgba(232, 237, 243, 0.502);",
                 text = hex6(DARK_TEXT),
                 canvas = hex6(DARK_CANVAS)
             )
