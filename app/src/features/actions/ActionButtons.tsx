@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { Fragment, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { Tooltip } from "../../components/Tooltip";
@@ -94,10 +94,18 @@ export function ReadOnlyNote({ ctx, id, compact = false }: { ctx: ActionContext;
   );
 }
 
+/** The line before a joined button of the toolbar. */
+const JOINED_LINE = "border-s border-border";
+
+/**
+ * The toolbar's own buttons, in joined groups as in the approved draft (stage 23, decision 0084):
+ * respond; file away (archive, delete, later, junk); flag, joined by "More actions". Everything
+ * else (read or unread, move, tags, pin, tasks, …) is in "More actions".
+ */
 export const PRIMARY_GROUPS: readonly (readonly ActionId[])[] = [
   ["reply", "replyAll", "forward", "editDraft"],
-  ["archive", "delete", "deletePermanently", "notSpam"],
-  ["toggleRead", "toggleFlag"],
+  ["archive", "delete", "deletePermanently", "snooze", "spam", "notSpam"],
+  ["toggleFlag"],
 ];
 
 function groupOf(id: ActionId): number {
@@ -112,10 +120,11 @@ const NARROW_PRIORITY: readonly ActionId[] = [
   "notSpam",
   "reply",
   "editDraft",
-  "toggleRead",
+  "toggleFlag",
   "replyAll",
   "forward",
-  "toggleFlag",
+  "snooze",
+  "spam",
 ];
 
 function rank(id: ActionId): number {
@@ -125,7 +134,11 @@ function rank(id: ActionId): number {
 
 /** The primary entries the toolbar shows itself; `count` limits them in a narrow pane. */
 export function visibleEntries<T extends { definition: { id: ActionId } }>(entries: readonly T[], count: number | null = null): T[] {
-  const primary = entries.filter((entry) => groupOf(entry.definition.id) !== -1);
+  // In the order of the groups (stage 23): the toolbar draws them so, and the arrow keys follow.
+  const order = PRIMARY_GROUPS.flat();
+  const primary = entries
+    .filter((entry) => groupOf(entry.definition.id) !== -1)
+    .sort((a, b) => order.indexOf(a.definition.id) - order.indexOf(b.definition.id));
   if (count === null || count >= primary.length) return primary;
   const keep = new Set(
     [...primary]
@@ -201,12 +214,9 @@ function useFitting(
       const noteWidth = noteFit ? noteFit.width + outerGap : 0;
       const compact = noteFit?.compact ?? false;
       setCompactNote((current) => (current === compact ? current : compact));
-      // The lines between the groups and before "More" take room too.
-      const line = bar.querySelector<HTMLElement>("[data-toolbar-separator]");
-      const lineStyle = line ? getComputedStyle(line) : null;
-      const lineWidth = line && lineStyle ? line.getBoundingClientRect().width + (Number.parseFloat(lineStyle.marginLeft) || 0) + (Number.parseFloat(lineStyle.marginRight) || 0) + gap : 0;
-      const room = element.clientWidth - noteWidth - PRIMARY_GROUPS.length * lineWidth;
-      const next = fittingCount(room, sample.getBoundingClientRect().width, gap, total + 1);
+      // The gaps between the joined groups and their frames take room too.
+      const room = element.clientWidth - noteWidth - PRIMARY_GROUPS.length * (gap + 2);
+      const next = fittingCount(room, sample.getBoundingClientRect().width, 0, total + 1);
       setFit((current) => (current === next ? current : next));
     };
     measure();
@@ -222,19 +232,15 @@ function useFitting(
 }
 
 /**
- * The actions as a toolbar (reading pane, selection bar): one tab stop, arrow keys move between
- * the buttons (WAI-ARIA toolbar). Read-only accounts see the actions disabled, each saying why,
- * and a note with the way to allow changes. The toolbar shows the primary groups (respond, file
- * away, mark: at most seven buttons); everything else is in the "More actions" menu at its end,
- * which is part of the arrow-key order. In a narrow pane primary buttons move there too. Every
- * action stays reachable by its shortcut and in the command palette. The buttons of the menu stay
- * in the document (hidden), so the toolbar's set of actions is the same at every width.
+ * The actions as a toolbar (the toolbar across the window for the open message, the selection
+ * bar, a message window): one tab stop, arrow keys move between the buttons (WAI-ARIA toolbar).
+ * Read-only accounts see the actions disabled, each saying why, and a note with the way to allow
+ * changes. Stage 23 (decision 0084): the primary groups are joined buttons as in the draft
+ * (respond · file away · flag with "More actions"); everything else is in the "More actions"
+ * menu, which is part of the arrow-key order. Where the room is short, primary buttons move there
+ * too. Every action stays reachable by its shortcut and in the command palette. The buttons of the
+ * menu stay in the document (hidden), so the toolbar's set of actions is the same at every width.
  */
-/** The thin line between two groups of the toolbar (decorative). */
-function Separator() {
-  return <span aria-hidden data-toolbar-separator className="mx-1 h-4 w-px shrink-0 bg-border" />;
-}
-
 export function ActionToolbar({ label, ...props }: ActionSurfaceProps & { label: string }) {
   const { t } = useTranslation();
   const entries = useEntries(props);
@@ -277,6 +283,57 @@ export function ActionToolbar({ label, ...props }: ActionSurfaceProps & { label:
     buttons[next]?.focus();
   };
 
+  const button = (entry: Entry, place: { first: boolean; last: boolean }) => {
+    const Icon = entry.definition.icon(props.ctx);
+    const index = shown.indexOf(entry);
+    const hidden = index === -1;
+    return (
+      <Tooltip key={entry.definition.id} label={entry.hint} disabled={hidden}>
+        <button
+          type="button"
+          hidden={hidden}
+          tabIndex={index === current ? 0 : -1}
+          aria-label={entry.label}
+          aria-disabled={entry.readOnly || undefined}
+          aria-keyshortcuts={entry.readOnly ? undefined : entry.shortcut}
+          onFocus={() => {
+            setActive(index);
+          }}
+          onClick={() => {
+            run(entry);
+          }}
+          data-testid={`action-${entry.definition.id}`}
+          className={cx(
+            "flex h-(--ui-toolbar-control) w-(--ui-toolbar-button) shrink-0 items-center justify-center text-secondary transition-colors",
+            !place.first && "border-s border-border",
+            place.first && "rounded-s-control",
+            place.last && "rounded-e-control",
+            entry.readOnly ? "cursor-default opacity-50" : "hover:bg-hover hover:text-primary",
+          )}
+        >
+          <Icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        </button>
+      </Tooltip>
+    );
+  };
+  // The last group with a shown button takes "More" at its end (the draft's "Flag · More").
+  const groups = PRIMARY_GROUPS.map((ids) => shown.filter((entry) => ids.includes(entry.definition.id)));
+  const lastShown = groups.reduce((last, group, index) => (group.length > 0 ? index : last), -1);
+  const more = (alone: boolean) => (
+    <OverflowMenu
+      label={t("actions.more")}
+      look={alone ? "joinedAlone" : "joined"}
+      {...(!alone && { className: JOINED_LINE })}
+      tabIndex={current === shown.length ? 0 : -1}
+      onFocus={() => {
+        setActive(shown.length);
+      }}
+      items={menuItems}
+      data-testid="action-more"
+    />
+  );
+  const groupBox = "flex shrink-0 items-center rounded-control border border-border bg-button";
+
   if (entries.length === 0) return null;
   return (
     <div ref={wrapper} className="flex min-w-0 flex-1 items-center gap-3">
@@ -286,57 +343,23 @@ export function ActionToolbar({ label, ...props }: ActionSurfaceProps & { label:
         aria-label={label}
         aria-describedby={readOnly ? noteId : undefined}
         onKeyDown={onKeyDown}
-        className="flex shrink-0 items-center gap-1"
+        className="flex shrink-0 items-center gap-2"
       >
         <div className="contents" data-testid="action-toolbar">
-          {entries.map((entry) => {
-            const Icon = entry.definition.icon(props.ctx);
-            const index = shown.indexOf(entry);
-            const hidden = index === -1;
-            const previous = index > 0 ? shown[index - 1] : undefined;
-            const newGroup = previous !== undefined && groupOf(previous.definition.id) !== groupOf(entry.definition.id);
+          {groups.map((group, groupIndex) => {
+            if (group.length === 0) return null;
+            const withMore = groupIndex === lastShown && overflow.length > 0;
             return (
-              <Fragment key={entry.definition.id}>
-                {newGroup && <Separator />}
-                <Tooltip label={entry.hint} disabled={hidden}>
-                  <button
-                    type="button"
-                    hidden={hidden}
-                    tabIndex={index === current ? 0 : -1}
-                    aria-label={entry.label}
-                    aria-disabled={entry.readOnly || undefined}
-                    aria-keyshortcuts={entry.readOnly ? undefined : entry.shortcut}
-                    onFocus={() => {
-                      setActive(index);
-                    }}
-                    onClick={() => {
-                      run(entry);
-                    }}
-                    data-testid={`action-${entry.definition.id}`}
-                    className={cx(
-                      "flex size-8 items-center justify-center rounded-control text-secondary transition-colors",
-                      entry.readOnly ? "cursor-default opacity-50" : "hover:bg-hover hover:text-primary",
-                    )}
-                  >
-                    <Icon aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
-                  </button>
-                </Tooltip>
-              </Fragment>
+              <div key={groupIndex} className={groupBox} data-toolbar-group>
+                {group.map((entry, index) => button(entry, { first: index === 0, last: index === group.length - 1 && !withMore }))}
+                {withMore && more(false)}
+              </div>
             );
           })}
+          {/* The rest of the actions: in "More", kept in the document (hidden). */}
+          {overflow.map((entry) => button(entry, { first: true, last: true }))}
         </div>
-        {overflow.length > 0 && shown.length > 0 && <Separator />}
-        {overflow.length > 0 && (
-          <OverflowMenu
-            label={t("actions.more")}
-            tabIndex={current === shown.length ? 0 : -1}
-            onFocus={() => {
-              setActive(shown.length);
-            }}
-            items={menuItems}
-            data-testid="action-more"
-          />
-        )}
+        {overflow.length > 0 && lastShown === -1 && <div className={groupBox}>{more(true)}</div>}
       </div>
       {readOnly && (
         <div ref={note} className="flex min-w-0">

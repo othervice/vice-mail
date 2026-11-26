@@ -95,7 +95,7 @@ describe("conversation view", () => {
       expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== 500)).toEqual([{ messageId: ANSWER.id, format: "auto", scheme: "light" }]);
     });
     const pane = await screen.findByRole("region", { name: "Message" });
-    expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
     expect(screen.queryByTestId("thread-entries")).toBeNull();
 
     // Unfolded: every message, oldest first, the answer from Sent named by its folder.
@@ -117,7 +117,7 @@ describe("conversation view", () => {
       expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto", scheme: "light" });
     });
     const replyPane = await screen.findByRole("region", { name: "Message" });
-    expect(within(replyPane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
   });
 
   it("says when the conversation cannot be loaded and still shows the row's message", async () => {

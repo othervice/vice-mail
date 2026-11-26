@@ -156,7 +156,7 @@ function RecipientSummary({ header, account, withAccount, showReplyTo, open, det
       aria-expanded={open}
       aria-controls={detailsId}
       onClick={onToggle}
-      className="flex max-w-full min-w-0 items-center gap-1 self-start rounded-control text-12 text-secondary transition-colors hover:text-primary"
+      className="flex max-w-full min-w-0 items-center gap-1 self-start rounded-control text-12 text-tertiary transition-colors hover:text-primary"
       data-testid="reading-recipients"
     >
       <span className="truncate">{text}</span>
@@ -169,7 +169,7 @@ function RecipientSummary({ header, account, withAccount, showReplyTo, open, det
       {withAccount && (
         <span className="flex min-w-0 shrink items-center gap-1">
           <span aria-hidden>{t("reading.header.dot")}</span>
-          <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
+          <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(account.color))} />
           <span className="truncate">{account.displayName || account.email}</span>
         </span>
       )}
@@ -234,7 +234,7 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
                   <span key={`${address.email}-${String(i)}`}>
                     <span className="font-semibold text-primary">{addressName(address)}</span>
                     {address.name?.trim() && address.email.trim() && (
-                      <span className="text-13 text-secondary"> {address.email}</span>
+                      <span className="text-13 text-tertiary"> {address.email}</span>
                     )}
                     {i < header.from.length - 1 && <span className="text-secondary">{t("reading.header.separator")}</span>}
                   </span>
@@ -247,7 +247,7 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
                 dateTime={new Date(header.date).toISOString()}
                 // Stage 21 (decision 0071): on a line of its own in a narrow card it wraps instead of
                 // running past the card's edge.
-                className="min-w-0 text-12 text-secondary tabular-nums select-text"
+                className="min-w-0 text-12 text-tertiary tabular-nums select-text"
                 data-testid="reading-date"
               >
                 {formatFullDate(header.date, i18n.language)}
@@ -277,7 +277,7 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
                 <>
                   <dt className="text-tertiary">{t("reading.header.account")}</dt>
                   <dd className="flex min-w-0 items-center gap-2" data-testid="reading-account">
-                    <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
+                    <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(account.color))} />
                     <span className="truncate text-secondary">{accountName}</span>
                   </dd>
                 </>
@@ -293,7 +293,7 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
             </dl>
           )}
         </div>
-        {menu && <div className="-me-2 flex shrink-0">{menu}</div>}
+        {menu && <div className="-me-1 flex shrink-0">{menu}</div>}
       </div>
     </header>
   );

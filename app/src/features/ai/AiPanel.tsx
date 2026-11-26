@@ -6,6 +6,7 @@ import { Button } from "../../components/Button";
 import { ChoiceGroup } from "../../components/ChoiceGroup";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
+import { ToolbarButton } from "../../components/ToolbarButton";
 import { Notice } from "../../components/Notice";
 import {
   AI_LIMITS,
@@ -57,14 +58,25 @@ export function cloudBlocked(settings: AiSettingsInfo | undefined, aiFunction: A
   return !settings?.accounts.some((entry) => entry.accountId === accountId && entry.cloudAllowed);
 }
 
-/** The header button that folds the panel in and out; absent while no AI function is usable. */
+/**
+ * The toolbar's button that folds the panel in and out (stage 23: in the toolbar across the
+ * window, decision 0084); absent while no AI function is usable.
+ */
 export function AiPanelToggle() {
   const { t } = useTranslation();
   const availability = useAiAvailability();
   const open = useAiPanelStore((state) => state.open);
   const toggle = useAiPanelStore((state) => state.toggle);
   if (!panelAvailable(availability.data)) return null;
-  return <IconButton icon={Sparkles} label={open ? t("ai.panel.hide") : t("ai.panel.show")} onClick={toggle} />;
+  return <ToolbarButton icon={Sparkles} label={open ? t("ai.panel.hide") : t("ai.panel.show")} active={open} onClick={toggle} />;
+}
+
+/** The panel is on screen beside the content (stage 23: the contact panel makes room for it). */
+export function useAiPanelShown(): boolean {
+  const inMail = useUiStore((state) => state.view.kind === "mail" || state.view.kind === "mailbox");
+  const availability = useAiAvailability();
+  const open = useAiPanelStore((state) => state.open);
+  return inMail && open && panelAvailable(availability.data);
 }
 
 /** The single message the mail view acts on (the selection, else the row with the cursor). */

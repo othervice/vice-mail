@@ -9,6 +9,7 @@ import { makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from
 import { emitCore } from "./support/events";
 import { optionName } from "./support/names";
 import { renderApp } from "./support/render";
+import { useQuickFilterFocus } from "../src/features/views/focus";
 
 const ADA = makeAccount({ writesEnabled: false });
 
@@ -198,7 +199,36 @@ describe("the table", () => {
   });
 });
 
+describe("the quick filter's button in the toolbar (stage 23)", () => {
+  it("folds the bar away until the button shows it, puts the focus into its field and keeps it while filtering", async () => {
+    const { user } = setup();
+    await list();
+    expect(screen.queryByRole("region", { name: "Quick filter" })).toBeNull();
+    const button = screen.getByRole("button", { name: "Quick filter" });
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    await user.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    const bar = await screen.findByRole("region", { name: "Quick filter" });
+    expect(document.activeElement).toBe(within(bar).getByRole("textbox", { name: "Filter by sender, subject and text" }));
+    await user.click(within(bar).getByRole("button", { name: "Flagged" }));
+    await user.click(button);
+    // A filter is set: the bar stays (with its Reset), the button says so.
+    expect(screen.getByRole("region", { name: "Quick filter" })).toBeTruthy();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    await user.click(within(screen.getByRole("region", { name: "Quick filter" })).getByRole("button", { name: "Reset" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Quick filter" })).toBeNull();
+    });
+  });
+});
+
 describe("the quick filter", () => {
+  // Stage 23 (decision 0084): the bar is folded behind the toolbar's filter button; these tests
+  // start with it shown, as after a click on that button.
+  beforeEach(() => {
+    useQuickFilterFocus.setState({ shown: true });
+  });
+
   it("switches combine, the bar counts the matches and Reset clears everything", async () => {
     const { core, user } = setup();
     await list();
@@ -338,6 +368,9 @@ describe("the quick filter", () => {
 });
 
 describe.each(["light", "dark"] as const)("axe for sorting, the table and the quick filter, %s theme", (theme: ThemePreference) => {
+  beforeEach(() => {
+    useQuickFilterFocus.setState({ shown: true });
+  });
   it("finds nothing serious in the view menu, the table header, the rows and the filter bar", async () => {
     const { user } = setup({ preferences: { theme, language: "system" }, listViews: { table: table() } });
     await list();

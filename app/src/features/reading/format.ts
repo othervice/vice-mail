@@ -68,3 +68,30 @@ export function attachmentKind(mimeType: string, executable: boolean): Attachmen
   if (ARCHIVES.test(mimeType)) return "archive";
   return "other";
 }
+
+/**
+ * Stage 23, step 3 (decision 0084): the colour family of an attachment card (tokens `file-*`):
+ * PDF, documents, spreadsheets, images, archives; anything else (and programs) is plain.
+ */
+export type FileTint = "pdf" | "doc" | "sheet" | "image" | "archive" | null;
+
+const SHEETS = /^(xls|xlsx|xlsm|ods|csv|tsv|numbers)$/;
+const DOCUMENTS = /^(doc|docx|odt|rtf|txt|md|pages|ppt|pptx|odp|key)$/;
+const ARCHIVE_NAMES = /^(zip|7z|rar|tar|gz|tgz|bz2|xz)$/;
+
+export function fileTint(name: string, mimeType: string, executable: boolean): FileTint {
+  if (executable) return null;
+  const extension = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1]?.toLowerCase() ?? "";
+  if (extension === "pdf" || mimeType === "application/pdf") return "pdf";
+  if (SHEETS.test(extension) || /spreadsheet|ms-excel|text\/csv/.test(mimeType)) return "sheet";
+  if (mimeType.startsWith("image/")) return "image";
+  if (ARCHIVE_NAMES.test(extension) || ARCHIVES.test(mimeType)) return "archive";
+  if (DOCUMENTS.test(extension) || /wordprocessing|msword|presentation|opendocument\.text|^text\//.test(mimeType)) return "doc";
+  return null;
+}
+
+/** The badge's letters: the first three of the extension in capitals ("XLS" for `.xlsx`), if any. */
+export function fileBadge(name: string): string | null {
+  const extension = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1];
+  return extension ? extension.slice(0, 3).toUpperCase() : null;
+}

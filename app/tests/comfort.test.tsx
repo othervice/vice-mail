@@ -209,7 +209,7 @@ describe("snooze", () => {
     const { core, user } = setup(items);
     const pane = await open(user, "Message 1");
 
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Snooze"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Snooze"));
 
     const picker = await screen.findByTestId("snooze-picker");
     expect(within(picker).getByRole("heading").textContent).toBe("Snooze message");
@@ -308,7 +308,7 @@ describe("pins and tasks", () => {
     const items = [makeMessage({ id: 50, subject: "Invoice", pinned: true, task: { done: false } })];
     const { core, user } = setup(items);
     const pane = await open(user, "Invoice");
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
 
     await user.click(await toolbarAction(user, toolbar, "Unpin"));
     await user.click(await toolbarAction(user, toolbar, "Mark task as done"));
@@ -362,7 +362,7 @@ describe("Later, Pinned and Tasks", () => {
     expect(core.callsOf("list_tasks")).toEqual([{ scope: { kind: "account", accountId: ADA.id }, filter: "open" }]);
     await user.click(row(tasks, "Pay the bill"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Mark task as done"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Mark task as done"));
     await waitFor(() => {
       expect(core.callsOf("set_task")).toEqual([{ messageIds: [10], mark: { done: true } }]);
     });

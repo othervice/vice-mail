@@ -33,6 +33,7 @@ export const de: Translation = {
     sidebar: "Konten und Ordner",
     viewsSection: "Ansichten",
     hideSidebar: "Seitenleiste ausblenden",
+    showSidebar: "Seitenleiste einblenden",
     resizeSidebar: "Breite der Seitenleiste",
     sidebarWidth: "{{width}} Pixel",
     accountWithState: "{{name}} ({{email}}), {{state}}",
@@ -600,6 +601,15 @@ export const de: Translation = {
       body: "Wähle in der Liste eine Mail, um sie hier zu lesen.",
     },
     region: "Nachricht",
+    meta: {
+      place: "{{account}} · {{folder}}",
+      count_one: "{{count, number}} Mail",
+      count_other: "{{count, number}} Mails",
+    },
+    conversation: {
+      you: "Du",
+      open: "{{name}}, {{date}}: diese Mail zeigen",
+    },
     // Stufe 14 (Entscheidung 0034): Gmail-Labels unter dem Kopf einer Gmail-Mail.
     labels: {
       region: "Labels",
@@ -4686,5 +4696,25 @@ export const de: Translation = {
     },
     optionKey: "Wahltaste",
     ctrlKey: "Strg",
+  },
+  toolbar: {
+    searchPlaceholder: "Suchen",
+    unread: "{{count, number}} ungelesen",
+    filter: "Schnellfilter",
+    filterShow: "Schnellfilter einblenden",
+    filterHide: "Schnellfilter ausblenden",
+    filterActive: "Schnellfilter, filtert",
+  },
+  contactPanel: {
+    label: "Kontakt",
+    toggle: "Kontaktspalte",
+    show: "Kontaktspalte einblenden",
+    hide: "Kontaktspalte ausblenden",
+    write: "Mail schreiben",
+    allMails: "Alle Mails",
+    mails: "Mails",
+    groups: "Gruppen",
+    empty: "Wähle eine Mail, dann steht hier, von wem sie ist.",
+    failed: "Der Kontakt ließ sich nicht laden.",
   },
 };

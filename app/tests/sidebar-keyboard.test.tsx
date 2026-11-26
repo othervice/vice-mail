@@ -370,22 +370,24 @@ describe("the Tab path to the message list", () => {
     const { user } = setup();
     await unfold(user);
     const stops = await tabToList(user);
-    // The column: its toggle and its edge (the splitter), the views, the account with its
-    // folders (one tree), the bottom group. Then the list header.
-    expect(stops.slice(0, stops.indexOf("button: Activity") + 1)).toEqual([
+    // Stage 23 (decision 0084): first the toolbar across the window (the column's toggle, New
+    // mail, the list's controls, the open message's actions as one stop, search), then the column
+    // (its edge, the views, the account with its folders as one tree, the bottom group), then the
+    // list. The quick filter is folded behind its button.
+    expect(stops).toEqual([
       "button: Hide sidebar",
+      "button: New message",
+      "button: Quick filter",
+      "button: Sorted by Date, Newest first",
+      "button: List options",
+      "button: Conversations",
+      "button: Reply",
+      "button: Search",
       "separator: Sidebar width",
       "treeitem: Views",
       "treeitem: Inbox, 3 unread",
       "button: Activity",
     ]);
-    // Stage 19: the view menu, the options; the header's last button, then the quick filter (its
-    // switches are one toolbar, the text field another stop).
-    expect(stops.slice(stops.indexOf("button: Activity") + 1, stops.indexOf("button: Activity") + 3)).toEqual([
-      "button: Sorted by Date, Newest first",
-      "button: List options",
-    ]);
-    expect(stops.slice(-3)).toEqual(["button: New message", "button: Unread", "input: Filter by sender, subject and text"]);
   });
 
   it("stays short with two accounts, favourites, inboxes and saved searches", async () => {
@@ -403,10 +405,11 @@ describe("the Tab path to the message list", () => {
     await screen.findByRole("tree", { name: "Saved searches" });
     await screen.findByRole("tree", { name: "Folders of Work" });
     const stops = await tabToList(user);
-    const sidebar = stops.slice(0, stops.indexOf("button: Activity"));
+    const sidebar = stops.slice(stops.indexOf("button: Search") + 1, stops.indexOf("button: Activity"));
     // One stop per tree (inboxes, views, saved searches, favourites, each account with its
-    // folders), plus the column's toggle and edge: no more than before with the account buttons.
+    // folders), plus the column's edge (its toggle is in the toolbar since stage 23): no more than
+    // before with the account buttons.
     expect(sidebar.filter((stop) => stop.startsWith("treeitem"))).toHaveLength(6);
-    expect(sidebar).toHaveLength(8);
+    expect(sidebar).toHaveLength(7);
   });
 });

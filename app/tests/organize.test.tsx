@@ -11,6 +11,7 @@ import { emitCore } from "./support/events";
 import { optionName } from "./support/names";
 import { toolbarAction } from "./support/reading";
 import { renderApp } from "./support/render";
+import { useQuickFilterFocus } from "../src/features/views/focus";
 
 const ADA = makeAccount({ writesEnabled: false });
 const BOB_ID = "33333333-3333-4333-8333-333333333333";
@@ -106,7 +107,7 @@ describe("the reading list", () => {
     // Removing it from the toolbar empties the view.
     await user.click(row(listbox, "Message 3"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Remove from reading list"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Remove from reading list"));
     await waitFor(() => {
       expect(core.parity.readingList).toEqual([]);
     });
@@ -124,6 +125,12 @@ describe("the reading list", () => {
 });
 
 describe("unread only and unread first", () => {
+  // Stage 23 (decision 0084): the bar is folded behind the toolbar's filter button; these tests
+  // start with it shown, as after a click on that button.
+  beforeEach(() => {
+    useQuickFilterFocus.setState({ shown: true });
+  });
+
   it("the quick filter's Unread shows only unread mail of the folder (stage 19: the header switch moved there)", async () => {
     const items = makeMessages(6); // every third one is unread
     const { core, user } = setup(items);
@@ -160,7 +167,7 @@ describe("unread only and unread first", () => {
     });
     await user.click(row(listbox, "Message 4"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Mark as read"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Mark as read"));
     await waitFor(() => {
       expect(core.callsOf("apply_action").length).toBeGreaterThan(0);
     });
@@ -410,7 +417,7 @@ describe("blocking a sender", () => {
     const listbox = await list();
     await user.click(row(listbox, "Message 1"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Block sender"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Block sender"));
     await waitFor(() => {
       expect(core.callsOf("block_sender")).toEqual([{ address: "sender1@example.org" }]);
     });
@@ -434,7 +441,7 @@ describe("blocking a sender", () => {
     const listbox = await list();
     await user.click(row(listbox, "Message 2"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Block sender"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Block sender"));
     await waitFor(() => {
       expect(core.parity.blockedSenders.map((b) => b.address)).toEqual(["sender2@example.org"]);
     });
@@ -450,7 +457,7 @@ describe("blocking a sender", () => {
     const listbox = await list();
     await user.click(row(listbox, "Odd"));
     const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Block sender"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Block sender"));
     await waitFor(() => {
       expect(notices().some((text) => text.includes("The sender could not be blocked."))).toBe(true);
     });

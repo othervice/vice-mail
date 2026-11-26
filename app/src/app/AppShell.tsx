@@ -25,6 +25,8 @@ import { UpdateNotices } from "../features/updates/UpdateNotices";
 import type { CoreError } from "../services/ipc";
 import { useUiStore } from "../stores/ui";
 import { useSidebarFit } from "../features/layout/useSidebarFit";
+import { ContactPanel } from "../features/contacts/ContactPanel";
+import { AppToolbar } from "./AppToolbar";
 import { IconRail } from "./IconRail";
 import { SidebarColumn } from "./SidebarColumn";
 
@@ -36,8 +38,9 @@ interface AppShellProps {
 }
 
 /**
- * The window frame: the accounts-and-folders column (folded: the icon rail) on the left, the
- * current view on the right. In a narrow window the column opens over the content.
+ * The window frame: the toolbar across the top (stage 23, decision 0084), below it the
+ * accounts-and-folders column (folded: the icon rail) on the left, the current view, the contact
+ * panel and the AI panel on the right. In a narrow window the column opens over the content.
  */
 export function AppShell({ eventsError }: AppShellProps) {
   const { t } = useTranslation();
@@ -84,9 +87,10 @@ export function AppShell({ eventsError }: AppShellProps) {
   }, [docked]);
 
   return (
-    // `data-sidebar` lets app.css move header titles clear of the macOS window buttons;
     // `data-chrome`: with Mica (Windows 11, decision 0079) the frame is left transparent.
-    <div className="relative flex h-full bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"} data-chrome>
+    <div className="flex h-full flex-col bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"} data-chrome>
+      <AppToolbar />
+      <div className="relative flex min-h-0 flex-1">
       {docked ? <SidebarColumn overlay={false} /> : <IconRail />}
       {overlay && <SidebarColumn overlay />}
       {/* Focusable (not in the Tab order): where the focus goes when what had it is gone (stage 8). */}
@@ -113,6 +117,8 @@ export function AppShell({ eventsError }: AppShellProps) {
         {/* Stage 5: the composer lies over the reading pane; send states at the bottom right. */}
         <ComposerHost />
       </main>
+      {/* Stage 23 (decision 0084): the person of the open message, right of the reading pane. */}
+      <ContactPanel />
       {/* Stage 13: the AI panel on the right; absent while no AI function is usable. */}
       <AiPanel />
       <Notices />
@@ -133,6 +139,7 @@ export function AppShell({ eventsError }: AppShellProps) {
       <RedirectHost />
       {/* Stage 19 (decision 0057): mbox exports and imports with their progress. */}
       <MboxJobsHost />
+      </div>
     </div>
   );
 }

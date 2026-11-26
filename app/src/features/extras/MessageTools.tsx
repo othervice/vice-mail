@@ -23,6 +23,8 @@ interface MessageToolsProps {
    * (`usePrintRequest`) can start.
    */
   shown?: boolean;
+  /** Stage 23: the quiet 28 px buttons of the reading pane's top line (main window). */
+  small?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface MessageToolsProps {
  * prints the message too, instead of the whole window, while a message is open. The reading pane
  * keys it by message, so a result never stays with the next message.
  */
-export function MessageTools({ messageId, beforePrint, shown = false }: MessageToolsProps) {
+export function MessageTools({ messageId, beforePrint, shown = false, small = false }: MessageToolsProps) {
   const { t } = useTranslation();
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const exportMessage = useExportMessage();
@@ -71,6 +73,7 @@ export function MessageTools({ messageId, beforePrint, shown = false }: MessageT
     <div role="group" aria-label={t("extras.tools.label")} className="relative flex items-center gap-1" data-testid="message-tools">
       <IconButton
         icon={FileDown}
+        small={small}
         label={t("extras.tools.export")}
         disabled={exportMessage.isPending}
         onClick={() => {
@@ -79,6 +82,7 @@ export function MessageTools({ messageId, beforePrint, shown = false }: MessageT
       />
       <IconButton
         icon={Printer}
+        small={small}
         label={t("extras.tools.printWithShortcut", { shortcut: formatShortcut(PRINT_SHORTCUT, platform) })}
         disabled={print.isPending}
         onClick={() => {

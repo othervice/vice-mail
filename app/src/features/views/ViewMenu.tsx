@@ -19,7 +19,8 @@ const PRESENTATIONS: readonly ListPresentation[] = ["rows", "table"];
 /**
  * Stage 19 (decision 0061): the view menu in the header of a folder, an inbox or a unified view:
  * what the list sorts by and in which direction (stored for this view), whether the wide list is
- * drawn as rows or as a table, and in a table which columns it shows. The button names the order.
+ * drawn as rows or as a table, and in a table which columns it shows. The button names the order
+ * (stage 23, decision 0084: as its name and tooltip; the toolbar shows its symbol only).
  */
 export function ListViewMenu({ viewKey, showRecipients, mixedAccounts }: ListViewMenuProps) {
   const { t } = useTranslation();
@@ -92,8 +93,8 @@ export function ListViewMenu({ viewKey, showRecipients, mixedAccounts }: ListVie
       label={t("views.sort.menu")}
       icon={order.ascending ? ArrowUpNarrowWide : ArrowDownWideNarrow}
       name={t("views.sort.current", { key: name, direction: way })}
-      text={name}
       active={!isDefaultOrder(order)}
+      compact
       tall
       groups={groups}
       data-testid="list-view-menu"

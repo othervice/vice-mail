@@ -35,6 +35,10 @@
   --ui-button: #ffffff;
   --ui-priority-tint: #f7f9fc;
   --ui-selected: #e3ecfa;
+  /* Stage 23, step 3 (decision 0084): the selected row of a list that does not have the focus
+     (the reading pane or the toolbar has it), neutral as in native lists. The focused list fills
+     its selected rows with `accent-fill` and `text-on-accent` (app.css, `[data-list-focus]`). */
+  --ui-selected-muted: #e2e8f1;
   --ui-hover: #f3f5f8;
   /* Fill of small pills and chips: conversation size, counters, recipients. */
   --ui-badge: #eef1f5;
@@ -176,6 +180,10 @@
   --ui-radius-tile: 8px;
   --ui-radius-card: 10px;
   --ui-radius-panel: 14px;
+  /* Stage 23, step 3 (decision 0084): the account's colour as a small square (8 px, 2 px round)
+     beside its name, and the count in a row (a 4 px round frame), as in the draft. */
+  --ui-radius-mark: 2px;
+  --ui-radius-chip: 4px;
 
   /* Elevation. Stage 23 (decision 0083): a shadow only for what floats (menus, tooltips, the
      quick actions, dialogs and panels over the content); cards, buttons and rows lie flat with a
@@ -197,7 +205,18 @@
   --ui-rail-item: 2.5rem;
   --ui-icon: 1.25rem;
   --ui-icon-small: 1rem;
-  --ui-header-height: 3.5rem;
+  /* Stage 23, step 3 (decision 0084): the toolbar across the window is 52 px, as in the draft;
+     headers that stand level with it (composer, AI panel) and notices below it use the same. */
+  --ui-header-height: 3.25rem;
+  --ui-toolbar-height: 3.25rem;
+  /* Its controls are 28 px high; the buttons of its joined groups 34 px wide. */
+  --ui-toolbar-control: 1.75rem;
+  --ui-toolbar-button: 2.125rem;
+  /* The search field in the toolbar (260 px in wide windows, 180 px below 1440 px, its symbol
+     only below 1120 px), and the contact panel on the right (264 px). */
+  --ui-toolbar-search-width: 16.25rem;
+  --ui-toolbar-search-compact: 11.25rem;
+  --ui-contact-panel-width: 16.5rem;
   --ui-settings-nav-width: 14rem;
   /* Stage 22 (decision 0073): the hits of the settings search float over the page, wider than the
      section list, at most this high (then they scroll). */
@@ -218,10 +237,11 @@
   --ui-rail-account-dot: 0.75rem;
   /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
      width rows get more lines: three comfortable (sender and time, subject, preview), two compact
-     (no preview). The list reads these values for its virtualizer. */
+     (no preview). The list reads these values for its virtualizer. Stage 23, step 3 (decision
+     0084): three-line rows 72 px and date bands 28 px, as in the draft. */
   --ui-row-height: 2.75rem;
-  --ui-row-height-two-line: 4.75rem;
-  --ui-section-height: 2rem;
+  --ui-row-height-two-line: 4.5rem;
+  --ui-section-height: 1.75rem;
   --ui-list-two-line-below: 45rem;
   --ui-list-sender-width: 12rem;
   /* Stage 21 (decision 0071): below this width the quick filter's chips show their symbol only
@@ -232,9 +252,10 @@
      starts after its lead with the mark column, as wide as the selection box: the unread dot,
      which turns into the box on hover and in a multiple selection. The lead puts the column on
      the line of the list's title and section labels; the sender follows 8 px after it. Stage 23
-     (decision 0083): rows run across the list's whole width (no gutter), so the lead is the
-     title's inset, 24 px; inside the cards drawn by rows (app.css, `.list-card`) it stays 16 px. */
-  --ui-row-lead: var(--ui-space-6);
+     (decision 0083): rows run across the list's whole width (no gutter); inside the cards drawn
+     by rows (app.css, `.list-card`) the lead stays 16 px. Step 3 (decision 0084): 8 px, so the
+     unread dot sits 16 px from the list's edge and the text starts near 28 px, as in the draft. */
+  --ui-row-lead: var(--ui-space-2);
   --ui-row-mark: var(--ui-icon-small);
   /* Stage 17 (decision 0049): the messages of an unfolded conversation are one line each (36 px,
      compact 28 px) in every list width. The conversation's dotted line runs under the mark
@@ -243,6 +264,10 @@
   --ui-tree-line-start: calc(var(--ui-row-lead) + var(--ui-row-mark) / 2);
   /* Stage 8: the account's name in rows of lists that mix accounts (unified inbox, search). */
   --ui-row-account-width: 8rem;
+  /* Stage 23, step 3 (decision 0084): instead, a 3 px stripe in the account's colour at the
+     row's right edge, 6 px in, as in the draft. */
+  --ui-row-stripe: 3px;
+  --ui-row-stripe-inset: 6px;
   /* Design pass 23.11.2026: distance of the command palette from the top of the window; the
      brand artwork on the first start and on the About page. */
   --ui-palette-top: 12vh;
@@ -266,8 +291,9 @@
   --ui-reading-min-width: 22.5rem;
   --ui-reading-min-height: 15rem;
   --ui-reading-max-width: 46rem;
-  /* Stage 21 (decision 0071): 20 rem instead of 16, so the name keeps room beside four buttons. */
-  --ui-attachment-width: 20rem;
+  /* Stage 21 (decision 0071): 20 rem instead of 16, so the name kept room beside four buttons.
+     Stage 23 (decision 0084): 14 rem, the draft's card; its buttons float over its end. */
+  --ui-attachment-width: 14rem;
   /* Stage 4: the dialog for deleting permanently, the folder and tag pickers (floating panels)
      and the height of their lists, the undo notices at the bottom. */
   --ui-dialog-width: 28rem;
@@ -290,13 +316,9 @@
   --ui-field-min-width: 10rem;
   /* Stage 13: the AI panel on the right (docs/DESIGN.md: 380 px). */
   --ui-ai-panel-width: 23.75rem;
-  /* Height of the native title-bar area the window overlays on the content. 0 unless the
-     platform draws its window buttons over the web view (macOS, see app.css). */
-  --ui-titlebar-inset: 0px;
-  /* Right edge of the window buttons the platform draws over the web view (macOS, app.css). */
+  /* Right edge of the window buttons the platform draws over the web view (macOS, app.css):
+     the toolbar's first segment starts after them. */
   --ui-window-buttons-end: 0px;
-  /* Start padding of view headers; larger where the window buttons reach into the header. */
-  --ui-header-inset-start: var(--ui-space-6);
 }
 
 :root[data-theme="dark"] {
@@ -319,6 +341,7 @@
   --ui-button: #232a34;
   --ui-priority-tint: #19212c;
   --ui-selected: #172747;
+  --ui-selected-muted: #2a3341;
   --ui-hover: #1f252e;
   --ui-badge: #252c37;
 
@@ -388,7 +411,7 @@
 :root[data-density="compact"] {
   --ui-row-height: 2.125rem;
   --ui-row-height-two-line: 3.25rem;
-  --ui-section-height: 1.75rem;
+  --ui-section-height: 1.5rem;
   --ui-child-row-height: 1.75rem;
 }
 
@@ -415,10 +438,12 @@
    follows; no colours here (the cards use the surface, border and shadow tokens above). */
 :root {
   /* The column of message cards: wide enough for a mail, centred in wide panes. */
-  --ui-reading-column: 54rem;
+  --ui-reading-column: 45rem;
   /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. Stage 23
      (decision 0083): 1.65, the draft's mail text (14 px). */
   --ui-reading-line-height: 1.65;
+  /* Stage 23 (decision 0084): the sender's column of the conversation's one-line messages. */
+  --ui-conversation-name-width: 9.375rem;
   /* Menus that unfold from a "…" button (reading toolbar, message card). */
   --ui-reading-menu-width: 15rem;
   /* Stage 21 (decision 0064): the context menu of messages and its submenus. */

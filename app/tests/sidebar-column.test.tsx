@@ -33,7 +33,7 @@ function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true },
       makeMailbox({ id: 40, accountId: CLUB.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 4 }),
       makeMailbox({ id: 41, accountId: CLUB.id, path: "Turniere", unread: 1 }),
     ],
-    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, ...layout } },
+    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, contactPanel: true, ...layout } },
     search: { savedSearches: [makeSavedSearch({ name: "Invoices" })] },
   });
   return { core, ...renderApp() };
@@ -155,12 +155,13 @@ describe("accounts-and-folders column", () => {
     await user.keyboard("{Meta>}{Shift>}s{/Shift}{/Meta}");
     expect(await column()).toBeTruthy();
     expect(useUiStore.getState().sidebarExpanded).toBe(true);
-    // From the keyboard the focus stays on the toggle that replaced the one it was on.
+    // Stage 23 (decision 0084): the toggle stands in the toolbar and stays; from the keyboard the
+    // focus stays on it, now named for unfolding.
     act(() => {
       screen.getByRole("button", { name: "Hide sidebar" }).focus();
     });
     await user.keyboard("{Enter}");
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Folders" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Show sidebar" }));
   });
 
   it("its edge is a splitter: arrow keys, Home and End change the width, Enter folds", async () => {

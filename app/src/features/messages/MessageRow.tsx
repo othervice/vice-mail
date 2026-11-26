@@ -222,17 +222,19 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
       aria-hidden
       {...(foldable && { "data-row-toggle": true })}
       title={foldable ? t(expanded ? "threads.collapse" : "threads.expand") : t("threads.replies", { count: replies })}
+      // Stage 23 (decision 0084): a small framed count, as in the draft.
       className={cx(
-        "grid h-5 shrink-1000000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-11 font-medium tabular-nums transition-colors",
-        foldable ? "cursor-pointer ps-1 pe-2" : "px-2",
-        expanded ? "bg-accent-soft text-accent" : "bg-badge text-secondary",
+        "grid h-4 shrink-1000000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-chip border text-11 font-semibold tabular-nums transition-colors",
+        "px-1",
+        foldable && "cursor-pointer",
+        expanded ? "border-accent text-accent" : "border-border-subtle text-secondary",
         foldable && !expanded && "hover:text-primary",
       )}
       data-testid="row-replies"
       data-expanded={foldable ? expanded : undefined}
     >
       {foldable ? (
-        <ChevronRight className={cx("me-1 size-3", expanded && "rotate-90")} strokeWidth={2.25} />
+        <ChevronRight className={cx("size-3", expanded && "rotate-90")} strokeWidth={2.25} />
       ) : (
         <span />
       )}
@@ -247,7 +249,7 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
         data-testid="row-replies-word"
       >
         <span className="absolute inset-0 @container">
-          <span className="block overflow-hidden leading-5 text-ellipsis whitespace-pre @max-[2.5em]:invisible">{word}</span>
+          <span className="block overflow-hidden leading-4 text-ellipsis whitespace-pre @max-[2.5em]:invisible">{word}</span>
         </span>
       </span>
     </span>
@@ -277,6 +279,7 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
         lifted && "self-end",
       )}
       data-testid="row-actions"
+      data-row-actions
     >
       {children}
     </span>
@@ -387,13 +390,19 @@ export function MessageRowContent({
       )}
     </span>
   );
+  const flag = item.flagged && (
+    <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} data-testid="row-flag" />
+  );
   // The subject comes first; in one line the preview takes what is left (basis 0), down to nothing.
+  // Stage 23 (decision 0084): in narrow rows the subject's line ends with the count, the
+  // attachment, the flag and the marks, as in the draft.
   const subjectLine = (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       <span
         title={subject}
         className={cx(
           "min-w-0 truncate text-13",
+          twoLine && "flex-1",
           !shownSubject.text ? "text-tertiary" : item.unread ? "font-semibold text-primary" : "text-primary",
         )}
         data-testid="row-subject"
@@ -408,57 +417,50 @@ export function MessageRowContent({
       {item.hasAttachments && (
         <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
       )}
+      {twoLine && (
+        <span className="contents" data-testid="row-meta-marks">
+          {flag}
+          {activity && <ActivityIcon activity={activity} />}
+          <RowMarks item={item} omit={omitMarks} />
+        </span>
+      )}
       {!threeLine && previewElement}
     </span>
   );
   const marks = (
     <>
-      {item.flagged && (
-        <Flag aria-hidden className="size-(--ui-icon-small) shrink-0 fill-current text-warning" strokeWidth={1.75} />
-      )}
+      {flag}
       {activity && <ActivityIcon activity={activity} />}
       <RowMarks item={item} omit={omitMarks} />
     </>
   );
-  // Stage 8: which account, in words, in lists that mix accounts, with its colour. Stage 17: the
-  // names come first; short of room the label gives way first, down to its colour dot (a shrink
-  // factor a million times the names', see `RepliesToggle`; the dot as its smallest size); the
-  // name stays its tooltip and is part of the row's accessible name. The name shows whole (an
-  // overlong one cut at the label's width) or not at all, never as a fragment: where it does not
-  // fit beside the dot it wraps onto a second line, which the label's height hides. Stage 22
-  // (decision 0072): it carries what the avatar's ring did, so it stays while the quick actions
-  // show (before them, the marks and the time give way to them).
-  const accountElement = decoration?.account ? (
+  // Stage 23, step 3 (decision 0084): in lists that mix accounts a 3 px stripe in the account's
+  // colour at the row's right edge (it was its dot and name before the time, stage 8 and 17). The
+  // name stays in the row's accessible name and is the stripe's tooltip; the open message names
+  // its account above the subject, the table has its column.
+  const stripe = decoration?.account ? (
     <span
+      aria-hidden
       title={decoration.account}
-      className="flex h-5 max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 flex-wrap items-center justify-end gap-x-1 overflow-hidden"
+      className={cx("absolute inset-y-2 end-(--ui-row-stripe-inset) w-(--ui-row-stripe) rounded-full", accountFill(accountColor))}
       data-testid="row-account"
-    >
-      {/* As tall as the label, so a name that wraps lands wholly on the hidden second line. */}
-      <span className="flex h-5 shrink-0 items-center">
-        <span aria-hidden className={cx("size-(--ui-dot) rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
-      </span>
-      <span
-        className="h-5 max-w-[calc(var(--ui-row-account-width)-var(--ui-dot)-var(--ui-space-1))] min-w-0 truncate text-12 leading-5 text-secondary"
-        data-testid="row-account-name"
-      >
-        {decoration.account}
-      </span>
-    </span>
+    />
   ) : null;
   const timeElement = (
     <time
       dateTime={new Date(item.date).toISOString()}
       title={formatFullDate(item.date, i18n.language)}
-      className={cx("shrink-0 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+      className="shrink-0 text-11 text-tertiary tabular-nums"
     >
       {time}
     </time>
   );
   const mark = <SelectionMark unread={item.unread} selected={selected} multiSelect={multiSelect} />;
   const rowClass = cx(
-    "relative h-full rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
-    selected ? "bg-selected" : "group-hover/row:bg-hover",
+    // Stage 23 (decision 0084): a hairline under every row; room at the end for the stripe.
+    "relative h-full rounded-row border-b border-border-subtle ps-(--ui-row-lead) transition-colors",
+    stripe ? "pe-5" : "pe-4",
+    selected ? "bg-selected-muted" : "group-hover/row:bg-hover",
     // The list keeps focus (aria-activedescendant); the cursor row shows it.
     cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
     contextTarget && CONTEXT_TARGET,
@@ -470,22 +472,23 @@ export function MessageRowContent({
     // line. Stage 17: the unfolded conversation's line leaves from the mark, in a box from the
     // content's top to the row's bottom, so it needs no heights.
     return (
-      <div aria-hidden className={cx(rowClass, "grid grid-rows-[1fr_auto_1fr]")} data-context-target={contextTarget || undefined}>
+      <div
+        aria-hidden
+        className={cx(rowClass, "grid grid-rows-[1fr_auto_1fr]")}
+        data-row-selected={selected || undefined}
+        data-context-target={contextTarget || undefined}
+      >
         {expanded && (
           <span aria-hidden className="pointer-events-none relative col-start-1 row-start-2 row-end-4">
             <TreeLine from="firstLine" to="bottom" />
           </span>
         )}
-        <span className="col-start-1 row-start-2 flex min-w-0 items-start gap-2">
+        <span className="col-start-1 row-start-2 flex min-w-0 items-start gap-1">
           <span className="flex h-5 shrink-0 items-center">{mark}</span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex h-5 min-w-0 items-center gap-2">
               {sender}
               <span className="flex-1" />
-              <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
-                {marks}
-              </RowMeta>
-              {accountElement}
               <RowMeta actions={Boolean(actions)} cursor={cursor}>
                 {timeElement}
               </RowMeta>
@@ -500,11 +503,17 @@ export function MessageRowContent({
             {threeLine && previewElement}
           </span>
         </span>
+        {stripe}
       </div>
     );
   }
   return (
-    <div aria-hidden className={cx(rowClass, "flex items-center")} data-context-target={contextTarget || undefined}>
+    <div
+      aria-hidden
+      className={cx(rowClass, "flex items-center")}
+      data-row-selected={selected || undefined}
+      data-context-target={contextTarget || undefined}
+    >
       {/* Stage 17: the unfolded conversation's line leaves from under the mark. */}
       {expanded && <TreeLine from="mark" to="bottom" />}
       <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -515,13 +524,13 @@ export function MessageRowContent({
           <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
             {marks}
           </RowMeta>
-          {accountElement}
           <RowMeta actions={Boolean(actions)} cursor={cursor}>
             {timeElement}
           </RowMeta>
           {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
         </span>
       </span>
+      {stripe}
     </div>
   );
 }
@@ -617,7 +626,7 @@ export function TableRowContent({
           <span key={id} title={decoration?.account} className="flex min-w-0 items-center gap-1 pe-3" data-testid="cell-account">
             {decoration?.account && (
               <>
-                <span className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(accountColor))} />
+                <span className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(accountColor))} />
                 <span className="min-w-0 truncate text-12 text-secondary">{decoration.account}</span>
               </>
             )}
@@ -629,7 +638,7 @@ export function TableRowContent({
             key={id}
             dateTime={new Date(item.date).toISOString()}
             title={formatFullDate(item.date, i18n.language)}
-            className={cx("min-w-0 truncate pe-3 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+            className="min-w-0 truncate pe-3 text-11 text-tertiary tabular-nums"
             data-testid="cell-date"
           >
             {formatListDate(item.date, bounds, i18n.language)}
@@ -648,11 +657,12 @@ export function TableRowContent({
     <div
       aria-hidden
       className={cx(
-        "relative flex h-full items-center rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
-        selected ? "bg-selected" : "group-hover/row:bg-hover",
+        "relative flex h-full items-center rounded-row border-b border-border-subtle ps-(--ui-row-lead) pe-3 transition-colors",
+        selected ? "bg-selected-muted" : "group-hover/row:bg-hover",
         cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
         contextTarget && CONTEXT_TARGET,
       )}
+      data-row-selected={selected || undefined}
       data-context-target={contextTarget || undefined}
       data-testid="table-row"
     >
@@ -722,10 +732,12 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
       aria-hidden
       className={cx(
         "relative flex h-full items-center rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
-        selected ? "bg-selected" : "group-hover/row:bg-hover",
+        last && "border-b border-border-subtle",
+        selected ? "bg-selected-muted" : "group-hover/row:bg-hover",
         cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
         contextTarget && CONTEXT_TARGET,
       )}
+      data-row-selected={selected || undefined}
       data-context-target={contextTarget || undefined}
     >
       <TreeLine from="top" to={last ? "middle" : "bottom"} />
@@ -759,7 +771,7 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
           <time
             dateTime={new Date(item.date).toISOString()}
             title={formatFullDate(item.date, i18n.language)}
-            className={cx("shrink-0 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+            className="shrink-0 text-11 text-tertiary tabular-nums"
           >
             {formatListDate(item.date, bounds, i18n.language)}
           </time>

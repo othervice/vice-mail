@@ -1,4 +1,5 @@
-import { FolderX, Inbox, ListChecks, Search, SquarePen } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
+import { FolderX, Inbox, ListChecks } from "lucide-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -6,9 +7,9 @@ import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { Welcome } from "./Welcome";
 import { ErrorNotice } from "../../components/ErrorNotice";
-import { IconButton } from "../../components/IconButton";
 import { ViewHeader } from "../../components/ViewHeader";
 import {
+  ipc,
   MAX_ACTION_MESSAGES,
   type Account,
   type Mailbox,
@@ -17,7 +18,6 @@ import {
 } from "../../services/ipc";
 import { useNoticeStore } from "../../stores/notices";
 import { openComposer } from "../../stores/composer";
-import { useSearchStore } from "../../stores/search";
 import { boundShortcuts } from "../../stores/shortcuts";
 import { useActionTarget } from "../../stores/actionTarget";
 import { useUiStore, type ShownMailViewId, type View } from "../../stores/ui";
@@ -39,16 +39,14 @@ import {
 } from "../actions/registry";
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
-import { AiPanelToggle } from "../ai/AiPanel";
 import { useAppInfo } from "../app-info/queries";
-import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { usePreviewing } from "../reading/usePreviewing";
 import { useReadingLayout } from "../layout/useReadingLayout";
-import { useMailboxes } from "../mailboxes/queries";
+import { mailboxesQueryKey, useMailboxes } from "../mailboxes/queries";
 import { isRoleView, mailboxWithRole, type RoleView } from "../mailboxes/tree";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle, type RowMenuRequest } from "../messages/MessageList";
 import { useMessagePages } from "../messages/queries";
@@ -65,13 +63,15 @@ import { useThreadSource } from "../threads/source";
 import { ThreadPane } from "../threads/ThreadPane";
 import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
 import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
+import { useAccountGroups, useHiddenAccounts } from "../unified/queries";
 // Stage 16: "Unread only" and "Unread first".
 import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 import { unionIds, useDropRows } from "../organize/useDropRows";
 // Stage 19: sorting, the table and the quick filter.
 import { useListView } from "../views/useListView";
 import { ListViewMenu } from "../views/ViewMenu";
-import type { InboxScope } from "../../services/ipc";
+import { QuickFilterToggle } from "../views/QuickFilterBar";
+import type { InboxScope, UnifiedView } from "../../services/ipc";
 
 export type MailViewState = Extract<View, { kind: "mail" } | { kind: "mailbox" }>;
 
@@ -86,12 +86,38 @@ function AccountLine({ account }: { account: Account }) {
   const { t } = useTranslation();
   return (
     <>
-      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
+      {/* Stage 23 (decision 0084): the account's square, as in the draft. */}
+      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(account.color))} />
       <span className="truncate">
         {account.displayName ? t("nav.account", { name: account.displayName, email: account.email }) : account.email}
       </span>
     </>
   );
+}
+
+/**
+ * Stage 23, step 3 (decision 0084): the unread count next to the title in the toolbar: the
+ * folder's, or the inboxes' of the accounts a unified view shows (as the sidebar counts them).
+ * Null where a view has no such count (Later, Tasks, saved searches).
+ */
+function useViewUnread(unified: UnifiedView | null, accounts: readonly Account[], mailbox: Mailbox | undefined): number | null {
+  const groups = useAccountGroups(unified?.kind === "group").data ?? [];
+  const hidden = new Set(useHiddenAccounts(unified !== null).data ?? []);
+  const ids = !unified
+    ? []
+    : unified.kind === "all"
+      ? accounts.map((account) => account.id)
+      : (groups.find((group) => group.id === unified.groupId)?.accountIds ?? []);
+  const inboxes = useQueries({
+    queries: ids.map((accountId) => ({ queryKey: mailboxesQueryKey(accountId), queryFn: () => ipc.listMailboxes(accountId) })),
+  });
+  if (unified) {
+    return ids.reduce(
+      (sum, id, index) => sum + (hidden.has(id) ? 0 : (inboxes[index]?.data?.find((inbox) => inbox.role === "inbox")?.unread ?? 0)),
+      0,
+    );
+  }
+  return mailbox ? mailbox.unread : null;
 }
 
 interface MailboxPanesProps {
@@ -456,6 +482,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
             key={single.id}
             account={account}
             messageId={single.id}
+            mailboxId={single.mailboxId}
             draft={single.draft}
             focusRequest={focusRequest}
             toolbar={
@@ -622,14 +649,12 @@ interface MailViewProps {
 export function MailView({ view }: MailViewProps) {
   const { t } = useTranslation();
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
-  const dragRegion = useWindowDragRegion();
   const { accounts, account } = useSelectedAccount();
   const mailboxes = useMailboxes(view.kind === "mailbox" ? view.accountId : null);
   const label = useMailboxLabel();
   // Stage 7: search, the unified inbox and its switcher in the header.
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   useSearchShortcut(platform);
-  const openSearch = useSearchStore((state) => state.openSearch);
   const unified = useUiStore((state) => state.unifiedInbox);
   const accountList = accounts.data ?? [];
   const inboxView = view.kind === "mail" && view.mailView === "inbox";
@@ -660,6 +685,7 @@ export function MailView({ view }: MailViewProps) {
         ? { kind: "mailbox", mailboxId: roleMailbox.id }
         : null;
   const shownRole = (folder ?? roleMailbox)?.role;
+  const unread = useViewUnread(unifiedView, accountList, view.kind === "mail" && !isRoleView(view.mailView) ? undefined : (folder ?? roleMailbox));
   const sentOrDrafts = !unifiedView && (shownRole === "sent" || shownRole === "drafts");
   const title = unifiedView
     ? unifiedName
@@ -714,41 +740,44 @@ export function MailView({ view }: MailViewProps) {
       </SearchArea>
     );
   }
-  const subtitle =
-    inboxView && account && (accountList.length > 1 || unifiedView) ? (
-      <InboxScopeSwitcher accounts={accountList} account={account} />
-    ) : (
-      account && <AccountLine account={account} />
-    );
+  // Stage 23, step 3 (decision 0084): the head stands in the toolbar over the list: the title,
+  // the inbox's scope as its menu ("All inboxes ▾"), the account where several exist, the unread
+  // count; the list's controls at the segment's end. Search, New mail and the AI panel's toggle
+  // are the toolbar's own.
+  const switcher = inboxView && account && (accountList.length > 1 || unifiedView);
+  const after = (
+    <>
+      {switcher && <InboxScopeSwitcher accounts={accountList} account={account} inTitle />}
+      {!switcher && account && accountList.length > 1 && (
+        <span className="flex min-w-0 items-center gap-2 text-12 text-tertiary" data-testid="view-account">
+          <AccountLine account={account} />
+        </span>
+      )}
+      {unread !== null && unread > 0 && (
+        <span className="shrink-0 text-12 whitespace-nowrap text-tertiary tabular-nums @max-[70rem]/toolbar:hidden" data-testid="view-unread">
+          {t("toolbar.unread", { count: unread })}
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewHeader title={title} subtitle={subtitle} dragRegion={dragRegion}>
-        <div className="flex min-w-0 items-center gap-3">
-          {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
-          <div className="flex shrink-0 items-center gap-1">
-            {/* Stage 19 (decision 0061): order, presentation and table columns of the view. */}
-            {account && unreadScope && (
-              <ListViewMenu
-                viewKey={unreadViewKey(unreadScope)}
-                showRecipients={sentOrDrafts}
-                mixedAccounts={Boolean(unifiedView) && accountList.length > 1}
-              />
-            )}
-            {account && unreadScope && <UnreadControls viewKey={unreadViewKey(unreadScope)} />}
-            {account && conversationsApply && <ConversationToggle />}
-            {/* Stage 13: folds the AI panel in and out (only while AI is usable). */}
-            {account && <AiPanelToggle />}
-            <IconButton icon={Search} label={t("search.open")} disabled={!account} onClick={openSearch} />
-            <IconButton
-              icon={SquarePen}
-              label={t("mail.compose")}
-              disabled={!account}
-              onClick={() => {
-                if (account) openComposer({ kind: "new", accountId: account.id });
-              }}
+      <ViewHeader title={title} after={after}>
+        {account && accounts.data && <SyncStatus accounts={accounts.data} account={account} />}
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Stage 23: the quick filter folds into this button (its bar shows above the list). */}
+          {account && unreadScope && <QuickFilterToggle viewKey={unreadViewKey(unreadScope)} />}
+          {/* Stage 19 (decision 0061): order, presentation and table columns of the view. */}
+          {account && unreadScope && (
+            <ListViewMenu
+              viewKey={unreadViewKey(unreadScope)}
+              showRecipients={sentOrDrafts}
+              mixedAccounts={Boolean(unifiedView) && accountList.length > 1}
             />
-          </div>
+          )}
+          {account && unreadScope && <UnreadControls viewKey={unreadViewKey(unreadScope)} />}
+          {account && conversationsApply && <ConversationToggle />}
         </div>
       </ViewHeader>
       {body}

@@ -1362,6 +1362,10 @@ export function MessageList({
         aria-activedescendant={activeId}
         onKeyDown={onKeyDown}
         onFocus={(event) => {
+          // Stage 23 (decision 0084): while the list has the focus its selection is filled with
+          // the accent (app.css). An attribute set here, not `:focus-within`: WebKit drops that
+          // while the window is not the key window, the focus events say the same in both.
+          event.currentTarget.dataset["listActive"] = "";
           // The list gets a cursor and a selected option with the focus: the first visible
           // message, unless there is one already. A click selects its own row instead, and the
           // focus back from the context menu selects nothing (stage 21).
@@ -1373,6 +1377,11 @@ export function MessageList({
           const first = firstVisible();
           if (first) setState((current) => (current.cursor ? current : only(first)));
         }}
+        onBlur={(event) => {
+          if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) {
+            delete event.currentTarget.dataset["listActive"];
+          }
+        }}
         onScroll={rememberAnchor}
         onContextMenu={(event) => {
           // Stage 21: never the web view's own menu over the list. A row opens its own (below);
@@ -1381,6 +1390,9 @@ export function MessageList({
           if (event.target === event.currentTarget) openCursorMenu();
         }}
         data-testid="message-list"
+        // Stage 23 (decision 0084): selected rows are filled with the accent while the list has
+        // the focus, a neutral tint otherwise (app.css).
+        data-list-focus
         className={cx(
           "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list",
           // Stage 19: the header reserves the same gutter, so the columns line up.
@@ -1472,7 +1484,7 @@ export function MessageList({
                       role="presentation"
                       aria-hidden
                       data-testid="list-section"
-                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-center border-b border-border-subtle bg-band ps-(--ui-row-lead) pe-3 text-11 font-semibold text-tertiary"
+                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-center border-b border-border-subtle bg-band ps-4 pe-3 text-11 font-semibold text-tertiary"
                     >
                       <SectionLabel section={row.section} bounds={bounds} />
                     </div>

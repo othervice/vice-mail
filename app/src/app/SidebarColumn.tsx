@@ -1,18 +1,14 @@
-import { EyeOff, PanelLeftClose, SlidersHorizontal } from "lucide-react";
+import { EyeOff, SlidersHorizontal } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { ResizeHandle } from "../components/ResizeHandle";
-import { Tooltip } from "../components/Tooltip";
 import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
 import { useAccountDropTarget } from "../features/accounts/accountDrag";
 import { useAccountArrange } from "../features/accounts/arrange";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { OverflowMenu, type OverflowItem } from "../features/actions/OverflowMenu";
-import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
-import { useAppInfo } from "../features/app-info/queries";
-import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { useColumnViews, useColumnViewsStore, useShownColumnViews, type ColumnViewId } from "../features/layout/columnViews";
 import { SECTION_KEY, SectionRow, useSection } from "../features/layout/SectionRow";
 import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
@@ -25,7 +21,6 @@ import { FavoriteFolders, RowMenuSlot } from "../features/organize/folders";
 import { SavedSearchNav } from "../features/search/SavedSearchNav";
 import { UnifiedTree } from "../features/unified/UnifiedTree";
 import type { Account, MailboxId } from "../services/ipc";
-import { useBoundShortcuts } from "../stores/shortcuts";
 import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore } from "../stores/ui";
 import { StatusGroup } from "./IconRail";
 
@@ -305,16 +300,11 @@ function useOverlayDismiss(column: RefObject<HTMLElement | null>, overlay: boole
 export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const { t } = useTranslation();
   const width = useUiStore((state) => state.sidebarWidth);
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const dragRegion = useWindowDragRegion();
   const { accounts, account: selected } = useSelectedAccount();
   const accountList = accounts.data ?? [];
   const column = useRef<HTMLElement>(null);
   const contentId = useId();
   const accountsHeading = useId();
-  const platform = shortcutPlatform(useAppInfo().data?.platform);
-  const shortcut = useBoundShortcuts(platform)("toggleSidebar")[0];
-  const label = t("nav.hideSidebar");
   const onKeyDown = useOverlayDismiss(column, overlay);
   const autoScroll = useDragAutoScroll();
   // "Go to Folders" (palette): the entry shown right now takes the focus, else the first tree's.
@@ -350,24 +340,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
       // over the content it stays opaque.
       data-chrome={overlay ? undefined : true}
     >
-      {/* As high as the list header; on macOS the window buttons sit at its start. */}
-      <div data-tauri-drag-region={dragRegion ? true : undefined} className="flex h-(--ui-header-height) shrink-0 items-center justify-end px-2">
-        <Tooltip label={shortcut ? t("actions.withShortcut", { label, shortcut: formatShortcut(shortcut, platform) }) : label} side="right">
-          <button
-            type="button"
-            aria-label={label}
-            aria-expanded
-            aria-controls={contentId}
-            aria-keyshortcuts={shortcut && ariaShortcut(shortcut, platform)}
-            onClick={toggleSidebar}
-            // The same test id as the rail's "Folders": the one control that folds and unfolds the column.
-            data-testid="rail-folders"
-            className="flex size-8 items-center justify-center rounded-control text-secondary transition-colors hover:bg-rail-hover hover:text-primary"
-          >
-            <PanelLeftClose aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
-          </button>
-        </Tooltip>
-      </div>
+      {/* Stage 23 (decision 0084): its toggle stands in the toolbar across the window. */}
       {!overlay && <SidebarResizeHandle controls={contentId} />}
       {/* Scrolls on its own, never sideways; the edges fade so a cut-off row reads as "more".
           Stage 21: what is inside clips sideways (`overflow-x: clip` on the inner block, which

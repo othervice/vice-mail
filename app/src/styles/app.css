@@ -40,6 +40,7 @@
   --color-button: var(--ui-button);
   --color-priority-tint: var(--ui-priority-tint);
   --color-selected: var(--ui-selected);
+  --color-selected-muted: var(--ui-selected-muted);
   --color-hover: var(--ui-hover);
   --color-badge: var(--ui-badge);
 
@@ -139,12 +140,15 @@
   --spacing-10: var(--ui-space-10);
   --spacing-12: var(--ui-space-12);
 
-  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel` */
+  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel`,
+     `rounded-mark` (the account's square), `rounded-chip` (a row's count) */
   --radius-control: var(--ui-radius-control);
   --radius-row: var(--ui-radius-row);
   --radius-tile: var(--ui-radius-tile);
   --radius-card: var(--ui-radius-card);
   --radius-panel: var(--ui-radius-panel);
+  --radius-mark: var(--ui-radius-mark);
+  --radius-chip: var(--ui-radius-chip);
 
   /* Shadows: `shadow-row`, `shadow-card`, `shadow-floating`, `shadow-panel` */
   --shadow-row: var(--ui-shadow-row);
@@ -159,20 +163,14 @@
 }
 
 /*
- * macOS: the window buttons sit over the web view (titleBarStyle "Overlay"). tauri.conf.json moves
- * them (`trafficLightPosition`) onto the middle of the 56 px list header, so the title-bar band is
- * as high as the header and the rail's first icon starts below the header line. Pixels, not the
- * header token: the system places the buttons in pixels. The three buttons (14 px, 23 px apart,
- * from x 20) end at 80 px, past the 56 px rail: while the rail is collapsed, header titles start
- * after them.
+ * macOS: the window buttons sit over the web view (titleBarStyle "Overlay"). Stage 23, step 3
+ * (decision 0084): the toolbar runs across the whole window (app/AppToolbar.tsx) and is the title
+ * bar; tauri.conf.json moves the buttons (`trafficLightPosition`) onto the middle of its 52 px.
+ * Pixels, not a token: the system places the buttons in pixels. The three buttons (14 px, 23 px
+ * apart, from x 20) end at 80 px; the toolbar's first segment starts after them.
  */
 :root[data-platform="macos"] {
-  --ui-titlebar-inset: 56px;
   --ui-window-buttons-end: 80px;
-}
-
-:root[data-platform="macos"] [data-sidebar="collapsed"] {
-  --ui-header-inset-start: calc(var(--ui-window-buttons-end) - var(--ui-rail-width) + var(--ui-space-6));
 }
 
 /*
@@ -308,6 +306,56 @@
   width: auto;
   --ui-row-lead: var(--ui-space-4);
   --ui-tree-line-start: calc(var(--ui-space-4) + var(--ui-row-mark) / 2);
+}
+
+/*
+ * Stage 23, step 3 (decision 0084): the selection of a message list. While the list has the
+ * focus (`data-list-active`, set by its focus events) its selected rows are filled with the accent
+ * (`accent-fill`) and everything in them turns
+ * to `text-on-accent`, as in native lists and the draft (all three text tiers, so the preview keeps
+ * the 4.5:1 of the fill's label; the draft dims it to 86 %); the account's stripe keeps its colour.
+ * Without the focus (it is in the reading pane, the toolbar, a menu) they are a neutral tint
+ * (`selected-muted`, the row's own classes). The row's tokens are swapped for the row, so its
+ * text, icons, dot, pill and focus ring follow without a class each. The quick actions float
+ * over the row on their own surface and take the list's colours back (`--list-*`, read where the
+ * list is, outside the swap).
+ */
+[data-list-focus] {
+  --list-text-primary: var(--ui-text-primary);
+  --list-text-secondary: var(--ui-text-secondary);
+  --list-text-tertiary: var(--ui-text-tertiary);
+  --list-accent: var(--ui-accent);
+  --list-warning: var(--ui-warning);
+  --list-danger: var(--ui-danger);
+  --list-badge: var(--ui-badge);
+  --list-surface-raised: var(--ui-surface-raised);
+}
+
+[data-list-focus][data-list-active] [data-row-selected] {
+  background-color: var(--ui-accent-fill);
+  --ui-text-primary: var(--ui-text-on-accent);
+  --ui-text-secondary: var(--ui-text-on-accent);
+  --ui-text-tertiary: var(--ui-text-on-accent);
+  --ui-accent: var(--ui-text-on-accent);
+  --ui-warning: var(--ui-text-on-accent);
+  --ui-danger: var(--ui-text-on-accent);
+  --ui-focus-ring: var(--ui-text-on-accent);
+  --ui-badge: color-mix(in srgb, var(--ui-text-on-accent) 18%, transparent);
+  --ui-accent-soft: color-mix(in srgb, var(--ui-text-on-accent) 18%, transparent);
+  --ui-border-subtle: color-mix(in srgb, var(--ui-text-on-accent) 55%, transparent);
+  --ui-border-strong: var(--ui-text-on-accent);
+  --ui-surface-raised: var(--ui-accent-fill);
+}
+
+[data-list-focus] [data-row-selected] [data-row-actions] {
+  --ui-text-primary: var(--list-text-primary);
+  --ui-text-secondary: var(--list-text-secondary);
+  --ui-text-tertiary: var(--list-text-tertiary);
+  --ui-accent: var(--list-accent);
+  --ui-warning: var(--list-warning);
+  --ui-danger: var(--list-danger);
+  --ui-badge: var(--list-badge);
+  --ui-surface-raised: var(--list-surface-raised);
 }
 
 /* Stage 16: find in the open message (features/reading/find.ts). The app's own text (head,

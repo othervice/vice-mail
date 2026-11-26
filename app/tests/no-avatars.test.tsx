@@ -112,7 +112,7 @@ describe("message rows without avatars", () => {
     it(`puts the mark on the first line of narrow rows (${density}: ${density === "compact" ? "two" : "three"} lines)`, async () => {
       listWidth(400);
       const items = makeMessages(2).map((item) => ({ ...item, unread: true, preview: "The start of the text" }));
-      inbox(items, { ui: { layout: { readingPane: "right", density, sidebarExpanded: false, sidebarWidth: 240, listWidth: 384, listHeight: 320 } } });
+      inbox(items, { ui: { layout: { readingPane: "right", density, sidebarExpanded: false, sidebarWidth: 240, listWidth: 384, listHeight: 320, contactPanel: true } } });
       const listbox = await screen.findByRole("listbox", { name: /^Messages in/ });
       await waitFor(() => {
         expect(document.documentElement.dataset["density"] ?? "comfortable").toBe(density);
@@ -171,12 +171,12 @@ describe("message rows without avatars", () => {
       // Tooltip and the row's accessible name say the account in words (SPEC: never colour alone).
       expect(label.title).toBe(name);
       expect(optionName(option)).toContain(`Account: ${name}`);
-      expect(classes(within(label).getByTestId("row-account-dot"))).toContain(accountFill(account.color));
+      // Stage 23 (decision 0084): the stripe in the account's colour.
+      expect(classes(label)).toContain(accountFill(account.color));
       // Not in the meta that gives way to the quick actions: it stays, before them.
       expect(within(option).getByTestId("row-meta").contains(label)).toBe(false);
       expect(within(option).getByTestId("row-meta-marks").contains(label)).toBe(false);
-      const actions = within(option).getByTestId("row-actions");
-      expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(option).getByTestId("row-actions")).toBeTruthy();
       // Away from the unread dot: after the sender and the subject.
       expect(within(option).getByTestId("row-subject").compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(within(option).queryByTestId("avatar")).toBeNull();

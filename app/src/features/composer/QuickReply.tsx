@@ -1,4 +1,4 @@
-import { Maximize2, Send, Trash2 } from "lucide-react";
+import { Maximize2, Reply, Send, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -290,13 +290,18 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
       }}
-      className="flex flex-col gap-2 rounded-card border border-border-subtle bg-surface px-3 py-2 has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-2 has-[textarea:focus-visible]:outline-focus-ring"
+      // Stage 23 (decision 0084): a framed field on the card surface at the pane's bottom.
+      className="flex flex-col gap-2 rounded-card border border-border-subtle bg-surface-raised px-4 py-3 has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-2 has-[textarea:focus-visible]:outline-focus-ring"
       data-testid="inline-reply"
       data-print-hide
     >
       <label htmlFor={fieldId} className="sr-only">
         {t("quickReply.label", { name: sender })}
       </label>
+      <div className="flex items-start gap-3">
+      <span aria-hidden className="flex h-5 shrink-0 items-center">
+        <Reply className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
+      </span>
       <textarea
         id={fieldId}
         value={text}
@@ -315,9 +320,10 @@ export function QuickReply({ account, messageId, sender, onLeave }: QuickReplyPr
             });
           }
         }}
-        className="w-full resize-none bg-transparent text-14 leading-relaxed text-primary outline-none placeholder:text-tertiary"
+        className="w-full resize-none bg-transparent text-13 leading-5 text-primary outline-none placeholder:text-tertiary"
         data-testid="inline-reply-field"
       />
+      </div>
       <p id={hintId} className={cx("text-12 text-tertiary", !open && "sr-only")}>
         {t("quickReply.hint", { shortcut: sendShortcut })}
       </p>

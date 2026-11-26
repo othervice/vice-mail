@@ -70,32 +70,40 @@ describe("reading toolbar", () => {
     expect(ids(visibleEntries(entries, 99))).toEqual(ids(visibleEntries(entries)));
   });
 
-  it("groups respond, file away and mark with lines between them; everything else is in “More”", async () => {
+  it("groups respond, file away and flag as joined buttons; everything else is in “More”", async () => {
     const { user } = setup();
     const pane = await openMessage(user);
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).getAllByRole("button").map(nameOf)).toEqual([
       "Reply",
       "Reply all",
       "Forward",
       "Archive",
       "Delete",
-      "Mark as unread",
+      "Snooze",
+      "Mark as junk",
       "Flag",
       "More actions",
     ]);
-    // Three thin lines: after Forward, after Delete, before "More" (decorative).
-    const lines = toolbar.querySelectorAll("[data-toolbar-separator]");
-    expect(lines).toHaveLength(3);
-    for (const line of lines) expect(line.getAttribute("aria-hidden")).toBe("true");
+    // Stage 23 (decision 0084): three joined groups as in the draft; "More" joins the flag.
+    const groups = [...toolbar.querySelectorAll("[data-toolbar-group]")].map((group) =>
+      within(group as HTMLElement)
+        .getAllByRole("button")
+        .map(nameOf),
+    );
+    expect(groups).toEqual([
+      ["Reply", "Reply all", "Forward"],
+      ["Archive", "Delete", "Snooze", "Mark as junk"],
+      ["Flag", "More actions"],
+    ]);
     // The HTML/plain-text switch is not in the toolbar but at the body.
     expect(within(toolbar).queryByRole("group", { name: "Show as" })).toBeNull();
     expect(within(within(pane).getByTestId("message-card")).getByRole("group", { name: "Show as" })).toBeTruthy();
   });
 
   it("moves what does not fit into “More actions”, every action reachable by mouse and keyboard", async () => {
-    // A narrow pane: 240 px for 32 px buttons and 1 px lines (no gaps in jsdom) leaves six of the
-    // seven primary buttons next to “More”; Flag joins the menu.
+    // A narrow pane: 240 px for 32 px buttons and the groups' frames (no gaps in jsdom) leaves six
+    // of the eight primary buttons next to “More”; Snooze and Mark as junk join the menu.
     let observed = 0;
     vi.stubGlobal(
       "ResizeObserver",
@@ -114,7 +122,7 @@ describe("reading toolbar", () => {
     });
     const { core, user } = setup();
     const pane = await openMessage(user);
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const more = await within(toolbar).findByRole("button", { name: "More actions" });
     expect(observed).toBeGreaterThan(0);
 
@@ -126,22 +134,22 @@ describe("reading toolbar", () => {
       .getAllByRole("button")
       .filter((button) => button !== more)
       .map(nameOf);
-    expect(shown).toEqual(["Reply", "Reply all", "Forward", "Archive", "Delete", "Mark as unread"]);
+    expect(shown).toEqual(["Reply", "Reply all", "Forward", "Archive", "Delete", "Flag"]);
 
     // The menu holds exactly the rest, in toolbar order, with their shortcuts.
     await user.click(more);
-    const menu = within(pane).getByRole("menu", { name: "More actions" });
+    const menu = screen.getByRole("menu", { name: "More actions" });
     const items = within(menu).getAllByRole("menuitem");
     expect(items.map(nameOf)).toEqual(all.filter((name) => !shown.includes(name)));
-    expect(items.map(nameOf)).toContain("Flag");
+    expect(items.map(nameOf)).toContain("Mark as junk");
     expect(document.activeElement).toBe(items[0]);
-    const flagItem = within(menu).getByRole("menuitem", { name: "Flag" });
-    expect(flagItem.textContent).toContain("S");
-    expect(flagItem.getAttribute("aria-keyshortcuts")).toBe("S");
+    const junkItem = within(menu).getByRole("menuitem", { name: "Mark as junk" });
+    expect(junkItem.textContent).toContain("!");
+    expect(junkItem.getAttribute("aria-keyshortcuts")).toBe("!");
 
     // Escape closes it and gives the focus back.
     await user.keyboard("{Escape}");
-    expect(within(pane).queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("menu", { name: "More actions" })).toBeNull();
     expect(document.activeElement).toBe(more);
 
     // From the toolbar's first button: End reaches “More”, Arrow Down opens it on the first item.
@@ -150,23 +158,23 @@ describe("reading toolbar", () => {
     await user.keyboard("{End}");
     expect(document.activeElement).toBe(more);
     await user.keyboard("{ArrowDown}");
-    const reopened = within(pane).getByRole("menu", { name: "More actions" });
+    const reopened = screen.getByRole("menu", { name: "More actions" });
     expect(document.activeElement).toBe(within(reopened).getAllByRole("menuitem")[0]);
     await user.keyboard("{ArrowUp}");
-    const flag = within(reopened).getByRole("menuitem", { name: "Flag" });
+    const flag = within(reopened).getByRole("menuitem", { name: "Mark as junk" });
     flag.focus();
     await user.keyboard("{Enter}");
     await waitFor(() => {
       expect(core.callsOf("apply_action")).toHaveLength(1);
     });
-    expect(within(pane).queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("menu", { name: "More actions" })).toBeNull();
   });
 });
 
 describe("reading toolbar in a very narrow pane", () => {
   it("keeps Reply folded away when it measures again, instead of flipping back to every button", async () => {
-    // 100 px leave room for Archive and Delete next to “More”: Reply, the first button in the
-    // toolbar, is folded away. A folded (hidden) button measures 0 like in a browser; measuring
+    // 132 px leave room for Archive and Delete next to “More” (and the groups' frames): Reply, the
+    // first button in the toolbar, is folded away. A folded (hidden) button measures 0 like in a browser; measuring
     // with it read as “nothing measured” and showed every button again on the next callback.
     const callbacks: (() => void)[] = [];
     class ManualResizeObserver implements ResizeObserver {
@@ -180,14 +188,14 @@ describe("reading toolbar in a very narrow pane", () => {
       disconnect() {}
     }
     vi.stubGlobal("ResizeObserver", ManualResizeObserver);
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(132);
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
       const width = this.hasAttribute("data-toolbar-separator") ? 1 : this.closest("[hidden]") ? 0 : 32;
       return { width, height: 32, top: 0, left: 0, right: width, bottom: 32, x: 0, y: 0, toJSON: () => ({}) };
     });
     const { user } = setup();
     const pane = await openMessage(user);
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const shown = () => within(toolbar).getAllByRole("button").map(nameOf);
     await waitFor(() => {
       expect(shown()).toEqual(["Archive", "Delete", "More actions"]);
@@ -218,7 +226,7 @@ describe("the read-only note in the toolbar", () => {
     layout(1000);
     const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
     const pane = await openMessage(user);
-    const note = await within(pane).findByTestId("read-only-actions");
+    const note = await screen.findByTestId("read-only-actions");
     await waitFor(() => {
       expect(note.dataset.compact).toBeUndefined();
     });
@@ -229,14 +237,14 @@ describe("the read-only note in the toolbar", () => {
     layout(200);
     const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
     const pane = await openMessage(user);
-    const note = await within(pane).findByTestId("read-only-actions");
+    const note = await screen.findByTestId("read-only-actions");
     await waitFor(() => {
       expect(note.dataset.compact).toBe("true");
     });
     // The word is still there for screen readers, and the toolbar is described by it.
     const label = note.querySelector("[data-read-only-label]") as HTMLElement;
     expect(label.className).toBe("sr-only");
-    expect(within(pane).getByRole("toolbar", { name: "Message actions" }).getAttribute("aria-describedby")).toBe(label.id);
+    expect(screen.getByRole("toolbar", { name: "Message actions" }).getAttribute("aria-describedby")).toBe(label.id);
     await user.hover(within(note).getByTestId("read-only-lock"));
     expect((await screen.findByRole("tooltip")).textContent).toContain("Read-only: Changes are turned off for this account");
     expect(within(note).getByRole("button", { name: "Allow changes…" })).toBeTruthy();
@@ -244,13 +252,16 @@ describe("the read-only note in the toolbar", () => {
 });
 
 describe("the open message", () => {
-  it("is a card under its subject with a reply row; with AI off there are no AI chips and no ask bar", async () => {
+  it("lies under its subject without a card, the quick reply at the bottom; with AI off no AI chips and no ask bar", async () => {
     const { user } = setup({ enabled: false });
     const pane = await openMessage(user);
     expect(within(pane).getByRole("heading", { level: 2, name: "Budget 2027" })).toBeTruthy();
+    // Stage 23 (decision 0084): no card and no reply row; replying is in the toolbar and the field.
     const card = within(pane).getByTestId("message-card");
-    const row = within(card).getByRole("group", { name: "Reply and forward" });
-    expect(within(row).getAllByRole("button").map(nameOf)).toEqual(["Reply to Grace Hopper", "Reply to everyone", "Forward this message"]);
+    expect(card.className).not.toContain("rounded-card");
+    expect(within(pane).queryByRole("group", { name: "Reply and forward" })).toBeNull();
+    expect(within(pane).getByRole("group", { name: "Quick reply to Grace Hopper" })).toBeTruthy();
+    expect(within(pane).getByTestId("reading-meta").textContent).toContain("Ada Lovelace");
     expect(within(card).getByRole("button", { name: "More for this message" })).toBeTruthy();
     expect(within(pane).queryByTestId("quick-replies")).toBeNull();
     expect(within(pane).queryByTestId("ask-bar")).toBeNull();

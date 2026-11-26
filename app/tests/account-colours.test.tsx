@@ -106,7 +106,8 @@ describe("account colours", () => {
       expect(within(list).getAllByRole("option")).toHaveLength(3);
     });
     const options = within(list).getAllByRole("option");
-    expect(options.map((option) => within(option).getByTestId("row-account").textContent)).toEqual(["Ada Lovelace", "Work", "Club"]);
+    // Stage 23 (decision 0084): the account's stripe at the row's edge, its name as the tooltip.
+    expect(options.map((option) => within(option).getByTestId("row-account").title)).toEqual(["Ada Lovelace", "Work", "Club"]);
     expect(optionName(options[1])).toContain("Projekt, Account: Work");
     expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);
     // The opened message names its account in the header, next to the dot.
@@ -146,7 +147,7 @@ describe("account colours", () => {
     const options = await within(results).findAllByRole("option");
     expect(options.length).toBeGreaterThan(0);
     for (const option of options) {
-      expect(within(option).getByTestId("row-account").textContent).toMatch(/^(Ada Lovelace|Work|Club)$/);
+      expect(within(option).getByTestId("row-account").title).toMatch(/^(Ada Lovelace|Work|Club)$/);
       expect(optionName(option)).toMatch(/Account: (Ada Lovelace|Work|Club)/);
     }
     expect(unnamedColours([ADA, WORK, CLUB])).toEqual([]);

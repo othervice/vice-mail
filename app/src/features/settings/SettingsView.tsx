@@ -21,7 +21,6 @@ import { ViewHeader } from "../../components/ViewHeader";
 import { SETTINGS_SECTION_IDS, useUiStore, type SettingsSectionId } from "../../stores/ui";
 import { shortcutPlatform } from "../actions/shortcuts";
 import { useAppInfo } from "../app-info/queries";
-import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { InboxSettings } from "../comfort/InboxSettings";
 import { KeyboardSettings } from "../keyboard/KeyboardSettings";
 import { ComposeSettings } from "../composer/ComposeSettings";
@@ -83,7 +82,6 @@ interface SettingsViewProps {
 export function SettingsView({ section }: SettingsViewProps) {
   const { t } = useTranslation();
   const showSettings = useUiStore((state) => state.showSettings);
-  const dragRegion = useWindowDragRegion();
   const search = useRef<SettingsSearchHandle>(null);
   const panels = useRef<HTMLDivElement>(null);
   const jump = useSettingsJump(panels, section);
@@ -93,7 +91,7 @@ export function SettingsView({ section }: SettingsViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewHeader title={t("settings.title")} dragRegion={dragRegion} />
+      <ViewHeader title={t("settings.title")} />
       <Tabs.Root
         value={section}
         onValueChange={(next) => {
