@@ -480,8 +480,6 @@ pub(crate) fn content_of(
         }
         // Stage 10: the name the user gave and the merge (decision 0023); stage 17 the note.
         "contact" => crate::contacts_dir::synced_content(conn, id)?,
-        // Stage 17 (decision 0050): the picture the user chose.
-        "contactPicture" => crate::contacts_view::synced_picture(conn, id)?,
         // Stage 19 (decision 0056): a contact group with its members.
         "contactList" => crate::contact_lists::synced_content(conn, id)?,
         // Stage 16 (decision 0033).
@@ -1068,16 +1066,6 @@ fn put_table(
                 }
             })?;
         }
-        // Stage 17 (decision 0050): a picture needs no contact row; it shows once this device
-        // knows the address.
-        "contactPicture" => {
-            crate::contacts_view::apply_synced_picture(conn, id, Some(value)).map_err(|err| {
-                match err {
-                    StoreError::InvalidArgument(what) => refused(what),
-                    other => ApplyError::Store(other),
-                }
-            })?;
-        }
         "contact" => {
             // The name the user gave and the merge; a contact this device never saw has nothing
             // to name: the record waits in `sync_record` until the address appears.
@@ -1179,7 +1167,6 @@ fn delete_table(
             id,
             crate::contacts_dir::SyncedContact::default(),
         )?,
-        "contactPicture" => crate::contacts_view::apply_synced_picture(conn, id, None)?,
         "contactList" => crate::contact_lists::apply_synced(conn, id, None, 0)?,
         "followUp" => {
             crate::follow_ups::apply_synced(conn, id, None, 0).map_err(|err| match err {

@@ -454,27 +454,6 @@ export const commands = {
 	separateContact: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("separate_contact", { email }, options)),
 	/**  Stage 17: sets the note of a contact, or with `null` (or empty text) removes it. */
 	setContactNote: (email: string, note: string | null, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("set_contact_note", { email, note }, options)),
-	/**
-	 *  Stage 17: asks for an image file in the system dialog; the core reads it and has the
-	 *  helper encode it for the cropper. `null` when the user cancelled.
-	 */
-	pickContactPicture: (options?: InvokeOptions) => typedError<ContactPictureSource | null, IpcError>(__TAURI_INVOKE("pick_contact_picture", undefined, options)),
-	/**
-	 *  Stage 17: an image dropped on the window: only a path of a drop the shell saw itself,
-	 *  shortly before (`invalid_argument` otherwise; see `drops.rs`).
-	 */
-	loadDroppedContactPicture: (path: string, options?: InvokeOptions) => typedError<ContactPictureSource, IpcError>(__TAURI_INVOKE("load_dropped_contact_picture", { path }, options)),
-	/**
-	 *  Stage 17: cuts the square `crop` out of the chosen image `token` and stores it as the
-	 *  contact's picture.
-	 */
-	setContactPicture: (email: string, token: string, crop: PictureCrop, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("set_contact_picture", { email, token, crop }, options)),
-	/**  Stage 17: removes the contact's picture (the initials show again). */
-	removeContactPicture: (email: string, options?: InvokeOptions) => typedError<ContactEntry, IpcError>(__TAURI_INVOKE("remove_contact_picture", { email }, options)),
-	/**  Stage 17: the picture of the contact with this address, `null` without one. */
-	getContactPicture: (email: string, options?: InvokeOptions) => typedError<ContactPicture | null, IpcError>(__TAURI_INVOKE("get_contact_picture", { email }, options)),
-	/**  Stage 17: which addresses show a picture. */
-	listContactPictures: (options?: InvokeOptions) => typedError<ContactPictureRef[], IpcError>(__TAURI_INVOKE("list_contact_pictures", undefined, options)),
 	/**  Stage 17: the newest messages from and to the contact, newest first (`limit` 1..50). */
 	listContactMessages: (email: string, limit: number, options?: InvokeOptions) => typedError<ContactMessages, IpcError>(__TAURI_INVOKE("list_contact_messages", { email, limit }, options)),
 	/**  Stage 17: marks the contact as spam: its addresses become blocked senders. */
@@ -2224,8 +2203,6 @@ export type ContactEntry = {
 	kind: ContactKind,
 	/**  Stage 17: the note the user wrote (synchronised). */
 	note: string | null,
-	/**  Stage 17: the revision of the contact's picture (`getContactPicture`), null without one. */
-	picture: number | null,
 	/**  Stage 17: at least one address is blocked (marked as spam). */
 	blocked: boolean,
 };
@@ -2308,37 +2285,6 @@ export type ContactPage = {
 	items: ContactEntry[],
 	/**  Pass to `listContacts` for the next page; `null` at the end. Opaque. */
 	next: string | null,
-};
-
-/**  Stage 17: a contact's picture as the UI shows it. */
-export type ContactPicture = {
-	/**  `data:image/jpeg;base64,…`, written by the helper. */
-	dataUrl: string,
-	revision: number,
-};
-
-/**
- *  Stage 17: which addresses show a picture: every address of a contact that has one, lower
- *  case (as written and with the ASCII domain), and the picture's revision. `key` is the
- *  contact's (for `getContactPicture`).
- */
-export type ContactPictureRef = {
-	key: string,
-	emails: string[],
-	revision: number,
-};
-
-/**
- *  Stage 17: an image the user chose for a contact, re-encoded in the helper and at most
- *  [`CONTACT_PICTURE_SOURCE_SIZE`] pixels per side, for the cropper. `token` names it in
- *  `setContactPicture` for a few minutes.
- */
-export type ContactPictureSource = {
-	token: string,
-	/**  `data:image/jpeg;base64,…`, written by the helper. */
-	dataUrl: string,
-	width: number,
-	height: number,
 };
 
 /**  An autocomplete suggestion from addresses of earlier mail. */
@@ -2453,8 +2399,8 @@ export type ConversationSummary = {
  *  - `updateStatusChanged` (stage 15, decision 0037): the update state changed (checking, up
  *    to date, available, download progress, ready, installing, failed). The setting itself
  *    comes back from the command that changed it; reload `getUpdateInfo` for the rest.
- *  - `contactsChanged` (stage 17): names, notes, pictures, merges or spam marks of contacts
- *    changed (here or by the settings sync). Reload the contacts and the picture list. Since
+ *  - `contactsChanged` (stage 17): names, notes, merges or spam marks of contacts changed
+ *    (here or by the settings sync). Reload the contacts. Since
  *    stage 19 (decision 0056) also contact groups and vCard imports.
  *  - `mboxJobChanged` (stage 19, decision 0057): an mbox export or import made progress,
  *    finished, was cancelled or failed; carries the whole job.
@@ -2491,8 +2437,8 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  */
 { type: "updateStatusChanged"; status: UpdateStatus } | 
 /**
- *  Stage 17: what the user set on contacts changed (name, note, picture, merge, spam mark),
- *  here or from another device. Reload the contacts and their pictures.
+ *  Stage 17: what the user set on contacts changed (name, note, merge, spam mark), here or
+ *  from another device. Reload the contacts.
  */
 { type: "contactsChanged" } | 
 /**  Stage 19 (decision 0057): an mbox job changed. */
@@ -3031,12 +2977,6 @@ export type ErrorCode = "internal" | "invalid_argument" | "not_found" | "databas
  *  encryption.
  */
 "jmap_unavailable" | 
-/**  Stage 17: the image for a contact picture is larger than the app reads. */
-"picture_too_large" | 
-/**  Stage 17: the file is not a PNG, JPEG, GIF or WebP image. */
-"picture_unsupported" | 
-/**  Stage 17: the image could not be decoded (damaged, or crafted). */
-"picture_damaged" | 
 /**
  *  Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
  *  9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
@@ -4202,11 +4142,6 @@ export type NewMailContent = {
 	 *  until the body is stored (the core fills it in as soon as the prefetch has it).
 	 */
 	snippet: string | null,
-	/**
-	 *  Stage 17 (decision 0050): the picture the user chose for the sender, as the JPEG
-	 *  `data:` URL the core's helper wrote; null without one. Never from the network.
-	 */
-	picture: string | null,
 };
 
 /**  The popup as the UI draws it. */
@@ -4564,13 +4499,6 @@ export type PauseNotifications =
 "untilTomorrow" | 
 /**  Not any more. */
 "resume";
-
-/**  Stage 17: the square the user cut out, in pixels of [`ContactPictureSource`]. */
-export type PictureCrop = {
-	x: number,
-	y: number,
-	size: number,
-};
 
 /**  A row of "Pinned attachments": the attachment as it was pinned, and its message. */
 export type PinnedAttachment = {
@@ -6074,8 +6002,6 @@ export type VcardImportProblemKind =
 "too_many_cards" | 
 /**  A line or card could not be read. */
 "malformed" | 
-/**  A picture was too large, not an image the app shows, or a link (never loaded). */
-"picture_skipped" | 
 /**  A card without any usable address. */
 "no_address" | 
 /**  A group would get more members than allowed, or there are too many groups. */
@@ -6090,7 +6016,7 @@ export type VcardImportReport = {
 	cards: number,
 	/**  New contacts. */
 	created: number,
-	/**  Known contacts that got a name, a note, a picture or more addresses. */
+	/**  Known contacts that got a name, a note or more addresses. */
 	updated: number,
 	/**
 	 *  Addresses merged into one contact (several addresses on a card, or a card naming
@@ -6099,8 +6025,6 @@ export type VcardImportReport = {
 	merged: number,
 	/**  Groups created or extended. */
 	lists: number,
-	/**  Pictures set (re-encoded by the helper, only where the contact had none). */
-	pictures: number,
 	/**  Problems, at most 32. */
 	problems: VcardImportProblem[],
 };

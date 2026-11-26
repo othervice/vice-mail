@@ -58,8 +58,6 @@ pub enum RecordKind {
     BlockedSender,
     /// A pinned attachment, by account, Message-ID and attachment index (stage 16, 0036).
     AttachmentPin,
-    /// The picture the user chose for a contact, by its normalised address (stage 17, 0050).
-    ContactPicture,
     /// A contact group with its members, by UUID (stage 19, 0056).
     ContactList,
     /// "Remind me if no reply", by account and Message-ID (stage 20, 0059).
@@ -128,7 +126,7 @@ pub struct KindSpec {
 const KIB: usize = 1024;
 
 /// The synchronised kinds, in [`RecordKind`] order. Nothing else is synchronised.
-pub const REGISTRY: [KindSpec; 23] = [
+pub const REGISTRY: [KindSpec; 22] = [
     // 16 KiB since stage 8 (decision 0025): one platform's shortcut changes are one setting.
     spec(
         RecordKind::Setting,
@@ -317,17 +315,6 @@ pub const REGISTRY: [KindSpec; 23] = [
         Removal::Apply,
         2 * KIB,
     ),
-    // Stage 17 (decision 0050): a contact picture, a JPEG of 256 × 256 px and at most 40 KiB
-    // in base64 (54,616 characters).
-    spec(
-        RecordKind::ContactPicture,
-        "contactPicture",
-        "contact_picture",
-        MergeRule::NewerWins,
-        IdShape::Address,
-        Removal::Apply,
-        56 * KIB,
-    ),
     // Stage 19 (decision 0056): a contact group; at most 1,000 members of up to about 450
     // bytes each (address, name, key).
     spec(
@@ -372,6 +359,12 @@ const fn spec(
     }
 }
 
+/// Kinds an older version wrote that this one no longer has: their entries in the folder are
+/// ignored (never applied, never reported as rejected, never deleted: devices with an older
+/// version may still use them), and no record of them is ever written. Stage 22 (decision
+/// 0072): `contactPicture`, the contact pictures of stage 17 (decision 0050).
+pub const RETIRED_KINDS: &[&str] = &["contactPicture"];
+
 /// Setting keys that are synchronised (decision 0022): theme, language, when an opened message
 /// counts as read, the undo delay of sending, the notification settings, and (stage 8,
 /// decision 0025) the default quote position of replies, the shortcut changes of each platform
@@ -414,7 +407,7 @@ pub const SYNCED_SETTINGS: &[&str] = &[
 pub const ACCOUNT_FIELDS: &[&str] = &["email", "displayName", "color", "imap", "smtp"];
 
 impl RecordKind {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 22] = [
         Self::Setting,
         Self::Signature,
         Self::Template,
@@ -435,7 +428,6 @@ impl RecordKind {
         Self::MailboxPref,
         Self::BlockedSender,
         Self::AttachmentPin,
-        Self::ContactPicture,
         Self::ContactList,
         Self::FollowUp,
     ];
@@ -451,6 +443,11 @@ impl RecordKind {
     /// The kind with this payload name, `None` if it is not registered.
     pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+
+    /// Whether `name` is a kind this version retired ([`RETIRED_KINDS`]).
+    pub fn is_retired(name: &str) -> bool {
+        RETIRED_KINDS.contains(&name)
     }
 }
 
@@ -938,15 +935,6 @@ fn check_structure(kind: RecordKind, value: &Value) -> Result<(), RecordError> {
                 return Err(invalid("not a usable note".into()));
             }
         }
-        // Stage 17 (decision 0050): base64 of a JPEG within the stored size; shown on this
-        // device only after its own helper encoded it again (decision 0046).
-        RecordKind::ContactPicture => {
-            let picture = ContactPictureContent::deserialize(value)
-                .map_err(|err| invalid(err.to_string()))?;
-            if !crate::contacts_view::is_picture_record(&picture.jpeg) {
-                return Err(invalid("not the base64 of a JPEG of at most 40 KiB".into()));
-            }
-        }
         // Stage 19 (decision 0056): a group as this device would store it: a usable name with
         // its search words, members with usable addresses and their normalised keys.
         RecordKind::ContactList => {
@@ -1289,14 +1277,6 @@ pub struct ContactContent {
     pub note: Option<String>,
 }
 
-/// Content of a contact picture record (stage 17, by normalised address): the JPEG in
-/// standard base64.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ContactPictureContent {
-    pub jpeg: String,
-}
-
 /// Stage 19 (decision 0056): content of a contact group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -1426,6 +1406,13 @@ mod tests {
         assert_eq!(names.len(), REGISTRY.len());
         assert_eq!(RecordKind::from_name("password"), None);
         assert_eq!(RecordKind::from_name("message"), None);
+        // Stage 22 (decision 0072): retired kinds are no kinds any more.
+        for name in RETIRED_KINDS {
+            assert!(RecordKind::is_retired(name));
+            assert_eq!(RecordKind::from_name(name), None);
+            assert!(!names.contains(name));
+        }
+        assert!(!RecordKind::is_retired("contact"));
     }
 
     #[test]

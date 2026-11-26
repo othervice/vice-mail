@@ -381,7 +381,7 @@ impl<C: Connector> AppCore<C> {
     }
 
     /// The visible cards with what the UI shows: the account where there are several, whether
-    /// it may write, the sender's picture; and the app's theme, language and accent.
+    /// it may write; and the app's theme, language and accent.
     async fn popup_view(&self) -> NewMailPopup {
         let (cards, more, revision) = lock(&self.comfort().popup).visible();
         let accounts = match self.store_ref() {
@@ -402,15 +402,6 @@ impl<C: Connector> AppCore<C> {
                     .from
                     .as_ref()
                     .and_then(|a| non_empty(Some(a.email.as_str())));
-                let picture = match &email {
-                    Some(email) => self
-                        .get_contact_picture(email.clone())
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|p| p.data_url),
-                    None => None,
-                };
                 Some(NewMailContent {
                     sender_name: card
                         .from
@@ -419,7 +410,6 @@ impl<C: Connector> AppCore<C> {
                     sender_email: email,
                     subject: card.subject.clone(),
                     snippet: card.snippet.clone(),
-                    picture,
                 })
             };
             shown.push(NewMailCard {

@@ -7,16 +7,14 @@
 //! - a known contact keeps its counts; it gets the card's name and note only where it has none;
 //! - several addresses on one card, or cards naming addresses of different contacts, are merged
 //!   into one contact (the head is the contact of the first known address, else the first);
-//! - a picture on the card is decoded and encoded again by the helper process (decision 0046:
-//!   [`mail_mcp::preview::PictureStep`], the same limits as a chosen picture), cut to its centre
-//!   square, and set only where the contact has none.
+//! - a picture on the card is skipped: contacts have no pictures (stage 22, decision 0072).
 //!
 //! Group cards (`KIND:group`, Apple's `X-ADDRESSBOOKSERVER-KIND:group`) become contact groups:
 //! members by address, or by the UID of another card of the file; a group with the same name is
 //! extended instead of created twice.
 //!
 //! **Export** writes the chosen contacts, a group or everything to the path from the system's
-//! save dialog: one card per contact (name, every address, note, picture), one per group with
+//! save dialog: one card per contact (name, every address, note; no picture), one per group with
 //! its members (by the UID of their card in the same file, else by address). UIDs are derived
 //! from the contact's key, so exporting again gives the same cards.
 
@@ -26,10 +24,9 @@ use std::path::PathBuf;
 use mail_content::{
     VcardCard, VcardKind, VcardMember, VcardProblemKind, VcardVersion, normalize_address,
 };
-use mail_mcp::preview::PictureStep;
 use mail_model::{
     Address, ContactExport, ContactListId, CoreError, CoreEvent, MAX_VCARD_EXPORT_CONTACTS,
-    PictureCrop, VcardImportProblem, VcardImportProblemKind, VcardImportReport, VcardVersionChoice,
+    VcardImportProblem, VcardImportProblemKind, VcardImportReport, VcardVersionChoice,
 };
 use mail_store::{MergeOutcome, Store, StoredContactGroup};
 use sha2::{Digest, Sha256};
@@ -60,9 +57,6 @@ fn problem_kind(kind: VcardProblemKind) -> VcardImportProblemKind {
     match kind {
         VcardProblemKind::TooLarge => VcardImportProblemKind::TooLarge,
         VcardProblemKind::TooManyCards => VcardImportProblemKind::TooManyCards,
-        VcardProblemKind::PhotoTooLarge | VcardProblemKind::PhotoUnsupported => {
-            VcardImportProblemKind::PictureSkipped
-        }
         _ => VcardImportProblemKind::Malformed,
     }
 }
@@ -149,7 +143,7 @@ impl<C: Connector> AppCore<C> {
         Ok(report.0)
     }
 
-    /// One individual card: rows for new addresses, name and note where empty, merged, picture.
+    /// One individual card: rows for new addresses, name and note where empty, merged.
     /// Returns the address groups can name it by.
     async fn import_card(
         &self,
@@ -230,29 +224,6 @@ impl<C: Connector> AppCore<C> {
                 .await?;
             changed = true;
         }
-        if let Some(photo) = &card.photo {
-            let member_keys: Vec<String> = group.members.iter().map(|m| m.key.clone()).collect();
-            if store
-                .contact_picture_of(member_keys.clone())
-                .await?
-                .is_none()
-            {
-                match self.imported_picture(photo.clone()).await {
-                    Ok(jpeg) => {
-                        let others = member_keys.into_iter().filter(|k| *k != head.key).collect();
-                        store
-                            .set_contact_picture(head.key.clone(), others, jpeg)
-                            .await?;
-                        report.0.pictures += 1;
-                        changed = true;
-                    }
-                    Err(err) => {
-                        tracing::info!(code = ?err.code(), "vCard picture skipped");
-                        report.problem(index, VcardImportProblemKind::PictureSkipped);
-                    }
-                }
-            }
-        }
         if changed && !(known.is_empty() && created > 0) {
             report.0.updated += 1;
         }
@@ -264,22 +235,6 @@ impl<C: Connector> AppCore<C> {
                 .cloned()
                 .unwrap_or_else(|| first.key.clone()),
         }))
-    }
-
-    /// The card's picture as a stored contact picture: decoded and encoded again by the
-    /// helper, the centre square cut out.
-    async fn imported_picture(&self, photo: Vec<u8>) -> Result<Vec<u8>, CoreError> {
-        let source = self.picture_step(photo, PictureStep::Source).await?;
-        let size = source.width.min(source.height);
-        let crop = PictureCrop {
-            x: (source.width - size) / 2,
-            y: (source.height - size) / 2,
-            size,
-        };
-        Ok(self
-            .picture_step(source.jpeg, PictureStep::Crop(crop))
-            .await?
-            .jpeg)
     }
 
     /// One group card: a new group, or the members added to the group of the same name.
@@ -382,7 +337,7 @@ impl<C: Connector> AppCore<C> {
                     if *people_only && !person {
                         continue;
                     }
-                    cards.push(self.contact_card(store, &group, &extras, &mut uids).await?);
+                    cards.push(contact_card(&group, &extras, &mut uids));
                 }
                 for list in store.contact_lists().await? {
                     if let Some(id) = ContactListId::parse(&list.uuid) {
@@ -393,7 +348,7 @@ impl<C: Connector> AppCore<C> {
             }
             ContactExport::Contact { email } => {
                 let group = contacts::group_of(store, email).await?;
-                cards.push(self.contact_card(store, &group, &extras, &mut uids).await?);
+                cards.push(contact_card(&group, &extras, &mut uids));
             }
             ContactExport::List { id } => {
                 let list = self.get_contact_list(id.clone()).await?;
@@ -401,9 +356,7 @@ impl<C: Connector> AppCore<C> {
                     match contacts::group_of(store, &member.email).await {
                         Ok(group) => {
                             if !uids.contains_key(&group.head().key) {
-                                cards.push(
-                                    self.contact_card(store, &group, &extras, &mut uids).await?,
-                                );
+                                cards.push(contact_card(&group, &extras, &mut uids));
                             }
                             let key = group.head().key.clone();
                             if let Some(uid) = uids.get(&key).cloned()
@@ -432,34 +385,26 @@ impl<C: Connector> AppCore<C> {
         }
         Ok(cards)
     }
+}
 
-    /// The card of one contact; its UID is remembered for every address (group members).
-    async fn contact_card(
-        &self,
-        store: &Store,
-        group: &StoredContactGroup,
-        extras: &Extras,
-        uids: &mut HashMap<String, String>,
-    ) -> Result<VcardCard, CoreError> {
-        let entry = entry_of(group, extras);
-        let keys: Vec<String> = group.members.iter().map(|m| m.key.clone()).collect();
-        let photo = store
-            .contact_picture_of(keys.clone())
-            .await?
-            .map(|picture| picture.image);
-        let uid = uid_of(&group.head().key);
-        for key in keys {
-            uids.insert(key, uid.clone());
-        }
-        Ok(VcardCard {
-            uid: Some(uid),
-            kind: VcardKind::Individual,
-            formatted_name: entry.name.clone(),
-            emails: group.members.iter().map(email_of).collect(),
-            note: entry.note,
-            photo,
-            members: Vec::new(),
-        })
+/// The card of one contact; its UID is remembered for every address (group members).
+fn contact_card(
+    group: &StoredContactGroup,
+    extras: &Extras,
+    uids: &mut HashMap<String, String>,
+) -> VcardCard {
+    let entry = entry_of(group, extras);
+    let uid = uid_of(&group.head().key);
+    for member in &group.members {
+        uids.insert(member.key.clone(), uid.clone());
+    }
+    VcardCard {
+        uid: Some(uid),
+        kind: VcardKind::Individual,
+        formatted_name: entry.name.clone(),
+        emails: group.members.iter().map(email_of).collect(),
+        note: entry.note,
+        members: Vec::new(),
     }
 }
 
@@ -471,7 +416,6 @@ fn group_card(list: &mail_model::ContactList, uids: &HashMap<String, String>) ->
         formatted_name: Some(list.name.clone()),
         emails: Vec::new(),
         note: None,
-        photo: None,
         members: list
             .members
             .iter()

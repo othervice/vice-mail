@@ -31,7 +31,6 @@ fn individuals_and_groups_survive_a_round_trip_in_both_versions() {
                 "j.mueller@work.example".into(),
             ],
             note: Some("Line one,\nline two; with \\ backslash\n\tand a tab".into()),
-            photo: Some(jpeg(5_000)),
             members: Vec::new(),
         },
         VcardCard {
@@ -49,7 +48,6 @@ fn individuals_and_groups_survive_a_round_trip_in_both_versions() {
             formatted_name: Some("Team, Berlin".into()),
             emails: Vec::new(),
             note: None,
-            photo: None,
             members: vec![
                 VcardMember::Uid("0b5e8f43-6c1f-4a51-9a51-0c4f5b3f6a01".into()),
                 VcardMember::Email("outside@example.net".into()),
@@ -76,20 +74,19 @@ fn written_cards_follow_each_version() {
     let mut group = person("Friends", &[]);
     group.kind = VcardKind::Group;
     group.members = vec![VcardMember::Email("a@example.org".into())];
-    let mut alice = person("Alice Liddell", &["alice@example.org", "a2@example.org"]);
-    alice.photo = Some(jpeg(10));
+    let alice = person("Alice Liddell", &["alice@example.org", "a2@example.org"]);
     let v4 = write_vcards(&[alice.clone(), group.clone()], VcardVersion::V4);
     assert!(v4.starts_with("BEGIN:VCARD\r\nVERSION:4.0\r\n"), "{v4}");
     assert!(v4.contains("N:Liddell;Alice;;;\r\n"), "{v4}");
     assert!(v4.contains("EMAIL;PREF=1:alice@example.org\r\nEMAIL:a2@example.org\r\n"));
-    assert!(v4.contains("PHOTO:data:image/jpeg;base64,/9j/4"), "{v4}");
+    assert!(!v4.contains("PHOTO"), "no pictures (decision 0072): {v4}");
     assert!(v4.contains("KIND:group\r\n"));
     assert!(v4.contains("MEMBER:mailto:a@example.org\r\n"));
     let v3 = write_vcards(&[alice, group], VcardVersion::V3);
     assert!(v3.starts_with("BEGIN:VCARD\r\nVERSION:3.0\r\n"), "{v3}");
     assert!(v3.contains("EMAIL;TYPE=INTERNET,pref:alice@example.org\r\n"));
     assert!(v3.contains("EMAIL;TYPE=INTERNET:a2@example.org\r\n"));
-    assert!(v3.contains("PHOTO;ENCODING=b;TYPE=JPEG:/9j/4"), "{v3}");
+    assert!(!v3.contains("PHOTO"), "no pictures (decision 0072): {v3}");
     assert!(v3.contains("X-ADDRESSBOOKSERVER-KIND:group\r\nFN:Friends\r\nN:Friends;;;;\r\n"));
     assert!(v3.contains("X-ADDRESSBOOKSERVER-MEMBER:mailto:a@example.org\r\n"));
     assert!(v3.ends_with("END:VCARD\r\n"));
@@ -161,8 +158,6 @@ fn apple_contacts_3_0() {
         johnny.uid.as_deref(),
         Some("A1B2C3D4-0000-4000-8000-000000000001")
     );
-    let photo = johnny.photo.as_deref().expect("photo");
-    assert!(photo.starts_with(b"\xFF\xD8\xFF\xE0\x00\x10JFIF"));
     let club = &read.cards[1];
     assert_eq!(club.kind, VcardKind::Group);
     assert_eq!(club.formatted_name.as_deref(), Some("Garden club"));
@@ -198,14 +193,8 @@ fn google_contacts_3_0() {
         vec!["grace@navy.example", "grace@home.example"],
         "each address once, ignoring case"
     );
-    assert_eq!(grace.photo, None, "a URL is never fetched");
-    assert_eq!(
-        read.problems,
-        vec![VcardProblem {
-            card: 0,
-            kind: VcardProblemKind::PhotoUnsupported
-        }]
-    );
+    // A photo is skipped like any property the app does not read (a URL is never fetched).
+    assert_eq!(read.problems, Vec::new());
 }
 
 #[test]
@@ -247,11 +236,6 @@ fn thunderbird_4_0() {
         ada.uid.as_deref(),
         Some("5b1f6f3a-4a40-4b38-9c1c-6f5f2b9d1e01")
     );
-    assert!(
-        ada.photo
-            .as_deref()
-            .is_some_and(|p| p.starts_with(b"\xFF\xD8\xFF"))
-    );
     let engines = &read.cards[1];
     assert_eq!(engines.kind, VcardKind::Group);
     assert_eq!(
@@ -288,11 +272,6 @@ fn outlook_2_1_with_quoted_printable_and_windows_1252() {
     assert_eq!(
         card.note.as_deref(),
         Some("Grüße aus Köln,\nzweite Zeile mit € und Ende")
-    );
-    assert!(
-        card.photo
-            .as_deref()
-            .is_some_and(|p| p.starts_with(b"\xFF\xD8\xFF"))
     );
 }
 
@@ -481,39 +460,24 @@ fn a_file_over_the_limit_is_cut() {
 }
 
 #[test]
-fn photos_over_the_limit_or_not_images_are_dropped() {
+fn photos_are_skipped_without_a_problem() {
+    // Stage 22 (decision 0072): contacts have no pictures. A photo, inline of 4 MiB (the line
+    // still fits), a link, not an image or not even base64, is neither decoded nor reported;
+    // the rest of the card is read.
     let mut big = String::new();
-    crate::image::base64_encode_into(&jpeg(MAX_VCARD_PHOTO_BYTES + 1), &mut big);
+    crate::image::base64_encode_into(&jpeg(4 * 1024 * 1024), &mut big);
     let file = format!(
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Big\nPHOTO;ENCODING=b;TYPE=JPEG:{big}\nEND:VCARD\n\
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Big\nPHOTO;ENCODING=b;TYPE=JPEG:{big}\nEMAIL:big@example.org\nEND:VCARD\n\
          BEGIN:VCARD\nVERSION:4.0\nFN:Svg\nPHOTO:data:image/svg+xml;base64,PHN2Zy8+\nEND:VCARD\n\
          BEGIN:VCARD\nVERSION:4.0\nFN:Broken\nPHOTO;ENCODING=b:not*base64\nEND:VCARD\n\
-         BEGIN:VCARD\nVERSION:4.0\nFN:Fits\nPHOTO:data:image/jpeg;base64,/9j/4A==\nEND:VCARD\n"
+         BEGIN:VCARD\nVERSION:4.0\nFN:Link\nPHOTO:https://tracker.example/p.png\nEND:VCARD\n"
     );
     let read = read_vcards(file.as_bytes());
+    assert_eq!(read.problems, Vec::new());
     assert_eq!(read.cards.len(), 4);
-    assert!(read.cards[..3].iter().all(|c| c.photo.is_none()));
-    assert_eq!(
-        read.cards[3].photo.as_deref(),
-        Some(&b"\xFF\xD8\xFF\xE0"[..])
-    );
-    assert_eq!(
-        read.problems,
-        vec![
-            VcardProblem {
-                card: 0,
-                kind: VcardProblemKind::PhotoTooLarge
-            },
-            VcardProblem {
-                card: 1,
-                kind: VcardProblemKind::PhotoUnsupported
-            },
-            VcardProblem {
-                card: 2,
-                kind: VcardProblemKind::PhotoUnsupported
-            },
-        ]
-    );
+    assert_eq!(read.cards[0].emails, vec!["big@example.org"]);
+    let written = write_vcards(&read.cards, VcardVersion::V4);
+    assert!(!written.contains("PHOTO"), "{written}");
 }
 
 #[test]
@@ -536,13 +500,11 @@ fn many_addresses_and_members_are_capped() {
 
 #[test]
 fn the_problem_list_is_bounded() {
-    let mut file = String::new();
-    for i in 0..100 {
-        file.push_str(&format!(
-            "BEGIN:VCARD\nFN:N{i}\nPHOTO:https://example.org/{i}.jpg\nEND:VCARD\n"
-        ));
+    // Since photos are skipped (decision 0072), no file yields a problem per card cheaply; the
+    // bound is the reader's.
+    let mut reader = Reader::default();
+    for card in 0..100 {
+        reader.problem(card, VcardProblemKind::Malformed);
     }
-    let read = read_vcards(file.as_bytes());
-    assert_eq!(read.cards.len(), 100);
-    assert_eq!(read.problems.len(), 32);
+    assert_eq!(reader.problems.len(), MAX_PROBLEMS);
 }

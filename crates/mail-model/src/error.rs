@@ -155,12 +155,6 @@ pub enum ErrorCode {
     /// resource at `/.well-known/jmap`, or one without mail), or it names its endpoints without
     /// encryption.
     JmapUnavailable,
-    /// Stage 17: the image for a contact picture is larger than the app reads.
-    PictureTooLarge,
-    /// Stage 17: the file is not a PNG, JPEG, GIF or WebP image.
-    PictureUnsupported,
-    /// Stage 17: the image could not be decoded (damaged, or crafted).
-    PictureDamaged,
     /// Stage 20 (decision 0060): the mailbox on the server is full (IMAP `[OVERQUOTA]`, RFC
     /// 9208; JMAP `overQuota`): saving to Drafts or Sent failed. Deleting large messages
     /// (search `larger:10M`) makes room.
@@ -666,9 +660,6 @@ mod tests {
             (ErrorCode::OauthDenied, "oauth_denied"),
             (ErrorCode::OauthFailed, "oauth_failed"),
             (ErrorCode::OauthSignInRequired, "oauth_sign_in_required"),
-            (ErrorCode::PictureTooLarge, "picture_too_large"),
-            (ErrorCode::PictureUnsupported, "picture_unsupported"),
-            (ErrorCode::PictureDamaged, "picture_damaged"),
             (ErrorCode::OverQuota, "over_quota"),
         ];
         for (code, wire) in codes {

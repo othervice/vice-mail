@@ -650,6 +650,50 @@ async fn records_of_a_newer_app_version_are_left_alone() {
     );
 }
 
+/// Stage 22 (decision 0072): a contact picture an older version wrote is ignored without a
+/// notice to the user (the status counts no rejected entry), never applied and left on the
+/// server for the devices that still use it.
+#[tokio::test]
+async fn picture_records_of_an_older_version_are_ignored_quietly() {
+    let (folder, mut a, mut b) = pair().await;
+    a.put(&theme(), json!("dark"));
+    a.pass().await;
+    let header = RawHeader {
+        opaque_id: "ffeeddccbbaa99887766554433221100".to_owned(),
+        version: a.hlc.now().expect("now").to_string(),
+    };
+    let payload = json!({
+        "format": 1, "opaqueId": header.opaque_id, "version": header.version,
+        "kind": "contactPicture", "id": "ada@example.org", "content": { "jpeg": "/9j/4AAQ" }
+    });
+    let identity = a.key.export();
+    let identity: age::x25519::Identity = identity.expose_secret().parse().expect("identity");
+    let body = age::encrypt(&identity.to_public(), payload.to_string().as_bytes()).expect("enc");
+    let handle = folder.insert_raw(header, body);
+    let report = b.pass().await;
+    assert!(
+        report
+            .notices
+            .iter()
+            .any(|n| matches!(n, Notice::Retired { handle: h } if *h == handle)),
+        "{report:?}"
+    );
+    assert!(
+        !report.notices.iter().any(Notice::is_left_out),
+        "not reported as rejected: {report:?}"
+    );
+    assert_eq!(b.value(&theme()), Some(json!("dark")));
+    settle(&mut [&mut a, &mut b]).await;
+    assert!(
+        folder.entries().iter().any(|(h, _)| *h == handle),
+        "kept on the server"
+    );
+    assert!(
+        b.state.records().keys().all(|key| key.kind() != RecordKind::Contact),
+        "nothing applied"
+    );
+}
+
 #[tokio::test]
 async fn unset_folder_and_foreign_key_are_typed_errors() {
     let (folder, mut a, _) = pair().await;
