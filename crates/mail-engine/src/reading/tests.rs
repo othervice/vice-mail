@@ -1932,7 +1932,7 @@ async fn html_mail_is_adapted_in_the_dark_theme_unless_the_setting_says_light() 
     };
     let (adapted, colors) = html(&dark(&h).await);
     assert_eq!(colors, MailColors::Adapted);
-    assert!(adapted.contains("bgcolor=\"#1b2129\""), "{adapted}");
+    assert!(adapted.contains("bgcolor=\"#14181e\""), "{adapted}");
     assert!(
         !adapted.contains("#333333") && !adapted.contains("#fff8e1"),
         "{adapted}"
