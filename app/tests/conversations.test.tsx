@@ -481,24 +481,21 @@ describe("opening a conversation", () => {
     const projekt = within(list)
       .getAllByRole("treeitem")
       .find((option) => optionName(option).includes("Projekt"));
-    // Stage 22 (decision 0072): the account's colour is a dot before the sender (where the
-    // avatar's ring was), named by its tooltip; it stays while the quick actions show.
-    const dot = within(projekt as HTMLElement).getByTestId("row-account-dot");
-    expect(dot.getAttribute("title")).toBe("Work");
-    expect(dot.querySelector(".bg-account-4")).toBeTruthy();
-    expect(dot.compareDocumentPosition(within(projekt as HTMLElement).getByTestId("row-sender")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(projekt as HTMLElement).getByTestId("row-meta").contains(dot)).toBe(false);
-    // Stage 17: the account's name beside the names, as its tooltip and in the row's name; it
-    // gives way to the names first (large shrink factor, down to nothing; the layout itself is
-    // measured in conversations.e2e.mjs).
+    // Stage 17: the account label beside the names: its colour dot and name, the name as its
+    // tooltip and in the row's name; it gives way to the names first (large shrink factor, the
+    // dot as its smallest size; the layout itself is measured in conversations.e2e.mjs).
     const label = within(projekt as HTMLElement).getByTestId("row-account");
     expect(label.getAttribute("title")).toBe("Work");
     expect(within(label).getByTestId("row-account-name").textContent).toBe("Work");
-    expect(within(label).queryByTestId("row-account-dot")).toBeNull();
+    expect(within(label).getByTestId("row-account-dot").className).toContain("bg-account-4");
     expect(label.className).toMatch(/\bshrink-1000000\b/);
-    expect(label.className).toContain("min-w-0");
+    expect(label.className).toContain("min-w-(--ui-dot)");
     expect(label.className).toContain("overflow-hidden");
-    // The name whole or not at all: where it does not fit it wraps out of sight.
+    // Stage 22 (decision 0072): it carries what the avatar's ring did, so it stays while the quick
+    // actions show (outside the meta that gives way to them).
+    expect(within(projekt as HTMLElement).getByTestId("row-meta").contains(label)).toBe(false);
+    expect(within(projekt as HTMLElement).getByTestId("row-meta-marks").contains(label)).toBe(false);
+    // The name whole or not at all: where it does not fit beside the dot it wraps out of sight.
     expect(label.className).toMatch(/\bflex-wrap\b/);
     expect(label.className).toMatch(/\bh-5\b/);
     expect(within(label).getByTestId("row-account-name").className).toMatch(/\btruncate\b/);

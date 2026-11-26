@@ -144,7 +144,7 @@ describe("message rows without avatars", () => {
     expect(classes(headerRow.firstElementChild)).toContain("w-(--ui-row-mark)");
   });
 
-  it("show the account as a dot in its colour before the sender in lists that mix accounts", async () => {
+  it("show the account with its colour's dot in lists that mix accounts, also while the quick actions show", async () => {
     const ada = makeMessages(1)[0] as MessageListItem;
     const work: MessageListItem = { ...ada, id: 900, accountId: WORK.id, mailboxId: 20, subject: "Projekt", date: ada.date - 60_000 };
     mockCore({
@@ -166,17 +166,18 @@ describe("message rows without avatars", () => {
     for (const option of within(list).getAllByRole("option")) {
       const account: Account = optionName(option).includes("Projekt") ? WORK : ADA;
       const name = account.displayName || account.email;
-      const dot = within(option).getByTestId("row-account-dot");
+      const label = within(option).getByTestId("row-account");
       // Tooltip and the row's accessible name say the account in words (SPEC: never colour alone).
-      expect(dot.title).toBe(name);
+      expect(label.title).toBe(name);
       expect(optionName(option)).toContain(`Account: ${name}`);
-      expect(dot.querySelector(`.${accountFill(account.color)}`)).toBeTruthy();
-      // Before the sender, outside the meta that the quick actions replace on hover.
-      const sender = within(option).getByTestId("row-sender");
-      expect(dot.compareDocumentPosition(sender) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(within(option).getByTestId("row-meta").contains(dot)).toBe(false);
-      // The mark column comes first, the dot after it.
-      expect(within(option).getByTestId("row-mark").compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(classes(within(label).getByTestId("row-account-dot"))).toContain(accountFill(account.color));
+      // Not in the meta that gives way to the quick actions: it stays, before them.
+      expect(within(option).getByTestId("row-meta").contains(label)).toBe(false);
+      expect(within(option).getByTestId("row-meta-marks").contains(label)).toBe(false);
+      const actions = within(option).getByTestId("row-actions");
+      expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Away from the unread dot: after the sender and the subject.
+      expect(within(option).getByTestId("row-subject").compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(within(option).queryByTestId("avatar")).toBeNull();
     }
     expect(await seriousFindings()).toEqual([]);

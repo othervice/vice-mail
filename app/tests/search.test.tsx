@@ -104,7 +104,7 @@ describe("search field", () => {
       expect.stringContaining("Rechnung März"),
       expect.stringContaining("Rechnung Firma"),
     ]);
-    expect(within(options[1] as HTMLElement).getByTestId("row-account-dot").querySelector(`.${accountFill(WORK.color)}`)).toBeTruthy();
+    expect(within(options[1] as HTMLElement).getByTestId("row-account-dot").className).toContain(accountFill(WORK.color));
     const marks = within(options[0] as HTMLElement).getAllByTestId("highlight").map((m) => m.textContent);
     expect(marks).toEqual(["Rechnung", "Rechnung"]);
     // One list: no date headings between hits (a folder's list has them).

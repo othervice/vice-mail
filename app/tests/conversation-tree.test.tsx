@@ -532,8 +532,9 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     });
   }
 
-  it("lists that mix accounts have them too: account label and time give way like the rest of the meta", async () => {
-    // Stage 21 (decision 0065, replaces 0052 point 5).
+  it("lists that mix accounts have them too: the time gives way like the rest of the meta, the account label stays", async () => {
+    // Stage 21 (decision 0065, replaces 0052 point 5). Stage 22 (decision 0072): the account label
+    // carries what the avatar's ring did, so it stays before the actions.
     const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work" });
     setup({ accounts: [ADA, work] });
     act(() => {
@@ -543,9 +544,14 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     const rows = await within(list).findAllByRole("treeitem");
     for (const row of rows) {
       const meta = within(row).getByTestId("row-meta");
-      expect(meta.contains(within(row).getByTestId("row-account"))).toBe(true);
+      const label = within(row).getByTestId("row-account");
+      expect(meta.contains(label)).toBe(false);
+      expect(within(row).getByTestId("row-meta-marks").contains(label)).toBe(false);
+      expect(classes(label)).not.toContain("group-hover/row:hidden");
       const actions = await within(row).findByTestId("row-actions");
       expect(actions.parentElement).toBe(meta.parentElement);
+      expect(label.parentElement).toBe(meta.parentElement);
+      expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(classes(meta)).toEqual(expect.arrayContaining(["contents", "group-hover/row:hidden"]));
       expect(within(actions).getByTestId("quick-archive")).toBeTruthy();
     }

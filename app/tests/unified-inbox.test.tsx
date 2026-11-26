@@ -58,13 +58,12 @@ describe("unified inbox", () => {
     expect(core.callsOf("list_inbox")).toContainEqual({ scope: { kind: "unified", view: { kind: "all" } }, cursor: null, limit: 200 });
     expect(core.callsOf("list_unified_inbox")).toEqual([]);
     const options = within(list).getAllByRole("option");
-    // Stage 22 (decision 0072): no avatar ring; a dot in the account's colour before the sender,
+    // Stage 22 (decision 0072): no avatar ring; the account's label with a dot in its colour,
     // named by its tooltip, and the account in words in the row's name.
     for (const [index, account] of [ADA, WORK, CLUB].entries()) {
       const option = options[index] as HTMLElement;
-      const dot = within(option).getByTestId("row-account-dot");
-      expect(dot.title).toBe(account.displayName || account.email);
-      expect(dot.querySelector(`.${accountFill(account.color)}`)).toBeTruthy();
+      expect(within(option).getByTestId("row-account").title).toBe(account.displayName || account.email);
+      expect(within(option).getByTestId("row-account-dot").className).toContain(accountFill(account.color));
       expect(within(option).queryByTestId("avatar")).toBeNull();
     }
 

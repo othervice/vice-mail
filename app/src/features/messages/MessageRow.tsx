@@ -283,10 +283,16 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
   );
 }
 
-/** The row's meta (marks, account, time): in the line as before, gone while the quick actions show. */
-function RowMeta({ actions, cursor, children }: { actions: boolean; cursor: boolean; children: ReactNode }) {
+/**
+ * The row's meta (marks, time): in the line as before, gone while the quick actions show. Stage 22
+ * (decision 0072): the account's label between them stays, before the actions.
+ */
+function RowMeta({ actions, cursor, children, ...rest }: { actions: boolean; cursor: boolean; children: ReactNode; "data-testid"?: string }) {
   return (
-    <span className={cx("contents", actions && "group-hover/row:hidden", actions && cursor && "group-focus-visible/list:hidden")} data-testid="row-meta">
+    <span
+      className={cx("contents", actions && "group-hover/row:hidden", actions && cursor && "group-focus-visible/list:hidden")}
+      data-testid={rest["data-testid"] ?? "row-meta"}
+    >
       {children}
     </span>
   );
@@ -316,23 +322,9 @@ function TreeLine({ from, to }: { from: "top" | "mark" | "firstLine"; to: "botto
 }
 
 /**
- * Stage 22 (decision 0072): which account a row of a list that mixes accounts belongs to, as a
- * dot in its colour before the sender, where the avatar's ring showed it before. It stays while
- * the quick actions take the place of the account's name at the end. Named by its tooltip; the
- * row's accessible name says the account in words (`useRowLabel`).
- */
-function AccountDot({ name, color }: { name: string; color: AccountColor }) {
-  return (
-    <span title={name} className="flex shrink-0 items-center" data-testid="row-account-dot">
-      <span aria-hidden className={cx("size-(--ui-dot) rounded-full", accountFill(color))} />
-    </span>
-  );
-}
-
-/**
  * One message in the list (docs/DESIGN.md, "Zeile"): the mark column (unread dot, the selection
- * box on hover), the account's dot in lists that mix accounts, sender, subject with conversation
- * size and attachment symbol, preview, flag, pending or failed change, the account's name, time,
+ * box on hover), sender, subject with conversation size and attachment symbol, preview, flag,
+ * pending or failed change, the account's dot and name in lists that mix accounts, time,
  * and the quick actions on hover. No avatar (stage 22, decision 0072). Wide lists show one line;
  * narrow ones three (sender and time, subject, preview), compact ones two (decision 0031). The
  * option around it carries the accessible name (`useRowLabel`); the preview describes it.
@@ -380,17 +372,9 @@ export function MessageRowContent({
       )}
     </span>
   );
-  // Stage 22: the account's dot before the sender, inside the sender's column, so the subjects of
-  // a list stand on one line whether it mixes accounts or not.
-  const sender = (
-    <span
-      // Narrow: as wide as the names; the account's name beside them gives way first.
-      className={cx("flex min-w-0 items-center gap-2", !twoLine && "w-(--ui-list-sender-width) shrink-0")}
-    >
-      {decoration?.account !== undefined && <AccountDot name={decoration.account} color={accountColor} />}
-      {senderText}
-    </span>
-  );
+  // The sender's column (narrow: as wide as the names; the account's name beside them gives way
+  // first).
+  const sender = <span className={cx("flex min-w-0 items-center", !twoLine && "w-(--ui-list-sender-width) shrink-0")}>{senderText}</span>;
   const previewElement = preview && (
     <span
       className={cx("min-w-0 truncate text-13 text-tertiary", !threeLine && "flex-1 basis-0")}
@@ -437,22 +421,28 @@ export function MessageRowContent({
       <RowMarks item={item} omit={omitMarks} />
     </>
   );
-  // Stage 8: which account, in words, in lists that mix accounts; its colour is the dot before
-  // the sender (stage 22). Stage 17: the names come first; short of room the label gives way
-  // first (a shrink factor a million times the names', see `RepliesToggle`), down to nothing; the
-  // name stays the dot's tooltip and is part of the row's accessible name. The name shows whole
-  // (an overlong one cut at the label's width) or not at all, never as a fragment: where it does
-  // not fit it wraps onto a second line (after an empty first item), which the label's height
-  // hides.
+  // Stage 8: which account, in words, in lists that mix accounts, with its colour. Stage 17: the
+  // names come first; short of room the label gives way first, down to its colour dot (a shrink
+  // factor a million times the names', see `RepliesToggle`; the dot as its smallest size); the
+  // name stays its tooltip and is part of the row's accessible name. The name shows whole (an
+  // overlong one cut at the label's width) or not at all, never as a fragment: where it does not
+  // fit beside the dot it wraps onto a second line, which the label's height hides. Stage 22
+  // (decision 0072): it carries what the avatar's ring did, so it stays while the quick actions
+  // show (before them, the marks and the time give way to them).
   const accountElement = decoration?.account ? (
     <span
       title={decoration.account}
-      className="flex h-5 max-w-(--ui-row-account-width) min-w-0 shrink-1000000 flex-wrap items-center justify-end overflow-hidden"
+      className="flex h-5 max-w-(--ui-row-account-width) min-w-(--ui-dot) shrink-1000000 flex-wrap items-center justify-end gap-x-1 overflow-hidden"
       data-testid="row-account"
     >
       {/* As tall as the label, so a name that wraps lands wholly on the hidden second line. */}
-      <span className="h-5 w-0 shrink-0" />
-      <span className="h-5 max-w-(--ui-row-account-width) min-w-0 truncate text-12 leading-5 text-secondary" data-testid="row-account-name">
+      <span className="flex h-5 shrink-0 items-center">
+        <span aria-hidden className={cx("size-(--ui-dot) rounded-full", accountFill(accountColor))} data-testid="row-account-dot" />
+      </span>
+      <span
+        className="h-5 max-w-[calc(var(--ui-row-account-width)-var(--ui-dot)-var(--ui-space-1))] min-w-0 truncate text-12 leading-5 text-secondary"
+        data-testid="row-account-name"
+      >
         {decoration.account}
       </span>
     </span>
@@ -493,9 +483,11 @@ export function MessageRowContent({
             <span className="flex h-5 min-w-0 items-center gap-2">
               {sender}
               <span className="flex-1" />
-              <RowMeta actions={Boolean(actions)} cursor={cursor}>
+              <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
                 {marks}
-                {accountElement}
+              </RowMeta>
+              {accountElement}
+              <RowMeta actions={Boolean(actions)} cursor={cursor}>
                 {timeElement}
               </RowMeta>
               {/* Stage 18: on the first line, clear of the subject's line with the toggle. */}
@@ -521,9 +513,11 @@ export function MessageRowContent({
         <span className="flex min-w-0 flex-1 items-center gap-3">
           {sender}
           {subjectLine}
-          <RowMeta actions={Boolean(actions)} cursor={cursor}>
+          <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
             {marks}
-            {accountElement}
+          </RowMeta>
+          {accountElement}
+          <RowMeta actions={Boolean(actions)} cursor={cursor}>
             {timeElement}
           </RowMeta>
           {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
