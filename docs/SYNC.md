@@ -193,7 +193,7 @@ that set "always as newsletter" for the same sender change the same record.
 | `attachmentPin` | `{pinnedAtMs, name, mimeType, size}`: the sanitised file name (not empty, no controls), the declared type and the size when it was pinned, so the list shows it without the body |
 | `contact` | `{userName?, mergedInto?, note?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10), and the user's note (stage 17: at most 1,000 characters, no controls but line breaks and tabs). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions, counts, ranks, names seen in mail and the kind stay on the device |
 | `contactPicture` | retired (decision 0072). Stage 17 to 21 wrote `{jpeg}`, standard base64 of a 256 × 256 JPEG of at most 40 KiB (decision 0050); this version reads no content of it |
-| `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
+| `account` | per field `{version, value}`: `email`, `displayName` (the name in the lists, empty shows the address; never a sender name, stage 22, decision 0078), `color`, `imap`, `smtp`; `protocol` only for JMAP accounts, `signIn` only with an API token, `oauth` only with a provider; since stage 22 `position` (an integer, the place in every list of accounts, lowest first) only once the user placed the account |
 | `device` | `{name, system, lastSeenMs}` |
 | `savedView` | `{name, query, position}`: a saved search of the sidebar (stage 7, decision 0026), checked like a local save (name 1 to 100 characters, query 1 to 2048 bytes, both trimmed, no control characters). Names are unique per device only where they are typed; records from other devices are taken over even with a name in use. Recent searches stay on the device |
 | `aiSettings` | any object (no local data yet; kept as they are) |
@@ -206,8 +206,9 @@ Content is only accepted through a validating type:
 - No object key may name a password, passphrase, secret, token, API or private key,
   credential, authorization or cookie (case, `_` and `-` ignored; `maxTokens` is fine).
 - No string may contain key material (`AGE-SECRET-KEY-`, `PRIVATE KEY-----`).
-- Account records only have the fields `email`, `displayName`, `color`, `imap`, `smtp`, and the
-  server entries only `host`, `port`, `security`, `username`. `writes_enabled` is deliberately
+- Account records only have the fields `email`, `displayName`, `color`, `imap`, `smtp` (and the
+  optional `protocol`, `signIn`, `oauth`, `position` above), and the server entries only `host`,
+  `port`, `security`, `username`. `writes_enabled` is deliberately
   not synced: write access is switched on by the user per account and device, and an account
   taken over from another device starts read-only. Other servers for an existing account wait
   for the user (see "Accounts taken over" below).
@@ -242,6 +243,15 @@ tests).
 - **Per field** (accounts): as above per record; among several surviving versions each field
   takes its newest value. If the result equals an existing version, that one wins; otherwise
   it is stored as a new version.
+  **The order of the accounts** (stage 22, decision 0078) rides on this: every move gives every
+  account a fresh `position` above all earlier ones (also where its place did not change), so
+  each account's newest `position` is the newest order's, and two orders made on two devices end
+  as the newer one as a whole, never a mix. Equal positions (two moves in the same instant) fall
+  back to the order the accounts were added in, the same on every device. Applying never renumbers
+  (that would be a local change). A record without `position` (an account nobody placed, or a
+  device before 0.1.3) keeps the position this device has. A device before 0.1.3 refuses records
+  with `position` as an unknown shape: they stay in the folder and apply after its update; until
+  then it uploads its own version again, which the newer devices remove again.
 - **Account removed elsewhere:** a winning tombstone does not delete a live local account. The
   user is asked: remove it here too, or keep it, which stores it again under a new version and
   brings it back on every device. Until the user decides, the removals of the account's other

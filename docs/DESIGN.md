@@ -448,6 +448,19 @@ Server neu laden“ liest die Ordnerliste des Servers sofort neu (sonst bei jede
 alle 3 Minuten), sodass Ordner, die ein anderes Programm angelegt oder gelöscht hat, ohne Neustart
 erscheinen bzw. verschwinden.
 
+**Reihenfolge und Name der Konten (Stufe 22, Entscheidung 0078).** Die Konten stehen in der
+Reihenfolge, die der Mensch wählt, überall gleich (Spalte, schmale Leiste, Einstellungen → Konten,
+jede Kontoauswahl); neue Konten hinten. Verschieben: die Kontozeile ziehen (eine Linie in
+`accent-fill`, 4 px, in der Lücke vor oder hinter einem Konto zeigt den Platz; Ordner nehmen ein
+Konto nie), „Nach oben“/„Nach unten“ im „…“ der Kontozeile (am Ende nicht verfügbar), Alt+↑/↓ auf
+der Zeile, in Einstellungen → Konten zwei kleine Pfeilknöpfe je Konto. Der Fokus bleibt am Konto bzw.
+am Knopf, eine Statuszeile sagt „Club steht jetzt an Stelle 2 von 3.“. Der Name in der Liste:
+Doppelklick auf die Kontozeile, F2 oder „Umbenennen“ im „…“ machen den Namen zum Feld an seiner
+Stelle (halbfett wie der Name, 2 px Rahmen in `accent`, die Adresse als Platzhalter); Enter oder
+Verlassen speichert, Escape bricht ab, leer heißt: die Adresse zeigen. Auf der Seite des Kontos das
+Feld „Name in der Liste“ mit dem Satz, dass wer eine Mail bekommt, ihn nie sieht. Neue Konten zeigen
+ihre Adresse, bis sie einen Namen bekommen.
+
 **Ordner.** Rollen zuerst in fester Reihenfolge Posteingang, Entwürfe, Gesendet, Archiv, Spam,
 Papierkorb (dann Markiert und Alle Nachrichten), danach die eigenen Ordner als Baum, je Ebene
 16 px eingerückt (als Innenabstand, damit Fläche und Balken über die ganze Zeile gehen). Symbole
@@ -462,6 +475,22 @@ Bildlaufbereich). Wie jedes „…“-Menü bleibt es im sichtbaren Bereich: ohn
 sich über dem Knopf, an den Seiten wird es zurückgeschoben, und passt es nirgends ganz, rollt es.
 Ein nicht verfügbarer Eintrag nennt seinen Grund als zweite Zeile (12 px, `text-secondary`).
 Ordnerzeilen sind Ziele zum Ablegen gezogener Mails.
+
+**Mails auf Ordner ziehen (Stufe 22, Entscheidung 0081).** Aus jeder Liste (Ordner, Ansichten,
+„Alle Posteingänge“, Suchergebnisse), auch mehrere Zeilen aus mehreren Konten, auf jeden Ordner der
+Spalte, die Favoriten und in der schmalen Leiste Posteingang, Archiv und Papierkorb (dort jeweils der
+Ordner dieser Rolle im Konto jeder Zeile). Das Ziehbild ist eine kleine Karte mit der Zahl („3
+Mails“). Ablegen verschiebt ohne Frage, mit gedrückter Wahltaste (macOS) bzw. Strg (Windows) wird
+kopiert; der Zeiger zeigt es, und neben dem Ordner unter dem Zeiger steht eine kleine Karte (12 px,
+Symbol in `accent`): „3 Mails nach Projekte verschieben“ bzw. „… kopieren“. Ein Ordner, der die
+Zeilen nicht nimmt (Konto nur lesend; beim Verschieben auch das Konto, aus dem eine Zeile kommt),
+zeigt beim Überfahren eine gestrichelte Umrandung in `danger`, der Zeiger „nicht erlaubt“ und die
+Karte mit Rand in `danger` den Grund („Nicht hierher: Für Club sind Änderungen ausgeschaltet.“).
+Der Text der Karte steht zugleich in einer Statusregion. Ein zugeklappter Ordner oder ein
+zugeklapptes Konto klappt nach 700 ms auf, die Spalte rollt an ihren Rändern (40 px) mit. Danach ein
+Hinweis für den ganzen Ablauf mit „Rückgängig“ (Verschieben im selben Konto) oder „Aktivität zeigen“
+(Kopien, Übertragungen in andere Konten). „Verschieben nach …“ im Menü fragt weiter, bevor eine Mail
+das Konto wechselt (0033); beim Ziehen ist das Ablegen die Antwort.
 
 **Als gelesen markieren (Stufe 21, Entscheidung 0063).** „Ordner als gelesen markieren“ ist der
 erste Eintrag im „…“ jedes Ordners (Baum und Favoriten; ebenso per Rechtsklick, Umschalt+F10 und
