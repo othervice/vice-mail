@@ -157,7 +157,7 @@ describe("the sidebar of the draft", () => {
     });
     expect(within(work).getByTestId(`account-count-${WORK.id}`).textContent).toBe("2");
     // The rail's groups: the inbox, the first section's views and Sent; a hairline; the rest.
-    expect(within(screen.getByTestId("rail-views-main")).getAllByRole("button").map((button) => button.dataset["testid"])).toEqual([
+    expect(within(screen.getByTestId("icon-rail-views-main")).getAllByRole("button").map((button) => button.dataset["testid"])).toEqual([
       "rail-inbox",
       "rail-later",
       "rail-flagged",

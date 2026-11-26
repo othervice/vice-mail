@@ -474,7 +474,7 @@ export function IconRail() {
               key={group}
               // Stage 23 (decision 0085): a hairline between the views of "All accounts" and the rest.
               className={cx("flex w-full flex-col items-center gap-1", group > 0 && "mt-2 border-t border-border-subtle pt-2")}
-              data-testid={group === 0 ? "rail-views-main" : "rail-views-more"}
+              data-testid={group === 0 ? "icon-rail-views-main" : "icon-rail-views-more"}
             >
               {ids.map((id) => (
                 <li key={id}>
