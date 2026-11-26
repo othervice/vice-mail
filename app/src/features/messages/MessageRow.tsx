@@ -223,7 +223,7 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
       {...(foldable && { "data-row-toggle": true })}
       title={foldable ? t(expanded ? "threads.collapse" : "threads.expand") : t("threads.replies", { count: replies })}
       className={cx(
-        "grid h-5 shrink-1000000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-12 font-medium tabular-nums transition-colors",
+        "grid h-5 shrink-1000000 grid-cols-[auto_auto_minmax(0,max-content)] items-center rounded-full text-11 font-medium tabular-nums transition-colors",
         foldable ? "cursor-pointer ps-1 pe-2" : "px-2",
         expanded ? "bg-accent-soft text-accent" : "bg-badge text-secondary",
         foldable && !expanded && "hover:text-primary",
@@ -272,7 +272,7 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
     <span
       aria-hidden
       className={cx(
-        "hidden shrink-0 items-center rounded-row bg-surface-list px-1 shadow-floating group-hover/row:flex",
+        "hidden shrink-0 items-center rounded-tile bg-surface-list px-1 shadow-floating group-hover/row:flex",
         cursor && "group-focus-visible/list:flex",
         lifted && "self-end",
       )}
@@ -362,7 +362,7 @@ export function MessageRowContent({
   const senderText = (
     <span
       title={who}
-      className={cx("min-w-0 truncate text-14 text-primary", item.unread ? "font-semibold" : "font-medium")}
+      className={cx("min-w-0 truncate text-13 text-primary", item.unread ? "font-bold" : "font-semibold")}
       data-testid="row-sender"
     >
       {highlights && !showRecipients && item.from && ownSender ? (
@@ -377,7 +377,7 @@ export function MessageRowContent({
   const sender = <span className={cx("flex min-w-0 items-center", !twoLine && "w-(--ui-list-sender-width) shrink-0")}>{senderText}</span>;
   const previewElement = preview && (
     <span
-      className={cx("min-w-0 truncate text-13 text-tertiary", !threeLine && "flex-1 basis-0")}
+      className={cx("min-w-0 truncate text-12 text-tertiary", !threeLine && "flex-1 basis-0")}
       data-testid="row-preview"
     >
       {highlights ? (
@@ -393,9 +393,8 @@ export function MessageRowContent({
       <span
         title={subject}
         className={cx(
-          "min-w-0 truncate",
-          twoLine ? "text-13" : "text-14",
-          !shownSubject.text ? "text-tertiary" : item.unread ? "font-medium text-primary" : "text-primary",
+          "min-w-0 truncate text-13",
+          !shownSubject.text ? "text-tertiary" : item.unread ? "font-semibold text-primary" : "text-primary",
         )}
         data-testid="row-subject"
       >
@@ -451,7 +450,7 @@ export function MessageRowContent({
     <time
       dateTime={new Date(item.date).toISOString()}
       title={formatFullDate(item.date, i18n.language)}
-      className={cx("shrink-0 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+      className={cx("shrink-0 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
     >
       {time}
     </time>
@@ -580,7 +579,7 @@ export function TableRowContent({
           <span
             key={id}
             title={who}
-            className={cx("min-w-0 truncate pe-3 text-14 text-primary", item.unread ? "font-semibold" : "font-medium")}
+            className={cx("min-w-0 truncate pe-3 text-13 text-primary", item.unread ? "font-bold" : "font-semibold")}
             data-testid="cell-correspondent"
           >
             {who}
@@ -598,8 +597,8 @@ export function TableRowContent({
             <span
               title={subject}
               className={cx(
-                "min-w-0 truncate text-14",
-                !shownSubject.text ? "text-tertiary" : item.unread ? "font-medium text-primary" : "text-primary",
+                "min-w-0 truncate text-13",
+                !shownSubject.text ? "text-tertiary" : item.unread ? "font-semibold text-primary" : "text-primary",
               )}
             >
               {subject}
@@ -630,7 +629,7 @@ export function TableRowContent({
             key={id}
             dateTime={new Date(item.date).toISOString()}
             title={formatFullDate(item.date, i18n.language)}
-            className={cx("min-w-0 truncate pe-3 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+            className={cx("min-w-0 truncate pe-3 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
             data-testid="cell-date"
           >
             {formatListDate(item.date, bounds, i18n.language)}
@@ -638,7 +637,7 @@ export function TableRowContent({
         );
       case "size":
         return (
-          <span key={id} className="min-w-0 truncate pe-3 text-end text-12 text-secondary tabular-nums" data-testid="cell-size">
+          <span key={id} className="min-w-0 truncate pe-3 text-end text-11 text-secondary tabular-nums" data-testid="cell-size">
             {item.size !== undefined ? formatSize(item.size, i18n.language) : ""}
           </span>
         );
@@ -749,7 +748,7 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
               {folder}
             </span>
           )}
-          <span title={text} className={cx("min-w-0 flex-1 truncate text-13", item.unread ? "text-secondary" : "text-tertiary")} data-testid="child-text">
+          <span title={text} className={cx("min-w-0 flex-1 truncate text-12", item.unread ? "text-secondary" : "text-tertiary")} data-testid="child-text">
             {text}
           </span>
         </span>
@@ -760,7 +759,7 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
           <time
             dateTime={new Date(item.date).toISOString()}
             title={formatFullDate(item.date, i18n.language)}
-            className={cx("shrink-0 text-12 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
+            className={cx("shrink-0 text-11 tabular-nums", item.unread ? "font-medium text-primary" : "text-secondary")}
           >
             {formatListDate(item.date, bounds, i18n.language)}
           </time>

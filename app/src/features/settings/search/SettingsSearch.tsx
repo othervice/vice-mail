@@ -200,7 +200,7 @@ export function SettingsSearch({ onChoose, ref }: SettingsSearchProps) {
                     onMouseMove={() => {
                       if (!selected) setActive(flat.indexOf(hit));
                     }}
-                    className={cx("flex min-h-8 cursor-default flex-col justify-center rounded-row px-2 py-1", selected && "bg-selected")}
+                    className={cx("flex min-h-8 cursor-default flex-col justify-center rounded-tile px-2 py-1", selected && "bg-selected")}
                     data-testid="settings-search-hit"
                     data-section={hit.entry.section}
                   >

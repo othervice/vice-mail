@@ -8,7 +8,7 @@ import tokensCss from "../src/styles/tokens.css?raw";
 // Stage 21, item 4 (decision 0071): the theme in app.css holds only the steps of the design
 // tokens: spacing on the 4 px grid (0, 1, 2, 3, 4, 5, 6, 8, 10, 12), the font sizes of
 // docs/DESIGN.md ("Tokens") and the four named radii. A utility with any other step, such as
-// `gap-1.5`, `h-7`, `text-11` or a bare `rounded`, makes Tailwind generate no CSS at all, silently:
+// `gap-1.5`, `h-7`, `text-15` or a bare `rounded`, makes Tailwind generate no CSS at all, silently:
 // the element simply loses its gap, height or radius. This test asks Tailwind itself, with the
 // app's own style sheet, which of the utilities written in the code produce CSS, so the scale has
 // one source (app.css) and the test cannot drift from it.
@@ -161,9 +161,10 @@ describe("the spacing, type and radius scale", () => {
     for (const sample of ["gap-2", "px-4", "text-13", "rounded-control", "size-4"]) {
       expect(found.some((u) => u.utility === sample)).toBe(true);
     }
-    const css = (await tailwind()).build(["gap-2", "gap-1.5", "-mt-1", "w-1/2", "text-13", "text-11", "rounded-card", "rounded"]);
-    expect(["gap-2", "-mt-1", "w-1/2", "text-13", "rounded-card"].filter((name) => !hasRule(css, name))).toEqual([]);
-    expect(["gap-1.5", "text-11", "rounded"].filter((name) => hasRule(css, name))).toEqual([]);
+    // Stage 23 (decision 0083): 11 and 26 joined the type scale, 15 is still no step of it.
+    const css = (await tailwind()).build(["gap-2", "gap-1.5", "-mt-1", "w-1/2", "text-13", "text-11", "text-26", "text-15", "rounded-card", "rounded-tile", "rounded"]);
+    expect(["gap-2", "-mt-1", "w-1/2", "text-13", "text-11", "text-26", "rounded-card", "rounded-tile"].filter((name) => !hasRule(css, name))).toEqual([]);
+    expect(["gap-1.5", "text-15", "rounded"].filter((name) => hasRule(css, name))).toEqual([]);
   });
 
   it("Tailwind generates CSS for every spacing, size, font size and radius in the code", async () => {

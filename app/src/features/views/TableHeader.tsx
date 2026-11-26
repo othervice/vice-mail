@@ -151,7 +151,7 @@ export function TableHeader({ config, listLabel, ref }: TableHeaderProps) {
   const scale = (px: number) => `${String(px)} px`;
   return (
     <div
-      className="flex shrink-0 items-center overflow-y-hidden border-b border-border bg-surface-list px-2 [scrollbar-gutter:stable]"
+      className="flex shrink-0 items-center overflow-y-hidden border-b border-border bg-surface-list [scrollbar-gutter:stable]"
       data-testid="table-header"
     >
       <div role="table" aria-label={t("views.table.label", { list: listLabel })} className="min-w-0 flex-1">

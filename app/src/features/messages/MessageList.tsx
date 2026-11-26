@@ -345,7 +345,7 @@ function ChildOption({ row, dateId, bounds, selected, cursor, multiSelect, actio
 
 function SkeletonRows({ label }: { label: string }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface-list px-2 pt-2" data-testid="list-skeleton">
+    <div className="flex min-h-0 flex-1 flex-col bg-surface-list pt-2" data-testid="list-skeleton">
       <p role="status" className="sr-only">
         {label}
       </p>
@@ -1382,7 +1382,7 @@ export function MessageList({
         }}
         data-testid="message-list"
         className={cx(
-          "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list px-2",
+          "group/list min-h-0 flex-1 overflow-y-auto bg-surface-list",
           // Stage 19: the header reserves the same gutter, so the columns line up.
           tableMode && "[scrollbar-gutter:stable]",
           // The cursor row shows the focus ring; without one (nothing loaded yet) the list does.
@@ -1472,7 +1472,7 @@ export function MessageList({
                       role="presentation"
                       aria-hidden
                       data-testid="list-section"
-                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-center border-b border-border-subtle bg-band ps-(--ui-row-lead) pe-3 text-12 font-semibold text-tertiary"
+                      className="absolute top-0 left-0 flex h-(--ui-section-height) w-full items-center border-b border-border-subtle bg-band ps-(--ui-row-lead) pe-3 text-11 font-semibold text-tertiary"
                     >
                       <SectionLabel section={row.section} bounds={bounds} />
                     </div>

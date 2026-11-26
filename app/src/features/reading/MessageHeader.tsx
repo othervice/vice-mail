@@ -100,7 +100,7 @@ export function SubjectTitle({ subject, subjectId }: SubjectTitleProps) {
   return (
     <h2
       id={subjectId}
-      className={cx("text-20 font-semibold break-words select-text", text ? "text-primary" : "text-tertiary")}
+      className={cx("text-26 font-bold tracking-title break-words select-text", text ? "text-primary" : "text-tertiary")}
       data-testid="reading-subject"
     >
       {text || t("list.noSubject")}

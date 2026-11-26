@@ -33,7 +33,7 @@ export function BlockHeading({ block }: { block: InboxBlock }) {
       data-testid={`inbox-block-${block}`}
       className={cx(
         "flex h-full gap-2 px-3 font-semibold",
-        priority ? "items-center text-13 text-primary" : "items-end pb-1 text-12 text-tertiary",
+        priority ? "items-center text-13 text-primary" : "items-end pb-1 text-11 text-tertiary",
       )}
     >
       <Icon
@@ -103,7 +103,7 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
   const title = (
     <>
       <Icon aria-hidden className="size-(--ui-icon-small) shrink-0 text-secondary" strokeWidth={1.75} data-testid="bundle-icon" />
-      <span className={cx("shrink-0 truncate text-14 text-primary", unread > 0 ? "font-semibold" : "font-medium")}>{name}</span>
+      <span className={cx("shrink-0 truncate text-13 text-primary", unread > 0 ? "font-bold" : "font-semibold")}>{name}</span>
       <span className="shrink-0 text-12 text-tertiary tabular-nums" data-testid="bundle-count">
         {counter}
       </span>

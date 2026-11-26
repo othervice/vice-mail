@@ -154,7 +154,7 @@ export function GroupList({ selected, onSelect }: GroupListProps) {
                   onSelect(group.id);
                 }}
                 className={cx(
-                  "mx-2 flex cursor-default items-center gap-3 rounded-row px-2 py-2",
+                  "mx-2 flex cursor-default items-center gap-3 rounded-tile px-2 py-2",
                   group.id === current?.id ? "bg-selected" : "hover:bg-hover",
                 )}
                 data-testid="contact-group-row"
@@ -276,7 +276,7 @@ export function GroupDetail({ id, onDeleted }: { id: ContactListId; onDeleted: (
         ) : (
           <ul aria-label={t("contactGroups.memberList")} className="flex flex-col" data-testid="contact-group-members">
             {group.members.map((member) => (
-              <li key={member.email} className="flex items-center gap-3 rounded-row px-2 py-1 hover:bg-hover" data-testid="contact-group-member">
+              <li key={member.email} className="flex items-center gap-3 rounded-tile px-2 py-1 hover:bg-hover" data-testid="contact-group-member">
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-13 text-primary">{member.name ?? member.email}</span>
                   {member.name && <span className="truncate text-12 text-secondary">{member.email}</span>}

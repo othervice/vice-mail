@@ -259,7 +259,7 @@ function EditViewsDialog() {
                 data-dragging={dragged || undefined}
                 data-testid={`edit-views-row-${view.id}`}
                 className={cx(
-                  "flex h-10 shrink-0 items-center gap-1 rounded-row ps-1 pe-1 transition-colors",
+                  "flex h-10 shrink-0 items-center gap-1 rounded-tile ps-1 pe-1 transition-colors",
                   dragged ? "bg-selected shadow-floating" : dragging === null && "hover:bg-hover",
                 )}
               >

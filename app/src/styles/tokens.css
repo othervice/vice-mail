@@ -131,6 +131,10 @@
     "Segoe UI", sans-serif;
   --ui-font-features: "cv11", "ss01";
   --ui-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  /* Stage 23 (decision 0083), the draft's scale: list rows 13 (sender, subject), preview 12,
+     time 11, section heads and bands 11 semibold, the reading pane's subject 26 bold. */
+  --ui-font-size-11: 0.6875rem;
+  --ui-line-height-11: 1rem;
   --ui-font-size-12: 0.75rem;
   --ui-line-height-12: 1rem;
   --ui-font-size-13: 0.8125rem;
@@ -141,11 +145,16 @@
   --ui-line-height-16: 1.5rem;
   --ui-font-size-20: 1.25rem;
   --ui-line-height-20: 1.75rem;
+  --ui-font-size-26: 1.625rem;
+  --ui-line-height-26: 2rem;
   --ui-font-size-28: 1.75rem;
   --ui-line-height-28: 2.25rem;
   --ui-font-weight-regular: 400;
   --ui-font-weight-medium: 500;
   --ui-font-weight-semibold: 600;
+  --ui-font-weight-bold: 700;
+  /* Large titles (the reading pane's subject) a little tighter, as in the draft. */
+  --ui-letter-spacing-title: -0.01em;
 
   /* Spacing: 4 px grid */
   --ui-space-1: 0.25rem;
@@ -158,16 +167,22 @@
   --ui-space-10: 2.5rem;
   --ui-space-12: 3rem;
 
-  /* Radius: controls, rows and icon tiles, cards, panels. Pills use `rounded-full`. */
-  --ui-radius-control: 6px;
-  --ui-radius-row: 8px;
+  /* Radius. Stage 23 (decision 0083), the draft's shapes: controls and the sidebar's entries 7;
+     rows of the message list none, their selection runs across the list's whole width; icon
+     tiles, the rail's entries and entries of floating lists 8; cards 10; floating cards
+     (dialogs, the palette, the composer card) 14. Pills use `rounded-full`. */
+  --ui-radius-control: 7px;
+  --ui-radius-row: 0px;
+  --ui-radius-tile: 8px;
   --ui-radius-card: 10px;
-  --ui-radius-panel: 16px;
+  --ui-radius-panel: 14px;
 
-  /* Elevation (decision 0031): soft shadows instead of hard borders. `card` lifts a block in the
-     list (priority) or a selected row by a hair; floating (menus, tooltips) and panel above it. */
-  --ui-shadow-card: 0 1px 2px rgb(16 24 36 / 0.06), 0 2px 8px rgb(16 24 36 / 0.05);
-  --ui-shadow-row: 0 1px 2px rgb(16 24 36 / 0.07);
+  /* Elevation. Stage 23 (decision 0083): a shadow only for what floats (menus, tooltips, the
+     quick actions, dialogs and panels over the content); cards, buttons and rows lie flat with a
+     hairline, as in the draft. `card` and `row` stay as names (their places may float later) and
+     draw nothing: a transparent shadow, as `none` would break Tailwind's shadow list. */
+  --ui-shadow-card: 0 0 #0000;
+  --ui-shadow-row: 0 0 #0000;
   --ui-shadow-floating: 0 4px 16px rgb(16 24 36 / 0.12), 0 1px 3px rgb(16 24 36 / 0.08);
   --ui-shadow-panel: 0 12px 40px rgb(16 24 36 / 0.14), 0 2px 6px rgb(16 24 36 / 0.06);
 
@@ -216,8 +231,10 @@
   /* Stage 22 (decision 0072): rows have no avatar. Every message row (list, table, conversation)
      starts after its lead with the mark column, as wide as the selection box: the unread dot,
      which turns into the box on hover and in a multiple selection. The lead puts the column on
-     the line of the list's title and section labels; the sender follows 8 px after it. */
-  --ui-row-lead: var(--ui-space-4);
+     the line of the list's title and section labels; the sender follows 8 px after it. Stage 23
+     (decision 0083): rows run across the list's whole width (no gutter), so the lead is the
+     title's inset, 24 px; inside the cards drawn by rows (app.css, `.list-card`) it stays 16 px. */
+  --ui-row-lead: var(--ui-space-6);
   --ui-row-mark: var(--ui-icon-small);
   /* Stage 17 (decision 0049): the messages of an unfolded conversation are one line each (36 px,
      compact 28 px) in every list width. The conversation's dotted line runs under the mark
@@ -353,9 +370,7 @@
   --ui-account-7: #55c3c9;
   --ui-account-8: #c4a98c;
 
-  /* Shadows need more weight on dark surfaces */
-  --ui-shadow-card: 0 1px 2px rgb(1 4 9 / 0.5), 0 2px 8px rgb(1 4 9 / 0.3);
-  --ui-shadow-row: 0 1px 2px rgb(1 4 9 / 0.45);
+  /* Shadows need more weight on dark surfaces (only floating ones, see above) */
   --ui-shadow-floating: 0 4px 16px rgb(1 4 9 / 0.5), 0 1px 3px rgb(1 4 9 / 0.4);
   --ui-shadow-panel: 0 12px 40px rgb(1 4 9 / 0.55), 0 2px 6px rgb(1 4 9 / 0.4);
 }
@@ -401,8 +416,9 @@
 :root {
   /* The column of message cards: wide enough for a mail, centred in wide panes. */
   --ui-reading-column: 54rem;
-  /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. */
-  --ui-reading-line-height: 1.6;
+  /* Line height of plain-text mail and the text around it: calmer than the UI's 20 px. Stage 23
+     (decision 0083): 1.65, the draft's mail text (14 px). */
+  --ui-reading-line-height: 1.65;
   /* Menus that unfold from a "…" button (reading toolbar, message card). */
   --ui-reading-menu-width: 15rem;
   /* Stage 21 (decision 0064): the context menu of messages and its submenus. */

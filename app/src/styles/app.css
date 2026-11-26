@@ -94,7 +94,7 @@
   /* Mail content: `bg-mail-canvas` behind HTML mail, in both themes */
   --color-mail-canvas: var(--ui-mail-canvas);
 
-  /* Type: `text-12` ... `text-28`, `font-regular|medium|semibold` */
+  /* Type: `text-11` ... `text-28`, `font-regular|medium|semibold|bold`, `tracking-title` */
   --font-sans: var(--ui-font-family);
   --font-sans--font-feature-settings: var(--ui-font-features);
   --default-font-family: var(--ui-font-family);
@@ -105,6 +105,8 @@
   --font-mono: var(--ui-font-family-mono);
   --font-mono--font-feature-settings: normal;
   --default-mono-font-family: var(--ui-font-family-mono);
+  --text-11: var(--ui-font-size-11);
+  --text-11--line-height: var(--ui-line-height-11);
   --text-12: var(--ui-font-size-12);
   --text-12--line-height: var(--ui-line-height-12);
   --text-13: var(--ui-font-size-13);
@@ -115,11 +117,15 @@
   --text-16--line-height: var(--ui-line-height-16);
   --text-20: var(--ui-font-size-20);
   --text-20--line-height: var(--ui-line-height-20);
+  --text-26: var(--ui-font-size-26);
+  --text-26--line-height: var(--ui-line-height-26);
   --text-28: var(--ui-font-size-28);
   --text-28--line-height: var(--ui-line-height-28);
   --font-weight-regular: var(--ui-font-weight-regular);
   --font-weight-medium: var(--ui-font-weight-medium);
   --font-weight-semibold: var(--ui-font-weight-semibold);
+  --font-weight-bold: var(--ui-font-weight-bold);
+  --tracking-title: var(--ui-letter-spacing-title);
 
   /* Spacing: only the 4 px grid steps from DESIGN.md exist */
   --spacing-0: 0px;
@@ -133,9 +139,10 @@
   --spacing-10: var(--ui-space-10);
   --spacing-12: var(--ui-space-12);
 
-  /* Radius: `rounded-control`, `rounded-row`, `rounded-card`, `rounded-panel` */
+  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel` */
   --radius-control: var(--ui-radius-control);
   --radius-row: var(--ui-radius-row);
+  --radius-tile: var(--ui-radius-tile);
   --radius-card: var(--ui-radius-card);
   --radius-panel: var(--ui-radius-panel);
 
@@ -288,6 +295,19 @@
     border-radius: var(--ui-radius-card);
     clip-path: none;
   }
+}
+
+/*
+ * Stage 23 (decision 0083): the rows of the message list run across its whole width, so a
+ * selected row is filled from edge to edge, as in the draft. The cards drawn by rows (priority,
+ * an unfolded bundle) keep an 8 px gutter on both sides and the old 16 px lead inside. Unlayered,
+ * so it wins over the row's `left-0 w-full`.
+ */
+.list-card {
+  inset-inline: var(--ui-space-2);
+  width: auto;
+  --ui-row-lead: var(--ui-space-4);
+  --ui-tree-line-start: calc(var(--ui-space-4) + var(--ui-row-mark) / 2);
 }
 
 /* Stage 16: find in the open message (features/reading/find.ts). The app's own text (head,

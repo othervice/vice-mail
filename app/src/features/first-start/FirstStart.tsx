@@ -505,7 +505,7 @@ function Extras({ syncOpen, onSync, autoCheck, onAutoCheck, autoCheckBusy }: Ext
 
 function IconTile({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <span className="flex size-8 shrink-0 items-center justify-center rounded-row bg-accent-soft text-accent">
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-tile bg-accent-soft text-accent">
       <Icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
     </span>
   );

@@ -34,7 +34,7 @@ export function Promises({ raised = false, "aria-label": label }: { raised?: boo
     >
       {POINTS.map(({ key, icon: Icon }) => (
         <div key={key} className="flex items-start gap-3 px-4 py-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-row bg-accent-soft text-accent">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-tile bg-accent-soft text-accent">
             <Icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
           </span>
           <p className="pt-1 text-13 text-secondary">{t(`mail.noAccount.points.${key}`)}</p>
