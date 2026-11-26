@@ -1,4 +1,4 @@
-# Stufe 23 — Rückmeldungen zu 0.1.3
+# Stufe 23 — Rückmeldungen zu 0.1.3 und neues Erscheinungsbild
 
 **Ziel:** Rückmeldungen zu 0.1.3 sammeln und gesammelt umsetzen.
 
@@ -41,13 +41,22 @@ sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist
   an WKWebView weiter: Die Seite bekommt `dragstart`, aber kein `dragover` und kein `drop`. Auch
   Mails auf einen Ordner ziehen geht deshalb auf dem Mac nicht.
 
-### 2 — Feinschliff (verworfen)
+### 2 — Neues Erscheinungsbild, Richtung Mailbird und Canary
 
 - Gefragt (26.11.): wie die App professioneller, hochwertiger und „weniger nach KI“ wirken kann.
-  Vorgeschlagen: weniger Text, neue Mail aufräumen, ruhigere Listen und Lesebereich, strenges
-  Design-System. Gewählt wurde zunächst „weniger Text“ mit Entwürfen vorab; kurz darauf
-  verworfen („das polishing mit dem weniger text ist quatsch, das lassen wir weg“). Entwürfe
-  abgebrochen, nichts geändert.
+  Ein erster Vorschlag (vor allem Texte kürzen) wurde verworfen („das polishing mit dem weniger
+  text ist quatsch“). Gemeint ist das Erscheinungsbild: Der Mensch zeigte Bildschirmfotos von
+  Mailbird („super polished, sowas in der Richtung“) und Canary Mail („kannst du da einen guten
+  Mix aus beidem machen?“).
+- Übernommene Prinzipien (kein Nachbau): von Mailbird helle, ruhige Flächen, eine eigene
+  einheitliche Schrift (Inter), dichte saubere Liste, großer Betreff, Anhänge als Karten, neue
+  Mail als schwebende Karte mit Formatleiste und Symbolreihe; von Canary die Werkzeugleiste über
+  die ganze Breite, die Seitenleiste nach Konten gegliedert mit Symbolen in der Kontofarbe, ein
+  Farbstreifen je Konto an der Zeile, kräftig gefüllte Auswahl, Bänder „Heute/Gestern“, eine
+  Kontaktspalte rechts (nur Daten der App: Name, Adresse, Notiz, Mails, Gruppen; keine Netzwerke)
+  und das dunkle Design. Keine Bilder und Initialen (Stufe 22).
+- Entwurf zur Freigabe: https://claude.ai/artifact/BuSPYpDvmSDm4s1JJoSZFX (Posteingang hell mit
+  Kontaktspalte, neue Mail als Karte, dunkel). Umgesetzt wird erst nach der Freigabe.
 
 ## Ergebnis
 
