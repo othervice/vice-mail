@@ -6,7 +6,8 @@ bauen.
 **Anlass:** Test von 0.1.2 am 26.11.2026. Wie in Stufe 21: erst alle Rückmeldungen sammeln,
 gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist.
 
-**Stand:** Liste vollständig („das reicht dann auch erstmal … los bau 0.1.3“, 26.11.2026).
+**Stand:** Fertig am 26.11.2026, ergibt 0.1.3. Liste vollständig („das reicht dann auch erstmal …
+los bau 0.1.3“), danach kamen noch Punkt 11 und 12 dazu.
 Ergibt 0.1.3. Aufteilung: 4+10 (Geheimnisse), 6 (Spamfilter), 5+7 (Suche), 3+8 (Oberfläche),
 danach 1+2 (Konten) und 9 (Windows); je ein Subagent in eigenem Worktree.
 
@@ -190,4 +191,103 @@ Personen melden“, „Ziehen in Finder/Explorer“).
 
 ## Ergebnis
 
-Noch offen; die Liste wird gesammelt.
+Erledigt am 26.11.2026: alle zwölf Punkte, ergibt 0.1.3. Sechs Subagenten in eigenen Worktrees
+(Suche 5+7, Oberfläche 3+8, Geheimnisse 4+10, Spamfilter 6, Windows 9+11, Konten 1+2+12),
+zusammengeführt auf `main`. Entscheidungen 0072 (keine Bilder), 0073 (Einstellungen
+durchsuchen), 0074 (Kontakte in der Suche, Suche im Wort), 0075 (ein Schlüsselbund-Eintrag),
+0076 (Passwörter übernehmen), 0077 (Spamfilter), 0078 (Reihenfolge und Namen der Konten), 0079
+(Windows-11-Optik), 0080 (Ziffern der Zahl am Symbol), 0081 (Ziehen aus jeder Liste). Migrationen
+0028 (keine Kontaktbilder), 0029 (Trigramm-Index), 0031 (Spamfilter), 0032 (Reihenfolge der
+Konten); 0030 blieb frei. Neue Abhängigkeit: keine (skrifa war schon über hayro im Build); neue
+Schrift: Teilmenge von Selawik Semibold (OFL) als „Badge Digits“.
+
+- **1:** Spalte `account.position` (leer bis zur ersten Änderung, die bisherige Reihenfolge
+  bleibt). Ziehen der Kontoüberschrift links, „Nach oben/unten“ im Kontomenü, Alt+Pfeil, Pfeile
+  in Einstellungen → Konten. Überall dieselbe Reihenfolge; im Sync als Feld `position` (jede
+  Änderung vergibt allen Konten neue, höhere Positionen, damit die neuere Reihenfolge als Ganzes
+  gewinnt).
+- **2:** `account.display_name` ist jetzt der Name in den Listen, Doppelklick, F2 oder
+  „Umbenennen“; leer zeigt die Adresse. Nichts Ausgehendes liest ihn mehr (KI-Antworten nehmen den
+  Absendernamen der Identität). Neue Konten starten ohne Listennamen.
+- **3:** Alle Bilder und Initialen entfernt (Liste, Lesebereich, Composer, Kontakte, Popup,
+  schmale Leiste, Einstellungen), dazu die Kontaktbilder aus Stufe 17 samt Befehlen, Hilfsprozess-
+  Modus und Sync-Art (alte Datensätze anderer Geräte werden still ignoriert). Zeilen beginnen mit
+  einer 16-px-Spalte für Ungelesen-Punkt bzw. Kästchen. In gemischten Listen bleibt die
+  Kontobeschriftung (Punkt und Name) auch beim Überfahren sichtbar (ein Punkt vor dem Absender war
+  vom Ungelesen-Punkt nicht zu unterscheiden). Schmale Leiste: Konten als Farbpunkte mit Namen.
+- **4:** Auf macOS ein Tresor-Eintrag in Generationen (`vault`, `vault.2`, …: neu schreiben,
+  zurücklesen, dann ältere löschen). Übernahme der alten Einträge beim Start nach den Namen aus der
+  Datenbank, Rückfall auf alte Einträge beim Lesen. Windows unverändert (ein Eintrag je
+  Geheimnis).
+- **5:** Bis zu drei Kontakte oben in der Suche (Name, Adresse, Domain, auch per Anfang); Auswahl
+  setzt den neuen Filter `contact:`/`kontakt:` (alle Adressen des Kontakts in Von/An/Cc, über alle
+  Konten).
+- **6:** Robinson/Fisher wie SpamBayes, Tokens als 64-Bit-Hashes (keine Wörter aus Mails in der
+  Datenbank), Klasse Gerät, nur der Schalter wird abgeglichen. Greift ab 0,99 und erst nach 50
+  Spam- und 200 anderen Mails. Nie Spam: eigene Adressen, angeschriebene Kontakte, Antworten auf
+  eigene Mails, Absender mit erlaubten Bildern, wichtige Absender. Gemessen am
+  SpamAssassin-Korpus (10-fach Kreuzvalidierung): 0,05 % falsch als Spam, 8,8 % Spam verpasst
+  (`docs/testing/spam-filter.md`).
+- **7:** Zweiter FTS5-Index `message_fts_tri` (Trigramme) über alle Spalten einschließlich Text.
+  Gemessen bei 100.000 Mails: Datenbank 119 → 272 MB, langsamste erste Treffer 20,7 → 29 ms
+  (Ziel 200 ms), Speichern von Bodies 2.213 → 916 je Sekunde. Ab 3 Zeichen findet ein Begriff
+  ohne Anführungszeichen auch Teile von Wörtern.
+- **8:** Suchfeld über der Abschnittsliste der Einstellungen (Cmd/Ctrl+F), Index aus denselben
+  i18n-Schlüsseln, die die Zeilen zeigen; ein Test rendert jeden Abschnitt und meldet jede Zeile,
+  die im Index fehlt.
+- **9:** Mica in der Titelleiste aller Fenster (Windows 11), im Hauptfenster auch hinter Leiste
+  und Ordnerspalte; Liste, Lesebereich, Composer, Menüs bleiben deckend. Rückfall ohne
+  Transparenz, vor Build 22000 und mit Kontrastdesign. Native Fenstertasten (Andock-Leiste von
+  Windows). Kontrasttest gegen hellstes/dunkelstes Mica.
+- **10:** Anfrage mit Festlegung auf den Schlüssel → Herausforderung mit Zufallswert vom
+  gebenden Gerät → Schlüssel offenlegen → sechsstelliger Code aus allen drei (Abweichung vom Plan:
+  ein Code nur aus Schlüssel und Anfrage ließe sich mit etwa einer Million Versuchen erzwingen).
+  Nur Konten mit gleichen Servern auf beiden Geräten (0040), keine OAuth-Tokens, Schreiben bleibt
+  aus, privater Schlüssel nur im Speicher, Einträge laufen nach 15 Minuten ab.
+- **11:** Geprüft: `mail-app.exe` und Installer von 0.1.2 enthalten das blaue Symbol. Ziffern
+  jetzt aus Selawik Semibold mit Hinting in genau der Pixelgröße (eigener Scanline-Rasterizer,
+  gleiche Pixel auf jeder Plattform), Vorschaubilder für 100–200 % angesehen. Der Installer
+  meldet Explorer nach Installation und Update das geänderte Symbol (`SHChangeNotify`, auch für
+  angeheftete Verknüpfungen); mit makensis 3.13 in einem kleinen Rahmen übersetzt, nicht in der
+  Vorlage von Tauri.
+- **12:** Ein Befehl `dropMessages` gruppiert die Zeilen: Zeilen des Zielkontos werden
+  verschoben, andere Konten über Kopieren-dann-Entfernen (0033), Zeilen schon im Ziel bleiben.
+  Ablegen verschiebt ohne Frage, Wahltaste/Strg kopiert; „Verschieben nach“ im Menü fragt weiter.
+  Nur lesende Konten lehnen beim Überfahren mit Begründung ab. Ordner klappen nach 700 ms auf,
+  die Spalte scrollt am Rand. Rückgängig nimmt Verschiebungen innerhalb eines Konto zurück; über
+  Konten nur, solange die Kopie noch nicht auf dem Server ist (sagt die Meldung).
+
+**Geprüft:**
+- `scripts/check.sh` grün auf `fc10011` (alle zwölf Punkte zusammengeführt): 1.665 Rust-Tests,
+  4.707 Vitest, Clippy für macOS und Windows, Lizenzen, Advisories.
+- GitHub-CI auf `ed2d186` (Version 0.1.3): `check` grün auf macOS und auf echtem Windows.
+- Server-Tests gegen den lokalen Testserver auf `ed2d186`: 1.777 grün.
+- Desktop: 43 Spec-Dateien (214 Tests) in drei Gesamtläufen je 42/43; jede Spec-Datei war in
+  mindestens einem Gesamtlauf grün (Ausreißer unten). `stage22-ui` und `spacing` danach einzeln
+  grün, `spacing` zweimal.
+- README-Bilder neu erzeugt (ohne Bilder und Initialen).
+- Vorschaubilder der Zahl am Symbol (100–200 %) und Bildschirmfotos aller Stränge angesehen.
+
+**Ungeprüft:**
+- Alles auf einem echten Windows-PC: Mica, Ziffern der Zahl am Symbol, Symbol nach dem Update,
+  Strg zum Kopieren (Prüfliste 22.1–22.4 in `docs/testing/windows-checklist.md`).
+- Wie oft macOS bei einem echten Update fragt (0.1.2 → 0.1.3 und danach), und ob ein neuer Build
+  Tresor-Einträge eines älteren löschen darf.
+- Passwörter übernehmen zwischen zwei echten Geräten; Sync mit einem Gerät auf 0.1.2.
+- Spamfilter mit echten, deutschsprachigen Postfächern; Release-Build-Zeiten.
+- Die echte Zieh-Geste des Systems (die Desktop-Tests lösen die Drag-Ereignisse in der Seite aus).
+- Ein echtes Update über die App.
+- Wackelige Tests:
+  - `comfort::tests::popup::new_mail_shows_as_popup_cards_by_the_same_rules` scheiterte einmal
+    unter hoher Last (danach 7 von 7 grün).
+  - `spacing.e2e.mjs` fand im dritten Gesamtlauf bei 900×600 das Gespräch nicht aufgeklappt
+    (nach einem Neustart des WebDrivers); einzeln zweimal grün.
+- Behoben während der Prüfung:
+  - `stage22-ui` fand in beiden ersten Gesamtläufen Bobs Mail in „Alle Posteingänge“ nicht:
+    frühere Specs legen kurz vorher neuere Mails ab, die Mail fiel aus den zwölf geprüften
+    Zeilen. Sie ist jetzt die neueste (`18f321d`).
+  - Der Server-Test des Spamfilters ließ Mails im Junk des Testservers liegen und brachte damit
+    die Zählung des IMAP-Ordnertests durcheinander (`a39af7d`).
+
+**Wartet auf:** welche Version auf dem Windows-PC lief (Punkt 11); Test von 0.1.3 auf Mac und
+Windows, zuerst ein Update über die App; Prüfliste 22.1–22.4 auf Windows.
