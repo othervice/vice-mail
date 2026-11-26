@@ -3,7 +3,16 @@ import { describe, expect, it, vi, type MockInstance } from "vitest";
 import { splitHighlights } from "../src/components/HighlightedText";
 import { handleSearchEvent } from "../src/features/search/events";
 import { scopeOf, scopesFor } from "../src/features/search/SearchArea";
-import { chipTerms, hasValue, monthFirstFor, rangeText, removeTerm, sortedProblems } from "../src/features/search/terms";
+import {
+  chipTerms,
+  contactWords,
+  hasValue,
+  monthFirstFor,
+  rangeText,
+  removeTerm,
+  sortedProblems,
+  withContact,
+} from "../src/features/search/terms";
 import { initialEntry } from "../src/features/threads/ThreadPane";
 import { visibleAccounts } from "../src/features/unified/UnifiedInbox";
 import type { SearchTermInfo, ThreadEntry } from "../src/services/ipc";
@@ -49,6 +58,31 @@ describe("search language helpers", () => {
       { code: "invalid_date", range: { start: 10, end: 20 } },
     ]);
     expect(problems.map((p) => p.code)).toEqual(["unknown_filter", "invalid_date"]);
+  });
+
+  // Stage 22 (decision 0074): contacts for the plain words, replacing them when chosen.
+  it.each([
+    ["max", "max"],
+    ["  max  muster ", "max muster"],
+    ["rech*", "rech"],
+    ["has:attachment max -spam", "max"],
+    ["from: anna max", "max"],
+    ["max OR moritz", "max moritz"],
+    ['"max muster"', ""],
+    ["is:unread", ""],
+    ["max@firma.de", "max@firma.de"],
+    ["", ""],
+  ])("looks up contacts for %j with %j", (query, words) => {
+    expect(contactWords(query)).toBe(words);
+  });
+
+  it.each([
+    ["max", "contact:max@firma.de"],
+    ["has:attachment max -spam", "has:attachment -spam contact:max@firma.de"],
+    ["from: anna max OR mu", "from: anna contact:max@firma.de"],
+    ["  max  ", "contact:max@firma.de"],
+  ])("choosing a contact for %j gives %j", (query, expected) => {
+    expect(withContact(query, "contact", "max@firma.de")).toBe(expected);
   });
 
   it("knows which regions write the month first", () => {

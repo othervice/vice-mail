@@ -1,5 +1,6 @@
-import { keepPreviousData, useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import {
+  contactsIpc,
   MAX_SEARCH_PAGE,
   searchIpc,
   type ListCursor,
@@ -68,3 +69,21 @@ export function useServerSearchPages(input: SearchInput | null) {
     }),
   });
 }
+
+/** Stage 22 (decision 0074): contacts shown on top while typing a search. */
+export const CONTACT_SUGGESTIONS = 3;
+
+/**
+ * Up to [`CONTACT_SUGGESTIONS`] contacts whose name, address or domain starts with every word,
+ * every kind (a shop's address finds its mail too). Under `contactDirectory`, so a change to
+ * the contacts reloads them. Empty words: no request.
+ */
+export function useContactSuggestions(words: string) {
+  return useQuery({
+    queryKey: ["contactDirectory", "searchSuggestions", words] as const,
+    queryFn: () => contactsIpc.listContacts(words, null, CONTACT_SUGGESTIONS, "all"),
+    enabled: words !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+

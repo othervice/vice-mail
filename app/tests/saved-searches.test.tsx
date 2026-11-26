@@ -32,7 +32,7 @@ function setup(search: SearchOptions = {}, extra: Parameters<typeof mockCore>[0]
 async function openSearch(user: ReturnType<typeof renderApp>["user"]) {
   await screen.findByRole("listbox", { name: "Messages in Inbox" });
   await user.click(screen.getByRole("button", { name: "Search" }));
-  return screen.findByRole("searchbox", { name: "Search mail" });
+  return screen.findByRole("combobox", { name: "Search mail" });
 }
 
 const lastSearch = (core: ReturnType<typeof mockCore>) => {
@@ -110,9 +110,9 @@ describe("recent searches", () => {
     await screen.findByRole("listbox", { name: "Recent searches" });
     await user.keyboard("{ArrowDown}{Escape}");
     expect(screen.queryByRole("listbox", { name: "Recent searches" })).toBeNull();
-    expect(screen.getByRole("searchbox", { name: "Search mail" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Search mail" })).toBeTruthy();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Search mail" })).toBeNull();
   });
 
   it("remembers a search once one of its hits is opened, once per search", async () => {
@@ -325,7 +325,7 @@ describe("saved searches as views", () => {
     await user.click(screen.getByRole("button", { name: "Suchen" }));
     expect(await screen.findByRole("listbox", { name: "Letzte Suchen" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Letzte Suchen löschen" })).toBeTruthy();
-    await user.type(screen.getByRole("searchbox"), "rechnung");
+    await user.type(screen.getByRole("combobox", { name: "Mails durchsuchen" }), "rechnung");
     expect(screen.getByRole("button", { name: "Suche speichern" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /^Gespeicherte Ansichten/ }));
     expect(await screen.findByRole("heading", { name: "Noch keine gespeicherten Suchen" })).toBeTruthy();

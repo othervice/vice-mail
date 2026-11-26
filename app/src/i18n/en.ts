@@ -2054,7 +2054,7 @@ export const en = {
       all: "All accounts",
     },
     hint: {
-      body: "Type words or a phrase in quotes. Filters: from:, to:, cc:, subject:, filename:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:, larger:10M. A - in front excludes a term, OR between words finds either.",
+      body: "Type words or a phrase in quotes. From three characters on, a word also matches inside longer words (uster finds Muster); in quotes only whole words. Filters: from:, to:, cc:, subject:, filename:, contact:, in:, account:, has:attachment, is:unread, is:read, is:flagged, before:, after:, older_than:, newer_than:, larger:10M. A - in front excludes a term, OR between words finds either.",
     },
     results: {
       label: "the search results for “{{query}}”",
@@ -2118,7 +2118,19 @@ export const en = {
         newer_than: "Newer than",
         // Stage 20 (decision 0060).
         larger: "Larger than",
+        // Stage 22 (decision 0074).
+        contact: "Contact",
       },
+    },
+    // Stage 22 (decision 0074): contacts on top while typing.
+    contacts: {
+      heading: "Contacts",
+      label: "Contacts: all mail with the person",
+      option: "{{name}}, {{email}}: show all mail with this person",
+      moreAddresses_one: "{{email}} and {{count}} more address",
+      moreAddresses_other: "{{email}} and {{count}} more addresses",
+      // The filter a chosen contact becomes in the field (`contact:` of the search language).
+      key: "contact",
     },
     index: {
       building: "The search index is being built ({{percent}} %). Older messages may be missing from the results.",

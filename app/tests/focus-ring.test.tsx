@@ -74,7 +74,7 @@ describe("focus ring", () => {
     });
     await expectRings(10);
     await user.click(screen.getByRole("button", { name: "Search" }));
-    await screen.findByRole("searchbox", { name: "Search mail" });
+    await screen.findByRole("combobox", { name: "Search mail" });
     await expectRings(10);
   });
 

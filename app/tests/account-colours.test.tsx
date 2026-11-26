@@ -141,7 +141,7 @@ describe("account colours", () => {
     const { user } = setup();
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await user.click(screen.getByRole("button", { name: "Search" }));
-    await user.type(await screen.findByRole("searchbox", { name: "Search mail" }), "r");
+    await user.type(await screen.findByRole("combobox", { name: "Search mail" }), "r");
     const results = await screen.findByRole("listbox", { name: /search results/ });
     const options = await within(results).findAllByRole("option");
     expect(options.length).toBeGreaterThan(0);

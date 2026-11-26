@@ -407,7 +407,7 @@ describe("command palette", () => {
     await chooseByKeyboard(user, "search", "Search");
     expect(useSearchStore.getState().open).toBe(true);
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: "Search mail" }));
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Search mail" }));
     });
   });
 
@@ -463,7 +463,7 @@ describe("command palette", () => {
     act(() => {
       useSearchStore.getState().openSearch();
     });
-    const field = await screen.findByRole("searchbox", { name: "Search mail" });
+    const field = await screen.findByRole("combobox", { name: "Search mail" });
     field.focus();
     await user.keyboard("{Meta>}5{/Meta}");
     expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });

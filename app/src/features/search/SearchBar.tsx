@@ -5,14 +5,27 @@ import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { splitHighlights } from "../../components/HighlightedText";
 import { IconButton } from "../../components/IconButton";
-import { toCoreError, type IpcError, type SearchPage, type SearchProblemCode, type SearchTermInfo } from "../../services/ipc";
+import {
+  toCoreError,
+  type ContactEntry,
+  type IpcError,
+  type SearchPage,
+  type SearchProblemCode,
+  type SearchTermInfo,
+} from "../../services/ipc";
 import { useSearchStore, type SearchScopeChoice } from "../../stores/search";
 import { useBoundShortcuts } from "../../stores/shortcuts";
 import { ariaShortcut, type ShortcutPlatform } from "../actions/shortcuts";
+import { ContactSuggestions } from "./ContactSuggestions";
+import { useContactSuggestions } from "./queries";
 import { RecentSearches } from "./RecentSearches";
 import { SaveSearchForm } from "./SaveSearchForm";
 import { useClearRecentSearches, useRecentSearches } from "./savedQueries";
-import { chipTerms, hasValue, rangeText, removeTerm, sortedProblems } from "./terms";
+import { chipTerms, contactWords, hasValue, rangeText, removeTerm, sortedProblems, withContact } from "./terms";
+import { useDebounced } from "./useDebounced";
+
+/** Stage 22: wait this long after the last key before looking up contacts. */
+const CONTACT_DELAY_MS = 150;
 
 interface SearchBarProps {
   /** Scopes that make sense in the current view, narrowest first. */
@@ -91,6 +104,9 @@ function Chip({ term, query, onRemove }: { term: SearchTermInfo; query: string; 
  * The search field above the list (stage 7): results while typing, the scope, the problems of
  * the query at their place (underlined in a copy of the text and explained below it), the
  * filters as chips that can be removed, and the state of the index while it is being built.
+ * The field is a combobox (stage 22, decision 0074): under the empty field the recent searches,
+ * while typing up to three contacts whose name, address or domain fits; choosing one searches
+ * all mail with that person in all accounts.
  */
 export function SearchBar({ scopes, scope, page, searched, platform, onClose, onRecord, recordError }: SearchBarProps) {
   const { t } = useTranslation();
@@ -115,8 +131,16 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
   const saveButton = useRef<HTMLDivElement>(null);
   const recents = recent.data ?? [];
   const showRecent = focused && !dismissed && query === "" && recents.length > 0;
-  const activeIndex = showRecent && active < recents.length ? active : -1;
-  const optionId = (index: number) => `${recentId}-${String(index)}`;
+  // Stage 22: contacts for the plain words of the query.
+  const contactsId = useId();
+  const words = useDebounced(contactWords(query), CONTACT_DELAY_MS);
+  const suggested = useContactSuggestions(words);
+  const contacts = words !== "" && contactWords(query) !== "" ? (suggested.data?.items ?? []) : [];
+  const showContacts = focused && !dismissed && !showRecent && contacts.length > 0;
+  const listId = showRecent ? recentId : showContacts ? contactsId : undefined;
+  const count = showRecent ? recents.length : showContacts ? contacts.length : 0;
+  const activeIndex = count > 0 && active < count ? active : -1;
+  const optionId = (index: number) => `${listId ?? recentId}-${String(index)}`;
   const changeQuery = (next: string) => {
     setQuery(next);
     setDismissed(false);
@@ -127,6 +151,13 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
     submit();
     onRecord(picked);
     setActive(-1);
+  };
+  const pickContact = (contact: ContactEntry) => {
+    const next = withContact(query, t("search.contacts.key"), contact.email);
+    // All mail with the person: every account.
+    setScope("all");
+    pick(next);
+    setDismissed(true);
   };
 
   useEffect(() => {
@@ -183,28 +214,45 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
               changeQuery(event.target.value);
             }}
             onKeyDown={(event) => {
-              if (showRecent && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+              if (count > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
                 event.preventDefault();
-                const count = recents.length;
                 setActive(event.key === "ArrowDown" ? (activeIndex + 1) % count : activeIndex <= 0 ? count - 1 : activeIndex - 1);
                 return;
               }
-              const chosen = recents[activeIndex];
-              if (event.key === "Enter" && chosen) {
-                event.preventDefault();
-                pick(chosen.query);
+              if (event.key === "Enter" && activeIndex >= 0) {
+                const recentChosen = showRecent ? recents[activeIndex] : undefined;
+                const contactChosen = showContacts ? contacts[activeIndex] : undefined;
+                if (recentChosen) {
+                  event.preventDefault();
+                  pick(recentChosen.query);
+                  return;
+                }
+                if (contactChosen) {
+                  event.preventDefault();
+                  pickContact(contactChosen);
+                  return;
+                }
+              }
+              if (event.key === "Enter") {
+                // The form submits the text; the contacts give way to the results.
+                setDismissed(true);
+                setActive(-1);
                 return;
               }
               if (event.key !== "Escape") return;
               event.preventDefault();
-              if (showRecent) {
-                // First Escape closes the list of recent searches, the next one the search.
+              if (showRecent || showContacts) {
+                // First Escape closes the list (recent searches or contacts), the next one
+                // clears the field, then the search closes.
                 setDismissed(true);
                 setActive(-1);
               } else if (query) changeQuery("");
               else onClose();
             }}
-            aria-controls={showRecent ? recentId : undefined}
+            role="combobox"
+            aria-expanded={listId !== undefined}
+            aria-autocomplete="list"
+            aria-controls={listId}
             aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
             aria-label={t("search.field")}
             aria-invalid={problems.length > 0 ? true : undefined}
@@ -233,6 +281,9 @@ export function SearchBar({ scopes, scope, page, searched, platform, onClose, on
             </button>
           )}
         </div>
+        {showContacts && (
+          <ContactSuggestions id={contactsId} contacts={contacts} active={activeIndex} optionId={optionId} onPick={pickContact} />
+        )}
         {showRecent && (
           <RecentSearches
             id={recentId}
