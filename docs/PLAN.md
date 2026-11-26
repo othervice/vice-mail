@@ -39,6 +39,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 19 | [Thunderbird-Funktionen](stages/19-thunderbird-funktionen.md) | fertig (0.1.1) | Sortieren, Tabellenansicht, Schnellfilter, Quelltext, Umleiten, Als neu, Kontaktgruppen, vCard/mbox, Übernahme aus Thunderbird |
 | 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
 | 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | fertig (0.1.2), Punkt 1 wartet auf den Menschen | Rückmeldungen aus dem Test von 0.1.1; ergibt 0.1.2 |
+| 22 | [Rückmeldungen zu 0.1.2](stages/22-rueckmeldungen-0-1-2.md) | sammelt | Konten verschieben und umbenennen, keine Bilder/Initialen mehr; ergibt 0.1.3 |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
