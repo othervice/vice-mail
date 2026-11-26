@@ -52,6 +52,71 @@ fn bindings_are_fresh() {
     );
 }
 
+/// Stage 23 (decision 0082): no command takes a file path from the page. Files the user drops
+/// come as bytes (`begin_file_upload`, `append_file_upload`); paths only from the core's own
+/// dialogs and the OS's open events. (`create_mailbox` takes an IMAP folder path, not a file.)
+#[test]
+fn no_command_takes_a_file_path_from_the_page() {
+    let dir = TempDir::new().expect("temp dir");
+    let fresh = dir.path().join("bindings.ts");
+    specta_builder::<tauri::Wry>()
+        .export(typescript(), &fresh)
+        .expect("tauri-specta export");
+    let text = fs::read_to_string(&fresh).expect("read bindings");
+    let mut offenders = Vec::new();
+    for line in text.lines().filter(|l| l.contains("__TAURI_INVOKE(\"")) {
+        let Some((_, call)) = line.split_once("__TAURI_INVOKE(\"") else {
+            continue;
+        };
+        let Some((command, rest)) = call.split_once('"') else {
+            continue;
+        };
+        let args = rest
+            .split_once('{')
+            .and_then(|(_, a)| a.split_once('}'))
+            .map(|(a, _)| a)
+            .unwrap_or_default();
+        let names_a_path = args.split(',').map(str::trim).any(|arg| {
+            let arg = arg.to_ascii_lowercase();
+            arg == "paths" || arg.ends_with("path") || arg.ends_with("paths")
+        });
+        if names_a_path && command != "create_mailbox" {
+            offenders.push(command.to_owned());
+        }
+    }
+    assert!(offenders.is_empty(), "commands taking paths: {offenders:?}");
+    assert!(text.contains("__TAURI_INVOKE(\"append_file_upload\""));
+}
+
+/// Stage 23 (decision 0082): Tauri's drag-and-drop handler stays off for every window, so the
+/// page's own drags work (on macOS and Windows). Windows built in code turn it off in
+/// `windows::guard`; the configured main window says so as well.
+#[test]
+fn no_window_has_the_shells_drag_and_drop_handler() {
+    let config: Value = serde_json::from_str(
+        &fs::read_to_string(manifest_dir().join("tauri.conf.json")).expect("tauri.conf.json"),
+    )
+    .expect("json");
+    let windows = config["app"]["windows"].as_array().expect("windows");
+    assert!(!windows.is_empty());
+    for window in windows {
+        assert_eq!(
+            window["dragDropEnabled"],
+            Value::Bool(false),
+            "{}",
+            window["label"]
+        );
+    }
+    let source = fs::read_to_string(manifest_dir().join("src/windows.rs")).expect("windows.rs");
+    let guard = source
+        .split_once("pub(crate) fn guard<")
+        .map(|(_, rest)| rest)
+        .and_then(|rest| rest.split_once("\n}\n"))
+        .map(|(body, _)| body)
+        .expect("guard");
+    assert!(guard.contains(".disable_drag_drop_handler()"));
+}
+
 #[test]
 fn event_name_is_core_event() {
     assert_eq!(CORE_EVENT_NAME, "core-event");

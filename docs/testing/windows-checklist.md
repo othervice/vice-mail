@@ -557,6 +557,48 @@ Das Einschalten erlaubt das Schreiben nur in den einen Ordner `Settings-Sync` de
   wieder Mica.
 - **Ergebnis:**
 
+## 23. Ziehen mit der Maus (Stufe 23, 0082)
+
+Unter 0.1.3 ging unter Windows kein Ziehen in der App. Bitte mit der echten Maus (oder dem
+Touchpad) prüfen, nicht mit der Tastatur. Zwei Konten einrichten, beide mit Schreibzugriff.
+
+**23.1 Konten umsortieren in der Spalte und in der schmalen Leiste**
+- **Tun:** In der Spalte links die Kopfzeile des zweiten Kontos nehmen und langsam über das erste
+  ziehen, ohne loszulassen; dann in die obere Hälfte des ersten Kontos und loslassen. Danach
+  dasselbe zurück, aber vor dem Loslassen Esc drücken. Ein Konto außerhalb der Spalte (über der
+  Mail-Liste) loslassen. Die Spalte einklappen und in der schmalen Leiste einen Farbpunkt über den
+  anderen ziehen und loslassen. Vice Mail beenden („Beenden“ im Symbol im Infobereich) und neu
+  starten.
+- **Erwartet:** Beim Ziehen eine blaue Linie (4 px) in der Lücke, in die das Konto käme; das
+  gezogene Konto bleibt halb durchsichtig an seinem Platz. Loslassen ordnet es dort ein, auch in der
+  Leiste. Esc bricht ab, außerhalb der Liste passiert nichts. Nach dem Neustart dieselbe
+  Reihenfolge überall (Spalte, Leiste, Einstellungen → Konten).
+- **Ergebnis:**
+
+**23.2 Mails auf Ordner ziehen (verschieben, mit Strg kopieren)**
+- **Tun:** Eine Mail aus dem Posteingang auf einen eigenen Ordner ziehen und loslassen. Eine
+  zweite mit gedrückter Strg-Taste auf denselben Ordner ziehen. Aus „Alle Posteingänge“ eine Mail
+  auf einen Ordner des anderen Kontos ziehen. Eine Mail auf einen zugeklappten Ordner ziehen und
+  dort kurz halten. Eine Mail auf „Papierkorb“ in der schmalen Leiste ziehen.
+- **Erwartet:** Beim Überfahren ist der Ordner hervorgehoben, daneben „1 Mail nach … verschieben“
+  bzw. mit Strg „… kopieren“ (der Zeiger zeigt das Pluszeichen). Loslassen verschiebt bzw. kopiert,
+  danach ein Hinweis (im selben Konto mit „Rückgängig“, sonst „Aktivität zeigen“); der zugeklappte
+  Ordner klappt nach einem Moment auf. Der Papierkorb der Leiste nimmt die Mail in den Papierkorb
+  ihres eigenen Kontos.
+- **Ergebnis:**
+
+**23.3 Datei aus dem Explorer auf eine neue Mail**
+- **Tun:** Eine neue Mail öffnen (im Fenster und im Bereich über dem Lesebereich). Aus dem
+  Explorer eine PDF-Datei und ein Foto (JPEG/PNG) zusammen auf das Fenster ziehen, erst nur
+  darüber halten, dann loslassen. Dasselbe mit „Reiner Text“. Einen Ordner aus dem Explorer auf die
+  Mail ziehen. Eine Datei auf die Mail-Liste ziehen, während keine neue Mail offen ist. Unter
+  Einstellungen → Schreiben eine Signatur bearbeiten und ein kleines PNG darauf ziehen.
+- **Erwartet:** Über dem Fenster ein Streifen „Lass die Dateien los, um sie anzuhängen.“ Formatiert:
+  das Foto steht im Text, die PDF als Anhang; „Reiner Text“: beide als Anhang. Ein Ordner wird
+  nicht angehängt, eine Meldung sagt es. Ohne offene Mail zeigt der Zeiger „nicht erlaubt“, nichts
+  öffnet sich, Vice Mail bleibt, wie es war. Das PNG erscheint in der Signatur.
+- **Ergebnis:**
+
 ## Notizen und „Wartet auf“
 
 _Platz für alles, was nicht in die Schritte passt._

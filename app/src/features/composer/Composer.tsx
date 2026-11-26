@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
+import { folderError, useWindowFileDrop } from "../../components/fileDrop";
 import { Notice } from "../../components/Notice";
 import { Tooltip } from "../../components/Tooltip";
 import {
@@ -345,7 +346,6 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [dropping, setDropping] = useState(false);
   // Stage 10: inline images (shown from `data:` URLs, saved as `cid:`), the size check, notes after
   // pasting or inserting a template, the template menu and "send later".
   const [imageSources, setImageSources] = useState<Record<string, string>>({});
@@ -459,57 +459,40 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     [],
   );
 
-  // Files dropped on the window while the composer is open become attachments (paths from the shell).
-  useEffect(() => {
-    let active = true;
-    let stop: (() => void) | undefined;
-    void composeIpc
-      .onFileDrop((event) => {
-        if (event.type === "enter") setDropping(true);
-        else if (event.type === "leave") setDropping(false);
-        else if (event.type === "drop") {
-          setDropping(false);
-          if (event.paths.length === 0) return;
-          // Rich text: images go into the text (stage 10), everything else is attached.
-          const inline = latest.current.format === "html" ? event.paths.filter(isImagePath) : [];
-          const files = event.paths.filter((path) => !inline.includes(path));
-          void (async () => {
-            if (inline.length > 0) {
-              setAddingImages(true);
-              try {
-                applyAdded(await composerIpc.addDroppedInlineImages(draftId, inline));
-              } catch (e) {
-                setActionError({ context: "images", error: toCoreError(e) });
-              } finally {
-                setAddingImages(false);
-              }
-            }
-            if (files.length > 0) {
-              setAttaching(true);
-              try {
-                const saved = await composeIpc.addDroppedAttachments(draftId, files);
-                setDraft((d) => ({ ...d, attachments: saved.attachments, server: saved.server, state: saved.state }));
-                checkSize();
-              } catch (e) {
-                setActionError({ context: "attach", error: toCoreError(e) });
-              } finally {
-                setAttaching(false);
-              }
-            }
-          })();
+  // Stage 23 (decision 0082): files dropped on the window while the composer is open become
+  // attachments, handed over as bytes (the page never sees a path).
+  const fileDrop = useWindowFileDrop(({ files, folders }) => {
+    if (folders.length > 0) setActionError({ context: "attach", error: folderError(folders) });
+    if (files.length === 0) return;
+    // Rich text: images go into the text (stage 10), everything else is attached.
+    const inline = latest.current.format === "html" ? files.filter((file) => isImagePath(file.name)) : [];
+    const attached = files.filter((file) => !inline.includes(file));
+    void (async () => {
+      if (inline.length > 0) {
+        setAddingImages(true);
+        try {
+          applyAdded(await composerIpc.addInlineImageFiles(draftId, inline));
+        } catch (e) {
+          setActionError({ context: "images", error: toCoreError(e) });
+        } finally {
+          setAddingImages(false);
         }
-      })
-      .then((unsubscribe) => {
-        if (active) stop = unsubscribe;
-        else unsubscribe();
-      });
-    return () => {
-      active = false;
-      stop?.();
-    };
-    // `applyAdded` and `checkSize` read refs and stable setters only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftId]);
+      }
+      if (attached.length > 0) {
+        setAttaching(true);
+        try {
+          const saved = await composeIpc.attachFiles(draftId, attached);
+          setDraft((d) => ({ ...d, attachments: saved.attachments, server: saved.server, state: saved.state }));
+          checkSize();
+        } catch (e) {
+          setActionError({ context: "attach", error: toCoreError(e) });
+        } finally {
+          setAttaching(false);
+        }
+      }
+    })();
+  });
+  const dropping = fileDrop.over;
 
   useEffect(() => {
     mounted.current = true;

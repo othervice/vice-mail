@@ -36,6 +36,9 @@ mod stage10_tests;
 mod stage19_tests;
 #[cfg(test)]
 mod stage20_tests;
+#[cfg(test)]
+mod stage23_tests;
+pub(crate) mod uploads;
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -54,7 +57,7 @@ use mail_model::{
     MAX_DRAFT_BODY_BYTES, MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SEND_DELAY_SECS,
     MAX_SUBJECT_CHARS, MailScheme, MailboxRole, MessageBody, MessageId, NewDraft, OperationId,
     OperationPayload, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition, SendJob, SendPhase,
-    SentCopyMode, ServerCopy, TextSegment, UnclearDecision,
+    SentCopyMode, ServerCopy, TextSegment, UnclearDecision, UploadId,
 };
 use mail_store::{DraftContent, GLOBAL_SCOPE, NewDraftRow, Store, StoredDraft};
 use tokio::sync::{Notify, broadcast};
@@ -64,6 +67,7 @@ use crate::clock::{Clock, SystemClock};
 use crate::core::Connector;
 use crate::outbox::{ComposeConfig, Outbox};
 use crate::reading::Reading;
+pub(crate) use uploads::SourceFile;
 
 /// Setting key of the undo delay (global scope, JSON number of seconds).
 const SEND_DELAY_KEY: &str = "compose.send_delay_seconds";
@@ -336,6 +340,8 @@ struct Inner<C: Connector> {
     clock: Arc<dyn Clock>,
     /// Stage 10: the SMTP SIZE limit per account, as last read in this session.
     limits: Mutex<HashMap<AccountId, schedule::KnownLimit>>,
+    /// Stage 23 (decision 0082): files the page hands over as bytes (dragged onto a window).
+    uploads: uploads::Uploads,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -369,6 +375,7 @@ impl<C: Connector> Compose<C> {
     ) -> Self {
         let root = files::compose_dir(&store);
         let config = outbox.compose_config().clone();
+        let uploads = uploads::Uploads::new(&root);
         Self {
             inner: Arc::new(Inner {
                 store,
@@ -382,6 +389,7 @@ impl<C: Connector> Compose<C> {
                 tasks: Mutex::default(),
                 clock,
                 limits: Mutex::default(),
+                uploads,
             }),
         }
     }
@@ -393,6 +401,11 @@ impl<C: Connector> Compose<C> {
             let lock = self.inner.outbox.files_lock();
             let _held = lock.lock().await;
             files::sweep(&self.inner.store).await;
+        }
+        // Stage 23: no upload outlives the run that began it.
+        let inner = Arc::clone(&self.inner);
+        if let Err(err) = blocking(move || inner.uploads.clear()).await {
+            tracing::warn!(error = %err, "leftover uploads not cleared");
         }
         match self.inner.store.drafts_to_save().await {
             Ok(drafts) => {
@@ -1419,11 +1432,12 @@ impl<C: Connector> Compose<C> {
         Ok(())
     }
 
-    /// Copies files into the draft (paths from the system dialog or a drop on the window).
+    /// Copies files into the draft (from the system dialog, or uploads of files dropped on a
+    /// window).
     pub(crate) async fn add_attachments(
         &self,
         id: DraftId,
-        paths: Vec<PathBuf>,
+        paths: Vec<SourceFile>,
     ) -> Result<Draft, CoreError> {
         let draft = self.stored(&id).await?;
         if draft.state != DraftState::Editing {
@@ -1442,13 +1456,9 @@ impl<C: Connector> Compose<C> {
             .max()
             .unwrap_or(0);
         let mut written: Vec<String> = Vec::new();
-        for path in paths {
+        for SourceFile { path, name } in paths {
             next += 1;
             let file_id = next.to_string();
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
             let limit = MAX_ATTACHMENT_BYTES.saturating_sub(used);
             let root = self.inner.root.clone();
             let draft_id = id.clone();
@@ -1503,6 +1513,51 @@ impl<C: Connector> Compose<C> {
         self.schedule(id.clone(), self.inner.config.draft_save_delay);
         self.drafts_changed(draft.account, vec![id], Vec::new());
         self.info(draft).await
+    }
+
+    /// Stage 23 (decision 0082): announces a file the page hands over as bytes.
+    pub(crate) async fn begin_upload(
+        &self,
+        name: String,
+        size: u64,
+    ) -> Result<UploadId, CoreError> {
+        let inner = Arc::clone(&self.inner);
+        blocking(move || inner.uploads.begin(&name, size)).await?
+    }
+
+    /// Stage 23: writes the next piece of an upload; answers the bytes written so far.
+    pub(crate) async fn append_upload(
+        &self,
+        upload: UploadId,
+        offset: u64,
+        bytes: Vec<u8>,
+    ) -> Result<u64, CoreError> {
+        let inner = Arc::clone(&self.inner);
+        blocking(move || inner.uploads.append(&upload, offset, &bytes)).await?
+    }
+
+    /// Stage 23: drops an upload the page gave up (an unknown one is no error).
+    pub(crate) async fn discard_upload(&self, upload: UploadId) -> Result<(), CoreError> {
+        let inner = Arc::clone(&self.inner);
+        blocking(move || inner.uploads.discard(&upload)).await
+    }
+
+    /// Stage 23: takes complete uploads for a command; their files go when the result is dropped.
+    pub(crate) fn take_uploads(
+        &self,
+        ids: &[UploadId],
+    ) -> Result<uploads::TakenUploads, CoreError> {
+        self.inner.uploads.take(ids)
+    }
+
+    /// Stage 23: complete uploads attached to the draft like files from the system dialog.
+    pub(crate) async fn add_uploaded_attachments(
+        &self,
+        id: DraftId,
+        uploads: Vec<UploadId>,
+    ) -> Result<Draft, CoreError> {
+        let taken = self.take_uploads(&uploads)?;
+        self.add_attachments(id, taken.files()).await
     }
 
     pub(crate) async fn remove_attachment(

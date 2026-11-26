@@ -53,6 +53,44 @@ pub const MAX_TEXT_SIGNATURE_BYTES: usize = 8 * 1024;
 /// Most contact suggestions of one autocomplete request.
 pub const MAX_CONTACT_SUGGESTIONS: u32 = 50;
 
+/// Stage 23 (decision 0082): the largest piece of a file the page hands over in one
+/// `appendFileUpload` call (decoded bytes). Files dragged onto a window come as bytes, not as
+/// paths, in pieces of this size, so neither the page nor the core holds a large file at once.
+pub const MAX_UPLOAD_CHUNK_BYTES: u64 = 2 * 1024 * 1024;
+/// Stage 23 (decision 0082): the largest file one upload may announce (no draft takes more).
+pub const MAX_UPLOAD_BYTES: u64 = MAX_ATTACHMENT_BYTES;
+
+/// Stage 23 (decision 0082): a file the page is handing over (dragged onto a window), staged by
+/// the core until a command takes it into a draft or a signature. A UUID the core drew, lower
+/// case; it never names a path.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(transparent)]
+pub struct UploadId(String);
+
+impl UploadId {
+    /// `None` unless `text` is a hyphenated UUID (any case; kept in lower case).
+    pub fn parse(text: &str) -> Option<Self> {
+        DraftId::parse(text).map(|id| Self(id.0))
+    }
+
+    /// From 128 random bits, as a UUID v4.
+    pub fn from_random(bits: u128) -> Self {
+        Self(DraftId::from_random(bits).0)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for UploadId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Id of a local draft: a UUID, lower case. Stable for the life of the draft.
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,

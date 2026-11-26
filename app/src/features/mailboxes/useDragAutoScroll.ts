@@ -1,5 +1,5 @@
 import { useEffect, useRef, type DragEvent } from "react";
-import { ACCOUNT_DRAG_TYPE, MESSAGE_DRAG_TYPE } from "../../stores/drag";
+import { isOwnDrag } from "../../stores/drag";
 
 /** How close to the column's top or bottom edge a drag starts scrolling it, in px. */
 export const AUTO_SCROLL_EDGE = 40;
@@ -56,8 +56,8 @@ export function useDragAutoScroll(): (event: DragEvent<HTMLElement>) => void {
   }, []);
 
   return (event) => {
-    const { types } = event.dataTransfer;
-    if (!types.includes(MESSAGE_DRAG_TYPE) && !types.includes(ACCOUNT_DRAG_TYPE)) return;
+    // Stage 23: the store knows the page's own drags (WebKit may hide their types until the drop).
+    if (!isOwnDrag(event, "rows") && !isOwnDrag(event, "account")) return;
     const box = event.currentTarget.getBoundingClientRect();
     const scrolling = state.current;
     scrolling.node = event.currentTarget;

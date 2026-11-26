@@ -1,20 +1,19 @@
 //! Stage 10 (decision 0023): inline images of a draft.
 //!
 //! An inline image is a draft file with a Content-ID: copied in like an attachment (from a path
-//! the shell took from the system dialog or a drop on the window, never one the page made up),
+//! the shell took from the system dialog, or an upload of a file dropped on a window, decision
+//! 0082; never a path the page named),
 //! checked to be a PNG, JPEG, GIF or WebP by its bytes (never SVG), and shown by the editor as
 //! `<img src="cid:…">` with the data the core hands out ([`Compose::inline_image_data`]). It
 //! goes out as a part of `multipart/related`, and only while the HTML still shows it. The size
 //! the user drags to is the `width`/`height` of the `img` element.
 
-use std::path::PathBuf;
-
 use mail_model::{
     CoreError, DraftError, DraftFile, DraftId, DraftState, InlineImagesAdded, MAX_ATTACHMENT_BYTES,
-    MAX_ATTACHMENTS, MAX_INLINE_IMAGE_BYTES,
+    MAX_ATTACHMENTS, MAX_INLINE_IMAGE_BYTES, UploadId,
 };
 
-use super::{Compose, blocking, files};
+use super::{Compose, SourceFile, blocking, files};
 use crate::core::Connector;
 
 /// Raster types an inline image may have.
@@ -34,11 +33,22 @@ pub(super) fn content_id_domain(email: &str) -> String {
 }
 
 impl<C: Connector> Compose<C> {
+    /// Stage 23 (decision 0082): complete uploads added as inline images, like files from the
+    /// system dialog.
+    pub(crate) async fn add_uploaded_inline_images(
+        &self,
+        id: DraftId,
+        uploads: Vec<UploadId>,
+    ) -> Result<InlineImagesAdded, CoreError> {
+        let taken = self.take_uploads(&uploads)?;
+        self.add_inline_images(id, taken.files()).await
+    }
+
     /// Copies image files into the draft as inline images.
     pub(crate) async fn add_inline_images(
         &self,
         id: DraftId,
-        paths: Vec<PathBuf>,
+        paths: Vec<SourceFile>,
     ) -> Result<InlineImagesAdded, CoreError> {
         let draft = self.stored(&id).await?;
         if draft.state != DraftState::Editing {
@@ -77,13 +87,9 @@ impl<C: Connector> Compose<C> {
                 files::remove_file(&self.inner.root, relative);
             }
         };
-        for path in paths {
+        for SourceFile { path, name } in paths {
             next += 1;
             let file_id = next.to_string();
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
             let limit = MAX_INLINE_IMAGE_BYTES.min(MAX_ATTACHMENT_BYTES.saturating_sub(used));
             let root = self.inner.root.clone();
             let draft_id = id.clone();

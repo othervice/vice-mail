@@ -22,13 +22,14 @@ use mail_model::{
     MAX_SIGNATURE_IMAGES_BYTES, MAX_SNIPPET_NAME_CHARS, MAX_TEMPLATE_RECIPIENTS, QuoteLanguage,
     SanitizeReport, SavedSignature, SavedTemplate, SignatureId, SignatureImageData,
     SignatureImageInfo, SignatureInfo, SignatureInput, TemplateFillProblem, TemplateId,
-    TemplateInfo, TemplateInput,
+    TemplateInfo, TemplateInput, UploadId,
 };
 use mail_store::{
     SignatureRow, Store, StoreError, StoredDraft, StoredSignature, StoredSignatureImage,
     StoredTemplate, TemplateRow,
 };
 
+use super::SourceFile;
 use super::build::Sender;
 use crate::AppCore;
 use crate::core::Connector;
@@ -321,7 +322,8 @@ fn image_bytes(image: &StoredSignatureImage) -> u64 {
 
 /// Reads an image file for a signature: at most [`MAX_SIGNATURE_IMAGE_BYTES`], a raster type
 /// recognised from the bytes (the extension is not trusted).
-fn read_image(path: &std::path::Path) -> Result<(String, &'static str, Vec<u8>), CoreError> {
+fn read_image(file: &SourceFile) -> Result<(String, &'static str, Vec<u8>), CoreError> {
+    let path = &file.path;
     let io = |err: std::io::Error| CoreError::InvalidArgument(format!("image unreadable: {err}"));
     let size = std::fs::metadata(path).map_err(io)?.len();
     if size > MAX_SIGNATURE_IMAGE_BYTES {
@@ -345,11 +347,11 @@ fn read_image(path: &std::path::Path) -> Result<(String, &'static str, Vec<u8>),
                 "a signature image is a PNG, JPEG, GIF or WebP picture".into(),
             )
         })?;
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    Ok((mail_content::sanitize_filename(&name), kind.mime(), bytes))
+    Ok((
+        mail_content::sanitize_filename(&file.name),
+        kind.mime(),
+        bytes,
+    ))
 }
 
 fn new_content_id() -> String {
@@ -482,13 +484,33 @@ impl<C: Connector> AppCore<C> {
         Ok(defaults_info(defaults))
     }
 
-    /// Adds images to a signature from files (paths from the system dialog or a drop on the
-    /// window, never from the page). Returns the signature; the new images' content ids are the
-    /// last ones of `images`. They stay only if the next save shows them.
+    /// Adds images to a signature from files (paths from the system dialog, never from the
+    /// page). Returns the signature; the new images' content ids are the last ones of `images`.
+    /// They stay only if the next save shows them.
     pub async fn add_signature_images(
         &self,
         id: SignatureId,
         paths: Vec<PathBuf>,
+    ) -> Result<SignatureInfo, CoreError> {
+        let files = paths.into_iter().map(SourceFile::from_path).collect();
+        self.add_signature_files(id, files).await
+    }
+
+    /// Stage 23 (decision 0082): complete uploads (image files dropped on the window, handed
+    /// over as bytes) added like images from the system dialog; they are used up either way.
+    pub async fn add_uploaded_signature_images(
+        &self,
+        id: SignatureId,
+        uploads: Vec<UploadId>,
+    ) -> Result<SignatureInfo, CoreError> {
+        let taken = self.compose_ref()?.take_uploads(&uploads)?;
+        self.add_signature_files(id, taken.files()).await
+    }
+
+    async fn add_signature_files(
+        &self,
+        id: SignatureId,
+        paths: Vec<SourceFile>,
     ) -> Result<SignatureInfo, CoreError> {
         let stored = self.require_signature(&id).await?;
         if stored.images.len() + paths.len() > MAX_SIGNATURE_IMAGES {
@@ -497,10 +519,7 @@ impl<C: Connector> AppCore<C> {
             )));
         }
         let read = tokio::task::spawn_blocking(move || {
-            paths
-                .iter()
-                .map(|path| read_image(path))
-                .collect::<Result<Vec<_>, _>>()
+            paths.iter().map(read_image).collect::<Result<Vec<_>, _>>()
         })
         .await
         .map_err(|err| CoreError::Internal(format!("reading images failed: {err}")))??;

@@ -141,6 +141,19 @@ export interface ComposeFakeState {
   setOutgoing: (operationId: number, patch: Partial<OutgoingMail>) => OutgoingMail;
   /** Ids the user discarded. */
   readonly deleted: readonly string[];
+  /** Stage 23: files handed over as bytes and not yet taken (by upload id). */
+  readonly uploads: ReadonlyMap<string, FakeUpload>;
+  /** Stage 23: takes complete uploads, as the core does; null if one is unknown or incomplete. */
+  takeUploads: (ids: readonly string[]) => FakeUpload[] | null;
+}
+
+/** Stage 23 (decision 0082): a file the page hands over in pieces. */
+export interface FakeUpload {
+  name: string;
+  size: number;
+  written: number;
+  /** The decoded bytes as a string of char codes (enough to compare in tests). */
+  bytes: string;
 }
 
 interface Deps {
@@ -158,6 +171,14 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
   const requests = new Map<string, OutgoingMail>();
   const deleted: string[] = [];
   let nextOperation = 900;
+  const uploads = new Map<string, FakeUpload>();
+  let nextUpload = 1;
+  const takeUploads = (ids: readonly string[]): FakeUpload[] | null => {
+    const taken = ids.map((id) => uploads.get(id));
+    if (taken.some((upload) => !upload || upload.written !== upload.size)) return null;
+    for (const id of ids) uploads.delete(id);
+    return taken as FakeUpload[];
+  };
 
   const identitiesOf = (accountId: string): ComposeIdentity[] => {
     const known = identities.get(accountId);
@@ -346,16 +367,38 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
         const picked = (options.picked ?? []).filter((p) => !draft.attachments.some((a) => a.id === p.id));
         return store({ ...draft, attachments: [...draft.attachments, ...picked] });
       }
-      case "add_dropped_attachments": {
+      // Stage 23 (decision 0082): files dropped on a window, handed over as bytes.
+      case "begin_file_upload": {
+        const id = `upload-${String(nextUpload++)}`;
+        uploads.set(id, { name: args["name"] as string, size: args["size"] as number, written: 0, bytes: "" });
+        return id;
+      }
+      case "append_file_upload": {
+        const upload = uploads.get(args["uploadId"] as string);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!upload) return Promise.reject(composeError("not_found"));
+        const piece = atob(args["piece"] as string);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (args["offset"] !== upload.written || upload.written + piece.length > upload.size) return Promise.reject(composeError("invalid_argument"));
+        upload.written += piece.length;
+        upload.bytes += piece;
+        return upload.written;
+      }
+      case "discard_file_upload":
+        uploads.delete(args["uploadId"] as string);
+        return null;
+      case "add_uploaded_attachments": {
         const draft = get(args["draftId"]);
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         if (!draft) return Promise.reject(composeError("not_found"));
-        const paths = args["paths"] as string[];
-        const added = paths.map((path, i) => ({
+        const taken = takeUploads(args["uploads"] as string[]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!taken) return Promise.reject(composeError("not_found"));
+        const added = taken.map((upload, i) => ({
           id: `drop-${String(draft.attachments.length + i)}`,
-          fileName: path.split("/").pop() ?? path,
+          fileName: upload.name,
           mime: "application/octet-stream",
-          size: 1000,
+          size: upload.size,
           contentId: null,
         }));
         return store({ ...draft, attachments: [...draft.attachments, ...added] });
@@ -530,18 +573,21 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
         return check;
       }
       case "pick_inline_images":
-      case "add_dropped_inline_images": {
+      case "add_uploaded_inline_images": {
         const draft = get(args["draftId"]);
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         if (!draft) return Promise.reject(composeError("not_found"));
+        const taken = cmd === "pick_inline_images" ? [] : takeUploads(args["uploads"] as string[]);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        if (!taken) return Promise.reject(composeError("not_found"));
         const added: DraftAttachment[] =
           cmd === "pick_inline_images"
             ? (options.pickedImages ?? []).filter((p) => !draft.attachments.some((a) => a.id === p.id))
-            : (args["paths"] as string[]).map((path, i) => ({
+            : taken.map((upload, i) => ({
                 id: `img-drop-${String(draft.attachments.length + i)}`,
-                fileName: path.split("/").pop() ?? path,
+                fileName: upload.name,
                 mime: "image/png",
-                size: 1000,
+                size: upload.size,
                 contentId: `drop${String(draft.attachments.length + i)}@vicemail.test`,
               }));
         const next = store({ ...draft, attachments: [...draft.attachments, ...added] });
@@ -573,6 +619,10 @@ export function createComposeFake(options: ComposeFakeOptions, deps: Deps) {
     get drafts() {
       return drafts;
     },
+    get uploads() {
+      return uploads;
+    },
+    takeUploads,
     get outgoing() {
       return outgoing;
     },

@@ -375,7 +375,8 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   no question (Option or Ctrl copies) and undoes each batch on its own: a transfer only while its
   `append` still waits. Server test in `crates/mail-engine/tests/drop.rs`.
 - Stage 22 (0078), **accounts:** `reorderAccounts(ids)` gives every account a fresh `position`
-  above all earlier ones (so the account records carry the newer order as a whole);
+  above all earlier ones (so the account records carry the newer order as a whole; stage 23,
+  0082: the UI drags accounts in the column and in the narrow rail);
   `renameAccount(id, name)` sets the list name (trimmed, at most 100 characters, no control
   characters). The AI writes replies from the default identity's sender name, never from the
   list name; new accounts start with an empty list name, the setup's name becomes the first
@@ -611,7 +612,7 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   (paragraphs, headings h1–h3, alignment, emphasis, lists, quotes, code, links only
   `http`/`https`/`mailto`). Images only as `cid:` with strict Content-ID syntax, and only in the
   app's own editor content; their bytes are read by the core from files the user
-  chose in the system dialog or dragged onto the window. Pasted HTML (Word, web pages) is cleaned by the core
+  chose in the system dialog or dragged onto the window (handed over as bytes, stage 23, 0082). Pasted HTML (Word, web pages) is cleaned by the core
   (`cleanPastedHtml`): no script, no style, no image, no external reference.
 - Stage 21 (0067): outgoing HTML carries no text or background colour (the editor offers none,
   pasted and quoted colours never reach the model; code blocks have a grey line, not a light
@@ -815,6 +816,22 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   the refresh token is revoked first.
 
 **Files**
+- Stage 23 (0082): no window has Tauri's drag-and-drop handler (`windows::guard` calls
+  `disable_drag_drop_handler()`, `tauri.conf.json` says `dragDropEnabled: false`): it reported
+  every drag as handled, so WKWebView never got `dragover`/`drop` and WebView2 lost HTML drag and
+  drop altogether. The page's own drags (accounts, mail onto folders, inside the editor) work, and a
+  file dragged in from the Finder or the Explorer reaches the page as an HTML `File`. No command
+  takes a file path from the page (a test walks the bindings): the page hands the bytes over in
+  pieces (`beginFileUpload(name, size)` → upload id the core drew, `appendFileUpload(id, offset,
+  base64)` at most `MAX_UPLOAD_CHUNK_BYTES` = 2 MiB decoded each, `discardFileUpload`), staged in
+  `compose/uploads/<id>` (a path from the id only), and `addUploadedAttachments`,
+  `addUploadedInlineImages` and `addUploadedSignatureImages` take the complete uploads like files
+  from the system dialog, with the same limits and checks (`compose::uploads`, `SourceFile`). One
+  upload at most `MAX_UPLOAD_BYTES` (100 MiB), at most 100 open and 200 MiB announced at a time;
+  taken, discarded or 10 minutes idle uploads are removed, a start removes them all. The page owns
+  file drags at the window (`components/fileDrop.ts`, capture phase): the composer or the
+  signature editor takes them while open, elsewhere a drop is refused and still handled, so the
+  web view never opens a file; drags that started in the page never count as files.
 - File names of attachments are sanitised: no path separators, no reserved Windows names,
   no control characters, no direction-reversal characters. Writing happens only to the location the
   user chooses in the system dialog.
@@ -1206,6 +1223,7 @@ Until the UI has been switched over, these values are still kept in the marked f
 | No pictures or initials anywhere; rows start with a narrow mark column, mixed lists keep the account's colour dot and name, also while the quick actions show (0072) | the user found the initials useless and their space wasted; nobody set pictures. The unread dot, the selection box and the account colour keep a place of their own | restore `Avatar` and the stage 17 picture code from history; the dropped pictures do not come back |
 | The account's `display_name` is its name in the lists, with a `position` of the user's order (0078) | nothing outgoing reads it once the AI takes the identity's sender name; one field instead of a second, dead name; positions written fresh on each move make the per-field sync keep one order | a separate list-name column with its own sync field |
 | Drag from any list onto any folder; dropping moves without a question, Option/Ctrl copies; the rail's Inbox/Archive/Trash mean each row's own account (0081) | the drop is the answer, as in every mail program; rows of "All inboxes" never cross accounts by accident on the rail; one core command sorts mixed rows | open the 0033 dialog again for other accounts' rows |
+| No drag-and-drop handler of the shell; files dragged onto a window come as bytes in pieces, never as paths (0082) | Tauri's handler swallowed every drag inside the page on macOS and turned HTML drag and drop off on Windows; a page that never names a path is safer than the drop registry of 0018; pieces keep large files out of memory | a fork of `tauri-runtime-wry` whose handler returns `false` for drags without files (Windows still loses WebView2's drop target) |
 | Settings search over a static index of i18n keys, rows found by their rendered title (0073) | no second copy of the texts, searchable in the UI's language without rendering every section; a test renders every section and fails for a row missing from the index | drop the field; the anchors are plain data attributes |
 | "Mark folder as read" as one outbox operation per folder on the stored unread UIDs (0063) | thousands of unread mails would be thousands of `set_flag` rows and (with CONDSTORE) one STORE per MODSEQ; `1:*` would also mark mail the user never saw; undo stays exact | per-message `markRead` on all unread locations (capped at 10,000 per action) |
 | Gmail via IMAP with its extensions instead of the Gmail API (0034) | labels, one mail via `X-GM-MSGID` and archiving work with the existing adapter, without a Google project | Gmail API in block C |

@@ -35,6 +35,15 @@ export interface DragSession {
   drop: (target: DropTarget, mode: DropMode) => void;
 }
 
+/**
+ * Stage 23: where a dragged account goes, shown as a line: before `target`, or after it (only
+ * after the last account of a list).
+ */
+export interface AccountPlace {
+  target: AccountId;
+  side: "before" | "after";
+}
+
 /** What a folder under the dragged rows says while they are over it (`DropHint`). */
 export interface DropHover {
   /** Which drop target this is (only that target clears it again). */
@@ -51,23 +60,90 @@ interface DragState {
   hover: DropHover | null;
   /** Stage 22 (decision 0078): the account heading being dragged to another place. */
   account: AccountId | null;
+  /** Stage 23: where it would go if let go now (the line), or null (no line, no drop). */
+  accountPlace: AccountPlace | null;
   start: (session: DragSession) => void;
   end: () => void;
   setHover: (hover: DropHover) => void;
   clearHover: (id: string) => void;
   startAccount: (account: AccountId) => void;
   endAccount: () => void;
+  setAccountPlace: (place: AccountPlace | null) => void;
 }
+
+/**
+ * Stage 23: whether a drag event belongs to the drag this page started and the store holds (rows
+ * or an account). The store, not the event's types, decides: WebKit may keep custom types hidden
+ * until the drop. Files from outside never count.
+ */
+export function isOwnDrag(event: { dataTransfer: DataTransfer | null }, kind: "rows" | "account"): boolean {
+  const { session, account } = useDragStore.getState();
+  const own = kind === "rows" ? session !== null : account !== null;
+  return own && !Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+/**
+ * Stage 23: a drag whose source vanished (rows that left the list, no `dragend`) must not stay in
+ * the store: every new drag or press starts clean. Installed once per page, before the first
+ * render; the listeners run before the elements' own (capture phase on the window).
+ */
+export function installDragReset(target: Window = window): void {
+  const reset = () => {
+    const state = useDragStore.getState();
+    if (state.session) state.end();
+    if (state.account) state.endAccount();
+  };
+  target.addEventListener("dragstart", reset, true);
+  target.addEventListener("mousedown", reset, true);
+}
+
+/** Marks the elements that take a dragged account (the column's accounts, the rail's dots). */
+export const ACCOUNT_DROP_ZONE = "data-account-drop-zone";
+
+/**
+ * While an account is dragged (stage 23): the line goes when the pointer leaves every list of
+ * accounts (no `dragleave` needed, which WebKit reports without `relatedTarget`), and Escape
+ * cancels the drag in the page as well (the system's drag ends on its own).
+ */
+function accountDragListeners(): { install: () => void; remove: () => void } {
+  const over = (event: DragEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest(`[${ACCOUNT_DROP_ZONE}]`)) useDragStore.getState().setAccountPlace(null);
+  };
+  const key = (event: KeyboardEvent) => {
+    if (event.key === "Escape") useDragStore.getState().endAccount();
+  };
+  return {
+    install: () => {
+      window.addEventListener("dragover", over, true);
+      window.addEventListener("keydown", key, true);
+    },
+    remove: () => {
+      window.removeEventListener("dragover", over, true);
+      window.removeEventListener("keydown", key, true);
+    },
+  };
+}
+const accountListeners = accountDragListeners();
 
 export const useDragStore = create<DragState>()((set) => ({
   session: null,
   hover: null,
   account: null,
+  accountPlace: null,
   startAccount: (account) => {
-    set({ account });
+    accountListeners.remove();
+    accountListeners.install();
+    set({ account, accountPlace: null });
   },
   endAccount: () => {
-    set({ account: null });
+    accountListeners.remove();
+    set({ account: null, accountPlace: null });
+  },
+  setAccountPlace: (place) => {
+    set((state) =>
+      state.accountPlace?.target === place?.target && state.accountPlace?.side === place?.side ? state : { accountPlace: place },
+    );
   },
   start: (session) => {
     set({ session, hover: null });

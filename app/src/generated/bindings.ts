@@ -376,10 +376,22 @@ export const commands = {
 	/**  Lets the user pick files in the system dialog and attaches them; cancelling changes nothing. */
 	pickAttachments: (draftId: DraftId, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("pick_attachments", { draftId }, options)),
 	/**
-	 *  Attaches files dropped on the window: only paths of a drop the shell saw itself, shortly
-	 *  before (`invalid_argument` otherwise; see `drops.rs`).
+	 *  Stage 23 (decision 0082): announces a file dropped on a window, which the page hands over as
+	 *  bytes: its name (only the name is kept) and its size. Answers the id its pieces go to.
 	 */
-	addDroppedAttachments: (draftId: DraftId, paths: string[], options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("add_dropped_attachments", { draftId, paths }, options)),
+	beginFileUpload: (name: string, size: number, options?: InvokeOptions) => typedError<UploadId, IpcError>(__TAURI_INVOKE("begin_file_upload", { name, size }, options)),
+	/**
+	 *  Stage 23: the next piece of an upload as base64 (at most `MAX_UPLOAD_CHUNK_BYTES` decoded),
+	 *  at `offset` = the bytes written so far. Answers the bytes written now.
+	 */
+	appendFileUpload: (uploadId: UploadId, offset: number, piece: string, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("append_file_upload", { uploadId, offset, piece }, options)),
+	/**  Stage 23: drops an upload the page gave up (an unknown one is no error). */
+	discardFileUpload: (uploadId: UploadId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("discard_file_upload", { uploadId }, options)),
+	/**
+	 *  Stage 23: complete uploads attached like files from the system dialog (same limits); they
+	 *  are used up either way.
+	 */
+	addUploadedAttachments: (draftId: DraftId, uploads: UploadId[], options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("add_uploaded_attachments", { draftId, uploads }, options)),
 	removeDraftAttachment: (draftId: DraftId, attachmentId: string, options?: InvokeOptions) => typedError<Draft, IpcError>(__TAURI_INVOKE("remove_draft_attachment", { draftId, attachmentId }, options)),
 	/**  Queues the draft for sending after the undo delay. `requestId` is a UUID per press of "send". */
 	sendDraft: (draftId: DraftId, requestId: string, options?: InvokeOptions) => typedError<OutgoingMail, IpcError>(__TAURI_INVOKE("send_draft", { draftId, requestId }, options)),
@@ -440,10 +452,10 @@ export const commands = {
 	 */
 	pickInlineImages: (draftId: DraftId, options?: InvokeOptions) => typedError<InlineImagesAdded, IpcError>(__TAURI_INVOKE("pick_inline_images", { draftId }, options)),
 	/**
-	 *  Adds images dropped on the window as inline images: only paths of a drop the shell saw
-	 *  itself, shortly before (`invalid_argument` otherwise; see `drops.rs`).
+	 *  Stage 23 (decision 0082): images dropped on a window, handed over as uploads, added as
+	 *  inline images with the checks of picked ones; the uploads are used up either way.
 	 */
-	addDroppedInlineImages: (draftId: DraftId, paths: string[], options?: InvokeOptions) => typedError<InlineImagesAdded, IpcError>(__TAURI_INVOKE("add_dropped_inline_images", { draftId, paths }, options)),
+	addUploadedInlineImages: (draftId: DraftId, uploads: UploadId[], options?: InvokeOptions) => typedError<InlineImagesAdded, IpcError>(__TAURI_INVOKE("add_uploaded_inline_images", { draftId, uploads }, options)),
 	/**  An inline image of a draft as a `data:` URL, for showing it in the editor. */
 	inlineImageData: (draftId: DraftId, attachmentId: string, options?: InvokeOptions) => typedError<string, IpcError>(__TAURI_INVOKE("inline_image_data", { draftId, attachmentId }, options)),
 	/**  Cleans HTML pasted into the editor (Word, web pages): no script, no external reference. */
@@ -500,10 +512,10 @@ export const commands = {
 	 */
 	pickSignatureImages: (signatureId: SignatureId, options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("pick_signature_images", { signatureId }, options)),
 	/**
-	 *  Adds images dropped on the window: only paths of a drop the shell saw itself, shortly
-	 *  before (`invalid_argument` otherwise; see `drops.rs`).
+	 *  Stage 23 (decision 0082): images dropped on the window, handed over as uploads, added with
+	 *  the checks of picked ones; the uploads are used up either way.
 	 */
-	addDroppedSignatureImages: (signatureId: SignatureId, paths: string[], options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("add_dropped_signature_images", { signatureId, paths }, options)),
+	addUploadedSignatureImages: (signatureId: SignatureId, uploads: UploadId[], options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("add_uploaded_signature_images", { signatureId, uploads }, options)),
 	removeSignatureImage: (signatureId: SignatureId, contentId: string, options?: InvokeOptions) => typedError<SignatureInfo, IpcError>(__TAURI_INVOKE("remove_signature_image", { signatureId, contentId }, options)),
 	/**  The signature's images as `data:` URLs, to show them in the editor in place of `cid:`. */
 	signatureImageData: (signatureId: SignatureId, options?: InvokeOptions) => typedError<SignatureImageData[], IpcError>(__TAURI_INVOKE("signature_image_data", { signatureId }, options)),
@@ -1069,6 +1081,10 @@ export const MAX_TABLE_COLUMN_WIDTH = 800 as const;
 export const MAX_TEXT_SIZE = 150 as const;
 
 export const MAX_THREAD_MESSAGES = 1000 as const;
+
+export const MAX_UPLOAD_BYTES = 104857600 as const;
+
+export const MAX_UPLOAD_CHUNK_BYTES = 2097152 as const;
 
 export const MCP_ACCESS_MAX_ENTRIES = 10000 as const;
 
@@ -6253,6 +6269,13 @@ export type UpdateStatus =
 { state: "installing"; version: string } | 
 /**  The last step failed. `version` is the update it concerned, if one was found. */
 { state: "failed"; version: string | null; error: IpcError };
+
+/**
+ *  Stage 23 (decision 0082): a file the page is handing over (dragged onto a window), staged by
+ *  the core until a command takes it into a draft or a signature. A UUID the core drew, lower
+ *  case; it never names a path.
+ */
+export type UploadId = string;
 
 /**  What an export wrote; `cancelled` when the user closed the save dialog. */
 export type VcardExportOutcome = { kind: "cancelled" } | { kind: "saved"; path: string; cards: number };

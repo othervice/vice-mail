@@ -1,11 +1,10 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { emit } from "@tauri-apps/api/event";
-import { mockWindows } from "@tauri-apps/api/mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SignatureInput, TemplateInput } from "../src/services/ipc";
 import { useUiStore } from "../src/stores/ui";
 import { makeIdentity } from "./support/compose";
 import { ipcError, makeAccount, makeMessages, mockCore, standardMailboxes, type Failure } from "./support/core";
+import { dragFilesOver, dropFiles, fileTransfer } from "./support/fileDrop";
 import { renderApp } from "./support/render";
 import { makeSignature, makeTemplate, type SnippetsFakeOptions } from "./support/snippets";
 
@@ -132,23 +131,16 @@ describe("signatures (Settings → Writing)", () => {
 
   it("image files dropped on the window while a signature is edited go into it", async () => {
     const { core, user } = await openWriting({ snippets: { signatures: [makeSignature()] } });
-    mockWindows("main");
     await user.click(await screen.findByRole("button", { name: "Edit signature Work" }));
     const editor = await screen.findByTestId("signature-editor");
-    const paths = ["/Users/ada/logo.png"];
-    // The listener of the shell's drag-and-drop event is registered asynchronously.
-    await waitFor(async () => {
-      await act(async () => {
-        await emit("tauri://drag-enter", { paths, position: { x: 10, y: 10 } });
-      });
-      expect(within(editor).getByTestId("signature-drop-hint")).toBeTruthy();
-    });
-    await act(async () => {
-      await emit("tauri://drag-drop", { paths, position: { x: 10, y: 10 } });
-    });
+    const transfer = fileTransfer([new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "logo.png", { type: "image/png" })]);
+    dragFilesOver(editor, transfer);
+    expect(await within(editor).findByTestId("signature-drop-hint")).toBeTruthy();
+    expect(dropFiles(editor, transfer)).toBe(true);
     await waitFor(() => {
-      expect(core.callsOf("add_dropped_signature_images")).toEqual([{ signatureId: "sig-1", paths }]);
+      expect(core.callsOf("add_uploaded_signature_images")).toEqual([{ signatureId: "sig-1", uploads: ["upload-1"] }]);
     });
+    expect(core.callsOf("begin_file_upload")).toEqual([{ name: "logo.png", size: 4 }]);
     expect(within(await within(editor).findByTestId("signature-images")).getByText("logo.png")).toBeTruthy();
     expect(within(editor).queryByTestId("signature-drop-hint")).toBeNull();
   });

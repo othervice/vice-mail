@@ -7,7 +7,7 @@
 // 2. Search: by name, by address and by domain, in the contacts view.
 // 3. No pictures (stage 22, decision 0072): the contact's page, the contact list and the inbox row
 //    of Grace's mail show no picture and no initials; a PNG dropped on the window while the contact
-//    is open (the e2e hook records the drop and announces it as the system does) changes nothing.
+//    is open (as an HTML file, stage 23) changes nothing.
 // 4. Mark as spam: Pushy is blocked, the two messages go to Junk on the server through the
 //    outbox; "Undo" unblocks and brings them back to the inbox.
 // 5. No CSP violation in the main frame during all of it.
@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, invoke, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -237,10 +237,22 @@ describe("stage 17: contacts", () => {
     assert.equal(open.detail.picture, null, "the contact's page shows a picture");
     assert.equal(open.detail.pictureArea, false, "the contact's page has a picture area");
     assert.equal(open.rows.find((r) => r.key === GRACE_ADDRESS)?.picture ?? null, null, "the list shows a picture");
-    const file = path.join(workDir, "grace.png");
-    fs.writeFileSync(file, png(900, 600));
-    const dropped = await invoke("e2e_drop_files", { paths: [file] });
-    assert.ok(!("failure" in dropped), JSON.stringify(dropped));
+    // Stage 23 (decision 0082): a file from outside reaches the page as an HTML `File`; dropped
+    // here, where nothing takes files, it is refused and nothing opens.
+    const dropped = await browser.execute((base64) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], "grace.png", { type: "image/png" }));
+      const target = document.querySelector("main") ?? document.body;
+      const fire = (kind) => {
+        const event = new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: 400, clientY: 300 });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      const over = fire("dragover");
+      return { over, dropEffect: transfer.dropEffect, drop: fire("drop"), location: window.location.pathname };
+    }, png(900, 600).toString("base64"));
+    assert.equal(dropped.dropEffect, "none", JSON.stringify(dropped));
+    assert.equal(dropped.drop, true, "the page handles the drop, so the web view opens nothing");
     await browser.pause(1000);
     const after = await viewState();
     assert.equal(after.cropper, null, "a cropper opened");

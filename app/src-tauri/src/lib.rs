@@ -10,7 +10,6 @@ mod backdrop;
 mod badge;
 pub mod commands;
 mod default_app;
-pub mod drops;
 #[cfg(feature = "e2e")]
 mod e2e;
 mod eml_files;
@@ -181,7 +180,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::compose::list_drafts,
             commands::compose::open_draft_from_message,
             commands::compose::pick_attachments::<tauri::Wry>,
-            commands::compose::add_dropped_attachments,
+            // Stage 23 (decision 0082): files dropped on a window come as bytes.
+            commands::compose::begin_file_upload,
+            commands::compose::append_file_upload,
+            commands::compose::discard_file_upload,
+            commands::compose::add_uploaded_attachments,
             commands::compose::remove_draft_attachment,
             commands::compose::send_draft,
             commands::compose::cancel_send,
@@ -206,7 +209,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::composer::resolve_missed_send,
             commands::composer::check_draft_size,
             commands::composer::pick_inline_images::<tauri::Wry>,
-            commands::composer::add_dropped_inline_images,
+            commands::composer::add_uploaded_inline_images,
             commands::composer::inline_image_data,
             commands::composer::clean_pasted_html,
             commands::contacts::list_contacts,
@@ -229,7 +232,7 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::snippets::get_identity_signature_defaults,
             commands::snippets::set_identity_signature_defaults,
             commands::snippets::pick_signature_images::<tauri::Wry>,
-            commands::snippets::add_dropped_signature_images,
+            commands::snippets::add_uploaded_signature_images,
             commands::snippets::remove_signature_image,
             commands::snippets::signature_image_data,
             commands::snippets::list_templates,
@@ -467,6 +470,15 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         .constant(
             "LARGE_ATTACHMENT_WARNING_BYTES",
             u32::try_from(mail_model::LARGE_ATTACHMENT_WARNING_BYTES).unwrap_or(u32::MAX),
+        )
+        // Stage 23 (decision 0082): files dropped on a window are handed over in pieces.
+        .constant(
+            "MAX_UPLOAD_BYTES",
+            u32::try_from(mail_model::MAX_UPLOAD_BYTES).unwrap_or(u32::MAX),
+        )
+        .constant(
+            "MAX_UPLOAD_CHUNK_BYTES",
+            u32::try_from(mail_model::MAX_UPLOAD_CHUNK_BYTES).unwrap_or(u32::MAX),
         )
         .constant("MAX_ATTACHMENTS", mail_model::MAX_ATTACHMENTS)
         .constant(
@@ -977,8 +989,6 @@ fn attach_core<R: Runtime>(app: &AppHandle<R>, specta: &Builder<R>, core: AppCor
     specta.mount_events(app);
     events::forward(app.clone(), core.subscribe());
     app.manage(core);
-    // Stage 5: paths of files dropped on the window (see `drops`).
-    app.manage(drops::DropRegistry::default());
     // Stage 22: what each window's page has behind it (decision 0079).
     app.manage(backdrop::Backdrops::default());
 }
@@ -1021,8 +1031,8 @@ pub(crate) fn open_main_window<R: Runtime>(
         backdrop::style(builder, backdrop::current(), backdrop::Reach::Page);
     let window = windows::guard(builder, app).build()?;
     backdrop::remember(app, &window, page_backdrop);
-    // Stage 5: remember what the user drops on the window; on Windows the frame guard.
-    windows::finish(app, &window)?;
+    // On Windows the frame guard and the window icon.
+    windows::finish(&window)?;
     // Stage 21: closing it keeps the app running; requests wait for its page; links of a new
     // page are taken again; the counter is drawn on its taskbar button.
     lifecycle::follow_main_window(app, &window);

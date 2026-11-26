@@ -282,7 +282,7 @@ fn open<R: Runtime>(app: &AppHandle<R>, popup: &NewMailPopup) -> tauri::Result<W
     // only the creation shows a window without activating it.
     .visible(cfg!(windows));
     let window = windows::guard(builder, app).build()?;
-    windows::finish(app, &window)?;
+    windows::finish(&window)?;
     if let Ok(theme) = window.theme() {
         let _ = window.set_background_color(Some(background(theme)));
     }

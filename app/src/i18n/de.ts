@@ -4652,6 +4652,7 @@ export const de: Translation = {
     tooLong: "Höchstens {{max}} Zeichen.",
     failed: "Das Konto konnte nicht geändert werden.",
     dragHint: "Zieh das Konto an eine andere Stelle oder nimm „Nach oben“ und „Nach unten“ in seinem Menü (Alt+Pfeil hoch, Alt+Pfeil runter).",
+    railDragHint: "Zieh das Konto an eine andere Stelle oder drück Alt+Pfeil hoch bzw. Alt+Pfeil runter.",
     moveUpNamed: "{{name}} nach oben",
     moveDownNamed: "{{name}} nach unten",
     listName: "Name in der Liste",

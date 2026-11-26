@@ -172,7 +172,6 @@ pub fn install(
             e2e_native_mouse_event,
             e2e_opened,
             e2e_invoked,
-            e2e_drop_files,
             e2e_advance_clock,
             e2e_dialog_answers,
             e2e_quit,
@@ -437,34 +436,6 @@ pub async fn e2e_native_mouse_event(
 #[tauri::command]
 pub fn e2e_opened() -> Vec<String> {
     OPENER.opened()
-}
-
-/// Stage 17: a drop of `paths` on the calling window, as the system makes it (WebDriver cannot
-/// drag files from the Finder): recorded like the window's `DragDrop` event records it, and
-/// announced to the page as Tauri announces a drop (`tauri://drag-drop` to this webview). The
-/// app's commands then take the paths like any drop (`drops.rs`).
-#[tauri::command]
-pub fn e2e_drop_files(
-    window: WebviewWindow,
-    drops: tauri::State<'_, crate::drops::DropRegistry>,
-    paths: Vec<String>,
-) -> Result<(), String> {
-    use tauri::{Emitter, EventTarget};
-    let paths: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
-    drops.record(&paths);
-    let label = window.label().to_owned();
-    window
-        .emit_filter(
-            "tauri://drag-drop",
-            serde_json::json!({ "paths": paths, "position": { "x": 0.0, "y": 0.0 } }),
-            |target| match target {
-                EventTarget::Webview { label: l } | EventTarget::WebviewWindow { label: l } => {
-                    *l == label
-                }
-                _ => false,
-            },
-        )
-        .map_err(|err| err.to_string())
 }
 
 /// Stage 20: the system clock plus an offset the desktop test moves forward

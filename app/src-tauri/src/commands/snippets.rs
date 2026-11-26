@@ -1,17 +1,16 @@
 //! Signatures and templates (stage 10, decision 0023). Each command forwards to [`AppCore`];
-//! the image dialog and the check of dropped paths are done here, because they need the
-//! window (like attachments in `compose.rs`).
+//! the image dialog is done here, because it needs the window (like attachments in
+//! `compose.rs`). Dropped images come as uploads (stage 23, decision 0082).
 
 use mail_engine::AppCore;
 use mail_model::{
     CoreError, DraftId, FilledTemplateInfo, IdentityId, IdentitySignatureDefaults, IpcError,
     QuoteLanguage, SavedSignature, SavedTemplate, SignatureId, SignatureImageData, SignatureInfo,
-    SignatureInput, TemplateId, TemplateInfo, TemplateInput,
+    SignatureInput, TemplateId, TemplateInfo, TemplateInput, UploadId,
 };
 use tauri::{Runtime, State, WebviewWindow};
 
 use super::to_ipc;
-use crate::drops::DropRegistry;
 
 /// Every signature of the pool, in the user's order.
 #[tauri::command]
@@ -102,24 +101,18 @@ pub async fn pick_signature_images<R: Runtime>(
         .map_err(to_ipc("pick_signature_images"))
 }
 
-/// Adds images dropped on the window: only paths of a drop the shell saw itself, shortly
-/// before (`invalid_argument` otherwise; see `drops.rs`).
+/// Stage 23 (decision 0082): images dropped on the window, handed over as uploads, added with
+/// the checks of picked ones; the uploads are used up either way.
 #[tauri::command]
 #[specta::specta]
-pub async fn add_dropped_signature_images(
+pub async fn add_uploaded_signature_images(
     core: State<'_, AppCore>,
-    drops: State<'_, DropRegistry>,
     signature_id: SignatureId,
-    paths: Vec<String>,
+    uploads: Vec<UploadId>,
 ) -> Result<SignatureInfo, IpcError> {
-    let paths = drops.take(&paths).map_err(|path| {
-        to_ipc("add_dropped_signature_images")(CoreError::InvalidArgument(format!(
-            "{path} was not dropped on the window"
-        )))
-    })?;
-    core.add_signature_images(signature_id, paths)
+    core.add_uploaded_signature_images(signature_id, uploads)
         .await
-        .map_err(to_ipc("add_dropped_signature_images"))
+        .map_err(to_ipc("add_uploaded_signature_images"))
 }
 
 #[tauri::command]

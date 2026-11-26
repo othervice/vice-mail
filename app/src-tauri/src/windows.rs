@@ -4,8 +4,9 @@
 //! Every window is built through [`guard`] and [`finish`], so each gets the same protection:
 //! the navigation hook (the app may load itself, the mail frame its own document, a link
 //! placeholder `https://link.invalid/<token>/<index>` is cancelled and reported to the core,
-//! everything else is cancelled), no new windows from the page, and on Windows the WebView2
-//! frame guard. The CSP comes from `tauri.conf.json` and applies to every page the app serves;
+//! everything else is cancelled), no new windows from the page, no drag-and-drop handler of the
+//! shell (stage 23, decision 0082: the page's own drag and drop works, files come as bytes),
+//! and on Windows the WebView2 frame guard. The CSP comes from `tauri.conf.json` and applies to every page the app serves;
 //! the capability `default` names the main window, the message windows (`message-*`) and the
 //! composer windows (`composer-*`), so each has exactly the main window's permissions and no
 //! window outside these labels has any.
@@ -16,7 +17,7 @@ use mail_model::{AccountId, CoreError, DraftId, EmlFile, EmlFileId, MessageId};
 use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Manager, Runtime, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{MAIN_WINDOW, drops, navigation};
+use crate::{MAIN_WINDOW, navigation};
 
 /// Labels of message windows start with this (and match `message-*` in the capability).
 pub(crate) const MESSAGE_WINDOW_PREFIX: &str = "message-";
@@ -191,6 +192,13 @@ pub(crate) fn guard<'a, R: Runtime, M: Manager<R>>(
     app: &AppHandle<R>,
 ) -> WebviewWindowBuilder<'a, R, M> {
     builder
+        // Stage 23 (decision 0082): Tauri's drag-and-drop handler reports every drag as handled.
+        // On macOS wry then never passes `draggingEntered`/`draggingUpdated`/`performDragOperation`
+        // to WKWebView (the page gets `dragstart`, but no `dragover` and no `drop`); on Windows it
+        // replaces WebView2's drop target, which turns HTML drag and drop off. Without it, the
+        // page's own drags work (accounts, mail onto folders), and a file dragged in from the
+        // Finder or Explorer reaches the page as an HTML `File`: bytes, never a path.
+        .disable_drag_drop_handler()
         .on_navigation(navigation_policy(app))
         // Nothing in the page opens windows; `window.open` and `target=_blank`, also from the
         // mail frame, are refused (WebView2 marks the request handled, decision 0011).
@@ -220,31 +228,24 @@ fn refuse_download(event: &DownloadEvent<'_>) -> bool {
     false
 }
 
-/// What every window gets after it is built: dropped files are remembered (stage 5; the
-/// composer may attach exactly these), and on Windows the WebView2 frame guard and the window
+/// What every window gets after it is built: on Windows the WebView2 frame guard and the window
 /// icon of its display scale (stage 21).
-pub(crate) fn finish<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &WebviewWindow<R>,
-) -> tauri::Result<()> {
-    let drop_app = app.clone();
+pub(crate) fn finish<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     #[cfg(windows)]
-    let icon_window = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
-            && let Some(registry) = drop_app.try_state::<drops::DropRegistry>()
-        {
-            registry.record(paths);
-        }
-        #[cfg(windows)]
-        if let tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
-            set_window_icon(&icon_window, *scale_factor);
-        }
-    });
+    {
+        let icon_window = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
+                set_window_icon(&icon_window, *scale_factor);
+            }
+        });
+    }
     #[cfg(all(windows, feature = "webview2-frame-guard"))]
     crate::install_frame_guard(window)?;
     #[cfg(windows)]
     set_window_icon(window, window.scale_factor().unwrap_or(1.0));
+    #[cfg(not(windows))]
+    let _ = window;
     Ok(())
 }
 
@@ -355,7 +356,7 @@ fn open_window<R: Runtime>(
         }
         Err(err) => return Err(err),
     };
-    finish(app, &window)?;
+    finish(&window)?;
     if let Some(core) = app.try_state::<mail_engine::AppCore>() {
         crate::window_theme::follow(window.clone(), core.subscribe());
     }

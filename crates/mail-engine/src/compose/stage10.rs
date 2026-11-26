@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use mail_model::{
     CleanedPaste, CoreError, DraftId, DraftSizeCheck, InlineImagesAdded, MissedSendDecision,
-    OperationId, OutgoingMail,
+    OperationId, OutgoingMail, UploadId,
 };
 
 use crate::AppCore;
@@ -58,14 +58,29 @@ impl<C: Connector> AppCore<C> {
         self.compose_ref()?.size_check(id).await
     }
 
-    /// Copies image files (paths from the system dialog or a drop on the window) into the
-    /// draft as inline images.
+    /// Copies image files (paths from the system dialog) into the draft as inline images.
     pub async fn add_inline_images(
         &self,
         id: DraftId,
         paths: Vec<PathBuf>,
     ) -> Result<InlineImagesAdded, CoreError> {
-        self.compose_ref()?.add_inline_images(id, paths).await
+        let files = paths
+            .into_iter()
+            .map(super::SourceFile::from_path)
+            .collect();
+        self.compose_ref()?.add_inline_images(id, files).await
+    }
+
+    /// Stage 23 (decision 0082): complete uploads (files dropped on a window, handed over as
+    /// bytes) added as inline images; they are used up either way.
+    pub async fn add_uploaded_inline_images(
+        &self,
+        id: DraftId,
+        uploads: Vec<UploadId>,
+    ) -> Result<InlineImagesAdded, CoreError> {
+        self.compose_ref()?
+            .add_uploaded_inline_images(id, uploads)
+            .await
     }
 
     /// An inline image of a draft as a `data:` URL for the editor.
