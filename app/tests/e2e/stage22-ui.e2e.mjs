@@ -201,7 +201,7 @@ describe("stage 22: no pictures, the mark column, account dots and the settings 
   });
 
   it("shows each row's account with its colour's dot in Alle Posteingänge, also on hover", async () => {
-    const unified = await browser.$('[data-testid="unified-tree"] [role="treeitem"]');
+    const unified = await browser.$('[data-testid="unified-all"]');
     await unified.waitForExist({ timeout: 20000 });
     await unified.click();
     await browser.waitUntil(async () => (await unified.getAttribute("aria-current")) === "page", { timeoutMsg: "the unified inbox did not open" });

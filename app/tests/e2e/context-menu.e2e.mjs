@@ -323,7 +323,7 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
   });
 
   it("shows the quick actions in All inboxes with each row's account; bob's are disabled with the reason", async () => {
-    const unified = await browser.$('[data-testid="unified-tree"] [role="treeitem"]');
+    const unified = await browser.$('[data-testid="unified-all"]');
     await unified.waitForExist({ timeout: 20000 });
     await unified.click();
     await browser.waitUntil(async () => (await unified.getAttribute("aria-current")) === "page", { timeoutMsg: "the unified inbox did not open" });

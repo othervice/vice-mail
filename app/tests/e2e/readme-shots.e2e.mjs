@@ -357,7 +357,7 @@ async function openRow(id, subject) {
 /** The unified inbox ("All inboxes") of the column. */
 async function showUnifiedInbox() {
   await setSidebar(true);
-  const entry = $('[data-testid="unified-tree"] [role="treeitem"]');
+  const entry = $('[data-testid="unified-all"]');
   await entry.waitForExist({ timeout: 20000 });
   await entry.click();
   await browser.waitUntil(async () => (await entry.getAttribute("aria-current")) === "page", { timeoutMsg: "the unified inbox did not open" });

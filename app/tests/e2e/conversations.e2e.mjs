@@ -511,7 +511,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       async () => (await coreCall("list_accounts")).every((a) => a.status.state === "idle" && a.status.lastSyncAt !== null),
       { timeout: 240000, interval: 500, timeoutMsg: "bob's first sync did not finish" },
     );
-    const unified = await browser.$('[data-testid="unified-tree"] [role="treeitem"]');
+    const unified = await browser.$('[data-testid="unified-all"]');
     await unified.waitForExist({ timeout: 20000 });
     await unified.click();
     await browser.waitUntil(async () => (await unified.getAttribute("aria-current")) === "page", { timeoutMsg: "the unified inbox did not open" });
