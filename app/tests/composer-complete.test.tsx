@@ -1,6 +1,4 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { emit } from "@tauri-apps/api/event";
-import { mockWindows } from "@tauri-apps/api/mocks";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertAtCursor, isImagePath } from "../src/features/composer/Composer";
@@ -11,6 +9,7 @@ import { useComposerStore } from "../src/stores/composer";
 import { makeDraft, makeIdentity, type ComposeFakeOptions } from "./support/compose";
 import { ipcError, makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
+import { dragFilesOver, dropFiles, fileTransfer } from "./support/fileDrop";
 import { renderApp } from "./support/render";
 import { toolbarAction } from "./support/reading";
 import { makeSignature, makeTemplate, type SnippetsFakeOptions } from "./support/snippets";
@@ -230,24 +229,25 @@ describe("composer: inline images", () => {
   it("dropped images go into a rich text draft, other files are attached", async () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft] } });
-    mockWindows("main");
     const editor = await openRich(core, draft);
     await user.click(editor);
-    const paths = ["/Users/ada/Foto.JPG", "/Users/ada/Bericht.pdf"];
-    await waitFor(async () => {
-      await act(async () => {
-        await emit("tauri://drag-enter", { paths, position: { x: 10, y: 10 } });
-      });
-      expect(screen.getByTestId("composer-drop-hint").textContent).toContain("Images go into the text");
-    });
-    await act(async () => {
-      await emit("tauri://drag-drop", { paths, position: { x: 10, y: 10 } });
-    });
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "Foto.JPG", { type: "image/jpeg" });
+    const report = new File(["%PDF"], "Bericht.pdf", { type: "application/pdf" });
+    const transfer = fileTransfer([photo, report]);
+    dragFilesOver(editor, transfer);
+    expect((await screen.findByTestId("composer-drop-hint")).textContent).toContain("Images go into the text");
+    // The editor never sees the drop (it would insert the file's name as text).
+    expect(dropFiles(editor, transfer)).toBe(true);
     await waitFor(() => {
-      expect(core.callsOf("add_dropped_inline_images")[0]).toMatchObject({ paths: ["/Users/ada/Foto.JPG"] });
-      expect(core.callsOf("add_dropped_attachments")[0]).toMatchObject({ paths: ["/Users/ada/Bericht.pdf"] });
+      expect(core.callsOf("add_uploaded_inline_images")).toHaveLength(1);
+      expect(core.callsOf("add_uploaded_attachments")).toHaveLength(1);
     });
+    expect(core.callsOf("begin_file_upload")).toEqual([
+      { name: "Foto.JPG", size: 3 },
+      { name: "Bericht.pdf", size: 4 },
+    ]);
     expect((await screen.findByTestId("composer-attachment")).textContent).toContain("Bericht.pdf");
+    expect(editor.textContent).not.toContain("Foto.JPG");
   });
 
   it("a failure while adding images is shown in place", async () => {

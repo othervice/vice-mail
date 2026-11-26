@@ -1,7 +1,8 @@
 //! Composing and sending (stage 5, decision 0018): drafts, attachments, sending, the outbox
 //! view, compose settings, identities with signatures, contact suggestions. Each one forwards
-//! to [`AppCore`]; the file dialog and the check of dropped paths are the only things done
-//! here, because they need the window.
+//! to [`AppCore`]; the file dialog is the only thing done here, because it needs the window.
+//! Files dropped on a window come as bytes (stage 23, decision 0082: `begin_file_upload`,
+//! `append_file_upload`, then `add_uploaded_attachments`); no command takes a path from the page.
 
 use std::path::PathBuf;
 
@@ -10,12 +11,11 @@ use mail_model::{
     AccountId, AccountSendSettings, ComposeIdentity, ComposeSettings, ContactSuggestion, CoreError,
     Draft, DraftId, DraftSendOptions, DraftSummary, DraftUpdate, IdentityId, IpcError, MessageId,
     NewDraft, OperationId, OutgoingMail, QuoteLanguage, ReadReceiptInfo, SentCopyMode,
-    UnclearDecision,
+    UnclearDecision, UploadId,
 };
 use tauri::{Runtime, State, WebviewWindow};
 
 use super::to_ipc;
-use crate::drops::DropRegistry;
 
 /// A new draft: empty, a reply, a reply to all, or a forward (with the original's attachments).
 #[tauri::command]
@@ -109,24 +109,61 @@ pub async fn pick_attachments<R: Runtime>(
         .map_err(to_ipc("pick_attachments"))
 }
 
-/// Attaches files dropped on the window: only paths of a drop the shell saw itself, shortly
-/// before (`invalid_argument` otherwise; see `drops.rs`).
+/// Stage 23 (decision 0082): announces a file dropped on a window, which the page hands over as
+/// bytes: its name (only the name is kept) and its size. Answers the id its pieces go to.
 #[tauri::command]
 #[specta::specta]
-pub async fn add_dropped_attachments(
+pub async fn begin_file_upload(
     core: State<'_, AppCore>,
-    drops: State<'_, DropRegistry>,
-    draft_id: DraftId,
-    paths: Vec<String>,
-) -> Result<Draft, IpcError> {
-    let paths = drops.take(&paths).map_err(|path| {
-        to_ipc("add_dropped_attachments")(CoreError::InvalidArgument(format!(
-            "{path} was not dropped on the window"
-        )))
-    })?;
-    core.add_draft_attachments(draft_id, paths)
+    name: String,
+    size: u32,
+) -> Result<UploadId, IpcError> {
+    core.begin_file_upload(name, u64::from(size))
         .await
-        .map_err(to_ipc("add_dropped_attachments"))
+        .map_err(to_ipc("begin_file_upload"))
+}
+
+/// Stage 23: the next piece of an upload as base64 (at most `MAX_UPLOAD_CHUNK_BYTES` decoded),
+/// at `offset` = the bytes written so far. Answers the bytes written now.
+#[tauri::command]
+#[specta::specta]
+pub async fn append_file_upload(
+    core: State<'_, AppCore>,
+    upload_id: UploadId,
+    offset: u32,
+    piece: String,
+) -> Result<u32, IpcError> {
+    let written = core
+        .append_file_upload_base64(upload_id, u64::from(offset), &piece)
+        .await
+        .map_err(to_ipc("append_file_upload"))?;
+    Ok(u32::try_from(written).unwrap_or(u32::MAX))
+}
+
+/// Stage 23: drops an upload the page gave up (an unknown one is no error).
+#[tauri::command]
+#[specta::specta]
+pub async fn discard_file_upload(
+    core: State<'_, AppCore>,
+    upload_id: UploadId,
+) -> Result<(), IpcError> {
+    core.discard_file_upload(upload_id)
+        .await
+        .map_err(to_ipc("discard_file_upload"))
+}
+
+/// Stage 23: complete uploads attached like files from the system dialog (same limits); they
+/// are used up either way.
+#[tauri::command]
+#[specta::specta]
+pub async fn add_uploaded_attachments(
+    core: State<'_, AppCore>,
+    draft_id: DraftId,
+    uploads: Vec<UploadId>,
+) -> Result<Draft, IpcError> {
+    core.add_uploaded_attachments(draft_id, uploads)
+        .await
+        .map_err(to_ipc("add_uploaded_attachments"))
 }
 
 #[tauri::command]

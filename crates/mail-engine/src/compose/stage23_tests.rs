@@ -151,6 +151,34 @@ async fn uploads_meet_the_limits_of_picked_files() {
             .is_empty()
     );
 
+    // Across the bridge the pieces come as base64: anything else is refused.
+    let err = bed
+        .core
+        .append_file_upload_base64(id.clone(), 2, "not base64!")
+        .await
+        .expect_err("not base64");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+    let long = "A".repeat(usize::try_from(MAX_UPLOAD_CHUNK_BYTES).expect("size") * 2);
+    let err = bed
+        .core
+        .append_file_upload_base64(id.clone(), 2, &long)
+        .await
+        .expect_err("too long");
+    assert_eq!(err.code(), ErrorCode::InvalidArgument);
+    let other = bed
+        .core
+        .begin_file_upload("b64.txt".into(), 5)
+        .await
+        .expect("begin");
+    assert_eq!(
+        bed.core
+            .append_file_upload_base64(other.clone(), 0, "aGVsbG8=")
+            .await
+            .expect("base64 piece"),
+        5
+    );
+    bed.core.discard_file_upload(other).await.expect("discard");
+
     // Given up: discarded, then unknown.
     bed.core
         .discard_file_upload(id.clone())

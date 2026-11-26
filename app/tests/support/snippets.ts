@@ -107,6 +107,8 @@ export interface SnippetsFakeState {
 export interface SnippetsFakeDeps {
   /** The compose fake's drafts (`fillTemplate` reads the first To recipient). */
   drafts: () => ReadonlyMap<string, Draft>;
+  /** Stage 23: takes complete uploads of the compose fake (null if one is unknown). */
+  takeUploads: (ids: readonly string[]) => { name: string; size: number }[] | null;
 }
 
 export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsFakeDeps) {
@@ -284,15 +286,16 @@ export function createSnippetsFake(options: SnippetsFakeOptions, deps: SnippetsF
       }
       case "pick_signature_images":
         return addImages(args["signatureId"] as string, options.pickedSignatureImages ?? []);
-      case "add_dropped_signature_images": {
-        const paths = args["paths"] as string[];
+      case "add_uploaded_signature_images": {
+        const taken = deps.takeUploads(args["uploads"] as string[]);
+        if (!taken) return reject("not_found");
         return addImages(
           args["signatureId"] as string,
-          paths.map((path, i) => ({
+          taken.map((upload, i) => ({
             contentId: `drop${String(i)}@vicemail.test`,
-            fileName: path.split("/").pop() ?? path,
+            fileName: upload.name,
             mime: "image/png",
-            size: 1000,
+            size: upload.size,
           })),
         );
       }

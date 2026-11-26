@@ -699,7 +699,6 @@ export const searchIpc = {
 };
 
 // ---- Stage 5 (composer, drafts, sending, outbox view, compose settings) ----
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   commands as composeCommands,
   DEFAULT_SEND_DELAY_SECS,
@@ -708,6 +707,8 @@ import {
   MAX_ATTACHMENTS,
   MAX_CONTACT_SUGGESTIONS,
   MAX_SEND_DELAY_SECS,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_CHUNK_BYTES,
   type AccountSendSettings,
   type ComposeFormat,
   type ComposeIdentity,
@@ -728,6 +729,7 @@ import {
   type SendState,
   type SentCopyMode,
   type UnclearDecision,
+  type UploadId,
 } from "../generated/bindings";
 
 export {
@@ -737,6 +739,8 @@ export {
   MAX_ATTACHMENTS,
   MAX_CONTACT_SUGGESTIONS,
   MAX_SEND_DELAY_SECS,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_CHUNK_BYTES,
 };
 
 export type {
@@ -760,10 +764,56 @@ export type {
   SendState,
   SentCopyMode,
   UnclearDecision,
+  UploadId,
 };
 
-/** Files dragged over the window, as the shell reports them (paths only on `enter` and `drop`). */
-export type FileDragEvent = { type: "enter"; paths: string[] } | { type: "over" } | { type: "drop"; paths: string[] } | { type: "leave" };
+/** A piece of a file as base64 (JSON has no bytes); the native encoder where the engine has one. */
+function toBase64(bytes: Uint8Array): string {
+  const native = (bytes as Uint8Array & { toBase64?: () => string }).toBase64;
+  if (typeof native === "function") return native.call(bytes);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** A dropped entry the page cannot read (a folder, a file that went away): like a path that is no file. */
+function unreadable(file: File): CoreError {
+  return new CoreError({ code: "invalid_argument", message: `${file.name} is not a file that can be read`, detail: null });
+}
+
+/**
+ * Stage 23 (decision 0082): hands files dropped on a window to the core as bytes, in pieces of
+ * `MAX_UPLOAD_CHUNK_BYTES`, so neither side holds a large file at once. Answers their upload ids
+ * in order; a command then takes them like files from the system dialog. On a failure the
+ * uploads begun so far are discarded. The page never learns or names a path.
+ */
+async function uploadFiles(files: readonly File[]): Promise<UploadId[]> {
+  const ids: UploadId[] = [];
+  try {
+    for (const file of files) {
+      // Too large for any draft: the core refuses it before a byte is read (`attachment_too_large`).
+      const id = await call(() => composeCommands.beginFileUpload(file.name, Math.min(file.size, MAX_UPLOAD_BYTES + 1)));
+      ids.push(id);
+      let offset = 0;
+      while (offset < file.size) {
+        let bytes: Uint8Array;
+        try {
+          bytes = new Uint8Array(await file.slice(offset, offset + MAX_UPLOAD_CHUNK_BYTES).arrayBuffer());
+        } catch {
+          throw unreadable(file);
+        }
+        if (bytes.length === 0) throw unreadable(file);
+        const piece = toBase64(bytes);
+        const at = offset;
+        offset = await call(() => composeCommands.appendFileUpload(id, at, piece));
+      }
+    }
+    return ids;
+  } catch (e) {
+    await Promise.all(ids.map((id) => composeCommands.discardFileUpload(id).catch(() => undefined)));
+    throw toCoreError(e);
+  }
+}
 
 /**
  * Drafts and sending (docs/decisions/0018). Drafts are saved by the composer (`saveDraft`
@@ -787,9 +837,11 @@ export const composeIpc = {
     call(() => composeCommands.openDraftFromMessage(messageId)),
   /** The system file dialog (in Rust); cancelling answers the unchanged draft. */
   pickAttachments: (draftId: DraftId): Promise<Draft> => call(() => composeCommands.pickAttachments(draftId)),
-  /** Only paths of a drop the shell saw itself (`onFileDrop`), shortly before. */
-  addDroppedAttachments: (draftId: DraftId, paths: string[]): Promise<Draft> =>
-    call(() => composeCommands.addDroppedAttachments(draftId, paths)),
+  /** Stage 23 (decision 0082): files dropped on the window, handed over as bytes and attached. */
+  attachFiles: async (draftId: DraftId, files: readonly File[]): Promise<Draft> => {
+    const uploads = await uploadFiles(files);
+    return call(() => composeCommands.addUploadedAttachments(draftId, uploads));
+  },
   removeDraftAttachment: (draftId: DraftId, attachmentId: string): Promise<Draft> =>
     call(() => composeCommands.removeDraftAttachment(draftId, attachmentId)),
   /** `requestId`: a fresh UUID per press of "Send" (the same id twice sends once). */
@@ -817,21 +869,6 @@ export const composeIpc = {
   /** Autocomplete from addresses of earlier mail. `limit` 1..`MAX_CONTACT_SUGGESTIONS`. */
   searchContacts: (query: string, limit: number): Promise<ContactSuggestion[]> =>
     call(() => composeCommands.searchContacts(query, limit)),
-  /**
-   * Files dragged onto the window, from the shell's own drag-and-drop event (the page cannot fake
-   * the paths the core accepts). Without a Tauri window (tests) nothing is reported.
-   */
-  onFileDrop: async (handler: (event: FileDragEvent) => void): Promise<Unsubscribe> => {
-    try {
-      return await getCurrentWebview().onDragDropEvent((e) => {
-        const payload = e.payload;
-        if (payload.type === "enter" || payload.type === "drop") handler({ type: payload.type, paths: payload.paths });
-        else handler({ type: payload.type });
-      });
-    } catch {
-      return () => undefined;
-    }
-  },
 };
 
 // ---- Stage 9 (inbox comfort: categories, bundles, snooze, pins, tasks, rules, notifications) ----
@@ -1170,9 +1207,11 @@ export const composerIpc = {
   checkDraftSize: (draftId: DraftId): Promise<DraftSizeCheck> => call(() => stage10Commands.checkDraftSize(draftId)),
   /** The system dialog with an image filter (in Rust); cancelling answers `added: []`. */
   pickInlineImages: (draftId: DraftId): Promise<InlineImagesAdded> => call(() => stage10Commands.pickInlineImages(draftId)),
-  /** Only paths of a drop the shell saw itself (`onFileDrop`). */
-  addDroppedInlineImages: (draftId: DraftId, paths: string[]): Promise<InlineImagesAdded> =>
-    call(() => stage10Commands.addDroppedInlineImages(draftId, paths)),
+  /** Stage 23 (decision 0082): image files dropped on the window, as bytes, into the text. */
+  addInlineImageFiles: async (draftId: DraftId, files: readonly File[]): Promise<InlineImagesAdded> => {
+    const uploads = await uploadFiles(files);
+    return call(() => stage10Commands.addUploadedInlineImages(draftId, uploads));
+  },
   /** A `data:` URL to show an inline image in the editor; never saved into the body. */
   inlineImageData: (draftId: DraftId, attachmentId: string): Promise<string> =>
     call(() => stage10Commands.inlineImageData(draftId, attachmentId)),
@@ -1196,8 +1235,11 @@ export const snippetsIpc = {
   /** The system dialog (in Rust); new images are the last entries. Save the signature first. */
   pickSignatureImages: (signatureId: SignatureId): Promise<SignatureInfo> =>
     call(() => stage10Commands.pickSignatureImages(signatureId)),
-  addDroppedSignatureImages: (signatureId: SignatureId, paths: string[]): Promise<SignatureInfo> =>
-    call(() => stage10Commands.addDroppedSignatureImages(signatureId, paths)),
+  /** Stage 23 (decision 0082): image files dropped on the window, as bytes. Save the signature first. */
+  addSignatureImageFiles: async (signatureId: SignatureId, files: readonly File[]): Promise<SignatureInfo> => {
+    const uploads = await uploadFiles(files);
+    return call(() => stage10Commands.addUploadedSignatureImages(signatureId, uploads));
+  },
   removeSignatureImage: (signatureId: SignatureId, contentId: string): Promise<SignatureInfo> =>
     call(() => stage10Commands.removeSignatureImage(signatureId, contentId)),
   signatureImageData: (signatureId: SignatureId): Promise<SignatureImageData[]> =>

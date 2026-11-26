@@ -1,14 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
+import { folderError, useWindowFileDrop } from "../../components/fileDrop";
 import { TextField } from "../../components/TextField";
 import {
-  composeIpc,
   snippetsIpc,
   toCoreError,
   type CoreError,
@@ -177,7 +177,6 @@ function SignatureEditor({ signature, onClose, onCreated }: SignatureEditorProps
   const [status, setStatus] = useState<"idle" | "saved">("idle");
   const [error, setError] = useState<EditorError | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dropping, setDropping] = useState(false);
   const editor = useRef<RichEditorHandle | null>(null);
   const latestHtml = useRef(html);
   const imagesRef = useRef(images);
@@ -256,32 +255,12 @@ function SignatureEditor({ signature, onClose, onCreated }: SignatureEditorProps
     });
   const addImage = () => addImages((id) => snippetsIpc.pickSignatureImages(id));
 
-  // Image files dropped on the window while this editor is open go into the signature (paths
-  // from the shell's own drop event; the page never reads a file).
-  const onDrop = useEffectEvent((paths: string[]) => {
-    void addImages((id) => snippetsIpc.addDroppedSignatureImages(id, paths));
-  });
-  useEffect(() => {
-    let active = true;
-    let stop: (() => void) | undefined;
-    void composeIpc
-      .onFileDrop((event) => {
-        if (event.type === "enter") setDropping(true);
-        else if (event.type === "leave") setDropping(false);
-        else if (event.type === "drop") {
-          setDropping(false);
-          if (event.paths.length > 0) onDrop(event.paths);
-        }
-      })
-      .then((unsubscribe) => {
-        if (active) stop = unsubscribe;
-        else unsubscribe();
-      });
-    return () => {
-      active = false;
-      stop?.();
-    };
-  }, []);
+  // Stage 23 (decision 0082): image files dropped on the window while this editor is open go
+  // into the signature, handed over as bytes (the page never sees a path).
+  const dropping = useWindowFileDrop(({ files, folders }) => {
+    if (folders.length > 0) setError({ context: "image", error: folderError(folders) });
+    if (files.length > 0) void addImages((id) => snippetsIpc.addSignatureImageFiles(id, files));
+  }).over;
 
   const removeImage = (image: SignatureImageInfo) =>
     run(async () => {

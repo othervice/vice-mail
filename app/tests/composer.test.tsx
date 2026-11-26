@@ -1,6 +1,4 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { emit } from "@tauri-apps/api/event";
-import { mockWindows } from "@tauri-apps/api/mocks";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,13 +6,14 @@ import { App } from "../src/app/App";
 import { createQueryClient } from "../src/app/queryClient";
 import { DRAFT_SAVE_DELAY_MS } from "../src/features/composer/Composer";
 import { createI18n } from "../src/i18n";
-import type { DraftUpdate, MessageListItem } from "../src/services/ipc";
+import { MAX_UPLOAD_CHUNK_BYTES, type DraftUpdate, type MessageListItem } from "../src/services/ipc";
 import { useComposerStore } from "../src/stores/composer";
 import { useUiStore } from "../src/stores/ui";
 import { makeDraft, makeIdentity, makeOutgoing, type ComposeFakeOptions } from "./support/compose";
 import { ipcError, makeAccount, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { dragFilesOver, dropFiles, fileTransfer } from "./support/fileDrop";
 import { optionName } from "./support/names";
 
 const ADA = makeAccount({ writesEnabled: true });
@@ -256,27 +255,44 @@ describe("composer: writing and drafts", () => {
     expect(core.callsOf("remove_draft_attachment")[0]).toMatchObject({ attachmentId: "a1" });
   });
 
-  it("files dropped on the window become attachments, with the shell's paths", async () => {
+  it("files dropped on the window become attachments, handed over as bytes in pieces", async () => {
     const { core, user } = setup();
-    mockWindows("main");
     await openNew(user);
-    const paths = ["/Users/ada/Prüfbericht 🧾.pdf"];
-    // The listener of the shell's drag-and-drop event is registered asynchronously.
-    await waitFor(async () => {
-      await act(async () => {
-        await emit("tauri://drag-enter", { paths, position: { x: 10, y: 10 } });
-      });
-      expect(screen.getByTestId("composer-drop-hint")).toBeTruthy();
-    });
-    await act(async () => {
-      await emit("tauri://drag-drop", { paths, position: { x: 10, y: 10 } });
-    });
+    const report = new File(["%PDF-1.7 Prüfbericht"], "Prüfbericht 🧾.pdf", { type: "application/pdf" });
+    const transfer = fileTransfer([report], ["Belege"]);
+    const editor = screen.getByRole("textbox", { name: "Message" });
+    // Over the window (here: the text field), the hint shows and the drop is offered as a copy.
+    const offered = dragFilesOver(editor, transfer);
+    expect(offered).toBe(false);
+    expect(transfer.dropEffect).toBe("copy");
+    expect(await screen.findByTestId("composer-drop-hint")).toBeTruthy();
+    expect(dropFiles(editor, transfer)).toBe(true);
     await waitFor(() => {
-      expect(core.callsOf("add_dropped_attachments")[0]).toMatchObject({ paths });
+      expect(core.callsOf("add_uploaded_attachments")).toHaveLength(1);
     });
+    expect(core.callsOf("begin_file_upload")).toEqual([{ name: "Prüfbericht 🧾.pdf", size: report.size }]);
+    expect(core.callsOf("append_file_upload")).toEqual([{ uploadId: "upload-1", offset: 0, piece: expect.any(String) as unknown }]);
+    expect(core.callsOf("add_uploaded_attachments")[0]).toMatchObject({ uploads: ["upload-1"] });
     expect((await screen.findByTestId("composer-attachment")).textContent).toContain("Prüfbericht 🧾.pdf");
     expect(screen.queryByTestId("composer-drop-hint")).toBeNull();
+    // The text stays as it was; no command ever got a path; the folder is said to be no file.
+    expect((editor as HTMLTextAreaElement).value).toBe("");
+    expect(JSON.stringify(core.calls)).not.toMatch(/"paths?"/);
+    expect((await screen.findByTestId("composer-action-error")).textContent).toContain("Belege: a folder is not a file");
   });
+
+  it("a large file goes over in pieces of MAX_UPLOAD_CHUNK_BYTES", async () => {
+    const { core, user } = setup();
+    await openNew(user);
+    const size = MAX_UPLOAD_CHUNK_BYTES * 2 + 10;
+    const big = new File([new Uint8Array(size).fill(65)], "big.bin");
+    dropFiles(screen.getByTestId("composer"), fileTransfer([big]));
+    await waitFor(() => {
+      expect(core.callsOf("add_uploaded_attachments")).toHaveLength(1);
+    });
+    expect((core.callsOf("append_file_upload") as { offset: number }[]).map((call) => call.offset)).toEqual([0, MAX_UPLOAD_CHUNK_BYTES, MAX_UPLOAD_CHUNK_BYTES * 2]);
+    expect(core.compose.uploads.size).toBe(0);
+  }, 20_000);
 
   it("offers the drafts left from the last session once at the start", async () => {
     const left = makeDraft({ accountId: ADA.id, subject: "Angebot", bodyText: "Entwurf von gestern", to: [{ name: null, email: "kunde@example.org" }] });

@@ -961,7 +961,10 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   const extrasFake = createExtrasFake(options.extras ?? {});
 
   // Stage 10: signatures, templates and contacts.
-  const snippetsFake = createSnippetsFake(options.snippets ?? {}, { drafts: () => composeFake.state.drafts });
+  const snippetsFake = createSnippetsFake(options.snippets ?? {}, {
+    drafts: () => composeFake.state.drafts,
+    takeUploads: (ids) => composeFake.state.takeUploads(ids),
+  });
   const contactsFake = createContactsFake(options.contacts ?? {});
 
   // Stage 13: AI in the app.

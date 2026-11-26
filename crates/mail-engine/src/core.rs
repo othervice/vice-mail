@@ -1763,6 +1763,28 @@ impl<C: Connector> AppCore<C> {
         self.compose()?.append_upload(upload, offset, bytes).await
     }
 
+    /// Stage 23: like [`AppCore::append_file_upload`] with the piece as base64 (how it crosses
+    /// the IPC bridge; JSON has no bytes). Text that is not base64 is `invalid_argument`.
+    pub async fn append_file_upload_base64(
+        &self,
+        upload: mail_model::UploadId,
+        offset: u64,
+        piece: &str,
+    ) -> Result<u64, CoreError> {
+        // A piece of at most MAX_UPLOAD_CHUNK_BYTES is at most a third longer as base64.
+        let longest = mail_model::MAX_UPLOAD_CHUNK_BYTES.div_ceil(3) * 4;
+        if u64::try_from(piece.len()).unwrap_or(u64::MAX) > longest {
+            return Err(CoreError::InvalidArgument(format!(
+                "a piece of an upload has at most {} bytes",
+                mail_model::MAX_UPLOAD_CHUNK_BYTES
+            )));
+        }
+        let bytes = crate::compose::snippets::base64_decode(piece).ok_or_else(|| {
+            CoreError::InvalidArgument("a piece of an upload is not base64".into())
+        })?;
+        self.append_file_upload(upload, offset, bytes).await
+    }
+
     /// Stage 23: drops an upload the page gave up.
     pub async fn discard_file_upload(&self, upload: mail_model::UploadId) -> Result<(), CoreError> {
         self.compose()?.discard_upload(upload).await
