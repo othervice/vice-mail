@@ -3,6 +3,8 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "../../components/Switch";
 import { parityIpc, type Account, type NotificationSound as Sound, type SoundPlatform } from "../../services/ipc";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, SETTING_LEGEND_CLASS, settingAnchor } from "../../components/settingAnchor";
 
 export const soundChoicesQueryKey = ["comfort", "soundChoices"] as const;
 
@@ -54,8 +56,11 @@ export function NotificationSoundSettings({ sound, off, accounts, mutedAccounts,
   const current = field ? sound[field] : null;
 
   return (
-    <fieldset className="flex flex-col gap-4" disabled={off} data-testid="notify-sound">
-      <legend className="pb-2 text-14 font-semibold text-primary">{t("sounds.legend")}</legend>
+    // Stage 22 (decision 0073): found by the settings search by its legend and its rows.
+    <fieldset className="flex flex-col gap-4" disabled={off} data-testid="notify-sound" {...SETTING_BLOCK}>
+      <legend {...settingAnchor(t("sounds.legend"))} data-setting-key="sounds.legend" className={cx("pb-2 text-14 font-semibold text-primary", SETTING_LEGEND_CLASS)}>
+        {t("sounds.legend")}
+      </legend>
       <Switch
         label={t("sounds.enabled.label")}
         description={t("sounds.enabled.description")}
@@ -67,7 +72,7 @@ export function NotificationSoundSettings({ sound, off, accounts, mutedAccounts,
         data-testid="notify-sound-enabled"
       />
       {field && current !== null && sounds.length > 0 && (
-        <div className="flex flex-col gap-1">
+        <div {...settingAnchor(t("sounds.choice"))} data-setting-key="sounds.choice" className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
           <label htmlFor={selectId} className="text-14 font-medium text-primary">
             {t("sounds.choice")}
           </label>
@@ -92,12 +97,15 @@ export function NotificationSoundSettings({ sound, off, accounts, mutedAccounts,
       )}
       {accounts.length > 0 && (
         <fieldset className="flex flex-col gap-4" disabled={silentOff}>
-          <legend className="pb-2 text-13 font-semibold text-secondary">{t("sounds.accounts")}</legend>
+          <legend {...settingAnchor(t("sounds.accounts"))} className={cx("pb-2 text-13 font-semibold text-secondary", SETTING_LEGEND_CLASS)}>
+            {t("sounds.accounts")}
+          </legend>
           {accounts.map((account) => {
             const muted = mutedAccounts.includes(account.id);
             return (
               <Switch
                 key={account.id}
+                findable={false}
                 label={t("sounds.accountLabel", {
                   account: account.displayName
                     ? t("nav.account", { name: account.displayName, email: account.email })

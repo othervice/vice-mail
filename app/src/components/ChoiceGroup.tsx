@@ -1,5 +1,7 @@
 import { RadioGroup } from "radix-ui";
 import { useId } from "react";
+import { cx } from "./cx";
+import { SETTING_ANCHOR_CLASS, settingAnchor } from "./settingAnchor";
 
 export interface ChoiceOption<T extends string> {
   value: T;
@@ -14,14 +16,17 @@ interface ChoiceGroupProps<T extends string> {
   value: T;
   options: readonly ChoiceOption<T>[];
   onChange: (value: T) => void;
+  /** Stage 22 (decision 0073): found by the settings search by its label (default; see `Switch`). */
+  findable?: boolean;
 }
 
 /** Segmented single choice (radio group): arrow keys move between options, Space selects. */
-export function ChoiceGroup<T extends string>({ label, description, value, options, onChange }: ChoiceGroupProps<T>) {
+export function ChoiceGroup<T extends string>({ label, description, value, options, onChange, findable = true }: ChoiceGroupProps<T>) {
   const labelId = useId();
   const descriptionId = useId();
   return (
-    <div className="flex flex-col gap-2">
+    // Stage 22 (decision 0073): a row the settings search can find by its label.
+    <div {...(findable && settingAnchor(label))} className={cx("flex flex-col gap-2", findable && SETTING_ANCHOR_CLASS)}>
       <div className="flex flex-col gap-1">
         <span id={labelId} className="text-14 font-medium text-primary">
           {label}

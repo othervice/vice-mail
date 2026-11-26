@@ -33,13 +33,16 @@ import {
   useSetMcpAccountAccess,
   useSetMcpEnabled,
 } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 const ACCESS_LEVELS: readonly McpAccountAccess[] = ["hidden", "read", "read_and_drafts"];
 
 function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 border-t border-border pt-6">
-      <div className="flex flex-col gap-1">
+    <section className="flex flex-col gap-3 border-t border-border pt-6" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search with its description. */}
+      <div {...settingAnchor(title)} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 className="text-14 font-semibold text-primary">{title}</h3>
         {description && <p className="text-13 text-secondary">{description}</p>}
       </div>
@@ -213,6 +216,8 @@ function AccountShare({ share, account }: { share: McpAccountShare; account: Acc
   return (
     <li className="flex flex-col gap-2" data-testid={`mcp-share-${share.accountId}`}>
       <ChoiceGroup
+        // Stage 22 (decision 0073): a row per account, found through "Shared accounts".
+        findable={false}
         label={account?.displayName ? t("mcp.accounts.accountLabel", { name: label, email: account.email }) : label}
         description={t(`mcp.accounts.accessDescription.${share.access}`)}
         value={share.access}

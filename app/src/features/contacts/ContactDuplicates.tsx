@@ -6,6 +6,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import type { ContactDuplicate } from "../../services/ipc";
 import { contactName } from "./names";
 import { useContactDuplicates, useDismissDuplicate, useMergeContacts, useSetContactName } from "./queries";
+import { SETTING_BLOCK } from "../../components/settingAnchor";
 
 /** One suggestion: two contacts that may be one person, or one contact seen with several names. */
 function DuplicateCard({ duplicate }: { duplicate: ContactDuplicate }) {
@@ -154,7 +155,9 @@ export function ContactDuplicates() {
   const list = duplicates.data ?? [];
   if (list.length === 0) return null;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="contact-duplicates">
+    // Stage 22 (decision 0073): the user's suggestions under a heading with their count; the
+    // search finds the section, not this list.
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="contact-duplicates" {...SETTING_BLOCK}>
       <div className="flex flex-col gap-1">
         <h3 id={headingId} className="text-14 font-semibold text-primary">
           {t("contacts.duplicates.title", { count: list.length })}

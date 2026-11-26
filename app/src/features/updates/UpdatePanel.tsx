@@ -5,6 +5,8 @@ import { Switch } from "../../components/Switch";
 import { toCoreError, type Platform, type UpdateInfo, type UpdateStatus } from "../../services/ipc";
 import { useAppInfo } from "../app-info/queries";
 import { useUpdateInfo, useUpdateStep } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 function formatTime(ms: number, language: string): string {
   return new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(ms));
@@ -42,8 +44,9 @@ export function UpdatePanel() {
   if (!info) return null;
 
   return (
-    <section aria-labelledby="updates-heading" className="flex flex-col gap-4" data-testid="updates-panel">
-      <h3 id="updates-heading" className="text-14 font-semibold text-primary">
+    <section aria-labelledby="updates-heading" className="flex flex-col gap-4" data-testid="updates-panel" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search, like its switch. */}
+      <h3 id="updates-heading" {...settingAnchor(t("updates.title"))} className={cx("text-14 font-semibold text-primary", SETTING_ANCHOR_CLASS)}>
         {t("updates.title")}
       </h3>
       {info.supported ? (

@@ -24,6 +24,8 @@ import {
   useSetComposeSettings,
   useSetSentCopyMode,
 } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 /** Choices for the undo delay, within 0..`MAX_SEND_DELAY_SECS`. */
 export const SEND_DELAY_CHOICES = [0, 5, 10, 15, 20, 30].filter((s) => s <= MAX_SEND_DELAY_SECS);
@@ -44,11 +46,16 @@ function AccountComposeSettings({ account }: { account: Account }) {
   const setMode = useSetSentCopyMode();
   const identities = useComposeIdentities(account.id);
   return (
-    <div className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="account-compose-settings">
+    // Stage 22 (decision 0073): a block per account under its name; the search finds its rows.
+    <div
+      className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
+      data-testid="account-compose-settings"
+      {...SETTING_BLOCK}
+    >
       <h3 className="text-14 font-semibold text-primary">{account.displayName ? t("composer.identity", { name: account.displayName, email: account.email }) : account.email}</h3>
       {settings.isError && <ErrorNotice context={t("composer.settings.loadFailed")} error={settings.error} onRetry={() => void settings.refetch()} />}
       {settings.data && (
-        <div className="flex flex-col gap-1">
+        <div {...settingAnchor(t("composer.settings.sentCopy"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
           <label htmlFor={modeId} className="text-13 font-medium text-primary">
             {t("composer.settings.sentCopy")}
           </label>
@@ -79,7 +86,9 @@ function AccountComposeSettings({ account }: { account: Account }) {
       )}
       {identities.data && identities.data.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="text-13 text-secondary">{t("snippets.defaults.hint")}</p>
+          <p {...settingAnchor(t("snippets.defaults.hint"))} className={cx("text-13 text-secondary", SETTING_ANCHOR_CLASS)}>
+            {t("snippets.defaults.hint")}
+          </p>
           {identities.data.map((identity) => (
             <SignatureDefaults key={identity.id} identity={identity} />
           ))}
@@ -114,7 +123,8 @@ export function ComposeSettings() {
   return (
     <SettingsSection title={t("composer.settings.title")}>
       {settings.isError && <ErrorNotice context={t("composer.settings.loadFailed")} error={settings.error} onRetry={() => void settings.refetch()} />}
-      <div className="flex flex-col gap-1">
+      {/* Stage 22 (decision 0073): each row found by the settings search. */}
+      <div {...settingAnchor(t("composer.settings.delay"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <label htmlFor={delayId} className="text-13 font-medium text-primary">
           {t("composer.settings.delay")}
         </label>
@@ -136,7 +146,7 @@ export function ComposeSettings() {
         </select>
         <p className="text-12 text-secondary">{t("composer.settings.delayHint")}</p>
       </div>
-      <div className="flex flex-col gap-1">
+      <div {...settingAnchor(t("writingDefaults.quotePosition.label"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <label htmlFor={quoteId} className="text-13 font-medium text-primary">
           {t("writingDefaults.quotePosition.label")}
         </label>
@@ -183,7 +193,7 @@ export function ComposeSettings() {
         }}
         data-testid="attachment-reminder-setting"
       />
-      <div className="flex flex-col gap-1">
+      <div {...settingAnchor(t("composer.settings.readReceipts"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <label htmlFor={receiptsId} className="text-13 font-medium text-primary">
           {t("composer.settings.readReceipts")}
         </label>

@@ -146,6 +146,10 @@
   --ui-icon-small: 1rem;
   --ui-header-height: 3.5rem;
   --ui-settings-nav-width: 14rem;
+  /* Stage 22 (decision 0073): the hits of the settings search float over the page, wider than the
+     section list, at most this high (then they scroll). */
+  --ui-settings-search-width: 26rem;
+  --ui-settings-search-height: 28rem;
   --ui-content-max-width: 40rem;
   --ui-form-max-width: 36rem;
   /* The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"): 15 rem by default; the

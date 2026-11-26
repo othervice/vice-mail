@@ -1079,6 +1079,17 @@ export const en = {
     // Stage 10
     contacts: { title: "Contacts" },
     sections: "Settings sections",
+    // Stage 22 (decision 0073): searching the settings.
+    search: {
+      label: "Search settings",
+      placeholder: "Search settings…",
+      results: "Settings found",
+      count_one: "{{count}} setting found",
+      count_other: "{{count}} settings found",
+      none: "No setting found for “{{query}}”.",
+      clear: "Clear the search",
+      section: "The whole page",
+    },
     general: {
       title: "General",
       language: {

@@ -7,6 +7,7 @@ import type { Account, AccountGroup, AccountGroupId } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { cx } from "../../components/cx";
 import { useAccountGroups, useDeleteAccountGroup, useSaveAccountGroup } from "./queries";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 /** Longest group name the core accepts (trimmed). */
 export const MAX_GROUP_NAME = 100;
@@ -109,8 +110,9 @@ export function AccountGroupsSection({ accounts }: { accounts: readonly Account[
   if (accounts.length === 0) return null;
 
   return (
-    <section aria-labelledby={headingId} className="flex max-w-(--ui-content-max-width) flex-col gap-3" data-testid="account-groups">
-      <div className="flex flex-col gap-1">
+    <section aria-labelledby={headingId} className="flex max-w-(--ui-content-max-width) flex-col gap-3" data-testid="account-groups" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search. */}
+      <div {...settingAnchor(t("groups.title"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 id={headingId} className="text-14 font-semibold text-primary">
           {t("groups.title")}
         </h3>

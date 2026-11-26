@@ -1071,6 +1071,17 @@ export const de: Translation = {
     // Stage 10
     contacts: { title: "Kontakte" },
     sections: "Bereiche der Einstellungen",
+    // Stufe 22 (Entscheidung 0073): die Einstellungen durchsuchen.
+    search: {
+      label: "Einstellungen durchsuchen",
+      placeholder: "Einstellungen durchsuchen\u00a0…",
+      results: "Gefundene Einstellungen",
+      count_one: "{{count}} Einstellung gefunden",
+      count_other: "{{count}} Einstellungen gefunden",
+      none: "Keine Einstellung zu „{{query}}“ gefunden.",
+      clear: "Suche leeren",
+      section: "Die ganze Seite",
+    },
     general: {
       title: "Allgemein",
       language: {

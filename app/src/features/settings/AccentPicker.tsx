@@ -4,6 +4,8 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { ACCENT_THEMES, DEFAULT_ACCENT, useAccentStore } from "../preferences/accent";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, settingAnchor } from "../../components/settingAnchor";
 
 /**
  * Stage 16: the accent theme (Settings → Appearance), a UI preference of the core synced between
@@ -20,7 +22,8 @@ export function AccentPicker() {
   const saveError = useAccentStore((state) => state.saveError);
   const setAccent = useAccentStore((state) => state.setAccent);
   return (
-    <div className="flex flex-col gap-2">
+    // Stage 22 (decision 0073): found by the settings search by its label.
+    <div {...settingAnchor(t("themes.label"))} className={cx("flex flex-col gap-2", SETTING_ANCHOR_CLASS)}>
       <div className="flex flex-col gap-1">
         <span id={labelId} className="text-14 font-medium text-primary">
           {t("themes.label")}
