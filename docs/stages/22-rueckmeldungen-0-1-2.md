@@ -54,6 +54,69 @@ gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist.
   - Schmale Leiste: Konten als Punkt in der Kontofarbe mit dem Namen als Tooltip.
   - Abstands-Test aus Stufe 21 (0071) auf die neuen Zeilen anpassen.
 
+Punkte 4 bis 9: vom Menschen am 26.11. aus den Vorschlägen gewählt (nicht gewählt: „Nur bei
+Personen melden“, „Ziehen in Finder/Explorer“).
+
+### 4 — Ein Schlüsselbund-Eintrag auf macOS
+
+- Anlass: Nach jedem Update fragt macOS 5–6 Mal nach dem Schlüsselbund, einmal je Eintrag
+  (ad-hoc-Signatur, die Zugriffsliste hängt am cdhash). Endgültig behebt das erst die Signatur
+  mit Developer ID (Stufe 15).
+- Plan: Auf macOS liegen alle Geheimnisse von Vice Mail in einem einzigen Eintrag (Dienst
+  `org.vicemail.desktop`), darin eine Tabelle Name → Geheimnis für Konten, OAuth-Tokens,
+  MCP-Clients, KI-Profile und den Sync-Schlüssel. Dann gibt es nach einem Update eine Abfrage statt
+  einer je Eintrag. Beim ersten Start übernimmt die App die alten Einträge (dabei fragt macOS ein
+  letztes Mal je Eintrag), schreibt den Sammel-Eintrag und löscht die alten erst danach.
+- Schreiben nur aus einem Prozess mit Sperre, damit gleichzeitige Änderungen nichts überschreiben;
+  bricht die Übernahme ab, bleiben die alten Einträge gültig.
+- Windows bleibt bei einem Eintrag je Geheimnis: Die Anmeldeinformationsverwaltung fragt nicht,
+  und ein Eintrag fasst dort höchstens 2.560 Bytes.
+- Entscheidung festhalten; `docs/SECURITY_MODEL.md` und `docs/PRIVACY.md` anpassen. Tests nur
+  gegen den Testdienst `org.vicemail.desktop.e2e`.
+
+### 5 — Kontakte in der Suche
+
+- Plan: Beim Tippen in die Suche stehen oben bis zu drei passende Kontakte (Name, Adresse oder
+  Domain, auch per Anfang). Auswahl zeigt alle Mails von und an diese Person über alle Konten
+  (Absender, Empfänger oder CC, alle Adressen des Kontakts). Mit Tastatur bedienbar; die normale
+  Volltextsuche darunter bleibt.
+
+### 6 — Lernender Spamfilter (lokal)
+
+- Plan: Ein Filter, der lokal aus „Spam“ und „Kein Spam“ lernt, wie bei Thunderbird; ohne Server,
+  ohne neue Abhängigkeit. Er wertet Kopfzeilen und Text der Mails aus.
+- Erkannte Mails gehen über die Outbox in den Spam-Ordner, mit Rückgängig. Bei nur lesenden
+  Konten oder ohne Spam-Ordner werden sie nur als „Spam-Verdacht“ markiert.
+- Bekannte Kontakte, eigene Adressen und Antworten in eigenen Gesprächen gelten nie als Spam.
+  Blockierte Absender bleiben wie bisher.
+- Standard aus. Beim Einschalten kann er aus dem vorhandenen Spam-Ordner lernen. Läuft nur,
+  solange die App läuft, und ist so beschriftet.
+- Größter Punkt der Liste. Die Trefferquote wird mit einem Testkorpus gemessen, und die Zahlen
+  werden hier eingetragen.
+
+### 7 — Suche mitten im Wort
+
+- Plan: Zusätzlich zum Wortindex ein Index aus Dreiergruppen von Zeichen (FTS5 `trigram`), mit
+  dem `uster` auch „Muster“ findet und `1234` eine Nummer mitten im Wort.
+  - Sicher für Absender, Empfänger, Betreff und Dateinamen.
+  - Für den Mail-Text erst nach Messung von Größe und Tempo bei 100.000 Mails; das Ziel bleibt
+    unter 200 ms bis zu den ersten Treffern.
+- Suchbegriffe mit weniger als drei Zeichen nutzen weiter den Wortindex. Der neue Index wird
+  im Hintergrund aufgebaut wie der bestehende.
+
+### 8 — Einstellungen durchsuchen
+
+- Plan: Suchfeld oben in den Einstellungen. Es findet jede Option über Titel und Beschreibung in
+  der eingestellten Sprache (z. B. „Signatur“, „Ton“), springt dorthin und hebt die Option kurz
+  hervor. Mit Tastatur bedienbar (Cmd/Ctrl+F in den Einstellungen).
+
+### 9 — Windows-11-Optik
+
+- Plan: Fensterhintergrund mit Mica wie bei Windows-11-Apps, Titelleiste in den Farben der App,
+  beim Überfahren des Maximieren-Knopfs die Andock-Leiste von Windows.
+- Auf dem Mac nicht prüfbar. Die CI prüft auf Windows nur den Build; wie es aussieht, muss der
+  Mensch auf dem PC ansehen.
+
 ## Ergebnis
 
 Noch offen; die Liste wird gesammelt.
