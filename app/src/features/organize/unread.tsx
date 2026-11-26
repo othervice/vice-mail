@@ -271,7 +271,7 @@ export function UnreadControls({ viewKey }: { viewKey: string }) {
   ];
   return (
     <div className="flex shrink-0 items-center gap-1" data-testid="unread-controls">
-      <OverflowMenu label={t("organize.unread.menu")} data-testid="list-options" items={items} />
+      <OverflowMenu label={t("organize.unread.menu")} look="toolbar" data-testid="list-options" items={items} />
     </div>
   );
 }

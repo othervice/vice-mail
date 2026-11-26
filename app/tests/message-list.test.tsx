@@ -402,13 +402,14 @@ describe("date sections and the time column", () => {
 });
 
 describe("folders in the list header", () => {
-  it("the header names the folder and its account", async () => {
+  it("the header names the folder; the account only where there are several", async () => {
     withViewport();
     mockCore({ accounts: [ACCOUNT], mailboxes: standardMailboxes(), messages: {} });
     renderApp();
 
     expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeTruthy();
-    expect(await within(screen.getByRole("banner")).findByText("Ada Lovelace (ada@vicemail.test)")).toBeTruthy();
+    // Stage 23 (decision 0084): the toolbar over the list is the header; one account needs no name.
+    expect(within(screen.getByRole("banner")).queryByText("Ada Lovelace (ada@vicemail.test)")).toBeNull();
   });
 
   it("a rail view whose folder the account lacks says so and points to the settings", async () => {

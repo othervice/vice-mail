@@ -7,7 +7,6 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { ViewHeader } from "../../components/ViewHeader";
 import type { ContactEntry } from "../../services/ipc";
-import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
 import { ContactBadges, ContactDetail } from "./ContactDetail";
 import { contactName } from "./names";
@@ -94,7 +93,6 @@ function ContactOption({
  */
 export function ContactsView() {
   const { t } = useTranslation();
-  const dragRegion = useWindowDragRegion();
   const searchId = useId();
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -244,7 +242,7 @@ export function ContactsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="contacts-view">
-      <ViewHeader title={t("nav.contacts")} subtitle={t("contacts.view.subtitle")} dragRegion={dragRegion}>
+      <ViewHeader title={t("nav.contacts")} subtitle={t("contacts.view.subtitle")}>
         <ContactsTransfer
           contact={tab === "contacts" && selected ? { email: selected.email, name: contactName(selected, selected.email) } : null}
           group={tab === "groups" && group ? { id: group.id, name: group.name } : null}

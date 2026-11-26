@@ -12,7 +12,6 @@ import { movedOrder, useAccountArrange } from "../features/accounts/arrange";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
 import { useOutgoing } from "../features/composer/queries";
-import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { DROP_REFUSED_CLASS, dropTargetState, useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
 import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
@@ -416,7 +415,6 @@ export function IconRail() {
   const overlay = useUiStore((state) => state.sidebarOverlay);
   const showMailView = useUiStore((state) => state.showMailView);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const dragRegion = useWindowDragRegion();
   const { accounts } = useSelectedAccount();
   const accountList = accounts.data ?? [];
   const groups = useColumnGroups();
@@ -454,8 +452,7 @@ export function IconRail() {
       // Decision 0079: chrome; Mica shows through it on Windows 11.
       data-chrome
     >
-      {/* Room for the window buttons that macOS draws over this corner. */}
-      <div aria-hidden data-tauri-drag-region={dragRegion ? "deep" : undefined} className="h-(--ui-titlebar-inset) w-full shrink-0" />
+      {/* Stage 23 (decision 0084): the window buttons sit in the toolbar across the window. */}
       {/* Design pass 23.11.2026: in a low window this group scrolls, never sideways. Its edges fade
           within the 12 px padding, so an entry cut off at the edge reads as "more". The narrow rail
           shows no scroll bar (on Windows it would push the icons off centre); wheel, trackpad and

@@ -22,7 +22,7 @@
 //! the scale `v = ln(Y + 0.05)` of the WCAG relative luminance `Y`, on which a contrast ratio is
 //! a distance. Hue and chroma stay (OKLab; chroma is reduced only where the new lightness has no
 //! such colour in sRGB); greys take the tint of the dark theme, so a white mail lands exactly on
-//! the dark card ([`DARK_CANVAS`]) and black text exactly on the app's text colour
+//! the dark reading surface ([`DARK_CANVAS`]) and black text exactly on the app's text colour
 //! ([`DARK_TEXT`]).
 //!
 //! - Backgrounds with `Y > 0.14` ([`BACKGROUND_THRESHOLD`]) are mirrored below that point and
@@ -56,9 +56,10 @@ use mail_model::{MailColors, MailScheme};
 
 use crate::dom::{self, Descend, Visit};
 
-/// The canvas of an adapted mail: the dark theme's raised card (`--ui-surface-raised` in
-/// `app/src/styles/tokens.css`), so the mail and its card are one surface.
-pub const DARK_CANVAS: [u8; 3] = [0x1b, 0x21, 0x29];
+/// The canvas of an adapted mail: the dark theme's reading surface (`--ui-surface` in
+/// `app/src/styles/tokens.css`), so the mail and the pane around it are one surface. Stage 23,
+/// step 3 (decision 0084): the reading pane has no card any more; before, the raised card.
+pub const DARK_CANVAS: [u8; 3] = [0x14, 0x18, 0x1e];
 /// Text of an adapted mail without a colour of its own, and the lightest text the pass writes
 /// (`--ui-text-primary` of the dark theme).
 pub const DARK_TEXT: [u8; 3] = [0xe8, 0xed, 0xf3];
@@ -72,7 +73,7 @@ pub const TEXT_THRESHOLD: f64 = 0.24;
 /// Default style of a frame on the dark canvas, after [`crate::html::MAIL_DEFAULT_STYLE`]:
 /// the scheme, the canvas, the text and link colours of [`DARK_CANVAS`], [`DARK_TEXT`] and
 /// [`DARK_LINK`]. `:where()` gives it no specificity, so every colour of the mail wins.
-pub const MAIL_DARK_STYLE: &str = ":where(html){color-scheme:dark;background-color:#1b2129;color:#e8edf3}:where(a:link){color:#6aa8ff}";
+pub const MAIL_DARK_STYLE: &str = ":where(html){color-scheme:dark;background-color:#14181e;color:#e8edf3}:where(a:link){color:#6aa8ff}";
 
 /// Chroma (OKLab) below which a colour counts as grey and takes the theme's tint.
 const NEUTRAL_CHROMA: f64 = 0.04;
@@ -1295,7 +1296,7 @@ mod tests {
                 .trim();
             parse_hex(value)
         };
-        assert_eq!(token("--ui-surface-raised"), DARK_CANVAS);
+        assert_eq!(token("--ui-surface"), DARK_CANVAS);
         assert_eq!(token("--ui-text-primary"), DARK_TEXT);
         assert_eq!(token("--ui-accent"), DARK_LINK);
         assert_eq!(
@@ -1428,7 +1429,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "color:{text}; background-color:{canvas}; border-color:rgba(27, 33, 41, 0.5); \
+                "color:{text}; background-color:{canvas}; border-color:rgba(20, 24, 30, 0.5); \
                  outline-color:{canvas}; text-decoration-color:rgba(232, 237, 243, 0.25); \
                  column-rule-color:{canvas}; caret-color:rgba(232, 237, 243, 0.502);",
                 text = hex6(DARK_TEXT),

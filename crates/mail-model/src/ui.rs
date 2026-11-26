@@ -471,6 +471,9 @@ pub struct WindowLayout {
     /// 100 % text size, [`MIN_LIST_HEIGHT`] to [`MAX_LIST_HEIGHT`] ([`DEFAULT_LIST_HEIGHT`] by
     /// default); the same handle sets it when the pane is below the list.
     pub list_height: u16,
+    /// Stage 23 (decision 0084): the contact panel right of the reading pane is shown (on by
+    /// default; a window too narrow for it hides it and keeps this value).
+    pub contact_panel: bool,
 }
 
 /// Narrowest accounts-and-folders column ([`WindowLayout::sidebar_width`]).
@@ -503,6 +506,7 @@ impl Default for WindowLayout {
             sidebar_width: DEFAULT_SIDEBAR_WIDTH,
             list_width: DEFAULT_LIST_WIDTH,
             list_height: DEFAULT_LIST_HEIGHT,
+            contact_panel: true,
         }
     }
 }
@@ -671,6 +675,7 @@ mod tests {
             sidebar_width: 300,
             list_width: 512,
             list_height: 240,
+            contact_panel: false,
         };
         let wire = json!({
             "readingPane": "replace",
@@ -678,7 +683,8 @@ mod tests {
             "sidebarExpanded": false,
             "sidebarWidth": 300,
             "listWidth": 512,
-            "listHeight": 240
+            "listHeight": 240,
+            "contactPanel": false
         });
         assert_eq!(serde_json::to_value(layout).expect("json"), wire);
         assert_eq!(
@@ -686,7 +692,8 @@ mod tests {
             layout
         );
         // The accounts-and-folders column is shown by default, 240 pixels wide; the list beside
-        // the reading pane is 384 pixels wide, above it 320 pixels high.
+        // the reading pane is 384 pixels wide, above it 320 pixels high; the contact panel is
+        // shown (stage 23).
         assert_eq!(
             serde_json::to_value(WindowLayout::default()).expect("json"),
             json!({
@@ -695,7 +702,8 @@ mod tests {
                 "sidebarExpanded": true,
                 "sidebarWidth": 240,
                 "listWidth": 384,
-                "listHeight": 320
+                "listHeight": 320,
+                "contactPanel": true
             })
         );
         assert!(WindowLayout::default().validate().is_ok());

@@ -45,6 +45,8 @@ interface ChoiceMenuProps {
   chip?: boolean;
   /** A menu of several groups may take most of the window's height before it scrolls. */
   tall?: boolean;
+  /** Stage 23 (decision 0084): a 28 px button of the toolbar across the window. */
+  compact?: boolean;
 }
 
 const ITEM_ROLES = '[role="menuitemradio"], [role="menuitemcheckbox"]';
@@ -56,7 +58,21 @@ const ITEM_ROLES = '[role="menuitemradio"], [role="menuitemcheckbox"]';
  * last; arrows, Home and End move, Escape and Tab close it, a click outside too. A radio item
  * closes the menu and gives the focus back to the button; a checkbox item stays open.
  */
-export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = false, align = "end", tabIndex, onFocus, chip = false, tall = false, ...rest }: ChoiceMenuProps) {
+export function ChoiceMenu({
+  label,
+  name,
+  groups,
+  icon: Icon,
+  text,
+  active = false,
+  align = "end",
+  tabIndex,
+  onFocus,
+  chip = false,
+  tall = false,
+  compact = false,
+  ...rest
+}: ChoiceMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -152,9 +168,9 @@ export function ChoiceMenu({ label, name, groups, icon: Icon, text, active = fal
           data-testid={rest["data-testid"]}
           className={cx(
             "flex items-center justify-center transition-colors",
-            chip ? "h-8 rounded-full border text-13" : "h-8 rounded-control text-13",
+            compact ? "h-(--ui-toolbar-control) rounded-control text-13" : chip ? "h-8 rounded-full border text-13" : "h-8 rounded-control text-13",
             // Without a visible text (an icon button; a chip of the compact quick filter) a square.
-            text === undefined ? "w-8" : chip ? "gap-1 px-3" : "gap-2 px-2",
+            text === undefined ? (compact ? "w-(--ui-toolbar-control)" : "w-8") : chip ? "gap-1 px-3" : "gap-2 px-2",
             chip
               ? active
                 ? "border-accent bg-accent-soft font-medium text-accent"

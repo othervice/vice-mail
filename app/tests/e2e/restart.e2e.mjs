@@ -27,7 +27,7 @@ describe("app restart (stage 1)", () => {
     const state = await documentState();
     assert.equal(state.theme, previous.expect.theme);
     assert.equal(state.lang, previous.expect.language);
-    assert.equal(await $("main header h1").getText(), "Posteingang");
+    assert.equal(await $("[data-testid=\"app-toolbar\"] h1").getText(), "Posteingang");
     assert.equal(await testId("rail-settings").getAttribute("aria-label"), "Einstellungen");
     assert.deepEqual(await coreCall("get_preferences"), previous.expect);
     assert.deepEqual(await cspViolations(), [], "CSP violations since the page started loading");

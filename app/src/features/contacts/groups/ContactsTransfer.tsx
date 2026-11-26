@@ -88,19 +88,21 @@ export function ContactsTransfer({ contact, group }: ContactsTransferProps) {
   const shown = report !== null || saved !== null || importing.isError || exporting.isError;
   return (
     <div className="relative flex items-center gap-1" data-testid="contacts-transfer">
-      <Button
-        variant="quiet"
+      {/* Stage 23 (decision 0084): in the toolbar across the window, as high as its buttons. */}
+      <button
+        type="button"
         disabled={importing.isPending}
         onClick={() => {
           dismiss();
           importing.mutate();
         }}
+        className="inline-flex h-(--ui-toolbar-control) shrink-0 items-center gap-2 rounded-control px-2 text-13 font-medium text-accent transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-50"
         data-testid="contacts-import"
       >
         <Upload aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         {t("contactGroups.transfer.import")}
-      </Button>
-      <OverflowMenu label={t("contactGroups.transfer.export")} items={exportItems} data-testid="contacts-export-menu" />
+      </button>
+      <OverflowMenu label={t("contactGroups.transfer.export")} items={exportItems} look="toolbar" data-testid="contacts-export-menu" />
       {shown && (
         <div className="absolute end-0 top-full z-20 mt-2 flex w-(--ui-notice-width) max-w-(--ui-notice-width) flex-col gap-2 rounded-card bg-surface-raised shadow-floating">
           {report && (

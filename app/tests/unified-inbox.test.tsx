@@ -63,7 +63,7 @@ describe("unified inbox", () => {
     for (const [index, account] of [ADA, WORK, CLUB].entries()) {
       const option = options[index] as HTMLElement;
       expect(within(option).getByTestId("row-account").title).toBe(account.displayName || account.email);
-      expect(within(option).getByTestId("row-account-dot").className).toContain(accountFill(account.color));
+      expect(within(option).getByTestId("row-account").className).toContain(accountFill(account.color));
       expect(within(option).queryByTestId("avatar")).toBeNull();
     }
 
@@ -94,8 +94,8 @@ describe("unified inbox", () => {
       expect(within(list).getAllByRole("option")).toHaveLength(3);
     });
     await user.click(within(list).getAllByRole("option")[1] as HTMLElement);
-    const pane = await screen.findByRole("region", { name: "Message" });
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    await screen.findByRole("region", { name: "Message" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // No pickers or dialogs of the folder view here.
     expect(within(toolbar).queryByRole("button", { name: /^Move/ })).toBeNull();
     await user.click(within(toolbar).getByRole("button", { name: /^Archive/ }));

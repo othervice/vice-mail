@@ -184,7 +184,7 @@ function startTimeline() {
       const list = document.querySelector('[data-testid="message-list"]');
       const first = list?.querySelector('[role="option"]');
       return {
-        view: document.querySelector("main header h1")?.textContent ?? null,
+        view: document.querySelector("[data-testid=\"app-toolbar\"] h1")?.textContent ?? null,
         folders: document.querySelectorAll('[data-testid^="mailbox-"]').length,
         rows: first ? 1 : 0,
         setSize: Number(first?.getAttribute("aria-setsize") ?? 0),
@@ -595,7 +595,7 @@ describe("account and read-only sync (stage 2)", function () {
     const account = await onlyAccount();
     const archive = (await coreCall("list_mailboxes", { accountId: account.id })).find((m) => m.role === "archive");
     await testId(`mailbox-${archive.id}`).click();
-    await browser.waitUntil(async () => (await $("main header h1").getText()) === "Archive");
+    await browser.waitUntil(async () => (await $("[data-testid=\"app-toolbar\"] h1").getText()) === "Archive");
     await browser.waitUntil(async () => (await renderedRows()).length === expected.Archive.messages, {
       timeoutMsg: "the archive does not show its messages",
     });

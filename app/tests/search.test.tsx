@@ -106,7 +106,7 @@ describe("search field", () => {
       expect.stringContaining("Rechnung März"),
       expect.stringContaining("Rechnung Firma"),
     ]);
-    expect(within(options[1] as HTMLElement).getByTestId("row-account-dot").className).toContain(accountFill(WORK.color));
+    expect(within(options[1] as HTMLElement).getByTestId("row-account").className).toContain(accountFill(WORK.color));
     const marks = within(options[0] as HTMLElement).getAllByTestId("highlight").map((m) => m.textContent);
     expect(marks).toEqual(["Rechnung", "Rechnung"]);
     // One list: no date headings between hits (a folder's list has them).
@@ -162,7 +162,7 @@ describe("search field", () => {
     // opened the hit.
     expect(core.callsOf("get_message").at(-1)).toEqual({ messageId: WORK_INVOICE.id, format: "auto", scheme: "light" });
     // The actions of the hit's own account and folder (read-only here: shown, but disabled).
-    const toolbar = await within(pane).findByRole("toolbar", { name: "Message actions" });
+    const toolbar = await screen.findByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).getByRole("button", { name: /^Archive/ }).getAttribute("aria-disabled")).toBe("true");
   });
 

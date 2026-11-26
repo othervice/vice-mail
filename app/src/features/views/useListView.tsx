@@ -6,7 +6,8 @@ import { monthFirstFor } from "../search/terms";
 import { useDebounced } from "../search/useDebounced";
 import { isDefaultOrder, useListOrder, useSetListOrder } from "./order";
 import { QuickFilterBar } from "./QuickFilterBar";
-import { beyondUnread, toQuickFilter, useQuickFilter } from "./quickFilter";
+import { useQuickFilterFocus } from "./focus";
+import { beyondUnread, isFiltering, toQuickFilter, useQuickFilter } from "./quickFilter";
 import { useViewSource } from "./source";
 import { useListTableConfig, type ListTableConfig } from "./TableHeader";
 
@@ -38,7 +39,10 @@ export interface ListView {
   active: boolean;
   /** The table while the wide list is drawn as one. */
   table: ListTableConfig | undefined;
-  /** The quick filter bar above the list (null where it does not apply). */
+  /**
+   * The quick filter bar above the list (null where it does not apply, and while it is folded
+   * away: stage 23, the toolbar's filter button shows it; a set filter keeps it).
+   */
   bar: ReactNode;
 }
 
@@ -67,6 +71,8 @@ export function useListView({ scope, keyBase, conversations, kept, showRecipient
     showRecipients,
     mixedAccounts,
   });
-  const bar = scope && viewKey ? <QuickFilterBar viewKey={viewKey} scope={scope} keyBase={keyBase} query={query} filter={filter} /> : null;
+  const shown = useQuickFilterFocus((state) => state.shown) || isFiltering(filter);
+  const bar =
+    scope && viewKey && shown ? <QuickFilterBar viewKey={viewKey} scope={scope} keyBase={keyBase} query={query} filter={filter} /> : null;
   return { source, active, table: scope ? table : undefined, bar };
 }

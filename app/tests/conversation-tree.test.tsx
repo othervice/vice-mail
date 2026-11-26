@@ -550,8 +550,8 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
       expect(classes(label)).not.toContain("group-hover/row:hidden");
       const actions = await within(row).findByTestId("row-actions");
       expect(actions.parentElement).toBe(meta.parentElement);
-      expect(label.parentElement).toBe(meta.parentElement);
-      expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Stage 23 (decision 0084): the account is the stripe at the row's edge, outside the line.
+      expect(actions.parentElement?.contains(label)).toBe(false);
       expect(classes(meta)).toEqual(expect.arrayContaining(["contents", "group-hover/row:hidden"]));
       expect(within(actions).getByTestId("quick-archive")).toBeTruthy();
     }
@@ -592,7 +592,7 @@ describe("the reading pane shows one message", () => {
     });
     expect(within(pane).getAllByTestId("message-card")).toHaveLength(1);
     // The subject of the conversation is the title; the toolbar acts on the open message.
-    expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
 
     await user.click(within(conversation()).getByTestId("row-replies"));
     await waitFor(() => {

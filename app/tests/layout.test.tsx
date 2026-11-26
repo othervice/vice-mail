@@ -48,7 +48,7 @@ describe("layouts", () => {
       expect(core.ui.layout.readingPane).toBe("bottom");
     });
     expect(core.callsOf("set_window_layout").at(-1)).toEqual({
-      layout: { readingPane: "bottom", density: "comfortable", sidebarExpanded: false, sidebarWidth: 240, listWidth: 384, listHeight: 320 },
+      layout: { readingPane: "bottom", density: "comfortable", sidebarExpanded: false, sidebarWidth: 240, listWidth: 384, listHeight: 320, contactPanel: false },
     });
 
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });

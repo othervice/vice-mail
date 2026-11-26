@@ -94,8 +94,8 @@ describe("conversation view", () => {
       // The inbox's top message (500) showed before the folder was opened.
       expect(core.callsOf("get_message").filter((call) => (call as { messageId: number }).messageId !== 500)).toEqual([{ messageId: ANSWER.id, format: "auto", scheme: "light" }]);
     });
-    const pane = await screen.findByRole("region", { name: "Message" });
-    expect(within(pane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    await screen.findByRole("region", { name: "Message" });
+    expect(screen.getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
     expect(screen.queryByTestId("thread-entries")).toBeNull();
 
     // Unfolded: every message, oldest first, the answer from Sent named by its folder.
@@ -116,8 +116,42 @@ describe("conversation view", () => {
     await waitFor(() => {
       expect(core.callsOf("get_message")).toContainEqual({ messageId: REPLY.id, format: "auto", scheme: "light" });
     });
-    const replyPane = await screen.findByRole("region", { name: "Message" });
-    expect(within(replyPane).getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+    await screen.findByRole("region", { name: "Message" });
+    expect(screen.getByRole("toolbar", { name: "Message actions" })).toBeTruthy();
+  });
+
+  it("shows the conversation's other messages as one-line rows around the open one; a click opens one", async () => {
+    // Stage 23 (decision 0084), as in the draft: the earlier messages above the open message.
+    const { core, user } = setup();
+    const list = await conversations(user);
+    await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
+    const pane = await screen.findByRole("region", { name: "Message" });
+    await waitFor(() => {
+      expect(within(pane).getAllByTestId("conversation-line")).toHaveLength(2);
+    });
+    expect(within(pane).getByTestId("reading-meta-count").textContent).toBe("3 messages");
+    const lines = within(pane).getAllByTestId("conversation-line");
+    expect(lines.map((line) => line.textContent)).toEqual([
+      expect.stringMatching(/^AnnaWie wäre es mit Montag\?/),
+      expect.stringMatching(/^You/),
+    ]);
+    // Both before the open message (the newest, unread one).
+    const card = within(pane).getByTestId("message-card");
+    for (const line of lines) expect(line.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lines[0]?.getAttribute("aria-label")).toMatch(/^Anna, .*: show this message$/);
+
+    await user.click(lines[0] as HTMLElement);
+    await waitFor(() => {
+      expect(core.callsOf("get_message")).toContainEqual({ messageId: FIRST.id, format: "auto", scheme: "light" });
+    });
+    await waitFor(() => {
+      expect(within(pane).getByTestId("reading-from").textContent).toContain("Anna");
+    });
+    // The opened one leaves the lines; the one open before joins them, after it.
+    const after = within(pane).getAllByTestId("conversation-line");
+    expect(after).toHaveLength(2);
+    expect(after.map((line) => line.textContent)).toEqual([expect.stringMatching(/^You/), expect.stringMatching(/^AnnaMontag passt/)]);
+    expect(document.activeElement).toBe(within(pane).getByRole("article"));
   });
 
   it("says when the conversation cannot be loaded and still shows the row's message", async () => {

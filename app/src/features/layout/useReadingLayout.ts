@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { cx } from "../../components/cx";
 import { useLayoutStore, type ReadingPanePosition } from "../../stores/layout";
+import { registerListColumn } from "../../stores/toolbar";
 import type { ListSelection, MessageListHandle } from "../messages/MessageList";
 
 export interface ReadingLayout {
@@ -10,7 +11,14 @@ export interface ReadingLayout {
   /** Id of the list column, which the handle between list and pane resizes (stage 18). */
   listId: string;
   /** Props of the list column, given whether something is selected. */
-  listColumn: (open: boolean) => { id: string; className: string; inert?: boolean; "aria-hidden"?: true };
+  listColumn: (open: boolean) => {
+    id: string;
+    className: string;
+    inert?: boolean;
+    "aria-hidden"?: true;
+    /** Stage 23 (decision 0084): beside the pane, the toolbar's list segment ends where it ends. */
+    ref?: (element: HTMLDivElement | null) => (() => void) | undefined;
+  };
   /** Whether the pane (or the summary of a selection) is shown. */
   paneShown: (open: boolean) => boolean;
   /**
@@ -87,6 +95,7 @@ export function useReadingLayout(list: RefObject<MessageListHandle | null>): Rea
       // pane gets less than its own (the list gives way first when the window gets smaller).
       return {
         id: listId,
+        ...(position === "right" && { ref: registerListColumn }),
         className:
           position === "bottom"
             ? cx(

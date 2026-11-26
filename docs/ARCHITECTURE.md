@@ -1175,7 +1175,8 @@ used commands of the palette; every change goes as `uiPreferencesChanged` to all
 Shortcuts and text size are synced by the settings sync (one key per platform), the history
 of the palette stays on the device. The layout (reading pane on the right, at the bottom or instead of the list,
 density, sidebar, the sidebar's width and, since stage 18, the list's width beside the reading pane and
-its height above it) is stored by `setWindowLayout` per window kind on the device. The core checks shape
+its height above it; since stage 23 (0084) whether the contact panel shows) is stored by
+`setWindowLayout` per window kind on the device. The core checks shape
 and limits; which commands exist and which shortcuts are assignable is decided by the UI.
 Until the UI has been switched over, these values are still kept in the marked fallback store
 `app/src/features/keyboard/localFallback.ts`.
@@ -1196,6 +1197,7 @@ Until the UI has been switched over, these values are still kept in the marked f
 
 | Decision | Reason | Way back |
 |---|---|---|
+| Step 3 of that look (0084): one 52 px toolbar across the window (the macOS title bar; below the native bar on Windows) into which views render their head and the open message's actions (`ToolbarPortal`), joined action groups, the quick filter behind a button, list rows with hairlines, a filled selection and an account stripe in mixed lists, the reading pane without a card (attachments as cards, quick reply at the bottom, adapted dark mail on the surface), a contact panel from the local contacts | the approved draft; one bar instead of a header per view and a toolbar per pane; the panel shows the data the app already has, no network | the view headers and the pane toolbar of 0071, `DARK_CANVAS` on the card, `contactPanel` ignored |
 | The look approved on 2026-11-26 (0083): Inter shipped as the UI font, the draft's light and dark palettes, a type scale with 11 and 26 px, flat cards, shadows only for floating things, list rows across the whole width | the human found the app looked generic and approved a draft mixing Mailbird and Canary Mail; one font looks the same on macOS and Windows; mail content keeps the system font, so what is written looks as sent | the system font in `--ui-font-family` and the values of 0053 in `tokens.css` |
 | Logo in blue (0068), approved by the human on 2026-11-25; icons from one script (`scripts/icons.sh`) | the GitHub blues of the colour scheme (0053); every size from its own source, so a new artwork is one command | swap the colours back in `make_svgs.py` and `Brand.tsx`, run the script |
 | The counter drawn for the display scale, window icon from the icon's own entry (0068) | Windows shows the overlay at 16 logical pixels; a 32 px image shrunk to 16 blurs the digits | the stage 9 overlay (32 px, one size) |

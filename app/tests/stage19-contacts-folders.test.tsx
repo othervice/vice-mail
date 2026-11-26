@@ -145,13 +145,13 @@ describe("vCard import and export", () => {
     });
     const { user } = renderApp();
     await user.click(await screen.findByRole("button", { name: "Contacts" }));
-    const view = await screen.findByTestId("contacts-view");
-    await user.click(within(view).getByTestId("contacts-import"));
+    await screen.findByTestId("contacts-view");
+    await user.click(screen.getByTestId("contacts-import"));
     const report = await screen.findByTestId("contacts-import-report");
     expect(report.textContent).toContain("3 cards read");
     expect(report.textContent).toContain("New contacts: 2, updated: 1, groups: 1.");
     expect(report.textContent).toContain("1 card or line could not be taken over completely.");
-    await user.click(within(view).getByRole("button", { name: "Export as vCard" }));
+    await user.click(screen.getByRole("button", { name: "Export as vCard" }));
     await user.click(await screen.findByRole("menuitem", { name: "Export all contacts (vCard 4.0)…" }));
     expect((await screen.findByTestId("contacts-export-saved")).textContent).toContain("/Users/test/Downloads/contacts.vcf");
     expect(core.callsOf("export_vcards")).toEqual([{ selection: { kind: "all", peopleOnly: true }, version: "v4" }]);

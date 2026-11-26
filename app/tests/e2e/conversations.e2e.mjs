@@ -495,7 +495,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     report.steps.account = account.email;
   });
 
-  it("puts the names before the account label in the unified inbox, down to its colour dot", async () => {
+  it("marks each row of the unified inbox with its account's stripe, clear of the names", async () => {
     const addedBOB = await coreCall("add_account", {
       settings: {
         email: BOB.email,
@@ -519,65 +519,51 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       timeout: 20000,
       timeoutMsg: "no account labels in the unified inbox",
     });
-    // A message open on the right: the list is narrow, names and label share the first line.
+    // A message open on the right: the list is narrow. Stage 23 (decision 0084): the account is a
+    // 3 px stripe at the row's right edge (its name the tooltip and in the row's name); it takes no
+    // room from the names, in any list width.
     await (await browser.$('[data-testid="message-list"] [data-testid="message-row"]')).click();
     await testId("message-card").waitForExist({ timeout: 10000 });
     const measure = () =>
       browser.execute(() =>
         [...document.querySelectorAll('[data-testid="message-list"] [data-testid="message-row"]')].flatMap((row) => {
           const sender = row.querySelector('[data-testid="row-sender"]');
-          const label = row.querySelector('[data-testid="row-account"]');
-          const dot = label?.querySelector('[data-testid="row-account-dot"]');
-          if (!sender || !label || !dot) return [];
-          // Cut by any fraction of a pixel (an ellipsis shows then).
-          const cut = (el) => {
-            const range = document.createRange();
-            range.selectNodeContents(el);
-            return range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.05;
-          };
-          const name = label.querySelector('[data-testid="row-account-name"]');
-          const box = label.getBoundingClientRect();
+          const stripe = row.querySelector('[data-testid="row-account"]');
+          if (!sender || !stripe) return [];
+          const box = stripe.getBoundingClientRect();
+          const rowBox = row.getBoundingClientRect();
           return [
             {
               names: sender.textContent,
-              namesCut: cut(sender),
-              // The label's name on its visible line, and whether it is cut there.
-              nameShown: Boolean(name && name.getBoundingClientRect().top < box.bottom - 1),
-              nameCut: Boolean(name && cut(name)),
-              labelMax: Number.parseFloat(getComputedStyle(label).maxWidth),
-              label: label.getAttribute("title"),
-              labelWidth: label.getBoundingClientRect().width,
-              dotWidth: dot.getBoundingClientRect().width,
-
+              senderRight: sender.getBoundingClientRect().right,
+              label: stripe.getAttribute("title"),
+              width: box.width,
+              inset: rowBox.right - box.right,
+              left: box.left,
+              colour: getComputedStyle(stripe).backgroundColor,
               rowName: row.querySelector('[data-testid="row-name"]')?.textContent ?? "",
             },
           ];
         }),
       );
-    await browser.waitUntil(async () => (await measure()).length > 0, { timeoutMsg: "no rows with names and an account label" });
+    await browser.waitUntil(async () => (await measure()).length > 0, { timeoutMsg: "no rows with names and an account stripe" });
     const check = (rows) => {
       for (const row of rows) {
         assert.ok(["Alice Archer", "Bob Baker"].includes(row.label ?? ""), `label ${String(row.label)}`);
         assert.ok(row.rowName.includes(`Account: ${String(row.label)}`), `the row's name lacks the account: ${row.rowName}`);
-        // Names cut only once the label is down to its dot.
-        if (row.namesCut) assert.ok(row.labelWidth <= row.dotWidth + 1, `"${String(row.names)}" cut beside a label of ${String(row.labelWidth)} px`);
-        // The account's name whole or not at all; cut only when longer than the label's width.
-        if (row.nameShown && row.nameCut) assert.ok(row.labelWidth >= row.labelMax - 1, `"${String(row.label)}" cut to a fragment in ${String(row.labelWidth)} px`);
+        assert.ok(Math.abs(row.width - 3) < 0.5, `stripe ${String(row.width)} px wide`);
+        assert.ok(Math.abs(row.inset - 6) < 1, `stripe ${String(row.inset)} px from the row's edge`);
+        assert.ok(row.left >= row.senderRight, `the stripe of "${String(row.names)}" lies over the names`);
       }
     };
     const rows = await measure();
     report.steps.unifiedLabels = rows.slice(0, 8);
     check(rows);
-    // Narrower: labels give way, then names are cut beside a bare dot (both measured).
+    assert.ok(new Set(rows.map((row) => row.colour)).size >= 1);
     await narrowList(280);
     const squeezed = await measure();
     report.steps.unifiedSqueezed = squeezed.slice(0, 8);
     check(squeezed);
-    assert.ok(
-      squeezed.some((row) => row.labelWidth <= row.dotWidth + 1),
-      `no label went down to its dot: ${JSON.stringify(squeezed.map((r) => r.labelWidth))}`,
-    );
-    assert.ok(squeezed.some((row) => !row.nameShown), "no label hid its name");
     report.screenshots.push(await screenshot("conversations-unified-squeezed"));
     await narrowList(null);
     report.screenshots.push(await screenshot("conversations-unified-labels"));

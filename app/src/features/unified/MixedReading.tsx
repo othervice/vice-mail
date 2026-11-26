@@ -152,6 +152,7 @@ function ReadingWithActions({
         <ReadingPane
           account={account}
           messageId={item.id}
+          mailboxId={item.mailboxId}
           focusRequest={focusRequest}
           toolbar={toolbar}
           onEscape={onEscape}
@@ -191,6 +192,7 @@ export function MixedReading(props: ReadingProps) {
       key={props.item.id}
       account={props.account}
       messageId={props.item.id}
+      mailboxId={props.item.mailboxId}
       focusRequest={props.focusRequest}
       onEscape={onEscape}
       onClose={onClose}

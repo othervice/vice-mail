@@ -52,6 +52,26 @@ export async function attach({ firstStart = "skip" } = {}) {
     return;
   }
   await skipFirstStart();
+  await hideContactPanel();
+}
+
+/**
+ * Stage 23 (decision 0084): the specs measure the window without the contact panel (it takes
+ * 264 px beside the reading pane wherever there is room, also after a spec makes the window
+ * larger). The choice is stored with the window's layout: once it is off for the test data
+ * directory (the page reads the layout at its start), it stays off. A spec that wants the panel
+ * shows it with the toolbar's button.
+ */
+export async function hideContactPanel() {
+  const layout = await coreCall("get_window_layout");
+  if (!layout.contactPanel) return;
+  await coreCall("set_window_layout", { layout: { ...layout, contactPanel: false } });
+  // Reloaded as columns.e2e.mjs does it; the page reads the stored layout at its start.
+  await browser.execute(() => {
+    window.location.reload();
+  });
+  await browser.pause(2000);
+  await $('[data-testid="rail-settings"]').waitForExist({ timeout: 20000 });
 }
 
 /**
@@ -304,7 +324,11 @@ export function documentState() {
     title: document.title,
     bodyBackground: getComputedStyle(document.body).backgroundColor,
     canvasToken: getComputedStyle(document.documentElement).getPropertyValue("--ui-canvas").trim(),
-    titlebarInset: getComputedStyle(document.documentElement).getPropertyValue("--ui-titlebar-inset").trim(),
+    // Stage 23 (decision 0084): the toolbar across the window is the title-bar band.
+    toolbar: (() => {
+      const box = document.querySelector('[data-testid="app-toolbar"]')?.getBoundingClientRect();
+      return box ? { top: box.top, height: box.height } : null;
+    })(),
     viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio },
   }));
 }

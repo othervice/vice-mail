@@ -42,7 +42,14 @@ const ADA_ROW = `sidebar-account-${ADA.id}`;
 const ADA_MORE = `sidebar-more-folders-${ADA.id}`;
 
 const focused = () => document.activeElement;
-const nameOf = (element: Element | null) => element?.getAttribute("aria-label") ?? element?.textContent ?? null;
+// The accessible name as screen readers compute it (aria-hidden parts left out, stage 23: the
+// toolbar's search is named by its text, not by its shortcut beside it).
+function visibleText(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(visibleText).join("");
+}
+const nameOf = (element: Element | null) => (element ? (element.getAttribute("aria-label") ?? visibleText(element)) : null);
 const heading = () => screen.getByRole("heading", { level: 1 }).textContent;
 
 /** The rows of a tree that Tab can reach: exactly one per tree. */
@@ -392,22 +399,24 @@ describe("the Tab path to the message list", () => {
     const { user } = setup();
     await unfold(user);
     const stops = await tabToList(user);
-    // The column: its toggle and its edge (the splitter), the views, the account with its
-    // folders (one tree), the foot's buttons. Then the list header.
-    expect(stops.slice(0, stops.indexOf("button: Sync now") + 1)).toEqual([
+    // Stage 23 (decision 0084): first the toolbar across the window (the column's toggle, New
+    // mail, the list's controls, the open message's actions as one stop, search), then the column
+    // (its edge, the views, the account with its folders as one tree, the foot's buttons as one
+    // toolbar; decision 0085), then the list. The quick filter is folded behind its button.
+    expect(stops).toEqual([
       "button: Hide sidebar",
+      "button: New message",
+      "button: Quick filter",
+      "button: Sorted by Date, Newest first",
+      "button: List options",
+      "button: Conversations",
+      "button: Reply",
+      "button: Search",
       "separator: Sidebar width",
       "treeitem: Views",
       "treeitem: Inbox, 3 unread",
       "button: Sync now",
     ]);
-    // Stage 19: the view menu, the options; the header's last button, then the quick filter (its
-    // switches are one toolbar, the text field another stop).
-    expect(stops.slice(stops.indexOf("button: Sync now") + 1, stops.indexOf("button: Sync now") + 3)).toEqual([
-      "button: Sorted by Date, Newest first",
-      "button: List options",
-    ]);
-    expect(stops.slice(-3)).toEqual(["button: New message", "button: Unread", "input: Filter by sender, subject and text"]);
   });
 
   it("stays short with two accounts, favourites, inboxes and saved searches", async () => {
@@ -425,10 +434,11 @@ describe("the Tab path to the message list", () => {
     await screen.findByRole("treeitem", { name: "Invoices" });
     await screen.findByRole("tree", { name: "Folders of Work" });
     const stops = await tabToList(user);
-    const sidebar = stops.slice(0, stops.indexOf("button: Sync now"));
+    const sidebar = stops.slice(stops.indexOf("button: Search") + 1, stops.indexOf("button: Sync now"));
     // One stop per tree ("All accounts" with the groups and saved searches, favourites, each
-    // account with its folders), plus the column's toggle and edge (stage 23: two fewer trees).
+    // account with its folders; decision 0085), plus the column's edge (its toggle is in the
+    // toolbar since stage 23, decision 0084).
     expect(sidebar.filter((stop) => stop.startsWith("treeitem"))).toHaveLength(4);
-    expect(sidebar).toHaveLength(6);
+    expect(sidebar).toHaveLength(5);
   });
 });

@@ -36,7 +36,7 @@ async function seriousFindings(): Promise<string[]> {
     .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`);
 }
 
-const LAYOUT = { readingPane: "right" as const, density: "comfortable" as const, sidebarExpanded: true, sidebarWidth: 240, listWidth: 384, listHeight: 320 };
+const LAYOUT = { readingPane: "right" as const, density: "comfortable" as const, sidebarExpanded: true, sidebarWidth: 240, listWidth: 384, listHeight: 320, contactPanel: true };
 
 describe("an account's section", () => {
   it("has the inbox and Sent on their own; everything else under More folders, roles first, own folders by name", () => {

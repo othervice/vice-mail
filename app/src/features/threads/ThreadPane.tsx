@@ -34,7 +34,8 @@ export function initialEntry(entries: readonly ThreadEntry[], fallback: MessageI
  * conversation's oldest unread one, else its newest (in any folder, the user's own answer in Sent
  * too). Which one is decided once, when the conversation is known, and kept while the row stays
  * selected: marking it read, or a reply that becomes the row's message, do not switch the pane.
- * The conversation's other messages are child rows in the list. The AI chips under the message
+ * The conversation's other messages are child rows in the list; stage 23 (decision 0084) shows them
+ * as one line each around the open message too, and a click on one opens it here. The AI chips under the message
  * work on the row's message (the panel's conversation), and a source of an AI answer among the
  * conversation's messages is shown through the list (`onShowMessage`). A thread is always opened by
  * a message id (thread ids change when threads merge).
@@ -93,6 +94,10 @@ export function ThreadPane({ account, item, ident, focusRequest, toolbarFor, onS
           // The AI panel works on the row's message (its conversation); its chips stand under
           // whichever message of the conversation is open.
           aiMessageId={item.id}
+          mailboxId={current.mailboxId}
+          // Stage 23 (decision 0084): the conversation's other messages as lines around it; a
+          // click opens one of them here.
+          conversation={{ messages: entries.map((entry) => entry.message), onOpen: setOpened }}
           focusRequest={focusRequest && focusRequest.messageId === item.id ? { ...focusRequest, messageId: current.id } : focusRequest}
           toolbar={toolbarFor?.(current)}
           onEscape={onEscape}

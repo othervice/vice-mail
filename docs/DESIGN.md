@@ -52,7 +52,9 @@ nehmen wir.“). Umgesetzt in vier Schritten (Stufendatei 23, Punkt 2); Schritt 
 Was Schritt 1 schon anwendet: Kopf jeder Ansicht im Ton der Werkzeugleiste, Monatsabschnitte der
 Liste als Bänder, aktiver Eintrag der Seitenleiste auf neutraler Fläche (Symbol im Akzent),
 Zweitknöpfe auf `button`, KI-Panel auf `panel`. Was die Schritte 2 bis 4 umbauen, steht in
-Entscheidung 0083. Schritt 2, die Seitenleiste, steht unter „Seitenleiste nach Konten“.
+Entscheidung 0083. Schritt 2, die Seitenleiste, steht unter „Seitenleiste nach Konten“ (Entscheidung
+0085); Schritt 3 (Werkzeugleiste über die ganze Breite, Zeilen, Lesebereich ohne Karte,
+Kontaktspalte) unter „Werkzeugleiste, Liste, Lesebereich und Kontaktspalte“ (Entscheidung 0084).
 
 ## Seitenleiste nach Konten (Stufe 23, Entscheidung 0085)
 
@@ -61,7 +63,7 @@ Die Seitenspalte wie im freigegebenen Entwurf; Code `app/src/app/SidebarColumn.t
 `features/organize/folders.tsx` (Favoriten), `features/layout/sidebarFolds.ts`.
 
 ```
-  (Kopf: Seitenleiste ausblenden; ab Schritt 3 in der Werkzeugleiste)
+  (darüber in der Werkzeugleiste: Seitenleiste ausblenden, Neue Mail)
   Alle Konten                     ← mit einem Konto „Ansichten“
   ▭ Posteingang            18     ← vereint, nur ab zwei Konten; halbfett gezählt
   ◷ Später                        ← Ansichten vor der Linie „Mehr“ (Standard: Später, Markiert)
@@ -125,7 +127,57 @@ Gesendet; Haarlinie; die Ansichten unter „Mehr“, Entwürfe, Archiv, Papierko
 Konten als Punkte, die Zahl ihrer ungelesenen Mails darunter (11 px, `text-secondary`, ab 1.000
 „999+“; das Zeichen für offline oder Fehler oben am Rand), Aktivität, Ausgang, Einstellungen. Aktiv: `rail-selected` und Symbol im Akzent, kein Balken.
 
+## Werkzeugleiste, Liste, Lesebereich und Kontaktspalte (Stufe 23, Schritt 3, Entscheidung 0084)
+
+**Werkzeugleiste.** Eine Leiste von 52 px über das ganze Fenster auf `toolbar`, darunter eine
+Haarlinie. Auf macOS ist sie die Titelleiste: Die Ampeln sitzen mittig an ihrem Anfang, Ziehen auf
+freier Fläche bewegt das Fenster. Auf Windows liegt sie unter der nativen Titelleiste auf Mica.
+Abschnitte: über der Seitenleiste (so breit wie sie) Seitenleiste ein/aus und Neue Mail (gerahmt,
+32 × 28); über der Liste (endet, wo die Liste neben dem Lesebereich endet) der Kopf der Liste; über
+dem Lesebereich die Aktionen der offenen Mail als verbundene Gruppen, dann das Suchfeld (öffnet die
+Suche über der Liste, zeigt ihr Kürzel), KI-Panel und Kontaktspalte. Bedienelemente 28 px, Symbole
+16 px. Schmaler: Suche 180 px unter 1440 px, nur ihr Symbol unter 1120 px; „n ungelesen“ entfällt
+unter 1120 px, „Gespräche“ unter 1600 px; Aktionen wandern ins Menü „Weitere Aktionen“. Die
+Ansichten zeichnen ihren Kopf und die Aktionen in die Leiste (`ToolbarPortal`); in der
+Tab-Reihenfolge kommt die Leiste zuerst.
+
+**Zeilen.** Haarlinie unter jeder Zeile, dreizeilig 72 px, Bänder 28 px, Vorlauf 8 px (Punkt 16 px
+vom Rand). Auswahl: gefüllt mit `accent-fill` und `text-on-accent`, solange die Liste den Fokus hat,
+sonst neutral (`selected-muted`). Kontostreifen in gemischten Listen (siehe „Zeile“, Konto).
+
+**Lesebereich.** Ohne Karte und ohne eigene Leiste: oben „■ Konto · Ordner · n Mails“ mit leisen
+Knöpfen Sichern, Drucken, Schließen; Betreff 26 px fett; die anderen Mails des Gesprächs als Zeilen
+(früher darüber, später darunter; ein Klick öffnet sie hier); Kopf mit Name und Adresse, „an dich“,
+Datum rechts; Text auf der Fläche (angepasste dunkle Mails auf `surface`); darunter „n Anhänge ·
+Alle speichern“ und Karten je Datei auf der Tönung ihres Typs mit Plakette; unten, außerhalb des
+Scrollbereichs, die Schnellantwort als gerahmtes Feld. Im Nachrichtenfenster bleibt die Leiste des
+Lesebereichs.
+
+**Kontaktspalte.** 264 px auf `panel` rechts vom Lesebereich: Name, Adresse, „Mail schreiben“,
+„Alle Mails“ (Suche `kontakt:`), Notiz, neueste Mails, Gruppen, alles aus dem Kontaktverzeichnis
+dieses Rechners. Ein- und ausblenden in der Leiste, gespeichert mit dem Layout des Fensters; nur in
+Mailansichten und wo Seitenleiste, Liste (in ihrer Breite), Lesebereich (360 px), Spalte und
+offenes KI-Panel Platz haben.
+
 ## Aufbau
+
+Seit Stufe 23 (Schritt 3, Entscheidung 0084):
+
+```
+┌──────────────────┬───────────────────────────┬───────────────────────────────────────────────┐
+│ ●●●     [▤] [✎]  │ Alle Posteingänge ▾  98 … │ [↩ ↩↩ ↪] [▣ 🗑 ◷ ⊘] [⚑ …]   [⌕ Suchen ⌘F] [▥] │ 52 px
+├──────────────────┼───────────────────────────┼─────────────────────────────────┬─────────────┤
+│ Seitenleiste     │ Heute                     │ ■ Konto · Ordner · 3 Mails      │ Kontakt-    │
+│ (oder schmale    │ ● Absender        10:42  ▌│ Betreff (26 px fett)            │ spalte      │
+│  Leiste)         │   Betreff   [3] 📎 ⚑     ▌│ Du          Danke! …   24. Nov. │ 264 px      │
+│                  │   Vorschau …             ▌│ Name adresse          Datum  …  │ Name        │
+│                  │ Gestern                   │ Text …                          │ Adresse     │
+│                  │ ● Absender …             ▌│ [PDF] [XLS] Anhänge             │ Notiz, Mails│
+│                  │                           │ [↩ Antworten an …            ]  │ Gruppen     │
+└──────────────────┴───────────────────────────┴─────────────────────────────────┴─────────────┘
+```
+
+Davor (bis Stufe 22):
 
 ```
 ┌────┬──────────────────────────────────────────────┬───────────────┐
@@ -158,10 +210,12 @@ keine Initialen, Stufe 22, Entscheidung 0072; seit Stufe 23 mit der Zahl seiner 
 Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
-**Kopf der Liste.** Titel der Ansicht mit Auswahl von Konto oder Kontogruppe, darunter eine
-Unterzeile (z. B. „Fokussiert“ oder „Alle“). Rechts: Kategorien an/aus, Suche, Neue Mail. Seit
-Stufe 19 davor das Ansichtsmenü (Sortieren, Zeilen oder Tabelle, Spalten) und unter dem Kopf der
-Schnellfilter (siehe „Sortieren, Tabelle und Schnellfilter“).
+**Kopf der Liste.** Seit Stufe 23 (0084) in der Werkzeugleiste über der Liste: Titel der Ansicht
+(13 px halbfett), beim Posteingang die Wahl der Konten oder Kontogruppe als Menü („Alle
+Posteingänge ▾“), das Konto nur, wo es mehrere gibt, „98 ungelesen“; am Ende der Knopf des
+Schnellfilters, das Ansichtsmenü (Sortieren, Zeilen oder Tabelle, Spalten), „Listenoptionen“ und ab
+1600 px „Gespräche“. Suche und Neue Mail stehen in der Leiste selbst (siehe „Werkzeugleiste, Liste,
+Lesebereich und Kontaktspalte“).
 
 **Liste.** Abschnitt „Priorität“ auf getönter Fläche, höchstens drei Zeilen und „Alle anzeigen (n)“.
 Danach Abschnitte nach Datum: Heute, Gestern, Diese Woche, dann nach Monat. Bündel sind eine Zeile
@@ -176,14 +230,15 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel; in schmaler Liste so breit wie die Namen |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
-| Konto | nur wo sich Konten mischen (vereinter Posteingang, Ansichten, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). Seit Stufe 22 trägt er, was der Ring des Avatars trug, und bleibt darum beim Überfahren vor den Schnellaktionen stehen (Markierungen und Zeit weichen ihnen) |
+| Konto | nur wo sich Konten mischen (vereinter Posteingang, Ansichten, Suche über Konten): seit Stufe 23 (0084) ein 3-px-Streifen in der Kontofarbe am rechten Rand der Zeile (6 px vom Rand, 8 px oben und unten), der keinem Text Platz nimmt und beim Überfahren bleibt. Der Kontoname ist sein Tooltip und steht im Namen der Zeile; die offene Mail nennt ihr Konto über dem Betreff, die Tabelle in ihrer Spalte. Vorher (Stufe 8 bis 22) Punkt und Name vor der Zeit |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
 | Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille. Seit Stufe 21 (Entscheidung 0065) auch im vereinten Posteingang und in Suchergebnissen, mit Konto und Ordner jeder Zeile (nur lesende Konten gesperrt mit Grund); das Konto wich dann wie die Zeit, seit Stufe 22 (Entscheidung 0072) bleibt es vor der Leiste stehen |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
 Betreff, darunter die Vorschau (nur komfortabel).
 
-**Lesebereich.** Öffnet rechts neben der Liste; die Liste wird schmaler und zweizeilig. Alternativ
+**Lesebereich.** Seit Stufe 23 (0084) ohne Karte und ohne eigene Leiste (siehe „Werkzeugleiste,
+Liste, Lesebereich und Kontaktspalte“). Öffnet rechts neben der Liste; die Liste wird schmaler und zweizeilig. Alternativ
 unten oder anstelle der Liste. Seit Stufe 18 (Aufgabe F, Entscheidung 0054) hat die Liste rechts
 und unten immer ihr Maß, auch ohne Auswahl, und das Öffnen eines Ordners oder einer Ansicht zeigt
 gleich die oberste Mail (bei einem Gespräch die, die ein Klick zeigen würde), ohne den Fokus zu
@@ -231,7 +286,7 @@ feste Farben oder Abstände.
 
 | Gruppe | Tokens |
 |---|---|
-| Flächen | `canvas` (Rahmen, Mulden in Karten), `rail` (Seitenleiste), `rail-hover`, `rail-selected` (aktiver Eintrag), `toolbar`, `band` (Bänder der Liste), `panel` (Spalte rechts), `button` (Zweitknöpfe), `surface-list` (Listenspalte), `surface` (Lesebereich), `surface-raised` (Karten), `priority-tint`, `selected`, `hover`, `badge` (Pillen, Chips) |
+| Flächen | `canvas` (Rahmen, Mulden in Karten), `rail` (Seitenleiste), `rail-hover`, `rail-selected` (aktiver Eintrag), `toolbar`, `band` (Bänder der Liste), `panel` (Spalte rechts), `button` (Zweitknöpfe), `surface-list` (Listenspalte), `surface` (Lesebereich), `surface-raised` (Karten), `priority-tint`, `selected`, `selected-muted` (gewählte Zeile einer Liste ohne Fokus, Stufe 23), `hover`, `badge` (Pillen, Chips) |
 | Linien | `border`, `border-subtle` (Haarlinien zwischen Bereichen), `border-strong`, `priority-border`, `focus-ring` |
 | Text | `text-primary`, `text-secondary`, `text-tertiary`, `text-on-accent` |
 | Akzent | `accent` (Text, Symbole, Schalter), `accent-fill` (Füllung des Hauptknopfs und kleiner Marken, dazu `text-on-accent`), `accent-soft`, `danger` (mit `text-on-danger`), `success`, `warning` |
@@ -240,7 +295,7 @@ feste Farben oder Abstände.
 | Dateitypen | `file-pdf`, `file-doc`, `file-sheet`, `file-image`, `file-archive` (Plakette, mit `text-on-file`) und je `-tint` (Karte), Stufe 23 |
 | Schrift | Inter, mitgeliefert (Stufe 23), dahinter die Systemschrift (SF Pro, Segoe UI Variable); Mailinhalt in der Systemschrift (`font-mail`); Größen 11, 12, 13, 14, 16, 20, 26, 28; Gewichte 400, 500, 600, 700 |
 | Abstand | Raster aus 4 px: 4, 8, 12, 16, 20, 24, 32, 40, 48; andere Stufen erzeugen kein CSS und sind per Test verboten (Stufe 21, siehe „Abstände“) |
-| Rundung | 7 (Bedienelemente, Einträge der Seitenleiste), 0 (Zeilen der Liste), 8 (`tile`: Kacheln, Einträge der schmalen Leiste und schwebender Listen), 10 (Karten), 14 (schwebende Karten, Panels, Fenster in der App); Pillen rund (Stufe 23) |
+| Rundung | 7 (Bedienelemente, Einträge der Seitenleiste), 0 (Zeilen der Liste), 8 (`tile`: Kacheln, Anhangskarten, Einträge der schmalen Leiste und schwebender Listen), 10 (Karten), 14 (schwebende Karten, Panels, Fenster in der App), 2 (`mark`: Quadrat der Kontofarbe), 4 (`chip`: Zähler in Zeilen); Pillen rund (Stufe 23) |
 | Schatten | nur Schwebendes: schwebend (Menüs, Schnellaktionen), Panel; `shadow-row` und `shadow-card` zeichnen seit Stufe 23 nichts (Karten und Knöpfe flach mit Haarlinie) |
 | Bewegung | 120, 180, 240 ms, weich auslaufend; bei „Bewegung reduzieren“ keine |
 
@@ -318,18 +373,19 @@ Icons, Logos und Illustrationen, eine dunkle Leiste im hellen Modus, Absenderbil
 
 ### Lesebereich, Konversation und Verfassen
 
-**Karten.** Der Betreff steht als ruhiger Titel (20 px halbfett) über der Mail. Die Mail ist eine
-Karte (`surface-raised`, Haarlinie `border-subtle`, `shadow-card`, Rundung 10) in einer Spalte
-(höchstens `reading-column`, mittig); seit Stufe 17 steht dort immer genau eine, auch für ein
-Gespräch (dessen andere Mails klappen in der Liste auf, „Gespräche aufklappen“). Textmails mit
-Zeilenhöhe 1,6; HTML-Mails auf ihrem weißen Blatt ohne eigenen Rahmen. Unter der Mail eine leise
-Zeile: Antworten, Allen antworten, Weiterleiten.
+**Karten.** Seit Stufe 23 (0084) keine Karte mehr: Die Mail liegt unter einer Haarlinie auf der
+Fläche des Lesebereichs, höchstens 720 px breit (`reading-column`), 40 px vom Rand; darüber „Konto ·
+Ordner“ und der Betreff (26 px fett). Es steht immer genau eine offene Mail da (Stufe 17); die
+anderen eines Gesprächs stehen als einzeilige Zeilen um sie und klappen in der Liste auf. Textmails
+14 px mit 1,65; HTML-Mails auf ihrem weißen Blatt ohne eigenen Rahmen. Die leise Zeile „Antworten,
+Allen antworten, Weiterleiten“ unter der Mail entfällt (Leiste, Kürzel, Schnellantwort unten).
 
 **HTML-Mails im dunklen Design (Stufe 21, Entscheidung 0066).** Standard ist „angepasst“: Der Kern
 macht helle Hintergründe dunkel und dunkle Schrift hell (Farbton bleibt, Bilder bleiben, der
 Kontrast jedes Paars bleibt mindestens 4,5 : 1, wo er es war). Eine weiße Mail liegt dann genau auf
-der Karte (`surface-raised`, seit Stufe 23 `#1b2129`), ihre Standardschrift ist `text-primary`,
-Links `accent`; Mail und Karte sind eine Fläche, wie bei Textmails. Mails mit eigenen dunklen
+der Fläche des Lesebereichs (`surface`, seit Stufe 23, Schritt 3 `#14181e`; vorher auf der Karte),
+ihre Standardschrift ist `text-primary`, Links `accent`; Mail und Lesebereich sind eine Fläche, wie
+bei Textmails. Mails mit eigenen dunklen
 Farben (`color-scheme: light dark`) behalten diese, Mails mit `only light` und die Einstellung „Immer auf
 weißem Grund“ (Einstellungen → Lesen) bekommen das weiße Blatt wie bisher. Über der Mail neben
 „HTML/Text“ der Umschalter „Originalfarben“ (Symbol Palette, gedrückt = weißes Blatt), nur im
@@ -344,10 +400,11 @@ Klick oder Enter klappt die vollständige Liste (An, Cc, Bcc, Antwort an, Konto)
 ist ein kleiner Chip „Noch nicht eingeordnet · Warum hier?“; „Warum hier?“ bleibt ein Button mit
 `aria-expanded`. Der Schalter HTML/Text sitzt klein über dem Text der Mail, nicht in der Leiste.
 
-**Symbolleiste.** Höchstens sieben Aktionen in drei Gruppen mit feinen Trennlinien: Antworten,
-Allen antworten, Weiterleiten (bei Entwürfen „Entwurf bearbeiten“) | Archivieren, Löschen (im
-Papierkorb endgültig löschen, im Spam „Kein Spam“) | Gelesen/Ungelesen, Markieren. Alles andere
-steht immer im Menü „Weitere Aktionen“ (…) mit Kürzel am Rand. Ist der Bereich zu schmal, wandern
+**Symbolleiste.** Seit Stufe 23 (0084) in der Werkzeugleiste über dem Lesebereich, drei verbundene
+Gruppen (gemeinsamer Rahmen, Knöpfe 34 × 28): Antworten, Allen antworten, Weiterleiten (bei Entwürfen
+„Entwurf bearbeiten“) · Archivieren, Löschen (im Papierkorb endgültig löschen), Später, Spam (im Spam
+„Kein Spam“) · Markieren mit „Weitere Aktionen“. Alles andere, auch Gelesen/Ungelesen, steht immer
+im Menü „Weitere Aktionen“ (…) mit Kürzel am Rand. Ist der Bereich zu schmal, wandern
 auch Hauptaktionen ins Menü, Archivieren und Löschen zuletzt. Das Menü gehört zur Pfeiltasten-
 Reihenfolge der Leiste (Pfeil nach unten öffnet, Escape schließt und gibt den Fokus zurück); die
 Buttons im Menü bleiben verborgen im Dokument, Tastenkürzel und Befehlspalette gelten unverändert.
@@ -1147,8 +1204,9 @@ Wunsch vom 24.11.2026 nach dem Vergleich mit Thunderbird: die Liste sortieren, a
 und schnell filtern.
 
 **Ansichtsmenü im Kopf.** In Ordnern, Posteingängen und vereinten Ansichten steht vor dem Menü
-„Listenoptionen“ ein Knopf mit dem Pfeil der Richtung und dem Namen des Schlüssels („Datum“), sein
-Name sagt die ganze Reihenfolge („Sortiert nach Datum, Neueste zuerst“). Sein Menü (Menüknopf nach
+„Listenoptionen“ ein Knopf mit dem Pfeil der Richtung (seit Stufe 23 in der Werkzeugleiste nur das
+Symbol, vorher mit dem Namen des Schlüssels „Datum“), sein Name sagt die ganze Reihenfolge
+(„Sortiert nach Datum, Neueste zuerst“). Sein Menü (Menüknopf nach
 WAI-ARIA, `menuitemradio`/`menuitemcheckbox` in benannten Gruppen, Häkchen in Akzentfarbe):
 
 ```
@@ -1195,8 +1253,11 @@ Für Bildschirmleser ist der Kopf eine Tabelle mit einer Kopfzeile (`columnheade
 die Liste bleibt `listbox` oder Baum mit denselben Namen der Zeilen wie bisher. Auch unter
 Einstellungen → Darstellung: „Darstellung der Liste: Zeilen / Tabelle“.
 
-**Schnellfilter.** Eine Leiste über der Liste derselben Ansichten, immer sichtbar, 40 px auf
-`surface-list` mit Haarlinie (`border-subtle`) darunter, Innenabstand 4/16 px:
+**Schnellfilter.** Eine Leiste über der Liste derselben Ansichten, 40 px auf `surface-list` mit
+Haarlinie (`border-subtle`) darunter, Innenabstand 4/16 px. Seit Stufe 23 (0084) eingeklappt: Der
+Filterknopf in der Werkzeugleiste über der Liste zeigt sie (ihr Textfeld bekommt den Fokus) und
+klappt sie wieder ein; solange ein Filter gesetzt ist, bleibt sie und der Knopf zeigt es;
+Cmd/Ctrl+Umschalt+K zeigt sie auch:
 
 ```
  (o Ungelesen) (o Markiert) (o Mit Anhang) (o Von Kontakten) (o Schlagwort ▾)  [o Diese Mails filtern     ]  12 Treffer  × Zurücksetzen
@@ -1333,8 +1394,11 @@ Abstands-, Größen-, Schrift- und Rundungsklassen im Code CSS erzeugen, und nen
 jeder anderen. Zwischenwerte, die es braucht, kommen aus Tokens (`calc()` mit `--ui-space-*` oder
 einem eigenen Token), nie als feste Pixel.
 
-**Leisten.** Was oben am Fenster steht, ist 56 px hoch (`--ui-header-height`): Kopf jeder
-Ansicht, Kopf der Seitenspalte, Kopf des Verfassens und des KI-Panels (vorher 48 px). Die Leisten
+**Leisten.** Was oben am Fenster steht, ist seit Stufe 23 (0084) 52 px hoch (`--ui-header-height`,
+`--ui-toolbar-height`): die Werkzeugleiste über die ganze Breite, Kopf des Verfassens und des
+KI-Panels (vorher 56 px mit einem Kopf je Ansicht und einem Kopf der Seitenspalte, davor 48 px).
+Seit Stufe 23 sind die Bedienelemente der Werkzeugleiste 28 px; gleiche Höhen gelten je Zeile einer
+Leiste. Bis Stufe 22 galt: Die Leisten
 direkt darunter, die nebeneinander stehen (Schnellfilter, Symbolleiste des Lesebereichs), sind
 gleich gebaut: 4 px, Bedienelemente 32 px, 4 px, Haarlinie `border-subtle`; sie enden auf einer
 Linie (vorher 48 px gegen drei Zeilen Filter). Alle Bedienelemente einer Leiste sind gleich hoch
@@ -1347,8 +1411,9 @@ Zeitwahlen (vorher teils 12 px, im Sortierknopf 4 px). 4 px nur in runden Chips 
 KI-Chips, Pille „n Antworten“) und kleinen Knöpfen mit 12-px-Text.
 
 **Kanten.** Was in einer Spalte untereinander steht, beginnt auf einer Linie: in der Liste der
-Titel der Ansicht, die Abschnitte („Heute“) und die Markenspalte der Zeilen (24 px, Vorlauf der
-Zeile; seit Stufe 22 statt der Avatare); in der
+Titel der Ansicht in der Werkzeugleiste und die Bänder („Heute“, 16 px), die Markenspalte der Zeilen
+auf ihrem Vorlauf (8 px; seit Stufe 23, vorher alle drei auf 24 px; seit Stufe 22 statt der
+Avatare); in der
 Seitenspalte die Etiketten („Ansichten“) und die Symbole der Zeilen (20 px); in der Befehlspalette
 die Gruppen („Treffer“) und die Symbole; der Inhalt der Aktivität im Einzug des Kopfes (24 px).
 Ein leiser Knopf allein unter Text („← Alle Konten“, „Erneut prüfen“ beim Speicher) steht mit seinem
@@ -1357,8 +1422,8 @@ Symbol oder Text auf der Kante, nicht mit seinem Innenabstand.
 **Nichts angeschnitten.** Text endet sichtbar mit „…“ oder gar nicht abgeschnitten; Chips und
 Pillen nie. Das Wort der Pille „n Antworten“ weicht wie bisher zuerst („3 Antworten“, „3 Antw…“,
 „3“), zeigt aber nie weniger als 2,5 em (vorher blieb ein Rest der Auslassungspunkte: „› 1 .“).
-Anhänge im Lesebereich sind Karten von 320 px (vorher 256 px, der Name hatte neben den vier Knöpfen
-kaum 60 px); das Datum im Kopf einer Mail bricht in einer schmalen Karte um, statt über ihren Rand
+Anhänge im Lesebereich sind Karten von 224 px (seit Stufe 23, ihre Knöpfe liegen beim Überfahren
+über ihrem Ende; vorher 320 px, davor 256 px, der Name hatte neben den vier Knöpfen kaum 60 px); das Datum im Kopf einer Mail bricht in einer schmalen Karte um, statt über ihren Rand
 zu laufen. Deutsche Einträge, die mit „…“ enden, haben davor ein geschütztes Leerzeichen, damit
 die Punkte nie allein in eine zweite Zeile rutschen.
 

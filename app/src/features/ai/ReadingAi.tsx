@@ -1,6 +1,7 @@
 import { ArrowUp, Sparkles } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { cx } from "../../components/cx";
 import { AI_LIMITS, type Account, type AiAvailability, type AiSettingsInfo, type MessageId } from "../../services/ipc";
 import { currentActionTarget, useActionTargetStore } from "../../stores/actionTarget";
 import { useAiPanelStore } from "../../stores/aiPanel";
@@ -105,6 +106,8 @@ export function QuickReplies({ account, messageId }: QuickRepliesProps) {
 
 interface AskBarProps {
   account: Account;
+  /** Stage 23: the quick reply lies at the pane's bottom; the bar floats above it. */
+  raised?: boolean;
 }
 
 /**
@@ -113,7 +116,7 @@ interface AskBarProps {
  * asks it through its own flow (consent step before the first request to a cloud provider, the
  * transfer shown, cancel). The chips start the panel's existing functions the same way.
  */
-export function AskBar({ account }: AskBarProps) {
+export function AskBar({ account, raised = false }: AskBarProps) {
   const { t } = useTranslation();
   const inputId = useId();
   const usable = useUsable(account);
@@ -144,7 +147,8 @@ export function AskBar({ account }: AskBarProps) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-end"
+      // Stage 23 (decision 0084): above the quick reply at the pane's bottom while it is there.
+      className={cx("pointer-events-none absolute inset-x-4 flex justify-end", raised ? "bottom-(--ui-reading-ask-room)" : "bottom-4")}
       data-testid="ask-bar"
       onFocus={() => {
         setFocused(true);

@@ -24,8 +24,9 @@ interface HtmlBodyProps {
 
 /**
  * HTML mail. Shown as written it lies on its own white canvas, in the dark theme too; adapted
- * to the dark theme (or with dark colours of its own) the core painted it on the dark card's
- * surface, so frame and card are one (docs/DESIGN.md, decision 0066). Clicks on links never
+ * to the dark theme (or with dark colours of its own) the core painted it on the reading pane's
+ * surface (stage 23, decision 0084: no card around the message any more), so frame and pane are
+ * one (docs/DESIGN.md, decision 0066). Clicks on links never
  * reach this code: the core's navigation hook sees them and sends `linkActivated`.
  */
 export function HtmlBody({ srcdoc, title, scrollerRef, colors }: HtmlBodyProps) {
@@ -41,7 +42,7 @@ export function HtmlBody({ srcdoc, title, scrollerRef, colors }: HtmlBodyProps) 
     <div
       className={cx(
         "overflow-hidden rounded-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring",
-        dark ? "bg-surface-raised" : "bg-mail-canvas",
+        dark ? "bg-surface" : "bg-mail-canvas",
       )}
     >
       <iframe
@@ -54,7 +55,7 @@ export function HtmlBody({ srcdoc, title, scrollerRef, colors }: HtmlBodyProps) 
         data-colors={colors}
         // The frame's scheme matches its document's (the core sets it): light for the white
         // canvas, dark for the adapted mail.
-        className={cx("block h-0 w-full border-0", dark ? "bg-surface-raised scheme-dark" : "bg-mail-canvas scheme-light")}
+        className={cx("block h-0 w-full border-0", dark ? "bg-surface scheme-dark" : "bg-mail-canvas scheme-light")}
       />
     </div>
   );
@@ -79,7 +80,7 @@ interface ColorsToggleProps {
 export function ColorsToggle({ original, onChange }: ColorsToggleProps) {
   const { t } = useTranslation();
   return (
-    <div className="inline-flex shrink-0 rounded-card bg-hover p-1">
+    <div className="inline-flex shrink-0">
       <button
         type="button"
         aria-pressed={original}
@@ -88,7 +89,7 @@ export function ColorsToggle({ original, onChange }: ColorsToggleProps) {
           onChange(!original);
         }}
         data-testid="colors-original"
-        className="inline-flex h-6 items-center gap-1 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
+        className="inline-flex h-6 items-center gap-1 rounded-control px-2 text-12 font-medium text-tertiary transition-colors hover:text-primary aria-pressed:bg-badge aria-pressed:text-primary"
       >
         <Palette aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
         {t("reading.colors.original")}

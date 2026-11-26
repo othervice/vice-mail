@@ -225,6 +225,8 @@ describe("stage 19, A: sorting, the table and the quick filter", () => {
     }
     await openView("inbox");
     await testId("message-list").waitForExist({ timeout: 20000 });
+    // Stage 23 (decision 0084): the quick filter folds behind the toolbar's filter button.
+    if (!(await testId("quick-filter").isExisting())) await testId("toolbar-filter").click();
     await testId("quick-filter").waitForExist({ timeout: 10000 });
   });
 

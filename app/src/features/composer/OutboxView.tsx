@@ -10,7 +10,6 @@ import { ViewHeader } from "../../components/ViewHeader";
 import { toCoreError, type Account, type CoreError, type OutgoingMail, type SendState } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
-import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { useComposerStore } from "../../stores/composer";
 import { addressLabel } from "./addresses";
 import { useOutgoing } from "./queries";
@@ -250,7 +249,6 @@ function OutgoingRow({ mail, account, showAccount }: { mail: OutgoingMail; accou
  */
 export function OutboxView() {
   const { t } = useTranslation();
-  const dragRegion = useWindowDragRegion();
   const accounts = useAccounts();
   const list = accounts.data ?? [];
   const results = useOutgoing(list);
@@ -301,7 +299,7 @@ export function OutboxView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="outbox-view">
-      <ViewHeader title={t("composer.outbox.title")} subtitle={t("composer.outbox.subtitle")} dragRegion={dragRegion} />
+      <ViewHeader title={t("composer.outbox.title")} subtitle={t("composer.outbox.subtitle")} />
       {body}
     </div>
   );

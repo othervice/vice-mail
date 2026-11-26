@@ -1,4 +1,4 @@
-import { Download, Eye, FolderDown, Info, LoaderCircle, Pin, PinOff, SquareArrowOutUpRight, TriangleExclamationPoint } from "lucide-react";
+import { Download, Eye, Info, LoaderCircle, Pin, PinOff, SquareArrowOutUpRight, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
@@ -8,7 +8,7 @@ import { IconButton } from "../../components/IconButton";
 import type { AttachmentInfo, EmlFileId, IpcError, MessageId } from "../../services/ipc";
 import { useAttachmentPins, useSaveAllAttachments, useSetAttachmentPinned } from "./attachmentQueries";
 import { AttachmentPreviewDialog } from "./AttachmentPreview";
-import { ATTACHMENT_ICONS, attachmentKind, fileType, formatSize } from "./format";
+import { ATTACHMENT_ICONS, attachmentKind, fileBadge, fileTint, fileType, formatSize, type FileTint } from "./format";
 import { useOpenAttachment, useSaveAttachment, type AttachmentOwner } from "./queries";
 import { useSaveAllRequest } from "./saveAllRequest";
 
@@ -41,7 +41,21 @@ interface AttachmentItemProps {
   handle: Ref<ItemHandle>;
 }
 
-/** One attachment in one line: type symbol, name, type and size, Preview, Pin, Save and Open. */
+/** Stage 23 (decision 0084): the card's tint and its badge's colour per kind of file. */
+const TINTS: Record<Exclude<FileTint, null>, { card: string; badge: string }> = {
+  pdf: { card: "bg-file-pdf-tint", badge: "bg-file-pdf text-on-file" },
+  doc: { card: "bg-file-doc-tint", badge: "bg-file-doc text-on-file" },
+  sheet: { card: "bg-file-sheet-tint", badge: "bg-file-sheet text-on-file" },
+  image: { card: "bg-file-image-tint", badge: "bg-file-image text-on-file" },
+  archive: { card: "bg-file-archive-tint", badge: "bg-file-archive text-on-file" },
+};
+const PLAIN = { card: "bg-badge", badge: "bg-button text-secondary" };
+
+/**
+ * One attachment as a card (stage 23, decision 0084, as in the draft): a badge in the colour of
+ * its kind of file, name, type and size on a tint of that colour. Preview, Pin, Save and Open
+ * appear at its end while the pointer is over it or the focus in it (always reachable by Tab).
+ */
 function AttachmentItem({
   owner,
   attachment,
@@ -104,18 +118,28 @@ function AttachmentItem({
   else if (open.isPending) status = working("opening");
   const previewable = attachment.preview !== null;
 
+  const tint = fileTint(attachment.name, attachment.mimeType, attachment.executable);
+  const colours = tint ? TINTS[tint] : PLAIN;
+  const badge = fileBadge(attachment.name);
   const text = (
     <>
-      <Icon
+      <span
         aria-hidden
-        className={cx("size-(--ui-icon) shrink-0", attachment.executable ? "text-warning" : "text-secondary")}
-        strokeWidth={1.75}
-      />
+        className={cx("flex size-8 shrink-0 items-center justify-center rounded-control text-11 font-bold", colours.badge)}
+        data-testid="attachment-badge"
+        data-tint={tint ?? undefined}
+      >
+        {badge && !attachment.executable ? (
+          badge
+        ) : (
+          <Icon aria-hidden className={cx("size-(--ui-icon-small)", attachment.executable && "text-warning")} strokeWidth={1.75} />
+        )}
+      </span>
       <span className="flex min-w-0 flex-1 flex-col text-start">
-        <span title={attachment.name} className="truncate text-13 font-medium text-primary select-text" data-testid="attachment-name">
+        <span title={attachment.name} className="truncate text-12 font-semibold text-primary select-text" data-testid="attachment-name">
           {attachment.name}
         </span>
-        <span className="truncate text-12 text-secondary" data-testid="attachment-details" role={status ? "status" : undefined}>
+        <span className="truncate text-11 text-tertiary tabular-nums" data-testid="attachment-details" role={status ? "status" : undefined}>
           {status ?? details}
         </span>
         {/* Never cut off: the warning must stay readable in a narrow card. */}
@@ -136,8 +160,9 @@ function AttachmentItem({
   return (
     <li
       className={cx(
-        "flex w-(--ui-attachment-width) max-w-full items-center gap-2 self-stretch rounded-card border bg-canvas py-2 ps-3 pe-1",
-        attachment.executable || confirming ? "border-warning" : "border-border",
+        "group/att relative flex w-(--ui-attachment-width) max-w-full items-center gap-3 self-stretch rounded-tile border px-3 py-2",
+        colours.card,
+        attachment.executable || confirming ? "border-warning" : "border-transparent",
       )}
       data-testid="attachment"
       data-index={attachment.index}
@@ -148,7 +173,7 @@ function AttachmentItem({
           type="button"
           onClick={onPreview}
           aria-describedby={hintId}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-control text-start"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-control text-start"
           data-testid="attachment-card"
         >
           {text}
@@ -157,9 +182,13 @@ function AttachmentItem({
           </span>
         </button>
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2">{text}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-3">{text}</div>
       )}
-      <div className="flex shrink-0">
+      {/* Over the card's end on its tint while the pointer is over it or the focus in it. */}
+      <div
+        className="absolute inset-y-0 end-0 flex items-center rounded-e-tile bg-inherit ps-1 pe-1 opacity-0 group-focus-within/att:opacity-100 group-hover/att:opacity-100"
+        data-testid="attachment-actions"
+      >
         {previewable && (
           <IconButton icon={Eye} label={t("attachments.preview.label", { name: attachment.name })} onClick={onPreview} />
         )}
@@ -316,10 +345,30 @@ export function Attachments({ messageId, fileId, attachments, partial }: Attachm
   return (
     <section
       aria-label={t("reading.attachments.label", { count: attachments.length })}
-      className="flex flex-col gap-2"
+      className="flex flex-col gap-2 pt-2"
       data-testid="attachments"
     >
       {partialNote}
+      {/* Stage 23 (decision 0084): "3 attachments · Save all" above the cards, as in the draft. */}
+      <div className="flex items-center gap-2 text-12 text-tertiary">
+        <span className="tabular-nums">{t("reading.attachments.label", { count: attachments.length })}</span>
+        {attachments.length >= 2 && (
+          <>
+            <span aria-hidden>{t("reading.header.dot")}</span>
+            <button
+              type="button"
+              disabled={saveAll.isPending}
+              onClick={startSaveAll}
+              aria-label={t("attachments.saveAll.label", { count: attachments.length })}
+              className="flex items-center gap-1 rounded-control font-medium text-accent hover:underline disabled:opacity-50"
+              data-testid="attachments-save-all"
+            >
+              {saveAll.isPending && <LoaderCircle aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />}
+              {saveAll.isPending ? t("attachments.saveAll.saving") : t("attachments.saveAll.action")}
+            </button>
+          </>
+        )}
+      </div>
       <ul className="flex flex-wrap gap-2">
         {attachments.map((attachment) => (
           <AttachmentItem
@@ -345,24 +394,6 @@ export function Attachments({ messageId, fileId, attachments, partial }: Attachm
           />
         ))}
       </ul>
-      {attachments.length >= 2 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            disabled={saveAll.isPending}
-            onClick={startSaveAll}
-            aria-label={t("attachments.saveAll.label", { count: attachments.length })}
-            data-testid="attachments-save-all"
-          >
-            {saveAll.isPending ? (
-              <LoaderCircle aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-            ) : (
-              <FolderDown aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-            )}
-            {saveAll.isPending ? t("attachments.saveAll.saving") : t("attachments.saveAll.action")}
-          </Button>
-        </div>
-      )}
       {previewing?.preview && (
         <AttachmentPreviewDialog
           owner={owner}

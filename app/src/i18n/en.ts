@@ -35,6 +35,8 @@ export const en = {
     sidebar: "Accounts and folders",
     viewsSection: "Views",
     hideSidebar: "Hide sidebar",
+    // Stage 23 (decision 0084): the toolbar's toggle while the rail stands instead.
+    showSidebar: "Show sidebar",
     resizeSidebar: "Sidebar width",
     sidebarWidth: "{{width}} pixels",
     // Stage 23 (decision 0085): the column's sections and its foot.
@@ -648,6 +650,16 @@ export const en = {
       body: "Choose a message in the list to read it here.",
     },
     region: "Message",
+    // Stage 23 (decision 0084): above the subject, and the conversation around the message.
+    meta: {
+      place: "{{account}} · {{folder}}",
+      count_one: "{{count, number}} message",
+      count_other: "{{count, number}} messages",
+    },
+    conversation: {
+      you: "You",
+      open: "{{name}}, {{date}}: show this message",
+    },
     // Stage 14 (decision 0034): Gmail labels under the head of a Gmail message.
     labels: {
       region: "Labels",
@@ -670,12 +682,6 @@ export const en = {
       original: "Original colours",
       originalHint: "Show this message as the sender designed it, on a white page",
       adaptedHint: "Show this message adapted to the dark theme",
-    },
-    replyRow: {
-      label: "Reply and forward",
-      reply: "Reply to {{name}}",
-      replyAll: "Reply to everyone",
-      forward: "Forward this message",
     },
     card: {
       menu: "More for this message",
@@ -4748,6 +4754,27 @@ export const en = {
     },
     optionKey: "Option",
     ctrlKey: "Ctrl",
+  },
+  // Stage 23, step 3 (decision 0084): the toolbar across the window.
+  toolbar: {
+    unread: "{{count, number}} unread",
+    filter: "Quick filter",
+    filterShow: "Show the quick filter",
+    filterHide: "Hide the quick filter",
+    filterActive: "Quick filter, filtering",
+  },
+  // Stage 23, step 3 (decision 0084): the contact panel right of the reading pane.
+  contactPanel: {
+    label: "Contact",
+    toggle: "Contact panel",
+    show: "Show contact panel",
+    hide: "Hide contact panel",
+    write: "Write mail",
+    allMails: "All mail",
+    mails: "Mail",
+    groups: "Groups",
+    empty: "Select a message to see who it is from.",
+    failed: "The contact could not be loaded.",
   },
 } as const;
 

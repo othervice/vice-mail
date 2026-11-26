@@ -107,7 +107,8 @@ const rowFacts = (subject) =>
       checkShown: check ? getComputedStyle(check).display !== "none" : null,
       checkBox: box(check),
       senderBox: box(option.querySelector('[data-testid="row-sender"]')),
-      accountDot: box(option.querySelector('[data-testid="row-account-dot"]')),
+      // Stage 23 (decision 0084): the account's stripe at the row's right edge.
+      accountDot: box(option.querySelector('[data-testid="row-account"]')),
       actionsBox: box(actions),
       sender: option.querySelector('[data-testid="row-sender"]') ? getComputedStyle(option.querySelector('[data-testid="row-sender"]')).fontWeight : null,
       hovered: option.matches(":hover"),
@@ -299,12 +300,16 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     const toSender = facts.senderBox.left - facts.mark.right;
     report.steps.rows = { lead, toSender, scale, facts };
     assert.equal(facts.avatar, false, "a row still has an avatar");
-    assert.ok(lead >= 15 * scale && lead <= 17 * scale, `the mark column starts ${String(lead)} px into the row`);
+    // Stage 23 (decision 0084): an 8 px lead, as in the draft (the dot 16 px from the list's edge);
+    // in narrow (several-line) rows the text follows 4 px after the column, in wide ones 8 px.
+    const severalLines = facts.row.height > 60 * scale;
+    assert.ok(lead >= 7 * scale && lead <= 9 * scale, `the mark column starts ${String(lead)} px into the row`);
     assert.ok(Math.abs(facts.mark.width - 16 * scale) < 1, `the mark column is ${String(facts.mark.width)} px wide`);
-    assert.ok(Math.abs(toSender - 8 * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
+    assert.ok(Math.abs(toSender - (severalLines ? 4 : 8) * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
     assert.ok(facts.dot, "no unread dot on an unread row");
     assert.ok(facts.dot.left >= facts.mark.left && facts.dot.right <= facts.mark.right, `the dot is not in the mark column: ${JSON.stringify(facts)}`);
-    assert.equal(facts.sender, "600", "unread rows are not bold");
+    // Stage 23 (decision 0083): unread senders bold (700), read ones semibold.
+    assert.equal(facts.sender, "700", "unread rows are not bold");
     assert.equal(facts.checkShown, false, "the box shows at rest");
     report.screenshots.push(await screenshot("s22-rows"));
     // Hovered: the box takes the dot's place in the column; unread stays bold.
@@ -329,7 +334,7 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     assert.ok(alicesRow.targets >= 4, `only ${String(alicesRow.targets)} quick actions`);
     // Stage 22: the account's label stays while the actions show, before them.
     assert.ok(alicesRow.accountDot && alicesRow.accountDot.width > 0, "no account dot on hover");
-    assert.ok(alicesRow.accountDot.right <= alicesRow.actionsBox.left, "the account dot is not before the quick actions");
+    assert.ok(alicesRow.accountDot.left >= alicesRow.actionsBox.right, "the account stripe is under the quick actions");
     assert.equal(alicesRow.archiveDisabled, null, "alice's archive is disabled");
     report.steps.unifiedAlice = alicesRow;
     report.screenshots.push(await screenshot("s21-unified-hover"));

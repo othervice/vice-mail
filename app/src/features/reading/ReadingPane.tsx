@@ -1,4 +1,4 @@
-import { AppWindow, CloudOff, FileX, Forward, LoaderCircle, Paperclip, Reply, ReplyAll, X } from "lucide-react";
+import { AppWindow, CloudOff, FileX, LoaderCircle, Paperclip, ReplyAll, X } from "lucide-react";
 // Stage 19 (decision 0055): source, all headers, redirect, edit as new.
 import { CopyPlus, CornerUpRight, FileCode, ListTree } from "lucide-react";
 import { useNoticeStore } from "../../stores/notices";
@@ -6,22 +6,23 @@ import { useRedirectStore } from "../../stores/redirect";
 import { openSourceInWindow } from "../windows/open";
 import { AllHeaders } from "./AllHeaders";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { IconButton } from "../../components/IconButton";
 import { Notice } from "../../components/Notice";
-import { Tooltip } from "../../components/Tooltip";
-import type { Account, BodyFormat, MailScheme, MessageId, MessageView } from "../../services/ipc";
+import { useToolbarSlot } from "../../components/ToolbarPortal";
+import type { Account, BodyFormat, MailboxId, MailScheme, MessageId, MessageListItem, MessageView } from "../../services/ipc";
 import { openComposer } from "../../stores/composer";
-import { useBoundShortcuts } from "../../stores/shortcuts";
+import { useContactPanelStore } from "../../stores/contactPanel";
 import { useUiStore } from "../../stores/ui";
+import { accountFill } from "../accounts/accountColor";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
-import type { ActionId } from "../actions/registry";
-import { formatShortcut, shortcutPlatform } from "../actions/shortcuts";
 import { AskBar, QuickReplies } from "../ai/ReadingAi";
-import { useAppInfo } from "../app-info/queries";
+import { useMailboxes } from "../mailboxes/queries";
+import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
 import { openMessageInWindow } from "../windows/open";
 import { Attachments } from "./Attachments";
 import { LinkCard } from "./LinkCard";
@@ -103,7 +104,8 @@ export function FormatToggle({ shown, onChange }: FormatToggleProps) {
     <div
       role="group"
       aria-label={t("reading.format.label")}
-      className="inline-flex shrink-0 gap-1 rounded-card bg-hover p-1"
+      // Stage 23 (decision 0084): quiet, at the body it changes.
+      className="inline-flex shrink-0 gap-1"
       data-testid="format-toggle"
     >
       {options.map((option) => (
@@ -115,7 +117,7 @@ export function FormatToggle({ shown, onChange }: FormatToggleProps) {
             onChange(option.value);
           }}
           data-testid={`format-${option.value}`}
-          className="h-6 rounded-control px-2 text-12 font-medium text-secondary transition-colors hover:text-primary aria-pressed:bg-surface-raised aria-pressed:text-primary aria-pressed:shadow-row"
+          className="h-6 rounded-control px-2 text-12 font-medium text-tertiary transition-colors hover:text-primary aria-pressed:bg-badge aria-pressed:text-primary"
         >
           {option.label}
         </button>
@@ -247,51 +249,6 @@ export function Problems({ view }: { view: Pick<MessageView, "problems"> }) {
   );
 }
 
-interface ReplyRowProps {
-  messageId: MessageId;
-  /** Who a reply goes to, for the button's name ("Reply to Grace Hopper"). */
-  sender: string;
-}
-
-/**
- * The quiet row under an open message: reply, reply all, forward. The same as the toolbar's
- * actions (and their shortcuts), close to where the reading ends. Replies are local drafts, so they
- * work on read-only accounts too.
- */
-function ReplyRow({ messageId, sender }: ReplyRowProps) {
-  const { t } = useTranslation();
-  const platform = shortcutPlatform(useAppInfo().data?.platform);
-  const shortcutsOf = useBoundShortcuts(platform);
-  const hint = (id: ActionId, label: string) => {
-    const first = shortcutsOf(id)[0];
-    return first ? t("actions.withShortcut", { label, shortcut: formatShortcut(first, platform) }) : label;
-  };
-  const buttons = [
-    { id: "reply", icon: Reply, name: t("reading.replyRow.reply", { name: sender }), label: t("actions.labels.reply"), kind: "reply" },
-    { id: "replyAll", icon: ReplyAll, name: t("reading.replyRow.replyAll"), label: t("actions.labels.replyAll"), kind: "reply_all" },
-    { id: "forward", icon: Forward, name: t("reading.replyRow.forward"), label: t("actions.labels.forward"), kind: "forward" },
-  ] as const;
-  return (
-    <div role="group" aria-label={t("reading.replyRow.label")} className="flex items-center gap-1" data-testid="reply-row">
-      {buttons.map((button) => (
-        <Tooltip key={button.id} label={hint(button.id, button.label)}>
-          <button
-            type="button"
-            aria-label={button.name}
-            onClick={() => {
-              openComposer({ kind: button.kind, messageId });
-            }}
-            className="flex size-8 items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary"
-            data-testid={`reply-row-${button.id}`}
-          >
-            <button.icon aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-          </button>
-        </Tooltip>
-      ))}
-    </div>
-  );
-}
-
 interface CardMenuProps {
   account: Account;
   messageId: MessageId;
@@ -332,7 +289,42 @@ function CardMenu({ account, messageId, inWindow, draft, allHeaders, onToggleAll
       ? []
       : [{ id: "openInWindow", label: t("actions.labels.openInWindow"), icon: AppWindow, onSelect: () => { openMessageInWindow(account.id, messageId); } }]),
   ].map((item) => ({ ...item, "data-testid": `card-menu-${item.id}` }));
-  return <OverflowMenu label={t("reading.card.menu")} items={items} data-testid="card-menu" />;
+  return <OverflowMenu label={t("reading.card.menu")} items={items} look="toolbar" data-testid="card-menu" />;
+}
+
+/**
+ * Stage 23, step 3 (decision 0084): the conversation around the open message, as in the draft:
+ * every other message of it as one line (sender, the start of its text, its day); the earlier
+ * ones above the message, the later ones below it. A click (Enter, Space) opens that message in
+ * the pane instead; the list's conversation rows stay as they are (decision 0049).
+ */
+export interface ConversationRows {
+  messages: readonly MessageListItem[];
+  /** Opens another message of the conversation in the pane. */
+  onOpen: (message: MessageListItem) => void;
+}
+
+function ConversationLine({ message, own, onOpen }: { message: MessageListItem; own: string; onOpen: () => void }) {
+  const { t, i18n } = useTranslation();
+  const bounds = dayBounds(new Date(), 1);
+  const from = message.from;
+  const name = !from ? t("list.unknownSender") : from.email.trim().toLowerCase() === own ? t("reading.conversation.you") : (addressName(from) ?? from.email);
+  const text = message.preview?.trim() || message.subject.trim() || t("list.noSubject");
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("reading.conversation.open", { name, date: formatFullDate(message.date, i18n.language) })}
+      className="flex w-full min-w-0 items-center gap-3 border-t border-border-subtle py-3 text-start transition-colors hover:bg-hover"
+      data-testid="conversation-line"
+    >
+      <span className={cx("w-(--ui-conversation-name-width) shrink-0 truncate text-13 text-primary", message.unread ? "font-bold" : "font-semibold")}>
+        {name}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-13 text-tertiary">{text}</span>
+      <span className="shrink-0 text-12 text-tertiary tabular-nums">{formatListDate(message.date, bounds, i18n.language)}</span>
+    </button>
+  );
 }
 
 interface ReadingPaneProps {
@@ -356,6 +348,22 @@ interface ReadingPaneProps {
    * the row's message, while the pane opens another one of the thread (the oldest unread).
    */
   aiMessageId?: MessageId;
+  /** Stage 23: the folder the message lies in, named above the subject with the account. */
+  mailboxId?: MailboxId;
+  /** Stage 23: the other messages of the conversation, as lines around the message. */
+  conversation?: ConversationRows;
+}
+
+/**
+ * Stage 23, step 3 (decision 0084): who the contact panel shows for the open message: the sender,
+ * or for the user's own mail the first other recipient.
+ */
+function panelPerson(view: MessageView, account: Account): { email: string; name: string | null } | null {
+  const own = account.email.trim().toLowerCase();
+  const usable = (address: { email: string }) => address.email.trim() !== "" && address.email.trim().toLowerCase() !== own;
+  const from = view.header.from.find((address) => address.email.trim() !== "");
+  const person = from && usable(from) ? from : [...view.header.to, ...view.header.cc].find(usable);
+  return person ? { email: person.email.trim(), name: person.name?.trim() || null } : null;
 }
 
 /**
@@ -377,8 +385,14 @@ export function ReadingPane({
   draft = false,
   inWindow = false,
   aiMessageId,
+  mailboxId,
+  conversation,
 }: ReadingPaneProps) {
   const { t } = useTranslation();
+  // Stage 23 (decision 0084): the actions stand in the toolbar across the window.
+  const toolbarSlot = useToolbarSlot("reading");
+  const inToolbar = toolbarSlot !== null && !inWindow;
+  const mailbox = useMailboxes(account.id).data?.find((candidate) => candidate.id === mailboxId);
   // The chosen format belongs to its message: another message of the conversation starts on "auto".
   const [chosenFormat, setChosenFormat] = useState<{ messageId: MessageId; format: BodyFormat } | null>(null);
   const format: BodyFormat = chosenFormat?.messageId === messageId ? chosenFormat.format : "auto";
@@ -408,6 +422,13 @@ export function ReadingPane({
     handledFocus.current = focusRequest.seq;
     articleRef.current?.focus();
   }, [focusRequest, messageId]);
+  // Stage 23: a message opened from the conversation's lines takes the focus (its line is gone).
+  const focusOpened = useRef(false);
+  useEffect(() => {
+    if (!focusOpened.current) return;
+    focusOpened.current = false;
+    articleRef.current?.focus({ preventScroll: true });
+  }, [messageId]);
 
   // Not on this computer and the account was offline: ask again once it is connected.
   const { refetch } = query;
@@ -430,6 +451,20 @@ export function ReadingPane({
   };
   const link = linkRequest && renderToken !== null && linkRequest.renderToken === renderToken ? linkRequest : null;
   const sender = view?.header.from.find((address) => address.email.trim() || address.name?.trim());
+
+  // Stage 23: the contact panel shows the other side of the message in the main window's pane.
+  const showPerson = useContactPanelStore((state) => state.show);
+  const leavePerson = useContactPanelStore((state) => state.leave);
+  const person = view && !inWindow ? panelPerson(view, account) : null;
+  const personEmail = person?.email ?? null;
+  const personName = person?.name ?? null;
+  useEffect(() => {
+    if (personEmail === null) return undefined;
+    showPerson({ email: personEmail, name: personName, accountId: account.id });
+    return () => {
+      leavePerson(personEmail);
+    };
+  }, [personEmail, personName, account.id, showPerson, leavePerson]);
 
   const retry = () => {
     void refetch();
@@ -465,16 +500,16 @@ export function ReadingPane({
     card = <ErrorNotice context={t("reading.loadFailed")} error={query.error} onRetry={retry} data-testid="reading-error" />;
   } else if (!view) {
     card = (
-      <div className={CARD}>
-        <div className="px-5 py-5">
-          <Skeleton label={t("reading.loading")} visible={skeleton} />
-        </div>
+      <div className={MESSAGE}>
+        <Skeleton label={t("reading.loading")} visible={skeleton} />
       </div>
     );
   } else {
     card = (
-      <div className={CARD} data-testid="message-card">
-        <div className="flex flex-col gap-4 px-4 pt-4 pb-2 min-[72rem]:px-5">
+      // Stage 23 (decision 0084): no card any more; the message lies on the pane's surface
+      // below a hairline, as in the draft. The test id stays the message's.
+      <div className={MESSAGE} data-testid="message-card">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             <MessageHeader
               header={view.header}
@@ -519,7 +554,6 @@ export function ReadingPane({
           {/* Stage 16: a request for a read receipt (answered only by a click), receipts that came back. */}
           <ReadReceipts account={account} messageId={view.id} bodyShown={shownFormat !== null} />
           <Problems view={view} />
-          <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
           {/* HTML or plain text, and (stage 21) the original colours in the dark theme: small
               switches at the body they change, not in the toolbar. */}
           {((canToggle && shownFormat) || canShowOriginal) && (
@@ -536,27 +570,47 @@ export function ReadingPane({
             </div>
           )}
           <Body view={view} account={account} format={format} scheme={scheme} scrollerRef={scrollerRef} onRetry={retry} />
+          {/* Stage 23 (decision 0084): the attachments below the text, as cards, as in the draft. */}
+          <Attachments messageId={view.id} attachments={view.attachments} partial={view.partial} />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3" data-print-hide>
-          {draft ? <span /> : <ReplyRow messageId={view.id} sender={(sender && addressName(sender)) ?? t("list.unknownSender")} />}
-          {!inWindow && <QuickReplies account={account} messageId={aiMessageId ?? view.id} />}
-        </div>
-        {/* Stage 16: the inline quick reply (the same drafts and outbox as the composer). */}
-        {!draft && !inWindow && (
-          <div className="px-3 pb-3">
-            <QuickReply
-              key={view.id}
-              account={account}
-              messageId={view.id}
-              sender={(sender && addressName(sender)) ?? t("list.unknownSender")}
-              onLeave={backToMessage}
-            />
+        {/* Stage 13: the AI's reply chips (replying itself is in the toolbar and below). */}
+        {!inWindow && (
+          <div className="flex flex-wrap items-center gap-2 empty:hidden" data-print-hide>
+            <QuickReplies account={account} messageId={aiMessageId ?? view.id} />
           </div>
         )}
       </div>
     );
   }
   const subject = view?.header.subject ?? title;
+  const own = account.email.trim().toLowerCase();
+  const openIndex = conversation ? conversation.messages.findIndex((message) => message.id === messageId) : -1;
+  const openLine = (message: MessageListItem) => {
+    focusOpened.current = true;
+    conversation?.onOpen(message);
+  };
+  const lines = (part: "before" | "after") =>
+    conversation?.messages
+      .filter((_, index) => (part === "before" ? index < openIndex : openIndex !== -1 && index > openIndex))
+      .map((message) => (
+        <ConversationLine
+          key={message.id}
+          message={message}
+          own={own}
+          onOpen={() => {
+            openLine(message);
+          }}
+        />
+      ));
+  const accountName = account.displayName || account.email;
+  const folderName = mailbox ? (mailbox.role === "custom" ? mailbox.name : t(`roles.${mailbox.role}`)) : null;
+  const count = conversation && conversation.messages.length > 1 ? conversation.messages.length : null;
+  const fetching = query.isFetching && view !== undefined;
+  // Stage 9: save as .eml, print (the print styles show only the article below).
+  const tools = view && (
+    <MessageTools key={view.id} messageId={view.id} beforePrint={beforePrint} shown={!query.isPending && body?.kind !== "loading"} small={inToolbar} />
+  );
+  const closeButton = <IconButton icon={X} label={t("reading.close")} onClick={onClose} small={inToolbar} />;
 
   return (
     <section
@@ -564,20 +618,27 @@ export function ReadingPane({
       onKeyDown={onKeyDown}
       data-testid="reading-pane"
       data-find-scope
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
+      className="@container/pane relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
     >
-      {/* Stage 21 (decision 0071): as high as the quick filter beside it (4 px, 32 px controls, 4 px,
-          the hairline), so both end on one line under the view's header. */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle py-1 ps-3 pe-2">
-        <div className="flex min-w-0 flex-1 items-center">{toolbar}</div>
-        {query.isFetching && view && (
-          <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
-        )}
-        {/* Stage 9: save as .eml, print (the print styles show only the article below). */}
-        {view && <MessageTools key={view.id} messageId={view.id} beforePrint={beforePrint} shown={!query.isPending && body?.kind !== "loading"} />}
-        <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-        <IconButton icon={X} label={t("reading.close")} onClick={onClose} />
-      </div>
+      {inToolbar ? (
+        // Stage 23 (decision 0084): the open message's actions in the toolbar across the window.
+        toolbar &&
+        createPortal(
+          <div className="flex min-w-0 flex-1 items-center" data-testid="reading-toolbar">
+            {toolbar}
+          </div>,
+          toolbarSlot,
+        )
+      ) : (
+        // A message window (or no toolbar): the pane's own bar with the actions, as before.
+        <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle py-1 ps-3 pe-2">
+          <div className="flex min-w-0 flex-1 items-center">{toolbar}</div>
+          {fetching && <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />}
+          {tools}
+          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+          {closeButton}
+        </div>
+      )}
       {finding > 0 && <FindBar scopeRef={scrollerRef} focusSeq={finding} onClose={closeFind} />}
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto" data-testid="reading-scroller">
         <article
@@ -587,17 +648,59 @@ export function ReadingPane({
           aria-label={subject !== undefined ? undefined : t("reading.region")}
           aria-busy={query.isPending || body?.kind === "loading"}
           data-print-root
-          className="mx-auto flex w-full max-w-(--ui-reading-column) flex-col gap-4 px-4 pt-5 pb-(--ui-reading-ask-room) focus-visible:-outline-offset-2 min-[72rem]:px-6 min-[72rem]:pt-6"
+          // Stage 23 (decision 0084): no card; 720 px of text from the pane's start, 40 px in,
+          // as in the draft (24 px in a narrow pane).
+          className="flex w-full max-w-(--ui-reading-column) flex-col px-6 pt-6 pb-8 focus-visible:-outline-offset-2 @min-[40rem]/pane:px-10 @min-[40rem]/pane:pt-8"
         >
+          {/* Account · folder · messages of the conversation; the pane's quiet tools at the end. */}
+          <div className="flex min-h-8 items-center gap-2 text-12 text-tertiary" data-testid="reading-meta" data-print-hide>
+            <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(account.color))} />
+            <span className="min-w-0 truncate" data-testid="reading-meta-place">
+              {folderName ? t("reading.meta.place", { account: accountName, folder: folderName }) : accountName}
+            </span>
+            {count !== null && (
+              <>
+                <span aria-hidden>{t("reading.header.dot")}</span>
+                <span className="shrink-0 tabular-nums" data-testid="reading-meta-count">
+                  {t("reading.meta.count", { count })}
+                </span>
+              </>
+            )}
+            <span className="flex-1" />
+            {inToolbar && (
+              <div className="flex shrink-0 items-center gap-1">
+                {fetching && <LoaderCircle aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />}
+                {tools}
+                {closeButton}
+              </div>
+            )}
+          </div>
           {subject !== undefined && <SubjectTitle subject={subject} subjectId={subjectId} />}
-          {card}
+          <div className="mt-5 flex flex-col">
+            {lines("before")}
+            {card}
+            {lines("after")}
+          </div>
         </article>
       </div>
+      {/* Stage 16: the inline quick reply (the same drafts and outbox as the composer); stage 23:
+          a framed field at the bottom of the pane, as in the draft. */}
+      {view && !draft && !inWindow && (
+        <div className="w-full max-w-(--ui-reading-column) shrink-0 px-6 pt-3 pb-5 @min-[40rem]/pane:px-10" data-print-hide>
+          <QuickReply
+            key={view.id}
+            account={account}
+            messageId={view.id}
+            sender={(sender && addressName(sender)) ?? t("list.unknownSender")}
+            onLeave={backToMessage}
+          />
+        </div>
+      )}
       {link && <LinkCard key={link.seq} request={link} onClosed={backToMessage} onReload={retry} />}
-      {!inWindow && <AskBar account={account} />}
+      {!inWindow && <AskBar account={account} raised={view !== undefined && !draft} />}
     </section>
   );
 }
 
-/** A message as a card on the reading surface: raised, rounded, a soft shadow instead of a frame. */
-const CARD = "flex flex-col rounded-card border border-border-subtle bg-surface-raised shadow-card";
+/** Stage 23 (decision 0084): the open message below a hairline on the pane's surface, no card. */
+const MESSAGE = "flex flex-col gap-4 border-t border-border-subtle pt-4";

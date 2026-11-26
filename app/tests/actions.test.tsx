@@ -174,21 +174,22 @@ describe("actions from the keyboard", () => {
 describe("actions from the toolbar and the rows", () => {
   it("the reading pane has a toolbar with the actions, their shortcuts and arrow-key navigation", async () => {
     const { core, user } = setup();
-    const { pane } = await openFirst(user);
+    await openFirst(user);
 
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const names = within(toolbar)
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    // The toolbar shows its primary groups (respond, file away, mark); the rest is in "More".
-    expect(names).toEqual(["Reply", "Reply all", "Forward", "Archive", "Delete", "Mark as read", "Flag", "More actions"]);
-    // Every action keeps its (hidden) button in toolbar order. Stage 5: reply, reply all and
-    // forward come first (stage 10: forward as attachment next to it).
+    // The toolbar shows its primary groups (respond, file away, flag; stage 23: joined groups as in
+    // the draft, "More" joined to the flag); the rest is in "More".
+    expect(names).toEqual(["Reply", "Reply all", "Forward", "Archive", "Delete", "Snooze", "Mark as junk", "Flag", "More actions"]);
+    // Every action keeps its (hidden) button, after the groups in toolbar order. Stage 5: reply,
+    // reply all and forward come first (stage 10: forward as attachment first among the rest).
     const all = within(toolbar)
       .getAllByRole("button", { hidden: true })
       .map((b) => b.getAttribute("aria-label"));
-    expect(all.slice(0, 4)).toEqual(["Reply", "Reply all", "Forward", "Forward as attachment"]);
-    expect(all.slice(4, 11)).toEqual(["Archive", "Delete", "Mark as read", "Flag", "Move to folder", "Tags", "Mark as junk"]);
+    expect(all.slice(0, names.length)).toEqual(names);
+    expect(all.slice(names.length, names.length + 4)).toEqual(["Forward as attachment", "Mark as read", "Move to folder", "Tags"]);
     const archive = within(toolbar).getByRole("button", { name: "Archive" });
     expect(archive.getAttribute("aria-keyshortcuts")).toBe("E");
     // One tab stop (the first button, Reply since stage 5); arrows move along.
@@ -463,9 +464,9 @@ describe("activity view", () => {
 describe("read-only accounts", () => {
   it("show the actions disabled, say why and lead to the switch", async () => {
     const { core, user } = setup({ account: READ_ONLY });
-    const { pane } = await openFirst(user);
+    await openFirst(user);
 
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // Stage 9: pins, snoozes and tasks are local marks and stay available on read-only accounts.
     // Stage 5: replying and forwarding write local drafts; sending explains read-only itself.
     // Stage 8: opening the message in a window of its own changes nothing either.
@@ -490,7 +491,7 @@ describe("read-only accounts", () => {
       if (local.has(button.getAttribute("aria-label") ?? "") || button.getAttribute("aria-label") === "More actions") continue;
       expect(button.getAttribute("aria-disabled")).toBe("true");
     }
-    const note = within(pane).getByTestId("read-only-actions");
+    const note = screen.getByTestId("read-only-actions");
     expect(note.textContent).toContain("Read-only");
     expect(note.textContent).toContain("Changes are turned off for this account, so the app only reads its mail.");
     expect(toolbar.getAttribute("aria-describedby")).toBeTruthy();
@@ -820,8 +821,8 @@ describe("move to folder", () => {
 
   it("Escape closes the list without moving and gives the focus back", async () => {
     const { core, user } = setup();
-    const { pane } = await openFirst(user);
-    const toolbar = within(pane).getByRole("toolbar");
+    await openFirst(user);
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // "Move to folder" is in "More actions"; the menu gives the focus back to its button first.
     await user.click(await toolbarAction(user, toolbar, "Move to folder"));
     await screen.findByRole("dialog", { name: "Move message to" });
@@ -979,8 +980,8 @@ describe("deleting for good", () => {
   it("in the trash asks in the one dialog: focus trapped, Escape cancels, focus returns", async () => {
     const { core, user } = trashSetup();
     await user.click(await screen.findByRole("button", { name: "Trash" }));
-    const { pane } = await openFirst(user);
-    const button = within(within(pane).getByRole("toolbar")).getByRole("button", { name: "Delete permanently" });
+    await openFirst(user);
+    const button = within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Delete permanently" });
 
     await user.click(button);
 
@@ -1009,8 +1010,8 @@ describe("deleting for good", () => {
   it("Escape still cancels and the focus comes back when the dialog lost the focus", async () => {
     const { core, user } = trashSetup();
     await user.click(await screen.findByRole("button", { name: "Trash" }));
-    const { pane } = await openFirst(user);
-    await user.click(within(within(pane).getByRole("toolbar")).getByRole("button", { name: "Delete permanently" }));
+    await openFirst(user);
+    await user.click(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Delete permanently" }));
     const dialog = await screen.findByRole("alertdialog");
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
 
@@ -1190,8 +1191,8 @@ describe("every action from every surface", () => {
     ["Mark as junk", "spam"],
   ])("toolbar button %s sends %s", async (name, type) => {
     const { core, user, items } = setup();
-    const { pane } = await openFirst(user);
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar"), name));
+    await openFirst(user);
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), name));
     await waitFor(() => {
       expect(actionCalls(core)).toHaveLength(1);
     });
@@ -1200,8 +1201,8 @@ describe("every action from every surface", () => {
 
   it("the toolbar's Tags button opens the tag editor", async () => {
     const { user } = setup();
-    const { pane } = await openFirst(user);
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar"), "Tags"));
+    await openFirst(user);
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Tags"));
     expect(await screen.findByRole("dialog", { name: "Tags of this message" })).toBeTruthy();
   });
 
@@ -1210,8 +1211,8 @@ describe("every action from every surface", () => {
     const { core, user } = setup({ items: [], others: { 8: junk } });
     await user.click(await screen.findByRole("button", { name: "Folders" }));
     await user.click(await screen.findByTestId("mailbox-8"));
-    const { pane, listbox } = await openFirst(user);
-    const toolbar = within(pane).getByRole("toolbar");
+    const { listbox } = await openFirst(user);
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).queryByRole("button", { name: "Mark as junk" })).toBeNull();
     expect(within(toolbar).getByRole("button", { name: "Not junk" })).toBeTruthy();
     listbox.focus();

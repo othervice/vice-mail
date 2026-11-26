@@ -228,8 +228,8 @@ describe("stage 20, remind me if no reply", () => {
     const [row] = await screen.findAllByRole("option");
     if (!row) throw new Error("no row");
     await user.click(row);
-    const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(within(pane).getByRole("button", { name: "More actions" }));
+    await screen.findByRole("region", { name: "Message" });
+    await user.click(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remind me if no reply…" }));
     const picker = await screen.findByTestId("follow-up-picker");
     expect(await seriousFindings()).toEqual([]);
@@ -462,7 +462,7 @@ describe("stage 20, mailbox quota", () => {
       {},
       {
         attachments: { quotas: { [ADA.id]: nearlyFull } },
-        ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, sidebarExpanded: true } },
+        ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, contactPanel: true, sidebarExpanded: true } },
       },
     );
     const mark = await screen.findByTestId(`account-quota-mark-${ADA.id}`);

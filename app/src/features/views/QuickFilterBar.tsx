@@ -14,6 +14,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import { useTranslation } from "react-i18next";
 import { ChoiceMenu, type ChoiceGroup } from "../../components/ChoiceMenu";
 import { cx } from "../../components/cx";
+import { ToolbarButton } from "../../components/ToolbarButton";
 import { Tooltip } from "../../components/Tooltip";
 import { useRovingFocus } from "../../components/useRovingFocus";
 import type { InboxScope, QuickFilter } from "../../services/ipc";
@@ -21,6 +22,7 @@ import { isUserTag } from "../actions/keywords";
 import { readTokenPixels } from "../messages/listMetrics";
 import {
   isFiltering,
+  useQuickFilter,
   useQuickFilterStore,
   type QuickFilterState,
 } from "./quickFilter";
@@ -113,11 +115,16 @@ export function QuickFilterBar({
   });
   const numbers = new Intl.NumberFormat(i18n.language);
 
-  // Cmd/Ctrl+Shift+K (the command "Quick filter") puts the focus into the text field.
+  // Cmd/Ctrl+Shift+K (the command "Quick filter") or the toolbar's filter button put the focus
+  // into the text field, also when the bar only appears for it (stage 23).
   const focusRequest = useQuickFilterFocus((state) => state.request);
+  const pending = useQuickFilterFocus((state) => state.pending);
+  const focused = useQuickFilterFocus((state) => state.focused);
   useEffect(() => {
-    if (focusRequest > 0) field.current?.focus();
-  }, [focusRequest]);
+    if (!pending) return;
+    field.current?.focus();
+    focused();
+  }, [pending, focusRequest, focused]);
 
   const knownTags = (tags.data ?? []).filter(isUserTag);
   if (
@@ -301,5 +308,30 @@ export function QuickFilterBar({
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * Stage 23, step 3 (decision 0084): the quick filter's button in the toolbar, over the list. It
+ * shows the bar above the list (its text field takes the focus) or folds it away again; while a
+ * filter is set the bar stays and the button says so. Cmd/Ctrl+Shift+K shows it too.
+ */
+export function QuickFilterToggle({ viewKey }: { viewKey: string }) {
+  const { t } = useTranslation();
+  const filter = useQuickFilter(viewKey);
+  const shown = useQuickFilterFocus((state) => state.shown);
+  const toggle = useQuickFilterFocus((state) => state.toggle);
+  const filtering = isFiltering(filter);
+  const open = shown || filtering;
+  return (
+    <ToolbarButton
+      icon={ListFilter}
+      label={t("toolbar.filter")}
+      hint={filtering ? t("toolbar.filterActive") : open ? t("toolbar.filterHide") : t("toolbar.filterShow")}
+      active={filtering}
+      aria-expanded={open}
+      onClick={toggle}
+      data-testid="toolbar-filter"
+    />
   );
 }

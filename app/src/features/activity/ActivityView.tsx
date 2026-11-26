@@ -10,7 +10,6 @@ import { ViewHeader } from "../../components/ViewHeader";
 import type { Account, Mailbox, MailboxId, OperationInfo, OperationState } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
-import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { outboxCountsQueryKey, operationsQueryKey, useDiscardOperations, useOperations, useRetryOperations } from "../actions/queries";
 import { useMailboxes } from "../mailboxes/queries";
 import { useUiStore } from "../../stores/ui";
@@ -236,13 +235,12 @@ function AccountActivity({ account }: { account: Account }) {
  */
 export function ActivityView() {
   const { t } = useTranslation();
-  const dragRegion = useWindowDragRegion();
   const accounts = useAccounts();
   const showAccountsPage = useUiStore((state) => state.showAccountsPage);
   const list = accounts.data ?? [];
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewHeader title={t("activity.title")} subtitle={t("activity.subtitle")} dragRegion={dragRegion} />
+      <ViewHeader title={t("activity.title")} subtitle={t("activity.subtitle")} />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6" data-testid="activity-view">
         {accounts.isError && (
           <ErrorNotice

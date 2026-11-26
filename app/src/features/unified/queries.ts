@@ -10,8 +10,8 @@ export function useAccountGroups(enabled = true) {
 }
 
 /** Accounts hidden from the unified views on this device. */
-export function useHiddenAccounts() {
-  return useQuery({ queryKey: hiddenAccountsQueryKey, queryFn: searchIpc.listHiddenAccounts });
+export function useHiddenAccounts(enabled = true) {
+  return useQuery({ queryKey: hiddenAccountsQueryKey, queryFn: searchIpc.listHiddenAccounts, enabled });
 }
 
 /** Lists that mix accounts change with groups and hidden accounts. */

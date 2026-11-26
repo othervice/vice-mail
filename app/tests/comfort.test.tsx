@@ -207,9 +207,9 @@ describe("snooze", () => {
     const items = makeMessages(3);
     const first = items[0] as MessageListItem;
     const { core, user } = setup(items);
-    const pane = await open(user, "Message 1");
+    await open(user, "Message 1");
 
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Snooze"));
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Snooze"));
 
     const picker = await screen.findByTestId("snooze-picker");
     expect(within(picker).getByRole("heading").textContent).toBe("Snooze message");
@@ -307,8 +307,8 @@ describe("pins and tasks", () => {
   it("the toolbar takes a mark back and ticks a task off", async () => {
     const items = [makeMessage({ id: 50, subject: "Invoice", pinned: true, task: { done: false } })];
     const { core, user } = setup(items);
-    const pane = await open(user, "Invoice");
-    const toolbar = within(pane).getByRole("toolbar", { name: "Message actions" });
+    await open(user, "Invoice");
+    const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
 
     await user.click(await toolbarAction(user, toolbar, "Unpin"));
     await user.click(await toolbarAction(user, toolbar, "Mark task as done"));
@@ -361,8 +361,8 @@ describe("Later, Pinned and Tasks", () => {
     // Open tasks by default; the filter stays above the list, also when it is empty.
     expect(core.callsOf("list_tasks")).toEqual([{ scope: { kind: "account", accountId: ADA.id }, filter: "open" }]);
     await user.click(row(tasks, "Pay the bill"));
-    const pane = await screen.findByRole("region", { name: "Message" });
-    await user.click(await toolbarAction(user, within(pane).getByRole("toolbar", { name: "Message actions" }), "Mark task as done"));
+    await screen.findByRole("region", { name: "Message" });
+    await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Mark task as done"));
     await waitFor(() => {
       expect(core.callsOf("set_task")).toEqual([{ messageIds: [10], mark: { done: true } }]);
     });

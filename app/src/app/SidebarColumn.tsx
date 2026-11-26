@@ -1,15 +1,10 @@
-import { PanelLeftClose } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { ResizeHandle } from "../components/ResizeHandle";
-import { Tooltip } from "../components/Tooltip";
 import { useAccountMoveByDrag } from "../features/accounts/accountDrag";
 import { useSelectedAccount } from "../features/accounts/selection";
-import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
-import { useAppInfo } from "../features/app-info/queries";
-import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { useSidebarFoldStore } from "../features/layout/sidebarFolds";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { useDragAutoScroll } from "../features/mailboxes/useDragAutoScroll";
@@ -17,7 +12,6 @@ import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
 import { FavoriteFolders } from "../features/organize/folders";
 import type { Account, MailboxId } from "../services/ipc";
-import { useBoundShortcuts } from "../stores/shortcuts";
 import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore } from "../stores/ui";
 import { AllAccountsTree } from "./AllAccountsTree";
 import { SidebarFooter } from "./SidebarFooter";
@@ -166,16 +160,11 @@ function useOverlayDismiss(column: RefObject<HTMLElement | null>, overlay: boole
 export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const { t } = useTranslation();
   const width = useUiStore((state) => state.sidebarWidth);
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const dragRegion = useWindowDragRegion();
   const { accounts, account: selected } = useSelectedAccount();
   const accountList = accounts.data ?? [];
   const column = useRef<HTMLElement>(null);
   const contentId = useId();
   const accountsHeading = useId();
-  const platform = shortcutPlatform(useAppInfo().data?.platform);
-  const shortcut = useBoundShortcuts(platform)("toggleSidebar")[0];
-  const label = t("nav.hideSidebar");
   const onKeyDown = useOverlayDismiss(column, overlay);
   const autoScroll = useDragAutoScroll();
   const accountDrop = useAccountMoveByDrag(accountList);
@@ -220,24 +209,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
       // over the content it stays opaque.
       data-chrome={overlay ? undefined : true}
     >
-      {/* As high as the list header; on macOS the window buttons sit at its start. */}
-      <div data-tauri-drag-region={dragRegion ? true : undefined} className="flex h-(--ui-header-height) shrink-0 items-center justify-end px-2">
-        <Tooltip label={shortcut ? t("actions.withShortcut", { label, shortcut: formatShortcut(shortcut, platform) }) : label} side="right">
-          <button
-            type="button"
-            aria-label={label}
-            aria-expanded
-            aria-controls={contentId}
-            aria-keyshortcuts={shortcut && ariaShortcut(shortcut, platform)}
-            onClick={toggleSidebar}
-            // The same test id as the rail's "Folders": the one control that folds and unfolds the column.
-            data-testid="rail-folders"
-            className="flex size-8 items-center justify-center rounded-control text-secondary transition-colors hover:bg-rail-hover hover:text-primary"
-          >
-            <PanelLeftClose aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
-          </button>
-        </Tooltip>
-      </div>
+      {/* Stage 23 (decision 0084): its toggle stands in the toolbar across the window. */}
       {!overlay && <SidebarResizeHandle controls={contentId} />}
       {/* Scrolls on its own, never sideways; the edges fade so a cut-off row reads as "more".
           Stage 21: what is inside clips sideways (`overflow-x: clip` on the inner block, which

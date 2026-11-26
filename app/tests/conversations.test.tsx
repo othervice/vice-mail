@@ -310,6 +310,8 @@ describe("conversation rows in the lists", () => {
   it("Unread only and Unread first list conversations", async () => {
     const { core, user } = setup({ parity: {} });
     await inboxList();
+    // Stage 23: the quick filter shows from the toolbar's button.
+    await user.click(screen.getByRole("button", { name: "Quick filter" }));
     await user.click(screen.getByRole("button", { name: "Unread" }));
     await waitFor(() => {
       expect(core.callsOf("list_inbox_conversations_filtered")).toContainEqual({
@@ -481,24 +483,15 @@ describe("opening a conversation", () => {
     const projekt = within(list)
       .getAllByRole("treeitem")
       .find((option) => optionName(option).includes("Projekt"));
-    // Stage 17: the account label beside the names: its colour dot and name, the name as its
-    // tooltip and in the row's name; it gives way to the names first (large shrink factor, the
-    // dot as its smallest size; the layout itself is measured in conversations.e2e.mjs).
+    // Stage 23 (decision 0084): the account's 3 px stripe at the row's right edge, in its colour,
+    // the name as its tooltip and in the row's name; it stays while the quick actions show
+    // (outside the meta that gives way to them).
     const label = within(projekt as HTMLElement).getByTestId("row-account");
     expect(label.getAttribute("title")).toBe("Work");
-    expect(within(label).getByTestId("row-account-name").textContent).toBe("Work");
-    expect(within(label).getByTestId("row-account-dot").className).toContain("bg-account-4");
-    expect(label.className).toMatch(/\bshrink-1000000\b/);
-    expect(label.className).toContain("min-w-(--ui-dot)");
-    expect(label.className).toContain("overflow-hidden");
-    // Stage 22 (decision 0072): it carries what the avatar's ring did, so it stays while the quick
-    // actions show (outside the meta that gives way to them).
+    expect(label.className).toContain("bg-account-4");
+    expect(label.className).toContain("w-(--ui-row-stripe)");
     expect(within(projekt as HTMLElement).getByTestId("row-meta").contains(label)).toBe(false);
     expect(within(projekt as HTMLElement).getByTestId("row-meta-marks").contains(label)).toBe(false);
-    // The name whole or not at all: where it does not fit beside the dot it wraps out of sight.
-    expect(label.className).toMatch(/\bflex-wrap\b/);
-    expect(label.className).toMatch(/\bh-5\b/);
-    expect(within(label).getByTestId("row-account-name").className).toMatch(/\btruncate\b/);
     expect(optionName(projekt)).toContain("Account: Work");
     await user.click(projekt as HTMLElement);
     await waitFor(() => {
@@ -519,10 +512,10 @@ describe("actions on conversation rows", () => {
     const { core, user } = setup();
     const list = await inboxList();
     await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
 
     // The toolbar: the open message only (the first unread one, Anna's question).
-    await user.click(within(within(pane).getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: /^Flag/ }));
+    await user.click(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: /^Flag/ }));
     await waitFor(() => {
       expect(actionCalls(core)).toHaveLength(1);
     });

@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setConversations, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -125,6 +125,15 @@ async function waitForDialog(check, message) {
 
 async function clickButton(label) {
   const button = await browser.$(`//button[@aria-label="${label}" or normalize-space(.)="${label}"]`);
+  // Stage 23 (decision 0084): an attachment card shows its buttons while the pointer is over it or
+  // the focus in it. A real pointer over the card brings them out (`:focus-within` needs the
+  // window to be the key window, which the test window is not).
+  await button.waitForExist({ timeout: 10000 });
+  const card = await browser.execute((el) => {
+    const box = el.closest('[data-testid="attachment"]')?.getBoundingClientRect();
+    return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2, viewportHeight: innerHeight } : null;
+  }, button);
+  if (card) await coreCall("e2e_native_mouse_event", { kind: "move", x: card.x, y: card.y, viewportHeight: card.viewportHeight });
   await button.waitForClickable({ timeout: 10000 });
   await button.click();
 }
@@ -150,6 +159,8 @@ describe("stage 16: attachment preview", () => {
       { timeout: 240000, interval: 500, timeoutMsg: "the first sync did not finish" },
     );
     await coreCall("set_reading_preferences", { preferences: { markReadOnOpen: "never" } });
+    // Message rows (as after account-sync.e2e.mjs), also when this spec runs on its own.
+    await setConversations(false);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vicemail-preview-"));
     const file = path.join(dir, "preview.eml");
     fs.writeFileSync(file, eml());

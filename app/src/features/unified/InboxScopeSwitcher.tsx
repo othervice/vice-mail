@@ -20,6 +20,12 @@ interface InboxScopeSwitcherProps {
   accounts: readonly Account[];
   /** The account the views show while no unified inbox is chosen. */
   account: Account | null;
+  /**
+   * Stage 23, step 3 (decision 0084): right after the view's title in the toolbar ("All inboxes
+   * ▾"): the chevron, and the account's square and name while one account is chosen (the title
+   * names all accounts or a group already).
+   */
+  inTitle?: boolean;
 }
 
 function sameView(a: UnifiedView | null, b: UnifiedView): boolean {
@@ -33,7 +39,7 @@ function sameView(a: UnifiedView | null, b: UnifiedView): boolean {
  * that unfolds the choices right below it (no popover: the CSP rules out Radix Popover); arrow
  * keys move between them, Escape folds them away again.
  */
-export function InboxScopeSwitcher({ accounts, account }: InboxScopeSwitcherProps) {
+export function InboxScopeSwitcher({ accounts, account, inTitle = false }: InboxScopeSwitcherProps) {
   const { t } = useTranslation();
   const listId = useId();
   const labelId = useId();
@@ -121,19 +127,22 @@ export function InboxScopeSwitcher({ accounts, account }: InboxScopeSwitcherProp
             close();
           }
         }}
-        className="flex h-6 min-w-0 items-center gap-2 rounded-control pe-1 text-12 text-secondary hover:bg-hover hover:text-primary"
+        className={cx(
+          "flex min-w-0 items-center gap-2 rounded-control hover:bg-hover hover:text-primary",
+          inTitle ? "h-(--ui-toolbar-control) px-1 text-13 text-secondary" : "h-6 pe-1 text-12 text-secondary",
+        )}
         data-testid="inbox-scope"
       >
         {current?.color !== null && current?.color !== undefined && (
-          <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(current.color))} />
+          <span aria-hidden className={cx("size-(--ui-dot) shrink-0", inTitle ? "rounded-mark" : "rounded-full", accountFill(current.color))} />
         )}
         <span id={labelId} className="sr-only">
           {t("unified.switcher")}
         </span>
-        <span id={valueId} className="truncate">
+        <span id={valueId} className={cx(inTitle && (current?.color ?? null) === null ? "sr-only" : "truncate")}>
           {current?.label}
         </span>
-        <ChevronDown aria-hidden className="size-3 shrink-0" strokeWidth={2} />
+        <ChevronDown aria-hidden className={cx("shrink-0", inTitle ? "size-(--ui-icon-small)" : "size-3")} strokeWidth={2} />
       </button>
       {open && (
         <ul

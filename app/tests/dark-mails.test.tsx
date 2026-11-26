@@ -49,7 +49,7 @@ async function openNewsletter(user: ReturnType<typeof renderApp>["user"]) {
 const frameIn = (pane: HTMLElement) => within(pane).getByTitle("Content of the message “Autumn offers”");
 
 describe("mails in the dark theme", () => {
-  it("asks the core for the dark scheme and lays the frame on the dark card", async () => {
+  it("asks the core for the dark scheme and lays the frame on the dark reading surface", async () => {
     const core = setup("dark");
     const { user } = renderApp();
     const pane = await openNewsletter(user);
@@ -60,7 +60,8 @@ describe("mails in the dark theme", () => {
     expect(core.callsOf("get_message")).toEqual([{ messageId: NEWSLETTER.id, format: "auto", scheme: "dark" }]);
     const frame = frameIn(pane);
     expect(frame.className).toContain("scheme-dark");
-    expect(frame.className).toContain("bg-surface-raised");
+    // Stage 23 (decision 0084): on the reading pane's surface (no card any more).
+    expect(frame.className).toMatch(/\bbg-surface\b/);
     expect(frame.className).not.toContain("bg-mail-canvas");
     const toggle = within(pane).getByRole("button", { name: "Original colours" });
     expect(toggle.getAttribute("aria-pressed")).toBe("false");

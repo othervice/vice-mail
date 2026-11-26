@@ -104,7 +104,8 @@ describe("account setup: known provider", () => {
     expect(core.callsOf("test_connection")).toEqual([]);
     // Afterwards the inbox of the new account is shown.
     expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeTruthy();
-    expect(screen.getByRole("banner").textContent).toContain("someone@gmail.com");
+    // Stage 23: the toolbar names the account only where there are several; the rail names it.
+    expect(screen.getByTestId("icon-rail").innerHTML).toContain("someone@gmail.com");
   });
 
   it("shows the iCloud note about app-specific passwords", async () => {

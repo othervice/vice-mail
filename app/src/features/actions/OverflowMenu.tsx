@@ -42,6 +42,13 @@ interface OverflowMenuProps {
   narrow?: boolean;
   /** Stage 17: a 24 px button for a 24 px row (a section label of the column). */
   small?: boolean;
+  /**
+   * Stage 23, step 3 (decision 0084): a button of the toolbar's joined groups (34 × 28, square
+   * corners, the group draws the frame) or a plain 28 px button of the toolbar or a message's head.
+   */
+  look?: "joined" | "joinedAlone" | "toolbar";
+  /** Classes of the wrapper, e.g. the line before a joined button. */
+  className?: string;
   "data-testid"?: string;
 }
 
@@ -53,7 +60,19 @@ interface OverflowMenuProps {
  * stays inside what can be seen (`useMenuPlacement`): above the button when there is no room
  * below, moved back in at the sides.
  */
-export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", returnFocus, narrow = false, small = false, ...rest }: OverflowMenuProps) {
+export function OverflowMenu({
+  label,
+  items,
+  tabIndex,
+  onFocus,
+  align = "end",
+  returnFocus,
+  narrow = false,
+  small = false,
+  look,
+  className,
+  ...rest
+}: OverflowMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -134,7 +153,7 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
 
   if (items.length === 0) return null;
   return (
-    <div ref={wrapper} className="relative flex">
+    <div ref={wrapper} className={cx("relative flex", className)}>
       <Tooltip label={label} disabled={open}>
         <button
           ref={button}
@@ -152,12 +171,16 @@ export function OverflowMenu({ label, items, tabIndex, onFocus, align = "end", r
           onKeyDown={onButtonKeyDown}
           data-testid={rest["data-testid"]}
           className={cx(
-            "flex items-center justify-center rounded-control text-secondary transition-colors hover:bg-hover hover:text-primary",
-            small ? "size-6" : "size-8",
+            "flex items-center justify-center text-secondary transition-colors hover:bg-hover hover:text-primary",
+            look === "joined" || look === "joinedAlone"
+              ? cx("h-(--ui-toolbar-control) w-(--ui-toolbar-button)", look === "joined" ? "rounded-e-control" : "rounded-control")
+              : look === "toolbar"
+                ? "size-(--ui-toolbar-control) rounded-control"
+                : cx("rounded-control", small ? "size-6" : "size-8"),
             open && "bg-hover text-primary",
           )}
         >
-          <MoreHorizontal aria-hidden className={small ? "size-(--ui-icon-small)" : "size-(--ui-icon)"} strokeWidth={1.75} />
+          <MoreHorizontal aria-hidden className={small || look ? "size-(--ui-icon-small)" : "size-(--ui-icon)"} strokeWidth={1.75} />
         </button>
       </Tooltip>
       {open && (

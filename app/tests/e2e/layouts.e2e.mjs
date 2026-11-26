@@ -70,7 +70,7 @@ const measure = () =>
     return {
       window: { width: window.innerWidth, height: window.innerHeight },
       focus: document.activeElement?.closest("[data-testid]")?.getAttribute("data-testid") ?? document.activeElement?.tagName ?? null,
-      title: document.querySelector("main header h1")?.textContent ?? null,
+      title: document.querySelector("[data-testid=\"app-toolbar\"] h1")?.textContent ?? null,
       listState: why('[data-testid="message-list"]'),
       paneState: why('[data-testid="reading-pane"]'),
       scrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,

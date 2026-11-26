@@ -127,8 +127,10 @@ describe("printing", () => {
     const pane = await open(user);
     const article = within(pane).getByRole("article");
     expect(article.hasAttribute("data-print-root")).toBe(true);
-    // Only the message is printed: the top bar with actions and tools is outside it.
-    expect(article.contains(tools(pane))).toBe(false);
+    // Only the message is printed: the tools (stage 23: in the pane's top line, decision 0084) and
+    // that line are not.
+    expect(tools(pane).closest("[data-print-hide]")).not.toBeNull();
+    expect(within(pane).getByTestId("reading-meta").hasAttribute("data-print-hide")).toBe(true);
     const bar = await within(pane).findByTestId("unsubscribe-bar");
     expect(bar.hasAttribute("data-print-hide")).toBe(true);
     expect(within(pane).getByTestId("category-panel").closest("[data-print-hide]")).not.toBeNull();

@@ -252,6 +252,8 @@ struct StoredLayout {
     list_width: u16,
     #[serde(default = "default_list_height")]
     list_height: u16,
+    #[serde(default = "default_contact_panel")]
+    contact_panel: bool,
 }
 
 fn default_sidebar_expanded() -> bool {
@@ -270,6 +272,10 @@ fn default_list_height() -> u16 {
     mail_model::DEFAULT_LIST_HEIGHT
 }
 
+fn default_contact_panel() -> bool {
+    WindowLayout::default().contact_panel
+}
+
 fn decode_layout(key: &str, json: &str) -> WindowLayout {
     let stored = match serde_json::from_str::<StoredLayout>(json) {
         Ok(stored) => stored,
@@ -285,6 +291,7 @@ fn decode_layout(key: &str, json: &str) -> WindowLayout {
         sidebar_width: stored.sidebar_width,
         list_width: stored.list_width,
         list_height: stored.list_height,
+        contact_panel: stored.contact_panel,
     }
     .with_sizes_in_range();
     for size in replaced {
