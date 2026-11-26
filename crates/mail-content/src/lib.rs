@@ -28,6 +28,8 @@
 //!   (stage 19); [`build_redirect`]: redirecting with `Resent-*` fields.
 //! - [`read_calendar`], [`calendar_parts`]: calendar invitations (`text/calendar`, `.ics`) for
 //!   the invitation card; time zones through a [`ZoneResolver`] the engine provides.
+//! - [`spam_tokens`], [`spam_score`]: the learning spam filter's tokens of a message and its
+//!   score from learned token counts (stage 22, decision 0077).
 //! - [`read_vcards`], [`write_vcards`]: vCard files (2.1, 3.0, 4.0 read; 3.0, 4.0 written) for
 //!   importing and exporting contacts and contact groups (stage 19).
 //! - [`MboxReader`], [`write_mbox_message`]: mbox files (stage 19), read line by line with
@@ -62,6 +64,7 @@ mod parse;
 mod preview;
 mod reencode;
 mod source;
+mod spam;
 mod templates;
 mod text;
 mod thunderbird;
@@ -129,6 +132,12 @@ pub use reencode::{
     ReencodedImages, is_reencoded_data_url, reencode_image, reencode_images,
 };
 pub use source::{HeaderField, SourceText, header_fields, source_text};
+pub use spam::{
+    MAX_DISCRIMINATORS, MAX_SPAM_TEXT_BYTES, MAX_SPAM_TOKENS, MIN_PROB_STRENGTH, SpamCounts,
+    SpamFields, SpamScore, SpamTokens, SpamTotals, UNKNOWN_WORD_PROB, UNKNOWN_WORD_STRENGTH,
+    spam_score, spam_token_hash, spam_tokens, spam_tokens_of_fields, spam_tokens_of_raw,
+    token_probability,
+};
 pub use templates::{
     DraftBody, DraftParts, FilledTemplate, LocalDate, MAX_SIGNATURE_BYTES, MAX_SNIPPET_INPUT_BYTES,
     MAX_TEMPLATE_BYTES, MAX_TEMPLATE_SUBJECT_CHARS, Placeholder, Quote, ReplyPosition,
