@@ -919,10 +919,12 @@ Hervorheben beim Klick. Die Zahl ungelesener Mails steht als Text rechts daneben
 ohne Zahl nur die Glyphe. Ein Klick öffnet das Menü.
 
 **Symbol im Infobereich (Windows).** Das farbige App-Symbol in seiner eigenen kleinen Größe
-(16/20/24/32 px bei 100–200 %), die Zahl in einem roten Abzeichen unten rechts: ein Kreis für eine
-Ziffer, darüber ein Rechteck mit runden Ecken, höchstens „99+“, mit einem Pixel Abstand vom Symbol
-ausgeschnitten. Ziffern weiß, pixelgenau, höchstens 36 % der Symbolhöhe hoch. Der Tooltip nennt die
-Zahl („Vice Mail: 3 ungelesen“). Linksklick öffnet das Fenster, Rechtsklick das Menü.
+(16/20/24/32 px bei 100–200 %), die Zahl in einem roten Abzeichen unten rechts, 5/8 des Symbols
+hoch: ein Kreis oder eine Pille, so breit wie die breiteste Zahl gleicher Länge, höchstens „99+“,
+mit einem Pixel Abstand vom Symbol ausgeschnitten; wo runde Enden zu wenig Platz lassen, mit
+engeren Ecken, damit eine Ziffer nie kleiner ist als zwei. Ziffern wie in der Taskleiste (unten).
+Der Tooltip nennt die Zahl („Vice Mail: 3 ungelesen“). Linksklick öffnet das Fenster, Rechtsklick
+das Menü.
 
 **Menü.** „Vice Mail öffnen“, „Neue Nachricht“, Trenner, „Mitteilungen pausieren ›“ (Für
 1 Stunde, Bis morgen, Trenner, während einer Pause die graue Zeile „Pausiert bis 14:30“, dann
@@ -930,12 +932,16 @@ Zahl („Vice Mail: 3 ungelesen“). Linksklick öffnet das Fenster, Rechtsklick
 in der Sprache der Oberfläche (Englisch in Titel-Schreibung wie in macOS-Menüs), Uhrzeit im
 12- oder 24-Stunden-Format der Sprache.
 
-**Zähler auf dem Taskleisten-Knopf (Windows).** Roter Kreis (`#D93025`, weiße Ziffern 4,6:1) in
-genau der Größe, in der Windows ihn zeigt (16 logische Pixel: 16/20/24/28/32/40 px), Ziffern aus
-zwei Pixelschriften (3×5 und 5×7) in ganzzahliger Vergrößerung, so dass jede Ziffer auf vollem
-Rot steht und kein Pixel grau wird; die größte Schrift, die mit Rand passt. „99+“ in einem
-Rechteck so breit wie das Bild, wenn der Kreis nur kleinere Ziffern fasste. Bilder:
-`badge::tests::golden_16px`.
+**Zähler auf dem Taskleisten-Knopf (Windows).** Rot (`#D93025`, weiße Ziffern 4,6:1) in genau
+der Größe, in der Windows ihn zeigt (16 logische Pixel: 16/20/24/28/32/40 px). Stufe 22
+(Entscheidung 0080): Ziffern aus Selawik Semibold (Microsofts quelloffener Ersatz für Segoe UI),
+für genau diese Pixelgröße eingepasst: Grundlinie, Ziffernhöhe und Striche auf ganzen Pixeln, nur
+Bögen und Schrägen mit weichen Pixeln, Weiß in linearem Licht ins Rot gemischt. Ein Kreis für eine
+Ziffer; für zwei Ziffern und „99+“ ein Rechteck mit runden Ecken so breit wie das Bild, wenn es
+größere Ziffern fasst. Alle Zahlen gleicher Länge in derselben Größe (die Zahl springt nicht),
+immer mit rotem Rand um die Ziffern. Bei 100 %: 9 px hohe Einzelziffern, 8 px zwei Ziffern, 6 px
+„99+“. Das „+“ sind zwei Balken auf dem Pixelraster. Bilder aller Zahlen bei 100–200 %:
+`badge::tests::write_previews`.
 
 **Einstellungen.** Allgemein → „Im Hintergrund“ (Überschrift 14 px wie „Standard-Mail-App“):
 Schalter „Weiterlaufen, wenn das Fenster geschlossen wird“ mit Beschreibung je System, unter
@@ -944,6 +950,26 @@ Infobereich, „Mit dem System starten“ (in Entwicklungs-Builds gesperrt, mit 
 → „Mitteilungen pausieren“ direkt unter dem Hauptschalter: Beschreibung, während einer Pause die
 Statuszeile mit durchgestrichener Glocke („Pausiert bis 14:30“, `role="status"`), Knöpfe „Für
 1 Stunde“, „Bis morgen früh“ (sekundär) und „Fortsetzen“ (leise, nur während einer Pause).
+
+## Windows 11: Mica, Titelleiste, Andock-Layouts (Stufe 22, Entscheidung 0079)
+
+**Rahmen.** Unter Windows bleibt die native Titelleiste mit den nativen Knöpfen; beim Überfahren
+von Maximieren zeigt Windows die Andock-Layouts. Unter Windows 11 liegt Mica in der Titelleiste
+jedes App-Fensters (hell oder dunkel wie die App, mit ihr wechselnd). Im Hauptfenster läuft das
+Material ohne Naht links herunter: Rahmen, schmale Leiste und angedockte Spalte der Konten und
+Ordner sind durchsichtig (`data-chrome`), ihre Texte, Symbole, Zähler und Fokusringe stehen auf
+Mica (geprüft gegen das dunkelste helle und das hellste dunkle Mica, 4,5:1 und 3:1). Überfahren und
+Auswahl in der Spalte behalten ihre Flächen (`rail-hover`, `selected`).
+
+**Undurchsichtig** bleiben Liste, Lesebereich, Composer, Einstellungen, KI-Seitenleiste, Menüs,
+Dialoge, Hinweise und die Spalte, wenn sie in einem schmalen Fenster über dem Inhalt liegt. Fenster
+für Mails, Entwürfe, `.eml` und Quelltext haben Mica nur in der Titelleiste; das Popup für neue
+Mails bleibt, wie es ist.
+
+**Ohne Mica** (Windows 10, Transparenzeffekte aus, Kontrastdesign, macOS) sieht alles aus wie
+vorher: dieselben Flächen aus `tokens.css`, keine Durchsicht. Wird Transparenz ausgeschaltet oder
+ein Kontrastdesign eingeschaltet, während ein Fenster offen ist, werden Rahmen, Leiste und Spalte
+sofort wieder undurchsichtig.
 
 ## Sortieren, Tabelle und Schnellfilter (Stufe 19, Entscheidungen 0061, 0062)
 
