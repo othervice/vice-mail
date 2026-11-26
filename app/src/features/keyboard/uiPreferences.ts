@@ -13,6 +13,7 @@ import {
   type CoreWindowLayout,
   type PlatformShortcuts,
   type ShortcutOverride,
+  type SidebarFold,
   type UiPreferences,
 } from "../../services/ipc";
 import type { Shortcut, ShortcutPlatform } from "../actions/shortcuts";
@@ -40,6 +41,8 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   conversations: true,
   // Stage 17: no choice, every view of the column in its default order.
   columnViews: [],
+  // Stage 23 (decision 0085): every part of the sidebar as it shows at first.
+  sidebarFolds: [],
 };
 
 export type PlatformOverrides = Record<ShortcutPlatform, ShortcutOverrides>;
@@ -110,6 +113,8 @@ export interface UiPreferencesChange {
   conversations?: boolean;
   /** Stage 17: the column's views in the user's order, shown or hidden; synced. */
   columnViews?: readonly ColumnView[];
+  /** Stage 23 (decision 0085): the sidebar's parts opened or closed, on this device. */
+  sidebarFolds?: readonly SidebarFold[];
 }
 
 let saves: Promise<unknown> = Promise.resolve();
@@ -141,6 +146,7 @@ export function saveUiPreferences(change: UiPreferencesChange): Promise<UiPrefer
       accentTheme: change.accentTheme ?? previous.accentTheme,
       conversations: change.conversations ?? previous.conversations,
       columnViews: change.columnViews ? [...change.columnViews] : previous.columnViews,
+      sidebarFolds: change.sidebarFolds ? [...change.sidebarFolds] : previous.sidebarFolds,
     };
     await queryClient?.cancelQueries({ queryKey: uiPreferencesQueryKey });
     queryClient?.setQueryData(uiPreferencesQueryKey, next);

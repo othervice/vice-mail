@@ -988,6 +988,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
   });
 
   const uiFake = createUiFake(options.ui ?? {}, {
+    accountIds: accounts.map((account) => account.id),
     accountOfMessage: (messageId) => [...messages.values()].flat().find((m) => m.id === messageId)?.accountId ?? null,
     hasDraft: (draftId) => composeFake.state.drafts.has(draftId),
     reject: (code, detail = null) => reject(code, detail),

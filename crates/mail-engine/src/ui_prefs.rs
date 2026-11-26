@@ -9,6 +9,7 @@
 //! | `ui.column_views` | the column's views in the user's order, shown or hidden (stage 17) | synced |
 //! | `ui.recent_commands` | palette entry keys, newest first | device |
 //! | `ui.ai_panel` | the AI panel unfolded or folded in (decision 0028) | device |
+//! | `ui.sidebar_folds` | the sidebar's parts opened or closed (stage 23, decision 0085) | device |
 //! | `ui.layout.<slot>` | [`WindowLayout`] of one kind of window | device |
 //!
 //! One key per platform, so a change on the Mac and one on a Windows machine never compete for
@@ -18,9 +19,9 @@
 
 use mail_model::{
     AccentTheme, AiPanelState, ColumnView, CoreError, CoreEvent, DEFAULT_TEXT_SIZE,
-    PlatformShortcuts, Shortcut, ShortcutOverride, ShortcutPlatform, UiPreferences,
+    PlatformShortcuts, Shortcut, ShortcutOverride, ShortcutPlatform, SidebarFold, UiPreferences,
     UiPreferencesError, WindowLayout, validate_column_views, validate_layout_slot,
-    validate_overrides, validate_recent_commands,
+    validate_overrides, validate_recent_commands, validate_sidebar_folds,
 };
 use mail_store::GLOBAL_SCOPE;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,9 @@ pub(crate) const RECENT_COMMANDS_KEY: &str = "ui.recent_commands";
 /// Device only (decision 0028): AI in the app is set up per device (0024), and the panel is
 /// part of the window's layout, which stays on the device too (0025).
 pub(crate) const AI_PANEL_KEY: &str = "ui.ai_panel";
+/// Stage 23 (decision 0085), device only: which parts of the sidebar are open is part of how
+/// this screen looks, like the window's layout; the keys of accounts' parts carry account ids.
+pub(crate) const SIDEBAR_FOLDS_KEY: &str = "ui.sidebar_folds";
 const LAYOUT_PREFIX: &str = "ui.layout.";
 
 /// The stored form of one changed command.
@@ -214,6 +218,22 @@ fn decode_ai_panel(json: &str) -> AiPanelState {
     })
 }
 
+/// A list this version cannot read or does not accept reads as the default (nothing opened or
+/// closed: every part of the sidebar as the UI shows it first).
+fn decode_sidebar_folds(json: &str) -> Vec<SidebarFold> {
+    let parsed = serde_json::from_str::<Vec<SidebarFold>>(json)
+        .map_err(|err| err.to_string())
+        .and_then(|list| {
+            validate_sidebar_folds(&list)
+                .map(|()| list)
+                .map_err(|err| err.to_string())
+        });
+    parsed.unwrap_or_else(|reason| {
+        tracing::warn!(key = SIDEBAR_FOLDS_KEY, %reason, "stored sidebar folds unreadable, using the default");
+        Vec::new()
+    })
+}
+
 /// A stored layout as older versions wrote it: fields missing then take the default (a layout
 /// stored before the column's width or the list's size (stage 18) existed keeps its reading
 /// pane, density and sidebar).
@@ -305,6 +325,7 @@ impl<C: Connector> AppCore<C> {
                 COLUMN_VIEWS_KEY => prefs.column_views = decode_column_views(value),
                 RECENT_COMMANDS_KEY => prefs.recent_commands = decode_recent(value),
                 AI_PANEL_KEY => prefs.ai_panel = decode_ai_panel(value),
+                SIDEBAR_FOLDS_KEY => prefs.sidebar_folds = decode_sidebar_folds(value),
                 _ => {}
             }
         }
@@ -349,6 +370,10 @@ impl<C: Connector> AppCore<C> {
                 encode(&preferences.recent_commands)?,
             ),
             (AI_PANEL_KEY.to_owned(), encode(&preferences.ai_panel)?),
+            (
+                SIDEBAR_FOLDS_KEY.to_owned(),
+                encode(&preferences.sidebar_folds)?,
+            ),
         ];
         self.store_ref()?
             .put_settings(GLOBAL_SCOPE, entries)
@@ -361,6 +386,7 @@ impl<C: Connector> AppCore<C> {
             accent = ?stored.accent_theme,
             conversations = stored.conversations,
             column_views = stored.column_views.len(),
+            sidebar_folds = stored.sidebar_folds.len(),
             "UI preferences stored"
         );
         self.emit_event(CoreEvent::UiPreferencesChanged {

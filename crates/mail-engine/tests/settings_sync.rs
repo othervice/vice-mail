@@ -1312,6 +1312,11 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
             id: "later".into(),
             shown: false,
         }],
+        // Stage 23 (decision 0085): the sidebar's opened and closed parts stay on the device.
+        sidebar_folds: vec![mail_model::SidebarFold {
+            key: "more".into(),
+            open: true,
+        }],
     };
     a.core
         .set_ui_preferences(prefs.clone())
@@ -1345,6 +1350,10 @@ async fn shortcuts_and_text_size_reach_the_other_device_history_and_layouts_stay
         taken.ai_panel,
         mail_model::AiPanelState::Open,
         "the AI panel's state stays on its device (decision 0028)"
+    );
+    assert!(
+        taken.sidebar_folds.is_empty(),
+        "the sidebar's opened and closed parts stay on their device (decision 0085)"
     );
     assert_eq!(
         b.core.get_window_layout("main").await.expect("layout"),
