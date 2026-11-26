@@ -129,6 +129,11 @@ export const en = {
     },
     loading: "Opening the draft…",
     close: "Close (the draft is kept)",
+    // Stage 23 (decision 0086): the composer as a floating card.
+    minimise: "Minimise",
+    expand: "Restore: {{title}}",
+    identityChip: "{{name}} · {{email}}",
+    identityMenu: "From: {{identity}}",
     from: "From",
     identity: "{{name}} <{{email}}>",
     subject: "Subject",
@@ -145,6 +150,11 @@ export const en = {
       readReceipt: "Request a read receipt",
       readReceiptHint: "The recipient's mail app asks them whether to send one. Nothing is tracked.",
       failed: "The send options could not be changed.",
+      // Stage 23 (decision 0086): the arrow of the send button and the "…" menu.
+      later: "Send later",
+      pick: "Pick a date and time…",
+      whenSending: "When sending",
+      options: "More options",
     },
     // Stage 20 (decision 0059): "Remind me if no reply by …" among the send options.
     followUp: {
@@ -154,6 +164,10 @@ export const en = {
       custom: "Pick a date and time…",
       customLabel: "Date and time of the reminder",
       set: "Set",
+      // Stage 23 (decision 0086): an icon in the composer's send row.
+      button: "Remind me if no reply",
+      buttonSet: "Remind me if no reply: {{time}}",
+      cancel: "Cancel",
     },
     errors: {
       open: "The draft could not be opened.",
@@ -208,6 +222,13 @@ export const en = {
       linkApply: "Set link",
       linkRemove: "Remove link",
       linkInvalid: "Only web addresses (https://…) and email addresses can be linked.",
+      // Stage 23 (decision 0086): the compact bar and its "More formatting".
+      more: "More formatting",
+      blockStyleNamed: "Paragraph style: {{style}}",
+      imageSizeNamed: "Image size: {{size}}",
+      indent: "Increase indent",
+      outdent: "Decrease indent",
+      clear: "Clear formatting",
     },
     signature: {
       preview: "Signature",
@@ -220,11 +241,14 @@ export const en = {
       below: "below the quote",
       above: "above the quote",
       formattedOnly: "The original message is included as formatted text.",
+      show: "Show quote",
+      hide: "Hide quote",
+      showForward: "Show forwarded message",
+      hideForward: "Hide forwarded message",
     },
     attachments: {
       add: "Attach files",
       adding: "Attaching…",
-      dropHint: "or drop files on the window",
       dropHere: "Drop the files to attach them.",
       list_one: "{{count}} attachment",
       list_other: "{{count}} attachments",
@@ -467,6 +491,7 @@ export const en = {
       missing: "No value for {{placeholder}}: it was left empty.",
       unknown: "{{name}} is no known placeholder and stays as written.",
       paletteInsert: "Insert template: {{name}}",
+      insert: "Insert template",
     },
     sendLater: {
       button: "Send later…",

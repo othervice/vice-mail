@@ -32,6 +32,11 @@ interface RecipientFieldProps {
    * recipients. Without it, groups are not suggested.
    */
   onGroup?: (members: Address[]) => void;
+  /**
+   * Stage 23 (decision 0086): the composer card's look: 24 px insets, a small grey label,
+   * chips on the chip tone without a hairline.
+   */
+  look?: "card";
   "data-testid"?: string;
 }
 
@@ -57,8 +62,10 @@ export function RecipientField({
   disabled = false,
   trailing,
   onGroup,
+  look,
   ...rest
 }: RecipientFieldProps) {
+  const card = look === "card";
   const { t } = useTranslation();
   const inputId = useId();
   const listId = useId();
@@ -149,8 +156,11 @@ export function RecipientField({
   // The first line is 32 px high like the subject's field and the "Cc"/"Bcc" buttons at the end:
   // label, chips and buttons share its middle; further lines of chips go below.
   return (
-    <div className={cx("relative flex min-w-0 items-start gap-2 border-b border-border-subtle px-4 py-1", FIELD_ROW_FOCUS)} data-testid={rest["data-testid"]}>
-      <label htmlFor={inputId} className="flex h-8 w-12 shrink-0 items-center text-13 text-tertiary">
+    <div
+      className={cx("relative flex min-w-0 items-start gap-2 border-b border-border-subtle py-1", card ? "px-6" : "px-4", FIELD_ROW_FOCUS)}
+      data-testid={rest["data-testid"]}
+    >
+      <label htmlFor={inputId} className={cx("flex h-8 w-12 shrink-0 items-center text-tertiary", card ? "text-12" : "text-13")}>
         {label}
       </label>
       <ul aria-label={label} className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
@@ -161,7 +171,7 @@ export function RecipientField({
               key={address.email.toLowerCase()}
               className={cx(
                 "flex max-w-full items-center gap-1 h-6 rounded-full border ps-2 pe-1 text-13",
-                bad ? "border-danger text-danger" : "border-border-subtle bg-hover text-primary",
+                bad ? "border-danger text-danger" : card ? "border-transparent bg-badge text-primary" : "border-border-subtle bg-hover text-primary",
               )}
               title={addressFull(address)}
               data-testid="recipient-chip"
@@ -221,7 +231,7 @@ export function RecipientField({
       </ul>
       {trailing && <div className="flex shrink-0 items-center gap-1">{trailing}</div>}
       {groupError && (
-        <p role="alert" className="absolute inset-x-4 top-full z-10 mt-1 text-12 text-danger" data-testid="recipient-group-error">
+        <p role="alert" className={cx("absolute top-full z-10 mt-1 text-12 text-danger", card ? "inset-x-6" : "inset-x-4")} data-testid="recipient-group-error">
           {t("composer.recipients.groupFailed")}
         </p>
       )}
@@ -235,7 +245,10 @@ export function RecipientField({
         role="listbox"
         aria-label={t("composer.recipients.suggestions")}
         hidden={!listOpen}
-        className="absolute inset-x-4 top-full z-20 mt-1 flex max-h-(--ui-picker-list-height) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised py-1 shadow-floating"
+        className={cx(
+          "absolute top-full z-20 mt-1 flex max-h-(--ui-picker-list-height) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised py-1 shadow-floating",
+          card ? "inset-x-6" : "inset-x-4",
+        )}
         data-testid="recipient-suggestions"
       >
         {listOpen &&

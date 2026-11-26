@@ -1,117 +1,188 @@
 import { MailClock } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
-import { followUpPresets, type FollowUpPreset } from "../comfort/FollowUpPicker";
+import { cx } from "../../components/cx";
+import { followUpPresets } from "../comfort/FollowUpPicker";
 import { useFollowUpTimes } from "../comfort/queries";
 import { formatSnoozeTime, parseLocalDateTime, snoozeTimeProblem, toLocalDateTimeValue, type SnoozeTimeProblem } from "../comfort/snooze";
+import { ComposerMenu, type MenuEntry, type MenuSection } from "./ComposerMenu";
 
 interface FollowUpOptionProps {
   /** The draft's reminder (Unix ms), null for none. */
   value: number | null;
   disabled: boolean;
   onChange: (at: number | null) => void;
+  /** Classes of the icon button (the composer's send row). */
+  className: (open: boolean) => string;
   /** For tests: the clock the custom time is checked against. */
   now?: () => number;
 }
 
-type Choice = "none" | FollowUpPreset | "custom" | "chosen";
-
-const NONE: Choice = "none";
-const CHOSEN: Choice = "chosen";
-const CUSTOM: Choice = "custom";
-
 /**
- * Stage 20 (decision 0059): "Remind me if no reply by …" in the composer's send options:
- * tomorrow, in three days, next week or a time of one's own. Recorded once the server accepted the
- * message; a reply in the conversation ends it.
+ * Stage 20 (decision 0059): "Remind me if no reply by …": tomorrow, in three days, next week or a
+ * time of one's own. Recorded once the server accepted the message; a reply in the conversation
+ * ends it. Stage 23 (decision 0086): an icon in the composer's send row with the choices as a
+ * menu; the icon shows in the accent while a reminder is set, and its name says when. "Pick a
+ * date and time…" opens a small panel above the row (Escape closes it, not the composer).
  */
-export function FollowUpOption({ value, disabled, onChange, now = Date.now }: FollowUpOptionProps) {
+export function FollowUpOption({ value, disabled, onChange, className, now = Date.now }: FollowUpOptionProps) {
   const { t, i18n } = useTranslation();
-  const selectId = useId();
   const inputId = useId();
   const problemId = useId();
+  const panelId = useId();
   const times = useFollowUpTimes();
+  const wrapper = useRef<HTMLDivElement>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState("");
   const [problem, setProblem] = useState<SnoozeTimeProblem | null>(null);
   const presets = times.data ? followUpPresets(times.data) : [];
   const preset = value === null ? undefined : presets.find((entry) => entry.at === value);
-  const selected: Choice = customOpen ? "custom" : value === null ? "none" : (preset?.kind ?? "chosen");
 
-  const choose = (choice: Choice) => {
-    setProblem(null);
-    if (choice === "custom") {
-      setCustomOpen(true);
-      setCustom(value === null ? "" : toLocalDateTimeValue(value));
-      return;
-    }
+  const closeCustom = () => {
     setCustomOpen(false);
-    if (choice === "none") onChange(null);
-    const at = presets.find((entry) => entry.kind === choice)?.at;
-    if (at !== undefined) onChange(at);
+    setProblem(null);
+    wrapper.current?.querySelector<HTMLButtonElement>('[data-testid="composer-follow-up"]')?.focus();
   };
   const applyCustom = () => {
     const at = parseLocalDateTime(custom);
     const found = snoozeTimeProblem(at, now());
     setProblem(found);
     if (found === null && at !== null) {
-      setCustomOpen(false);
       onChange(at);
+      closeCustom();
+    }
+  };
+  const onPanelKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCustom();
+    } else if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+      // Enter in the field sets the time (not "send": that needs Cmd/Ctrl).
+      if (event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      applyCustom();
     }
   };
 
+  const sections = (openedAt: number): MenuSection[] => [
+    {
+      id: "choice",
+      entries: [
+        {
+          kind: "radio",
+          id: "none",
+          label: t("composer.followUp.none"),
+          checked: value === null,
+          onSelect: () => {
+            setCustomOpen(false);
+            onChange(null);
+          },
+          "data-testid": "composer-follow-up-none",
+        },
+        ...presets.map(
+          (entry): MenuEntry => ({
+            kind: "radio",
+            id: entry.kind,
+            label: t("composer.followUp.preset", { name: t(`comfort.followUp.${entry.kind}`), time: formatSnoozeTime(entry.at, openedAt, i18n.language) }),
+            checked: preset?.kind === entry.kind,
+            onSelect: () => {
+              setCustomOpen(false);
+              onChange(entry.at);
+            },
+            "data-testid": `composer-follow-up-${entry.kind}`,
+          }),
+        ),
+        ...(value !== null && preset === undefined
+          ? [
+              {
+                kind: "radio",
+                id: "chosen",
+                label: formatSnoozeTime(value, openedAt, i18n.language),
+                checked: true,
+                onSelect: () => undefined,
+                "data-testid": "composer-follow-up-chosen",
+              } satisfies MenuEntry,
+            ]
+          : []),
+      ],
+    },
+    {
+      id: "custom",
+      entries: [
+        {
+          kind: "action",
+          id: "custom",
+          label: t("composer.followUp.custom"),
+          onSelect: () => {
+            setCustom(value === null ? "" : toLocalDateTimeValue(value));
+            setProblem(null);
+            setCustomOpen(true);
+          },
+          "data-testid": "composer-follow-up-other",
+        },
+      ],
+    },
+  ];
+
+  const name = value === null ? t("composer.followUp.button") : t("composer.followUp.buttonSet", { time: formatSnoozeTime(value, now(), i18n.language) });
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="composer-follow-up">
-      <MailClock aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-      <label htmlFor={selectId}>{t("composer.followUp.label")}</label>
-      <select
-        id={selectId}
-        value={selected}
+    <div ref={wrapper} className="relative flex">
+      <ComposerMenu
+        label={t("composer.followUp.button")}
+        name={name}
+        sections={sections}
         disabled={disabled}
-        onChange={(event) => {
-          choose(event.target.value as Choice);
-        }}
-        className="h-8 rounded-control border border-border-strong bg-surface-raised px-2 text-13 text-primary"
-        data-testid="composer-follow-up-choice"
+        className={className}
+        data-active={value !== null}
+        data-testid="composer-follow-up"
       >
-        <option value={NONE}>{t("composer.followUp.none")}</option>
-        {presets.map((entry) => (
-          <option key={entry.kind} value={entry.kind}>
-            {t("composer.followUp.preset", { name: t(`comfort.followUp.${entry.kind}`), time: formatSnoozeTime(entry.at, now(), i18n.language) })}
-          </option>
-        ))}
-        {selected === "chosen" && value !== null && <option value={CHOSEN}>{formatSnoozeTime(value, now(), i18n.language)}</option>}
-        <option value={CUSTOM}>{t("composer.followUp.custom")}</option>
-      </select>
+        <MailClock aria-hidden className="size-(--ui-icon)" strokeWidth={1.75} />
+        {value !== null && <span aria-hidden className="absolute end-1 top-1 size-2 rounded-full bg-accent-fill" />}
+      </ComposerMenu>
       {customOpen && (
-        <span className="flex items-center gap-2">
-          <label htmlFor={inputId} className="sr-only">
+        <div
+          id={panelId}
+          role="group"
+          aria-labelledby={`${panelId}-label`}
+          onKeyDown={onPanelKey}
+          className="absolute start-0 bottom-full z-30 mb-2 flex w-max max-w-[calc(100vw-var(--ui-space-4))] flex-col gap-2 rounded-card border border-border bg-surface-raised p-3 shadow-floating"
+          data-testid="composer-follow-up-panel"
+        >
+          <label id={`${panelId}-label`} htmlFor={inputId} className="text-13 font-semibold text-primary">
             {t("composer.followUp.customLabel")}
           </label>
-          <input
-            id={inputId}
-            type="datetime-local"
-            value={custom}
-            min={toLocalDateTimeValue(now() + 60_000)}
-            aria-invalid={problem !== null}
-            aria-describedby={problem ? problemId : undefined}
-            onChange={(event) => {
-              setCustom(event.target.value);
-              setProblem(null);
-            }}
-            data-testid="composer-follow-up-custom"
-            className="h-8 rounded-control border border-border bg-surface px-2 text-13 text-primary"
-          />
-          <Button variant="secondary" onClick={applyCustom} data-testid="composer-follow-up-set">
-            {t("composer.followUp.set")}
-          </Button>
-        </span>
-      )}
-      {problem && (
-        <span id={problemId} role="alert" className="text-12 text-danger" data-testid="composer-follow-up-problem">
-          {t(`comfort.snooze.problems.${problem}`)}
-        </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id={inputId}
+              type="datetime-local"
+              autoFocus
+              value={custom}
+              min={toLocalDateTimeValue(now() + 60_000)}
+              aria-invalid={problem !== null}
+              aria-describedby={problem ? problemId : undefined}
+              onChange={(event) => {
+                setCustom(event.target.value);
+                setProblem(null);
+              }}
+              data-testid="composer-follow-up-custom"
+              className={cx("h-8 rounded-control border bg-surface px-2 text-13 text-primary", problem ? "border-danger" : "border-border-strong")}
+            />
+            <Button onClick={applyCustom} data-testid="composer-follow-up-set">
+              {t("composer.followUp.set")}
+            </Button>
+            <Button variant="secondary" onClick={closeCustom} data-testid="composer-follow-up-cancel">
+              {t("composer.followUp.cancel")}
+            </Button>
+          </div>
+          {problem && (
+            <p id={problemId} role="alert" className="text-12 text-danger" data-testid="composer-follow-up-problem">
+              {t(`comfort.snooze.problems.${problem}`)}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

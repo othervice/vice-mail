@@ -588,15 +588,31 @@ Touchpad) prüfen, nicht mit der Tastatur. Zwei Konten einrichten, beide mit Sch
 - **Ergebnis:**
 
 **23.3 Datei aus dem Explorer auf eine neue Mail**
-- **Tun:** Eine neue Mail öffnen (im Fenster und im Bereich über dem Lesebereich). Aus dem
+- **Tun:** Eine neue Mail öffnen (im Fenster und als Karte über dem Lesebereich). Aus dem
   Explorer eine PDF-Datei und ein Foto (JPEG/PNG) zusammen auf das Fenster ziehen, erst nur
   darüber halten, dann loslassen. Dasselbe mit „Reiner Text“. Einen Ordner aus dem Explorer auf die
   Mail ziehen. Eine Datei auf die Mail-Liste ziehen, während keine neue Mail offen ist. Unter
   Einstellungen → Schreiben eine Signatur bearbeiten und ein kleines PNG darauf ziehen.
-- **Erwartet:** Über dem Fenster ein Streifen „Lass die Dateien los, um sie anzuhängen.“ Formatiert:
+- **Erwartet:** Über den Anhängen der Mail ein gestrichelter Streifen „Lass die Dateien los, um sie
+  anzuhängen.“ (eine verkleinerte Mail kommt dabei zurück). Formatiert:
   das Foto steht im Text, die PDF als Anhang; „Reiner Text“: beide als Anhang. Ein Ordner wird
   nicht angehängt, eine Meldung sagt es. Ohne offene Mail zeigt der Zeiger „nicht erlaubt“, nichts
   öffnet sich, Vice Mail bleibt, wie es war. Das PNG erscheint in der Signatur.
+- **Ergebnis:**
+
+**23.4 Neue Mail als Karte (Stufe 23, 0086)**
+- **Tun:** Eine Mail im Lesebereich öffnen, dann „Neue Mail“. Mit der Maus eine andere Mail in der
+  Liste anklicken, die Grenze zwischen Liste und Lesebereich ziehen. In der Karte jedes Menü
+  öffnen: „Von“ (bei zwei Absendern), Absatzformat, „Weitere Formatierung“, den Pfeil an „Senden“,
+  Erinnern, „…“. Mit Tab und Umschalt+Tab durch die Karte gehen, ein Menü mit ↓ öffnen und mit Esc
+  schließen, dann Esc in der Karte. „Verkleinern“, eine Mail lesen, die Leiste unten anklicken.
+  Eine Antwort öffnen und „Zitat anzeigen“. Im dunklen Design und mit Mica wiederholen.
+- **Erwartet:** Die Karte liegt mit runden Ecken und Schatten über dem Lesebereich, nicht
+  durchsichtig, die Liste daneben bleibt bedienbar, die Karte folgt der Grenze. Menüs öffnen nach
+  oben, wenn unten kein Platz ist, nichts wird abgeschnitten. Tab bleibt in der Karte, Esc im Menü
+  schließt nur das Menü, Esc in der Karte schließt sie (der Entwurf bleibt). Verkleinert eine
+  Leiste unten rechts; ein Klick bringt die Karte mit dem Text zurück. Das Zitat ist erst
+  eingeklappt.
 - **Ergebnis:**
 
 ## Notizen und „Wartet auf“

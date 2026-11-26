@@ -130,9 +130,22 @@ describe("focus ring", () => {
     });
     await screen.findByTestId("composer-rich-body");
     await expectRings(15);
-    await user.click(screen.getByRole("button", { name: "Send later…" }));
+    // Stage 23 (decision 0086): the menus of the card (send later, "…", more formatting) and the
+    // picker of a time of one's own.
+    await user.click(screen.getByRole("button", { name: "More ways to send" }));
+    await screen.findByTestId("composer-send-later-menu");
+    await expectRings(18);
+    await user.click(screen.getByRole("menuitem", { name: "Pick a date and time…" }));
     await screen.findByTestId("composer-send-later-picker");
     await expectRings(15);
+    await user.click(screen.getByTestId("composer-options"));
+    await screen.findByTestId("composer-options-menu");
+    await expectRings(18);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("format-more"));
+    await screen.findByTestId("format-more-menu");
+    await expectRings(25);
+    await user.keyboard("{Escape}");
     // The question before discarding (a dialog, the focus stays inside).
     await user.click(screen.getByTestId("composer-discard"));
     await screen.findByTestId("composer-confirm-discard");

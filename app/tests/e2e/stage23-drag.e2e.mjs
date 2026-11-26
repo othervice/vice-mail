@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setComposerFormat, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const BOB = { email: "bob@vicemail.test", password: "bob-test-pw" };
@@ -243,7 +243,7 @@ describe("stage 23: dragging inside the app, files from outside as bytes", () =>
 
     await $('button[aria-label="Neue E-Mail"]').click();
     await testId("composer").waitForExist({ timeout: 10000 });
-    if (await testId("composer-format-html").isExisting()) await testId("composer-format-html").click();
+    await setComposerFormat("html");
     const big = 5 * 1024 * 1024 + 7;
     const over = await dragFiles('[data-testid="composer"]', [
       { name: "Diagramm.png", type: "image/png", base64: PNG },

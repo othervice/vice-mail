@@ -16,7 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, luminance, openView, screenshot, SCREENSHOT_DIR, setConversations, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, luminance, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, setConversations, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -340,8 +340,7 @@ describe("stage 21: mails in the dark theme, no colours in sent mail", () => {
     const to = await $('[data-testid="composer-to"] [data-testid="recipient-input"]');
     await to.setValue(`${ALICE.email},`);
     await testId("composer-subject").setValue(subject);
-    const html = await testId("composer-format-html");
-    if (await html.isExisting()) await html.click();
+    await setComposerFormat("html");
     const editor = await testId("composer-rich-body");
     await editor.waitForExist({ timeout: 20000 });
     await editor.click();

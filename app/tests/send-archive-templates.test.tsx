@@ -7,6 +7,7 @@ import { makeDraft, makeIdentity, makeOutgoing, type ComposeFakeOptions } from "
 import { ipcError, makeAccount, makeMessages, makeView, mockCore, standardMailboxes, type Failure } from "./support/core";
 import { renderApp } from "./support/render";
 import { makeTemplate, type SnippetsFakeOptions } from "./support/snippets";
+import { menuEntries, menuEntry, openComposerMenu } from "./support/composerMenus";
 
 // Stage 16: "Send and archive" and "Request a read receipt" in the composer, the notice when no
 // Archive folder exists, and templates that prefill recipients.
@@ -103,12 +104,17 @@ describe("composer: send and archive", () => {
     expect(core.compose.outgoing[0]?.archive).toBeNull();
   });
 
-  it("a new message has nothing to archive: no option, no menu, Cmd+Shift+Enter does nothing", async () => {
+  it("a new message has nothing to archive: no option, no menu entry, Cmd+Shift+Enter does nothing", async () => {
     const draft = makeDraft({ accountId: ADA.id, to: [GRACE], subject: "Hi", bodyText: "Hello" });
     const { core, user } = setup({ compose: { drafts: [draft] } });
-    const composer = await openDraft(draft);
-    expect(within(composer).queryByRole("checkbox", { name: "Archive the original after sending" })).toBeNull();
-    expect(within(composer).queryByRole("button", { name: "More ways to send" })).toBeNull();
+    await openDraft(draft);
+    // Stage 23 (decision 0086): the arrow of the send button stays (it has "Send later").
+    const options = await openComposerMenu(user, "composer-options");
+    expect(menuEntries(options).some((entry) => entry.textContent === "Archive the original after sending")).toBe(false);
+    await user.keyboard("{Escape}");
+    const later = await openComposerMenu(user, "composer-send-later");
+    expect(menuEntries(later).some((entry) => /Send and archive/.test(entry.textContent ?? ""))).toBe(false);
+    await user.keyboard("{Escape}");
     await user.click(screen.getByLabelText("Subject"));
     await user.keyboard("{Meta>}{Shift>}{Enter}{/Shift}{/Meta}");
     await new Promise((resolve) => setTimeout(resolve, 30));
@@ -118,18 +124,24 @@ describe("composer: send and archive", () => {
   it("a reply starts with the setting “Archive the original when I reply”", async () => {
     const draft = replyDraft({ archiveOriginal: true });
     const { user } = setup({ compose: { drafts: [draft], settings: { sendDelaySeconds: 10, archiveOnReply: true } } });
-    const composer = await openDraft(draft);
-    const box = within(composer).getByRole<HTMLInputElement>("checkbox", { name: "Archive the original after sending" });
-    expect(box.checked).toBe(true);
+    await openDraft(draft);
+    const menu = await openComposerMenu(user, "composer-options");
+    const box = menuEntry(menu, "Archive the original after sending");
+    expect(box.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(box.getAttribute("aria-checked")).toBe("true");
     await user.click(box);
-    expect(box.checked).toBe(false);
+    // An option keeps the menu open for the next one.
+    expect(menuEntry(menu, "Archive the original after sending").getAttribute("aria-checked")).toBe("false");
   });
 
   it("“Request a read receipt” is stored on the draft; a refusal puts the switch back and says why", async () => {
     const draft = replyDraft();
     const { core, user } = setup({ compose: { drafts: [draft] } });
-    const composer = await openDraft(draft);
-    const box = within(composer).getByRole<HTMLInputElement>("checkbox", { name: "Request a read receipt" });
+    await openDraft(draft);
+    const menu = await openComposerMenu(user, "composer-options");
+    const box = menuEntry(menu, "Request a read receipt");
+    // The hint says what it is, as the item's description.
+    expect(document.getElementById(box.getAttribute("aria-describedby") ?? "")?.textContent).toContain("Nothing is tracked.");
     await user.click(box);
     await waitFor(() => {
       expect(core.callsOf("set_draft_send_options")).toEqual([
@@ -137,18 +149,18 @@ describe("composer: send and archive", () => {
       ]);
     });
     expect(core.compose.drafts.get(draft.id)?.requestReadReceipt).toBe(true);
-    expect(box.checked).toBe(true);
+    expect(menuEntry(menu, "Request a read receipt").getAttribute("aria-checked")).toBe("true");
   });
 
   it("a refused send option is taken back with the reason", async () => {
     const draft = replyDraft();
     const { user } = setup({ compose: { drafts: [draft] }, failures: { set_draft_send_options: ipcError("send_in_progress") } });
-    const composer = await openDraft(draft);
-    const box = within(composer).getByRole<HTMLInputElement>("checkbox", { name: "Request a read receipt" });
-    await user.click(box);
+    await openDraft(draft);
+    const menu = await openComposerMenu(user, "composer-options");
+    await user.click(menuEntry(menu, "Request a read receipt"));
     const error = await screen.findByTestId("composer-action-error");
     expect(error.textContent).toContain("The send options could not be changed.");
-    expect(box.checked).toBe(false);
+    expect(menuEntry(await openComposerMenu(user, "composer-options"), "Request a read receipt").getAttribute("aria-checked")).toBe("false");
   });
 
   it("says quietly when the account had no Archive folder for the original", async () => {
@@ -226,7 +238,7 @@ describe("templates with recipients", () => {
     const draft = makeDraft({ accountId: ADA.id, to: [GRACE], subject: "", bodyText: "" });
     const { core, user } = setup({ compose: { drafts: [draft] }, snippets: { templates: [template] } });
     await openDraft(draft);
-    await user.click(screen.getByRole("button", { name: "Template" }));
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
     const menu = await screen.findByRole("group", { name: "Templates" });
     await user.click(await within(menu).findByRole("button", { name: /Team/ }));
     const note = await screen.findByTestId("composer-template-recipients");

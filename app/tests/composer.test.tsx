@@ -15,6 +15,7 @@ import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
 import { dragFilesOver, dropFiles, fileTransfer } from "./support/fileDrop";
 import { optionName } from "./support/names";
+import { chooseInComposerMenu, menuEntry, openComposerMenu } from "./support/composerMenus";
 
 const ADA = makeAccount({ writesEnabled: true });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -231,7 +232,10 @@ describe("composer: writing and drafts", () => {
     await openNew(user);
     const signature = await screen.findByTestId("composer-signature");
     expect(signature.textContent).toBe("-- \nAda Lovelace\nAnalytical Engines");
-    await user.selectOptions(screen.getByLabelText("From"), "2");
+    // Stage 23 (decision 0086): "From" is a chip with a menu of the identities.
+    expect(screen.getByTestId("composer-identity").getAttribute("aria-label")).toBe("From: Ada · ada@vicemail.test");
+    await chooseInComposerMenu(user, "composer-identity", "Ada (work) · ada@work.test");
+    expect(screen.getByTestId("composer-identity").getAttribute("aria-label")).toBe("From: Ada (work) · ada@work.test");
     expect(screen.queryByTestId("composer-signature")).toBeNull();
     await user.tab();
     await waitFor(() => {
@@ -351,8 +355,10 @@ describe("composer: writing and drafts", () => {
     expect(editor.querySelector("strong")?.textContent).toBe("Grace");
     expect(screen.getByRole("toolbar", { name: "Formatting" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Bold" })?.hasAttribute("aria-pressed")).toBe(true);
-    await user.click(within(screen.getByTestId("composer")).getByRole("button", { name: "Plain text" }));
+    // Stage 23 (decision 0086): the format is a choice in "…" (and in "More formatting").
+    await chooseInComposerMenu(user, "composer-options", "Plain text");
     expect((within(screen.getByTestId("composer")).getByLabelText<HTMLInputElement>("Message")).value).toBe("Hallo Grace\n- eins");
+    expect(screen.queryByRole("toolbar", { name: "Formatting" })).toBeNull();
   });
 });
 
@@ -376,7 +382,7 @@ describe("composer: rich text typing", () => {
   it("what the user types in the rich text body is saved as editor HTML", async () => {
     const { core, user } = setup();
     await openNew(user);
-    await user.click(screen.getByRole("button", { name: "Rich text" }));
+    await chooseInComposerMenu(user, "composer-options", "Rich text");
     const editor = await screen.findByTestId("composer-rich-body");
     await user.click(editor);
     await user.type(editor, "Hallo");
@@ -422,8 +428,17 @@ describe("composer: replying and forwarding", () => {
     expect((await screen.findByLabelText<HTMLInputElement>("Subject")).value).toBe(`Re: ${first.subject}`);
     expect(core.callsOf("create_draft")[0]?.["request"]).toEqual({ kind: "reply", messageId: first.id, language: "en" });
     expect(screen.getByTestId("composer-quote")?.textContent).toContain("Grace Hopper wrote:");
+    // Stage 23 (decision 0086): folded behind "Show quote" (it is sent either way).
+    const toggle = screen.getByTestId("composer-quote-toggle");
+    expect(toggle.textContent).toBe("Show quote");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByTestId("composer-quote-text").hidden).toBe(true);
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("Hide quote");
+    expect(screen.getByTestId("composer-quote-text").hidden).toBe(false);
     expect(chips().map((c) => c.textContent)).toEqual([expect.stringContaining(first.from?.name ?? "")]);
-    await user.click(screen.getByRole("checkbox", { name: "Quote the original message" }));
+    await chooseInComposerMenu(user, "composer-options", "Quote the original message");
     expect(screen.queryByTestId("composer-quote")).toBeNull();
   });
 
@@ -448,17 +463,18 @@ describe("composer: replying and forwarding", () => {
     const subject = screen.getByLabelText("Subject");
     const quoteFollows = () =>
       Boolean(subject.compareDocumentPosition(screen.getByTestId("composer-quote")) & Node.DOCUMENT_POSITION_FOLLOWING);
-    const position = screen.getByTestId("composer-quote-position");
-    // "above": the answer above the quote, so the quote comes last.
-    await user.selectOptions(position, "above");
+    // "above": the answer above the quote, so the quote comes last (a choice in "…").
+    await chooseInComposerMenu(user, "composer-options", "above the quote");
     const quote = screen.getByTestId("composer-quote");
     const body = screen.getByTestId("composer").querySelector("textarea, [contenteditable]");
     if (!body) throw new Error("no body");
     expect(quoteFollows()).toBe(true);
     expect(body.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("option", { name: "above the quote" })).toBeTruthy();
+    const menu = await openComposerMenu(user, "composer-options");
+    expect(within(menu).getByRole("group", { name: "My text goes" })).toBeTruthy();
+    expect(menuEntry(menu, "above the quote").getAttribute("aria-checked")).toBe("true");
     // "below": the quote first, then the answer.
-    await user.selectOptions(position, "below");
+    await user.click(menuEntry(menu, "below the quote"));
     const moved = screen.getByTestId("composer-quote");
     expect(body.compareDocumentPosition(moved) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });

@@ -125,6 +125,11 @@ export const de: Translation = {
     },
     loading: "Entwurf wird geöffnet\u00a0…",
     close: "Schließen (der Entwurf bleibt)",
+    // Stufe 23 (Entscheidung 0086): der Composer als schwebende Karte.
+    minimise: "Verkleinern",
+    expand: "Vergrößern: {{title}}",
+    identityChip: "{{name}} · {{email}}",
+    identityMenu: "Von: {{identity}}",
     from: "Von",
     identity: "{{name}} <{{email}}>",
     subject: "Betreff",
@@ -141,15 +146,24 @@ export const de: Translation = {
       readReceipt: "Lesebestätigung anfordern",
       readReceiptHint: "Das Mailprogramm des Empfängers fragt ihn, ob er eine sendet. Es wird nichts verfolgt.",
       failed: "Die Sendeoptionen konnten nicht geändert werden.",
+      // Stufe 23 (Entscheidung 0086): der Pfeil am Senden-Knopf und das „…“-Menü.
+      later: "Später senden",
+      pick: "Datum und Uhrzeit wählen\u00a0…",
+      whenSending: "Beim Senden",
+      options: "Weitere Optionen",
     },
     // Stufe 20 (Entscheidung 0059): „Erinnern, wenn keine Antwort kommt“ bei den Sendeoptionen.
     followUp: {
       label: "Erinnern, wenn keine Antwort kommt:",
       none: "Nicht erinnern",
       preset: "{{name}} ({{time}})",
-      custom: "Datum und Uhrzeit wählen…",
+      custom: "Datum und Uhrzeit wählen\u00a0…",
       customLabel: "Datum und Uhrzeit der Erinnerung",
       set: "Übernehmen",
+      // Stufe 23 (Entscheidung 0086): ein Symbol in der Sendezeile des Composers.
+      button: "Erinnern, wenn keine Antwort kommt",
+      buttonSet: "Erinnern, wenn keine Antwort kommt: {{time}}",
+      cancel: "Abbrechen",
     },
     errors: {
       open: "Der Entwurf ließ sich nicht öffnen.",
@@ -204,6 +218,13 @@ export const de: Translation = {
       linkApply: "Link setzen",
       linkRemove: "Link entfernen",
       linkInvalid: "Verlinken lassen sich nur Webadressen (https://…) und E-Mail-Adressen.",
+      // Stufe 23 (Entscheidung 0086): die kompakte Leiste und „Weitere Formatierung“.
+      more: "Weitere Formatierung",
+      blockStyleNamed: "Absatzformat: {{style}}",
+      imageSizeNamed: "Bildgröße: {{size}}",
+      indent: "Einzug vergrößern",
+      outdent: "Einzug verkleinern",
+      clear: "Formatierung entfernen",
     },
     signature: {
       preview: "Signatur",
@@ -216,11 +237,14 @@ export const de: Translation = {
       below: "unter dem Zitat",
       above: "über dem Zitat",
       formattedOnly: "Die ursprüngliche Nachricht wird als formatierter Text eingefügt.",
+      show: "Zitat anzeigen",
+      hide: "Zitat ausblenden",
+      showForward: "Weitergeleitete Nachricht anzeigen",
+      hideForward: "Weitergeleitete Nachricht ausblenden",
     },
     attachments: {
       add: "Dateien anhängen",
       adding: "Wird angehängt\u00a0…",
-      dropHint: "oder Dateien auf das Fenster ziehen",
       dropHere: "Lass die Dateien los, um sie anzuhängen.",
       list_one: "{{count}} Anhang",
       list_other: "{{count}} Anhänge",
@@ -462,6 +486,7 @@ export const de: Translation = {
       missing: "Kein Wert für {{placeholder}}: Die Stelle bleibt leer.",
       unknown: "{{name}} ist kein bekannter Platzhalter und bleibt, wie er ist.",
       paletteInsert: "Vorlage einfügen: {{name}}",
+      insert: "Vorlage einfügen",
     },
     sendLater: {
       button: "Später senden\u00a0…",

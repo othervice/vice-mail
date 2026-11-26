@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, composerMenuChoice, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -32,16 +32,8 @@ let account;
  */
 const backToText = () => browser.execute(() => document.querySelector('[data-testid="composer-rich-body"]')?.focus());
 
-/**
- * Picks a block style in the native select as a choice in its menu does (value, then `change`):
- * the driver's click on an `<option>` does not select it.
- */
-const pickBlockStyle = (value) =>
-  browser.execute((v) => {
-    const select = document.querySelector('[data-testid="format-block"]');
-    select.value = v;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  }, value);
+/** Stage 23 (decision 0086): a block style from the compact bar's menu. */
+const pickBlockStyle = (value) => composerMenuChoice("format-block", `format-block-${value}`);
 
 async function openRichComposer(subject) {
   await $('button[aria-label="New message"]').click();
@@ -49,7 +41,7 @@ async function openRichComposer(subject) {
   const input = await $('[data-testid="composer-to"] [data-testid="recipient-input"]');
   await input.setValue(`${ALICE.email},`);
   await testId("composer-subject").setValue(subject);
-  await testId("composer-format-html").click();
+  await setComposerFormat("html");
   await testId("composer-rich-body").waitForExist({ timeout: 20000 });
 }
 
@@ -109,10 +101,11 @@ describe("stage 10: the composer complete", () => {
     await browser.keys([..."Plan"]);
     await pickBlockStyle("heading2");
     await backToText();
-    await testId("format-align-center").click();
+    // Stage 23 (decision 0086): alignment and strikethrough live in "More formatting".
+    await composerMenuChoice("format-more", "format-align-center");
     await backToText();
     await browser.keys("Enter");
-    await testId("format-strike").click();
+    await composerMenuChoice("format-more", "format-strike");
     await backToText();
     await browser.keys([..."alt"]);
     report.screenshots.push(await screenshot("composer-complete-format"));

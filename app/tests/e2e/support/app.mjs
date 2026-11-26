@@ -96,6 +96,29 @@ export async function coreCall(command, args) {
 export const testId = (id) => $(`[data-testid="${id}"]`);
 
 /**
+ * Stage 23 (decision 0086): the composer keeps its options in menus. Opens the menu of the button
+ * with the test id `menu` (unless it is open) and picks the entry with the test id `entry`.
+ */
+export async function composerMenuChoice(menu, entry) {
+  const item = testId(entry);
+  if (!(await item.isExisting())) {
+    await testId(menu).click();
+    await item.waitForExist({ timeout: 10000 });
+  }
+  await item.click();
+}
+
+/** Rich text ("html") or plain text ("text") for the open composer, through its "…" menu. */
+export async function setComposerFormat(format) {
+  await testId("composer-options").click();
+  const item = testId(`composer-format-${format}`);
+  await item.waitForExist({ timeout: 10000 });
+  if ((await item.getAttribute("aria-checked")) === "true") await browser.keys("Escape");
+  else await item.click();
+  await testId("composer-options-menu").waitForExist({ reverse: true, timeout: 5000 });
+}
+
+/**
  * Tab as the browser does it. The embedded WebDriver dispatches the key events of Tab but does
  * not perform its default action, moving the focus (tauri-plugin-wdio-webdriver,
  * `build_special_key_script`: default actions only for Backspace, Delete, arrows on radios and

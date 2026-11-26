@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -159,7 +159,8 @@ describe("stage 5: writing and sending", () => {
     // "New message" is in the header of the mail views, not of the outbox.
     await openView("inbox");
     await openComposer();
-    await testId("composer-format-html").click();
+    // Stage 23 (decision 0086): the format is a choice of the composer's "…" menu.
+    await setComposerFormat("html");
     await testId("composer-rich-body").click();
     await browser.keys(["F", "e", "t", "t"]);
     await testId("format-bold").click();

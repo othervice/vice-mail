@@ -145,6 +145,14 @@ describe("the composer window", () => {
     expect(screen.queryByRole("navigation", { name: "Views" })).toBeNull();
     // Already in its own window: no second offer.
     expect(within(composer).queryByTestId("composer-open-window")).toBeNull();
+    // Stage 23 (decision 0086): the same card fills the window: no floating dialog, nothing to
+    // minimise (the window has its own), the same foot with the send row.
+    const card = screen.getByTestId("composer");
+    expect(card.getAttribute("role")).toBeNull();
+    expect(card.className).toContain("inset-0");
+    expect(within(card).queryByTestId("composer-minimise")).toBeNull();
+    expect(within(card).getByTestId("composer-send-later")).toBeTruthy();
+    expect(within(card).getByTestId("composer-options")).toBeTruthy();
     await user.click(screen.getByTestId("composer-close"));
     await waitFor(() => {
       expect(core.ui.closeRequests).toBe(1);
