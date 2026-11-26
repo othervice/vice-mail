@@ -140,7 +140,9 @@ keys in `SYNCED_SETTINGS`: `ui.theme`, `ui.language`, `reading.mark_read_on_open
 as the default), (decision 0039) `ui.conversations` (a boolean, default on) and since stage 17
 `ui.column_views` (the views of the column's "Views" section and of the rail in the user's order,
 a list of `{ id, shown }`; `[]` is the default, a view a list does not name keeps its default place,
-and entries of views a device does not know are kept). Device settings such
+and entries of views a device does not know are kept), and since stage 22 (decision 0077)
+`spam.filter` (`{ enabled, excludedAccounts: [account UUID] }`, the learning spam filter's switch;
+what the filter learned stays on each device and is never synchronised). Device settings such
 as `prefetch.*` (what this machine keeps offline), `inbox.settings` (categories and bundles on
 this screen), `ui.recent_commands` (the palette's history), `ui.layout.<slot>` (window layouts)
 and `ui.unread_first` (the views that group unread mail on top) stay local.

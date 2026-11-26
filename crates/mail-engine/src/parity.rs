@@ -408,7 +408,7 @@ impl<C: Connector> AppCore<C> {
                 };
                 let request = format!("blocked-{}-{}", message.mailbox_id, message.id);
                 match self
-                    .apply_action(MailAction::Spam, vec![target], request)
+                    .apply_action_quietly(MailAction::Spam, vec![target], request)
                     .await
                 {
                     Ok(_) => moved = true,

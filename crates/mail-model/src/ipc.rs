@@ -219,6 +219,8 @@ const fn default_on() -> bool {
 ///   finished, was cancelled or failed; carries the whole job.
 /// - `notificationPauseChanged` (stage 21, decision 0069): notifications were paused or resumed
 ///   (tray menu or Settings); carries the pause as it is now.
+/// - `spamFilterChanged`, `spamFiltered` (stage 22, decision 0077): the spam filter's status
+///   changed; the filter moved or marked new mail of an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(
     tag = "type",
@@ -348,6 +350,20 @@ pub enum CoreEvent {
     },
     NotificationPauseChanged {
         pause: crate::NotificationPause,
+    },
+    /// Stage 22 (decision 0077): the spam filter's settings, what it learned, or its learning
+    /// from existing mail changed.
+    SpamFilterChanged {
+        status: crate::SpamFilterStatus,
+    },
+    /// Stage 22: the spam filter moved new mail of an account to the junk folder (`moved`, one
+    /// batch: "Undo" sends `undoAction(batch)`, which also learns the mails as not spam) or
+    /// marked it as suspected spam on this device (`marked`).
+    SpamFiltered {
+        account_id: AccountId,
+        moved: u32,
+        marked: u32,
+        batch: Option<crate::BatchId>,
     },
 }
 

@@ -215,7 +215,7 @@ impl<C: Connector> crate::AppCore<C> {
             for (chunk_index, chunk) in refs.chunks(MAX_ACTION_MESSAGES).enumerate() {
                 let request = format!("contact-spam-{stamp}-{index}-{chunk_index}");
                 match self
-                    .apply_action(MailAction::Spam, chunk.to_vec(), request)
+                    .apply_action_quietly(MailAction::Spam, chunk.to_vec(), request)
                     .await
                 {
                     Ok(done) => {

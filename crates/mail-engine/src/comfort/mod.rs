@@ -1251,6 +1251,14 @@ impl<C: Connector> AppCore<C> {
         // rules, no notification.
         let blocked = self.handle_blocked_arrivals(&account, &messages).await?;
         messages.retain(|m| !blocked.contains(&m.id));
+        // Stage 22 (decision 0077): what the learning spam filter takes for spam goes to junk
+        // or is marked; no rules, no notification. A failure leaves the mail to the rules.
+        match self.handle_spam_arrivals(&account, &messages).await {
+            Ok(spam) => messages.retain(|m| !spam.contains(&m.id)),
+            Err(err) => {
+                tracing::error!(code = ?err.code(), error = %err, "spam filter: new mail not looked at");
+            }
+        }
         if messages.is_empty() {
             return Ok(());
         }

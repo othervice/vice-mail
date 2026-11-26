@@ -1,9 +1,33 @@
-import { AlarmClockCheck, BookOpen, Clock, ListTodo, MailClock, MailWarning, Pin, SquareCheckBig, Zap, type LucideIcon } from "lucide-react";
+import {
+  AlarmClockCheck,
+  BookOpen,
+  Clock,
+  ListTodo,
+  MailClock,
+  MailWarning,
+  Pin,
+  ShieldAlert,
+  ShieldX,
+  SquareCheckBig,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { MessageListItem } from "../../services/ipc";
 
-export type RowMark = "important" | "pinned" | "snoozed" | "returned" | "task" | "taskDone" | "readingList" | "followUp" | "noReply";
+export type RowMark =
+  | "important"
+  | "pinned"
+  | "snoozed"
+  | "returned"
+  | "task"
+  | "taskDone"
+  | "readingList"
+  | "followUp"
+  | "noReply"
+  | "spamSuspected"
+  | "spamMoved";
 
 const MARK_ICONS: Record<RowMark, LucideIcon> = {
   important: Zap,
@@ -15,6 +39,8 @@ const MARK_ICONS: Record<RowMark, LucideIcon> = {
   readingList: BookOpen,
   followUp: MailClock,
   noReply: MailWarning,
+  spamSuspected: ShieldAlert,
+  spamMoved: ShieldX,
 };
 
 /** Stage 9 marks of a row, in reading order: important, pinned, snoozed or back, task. */
@@ -28,6 +54,10 @@ export function rowMarks(item: MessageListItem): RowMark[] {
   if (item.readingList) marks.push("readingList");
   // Stage 20 (decision 0059): a reminder if no reply comes, or none came by its time.
   if (item.followUp) marks.push(item.followUp.returned ? "noReply" : "followUp");
+  // Stage 22 (decision 0077): the learning spam filter suspects it (marked on this device), or
+  // moved it to the junk folder (shown only there).
+  if (item.spam === "suspected") marks.push("spamSuspected");
+  else if (item.spam === "moved") marks.push("spamMoved");
   return marks;
 }
 
@@ -39,6 +69,8 @@ function sentDay(at: number, language: string): string {
 
 function markLabel(mark: RowMark, item: MessageListItem, t: TFunction, language: string): string {
   if (mark === "readingList") return t("organize.readingList.mark");
+  if (mark === "spamSuspected") return t("spam.marks.suspected");
+  if (mark === "spamMoved") return t("spam.marks.moved");
   if (mark === "noReply" && item.followUp) return t("comfort.marks.noReplySince", { date: sentDay(item.followUp.sentAt, language) });
   return t(`comfort.marks.${mark}`);
 }
@@ -71,6 +103,24 @@ export function RowMarks({ item, omit }: { item: MessageListItem; omit?: readonl
             >
               <Icon aria-hidden className="size-3" strokeWidth={2} />
               <span aria-hidden>{t("comfort.marks.back")}</span>
+            </span>
+          );
+        }
+        if (mark === "spamSuspected" || mark === "spamMoved") {
+          // Stage 22: a word, not only a symbol: why the mail looks like spam, or why it is here.
+          return (
+            <span
+              key={mark}
+              title={markLabel(mark, item, t, i18n.language)}
+              data-testid={`row-mark-${mark}`}
+              className={
+                mark === "spamSuspected"
+                  ? "flex shrink-0 items-center gap-1 rounded-full border border-border px-2 text-12 font-semibold text-warning"
+                  : "flex shrink-0 items-center gap-1 rounded-full border border-border px-2 text-12 font-medium text-secondary"
+              }
+            >
+              <Icon aria-hidden className="size-3" strokeWidth={2} />
+              <span aria-hidden>{t(mark === "spamSuspected" ? "spam.marks.suspectedShort" : "spam.marks.movedShort")}</span>
             </span>
           );
         }

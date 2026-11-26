@@ -73,6 +73,7 @@ pub(crate) fn item_at(
         task: None,
         reading_list: false,
         follow_up: None,
+        spam: None,
         size: size_at(r, 14)?,
     })
 }
@@ -533,6 +534,7 @@ pub(crate) fn entry(
             task: None,
             reading_list: false,
             follow_up: None,
+            spam: None,
             size: head.size,
         },
         mailbox_ids,

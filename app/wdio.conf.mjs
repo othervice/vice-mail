@@ -126,6 +126,10 @@ export const config = {
     // 1280×800 and 900×600, measured. Sets up alice and bob itself, appends `Spacing <run>`
     // messages, and leaves theme, density and the column as it found them.
     "./tests/e2e/spacing.e2e.mjs",
+    // Stage 22, item 6 (decision 0077): the learning spam filter. Sets up alice itself, appends
+    // offers to the junk folder and read letters to the inbox, moves one offer to Junk and back,
+    // and removes the account and what the filter learned again.
+    "./tests/e2e/spam-filter.e2e.mjs",
     "./tests/e2e/layouts.e2e.mjs",
   ],
   exclude: [...(README_SHOTS ? [] : ["./tests/e2e/readme-shots.e2e.mjs"]), ...(PERF ? [] : ["./tests/e2e/perf.e2e.mjs"])],

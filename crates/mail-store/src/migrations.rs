@@ -65,6 +65,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0028_no_contact_pictures.sql")),
     // Stage 22: the trigram index for search inside words (decision 0074).
     M::up(include_str!("../migrations/0029_search_substrings.sql")),
+    // Stage 22, item 6: the learning spam filter, class Device (decision 0077).
+    M::up(include_str!("../migrations/0031_spam_filter.sql")),
 ];
 
 /// All migrations this build knows.

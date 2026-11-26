@@ -212,6 +212,11 @@ pub struct MessageListItem {
     #[serde(skip_serializing_if = "is_zero")]
     #[specta(optional, type = Number)]
     pub size: u32,
+    /// Stage 22 (decision 0077): the spam filter suspects it (marked on this device) or moved
+    /// it to the junk folder. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub spam: Option<crate::SpamFilterMark>,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference

@@ -30,6 +30,7 @@ pub mod search;
 pub mod settings_sync;
 pub mod snippets;
 pub mod source;
+pub mod spam;
 pub mod takeover;
 pub mod threads;
 pub mod ui;

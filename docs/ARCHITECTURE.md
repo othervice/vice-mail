@@ -106,8 +106,9 @@ vice-mail/
   trait `UidMapStore`, which the store implements. The engine chooses the adapter per account
   (`AnyConnector`, `AnySender` in `mail-engine/src/protocols.rs`).
 - `mail-content`: turns raw data into a displayed mail: parsing, HTML sanitising with mandatory CSP,
-  link placeholders, link warnings, safe file names, preview text. Pure, without IO, without Tokio;
-  security-critical and tested with its own corpus (hence a fifth crate).
+  link placeholders, link warnings, safe file names, preview text; since stage 22 (0077) the spam
+  filter's tokens and scores. Pure, without IO, without Tokio; security-critical and tested with
+  its own corpus (hence a fifth crate).
 - `mail-engine`: connects adapters and storage. Offers the shell a facade `AppCore` and a
   stream of typed events. All behaviour is testable via `AppCore` without a WebView.
 - `app/src-tauri`: passes commands through to `AppCore` and events on to the UI.
@@ -175,6 +176,8 @@ server cannot do is not faked but hidden or given a clear notice.
 | `sync_device` | devices of the sync with name, system, last seen | sync |
 | `account.protocol` | stage 14 (0041): `imap` or `jmap`, fixed from setup onwards; for JMAP the `imap_*` columns name the JMAP server, `smtp_*` a copy | sync (in the record only for JMAP) |
 | `jmap_state`, `jmap_mailbox`, `jmap_uid` | stage 14 (0041): the JMAP adapter's UID numbering per account (JMAP account id, Email state, counter as HIGHESTMODSEQ), per JMAP mailbox (UIDVALIDITY, next UID, numbering complete) and per UID (Email id, counter value of the last change) | Cache |
+| `spam_token`, `spam_model`, `spam_trained`, `spam_verdict` | stage 22 (0077, migration 0031): the learning spam filter. Per token (64-bit FNV-1a hash of its text, no words of mails) the learned spam and ham counts; the number of mails learned per class; per learned message its class, the exact token hashes it taught (to unlearn it) and the outbox batch of the user's action (undo); per message the filter judged its mark (`moved` with the move's batch, or `suspected` on this device), score and time. Learned records and verdicts go with their message row (foreign key); the counts stay | Device |
+| `setting` `spam.filter` | stage 22 (0077): the spam filter's switch (default off) and the accounts it leaves out (account UUIDs) | sync |
 | `account_server_change` | servers (IMAP and SMTP) that an account record from the sync folder names for an existing account and that differ from this device's; they wait for "Use the new servers" or "Keep the current servers" (`dismissed`), and until then the sync regards these servers as the account's (security review F1, 0040) | Device |
 
 Classes: **Cache** can be rebuilt from the mail server. **Device** stays on the device.
@@ -407,6 +410,31 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   does not offer `Mailbox/set` for renaming or deleting yet.
 - If something fails, the local state is rolled back and the error is shown. In a
   conflict the server state wins, and the user is told.
+
+**Learning spam filter (stage 22, 0077)**
+- Off by default (`spam.filter`, synced; what it learned is Device). It learns from the user's
+  `applyAction` with `spam` / `notSpam` (not from the core's own moves: blocked senders, a
+  contact marked as spam, the filter itself use `apply_action_quietly`), in a worker in order:
+  the tokens of the stored body (`Reading::spam_tokens`), else of the stored header data
+  (`mail_content::spam_tokens_of_fields`, a subset in the same spelling), never over the network
+  (after the move the mail has no location until the next sync). `undoAction` unlearns what the
+  batch taught; undoing a batch the filter moved itself learns those mails as ham. On request
+  (`learnSpamFromMail`) it learns the newest junk mail (≤ 500) and read inbox mail (≤ 1,000,
+  replied first) in the background with progress and cancel, fetching bodies read-only like for
+  opening. It keeps at least twice as much ham as spam by learning more read inbox mail (≤ 200 at a
+  time; mail it already scores at 0.9 or more is skipped).
+- New mail of an inbox (`handle_arrival`, never the first sync): blocked senders first, then the
+  filter, then local rules and the notification. It acts only after 50 spam and 200 ham mails were
+  learned. Never spam: the user's own addresses, contacts the user wrote to (or named, noted,
+  merged, grouped), replies to the user's mail (In-Reply-To/References), senders whose images are
+  always loaded, important senders. The body is fetched if not stored (read-only); Robinson
+  probabilities with Fisher combining (`mail_content::spam_score`, SpamBayes defaults), the
+  counts looked up by primary key. From 0.99 the spam of one window goes to the junk folder as one
+  outbox batch where the account may write and has one, otherwise it is marked `suspected` on this
+  device; neither runs rules or notifies; `spamFiltered` carries the batch for "Undo".
+- List rows carry `MessageListItem.spam` (`marks::decorate`: `suspected` always, `moved` only in a
+  junk folder); `getSpamVerdict` serves the reading pane's note, `markSpamLocally` the local "Spam"
+  / "Not spam" of accounts that may not write. Measured in `docs/testing/spam-filter.md`.
 
 **Sending**
 - The Message-ID is created when the draft is created and stays the same across all attempts.
@@ -1124,6 +1152,7 @@ Until the UI has been switched over, these values are still kept in the marked f
 | Closing the main window keeps the app running, web view destroyed, tray icon (0069) | the human chose it after the test of 0.1.1; no idle web view in the background (0048) | switch "keep running" off; without it the app quits with its last window as before |
 | Own login item (launch agent, Run key) instead of `tauri-plugin-autostart` or `SMAppService` (0070) | starts hidden with `--background`, no new dependency, testable with a fake | the plugin, or `SMAppService` once a maintained binding exists |
 | Trackers are counted and never loaded; links lose tracking parameters; redirects are not resolved (0058) | the user sees what the mail tried; the request for an approved image never carries tracking data; resolving a redirect would call the tracking service | turn off `reading.block_trackers` and `reading.clean_links` |
+| Learning spam filter on the device: Robinson/Fisher over hashed tokens, threshold 0.99, acting after 50 spam and 200 ham, at least twice as much ham as spam (0077) | measured on the SpamAssassin corpus: 0.05 % good mail as spam; with little or mostly spam learning it misjudges 1–7 %; no new dependency, no words of mails in the database | switch it off (default), "Forget what was learned" empties the tables |
 | Reminders without a reply are local records like snoozes; any message of the thread from someone else ends them (0059) | no write on the server, works across folders and devices, stage 7 threading is exact | remove the `follow_up` table and the composer option |
 | The "Attachments" view lists the attachments of stored bodies (index written with the search index), not of every BODYSTRUCTURE (0060) | same index as the reading pane, no extra traffic in the sync; preloading decides how far back it reaches | read BODYSTRUCTURE in the header sync and write rows there |
 | Storage quota over the read-only connection, kept 15 minutes; cleanup via the search filter `larger:` (0060) | RFC 9208 / RFC 9425, nothing written; one cleanup path for both protocols | drop the block; the `over_quota` message stays |

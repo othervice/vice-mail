@@ -342,7 +342,10 @@ fn header_without_body_fields(header: &[u8]) -> Vec<u8> {
 /// A message with the original header and structure that contains only the readable parts
 /// that are stored. Multiparts without a stored readable part are left out; attached messages
 /// and attachments are always left out (the attachment list comes from the structure).
-fn assemble_partial(structure: &MessageStructure, sections: &[FetchedSection]) -> Vec<u8> {
+pub(crate) fn assemble_partial(
+    structure: &MessageStructure,
+    sections: &[FetchedSection],
+) -> Vec<u8> {
     let find = |section: &BodySection| {
         sections
             .iter()

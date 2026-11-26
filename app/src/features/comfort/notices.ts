@@ -1,11 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { comfortIpc, contactsIpc, parityIpc, reminderIpc, type BlockedSender } from "../../services/ipc";
+import { comfortIpc, contactsIpc, parityIpc, reminderIpc, spamIpc, type BlockedSender } from "../../services/ipc";
 import { blockedSendersQueryKey } from "../blocked/queries";
 import { refreshContacts } from "../contacts/queries";
 import type { ComfortNotice } from "../../stores/notices";
 import { refreshComfortLists } from "./queries";
 import { formatSnoozeTime } from "./snooze";
+import { undoAction } from "../actions/undo";
 
 export interface ComfortNoticeText {
   text: string;
@@ -104,6 +105,41 @@ export function comfortNoticeText(t: TFunction, language: string, notice: Comfor
     }
     case "contactNotSpam":
       return { text: t("contacts.view.notices.notSpam", { name: notice.name }), detail: null, error: false, undo: null };
+    // Stage 22 (decision 0077): the learning spam filter on new mail.
+    case "spamFiltered": {
+      const { accountId, batch } = notice;
+      return {
+        text:
+          notice.moved > 0
+            ? t("spam.notices.moved", { count: notice.moved })
+            : t("spam.notices.marked", { count: notice.marked }),
+        detail: notice.moved > 0 ? t("spam.notices.movedDetail") : t("spam.notices.markedDetail"),
+        error: false,
+        undo:
+          notice.moved > 0 && batch !== null
+            ? (queryClient) => {
+                void undoAction(queryClient, { accountId, batches: [batch] });
+              }
+            : null,
+      };
+    }
+    case "spamCleared": {
+      const { messageIds } = notice;
+      return {
+        text: t("spam.notices.cleared", { count: messageIds.length }),
+        detail: null,
+        error: false,
+        undo: (queryClient) => {
+          void spamIpc
+            .markLocally([...messageIds], true)
+            .catch(() => undefined)
+            .finally(() => {
+              void queryClient.invalidateQueries({ queryKey: ["spam", "verdict"] });
+              void queryClient.invalidateQueries({ queryKey: ["messages"] });
+            });
+        },
+      };
+    }
     case "failed":
       if (notice.what === "readingList" || notice.what === "block") {
         return {

@@ -6,6 +6,7 @@ import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
 import type { InboxSettings as Settings, SenderRule } from "../../services/ipc";
 import { BlockedSenders } from "../blocked/BlockedSenders";
+import { SpamFilterSettings } from "../spam/SpamFilterSettings";
 import { LocalRules } from "./LocalRules";
 import { UnreadFirstSettings } from "../organize/UnreadFirstSettings";
 import { useDeleteSenderRule, useInboxSettings, useSenderRules, useSetInboxSettings } from "./queries";
@@ -78,6 +79,8 @@ export function InboxSettings() {
       <SenderRules />
       {/* Stage 16: blocked senders, with "Unblock". */}
       <BlockedSenders />
+      {/* Stage 22 (decision 0077): the learning spam filter. */}
+      <SpamFilterSettings />
       <LocalRules />
     </div>
   );

@@ -187,6 +187,8 @@ struct Inner<C: Connector> {
     mbox: crate::mbox::MboxJobs,
     /// Stage 19 (decision 0057): Thunderbird profiles opened for a takeover.
     takeover: crate::takeover::TakeoverState,
+    /// Stage 22 (decision 0077): the learning spam filter's worker and learning runs.
+    spam: crate::spam::SpamState,
 }
 
 impl<C: Connector> Drop for Inner<C> {
@@ -205,6 +207,7 @@ impl<C: Connector> Drop for Inner<C> {
             compose.shutdown();
         }
         self.comfort.stop();
+        self.spam.stop();
         self.mcp.abort();
         self.settings_sync.stop();
         self.ai.cancel_all();
@@ -373,6 +376,7 @@ impl<C: Connector> AppCore<C> {
                 updates: crate::updates::UpdatesState::default(),
                 mbox: crate::mbox::MboxJobs::default(),
                 takeover: crate::takeover::TakeoverState::default(),
+                spam: crate::spam::SpamState::default(),
             }),
         };
         if let Some(reading) = &core.inner.reading {
@@ -384,6 +388,8 @@ impl<C: Connector> AppCore<C> {
         core.migrate_secrets().await;
         // Stage 9 before the sync starts, so no arrival is missed.
         let categories_pending = crate::comfort::start(&core).await;
+        // Stage 22: the spam filter's worker, before anything can teach it.
+        crate::spam::start(&core);
         // Stage 10: scheduled sends missed while the app was off are asked about, not sent;
         // before anything can start the outbox (a connected account wakes it).
         if let Some(compose) = &core.inner.compose {
@@ -909,7 +915,25 @@ impl<C: Connector> AppCore<C> {
     /// `missing_mailbox` (no archive, trash or junk folder), `confirmation_required` (delete in
     /// the trash: send `DeletePermanently`), `invalid_keyword`, `not_found` (the list was out
     /// of date), `invalid_argument`.
+    ///
+    /// Stage 22 (decision 0077): "Spam" and "Not spam" also teach the spam filter (when it is
+    /// on); undoing the batch unlearns them.
     pub async fn apply_action(
+        &self,
+        action: MailAction,
+        messages: Vec<MessageRef>,
+        request_id: String,
+    ) -> Result<ActionResult, CoreError> {
+        let result = self
+            .apply_action_quietly(action.clone(), messages.clone(), request_id)
+            .await?;
+        self.spam_action_applied(&action, &messages, &result);
+        Ok(result)
+    }
+
+    /// [`Self::apply_action`] for the core's own actions (blocked senders, the spam filter's
+    /// moves, a contact marked as spam): nothing is learned from them.
+    pub(crate) async fn apply_action_quietly(
         &self,
         action: MailAction,
         messages: Vec<MessageRef>,
@@ -922,9 +946,12 @@ impl<C: Connector> AppCore<C> {
 
     /// Undoes a batch (the notice's "Undo"): cancels what is still queued, sends
     /// counter-operations for the rest. `not_undoable` if a part cannot be undone; then
-    /// nothing changes.
+    /// nothing changes. Stage 22: what the batch taught the spam filter is unlearned; mail the
+    /// filter moved in it is learned as not spam.
     pub async fn undo_action(&self, batch: BatchId) -> Result<ActionResult, CoreError> {
-        self.outbox()?.undo(batch).await
+        let result = self.outbox()?.undo(batch).await?;
+        self.spam_batch_undone(batch);
+        Ok(result)
     }
 
     /// Queues the creation of a folder (decoded path, the server's delimiter) that gets `role`,
@@ -1597,6 +1624,11 @@ impl<C: Connector> AppCore<C> {
 
     pub(crate) fn takeover(&self) -> &crate::takeover::TakeoverState {
         &self.inner.takeover
+    }
+
+    /// Stage 22 (`crate::spam`, decision 0077).
+    pub(crate) fn spam(&self) -> &crate::spam::SpamState {
+        &self.inner.spam
     }
 
     /// A reference that does not keep the core alive (for background tasks).

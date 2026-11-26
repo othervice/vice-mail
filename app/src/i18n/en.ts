@@ -4584,6 +4584,73 @@ export const en = {
     folderStarted: "The import runs; its progress is shown at the bottom left.",
     folderFailed: "The folder could not be imported.",
   },
+  // Stage 22 (decision 0077): the learning spam filter.
+  spam: {
+    settings: {
+      title: "Spam filter",
+      loadFailed: "The spam filter’s settings could not be loaded.",
+      saveFailed: "The setting could not be saved.",
+      learnFailed: "Learning from your mail failed.",
+      cancelFailed: "Learning could not be stopped.",
+      enabled: {
+        label: "Learning spam filter",
+        description:
+          "Learns from your “Mark as junk” and “Not junk” and moves new mail that looks like spam to Junk, or only marks it where changes are off. It runs only while the app runs, also in the background. What it learns stays on this device.",
+      },
+      learned: "Learned so far: {{spam}} spam and {{ham}} other mails.",
+      ready: "It looks at new mail in your inboxes.",
+      notReady: "It starts looking at new mail once it has learned at least {{spam}} spam and {{ham}} other mails.",
+      learn: {
+        label: "Learn from existing mail",
+        description:
+          "Your Junk folders as spam, read mail in your inboxes as not spam (replied to first; up to 500 and 1,000). Mail that is not stored yet is fetched without marking it read.",
+        start: "Learn now",
+        cancel: "Stop",
+        running: "Learning… {{done}} of {{total}} mails",
+        done: "Learned {{spam}} spam and {{ham}} other mails.",
+        cancelled: "Stopped. Learned {{spam}} spam and {{ham}} other mails until then.",
+        failed: "Stopped by an error after {{spam}} spam and {{ham}} other mails.",
+        skipped_one: "{{count, number}} mail left out.",
+        skipped_other: "{{count, number}} mails left out.",
+      },
+      accounts: {
+        label: "Use for these accounts",
+        readOnly: "Changes are off: suspected spam is only marked on this device.",
+      },
+      forget: {
+        button: "Forget what was learned…",
+        title: "Forget what the spam filter learned?",
+        body: "Everything the spam filter learned on this device and its marks are deleted. Mail it moved stays in Junk. Afterwards it learns from scratch.",
+        confirm: "Forget",
+        cancel: "Cancel",
+        failed: "What was learned could not be forgotten.",
+      },
+    },
+    marks: {
+      suspected: "Suspected spam (spam filter)",
+      suspectedShort: "Spam?",
+      moved: "Moved here by the spam filter",
+      movedShort: "Spam filter",
+    },
+    note: {
+      moved: "The spam filter moved this mail to Junk ({{percent}} sure).",
+      suspected: "The spam filter thinks this mail is spam ({{percent}} sure).",
+      localOnly: "Changes are off for this account or it has no Junk folder: the mail is only marked on this device.",
+      notSpam: "Not spam",
+      move: "Move to Junk",
+      failed: "That did not work.",
+    },
+    notices: {
+      moved_one: "The spam filter moved a new mail to Junk",
+      moved_other: "The spam filter moved {{count, number}} new mails to Junk",
+      movedDetail: "Undo moves the mail back and teaches the filter that it is not spam.",
+      marked_one: "The spam filter marked a new mail as suspected spam",
+      marked_other: "The spam filter marked {{count, number}} new mails as suspected spam",
+      markedDetail: "Nothing changed on the server.",
+      cleared_one: "Marked as not spam",
+      cleared_other: "{{count, number}} mails marked as not spam",
+    },
+  },
 } as const;
 
 type DeepStrings<T> = { readonly [K in keyof T]: T[K] extends string ? string : DeepStrings<T[K]> };
