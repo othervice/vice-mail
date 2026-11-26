@@ -197,3 +197,11 @@ rückt dafür an den oberen Rand. Der Name sagt die Zahl mit („…, 3 ungelese
   Werkzeugleiste über die ganze Breite gewandert; die Spalte beginnt mit „Alle Konten“. Mit zwei
   Konten, Favoriten, Gruppen und gespeicherten Suchen hat die Spalte jetzt 5 Tab-Stopps (Rand, vier
   Bäume) plus den Fuß.
+- **Zahl am Punkt der schmalen Leiste:** Ab 1.000 ungelesenen Mails steht dort „999+“, der Name
+  sagte aber die genaue Zahl („1.296 ungelesen“); axe in der echten WebView meldete das als
+  `label-content-name-mismatch` (WCAG 2.5.3). Jetzt sagt der Name „999+ ungelesen“ wie der Punkt
+  (`IconRail.tsx`, Text `sidebar.unreadOver`; Vitest `sidebar-sections.test.tsx`, Desktop
+  `a11y.e2e.mjs`, `stage22-ui.e2e.mjs`). Die genaue Zahl steht am Kopf des Kontos in der Spalte.
+- **Desktop-Tests:** Specs, die Ordner unter „Weitere Ordner“ anklicken (`account-sync`,
+  `reading`, `folders`, `stage19-contacts-folders`), öffnen es vorher (`openSidebarParts`);
+  „Alle Posteingänge“ ist in den Specs die Zeile `unified-all`.

@@ -130,7 +130,8 @@ Konto und seine „Weiteren Ordner“, offen oder zu; gespeichert wird nur, was 
 **Schmale Leiste.** Gleiche Gliederung als Symbole: Posteingang, die Ansichten vor der Linie,
 Gesendet; Haarlinie; die Ansichten unter „Mehr“, Entwürfe, Archiv, Papierkorb, Ordner. Unten die
 Konten als Punkte, die Zahl ihrer ungelesenen Mails darunter (11 px, `text-secondary`, ab 1.000
-„999+“; das Zeichen für offline oder Fehler oben am Rand), Aktivität, Ausgang, Einstellungen. Aktiv: `rail-selected` und Symbol im Akzent, kein Balken.
+„999+“; das Zeichen für offline oder Fehler oben am Rand; der Name sagt die Zahl so, wie sie
+dasteht, ab 1.000 also „999+ ungelesen“, WCAG 2.5.3), Aktivität, Ausgang, Einstellungen. Aktiv: `rail-selected` und Symbol im Akzent, kein Balken.
 
 ## Werkzeugleiste, Liste, Lesebereich und Kontaktspalte (Stufe 23, Schritt 3, Entscheidung 0084)
 
