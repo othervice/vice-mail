@@ -752,7 +752,8 @@ describe("README screenshots (docs/images)", function () {
     // on again, with marking as read on open turned off meanwhile (nothing reaches the server).
     const overflow = () =>
       browser.execute(() => {
-        const bar = document.querySelector('[data-testid="reading-pane"] [role="toolbar"]')?.parentElement;
+        // Stage 23 (decision 0084): the open message's actions stand in the toolbar across the window.
+        const bar = document.querySelector('[data-testid="toolbar-reading"] [role="toolbar"]')?.parentElement;
         return bar ? bar.scrollWidth - bar.clientWidth : null;
       });
     const reading = await coreCall("get_reading_preferences");
