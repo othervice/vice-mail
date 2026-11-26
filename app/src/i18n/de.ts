@@ -77,6 +77,9 @@ export const de: Translation = {
     folders: "Ordner von {{account}}",
     folderUnread_one: "{{name}}, {{count, number}} ungelesen",
     folderUnread_other: "{{name}}, {{count, number}} ungelesen",
+    // Stage 23 integration: an account's dot in the rail shows "999+" from 1,000 on; its name
+    // says the same text (WCAG 2.5.3, label in name).
+    unreadOver: "{{name}}, {{shown}} ungelesen",
     expand: "Unterordner von {{name}} zeigen",
     collapse: "Unterordner von {{name}} ausblenden",
     noFolders: "Die Ordner erscheinen nach dem ersten Abgleich.",

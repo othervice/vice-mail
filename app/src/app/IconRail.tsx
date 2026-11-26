@@ -233,15 +233,28 @@ function OutboxButton({ accounts, active, roving }: { accounts: readonly Account
   );
 }
 
+/** The most unread mail the count under an account's dot shows exactly; more reads "999+". */
+const RAIL_UNREAD_MAX = 999;
+
+/** The count under an account's dot, as shown: "999+" from 1,000 on. */
+function railUnread(unread: number, language: string): string {
+  const format = new Intl.NumberFormat(language);
+  return unread > RAIL_UNREAD_MAX ? `${format.format(RAIL_UNREAD_MAX)}+` : format.format(unread);
+}
+
 function useAccountLabel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (account: Account, unread: number) => {
     const label = t("nav.accountWithState", {
       name: account.displayName || account.email,
       email: account.email,
       state: t(`nav.accountState.${account.status.state}`),
     });
-    return unread > 0 ? t("sidebar.folderUnread", { name: label, count: unread }) : label;
+    if (unread <= 0) return label;
+    // The name says the count as the dot shows it (WCAG 2.5.3: the visible text is in the name).
+    return unread > RAIL_UNREAD_MAX
+      ? t("sidebar.unreadOver", { name: label, shown: railUnread(unread, i18n.language) })
+      : t("sidebar.folderUnread", { name: label, count: unread });
   };
 }
 
@@ -306,7 +319,7 @@ function AccountDot({ account, accounts, current, roving, line, dimmed, dropItem
             <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
             {unread > 0 && (
               <span aria-hidden className="text-11 leading-none font-medium text-secondary tabular-nums" data-testid={`account-count-${account.id}`}>
-                {unread > 999 ? `${new Intl.NumberFormat(i18n.language).format(999)}+` : new Intl.NumberFormat(i18n.language).format(unread)}
+                {railUnread(unread, i18n.language)}
               </span>
             )}
           </span>

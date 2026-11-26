@@ -81,6 +81,9 @@ export const en = {
     folders: "Folders of {{account}}",
     folderUnread_one: "{{name}}, {{count, number}} unread",
     folderUnread_other: "{{name}}, {{count, number}} unread",
+    // Stage 23 integration: an account's dot in the rail shows "999+" from 1,000 on; its name
+    // says the same text (WCAG 2.5.3, label in name).
+    unreadOver: "{{name}}, {{shown}} unread",
     expand: "Show subfolders of {{name}}",
     collapse: "Hide subfolders of {{name}}",
     noFolders: "Folders appear after the first sync.",

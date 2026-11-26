@@ -166,6 +166,21 @@ describe("the sidebar of the draft", () => {
     expect(await seriousFindings()).toEqual([]);
   });
 
+  // Stage 23 integration (WCAG 2.5.3, found by axe in the real web view): from 1,000 on the dot
+  // shows "999+", and its name says the same.
+  it("names a count over 999 as the dot shows it", async () => {
+    const { user } = setup({
+      mailboxes: [...standardMailboxes(), makeMailbox({ id: 20, accountId: WORK.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 1296 })],
+    });
+    await screen.findByRole("tree", { name: "All accounts" });
+    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
+    const work = await screen.findByTestId(`account-switch-${WORK.id}`);
+    await waitFor(() => {
+      expect(work.getAttribute("aria-label")).toBe("Work (work@example.com), up to date, 999+ unread");
+    });
+    expect(within(work).getByTestId(`account-count-${WORK.id}`).textContent).toBe("999+");
+  });
+
   it("opens More folders while dragged mail rests on it", async () => {
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
     const mail = makeMessage({ id: 3000, accountId: ADA.id, mailboxId: 1, subject: "Rechnung" });
