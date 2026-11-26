@@ -9,9 +9,7 @@ import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
 import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
-import { useMailboxes } from "../features/mailboxes/queries";
-import { mailboxWithRole } from "../features/mailboxes/tree";
-import { useDropTarget } from "../features/mailboxes/useDropTarget";
+import { DROP_REFUSED_CLASS, dropTargetState, useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
 import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
 import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
@@ -19,8 +17,9 @@ import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/acti
 import { useAppInfo } from "../features/app-info/queries";
 import { useShownColumnViews } from "../features/layout/columnViews";
 import { useBoundShortcuts } from "../stores/shortcuts";
-import type { Account, Mailbox } from "../services/ipc";
+import type { Account } from "../services/ipc";
 import { useUiStore, type MailViewId } from "../stores/ui";
+import type { DropRole } from "../stores/drag";
 
 /** Roving focus of the rail group the entry belongs to (`useRovingFocus`). */
 type Roving = ReturnType<ReturnType<typeof useRovingFocus>["itemProps"]>;
@@ -57,8 +56,11 @@ interface RailButtonProps {
   text?: string;
   /** In the labelled sidebar: shown at the end of the row instead of `badge` on the icon. */
   trailing?: ReactNode;
-  /** Rows dragged out of the list can be dropped here: they move into this folder. */
-  dropMailbox?: Mailbox | undefined;
+  /**
+   * Rows dragged out of any list can be dropped here (stage 22, decision 0081): each goes to the
+   * folder with this role in its own account.
+   */
+  dropRole?: DropRole | undefined;
   /** Stage 8: the view's shortcut, in the tooltip and for screen readers. */
   shortcut?: { hint: string; aria: string } | undefined;
   /** The group's single Tab stop and arrow keys. */
@@ -67,9 +69,9 @@ interface RailButtonProps {
   "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, text, trailing, dropMailbox, shortcut, roving, ...rest }: RailButtonProps) {
+function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, text, trailing, dropRole, shortcut, roving, ...rest }: RailButtonProps) {
   const { t } = useTranslation();
-  const drop = useDropTarget(dropMailbox);
+  const drop = useDropTarget(dropRole && { kind: "role", role: dropRole }, { id: `rail-${rest["data-testid"]}`, folder: label });
   const buttonRef = useRef<HTMLButtonElement>(null);
   // Design pass 23.11.2026: in a low window the upper group scrolls; the active view is scrolled
   // into it (also when a shortcut opens a view further down). Only that group moves, nothing else.
@@ -85,13 +87,17 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
   // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone. In
   // the column the rows look like the rows of its trees.
   const className = expanded
-    ? sidebarRowClass(active, cx("w-full gap-2 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent"))
+    ? sidebarRowClass(
+        active,
+        cx("w-full gap-2 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent", drop.refused && DROP_REFUSED_CLASS),
+      )
     : cx(
         "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
         active
           ? "bg-accent-soft font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
           : "text-secondary hover:bg-rail-hover hover:text-primary",
         drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+        drop.refused && DROP_REFUSED_CLASS,
       );
   const button = (
     <button
@@ -104,10 +110,10 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
       aria-controls={disclosure?.controls}
       onClick={onClick}
       {...roving}
-      {...(dropMailbox && drop.handlers)}
+      {...(dropRole && drop.handlers)}
       className={className}
       data-testid={rest["data-testid"]}
-      data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
+      data-drop-target={dropTargetState(drop)}
     >
       <span className="relative flex shrink-0">
         <Icon aria-hidden className={expanded ? sidebarIconClass(active) : "size-(--ui-icon) shrink-0"} strokeWidth={1.75} />
@@ -357,14 +363,15 @@ export function IconRail() {
   const showMailView = useUiStore((state) => state.showMailView);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const dragRegion = useWindowDragRegion();
-  const { accounts, account: selected } = useSelectedAccount();
+  const { accounts } = useSelectedAccount();
   const accountList = accounts.data ?? [];
-  const mailboxes = useMailboxes(selected?.id).data ?? [];
   const chosen = useShownColumnViews();
   const viewIds: MailViewId[] = [...RAIL_TOP, ...chosen, ...RAIL_BOTTOM];
-  /** Rail views that take dragged rows: they move into the folder the view shows. */
-  const dropFolder = (id: MailViewId) =>
-    id === "inbox" || id === "archive" || id === "trash" ? mailboxWithRole(mailboxes, id) : undefined;
+  /**
+   * Rail views that take dragged rows (stage 22, decision 0081): each row goes to the folder with
+   * that role in its own account, so rows of "All inboxes" never cross accounts here.
+   */
+  const dropRole = (id: MailViewId): DropRole | undefined => (id === "inbox" || id === "archive" || id === "trash" ? id : undefined);
   // Stage 8: Cmd/Ctrl+1 to 8 open the views (as the user assigned them).
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const shortcutsOf = useBoundShortcuts(platform);
@@ -427,7 +434,7 @@ export function IconRail() {
                     onClick={() => {
                       showMailView(id);
                     }}
-                    dropMailbox={dropFolder(id)}
+                    dropRole={dropRole(id)}
                     shortcut={viewShortcut(id)}
                     roving={views.itemProps(id)}
                     data-testid={`rail-${id}`}

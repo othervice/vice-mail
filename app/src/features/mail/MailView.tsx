@@ -1,5 +1,5 @@
 import { FolderX, Inbox, ListChecks, Search, SquarePen } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
@@ -15,7 +15,6 @@ import {
   type MessageId,
   type MessageListItem,
 } from "../../services/ipc";
-import { useDragStore } from "../../stores/drag";
 import { useNoticeStore } from "../../stores/notices";
 import { openComposer } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
@@ -68,6 +67,7 @@ import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
 import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
 // Stage 16: "Unread only" and "Unread first".
 import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
+import { unionIds, useDropRows } from "../organize/useDropRows";
 // Stage 19: sorting, the table and the quick filter.
 import { useListView } from "../views/useListView";
 import { ListViewMenu } from "../views/ViewMenu";
@@ -243,13 +243,14 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
   const mailboxes = useMailboxes(account.id).data;
   const pages = useMessagePages(account.id, mailbox.id, kind === "folder" && !conversations && !unreadSource && !listView.active);
   const push = useNoticeStore((state) => state.push);
-  const startDrag = useDragStore((state) => state.start);
-  const endDrag = useDragStore((state) => state.end);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const list = useRef<MessageListHandle>(null);
   // Stage 21: the controller with moving and copying, shared with the context menu.
   const actions = useFolderActions({ account, mailbox, list, conversations });
-  const { controller, moveOrAsk } = actions;
+  const { controller } = actions;
+  // Stage 22 (decision 0081): rows dragged onto any folder in the column or the rail.
+  const drops = useDropRows({ list, conversations });
+  const hiddenIds = useMemo(() => unionIds(controller.hiddenIds, drops.hiddenIds), [controller.hiddenIds, drops.hiddenIds]);
   /** Stage 21 (decision 0064): the context menu asked for on rows of the list. */
   const [menu, setMenu] = useState<RowMenuRequest | null>(null);
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
@@ -360,7 +361,7 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
           folderName={folderName}
           showRecipients={mailbox.role === "sent" || mailbox.role === "drafts"}
           platform={platform}
-          hiddenIds={controller.hiddenIds}
+          hiddenIds={hiddenIds}
           source={source}
           handle={list}
           // Stage 9 (decision 0028): notifications and AI sources select their message here. Later,
@@ -407,17 +408,8 @@ function MailboxPanes({ account, mailbox, folderName, kind = "folder" }: Mailbox
               platform={platform}
             />
           )}
-          onDragRows={(items, childIds) => {
-            startDrag({
-              accountId: account.id,
-              sourceMailboxId: mailbox.id,
-              count: items.length,
-              drop: (target) => {
-                moveOrAsk(target, items, childIds.size > 0 ? childIds : false);
-              },
-            });
-          }}
-          onDragEnd={endDrag}
+          onDragRows={drops.onDragRows}
+          onDragEnd={drops.onDragEnd}
           table={listView.table}
           onRowMenu={setMenu}
         />

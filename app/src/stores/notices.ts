@@ -15,6 +15,11 @@ import type {
 export interface UndoTarget {
   accountId: AccountId;
   batches: readonly BatchId[];
+  /**
+   * Stage 22 (decision 0081): a drop's batches undo each on its own, newest first, past those that
+   * cannot be undone any more (a copy into another account that reached the server).
+   */
+  partial?: boolean;
 }
 
 /**
@@ -32,6 +37,8 @@ export type NoticeContent =
       undo: UndoTarget | null;
     }
   | { kind: "undone" }
+  /** Stage 22: a drop undone except its transfers that reached the server. */
+  | { kind: "undonePartly" }
   | { kind: "notUndoable" }
   /** Writes are off for the account: why nothing happened, and where to change it. */
   | { kind: "readOnly"; accountId: AccountId }
@@ -53,7 +60,9 @@ export type NoticeContent =
         | "appearance"
         | "source"
         | "mbox"
-        | "export";
+        | "export"
+        | "drop"
+        | "accounts";
       error: IpcError;
     }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */
@@ -68,6 +77,21 @@ export type NoticeContent =
   | { kind: "foldersReloading"; account: string }
   /** Stage 21: a message was saved as an `.eml` file from the context menu, at `path`. */
   | { kind: "exported"; path: string }
+  /**
+   * Stage 22 (decision 0081): rows dropped on a folder. `moved`: moved within the folder's
+   * account at once; `transferred`: copied there, or on their way from other accounts; `skipped`:
+   * there already. `account`: the folder's account when rows crossed accounts.
+   */
+  | {
+      kind: "dropped";
+      mode: "move" | "copy";
+      moved: number;
+      transferred: number;
+      skipped: number;
+      folder: string;
+      account: string;
+      undo: UndoTarget | null;
+    }
   /** Stage 16: a copy or move into another account was recorded (its progress is in Activity). */
   | { kind: "transfer"; mode: "copy" | "move"; count: number; folder: string; account: string }
   /** Stage 9: pins, snoozes, tasks and skipped local rules (texts: `features/comfort/notices.ts`). */
@@ -125,10 +149,11 @@ export const useNoticeStore = create<NoticeState>()((set) => ({
     const id = nextId++;
     set((state) => {
       // A new undo notice replaces the previous one: only the last action is undone by Z.
-      const kept = content.kind === "done" ? state.notices.filter((n) => n.content.kind !== "done") : state.notices;
+      const undoing = content.kind === "done" || content.kind === "dropped";
+      const kept = undoing ? state.notices.filter((n) => n.content.kind !== "done" && n.content.kind !== "dropped") : state.notices;
       return {
         notices: [...kept, { id, content }].slice(-MAX_NOTICES),
-        ...(content.kind === "done" && content.undo && { lastUndo: content.undo }),
+        ...(undoing && content.undo && { lastUndo: content.undo }),
       };
     });
     return id;

@@ -1,6 +1,6 @@
 // Stage 16 (decision 0033), lists and folders: the reading list, "Unread only" and "Unread first",
 // favourite folders and folder colours, moving and copying between accounts, blocking a sender.
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageListItem, ThemePreference } from "../src/services/ipc";
@@ -360,8 +360,9 @@ describe("moving and copying into another account", () => {
     expect(screen.getByTestId("notice-allow-changes")).toBeTruthy();
   });
 
-  it("dropping rows onto a folder of another account asks first", async () => {
-    // A read-only source can still copy: only the move needs changes in both accounts.
+  it("dropping rows onto a folder of another account moves them without asking; a read-only source only copies", async () => {
+    // Stage 22 (decision 0081): the drop is the answer. A read-only source refuses a move (the
+    // folder says why) and takes a copy with Option held: only the move changes the source.
     const { core, user, items } = twoAccounts(false);
     const listbox = await list();
     const source = await waitFor(() => row(listbox, "Message 2"));
@@ -369,14 +370,35 @@ describe("moving and copying into another account", () => {
     await openFolders(user);
     fireEvent.dragStart(source, { dataTransfer });
     expect(useDragStore.getState().session).not.toBeNull();
+    expect(dataTransfer.effectAllowed).toBe("copyMove");
     const target = await screen.findByTestId("mailbox-22");
     fireEvent.dragEnter(target, { dataTransfer });
     fireEvent.dragOver(target, { dataTransfer });
+    expect(target.dataset["dropTarget"]).toBe("refused");
+    expect(dataTransfer.dropEffect).toBe("none");
+    const hint = await screen.findByTestId("drop-hint");
+    expect(hint.textContent).toBe("Not as a move: changes are turned off for Ada Lovelace. Hold Option to copy instead.");
+    expect(screen.getByTestId("drop-hint-status").textContent).toBe(hint.textContent);
     fireEvent.drop(target, { dataTransfer });
-    const dialog = await screen.findByRole("alertdialog", { name: /Archiv in Bob Builder/ });
-    await user.click(within(dialog).getByRole("button", { name: "Copy" }));
+    expect(core.callsOf("drop_messages")).toEqual([]);
+
+    // With Option: a copy, no question. (jsdom has no DragEvent: the modifier is set by hand.)
+    const withOption = (event: Event) => {
+      Object.defineProperty(event, "altKey", { value: true });
+      return event;
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent(target, withOption(createEvent.dragOver(target, { dataTransfer })));
+    expect(target.dataset["dropTarget"]).toBe("over");
+    expect(dataTransfer.dropEffect).toBe("copy");
+    expect((await screen.findByTestId("drop-hint")).textContent).toBe("Copy to Archiv");
+    fireEvent(target, withOption(createEvent.drop(target, { dataTransfer })));
     await waitFor(() => {
-      expect(core.parity.transfers[0]).toMatchObject({ targetMailboxId: 22, mode: "copy", messages: [{ messageId: items[1]?.id }] });
+      expect(core.callsOf("drop_messages")[0]).toMatchObject({ targetMailboxId: 22, mode: "copy", messages: [{ messageId: items[1]?.id }] });
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => {
+      expect(notices().some((text) => text.includes("Copying to Archiv in Bob Builder"))).toBe(true);
     });
   });
 });

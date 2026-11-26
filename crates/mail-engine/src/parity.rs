@@ -506,8 +506,8 @@ impl<C: Connector> AppCore<C> {
     /// folder stay as they are. Refused before anything is recorded: `read_only` (the target's
     /// account, and moving the accounts the messages come from, must write; the error names the
     /// account), `invalid_argument` (no or more than [`MAX_TRANSFER_MESSAGES`] messages, a
-    /// message to transfer without Message-ID, a bad request id), `not_found`,
-    /// `invalid_target`. The transfer is recorded first: fetching a message's bytes can fail,
+    /// message to transfer without Message-ID, an unknown or unselectable target, a bad request
+    /// id), `not_found`. The transfer is recorded first: fetching a message's bytes can fail,
     /// and then nothing is recorded. `request_id` as in `apply_action` (at most 60 characters);
     /// the same id again records nothing new.
     pub async fn drop_messages(

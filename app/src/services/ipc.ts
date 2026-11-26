@@ -403,6 +403,16 @@ export const ipc = {
   /** The user's per-account switch. Off: queued operations fail with `read_only` and are reverted. */
   setWritesEnabled: (accountId: AccountId, enabled: boolean): Promise<Account> =>
     call(() => commands.setWritesEnabled(accountId, enabled)),
+  /**
+   * Stage 22 (decision 0078): the accounts in this order for every list of accounts; left out
+   * ones follow in their order. Answers them in their new order; synchronised.
+   */
+  reorderAccounts: (accountIds: AccountId[]): Promise<Account[]> => call(() => commands.reorderAccounts(accountIds)),
+  /**
+   * Stage 22 (decision 0078): the account's name in the lists (trimmed, at most
+   * `ACCOUNT_NAME_MAX_CHARS`); empty shows its address. Never the sender name of its identities.
+   */
+  renameAccount: (accountId: AccountId, name: string): Promise<Account> => call(() => commands.renameAccount(accountId, name)),
 
   /** Subscribes to the typed event stream of the core. Resolves once the listener is registered. */
   onCoreEvent: async (handler: (event: CoreEvent) => void): Promise<Unsubscribe> => {
@@ -1579,6 +1589,7 @@ import {
   type ReceiptDisposition,
   type ReceivedReadReceipt,
   type SoundPlatform,
+  type DropResult,
   type TransferMode,
   type UnreadFirstCursor,
   type UnreadFirstPage,
@@ -1598,6 +1609,7 @@ export type {
   ReceiptDisposition,
   ReceivedReadReceipt,
   SoundPlatform,
+  DropResult,
   TransferMode,
   UnreadFirstCursor,
   UnreadFirstPage,
@@ -1616,7 +1628,12 @@ export const PARITY_LIMITS = {
   favorites: 200,
   /** `transferMessages`: messages per call. */
   transferMessages: 500,
+  /** Stage 22: `dropMessages`: messages per call. */
+  dropMessages: 500,
 } as const;
+
+/** Stage 22 (decision 0078): the longest name of an account in the lists, in characters. */
+export const ACCOUNT_NAME_MAX_CHARS = 100;
 
 /**
  * Stage 16: the reading list, unread views, favourite folders and folder colours, moving and
@@ -1655,6 +1672,15 @@ export const parityIpc = {
    */
   transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string): Promise<ActionResult> =>
     call(() => parityCommands.transferMessages(messages, targetMailboxId, mode, requestId)),
+  /**
+   * Stage 22 (decision 0081): rows dragged from any list and dropped on a folder: those of the
+   * folder's account move there, those of other accounts are transferred (copy first, the source
+   * removed once the copy arrived), those already there stay; `copy` copies all of them.
+   * `read_only` (naming the account) unless the target and, moving, every source may write.
+   * `requestId` is a fresh UUID per drop (at most 60 characters).
+   */
+  dropMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string): Promise<DropResult> =>
+    call(() => parityCommands.dropMessages(messages, targetMailboxId, mode, requestId)),
   /** A bare address; answers every blocked sender, sorted. */
   blockSender: (address: string): Promise<BlockedSender[]> => call(() => parityCommands.blockSender(address)),
   unblockSender: (address: string): Promise<BlockedSender[]> => call(() => parityCommands.unblockSender(address)),

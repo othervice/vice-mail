@@ -7,9 +7,10 @@ import { ErrorNotice } from "../../../components/ErrorNotice";
 import { Notice } from "../../../components/Notice";
 import { Switch } from "../../../components/Switch";
 import { TextField } from "../../../components/TextField";
-import type { Account, ServerSettings } from "../../../services/ipc";
+import { ACCOUNT_NAME_MAX_CHARS, type Account, type CoreError, type ServerSettings } from "../../../services/ipc";
 import { useUiStore } from "../../../stores/ui";
 import { accountFill } from "../../accounts/accountColor";
+import { useAccountArrange } from "../../accounts/arrange";
 import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
 import { useSetWritesEnabled } from "../../actions/queries";
 import { useSendSettings } from "../../composer/queries";
@@ -91,6 +92,62 @@ function WritesBlock({ account }: { account: Account }) {
       </p>
       {checked && <p className="text-12 text-secondary">{t("settings.accounts.detail.writes.offNote")}</p>}
       {save.isError && <ErrorNotice context={t("settings.accounts.detail.writes.failed")} error={save.error} />}
+    </Block>
+  );
+}
+
+/**
+ * Stage 22 (decision 0078): the account's name in the folder column and every list of accounts;
+ * empty shows the address. Never the sender name (that belongs to the addresses below).
+ */
+function ListNameBlock({ account }: { account: Account }) {
+  const { t } = useTranslation();
+  const arrange = useAccountArrange();
+  const [name, setName] = useState(account.displayName);
+  const [error, setError] = useState<CoreError | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // Renamed elsewhere (the column, another device): the field follows while it is not being edited.
+  const [shown, setShown] = useState(account.displayName);
+  if (shown !== account.displayName) {
+    setShown(account.displayName);
+    setName(account.displayName);
+  }
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    void arrange.rename(account.id, name).then((result) => {
+      setSaving(false);
+      setError(result);
+      setSaved(result === null);
+    });
+  };
+  return (
+    <Block title={t("accountEdit.listName")}>
+      <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-3" data-testid="account-list-name-form">
+        <TextField
+          label={t("accountEdit.listName")}
+          description={t("accountEdit.listNameDescription")}
+          value={name}
+          onChange={(next) => {
+            setName(next);
+            setSaved(false);
+          }}
+          maxLength={ACCOUNT_NAME_MAX_CHARS}
+          placeholder={account.email}
+          error={error ? t(`errors.codes.${error.code}.title`) : null}
+          data-testid="account-list-name"
+        />
+        <div className="flex items-center gap-3">
+          <Button type="submit" variant="secondary" disabled={saving || name.trim() === account.displayName}>
+            {t("accountEdit.save")}
+          </Button>
+          <span role="status" className="text-13 text-secondary">
+            {saved ? t("accountEdit.saved") : ""}
+          </span>
+        </div>
+      </form>
     </Block>
   );
 }
@@ -374,6 +431,7 @@ export function AccountDetail({ accountId }: { accountId: string }) {
         </Notice>
       )}
       <ServerChangeNotice account={account} />
+      <ListNameBlock key={account.id} account={account} />
       <StatusBlock account={account} />
       {/* Stage 20 (decision 0060): how full the mailbox on the server is. */}
       <QuotaBlock account={account} />

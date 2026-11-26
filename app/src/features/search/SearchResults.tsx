@@ -17,6 +17,7 @@ import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
 import { useReadingLayout } from "../layout/useReadingLayout";
 import { useMixedActions } from "../unified/MixedActions";
+import { unionIds, useDropRows } from "../organize/useDropRows";
 import { MixedReading } from "../unified/MixedReading";
 import { useServerSearchPages, type SearchInput } from "./queries";
 import { accountShortNames } from "../accounts/accountName";
@@ -99,6 +100,9 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
   // Stage 21 (decision 0065): quick actions and the context menu with each hit's own folder.
   const loaded = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
   const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey: ["search"], platform });
+  // Stage 22 (decision 0081): rows of several accounts dragged onto any folder.
+  const drops = useDropRows({ list, conversations, listKey: ["search"] });
+  const hiddenIds = useMemo(() => unionIds(mixed.hiddenIds, drops.hiddenIds), [mixed.hiddenIds, drops.hiddenIds]);
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
@@ -140,9 +144,11 @@ function HitList({ query, accounts, label, platform, header, footer, onUse }: Hi
             layout.onOpen();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
-          hiddenIds={mixed.hiddenIds}
+          hiddenIds={hiddenIds}
           renderQuickActions={mixed.renderQuickActions}
           onRowMenu={mixed.onRowMenu}
+          onDragRows={drops.onDragRows}
+          onDragEnd={drops.onDragEnd}
         />
         {footer}
       </div>

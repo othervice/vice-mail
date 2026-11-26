@@ -1,42 +1,150 @@
 import { create } from "zustand";
-import type { AccountId, Mailbox, MailboxId } from "../services/ipc";
+import type { Account, AccountId, Mailbox, MessageListItem } from "../services/ipc";
 
 /** Data type of dragged list rows. Only for `types` checks: the session below holds the rows. */
 export const MESSAGE_DRAG_TYPE = "application/x-mail-message-refs";
 
 /**
- * Rows dragged out of the message list (native drag and drop). Folders in the sidebar and the
- * rail accept them while a session of the same account runs; `drop` runs the move through the
- * list's action controller, with its undo notice and focus handling.
+ * Stage 22 (decision 0078): data type of an account heading dragged in the left column to put it
+ * elsewhere. A type of its own, so folders never take an account and headings never take rows.
+ */
+export const ACCOUNT_DRAG_TYPE = "application/x-mail-account";
+
+/** Stage 22 (decision 0081): dropping moves; holding Option (macOS) or Ctrl (Windows) copies. */
+export type DropMode = "move" | "copy";
+
+/** The roles the narrow rail takes rows for: each row goes to that folder of its own account. */
+export type DropRole = "inbox" | "archive" | "trash";
+
+/**
+ * Where rows are dropped: a folder (the column's trees and favourites), or in the narrow rail a
+ * role, which is the folder with that role in each row's own account.
+ */
+export type DropTarget = { kind: "folder"; mailbox: Mailbox } | { kind: "role"; role: DropRole };
+
+/**
+ * Rows dragged out of any message list (stage 22, decision 0081: a folder's list, the views, the
+ * unified inbox, search results; rows of several folders and accounts at once). Folders in the
+ * column, the favourites and the rail take them; `drop` runs it through the list that started the
+ * drag (its hidden rows, focus and notice).
  */
 export interface DragSession {
-  accountId: AccountId;
-  sourceMailboxId: MailboxId;
+  /** The rows as dragged (conversation rows stand for their conversation until the drop). */
+  items: readonly MessageListItem[];
   count: number;
-  drop: (target: Mailbox) => void;
+  drop: (target: DropTarget, mode: DropMode) => void;
+}
+
+/** What a folder under the dragged rows says while they are over it (`DropHint`). */
+export interface DropHover {
+  /** Which drop target this is (only that target clears it again). */
+  id: string;
+  /** Its place on screen, for the hint next to it. */
+  rect: { top: number; right: number; bottom: number; left: number };
+  verdict: Exclude<DropVerdict, { kind: "none" }>;
+  /** The folder's name as shown. */
+  folder: string;
 }
 
 interface DragState {
   session: DragSession | null;
+  hover: DropHover | null;
+  /** Stage 22 (decision 0078): the account heading being dragged to another place. */
+  account: AccountId | null;
   start: (session: DragSession) => void;
   end: () => void;
+  setHover: (hover: DropHover) => void;
+  clearHover: (id: string) => void;
+  startAccount: (account: AccountId) => void;
+  endAccount: () => void;
 }
 
 export const useDragStore = create<DragState>()((set) => ({
   session: null,
+  hover: null,
+  account: null,
+  startAccount: (account) => {
+    set({ account });
+  },
+  endAccount: () => {
+    set({ account: null });
+  },
   start: (session) => {
-    set({ session });
+    set({ session, hover: null });
   },
   end: () => {
-    set({ session: null });
+    set({ session: null, hover: null });
+  },
+  setHover: (hover) => {
+    set({ hover });
+  },
+  clearHover: (id) => {
+    set((state) => (state.hover?.id === id ? { hover: null } : state));
   },
 }));
 
 /**
- * Whether `mailbox` takes the rows of the running session: another real folder. Since stage 16 a
- * folder of another account takes them too; the session's `drop` then asks whether to move or
- * copy (decision 0033), so nothing crosses accounts without the user's answer.
+ * Whether a drop of the session's rows on a target is possible (decision 0081):
+ * - `accept` with the mode the modifier asks for;
+ * - `refuse` with the reason the target shows while the rows are over it: the target's account
+ *   may not write, an account a row comes from may not write (only a move; a copy leaves it as it
+ *   is), or (rail) an account of a row has no folder with that role;
+ * - `none`: not a target for these rows at all (not a real folder, or every row lies there).
  */
-export function acceptsDrop(session: DragSession | null, mailbox: Mailbox | undefined): mailbox is Mailbox {
-  return session !== null && mailbox !== undefined && mailbox.selectable && mailbox.id !== session.sourceMailboxId;
+export type DropVerdict =
+  | { kind: "accept"; mode: DropMode; count: number }
+  | { kind: "refuse"; reason: "targetReadOnly" | "sourceReadOnly"; account: Account }
+  | { kind: "refuse"; reason: "noRoleFolder"; account: Account; role: DropRole }
+  | { kind: "none" };
+
+export interface VerdictContext {
+  accounts: readonly Account[];
+  /** The folders of an account as cached (rail roles). */
+  mailboxesOf: (accountId: AccountId) => readonly Mailbox[];
+}
+
+/** The folder with `role` in `accountId`, if the account has one. */
+export function roleFolder(context: VerdictContext, accountId: AccountId, role: DropRole): Mailbox | undefined {
+  return context.mailboxesOf(accountId).find((mailbox) => mailbox.role === role && mailbox.selectable);
+}
+
+export function dropVerdict(session: DragSession | null, target: DropTarget | undefined, mode: DropMode, context: VerdictContext): DropVerdict {
+  if (!session || !target || session.items.length === 0) return { kind: "none" };
+  const accountOf = (id: AccountId) => context.accounts.find((account) => account.id === id);
+  if (target.kind === "folder") {
+    const { mailbox } = target;
+    if (!mailbox.selectable) return { kind: "none" };
+    const moving = session.items.filter((item) => item.mailboxId !== mailbox.id);
+    if (moving.length === 0) return { kind: "none" };
+    const owner = accountOf(mailbox.accountId);
+    if (!owner) return { kind: "none" };
+    if (!owner.writesEnabled) return { kind: "refuse", reason: "targetReadOnly", account: owner };
+    if (mode === "move") {
+      for (const item of moving) {
+        const source = accountOf(item.accountId);
+        if (source && !source.writesEnabled) return { kind: "refuse", reason: "sourceReadOnly", account: source };
+      }
+    }
+    return { kind: "accept", mode, count: moving.length };
+  }
+  let count = 0;
+  const seen = new Set<AccountId>();
+  for (const item of session.items) {
+    const account = accountOf(item.accountId);
+    if (!account) continue;
+    const folder = roleFolder(context, item.accountId, target.role);
+    if (!seen.has(account.id)) {
+      seen.add(account.id);
+      if (!folder) return { kind: "refuse", reason: "noRoleFolder", account, role: target.role };
+    }
+    if (folder && item.mailboxId === folder.id) continue;
+    if (!account.writesEnabled) return { kind: "refuse", reason: "targetReadOnly", account };
+    count += 1;
+  }
+  return count === 0 ? { kind: "none" } : { kind: "accept", mode, count };
+}
+
+/** Whether the pointer's modifier asks for a copy: Option on macOS, Ctrl on Windows. */
+export function dropModeOf(event: { altKey: boolean; ctrlKey: boolean }, platform: "macos" | "windows"): DropMode {
+  return (platform === "macos" ? event.altKey : event.ctrlKey) ? "copy" : "move";
 }

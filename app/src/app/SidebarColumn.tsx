@@ -6,6 +6,8 @@ import { cx } from "../components/cx";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { Tooltip } from "../components/Tooltip";
 import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
+import { useAccountDropTarget } from "../features/accounts/accountDrag";
+import { useAccountArrange } from "../features/accounts/arrange";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { OverflowMenu, type OverflowItem } from "../features/actions/OverflowMenu";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
@@ -16,6 +18,7 @@ import { SECTION_KEY, SectionRow, useSection } from "../features/layout/SectionR
 import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
+import { useDragAutoScroll } from "../features/mailboxes/useDragAutoScroll";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
 import { FavoriteFolders, RowMenuSlot } from "../features/organize/folders";
@@ -171,7 +174,19 @@ function ViewsTree() {
 }
 
 /** The folder tree of one account, with the folder the view shows marked as current. */
-function AccountFolders({ account, selected }: { account: Account; selected: boolean }) {
+function AccountFolders({ account, accounts, selected }: { account: Account; accounts: readonly Account[]; selected: boolean }) {
+  const { t } = useTranslation();
+  const arrange = useAccountArrange();
+  const [moved, setMoved] = useState("");
+  // Stage 22 (decision 0078): a dragged account heading goes before or after this account.
+  const drop = useAccountDropTarget(account, accounts, (order, movedId) => {
+    const dragged = accounts.find((a) => a.id === movedId);
+    void arrange.reorder(order).then((ok) => {
+      if (ok && dragged) {
+        setMoved(t("accountEdit.moved", { name: dragged.displayName || dragged.email, position: order.indexOf(dragged.id) + 1, count: order.length }));
+      }
+    });
+  });
   const view = useUiStore((state) => state.view);
   const unified = useUiStore((state) => state.unifiedInbox !== null);
   const mailboxes = useMailboxes(account.id);
@@ -182,8 +197,22 @@ function AccountFolders({ account, selected }: { account: Account; selected: boo
     current = mailboxWithRole(mailboxes.data ?? [], view.mailView)?.id ?? null;
   }
   return (
-    <section aria-label={account.displayName || account.email} className="flex flex-col" data-testid={`sidebar-account-section-${account.id}`}>
+    <section
+      aria-label={account.displayName || account.email}
+      {...drop.handlers}
+      data-account-drop={drop.position ?? undefined}
+      className={cx(
+        "relative flex flex-col",
+        // The place it goes: a line in the gap above or below the account.
+        drop.position === "before" && "before:absolute before:inset-x-1 before:-top-2 before:h-1 before:rounded-full before:bg-accent-fill",
+        drop.position === "after" && "after:absolute after:inset-x-1 after:-bottom-2 after:h-1 after:rounded-full after:bg-accent-fill",
+      )}
+      data-testid={`sidebar-account-section-${account.id}`}
+    >
       <MailboxTree account={account} currentMailboxId={current} />
+      <span aria-live="polite" className="sr-only">
+        {moved}
+      </span>
     </section>
   );
 }
@@ -287,6 +316,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const shortcut = useBoundShortcuts(platform)("toggleSidebar")[0];
   const label = t("nav.hideSidebar");
   const onKeyDown = useOverlayDismiss(column, overlay);
+  const autoScroll = useDragAutoScroll();
   // "Go to Folders" (palette): the entry shown right now takes the focus, else the first tree's.
   const focusRequested = useUiStore((state) => state.sidebarFocusRequested);
   const sidebarFocused = useUiStore((state) => state.sidebarFocused);
@@ -345,6 +375,8 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
         onScroll={(event) => {
           if (event.currentTarget.scrollLeft !== 0) event.currentTarget.scrollLeft = 0;
         }}
+        // Stage 22 (decision 0081): dragged rows or an account scroll the column at its edges.
+        onDragOver={autoScroll}
         className={cx(
           "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-1 pb-4 [scrollbar-width:thin]",
           "[mask-image:linear-gradient(to_bottom,transparent,black_var(--ui-space-2),black_calc(100%-var(--ui-space-2)),transparent)]",
@@ -369,7 +401,7 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
             </p>
           )}
           {accountList.map((account) => (
-            <AccountFolders key={account.id} account={account} selected={account.id === selected?.id} />
+            <AccountFolders key={account.id} account={account} accounts={accountList} selected={account.id === selected?.id} />
           ))}
         </section>
         </div>
