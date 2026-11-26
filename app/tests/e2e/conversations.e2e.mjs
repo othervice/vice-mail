@@ -17,10 +17,10 @@
 // 5. The look, measured in the wide list and in the narrow one beside the reading pane (after the
 //    screenshot pass of 24.11.2026): the row shows the conversation's subject ("Planning the 2026
 //    offsite", not the newest "AW: …"); the replies pill gives way before the subject and never
-//    pushes the date; the dotted line leaves from under the conversation's avatar and runs on to
-//    the last message; child rows size the sender to its name and give the text the rest. With a
-//    second account in the unified inbox, the account label gives way to the names first, down to
-//    its colour dot.
+//    pushes the date; the dotted line leaves from the conversation's mark column (stage 22: no
+//    avatar) and runs on to the last message; child rows size the sender to its name and give the
+//    text the rest. With a second account in the unified inbox, the account label gives way to the
+//    names first, down to its colour dot.
 //
 // Screenshots go to tests/e2e/screenshots/conversations-*.png, the facts to
 // conversations-report.json.
@@ -138,7 +138,7 @@ const layout = (id) =>
     };
     const subject = row?.querySelector('[data-testid="row-subject"]');
     const pill = row?.querySelector('[data-testid="row-replies"]');
-    const avatar = row?.querySelector('[data-testid="avatar"]');
+    const mark = row?.querySelector('[data-testid="row-mark"]');
     return {
       narrow: Boolean(row?.querySelector(".flex-col")),
       row: box(row),
@@ -148,7 +148,8 @@ const layout = (id) =>
       pill: box(pill),
       word: box(pill?.querySelector('[data-testid="row-replies-word"]')),
       time: box(row?.querySelector("time")),
-      avatar: box(avatar),
+      mark: box(mark),
+      avatar: row?.querySelector('[data-testid="avatar"]') !== null,
       line: box(row?.querySelector('[data-testid="tree-line"]')),
       children: [...document.querySelectorAll('[data-testid="child-row"]')].map((child) => {
         const sender = child.querySelector('[data-testid="child-sender"]');
@@ -164,7 +165,7 @@ const layout = (id) =>
           textCut: cut(text),
           group: box(text?.parentElement),
           line: box(child.querySelector('[data-testid="tree-line"]')),
-          avatar: box(child.querySelector('[data-testid="avatar"]')),
+          mark: box(child.querySelector('[data-testid="row-mark"]')),
         };
       }),
     };
@@ -181,11 +182,13 @@ function checkLayout(found, where) {
   // The date stays whole and in the row; on the pill's line it comes after it.
   assert.ok(found.time.right <= found.row.right + 0.5, `${where}: the date is pushed out`);
   if (near(found.time.top, found.pill.top, 4)) assert.ok(found.pill.right <= found.time.left, `${where}: the pill reaches the date`);
-  // The line: from under the avatar (its start covered by it) down to the row's end, at its centre.
+  // Stage 22: no avatar. The line: from the mark's middle (the unread dot covers its start; narrow:
+  // the mark on the first line) down to the row's end, under the mark column's centre.
+  assert.equal(found.avatar, false, `${where}: the row has an avatar`);
   assert.ok(found.line, `${where}: no line in the conversation's row`);
-  assert.ok(found.line.top >= found.avatar.top && found.line.top < found.avatar.bottom, `${where}: the line starts at ${String(found.line.top)}, the avatar spans ${String(found.avatar.top)}–${String(found.avatar.bottom)}`);
+  assert.ok(near(found.line.top, (found.mark.top + found.mark.bottom) / 2, 1.5), `${where}: the line starts at ${String(found.line.top)}, the mark spans ${String(found.mark.top)}–${String(found.mark.bottom)}`);
   assert.ok(near(found.line.bottom, found.row.bottom), `${where}: the line ends before the row's end`);
-  assert.ok(near(found.line.left, (found.avatar.left + found.avatar.right) / 2, 1.5), `${where}: the line is not under the avatar's centre`);
+  assert.ok(near(found.line.left, (found.mark.left + found.mark.right) / 2, 1.5), `${where}: the line is not under the mark's centre`);
   // On through every message: no gap between rows, ending in the middle of the last one.
   const children = found.children;
   assert.ok(children.length > 1, `${where}: no messages below the row`);
@@ -363,7 +366,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     assert.deepEqual(open.line, { style: "dotted", width: "1px" });
     await wideList(true);
     const wide = await layout(conversationId);
-    report.steps.layoutWide = { narrow: wide.narrow, subject: wide.subject, subjectCut: wide.subjectCut, word: wide.word, line: wide.line, avatar: wide.avatar };
+    report.steps.layoutWide = { narrow: wide.narrow, subject: wide.subject, subjectCut: wide.subjectCut, word: wide.word, line: wide.line, mark: wide.mark };
     assert.equal(wide.narrow, false, "the list wider than 720 px is wide");
     checkLayout(wide, "wide list");
     await setTheme("light");
@@ -403,13 +406,14 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       word: narrow.word,
       pill: narrow.pill,
       line: narrow.line,
-      avatar: narrow.avatar,
+      mark: narrow.mark,
       children: narrow.children.slice(0, 4).map((c) => ({ sender: c.sender?.width, needs: c.senderNeeds, textCut: c.textCut })),
     };
     checkLayout(narrow, "narrow list");
-    // Narrower still: the pill gives up its word, then the subject is cut (both measured).
+    // Narrower still: the pill gives up its word, then the subject is cut (both measured). Stage 22:
+    // without the avatar the row's text starts 20 px earlier, so it takes a narrower list.
     report.steps.layoutSqueezed = [];
-    for (const width of [380, 330, 290]) {
+    for (const width of [380, 330, 290, 265]) {
       await narrowList(width);
       const squeezed = await layout(conversationId);
       report.steps.layoutSqueezed.push({ width, subjectCut: squeezed.subjectCut, word: squeezed.word.width, pill: squeezed.pill.width });
@@ -540,6 +544,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
               label: label.getAttribute("title"),
               labelWidth: label.getBoundingClientRect().width,
               dotWidth: dot.getBoundingClientRect().width,
+
               rowName: row.querySelector('[data-testid="row-name"]')?.textContent ?? "",
             },
           ];
