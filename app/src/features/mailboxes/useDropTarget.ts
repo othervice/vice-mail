@@ -102,10 +102,12 @@ export function useDropTarget(target: DropTarget | undefined, { id, folder, onEx
     if (changed) setHovered(verdict);
     const box = event.currentTarget.getBoundingClientRect();
     const current = useDragStore.getState().hover;
+    // The same target, the same answer and still at its place (the column may have scrolled).
     const same =
       current?.id === id &&
       current.verdict.kind === verdict.kind &&
-      (verdict.kind !== "accept" || (current.verdict.kind === "accept" && current.verdict.mode === verdict.mode));
+      (verdict.kind !== "accept" || (current.verdict.kind === "accept" && current.verdict.mode === verdict.mode)) &&
+      Math.abs(current.rect.top - box.top) < 1;
     if (!same) setHover({ id, rect: { top: box.top, right: box.right, bottom: box.bottom, left: box.left }, verdict, folder });
   };
 
