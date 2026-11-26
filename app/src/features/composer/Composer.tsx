@@ -844,7 +844,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
   // plain text (and the identity's text signature): as text under the text field.
   const richSignature = fields.format === "html" && chosenSignature !== null && signature !== null && fields.includeSignature;
   const signaturePreview = richSignature ? (
-    <div aria-label={t("composer.signature.preview")} className="px-2 pt-1 pb-3 text-13 text-secondary" data-testid="composer-signature">
+    <div aria-label={t("composer.signature.preview")} className="px-2 pt-1 pb-3 font-mail text-13 text-secondary" data-testid="composer-signature">
       <p className="whitespace-pre">{"-- "}</p>
       <SignatureHtml html={chosenSignature.html} />
     </div>
@@ -905,7 +905,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
     hasQuote && fields.includeQuote ? (
       <div className={cx("mb-3 rounded-card border border-border-subtle bg-canvas p-3", quoteInWriting ? "mx-2" : "mx-4")} data-testid="composer-quote">
         {draft.quoteText !== null ? (
-          <pre className="max-h-(--ui-picker-list-height) overflow-y-auto font-sans text-13 whitespace-pre-wrap text-secondary">
+          <pre className="max-h-(--ui-picker-list-height) overflow-y-auto font-mail text-13 whitespace-pre-wrap text-secondary">
             {draft.quoteText}
           </pre>
         ) : (
@@ -1274,7 +1274,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
                 change({ bodyText: e.target.value });
               }}
               onBlur={saveNow}
-              className="mx-2 mb-2 min-h-(--ui-picker-list-height) flex-1 resize-none rounded-card bg-transparent px-2 py-3 font-sans text-14 text-primary focus-visible:-outline-offset-2"
+              className="mx-2 mb-2 min-h-(--ui-picker-list-height) flex-1 resize-none rounded-card bg-transparent px-2 py-3 font-mail text-14 text-primary focus-visible:-outline-offset-2"
               data-testid="composer-text-body"
             />
           </>
@@ -1284,7 +1284,7 @@ function ComposerForm({ seq, initial, prefill }: { seq: number; initial: Draft; 
         {signature && fields.includeSignature && !richSignature && (
           <pre
             aria-label={t("composer.signature.preview")}
-            className="mx-4 mb-3 font-sans text-13 whitespace-pre-wrap text-secondary"
+            className="mx-4 mb-3 font-mail text-13 whitespace-pre-wrap text-secondary"
             data-testid="composer-signature"
           >
             {signatureText}

@@ -86,12 +86,21 @@
   --ui-mail-find-match: #fbe7a6;
   --ui-mail-find-current: #f5b83d;
 
-  /* Type: system font (SF Pro on macOS, Segoe UI Variable on Windows 11). Segoe UI Variable comes
-     before system-ui, which WebView2 resolves to the older Segoe UI; Windows 10 falls back to
-     that. rem so text scaling works. */
+  /* Type. Stage 23 (decision 0083): the UI is set in Inter on macOS and Windows alike, shipped
+     with the app (app.css, `@font-face`; never loaded from the network), with the system font as
+     the fallback. The draft's character variants: single-storey a (cv11) and open digits (ss01).
+     Mail content keeps the system font (`font-family-mail`): HTML mail that names no font
+     (crates/mail-content, `MAIL_DEFAULT_STYLE`, the same list), the composer's writing area and
+     signatures, so what is written looks as it will be sent. System font: SF Pro on macOS,
+     Segoe UI Variable on Windows 11; Segoe UI Variable comes before system-ui, which WebView2
+     resolves to the older Segoe UI; Windows 10 falls back to that. rem so text scaling works. */
   --ui-font-family:
+    "InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable",
+    system-ui, "Segoe UI", sans-serif;
+  --ui-font-family-mail:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable", system-ui,
     "Segoe UI", sans-serif;
+  --ui-font-features: "cv11", "ss01";
   --ui-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
   --ui-font-size-12: 0.75rem;
   --ui-line-height-12: 1rem;

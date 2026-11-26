@@ -2,6 +2,22 @@
 @import "./tokens.css";
 
 /*
+ * Stage 23 (decision 0083): Inter 4.1, the UI font (`--ui-font-family`), shipped with the app as
+ * the unmodified variable file of its release (assets/fonts, SIL Open Font License 1.1 in
+ * LICENSE.txt there; listed by scripts/licenses.mjs). Served by the app itself ('self' in the
+ * CSP), never from the network. One file for every weight and the optical sizes; upright only, as
+ * the UI sets nothing in italic (mail content keeps the system font). `block`: the file is local,
+ * so the first frame waits for it instead of flashing in the system font.
+ */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+}
+
+/*
  * The Tailwind theme consists of the design tokens only. `--*: initial` removes Tailwind's
  * defaults (palette, spacing scale, fonts, ...), so utilities like `bg-red-500` or `p-5` do not
  * exist and every class resolves to a token. `inline` makes utilities read the token variables
@@ -62,8 +78,14 @@
 
   /* Type: `text-12` ... `text-28`, `font-regular|medium|semibold` */
   --font-sans: var(--ui-font-family);
+  --font-sans--font-feature-settings: var(--ui-font-features);
   --default-font-family: var(--ui-font-family);
+  --default-font-feature-settings: var(--ui-font-features);
+  /* Stage 23: `font-mail` for mail content in the app's own document (decision 0083). */
+  --font-mail: var(--ui-font-family-mail);
+  --font-mail--font-feature-settings: normal;
   --font-mono: var(--ui-font-family-mono);
+  --font-mono--font-feature-settings: normal;
   --default-mono-font-family: var(--ui-font-family-mono);
   --text-12: var(--ui-font-size-12);
   --text-12--line-height: var(--ui-line-height-12);
@@ -176,6 +198,7 @@
     background-color: var(--ui-canvas);
     color: var(--ui-text-primary);
     font-family: var(--ui-font-family);
+    font-feature-settings: var(--ui-font-features);
     font-size: var(--ui-font-size-14);
     line-height: var(--ui-line-height-14);
     -webkit-font-smoothing: antialiased;
