@@ -6,7 +6,9 @@ bauen.
 **Anlass:** Test von 0.1.2 am 26.11.2026. Wie in Stufe 21: erst alle Rückmeldungen sammeln,
 gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist.
 
-**Stand:** Sammeln (seit 26.11.2026). Noch nichts umgesetzt.
+**Stand:** Liste vollständig („das reicht dann auch erstmal … los bau 0.1.3“, 26.11.2026).
+Ergibt 0.1.3. Aufteilung: 4+10 (Geheimnisse), 6 (Spamfilter), 5+7 (Suche), 3+8 (Oberfläche),
+danach 1+2 (Konten) und 9 (Windows); je ein Subagent in eigenem Worktree.
 
 ## Rückmeldungen
 
@@ -116,6 +118,28 @@ Personen melden“, „Ziehen in Finder/Explorer“).
   beim Überfahren des Maximieren-Knopfs die Andock-Leiste von Windows.
 - Auf dem Mac nicht prüfbar. Die CI prüft auf Windows nur den Build; wie es aussieht, muss der
   Mensch auf dem PC ansehen.
+
+### 10 — Passwörter von einem anderen Gerät übernehmen
+
+- Gewünscht (26.11.): Nach dem Beitreten zum Einstellungs-Sync die Passwörter nicht pro Konto neu
+  eintippen müssen. Heute starten übernommene Konten mit „Passwort fehlt“ (`docs/SYNC.md`,
+  „Accounts taken over“).
+- Plan:
+  - Der neue Rechner erzeugt ein Schlüsselpaar nur für diese Übernahme. Den öffentlichen Teil
+    legt er als Anfrage in den Sync-Ordner. Die Anfrage läuft nach 15 Minuten ab.
+  - Beide Geräte zeigen denselben kurzen Code. Auf einem eingerichteten Gerät bestätigt der
+    Mensch, dass die Codes gleich sind, und wählt die Konten.
+  - Erst dann verschlüsselt das alte Gerät die Passwörter für genau diesen Schlüssel. Der neue
+    Rechner holt sie ab, legt sie in den Schlüsselbund und löscht Anfrage und Antwort aus dem
+    Ordner.
+- Nur für Konten, deren Server auf beiden Geräten genau gleich eingetragen sind (Grenze aus
+  Entscheidung 0040). Ein Passwort geht also nie an einen Server, den nur der Ordner nennt.
+- Schreibzugriff bleibt auf dem neuen Gerät aus. OAuth-Konten melden sich auf jedem Gerät selbst
+  an.
+- Der private Schlüssel liegt nur im Speicher, ein Neustart verwirft die Anfrage. Die Passwörter
+  liegen nie dauerhaft im Postfach.
+- Entscheidung festhalten; `docs/SYNC.md`, `docs/SECURITY_MODEL.md` und `docs/PRIVACY.md`
+  anpassen.
 
 ## Ergebnis
 
