@@ -199,23 +199,28 @@ function AccountChoice({
       {list.map((account) => {
         const on = !excluded.includes(account.id);
         return (
-          <label key={account.id} className="flex cursor-default items-start gap-2 text-13 text-primary">
-            <input
-              type="checkbox"
-              checked={on}
-              disabled={disabled}
-              onChange={(event) => {
-                const others = excluded.filter((id) => id !== account.id);
-                onChange(event.target.checked ? others : [...others, account.id]);
-              }}
-              className="mt-0.5 size-4 shrink-0 accent-accent"
-              data-testid={`spam-account-${account.email}`}
-            />
-            <span className="flex min-w-0 flex-col">
+          <div key={account.id} className="flex flex-col gap-1">
+            <label className="flex cursor-default items-center gap-2 text-13 text-primary">
+              <input
+                type="checkbox"
+                checked={on}
+                disabled={disabled}
+                aria-describedby={account.writesEnabled ? undefined : `spam-read-only-${account.id}`}
+                onChange={(event) => {
+                  const others = excluded.filter((id) => id !== account.id);
+                  onChange(event.target.checked ? others : [...others, account.id]);
+                }}
+                className="size-4 shrink-0 accent-accent"
+                data-testid={`spam-account-${account.email}`}
+              />
               <span className="truncate">{account.email}</span>
-              {!account.writesEnabled && <span className="text-12 text-secondary">{t("spam.settings.accounts.readOnly")}</span>}
-            </span>
-          </label>
+            </label>
+            {!account.writesEnabled && (
+              <span id={`spam-read-only-${account.id}`} className="pl-6 text-12 text-secondary">
+                {t("spam.settings.accounts.readOnly")}
+              </span>
+            )}
+          </div>
         );
       })}
     </fieldset>

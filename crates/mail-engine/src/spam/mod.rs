@@ -29,6 +29,9 @@
 
 mod learn;
 
+#[cfg(test)]
+mod server_tests;
+
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;

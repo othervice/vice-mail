@@ -121,7 +121,9 @@ describe("spam filter: settings", () => {
     const ada = within(accounts).getByRole<HTMLInputElement>("checkbox", { name: /ada@vicemail\.test/ });
     const bob = within(accounts).getByRole("checkbox", { name: /bob@vicemail\.test/ });
     expect(ada.checked).toBe(true);
-    expect(bob.closest("label")?.textContent).toContain("only marked on this device");
+    expect(document.getElementById(bob.getAttribute("aria-describedby") ?? "")?.textContent).toContain(
+      "only marked on this device",
+    );
     await user.click(ada);
     await waitFor(() => {
       expect(core.callsOf("set_spam_filter")).toEqual([{ settings: { enabled: true, excludedAccounts: [ADA.id] } }]);

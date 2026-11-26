@@ -123,6 +123,8 @@ const READING_COMMANDS = new Set([
   "main_window_ready",
   "plugin:event|listen",
   "plugin:event|unlisten",
+  // Stage 22 (decision 0077): the spam filter's verdict on the opened message (local, read-only).
+  "get_spam_verdict",
 ]);
 
 describe("reading pane", () => {
