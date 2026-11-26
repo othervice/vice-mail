@@ -23,7 +23,7 @@ function layOut() {
     const items = id === null ? [] : [...(this.parentElement?.querySelectorAll("[data-account-drop-item]") ?? [])];
     const place = index < 0 ? 0 : items.indexOf(this);
     const top = place * 100;
-    return { top, bottom: top + 100, left: 0, right: 200, width: 200, height: 100, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    return { top, bottom: top + 100, left: 0, right: 200, width: 200, height: 100, x: 0, y: top, toJSON: () => ({}) };
   });
 }
 

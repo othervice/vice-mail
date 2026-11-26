@@ -127,6 +127,9 @@ export const config = {
     // the app started again and removes them.
     "./tests/e2e/stage22-accounts.e2e.mjs",
     "./tests/e2e/stage22-accounts-restart.e2e.mjs",
+    // Stage 23, item 1 (decision 0082): accounts dragged in the column and the rail, files from
+    // outside as bytes (a composer takes a PNG and a 5 MB file). Sets up and removes alice and bob.
+    "./tests/e2e/stage23-drag.e2e.mjs",
     // Stage 21, item 4 (decision 0071): the spacing pass, every main view light and dark at
     // 1280×800 and 900×600, measured. Sets up alice and bob itself, appends `Spacing <run>`
     // messages, and leaves theme, density and the column as it found them.
