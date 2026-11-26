@@ -280,7 +280,7 @@ function useCardPlacement(card: RefObject<HTMLElement | null>, enabled: boolean)
     const host = node?.parentElement;
     if (!enabled || !node || !host) return undefined;
     let frame = 0;
-    let watched: readonly Element[] = [];
+    let watched: readonly HTMLElement[] = [];
     const resize = new ResizeObserver(() => {
       schedule();
     });
@@ -298,9 +298,10 @@ function useCardPlacement(card: RefObject<HTMLElement | null>, enabled: boolean)
       if (frame === 0) frame = window.requestAnimationFrame(place);
     };
     // A view or a layout replaced: the reading area may be another element now. The card's own
-    // changes (typing) do not matter.
+    // changes (typing) and the rows of the list (scrolling) do not matter.
     const mutations = new MutationObserver((records) => {
-      if (records.some((record) => !node.contains(record.target))) schedule();
+      const list = watched[2];
+      if (records.some((record) => !node.contains(record.target) && !list?.contains(record.target))) schedule();
     });
     mutations.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-reading-pane"] });
     place();
@@ -344,15 +345,18 @@ function placeCard(node: HTMLElement, host: HTMLElement): HTMLElement[] {
       }
     }
   }
-  node.style.setProperty("--composer-top", `${String(Math.max(0, Math.round(top)))}px`);
-  if (start === null) {
-    node.style.removeProperty("--composer-start");
-    node.dataset["placement"] = "end";
-  } else {
-    node.style.setProperty("--composer-start", `${String(Math.max(0, Math.round(start)))}px`);
-    node.dataset["placement"] = "area";
-  }
-  return [host, area, list].filter((element): element is HTMLElement => element !== null);
+  // Written only when it changed: an unchanged card needs no new style.
+  const set = (name: string, value: string | null) => {
+    if (value === null) {
+      if (node.style.getPropertyValue(name) !== "") node.style.removeProperty(name);
+    } else if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value);
+  };
+  set("--composer-top", `${String(Math.max(0, Math.round(top)))}px`);
+  set("--composer-start", start === null ? null : `${String(Math.max(0, Math.round(start)))}px`);
+  const placement = start === null ? "end" : "area";
+  if (node.dataset["placement"] !== placement) node.dataset["placement"] = placement;
+  // In this order: the window's content, the reading area, the list (read by the observer).
+  return area ? (list ? [host, area, list] : [host, area]) : [host];
 }
 
 interface ComposerFrameProps {

@@ -220,7 +220,7 @@ export function ComposerMenu({
           aria-describedby={note ? noteId : undefined}
           onKeyDown={onMenuKeyDown}
           className={cx(
-            "absolute z-30 flex max-h-(--ui-picker-list-height) w-max max-w-[min(var(--ui-composer-menu-max-width),calc(100vw-var(--ui-space-4)))] min-w-(--ui-reading-menu-width) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
+            "absolute z-30 flex max-h-[calc(100vh-var(--ui-space-12)*2)] w-max max-w-[min(var(--ui-composer-menu-max-width),calc(100vw-var(--ui-space-4)))] min-w-(--ui-reading-menu-width) flex-col overflow-y-auto rounded-card border border-border bg-surface-raised p-1 shadow-floating",
             "top-full mt-1 data-[side=above]:top-auto data-[side=above]:bottom-full data-[side=above]:mt-0 data-[side=above]:mb-1",
             align === "end" ? "end-0" : "start-0",
           )}
