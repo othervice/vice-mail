@@ -137,6 +137,19 @@ gelernt sind, in Ruhe; jede Verschiebung hat eine eigene Anfrage-ID. Ein Test im
 (`new_spam_goes_to_junk_unannounced_and_undo_learns_it_as_ham`) prüft das nun mit; ohne die
 Korrektur schlägt er fehl (gegengeprüft).
 
+## Desktop-Test
+
+`app/tests/e2e/spam-filter.e2e.mjs` in der echten App gegen den Testserver (10.000 Mails im
+Posteingang, wie die anderen Desktop-Tests): Schalter in Einstellungen → Posteingang, 60 Angebote
+in den Spam-Ordner und 220 gelesene Briefe in den Posteingang gelegt, „Jetzt lernen“: 61 Spam- und
+1.000 andere Mails (die 220 Briefe und 780 gelesene Mails des Seeds) in
+9–13 s gelernt (drei Läufe), nichts ausgelassen. Ein neues Angebot lag 298–440 ms nach dem Ablegen im
+Spam-Ordner des Servers, mit Hinweis, Marke „Spamfilter“ und Notiz (99,9 %); „Kein Spam“ in der
+Notiz brachte es zurück, und es blieb im Posteingang. Ohne Schreibzugriff wurde ein weiteres
+Angebot nur markiert („Spam?“, Notiz ohne „In den Spam-Ordner“), auf dem Server änderte sich
+nichts; „Kein Spam“ nahm die Marke weg. Bilder (deutsch, hell und dunkel) entstehen als
+`tests/e2e/screenshots/spam-*.png`.
+
 ## Ungeprüft
 
 - Echte, deutschsprachige Postfächer; neuer Spam (der Korpus ist von 2002–2005).
