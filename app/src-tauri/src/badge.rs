@@ -854,16 +854,12 @@ pub fn on_icon(icon: &Rgba, count: u32) -> Result<Rgba, BadgeError> {
     let labels = siblings(&text);
     // The badge is 5/8 of the icon high: a circle for one digit, a pill for more (at most as
     // wide as the icon), as wide as the widest label of the same length needs, with the largest
-    // digits with which all of them stand on solid ground. Where a pill's round ends leave too
-    // little room (three glyphs at 16 px), its corners get tighter; larger digits win over
-    // rounder corners.
+    // digits with which all of them stand on solid ground. Where round ends leave too little room
+    // (one digit up to 20 px, three glyphs at 16 px), the corners get tighter: larger digits win
+    // over rounder corners, so one digit is never smaller than two.
     let pill_h = (n * 5).div_ceil(8).max(7);
     let pad = (pill_h / 8).max(1);
-    let roundness: &[f32] = if text.chars().count() == 1 {
-        &[0.5]
-    } else {
-        &[0.5, 0.3, 0.15]
-    };
+    let roundness: &[f32] = &[0.5, 0.3, 0.15];
     for height in heights(pill_h - 2) {
         let glyphs = Glyphs::new(height)?;
         let lines = labels
@@ -1122,6 +1118,25 @@ mod tests {
         assert!(height(7, 16) >= 8, "{}", height(7, 16));
         assert!(height(42, 16) >= 7, "{}", height(42, 16));
         assert!(height(100, 16) >= 5, "{}", height(100, 16));
+    }
+
+    #[test]
+    fn in_the_tray_one_digit_is_never_smaller_than_two() {
+        let height = |image: &Rgba| {
+            (0..image.h())
+                .filter(|&y| (0..image.w()).any(|x| whiteness(image.at(x, y)) > 0.9))
+                .count()
+        };
+        for size in [16usize, 20, 24, 32] {
+            let icon = Rgba {
+                width: size as u32,
+                height: size as u32,
+                pixels: [0x40, 0x40, 0x40, 0xFF].repeat(size * size),
+            };
+            let one = height(&on_icon(&icon, 7).expect("drawn"));
+            let two = height(&on_icon(&icon, 77).expect("drawn"));
+            assert!(one >= two, "{size}px: 7 is {one} rows, 77 is {two}");
+        }
     }
 
     #[test]
