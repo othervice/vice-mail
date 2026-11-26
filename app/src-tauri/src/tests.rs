@@ -910,7 +910,8 @@ fn window_layout_belongs_to_the_calling_window() {
         "sidebarExpanded": false,
         "sidebarWidth": 300,
         "listWidth": 500,
-        "listHeight": 260
+        "listHeight": 260,
+        "contactPanel": false
     });
     // The accounts-and-folders column is shown by default, 240 pixels wide; the list is 384
     // pixels wide beside the reading pane and 320 high above it (stage 18).
@@ -920,7 +921,8 @@ fn window_layout_belongs_to_the_calling_window() {
         "sidebarExpanded": true,
         "sidebarWidth": 240,
         "listWidth": 384,
-        "listHeight": 320
+        "listHeight": 320,
+        "contactPanel": true
     });
     assert_eq!(
         invoke(&h, "get_window_layout", json!({})).expect("get"),
@@ -978,7 +980,8 @@ fn window_layout_belongs_to_the_calling_window() {
         "sidebarExpanded": false,
         "sidebarWidth": 240,
         "listWidth": 384,
-        "listHeight": 320
+        "listHeight": 320,
+        "contactPanel": true
     });
     invoke_from(&first, "set_window_layout", json!({ "layout": replace })).expect("set");
     let second = WebviewWindowBuilder::new(&h.app, label(2), Default::default())

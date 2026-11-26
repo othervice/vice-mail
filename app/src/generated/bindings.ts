@@ -6384,6 +6384,11 @@ export type WindowLayout = {
 	 *  default); the same handle sets it when the pane is below the list.
 	 */
 	listHeight: number,
+	/**
+	 *  Stage 23 (decision 0084): the contact panel right of the reading pane is shown (on by
+	 *  default; a window too narrow for it hides it and keeps this value).
+	 */
+	contactPanel: boolean,
 };
 
 /* Tauri Specta runtime */

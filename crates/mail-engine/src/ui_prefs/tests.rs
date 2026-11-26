@@ -552,6 +552,7 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
         sidebar_width: 280,
         list_width: 640,
         list_height: 400,
+        contact_panel: false,
     };
     let message = WindowLayout {
         reading_pane: ReadingPanePosition::Replace,
@@ -577,7 +578,8 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
             "sidebarExpanded": false,
             "sidebarWidth": 280,
             "listWidth": 640,
-            "listHeight": 400
+            "listHeight": 400,
+            "contactPanel": false
         }))
     );
 
@@ -616,7 +618,8 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
     }
     assert_eq!(core.get_window_layout("main").await.expect("main"), main);
     // A layout stored before the width existed keeps its other fields; a width out of range
-    // reads as the default. The same for the list's size (stage 18), each size on its own.
+    // reads as the default. The same for the list's size (stage 18), each size on its own, and
+    // the contact panel (stage 23), shown when the stored layout does not say.
     core.store_for_tests()
         .put_settings(
             GLOBAL_SCOPE,
@@ -641,6 +644,7 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
             sidebar_width: mail_model::DEFAULT_SIDEBAR_WIDTH,
             list_width: mail_model::DEFAULT_LIST_WIDTH,
             list_height: mail_model::DEFAULT_LIST_HEIGHT,
+            contact_panel: true,
             ..main
         }
     );
@@ -663,6 +667,7 @@ async fn window_layouts_are_stored_per_slot_on_this_device() {
         core.get_window_layout("main").await.expect("main"),
         WindowLayout {
             list_width: mail_model::DEFAULT_LIST_WIDTH,
+            contact_panel: true,
             ..main
         }
     );

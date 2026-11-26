@@ -33,6 +33,8 @@ export const DEFAULT_WINDOW_LAYOUT: CoreWindowLayout = {
   sidebarWidth: 240,
   listWidth: 384,
   listHeight: 320,
+  // Stage 23: the contact panel stays folded unless a test asks for it (jsdom's window has room).
+  contactPanel: false,
 };
 
 /** What Tauri answers a window command the capability does not allow (a plain string). */

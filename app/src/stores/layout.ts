@@ -43,6 +43,8 @@ export interface WindowLayout {
   listWidth: number;
   /** Stage 18: the list's height above the reading pane, px at 100 % text size (160 to 1600). */
   listHeight: number;
+  /** Stage 23 (decision 0084): the contact panel right of the reading pane is shown. */
+  contactPanel: boolean;
 }
 
 export const DEFAULT_LAYOUT: WindowLayout = {
@@ -53,6 +55,7 @@ export const DEFAULT_LAYOUT: WindowLayout = {
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
   listWidth: LIST_WIDTH.default,
   listHeight: LIST_HEIGHT.default,
+  contactPanel: true,
 };
 
 /** A size the core accepts: whole pixels within its limits (anything else: the default). */
@@ -81,6 +84,7 @@ export function parseStoredLayout(raw: unknown): WindowLayout {
     sidebarWidth: DEFAULT_LAYOUT.sidebarWidth,
     listWidth: DEFAULT_LAYOUT.listWidth,
     listHeight: DEFAULT_LAYOUT.listHeight,
+    contactPanel: DEFAULT_LAYOUT.contactPanel,
   };
 }
 
@@ -113,6 +117,7 @@ const windowPart = (layout: WindowLayout): CoreWindowLayout => ({
   sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
   listWidth: storedSize(layout.listWidth, LIST_WIDTH),
   listHeight: storedSize(layout.listHeight, LIST_HEIGHT),
+  contactPanel: layout.contactPanel,
 });
 
 /**
@@ -139,7 +144,8 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
         change.sidebarExpanded !== undefined ||
         change.sidebarWidth !== undefined ||
         change.listWidth !== undefined ||
-        change.listHeight !== undefined
+        change.listHeight !== undefined ||
+        change.contactPanel !== undefined
       ) {
         saveWindowLayout(windowPart(next)).catch(failed);
       }
@@ -152,6 +158,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => {
         sidebarWidth: storedSidebarWidth(layout.sidebarWidth),
         listWidth: storedSize(layout.listWidth, LIST_WIDTH),
         listHeight: storedSize(layout.listHeight, LIST_HEIGHT),
+        contactPanel: layout.contactPanel,
       };
       applyToDocument({ density: next.density, textSize: get().textSize });
       set(next);

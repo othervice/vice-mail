@@ -69,6 +69,7 @@ export async function migrateLocalFallback(preferences: UiPreferences, layout: C
           sidebarWidth: layout.sidebarWidth,
           listWidth: layout.listWidth,
           listHeight: layout.listHeight,
+          contactPanel: layout.contactPanel,
         }
       : null;
 
