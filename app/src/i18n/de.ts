@@ -633,12 +633,6 @@ export const de: Translation = {
       originalHint: "Diese Nachricht so zeigen, wie der Absender sie gestaltet hat, auf weißem Grund",
       adaptedHint: "Diese Nachricht an das dunkle Design angepasst zeigen",
     },
-    replyRow: {
-      label: "Antworten und weiterleiten",
-      reply: "{{name}} antworten",
-      replyAll: "Allen Beteiligten antworten",
-      forward: "Diese Mail weiterleiten",
-    },
     card: {
       menu: "Mehr zu dieser Mail",
     },

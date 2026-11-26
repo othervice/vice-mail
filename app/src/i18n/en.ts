@@ -640,12 +640,6 @@ export const en = {
       originalHint: "Show this message as the sender designed it, on a white page",
       adaptedHint: "Show this message adapted to the dark theme",
     },
-    replyRow: {
-      label: "Reply and forward",
-      reply: "Reply to {{name}}",
-      replyAll: "Reply to everyone",
-      forward: "Forward this message",
-    },
     card: {
       menu: "More for this message",
     },
