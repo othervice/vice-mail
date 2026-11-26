@@ -61,6 +61,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0026_list_sort.sql")),
     // Stage 21: "Mark folder as read" as an operation of its own (decision 0063).
     M::up(include_str!("../migrations/0027_mark_mailbox.sql")),
+    // Stage 22, item 6: the learning spam filter, class Device (decision 0077). The numbers 0028
+    // to 0030 are reserved for the other items of stage 22.
+    M::up(include_str!("../migrations/0031_spam_filter.sql")),
 ];
 
 /// All migrations this build knows.

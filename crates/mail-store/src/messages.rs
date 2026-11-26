@@ -377,6 +377,7 @@ pub(crate) fn list(
                 task: None,
                 reading_list: false,
                 follow_up: None,
+                spam: None,
                 size: crate::lists::size_at(r, 14)?,
             })
         })?

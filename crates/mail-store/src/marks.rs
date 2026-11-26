@@ -309,11 +309,15 @@ pub(crate) const ROW_MARKS: &str = "
            EXISTS (SELECT 1 FROM reading_list r
                    WHERE r.account_uuid = ?2 AND r.message_id_hdr = m.message_id_hdr),
            (SELECT json_array(f.due, f.sent_at, f.returned_at IS NOT NULL) FROM follow_up f
-            WHERE f.account_uuid = ?2 AND f.message_id_hdr = m.message_id_hdr)
+            WHERE f.account_uuid = ?2 AND f.message_id_hdr = m.message_id_hdr),
+           (SELECT v.mark FROM spam_verdict v
+            WHERE v.message_id = m.id
+              AND (v.mark = 'suspected' OR (SELECT b.role FROM mailbox b WHERE b.id = ?3) = 'junk'))
     FROM message m WHERE m.id = ?1";
 
 /// Fills the stage-9 marks of list rows: category, important, pinned, snooze, task; stage 16
-/// the reading list, stage 20 the reminder if no reply comes.
+/// the reading list, stage 20 the reminder if no reply comes, stage 22 the spam filter's mark
+/// (a mail it moved shows it only in the junk folder).
 pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Result<(), StoreError> {
     if items.is_empty() {
         return Ok(());
@@ -321,20 +325,25 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
     let mut stmt = conn.prepare_cached(ROW_MARKS)?;
     for item in items.iter_mut() {
         let marks = stmt
-            .query_row(params![item.id.0, item.account_id.to_string()], |r| {
-                Ok((
-                    r.get::<_, Option<i64>>(0)?,
-                    r.get::<_, bool>(1)?,
-                    r.get::<_, bool>(2)?,
-                    r.get::<_, Option<i64>>(3)?,
-                    r.get::<_, Option<bool>>(4)?,
-                    r.get::<_, Option<bool>>(5)?,
-                    r.get::<_, bool>(6)?,
-                    r.get::<_, Option<String>>(7)?,
-                ))
-            })
+            .query_row(
+                params![item.id.0, item.account_id.to_string(), item.mailbox_id.0],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<i64>>(0)?,
+                        r.get::<_, bool>(1)?,
+                        r.get::<_, bool>(2)?,
+                        r.get::<_, Option<i64>>(3)?,
+                        r.get::<_, Option<bool>>(4)?,
+                        r.get::<_, Option<bool>>(5)?,
+                        r.get::<_, bool>(6)?,
+                        r.get::<_, Option<String>>(7)?,
+                        r.get::<_, Option<String>>(8)?,
+                    ))
+                },
+            )
             .optional()?;
-        let Some((category, important, pinned, until, returned, done, reading, follow_up)) = marks
+        let Some((category, important, pinned, until, returned, done, reading, follow_up, spam)) =
+            marks
         else {
             continue;
         };
@@ -348,6 +357,7 @@ pub(crate) fn decorate(conn: &Connection, items: &mut [MessageListItem]) -> Resu
         item.task = done.map(|done| TaskMark { done });
         item.reading_list = reading;
         item.follow_up = crate::follow_ups::mark_from_json(follow_up.as_deref());
+        item.spam = spam.as_deref().and_then(crate::spam::mark_of);
     }
     Ok(())
 }

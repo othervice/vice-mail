@@ -78,6 +78,7 @@ mod settings;
 pub mod settings_sync;
 mod signatures;
 mod sort_keys;
+mod spam;
 mod store;
 mod threads;
 mod views;
@@ -140,6 +141,10 @@ pub use signatures::{
     SignatureDefaults, SignatureRow, StoredSignature, StoredSignatureImage, StoredTemplate,
     TemplateRow,
 };
+pub use spam::{
+    Learned, MAX_SPAM_TOKENS_STORED, SpamClass, SpamLookup, SpamModelSize, SpamSenderFacts,
+    StoredSpamFields,
+};
 pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 pub use views::{ViewFilter, ViewQuery};
 
@@ -177,6 +182,8 @@ mod plan_tests;
 mod settings_sync_tests;
 #[cfg(test)]
 mod signature_tests;
+#[cfg(test)]
+mod spam_tests;
 #[cfg(test)]
 mod stage16_tests;
 #[cfg(test)]

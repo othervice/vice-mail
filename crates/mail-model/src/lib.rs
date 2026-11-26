@@ -51,6 +51,7 @@ mod send;
 mod settings_sync;
 mod snippets;
 mod source;
+mod spam_filter;
 mod takeover;
 mod text;
 pub mod threading;
@@ -247,6 +248,11 @@ pub use snippets::{
 pub use source::{
     HeaderField, MAX_HEADER_FIELDS, MAX_HEADER_VALUE_CHARS, MAX_REDIRECT_RECIPIENTS,
     MAX_SOURCE_BYTES, MessageSource, RedirectRequest,
+};
+pub use spam_filter::{
+    MAX_LEARN_HAM, MAX_LEARN_SPAM, MAX_SPAM_EXCLUDED_ACCOUNTS, MAX_SPAM_FEEDBACK_MESSAGES,
+    MIN_LEARNED_HAM, MIN_LEARNED_SPAM, SPAM_THRESHOLD, SpamFilterMark, SpamFilterSettings,
+    SpamFilterStatus, SpamLearning, SpamLearningState, SpamVerdict,
 };
 pub use takeover::{
     MAX_SIGNATURE_FILE_BYTES, MAX_TAKEOVER_FOLDERS, TakeoverAccount, TakeoverAccountKind,
