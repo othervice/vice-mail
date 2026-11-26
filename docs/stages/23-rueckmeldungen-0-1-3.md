@@ -46,7 +46,13 @@ sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist
     Zitat-Optionen, Archivieren, Lesebestätigung, Erinnern, „Später senden“ als eigener Knopf.
   - Werkzeugleiste des Lesebereichs mit „Schreibgeschützt · Änderungen erlauben …“ als Text.
   - Seitenleiste mit zehn Ansichten untereinander, Zähler überall gleich laut.
-- Vorschläge stehen in der Antwort vom 26.11.; was gewählt wird, kommt hierher.
+- Vorgeschlagen am 26.11.: weniger Text, neue Mail aufräumen, ruhigere Listen und Lesebereich,
+  strenges Design-System. **Gewählt: nur „Weniger Text“**, und zwar mit Entwürfen vorab: Erst
+  Vorher/Nachher für einige Bereiche zeigen, nach der Freigabe alle Texte (Deutsch und Englisch)
+  so kürzen.
+- Plan: eine kurze Schreibregel für UI-Texte (Ton, Länge, was nie erklärt wird) und Entwürfe für
+  Einstellungen → Allgemein und Posteingang (mit Spamfilter), Einstellungs-Sync, die neue Mail
+  und die häufigsten Meldungen und Dialoge, mit Bildschirmfotos vorher und nachher.
 
 ## Ergebnis
 
