@@ -2,19 +2,21 @@
 // dark, at 1280×800 and at the narrowest supported window (900×600), as a screenshot, and measured
 // against the rules that make it look finished (docs/DESIGN.md, "Abstände"):
 //
-// - header-height: the bars at the top of the window (view headers, the column's top, the
-//   composer's and the AI panel's header) are `--ui-header-height` high;
+// - header-height: the bars at the top of the window (stage 23, decision 0084: the toolbar across
+//   the window; the composer's and the AI panel's header) are `--ui-header-height` high;
 // - bars-align: the bars right under the header that stand side by side (the list's quick filter
-//   or table header, the reading pane's toolbar) end on the same line; beside the reading pane at
-//   the list's default width the quick filter is one row;
-// - equal-heights: the controls of one bar (buttons, icon buttons, chips, fields, selects) are
-//   equally high and, in a bar of one row, share their middle;
+//   or table header, the selection bar) end on the same line; beside the reading pane at the
+//   list's default width the quick filter is one row;
+// - equal-heights: the controls of one row of a bar (buttons, icon buttons, chips, fields,
+//   selects) are equally high and share their middle (stage 23: per row; the selection bar's
+//   buttons are 32 px, the joined action groups under them the toolbar's 28 px);
 // - field-height: framed fields and selects are 32 px;
 // - icon-gap: 8 px between the icon and the label of a button, menu entry, navigation row or
 //   palette entry, 4 px in round chips and small buttons with 12 px text;
-// - edges: what stands in one column starts at one inset (the list's title, section labels and
-//   the rows' mark column, stage 22: no avatars; the column's section labels and row icons; the palette's group labels and icons; the
-//   activity view and its header);
+// - edges: what stands in one column starts at one inset (the list's title in the toolbar and the
+//   date bands' labels, 16 px; the rows' mark column at the rows' 8 px lead, stage 23, decision
+//   0084; stage 22: no avatars; the column's section labels and row icons; the palette's group
+//   labels and icons);
 // - clipped: no text is cut off without an ellipsis, chips and pills never (the replies pill's
 //   word keeps at least 2.5 em or goes), and no text runs past its card, menu or dialog.
 //
@@ -175,7 +177,6 @@ const PROBE = () => {
   };
   const barName = (el) => {
     if (el.matches("header")) return `header ${el.querySelector("h1")?.textContent?.trim() ?? where(el)}`;
-    if (el.parentElement?.matches('[data-testid="reading-pane"]')) return "reading toolbar";
     if (el.parentElement?.matches('[data-testid="sidebar-column"]')) return "column top";
     if (el.parentElement?.matches('[data-testid="search-bar"]')) return "search bar";
     return where(el);
@@ -183,7 +184,6 @@ const PROBE = () => {
   const bars = [
     ...[...document.querySelectorAll("header")].filter((header) => !header.closest("article, [data-testid='message-card']")),
     ...document.querySelectorAll('[data-testid="sidebar-column"] > div:first-child'),
-    ...document.querySelectorAll('[data-testid="reading-pane"] > div:first-child'),
     ...document.querySelectorAll('[data-testid="quick-filter"], [data-testid="table-header"], [data-testid="selection-bar"], [role="toolbar"]'),
     ...document.querySelectorAll('[data-testid="search-bar"] > div:first-child'),
   ]
@@ -313,15 +313,17 @@ const PROBE = () => {
   };
   const list = document.querySelector('[data-testid="message-list"]');
   const column = document.querySelector('[data-testid="sidebar-column"]');
-  const header = document.querySelector("main header");
-  const defaultInset = header ? Math.abs(Number.parseFloat(getComputedStyle(header).paddingInlineStart) - length("--ui-space-6")) < 0.5 : false;
-  const activity = document.querySelector('[data-testid="activity-view"]');
+  // Stage 23 (decision 0084): the list's title stands in the toolbar's segment over the list; it
+  // lines up with the list where that segment starts with the list (the column docked; beside the
+  // folded rail the window buttons and the toolbar's first buttons take more room than the rail).
+  const listSlot = document.querySelector('[data-testid="toolbar-list"]');
+  const listColumn = list?.parentElement ?? null;
+  const slotAligned = Boolean(listSlot && listColumn && shown(list) && Math.abs(listSlot.getBoundingClientRect().left - listColumn.getBoundingClientRect().left) < 1);
   const edges = {
-    // The title's inset is larger where the macOS window buttons reach into the header.
-    listTitle: list && shown(list) && defaultInset ? textLeftOf("main header h1") : null,
-    viewTitle: defaultInset ? textLeftOf("main header h1") : null,
-    activityStart: activity && shown(activity) ? leftOf(':scope > div > *, :scope > *', activity) : null,
+    listTitle: slotAligned ? textLeftOf('[data-testid="toolbar-list"] h1') : null,
     listSection: list ? textLeftOf('[data-testid="list-section"] span, [data-testid="list-section"]', list) : null,
+    listLeft: list && shown(list) ? round(list.getBoundingClientRect().left) : null,
+    rowLead: length("--ui-row-lead"),
     // A row of the list itself, not one inside a card (priority, an unfolded bundle). Stage 22: the
     // mark column (unread dot, selection box) where the avatar was.
     rowMark: list
@@ -380,7 +382,7 @@ function rules(scene, facts) {
     const under = facts.bars.filter(
       (b) =>
         near(b.top, header.bottom, 1.5) &&
-        ["quick-filter", "table-header", "reading toolbar", "selection-bar"].includes(b.name) &&
+        ["quick-filter", "table-header", "selection-bar"].includes(b.name) &&
         !(b.name === "quick-filter" && b.width < 383 * s),
     );
     const bottoms = [...new Set(under.map((b) => b.bottom))];
@@ -388,18 +390,25 @@ function rules(scene, facts) {
       fail("bars-align", under.map((b) => `${b.name} ${String(b.top)}–${String(b.bottom)}`).join(", "));
     }
   }
-  // equal-heights: the controls of a bar.
+  // equal-heights: the controls of one row of a bar (stage 23: per row, a row being the controls
+  // whose middles lie within 8 px of each other; the rail and the column's foot stack theirs).
   for (const bar of facts.bars) {
     if (bar.controls.length < 2) continue;
-    const heights = bar.controls.map((c) => c.height);
-    const middles = bar.controls.map((c) => c.middle);
-    // A bar of one row: as high as its tallest control and some padding (the rail and the
-    // column's foot stack their controls; a wrapped quick filter has rows of its own).
-    const oneRow = bar.height < Math.max(...heights) * 1.9;
-    if (Math.max(...heights) - Math.min(...heights) > 0.6) {
-      fail("equal-heights", `${bar.name}: ${bar.controls.map((c) => `${c.testid ?? c.label} ${String(c.height)}`).join(", ")}`);
-    } else if (oneRow && Math.max(...middles) - Math.min(...middles) > 1) {
-      fail("equal-heights", `${bar.name}: middles ${JSON.stringify(middles)}`);
+    const rows = [];
+    for (const control of [...bar.controls].sort((a, b) => a.middle - b.middle)) {
+      const row = rows.find((r) => Math.abs(r[0].middle - control.middle) <= 8);
+      if (row) row.push(control);
+      else rows.push([control]);
+    }
+    for (const row of rows) {
+      if (row.length < 2) continue;
+      const heights = row.map((c) => c.height);
+      const middles = row.map((c) => c.middle);
+      if (Math.max(...heights) - Math.min(...heights) > 0.6) {
+        fail("equal-heights", `${bar.name}: ${row.map((c) => `${c.testid ?? c.label} ${String(c.height)}`).join(", ")}`);
+      } else if (Math.max(...middles) - Math.min(...middles) > 1) {
+        fail("equal-heights", `${bar.name}: middles ${JSON.stringify(middles)}`);
+      }
     }
   }
   // field-height: framed fields and selects are 32 px (docs/DESIGN.md, "Felder, Auswahllisten").
@@ -425,11 +434,10 @@ function rules(scene, facts) {
   const same = (what, a, b) => {
     if (a !== null && b !== null && !near(a, b, 1)) fail("edges", `${what}: ${String(a)} vs ${String(b)}`);
   };
-  same("list title vs row mark", e.listTitle, e.rowMark);
-  same("list section vs row mark", e.listSection, e.rowMark);
+  same("list title vs date band", e.listTitle, e.listSection);
+  same("row mark at the rows' lead", e.rowMark, e.listLeft === null ? null : e.listLeft + e.rowLead);
   if (e.rowAvatars > 0) fail("edges", `${String(e.rowAvatars)} avatars in the list (decision 0072)`);
   same("column section vs row icon", e.columnSection, e.columnRowIcon);
-  same("activity title vs content", e.viewTitle, e.activityStart);
   same("palette group vs option icon", e.paletteGroup, e.paletteIcon);
   return failures;
 }

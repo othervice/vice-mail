@@ -4698,7 +4698,6 @@ export const de: Translation = {
     ctrlKey: "Strg",
   },
   toolbar: {
-    searchPlaceholder: "Suchen",
     unread: "{{count, number}} ungelesen",
     filter: "Schnellfilter",
     filterShow: "Schnellfilter einblenden",

@@ -166,7 +166,7 @@ describe("stage 4: actions and the outbox", () => {
     await showRole("inbox");
     await openRow(0);
     const buttons = await browser.execute(() =>
-      [...document.querySelectorAll('[data-testid="action-toolbar"] button')].map((b) => ({
+      [...document.querySelectorAll('[data-testid="action-toolbar"] button[data-testid^="action-"]:not([data-testid="action-more"])')].map((b) => ({
         id: b.dataset.testid.replace(/^action-/, ""),
         disabled: b.getAttribute("aria-disabled") === "true",
       })),

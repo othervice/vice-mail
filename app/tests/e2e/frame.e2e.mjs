@@ -125,7 +125,7 @@ describe("app frame (stage 1)", () => {
     for (const id of RAIL) assert.ok(await testId(`rail-${id}`).isDisplayed(), `rail-${id} visible`);
     assert.equal(await testId("rail-inbox").getAttribute("aria-label"), "Inbox");
 
-    const header = $("main header h1");
+    const header = $("[data-testid=\"app-toolbar\"] h1");
     assert.ok(await header.isDisplayed());
     assert.equal(await header.getText(), "Inbox");
 
@@ -136,8 +136,8 @@ describe("app frame (stage 1)", () => {
     report.column = await $$('[data-testid="sidebar-column"] [data-testid^="rail-"], [data-testid="sidebar-column"] [data-testid^="sidebar-view-"]').map((el) =>
       el.getAttribute("data-testid"),
     );
+    // Stage 23 (decision 0084): the column's toggle stands in the toolbar across the window.
     assert.deepEqual(report.column, [
-      "rail-folders",
       ...["later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
       "rail-activity",
       "rail-outbox",
@@ -168,7 +168,7 @@ describe("app frame (stage 1)", () => {
     const controls = await coreCall("e2e_window_controls");
     const state = await documentState();
     report.windowControls = controls;
-    report.titlebarInsetToken = state.titlebarInset;
+    report.toolbar = state.toolbar;
     assert.equal(controls.buttons.length, 3);
     const boxes = await controlBoxes();
     const clashes = [];
@@ -177,14 +177,19 @@ describe("app frame (stage 1)", () => {
     }
     report.windowButtonClashes = clashes;
     assert.deepEqual(clashes, []);
-    // The buttons sit inside the title-bar band the frame keeps free.
-    const inset = Number.parseFloat(state.titlebarInset);
-    for (const b of controls.buttons) assert.ok(b.y + b.height <= inset, `${b.name} below the ${inset}px inset`);
+    // Stage 23 (decision 0084): the buttons sit in the toolbar across the window, the title bar,
+    // centred on its 52 px (±2 px) and before its first segment's controls.
+    assert.equal(state.toolbar?.top, 0);
+    assert.equal(state.toolbar?.height, 52);
+    for (const b of controls.buttons) {
+      assert.ok(b.y + b.height <= state.toolbar.height, `${b.name} inside the toolbar`);
+      assert.ok(Math.abs(b.y + b.height / 2 - state.toolbar.height / 2) <= 2, `${b.name} centred on the toolbar: ${JSON.stringify(b)}`);
+    }
   });
 
   it("opens the settings with all five sections", async () => {
     await testId("rail-settings").click();
-    assert.equal(await $("main header h1").getText(), "Settings");
+    assert.equal(await $("[data-testid=\"app-toolbar\"] h1").getText(), "Settings");
     for (const id of ["general", "accounts", "reading", "appearance", "about"]) {
       assert.ok(await testId(`settings-tab-${id}`).isDisplayed(), `${id} tab`);
     }
@@ -225,7 +230,7 @@ describe("app frame (stage 1)", () => {
     });
     await setPreference("language", "de");
     // Right after the click, not after a reload: the marker survives and the texts are German.
-    await browser.waitUntil(async () => (await $("main header h1").getText()) === "Einstellungen", {
+    await browser.waitUntil(async () => (await $("[data-testid=\"app-toolbar\"] h1").getText()) === "Einstellungen", {
       timeout: 2000,
       timeoutMsg: "the settings title did not turn German",
     });
@@ -237,7 +242,7 @@ describe("app frame (stage 1)", () => {
     await screenshot("settings-general-de-dark");
 
     await setPreference("language", "en");
-    await browser.waitUntil(async () => (await $("main header h1").getText()) === "Settings", { timeout: 2000 });
+    await browser.waitUntil(async () => (await $("[data-testid=\"app-toolbar\"] h1").getText()) === "Settings", { timeout: 2000 });
     assert.equal(await testId("rail-settings").getAttribute("aria-label"), "Settings");
     assert.equal(await browser.execute(() => window.__e2eNoReload === true), true, "no reload");
   });

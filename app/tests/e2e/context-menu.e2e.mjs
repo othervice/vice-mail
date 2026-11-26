@@ -107,7 +107,8 @@ const rowFacts = (subject) =>
       checkShown: check ? getComputedStyle(check).display !== "none" : null,
       checkBox: box(check),
       senderBox: box(option.querySelector('[data-testid="row-sender"]')),
-      accountDot: box(option.querySelector('[data-testid="row-account-dot"]')),
+      // Stage 23 (decision 0084): the account's stripe at the row's right edge.
+      accountDot: box(option.querySelector('[data-testid="row-account"]')),
       actionsBox: box(actions),
       sender: option.querySelector('[data-testid="row-sender"]') ? getComputedStyle(option.querySelector('[data-testid="row-sender"]')).fontWeight : null,
       hovered: option.matches(":hover"),
@@ -329,7 +330,7 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     assert.ok(alicesRow.targets >= 4, `only ${String(alicesRow.targets)} quick actions`);
     // Stage 22: the account's label stays while the actions show, before them.
     assert.ok(alicesRow.accountDot && alicesRow.accountDot.width > 0, "no account dot on hover");
-    assert.ok(alicesRow.accountDot.right <= alicesRow.actionsBox.left, "the account dot is not before the quick actions");
+    assert.ok(alicesRow.accountDot.left >= alicesRow.actionsBox.right, "the account stripe is under the quick actions");
     assert.equal(alicesRow.archiveDisabled, null, "alice's archive is disabled");
     report.steps.unifiedAlice = alicesRow;
     report.screenshots.push(await screenshot("s21-unified-hover"));

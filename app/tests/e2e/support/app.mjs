@@ -52,6 +52,19 @@ export async function attach({ firstStart = "skip" } = {}) {
     return;
   }
   await skipFirstStart();
+  await hideContactPanel();
+}
+
+/**
+ * Stage 23 (decision 0084): the specs measure the window without the contact panel (it takes
+ * 264 px beside the reading pane where there is room); the choice is stored with the layout, so
+ * it stays off. A spec that wants the panel shows it with the toolbar's button.
+ */
+export async function hideContactPanel() {
+  await browser.execute(() => {
+    const toggle = document.querySelector('[data-testid="toolbar-contact-panel"]');
+    if (toggle?.getAttribute("aria-expanded") === "true") toggle.click();
+  });
 }
 
 /**
@@ -240,7 +253,11 @@ export function documentState() {
     title: document.title,
     bodyBackground: getComputedStyle(document.body).backgroundColor,
     canvasToken: getComputedStyle(document.documentElement).getPropertyValue("--ui-canvas").trim(),
-    titlebarInset: getComputedStyle(document.documentElement).getPropertyValue("--ui-titlebar-inset").trim(),
+    // Stage 23 (decision 0084): the toolbar across the window is the title-bar band.
+    toolbar: (() => {
+      const box = document.querySelector('[data-testid="app-toolbar"]')?.getBoundingClientRect();
+      return box ? { top: box.top, height: box.height } : null;
+    })(),
     viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio },
   }));
 }

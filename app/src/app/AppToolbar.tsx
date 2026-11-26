@@ -68,9 +68,9 @@ function SearchField() {
   const hint = shortcut && formatShortcut(shortcut, platform);
   return (
     <Tooltip label={hint ? t("actions.withShortcut", { label: t("search.open"), shortcut: hint }) : t("search.open")}>
+      {/* Named by its text ("Search"; only visually hidden where the field shows its symbol only). */}
       <button
         type="button"
-        aria-label={t("search.open")}
         aria-keyshortcuts={shortcut && ariaShortcut(shortcut, platform)}
         onClick={openSearch}
         // Narrow windows: its symbol only; wide ones: the draft's 260 px field.
@@ -82,9 +82,7 @@ function SearchField() {
         data-testid="toolbar-search"
       >
         <Search aria-hidden className="size-(--ui-icon-small) shrink-0" strokeWidth={1.75} />
-        <span aria-hidden className="hidden min-w-0 flex-1 truncate text-start @min-[70rem]/toolbar:inline">
-          {t("toolbar.searchPlaceholder")}
-        </span>
+        <span className="sr-only min-w-0 flex-1 truncate text-start @min-[70rem]/toolbar:not-sr-only">{t("search.open")}</span>
         {hint && (
           <span aria-hidden className="hidden shrink-0 text-11 tabular-nums @min-[70rem]/toolbar:inline">
             {hint}

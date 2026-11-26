@@ -128,7 +128,7 @@ async function startMarks(launchedAt, timeoutMs = 120000) {
   try {
     while (Date.now() < deadline) {
       perf = await webdriver("POST", `/session/${session}/execute/sync`, {
-        script: "return window.__e2ePerf ? JSON.parse(JSON.stringify({ perf: window.__e2ePerf, visibility: document.visibilityState, view: document.querySelector('main header h1')?.textContent ?? null, size: [innerWidth, innerHeight, devicePixelRatio] })) : null;",
+        script: "return window.__e2ePerf ? JSON.parse(JSON.stringify({ perf: window.__e2ePerf, visibility: document.visibilityState, view: document.querySelector('[data-testid=\"app-toolbar\"] h1')?.textContent ?? null, size: [innerWidth, innerHeight, devicePixelRatio] })) : null;",
         args: [],
       }).catch(() => null);
       const marks = perf?.perf?.marks ?? {};

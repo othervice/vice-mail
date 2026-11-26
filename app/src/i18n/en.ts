@@ -4717,7 +4717,6 @@ export const en = {
   },
   // Stage 23, step 3 (decision 0084): the toolbar across the window.
   toolbar: {
-    searchPlaceholder: "Search",
     unread: "{{count, number}} unread",
     filter: "Quick filter",
     filterShow: "Show the quick filter",

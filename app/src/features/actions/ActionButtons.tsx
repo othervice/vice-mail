@@ -85,7 +85,8 @@ export function ReadOnlyNote({ ctx, id, compact = false }: { ctx: ActionContext;
         onClick={() => {
           showAccountsPage({ kind: "account", accountId: ctx.account.id });
         }}
-        className="flex h-8 shrink-0 items-center rounded-control px-2 font-medium text-accent hover:bg-hover"
+        // Stage 23: as high as the toolbar's buttons beside it.
+        className="flex h-(--ui-toolbar-control) shrink-0 items-center rounded-control px-2 font-medium text-accent hover:bg-hover"
         data-testid="allow-changes"
       >
         {t("actions.readOnly.open")}

@@ -125,6 +125,12 @@ async function waitForDialog(check, message) {
 
 async function clickButton(label) {
   const button = await browser.$(`//button[@aria-label="${label}" or normalize-space(.)="${label}"]`);
+  // Stage 23 (decision 0084): an attachment card shows its buttons while the pointer is over it or
+  // the focus in it; the focus brings them out, as for a keyboard user.
+  await button.waitForExist({ timeout: 10000 });
+  await browser.execute((el) => {
+    if (el.closest('[data-testid="attachment"]')) el.focus();
+  }, button);
   await button.waitForClickable({ timeout: 10000 });
   await button.click();
 }

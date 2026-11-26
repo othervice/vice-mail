@@ -87,7 +87,8 @@ export function AppShell({ eventsError }: AppShellProps) {
   }, [docked]);
 
   return (
-    // `data-chrome`: with Mica (Windows 11, decision 0079) the frame is left transparent.
+    // `data-sidebar`: the column docked or folded; `data-chrome`: with Mica (Windows 11, decision
+    // 0079) the frame is left transparent.
     <div className="flex h-full flex-col bg-canvas text-primary" data-sidebar={docked ? "expanded" : "collapsed"} data-chrome>
       <AppToolbar />
       <div className="relative flex min-h-0 flex-1">

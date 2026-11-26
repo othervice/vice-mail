@@ -40,7 +40,14 @@ async function unfold(user: ReturnType<typeof renderApp>["user"]) {
 const ADA_ROW = `sidebar-account-${ADA.id}`;
 
 const focused = () => document.activeElement;
-const nameOf = (element: Element | null) => element?.getAttribute("aria-label") ?? element?.textContent ?? null;
+// The accessible name as screen readers compute it (aria-hidden parts left out, stage 23: the
+// toolbar's search is named by its text, not by its shortcut beside it).
+function visibleText(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(visibleText).join("");
+}
+const nameOf = (element: Element | null) => (element ? (element.getAttribute("aria-label") ?? visibleText(element)) : null);
 const heading = () => screen.getByRole("heading", { level: 1 }).textContent;
 
 /** The rows of a tree that Tab can reach: exactly one per tree. */

@@ -16,6 +16,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
 import { attach, coreCall, cspViolations, openSettings, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+
+/** Stage 23: conversations on or off from the list's "…" menu in the toolbar. */
+async function toggleConversations(on) {
+  await testId("list-options").click();
+  await testId("conversations-menu-toggle").click();
+  await browser.waitUntil(async () => (await coreCall("get_ui_preferences")).conversations === on, {
+    timeoutMsg: `conversations did not turn ${on ? "on" : "off"}`,
+  });
+}
 import { ALICE, SERVER } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -119,12 +128,13 @@ describe("stage 7: search, conversations, identities", () => {
 
   it("lists conversations in a plain folder and in the sorted inbox, and opens one", async () => {
     // Decision 0039: offered in the sorted inbox too; off since account-sync.e2e.mjs.
-    assert.equal(await testId("conversation-toggle").getAttribute("aria-pressed"), "false", "conversation toggle in the inbox");
+    // Stage 23 (decision 0084): the switch is in the list's "…" menu (the toolbar's own button
+    // shows in wide windows only).
+    assert.equal((await coreCall("get_ui_preferences")).conversations, false, "conversations off in the inbox");
     // The seed's 60-message thread "Planning the 2026 offsite" lies in Archive, INBOX and Sent.
     await openView("archive");
     await testId("message-list").waitForExist({ timeout: 20000 });
-    await testId("conversation-toggle").click();
-    await browser.waitUntil(async () => (await testId("conversation-toggle").getAttribute("aria-pressed")) === "true");
+    await toggleConversations(true);
     await testId("message-list").waitForExist({ timeout: 20000 });
     // Stage 17 (decision 0049): the list is a tree; a conversation row says "n replies".
     let first = null;
@@ -153,8 +163,7 @@ describe("stage 7: search, conversations, identities", () => {
       async () => (await browser.execute(() => document.querySelectorAll('[data-testid="row-replies"]').length)) > 0,
       { timeout: 20000, timeoutMsg: "no conversation row in the inbox" },
     );
-    await testId("conversation-toggle").click();
-    await browser.waitUntil(async () => (await testId("conversation-toggle").getAttribute("aria-pressed")) === "false");
+    await toggleConversations(false);
   });
 
   it("lists the account's identities in its settings", async () => {

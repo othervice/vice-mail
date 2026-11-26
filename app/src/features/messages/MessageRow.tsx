@@ -402,7 +402,6 @@ export function MessageRowContent({
         title={subject}
         className={cx(
           "min-w-0 truncate text-13",
-          twoLine && "flex-1",
           !shownSubject.text ? "text-tertiary" : item.unread ? "font-semibold text-primary" : "text-primary",
         )}
         data-testid="row-subject"
@@ -413,6 +412,9 @@ export function MessageRowContent({
           subject
         )}
       </span>
+      {/* Narrow rows: count and symbols at the line's end. A spacer, not a growing subject, so the
+          pill's word still gives way before the subject loses a letter (stage 17). */}
+      {twoLine && <span aria-hidden className="min-w-0 flex-1" />}
       {threadCount > 1 && <RepliesToggle replies={threadCount - 1} expanded={expanded} />}
       {item.hasAttachments && (
         <Paperclip aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />

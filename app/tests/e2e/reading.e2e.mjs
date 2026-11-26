@@ -506,7 +506,7 @@ async function showMailbox(mailbox) {
   const wasExpanded = await setSidebar(true);
   await testId(`mailbox-${mailbox.id}`).waitForExist();
   await testId(`mailbox-${mailbox.id}`).click();
-  await browser.waitUntil(async () => (await browser.execute(() => document.querySelector("main header h1")?.textContent)) === mailbox.name, {
+  await browser.waitUntil(async () => (await browser.execute(() => document.querySelector("[data-testid=\"app-toolbar\"] h1")?.textContent)) === mailbox.name, {
     timeoutMsg: `folder ${mailbox.path} did not open`,
   });
   await setSidebar(wasExpanded);

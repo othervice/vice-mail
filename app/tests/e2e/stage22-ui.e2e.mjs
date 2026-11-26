@@ -96,7 +96,7 @@ const rows = () =>
       return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
     };
     const list = document.querySelector('[data-testid="message-list"]');
-    const title = document.querySelector("main header h1");
+    const title = document.querySelector("[data-testid=\"app-toolbar\"] h1");
     const titleText = title ? (() => {
       const range = document.createRange();
       range.selectNodeContents(title);
@@ -107,7 +107,8 @@ const rows = () =>
       avatars: list ? list.querySelectorAll('[data-testid="avatar"], img').length : -1,
       rows: [...(list?.querySelectorAll('[data-testid="message-row"]') ?? [])].slice(0, 12).map((row) => {
         const label = row.querySelector('[data-testid="row-account"]');
-        const dot = row.querySelector('[data-testid="row-account-dot"]');
+        // Stage 23 (decision 0084): the account's stripe at the row's right edge.
+        const dot = label;
         const actions = row.querySelector('[data-testid="row-actions"]');
         return {
           name: row.querySelector('[data-testid="row-name"]')?.textContent ?? "",
@@ -229,7 +230,8 @@ describe("stage 22: no pictures, the mark column, account dots and the settings 
     const hovered = (await rows()).rows.find((r) => r.actions !== null);
     report.steps.unifiedHover = hovered;
     assert.ok(hovered.accountDot && hovered.accountDot.width > 0, "the account's dot went with the hover");
-    assert.ok(hovered.accountDot.right <= hovered.actions.left, "the account's dot is not before the quick actions");
+    // Stage 23 (decision 0084): the stripe at the row's edge, clear of the quick actions.
+    assert.ok(hovered.accountDot.left >= hovered.actions.right, "the account's stripe is under the quick actions");
     report.screenshots.push(await screenshot("s22-unified-hover-light"));
     await coreCall("e2e_native_mouse_event", { kind: "move", x: 2, y: 2, viewportHeight });
   });

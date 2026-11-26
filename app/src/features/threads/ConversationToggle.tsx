@@ -23,8 +23,8 @@ export function ConversationToggle() {
       onClick={() => {
         setOn(!on);
       }}
-      // Narrow windows: in the list's "…" menu only (where it is too).
-      className="@max-[70rem]/toolbar:hidden"
+      // Below 1600 px in the list's "…" menu only (where it is too), so the title keeps its room.
+      className="@max-[100rem]/toolbar:hidden"
       data-testid="conversation-toggle"
     />
   );
