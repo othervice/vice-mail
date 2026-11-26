@@ -214,7 +214,8 @@ describe("the names of the accounts", () => {
     const { core, user } = setup();
     useUiStore.getState().showSettings();
     useUiStore.getState().showAccountsPage({ kind: "account", accountId: WORK.id });
-    const field = await screen.findByRole("textbox", { name: "Name in the list" });
+    expect(await screen.findByRole("heading", { level: 3, name: "Name in the list" })).toBeTruthy();
+    const field = screen.getByRole("textbox", { name: "Name" });
     expect(field.getAttribute("placeholder")).toBe("work@example.com");
     expect(screen.getByText(/People you write to never see it/)).toBeTruthy();
     await user.type(field, "Arbeit");

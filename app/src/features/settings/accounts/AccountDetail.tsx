@@ -127,7 +127,7 @@ function ListNameBlock({ account }: { account: Account }) {
     <Block title={t("accountEdit.listName")}>
       <form noValidate onSubmit={submit} className="flex max-w-(--ui-form-max-width) flex-col gap-3" data-testid="account-list-name-form">
         <TextField
-          label={t("accountEdit.listName")}
+          label={t("accountEdit.nameLabel")}
           description={t("accountEdit.listNameDescription")}
           value={name}
           onChange={(next) => {

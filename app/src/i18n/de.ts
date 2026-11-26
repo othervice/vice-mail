@@ -4520,6 +4520,7 @@ export const de: Translation = {
     moveUpNamed: "{{name}} nach oben",
     moveDownNamed: "{{name}} nach unten",
     listName: "Name in der Liste",
+    nameLabel: "Name",
     listNameDescription: "Steht in der Ordnerspalte und überall, wo Konten aufgezählt sind. Leer zeigt die Adresse. Wem du schreibst, sieht ihn nie: Dort steht der Absendername einer Adresse weiter unten.",
     save: "Namen speichern",
     saved: "Gespeichert.",

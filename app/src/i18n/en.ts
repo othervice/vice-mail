@@ -4536,6 +4536,7 @@ export const en = {
     moveUpNamed: "Move {{name}} up",
     moveDownNamed: "Move {{name}} down",
     listName: "Name in the list",
+    nameLabel: "Name",
     listNameDescription: "Shown in the folder column and wherever accounts are listed. Empty shows the address. People you write to never see it: they see the sender name of an address below.",
     save: "Save name",
     saved: "Saved.",

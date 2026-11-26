@@ -56,7 +56,7 @@ function writeMessages(entries, offset = 0) {
 }
 
 async function addAccount(who, displayName) {
-  return coreCall("add_account", {
+  const added = await coreCall("add_account", {
     settings: {
       email: who.email,
       displayName,
@@ -65,6 +65,8 @@ async function addAccount(who, displayName) {
     },
     password: who.password,
   });
+  // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+  return coreCall("rename_account", { accountId: added.id, name: displayName });
 }
 
 async function setTheme(theme) {
