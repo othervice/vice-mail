@@ -126,11 +126,14 @@ async function waitForDialog(check, message) {
 async function clickButton(label) {
   const button = await browser.$(`//button[@aria-label="${label}" or normalize-space(.)="${label}"]`);
   // Stage 23 (decision 0084): an attachment card shows its buttons while the pointer is over it or
-  // the focus in it; the focus brings them out, as for a keyboard user.
+  // the focus in it. A real pointer over the card brings them out (`:focus-within` needs the
+  // window to be the key window, which the test window is not).
   await button.waitForExist({ timeout: 10000 });
-  await browser.execute((el) => {
-    if (el.closest('[data-testid="attachment"]')) el.focus();
+  const card = await browser.execute((el) => {
+    const box = el.closest('[data-testid="attachment"]')?.getBoundingClientRect();
+    return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2, viewportHeight: innerHeight } : null;
   }, button);
+  if (card) await coreCall("e2e_native_mouse_event", { kind: "move", x: card.x, y: card.y, viewportHeight: card.viewportHeight });
   await button.waitForClickable({ timeout: 10000 });
   await button.click();
 }
