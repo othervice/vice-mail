@@ -54,6 +54,7 @@ Security Policy forbids remote sources), and no lookups in third-party directori
 | Backups of the database taken before each update of its format (the last three) | no |
 | Logs: technical events such as account IDs, server and link host names, error codes. Passwords are masked by design; the logs are not meant to contain message text, and a failed command is logged with its error code, not its error text. One file per day, the last 14 are kept | no |
 | The AI request log (only if you use AI in the app): feature, provider host, model, number of messages and bytes, result, duration. No message content. Kept 30 days, at most 10,000 entries | no |
+| The learning spam filter (only if you turn it on in Settings → Inbox): for every word and sign it learned from mail you marked as spam or not spam (or let it learn from your Junk folders and read inbox mail), a number standing for it (a hash, not the word itself) and how many spam and other mails had it; per learned mail which numbers it taught; and for new mail it judged, its mark and score. It stays on this device, never goes through the settings sync, and never leaves the computer. "Forget what was learned" deletes it; the learned counts are not removed with an account | no |
 | The MCP access log (only if you turn on the MCP server): which client used which tool, when, on how many messages, and the outcome. Never the request's arguments or any content. Kept 30 days, at most 10,000 entries | no |
 | Web view data (the interface's local storage and cache) | no |
 

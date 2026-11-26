@@ -344,8 +344,9 @@ Entfernen eines Kontos sind erhabene Karten mit einem Balken in der Tonfarbe am 
 Symbol am Titel (Gefahr: Warndreieck, Akzent: Info) statt eines farbigen Rahmens um den ganzen Text.
 
 **Weitere Abschnitte einer Seite.** Auf der Seite „Posteingang“ sind „Ungelesene oben“, „Deine
-Einordnungen“, „Blockierte Absender“ und „Lokale Regeln“ Unterabschnitte: 16 px mit Haarlinie
-darüber (`SettingsSection sub`), nicht 20 px wie der Seitentitel.
+Einordnungen“, „Blockierte Absender“, „Spamfilter“ (Stufe 22) und „Lokale Regeln“
+Unterabschnitte: 16 px mit Haarlinie darüber (`SettingsSection sub`), nicht 20 px wie der
+Seitentitel.
 
 **Auswahllisten.** Native `<select>` bleiben: Ein gestaltetes Auswahlfeld mit eigenem Popup passt
 weder in `ComboBox` (Filterfeld mit Liste) noch in `ChoiceGroup` (Segmente) und wäre ein neues
@@ -1084,6 +1085,44 @@ Tabelle) ein Menü in der Art von Thunderbird:
 | Pos1 / Ende | erster / letzter Eintrag |
 | Buchstabe | nächster Eintrag, der so beginnt (derselbe noch einmal: weiter) |
 | Eingabe, Leertaste | Eintrag ausführen (gesperrte tun nichts) |
+
+## Lernender Spamfilter (Stufe 22, Entscheidung 0077)
+
+**Einstellungen → Posteingang → „Spamfilter“** (Unterabschnitt nach „Blockierte Absender“):
+
+- Schalter „Lernender Spamfilter“, Standard aus; die Beschreibung sagt, was er tut, dass er **nur
+  läuft, solange die App läuft (auch im Hintergrund)** und dass das Gelernte **auf diesem Gerät**
+  bleibt.
+- Eingeschaltet darunter: „Bisher gelernt: N Spam- und M andere Mails.“ (13 px `text-primary`) und
+  eine Zeile `text-secondary`, ob er neue Mails schon prüft oder wie viele er dafür noch braucht.
+- Eine Karte (Haarlinie `border-subtle`, Rundung 10) „Aus vorhandenen Mails lernen“ mit Satz und
+  Zweitknopf „Jetzt lernen“; während des Lernens „Anhalten“, darunter „Lernt … 600 von 1.500 Mails“
+  (`role="status"`) und ein nativer Fortschrittsbalken (4 px, Akzent) wie bei mbox; danach, wie es
+  endete, und wie viele Mails ausgelassen wurden.
+- „Für diese Konten verwenden“: je Konto ein Kästchen mit der Adresse; bei Konten ohne
+  Schreibzugriff darunter eingerückt (12 px `text-secondary`, an das Kästchen gebunden), dass
+  Spam-Verdacht dort nur markiert wird.
+- „Gelerntes vergessen …“ als Zweitknopf, sobald etwas gelernt ist; die einzige Rückfrage des
+  Abschnitts (`ConfirmDialog`, Gefahr), weil das Gelernte endgültig weg ist.
+
+**Listenzeilen.** Wie „Zurück“ eine kleine Pille an den Markierungen der Zeile, 12 px, Haarlinie
+`border`, Rundung voll, Symbol 12 px: „Spam?“ mit Schild-Warnsymbol in `text-warning`, solange der
+Filter eine Mail nur verdächtigt (Konto ohne Schreibzugriff oder ohne Spam-Ordner); „Spamfilter“
+mit durchgestrichenem Schild in `text-secondary` für Mails, die er verschoben hat, nur im
+Spam-Ordner. Der Name der Zeile sagt dasselbe in Worten („Spam-Verdacht (Spamfilter)“, „Vom
+Spamfilter hierher verschoben“).
+
+**Lesebereich.** Eine ruhige Notiz wie bei blockierten Absendern (`role="note"`, `canvas`,
+Haarlinie `border-subtle`, 13 px `text-secondary`) über der Mail: „Der Spamfilter hält diese Mail
+für Spam (zu 99,7 % sicher).“ bzw. „… hat diese Mail in den Spam-Ordner verschoben …“; rechts leise
+Knöpfe in Akzentfarbe „Kein Spam“ und, wo das Konto schreiben darf und einen Spam-Ordner hat, „In
+den Spam-Ordner“. Bei Konten ohne Schreibzugriff darunter in 12 px `text-tertiary`, dass die Mail
+nur auf diesem Gerät markiert ist. Nie „100 %“: der Wert ist auf 99,9 % begrenzt.
+
+**Hinweis.** Hat der Filter neue Mails verschoben: „Der Spamfilter hat N neue Mails in den
+Spam-Ordner verschoben“ mit „Rückgängig“ (holt sie zurück und lehrt ihn „kein Spam“), als Zeile
+darunter, was „Rückgängig“ tut. Nur markiert: „… als Spam-Verdacht markiert“, ohne Knopf. „Kein
+Spam“ in der Notiz eines nur markierten Mails: „Als kein Spam markiert“ mit „Rückgängig“.
 
 ## Abstände (Stufe 21, Entscheidung 0071)
 
