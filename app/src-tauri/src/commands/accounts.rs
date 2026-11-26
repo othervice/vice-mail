@@ -8,7 +8,7 @@ use tauri::State;
 
 use super::to_ipc;
 
-/// All accounts, oldest first, with their live sync status.
+/// All accounts in the user's order (stage 22), with their live sync status.
 #[tauri::command]
 #[specta::specta]
 pub async fn list_accounts(core: State<'_, AppCore>) -> Result<Vec<Account>, IpcError> {
@@ -64,6 +64,33 @@ pub async fn add_account(
     core.add_account(settings, password)
         .await
         .map_err(to_ipc("add_account"))
+}
+
+/// Stage 22 (decision 0078): puts the accounts in this order for every list of accounts;
+/// left out ones follow in their order. Returns them in their new order.
+#[tauri::command]
+#[specta::specta]
+pub async fn reorder_accounts(
+    core: State<'_, AppCore>,
+    account_ids: Vec<AccountId>,
+) -> Result<Vec<Account>, IpcError> {
+    core.reorder_accounts(account_ids)
+        .await
+        .map_err(to_ipc("reorder_accounts"))
+}
+
+/// Stage 22 (decision 0078): the account's name in the lists; empty shows its address. Never
+/// the sender name of its identities.
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_account(
+    core: State<'_, AppCore>,
+    account_id: AccountId,
+    name: String,
+) -> Result<Account, IpcError> {
+    core.rename_account(account_id, name)
+        .await
+        .map_err(to_ipc("rename_account"))
 }
 
 /// Stops the sync, deletes the keychain entry and all local data of the account.

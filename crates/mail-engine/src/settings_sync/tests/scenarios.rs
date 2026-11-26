@@ -576,6 +576,59 @@ async fn account_fields_changed_on_two_devices_are_merged() {
     assert_eq!(synced.display_name, "Ann Example");
 }
 
+/// Stage 22 (decision 0078): a rename on one device and a new order on another both arrive;
+/// two orders made at the same time end as the newer one on every device, as a whole (each
+/// move gives every account a fresh position, so each account's newest position is the newer
+/// order's), never a mix of the two.
+#[tokio::test]
+async fn account_names_and_the_newest_order_reach_every_device() {
+    let (_, mut a, mut b) = pair().await;
+    for (n, who) in [(1, "ann"), (2, "bob"), (3, "cy")] {
+        a.put_fields(
+            &account(n),
+            account_fields(&format!("{who}@example.org"), ""),
+        );
+    }
+    settle(&mut [&mut a, &mut b]).await;
+    // A renames Bob's account and puts Cy first (fresh positions 0, 1, 2).
+    a.advance(5);
+    a.put_fields(&account(2), json!({ "displayName": "Arbeit" }));
+    for (n, position) in [(3, 0), (1, 1), (2, 2)] {
+        a.put_fields(&account(n), json!({ "position": position }));
+    }
+    // B, not having seen that, later puts Bob first (its own fresh positions 0, 1, 2).
+    b.advance(7);
+    for (n, position) in [(2, 0), (3, 1), (1, 2)] {
+        b.put_fields(&account(n), json!({ "position": position }));
+    }
+    settle(&mut [&mut a, &mut b]).await;
+    let order = |device: &super::Device| {
+        let mut placed: Vec<(i64, u128)> = (1..=3)
+            .map(|n| {
+                let value = device.value(&account(n)).expect("account");
+                (value["position"].as_i64().expect("placed"), n)
+            })
+            .collect();
+        placed.sort_unstable();
+        placed.into_iter().map(|(_, n)| n).collect::<Vec<_>>()
+    };
+    for device in [&a, &b] {
+        assert_eq!(order(device), [2, 3, 1], "B's newer order as a whole");
+        assert_eq!(
+            device.value(&account(2)).expect("bob")["displayName"],
+            json!("Arbeit")
+        );
+    }
+    assert_eq!(a.live(), b.live());
+    // The typed account reads the name and the position.
+    let content = a.state.content(&account(2)).expect("content");
+    let synced = SyncedAccount::from_content(content).expect("typed");
+    assert_eq!(
+        (synced.display_name.as_str(), synced.position),
+        ("Arbeit", Some(0))
+    );
+}
+
 #[tokio::test]
 async fn snooze_and_pin_follow_the_message_not_local_ids() {
     let (_, mut a, mut b) = pair().await;
@@ -765,6 +818,7 @@ async fn passwords_tokens_and_api_keys_appear_in_no_record() {
         smtp: typed,
         protocol: Default::default(),
         sign_in: Default::default(),
+        position: None,
     };
     let values = synced.to_values().expect("values");
     assert_eq!(values.keys().map(String::as_str).collect::<Vec<_>>(), {

@@ -657,7 +657,10 @@ pub struct TransferPlan {
     pub items: Vec<TransferItem>,
 }
 
-fn target_of(conn: &Connection, target: MailboxId) -> Result<(TargetMailbox, i64), StoreError> {
+pub(crate) fn target_of(
+    conn: &Connection,
+    target: MailboxId,
+) -> Result<(TargetMailbox, i64), StoreError> {
     let row: Option<(String, i64, bool)> = conn
         .prepare_cached("SELECT name, account_id, selectable FROM mailbox WHERE id = ?1")?
         .query_row([target.0], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))

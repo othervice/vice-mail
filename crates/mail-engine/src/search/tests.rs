@@ -102,6 +102,11 @@ pub(super) async fn fixture() -> Fixture {
             })
             .await
             .expect("account");
+        // Stage 22 (decision 0078): `account:` finds the account by its name in the lists.
+        store
+            .rename_account(id, name.into())
+            .await
+            .expect("list name");
         let remote = |name: &str, attrs: &[&str]| RemoteMailbox {
             name: name.into(),
             path: name.into(),

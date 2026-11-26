@@ -866,13 +866,17 @@ impl<C: Connector> AppCore<C> {
             .last()
             .map(|mail| mail.account)
             .ok_or_else(|| CoreError::NotFound(format!("message {}", message.0)))?;
+        // Stage 22 (decision 0078): the identity the reply is written from (its sender name),
+        // never the account's name in the lists, which may be "Work".
         let user = self
             .store_ref()?
-            .account(account)
+            .identities(account)
             .await?
-            .map(|a| mail_model::Address {
-                name: Some(a.display_name),
-                email: a.email,
+            .into_iter()
+            .find(|identity| identity.is_default)
+            .map(|identity| mail_model::Address {
+                name: Some(identity.name).filter(|name| !name.trim().is_empty()),
+                email: identity.email,
             });
         let zone = LocalZone::system();
         let context = self.ai_context(self.ai_language().await, &zone);

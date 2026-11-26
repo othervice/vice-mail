@@ -9,12 +9,15 @@ use crate::StoreError;
 use crate::mail_api::{NewAccount, StoredAccount};
 use crate::settings::now_millis;
 
+/// Stage 22 (decision 0078): every list of accounts in the user's order: the accounts the user
+/// placed (`position`) first, lowest first; then the others in the order they were added, which
+/// was the only order before migration 0032.
 pub(crate) const SELECT_ACCOUNTS: &str = "
     SELECT uuid, email, display_name, color,
            imap_host, imap_port, imap_security, imap_username,
            smtp_host, smtp_port, smtp_security, smtp_username,
            credential_ref, writes_enabled, created_at, protocol
-    FROM account ORDER BY created_at, id";
+    FROM account ORDER BY position IS NULL, position, created_at, id";
 
 pub(crate) const SELECT_ACCOUNT: &str = "
     SELECT uuid, email, display_name, color,
@@ -24,6 +27,9 @@ pub(crate) const SELECT_ACCOUNT: &str = "
     FROM account WHERE uuid = ?1";
 
 pub(crate) const ACCOUNT_ROW: &str = "SELECT id FROM account WHERE uuid = ?1";
+
+/// Longest name an account can have in the lists, in characters.
+pub const MAX_ACCOUNT_NAME_CHARS: usize = 100;
 
 /// Local row id of the account, or [`StoreError::NotFound`].
 pub(crate) fn row_id(conn: &Connection, account: AccountId) -> Result<i64, StoreError> {
@@ -63,7 +69,10 @@ pub(crate) fn insert(
     .execute(params![
         new.id.to_string(),
         new.email,
-        new.display_name,
+        // Stage 22 (decision 0078): the account's name in the lists starts empty, so the lists
+        // show its address; the name typed when setting it up is the sender name of its first
+        // identity (below), which a list name like "Work" never becomes.
+        "",
         color.index(),
         new.imap.host,
         new.imap.port,
@@ -96,7 +105,7 @@ pub(crate) fn insert(
     Ok(StoredAccount {
         id: new.id,
         email: new.email.clone(),
-        display_name: new.display_name.clone(),
+        display_name: String::new(),
         color,
         imap: new.imap.clone(),
         smtp: new.smtp.clone(),
@@ -105,6 +114,78 @@ pub(crate) fn insert(
         created_at,
         protocol,
     })
+}
+
+/// Stage 22 (decision 0078): puts the accounts in the order of `ids`. Accounts `ids` leaves
+/// out keep their order after the named ones; a repeated id counts once; an unknown one fails
+/// with [`StoreError::NotFound`] (nothing written). Every account gets a fresh position above
+/// all earlier ones, also where its place did not change: each account record then carries a
+/// new version, so across devices the newest order wins as a whole instead of mixing per
+/// account (`docs/SYNC.md`). Returns the accounts in their new order.
+pub(crate) fn reorder(
+    conn: &Connection,
+    ids: &[AccountId],
+) -> Result<Vec<StoredAccount>, StoreError> {
+    let current = all(conn)?;
+    let mut ordered: Vec<AccountId> = Vec::with_capacity(current.len());
+    for id in ids {
+        if !current.iter().any(|a| a.id == *id) {
+            return Err(StoreError::NotFound(format!("account {id}")));
+        }
+        if !ordered.contains(id) {
+            ordered.push(*id);
+        }
+    }
+    for account in &current {
+        if !ordered.contains(&account.id) {
+            ordered.push(account.id);
+        }
+    }
+    let base: i64 = conn
+        .prepare_cached("SELECT coalesce(max(position), -1) + 1 FROM account")?
+        .query_row([], |r| r.get(0))?;
+    let mut stmt = conn.prepare_cached("UPDATE account SET position = ?2 WHERE uuid = ?1")?;
+    for (offset, id) in (0_i64..).zip(&ordered) {
+        stmt.execute(params![id.to_string(), base.saturating_add(offset)])
+            .map_err(StoreError::sqlite("reorder accounts"))?;
+    }
+    all(conn)
+}
+
+/// Stage 22 (decision 0078): the name the account has in the lists (`display_name`), trimmed;
+/// empty shows the address. Never the sender name of its identities. Control characters and
+/// names over [`MAX_ACCOUNT_NAME_CHARS`] fail with [`StoreError::InvalidArgument`].
+pub(crate) fn rename(
+    conn: &Connection,
+    id: AccountId,
+    name: &str,
+) -> Result<StoredAccount, StoreError> {
+    let name = clean_account_name(name)?;
+    let changed = conn
+        .prepare_cached("UPDATE account SET display_name = ?2 WHERE uuid = ?1")?
+        .execute(params![id.to_string(), name])
+        .map_err(StoreError::sqlite("rename account"))?;
+    if changed == 0 {
+        return Err(StoreError::NotFound(format!("account {id}")));
+    }
+    one(conn, id)?.ok_or_else(|| StoreError::NotFound(format!("account {id}")))
+}
+
+/// The list name as stored: trimmed, without control characters, at most
+/// [`MAX_ACCOUNT_NAME_CHARS`] characters.
+pub fn clean_account_name(name: &str) -> Result<String, StoreError> {
+    let name = name.trim();
+    if name.chars().any(char::is_control) {
+        return Err(StoreError::InvalidArgument(
+            "an account name cannot contain control characters".into(),
+        ));
+    }
+    if name.chars().count() > MAX_ACCOUNT_NAME_CHARS {
+        return Err(StoreError::InvalidArgument(format!(
+            "an account name has at most {MAX_ACCOUNT_NAME_CHARS} characters"
+        )));
+    }
+    Ok(name.to_owned())
 }
 
 pub(crate) fn all(conn: &Connection) -> Result<Vec<StoredAccount>, StoreError> {

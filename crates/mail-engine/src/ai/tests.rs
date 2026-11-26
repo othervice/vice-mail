@@ -741,6 +741,24 @@ async fn a_reply_suggestion_becomes_an_editable_draft_only_when_opened() {
     assert!(h.core.list_drafts(None).await.expect("drafts").is_empty());
     let body = &h.mock.requests()[0].1;
     assert!(body.contains("REPLY_CONTEXT") && body.contains("alice@fake.test"));
+    // Stage 22 (decision 0078): written from the identity's sender name, not from the
+    // account's name in the lists.
+    assert!(body.contains(r#"\"name\":\"Alice\""#), "{body}");
+    let account = h.core.list_accounts().await.expect("accounts")[0].id;
+    h.core
+        .rename_account(account, "Work".into())
+        .await
+        .expect("rename");
+    h.mock.answer(r#"{"reply": "Hi Bob,\n\nyes.\n\nAlice"}"#);
+    h.core
+        .ai_suggest_reply("r-2".into(), message)
+        .await
+        .expect("suggestion");
+    let body = &h.mock.requests()[1].1;
+    assert!(
+        body.contains(r#"\"name\":\"Alice\""#) && !body.contains("Work"),
+        "{body}"
+    );
 
     let draft = h
         .core

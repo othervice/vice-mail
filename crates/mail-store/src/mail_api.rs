@@ -33,6 +33,9 @@ pub const MAX_PAGE_SIZE: u32 = 500;
 pub struct NewAccount {
     pub id: AccountId,
     pub email: String,
+    /// The sender name of the account's first identity (the setup form's "Your name"); may be
+    /// empty. Stage 22 (decision 0078): not the account's name in the lists, which starts empty
+    /// (the lists show the address) until the user renames the account.
     pub display_name: String,
     pub imap: ServerSettings,
     pub smtp: ServerSettings,
@@ -45,6 +48,8 @@ pub struct NewAccount {
 pub struct StoredAccount {
     pub id: AccountId,
     pub email: String,
+    /// Stage 22 (decision 0078): the account's name in the lists; empty shows the address.
+    /// Never a sender name (those are the identities').
     pub display_name: String,
     pub color: AccountColor,
     pub imap: ServerSettings,
@@ -140,7 +145,8 @@ impl Store {
     // ---------------------------------------------------------------------------------------
 
     /// Inserts an account with `writes_enabled = false`, the next free color
-    /// ([`AccountColor::next_free`]) and one default identity (email and display name).
+    /// ([`AccountColor::next_free`]), an empty name in the lists, after the other accounts, and
+    /// one default identity (email and `display_name` as its sender name).
     /// [`StoreError::AccountExists`] if the email is taken (case-insensitive).
     pub async fn insert_account(&self, account: NewAccount) -> Result<StoredAccount, StoreError> {
         self.insert_account_with_protocol(account, mail_model::Protocol::Imap)
@@ -163,9 +169,31 @@ impl Store {
         result
     }
 
-    /// All accounts, oldest first.
+    /// All accounts in the user's order (stage 22, decision 0078): those the user placed
+    /// first, then the others oldest first.
     pub async fn accounts(&self) -> Result<Vec<StoredAccount>, StoreError> {
         self.read(accounts::all).await
+    }
+
+    /// Stage 22 (decision 0078): puts the accounts in the order of `ids`; accounts it leaves out
+    /// follow in their order, a repeated id counts once, an unknown one fails with
+    /// [`StoreError::NotFound`]. Every account gets a fresh position above all earlier ones, so
+    /// across devices the newest order wins as a whole. Returns them in their new order.
+    pub async fn reorder_accounts(
+        &self,
+        ids: Vec<AccountId>,
+    ) -> Result<Vec<StoredAccount>, StoreError> {
+        self.write(move |tx| accounts::reorder(tx, &ids)).await
+    }
+
+    /// Stage 22 (decision 0078): the account's name in the lists; empty shows the address. The
+    /// sender names of its identities stay as they are.
+    pub async fn rename_account(
+        &self,
+        id: AccountId,
+        name: String,
+    ) -> Result<StoredAccount, StoreError> {
+        self.write(move |tx| accounts::rename(tx, id, &name)).await
     }
 
     pub async fn account(&self, id: AccountId) -> Result<Option<StoredAccount>, StoreError> {

@@ -48,6 +48,7 @@ mod contacts_dir;
 mod contacts_view;
 mod conversations;
 mod diagnostics;
+mod drops;
 mod error;
 mod folders;
 mod follow_ups;
@@ -83,6 +84,7 @@ mod threads;
 mod views;
 mod workers;
 
+pub use accounts::{MAX_ACCOUNT_NAME_CHARS, clean_account_name};
 pub use ai::{NewAiRequest, OpenReplyRow};
 pub use attachment_index::{AttachmentQuery, AttachmentRows, IndexedAttachment, StoredAttachment};
 pub use attachment_pins::{AttachmentPinInput, PinnedAttachmentRow};
@@ -107,6 +109,7 @@ pub use contacts_dir::{
 };
 pub use contacts_view::{KindRow, SenderLocation};
 pub use diagnostics::{AccountStats, DatabaseStats};
+pub use drops::DropPlan;
 pub use error::StoreError;
 pub use folders::MAX_FOLDER_NAME_CHARS;
 pub use follow_ups::{MAX_FOLLOW_UP_VIEW, SettleScope, SettledFollowUps, StoredFollowUp};
@@ -144,6 +147,8 @@ pub use store::{BODIES_DIR, OpenReport, Store, StoreOptions};
 pub use views::{ViewFilter, ViewQuery};
 
 #[cfg(test)]
+mod account_order_tests;
+#[cfg(test)]
 mod attachment_index_tests;
 #[cfg(test)]
 mod bench;
@@ -159,6 +164,8 @@ mod contacts_dir_tests;
 mod contacts_view_tests;
 #[cfg(test)]
 mod conversation_tests;
+#[cfg(test)]
+mod drop_tests;
 #[cfg(test)]
 mod folders_tests;
 #[cfg(test)]

@@ -37,7 +37,7 @@ pub struct DatabaseStats {
     pub operations: Vec<(String, i64)>,
     /// Failed or conflicting operations per error code of their last error.
     pub operation_errors: Vec<(String, i64)>,
-    /// Oldest account first, like [`Store::accounts`].
+    /// In the user's order, like [`Store::accounts`] (stage 22, decision 0078).
     pub accounts: Vec<AccountStats>,
 }
 
@@ -147,7 +147,7 @@ fn account_stats(conn: &Connection) -> Result<Vec<AccountStats>, StoreError> {
            (SELECT count(*) FROM message m JOIN message_body mb ON mb.message_id = m.id
               WHERE m.account_id = a.id),
            coalesce((SELECT s.gmail FROM account_server s WHERE s.account_id = a.id), 0)
-         FROM account a ORDER BY a.created_at, a.id",
+         FROM account a ORDER BY a.position IS NULL, a.position, a.created_at, a.id",
     )?;
     let rows = stmt
         .query_map([], |r| {

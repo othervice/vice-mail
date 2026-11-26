@@ -91,6 +91,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::accounts::test_connection,
             commands::accounts::add_account,
             commands::accounts::remove_account,
+            // Stage 22 (decision 0078): the user's order and names of the accounts.
+            commands::accounts::reorder_accounts,
+            commands::accounts::rename_account,
             commands::accounts::retry_account,
             commands::accounts::update_password,
             commands::oauth::get_oauth_availability,
@@ -261,6 +264,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::parity::unblock_sender,
             commands::parity::list_blocked_senders,
             commands::parity::transfer_messages,
+            // Stage 22 (decision 0081): drops from any list.
+            commands::parity::drop_messages,
             commands::parity::set_attachment_pinned,
             commands::parity::get_attachment_pins,
             commands::parity::list_pinned_attachments,

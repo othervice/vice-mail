@@ -78,3 +78,21 @@ pub enum TransferMode {
     /// The original is removed from the source once the copy is confirmed in the target.
     Move,
 }
+
+/// Stage 22 (decision 0081): what a drop of messages on a folder recorded (`dropMessages`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DropResult {
+    /// The account of the folder they were dropped on.
+    pub account_id: crate::AccountId,
+    /// Messages of that account moved there at once (an ordinary move).
+    pub moved: u32,
+    /// Messages copied there, or moved there from other accounts: copy first, the source
+    /// removed only once the copy arrived (decision 0033).
+    pub transferred: u32,
+    /// Messages already in the folder, left as they were.
+    pub skipped: u32,
+    /// The batches recorded, newest last, for "Undo" and the failure notices. A move within the
+    /// account undoes like any move; a transfer only while nothing of it reached the server.
+    pub batches: Vec<crate::BatchId>,
+}

@@ -26,7 +26,7 @@ use std::collections::HashSet;
 use mail_content::normalize_address;
 use mail_model::{
     AccountColor, AccountId, ActionResult, BlockedSender, CoreError, CoreEvent, DraftId,
-    InboxScope, MAX_ACTION_MESSAGES, MAX_PINNED_ATTACHMENTS, MAX_UNREAD_FIRST_VIEWS,
+    DropResult, InboxScope, MAX_ACTION_MESSAGES, MAX_PINNED_ATTACHMENTS, MAX_UNREAD_FIRST_VIEWS,
     MAX_VIEW_KEY_CHARS, MailAction, Mailbox, MailboxId, MarkScope, MessageId, MessageListItem,
     MessageRef, PinnedAttachment, TransferMode, UnreadFirstCursor, UnreadFirstPage,
 };
@@ -488,6 +488,81 @@ impl<C: Connector> AppCore<C> {
             .await?;
         tracing::info!(account = %change.account, ?mode, queued = change.operations.len(), "transfer recorded");
         Ok(outbox.recorded_result(&change))
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stage 22 (decision 0081): dropping messages on a folder
+
+/// Longest request id of [`AppCore::drop_messages`]: room for the suffix of each part.
+const MAX_DROP_REQUEST_ID: usize = 60;
+
+impl<C: Connector> AppCore<C> {
+    /// Stage 22 (decision 0081): messages dragged from any list (they may come from several
+    /// folders and accounts) and dropped on the folder `target`. `Move`: messages of the
+    /// target's account move there at once (an ordinary move with its undo); messages of other
+    /// accounts are transferred (copy first, the source removed once the copy arrived, decision
+    /// 0033). `Copy`: every message is copied there through the outbox. Messages already in the
+    /// folder stay as they are. Refused before anything is recorded: `read_only` (the target's
+    /// account, and moving the accounts the messages come from, must write; the error names the
+    /// account), `invalid_argument` (no or more than [`MAX_TRANSFER_MESSAGES`] messages, a
+    /// message to transfer without Message-ID, a bad request id), `not_found`,
+    /// `invalid_target`. The transfer is recorded first: fetching a message's bytes can fail,
+    /// and then nothing is recorded. `request_id` as in `apply_action` (at most 60 characters);
+    /// the same id again records nothing new.
+    pub async fn drop_messages(
+        &self,
+        messages: Vec<MessageRef>,
+        target: MailboxId,
+        mode: TransferMode,
+        request_id: String,
+    ) -> Result<DropResult, CoreError> {
+        check_count(messages.len(), MAX_TRANSFER_MESSAGES)?;
+        if request_id.len() > MAX_DROP_REQUEST_ID {
+            return Err(CoreError::InvalidArgument(format!(
+                "the request id of a drop has at most {MAX_DROP_REQUEST_ID} characters"
+            )));
+        }
+        crate::core::check_request_id(&request_id)?;
+        let plan = self.store_ref()?.plan_drop(messages, target, mode).await?;
+        let mut result = DropResult {
+            account_id: plan.target_account,
+            moved: 0,
+            transferred: 0,
+            skipped: plan.skipped,
+            batches: Vec::new(),
+        };
+        let transfer: Vec<MessageRef> = match mode {
+            TransferMode::Move => plan.other_accounts,
+            TransferMode::Copy => plan
+                .same_account
+                .iter()
+                .chain(&plan.other_accounts)
+                .copied()
+                .collect(),
+        };
+        if !transfer.is_empty() {
+            let count = u32::try_from(transfer.len()).unwrap_or(u32::MAX);
+            let recorded = self
+                .transfer_messages(transfer, target, mode, format!("{request_id}-t"))
+                .await?;
+            result.transferred = count;
+            result.batches.extend(recorded.batch);
+        }
+        if mode == TransferMode::Move && !plan.same_account.is_empty() {
+            let count = u32::try_from(plan.same_account.len()).unwrap_or(u32::MAX);
+            let recorded = self
+                .apply_action(
+                    MailAction::Move { target },
+                    plan.same_account,
+                    format!("{request_id}-m"),
+                )
+                .await?;
+            result.moved = count;
+            result.batches.extend(recorded.batch);
+        }
+        tracing::info!(account = %result.account_id, ?mode, moved = result.moved, transferred = result.transferred, skipped = result.skipped, "drop recorded");
+        Ok(result)
     }
 }
 

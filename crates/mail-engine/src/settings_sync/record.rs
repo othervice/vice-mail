@@ -30,8 +30,8 @@ pub enum RecordKind {
     Snooze,
     /// A pinned message, by account and Message-ID.
     Pin,
-    /// Account list entry: address, name, colour, server settings. Never passwords, never
-    /// `writes_enabled` (see [`ACCOUNT_FIELDS`]).
+    /// Account list entry: address, name in the lists, colour, server settings, since stage 22
+    /// its place in the lists. Never passwords, never `writes_enabled` (see [`ACCOUNT_FIELDS`]).
     Account,
     /// A sender identity.
     Identity,
@@ -982,6 +982,9 @@ fn check_account_field(name: &str, value: &Value) -> Result<(), String> {
         // Stage 14: only in records of JMAP accounts that sign in with an API token; the kind
         // (`apiToken`), never the token. Not named "credential": that name marks a secret.
         "signIn" => typed(mail_model::CredentialKind::deserialize(value).map(drop)),
+        // Stage 22 (decision 0078): only in records of accounts the user placed; where the
+        // account stands in the lists (lowest first).
+        "position" => typed(i64::deserialize(value).map(drop)),
         _ => Err(format!("unknown account field {name:?}")),
     }
 }
@@ -1030,6 +1033,11 @@ pub struct SyncedAccount {
         skip_serializing_if = "mail_model::CredentialKind::is_password"
     )]
     pub sign_in: mail_model::CredentialKind,
+    /// Stage 22 (decision 0078): where the account stands in the lists, lowest first; only
+    /// written once the user placed it. Each move gives every account a fresh, higher position,
+    /// so with the per-field merge the newest order wins as a whole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<i64>,
 }
 
 impl SyncedAccount {

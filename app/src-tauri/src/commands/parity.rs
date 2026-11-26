@@ -4,9 +4,9 @@
 
 use mail_engine::AppCore;
 use mail_model::{
-    AccountColor, ActionResult, BlockedSender, InboxScope, IpcError, Mailbox, MailboxId, MarkScope,
-    MessageId, MessageListItem, MessageRef, PinnedAttachment, TransferMode, UnreadFirstCursor,
-    UnreadFirstPage,
+    AccountColor, ActionResult, BlockedSender, DropResult, InboxScope, IpcError, Mailbox,
+    MailboxId, MarkScope, MessageId, MessageListItem, MessageRef, PinnedAttachment, TransferMode,
+    UnreadFirstCursor, UnreadFirstPage,
 };
 use tauri::State;
 
@@ -224,4 +224,21 @@ pub async fn transfer_messages(
     core.transfer_messages(messages, target_mailbox_id, mode, request_id)
         .await
         .map_err(to_ipc("transfer_messages"))
+}
+
+/// Stage 22 (decision 0081): messages dragged from any list and dropped on a folder: those of
+/// the folder's account move there, those of other accounts are transferred, those already
+/// there stay; `copy` copies all of them. `requestId` is a UUID per drop.
+#[tauri::command]
+#[specta::specta]
+pub async fn drop_messages(
+    core: State<'_, AppCore>,
+    messages: Vec<MessageRef>,
+    target_mailbox_id: MailboxId,
+    mode: TransferMode,
+    request_id: String,
+) -> Result<DropResult, IpcError> {
+    core.drop_messages(messages, target_mailbox_id, mode, request_id)
+        .await
+        .map_err(to_ipc("drop_messages"))
 }

@@ -65,6 +65,9 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0028_no_contact_pictures.sql")),
     // Stage 22: the trigram index for search inside words (decision 0074).
     M::up(include_str!("../migrations/0029_search_substrings.sql")),
+    // Stage 22: the user's order of the accounts (decision 0078). The numbers 0030 and 0031
+    // belong to other parts of the stage.
+    M::up(include_str!("../migrations/0032_account_order.sql")),
 ];
 
 /// All migrations this build knows.

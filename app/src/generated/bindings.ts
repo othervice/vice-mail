@@ -138,7 +138,7 @@ export const commands = {
 	applyThunderbirdAccount: (token: TakeoverToken, index: number, accountId: AccountId, options?: InvokeOptions) => typedError<TakeoverApplied, IpcError>(__TAURI_INVOKE("apply_thunderbird_account", { token, index, accountId }, options)),
 	/**  Imports a local folder of the profile into a folder through the outbox (an mbox job). */
 	importThunderbirdFolder: (token: TakeoverToken, index: number, mailboxId: MailboxId, options?: InvokeOptions) => typedError<MboxJob, IpcError>(__TAURI_INVOKE("import_thunderbird_folder", { token, index, mailboxId }, options)),
-	/**  All accounts, oldest first, with their live sync status. */
+	/**  All accounts in the user's order (stage 22), with their live sync status. */
 	listAccounts: (options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("list_accounts", undefined, options)),
 	/**  Server settings from the built-in table of well-known providers. No network. */
 	discoverKnownProvider: (email: string, options?: InvokeOptions) => typedError<DiscoveryResult, IpcError>(__TAURI_INVOKE("discover_known_provider", { email }, options)),
@@ -150,6 +150,16 @@ export const commands = {
 	addAccount: (settings: AccountSettings, password: string, options?: InvokeOptions) => typedError<Account, IpcError>(__TAURI_INVOKE("add_account", { settings, password }, options)),
 	/**  Stops the sync, deletes the keychain entry and all local data of the account. */
 	removeAccount: (accountId: AccountId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("remove_account", { accountId }, options)),
+	/**
+	 *  Stage 22 (decision 0078): puts the accounts in this order for every list of accounts;
+	 *  left out ones follow in their order. Returns them in their new order.
+	 */
+	reorderAccounts: (accountIds: AccountId[], options?: InvokeOptions) => typedError<Account[], IpcError>(__TAURI_INVOKE("reorder_accounts", { accountIds }, options)),
+	/**
+	 *  Stage 22 (decision 0078): the account's name in the lists; empty shows its address. Never
+	 *  the sender name of its identities.
+	 */
+	renameAccount: (accountId: AccountId, name: string, options?: InvokeOptions) => typedError<Account, IpcError>(__TAURI_INVOKE("rename_account", { accountId, name }, options)),
 	/**  Reconnects now: cuts a backoff short and leaves the `error` state. */
 	retryAccount: (accountId: AccountId, options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("retry_account", { accountId }, options)),
 	/**  Checks the login with the new password, replaces the keychain entry and reconnects. */
@@ -574,6 +584,12 @@ export const commands = {
 	 *  copy was confirmed in the target. `requestId` is a UUID per user action.
 	 */
 	transferMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string, options?: InvokeOptions) => typedError<ActionResult, IpcError>(__TAURI_INVOKE("transfer_messages", { messages, targetMailboxId, mode, requestId }, options)),
+	/**
+	 *  Stage 22 (decision 0081): messages dragged from any list and dropped on a folder: those of
+	 *  the folder's account move there, those of other accounts are transferred, those already
+	 *  there stay; `copy` copies all of them. `requestId` is a UUID per drop.
+	 */
+	dropMessages: (messages: MessageRef[], targetMailboxId: MailboxId, mode: TransferMode, requestId: string, options?: InvokeOptions) => typedError<DropResult, IpcError>(__TAURI_INVOKE("drop_messages", { messages, targetMailboxId, mode, requestId }, options)),
 	/**
 	 *  Stage 16 (decision 0036): pins attachment `index` of a message or takes the pin off. Local
 	 *  only, synced; emits `inboxChanged`.
@@ -2762,6 +2778,26 @@ export type DraftUpdate = {
 	 *  default for this kind of draft.
 	 */
 	signatureId?: SignatureId | null,
+};
+
+/**  Stage 22 (decision 0081): what a drop of messages on a folder recorded (`dropMessages`). */
+export type DropResult = {
+	/**  The account of the folder they were dropped on. */
+	accountId: AccountId,
+	/**  Messages of that account moved there at once (an ordinary move). */
+	moved: number,
+	/**
+	 *  Messages copied there, or moved there from other accounts: copy first, the source
+	 *  removed only once the copy arrived (decision 0033).
+	 */
+	transferred: number,
+	/**  Messages already in the folder, left as they were. */
+	skipped: number,
+	/**
+	 *  The batches recorded, newest last, for "Undo" and the failure notices. A move within the
+	 *  account undoes like any move; a transfer only while nothing of it reached the server.
+	 */
+	batches: BatchId[],
 };
 
 /**  Why two contacts may be the same person (or one contact has several names). */
