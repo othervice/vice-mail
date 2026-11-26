@@ -255,17 +255,20 @@ fn show_count<R: Runtime>(app: &AppHandle<R>, count: u32) {
     let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) else {
         return;
     };
-    let result = if count > 0 {
-        let size = crate::badge::overlay_size(window.scale_factor().unwrap_or(1.0));
-        let image = crate::badge::overlay(count, size);
-        window.set_overlay_icon(Some(tauri::image::Image::new_owned(
-            image.pixels,
-            image.width,
-            image.height,
-        )))
-    } else {
-        window.set_overlay_icon(None)
+    let size = crate::badge::overlay_size(window.scale_factor().unwrap_or(1.0));
+    let image = match (count > 0).then(|| crate::badge::overlay(count, size)) {
+        Some(Ok(image)) => Some(image),
+        Some(Err(err)) => {
+            // Never with the font the app is built with (badge tests); the tray tooltip and
+            // the app itself still show the number.
+            tracing::warn!(%err, "taskbar overlay not drawn");
+            None
+        }
+        None => None,
     };
+    let result = window.set_overlay_icon(
+        image.map(|image| tauri::image::Image::new_owned(image.pixels, image.width, image.height)),
+    );
     if let Err(err) = result {
         tracing::debug!(%err, "taskbar overlay not set");
     }

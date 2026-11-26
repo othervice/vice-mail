@@ -1,11 +1,12 @@
 /*
  * The third-party licences of the app (stage 15): `src/generated/licenses.json`, written by
- * `scripts/licenses.mjs` from the Rust crates and npm packages the app is built from. Loaded only
+ * `scripts/licenses.mjs` from the Rust crates, npm packages and fonts the app is built from. Loaded only
  * when the list is opened (a chunk of its own, about 370 kB of text), as raw text through Vite, so
  * the type checker never reads the whole file. Plain data: no IPC, no network.
  */
 
-export type LicenseEcosystem = "rust" | "npm";
+/** `font`: a font embedded in the app (stage 22, decision 0080), no package. */
+export type LicenseEcosystem = "rust" | "npm" | "font";
 export type LicensePlatform = "macos" | "windows";
 
 export interface LicensePackage {
@@ -44,7 +45,7 @@ function isPackage(value: unknown, texts: Record<string, string>): value is Lice
   return (
     isString(v["name"]) &&
     isString(v["version"]) &&
-    (v["ecosystem"] === "rust" || v["ecosystem"] === "npm") &&
+    (v["ecosystem"] === "rust" || v["ecosystem"] === "npm" || v["ecosystem"] === "font") &&
     isString(v["license"]) &&
     isString(v["declared"]) &&
     (v["repository"] === null || isString(v["repository"])) &&

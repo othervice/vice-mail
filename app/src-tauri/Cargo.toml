@@ -37,6 +37,10 @@ tauri-plugin-updater.workspace = true
 # `tauri::generate_context!` embeds the `plugins` section of tauri.conf.json (the updater's
 # key and endpoint) as JSON values and names this crate in the generated code.
 serde_json.workspace = true
+# Stage 22 (decision 0080): the unread count drawn from a font for Windows (taskbar overlay and
+# notification-area icon); compiled everywhere so its tests run on every platform.
+skrifa.workspace = true
+ab_glyph_rasterizer.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Stage 18 (decision 0051): the new-mail popup's window (rounded corners through the content

@@ -53,6 +53,12 @@ describe("licence data", () => {
       expect(p.texts.length, p.name).toBeGreaterThan(0);
       expect(p.license).not.toMatch(/GPL/);
     }
+    // Stage 22 (decision 0080): the font of the unread count on Windows, with the OFL's text.
+    const font = data.packages.find((p) => p.ecosystem === "font");
+    expect(font?.license).toBe("OFL-1.1");
+    expect(font?.platforms).toEqual(["windows"]);
+    expect(font?.notices.join(" ")).toMatch(/Microsoft Corporation/);
+    expect(data.texts["OFL-1.1"]).toMatch(/SIL OPEN FONT LICENSE Version 1\.1/);
   });
 
   it("rejects malformed data", () => {

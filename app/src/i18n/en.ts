@@ -1500,6 +1500,7 @@ export const en = {
         ecosystem: {
           rust: "Rust",
           npm: "npm",
+          font: "Font",
         },
         usedUnder: "License",
         declared: "Declared by the library",
