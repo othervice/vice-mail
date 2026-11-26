@@ -1,11 +1,18 @@
-//! From the parsed query to what the store runs: one FTS5 `MATCH` expression and the other
-//! filters as data.
+//! From the parsed query to what the store runs: FTS5 `MATCH` expressions for the word index
+//! and the trigram index, and the other filters as data.
 //!
 //! FTS5 safety: every text term becomes one string literal (`"…"`, inner quotes doubled), so
 //! nothing typed can turn into FTS5 operators, column filters or `NEAR`. The only syntax in the
-//! expression comes from here: `AND`, `OR`, `NOT`, parentheses, `*` and the column filters of
+//! expressions comes from here: `AND`, `OR`, `NOT`, parentheses, `*` and the column filters of
 //! [`FtsColumn`]. Terms without a single token character are never emitted, because FTS5 treats
 //! an empty phrase as "matches nothing" (`"a" AND ""` finds nothing).
+//!
+//! Stage 22 (decision 0074): besides the word index `message_fts` there is a trigram index
+//! `message_fts_tri` over the same columns, in which a string matches as a substring
+//! (`"uster"` finds "Muster"). An unquoted term of at least [`MIN_SUBSTRING_CHARS`] characters
+//! matches in either index; shorter terms and quoted ones only in the word index. Where every
+//! word hit is a substring hit too (a single word, the trigram index complete), the term uses
+//! the trigram index alone, so the store usually runs one `MATCH`.
 
 use super::parse::{is_token_char, last_word_chars};
 use super::{
@@ -13,9 +20,9 @@ use super::{
     TextField, TextTerm,
 };
 
-/// Columns of the FTS5 table `message_fts`, in this order (decision 0003). `mail-store` must
-/// create the table with exactly these names: `from:`, `to:`, `cc:`, `subject:` and `filename:`
-/// are FTS5 column filters on them.
+/// Columns of the FTS5 tables `message_fts` and `message_fts_tri`, in this order (decisions 0003
+/// and 0074). `mail-store` must create the tables with exactly these names: `from:`, `to:`,
+/// `cc:`, `subject:` and `filename:` are FTS5 column filters on them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FtsColumn {
     Subject,
@@ -65,6 +72,28 @@ impl TextField {
     }
 }
 
+/// Shortest unquoted term (in characters) that also matches as a substring (decision 0074): the
+/// trigram index cannot find anything shorter.
+pub const MIN_SUBSTRING_CHARS: usize = 3;
+
+/// Decision 0074: the trigram index holds the mail text as well, not only sender, recipients,
+/// copy, subject and file names. `mail-store` writes the body into it exactly when this is set.
+pub const SUBSTRING_BODY: bool = true;
+
+/// How the trigram index is used (decision 0074).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Substrings {
+    /// Word index only, as before decision 0074.
+    Off,
+    /// The trigram index may miss messages (it is being filled): a term that can match as a
+    /// substring matches in either index, so word hits never go missing.
+    #[default]
+    Filling,
+    /// The trigram index holds every message: a single word (only letters and digits) matches
+    /// in the trigram index alone, since each of its word hits is a substring hit there too.
+    Complete,
+}
+
 /// Options for [`ParsedQuery::compile`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CompileOptions {
@@ -72,19 +101,127 @@ pub struct CompileOptions {
     /// word matches as a prefix (`rech` finds "Rechnung"), if it has at least
     /// [`MIN_PREFIX_CHARS`] characters.
     pub prefix_last_word: bool,
+    /// Decision 0074: whether and how terms match inside words.
+    pub substrings: Substrings,
 }
 
-/// The text part of a query for `message_fts MATCH ?`.
+/// Messages that match `words` in the word index (`message_fts MATCH words`) or `trigrams` in
+/// the trigram index (`message_fts_tri MATCH trigrams`). Neither set: no condition (as
+/// [`TextMatch::none`], nothing excluded; compiling never puts such a clause into `all`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum TextMatch {
+pub struct TextClause {
+    pub words: Option<String>,
+    pub trigrams: Option<String>,
+}
+
+impl TextClause {
+    /// Neither expression is set.
+    pub fn is_empty(&self) -> bool {
+        self.words.is_none() && self.trigrams.is_none()
+    }
+}
+
+/// The text part of a query (decision 0074): every clause of `all` must match and `none` must
+/// not. In what [`ParsedQuery::compile`] makes, at most one clause has only `words` and one only
+/// `trigrams` (the terms of one index are joined with `AND`); the others have both, and the store
+/// takes one clause to walk and checks the rest per message.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TextMatch {
+    pub all: Vec<TextClause>,
+    /// The exclusions (`-rechnung`), joined with `OR` per index.
+    pub none: TextClause,
+}
+
+impl TextMatch {
     /// No text condition.
-    #[default]
-    Any,
-    /// `rowid IN (… WHERE message_fts MATCH expr)`: the expression may end in `NOT (…)`.
-    Match(String),
-    /// Only exclusions (`-rechnung`). FTS5 has no unary NOT, so the store keeps messages that do
-    /// *not* match: `rowid NOT IN (SELECT rowid FROM message_fts WHERE message_fts MATCH expr)`.
-    Exclude(String),
+    pub fn is_any(&self) -> bool {
+        self.all.is_empty() && self.none.is_empty()
+    }
+
+    /// Messages that match `expr` in the word index.
+    pub fn words(expr: impl Into<String>) -> Self {
+        Self {
+            all: vec![TextClause {
+                words: Some(expr.into()),
+                trigrams: None,
+            }],
+            none: TextClause::default(),
+        }
+    }
+
+    /// Messages that do not match `expr` in the word index.
+    pub fn excluding_words(expr: impl Into<String>) -> Self {
+        Self {
+            all: Vec::new(),
+            none: TextClause {
+                words: Some(expr.into()),
+                trigrams: None,
+            },
+        }
+    }
+
+    /// Adds a condition on the word index: joined with `AND` to the clause with only words, or a
+    /// new one.
+    pub fn require_words(&mut self, expr: String) {
+        match self
+            .all
+            .iter_mut()
+            .find(|c| c.trigrams.is_none() && c.words.is_some())
+        {
+            Some(clause) => {
+                if let Some(words) = &mut clause.words {
+                    *words = format!("{words} AND {expr}");
+                }
+            }
+            None => self.all.insert(
+                0,
+                TextClause {
+                    words: Some(expr),
+                    trigrams: None,
+                },
+            ),
+        }
+    }
+
+    /// Adds an exclusion on the word index (joined with `OR` to the others).
+    pub fn exclude_words(&mut self, expr: String) {
+        self.none.words = Some(match self.none.words.take() {
+            Some(words) => format!("{words} OR {expr}"),
+            None => expr,
+        });
+    }
+}
+
+/// Stage 22 (decision 0074): a `contact:` term, resolved by the engine to the contact's
+/// addresses ([`contact_match`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContactTerm {
+    /// As typed (usually an address).
+    pub value: String,
+    pub negated: bool,
+    pub span: Span,
+}
+
+/// Decision 0074: messages from, to or in copy of any of `addresses`, for the word index: each
+/// address a phrase of its words in the columns `from`, `to` and `cc` (`max@firma.de` does not
+/// find `jan@firma.de`, whose first word is another). `None` if no address has a token
+/// character.
+pub fn contact_match(addresses: &[String]) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for address in addresses {
+        if !address.chars().any(is_token_char) {
+            continue;
+        }
+        let phrase = format!("{{from to cc}} : {}", quoted(address));
+        if !parts.contains(&phrase) {
+            parts.push(phrase);
+        }
+    }
+    match parts.len() {
+        0 => None,
+        1 => parts.pop(),
+        _ => Some(format!("({})", parts.join(" OR "))),
+    }
 }
 
 /// Date filter as a range of `message.id`, which is the sort date in Unix seconds (decision
@@ -133,6 +270,8 @@ pub struct CompiledQuery {
     /// Stage 20 (decision 0060): `larger:` (at least this many bytes) and `-larger:` (fewer).
     pub size_at_least: Option<u64>,
     pub size_below: Option<u64>,
+    /// Stage 22 (decision 0074): `contact:` terms; the engine adds them to `text`.
+    pub contacts: Vec<ContactTerm>,
     /// Terms that contradict earlier ones (`is:unread is:read`, `after:` later than `before:`,
     /// `in:inbox -in:inbox`). If any, the query has no results; the UI can mark these spans.
     pub conflicts: Vec<Span>,
@@ -156,25 +295,22 @@ impl ParsedQuery {
     pub fn compile(&self, context: &SearchContext<'_>, options: CompileOptions) -> CompiledQuery {
         let mut out = CompiledQuery::default();
         let typing_at = (options.prefix_last_word && self.open_end).then_some(self.input_len);
-        let mut positives = Vec::new();
-        let mut negatives = Vec::new();
+        let mut text = TextBuilder::default();
         for clause in &self.clauses {
             let term = match clause {
                 Clause::AnyOf(terms) => {
-                    let parts: Vec<String> = terms
+                    let parts: Vec<TextClause> = terms
                         .iter()
                         .filter_map(|t| match &t.filter {
-                            Filter::Text(text) => {
-                                fts_term(text, typing_at == Some(t.span.end) && !t.negated)
-                            }
+                            Filter::Text(text) => text_clause(
+                                text,
+                                typing_at == Some(t.span.end) && !t.negated,
+                                options.substrings,
+                            ),
                             _ => None,
                         })
                         .collect();
-                    match parts.len() {
-                        0 => {}
-                        1 => positives.extend(parts),
-                        _ => positives.push(format!("({})", parts.join(" OR "))),
-                    }
+                    text.require(any_of(parts));
                     continue;
                 }
                 Clause::Term(term) => term,
@@ -182,16 +318,21 @@ impl ParsedQuery {
             let positive = !term.negated;
             let mut conflict = false;
             match &term.filter {
-                Filter::Text(text) => {
+                Filter::Text(value) => {
                     let open = typing_at == Some(term.span.end) && positive;
-                    if let Some(fts) = fts_term(text, open) {
+                    if let Some(clause) = text_clause(value, open, options.substrings) {
                         if positive {
-                            positives.push(fts);
+                            text.require(clause);
                         } else {
-                            negatives.push(fts);
+                            text.exclude(clause);
                         }
                     }
                 }
+                Filter::Contact(value) => out.contacts.push(ContactTerm {
+                    value: value.clone(),
+                    negated: !positive,
+                    span: term.span,
+                }),
                 Filter::In(spec) => {
                     let (list, other) = if positive {
                         (&mut out.mailboxes, &out.excluded_mailboxes)
@@ -255,17 +396,89 @@ impl ParsedQuery {
                 out.conflicts.push(term.span);
             }
         }
-        out.text = match (positives.is_empty(), negatives.is_empty()) {
-            (true, true) => TextMatch::Any,
-            (false, true) => TextMatch::Match(positives.join(" AND ")),
-            (false, false) => TextMatch::Match(format!(
-                "({}) NOT ({})",
-                positives.join(" AND "),
-                negatives.join(" OR ")
-            )),
-            (true, false) => TextMatch::Exclude(negatives.join(" OR ")),
-        };
+        out.text = text.finish();
         out
+    }
+}
+
+/// Collects the text clauses of a query (see [`TextMatch`]).
+#[derive(Default)]
+struct TextBuilder {
+    words: Vec<String>,
+    trigrams: Vec<String>,
+    both: Vec<TextClause>,
+    none_words: Vec<String>,
+    none_trigrams: Vec<String>,
+}
+
+impl TextBuilder {
+    fn require(&mut self, clause: TextClause) {
+        match clause {
+            TextClause {
+                words: Some(words),
+                trigrams: None,
+            } => self.words.push(words),
+            TextClause {
+                words: None,
+                trigrams: Some(trigrams),
+            } => self.trigrams.push(trigrams),
+            TextClause {
+                words: Some(_),
+                trigrams: Some(_),
+            } => self.both.push(clause),
+            TextClause {
+                words: None,
+                trigrams: None,
+            } => {}
+        }
+    }
+
+    fn exclude(&mut self, clause: TextClause) {
+        self.none_words.extend(clause.words);
+        self.none_trigrams.extend(clause.trigrams);
+    }
+
+    fn finish(self) -> TextMatch {
+        let joined = |parts: Vec<String>, op: &str| (!parts.is_empty()).then(|| parts.join(op));
+        let mut all = Vec::new();
+        if let Some(words) = joined(self.words, " AND ") {
+            all.push(TextClause {
+                words: Some(words),
+                trigrams: None,
+            });
+        }
+        if let Some(trigrams) = joined(self.trigrams, " AND ") {
+            all.push(TextClause {
+                words: None,
+                trigrams: Some(trigrams),
+            });
+        }
+        all.extend(self.both);
+        TextMatch {
+            all,
+            none: TextClause {
+                words: joined(self.none_words, " OR "),
+                trigrams: joined(self.none_trigrams, " OR "),
+            },
+        }
+    }
+}
+
+/// An `OR` group: the members' word expressions joined, and their trigram expressions.
+fn any_of(parts: Vec<TextClause>) -> TextClause {
+    let group = |items: Vec<String>| match items.len() {
+        0 => None,
+        1 => items.into_iter().next(),
+        _ => Some(format!("({})", items.join(" OR "))),
+    };
+    let (mut words, mut trigrams) = (Vec::new(), Vec::new());
+    for part in parts {
+        words.extend(part.words);
+        trigrams.extend(part.trigrams);
+    }
+    TextClause {
+        words: group(words),
+        trigrams: group(trigrams),
     }
 }
 
@@ -287,20 +500,45 @@ fn same_mailbox(a: &MailboxSpec, b: &MailboxSpec) -> bool {
     }
 }
 
-/// One text term as FTS5 syntax: `{column} : "text"`, with ` *` for a prefix. `None` if the
-/// text has nothing the tokenizer would index.
-fn fts_term(term: &TextTerm, open: bool) -> Option<String> {
-    if !term.text.chars().any(is_token_char) {
-        return None;
-    }
-    let mut out = String::with_capacity(term.text.len() + 20);
-    if let Some(column) = term.field.column() {
-        out.push('{');
-        out.push_str(column.name());
-        out.push_str("} : ");
-    }
+/// One text term as its clause: the word index expression and, for an unquoted term of at
+/// least [`MIN_SUBSTRING_CHARS`] characters, the trigram one (decision 0074). `None` if the text
+/// has nothing the tokenizer would index.
+fn text_clause(term: &TextTerm, open: bool, substrings: Substrings) -> Option<TextClause> {
+    let words = fts_term(term, open)?;
+    let trigrams = (substrings != Substrings::Off
+        && !term.quoted
+        && substring_chars(&term.text) >= MIN_SUBSTRING_CHARS)
+        .then(|| column_filter(term.field.column(), &term.text));
+    // A single word: each word (or prefix) hit is a substring hit of the same folded text.
+    let covered = match term.field.column() {
+        None | Some(FtsColumn::Body) => SUBSTRING_BODY,
+        Some(_) => true,
+    };
+    let alone = substrings == Substrings::Complete
+        && trigrams.is_some()
+        && covered
+        && term.text.chars().all(is_token_char);
+    Some(TextClause {
+        words: (!alone).then_some(words),
+        trigrams,
+    })
+}
+
+/// Characters the trigram tokenizer sees: combining marks fold away with the diacritics.
+fn substring_chars(text: &str) -> usize {
+    text.chars().filter(|c| !is_combining_mark(*c)).count()
+}
+
+/// The blocks of combining diacritical marks, which `remove_diacritics` drops.
+pub(super) fn is_combining_mark(c: char) -> bool {
+    matches!(c, '\u{0300}'..='\u{036F}' | '\u{1AB0}'..='\u{1AFF}' | '\u{1DC0}'..='\u{1DFF}' | '\u{20D0}'..='\u{20FF}' | '\u{FE20}'..='\u{FE2F}')
+}
+
+/// `"text"` as an FTS5 string: inner quotes doubled, control characters as spaces.
+fn quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
     out.push('"');
-    for c in term.text.chars() {
+    for c in text.chars() {
         match c {
             '"' => out.push_str("\"\""),
             c if c.is_control() => out.push(' '),
@@ -308,6 +546,24 @@ fn fts_term(term: &TextTerm, open: bool) -> Option<String> {
         }
     }
     out.push('"');
+    out
+}
+
+/// `{column} : "text"`, or the string alone for every column.
+fn column_filter(column: Option<FtsColumn>, text: &str) -> String {
+    match column {
+        Some(column) => format!("{{{}}} : {}", column.name(), quoted(text)),
+        None => quoted(text),
+    }
+}
+
+/// One text term as FTS5 syntax for the word index: `{column} : "text"`, with ` *` for a
+/// prefix. `None` if the text has nothing the tokenizer would index.
+fn fts_term(term: &TextTerm, open: bool) -> Option<String> {
+    if !term.text.chars().any(is_token_char) {
+        return None;
+    }
+    let mut out = column_filter(term.field.column(), &term.text);
     // While typing, only a word the cursor is still in (`rech|`, not `rech.` or `"rech"`).
     let prefix = term.prefix
         || (open && !term.quoted && term.text.chars().next_back().is_some_and(is_token_char));

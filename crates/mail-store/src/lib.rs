@@ -188,6 +188,8 @@ mod stage9_plan_tests;
 #[cfg(test)]
 mod stage9_tests;
 #[cfg(test)]
+mod substring_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;

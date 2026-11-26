@@ -14,8 +14,9 @@
 //! and a page never depends on how many rows came before it.
 //!
 //! **Filters** are checked per row: flags and tag on the view's location `l`, the search's
-//! conditions on `m` (`search::conditions_on`), the text as `l.message_id IN (… MATCH ?)`
-//! (SQLite fills the matches once per statement). A rare filter in a large mailbox therefore
+//! conditions on `m` (`search::conditions_on`), the text as `l.message_id IN (… MATCH ?)` per
+//! clause, in either index for a clause that needs both (decision 0074; SQLite fills the matches
+//! once per statement). A rare filter in a large mailbox therefore
 //! walks much of the index; the counts in `docs/testing/performance.md` (stage 19) say how much.
 //!
 //! **Inbox rules.** Inboxes and unified views leave out waiting snoozes and mail of blocked
@@ -28,7 +29,6 @@
 
 use std::collections::HashMap;
 
-use mail_model::search::TextMatch;
 use mail_model::{
     AccountId, ListOrder, MailboxId, MessageListItem, SortKey, ViewCursor, ViewMessagePage,
     ViewThreadPage,
@@ -40,7 +40,7 @@ use crate::accounts;
 use crate::comfort_api::{InboxMailboxes, resolve};
 use crate::inbox::InboxListKind;
 use crate::lists::{LIST_COLUMNS, item_at, list_columns};
-use crate::search::{SearchFilter, conditions_on};
+use crate::search::{SearchFilter, TextParams, conditions_on, push_text, text_conditions};
 use crate::{Store, StoreError};
 
 /// What a view's page is asked for, resolved (see the module docs).
@@ -103,7 +103,7 @@ struct Shared {
     cursor: Option<(Option<usize>, usize)>,
     fetch: usize,
     /// The text match, once for all branches.
-    text: Option<usize>,
+    text: TextParams,
     keyword: Option<usize>,
 }
 
@@ -141,19 +141,18 @@ fn row_conditions(
             "instr(' ' || lower(coalesce({l}.keywords, '')) || ' ', ' ' || ?{n} || ' ') > 0"
         ));
     }
-    if let Some(n) = shared.text {
-        out.push(format!(
-            "{pin}{l}.message_id IN (SELECT rowid FROM message_fts WHERE message_fts MATCH ?{n})",
-            pin = shared.pin
-        ));
-    }
+    text_conditions(
+        &format!("{pin}{l}.message_id", pin = shared.pin),
+        &shared.text,
+        &mut out,
+    );
     // The search's own conditions on the message; flags are on the location above.
     let rest = SearchFilter {
         unread: None,
         flagged: None,
         ..f.clone()
     };
-    conditions_on(&rest, m, account_rows, false, &mut params.0, &mut out);
+    conditions_on(&rest, m, account_rows, false, &mut out);
     if filter.contacts {
         out.push(format!(
             "EXISTS (SELECT 1 FROM contact c WHERE c.address_key = {m}.sender_key
@@ -233,6 +232,19 @@ fn branch(
     )
 }
 
+/// The text match's parameters (none for the server's results, whose text the server checked).
+fn view_text(view: &ResolvedView<'_>, params: &mut Params) -> TextParams {
+    if view.filter.search.only.is_some() {
+        return TextParams::default();
+    }
+    push_text(
+        &view.filter.search.text,
+        None,
+        (false, false),
+        &mut params.0,
+    )
+}
+
 /// The whole statement over `mailboxes` and its parameters.
 pub(crate) fn statement(
     view: &ResolvedView<'_>,
@@ -259,12 +271,7 @@ pub(crate) fn statement(
         }
     };
     let fetch = params.push(i64::from(limit) + 1);
-    let text = match &view.filter.search.text {
-        TextMatch::Match(expr) if view.filter.search.only.is_none() => {
-            Some(params.push(expr.clone()))
-        }
-        _ => None,
-    };
+    let text = view_text(view, &mut params);
     let keyword = view
         .filter
         .keyword
@@ -460,12 +467,7 @@ pub(crate) fn conversations(
 
 /// The statement that counts the matching messages of one mailbox (`?1`, account UUID `?2`).
 fn count_sql(view: &ResolvedView<'_>, params: &mut Params) -> String {
-    let text = match &view.filter.search.text {
-        TextMatch::Match(expr) if view.filter.search.only.is_none() => {
-            Some(params.push(expr.clone()))
-        }
-        _ => None,
-    };
+    let text = view_text(view, params);
     let keyword = view
         .filter
         .keyword

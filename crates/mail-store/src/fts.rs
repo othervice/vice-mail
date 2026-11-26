@@ -1,5 +1,10 @@
-//! The full-text index `message_fts` (decision 0003, stage 7). Synchronous functions over a
+//! The full-text indexes `message_fts` (words, decision 0003, stage 7) and `message_fts_tri`
+//! (trigrams for search inside words, decision 0074, stage 22). Synchronous functions over a
 //! connection; `search_api` runs them on the writer thread or a reader.
+//!
+//! **Two indexes, one row each.** Both have the same columns and rowids and get the same text
+//! in the same transaction (the trigram index the body only if
+//! [`mail_model::search::SUBSTRING_BODY`]); everything below holds for both.
 //!
 //! **What is indexed.** Every message has one row, rowid = `message.id`. The header columns
 //! (`subject`, `from`, `to`, `cc`) are written in the transaction that stores the message; once a
@@ -13,23 +18,27 @@
 //! **Order.** FTS5 starts a new segment whenever a rowid is smaller than the previous one in a
 //! transaction, so every transaction writes its rows sorted by rowid (decision 0003).
 //!
-//! **The job.** Existing messages (after the migration) and a rebuild are filled in by a job
-//! (`search_index_job`) in batches of ascending ids: a reader lists the next ids with their
-//! body state, the body texts are made on the blocking pool, and one writer transaction writes
-//! the rows and moves the job on. While the job targets `message_fts_new` (a rebuild), every
-//! write above goes to both tables, so the new table misses nothing that happens meanwhile; at
-//! the end it replaces `message_fts` in one transaction. Searches keep using the old table until
-//! then. A batch row is skipped when the message's body changed after the batch was read (the
-//! live write has the newer text) or the message is gone.
+//! **The job.** Existing messages (after migration 0005 both indexes, after 0029 the trigram
+//! index) and a rebuild are filled in by a job (`search_index_job`) in batches of ascending ids:
+//! a reader lists the next ids with their body state, the body texts are made on the blocking
+//! pool, and one writer transaction writes the rows and moves the job on. While the job targets
+//! `message_fts_new` (a rebuild of both indexes), every write above goes to the new tables as
+//! well, so they miss nothing that happens meanwhile; at the end they replace the live ones in
+//! one transaction. Searches keep using the old tables until then. A batch row is skipped when
+//! the message's body changed after the batch was read (the live write has the newer text) or
+//! the message is gone.
 
+use mail_model::search::SUBSTRING_BODY;
 use mail_model::{Address, FetchedSection, MessageHeader, MessageStructure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::StoreError;
 
-/// The live index.
+/// The live word index, and the job that fills both live indexes.
 pub(crate) const LIVE: &str = "message_fts";
-/// The table a rebuild fills.
+/// The live trigram index (decision 0074), and the job that fills only it.
+pub(crate) const TRIGRAMS: &str = "message_fts_tri";
+/// The tables a rebuild fills (the job's target names the word one).
 pub(crate) const NEW: &str = "message_fts_new";
 
 /// Longest body text indexed per message, in bytes (cut at a character boundary). Long
@@ -60,12 +69,41 @@ pub trait BodyTextSource: Send + Sync {
     fn partial(&self, structure: &MessageStructure, sections: &[FetchedSection]) -> BodyText;
 }
 
-const INSERT_LIVE: &str = "
-    INSERT OR REPLACE INTO message_fts (rowid, subject, \"from\", \"to\", cc, body, attachments)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
-const INSERT_NEW: &str = "
-    INSERT OR REPLACE INTO message_fts_new (rowid, subject, \"from\", \"to\", cc, body, attachments)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
+/// One FTS5 table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Table {
+    Words,
+    Trigrams,
+    WordsNew,
+    TrigramsNew,
+}
+
+impl Table {
+    fn insert(self) -> &'static str {
+        match self {
+            Self::Words => {
+                "INSERT OR REPLACE INTO message_fts (rowid, subject, \"from\", \"to\", cc, body, attachments)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            }
+            Self::Trigrams => {
+                "INSERT OR REPLACE INTO message_fts_tri (rowid, subject, \"from\", \"to\", cc, body, attachments)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            }
+            Self::WordsNew => {
+                "INSERT OR REPLACE INTO message_fts_new (rowid, subject, \"from\", \"to\", cc, body, attachments)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            }
+            Self::TrigramsNew => {
+                "INSERT OR REPLACE INTO message_fts_tri_new (rowid, subject, \"from\", \"to\", cc, body, attachments)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            }
+        }
+    }
+
+    fn trigrams(self) -> bool {
+        matches!(self, Self::Trigrams | Self::TrigramsNew)
+    }
+}
 
 pub(crate) const JOB: &str = "SELECT target, next_id FROM search_index_job WHERE id = 1";
 
@@ -90,6 +128,14 @@ pub(crate) const ID_RANGE: &str =
 
 const SET_NEXT: &str = "UPDATE search_index_job SET next_id = ?1 WHERE id = 1";
 
+/// Tables a rebuild left behind (a stop between creating and swapping, or between swapping and
+/// dropping the old tables).
+const DROP_NEW: &str = "
+    DROP TRIGGER IF EXISTS message_fts_new_delete;
+    DROP TRIGGER IF EXISTS message_fts_tri_new_delete;
+    DROP TABLE IF EXISTS message_fts_new;
+    DROP TABLE IF EXISTS message_fts_tri_new;";
+
 const CREATE_NEW: &str = "
     CREATE VIRTUAL TABLE message_fts_new USING fts5(
       subject, \"from\", \"to\", cc, body, attachments,
@@ -97,29 +143,46 @@ const CREATE_NEW: &str = "
       tokenize = 'unicode61 remove_diacritics 2');
     CREATE TRIGGER message_fts_new_delete AFTER DELETE ON message BEGIN
       DELETE FROM message_fts_new WHERE rowid = old.id;
+    END;
+    CREATE VIRTUAL TABLE message_fts_tri_new USING fts5(
+      subject, \"from\", \"to\", cc, body, attachments,
+      content = '', contentless_delete = 1,
+      tokenize = 'trigram remove_diacritics 1');
+    CREATE TRIGGER message_fts_tri_new_delete AFTER DELETE ON message BEGIN
+      DELETE FROM message_fts_tri_new WHERE rowid = old.id;
     END;";
 
-/// The swap at the end of a rebuild: the new table takes the live name, the old one is dropped
-/// in the next transaction. Triggers are recreated, not renamed (a rename would rewrite them to
-/// point at the renamed tables).
+/// The swap at the end of a rebuild: the new tables take the live names, the old ones are
+/// dropped in the next transaction. Triggers are recreated, not renamed (a rename would rewrite
+/// them to point at the renamed tables).
 const SWAP: &str = "
     DROP TRIGGER message_fts_new_delete;
+    DROP TRIGGER message_fts_tri_new_delete;
     DROP TRIGGER message_fts_delete;
+    DROP TRIGGER message_fts_tri_delete;
     ALTER TABLE message_fts RENAME TO message_fts_old;
+    ALTER TABLE message_fts_tri RENAME TO message_fts_tri_old;
     ALTER TABLE message_fts_new RENAME TO message_fts;
+    ALTER TABLE message_fts_tri_new RENAME TO message_fts_tri;
     CREATE TRIGGER message_fts_delete AFTER DELETE ON message BEGIN
       DELETE FROM message_fts WHERE rowid = old.id;
     END;
+    CREATE TRIGGER message_fts_tri_delete AFTER DELETE ON message BEGIN
+      DELETE FROM message_fts_tri WHERE rowid = old.id;
+    END;
     DELETE FROM search_index_job;";
 
-pub(crate) const DROP_OLD: &str = "DROP TABLE IF EXISTS message_fts_old";
+pub(crate) const DROP_OLD: &str =
+    "DROP TABLE IF EXISTS message_fts_old; DROP TABLE IF EXISTS message_fts_tri_old;";
 
-/// Which table a job fills.
+/// Which tables a job fills.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Target {
-    /// Existing messages after the migration, into the live table.
+    /// Existing messages after migration 0005, into both live indexes.
     Live,
-    /// A rebuild into `message_fts_new`.
+    /// Existing messages after migration 0029, into the live trigram index.
+    Trigrams,
+    /// A rebuild into `message_fts_new` and `message_fts_tri_new`.
     New,
 }
 
@@ -127,6 +190,7 @@ impl Target {
     fn parse(name: &str) -> Option<Self> {
         match name {
             LIVE => Some(Self::Live),
+            TRIGRAMS => Some(Self::Trigrams),
             NEW => Some(Self::New),
             _ => None,
         }
@@ -135,7 +199,16 @@ impl Target {
     fn name(self) -> &'static str {
         match self {
             Self::Live => LIVE,
+            Self::Trigrams => TRIGRAMS,
             Self::New => NEW,
+        }
+    }
+
+    fn tables(self) -> &'static [Table] {
+        match self {
+            Self::Live => &[Table::Words, Table::Trigrams],
+            Self::Trigrams => &[Table::Trigrams],
+            Self::New => &[Table::WordsNew, Table::TrigramsNew],
         }
     }
 }
@@ -214,30 +287,29 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// Tables every index write goes to: the live one, and the new one while a rebuild runs.
-pub(crate) fn targets(conn: &Connection) -> Result<Vec<Target>, StoreError> {
-    Ok(match job(conn)? {
-        Some(Job {
-            target: Target::New,
-            ..
-        }) => vec![Target::Live, Target::New],
-        _ => vec![Target::Live],
-    })
+/// Tables every index write goes to: the live ones, and the new ones while a rebuild runs.
+pub(crate) fn targets(conn: &Connection) -> Result<Vec<Table>, StoreError> {
+    let mut tables = vec![Table::Words, Table::Trigrams];
+    if let Some(Job {
+        target: Target::New,
+        ..
+    }) = job(conn)?
+    {
+        tables.extend(Target::New.tables());
+    }
+    Ok(tables)
 }
 
-/// Writes `rows` (sorted here by rowid) to `targets`, replacing existing rows.
+/// Writes `rows` (sorted here by rowid) to `tables`, replacing existing rows.
 pub(crate) fn write(
     conn: &Connection,
-    targets: &[Target],
+    tables: &[Table],
     rows: &mut [(i64, Row)],
 ) -> Result<(), StoreError> {
     rows.sort_by_key(|(id, _)| *id);
-    for target in targets {
-        let sql = match target {
-            Target::Live => INSERT_LIVE,
-            Target::New => INSERT_NEW,
-        };
-        let mut stmt = conn.prepare_cached(sql)?;
+    for table in tables {
+        let body_too = !table.trigrams() || SUBSTRING_BODY;
+        let mut stmt = conn.prepare_cached(table.insert())?;
         for (id, row) in rows.iter() {
             stmt.execute(params![
                 id,
@@ -245,7 +317,7 @@ pub(crate) fn write(
                 row.from,
                 row.to,
                 row.cc,
-                row.body,
+                if body_too { row.body.as_str() } else { "" },
                 row.attachments
             ])
             .map_err(StoreError::sqlite("write full-text index"))?;
@@ -371,7 +443,7 @@ pub(crate) fn write_batch(
         };
         rows.push((item.id, row));
     }
-    write(conn, &[expected.target], &mut rows)?;
+    write(conn, expected.target.tables(), &mut rows)?;
     conn.prepare_cached(SET_NEXT)?
         .execute([next_id])
         .map_err(StoreError::sqlite("advance the index job"))?;
@@ -390,7 +462,7 @@ pub(crate) fn finish(conn: &Connection, expected: Job) -> Result<bool, StoreErro
                 .map_err(StoreError::sqlite("swap in the rebuilt index"))?;
             Ok(true)
         }
-        Target::Live => {
+        Target::Live | Target::Trigrams => {
             conn.execute("DELETE FROM search_index_job", [])
                 .map_err(StoreError::sqlite("end the index job"))?;
             Ok(false)
@@ -398,12 +470,15 @@ pub(crate) fn finish(conn: &Connection, expected: Job) -> Result<bool, StoreErro
     }
 }
 
-/// Starts a rebuild into `message_fts_new`. Returns `false` if a job runs already.
+/// Starts a rebuild into `message_fts_new` and `message_fts_tri_new`. Returns `false` if a job
+/// runs already.
 pub(crate) fn start_rebuild(conn: &Connection, now_ms: i64) -> Result<bool, StoreError> {
     if job(conn)?.is_some() {
         return Ok(false);
     }
     conn.execute_batch(DROP_OLD)
+        .map_err(StoreError::sqlite("drop a left-over index"))?;
+    conn.execute_batch(DROP_NEW)
         .map_err(StoreError::sqlite("drop a left-over index"))?;
     conn.execute_batch(CREATE_NEW)
         .map_err(StoreError::sqlite("create the rebuilt index"))?;

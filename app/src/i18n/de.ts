@@ -2041,7 +2041,7 @@ export const de: Translation = {
       all: "Allen Konten",
     },
     hint: {
-      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Filter: von:, an:, cc:, betreff:, datei:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:, größer:10M. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
+      body: "Tippe Wörter oder eine Phrase in Anführungszeichen. Ab drei Zeichen findet ein Wort auch Teile längerer Wörter (uster findet Muster), in Anführungszeichen nur ganze Wörter. Filter: von:, an:, cc:, betreff:, datei:, kontakt:, in:, konto:, hat:anhang, ist:ungelesen, ist:gelesen, ist:markiert, vor:, nach:, older_than:, newer_than:, größer:10M. Ein - davor schließt einen Begriff aus, OR zwischen Wörtern findet beide.",
     },
     results: {
       label: "den Suchergebnissen für „{{query}}“",
@@ -2105,7 +2105,19 @@ export const de: Translation = {
         newer_than: "Neuer als",
         // Stage 20 (decision 0060).
         larger: "Größer als",
+        // Stage 22 (decision 0074).
+        contact: "Kontakt",
       },
+    },
+    // Stage 22 (decision 0074): Kontakte oben beim Tippen.
+    contacts: {
+      heading: "Kontakte",
+      label: "Kontakte: alle Mails mit der Person",
+      option: "{{name}}, {{email}}: alle Mails mit dieser Person zeigen",
+      moreAddresses_one: "{{email}} und {{count}} weitere Adresse",
+      moreAddresses_other: "{{email}} und {{count}} weitere Adressen",
+      // Der Filter, zu dem ein gewählter Kontakt im Feld wird (`kontakt:` der Suchsprache).
+      key: "kontakt",
     },
     index: {
       building: "Der Suchindex wird aufgebaut ({{percent}} %). Ältere Mails können in den Ergebnissen noch fehlen.",

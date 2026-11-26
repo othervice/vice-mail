@@ -1131,6 +1131,22 @@ die Punkte nie allein in eine zweite Zeile rutschen.
 Updates und die mbox-Aufträge unten links (vorher am Rand bzw. 16 px), wie die Sendehinweise unten
 rechts.
 
+## Kontakte in der Suche (Stufe 22, Entscheidung 0074)
+
+Das Suchfeld ist eine Combobox. Unter dem leeren Feld stehen wie bisher die letzten Suchen, beim
+Tippen bis zu drei Kontakte in derselben schwebenden Fläche (`surface-raised`, Rand
+`border-strong`, `shadow-floating`, Ecke `rounded-card`): ein leises Etikett „Kontakte“ (12 px,
+`text-secondary`), je Kontakt eine Zeile (mindestens 40 px) mit Personensymbol, Name in 13 px und
+darunter der Adresse in 12 px `text-secondary`; hat der Kontakt mehrere Adressen, steht „und n
+weitere Adressen“ dahinter. Die gewählte Zeile `bg-selected`, Überfahren `bg-hover`. Die Fläche
+überdeckt nur den Anfang der Treffer; die Volltextsuche läuft darunter weiter. Der Fokus bleibt im
+Feld: Pfeile wählen, Eingabe übernimmt, Escape schließt erst die Liste. Die Wahl schreibt
+`kontakt:<Adresse>` (englisch `contact:`) ins Feld, das als Chip „Kontakt: …“ erscheint, und stellt
+den Bereich auf „Allen Konten“.
+
+Treffer mitten im Wort markiert die Liste an der Stelle, an der der Begriff steht („M**uster**“),
+nicht das ganze Wort.
+
 ## Regeln für Interaktion
 
 - Jede Aktion wirkt sofort in der Oberfläche; der Abgleich mit dem Server läuft dahinter.

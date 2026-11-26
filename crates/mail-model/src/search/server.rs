@@ -12,6 +12,8 @@
 //! - `is:unread`/`is:read`/`is:flagged` become `UNSEEN`/`SEEN`/`FLAGGED`/`UNFLAGGED`.
 //! - `has:attachment` and `is:snoozed` have no IMAP form: they are reported as not on the server
 //!   and only applied locally. `in:` and `account:` choose where to search.
+//! - Stage 22 (decision 0074): `contact:x` becomes `OR FROM x (OR TO x CC x)` with the address
+//!   as typed (the server does not know the contact's other addresses).
 
 use super::{CivilDate, Clause, Filter, ParsedQuery, SearchContext, Span, Status, TextField};
 
@@ -78,6 +80,13 @@ impl ParsedQuery {
                     let positive = !term.negated;
                     let criterion = match &term.filter {
                         Filter::Text(text) => Some(text_criterion(text.field, &text.text)),
+                        Filter::Contact(value) => Some(ServerCriterion::Or(
+                            Box::new(ServerCriterion::From(value.clone())),
+                            Box::new(ServerCriterion::Or(
+                                Box::new(ServerCriterion::To(value.clone())),
+                                Box::new(ServerCriterion::Cc(value.clone())),
+                            )),
+                        )),
                         Filter::Is(Status::Unread) => Some(ServerCriterion::Seen(!positive)),
                         Filter::Is(Status::Read) => Some(ServerCriterion::Seen(positive)),
                         Filter::Is(Status::Flagged) => Some(ServerCriterion::Flagged(positive)),
@@ -101,7 +110,8 @@ impl ParsedQuery {
                     };
                     let Some(criterion) = criterion else { continue };
                     // Flags and dates carry their polarity already.
-                    let negate = !positive && matches!(term.filter, Filter::Text(_));
+                    let negate =
+                        !positive && matches!(term.filter, Filter::Text(_) | Filter::Contact(_));
                     out.criteria.push(if negate {
                         ServerCriterion::Not(Box::new(criterion))
                     } else {
@@ -204,5 +214,18 @@ mod tests {
         );
         assert_eq!(q.local_only.len(), 1);
         assert!(query("in:inbox").is_empty());
+
+        // Stage 22: a contact is sender, recipient or copy on the server.
+        let either = |a: &str| {
+            Or(
+                Box::new(From(a.into())),
+                Box::new(Or(Box::new(To(a.into())), Box::new(Cc(a.into())))),
+            )
+        };
+        let q = query("contact:max@firma.de -kontakt:spam@x.de");
+        assert_eq!(
+            q.criteria,
+            [either("max@firma.de"), Not(Box::new(either("spam@x.de")))]
+        );
     }
 }

@@ -58,3 +58,49 @@ export function monthFirstFor(locale: string): boolean {
     return false;
   }
 }
+
+/** `OR` and `AND` between terms. */
+function isOperator(token: string): boolean {
+  return token === "OR" || token === "AND";
+}
+
+/**
+ * The query's terms split at white space, each marked plain (text, no filter, exclusion or
+ * operator). `from: anna` is one filter: a value after a key with nothing behind its colon.
+ */
+function terms(query: string): { token: string; plain: boolean }[] {
+  const out: { token: string; plain: boolean }[] = [];
+  let valueNext = false;
+  for (const token of query.split(/\s+/u)) {
+    if (token === "") continue;
+    const plain = !valueNext && !token.includes(":") && !token.startsWith("-") && !isOperator(token);
+    valueNext = /^-?[\p{L}_]+:$/u.test(token);
+    out.push({ token, plain });
+  }
+  return out;
+}
+
+/**
+ * Stage 22 (decision 0074): the words to look up contacts with while typing: the plain words of
+ * the query (filters stay out), without a prefix `*`. Empty when there are none, or when the
+ * query has a phrase in quotes (its words are not a name).
+ */
+export function contactWords(query: string): string {
+  if (query.includes('"')) return "";
+  return terms(query)
+    .filter((term) => term.plain)
+    .map((term) => term.token.replace(/\*+$/u, ""))
+    .filter((word) => word !== "")
+    .join(" ");
+}
+
+/**
+ * The query after a contact was chosen: its plain words give way to `{key}:{email}` (the
+ * language's `contact:`, `kontakt:` in German); filters and exclusions stay.
+ */
+export function withContact(query: string, key: string, email: string): string {
+  const kept = terms(query)
+    .filter((term) => !term.plain && !isOperator(term.token))
+    .map((term) => term.token);
+  return [...kept, `${key}:${email}`].join(" ");
+}

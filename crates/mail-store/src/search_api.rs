@@ -69,11 +69,39 @@ impl Store {
             };
             Ok(SearchIndexStatus {
                 state: match job.target {
-                    fts::Target::Live => SearchIndexState::Building,
+                    fts::Target::Live | fts::Target::Trigrams => SearchIndexState::Building,
                     fts::Target::New => SearchIndexState::Rebuilding,
                 },
                 percent,
             })
+        })
+        .await
+    }
+
+    /// Stage 22 (decision 0074): bytes of the database pages that hold the word index and the
+    /// trigram index (their shadow tables, `dbstat`), for the measurements of
+    /// `docs/testing/performance.md`.
+    pub async fn full_text_sizes(&self) -> Result<(u64, u64), StoreError> {
+        self.read(|c| {
+            let size = |table: &str| -> Result<u64, StoreError> {
+                let names: Vec<String> = ["data", "idx", "docsize", "config", "content"]
+                    .iter()
+                    .map(|suffix| format!("'{table}_{suffix}'"))
+                    .collect();
+                let bytes: i64 = c.query_row(
+                    &format!(
+                        "SELECT coalesce(sum(pgsize), 0) FROM dbstat WHERE name IN ({})",
+                        names.join(", ")
+                    ),
+                    [],
+                    |r| r.get(0),
+                )?;
+                Ok(u64::try_from(bytes).unwrap_or(0))
+            };
+            Ok((
+                size(crate::search::fts_table(false))?,
+                size(crate::search::fts_table(true))?,
+            ))
         })
         .await
     }
@@ -112,7 +140,7 @@ impl Store {
                 .await?;
                 tracing::info!("rebuilt full-text index swapped in");
             } else {
-                tracing::info!("existing messages indexed");
+                tracing::info!(?job.target, "existing messages indexed");
             }
             return Ok(IndexStep::Finished);
         };

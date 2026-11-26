@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { accountRing } from "../src/features/accounts/accountColor";
 import { monthFirstFor } from "../src/features/search/terms";
 import type { MessageListItem, SearchRequest, SearchTermInfo } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
+import { makeContact } from "./support/contacts";
 import { makeHit, searchPage } from "./support/search";
 import { renderApp } from "./support/render";
 import { showHeaderDetails } from "./support/reading";
@@ -46,7 +48,7 @@ function setup(options: Parameters<typeof mockCore>[0] = {}) {
 async function openSearch(user: ReturnType<typeof renderApp>["user"]) {
   await screen.findByRole("listbox", { name: "Messages in Inbox" });
   await user.click(screen.getByRole("button", { name: "Search" }));
-  return screen.findByRole("searchbox", { name: "Search mail" });
+  return screen.findByRole("combobox", { name: "Search mail" });
 }
 
 const lastRequest = (core: ReturnType<typeof mockCore>, cmd = "search") => {
@@ -63,7 +65,7 @@ describe("search field", () => {
     const { user } = setup();
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await user.keyboard("{Meta>}f{/Meta}");
-    const input = await screen.findByRole("searchbox", { name: "Search mail" });
+    const input = await screen.findByRole("combobox", { name: "Search mail" });
     // The field takes the focus in an effect after it renders: wait for it (slow under load).
     await waitFor(() => {
       expect(document.activeElement).toBe(input);
@@ -74,10 +76,10 @@ describe("search field", () => {
     expect(within(screen.getByRole("search")).getByText(/from:, to:, cc:, subject:/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Close search" }));
-    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Search mail" })).toBeNull();
     await user.click(screen.getByRole("listbox", { name: "Messages in Inbox" }));
     await user.keyboard("/");
-    const reopened = await screen.findByRole("searchbox", { name: "Search mail" });
+    const reopened = await screen.findByRole("combobox", { name: "Search mail" });
     await waitFor(() => {
       expect(document.activeElement).toBe(reopened);
     });
@@ -318,3 +320,159 @@ describe("search on the server", () => {
     expect(alert.dataset["errorCode"]).toBe("connection_lost");
   });
 });
+
+// Stage 22 (decision 0074): contacts on top while typing.
+const MAX = makeContact({
+  email: "max.mustermann@firma.example",
+  name: "Max Mustermann",
+  addresses: [
+    { email: "max.mustermann@firma.example", sent: 3, received: 5, seen: 0, lastUsed: null, blocked: false },
+    { email: "max@privat.example", sent: 0, received: 2, seen: 0, lastUsed: null, blocked: false },
+  ],
+});
+const DIRECTORY = [
+  MAX,
+  makeContact({ email: "maxi@laden.example", name: "Maxi Laden" }),
+  makeContact({ email: "max.planck@physik.example", name: "Max Planck" }),
+  makeContact({ email: "maxine@example.org", name: "Maxine" }),
+  makeContact({ email: "anna@example.org", name: "Anna Berg" }),
+];
+
+function contactsSetup(options: Parameters<typeof mockCore>[0] = {}) {
+  return setup({
+    contacts: { contacts: DIRECTORY },
+    search: {
+      search: (request) =>
+        request.query.includes(":")
+          ? searchPage({ terms: [term("contact", 0, request.query.length, request.query.indexOf(":") + 1)] })
+          : searchPage({ hits: [makeHit(INVOICE)] }),
+    },
+    ...options,
+  });
+}
+
+async function axeFindings(): Promise<string[]> {
+  const results = await axe.run(document.body, {
+    resultTypes: ["violations"],
+    iframes: false,
+    rules: { "color-contrast": { enabled: false } },
+  });
+  return results.violations
+    .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
+    .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+}
+
+describe("contacts on top of the search (stage 22)", () => {
+  it("offers up to three contacts while typing, chosen with the keyboard, over all accounts", async () => {
+    const { core, user } = contactsSetup();
+    const input = await openSearch(user);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Search in" }), "This folder");
+    await user.type(input, "max");
+
+    const contacts = await screen.findByRole("listbox", { name: "Contacts: all mail with the person" });
+    const options = within(contacts).getAllByRole("option");
+    expect(options.map((o) => o.getAttribute("aria-label"))).toEqual([
+      "Max Mustermann, max.mustermann@firma.example: show all mail with this person",
+      "Maxi Laden, maxi@laden.example: show all mail with this person",
+      "Max Planck, max.planck@physik.example: show all mail with this person",
+    ]);
+    // A merged contact names its other addresses.
+    expect(options[0]?.textContent).toContain("max.mustermann@firma.example and 1 more address");
+    expect(core.callsOf("list_contacts").at(-1)).toEqual({ query: "max", cursor: null, limit: 3, filter: "all" });
+    // Combobox: the field controls the list; the full-text results stay below.
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(input.getAttribute("aria-controls")).toBe(contacts.id);
+    expect(await screen.findByRole("listbox", { name: "Messages in the search results for “max”" })).toBeTruthy();
+
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowUp}");
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[0]?.id);
+    expect(options[0]?.getAttribute("aria-selected")).toBe("true");
+    await user.keyboard("{ArrowUp}");
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[2]?.id);
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect((input as HTMLInputElement).value).toBe("contact:max.mustermann@firma.example");
+    expect(screen.queryByRole("listbox", { name: "Contacts: all mail with the person" })).toBeNull();
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Search in" }).value).toBe("all");
+    await waitFor(() => {
+      expect(lastRequest(core)).toMatchObject({
+        query: "contact:max.mustermann@firma.example",
+        scope: { kind: "all" },
+        typing: false,
+      });
+    });
+    expect(core.callsOf("add_recent_search").at(-1)).toEqual({ query: "contact:max.mustermann@firma.example" });
+    const chips = await screen.findByRole("list", { name: "Filters of this search" });
+    expect(within(chips).getByTestId("search-chip").firstChild?.textContent).toBe(
+      "Contact: max.mustermann@firma.example",
+    );
+  });
+
+  it("keeps the filters, closes with Escape first, and answers a click", async () => {
+    const { core, user } = contactsSetup();
+    const input = await openSearch(user);
+    await user.type(input, "has:attachment must");
+    const contacts = await screen.findByRole("listbox", { name: "Contacts: all mail with the person" });
+    expect(core.callsOf("list_contacts").at(-1)).toMatchObject({ query: "must" });
+    expect(within(contacts).getAllByRole("option")).toHaveLength(1);
+
+    // Escape closes the list and keeps the text; typing opens it again.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "Contacts: all mail with the person" })).toBeNull();
+    expect((input as HTMLInputElement).value).toBe("has:attachment must");
+    await user.type(input, "e");
+    const again = await screen.findByRole("listbox", { name: "Contacts: all mail with the person" });
+    // Enter without a chosen contact searches the text.
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("listbox", { name: "Contacts: all mail with the person" })).toBeNull();
+    await waitFor(() => {
+      expect(lastRequest(core)).toMatchObject({ query: "has:attachment muste", typing: false });
+    });
+    await user.type(input, "r");
+    await user.click(within(await screen.findByRole("listbox", { name: "Contacts: all mail with the person" })).getAllByRole("option")[0] as HTMLElement);
+    expect(again).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("has:attachment contact:max.mustermann@firma.example");
+    expect(document.activeElement).toBe(input);
+    // Filters only, a phrase, nothing that fits: no list.
+    await user.clear(input);
+    await user.type(input, "\"max");
+    await user.type(input, " zzz");
+    expect(screen.queryByRole("listbox", { name: "Contacts: all mail with the person" })).toBeNull();
+    await user.clear(input);
+    await user.type(input, "zzz");
+    await waitFor(() => {
+      expect(core.callsOf("list_contacts").at(-1)).toMatchObject({ query: "zzz" });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox", { name: "Contacts: all mail with the person" })).toBeNull();
+    });
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("writes the German filter in German", async () => {
+    const { user } = contactsSetup({ preferences: { theme: "light", language: "de" } });
+    await screen.findByRole("listbox", { name: "Nachrichten in Posteingang" });
+    await user.click(screen.getByRole("button", { name: "Suchen" }));
+    const input = await screen.findByRole("combobox", { name: "Mails durchsuchen" });
+    await user.type(input, "planck");
+    const contacts = await screen.findByRole("listbox", { name: "Kontakte: alle Mails mit der Person" });
+    expect(within(screen.getByTestId("search-contacts")).getByText("Kontakte")).toBeTruthy();
+    await user.click(within(contacts).getAllByRole("option")[0] as HTMLElement);
+    expect((input as HTMLInputElement).value).toBe("kontakt:max.planck@physik.example");
+  });
+
+  it.each(["light", "dark"] as const)("has nothing serious for axe with the list open (%s)", async (theme) => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    const { user } = contactsSetup({ preferences: { theme, language: "system" } });
+    const input = await openSearch(user);
+    await waitFor(() => {
+      expect(document.documentElement.dataset["theme"]).toBe(theme);
+    });
+    await user.type(input, "max");
+    await screen.findByRole("listbox", { name: "Contacts: all mail with the person" });
+    await user.keyboard("{ArrowDown}");
+    expect(await axeFindings()).toEqual([]);
+  });
+});
+

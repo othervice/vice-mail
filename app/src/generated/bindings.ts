@@ -5146,7 +5146,9 @@ export type SearchTermInfo = {
 /**  What a term of the query is, for chips. */
 export type SearchTermKind = "text" | "from" | "to" | "cc" | "subject" | "filename" | "in" | "account" | "has_attachment" | "is_unread" | "is_read" | "is_flagged" | "is_snoozed" | "before" | "after" | "older_than" | "newer_than" | 
 /**  Stage 20: `larger:`. */
-"larger";
+"larger" | 
+/**  Stage 22: `contact:`. */
+"contact";
 
 /**
  *  Transport security of a server connection. There is deliberately no plaintext option: a

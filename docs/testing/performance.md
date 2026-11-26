@@ -906,3 +906,82 @@ von alice).
   gemessen (die zuvor geöffnete Mail blieb trotz Escape oben stehen), die Zahl in 78 ms.
 - **Ungeprüft:** 500.000 Mails auf dem Desktop, Windows, Retina-Bildschirm, die Tabellenansicht
   (gleiche Abfragen, anderes Zeichnen; gemessen ist nur die Zeilenansicht).
+
+## Stufe 22 – Suche mitten im Wort und Kontakte (Entscheidung 0074) – 26.11.2026
+
+**Umgebung:** Mac mini, Apple M4, macOS 27.2, SQLite 3.54.1 (gebündelt). **Debug-Build** (Rust
+`-O0`, SQLite ohne Optimierung): Ein Release-Build mit LTO hätte einen zweiten Satz aller
+Abhängigkeiten auf die knappe Platte gelegt; Stufe 7 maß im Release-Build rund ein Zehntel dieser
+Zeiten. Während der Läufe bauten andere Sitzungen (Load 5–8), Mediane schwanken deshalb; Unterschiede
+unter dem Anderthalbfachen sind Rauschen.
+
+**Wie gemessen:** `search::bench::bench_100k` (100.000 Mails, 17.935 Körper lokal, sonst wie in
+Stufe 7), dreimal mit demselben Generator: **vorher** (Commit `eeb863d`), **nachher** mit dem
+Mail-Text im Trigramm-Index (`SUBSTRING_BODY = true`, entschieden) und zum Vergleich **ohne Text**
+(nur Kopfzeilen und Dateinamen im Trigramm-Index). Die Größen der Indexe aus `dbstat`
+(`Store::full_text_sizes`). Alle Abfragen über `AppCore::search`, erste 50 Treffer, Median aus 100.
+
+```text
+cargo test -p mail-engine --lib search::bench::bench_100k -- --ignored --nocapture --test-threads 1
+```
+
+### Platz und Schreiben
+
+| | vorher | nachher (mit Text) | ohne Text |
+|---|---:|---:|---:|
+| Datenbankdatei | 119 MB | **272 MB** | 168 MB |
+| Wortindex `message_fts` | 33 MB | 33 MB | 33 MB |
+| Trigramm-Index `message_fts_tri` | – | **153 MB** | 48 MB |
+| Kopfdaten speichern (Fenster von 500) | 70,2 ms | 91,8 ms | 91,8 ms |
+| Körper speichern (Indextext über `mail-content`) | 2.213/s | 916/s | 1.373/s |
+| Neuaufbau beider Indexe (alle Körper neu gelesen) | 18,2 s | 27,2 s | 27,5 s |
+
+Der Trigramm-Index braucht rund 3,7 Byte je Byte Text, der Wortindex unter einem: 48 MB für Betreff,
+Absender, Empfänger, Kopie und Dateinamen aller 100.000 Mails, 105 MB für den Text der 17.935 Körper
+(rund 6 KB je Körper). Er wächst mit dem lokal liegenden Text, nicht mit der Zahl der Mails.
+
+### Erste Suchtreffer (50, Median, ms)
+
+| Anfrage | vorher | nachher | ohne Text |
+|---|---:|---:|---:|
+| häufiges Wort `rechnung` | 2,61 | 7,21 | 3,33 |
+| sehr häufiges Wort `und` | 2,74 | 6,00 | 3,21 |
+| seltenes Wort `tiberdor` | 2,32 | **29,25** | 7,84 |
+| beim Tippen `rech` | 4,49 | 6,81 | 5,17 |
+| Phrase `"viele grüße"` (nur Wortindex) | 2,51 | 5,15 | 2,40 |
+| zwei Wörter `rechnung bestellung` | 2,42 | 5,94 | 20,97 |
+| `from:` Nachname | 2,33 | 5,12 | 3,02 |
+| Wort + `account:` (kleinstes Konto) | 4,49 | 9,94 | 6,52 |
+| Wort + `in:inbox is:unread` | 3,29 | 3,22 | 3,27 |
+| `filename:rechnung has:attachment` | 2,76 | 2,46 | 2,20 |
+| nur Ausschluss `-und` | 20,71 | 18,89 | 30,19 |
+| `rechnung OR invoice` | 2,72 | 3,03 | 2,92 |
+| im Wort, häufig `echnun` | – | 2,53 | 2,53 |
+| im Wort, drei Zeichen `ech` | – | 2,33 | 2,37 |
+| im Wort, selten `iberdor` | – | 12,59 | 4,22 |
+| Zahl im Dateinamen `2345` | – | 0,34 | 0,36 |
+| im Wort, ohne Treffer `qxzqxz` | – | 0,12 | 0,16 |
+| Adressteil `istgeloch3@sen` (beide Indexe) | – | 4,13 | 3,45 |
+| ganze Adresse (beide Indexe) | – | 10,23 | 5,84 |
+| `"rechnung" echnun` (Wort und Teilwort) | – | 13,76 | 7,52 |
+| zwei Teile `echnun estell` | – | 2,90 | 7,39 |
+| Ausschluss im Wort `-echnun` | – | 18,42 | 6,93 |
+| beim Tippen, zwei Zeichen `re` (nur Wortindex) | – | 2,13 | 2,19 |
+| `contact:` Adresse (Absender, Empfänger, Kopie) | – | 2,26 | 2,38 |
+
+Schnellfilter der Listen (Stufe 19, Posteingang, 100 Zeilen): Text `rechnung` 7,2 → 24,2 ms, beim
+Tippen `rech` 6,9 → 15,2 ms, seltenes Wort nach Datum 0,4 → 13,1 ms, nach Absender 22,2 → 35,4 ms
+(alle Treffer eines Index werden je Abfrage einmal gesammelt).
+
+- **Ziel „Suche bis erste Treffer unter 200 ms bei 100.000 Mails“ erfüllt:** die langsamste Anfrage
+  29 ms im Debug-Build (ein seltenes Wort, dessen Dreiergruppen alle häufig sind: der Generator baut
+  Wörter aus 26 Silben, echte seltene Wörter und Nummern haben meist eine seltene Dreiergruppe).
+- Ein einzelnes Wort läuft über den Trigramm-Index allein (eine Abfrage); ohne Text im Index wären
+  es für jedes Wort ab drei Zeichen beide Indexe, deshalb dort „zwei Wörter“ 21 ms.
+- `search::bench::small_data_meets_generous_thresholds` prüft mit jedem `cargo test` (3.000 Mails)
+  zusätzlich die Anfragen von Stufe 22 gegen 200 ms (`search inside words`).
+
+**Ungeprüft:** Release-Build, 500.000 Mails, Kaltstart, echte Postfächer mit langen Texten,
+Windows. Der Hintergrund-Job nach Migration 0029 kostet einmal so viel wie ein Neuaufbau (hier
+27 s im Debug-Build); bis dahin findet die Suche Wörter wie bisher und Teilwörter nur in schon
+eingetragenen Mails (Hinweis „Der Suchindex wird aufgebaut“).

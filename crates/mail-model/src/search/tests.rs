@@ -63,6 +63,7 @@ fn describe_term(term: &Term) -> String {
         Filter::OlderThan(age) => out.push_str(&format!("older_than:{}{:?}", age.amount, age.unit)),
         Filter::NewerThan(age) => out.push_str(&format!("newer_than:{}{:?}", age.amount, age.unit)),
         Filter::Larger(bytes) => out.push_str(&format!("larger:{bytes}")),
+        Filter::Contact(value) => out.push_str(&format!("contact:{value}")),
     }
     out
 }
@@ -431,16 +432,64 @@ fn long_input_is_cut_and_reported() {
         &ctx(),
         CompileOptions {
             prefix_last_word: true,
+            substrings: Substrings::Off,
         },
     );
-    assert!(matches!(&compiled.text, TextMatch::Match(m) if !m.ends_with('*')));
+    assert!(text_match(&compiled).starts_with("match:"));
+    assert!(!text_match(&compiled).ends_with('*'));
 }
 
+/// The text of a query with the word index only, in the form of one expression (as before
+/// decision 0074): `match:` the positive terms, `NOT` the exclusions; `exclude:` exclusions only.
 fn text_match(compiled: &CompiledQuery) -> String {
-    match &compiled.text {
-        TextMatch::Any => "any".to_owned(),
-        TextMatch::Match(expr) => format!("match:{expr}"),
-        TextMatch::Exclude(expr) => format!("exclude:{expr}"),
+    let text = &compiled.text;
+    assert!(
+        text.all.len() <= 1
+            && text.all.iter().all(|c| c.trigrams.is_none())
+            && text.none.trigrams.is_none(),
+        "word index only: {text:?}"
+    );
+    let words = text.all.first().and_then(|c| c.words.clone());
+    match (words, &text.none.words) {
+        (None, None) => "any".to_owned(),
+        (Some(w), None) => format!("match:{w}"),
+        (Some(w), Some(n)) => format!("match:({w}) NOT ({n})"),
+        (None, Some(n)) => format!("exclude:{n}"),
+    }
+}
+
+/// Every expression of a text match.
+fn expressions(text: &TextMatch) -> Vec<&str> {
+    text.all
+        .iter()
+        .chain(std::iter::once(&text.none))
+        .flat_map(|c| [c.words.as_deref(), c.trigrams.as_deref()])
+        .flatten()
+        .collect()
+}
+
+/// Decision 0074: `words:` and `tri:` clauses (one index), `either:` (word | trigram), then the
+/// exclusions per index, separated by ` ; `.
+fn describe_text(text: &TextMatch) -> String {
+    let mut parts = Vec::new();
+    for clause in &text.all {
+        parts.push(match (&clause.words, &clause.trigrams) {
+            (Some(w), None) => format!("words:{w}"),
+            (None, Some(t)) => format!("tri:{t}"),
+            (Some(w), Some(t)) => format!("either:{w} | {t}"),
+            (None, None) => "empty".to_owned(),
+        });
+    }
+    if let Some(w) = &text.none.words {
+        parts.push(format!("not-words:{w}"));
+    }
+    if let Some(t) = &text.none.trigrams {
+        parts.push(format!("not-tri:{t}"));
+    }
+    if parts.is_empty() {
+        "any".to_owned()
+    } else {
+        parts.join(" ; ")
     }
 }
 
@@ -535,16 +584,17 @@ fn fts_table() {
     for (input, closed, open) in FTS_CASES {
         let query = parse(input, &ctx());
         for (prefix_last_word, want) in [(false, closed), (true, open)] {
-            let got = text_match(&query.compile(&ctx(), CompileOptions { prefix_last_word }));
+            let options = CompileOptions {
+                prefix_last_word,
+                substrings: Substrings::Off,
+            };
+            let got = text_match(&query.compile(&ctx(), options));
             if got != *want {
                 failures.push(format!(
                     "{input:?} (prefix_last_word {prefix_last_word})\n   want {want}\n   got  {got}"
                 ));
             }
-            if let TextMatch::Match(expr) | TextMatch::Exclude(expr) = &query
-                .compile(&ctx(), CompileOptions { prefix_last_word })
-                .text
-            {
+            for expr in expressions(&query.compile(&ctx(), options).text) {
                 check_fts_syntax(expr);
             }
         }
@@ -574,7 +624,7 @@ fn structured_filters() {
     );
     assert_eq!(q.excluded_mailboxes[0].role, Some(MailboxRole::Trash));
     assert!(!q.matches_nothing());
-    assert_eq!(q.text, TextMatch::Any);
+    assert!(q.text.is_any());
 
     let q = compiled("is:unread is:flagged -is:snoozed has:attachment");
     assert_eq!(
@@ -716,7 +766,11 @@ fn check_fts_syntax(expr: &str) {
             }
             '{' => {
                 let end = rest.find('}').expect("closing brace");
-                assert!(columns.contains(&&rest[1..end]), "column in {expr:?}");
+                let names: Vec<&str> = rest[1..end].split(' ').collect();
+                assert!(
+                    !names.is_empty() && names.iter().all(|n| columns.contains(n)),
+                    "column in {expr:?}"
+                );
                 let after = rest[end + 1..].strip_prefix(" : ").expect("column colon");
                 assert!(
                     after.starts_with('"'),
@@ -848,6 +902,9 @@ const FRAGMENTS: &[&str] = &[
     "https://",
     "Re:",
     "x1:",
+    "contact:",
+    "kontakt:",
+    "max@firma.de",
 ];
 
 #[test]
@@ -903,9 +960,20 @@ fn random_input_never_panics_and_never_injects() {
                 .all(|w| w[0].span.start <= w[1].span.start)
         );
         for prefix_last_word in [false, true] {
-            let compiled = query.compile(context, CompileOptions { prefix_last_word });
-            if let TextMatch::Match(expr) | TextMatch::Exclude(expr) = &compiled.text {
-                check_fts_syntax(expr);
+            for substrings in [Substrings::Off, Substrings::Filling, Substrings::Complete] {
+                let options = CompileOptions {
+                    prefix_last_word,
+                    substrings,
+                };
+                let compiled = query.compile(context, options);
+                for expr in expressions(&compiled.text) {
+                    check_fts_syntax(expr);
+                }
+                for contact in &compiled.contacts {
+                    if let Some(expr) = contact_match(std::slice::from_ref(&contact.value)) {
+                        check_fts_syntax(&expr);
+                    }
+                }
             }
         }
     }
@@ -946,4 +1014,245 @@ fn larger_takes_sizes_with_units_and_compiles_to_bounds() {
     for bad in ["larger:big", "larger:5X", "larger:-3M", "larger:2T"] {
         assert!(!parse(bad, &ctx()).errors.is_empty(), "{bad}");
     }
+}
+
+/// (input, typing, text with the trigram index being filled, with it complete); decision 0074.
+const SUBSTRING_CASES: &[(&str, bool, &str, &str)] = &[
+    (
+        "uster",
+        false,
+        r#"either:"uster" | "uster""#,
+        r#"tri:"uster""#,
+    ),
+    // Shorter than three characters, quoted: words only.
+    ("us", false, r#"words:"us""#, r#"words:"us""#),
+    ("us", true, r#"words:"us""#, r#"words:"us""#),
+    (
+        "\"muster\"",
+        false,
+        r#"words:"muster""#,
+        r#"words:"muster""#,
+    ),
+    (
+        "\"vielen dank\"",
+        false,
+        r#"words:"vielen dank""#,
+        r#"words:"vielen dank""#,
+    ),
+    // The word being typed: a prefix in the word index, a substring in the trigram one.
+    ("rech", true, r#"either:"rech" * | "rech""#, r#"tri:"rech""#),
+    (
+        "rech*",
+        false,
+        r#"either:"rech" * | "rech""#,
+        r#"tri:"rech""#,
+    ),
+    ("1234", false, r#"either:"1234" | "1234""#, r#"tri:"1234""#),
+    // More than one word: both indexes, also when complete.
+    (
+        "bob@example.com",
+        false,
+        r#"either:"bob@example.com" | "bob@example.com""#,
+        r#"either:"bob@example.com" | "bob@example.com""#,
+    ),
+    (
+        "a-b",
+        false,
+        r#"either:"a-b" | "a-b""#,
+        r#"either:"a-b" | "a-b""#,
+    ),
+    // Combining marks do not count.
+    (
+        "u\u{308}s",
+        false,
+        "words:\"u\u{308}s\"",
+        "words:\"u\u{308}s\"",
+    ),
+    // Columns.
+    (
+        "from:uster",
+        false,
+        r#"either:{from} : "uster" | {from} : "uster""#,
+        r#"tri:{from} : "uster""#,
+    ),
+    (
+        "filename:2026",
+        false,
+        r#"either:{attachments} : "2026" | {attachments} : "2026""#,
+        r#"tri:{attachments} : "2026""#,
+    ),
+    // Terms of one index are joined; mixed ones stay clauses of their own.
+    (
+        "max mustermann",
+        false,
+        r#"either:"max" | "max" ; either:"mustermann" | "mustermann""#,
+        r#"tri:"max" AND "mustermann""#,
+    ),
+    (
+        "ab muster",
+        false,
+        r#"words:"ab" ; either:"muster" | "muster""#,
+        r#"words:"ab" ; tri:"muster""#,
+    ),
+    // OR: the members' expressions per index.
+    (
+        "uster OR ab",
+        false,
+        r#"either:("uster" OR "ab") | "uster""#,
+        r#"either:"ab" | "uster""#,
+    ),
+    (
+        "uster OR muster",
+        false,
+        r#"either:("uster" OR "muster") | ("uster" OR "muster")"#,
+        r#"tri:("uster" OR "muster")"#,
+    ),
+    // Exclusions per index.
+    (
+        "-uster",
+        false,
+        r#"not-words:"uster" ; not-tri:"uster""#,
+        r#"not-tri:"uster""#,
+    ),
+    (
+        "rechnung -uster -ab",
+        false,
+        r#"either:"rechnung" | "rechnung" ; not-words:"uster" OR "ab" ; not-tri:"uster""#,
+        r#"tri:"rechnung" ; not-words:"ab" ; not-tri:"uster""#,
+    ),
+    // Injection attempts stay inside string literals in both indexes.
+    (
+        "{from}:x",
+        false,
+        r#"either:"{from}:x" | "{from}:x""#,
+        r#"either:"{from}:x" | "{from}:x""#,
+    ),
+    (
+        "NEAR(abc",
+        false,
+        r#"either:"NEAR(abc" | "NEAR(abc""#,
+        r#"either:"NEAR(abc" | "NEAR(abc""#,
+    ),
+    (
+        "foo:\"bar\"",
+        false,
+        r#"either:"foo:""bar""" | "foo:""bar""""#,
+        r#"either:"foo:""bar""" | "foo:""bar""""#,
+    ),
+    ("is:unread", false, "any", "any"),
+];
+
+#[test]
+fn substring_table() {
+    let mut failures = Vec::new();
+    for (input, typing, filling, complete) in SUBSTRING_CASES {
+        let query = parse(input, &ctx());
+        for (substrings, want) in [
+            (Substrings::Filling, filling),
+            (Substrings::Complete, complete),
+        ] {
+            let compiled = query.compile(
+                &ctx(),
+                CompileOptions {
+                    prefix_last_word: *typing,
+                    substrings,
+                },
+            );
+            let got = describe_text(&compiled.text);
+            if got != *want {
+                failures.push(format!(
+                    "{input:?} ({substrings:?}, typing {typing})\n   want {want}\n   got  {got}"
+                ));
+            }
+            for expr in expressions(&compiled.text) {
+                check_fts_syntax(expr);
+            }
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    // The default is the safe one: word hits never go missing while the index fills.
+    assert_eq!(CompileOptions::default().substrings, Substrings::Filling);
+}
+
+/// Decision 0074: `contact:` is a filter of its own; the engine resolves it.
+#[test]
+fn contact_terms() {
+    let query = parse("contact:max@firma.de -kontakt:spam@x.de rechnung", &ctx());
+    assert!(query.errors.is_empty(), "{:?}", query.errors);
+    let compiled = query.compile(&ctx(), CompileOptions::default());
+    let contacts: Vec<(&str, bool)> = compiled
+        .contacts
+        .iter()
+        .map(|c| (c.value.as_str(), c.negated))
+        .collect();
+    assert_eq!(contacts, [("max@firma.de", false), ("spam@x.de", true)]);
+    assert_eq!(
+        &"contact:max@firma.de -kontakt:spam@x.de rechnung"
+            [compiled.contacts[1].span.start..compiled.contacts[1].span.end],
+        "-kontakt:spam@x.de"
+    );
+    assert!(!compiled.is_unrestricted());
+    assert!(
+        !parse("contact:a", &ctx())
+            .compile(&ctx(), CompileOptions::default())
+            .is_unrestricted()
+    );
+    // Nothing to search, no value: reported and left out.
+    let bad = parse("contact:!!! contact:", &ctx());
+    let kinds: Vec<SearchErrorKind> = bad.errors.iter().map(|e| e.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            SearchErrorKind::NothingToSearch,
+            SearchErrorKind::MissingValue
+        ]
+    );
+    // OR only between text terms.
+    let or = parse("contact:a@b.de OR rechnung", &ctx());
+    assert_eq!(or.errors[0].kind, SearchErrorKind::OrNeedsText);
+
+    // The expression: a phrase per address in sender, recipients and copy, quoted.
+    assert_eq!(
+        contact_match(&["max@firma.de".into()]).as_deref(),
+        Some(r#"{from to cc} : "max@firma.de""#)
+    );
+    assert_eq!(
+        contact_match(&[
+            "max@firma.de".into(),
+            "Max@Firma.de\") OR x".into(),
+            "max@firma.de".into(),
+            "!!!".into()
+        ])
+        .as_deref(),
+        Some(r#"({from to cc} : "max@firma.de" OR {from to cc} : "Max@Firma.de"") OR x")"#)
+    );
+    assert_eq!(contact_match(&["@@".into()]), None);
+    for expr in [
+        contact_match(&["a@b.de".into(), "c@d.de".into()]).expect("expr"),
+        contact_match(&["x\"y".into()]).expect("expr"),
+    ] {
+        check_fts_syntax(&expr);
+    }
+
+    // Added to a text match: joined with the clause of words, or excluded.
+    let mut text = TextMatch::default();
+    text.require_words("\"a\"".into());
+    text.require_words("\"b\"".into());
+    text.exclude_words("\"c\"".into());
+    text.exclude_words("\"d\"".into());
+    assert_eq!(
+        describe_text(&text),
+        r#"words:"a" AND "b" ; not-words:"c" OR "d""#
+    );
+    let mut text = parse("uster", &ctx())
+        .compile(
+            &ctx(),
+            CompileOptions {
+                prefix_last_word: false,
+                substrings: Substrings::Complete,
+            },
+        )
+        .text;
+    text.require_words("\"a\"".into());
+    assert_eq!(describe_text(&text), r#"words:"a" ; tri:"uster""#);
 }

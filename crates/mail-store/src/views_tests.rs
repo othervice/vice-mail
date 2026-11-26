@@ -1,7 +1,7 @@
 //! Stage 19, task A in the store: sorted and filtered list views (decisions 0061, 0062), the
 //! sort keys of every location (migration 0026) and the plans of the view queries.
 
-use mail_model::search::{RowidRange, TextMatch};
+use mail_model::search::{RowidRange, TextClause, TextMatch};
 use mail_model::{
     AccountId, Address, ListOrder, MailboxId, MessageHeader, MessageId, SortKey, ViewCursor,
     sender_sort_key, subject_sort_key,
@@ -410,7 +410,7 @@ async fn quick_filters_combine_and_count() {
     check(
         "text in the subject",
         search(SearchFilter {
-            text: TextMatch::Match("\"angebot\"".into()),
+            text: TextMatch::words("\"angebot\""),
             ..SearchFilter::default()
         }),
         ids_where(&headers, |_, h| h.subject.contains("Angebot")),
@@ -419,10 +419,60 @@ async fn quick_filters_combine_and_count() {
     check(
         "text without the excluded word",
         search(SearchFilter {
-            text: TextMatch::Exclude("\"angebot\"".into()),
+            text: TextMatch::excluding_words("\"angebot\""),
             ..SearchFilter::default()
         }),
         ids_where(&headers, |_, h| !h.subject.contains("Angebot")),
+    )
+    .await;
+    // Decision 0074: inside words through the trigram index, alone, in either index, excluded.
+    check(
+        "text inside a word",
+        search(SearchFilter {
+            text: TextMatch {
+                all: vec![TextClause {
+                    words: None,
+                    trigrams: Some("\"ngebo\"".into()),
+                }],
+                none: TextClause::default(),
+            },
+            ..SearchFilter::default()
+        }),
+        ids_where(&headers, |_, h| h.subject.contains("Angebot")),
+    )
+    .await;
+    check(
+        "text as a word or inside one",
+        search(SearchFilter {
+            text: TextMatch {
+                all: vec![TextClause {
+                    words: Some("\"zebra\"".into()),
+                    trigrams: Some("\"echnu\"".into()),
+                }],
+                none: TextClause::default(),
+            },
+            ..SearchFilter::default()
+        }),
+        ids_where(&headers, |_, h| {
+            h.subject == "zebra" || h.subject.contains("Rechnung")
+        }),
+    )
+    .await;
+    check(
+        "text not inside a word",
+        search(SearchFilter {
+            text: TextMatch {
+                all: Vec::new(),
+                none: TextClause {
+                    words: Some("\"zebra\"".into()),
+                    trigrams: Some("\"ngebo\"".into()),
+                },
+            },
+            ..SearchFilter::default()
+        }),
+        ids_where(&headers, |_, h| {
+            h.subject != "zebra" && !h.subject.contains("Angebot")
+        }),
     )
     .await;
     let from = D + 10 * 60;
@@ -431,7 +481,7 @@ async fn quick_filters_combine_and_count() {
         "text, tag, unread and a date range",
         ViewFilter {
             search: SearchFilter {
-                text: TextMatch::Match("\"angebot\"".into()),
+                text: TextMatch::words("\"angebot\""),
                 unread: Some(true),
                 dates: RowidRange {
                     from: Some(from),
@@ -859,7 +909,7 @@ fn filters() -> Vec<(&'static str, ViewFilter)> {
             "text, tag, contacts, attachment",
             ViewFilter {
                 search: SearchFilter {
-                    text: TextMatch::Match("\"angebot\"".into()),
+                    text: TextMatch::words("\"angebot\""),
                     has_attachment: Some(true),
                     ..SearchFilter::default()
                 },
@@ -920,7 +970,7 @@ fn check_plans(conn: &Connection, mailboxes: &[(MailboxId, AccountId)], stage: &
                                         || l.starts_with("SEARCH l USING INDEX loc_unseen")
                                         || l.starts_with("SEARCH l USING INDEX loc_flagged")
                                         // The text's matches in id order, like the search.
-                                        || (matches!(filter.search.text, TextMatch::Match(_))
+                                        || (!filter.search.text.all.is_empty()
                                             && l.starts_with("SEARCH l USING INDEX loc_message (message_id=? AND mailbox_id=?)"))
                                 }).count(),
                                 _ => {

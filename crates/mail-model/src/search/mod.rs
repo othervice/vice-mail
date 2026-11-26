@@ -7,13 +7,15 @@
 //!    input (for chips and error marks) and every problem found, each with its position. It never
 //!    fails: problems are reported and the term is dropped or read as text, so the rest of the
 //!    query still searches.
-//! 2. [`ParsedQuery::compile`] turns that into a [`CompiledQuery`] for the store: one FTS5 `MATCH`
-//!    expression (quoted, so no input can inject FTS5 syntax) plus the other filters as data
-//!    (accounts, mailboxes, a `rowid` range for dates as in decision 0003, flags, attachments).
+//! 2. [`ParsedQuery::compile`] turns that into a [`CompiledQuery`] for the store: FTS5 `MATCH`
+//!    expressions for the word index and, since stage 22 (decision 0074), the trigram index
+//!    (quoted, so no input can inject FTS5 syntax) plus the other filters as data (accounts,
+//!    mailboxes, contacts, a `rowid` range for dates as in decision 0003, flags, attachments).
 //!    SQL for the non-FTS parts is built by `mail-store`.
 //!
-//! Text is passed on as typed: case and diacritics are folded by the FTS5 tokenizer
-//! (`unicode61 remove_diacritics 2`), not here. Only control characters count as whitespace.
+//! Text is passed on as typed: case and diacritics are folded by the FTS5 tokenizers
+//! (`unicode61 remove_diacritics 2`, `trigram remove_diacritics 1`, which fold the same way), not
+//! here. Only control characters count as whitespace.
 
 mod compile;
 mod date;
@@ -23,7 +25,10 @@ mod server;
 #[cfg(test)]
 mod tests;
 
-pub use compile::{CompileOptions, CompiledQuery, FtsColumn, RowidRange, TextMatch};
+pub use compile::{
+    CompileOptions, CompiledQuery, ContactTerm, FtsColumn, MIN_SUBSTRING_CHARS, RowidRange,
+    SUBSTRING_BODY, Substrings, TextClause, TextMatch, contact_match,
+};
 pub use date::{Age, AgeUnit, CivilDate, FixedOffset, TimeZone};
 pub use highlight::{HighlightField, HighlightTerm, fold, highlight};
 pub use parse::{

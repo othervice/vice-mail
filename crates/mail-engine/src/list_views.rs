@@ -106,6 +106,7 @@ impl<C: Connector> AppCore<C> {
         };
         let options = mail_model::search::CompileOptions {
             prefix_last_word: true,
+            substrings: resolve::substrings_now(store).await?,
         };
         let compiled = {
             let zone = LocalZone::system();

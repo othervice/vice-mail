@@ -4,7 +4,7 @@
 //! - `word`, `"a phrase"`: free text in every indexed field; `word*`/`"phrase"*` matches the
 //!   start of the last word (at least [`MIN_PREFIX_CHARS`] characters)
 //! - `key:value`, `key:"value with spaces"`, also `key: value`; keys ignore case, German aliases
-//!   `von an betreff datei ordner konto hat ist vor nach`
+//!   `von an betreff datei ordner konto hat ist vor nach kontakt`
 //! - `-term` excludes (also before filters and phrases)
 //! - `a OR b` (upper case) between text terms; binds tighter than the implicit AND, so
 //!   `a b OR c` is `a AND (b OR c)`. No parentheses. `AND` (upper case) may be written and
@@ -104,6 +104,10 @@ pub enum Filter {
     /// Stage 20 (decision 0060): `larger:10M`, the message is at least this many bytes
     /// (RFC822.SIZE); `-larger:` smaller than that. Units `K`, `M`, `G` (1024-based), `B`.
     Larger(u64),
+    /// Stage 22 (decision 0074): `contact:` an address (as typed): mail from, to or in copy of
+    /// any address of the contact that has it. The engine resolves the contact's addresses;
+    /// a value that is no address is searched as words in sender, recipients and copy.
+    Contact(String),
 }
 
 /// Text to find. Passed to FTS5 as one quoted string: several words in it are a phrase.
@@ -434,6 +438,7 @@ enum Key {
     OlderThan,
     NewerThan,
     Larger,
+    Contact,
 }
 
 /// Stage 20: `10M`, `500k`, `2G`, `1,5M`/`1.5M`, `12345` (bytes), `20MB`: bytes, 1024-based;
@@ -477,6 +482,7 @@ fn known_key(key: &str) -> Option<Key> {
         "older_than" => Key::OlderThan,
         "newer_than" => Key::NewerThan,
         "larger" | "größer" | "groesser" => Key::Larger,
+        "contact" | "kontakt" => Key::Contact,
         _ => return None,
     };
     Some(key)
@@ -570,6 +576,16 @@ fn term(
             role: mailbox_role(trimmed),
         }),
         Key::Account => Filter::Account(trimmed.to_owned()),
+        Key::Contact => {
+            if !trimmed.chars().any(is_token_char) {
+                errors.push(SearchError {
+                    kind: SearchErrorKind::NothingToSearch,
+                    span,
+                });
+                return None;
+            }
+            Filter::Contact(trimmed.to_owned())
+        }
         Key::Has | Key::Is => {
             let filter = match key {
                 Key::Has => is_attachment_word(trimmed).then_some(Filter::HasAttachment),

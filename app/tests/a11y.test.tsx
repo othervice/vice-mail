@@ -350,7 +350,7 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await screen.findByRole("listbox", { name: "Recent searches" });
     await user.keyboard("{ArrowDown}");
     expect(await seriousFindings()).toEqual([]);
-    await user.type(screen.getByRole("searchbox", { name: "Search mail" }), "rechnung");
+    await user.type(screen.getByRole("combobox", { name: "Search mail" }), "rechnung");
     await user.click(screen.getByRole("button", { name: "Save search" }));
     await screen.findByRole("group", { name: "Save this search" });
     expect(await seriousFindings()).toEqual([]);
