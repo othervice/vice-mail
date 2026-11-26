@@ -269,10 +269,11 @@ function focusables(root: HTMLElement): HTMLElement[] {
 /**
  * Stage 23 (decision 0086): where the card stands in the main window. Over the reading area when
  * the reading pane is beside the list (its start is where the list ends, its top where the area
- * below the view's header starts), else at the end of the window. Measured on the DOM (the list's
- * width follows its handle, the layout and the view change while the composer is open) and given
- * to the card as CSS variables (CSSOM, no style attribute: CSP); the stylesheet keeps the card
- * inside the window and wide enough.
+ * starts: right under the toolbar across the window, decision 0084, or under a notice above the
+ * view), else at the end of the window. Measured on the DOM (the list's width follows its handle,
+ * the layout and the view change while the composer is open) and given to the card as CSS
+ * variables (CSSOM, no style attribute: CSP); the stylesheet keeps the card inside the window and
+ * wide enough.
  */
 function useCardPlacement(card: RefObject<HTMLElement | null>, enabled: boolean): void {
   useLayoutEffect(() => {
@@ -313,9 +314,6 @@ function useCardPlacement(card: RefObject<HTMLElement | null>, enabled: boolean)
   }, [card, enabled]);
 }
 
-/** A bar at the top of the reading area is lower than this (px): a toolbar's row, not the pane. */
-const BAR_MAX_HEIGHT = 80;
-
 /** Measures the reading area in `host` and puts the card there; returns what was measured. */
 function placeCard(node: HTMLElement, host: HTMLElement): HTMLElement[] {
   const box = host.getBoundingClientRect();
@@ -324,8 +322,7 @@ function placeCard(node: HTMLElement, host: HTMLElement): HTMLElement[] {
   let start: number | null = null;
   let list: HTMLElement | null = null;
   if (area) {
-    const areaTop = area.getBoundingClientRect().top;
-    top = areaTop - box.top;
+    top = area.getBoundingClientRect().top - box.top;
     if (area.dataset["readingPane"] === "right") {
       const handle = area.querySelector('[role="separator"][aria-controls]');
       const id = handle?.getAttribute("aria-controls");
@@ -334,15 +331,8 @@ function placeCard(node: HTMLElement, host: HTMLElement): HTMLElement[] {
         const rect = list.getBoundingClientRect();
         start = document.documentElement.dir === "rtl" ? box.right - rect.left : rect.right - box.left;
       }
-      // The reading pane's toolbar at the top of the area stays visible and usable: the card
-      // starts below its bar.
-      for (const toolbar of area.querySelectorAll<HTMLElement>('[role="toolbar"]')) {
-        if (node.contains(toolbar) || list?.contains(toolbar)) continue;
-        let bar: HTMLElement = toolbar;
-        while (bar.parentElement && bar.parentElement !== area && bar.parentElement.getBoundingClientRect().height < BAR_MAX_HEIGHT) bar = bar.parentElement;
-        const rect = bar.getBoundingClientRect();
-        if (rect.top - areaTop < BAR_MAX_HEIGHT && rect.height > 0) top = Math.max(top, rect.bottom - box.top);
-      }
+      // The open message's actions stand in the toolbar across the window (decision 0084), above
+      // the card, and stay usable; the reading pane has no bar of its own to keep clear.
     }
   }
   // Written only when it changed: an unchanged card needs no new style.
@@ -395,6 +385,17 @@ function ComposerFrame({ title, heading, onClose, status, actions, children, onK
   const minimisable = !inWindow && onMinimisedChange !== undefined;
   const shownMinimised = minimisable && minimised;
   useCardPlacement(card, !inWindow);
+  // Decision 0086 (addendum, stage 23 integration): while the card covers the reading area, the
+  // contact panel beside it steps aside, so the card has the room the draft gives it.
+  const setCardOpen = useComposerStore((state) => state.setCardOpen);
+  const covering = !inWindow && !shownMinimised;
+  useLayoutEffect(() => {
+    if (!covering) return undefined;
+    setCardOpen(true);
+    return () => {
+      setCardOpen(false);
+    };
+  }, [covering, setCardOpen]);
 
   const minimise = () => {
     onMinimisedChange?.(true);

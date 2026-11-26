@@ -188,7 +188,13 @@ describe("the contact panel", () => {
         to: [{ name: "Grace Hopper", email: "grace@example.org" }],
       });
     });
-    await user.click(within(panel).getByRole("button", { name: "All mail" }));
+    // The composer card takes the panel's room while it is open (decision 0086, addendum).
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Contact" })).toBeNull();
+    });
+    await user.click(await screen.findByTestId("composer-close"));
+    const back = await screen.findByRole("complementary", { name: "Contact" });
+    await user.click(within(back).getByRole("button", { name: "All mail" }));
     expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "inbox" });
     expect(useSearchStore.getState()).toMatchObject({ open: true, query: "contact:grace@example.org", submitted: true, scope: "all" });
   });
@@ -224,5 +230,28 @@ describe("the contact panel", () => {
     });
     expect(screen.queryByRole("complementary", { name: "Contact" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Contact panel" })).toBeNull();
+  });
+
+  // Stage 23 integration (decision 0086, addendum): the composer card takes the reading area and
+  // the panel's room, as in the draft; minimised or closed, the panel is back.
+  it("steps aside while the composer card covers the reading area", async () => {
+    const { user } = setup();
+    await openGrace(user);
+    expect(await screen.findByRole("complementary", { name: "Contact" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "New message" }));
+    await screen.findByRole("dialog", { name: "New message" });
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Contact" })).toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: "Contact panel" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Minimise" }));
+    expect(await screen.findByRole("complementary", { name: "Contact" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Contact panel" }).getAttribute("aria-expanded")).toBe("true");
+    await user.click(screen.getByTestId("composer-restore"));
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Contact" })).toBeNull();
+    });
+    await user.click(screen.getByTestId("composer-close"));
+    expect(await screen.findByRole("complementary", { name: "Contact" })).toBeTruthy();
   });
 });

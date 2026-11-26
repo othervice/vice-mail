@@ -54,6 +54,12 @@ interface ComposerState {
   session: ComposerSession | null;
   /** The draft the open composer edits, once it has one (for `draftsChanged`). */
   openDraftId: DraftId | null;
+  /**
+   * Stage 23 (decision 0086, addendum): the main window's composer stands as a card over the
+   * reading area (open, not minimised). The contact panel steps aside meanwhile, as in the draft.
+   */
+  cardOpen: boolean;
+  setCardOpen: (open: boolean) => void;
   /** Sends shown as notices, oldest first. */
   sends: readonly TrackedSend[];
   open: (source: ComposerSource) => void;
@@ -113,6 +119,10 @@ function trim(sends: TrackedSend[]): TrackedSend[] {
 export const useComposerStore = create<ComposerState>()((set) => ({
   session: null,
   openDraftId: null,
+  cardOpen: false,
+  setCardOpen: (cardOpen) => {
+    set((state) => (state.cardOpen === cardOpen ? state : { cardOpen }));
+  },
   sends: [],
   open: (source) => {
     set({

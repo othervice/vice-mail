@@ -3,7 +3,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { contactListIpc, toCoreError, type ContactEntry, type MessageListItem } from "../../services/ipc";
-import { openComposer } from "../../stores/composer";
+import { openComposer, useComposerStore } from "../../stores/composer";
 import { useContactPanelStore, type PanelPerson } from "../../stores/contactPanel";
 import { useLayoutStore } from "../../stores/layout";
 import { useSearchStore } from "../../stores/search";
@@ -34,9 +34,11 @@ const AI_PANEL_OVERLAY_BELOW = 1100;
  * Whether the window has room for the contact panel next to the sidebar (or the rail), the list
  * in its width (the panel never squeezes it), the reading pane's smallest width and the AI panel
  * when it is open. Not on narrow windows: the panel hides and its toggle with it; the stored
- * choice stays.
+ * choice stays. Stage 23 (decision 0086, addendum): nor while the composer card covers the
+ * reading area; the card takes that room, as in the draft.
  */
 export function useContactPanelFits(): boolean {
+  const composing = useComposerStore((state) => state.cardOpen);
   const docked = useUiStore((state) => state.sidebarExpanded && !state.sidebarNarrow);
   const sidebarWidth = useUiStore((state) => state.sidebarWidth);
   const listWidth = useUiStore((state) => state.listWidth);
@@ -57,7 +59,7 @@ export function useContactPanelFits(): boolean {
   const aiRoom = aiShown && width > AI_PANEL_OVERLAY_BELOW ? AI_PANEL : 0;
   const content = beside ? listWidth + READING_MIN : Math.max(LIST_MIN, READING_MIN);
   const needed = ((docked ? sidebarWidth : RAIL) + content + PANEL + aiRoom) * (rem / 16);
-  return width >= needed;
+  return !composing && width >= needed;
 }
 
 /** The panel is on screen: chosen, a mail view, and room for it. */
