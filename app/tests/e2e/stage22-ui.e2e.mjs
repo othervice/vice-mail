@@ -147,7 +147,9 @@ describe("stage 22: no pictures, the mark column, account dots and the settings 
         [`${MARK} Rechnung November`, "Edsger Dijkstra <edsger@example.org>", "Alice Archer <alice@vicemail.test>"],
       ]),
     );
-    await appendToBob(writeMessages([[`${MARK} Vereinstreffen`, "Grace Hopper <grace@example.org>", "Bob Baker <bob@vicemail.test>"]], 3));
+    // Bob's message is the newest (dated now): in a full run, earlier specs leave mail of the last
+    // minutes in alice's inbox, and the unified inbox step looks at its first twelve rows.
+    await appendToBob(writeMessages([[`${MARK} Vereinstreffen`, "Grace Hopper <grace@example.org>", "Bob Baker <bob@vicemail.test>"]], -1));
     await coreCall("retry_account", { accountId: alice.id });
     await coreCall("retry_account", { accountId: bob.id });
     await setSidebar(true);
