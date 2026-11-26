@@ -27,6 +27,18 @@ impl Platform {
     }
 }
 
+/// Stage 22 (decision 0079): what the system draws where the page of a window is transparent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowBackdrop {
+    /// Nothing: the page paints every pixel itself (macOS, Windows 10, every window but the main
+    /// one, transparency effects off, high contrast).
+    #[default]
+    None,
+    /// Windows 11's Mica: the page leaves its chrome (frame, rail, folder column) transparent.
+    Mica,
+}
+
 /// Version information shown under Settings, About.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

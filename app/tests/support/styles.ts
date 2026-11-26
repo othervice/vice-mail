@@ -148,16 +148,29 @@ function flatten(source: string, layerOf: (name: string | null) => number): Shee
 
 export interface Environment {
   reducedMotion?: boolean;
+  /** Stage 22 (decision 0079): Windows' "Transparency effects" off. */
+  reducedTransparency?: boolean;
+  /** A contrast theme: the system forces its own colours. */
+  forcedColors?: boolean;
+}
+
+function featureMatches(query: string, environment: Environment): boolean {
+  if (query === "(hover: hover)") return true;
+  if (query === "(prefers-reduced-motion: reduce)") return environment.reducedMotion === true;
+  if (query === "(prefers-reduced-motion: no-preference)") return environment.reducedMotion !== true;
+  if (query === "(prefers-reduced-transparency: reduce)") return environment.reducedTransparency === true;
+  if (query === "(prefers-reduced-transparency: no-preference)") return environment.reducedTransparency !== true;
+  if (query === "(forced-colors: active)") return environment.forcedColors === true;
+  if (query === "(forced-colors: none)") return environment.forcedColors !== true;
+  // print, @supports fallbacks for other engines, colour scheme (the app switches themes with
+  // data-theme, not media queries): not the state under test.
+  return false;
 }
 
 function mediaMatches(condition: string, environment: Environment): boolean {
   const query = condition.replace(/\s+/g, " ").trim();
-  if (query === "(hover: hover)") return true;
-  if (query === "(prefers-reduced-motion: reduce)") return environment.reducedMotion === true;
-  if (query === "(prefers-reduced-motion: no-preference)") return environment.reducedMotion !== true;
-  // print, forced colours, @supports fallbacks for other engines, colour scheme (the app
-  // switches themes with data-theme, not media queries): not the state under test.
-  return false;
+  // A list of features joined with "and" (no "or", "not" or media types here).
+  return query.split(" and ").every((part) => featureMatches(part.trim(), environment));
 }
 
 const PSEUDO_ELEMENT = /::?(before|after|placeholder|backdrop|file-selector-button|selection|marker|-webkit-[a-z-]+|-moz-[a-z-]+)/;

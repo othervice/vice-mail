@@ -50,6 +50,7 @@ import type {
   AccountSettings,
   AccountStatus,
   AppInfo,
+  WindowBackdrop,
   AttachmentInfo,
   BodyFormat,
   Capabilities,
@@ -272,6 +273,8 @@ const NOTHING: DiscoveryResult = { source: "none", imap: null, smtp: null, provi
 
 interface FakeCoreOptions {
   appInfo?: AppInfo;
+  /** Stage 22 (decision 0079): what the window has behind its chrome (default: nothing). */
+  windowBackdrop?: WindowBackdrop;
   /** What kept the database from opening at start (`getStartupProblem`); none by default. */
   startupProblem?: StartupProblem | null;
   /** Stage 14: Gmail labels by message id; messages without an entry are not Gmail (null). */
@@ -1028,6 +1031,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
       switch (cmd) {
         case "get_app_info":
           return appInfo;
+        // Stage 22 (decision 0079): Mica behind the chrome only where asked for.
+        case "get_window_backdrop":
+          return options.windowBackdrop ?? "none";
         case "get_startup_problem":
           return options.startupProblem ?? null;
         // Stage 15: the core shows the save dialog and writes the file.

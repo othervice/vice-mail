@@ -77,5 +77,6 @@ afterEach(() => {
   const root = document.documentElement;
   delete root.dataset["theme"];
   delete root.dataset["platform"];
+  delete root.dataset["backdrop"];
   root.lang = "";
 });

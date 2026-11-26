@@ -316,6 +316,9 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
       )}
       data-testid="sidebar-column"
       data-overlay={overlay || undefined}
+      // Decision 0079: docked, the column is chrome (Mica shows through it on Windows 11); lying
+      // over the content it stays opaque.
+      data-chrome={overlay ? undefined : true}
     >
       {/* As high as the list header; on macOS the window buttons sit at its start. */}
       <div data-tauri-drag-region={dragRegion ? true : undefined} className="flex h-(--ui-header-height) shrink-0 items-center justify-end px-2">

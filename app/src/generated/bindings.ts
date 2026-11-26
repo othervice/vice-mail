@@ -24,6 +24,13 @@ export const commands = {
 	 *  `diagnostics_write_failed` when the file cannot be written.
 	 */
 	exportDiagnostics: (locale: string, options?: InvokeOptions) => typedError<DiagnosticsExportResult, IpcError>(__TAURI_INVOKE("export_diagnostics", { locale }, options)),
+	/**
+	 *  Stage 22 (decision 0079): what the system draws where the calling window's page is
+	 *  transparent: `mica` for the main window on Windows 11 (unless transparency effects are off or
+	 *  a contrast theme is on), `none` everywhere else. The UI leaves its chrome transparent only
+	 *  for `mica`.
+	 */
+	getWindowBackdrop: (options?: InvokeOptions) => typedError<WindowBackdrop, IpcError>(__TAURI_INVOKE("get_window_backdrop", undefined, options)),
 	/**  Stored theme and language preferences, defaults when nothing is stored. */
 	getPreferences: (options?: InvokeOptions) => typedError<Preferences, IpcError>(__TAURI_INVOKE("get_preferences", undefined, options)),
 	/**  Stores the preferences and emits `preferencesChanged` to all windows. */
@@ -6151,6 +6158,16 @@ export type ViewThreadPage = {
 	/**  Null on the last page. */
 	nextCursor: ViewCursor | null,
 };
+
+/**  Stage 22 (decision 0079): what the system draws where the page of a window is transparent. */
+export type WindowBackdrop = 
+/**
+ *  Nothing: the page paints every pixel itself (macOS, Windows 10, every window but the main
+ *  one, transparency effects off, high contrast).
+ */
+"none" | 
+/**  Windows 11's Mica: the page leaves its chrome (frame, rail, folder column) transparent. */
+"mica";
 
 /**
  *  The layout of one window, stored per window on this device (not synchronised: the screens

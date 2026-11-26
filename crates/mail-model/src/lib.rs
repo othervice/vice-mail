@@ -166,7 +166,7 @@ pub use inbox::{
 };
 pub use ipc::{
     AppInfo, CoreEvent, DarkMails, LanguagePreference, MARK_READ_DELAY_MS, MarkReadOnOpen,
-    Platform, Preferences, ReadingPreferences, StartupProblem, ThemePreference,
+    Platform, Preferences, ReadingPreferences, StartupProblem, ThemePreference, WindowBackdrop,
 };
 pub use list_view::{
     ListOrder, ListPresentation, ListTableSettings, ListViewRequest, MAX_LIST_ORDERS,

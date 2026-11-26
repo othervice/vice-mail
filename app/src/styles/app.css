@@ -148,6 +148,28 @@
   --ui-header-inset-start: calc(var(--ui-window-buttons-end) - var(--ui-rail-width) + var(--ui-space-6));
 }
 
+/*
+ * Stage 22 (decision 0079), Windows 11: the shell builds the main window transparent with Mica
+ * behind it and says so (`data-backdrop="mica"`, features/app-info/useBackdropAttribute.ts). The
+ * page then leaves itself and its chrome transparent (`data-chrome`: the frame, the icon rail,
+ * the docked folder column), so the material of the native title bar runs on down the side of
+ * the window as in Windows' own apps. Only the chrome: list, reading pane, composer, panels,
+ * menus and the column lying over the content (narrow window) keep their opaque surfaces, so
+ * reading text has the contrast of tokens.css on any wallpaper; the text on the chrome is
+ * checked against Mica's tones in tests/contrast.test.ts. Unlayered, so it wins over the `bg-*`
+ * utilities. Only while the system allows transparency and does not force its own colours: if
+ * "Transparency effects" are turned off or a contrast theme on while the window is open, the
+ * chrome is opaque again, in today's colours (an engine that does not know
+ * `prefers-reduced-transparency` never applies this).
+ */
+@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
+  :root[data-backdrop="mica"],
+  :root[data-backdrop="mica"] body,
+  :root[data-backdrop="mica"] [data-chrome] {
+    background-color: transparent;
+  }
+}
+
 @layer base {
   html,
   body,

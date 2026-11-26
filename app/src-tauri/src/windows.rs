@@ -336,6 +336,12 @@ fn open_window<R: Runtime>(
         .min_inner_size(EXTRA_WINDOW_MIN_SIZE.0, EXTRA_WINDOW_MIN_SIZE.1)
         .theme(theme)
         .focused(true);
+    // Stage 22 (decision 0079): Mica in the title bar on Windows 11; the page stays opaque.
+    let (builder, _) = crate::backdrop::style(
+        builder,
+        crate::backdrop::current(),
+        crate::backdrop::Reach::TitleBar,
+    );
     let window = match guard(builder, app).build() {
         Ok(window) => window,
         Err(

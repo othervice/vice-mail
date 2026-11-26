@@ -2,6 +2,9 @@
 //! only forwards commands to [`AppCore`] and core events to the UI.
 
 mod autostart;
+// Stage 22 (decision 0079): Mica on Windows 11; decided for Windows, tested everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod backdrop;
 // Drawn for Windows (taskbar overlay, notification area); tested everywhere.
 #[cfg_attr(not(windows), allow(dead_code))]
 mod badge;
@@ -46,6 +49,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::app::get_startup_problem,
             // Stage 15: "Export diagnostics…" (system save dialog, then the core writes).
             commands::app::export_diagnostics::<tauri::Wry>,
+            // Stage 22 (decision 0079): Mica behind the main window's chrome on Windows 11.
+            commands::app::get_window_backdrop::<tauri::Wry>,
             commands::preferences::get_preferences,
             commands::preferences::set_preferences,
             commands::preferences::get_reading_preferences,
@@ -961,6 +966,8 @@ fn attach_core<R: Runtime>(app: &AppHandle<R>, specta: &Builder<R>, core: AppCor
     app.manage(core);
     // Stage 5: paths of files dropped on the window (see `drops`).
     app.manage(drops::DropRegistry::default());
+    // Stage 22: what each window's page has behind it (decision 0079).
+    app.manage(backdrop::Backdrops::default());
 }
 
 /// The window frame's theme at start, from the stored preferences (see [`window_theme`]).
@@ -995,7 +1002,12 @@ pub(crate) fn open_main_window<R: Runtime>(
     let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?
         .theme(theme)
         .visible(visible);
+    // Stage 22 (decision 0079): Windows 11 draws Mica in the title bar and behind the page's
+    // transparent chrome; decided anew each time the window is built.
+    let (builder, page_backdrop) =
+        backdrop::style(builder, backdrop::current(), backdrop::Reach::Page);
     let window = windows::guard(builder, app).build()?;
+    backdrop::remember(app, &window, page_backdrop);
     // Stage 5: remember what the user drops on the window; on Windows the frame guard.
     windows::finish(app, &window)?;
     // Stage 21: closing it keeps the app running; requests wait for its page; links of a new

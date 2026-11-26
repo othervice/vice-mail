@@ -300,3 +300,35 @@ it("the contrast check itself is calibrated (black on white is 21:1)", () => {
   expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 5);
   expect(contrast("#767676", "#ffffff")).toBeGreaterThanOrEqual(4.5);
 });
+
+/*
+ * Stage 22 (decision 0079): with Mica on Windows 11 the frame, the icon rail and the docked folder
+ * column are transparent (app.css), so whatever the UI draws on `rail` or `canvas` there lies on
+ * Mica instead. Mica is Windows' own material: the wallpaper, blurred, its lightness replaced by
+ * a fixed tone and tinted with it (Windows App SDK's MicaController: light #f3f3f3 at 50 % tint,
+ * dark #202020 at 80 %, luminosity at 100 %), so only its hue follows the wallpaper: at most half
+ * (light) or a fifth (dark) of it is the wallpaper's colour at the tone's own lightness. Every
+ * pair on `rail` and `canvas` is checked against the darkest light and the lightest dark Mica
+ * that leaves room for, with margin: #e6e6e6 and #282828. (Cards drawn on `canvas` inside the
+ * opaque content never lie on Mica; checking them too costs nothing.) What Mica really looks like
+ * over a given wallpaper is for the check on Windows (docs/testing/windows-checklist.md).
+ */
+const MICA = { light: "#e6e6e6", dark: "#282828" } as const;
+const ON_CHROME = new Set(["rail", "canvas"]);
+
+describe.each(Object.entries(themes))("%s theme on Mica", (name, tokens) => {
+  const mica = name.startsWith("dark") ? MICA.dark : MICA.light;
+  function colour(token: string): string {
+    const value = tokens[token];
+    if (!value) throw new Error(`token --ui-${token} is missing`);
+    return value;
+  }
+
+  it.each(TEXT_PAIRS.filter(([, bg]) => ON_CHROME.has(bg)))("text %s on Mica (instead of %s) reaches 4.5:1", (fg) => {
+    expect(contrast(colour(fg), mica)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(CONTROL_PAIRS.filter(([, bg]) => ON_CHROME.has(bg)))("control %s on Mica (instead of %s) reaches 3:1", (fg) => {
+    expect(contrast(colour(fg), mica)).toBeGreaterThanOrEqual(3);
+  });
+});
