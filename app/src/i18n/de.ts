@@ -4513,4 +4513,71 @@ export const de: Translation = {
     folderStarted: "Der Import läuft; sein Fortschritt steht unten links.",
     folderFailed: "Der Ordner konnte nicht importiert werden.",
   },
+  // Stufe 22 (Entscheidung 0077): der lernende Spamfilter.
+  spam: {
+    settings: {
+      title: "Spamfilter",
+      loadFailed: "Die Einstellungen des Spamfilters konnten nicht geladen werden.",
+      saveFailed: "Die Einstellung konnte nicht gespeichert werden.",
+      learnFailed: "Das Lernen aus deinen Mails ist fehlgeschlagen.",
+      cancelFailed: "Das Lernen konnte nicht angehalten werden.",
+      enabled: {
+        label: "Lernender Spamfilter",
+        description:
+          "Lernt aus deinem „Als Spam markieren“ und „Kein Spam“ und verschiebt neue Mails, die nach Spam aussehen, in den Spam-Ordner, oder markiert sie nur, wo Änderungen aus sind. Er läuft nur, solange die App läuft, auch im Hintergrund. Was er lernt, bleibt auf diesem Gerät.",
+      },
+      learned: "Bisher gelernt: {{spam}} Spam- und {{ham}} andere Mails.",
+      ready: "Er prüft neue Mails in deinen Posteingängen.",
+      notReady: "Er prüft neue Mails, sobald er mindestens {{spam}} Spam- und {{ham}} andere Mails gelernt hat.",
+      learn: {
+        label: "Aus vorhandenen Mails lernen",
+        description:
+          "Deine Spam-Ordner als Spam, gelesene Mails in deinen Posteingängen als kein Spam (beantwortete zuerst; bis zu 500 und 1.000). Noch nicht gespeicherte Mails werden geholt, ohne sie als gelesen zu markieren.",
+        start: "Jetzt lernen",
+        cancel: "Anhalten",
+        running: "Lernt\u00a0… {{done}} von {{total}} Mails",
+        done: "{{spam}} Spam- und {{ham}} andere Mails gelernt.",
+        cancelled: "Angehalten. Bis dahin {{spam}} Spam- und {{ham}} andere Mails gelernt.",
+        failed: "Wegen eines Fehlers abgebrochen nach {{spam}} Spam- und {{ham}} anderen Mails.",
+        skipped_one: "{{count, number}} Mail ausgelassen.",
+        skipped_other: "{{count, number}} Mails ausgelassen.",
+      },
+      accounts: {
+        label: "Für diese Konten verwenden",
+        readOnly: "Änderungen sind aus: Spam-Verdacht wird nur auf diesem Gerät markiert.",
+      },
+      forget: {
+        button: "Gelerntes vergessen\u00a0…",
+        title: "Vergessen, was der Spamfilter gelernt hat?",
+        body: "Alles, was der Spamfilter auf diesem Gerät gelernt hat, und seine Markierungen werden gelöscht. Mails, die er verschoben hat, bleiben im Spam-Ordner. Danach lernt er von vorn.",
+        confirm: "Vergessen",
+        cancel: "Abbrechen",
+        failed: "Das Gelernte konnte nicht vergessen werden.",
+      },
+    },
+    marks: {
+      suspected: "Spam-Verdacht (Spamfilter)",
+      suspectedShort: "Spam?",
+      moved: "Vom Spamfilter hierher verschoben",
+      movedShort: "Spamfilter",
+    },
+    note: {
+      moved: "Der Spamfilter hat diese Mail in den Spam-Ordner verschoben (zu {{percent}} sicher).",
+      suspected: "Der Spamfilter hält diese Mail für Spam (zu {{percent}} sicher).",
+      localOnly: "Für dieses Konto sind Änderungen aus oder es hat keinen Spam-Ordner: Die Mail ist nur auf diesem Gerät markiert.",
+      notSpam: "Kein Spam",
+      move: "In den Spam-Ordner",
+      failed: "Das hat nicht geklappt.",
+    },
+    notices: {
+      moved_one: "Der Spamfilter hat eine neue Mail in den Spam-Ordner verschoben",
+      moved_other: "Der Spamfilter hat {{count, number}} neue Mails in den Spam-Ordner verschoben",
+      movedDetail: "„Rückgängig“ holt die Mail zurück und bringt dem Filter bei, dass sie kein Spam ist.",
+      marked_one: "Der Spamfilter hat eine neue Mail als Spam-Verdacht markiert",
+      marked_other: "Der Spamfilter hat {{count, number}} neue Mails als Spam-Verdacht markiert",
+      markedDetail: "Auf dem Server hat sich nichts geändert.",
+      cleared_one: "Als kein Spam markiert",
+      cleared_other: "{{count, number}} Mails als kein Spam markiert",
+    },
+  },
 };

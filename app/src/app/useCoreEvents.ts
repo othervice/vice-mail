@@ -21,6 +21,8 @@ import { handleSearchEvent } from "../features/search/events";
 import { handleUiPreferencesEvent } from "../features/keyboard/useUiPreferencesSync";
 import { handleUpdateEvent } from "../features/updates/queries";
 import { handleDesktopEvent } from "../features/desktop/queries";
+// Stage 22 (decision 0077): the learning spam filter.
+import { handleSpamEvent } from "../features/spam/queries";
 import { currentWindowRoute } from "../features/windows/route";
 import { desktopIpc, ipc, toCoreError, type CoreError, type CoreEvent, type Unsubscribe } from "../services/ipc";
 import { reportOwnFailures } from "../stores/notices";
@@ -55,6 +57,8 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   // Stage 17 (decision 0050): contacts, their pictures and spam marks.
   handleContactsEvent(queryClient, event);
   handleMboxEvent(event);
+  // Stage 22 (decision 0077): the spam filter's status and what it did with new mail.
+  handleSpamEvent(queryClient, event);
   switch (event.type) {
     case "preferencesChanged":
       // Another window (or the core itself) changed them; the effects re-apply theme and language.

@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AccountId, IpcError, MessageId};
+use crate::{AccountId, IpcError, MailboxId, MessageId};
 
 /// Score from which the filter acts (decision 0077: conservative, measured on a corpus).
 pub const SPAM_THRESHOLD: f64 = 0.99;
@@ -108,6 +108,9 @@ pub enum SpamFilterMark {
 #[serde(rename_all = "camelCase")]
 pub struct SpamVerdict {
     pub message_id: MessageId,
+    /// Where the note's buttons act on it: its location in the junk folder for a moved mail,
+    /// else in the inbox, else any; null when it lies nowhere (moving).
+    pub mailbox_id: Option<MailboxId>,
     pub mark: SpamFilterMark,
     /// 0 to 1.
     pub score: f64,

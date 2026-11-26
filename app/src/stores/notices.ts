@@ -90,7 +90,14 @@ export type ComfortNotice =
    */
   | { type: "contactSpam"; email: string; name: string; undo: SpamUndo; moved: number; kept: number }
   | { type: "contactNotSpam"; name: string }
-  | { type: "ruleSkipped"; ruleName: string; reason: RuleSkipReason; count: number };
+  | { type: "ruleSkipped"; ruleName: string; reason: RuleSkipReason; count: number }
+  /**
+   * Stage 22 (decision 0077): the learning spam filter moved new mail to the junk folder (undo:
+   * the batch, which also teaches the filter that it was not spam) or marked it on this device.
+   */
+  | { type: "spamFiltered"; accountId: AccountId; moved: number; marked: number; batch: BatchId | null }
+  /** Stage 22: "Not spam" on a mail the filter only marked here; undo marks it again. */
+  | { type: "spamCleared"; messageIds: readonly MessageId[] };
 
 export interface Notice {
   id: number;

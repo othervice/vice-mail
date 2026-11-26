@@ -5661,6 +5661,11 @@ export type SpamUndone = {
 /**  The filter's verdict on one message, for the reading pane's note (`getSpamVerdict`). */
 export type SpamVerdict = {
 	messageId: MessageId,
+	/**
+	 *  Where the note's buttons act on it: its location in the junk folder for a moved mail,
+	 *  else in the inbox, else any; null when it lies nowhere (moving).
+	 */
+	mailboxId: MailboxId | null,
 	mark: SpamFilterMark,
 	/**  0 to 1. */
 	score: number | null,

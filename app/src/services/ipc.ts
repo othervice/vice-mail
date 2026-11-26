@@ -2246,3 +2246,44 @@ export const desktopIpc = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Stage 22, item 6 (decision 0077): the learning spam filter. It learns on this device from
+// "Spam" and "Not spam" (`applyAction`) and on request from existing mail; only its switch is
+// synchronised. Events: `spamFilterChanged` (status), `spamFiltered` (new mail moved or marked).
+
+import {
+  commands as spamCommands,
+  type SpamFilterMark,
+  type SpamFilterSettings,
+  type SpamFilterStatus,
+  type SpamLearning,
+  type SpamLearningState,
+  type SpamVerdict,
+} from "../generated/bindings";
+
+export type { SpamFilterMark, SpamFilterSettings, SpamFilterStatus, SpamLearning, SpamLearningState, SpamVerdict };
+
+/** Stage 22 limits of the IPC contract that the bindings do not export. */
+export const SPAM_LIMITS = {
+  /** `markSpamLocally`: messages per call. */
+  feedbackMessages: 500,
+  /** `setSpamFilter`: excluded accounts. */
+  excludedAccounts: 100,
+} as const;
+
+export const spamIpc = {
+  getStatus: (): Promise<SpamFilterStatus> => call(() => spamCommands.getSpamFilter()),
+  /** On or off and the excluded accounts (synchronised); turning it off stops learning. */
+  setSettings: (settings: SpamFilterSettings): Promise<SpamFilterStatus> => call(() => spamCommands.setSpamFilter(settings)),
+  /** Learns from the junk folders and read inbox mail in the background. `invalid_argument` while off. */
+  learnFromMail: (): Promise<SpamFilterStatus> => call(() => spamCommands.learnSpamFromMail()),
+  cancelLearning: (): Promise<void> => infallible(() => spamCommands.cancelSpamLearning()),
+  /** Forgets everything learned on this device and the filter's marks. */
+  forget: (): Promise<SpamFilterStatus> => call(() => spamCommands.forgetSpamFilter()),
+  /** The filter's verdict on a message, or null. */
+  getVerdict: (messageId: MessageId): Promise<SpamVerdict | null> => call(() => spamCommands.getSpamVerdict(messageId)),
+  /** "Spam" or "Not spam" on this device only (accounts that may not write or have no junk folder). */
+  markLocally: (messageIds: MessageId[], spam: boolean): Promise<number> =>
+    call(() => spamCommands.markSpamLocally(messageIds, spam)),
+};

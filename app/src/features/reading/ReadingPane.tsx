@@ -38,6 +38,8 @@ import { useLoadRemoteContent, useMessageView } from "./queries";
 import { RemoteContentBar } from "./RemoteContentBar";
 import { TrackerNotice } from "./TrackerNotice";
 import { BlockedNote } from "../organize/BlockedNote";
+// Stage 22 (decision 0077): the learning spam filter's verdict.
+import { SpamNote } from "../spam/SpamNote";
 // Stage 16: find in the open message.
 import { FindBar, useFindShortcut } from "./FindBar";
 // Stage 16: read receipts (RFC 8098) and the inline quick reply.
@@ -512,6 +514,7 @@ export function ReadingPane({
           {/* Stage 13: "maybe still open" (rules in the core, no AI). */}
           <OpenReplyHintBar messageId={view.id} />
           {/* Stage 16: the sender is blocked (future mail goes to Junk or is hidden). */}
+          <SpamNote account={account} messageId={view.id} />
           <BlockedNote from={view.header.from} />
           {/* Stage 16: a request for a read receipt (answered only by a click), receipts that came back. */}
           <ReadReceipts account={account} messageId={view.id} bodyShown={shownFormat !== null} />

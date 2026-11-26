@@ -6,7 +6,7 @@
 //! precisely those, whatever the message's body looks like by then.
 
 use mail_model::{
-    AccountId, Address, BatchId, MailboxRole, MessageId, SpamFilterMark, SpamVerdict,
+    AccountId, Address, BatchId, MailboxId, MailboxRole, MessageId, SpamFilterMark, SpamVerdict,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -365,7 +365,13 @@ pub(crate) fn verdict(
         .prepare_cached(
             "SELECT v.mark, v.score, v.at,
                     a.writes_enabled = 1
-                    AND EXISTS (SELECT 1 FROM mailbox b WHERE b.account_id = a.id AND b.role = 'junk')
+                    AND EXISTS (SELECT 1 FROM mailbox b WHERE b.account_id = a.id AND b.role = 'junk'),
+                    (SELECT l.mailbox_id FROM message_location l
+                     CROSS JOIN mailbox b ON b.id = l.mailbox_id
+                     WHERE l.message_id = v.message_id
+                     ORDER BY CASE b.role WHEN (CASE v.mark WHEN 'moved' THEN 'junk' ELSE 'inbox' END)
+                                          THEN 0 ELSE 1 END, l.mailbox_id
+                     LIMIT 1)
              FROM spam_verdict v
              CROSS JOIN message m ON m.id = v.message_id
              CROSS JOIN account a ON a.id = m.account_id
@@ -374,8 +380,10 @@ pub(crate) fn verdict(
         .query_row([message.0], |r| {
             let mark: String = r.get(0)?;
             let (score, at, can_move) = (r.get(1)?, r.get(2)?, r.get(3)?);
+            let mailbox_id = r.get::<_, Option<i64>>(4)?.map(MailboxId);
             Ok(mark_of(&mark).map(|mark| SpamVerdict {
                 message_id: message,
+                mailbox_id,
                 mark,
                 score,
                 at,
