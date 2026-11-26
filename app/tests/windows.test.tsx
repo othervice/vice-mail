@@ -121,7 +121,7 @@ describe("the message window", () => {
     const list = await screen.findByRole("listbox", { name: /^Messages in/ });
     list.focus();
     await user.keyboard("{Enter}");
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     await user.click(await toolbarAction(user, toolbar, "Open in new window"));
     expect(core.ui.messageWindows).toEqual([`${ACCOUNT.id}/${String(items[0]?.id)}`]);

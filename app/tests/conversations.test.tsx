@@ -512,7 +512,7 @@ describe("actions on conversation rows", () => {
     const { core, user } = setup();
     const list = await inboxList();
     await user.click(within(list).getAllByRole("treeitem")[0] as HTMLElement);
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
 
     // The toolbar: the open message only (the first unread one, Anna's question).
     await user.click(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: /^Flag/ }));

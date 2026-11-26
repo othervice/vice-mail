@@ -145,7 +145,7 @@ describe("vCard import and export", () => {
     });
     const { user } = renderApp();
     await user.click(await screen.findByRole("button", { name: "Contacts" }));
-    const view = await screen.findByTestId("contacts-view");
+    await screen.findByTestId("contacts-view");
     await user.click(screen.getByTestId("contacts-import"));
     const report = await screen.findByTestId("contacts-import-report");
     expect(report.textContent).toContain("3 cards read");

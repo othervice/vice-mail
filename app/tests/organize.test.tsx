@@ -106,7 +106,7 @@ describe("the reading list", () => {
     expect(core.callsOf("list_reading_list")[0]).toEqual({ scope: { kind: "account", accountId: ADA.id } });
     // Removing it from the toolbar empties the view.
     await user.click(row(listbox, "Message 3"));
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
     await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Remove from reading list"));
     await waitFor(() => {
       expect(core.parity.readingList).toEqual([]);
@@ -440,7 +440,7 @@ describe("blocking a sender", () => {
     const { core, user } = setup(items);
     const listbox = await list();
     await user.click(row(listbox, "Message 2"));
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
     await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Block sender"));
     await waitFor(() => {
       expect(core.parity.blockedSenders.map((b) => b.address)).toEqual(["sender2@example.org"]);
@@ -456,7 +456,7 @@ describe("blocking a sender", () => {
     const { user } = setup(items, { failures: { block_sender: { code: "invalid_argument", message: "x", detail: null } } });
     const listbox = await list();
     await user.click(row(listbox, "Odd"));
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
     await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Block sender"));
     await waitFor(() => {
       expect(notices().some((text) => text.includes("The sender could not be blocked."))).toBe(true);

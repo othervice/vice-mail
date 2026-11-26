@@ -174,7 +174,7 @@ describe("actions from the keyboard", () => {
 describe("actions from the toolbar and the rows", () => {
   it("the reading pane has a toolbar with the actions, their shortcuts and arrow-key navigation", async () => {
     const { core, user } = setup();
-    const { pane } = await openFirst(user);
+    await openFirst(user);
 
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const names = within(toolbar)
@@ -464,7 +464,7 @@ describe("activity view", () => {
 describe("read-only accounts", () => {
   it("show the actions disabled, say why and lead to the switch", async () => {
     const { core, user } = setup({ account: READ_ONLY });
-    const { pane } = await openFirst(user);
+    await openFirst(user);
 
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // Stage 9: pins, snoozes and tasks are local marks and stay available on read-only accounts.
@@ -821,7 +821,7 @@ describe("move to folder", () => {
 
   it("Escape closes the list without moving and gives the focus back", async () => {
     const { core, user } = setup();
-    const { pane } = await openFirst(user);
+    await openFirst(user);
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // "Move to folder" is in "More actions"; the menu gives the focus back to its button first.
     await user.click(await toolbarAction(user, toolbar, "Move to folder"));
@@ -980,7 +980,7 @@ describe("deleting for good", () => {
   it("in the trash asks in the one dialog: focus trapped, Escape cancels, focus returns", async () => {
     const { core, user } = trashSetup();
     await user.click(await screen.findByRole("button", { name: "Trash" }));
-    const { pane } = await openFirst(user);
+    await openFirst(user);
     const button = within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Delete permanently" });
 
     await user.click(button);
@@ -1010,7 +1010,7 @@ describe("deleting for good", () => {
   it("Escape still cancels and the focus comes back when the dialog lost the focus", async () => {
     const { core, user } = trashSetup();
     await user.click(await screen.findByRole("button", { name: "Trash" }));
-    const { pane } = await openFirst(user);
+    await openFirst(user);
     await user.click(within(screen.getByRole("toolbar", { name: "Message actions" })).getByRole("button", { name: "Delete permanently" }));
     const dialog = await screen.findByRole("alertdialog");
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
@@ -1191,7 +1191,7 @@ describe("every action from every surface", () => {
     ["Mark as junk", "spam"],
   ])("toolbar button %s sends %s", async (name, type) => {
     const { core, user, items } = setup();
-    const { pane } = await openFirst(user);
+    await openFirst(user);
     await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), name));
     await waitFor(() => {
       expect(actionCalls(core)).toHaveLength(1);
@@ -1201,7 +1201,7 @@ describe("every action from every surface", () => {
 
   it("the toolbar's Tags button opens the tag editor", async () => {
     const { user } = setup();
-    const { pane } = await openFirst(user);
+    await openFirst(user);
     await user.click(await toolbarAction(user, screen.getByRole("toolbar", { name: "Message actions" }), "Tags"));
     expect(await screen.findByRole("dialog", { name: "Tags of this message" })).toBeTruthy();
   });
@@ -1211,7 +1211,7 @@ describe("every action from every surface", () => {
     const { core, user } = setup({ items: [], others: { 8: junk } });
     await user.click(await screen.findByRole("button", { name: "Folders" }));
     await user.click(await screen.findByTestId("mailbox-8"));
-    const { pane, listbox } = await openFirst(user);
+    const { listbox } = await openFirst(user);
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     expect(within(toolbar).queryByRole("button", { name: "Mark as junk" })).toBeNull();
     expect(within(toolbar).getByRole("button", { name: "Not junk" })).toBeTruthy();

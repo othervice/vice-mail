@@ -121,7 +121,7 @@ describe("reading toolbar", () => {
       return { width, height: 32, top: 0, left: 0, right: width, bottom: 32, x: 0, y: 0, toJSON: () => ({}) };
     });
     const { core, user } = setup();
-    const pane = await openMessage(user);
+    await openMessage(user);
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const more = await within(toolbar).findByRole("button", { name: "More actions" });
     expect(observed).toBeGreaterThan(0);
@@ -194,7 +194,7 @@ describe("reading toolbar in a very narrow pane", () => {
       return { width, height: 32, top: 0, left: 0, right: width, bottom: 32, x: 0, y: 0, toJSON: () => ({}) };
     });
     const { user } = setup();
-    const pane = await openMessage(user);
+    await openMessage(user);
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     const shown = () => within(toolbar).getAllByRole("button").map(nameOf);
     await waitFor(() => {
@@ -225,7 +225,7 @@ describe("the read-only note in the toolbar", () => {
   it("keeps the word where there is room for it", async () => {
     layout(1000);
     const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
-    const pane = await openMessage(user);
+    await openMessage(user);
     const note = await screen.findByTestId("read-only-actions");
     await waitFor(() => {
       expect(note.dataset.compact).toBeUndefined();
@@ -236,7 +236,7 @@ describe("the read-only note in the toolbar", () => {
   it("shows only the lock with a tooltip in a narrow pane, never a word cut to “Read-…”", async () => {
     layout(200);
     const { user } = setup({ enabled: false }, { accounts: [READ_ONLY] });
-    const pane = await openMessage(user);
+    await openMessage(user);
     const note = await screen.findByTestId("read-only-actions");
     await waitFor(() => {
       expect(note.dataset.compact).toBe("true");

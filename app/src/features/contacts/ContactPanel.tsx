@@ -214,9 +214,12 @@ function PersonDetails({ person }: { person: PanelPerson }) {
           <p className="text-13 leading-5 break-words whitespace-pre-wrap text-secondary select-text">{note}</p>
         </Section>
       )}
-      <Section title={t("contactPanel.mails")} data-testid="contact-panel-mails">
-        <RecentMails email={email} />
-      </Section>
+      {/* The contacts store knows the mail of its contacts only (a first sender has none yet). */}
+      {contact && (
+        <Section title={t("contactPanel.mails")} data-testid="contact-panel-mails">
+          <RecentMails email={email} />
+        </Section>
+      )}
       {contact && <Groups contact={contact} />}
     </>
   );

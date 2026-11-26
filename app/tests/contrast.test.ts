@@ -62,6 +62,8 @@ const SURFACES = [
   "band",
   "panel",
   "button",
+  // Stage 23, step 3 (decision 0084): the selected row of a list without the focus.
+  "selected-muted",
 ];
 const FILE_TYPES = ["pdf", "doc", "sheet", "image", "archive"];
 const ACCOUNTS = Array.from({ length: 8 }, (_, i) => `account-${i + 1}`);
@@ -179,6 +181,10 @@ const CONTROL_PAIRS: [string, string][] = [
   // the bands; field borders on the toolbar and panel.
   ["accent", "rail-selected"],
   ...ACCOUNTS.flatMap((account) => ["rail-hover", "rail-selected", "band", "toolbar"].map((bg): [string, string] => [account, bg])),
+  // Step 3 (decision 0084): on the selected row of an unfocused list the unread dot (accent), the
+  // flag (warning), pending and failed changes and the account's stripe.
+  ...["accent", "warning", "danger"].map((fg): [string, string] => [fg, "selected-muted"]),
+  ...ACCOUNTS.map((account): [string, string] => [account, "selected-muted"]),
   ...["toolbar", "panel", "button", "band"].map((bg): [string, string] => ["border-strong", bg]),
   ...["toolbar", "button", "rail-selected", "band", "panel"].map((bg): [string, string] => ["focus-ring", bg]),
 ];

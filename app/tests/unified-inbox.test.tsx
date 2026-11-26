@@ -94,7 +94,7 @@ describe("unified inbox", () => {
       expect(within(list).getAllByRole("option")).toHaveLength(3);
     });
     await user.click(within(list).getAllByRole("option")[1] as HTMLElement);
-    const pane = await screen.findByRole("region", { name: "Message" });
+    await screen.findByRole("region", { name: "Message" });
     const toolbar = screen.getByRole("toolbar", { name: "Message actions" });
     // No pickers or dialogs of the folder view here.
     expect(within(toolbar).queryByRole("button", { name: /^Move/ })).toBeNull();
