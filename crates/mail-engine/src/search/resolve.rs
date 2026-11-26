@@ -5,11 +5,11 @@ use std::collections::{BTreeSet, HashSet};
 
 use mail_model::search::{
     Clause, CompileOptions, CompiledQuery, Filter, MailboxSpec, ParsedQuery, SearchContext,
-    TimeZone, parse,
+    Substrings, TimeZone, contact_match, parse,
 };
 use mail_model::{
-    AccountId, CoreError, MailboxId, MailboxRole, SearchProblem, SearchProblemCode, SearchRequest,
-    SearchScope, SearchTermInfo, utf16_range,
+    AccountId, CoreError, MailboxId, MailboxRole, SearchIndexState, SearchIndexStatus,
+    SearchProblem, SearchProblemCode, SearchRequest, SearchScope, SearchTermInfo, utf16_range,
 };
 use mail_store::{MailboxName, SearchFilter, Store, StoredAccount};
 
@@ -90,6 +90,21 @@ fn names_mailboxes(spec: &MailboxSpec, mailboxes: &[MailboxName]) -> Vec<Mailbox
         .filter(|m| m.path.to_lowercase() == name || m.name.to_lowercase() == name)
         .map(|m| m.id)
         .collect()
+}
+
+/// Decision 0074: how a query can use the trigram index, by the state of the index job. While
+/// existing messages are being indexed, a term matches in either index so no word hit goes
+/// missing; during a rebuild the live indexes are complete.
+pub(crate) fn substrings(index: &SearchIndexStatus) -> Substrings {
+    match index.state {
+        SearchIndexState::Building => Substrings::Filling,
+        SearchIndexState::Ready | SearchIndexState::Rebuilding => Substrings::Complete,
+    }
+}
+
+/// [`substrings`] of the store's current index state.
+pub(crate) async fn substrings_now(store: &Store) -> Result<Substrings, CoreError> {
+    Ok(substrings(&store.search_index_status().await?))
 }
 
 /// Parses and compiles the query (before any `.await`: the context borrows a time zone that
@@ -279,9 +294,22 @@ pub(crate) async fn plan_with(
     }
     problems.sort_by_key(|p| (p.range.start, p.range.end));
 
+    // Stage 22 (decision 0074): `contact:` with every address of the contact, resolved now so a
+    // saved search follows the contact (merged addresses too).
+    let mut text = compiled.text.clone();
+    for contact in &compiled.contacts {
+        let addresses = crate::compose::contacts::search_addresses(store, &contact.value).await?;
+        match contact_match(&addresses) {
+            Some(expr) if contact.negated => text.exclude_words(expr),
+            Some(expr) => text.require_words(expr),
+            None if contact.negated => {}
+            None => matches_nothing = true,
+        }
+    }
+
     let every_account = allowed.len() == all.len();
     let filter = SearchFilter {
-        text: compiled.text.clone(),
+        text,
         dates: compiled.dates,
         accounts: (!every_account).then(|| allowed.iter().copied().collect()),
         mailbox_sets,

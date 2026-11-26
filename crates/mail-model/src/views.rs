@@ -138,6 +138,8 @@ pub enum SearchTermKind {
     NewerThan,
     /// Stage 20: `larger:`.
     Larger,
+    /// Stage 22: `contact:`.
+    Contact,
 }
 
 impl SearchTermKind {
@@ -163,6 +165,7 @@ impl SearchTermKind {
             Filter::OlderThan(_) => Self::OlderThan,
             Filter::NewerThan(_) => Self::NewerThan,
             Filter::Larger(_) => Self::Larger,
+            Filter::Contact(_) => Self::Contact,
         }
     }
 }

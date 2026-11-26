@@ -15,17 +15,23 @@ use tempfile::TempDir;
 use crate::credentials::{Credentials, MemorySecretStore};
 use crate::{AppCore, BuildInfo, CoreConfig, CoreServices};
 
-const UV: UidValidity = UidValidity(7);
+pub(super) const UV: UidValidity = UidValidity(7);
 const D: i64 = 1_790_000_000;
 
-struct Fixture {
+pub(super) struct Fixture {
     _dir: TempDir,
-    core: AppCore,
+    pub(super) core: AppCore,
     /// (account, inbox, archive)
-    accounts: Vec<(AccountId, mail_model::MailboxId, mail_model::MailboxId)>,
+    pub(super) accounts: Vec<(AccountId, mail_model::MailboxId, mail_model::MailboxId)>,
 }
 
-fn header(uid: u32, date: i64, subject: &str, from: (&str, &str), to: &str) -> MessageHeader {
+pub(super) fn header(
+    uid: u32,
+    date: i64,
+    subject: &str,
+    from: (&str, &str),
+    to: &str,
+) -> MessageHeader {
     MessageHeader {
         uid,
         modseq: None,
@@ -56,7 +62,7 @@ fn header(uid: u32, date: i64, subject: &str, from: (&str, &str), to: &str) -> M
     }
 }
 
-async fn fixture() -> Fixture {
+pub(super) async fn fixture() -> Fixture {
     let dir = TempDir::new().expect("temp dir");
     let core = AppCore::start(
         CoreConfig {
@@ -139,7 +145,7 @@ async fn fixture() -> Fixture {
     }
 }
 
-fn request(query: &str, scope: SearchScope) -> SearchRequest {
+pub(super) fn request(query: &str, scope: SearchScope) -> SearchRequest {
     SearchRequest {
         query: query.into(),
         scope,
@@ -150,7 +156,7 @@ fn request(query: &str, scope: SearchScope) -> SearchRequest {
     }
 }
 
-fn subjects(page: &mail_model::SearchPage) -> Vec<&str> {
+pub(super) fn subjects(page: &mail_model::SearchPage) -> Vec<&str> {
     page.hits
         .iter()
         .map(|h| h.message.subject.as_str())

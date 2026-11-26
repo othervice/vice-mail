@@ -3,7 +3,7 @@
 //! `message`, `message_location`, `thread` or `thread_ref`, the expected index for each, and a
 //! temporary B-tree only where several mailbox branches are merged (n × (limit + 1) rows).
 
-use mail_model::search::{RowidRange, TextMatch};
+use mail_model::search::{RowidRange, TextClause, TextMatch};
 use mail_model::{MailboxId, MessageId};
 use rusqlite::Connection;
 
@@ -40,7 +40,7 @@ fn expected() -> Vec<Expected> {
     let text = |f: SearchFilter| build(&f, Some(&[1, 2]), Some(1), 2_000_000_000, 51).sql;
     let m = |ids: &[i64]| ids.iter().map(|i| MailboxId(*i)).collect::<Vec<_>>();
     let all_filters = SearchFilter {
-        text: TextMatch::Match("\"rechnung\"".into()),
+        text: TextMatch::words("\"rechnung\""),
         dates: RowidRange {
             from: Some(1),
             until: Some(2),
@@ -58,7 +58,7 @@ fn expected() -> Vec<Expected> {
         size_below: None,
     };
     let fts_only = SearchFilter {
-        text: TextMatch::Match("\"rechnung\"".into()),
+        text: TextMatch::words("\"rechnung\""),
         ..SearchFilter::default()
     };
     let in_one_unread = SearchFilter {
@@ -72,8 +72,46 @@ fn expected() -> Vec<Expected> {
         ..SearchFilter::default()
     };
     let exclude_only = SearchFilter {
-        text: TextMatch::Exclude("\"spam\"".into()),
+        text: TextMatch::excluding_words("\"spam\""),
         unread: Some(false),
+        ..SearchFilter::default()
+    };
+    // Decision 0074: the trigram index alone, beside the word index, and both for one term.
+    let clause = |words: Option<&str>, trigrams: Option<&str>| TextClause {
+        words: words.map(str::to_owned),
+        trigrams: trigrams.map(str::to_owned),
+    };
+    let trigrams_only = SearchFilter {
+        text: TextMatch {
+            all: vec![clause(None, Some("\"uster\""))],
+            none: clause(Some("\"ab\""), Some("\"spam\"")),
+        },
+        mailbox_sets: vec![m(&[1, 2])],
+        ..SearchFilter::default()
+    };
+    let words_and_trigrams = SearchFilter {
+        text: TextMatch {
+            all: vec![
+                clause(Some("\"ab\""), None),
+                clause(None, Some("\"uster\"")),
+            ],
+            none: TextClause::default(),
+        },
+        ..SearchFilter::default()
+    };
+    let either = SearchFilter {
+        text: TextMatch {
+            all: vec![
+                clause(Some("\"bob example\""), Some("\"bob@example\"")),
+                clause(Some("\"a b\""), Some("\"a-b\"")),
+            ],
+            none: clause(None, Some("\"spam\"")),
+        },
+        dates: RowidRange {
+            from: Some(1),
+            until: None,
+        },
+        unread: Some(true),
         ..SearchFilter::default()
     };
     let mut out = vec![
@@ -278,6 +316,37 @@ fn expected() -> Vec<Expected> {
             ],
         ),
         e(
+            "search: inside words (trigram index)",
+            &text(trigrams_only),
+            &[
+                "SCAN message_fts_tri VIRTUAL TABLE INDEX 192:M6<>",
+                "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+                // The word index's exclusion: its matches collected once.
+                "LIST SUBQUERY",
+                "SCAN message_fts VIRTUAL TABLE INDEX 0:M6",
+            ],
+        ),
+        e(
+            "search: a short word and inside words",
+            &text(words_and_trigrams),
+            &[
+                "SCAN message_fts_tri VIRTUAL TABLE INDEX 192:M6<>",
+                "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+                "SCAN message_fts VIRTUAL TABLE INDEX 0:M6",
+            ],
+        ),
+        e(
+            "search: a term in either index",
+            &text(either),
+            &[
+                // Both indexes walk their rowids descending and are merged without sorting.
+                "MERGE (UNION)",
+                "SCAN message_fts VIRTUAL TABLE INDEX 192:M6<>",
+                "SCAN message_fts_tri VIRTUAL TABLE INDEX 192:M6<>",
+                "SEARCH m USING INTEGER PRIMARY KEY (rowid=?)",
+            ],
+        ),
+        e(
             "search: only exclusions",
             &text(exclude_only),
             &[
@@ -325,6 +394,7 @@ fn check_plans(conn: &Connection, stage: &str) {
             let merge_scan = q.merge && l.starts_with("SCAN (subquery-");
             (l.starts_with("SCAN")
                 && !l.starts_with("SCAN message_fts VIRTUAL TABLE")
+                && !l.starts_with("SCAN message_fts_tri VIRTUAL TABLE")
                 && l != "SCAN CONSTANT ROW"
                 && !merge_scan)
                 || (l.contains("TEMP B-TREE") && !q.merge)

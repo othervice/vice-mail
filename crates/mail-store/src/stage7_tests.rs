@@ -23,7 +23,7 @@ const D: i64 = 1_790_000_000;
 /// Index text as a test can predict it: the body is everything after the header, the
 /// attachments are the values of `X-Attachment:` header lines; a partial body is the text of
 /// its body-text sections, its attachments the file names of the structure (like the engine).
-struct TestText;
+pub(crate) struct TestText;
 
 impl BodyTextSource for TestText {
     fn complete(&self, raw: &[u8]) -> BodyText {
@@ -75,7 +75,7 @@ impl BodyTextSource for TestText {
     }
 }
 
-fn raw(body: &str, attachments: &[&str]) -> Vec<u8> {
+pub(crate) fn raw(body: &str, attachments: &[&str]) -> Vec<u8> {
     let mut out = String::from("Subject: x\r\n");
     for a in attachments {
         out.push_str(&format!("X-Attachment: {a}\r\n"));
@@ -85,7 +85,7 @@ fn raw(body: &str, attachments: &[&str]) -> Vec<u8> {
     out.into_bytes()
 }
 
-async fn with_text() -> Fixture {
+pub(crate) async fn with_text() -> Fixture {
     let f = fixture().await;
     f.store.set_body_text_source(Arc::new(TestText));
     f
@@ -135,29 +135,22 @@ fn instances(conn: &Connection, schema: &str, table: &str) -> BTreeSet<(String, 
     rows
 }
 
-/// Asserts that `message_fts` holds exactly one row per message, with the stored headers and
-/// the expected body texts (`texts`; messages not in it: headers only). Compares the index terms
-/// with an index built from scratch out of the same data.
-async fn assert_index_matches(store: &Store, texts: &BTreeMap<i64, BodyText>, when: &str) {
+/// Asserts that `message_fts` and (decision 0074) `message_fts_tri` hold exactly one row per
+/// message, with the stored headers and the expected body texts (`texts`; messages not in it:
+/// headers only). Compares the index terms with indexes built from scratch out of the same data.
+pub(crate) async fn assert_index_matches(
+    store: &Store,
+    texts: &BTreeMap<i64, BodyText>,
+    when: &str,
+) {
     let texts = texts.clone();
     let when = when.to_owned();
     store
         .write(move |tx| {
-            let fts_ids: Vec<i64> = tx
-                .prepare("SELECT rowid FROM message_fts ORDER BY rowid")?
-                .query_map([], |r| r.get(0))?
-                .collect::<Result<_, _>>()?;
             let ids: Vec<i64> = tx
                 .prepare("SELECT id FROM message ORDER BY id")?
                 .query_map([], |r| r.get(0))?
                 .collect::<Result<_, _>>()?;
-            assert_eq!(fts_ids, ids, "{when}: index rows are the messages");
-
-            tx.execute_batch(
-                "CREATE VIRTUAL TABLE temp.expected_fts USING fts5(
-                   subject, \"from\", \"to\", cc, body, attachments, content = '',
-                   tokenize = 'unicode61 remove_diacritics 2')",
-            )?;
             let mut rows = Vec::new();
             for id in &ids {
                 let (mut row, _) = fts::stored_row(tx, *id)?.expect("row");
@@ -167,29 +160,56 @@ async fn assert_index_matches(store: &Store, texts: &BTreeMap<i64, BodyText>, wh
                 }
                 rows.push((*id, row));
             }
-            for (id, row) in &rows {
-                tx.execute(
-                    "INSERT INTO temp.expected_fts (rowid, subject, \"from\", \"to\", cc, body, attachments)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    rusqlite::params![id, row.subject, row.from, row.to, row.cc, row.body, row.attachments],
-                )?;
+            for (table, tokenize, body) in [
+                ("message_fts", "unicode61 remove_diacritics 2", true),
+                (
+                    "message_fts_tri",
+                    "trigram remove_diacritics 1",
+                    mail_model::search::SUBSTRING_BODY,
+                ),
+            ] {
+                let fts_ids: Vec<i64> = tx
+                    .prepare(&format!("SELECT rowid FROM {table} ORDER BY rowid"))?
+                    .query_map([], |r| r.get(0))?
+                    .collect::<Result<_, _>>()?;
+                assert_eq!(fts_ids, ids, "{when}: rows of {table} are the messages");
+                tx.execute_batch(&format!(
+                    "CREATE VIRTUAL TABLE temp.expected_fts USING fts5(
+                       subject, \"from\", \"to\", cc, body, attachments, content = '',
+                       tokenize = '{tokenize}')"
+                ))?;
+                for (id, row) in &rows {
+                    tx.execute(
+                        "INSERT INTO temp.expected_fts (rowid, subject, \"from\", \"to\", cc, body, attachments)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        rusqlite::params![
+                            id,
+                            row.subject,
+                            row.from,
+                            row.to,
+                            row.cc,
+                            if body { row.body.as_str() } else { "" },
+                            row.attachments
+                        ],
+                    )?;
+                }
+                let live = instances(tx, "main", table);
+                let expected = instances(tx, "temp", "expected_fts");
+                tx.execute_batch("DROP TABLE temp.expected_fts")?;
+                let missing: Vec<_> = expected.difference(&live).take(5).collect();
+                let extra: Vec<_> = live.difference(&expected).take(5).collect();
+                assert!(
+                    missing.is_empty() && extra.is_empty(),
+                    "{when}: {table} differs; missing {missing:?}, extra {extra:?}"
+                );
             }
-            let live = instances(tx, "main", "message_fts");
-            let expected = instances(tx, "temp", "expected_fts");
-            tx.execute_batch("DROP TABLE temp.expected_fts")?;
-            let missing: Vec<_> = expected.difference(&live).take(5).collect();
-            let extra: Vec<_> = live.difference(&expected).take(5).collect();
-            assert!(
-                missing.is_empty() && extra.is_empty(),
-                "{when}: index differs; missing {missing:?}, extra {extra:?}"
-            );
             Ok(())
         })
         .await
         .expect("compare index");
 }
 
-async fn run_index_job(store: &Store) -> usize {
+pub(crate) async fn run_index_job(store: &Store) -> usize {
     let mut steps = 0;
     loop {
         match store.search_index_step().await.expect("index step") {
@@ -201,12 +221,12 @@ async fn run_index_job(store: &Store) -> usize {
 
 fn find(f: &str) -> SearchFilter {
     SearchFilter {
-        text: TextMatch::Match(f.into()),
+        text: TextMatch::words(f),
         ..SearchFilter::default()
     }
 }
 
-async fn search_ids(store: &Store, filter: SearchFilter) -> Vec<i64> {
+pub(crate) async fn search_ids(store: &Store, filter: SearchFilter) -> Vec<i64> {
     let mut out = Vec::new();
     let mut cursor = None;
     loop {
@@ -432,7 +452,7 @@ async fn the_index_follows_inserts_changes_deletes_and_a_rebuild() {
     assert_index_matches(store, &texts, "after the rebuild").await;
     let tables: Vec<String> = store
         .read(|c| {
-            Ok(c.prepare("SELECT name FROM sqlite_schema WHERE name LIKE 'message_fts_new%' OR name LIKE 'message_fts_old%'")?
+            Ok(c.prepare("SELECT name FROM sqlite_schema WHERE name LIKE 'message_fts%new%' OR name LIKE 'message_fts%old%'")?
                 .query_map([], |r| r.get(0))?
                 .collect::<Result<_, _>>()?)
         })
@@ -447,7 +467,7 @@ async fn the_index_follows_inserts_changes_deletes_and_a_rebuild() {
         })
         .await
         .expect("triggers");
-    assert_eq!(triggers, ["message_fts_delete"]);
+    assert_eq!(triggers, ["message_fts_delete", "message_fts_tri_delete"]);
 
     // Deleting the account empties the index.
     assert!(store.delete_account(f.account).await.expect("delete"));
@@ -1108,7 +1128,7 @@ async fn search_filters_and_paging() {
     assert_eq!(search_ids(store, flagged).await, [id(5)]);
     // Only exclusions.
     let not_termin = SearchFilter {
-        text: TextMatch::Exclude("\"termin\"".into()),
+        text: TextMatch::excluding_words("\"termin\""),
         ..SearchFilter::default()
     };
     assert_eq!(

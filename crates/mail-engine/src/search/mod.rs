@@ -23,6 +23,8 @@ mod server;
 #[cfg(test)]
 mod server_tests;
 #[cfg(test)]
+mod stage22_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::{Arc, Mutex, PoisonError, Weak};
@@ -256,15 +258,16 @@ impl<C: Connector> AppCore<C> {
     pub async fn search(&self, request: SearchRequest) -> Result<SearchPage, CoreError> {
         check_limit(request.limit)?;
         let store = self.store_ref()?;
+        let index = store.search_index_status().await?;
         let options = CompileOptions {
             prefix_last_word: request.typing,
+            substrings: resolve::substrings(&index),
         };
         let compiled = {
             let zone = LocalZone::system();
             let context = self.search_context(&zone, &request);
             resolve::compile(&request, &context, options)
         };
-        let index = store.search_index_status().await?;
         let plan = resolve::plan(store, &request, compiled).await?;
         let terms = plan.parsed.highlight_terms(options);
         let mut page = SearchPage {
@@ -328,10 +331,14 @@ impl<C: Connector> AppCore<C> {
             typing: false,
             month_first: false,
         };
+        let options = CompileOptions {
+            prefix_last_word: false,
+            substrings: resolve::substrings_now(store).await?,
+        };
         let compiled = {
             let zone = LocalZone::system();
             let context = self.search_context(&zone, &request);
-            resolve::compile(&request, &context, CompileOptions::default())
+            resolve::compile(&request, &context, options)
         };
         let plan = resolve::plan_with(
             store,

@@ -380,6 +380,8 @@ struct Dataset {
     frequent: Vec<String>,
     rare: String,
     sender: String,
+    /// Stage 22: the address of `senders[3]`.
+    sender_email: String,
 }
 
 fn data_path(dir: &TempDir) -> PathBuf {
@@ -566,6 +568,7 @@ async fn generate(total: usize) -> Dataset {
             .next_back()
             .unwrap_or_default()
             .to_owned(),
+        sender_email: senders[3].1.clone(),
     }
 }
 
@@ -657,6 +660,9 @@ fn search_request(query: &str, typing: bool) -> SearchRequest {
     }
 }
 
+/// The last queries of [`queries`], added in stage 22 (decision 0074).
+const STAGE22_QUERIES: usize = 12;
+
 /// The measured queries: (name, query, typing).
 fn queries(data: &Dataset) -> Vec<(String, String, bool)> {
     let f = &data.frequent;
@@ -696,6 +702,39 @@ fn queries(data: &Dataset) -> Vec<(String, String, bool)> {
         ),
         ("nur Ausschluss: -und".into(), "-und".into(), false),
         ("OR".into(), "rechnung OR invoice".into(), false),
+        // Stage 22 (decision 0074): inside words through the trigram index.
+        ("im Wort, häufig".into(), "echnun".into(), false),
+        ("im Wort, drei Zeichen".into(), "ech".into(), false),
+        (
+            "im Wort, selten".into(),
+            data.rare.chars().skip(1).collect(),
+            false,
+        ),
+        ("Zahl im Dateinamen".into(), "2345".into(), false),
+        ("im Wort, ohne Treffer".into(), "qxzqxz".into(), false),
+        (
+            "Adressteil (beide Indexe)".into(),
+            format!("{}3@sen", data.sender),
+            false,
+        ),
+        (
+            "ganze Adresse (beide Indexe)".into(),
+            data.sender_email.clone(),
+            false,
+        ),
+        (
+            "Wort in Anführungszeichen + im Wort".into(),
+            "\"rechnung\" echnun".into(),
+            false,
+        ),
+        ("zwei Teile im Wort".into(), "echnun estell".into(), false),
+        ("Ausschluss im Wort".into(), "-echnun".into(), false),
+        ("beim Tippen, zwei Zeichen".into(), "re".into(), true),
+        (
+            "Kontakt (Absender, Empfänger, Kopie)".into(),
+            format!("contact:{}", data.sender_email),
+            false,
+        ),
     ]
 }
 
@@ -1068,7 +1107,9 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
     }
 
     let mut slowest = Duration::ZERO;
-    for (name, query, typing) in queries(data) {
+    let mut slowest_inside = Duration::ZERO;
+    let stage7 = queries(data).len() - STAGE22_QUERIES;
+    for (n, (name, query, typing)) in queries(data).into_iter().enumerate() {
         let t = time(runs, || async {
             core.search(search_request(&query, typing))
                 .await
@@ -1083,8 +1124,12 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
             .len();
         row(&format!("Suche: {name} (`{query}`, {hits} Treffer)"), &t);
         slowest = slowest.max(t.median);
+        if n >= stage7 {
+            slowest_inside = slowest_inside.max(t.median);
+        }
     }
     worst.insert("search", slowest);
+    worst.insert("search inside words", slowest_inside);
 
     // Switching between locally stored messages: getMessage of stored bodies (parse, sanitise,
     // render), HTML and text.
@@ -1300,12 +1345,18 @@ async fn report(total: usize, runs: usize) {
     let path = data_path(&data.dir);
     let store = Store::open(&path, StoreOptions::default()).expect("open");
     let sizes = store.search_index_status().await.expect("status");
+    // Stage 22: the pages of both full-text indexes (their `_data` and `_idx` tables), counted
+    // without the indexes of the other tables.
+    let (words, trigrams) = store.full_text_sizes().await.expect("index sizes");
     drop(store);
     println!(
-        "database {:.0} MB, bodies {:.0} MB, index state {:?}",
+        "database {:.0} MB, bodies {:.0} MB, index state {:?}; word index {:.1} MB, trigram index {:.1} MB (body text in it: {})",
         file_mb(&path),
         dir_mb(&data.dir.path().join("data").join("bodies")),
-        sizes.state
+        sizes.state,
+        words as f64 / 1e6,
+        trigrams as f64 / 1e6,
+        mail_model::search::SUBSTRING_BODY,
     );
     measure(&data, runs).await;
     // The generator stores as stage 7 did, without the classifier: the categories are left to
@@ -1364,6 +1415,8 @@ async fn small_data_meets_generous_thresholds() {
     limit("conversations", 200);
     limit("unified conversations", 300);
     limit("search", 200);
+    // Stage 22: inside words, both indexes, contacts.
+    limit("search inside words", 200);
     limit("open", 500);
     // Stage 19: sorted views, filters (a filter without matches walks the whole inbox) and
     // the counts of the filter bar.

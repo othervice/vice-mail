@@ -2,20 +2,27 @@
 //! resolves `account:` and `in:` to ids; this module turns the result into SQL.
 //!
 //! **Drivers** (what the query walks, newest first, stopping after `limit + 1` rows):
-//! 1. A text match: `message_fts MATCH ?` ordered by rowid descending, with the date filter and
-//!    the cursor as a rowid range inside FTS5; every other filter is checked per row on
-//!    `message` (CROSS JOIN, rowid lookup) and on `message_location` (`loc_message`).
+//! 1. A text match: `message_fts MATCH ?` (or `message_fts_tri`, decision 0074) ordered by rowid
+//!    descending, with the date filter and the cursor as a rowid range inside FTS5; every other
+//!    filter is checked per row on `message` (CROSS JOIN, rowid lookup) and on
+//!    `message_location` (`loc_message`). The walked clause is one with a single index (trigrams
+//!    first: their terms are the longer ones); if every clause needs both indexes, the first one
+//!    is walked as a `UNION` of one branch per index, which SQLite merges in rowid order
+//!    (`MERGE (UNION)`, no sorting). The other clauses are checked per row as
+//!    `m.id IN (SELECT rowid … MATCH ?)` (SQLite collects those matches once per statement), the
+//!    exclusions of the walked index inside its `MATCH` (`(…) NOT (…)`), the others as
+//!    `m.id NOT IN (…)`.
 //! 2. No text, but mailboxes (`in:` or a mailbox scope): one branch per mailbox of the first
 //!    set, each a range of the location key (with `is:unread`/`is:flagged` on the location, so
 //!    `loc_unseen` can drive), combined with `UNION ALL`. A message in two of these mailboxes
 //!    comes twice and is merged here.
 //! 3. Otherwise `message` by its primary key from the cursor down (filters per row; only
-//!    exclusions such as `-spam` become `rowid NOT IN (SELECT rowid … MATCH ?)`).
+//!    exclusions such as `-spam` become `m.id NOT IN (SELECT rowid … MATCH ?)`).
 //!
 //! The SQL text depends on the filters (lists of ids are written as integer literals: they
 //! come from the database, never from input); values the user typed are always parameters.
 
-use mail_model::search::{RowidRange, TextMatch};
+use mail_model::search::{RowidRange, TextClause, TextMatch};
 use mail_model::{AccountId, ListCursor, MailboxId, MessageId};
 use rusqlite::types::Value;
 use rusqlite::{Connection, params_from_iter};
@@ -102,10 +109,9 @@ fn conditions(
     f: &SearchFilter,
     account_rows: Option<&[i64]>,
     skip_first_set: bool,
-    params: &mut Vec<Value>,
     out: &mut Vec<String>,
 ) {
-    conditions_on(f, "m", account_rows, skip_first_set, params, out);
+    conditions_on(f, "m", account_rows, skip_first_set, out);
 }
 
 /// [`conditions`] on the message alias `m` (stage 19: the list views apply them to a newer
@@ -115,7 +121,6 @@ pub(crate) fn conditions_on(
     m: &str,
     account_rows: Option<&[i64]>,
     skip_first_set: bool,
-    params: &mut Vec<Value>,
     out: &mut Vec<String>,
 ) {
     // `+` keeps these terms off the indexes: the driver decides the order (newest first), an
@@ -190,15 +195,118 @@ pub(crate) fn conditions_on(
             "NOT EXISTS (SELECT 1 FROM message_body cb WHERE cb.message_id = {m}.id AND cb.complete = 1)"
         ));
     }
-    if f.only.is_none()
-        && let TextMatch::Exclude(expr) = &f.text
-    {
-        params.push(Value::Text(expr.clone()));
-        out.push(format!(
-            "{m}.id NOT IN (SELECT rowid FROM message_fts WHERE message_fts MATCH ?{})",
-            params.len()
-        ));
+}
+
+/// The FTS5 table of the word index or of the trigram index (decision 0074).
+pub(crate) const fn fts_table(trigrams: bool) -> &'static str {
+    if trigrams {
+        "message_fts_tri"
+    } else {
+        "message_fts"
     }
+}
+
+/// The parameter numbers of a text match's expressions, pushed once per statement (every branch
+/// of a `UNION` refers to the same numbers).
+#[derive(Debug, Default)]
+pub(crate) struct TextParams {
+    /// Per clause of [`TextMatch::all`]: its word and its trigram expression.
+    all: Vec<(Option<usize>, Option<usize>)>,
+    none: (Option<usize>, Option<usize>),
+}
+
+/// Pushes the expressions of `text`. `skip`: a clause the query walks (not pushed);
+/// `skip_none`: the exclusions of the word index (`.0`) or the trigram index (`.1`) the walked
+/// `MATCH` holds already.
+pub(crate) fn push_text(
+    text: &TextMatch,
+    skip: Option<usize>,
+    skip_none: (bool, bool),
+    params: &mut Vec<Value>,
+) -> TextParams {
+    let mut push = |expr: &Option<String>| {
+        expr.as_ref().map(|e| {
+            params.push(Value::Text(e.clone()));
+            params.len()
+        })
+    };
+    let all = text
+        .all
+        .iter()
+        .enumerate()
+        .map(|(i, clause)| {
+            if Some(i) == skip {
+                (None, None)
+            } else {
+                (push(&clause.words), push(&clause.trigrams))
+            }
+        })
+        .collect();
+    let none = (
+        if skip_none.0 {
+            None
+        } else {
+            push(&text.none.words)
+        },
+        if skip_none.1 {
+            None
+        } else {
+            push(&text.none.trigrams)
+        },
+    );
+    TextParams { all, none }
+}
+
+/// `{id} IN (SELECT rowid FROM … MATCH ?{n})` (`NOT IN` if `not`).
+fn member(id: &str, trigrams: bool, n: usize, not: bool) -> String {
+    let t = fts_table(trigrams);
+    format!(
+        "{id} {}IN (SELECT rowid FROM {t} WHERE {t} MATCH ?{n})",
+        if not { "NOT " } else { "" }
+    )
+}
+
+/// The text conditions of `params` on the message id `id` (`m.id`, `+l.message_id`), appended
+/// to `out`: every clause in at least one of its indexes, no exclusion in any.
+pub(crate) fn text_conditions(id: &str, params: &TextParams, out: &mut Vec<String>) {
+    for clause in &params.all {
+        match clause {
+            (Some(w), Some(t)) => out.push(format!(
+                "({} OR {})",
+                member(id, false, *w, false),
+                member(id, true, *t, false)
+            )),
+            (Some(w), None) => out.push(member(id, false, *w, false)),
+            (None, Some(t)) => out.push(member(id, true, *t, false)),
+            (None, None) => {}
+        }
+    }
+    if let Some(w) = params.none.0 {
+        out.push(member(id, false, w, true));
+    }
+    if let Some(t) = params.none.1 {
+        out.push(member(id, true, t, true));
+    }
+}
+
+/// The clause a text search walks: one with a single index (trigrams first), else the first.
+fn walked(text: &TextMatch) -> Option<usize> {
+    let single = |trigrams: bool| {
+        text.all.iter().position(|c| match c {
+            TextClause {
+                words: None,
+                trigrams: Some(_),
+            } => trigrams,
+            TextClause {
+                words: Some(_),
+                trigrams: None,
+            } => !trigrams,
+            _ => false,
+        })
+    };
+    single(true)
+        .or_else(|| single(false))
+        .or_else(|| (!text.all.is_empty()).then_some(0))
 }
 
 fn and(conditions: &[String]) -> String {
@@ -206,6 +314,54 @@ fn and(conditions: &[String]) -> String {
         .iter()
         .map(|c| format!(" AND {c}"))
         .collect::<String>()
+}
+
+/// The id query that walks one index's `MATCH` of clause `walk` (`expr`), its exclusions inside.
+#[allow(clippy::too_many_arguments)]
+fn one_index(
+    f: &SearchFilter,
+    account_rows: Option<&[i64]>,
+    walk: Option<usize>,
+    trigrams: bool,
+    expr: &str,
+    lower: Option<i64>,
+    upper: i64,
+    fetch: i64,
+) -> Built {
+    let mut params: Vec<Value> = Vec::new();
+    let push = |params: &mut Vec<Value>, v: Value| {
+        params.push(v);
+        params.len()
+    };
+    let t = fts_table(trigrams);
+    let none = if trigrams {
+        &f.text.none.trigrams
+    } else {
+        &f.text.none.words
+    };
+    let expr = match none {
+        Some(none) => format!("({expr}) NOT ({none})"),
+        None => expr.to_owned(),
+    };
+    let n_match = push(&mut params, Value::Text(expr));
+    let n_upper = push(&mut params, Value::Integer(upper));
+    let mut range = format!(" AND {t}.rowid < ?{n_upper}");
+    if let Some(lower) = lower {
+        let n = push(&mut params, Value::Integer(lower));
+        range.push_str(&format!(" AND {t}.rowid >= ?{n}"));
+    }
+    let mut conds = Vec::new();
+    conditions(f, account_rows, false, &mut conds);
+    let text = push_text(&f.text, walk, (!trigrams, trigrams), &mut params);
+    text_conditions("m.id", &text, &mut conds);
+    let n_fetch = push(&mut params, Value::Integer(fetch));
+    let sql = format!(
+        "SELECT m.id FROM {t} CROSS JOIN message m ON m.id = {t}.rowid
+         WHERE {t} MATCH ?{n_match}{range}{}
+         ORDER BY {t}.rowid DESC LIMIT ?{n_fetch}",
+        and(&conds)
+    );
+    Built { sql, params }
 }
 
 /// Builds the id query: ids newest first, at most `fetch` rows, all below `upper` and at or above
@@ -225,7 +381,7 @@ pub(crate) fn build(
     if let Some(only) = &f.only {
         // The candidates as literals: they are ids from the database.
         let mut conds = Vec::new();
-        conditions(f, account_rows, false, &mut params, &mut conds);
+        conditions(f, account_rows, false, &mut conds);
         let n_upper = push(&mut params, Value::Integer(upper));
         let n_lower = push(&mut params, Value::Integer(lower.unwrap_or(i64::MIN)));
         let n_fetch = push(&mut params, Value::Integer(fetch));
@@ -237,23 +393,41 @@ pub(crate) fn build(
         );
         return Built { sql, params };
     }
-    match &f.text {
-        TextMatch::Match(expr) => {
-            let n_match = push(&mut params, Value::Text(expr.clone()));
+    let walk = walked(&f.text);
+    let clause = walk.map(|i| &f.text.all[i]);
+    match clause.map(|c| (c.words.as_deref(), c.trigrams.as_deref())) {
+        Some((Some(expr), None)) => {
+            one_index(f, account_rows, walk, false, expr, lower, upper, fetch)
+        }
+        Some((None, Some(expr))) => {
+            one_index(f, account_rows, walk, true, expr, lower, upper, fetch)
+        }
+        Some((Some(words), Some(trigrams))) => {
+            // Both indexes: one branch each, merged in rowid order.
+            let n_words = push(&mut params, Value::Text(words.to_owned()));
+            let n_trigrams = push(&mut params, Value::Text(trigrams.to_owned()));
             let n_upper = push(&mut params, Value::Integer(upper));
-            let mut range = format!(" AND message_fts.rowid < ?{n_upper}");
-            if let Some(lower) = lower {
-                let n = push(&mut params, Value::Integer(lower));
-                range.push_str(&format!(" AND message_fts.rowid >= ?{n}"));
-            }
+            let n_lower = lower.map(|l| push(&mut params, Value::Integer(l)));
             let mut conds = Vec::new();
-            conditions(f, account_rows, false, &mut params, &mut conds);
+            conditions(f, account_rows, false, &mut conds);
+            let text = push_text(&f.text, walk, (false, false), &mut params);
+            text_conditions("m.id", &text, &mut conds);
             let n_fetch = push(&mut params, Value::Integer(fetch));
+            let branch = |t: &str, n_match: usize| {
+                let mut range = format!(" AND {t}.rowid < ?{n_upper}");
+                if let Some(n) = n_lower {
+                    range.push_str(&format!(" AND {t}.rowid >= ?{n}"));
+                }
+                format!(
+                    "SELECT {t}.rowid FROM {t} CROSS JOIN message m ON m.id = {t}.rowid
+                     WHERE {t} MATCH ?{n_match}{range}{}",
+                    and(&conds)
+                )
+            };
             let sql = format!(
-                "SELECT m.id FROM message_fts CROSS JOIN message m ON m.id = message_fts.rowid
-                 WHERE message_fts MATCH ?{n_match}{range}{}
-                 ORDER BY message_fts.rowid DESC LIMIT ?{n_fetch}",
-                and(&conds)
+                "{} UNION {} ORDER BY 1 DESC LIMIT ?{n_fetch}",
+                branch(fts_table(false), n_words),
+                branch(fts_table(true), n_trigrams)
             );
             Built { sql, params }
         }
@@ -262,7 +436,9 @@ pub(crate) fn build(
             let n_lower = lower.map(|l| push(&mut params, Value::Integer(l)));
             let n_fetch = push(&mut params, Value::Integer(fetch));
             let mut conds = Vec::new();
-            conditions(f, account_rows, true, &mut params, &mut conds);
+            conditions(f, account_rows, true, &mut conds);
+            let text = push_text(&f.text, None, (false, false), &mut params);
+            text_conditions("m.id", &text, &mut conds);
             let mut on_location = String::new();
             if f.unread == Some(true) {
                 on_location.push_str(" AND l.seen = 0");
@@ -304,7 +480,9 @@ pub(crate) fn build(
                 range.push_str(&format!(" AND m.id >= ?{n}"));
             }
             let mut conds = Vec::new();
-            conditions(f, account_rows, false, &mut params, &mut conds);
+            conditions(f, account_rows, false, &mut conds);
+            let text = push_text(&f.text, None, (false, false), &mut params);
+            text_conditions("m.id", &text, &mut conds);
             let n_fetch = push(&mut params, Value::Integer(fetch));
             let sql = format!(
                 "SELECT m.id FROM message m WHERE {range}{} ORDER BY m.id DESC LIMIT ?{n_fetch}",

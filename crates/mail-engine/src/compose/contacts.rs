@@ -586,6 +586,35 @@ pub(crate) async fn group_of(store: &Store, email: &str) -> Result<StoredContact
     group_by_email(store, email).await
 }
 
+/// Stage 22 (decision 0074): the addresses a `contact:` value stands for, as mail spells them:
+/// every address of the contact that has it (merged ones too), each as written and as its key
+/// (ASCII domain); an address without a contact alone; anything else as typed.
+pub(crate) async fn search_addresses(store: &Store, value: &str) -> Result<Vec<String>, CoreError> {
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |address: String| {
+        if !out.iter().any(|a| a.eq_ignore_ascii_case(&address)) {
+            out.push(address);
+        }
+    };
+    let Some(normalized) = normalize_address(value) else {
+        push(value.trim().to_owned());
+        return Ok(out);
+    };
+    match store.contact_group(normalized.key.clone()).await? {
+        Some(group) => {
+            for member in &group.members {
+                push(email_of(member));
+                push(member.key.clone());
+            }
+        }
+        None => {
+            push(normalized.display());
+            push(normalized.key);
+        }
+    }
+    Ok(out)
+}
+
 /// Sets (or with `None` clears) the name the user gives the contact with the address `email`.
 pub(crate) async fn set_name(
     store: &Store,
