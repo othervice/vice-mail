@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSidebarParts, screenshot, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, createServerFolder, deleteServerFolders, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -99,6 +99,8 @@ describe("stage 18: folders created in the app exist on the server; the server's
     account = await onlyAccount();
     await setConversations(false);
     sidebarBefore = await setSidebar(true);
+    // Stage 23 (decision 0085): the own folders are under the account's "More folders".
+    await openSidebarParts();
     await testId(`account-menu-${account.id}`).waitForExist({ timeout: 10000 });
   });
 

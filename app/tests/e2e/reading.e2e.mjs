@@ -28,7 +28,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, dataDir, invoke, openView, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, dataDir, invoke, openSidebarParts, openView, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { counter, startCounter } from "./support/counter-server.mjs";
 import { ALICE, REPO, SERVER, appendMessages, attachmentDigests, copySeedMessages, testmail } from "./support/testmail.mjs";
 
@@ -504,6 +504,8 @@ async function showInbox() {
 /** Opens a folder through the unfolded sidebar's tree, then leaves the sidebar as it was. */
 async function showMailbox(mailbox) {
   const wasExpanded = await setSidebar(true);
+  // Stage 23 (decision 0085): folders other than the inbox and Sent are under "More folders".
+  await openSidebarParts();
   await testId(`mailbox-${mailbox.id}`).waitForExist();
   await testId(`mailbox-${mailbox.id}`).click();
   await browser.waitUntil(async () => (await browser.execute(() => document.querySelector("[data-testid=\"app-toolbar\"] h1")?.textContent)) === mailbox.name, {

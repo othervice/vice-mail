@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openSettings, openView, screenshot, SCREENSHOT_DIR, setConversations, setPreference, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSettings, openSidebarParts, openView, screenshot, SCREENSHOT_DIR, setConversations, setPreference, setSidebar, testId } from "./support/app.mjs";
 import { measureScroll } from "./support/scroll.mjs";
 import {
   ALICE,
@@ -38,7 +38,10 @@ const ROLE_BY_FLAG = { "\\sent": "sent", "\\drafts": "drafts", "\\archive": "arc
 const ROLE_NAMES = { inbox: "Inbox", sent: "Sent", drafts: "Drafts", archive: "Archive", trash: "Trash", junk: "Junk" };
 // Role folders first in the column's order (docs/DESIGN.md, "Seitenspalte"; ROLE_ORDER in
 // src/features/mailboxes/tree.ts), then the account's own folders.
-const TOP_LEVEL_ORDER = ["Inbox", "Drafts", "Sent", "Archive", "Junk", "Trash", "Projects"];
+// Stage 23 (decision 0085): the inbox and Sent stand in the account's section, the other folders
+// (roles first, then the own ones by name) one level deeper under "More folders".
+const TOP_LEVEL_ORDER = ["Inbox", "Sent"];
+const MORE_FOLDERS_ORDER = ["Drafts", "Archive", "Junk", "Trash", "Projects"];
 const PROGRESS_TEXT = /^Syncing…[\d,]+ of [\d,]+$/;
 /**
  * The slowed-down server: it runs 5 ms, then pauses 745 ms. The app, not the server, does most of
@@ -181,6 +184,10 @@ function startTimeline() {
     window.__e2eTimeline?.observer.disconnect();
     const samples = [];
     const snapshot = () => {
+      // Stage 23 (decision 0085): every folder but the inbox and Sent sits under the account's
+      // "More folders", closed by default; it is opened as soon as it shows, as a user would, so
+      // the count still says when the whole tree is there.
+      for (const row of document.querySelectorAll('[data-testid^="sidebar-more-folders-"][aria-expanded="false"]')) row.click();
       const list = document.querySelector('[data-testid="message-list"]');
       const first = list?.querySelector('[role="option"]');
       return {
@@ -536,6 +543,7 @@ describe("account and read-only sync (stage 2)", function () {
   });
 
   it("shows the folder tree with roles and unread counters from the server", async () => {
+    await openSidebarParts();
     const account = await onlyAccount();
     const mailboxes = await coreCall("list_mailboxes", { accountId: account.id });
     const tree = await browser.execute(() =>
@@ -543,9 +551,10 @@ describe("account and read-only sync (stage 2)", function () {
         id: Number(b.dataset.testid.slice("mailbox-".length)),
         text: b.textContent,
         label: b.getAttribute("aria-label"),
-        // The tree's rows are flat; the depth is their level (WAI-ARIA tree view) below the
-        // account's own row, which is level 1: the top folders are level 2.
-        depth: Number(b.getAttribute("aria-level")) - 2,
+        // The tree's rows are flat; the level (WAI-ARIA tree view) is below the account's own
+        // row, which is level 1: the inbox and Sent are level 2, the folders under "More
+        // folders" level 3 (stage 23, decision 0085).
+        level: Number(b.getAttribute("aria-level")),
       })),
     );
     const rows = [];
@@ -564,11 +573,13 @@ describe("account and read-only sync (stage 2)", function () {
       const count = info.unseen > 0 ? numbers.format(info.unseen) : "";
       assert.equal(item.text, count ? `${name} ${count}` : name, `tree entry of ${p}`);
       assert.equal(item.label, info.unseen > 0 ? `${name}, ${numbers.format(info.unseen)} unread` : name, `accessible name of ${p}`);
-      assert.equal(item.depth, p.split("/").length - 1, `depth of ${p}`);
+      const base = role === "inbox" || role === "sent" ? 2 : 3;
+      assert.equal(item.level, base + p.split("/").length - 1, `level of ${p}`);
       rows.push(`${item.text.padEnd(18)} ${role} (${local.roleSource}) ${local.total}`);
     }
     assert.equal(total, 10000);
-    assert.deepEqual(tree.filter((t) => t.depth === 0).map((t) => t.label.split(",")[0]), TOP_LEVEL_ORDER);
+    assert.deepEqual(tree.filter((t) => t.level === 2).map((t) => t.label.split(",")[0]), TOP_LEVEL_ORDER);
+    assert.deepEqual(tree.filter((t) => t.level === 3).map((t) => t.label.split(",")[0]), MORE_FOLDERS_ORDER);
     report.tree = rows;
     await assertFrameInPlace("mail view");
     await scrollListTo(0);
@@ -594,6 +605,7 @@ describe("account and read-only sync (stage 2)", function () {
   it("opens another folder from the tree", async () => {
     const account = await onlyAccount();
     const archive = (await coreCall("list_mailboxes", { accountId: account.id })).find((m) => m.role === "archive");
+    await openSidebarParts();
     await testId(`mailbox-${archive.id}`).click();
     await browser.waitUntil(async () => (await $("[data-testid=\"app-toolbar\"] h1").getText()) === "Archive");
     await browser.waitUntil(async () => (await renderedRows()).length === expected.Archive.messages, {
@@ -854,7 +866,8 @@ describe("account and read-only sync (stage 2)", function () {
     // The folded rail: the account button names the state.
     await setSidebar(false);
     report.offline.railLabel = await testId(`account-switch-${account.id}`).getAttribute("aria-label");
-    assert.match(report.offline.railLabel, /, offline$/);
+    // Stage 23 (decision 0085): the dot also says the account's unread mail.
+    assert.match(report.offline.railLabel, /, offline(, [\d,]+ unread)?$/);
     await shootBothThemes("offline-rail");
     await setSidebar(true);
     assert.deepEqual(await newCspViolations(), [], "CSP violations in the mail views");
