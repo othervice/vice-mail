@@ -40,7 +40,7 @@ once it is large enough.
 | Languages | i18next, react-i18next | 27.2 / 18.0 | standard, English and German; text literals in components are forbidden by `eslint-plugin-i18next` (`no-literal-string`) |
 | Lint | ESLint, typescript-eslint, eslint-plugin-react-hooks, eslint-plugin-i18next | 10.15 / 8.73 / 7.1 / 6.1 | `eslint-plugin-react` is ruled out (no release since April 2025, no ESLint 10) |
 | IDs | uuid | 1.29 | account IDs (UUID v4) |
-| Database | SQLite via rusqlite (bundled, FTS5, tokenizer `unicode61 remove_diacritics 2`) | 0.41.1 (SQLite 3.54.1, 0006) | one process, one writer: synchronous rusqlite is simpler and faster than SQLx; with 500,000 mails a list page takes 0.04 ms, first search hits under 0.2 ms (0003) |
+| Database | SQLite via rusqlite (bundled, FTS5, tokenizers `unicode61 remove_diacritics 2` and, from stage 22, `trigram remove_diacritics 1` (0074)) | 0.41.1 (SQLite 3.54.1, 0006) | one process, one writer: synchronous rusqlite is simpler and faster than SQLx; with 500,000 mails a list page takes 0.04 ms, first search hits under 0.2 ms (0003) |
 | Migrations | rusqlite_migration | 2.7.0 | small, uses `user_version`; pins rusqlite to ^0.41 (0006) |
 | SQL functions | rusqlite feature `functions` (stage 19, 0061) | with rusqlite | the sort keys of a location are computed in Rust (`mail_model::sort_text`) and called from the statements that insert locations and from migration 0026; registered on the write connection only |
 | IMAP | async-imap (Tokio, rustls) plus our own thin command layer in `mail-imap` | 0.12.0 | in continuous use at Delta Chat; connection, parser, IDLE come from the library. Status checking, response codes (APPENDUID, COPYUID, MODIFIED), ENABLE, QRESYNC, LIST-STATUS and modified UTF-7 via our own layer. 10,000 headers in 0.044 s over TLS (0002) |
@@ -145,6 +145,7 @@ server cannot do is not faked but hidden or given a clear notice.
 | `message_body`, `message_body_part` | reference to the compressed body file (whole mail or individual parts of large mails), size, checksum | Cache |
 | `remote_content_sender` | senders whose external images are always loaded (account UUID, normalised address) | sync |
 | `message_fts` | FTS5 index over subject, sender, recipients, text, attachment names | Cache |
+| `message_fts_tri` | from stage 22 (0074, migration 0029): the same columns and rowids tokenized into trigrams, for search inside words; written with `message_fts` | Cache |
 | `operation` | outbox: kind, payload, idempotency key, state, attempts, last error; from stage 21 (0063, migration 0027) also `mark_mailbox`: one row per folder marked as read, `mailbox_id` set and `uid` NULL, the UIDs as a sequence set in the payload | Device |
 | `draft` | UUID, account, identity, headers, Message-ID (fixed from creation), text, quote, signature yes/no and chosen signature (stage 10), attachments and inline images (with Content-ID) as references to our own copies under `compose/`, state (`editing`/`sending`), revision, server copy (folder, UIDVALIDITY, UID, revision) (0018, 0023); `kept_original`: Message-ID of another program's draft that stays untouched in the folder because the editor could not take it over completely (0047) | Device (reconciled via IMAP) |
 | `contact` | one row per address: key, spelling, counter, last used, rank (REAL with index), names, `user_name`, folded search words, `contact_group` for merged contacts (0016, 0018, 0023); from stage 17 (0050) `seen`/`last_seen` (copied, Reply-To), `personal`, `kind` (person, list, system) and the user's `note` | Cache; name, merging and note sync |
@@ -202,7 +203,18 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   (`WHERE seen = 0`); plus `message` by Message-ID and thread, `attachment` by message.
 - `message_fts` is contentless with `contentless_delete=1`, columns `subject, from, to, cc, body,
   attachments`, tokenizer `unicode61 remove_diacritics 2`. Bodies are indexed afterwards via
-  `INSERT OR REPLACE`. Substring search (the German "auszug" finding "Kontoauszug", bank statement) does not exist in version 1.
+  `INSERT OR REPLACE`. Substring search (the German "auszug" finding "Kontoauszug", bank statement)
+  came with stage 22 (`docs/decisions/0074-kontakte-in-der-suche-und-suche-im-wort.md`): a second
+  contentless index `message_fts_tri` (tokenizer `trigram remove_diacritics 1`, the same folding)
+  over the same columns, the mail text included, written in the same transactions, rebuilt and
+  swapped together with `message_fts`; the job target `message_fts_tri` fills it for existing
+  mail after migration 0029. An unquoted term of three or more characters matches in either index,
+  shorter and quoted terms only as words; a single word uses the trigram index alone once it is
+  complete (every word hit is a substring hit there). `CompiledQuery::text` is a `TextMatch` of
+  clauses per index; the store walks one clause's `MATCH` by `rowid DESC` (two clauses that need
+  both indexes as a `UNION` merged in rowid order) and checks the others per row with
+  `IN (… MATCH ?)`. Cost: about 3.7 bytes of index per byte of text (100,000 mails with 17,935
+  local bodies: database 119 → 272 MB), first hits at most 29 ms in a debug build.
 - Lists only via keyset, never via `OFFSET`. Views across several mailboxes (unified inbox)
   via `UNION ALL` per mailbox, never via `IN (…)` (measured 0.14 ms versus 393 ms). Fixed
   join order via `CROSS JOIN`. For every list and search query a test checks the query plan.
@@ -286,6 +298,13 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   a first page with any filter under 400 ms, a test checks the plan (no temporary B-tree).
   The search language knows `larger:` (`größer:`; sizes with K, M, G, B; `-larger:` is smaller),
   local only, over `message.size`.
+- Contacts in the search (stage 22, `docs/decisions/0074-kontakte-in-der-suche-und-suche-im-wort.md`):
+  the search field is a combobox that offers up to three contacts while typing (the directory's
+  word-prefix search, `listContacts` with every kind). Choosing one writes `contact:<address>`
+  (`kontakt:`), a filter of the search language that the engine resolves on every search to all
+  addresses of the contact (merged ones too), so saved searches follow merges; it compiles to
+  phrases in the word index's columns `from`, `to` and `cc` (word boundaries: `an@firma.de` does not
+  find `jan@firma.de`). On the server it becomes `OR FROM (OR TO CC)` with the written address.
 - From the re-measurement of stage 8/9 (`docs/decisions/0029-start-ohne-breites-lesen.md`): queries on
   a partial index that becomes empty after a catch-up run (`message_category_todo`,
   `message_contacts_todo`) name it via `INDEXED BY`. Otherwise `PRAGMA optimize` on close
@@ -1116,6 +1135,8 @@ Until the UI has been switched over, these values are still kept in the marked f
 | tauri-specta instead of ts-rs (0004) | typed commands and events, enforced decision for 64-bit numbers | ts-rs generates the same types; only `ipc.ts` would have to be rewritten |
 | Stalwart as test server (0001) | one binary, all needed capabilities, no Docker | Dovecot via Homebrew with a separate MTA |
 | FTS5 with `unicode61` instead of `trigram` (0003) | trigram is 5.2 times as large and half as fast at inserting | tokenizer can be switched via migration, the index is cache |
+| A trigram index next to the word index, the mail text included (0074) | the human chose search inside words; numbers and German compounds stand mostly in the text; first hits stay far under 200 ms, the cost is disk (about 3.7 bytes per byte of text) | `SUBSTRING_BODY = false` and a rebuild: headers and file names only |
+| `contact:` as a filter resolved on every search, phrases in `from`/`to`/`cc` of the word index (0074) | saved searches follow merged contacts; word boundaries keep addresses exact | an `OR` of `from:`/`to:`/`cc:` terms written into the query |
 | Guided first start (0044): device setting `first_start`, `getFirstStart`/`finishFirstStart`; installations with an account count as set up | a new installation is guided through account, look and the optional extras, without existing installations seeing any of it | remove `FirstStartGate`, then the empty state again |
 | Updates only with consent via the Tauri updater (0037) | the only connection to a server the user has not set up; signed files, key only in the keychain | switch off; without the updater you install by hand |
 | rusqlite 0.41 instead of 0.43 (0006) | `rusqlite_migration` 2.7 requires ^0.41; same SQLite 3.54.1 | own migration runner, then rusqlite 0.43 |

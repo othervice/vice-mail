@@ -82,7 +82,11 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 
 ### Suche
 - Volltext offline über alles, was lokal vorliegt; erste Treffer beim Tippen.
-- Filter: `from:` `to:` `cc:` `subject:` `in:` `account:` `filename:` `has:attachment` `is:unread`
+- Ab drei Zeichen auch mitten im Wort („uster“ findet „Muster“, „1234“ eine Nummer im Wort), in
+  Anführungszeichen nur ganze Wörter (Stufe 22, Entscheidung 0074).
+- Beim Tippen oben bis zu drei passende Kontakte (Name, Adresse, Domain); die Wahl zeigt alle Mails
+  von, an und in Kopie dieser Person über alle Konten (`contact:`, Stufe 22, Entscheidung 0074).
+- Filter: `from:` `to:` `cc:` `subject:` `in:` `account:` `filename:` `contact:` `has:attachment` `is:unread`
   `is:flagged` `is:snoozed` `before:` `after:` `older_than:` `newer_than:`, Phrasen in Anführungszeichen, `-` zum Ausschließen.
 - Auf Wunsch auf dem Server weitersuchen.
 
