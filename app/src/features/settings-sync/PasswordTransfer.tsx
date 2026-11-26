@@ -329,7 +329,7 @@ function RequestCard({ request, accounts }: { request: PasswordRequest; accounts
   }
   return (
     <li className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised p-4 shadow-card" data-testid={`give-request-${request.state}`}>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <p className="font-semibold text-primary">{t("settingsSync.give.requestFrom", { device })}</p>
         <p className="text-12 text-secondary">{t("settingsSync.give.runsUntil", { time: formatSyncTime(request.expiresAt, i18n.language) })}</p>
       </div>
