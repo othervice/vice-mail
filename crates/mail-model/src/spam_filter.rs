@@ -112,6 +112,7 @@ pub struct SpamVerdict {
     /// 0 to 1.
     pub score: f64,
     /// Unix ms.
+    #[specta(type = specta_typescript::Number)]
     pub at: i64,
     /// "Move to spam" can run (writes on, a junk folder): for a suspected mail.
     pub can_move: bool,

@@ -1797,6 +1797,10 @@ mod contacts_view;
 #[path = "popup_tests.rs"]
 mod popup;
 
+// Stage 22 (decision 0077): the learning spam filter, with this harness.
+#[path = "../spam/tests.rs"]
+mod spam;
+
 // ---------------------------------------------------------------------------------------------
 // Decision 0039: the inbox as conversations
 

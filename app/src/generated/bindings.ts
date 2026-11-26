@@ -609,6 +609,27 @@ export const commands = {
 	 *  leave out, for the list's note.
 	 */
 	countBlockedHidden: (scope: InboxScope, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("count_blocked_hidden", { scope }, options)),
+	/**  What the spam filter learned on this device, its setting, and learning from existing mail. */
+	getSpamFilter: (options?: InvokeOptions) => typedError<SpamFilterStatus, IpcError>(__TAURI_INVOKE("get_spam_filter", undefined, options)),
+	/**  Stores the setting (on or off, excluded accounts; synchronised) and returns the status. */
+	setSpamFilter: (settings: SpamFilterSettings, options?: InvokeOptions) => typedError<SpamFilterStatus, IpcError>(__TAURI_INVOKE("set_spam_filter", { settings }, options)),
+	/**
+	 *  Starts learning from the junk folders and read inbox mail in the background; progress comes
+	 *  as `spamFilterChanged`. `invalid_argument` while the filter is off.
+	 */
+	learnSpamFromMail: (options?: InvokeOptions) => typedError<SpamFilterStatus, IpcError>(__TAURI_INVOKE("learn_spam_from_mail", undefined, options)),
+	/**  Stops learning from existing mail; what was learned stays. */
+	cancelSpamLearning: (options?: InvokeOptions) => __TAURI_INVOKE<void>("cancel_spam_learning", undefined, options),
+	/**  Forgets everything the filter learned and its marks. */
+	forgetSpamFilter: (options?: InvokeOptions) => typedError<SpamFilterStatus, IpcError>(__TAURI_INVOKE("forget_spam_filter", undefined, options)),
+	/**  The filter's verdict on a message (moved here, or suspected), for the reading pane's note. */
+	getSpamVerdict: (messageId: MessageId, options?: InvokeOptions) => typedError<SpamVerdict | null, IpcError>(__TAURI_INVOKE("get_spam_verdict", { messageId }, options)),
+	/**
+	 *  "Spam" (`spam`) or "Not spam" on this device only, for mail the filter marked where the
+	 *  account may not write or has no junk folder; teaches the filter. Returns how many marks
+	 *  changed.
+	 */
+	markSpamLocally: (messageIds: MessageId[], spam: boolean, options?: InvokeOptions) => typedError<number, IpcError>(__TAURI_INVOKE("mark_spam_locally", { messageIds, spam }, options)),
 	/**
 	 *  One page of a view in another order than newest first, or with the quick filter: one row per
 	 *  message. `limit` 1..=500; pass `nextCursor` back unchanged.
@@ -2460,6 +2481,8 @@ export type ConversationSummary = {
  *    finished, was cancelled or failed; carries the whole job.
  *  - `notificationPauseChanged` (stage 21, decision 0069): notifications were paused or resumed
  *    (tray menu or Settings); carries the pause as it is now.
+ *  - `spamFilterChanged`, `spamFiltered` (stage 22, decision 0077): the spam filter's status
+ *    changed; the filter moved or marked new mail of an account.
  */
 export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences } | { type: "accountsChanged" } | { type: "accountStatusChanged"; accountId: AccountId; status: AccountStatus } | { type: "mailboxesChanged"; accountId: AccountId } | { type: "messagesChanged"; accountId: AccountId; mailboxId: MailboxId } | { type: "newMail"; accountId: AccountId; mailboxId: MailboxId; count: number } | { type: "messageBodyAvailable"; accountId: AccountId; messageId: MessageId } | { type: "messageBodyFailed"; accountId: AccountId; messageId: MessageId; error: IpcError } | { type: "prefetchProgress"; accountId: AccountId; status: PrefetchStatus } | { type: "linkActivated"; renderToken: RenderToken; index: number } | { type: "operationsChanged"; accountId: AccountId; operations: OperationInfo[]; removed: OperationId[] } | { type: "draftsChanged"; accountId: AccountId; changed: DraftId[]; removed: DraftId[] } | { type: "outgoingChanged"; accountId: AccountId; mails: OutgoingMail[] } | { type: "sendNeedsDecision"; accountId: AccountId; mail: OutgoingMail } | { type: "inboxChanged"; accountId: AccountId | null } | { type: "ruleSkipped"; accountId: AccountId; ruleId: RuleId; ruleName: string; reason: RuleSkipReason; count: number } | { type: "openMessageRequested"; accountId: AccountId; mailboxId: MailboxId | null; messageId: MessageId } | 
 /**
@@ -2496,7 +2519,18 @@ export type CoreEvent = { type: "preferencesChanged"; preferences: Preferences }
  */
 { type: "contactsChanged" } | 
 /**  Stage 19 (decision 0057): an mbox job changed. */
-{ type: "mboxJobChanged"; job: MboxJob } | { type: "notificationPauseChanged"; pause: NotificationPause };
+{ type: "mboxJobChanged"; job: MboxJob } | { type: "notificationPauseChanged"; pause: NotificationPause } | 
+/**
+ *  Stage 22 (decision 0077): the spam filter's settings, what it learned, or its learning
+ *  from existing mail changed.
+ */
+{ type: "spamFilterChanged"; status: SpamFilterStatus } | 
+/**
+ *  Stage 22: the spam filter moved new mail of an account to the junk folder (`moved`, one
+ *  batch: "Undo" sends `undoAction(batch)`, which also learns the mails as not spam) or
+ *  marked it as suspected spam on this device (`marked`).
+ */
+{ type: "spamFiltered"; accountId: AccountId; moved: number; marked: number; batch: BatchId | null };
 
 /**
  *  What the secret of an account is (stage 14). A password (or an app password) by default;
@@ -4033,6 +4067,11 @@ export type MessageListItem = {
 	 *  Absent when unknown.
 	 */
 	size?: number,
+	/**
+	 *  Stage 22 (decision 0077): the spam filter suspects it (marked on this device) or moved
+	 *  it to the junk folder. Absent otherwise.
+	 */
+	spam?: SpamFilterMark | null,
 };
 
 /**  One page of a message list, newest first. */
@@ -5504,6 +5543,70 @@ export type SoundPlatform = "macos" | "windows" |
 /**  Neither: the system's notification sound, no choice. */
 "other";
 
+/**  The filter's mark on a list row. */
+export type SpamFilterMark = 
+/**
+ *  Suspected spam, marked only on this device (the account may not write or has no junk
+ *  folder).
+ */
+"suspected" | 
+/**  Moved to the junk folder by the filter. */
+"moved";
+
+/**
+ *  The setting `spam.filter` (global, synchronised like other settings; the learned data is
+ *  not). Off by default.
+ */
+export type SpamFilterSettings = {
+	enabled: boolean,
+	/**
+	 *  Accounts the filter leaves alone (it neither looks at their new mail nor learns from
+	 *  them).
+	 */
+	excludedAccounts?: AccountId[],
+};
+
+/**
+ *  What the filter learned and does, for Settings (`getSpamFilter`, event
+ *  `spamFilterChanged`).
+ */
+export type SpamFilterStatus = {
+	settings: SpamFilterSettings,
+	/**  Mails learned as spam on this device. */
+	learnedSpam: number,
+	/**  Mails learned as not spam on this device. */
+	learnedHam: number,
+	/**  Distinct tokens the filter knows. */
+	tokens: number,
+	/**  It learned enough to act ([`MIN_LEARNED_SPAM`], [`MIN_LEARNED_HAM`]). */
+	ready: boolean,
+	minSpam: number,
+	minHam: number,
+	/**  Learning from existing mail: running, or how the last run ended (this session). */
+	learning: SpamLearning | null,
+};
+
+/**  Learning from existing mail (`learnSpamFromMail`), as the UI shows it. */
+export type SpamLearning = {
+	state: SpamLearningState,
+	/**  Mails looked at so far. */
+	done: number,
+	/**  Mails chosen to learn from. */
+	total: number,
+	/**  Learned as spam and as not spam in this run. */
+	spam: number,
+	ham: number,
+	/**
+	 *  Mails left out: their content could not be read, or (not spam) the filter already
+	 *  thought them spam.
+	 */
+	skipped: number,
+	/**  Why it failed (`failed`). */
+	error: IpcError | null,
+};
+
+export type SpamLearningState = "running" | "done" | "cancelled" | "failed";
+
 /**
  *  Stage 17: existing mail of a contact marked as spam in one account: messages from its
  *  addresses outside junk, trash, sent and drafts.
@@ -5553,6 +5656,18 @@ export type SpamUndo = {
 export type SpamUndone = {
 	contact: ContactEntry,
 	notUndone: number,
+};
+
+/**  The filter's verdict on one message, for the reading pane's note (`getSpamVerdict`). */
+export type SpamVerdict = {
+	messageId: MessageId,
+	mark: SpamFilterMark,
+	/**  0 to 1. */
+	score: number | null,
+	/**  Unix ms. */
+	at: number,
+	/**  "Move to spam" can run (writes on, a junk folder): for a suspected mail. */
+	canMove: boolean,
 };
 
 /**

@@ -271,6 +271,14 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::parity::get_attachment_pins,
             commands::parity::list_pinned_attachments,
             commands::parity::count_blocked_hidden,
+            // Stage 22 (decision 0077): the learning spam filter.
+            commands::spam::get_spam_filter,
+            commands::spam::set_spam_filter,
+            commands::spam::learn_spam_from_mail,
+            commands::spam::cancel_spam_learning,
+            commands::spam::forget_spam_filter,
+            commands::spam::get_spam_verdict,
+            commands::spam::mark_spam_locally,
             // Stage 19, task A: sorted and filtered lists, orders, table (decisions 0061, 0062).
             commands::views::list_view_messages,
             commands::views::list_view_conversations,

@@ -405,6 +405,9 @@ pub const SYNCED_SETTINGS: &[&str] = &[
     "compose.attachment_reminder",
     // Stage 21 (decision 0066): HTML mail in the dark theme.
     "reading.dark_mails",
+    // Stage 22 (decision 0077): the learning spam filter's switch and excluded accounts; what
+    // it learned stays on the device.
+    "spam.filter",
 ];
 
 /// Fields of an account record, each with its own version. Passwords and tokens live in the

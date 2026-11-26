@@ -27,6 +27,7 @@ pub mod protocols;
 pub mod reading;
 pub mod search;
 pub mod settings_sync;
+mod spam;
 pub mod sync;
 pub mod sync_state;
 mod takeover;

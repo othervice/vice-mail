@@ -82,6 +82,17 @@ use links::{RenderOwner, Rendering, Renderings};
 use prefetch::Prefetcher;
 use view::{Attachment, AttachmentSource, Content};
 
+/// Stage 22: whether [`Reading::spam_tokens`] may fetch a body that is not stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SpamFetch {
+    /// Only what is stored.
+    No,
+    /// Fetch, and refresh the lists showing the message.
+    Notify,
+    /// Fetch without refreshing lists.
+    Quiet,
+}
+
 /// Delay of the start-up sweep of body files.
 pub const SWEEP_DELAY: Duration = Duration::from_secs(5);
 
@@ -757,8 +768,80 @@ impl<C: MailConnector + 'static> Reading<C> {
         Ok(self.load_content(summary.id).await?.map(split))
     }
 
+    /// Stage 22 (decision 0077): the spam filter's tokens of a stored body (whole, or the
+    /// header and readable parts of a large one). With `fetch` (not [`SpamFetch::No`]) a body
+    /// that is not stored is fetched first as for opening (read-only, `BODY.PEEK`: nothing
+    /// becomes read) while the account is online; [`SpamFetch::Quiet`] does not refresh the
+    /// lists for it (learning from many mails). `None`: no body to read.
+    pub(crate) async fn spam_tokens(
+        &self,
+        message: MessageId,
+        fetch: SpamFetch,
+    ) -> Result<Option<mail_content::SpamTokens>, CoreError> {
+        if let Some(tokens) = self.stored_spam_tokens(message).await? {
+            return Ok(Some(tokens));
+        }
+        if fetch == SpamFetch::No {
+            return Ok(None);
+        }
+        let summary = self.summary(message).await?;
+        let state = self.accounts.status(summary.account_id).map(|s| s.state);
+        if matches!(
+            state,
+            None | Some(AccountState::Offline | AccountState::Error)
+        ) {
+            return Ok(None);
+        }
+        if !self
+            .fetch_and_store(&summary, fetch == SpamFetch::Notify)
+            .await?
+        {
+            return Ok(None);
+        }
+        self.stored_spam_tokens(message).await
+    }
+
+    async fn stored_spam_tokens(
+        &self,
+        message: MessageId,
+    ) -> Result<Option<mail_content::SpamTokens>, CoreError> {
+        let Some(info) = self.store.body_info(message).await? else {
+            return Ok(None);
+        };
+        if info.complete {
+            let Some(raw) = self.store.load_message(message).await? else {
+                return Ok(None);
+            };
+            return blocking(move || mail_content::spam_tokens_of_raw(&raw))
+                .await
+                .map(Some);
+        }
+        let Some(structure) = info.structure else {
+            return Ok(None);
+        };
+        let sections = self.store.load_sections(message, None).await?;
+        if !sections.iter().any(|s| s.section == BodySection::Header) {
+            return Ok(None);
+        }
+        blocking(move || {
+            let raw = view::assemble_partial(&structure, &sections);
+            mail_content::spam_tokens_of_raw(&raw)
+        })
+        .await
+        .map(Some)
+    }
+
     /// `true` once stored, `false` if the server no longer has the message.
     async fn fetch_for_open(&self, summary: &StoredMessage) -> Result<bool, CoreError> {
+        self.fetch_and_store(summary, true).await
+    }
+
+    /// [`Self::fetch_for_open`]; `notify`: the lists showing it refresh (its preview).
+    async fn fetch_and_store(
+        &self,
+        summary: &StoredMessage,
+        notify: bool,
+    ) -> Result<bool, CoreError> {
         let account = self
             .store
             .account(summary.account_id)
@@ -783,7 +866,9 @@ impl<C: MailConnector + 'static> Reading<C> {
             ms = started.elapsed().as_millis() as u64,
             "body fetched for opening"
         );
-        notify_lists(&self.store, &self.events, summary.account_id, summary.id).await;
+        if notify {
+            notify_lists(&self.store, &self.events, summary.account_id, summary.id).await;
+        }
         Ok(true)
     }
 
