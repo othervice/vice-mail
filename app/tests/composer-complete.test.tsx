@@ -234,6 +234,14 @@ describe("composer: inline images", () => {
     const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "Foto.JPG", { type: "image/jpeg" });
     const report = new File(["%PDF"], "Bericht.pdf", { type: "application/pdf" });
     const transfer = fileTransfer([photo, report]);
+    // Stage 23: no `<img src="cid:…">` is ever built in the page's document (the CSP would refuse
+    // and report its load); the saved HTML is built in an inert one.
+    const cidInPage: string[] = [];
+    const original = Element.prototype.setAttribute;
+    const setAttribute = vi.spyOn(Element.prototype, "setAttribute").mockImplementation(function (this: Element, name: string, value: string) {
+      if (name === "src" && value.startsWith("cid:") && this.ownerDocument === document) cidInPage.push(value);
+      original.call(this, name, value);
+    });
     dragFilesOver(editor, transfer);
     expect((await screen.findByTestId("composer-drop-hint")).textContent).toContain("Images go into the text");
     // The editor never sees the drop (it would insert the file's name as text).
@@ -248,6 +256,12 @@ describe("composer: inline images", () => {
     ]);
     expect((await screen.findByTestId("composer-attachment")).textContent).toContain("Bericht.pdf");
     expect(editor.textContent).not.toContain("Foto.JPG");
+    // The image is in the text (its node view shows it from a `data:` URL, never `cid:`).
+    await waitFor(() => {
+      expect(editor.querySelector('img[data-content-id="drop0@vicemail.test"]')).not.toBeNull();
+    });
+    setAttribute.mockRestore();
+    expect(cidInPage).toEqual([]);
   });
 
   it("a failure while adding images is shown in place", async () => {

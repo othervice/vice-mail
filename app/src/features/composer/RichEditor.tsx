@@ -1,3 +1,4 @@
+import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent, Extension, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -36,6 +37,18 @@ export interface RichEditorHandle {
   /** Puts `<img src="cid:…">` for each image at the cursor. */
   insertImages: (images: readonly { contentId: string; alt?: string }[]) => void;
   focus: () => void;
+}
+
+/**
+ * The editor's HTML, built in an inert document. TipTap's `getHTML` builds the nodes in the page's
+ * own document first, where an inline image's `<img src="cid:…">` starts a load that the CSP
+ * refuses and reports (stage 23, found by the desktop test of dropped images).
+ */
+function editorHtml(editor: Editor): string {
+  const inert = document.implementation.createHTMLDocument();
+  const container = inert.createElement("div");
+  container.append(DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content, { document: inert }));
+  return container.innerHTML;
 }
 
 /** What a paste did: the core cleaned it (with notes), it went in as plain text, or it failed. */
@@ -240,9 +253,11 @@ export function RichEditor({
         );
         return true;
       },
-      handleDrop: (_view, event) => {
-        // Files dropped on the window are the shell's (attachments, inline images); HTML dragged
-        // in from elsewhere is not cleaned by the core, so the editor does not take it.
+      handleDrop: (view, event) => {
+        // Stage 23: text or an image dragged inside this editor moves (its own content). Files
+        // from outside never get here (the window takes them, `components/fileDrop.ts`); HTML
+        // dragged in from elsewhere is not cleaned by the core, so the editor does not take it.
+        if (view.dragging) return false;
         const types = Array.from(event.dataTransfer?.types ?? []);
         return types.includes("Files") || types.includes("text/html");
       },
@@ -255,7 +270,7 @@ export function RichEditor({
       if (autoFocus) e.view.dom.focus({ preventScroll: true });
     },
     onUpdate: ({ editor: e }) => {
-      change.current(e.isEmpty ? "" : e.getHTML());
+      change.current(e.isEmpty ? "" : editorHtml(e));
     },
     onBlur: () => {
       blur.current();
