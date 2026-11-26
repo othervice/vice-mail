@@ -141,6 +141,29 @@ Personen melden“, „Ziehen in Finder/Explorer“).
 - Entscheidung festhalten; `docs/SYNC.md`, `docs/SECURITY_MODEL.md` und `docs/PRIVACY.md`
   anpassen.
 
+### 11 — Windows: Taskleisten-Symbol noch orange, Zahl am Symbol pixelig
+
+- Gemeldet (26.11., nach dem Start des Baus): Unter Windows ist das Taskleisten-Symbol weiterhin
+  orange statt blau. Die Zahl am Symbol bei neuen Mails ist noch pixelig, sie soll „super
+  hochauflösend“ sein.
+- Geprüft:
+  - `mail-app.exe` und der Installer von 0.1.2 enthalten das blaue Symbol (die PNG-Bilder aus
+    `icons/icon.ico` von v0.1.2 stecken unverändert darin, die von v0.1.1 nicht).
+  - Orange heißt also entweder, dass auf dem PC noch 0.1.1 läuft, oder dass Windows das alte
+    Symbol der angehefteten Verknüpfung aus seinem Symbol-Zwischenspeicher zeigt. Der Installer
+    meldet der Shell nach dem Installieren keine Änderung (`installer-hooks.nsh`).
+- Die Zahl zeichnet `app/src-tauri/src/badge.rs` (Stufe 21, Entscheidung 0068) mit zwei
+  Bitmap-Schriften (3×5 und 5×7), nur ganzzahlig vergrößert. Die Kanten sind scharf, die Ziffern
+  aber bewusst klötzchenhaft. Das ist das „pixelig“.
+- Plan:
+  - Ziffern als echte Schrift mit Kantenglättung in genau der Pixelgröße zeichnen, die Windows
+    zeigt, für das Taskleisten-Overlay und das Symbol im Infobereich: die Systemschrift (Segoe
+    UI) oder eine mitgelieferte, lizenzverträgliche Schrift, ohne `unsafe`.
+  - Bilder bei 100, 125, 150 und 200 % als Testbilder ablegen und ansehen.
+  - Der Installer lässt Windows nach Installation und Update die Symbole neu laden
+    (`SHChangeNotify`), damit angeheftete Verknüpfungen das neue Symbol zeigen.
+- Wartet auf: welche Version auf dem PC läuft (Einstellungen → Über).
+
 ## Ergebnis
 
 Noch offen; die Liste wird gesammelt.
