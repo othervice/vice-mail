@@ -255,8 +255,9 @@ describe("stage 21: running in the background", () => {
     const tray = await test("e2e_tray");
     const pause = tray.model.menu.find((e) => e.id === "pause");
     const status = pause.items.find((e) => e.id === "paused");
-    // The UI's language decides the clock: English here, so "Paused until 1:39 PM".
-    assert.ok(status && /^Paused until \d{1,2}:\d\d( [AP]M)?$/.test(status.text), JSON.stringify(pause));
+    // The UI's language decides the clock: English here, so "Paused until 1:39 PM" (after 11 PM
+    // the hour ends tomorrow: "Paused until tomorrow, 12:06 AM").
+    assert.ok(status && /^Paused until (tomorrow, )?\d{1,2}:\d\d( [AP]M)?$/.test(status.text), JSON.stringify(pause));
     assert.equal(pause.items.find((e) => e.id === "resume").enabled, true);
     report.steps.pausedMenu = status.text;
     const quiet = `Background quiet ${RUN}`;
