@@ -429,6 +429,25 @@
   --ui-reading-ask-room: 5rem;
 }
 
+/* ---- Stage 23 (decision 0086): the composer as a floating card ----
+   Over the reading area of the main window, 20 px from its top and bottom and 24 px from its
+   sides (the card's place comes from the reading area, measured in Composer.tsx); never narrower
+   than the reading pane's minimum, never wider than a comfortable line of mail (centred beyond
+   it). Without a reading pane beside the list (below it, in its place, other views) it stands at
+   the end of the window, as wide as the composer stood before. Minimised it is a slim bar at the
+   bottom. Its menus get at most this wide; longer names wrap. */
+:root {
+  --ui-composer-min-width: 22.5rem;
+  --ui-composer-max-width: 60rem;
+  --ui-composer-end-width: 46rem;
+  --ui-composer-bar-width: 20rem;
+  --ui-composer-menu-max-width: 22rem;
+  /* The save state beside the subject: longer states end in "…" (the whole text is its tooltip). */
+  --ui-composer-status-width: 11rem;
+  /* The square in the account's colour in the "From" chip (the draft's 2 px corners). */
+  --ui-composer-swatch-radius: 2px;
+}
+
 /* ---- Stage 16: accent themes (Settings → Appearance) ----
    The accent family of each theme, light and dark: the accent itself, its fill, its soft fill,
    the selected row, the focus ring and the text on the fill. Everything else stays as above.

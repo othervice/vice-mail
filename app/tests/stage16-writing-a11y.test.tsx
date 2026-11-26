@@ -141,14 +141,24 @@ describe("stage 16 writing, focus ring", () => {
     await screen.findByLabelText("Subject");
     await user.click(screen.getByRole("button", { name: "More ways to send" }));
     await screen.findByRole("menuitem", { name: /Send and archive/ });
-    // The menu button and its open item (the test id sits on the button).
-    const menu = await focusRingReport(screen.getByTestId("composer-send-menu").parentElement ?? document.body);
+    // Stage 23 (decision 0086): the arrow of the send button and its menu (suggestions, a time of
+    // one's own, "Send and archive").
+    const menu = await focusRingReport(screen.getByTestId("composer-send-later").parentElement ?? document.body);
     expect(menu.findings).toEqual([]);
-    expect(menu.checked).toBeGreaterThanOrEqual(2);
-    const options = await focusRingReport(screen.getByTestId("composer-send-options"));
+    expect(menu.checked).toBeGreaterThanOrEqual(5);
+    await user.keyboard("{Escape}");
+    // The send options in "…" (archive the original, read receipt, the signature, the format).
+    await user.click(screen.getByTestId("composer-options"));
+    const options = await focusRingReport(screen.getByTestId("composer-options").parentElement ?? document.body);
     expect(options.findings).toEqual([]);
-    // Stage 20: and the reminder's choice (decision 0059).
-    expect(options.checked).toBe(3);
+    expect(options.checked).toBeGreaterThanOrEqual(5);
+    await user.keyboard("{Escape}");
+    // Stage 20: and the reminder's choices (decision 0059).
+    await user.click(screen.getByTestId("composer-follow-up"));
+    await screen.findByTestId("composer-follow-up-menu");
+    const reminder = await focusRingReport(screen.getByTestId("composer-follow-up").parentElement ?? document.body);
+    expect(reminder.findings).toEqual([]);
+    expect(reminder.checked).toBeGreaterThanOrEqual(3);
   });
 
   it("shows on the recipient fields of a template", async () => {

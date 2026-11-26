@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
@@ -28,6 +29,8 @@ import type { CoreError } from "../../services/ipc";
 import { cleanPaste, type PasteOutcome } from "./paste";
 import { createInlineImage, IMAGE_SIZES, imageSizeOf, savedInlineImage, type ImageSize, type ImageSources } from "./inlineImage";
 import { TextAlign, type Alignment } from "./textAlign";
+import { ComposerFormatBar } from "./ComposerFormatBar";
+import { alignmentOf, BLOCK_STYLES, blockStyleOf, normaliseLink, setAlignment as alignTo, setBlockStyle } from "./formatting";
 import "./composer.css";
 
 /** What the composer (and the signature and template editors) can do with the editor. */
@@ -79,6 +82,15 @@ interface RichEditorProps {
    * under the area's full height; the area still reaches the attachment bar.
    */
   footer?: ReactNode;
+  /**
+   * Stage 23 (decision 0086): the composer's compact formatting bar (`ComposerFormatBar`), drawn
+   * into this element at the composer's foot instead of the full toolbar above the text.
+   * `undefined`: the full toolbar (signature and template editors); `null`: the composer's foot
+   * is not there yet. The text then lines up with the composer's fields (24 px).
+   */
+  formatBarSlot?: HTMLElement | null;
+  /** The compact bar's "Plain text": the composer turns the draft into plain text. */
+  onPlainText?: () => void;
 }
 
 type Mark =
@@ -110,46 +122,7 @@ const ALIGNMENTS: readonly { id: Alignment; icon: LucideIcon }[] = [
   { id: "justify", icon: AlignJustify },
 ];
 
-/** The block styles the core keeps: paragraphs, headings 1 to 3 and code blocks. */
-export const BLOCK_STYLES = ["paragraph", "heading1", "heading2", "heading3", "codeBlock"] as const;
-export type BlockStyle = (typeof BLOCK_STYLES)[number];
-
-function blockStyleOf(editor: Editor): BlockStyle {
-  for (const level of [1, 2, 3] as const) if (editor.isActive("heading", { level })) return `heading${String(level)}` as BlockStyle;
-  if (editor.isActive("codeBlock")) return "codeBlock";
-  return "paragraph";
-}
-
-function setBlockStyle(editor: Editor, style: BlockStyle): void {
-  const chain = editor.chain().focus();
-  switch (style) {
-    case "paragraph":
-      chain.setParagraph().run();
-      break;
-    case "codeBlock":
-      chain.setCodeBlock().run();
-      break;
-    default:
-      chain.setHeading({ level: Number(style.slice(-1)) as 1 | 2 | 3 }).run();
-  }
-}
-
-function alignmentOf(editor: Editor): Alignment {
-  for (const align of ["center", "right", "justify"] as const) {
-    if (editor.isActive({ textAlign: align })) return align;
-  }
-  return "left";
-}
-
-/** Only web and mail links; anything else (javascript:, file:) is refused. */
-export function normaliseLink(input: string): string | null {
-  const text = input.trim();
-  if (text === "") return null;
-  if (/^(https?:\/\/|mailto:)/i.test(text)) return text;
-  if (/^[^\s:/]+@[^\s:/]+$/.test(text)) return `mailto:${text}`;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return null;
-  return `https://${text}`;
-}
+export { BLOCK_STYLES, normaliseLink, type BlockStyle } from "./formatting";
 
 /**
  * The rich text body (TipTap) with what the core's allowlist keeps (decision 0023): bold,
@@ -173,6 +146,8 @@ export function RichEditor({
   onPasteResult,
   testId = "composer-rich-body",
   footer,
+  formatBarSlot,
+  onPlainText,
 }: RichEditorProps) {
   const { t } = useTranslation();
   const change = useRef(onChange);
@@ -283,6 +258,7 @@ export function RichEditor({
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+  const compact = formatBarSlot !== undefined;
 
   useEffect(() => {
     editor.setEditable(!disabled);
@@ -361,8 +337,7 @@ export function RichEditor({
     }
   };
   const setAlignment = (align: Alignment) => {
-    const value = align === "left" ? null : align;
-    editor.chain().focus().updateAttributes("paragraph", { textAlign: value }).updateAttributes("heading", { textAlign: value }).run();
+    alignTo(editor, align);
   };
   const setImageSize = (size: ImageSize) => {
     editor.chain().focus().updateAttributes("inlineImage", { width: IMAGE_SIZES[size] }).run();
@@ -372,6 +347,10 @@ export function RichEditor({
     // At least the height of a few paragraphs: in a low window the composer scrolls as a whole
     // instead of squeezing the editor to one line.
     <div className="flex min-h-(--ui-picker-list-height) flex-1 flex-col">
+      {compact && formatBarSlot
+        ? createPortal(<ComposerFormatBar editor={editor} disabled={disabled} onInsertImage={onInsertImage} onPlainText={onPlainText} />, formatBarSlot)
+        : null}
+      {!compact && (
       <div
         role="toolbar"
         aria-label={t("composer.format.toolbar")}
@@ -482,7 +461,8 @@ export function RichEditor({
           </span>
         )}
       </div>
-      {linkOpen && (
+      )}
+      {!compact && linkOpen && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border-subtle px-4 py-2" data-testid="composer-link-editor">
           <label htmlFor={linkId} className="text-13 text-secondary">
             {t("composer.format.linkAddress")}
@@ -514,14 +494,15 @@ export function RichEditor({
           )}
         </div>
       )}
-      {/* Inset by 8 px, so the text still lines up with the fields above (16 px). */}
+      {/* Inset by 8 px, so the text still lines up with the fields above (16 px); in the composer
+          (stage 23) by 16 px, with the fields at 24 px. */}
       {footer === undefined ? (
-        <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" />
+        <EditorContent editor={editor} className={cx("min-h-0 flex-1 overflow-y-auto pb-2", compact ? "px-4" : "px-2")} />
       ) : (
         // The text, then the footer right below it; the area under both is part of the writing
         // area: a press there puts the cursor at the end of the text (not on the footer itself).
         <div
-          className="composer-writing min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+          className={cx("composer-writing min-h-0 flex-1 overflow-y-auto pb-2", compact ? "px-4" : "px-2")}
           onMouseDown={(event) => {
             if (event.target !== event.currentTarget) return;
             event.preventDefault();

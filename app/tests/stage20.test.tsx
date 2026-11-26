@@ -13,6 +13,7 @@ import { makeDraft, makeIdentity, type ComposeFakeOptions } from "./support/comp
 import { htmlBody, makeAccount, makeMessage, makeMessages, makeView, mockCore, standardMailboxes } from "./support/core";
 import { emitCore } from "./support/events";
 import { renderApp } from "./support/render";
+import { menuEntry, openComposerMenu } from "./support/composerMenus";
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
@@ -127,25 +128,43 @@ describe("stage 20, remind me if no reply", () => {
     const d = makeDraft({ accountId: ADA.id, to: [{ name: "Grace", email: "grace@example.org" }], subject: "Offer" });
     const { core, user } = setup({ drafts: [d] });
     const composer = await openDraft(d);
-    const choice = within(composer).getByRole("combobox", { name: "Remind me if no reply:" });
+    // Stage 23 (decision 0086): an icon of the send row with the choices as a menu.
+    const button = within(composer).getByTestId("composer-follow-up");
+    expect(button.getAttribute("aria-label")).toBe("Remind me if no reply");
+    expect(button.hasAttribute("data-active")).toBe(false);
     // The presets come with their times from the core.
-    await within(choice).findByRole("option", { name: /^In 3 days/ });
-    await user.selectOptions(choice, "inThreeDays");
+    await waitFor(async () => {
+      const menu = await openComposerMenu(user, "composer-follow-up");
+      expect(menuEntry(menu, /^In 3 days/)).toBeTruthy();
+    });
+    await user.click(menuEntry(within(composer).getByTestId("composer-follow-up-menu"), /^In 3 days/));
     await waitFor(() => {
       expect(core.callsOf("set_draft_send_options").at(-1)?.["options"]).toMatchObject({ followUpAt: FOLLOW_UP_TIMES.inThreeDays });
     });
-    await user.selectOptions(choice, "none");
+    // Set: the icon in the accent, its name says when.
+    expect(button.hasAttribute("data-active")).toBe(true);
+    expect(button.getAttribute("aria-label")).toMatch(/^Remind me if no reply: /);
+    expect(menuEntry(await openComposerMenu(user, "composer-follow-up"), /^In 3 days/).getAttribute("aria-checked")).toBe("true");
+    await user.click(menuEntry(within(composer).getByTestId("composer-follow-up-menu"), "Don't remind"));
     await waitFor(() => {
       expect(core.callsOf("set_draft_send_options").at(-1)?.["options"]).toMatchObject({ followUpAt: null });
     });
-    // A time of one's own.
-    await user.selectOptions(choice, "custom");
+    // A time of one's own, in a small panel above the row; Escape there closes only the panel.
+    await user.click(menuEntry(await openComposerMenu(user, "composer-follow-up"), "Pick a date and time…"));
     const custom = within(composer).getByTestId("composer-follow-up-custom");
-    await user.type(custom, "2030-01-02T09:30");
+    expect(document.activeElement).toBe(custom);
+    await user.keyboard("{Escape}");
+    expect(within(composer).queryByTestId("composer-follow-up-panel")).toBeNull();
+    expect(screen.getByTestId("composer")).toBeTruthy();
+    await user.click(menuEntry(await openComposerMenu(user, "composer-follow-up"), "Pick a date and time…"));
+    await user.type(within(composer).getByTestId("composer-follow-up-custom"), "2030-01-02T09:30");
     await user.click(within(composer).getByTestId("composer-follow-up-set"));
     await waitFor(() => {
       expect(core.callsOf("set_draft_send_options").at(-1)?.["options"]).toMatchObject({ followUpAt: new Date(2030, 0, 2, 9, 30).getTime() });
     });
+    // A time that is no preset shows as itself, checked.
+    const chosen = within(await openComposerMenu(user, "composer-follow-up")).getByTestId("composer-follow-up-chosen");
+    expect(chosen.getAttribute("aria-checked")).toBe("true");
   });
 
   it("a returned reminder stands above the inbox with “No reply since …”; the view lists the waiting ones", async () => {

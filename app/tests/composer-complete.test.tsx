@@ -13,6 +13,7 @@ import { dragFilesOver, dropFiles, fileTransfer } from "./support/fileDrop";
 import { renderApp } from "./support/render";
 import { toolbarAction } from "./support/reading";
 import { makeSignature, makeTemplate, type SnippetsFakeOptions } from "./support/snippets";
+import { chooseInComposerMenu, menuEntries, menuEntry, openComposerMenu } from "./support/composerMenus";
 
 // Stage 10: the composer complete (formatting, pasting, inline images, size, signatures in the
 // composer, templates, send later, forward as attachment).
@@ -77,6 +78,27 @@ function richDraft(overrides: Parameters<typeof makeDraft>[0] = {}) {
   return makeDraft({ accountId: ADA.id, format: "html", bodyHtml: "<p>Hallo</p>", to: [GRACE], ...overrides });
 }
 
+/**
+ * Selects `text` in the editor (or puts the cursor in it) the way the browser would: a DOM
+ * selection and `selectionchange`, which ProseMirror reads (jsdom has no layout for clicks).
+ */
+function selectText(editor: HTMLElement, text: string, collapsed = false) {
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = node.textContent?.indexOf(text) ?? -1;
+    if (at < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, collapsed ? at + 1 : at);
+    range.setEnd(node, collapsed ? at + 1 : at + text.length);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return;
+  }
+  throw new Error(`no text ${text}`);
+}
+
 /** Places the cursor at the end of the editor's text. */
 async function clickEnd(user: ReturnType<typeof userEvent.setup>, editor: HTMLElement) {
   await user.click(editor);
@@ -85,15 +107,62 @@ async function clickEnd(user: ReturnType<typeof userEvent.setup>, editor: HTMLEl
 describe("composer: formatting", () => {
   it("offers undo, redo, styles, strikethrough, code and alignment", async () => {
     const draft = richDraft();
-    const { core } = setup({ compose: { drafts: [draft] } });
+    const { core, user } = setup({ compose: { drafts: [draft] } });
     await openRich(core, draft);
+    // Stage 23 (decision 0086): a compact bar at the composer's foot, the rest in "More formatting".
     const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
-    for (const name of ["Undo", "Redo", "Bold", "Strikethrough", "Code", "Center", "Align right", "Justify", "Insert image"]) {
+    expect(screen.getByTestId("composer-foot").contains(toolbar)).toBe(true);
+    for (const name of ["Bold", "Italic", "Underline", "Bulleted list", "Link", "Quote"]) {
       expect(within(toolbar).getByRole("button", { name }), name).toBeTruthy();
     }
-    expect(within(toolbar).getByRole("combobox", { name: "Paragraph style" })).toBeTruthy();
-    // Nothing typed yet: nothing to undo.
-    expect(within(toolbar).getByRole<HTMLButtonElement>("button", { name: "Undo" }).disabled).toBe(true);
+    const style = within(toolbar).getByRole("button", { name: "Paragraph style: Text" });
+    expect(style.getAttribute("aria-haspopup")).toBe("menu");
+    const more = await openComposerMenu(user, "format-more");
+    expect(more.getAttribute("aria-label")).toBe("More formatting");
+    expect(menuEntries(more).map((entry) => entry.querySelector("span + span")?.textContent ?? entry.textContent)).toEqual([
+      "Strikethrough",
+      "Code",
+      "Numbered list",
+      "Align left",
+      "Center",
+      "Align right",
+      "Justify",
+      "Increase indent",
+      "Decrease indent",
+      "Insert image",
+      "Clear formatting",
+      "Undo",
+      "Redo",
+      "Rich text",
+      "Plain text",
+    ]);
+    expect(within(more).getByRole("group", { name: "Alignment" })).toBeTruthy();
+    // Nothing typed yet: nothing to undo; outside a list nothing to indent.
+    expect(menuEntry(more, "Undo").getAttribute("aria-disabled")).toBe("true");
+    expect(menuEntry(more, "Increase indent").getAttribute("aria-disabled")).toBe("true");
+    expect(menuEntry(more, "Align left").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("indents list items and clears formatting (stage 23)", async () => {
+    const draft = richDraft({ bodyHtml: "<ul><li><p>eins</p></li><li><p>zwei</p></li></ul><p><strong>fett</strong></p>" });
+    const { core, user } = setup({ compose: { drafts: [draft] } });
+    const editor = await openRich(core, draft);
+    await user.click(editor);
+    selectText(editor, "zwei", true);
+    await chooseInComposerMenu(user, "format-more", "Increase indent");
+    await waitFor(() => {
+      expect(editor.querySelector("li ul li")?.textContent).toBe("zwei");
+    });
+    await chooseInComposerMenu(user, "format-more", "Decrease indent");
+    await waitFor(() => {
+      expect(editor.querySelector("li ul")).toBeNull();
+    });
+    selectText(editor, "fett");
+    await chooseInComposerMenu(user, "format-more", "Clear formatting");
+    await user.click(screen.getByLabelText("Subject"));
+    await waitFor(() => {
+      expect(saves(core).at(-1)?.bodyHtml ?? "").toMatch(/<p>fett<\/p>$/);
+    });
   });
 
   it("a heading, centred, is saved as the HTML the core keeps", async () => {
@@ -101,9 +170,10 @@ describe("composer: formatting", () => {
     const { core, user } = setup({ compose: { drafts: [draft] } });
     const editor = await openRich(core, draft);
     await clickEnd(user, editor);
-    await user.selectOptions(screen.getByRole("combobox", { name: "Paragraph style" }), "heading2");
-    await user.click(screen.getByRole("button", { name: "Center" }));
-    expect(screen.getByRole("button", { name: "Center" }).getAttribute("aria-pressed")).toBe("true");
+    await chooseInComposerMenu(user, "format-block", "Heading 2");
+    expect(screen.getByTestId("format-block").getAttribute("aria-label")).toBe("Paragraph style: Heading 2");
+    await chooseInComposerMenu(user, "format-more", "Center");
+    expect(menuEntry(await openComposerMenu(user, "format-more"), "Center").getAttribute("aria-checked")).toBe("true");
     await user.click(screen.getByLabelText("Subject"));
     await waitFor(() => {
       // The core reads `text-align` from the declarations of the style (a trailing ";" is fine).
@@ -116,22 +186,22 @@ describe("composer: formatting", () => {
     const { core, user } = setup({ compose: { drafts: [draft] } });
     const editor = await openRich(core, draft);
     await user.click(editor);
-    await user.click(screen.getByRole("button", { name: "Strikethrough" }));
+    await chooseInComposerMenu(user, "format-more", "Strikethrough");
     await user.type(editor, "alt", { skipClick: true });
-    await user.click(screen.getByRole("button", { name: "Strikethrough" }));
-    await user.click(screen.getByRole("button", { name: "Code" }));
+    await chooseInComposerMenu(user, "format-more", "Strikethrough");
+    await chooseInComposerMenu(user, "format-more", "Code");
     await user.type(editor, "x", { skipClick: true });
     await user.click(screen.getByLabelText("Subject"));
     await waitFor(() => {
       expect(saves(core).at(-1)?.bodyHtml).toMatch(/<s>alt<\/s><code>x<\/code>/);
     });
-    const undo = screen.getByRole<HTMLButtonElement>("button", { name: "Undo" });
-    expect(undo.disabled).toBe(false);
+    const undo = menuEntry(await openComposerMenu(user, "format-more"), "Undo");
+    expect(undo.getAttribute("aria-disabled")).toBeNull();
     await user.click(undo);
     await waitFor(() => {
       expect(editor.querySelector("code")).toBeNull();
     });
-    await user.click(screen.getByRole("button", { name: "Redo" }));
+    await chooseInComposerMenu(user, "format-more", "Redo");
     await waitFor(() => {
       expect(editor.querySelector("code")?.textContent).toBe("x");
     });
@@ -205,8 +275,9 @@ describe("composer: inline images", () => {
 
     // A click selects the image, and it can be made smaller.
     fireEvent.click(shown as HTMLImageElement);
-    const size = await screen.findByRole("combobox", { name: "Image size" });
-    await user.selectOptions(size, "small");
+    // Stage 23 (decision 0086): the size is a menu in the bar while the image is selected.
+    expect((await screen.findByTestId("format-image-size")).getAttribute("aria-label")).toBe("Image size: Original size");
+    await chooseInComposerMenu(user, "format-image-size", "Small");
     await user.click(screen.getByLabelText("Subject"));
     await waitFor(() => {
       expect(saves(core).at(-1)?.bodyHtml).toContain('<img src="cid:3f9a@vicemail.test" alt="" width="160">');
@@ -316,23 +387,26 @@ describe("composer: signatures", () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft], identities }, snippets: { signatures: [work, short] } });
     await openRich(core, draft);
-    const choice = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Signature" });
+    // Stage 23 (decision 0086): the choice is a group of "…".
     await waitFor(() => {
-      expect(within(choice).getByRole("option", { name: "Default: Work" })).toBeTruthy();
+      expect(screen.getByTestId("composer-signature").textContent).toBe("-- Ada, Analytical Engines");
     });
-    expect(choice.value).toBe("default");
-    expect(screen.getByTestId("composer-signature").textContent).toBe("-- Ada, Analytical Engines");
-
-    await user.selectOptions(choice, "sig-short");
+    const menu = await openComposerMenu(user, "composer-options");
+    const group = within(menu).getByRole("group", { name: "Signature" });
+    expect(menuEntries(group).map((entry) => [entry.textContent, entry.getAttribute("aria-checked")])).toEqual([
+      ["Default: Work", "true"],
+      ["Work", "false"],
+      ["Short", "false"],
+      ["No signature", "false"],
+    ]);
+    await user.click(menuEntry(menu, "Short"));
     expect(screen.getByTestId("composer-signature").textContent).toBe("-- A.");
-    await user.selectOptions(choice, "none");
+    await chooseInComposerMenu(user, "composer-options", "No signature");
     expect(screen.queryByTestId("composer-signature")).toBeNull();
-    await user.click(screen.getByLabelText("Subject"));
     await waitFor(() => {
       expect(saves(core).at(-1)).toMatchObject({ includeSignature: false });
     });
-    await user.selectOptions(choice, "sig-short");
-    await user.click(screen.getByLabelText("Subject"));
+    await chooseInComposerMenu(user, "composer-options", "Short");
     await waitFor(() => {
       expect(saves(core).at(-1)).toMatchObject({ includeSignature: true, signatureId: "sig-short" });
     });
@@ -389,7 +463,7 @@ describe("composer: templates", () => {
     const draft = richDraft({ bodyHtml: "", subject: "" });
     const { core, user } = setup({ compose: { drafts: [draft] }, snippets: { templates: [offer] } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Template" }));
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
     const menu = await screen.findByRole("group", { name: "Templates" });
     await user.click(await within(menu).findByRole("button", { name: /Offer/ }));
     await waitFor(() => {
@@ -409,7 +483,7 @@ describe("composer: templates", () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft] } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Template" }));
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
     const menu = await screen.findByRole("group", { name: "Templates" });
     expect(await within(menu).findByText(/No templates yet/)).toBeTruthy();
     await user.click(within(menu).getByRole("button", { name: "Manage templates" }));
@@ -438,7 +512,7 @@ describe("composer: templates", () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft] }, snippets: { templates: [offer] }, failures: { fill_template: ipcError("not_found") } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Template" }));
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
     await user.click(await screen.findByRole("button", { name: /Offer/ }));
     expect((await screen.findByTestId("composer-action-error")).textContent).toContain("The template could not be inserted.");
   });
@@ -449,10 +523,13 @@ describe("composer: send later", () => {
     const draft = richDraft({ subject: "Später" });
     const { core, user } = setup({ compose: { drafts: [draft] } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Send later…" }));
-    const picker = await screen.findByTestId("composer-send-later-picker");
-    expect(picker.textContent).toContain("running and online");
-    await user.click(within(picker).getByTestId("send-later-preset-tomorrowMorning"));
+    // Stage 23 (decision 0086): the arrow of the send button, with the suggestions and the rule.
+    const menu = await openComposerMenu(user, "composer-send-later");
+    expect(screen.getByTestId("composer-send-later").getAttribute("aria-label")).toBe("More ways to send");
+    expect(within(menu).getByRole("group", { name: "Send later" })).toBeTruthy();
+    expect(screen.getByTestId("composer-send-later-note").textContent).toContain("running and online");
+    expect(menu.getAttribute("aria-describedby")).toBe(screen.getByTestId("composer-send-later-note").id);
+    await user.click(within(menu).getByTestId("send-later-preset-tomorrowMorning"));
     await waitFor(() => {
       expect(core.callsOf("schedule_send")).toHaveLength(1);
     });
@@ -470,11 +547,16 @@ describe("composer: send later", () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft] }, failures: { schedule_send: ipcError("message_too_large") } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Send later…" }));
-    await user.click(await screen.findByTestId("send-later-preset-inOneHour"));
+    await chooseInComposerMenu(user, "composer-send-later", /^In 1 hour/);
     const error = await screen.findByTestId("send-later-error");
     expect(error.textContent).toContain("larger than your mail server accepts");
     expect(screen.getByTestId("composer")).toBeTruthy();
+    // The picker of its own: its suggestions, a date and time, and the reason when it refuses.
+    await chooseInComposerMenu(user, "composer-send-later", "Pick a date and time…");
+    const picker = await screen.findByTestId("composer-send-later-picker");
+    expect(picker.textContent).toContain("running and online");
+    await user.click(within(picker).getByTestId("send-later-preset-inOneHour"));
+    expect((await within(picker).findByTestId("send-later-error")).textContent).toContain("larger than your mail server accepts");
   });
 });
 
@@ -518,7 +600,7 @@ describe("composer: events", () => {
     const draft = richDraft();
     const { core, user } = setup({ compose: { drafts: [draft] }, snippets: { signatures: [makeSignature()], templates: [makeTemplate()] } });
     await openRich(core, draft);
-    await user.click(screen.getByRole("button", { name: "Template" }));
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
     await screen.findByTestId("composer-template-option");
     const signatures = core.callsOf("list_signatures").length;
     const templates = core.callsOf("list_templates").length;

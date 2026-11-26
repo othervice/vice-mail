@@ -147,14 +147,33 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     });
     await screen.findByTestId("composer-rich-body");
     await screen.findByTestId("composer-size-warning");
-    await screen.findByRole("combobox", { name: "Signature" });
-    await user.click(screen.getByRole("button", { name: "Template" }));
-    await screen.findByTestId("composer-template-option");
-    await user.click(screen.getByRole("button", { name: "Send later…" }));
-    await screen.findByTestId("composer-send-later-picker");
     await waitFor(() => {
       expect(document.documentElement.dataset["theme"]).toBe(theme);
     });
+    // Stage 23 (decision 0086): the card with each of its menus open in turn.
+    await user.click(screen.getByTestId("composer-options"));
+    await screen.findByRole("group", { name: "Signature" });
+    expect(await seriousFindings()).toEqual([]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("format-more"));
+    await screen.findByTestId("format-more-menu");
+    expect(await seriousFindings()).toEqual([]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("composer-follow-up"));
+    await screen.findByTestId("composer-follow-up-menu");
+    expect(await seriousFindings()).toEqual([]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Insert template" }));
+    await screen.findByTestId("composer-template-option");
+    await user.click(screen.getByRole("button", { name: "More ways to send" }));
+    await screen.findByTestId("composer-send-later-menu");
+    expect(await seriousFindings()).toEqual([]);
+    await user.click(screen.getByRole("menuitem", { name: "Pick a date and time…" }));
+    await screen.findByTestId("composer-send-later-picker");
+    expect(await seriousFindings()).toEqual([]);
+    // Minimised to its bar.
+    await user.click(screen.getByTestId("composer-minimise"));
+    await screen.findByTestId("composer-restore");
     expect(await seriousFindings()).toEqual([]);
   });
 
