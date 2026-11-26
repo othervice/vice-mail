@@ -1,7 +1,6 @@
-# Stufe 23 — Rückmeldungen zu 0.1.3 und Feinschliff
+# Stufe 23 — Rückmeldungen zu 0.1.3
 
-**Ziel:** Rückmeldungen zu 0.1.3 sammeln und gesammelt umsetzen; dazu ein Feinschliff der
-Oberfläche, damit die App hochwertiger und professioneller wirkt.
+**Ziel:** Rückmeldungen zu 0.1.3 sammeln und gesammelt umsetzen.
 
 **Anlass:** Test von 0.1.3 am 26.11.2026. Wie in Stufe 21 und 22: erst alle Rückmeldungen
 sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist.
@@ -42,26 +41,13 @@ sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist
   an WKWebView weiter: Die Seite bekommt `dragstart`, aber kein `dragover` und kein `drop`. Auch
   Mails auf einen Ordner ziehen geht deshalb auf dem Mac nicht.
 
-### 2 — Feinschliff: hochwertiger, professioneller, „weniger nach KI“
+### 2 — Feinschliff (verworfen)
 
-- Gewünscht (26.11.): „Wie man das Ganze noch mehr polishen kann, sodass es professioneller,
-  besser aussieht, hochwertiger, weniger nach KI-Slop.“
-- Beobachtungen (aus den Bildschirmfotos von 0.1.3):
-  - Zu viel Text: lange Beschreibungen unter fast jeder Einstellung, erklärende Sätze in
-    Dialogen und Meldungen, Hinweise wie „oder Dateien auf das Fenster ziehen“.
-  - Zu viele Kästen und Pillen: Mail als Karte im Lesebereich, Chip „In Personen · Warum hier?“,
-    runde Knöpfe im Schnellfilter, Kürzel-Chip neben „Senden“.
-  - Composer zeigt alles auf einmal: Rich/Plain-Umschalter, volle Formatleiste, Signatur,
-    Zitat-Optionen, Archivieren, Lesebestätigung, Erinnern, „Später senden“ als eigener Knopf.
-  - Werkzeugleiste des Lesebereichs mit „Schreibgeschützt · Änderungen erlauben …“ als Text.
-  - Seitenleiste mit zehn Ansichten untereinander, Zähler überall gleich laut.
-- Vorgeschlagen am 26.11.: weniger Text, neue Mail aufräumen, ruhigere Listen und Lesebereich,
-  strenges Design-System. **Gewählt: nur „Weniger Text“**, und zwar mit Entwürfen vorab: Erst
-  Vorher/Nachher für einige Bereiche zeigen, nach der Freigabe alle Texte (Deutsch und Englisch)
-  so kürzen.
-- Plan: eine kurze Schreibregel für UI-Texte (Ton, Länge, was nie erklärt wird) und Entwürfe für
-  Einstellungen → Allgemein und Posteingang (mit Spamfilter), Einstellungs-Sync, die neue Mail
-  und die häufigsten Meldungen und Dialoge, mit Bildschirmfotos vorher und nachher.
+- Gefragt (26.11.): wie die App professioneller, hochwertiger und „weniger nach KI“ wirken kann.
+  Vorgeschlagen: weniger Text, neue Mail aufräumen, ruhigere Listen und Lesebereich, strenges
+  Design-System. Gewählt wurde zunächst „weniger Text“ mit Entwürfen vorab; kurz darauf
+  verworfen („das polishing mit dem weniger text ist quatsch, das lassen wir weg“). Entwürfe
+  abgebrochen, nichts geändert.
 
 ## Ergebnis
 
