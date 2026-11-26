@@ -17,6 +17,7 @@ import { useSavedSearches } from "../features/search/savedQueries";
 import { sameUnifiedView, UnifiedRowMenu, useUnifiedEntries, type UnifiedEntry } from "../features/unified/unifiedEntries";
 import type { Account } from "../services/ipc";
 import { useUiStore } from "../stores/ui";
+import { coversScope } from "../features/unified/scope";
 import { RailCount, useActivityEntry, useOutboxEntry, type StatusEntry } from "./IconRail";
 
 /** A view row's "…": hide it from the column and the rail, or "Edit views…". */
@@ -122,6 +123,7 @@ export function AllAccountsTree({ accounts }: { accounts: readonly Account[] }) 
   const unified = useUiStore((state) => state.unifiedInbox);
   const showMailView = useUiStore((state) => state.showMailView);
   const showUnifiedInbox = useUiStore((state) => state.showUnifiedInbox);
+  const showAllAccountsView = useUiStore((state) => state.showAllAccountsView);
   const showSavedSearch = useUiStore((state) => state.showSavedSearch);
   const showActivity = useUiStore((state) => state.showActivity);
   const showOutbox = useUiStore((state) => state.showOutbox);
@@ -134,6 +136,11 @@ export function AllAccountsTree({ accounts }: { accounts: readonly Account[] }) 
   const activity = useActivityEntry(accounts);
   const outbox = useOutboxEntry(accounts);
   const several = accounts.length > 1;
+  /** Stage 23 (decision 0087): with several accounts, a view here covers all of them. */
+  const openView = (id: ColumnViewId) => {
+    if (several && coversScope(id)) showAllAccountsView(id);
+    else showMailView(id);
+  };
   const section = useSection("allAccounts", several ? t("nav.allAccounts") : t("nav.viewsSection"));
   const more = useFold("more");
   const headingId = useId();
@@ -147,7 +154,9 @@ export function AllAccountsTree({ accounts }: { accounts: readonly Account[] }) 
     if (view.mailView === "savedViews" && view.savedSearchId !== undefined) currentKey = `search:${String(view.savedSearchId)}`;
     else if (inInbox && unified?.kind === "group") currentKey = `group:${unified.groupId}`;
     else if (inInbox && several && sameUnifiedView(unified, unifiedEntries.all.view)) currentKey = "inbox";
-    else if (view.mailView === "sent" && several) currentKey = "sent";
+    // Stage 23 (decision 0087): with several accounts the views here cover all of them; one
+    // account's Later (chosen in the rail or the palette) has no row in this section.
+    else if (several && coversScope(view.mailView)) currentKey = unified?.kind === "all" ? view.mailView : null;
     else if (view.mailView !== "inbox" && view.mailView !== "sent") currentKey = view.mailView;
   }
 
@@ -195,7 +204,7 @@ export function AllAccountsTree({ accounts }: { accounts: readonly Account[] }) 
       />
     ),
     onOpen: () => {
-      showMailView(id);
+      openView(id);
     },
     "data-testid": `sidebar-view-${id}`,
   });
@@ -214,7 +223,7 @@ export function AllAccountsTree({ accounts }: { accounts: readonly Account[] }) 
             label: t("nav.sent"),
             current: currentKey === "sent",
             onOpen: () => {
-              showMailView("sent");
+              showAllAccountsView("sent");
             },
             "data-testid": "sidebar-view-sent",
           },

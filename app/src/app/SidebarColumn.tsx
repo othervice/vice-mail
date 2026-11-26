@@ -37,14 +37,8 @@ function AccountFolders({ account, selected, sentAbove, line, dimmed, dropItem }
   let current: MailboxId | null = null;
   if (view.kind === "mailbox" && view.accountId === account.id) current = view.mailboxId;
   // Stage 7: while the unified inbox is shown, no account's own inbox is the current folder.
-  // Stage 23: Sent of "All accounts" is the current row of the Sent view, not the account's.
-  if (
-    view.kind === "mail" &&
-    selected &&
-    isRoleView(view.mailView) &&
-    !(unified && view.mailView === "inbox") &&
-    !(sentAbove && view.mailView === "sent")
-  ) {
+  // Stage 23 (decision 0087): nor its Sent while Sent of "All accounts" shows (the unified scope).
+  if (view.kind === "mail" && selected && isRoleView(view.mailView) && !(unified && (view.mailView === "inbox" || view.mailView === "sent"))) {
     current = mailboxWithRole(mailboxes.data ?? [], view.mailView)?.id ?? null;
   }
   return (

@@ -1,5 +1,6 @@
 import { EyeOff, FolderX, Inbox } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import type { QueryKey } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
@@ -8,6 +9,7 @@ import { useUiStore } from "../../stores/ui";
 import type { ShortcutPlatform } from "../actions/shortcuts";
 import type { MessageListSource } from "../messages/listSource";
 import { MessageList, NO_SELECTION, type ListSelection, type MessageListHandle } from "../messages/MessageList";
+import type { ListTableConfig } from "../views/TableHeader";
 import { MIXED_LIST_SCOPE } from "../../stores/listSelect";
 import { useUnifiedInboxSource } from "../comfort/listSources";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
@@ -34,6 +36,9 @@ export function visibleAccounts(
   return accounts.filter((account) => !hidden.includes(account.id) && (memberIds === null || memberIds.includes(account.id)));
 }
 
+/** What actions in the unified inbox reload: every list under `["unified"]`. */
+const UNIFIED_LIST_KEY = ["unified"] as const;
+
 interface PanesProps {
   view: UnifiedView;
   accounts: readonly Account[];
@@ -43,19 +48,13 @@ interface PanesProps {
 
 /**
  * The list of a unified view and the reading pane: the sorted inbox (stage 9: blocks, bundles,
- * hidden snoozes) over every shown account, each row with its account's dot (stage 22),
+ * hidden snoozes) over every shown account, each row with its account's stripe (stage 23),
  * opened with the account it belongs to. Decision 0039: with the conversation view on (the
  * default) each row is a conversation of its account and opens in the thread pane.
  */
 function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const { t } = useTranslation();
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
-  const list = useRef<MessageListHandle>(null);
-  const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
-  const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
-  // Stage 8: with more than one account, each row names its account next to the colour.
-  const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
   // Stage 16: "Unread only" and "Unread first" over the same accounts.
   const unreadScope: InboxScope = { kind: "unified", view };
   const unreadMode = useUnreadMode(unreadViewKey(unreadScope));
@@ -74,15 +73,92 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   const source: MessageListSource = {
     empty: { icon: Inbox, title: t("unified.empty.title"), body: t("unified.empty.body") },
     ...(listView.source ?? unread ?? sorted),
+  };
+  return (
+    <MixedPanes
+      accounts={accounts}
+      source={source}
+      listKey={UNIFIED_LIST_KEY}
+      name={name}
+      platform={platform}
+      conversations={conversations}
+      selection={selection}
+      onSelection={setSelection}
+      errorContext={t("unified.loadFailed")}
+      table={listView.table}
+      top={
+        <>
+          {/* Stage 16 (decision 0036): mail of blocked senders the unified inbox leaves out. */}
+          <BlockedHiddenNote scope={unreadScope} accountId={null} />
+          {listView.bar}
+        </>
+      }
+      data-testid="unified-inbox"
+    />
+  );
+}
+
+interface MixedPanesProps {
+  /** Every account (colours, names and actions of the rows). */
+  accounts: readonly Account[];
+  /** The rows; the account's colour and name are added here. */
+  source: MessageListSource;
+  /** The mixed list's query, reloaded after actions that move rows out of it. */
+  listKey: QueryKey;
+  name: string;
+  platform: ShortcutPlatform;
+  /** Decision 0039: the rows are conversations. */
+  conversations: boolean;
+  /** Sent: the rows name their recipients instead of the sender. */
+  showRecipients?: boolean;
+  selection: ListSelection;
+  onSelection: (selection: ListSelection) => void;
+  /** What the error notice names when the list cannot be loaded. */
+  errorContext: string;
+  /** Above the list (notes, the quick filter's bar). */
+  top?: ReactNode;
+  table?: ListTableConfig | undefined;
+  "data-testid": string;
+}
+
+/**
+ * A list that mixes accounts and its reading pane (stage 7; stage 23, decision 0087: also Later,
+ * Flagged, Sent and the other views of "All accounts"): each row with its account's stripe, its
+ * quick actions, context menu and drags acting with its own account and folder (decision 0065),
+ * opened with that account (its read-only rules, its actions).
+ */
+export function MixedPanes({
+  accounts,
+  source: rows,
+  listKey,
+  name,
+  platform,
+  conversations,
+  showRecipients = false,
+  selection,
+  onSelection,
+  errorContext,
+  top,
+  table,
+  ...rest
+}: MixedPanesProps) {
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const list = useRef<MessageListHandle>(null);
+  const colors = useMemo(() => new Map(accounts.map((account) => [account.id, account.color] as const)), [accounts]);
+  const accountColor = (item: MessageListItem): AccountColor => colors.get(item.accountId) ?? 0;
+  // Stage 8: with more than one account, each row names its account (stage 23: the stripe's name).
+  const names = useMemo(() => (accounts.length > 1 ? accountShortNames(accounts) : null), [accounts]);
+  const source: MessageListSource = {
+    ...rows,
     accountColor,
     ...(names && { accountName: (item: MessageListItem) => names.get(item.accountId) }),
   };
   const query = source.query;
   // Stage 21 (decision 0065): quick actions and the context menu with each row's own account.
   const loaded = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
-  const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey: ["unified"], platform });
+  const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey, platform });
   // Stage 22 (decision 0081): rows of several accounts dragged onto any folder.
-  const drops = useDropRows({ list, conversations, listKey: ["unified"] });
+  const drops = useDropRows({ list, conversations, listKey });
   const hiddenIds = useMemo(() => unionIds(mixed.hiddenIds, drops.hiddenIds), [mixed.hiddenIds, drops.hiddenIds]);
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const rowKey = selection.keys[0] ?? "";
@@ -97,7 +173,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
     return (
       <div className="px-6 py-4">
         <ErrorNotice
-          context={t("unified.loadFailed")}
+          context={errorContext}
           error={query.error}
           onRetry={() => {
             void query.refetch();
@@ -108,16 +184,15 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   }
 
   return (
-    <div className={layout.container} data-testid="unified-inbox" data-reading-pane={layout.position}>
+    <div className={layout.container} data-testid={rest["data-testid"]} data-reading-pane={layout.position}>
       <div {...layout.listColumn(open)}>
         {mixed.element}
-        {/* Stage 16 (decision 0036): mail of blocked senders the unified inbox leaves out. */}
-        <BlockedHiddenNote scope={unreadScope} accountId={null} />
-        {listView.bar}
+        {top}
+        {source.controls}
         <MessageList
           source={source}
           folderName={name}
-          showRecipients={false}
+          showRecipients={showRecipients}
           platform={platform}
           handle={list}
           // Stage 9 (decision 0028): an AI source among these rows is selected here.
@@ -126,7 +201,7 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
             layout.onOpen();
           }}
           onSelectionChange={(next) => {
-            setSelection(next);
+            onSelection(next);
             const focusPane = layout.onSelectionChange(next);
             const only = next.items.length === 1 ? next.items[0]?.id : undefined;
             setFocusRequest((request) =>
@@ -142,9 +217,9 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
             preview.engage();
             setFocusRequest((request) => ({ messageId: id, seq: (request?.seq ?? 0) + 1 }));
           }}
-          // Stage 18 (task F): opening the unified inbox shows its top message.
+          // Stage 18 (task F): opening the list shows its top message.
           autoSelectFirst={layout.autoSelectFirst}
-          table={listView.table}
+          table={table}
           hiddenIds={hiddenIds}
           renderQuickActions={mixed.renderQuickActions}
           onRowMenu={mixed.onRowMenu}

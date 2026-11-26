@@ -25,8 +25,11 @@ export const inboxQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
   ["messages", accountId, mailboxId, "inbox"] as const;
 export const priorityQueryKey = (accountId: AccountId, mailboxId: MailboxId) =>
   ["messages", accountId, mailboxId, "priority"] as const;
-export const markListQueryKey = (accountId: AccountId, mailboxId: MailboxId, kind: MarkListKind, filter: string) =>
-  ["messages", accountId, mailboxId, kind, filter] as const;
+/**
+ * Stage 23 (decision 0087): the mark views of "All accounts" (or of a group) mix every account's
+ * marks; they sit under this prefix (below `["unified"]`, which the core's events reload too).
+ */
+export const mixedMarksQueryKey = ["unified", "marks"] as const;
 
 export const inboxSettingsQueryKey = ["comfort", "inboxSettings"] as const;
 export const senderRulesQueryKey = ["comfort", "senderRules"] as const;
@@ -66,6 +69,12 @@ export function refreshComfortLists(queryClient: QueryClient, accountId: Account
     predicate: (query) => COMFORT_LIST_KINDS.has(String(query.queryKey[3])),
   });
   for (const query of queries) refreshQuery(queryClient, query.queryKey);
+  refreshMixedMarks(queryClient);
+}
+
+/** Stage 23 (decision 0087): a mark of any account may show in the views of "All accounts". */
+function refreshMixedMarks(queryClient: QueryClient): void {
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: mixedMarksQueryKey })) refreshQuery(queryClient, query.queryKey);
 }
 
 const MARK_KINDS = new Set(["later", "waiting", "pinned", "tasks", "readingList", "flagged"]);
@@ -83,6 +92,7 @@ export function refreshComfortListsOf(queryClient: QueryClient, accountId: Accou
     },
   });
   for (const query of queries) refreshQuery(queryClient, query.queryKey);
+  refreshMixedMarks(queryClient);
 }
 
 /** After `inboxChanged`: the lists, and what "Why here?" and the sender rules show. */

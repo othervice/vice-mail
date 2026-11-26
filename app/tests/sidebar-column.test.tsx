@@ -202,11 +202,17 @@ describe("accounts-and-folders column", () => {
   it("marks the shown view under a closed More or More folders on that row, and Tab comes in there", async () => {
     const { user } = setup({ sidebarExpanded: true }, [], true);
     const nav = await column();
+    // One account's Tasks (the rail or the palette with an account chosen) has no row in "All
+    // accounts" (stage 23, decision 0087); the views there cover every account.
     act(() => {
       useUiStore.getState().showMailView("tasks");
     });
     const all = await within(nav).findByRole("tree", { name: "All accounts" });
     const more = within(all).getByRole("treeitem", { name: "More" });
+    expect(more.className).not.toContain("bg-rail-selected");
+    act(() => {
+      useUiStore.getState().showAllAccountsView("tasks");
+    });
     expect(more.className).toContain("bg-rail-selected");
     expect(more.tabIndex).toBe(0);
     expect(more.hasAttribute("aria-current")).toBe(false);

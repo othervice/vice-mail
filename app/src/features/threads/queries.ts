@@ -26,7 +26,7 @@ export interface ThreadListPage {
   nextCursor: ThreadPage["nextCursor"];
 }
 
-function withItems(data: InfiniteData<ThreadPage, ListCursor | null>): InfiniteData<ThreadListPage, ListCursor | null> {
+export function withThreadItems(data: InfiniteData<ThreadPage, ListCursor | null>): InfiniteData<ThreadListPage, ListCursor | null> {
   return {
     ...data,
     pages: data.pages.map((page) => ({
@@ -45,7 +45,7 @@ export function useThreadPages(accountId: AccountId, mailboxId: MailboxId, enabl
     initialPageParam: null as ListCursor | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled,
-    select: withItems,
+    select: withThreadItems,
   });
 }
 

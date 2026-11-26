@@ -208,7 +208,7 @@ describe("the sidebar of the draft", () => {
     expect(within(nav).getByRole("toolbar", { name: "Abgleich und Einstellungen" })).toBeTruthy();
     expect(within(nav).getByRole("button", { name: "Jetzt abgleichen" })).toBeTruthy();
     act(() => {
-      useUiStore.getState().showMailView("later");
+      useUiStore.getState().showAllAccountsView("later");
     });
     expect(within(all).getByRole("treeitem", { name: "Später" }).getAttribute("aria-current")).toBe("page");
     expect(await seriousFindings()).toEqual([]);

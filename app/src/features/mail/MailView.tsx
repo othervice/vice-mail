@@ -40,7 +40,7 @@ import {
 import { isEditableTarget, matchesShortcut, shortcutPlatform, type ShortcutPlatform } from "../actions/shortcuts";
 import { useMarkReadOnOpen } from "../actions/useMarkReadOnOpen";
 import { useAppInfo } from "../app-info/queries";
-import { useListSource, type ListKind } from "../comfort/listSources";
+import { isMarkKind, useListSource, type ListKind } from "../comfort/listSources";
 import type { MarkListKind } from "../comfort/queries";
 import { ListResizeHandle } from "../layout/ListResizeHandle";
 import { NoMessageSelected } from "../reading/NoMessageSelected";
@@ -64,6 +64,8 @@ import { ThreadPane } from "../threads/ThreadPane";
 import { InboxScopeSwitcher } from "../unified/InboxScopeSwitcher";
 import { UnifiedInbox, useUnifiedName } from "../unified/UnifiedInbox";
 import { useAccountGroups, useHiddenAccounts } from "../unified/queries";
+import { ScopedMarkView, ScopedSentView } from "../unified/AllAccountsViews";
+import { coversScope, markScopeOf } from "../unified/scope";
 // Stage 16: "Unread only" and "Unread first".
 import { UnreadControls, unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unread";
 import { unionIds, useDropRows } from "../organize/useDropRows";
@@ -638,6 +640,26 @@ function MailBody({ view, account }: MailBodyProps) {
   );
 }
 
+interface ScopedViewProps {
+  view: UnifiedView;
+  mailView: ShownMailViewId;
+  accounts: readonly Account[];
+  platform: ShortcutPlatform;
+  name: string;
+}
+
+/**
+ * Stage 23 (decision 0087): a view of "All accounts" (other than the inbox) over the unified
+ * scope: the marked messages, the pinned attachments or Sent of every visible account (or of a
+ * group's), mixed by account.
+ */
+function ScopedView({ view, mailView, accounts, platform, name }: ScopedViewProps) {
+  if (mailView === "pinnedAttachments") return <PinnedAttachmentsView scope={markScopeOf(view)} />;
+  if (mailView === "sent") return <ScopedSentView view={view} accounts={accounts} platform={platform} name={name} />;
+  if (isMarkKind(mailView)) return <ScopedMarkView key={mailView} kind={mailView} view={view} accounts={accounts} platform={platform} name={name} />;
+  return null;
+}
+
 interface MailViewProps {
   view: MailViewState;
 }
@@ -660,23 +682,26 @@ export function MailView({ view }: MailViewProps) {
   const inboxView = view.kind === "mail" && view.mailView === "inbox";
   // Decision 0039: conversations for folders, inboxes and the unified inbox (not Later, Pinned, Tasks).
   const conversationsApply = view.kind === "mailbox" || isRoleView(view.mailView);
-  const unifiedView = inboxView && account ? unified : null;
-  const unifiedName = useUnifiedName(unifiedView ?? { kind: "all" });
-  const roleMailboxes = useMailboxes(unifiedView ? null : account?.id).data ?? [];
+  // Stage 23 (decision 0087): while the unified scope is on, the views of "All accounts" (Later,
+  // Flagged, Sent, …) cover its accounts like the inbox does.
+  const scopedView = view.kind === "mail" && account && coversScope(view.mailView) ? unified : null;
+  const unifiedView = inboxView ? scopedView : null;
+  const unifiedName = useUnifiedName(scopedView ?? { kind: "all" });
+  const roleMailboxes = useMailboxes(scopedView ? null : account?.id).data ?? [];
   const searchContext = {
-    accountId: unifiedView ? null : (account?.id ?? null),
+    accountId: scopedView ? null : (account?.id ?? null),
     mailboxId:
       view.kind === "mailbox"
         ? view.mailboxId
-        : !unifiedView && isRoleView(view.mailView)
+        : !scopedView && isRoleView(view.mailView)
           ? (mailboxWithRole(roleMailboxes, view.mailView)?.id ?? null)
           : null,
-    groupId: unifiedView?.kind === "group" ? unifiedView.groupId : null,
+    groupId: scopedView?.kind === "group" ? scopedView.groupId : null,
   };
 
   const folder = view.kind === "mailbox" ? mailboxes.data?.find((m) => m.id === view.mailboxId) : undefined;
   // Stage 16: the view "Unread only" and "Unread first" apply to (folders, inboxes, unified views).
-  const roleMailbox = view.kind === "mail" && !unifiedView && isRoleView(view.mailView) ? mailboxWithRole(roleMailboxes, view.mailView) : undefined;
+  const roleMailbox = view.kind === "mail" && !scopedView && isRoleView(view.mailView) ? mailboxWithRole(roleMailboxes, view.mailView) : undefined;
   const unreadScope: InboxScope | null = unifiedView
     ? { kind: "unified", view: unifiedView }
     : folder
@@ -732,6 +757,12 @@ export function MailView({ view }: MailViewProps) {
         <UnifiedInbox view={unifiedView} accounts={accountList} platform={platform} />
       </SearchArea>
     );
+  } else if (scopedView && view.kind === "mail") {
+    body = (
+      <SearchArea context={searchContext} platform={platform}>
+        <ScopedView view={scopedView} mailView={view.mailView} accounts={accountList} platform={platform} name={title} />
+      </SearchArea>
+    );
   } else {
     body = (
       <SearchArea context={searchContext} platform={platform}>
@@ -748,7 +779,13 @@ export function MailView({ view }: MailViewProps) {
   const after = (
     <>
       {switcher && <InboxScopeSwitcher accounts={accountList} account={account} inTitle />}
-      {!switcher && account && accountList.length > 1 && (
+      {/* Stage 23 (decision 0087): a view of "All accounts" names its scope, not one account. */}
+      {!switcher && scopedView && accountList.length > 1 && (
+        <span className="min-w-0 truncate text-12 text-tertiary" data-testid="view-scope">
+          {scopedView.kind === "all" ? t("nav.allAccounts") : unifiedName}
+        </span>
+      )}
+      {!switcher && !scopedView && account && accountList.length > 1 && (
         <span className="flex min-w-0 items-center gap-2 text-12 text-tertiary" data-testid="view-account">
           <AccountLine account={account} />
         </span>

@@ -955,6 +955,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     listMessages,
     reject: (code) => reject(code),
     roleOf: (mailboxId) => mailboxes.find((mailbox) => mailbox.id === mailboxId)?.role,
+    mailboxIds: () => mailboxes.map((mailbox) => mailbox.id),
   });
 
   // Stage 9 part B: unsubscribing, invitations, export, printing, default mail app, mailto.

@@ -2306,6 +2306,12 @@ export const de: Translation = {
     sidebar: "Posteingänge",
     loadFailed: "Der vereinte Posteingang konnte nicht geladen werden",
     groupsFailed: "Die Kontogruppen konnten nicht geladen werden",
+    // Stage 23 (decision 0087): Later, Flagged, Sent and the other views of "All accounts".
+    viewFailed: "Diese Ansicht aller Konten konnte nicht geladen werden",
+    sentEmpty: {
+      title: "Noch nichts gesendet",
+      body: "Was du aus einem der gezeigten Konten sendest, erscheint hier.",
+    },
     empty: {
       title: "Keine Mails",
       body: "Neue Mails aller gezeigten Konten erscheinen hier.",

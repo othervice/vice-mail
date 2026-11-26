@@ -17,6 +17,7 @@ import type {
   SenderRule,
   SnoozeChoice,
   SnoozeTimes,
+  MarkScope,
   TaskMark,
   FollowUpChoice,
   FollowUpMark,
@@ -113,6 +114,8 @@ export function createComfortFake(
     reject: (code: "invalid_argument" | "not_found") => Promise<never>;
     /** The role of a mailbox, for the Flagged view (it leaves Trash and Junk out). */
     roleOf?: (mailboxId: number) => string | undefined;
+    /** Stage 23 (decision 0087): every mailbox, for the views of "All accounts". */
+    mailboxIds?: () => number[];
   },
 ): ComfortFake {
   let inboxSettings: InboxSettings = options.inboxSettings ?? {
@@ -146,6 +149,18 @@ export function createComfortFake(
   const scopeMailbox = (scope: InboxScope) => (scope.kind === "mailbox" ? scope.mailboxId : 1);
 
   const all = () => [1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((id) => core.messagesIn(id)).map(marked);
+  /**
+   * The messages a mark view looks at: one account's (the standard mailboxes, as before), or, for
+   * "All accounts" and groups (stage 23, decision 0087), every mailbox's.
+   */
+  const inScope = (args: Record<string, unknown>) => {
+    const scope = args["scope"] as MarkScope | undefined;
+    if (!scope || scope.kind === "account" || !core.mailboxIds) return all();
+    return core
+      .mailboxIds()
+      .flatMap((id) => core.messagesIn(id))
+      .map(marked);
+  };
 
   function listInbox(scope: InboxScope, cursor: { before: number; bundles: string | null } | null, limit: number): InboxPage {
     const mailboxId = scopeMailbox(scope);
@@ -262,7 +277,7 @@ export function createComfortFake(
         for (const id of ids(args)) followUps.delete(id);
         return null;
       case "list_follow_ups":
-        return all()
+        return inScope(args)
           .filter((item) => item.followUp)
           .sort((a, b) => (a.followUp?.due ?? 0) - (b.followUp?.due ?? 0));
       case "unsnooze_messages":
@@ -283,20 +298,20 @@ export function createComfortFake(
         return null;
       }
       case "list_snoozed":
-        return all()
+        return inScope(args)
           .filter((item) => item.snooze && !item.snooze.returned)
           .sort((a, b) => (a.snooze?.until ?? 0) - (b.snooze?.until ?? 0));
       case "list_pinned":
-        return all().filter((item) => item.pinned);
+        return inScope(args).filter((item) => item.pinned);
       case "list_flagged": {
         const left = new Set(["trash", "junk"]);
-        return all()
+        return inScope(args)
           .filter((item) => item.flagged && !left.has(core.roleOf?.(item.mailboxId) ?? ""))
           .sort((a, b) => b.date - a.date);
       }
       case "list_tasks": {
         const filter = args["filter"] as "open" | "done" | "all";
-        return all().filter((item) => item.task && (filter === "all" || (filter === "done") === item.task.done));
+        return inScope(args).filter((item) => item.task && (filter === "all" || (filter === "done") === item.task.done));
       }
       case "list_rules":
         return rules;

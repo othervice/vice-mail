@@ -34,7 +34,7 @@ import type { MessageListSource } from "../messages/listSource";
 import { buildRows, type DayBounds, type ListRow } from "../messages/rows";
 import { buildInboxRows, inboxPageItems, type InboxListRow, type InboxViewPage } from "./inboxRows";
 import { BlockHeading, BundleRow, ShowAllRow } from "./InboxListRows";
-import { inboxQueryKey, markListQueryKey, priorityQueryKey, type MarkListKind } from "./queries";
+import { inboxQueryKey, priorityQueryKey, type MarkListKind } from "./queries";
 
 /** Messages per `listInbox` page; the contract allows 1..500 and counts messages, not rows. */
 export const INBOX_PAGE_SIZE = 200;
@@ -260,36 +260,51 @@ export function useUnifiedInboxSource(view: UnifiedView, enabled: boolean): Mess
 }
 
 export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox): MessageListSource | undefined {
-  const { t } = useTranslation();
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("open");
-  const markScope: MarkScope = { kind: "account", accountId: account.id };
   const sorted = useSortedInboxSource(
     mailboxScope(mailbox),
     { inbox: inboxQueryKey(account.id, mailbox.id), priority: priorityQueryKey(account.id, mailbox.id) },
     kind === "inbox",
   );
+  // The mark views sit below the folder key, so a folder's reloads reach them.
+  const marks = useMarkListSource(isMarkKind(kind) ? kind : null, { kind: "account", accountId: account.id }, ["messages", account.id, mailbox.id]);
+  return kind === "folder" ? undefined : kind === "inbox" ? sorted : marks;
+}
 
-  const markKind: MarkListKind =
-    kind === "later" || kind === "waiting" || kind === "pinned" || kind === "tasks" || kind === "readingList" || kind === "flagged"
-      ? kind
-      : "later";
+const MARK_LIST_KINDS: readonly MarkListKind[] = ["later", "waiting", "pinned", "tasks", "readingList", "flagged"];
+
+/** Later, Waiting, Pinned, Tasks, the reading list and Flagged: the views of marked messages. */
+export function isMarkKind(kind: string): kind is MarkListKind {
+  return (MARK_LIST_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * The list of a mark view (stage 9 and later) over `scope`: one account (under its inbox's key,
+ * `["messages", account, inbox, kind, filter]`), or, stage 23 (decision 0087), the accounts of
+ * "All accounts" or of a group (under `mixedMarksQueryKey`, which the core's events and the
+ * comfort notices reload).
+ * Undefined while `kind` is null (the hook stays mounted, its query off).
+ */
+export function useMarkListSource(kind: MarkListKind | null, scope: MarkScope, keyBase: QueryKey): MessageListSource | undefined {
+  const { t } = useTranslation();
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("open");
+  const markKind: MarkListKind = kind ?? "later";
   const marks = useInfiniteQuery({
-    queryKey: markListQueryKey(account.id, mailbox.id, markKind, markKind === "tasks" ? taskFilter : ""),
+    queryKey: [...keyBase, markKind, markKind === "tasks" ? taskFilter : ""],
     queryFn: async (): Promise<{ items: MessageListItem[] }> => {
       // Later, Pinned and Tasks come in one answer (at most 1,000, decision 0020): one page.
-      if (markKind === "later") return { items: await comfortIpc.listSnoozed(markScope) };
+      if (markKind === "later") return { items: await comfortIpc.listSnoozed(scope) };
       // Stage 20 (decision 0059): the reminders if no reply comes (at most 1,000 as well).
-      if (markKind === "waiting") return { items: await reminderIpc.listFollowUps(markScope) };
-      if (markKind === "pinned") return { items: await comfortIpc.listPinned(markScope) };
+      if (markKind === "waiting") return { items: await reminderIpc.listFollowUps(scope) };
+      if (markKind === "pinned") return { items: await comfortIpc.listPinned(scope) };
       // Stage 16: the reading list, most recently added first (at most 1,000 as well).
-      if (markKind === "readingList") return { items: await parityIpc.listReadingList(markScope) };
+      if (markKind === "readingList") return { items: await parityIpc.listReadingList(scope) };
       // The server's flag in every folder but Trash and Junk (at most 1,000 as well).
-      if (markKind === "flagged") return { items: await comfortIpc.listFlagged(markScope) };
-      return { items: await comfortIpc.listTasks(markScope, taskFilter) };
+      if (markKind === "flagged") return { items: await comfortIpc.listFlagged(scope) };
+      return { items: await comfortIpc.listTasks(scope, taskFilter) };
     },
     initialPageParam: null,
     getNextPageParam: () => null,
-    enabled: kind === markKind,
+    enabled: kind !== null,
   });
 
   const plainRows = useCallback((items: readonly MessageListItem[], bounds: DayBounds) => buildRows(items, bounds), []);
@@ -302,10 +317,8 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
 
   return useMemo((): MessageListSource | undefined => {
     switch (kind) {
-      case "folder":
+      case null:
         return undefined;
-      case "inbox":
-        return sorted;
       case "readingList":
         return {
           query: marks,
@@ -333,7 +346,7 @@ export function useListSource(kind: ListKind, account: Account, mailbox: Mailbox
         };
       }
     }
-  }, [kind, sorted, marks, plainRows, addedRows, taskFilter, t]);
+  }, [kind, marks, plainRows, addedRows, taskFilter, t]);
 }
 
 const TASK_FILTERS: readonly TaskFilter[] = ["open", "done", "all"];

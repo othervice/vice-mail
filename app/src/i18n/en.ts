@@ -2321,6 +2321,12 @@ export const en = {
     sidebar: "Inboxes",
     loadFailed: "The unified inbox could not be loaded",
     groupsFailed: "The account groups could not be loaded",
+    // Stage 23 (decision 0087): Later, Flagged, Sent and the other views of "All accounts".
+    viewFailed: "This view of all accounts could not be loaded",
+    sentEmpty: {
+      title: "Nothing sent yet",
+      body: "Mail you send from any of the shown accounts appears here.",
+    },
     empty: {
       title: "No messages",
       body: "New messages of all shown accounts appear here.",

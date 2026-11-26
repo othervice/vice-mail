@@ -502,8 +502,10 @@ describe.each(["light", "dark"] as const)("axe for the stage 16 lists and folder
     expect(await seriousFindings()).toEqual([]);
     await user.keyboard("{Escape}");
 
+    // "Reading list" of "All accounts" covers both accounts (stage 23, decision 0087); the
+    // first account's own inbox has the folder actions.
     act(() => {
-      useUiStore.getState().showMailView("inbox");
+      useUiStore.getState().showMailbox(makeAccount().id, 1);
     });
     const inbox = await list();
     await user.click(row(inbox, "Message 1"));

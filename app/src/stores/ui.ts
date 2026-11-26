@@ -127,7 +127,9 @@ interface UiState {
   selectedAccountId: AccountId | null;
   /**
    * Stage 7: the Inbox view shows the unified inbox of every visible account or of a group
-   * instead of the selected account's inbox. Picking an account or a folder ends it.
+   * instead of the selected account's inbox. Picking an account or a folder ends it. Stage 23
+   * (decision 0087): Later, Flagged, Sent and the other views of "All accounts" cover the same
+   * accounts while it is set (`features/unified/scope.ts`).
    */
   unifiedInbox: UnifiedView | null;
   /**
@@ -163,6 +165,8 @@ interface UiState {
   showSavedSearch: (savedSearchId: SavedSearchId) => void;
   selectAccount: (accountId: AccountId) => void;
   showUnifiedInbox: (view: UnifiedView) => void;
+  /** Stage 23 (decision 0087): a view of "All accounts" over every visible account. */
+  showAllAccountsView: (mailView: ShownMailViewId) => void;
   showSettings: (section?: SettingsSectionId) => void;
   showAccountsPage: (page: AccountsPage) => void;
   showActivity: () => void;
@@ -216,6 +220,9 @@ export const useUiStore = create<UiState>()((set) => ({
   },
   showUnifiedInbox: (unifiedInbox) => {
     set({ unifiedInbox, view: { kind: "mail", mailView: "inbox" } });
+  },
+  showAllAccountsView: (mailView) => {
+    set({ unifiedInbox: { kind: "all" }, view: { kind: "mail", mailView } });
   },
   showSettings: (section = "general") => {
     set({ view: { kind: "settings", section }, ...(section === "accounts" && { accountsPage: { kind: "list" } }) });
