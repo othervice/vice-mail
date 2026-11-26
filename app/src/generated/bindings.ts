@@ -814,6 +814,22 @@ export const commands = {
 	disableSettingsSync: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("disable_settings_sync", undefined, options)),
 	/**  The name of this device in the device list (1 to 64 characters). */
 	setSyncDeviceName: (name: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("set_sync_device_name", { name }, options)),
+	/**
+	 *  Stage 22 (decision 0076): asks another device of the sync for the passwords of the accounts
+	 *  that wait for theirs here (taken over from the sync). Replaces a running request.
+	 */
+	startPasswordTransfer: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("start_password_transfer", undefined, options)),
+	/**  Stage 22: ends this device's request, or closes how the last one ended. */
+	cancelPasswordTransfer: (options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("cancel_password_transfer", undefined, options)),
+	/**  Stage 22: answers another device's request; the code to compare follows in the status. */
+	openPasswordRequest: (requestId: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("open_password_request", { requestId }, options)),
+	/**
+	 *  Stage 22: after the codes matched, sends the passwords of `account_ids` (only those with the
+	 *  same servers on both devices) encrypted to the new device.
+	 */
+	givePasswords: (requestId: string, accountIds: AccountId[], options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("give_passwords", { requestId, accountIds }, options)),
+	/**  Stage 22: declines another device's request. */
+	declinePasswordRequest: (requestId: string, options?: InvokeOptions) => typedError<SettingsSyncStatus, IpcError>(__TAURI_INVOKE("decline_password_request", { requestId }, options)),
 	/**  Version, the switch, whether to ask the one-time question, and the current state. */
 	getUpdateInfo: (options?: InvokeOptions) => typedError<UpdateInfo, IpcError>(__TAURI_INVOKE("get_update_info", undefined, options)),
 	/**  "Check for updates automatically" on or off; either value answers the one-time question. */
@@ -4556,6 +4572,87 @@ export type OutgoingMail = {
 /**  `PARTSTAT` of an attendee. */
 export type ParticipationStatus = "needs_action" | "accepted" | "declined" | "tentative" | "delegated";
 
+/**  Stage 22: another device asks for passwords. */
+export type PasswordRequest = {
+	requestId: string,
+	/**  The name the new device gave itself (not proof of anything; the code is). */
+	deviceName: string,
+	expiresAt: number,
+	state: PasswordRequestState,
+	/**  The code to compare (`confirm`). */
+	code: string | null,
+	accounts: PasswordRequestAccount[],
+};
+
+/**  Stage 22: an account a request asks for. */
+export type PasswordRequestAccount = {
+	accountId: AccountId,
+	state: PasswordRequestAccountState,
+};
+
+/**  Stage 22: whether this device can give the password of an account a request asks for. */
+export type PasswordRequestAccountState = 
+/**  The account has a password here and the same servers on both devices. */
+"ready" | 
+/**  Host, port, security or user name of IMAP or SMTP differ (decision 0040): never sent. */
+"serversDiffer" | 
+/**  No password here (it signs in with its provider, or waits for its password too). */
+"noPassword" | 
+/**  The account does not exist here. */
+"unknown";
+
+/**  Stage 22: where a request of another device stands on this device. */
+export type PasswordRequestState = 
+/**  Seen in the folder; not answered here. */
+"open" | 
+/**  Answered here; waiting for the new device to send its key. */
+"connecting" | 
+/**  Compare `code` with the one the new device shows, then choose the accounts. */
+"confirm" | 
+/**  The new device answered another device. */
+"otherDevice" | 
+/**  The key the new device sent does not fit its request (tampered with): nothing is sent. */
+"failed" | 
+/**  The passwords were sent. */
+"given" | 
+/**  Declined here. */
+"declined";
+
+/**  Stage 22: this device's request for passwords from another device. */
+export type PasswordTransfer = {
+	state: PasswordTransferState,
+	/**  The code both devices show, `123 456`; null until a device answered. */
+	code: string | null,
+	/**  The name of the device that answered. */
+	otherDevice: string | null,
+	/**  Unix ms when the request runs out. */
+	expiresAt: number,
+	/**  The accounts asked for. */
+	accounts: AccountId[],
+	/**  Accounts whose password arrived and is stored. */
+	stored: AccountId[],
+	/**
+	 *  Accounts that came back without a password here (servers differ, none on the other
+	 *  device, or no longer waiting).
+	 */
+	skipped: AccountId[],
+};
+
+/**  Stage 22 (decision 0076): where this device's request for passwords stands. */
+export type PasswordTransferState = 
+/**  The request is in the sync folder; no device answered yet. */
+"waiting" | 
+/**  A device answered: compare `code` with the one it shows and confirm there. */
+"confirm" | 
+/**  The passwords arrived (`stored`; `skipped` came without one). */
+"done" | 
+/**  The other device declined. */
+"declined" | 
+/**  Nobody answered within 15 minutes. */
+"expired" | 
+/**  The answer could not be read (not sealed to this request) or the request vanished. */
+"failed";
+
 /**  How long notifications pause (menu of the tray icon, Settings → Notifications). */
 export type PauseNotifications = 
 /**  For one hour from now. */
@@ -5370,6 +5467,16 @@ export type SettingsSyncStatus = {
 	 *  confirms or dismisses the change (`resolveServerChange`, decision 0040).
 	 */
 	serverChanges: SyncServerChange[],
+	/**
+	 *  Stage 22 (decision 0076): this device's request for passwords from another device
+	 *  (`startPasswordTransfer`), or how the last one ended; null if there is none.
+	 */
+	passwordTransfer: PasswordTransfer | null,
+	/**
+	 *  Stage 22: requests of other devices for passwords this device may have
+	 *  (`openPasswordRequest`, `givePasswords`, `declinePasswordRequest`).
+	 */
+	passwordRequests: PasswordRequest[],
 };
 
 /**

@@ -449,6 +449,12 @@ import {
   type McpStatus,
   type McpTestProblem,
   type McpTool,
+  type PasswordRequest,
+  type PasswordRequestAccount,
+  type PasswordRequestAccountState,
+  type PasswordRequestState,
+  type PasswordTransfer,
+  type PasswordTransferState,
   type SettingsSyncPreview,
   type SettingsSyncState,
   type SettingsSyncStatus,
@@ -488,6 +494,12 @@ export type {
   McpStatus,
   McpTestProblem,
   McpTool,
+  PasswordRequest,
+  PasswordRequestAccount,
+  PasswordRequestAccountState,
+  PasswordRequestState,
+  PasswordTransfer,
+  PasswordTransferState,
   SettingsSyncPreview,
   SettingsSyncState,
   SettingsSyncStatus,
@@ -552,6 +564,21 @@ export const settingsSyncIpc = {
   reset: (passphrase: string): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.resetSettingsSync(passphrase)),
   disable: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.disableSettingsSync()),
   setDeviceName: (name: string): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.setSyncDeviceName(name)),
+  /**
+   * Stage 22 (decision 0076): asks another device of the sync for the passwords of the accounts
+   * that wait for theirs here. The code to compare arrives in the status (`passwordTransfer`).
+   */
+  startPasswordTransfer: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.startPasswordTransfer()),
+  /** Ends this device's request, or closes how the last one ended. */
+  cancelPasswordTransfer: (): Promise<SettingsSyncStatus> => call(() => mcpSyncCommands.cancelPasswordTransfer()),
+  /** Answers another device's request; its code follows in `passwordRequests`. */
+  openPasswordRequest: (requestId: string): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.openPasswordRequest(requestId)),
+  /** After the codes matched: sends the passwords of these accounts (same servers only). */
+  givePasswords: (requestId: string, accountIds: AccountId[]): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.givePasswords(requestId, accountIds)),
+  declinePasswordRequest: (requestId: string): Promise<SettingsSyncStatus> =>
+    call(() => mcpSyncCommands.declinePasswordRequest(requestId)),
 };
 
 // ---- Stage 7 (search, threads, unified inbox, account groups, identities) ----

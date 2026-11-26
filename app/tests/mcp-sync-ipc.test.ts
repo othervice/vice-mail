@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CoreError, mcpIpc, MIN_SYNC_PASSPHRASE_CHARS, SETTINGS_SYNC_FOLDER, settingsSyncIpc } from "../src/services/ipc";
 import { makeAccount, mockCore } from "./support/core";
-import { syncStatus } from "./support/mcpSync";
+import { makePasswordRequest, syncStatus } from "./support/mcpSync";
 
 const ADA = makeAccount();
 
@@ -96,6 +96,35 @@ describe("stage 11 commands", () => {
     await expect(settingsSyncIpc.previewJoin(ADA.id, "wrong passphrase")).rejects.toMatchObject({
       name: "CoreError",
       code: "sync_wrong_passphrase",
+    });
+  });
+});
+
+describe("stage 22 commands", () => {
+  it("send the command names and argument names of the contract", async () => {
+    const request = makePasswordRequest({ state: "confirm", code: "123 456", accounts: [{ accountId: ADA.id, state: "ready" }] });
+    const core = mockCore({
+      accounts: [ADA],
+      mcpSync: { sync: { status: syncStatus({ state: "active", accountId: ADA.id, accountsNeedingPassword: [ADA.id], passwordRequests: [request] }) } },
+    });
+
+    const started = await settingsSyncIpc.startPasswordTransfer();
+    await settingsSyncIpc.cancelPasswordTransfer();
+    await settingsSyncIpc.givePasswords(request.requestId, [ADA.id]);
+    await settingsSyncIpc.openPasswordRequest(request.requestId);
+    await settingsSyncIpc.declinePasswordRequest(request.requestId);
+
+    expect(started.passwordTransfer?.state).toBe("waiting");
+    expect(core.calls).toEqual([
+      { cmd: "start_password_transfer", args: {} },
+      { cmd: "cancel_password_transfer", args: {} },
+      { cmd: "give_passwords", args: { requestId: request.requestId, accountIds: [ADA.id] } },
+      { cmd: "open_password_request", args: { requestId: request.requestId } },
+      { cmd: "decline_password_request", args: { requestId: request.requestId } },
+    ]);
+    await expect(settingsSyncIpc.openPasswordRequest("ffffffffffffffffffffffffffffffff")).rejects.toMatchObject({
+      name: "CoreError",
+      code: "not_found",
     });
   });
 });

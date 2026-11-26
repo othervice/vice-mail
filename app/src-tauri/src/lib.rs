@@ -350,6 +350,12 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
             commands::settings_sync::reset_settings_sync,
             commands::settings_sync::disable_settings_sync,
             commands::settings_sync::set_sync_device_name,
+            // Stage 22 (decision 0076): passwords from another device.
+            commands::settings_sync::start_password_transfer,
+            commands::settings_sync::cancel_password_transfer,
+            commands::settings_sync::open_password_request,
+            commands::settings_sync::give_passwords,
+            commands::settings_sync::decline_password_request,
             // Stage 15 (decision 0037): in-app updates, opt-in.
             commands::updates::get_update_info,
             commands::updates::set_update_auto_check,

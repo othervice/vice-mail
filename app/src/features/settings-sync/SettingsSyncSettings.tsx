@@ -12,6 +12,7 @@ import { InlineConfirm } from "../mcp/InlineConfirm";
 import { AccountPicker } from "./AccountPicker";
 import { formatSyncTime } from "./format";
 import { JoinFlow } from "./JoinFlow";
+import { GivePasswords, TakeOverPasswords } from "./PasswordTransfer";
 import { EMPTY_PASSPHRASE, PassphraseFields, passphraseProblem, type PassphraseDraft } from "./PassphraseFields";
 import {
   settingsSyncQueryKey,
@@ -329,9 +330,13 @@ function PasswordsBlock({ status, accounts }: { status: SettingsSyncStatus; acco
   const { t } = useTranslation();
   // An account the list does not have yet arrives with `accountsChanged`; until then it has no row.
   const waiting = accounts.filter((account) => status.accountsNeedingPassword.includes(account.id));
-  if (waiting.length === 0) return null;
+  // Stage 22: how a transfer ended stays visible after the last password arrived.
+  if (waiting.length === 0 && !status.passwordTransfer) return null;
   return (
     <Block title={t("settingsSync.passwords.title")} description={t("settingsSync.passwords.description")} data-testid="sync-passwords">
+      {(waiting.some((account) => !account.oauth) || status.passwordTransfer) && (
+        <TakeOverPasswords transfer={status.passwordTransfer} accounts={accounts} />
+      )}
       <ul className="flex flex-col gap-4">
         {waiting.map((account) => (
           <PasswordRow key={account.id} accountId={account.id} account={account} />
@@ -612,6 +617,11 @@ function OnPage({ status, accounts }: { status: SettingsSyncStatus; accounts: re
       <StatusBlock status={status} account={account} />
       {status.state === "needsPassphrase" && <NeedsPassphrase status={status} account={account} />}
       <PasswordsBlock status={status} accounts={accounts} />
+      {/* Stage 22: only where there is something to give, or a request to answer. */}
+      {status.state !== "needsPassphrase" &&
+        (accounts.some((a) => !a.oauth && !status.accountsNeedingPassword.includes(a.id)) || status.passwordRequests.length > 0) && (
+          <GivePasswords status={status} accounts={accounts} />
+        )}
       <QuestionsBlock questions={status.questions} />
       <DevicesBlock devices={status.devices} />
       {status.state !== "needsPassphrase" && <ChangePassphraseBlock />}

@@ -1,7 +1,8 @@
 //! Settings sync (stage 11, decisions 0014 and 0022): turning it on with a sync account and a
 //! passphrase, joining from a second device (preview first), the status, "sync now",
 //! questions about accounts removed elsewhere, the passphrase, the reset, turning it off and
-//! the device name. Each one forwards to [`AppCore`]. Event: `settingsSyncChanged`.
+//! the device name; since stage 22 passwords from another device. Each one forwards to
+//! [`AppCore`]. Event: `settingsSyncChanged`.
 //!
 //! Passphrases cross the bridge as plain strings and become a [`Secret`] at once; they are
 //! never stored (the keychain holds the sync key, decision 0014) and never logged.
@@ -146,4 +147,65 @@ pub async fn set_sync_device_name(
     core.set_sync_device_name(name)
         .await
         .map_err(to_ipc("set_sync_device_name"))
+}
+
+/// Stage 22 (decision 0076): asks another device of the sync for the passwords of the accounts
+/// that wait for theirs here (taken over from the sync). Replaces a running request.
+#[tauri::command]
+#[specta::specta]
+pub async fn start_password_transfer(
+    core: State<'_, AppCore>,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.start_password_transfer()
+        .await
+        .map_err(to_ipc("start_password_transfer"))
+}
+
+/// Stage 22: ends this device's request, or closes how the last one ended.
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_password_transfer(
+    core: State<'_, AppCore>,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.cancel_password_transfer()
+        .await
+        .map_err(to_ipc("cancel_password_transfer"))
+}
+
+/// Stage 22: answers another device's request; the code to compare follows in the status.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_password_request(
+    core: State<'_, AppCore>,
+    request_id: String,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.open_password_request(request_id)
+        .await
+        .map_err(to_ipc("open_password_request"))
+}
+
+/// Stage 22: after the codes matched, sends the passwords of `account_ids` (only those with the
+/// same servers on both devices) encrypted to the new device.
+#[tauri::command]
+#[specta::specta]
+pub async fn give_passwords(
+    core: State<'_, AppCore>,
+    request_id: String,
+    account_ids: Vec<AccountId>,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.give_passwords(request_id, account_ids)
+        .await
+        .map_err(to_ipc("give_passwords"))
+}
+
+/// Stage 22: declines another device's request.
+#[tauri::command]
+#[specta::specta]
+pub async fn decline_password_request(
+    core: State<'_, AppCore>,
+    request_id: String,
+) -> Result<SettingsSyncStatus, IpcError> {
+    core.decline_password_request(request_id)
+        .await
+        .map_err(to_ipc("decline_password_request"))
 }
