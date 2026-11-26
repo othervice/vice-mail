@@ -26,6 +26,8 @@ let account;
 let junk;
 /** The theme and language before this spec, put back at its end. */
 let preferencesBefore = null;
+/** The inbox settings before step 3, put back at the end. */
+let inboxBefore = null;
 
 const WORDS = {
   offer: ["cheap", "pills", "pharmacy", "discount", "viagra", "cialis", "prescription", "winner", "prize", "casino", "bonus", "loan", "crypto", "investment", "guaranteed", "limited", "exclusive", "unsubscribe"],
@@ -82,6 +84,11 @@ function writeEmls(prefix, messages) {
     fs.writeFileSync(file, lines.join("\r\n"));
     return file;
   });
+}
+
+/** The embedded WebDriver has no actions API: scroll in the page, as the other specs do. */
+async function scrollTo(id) {
+  await browser.execute((testid) => document.querySelector(`[data-testid="${testid}"]`)?.scrollIntoView({ block: "start" }), id);
 }
 
 async function status() {
@@ -143,6 +150,9 @@ describe("stage 22: the learning spam filter", () => {
     await coreCall("set_writes_enabled", { accountId: account.id, enabled: true });
     const reading = await coreCall("get_reading_preferences");
     await coreCall("set_reading_preferences", { preferences: { ...reading, markReadOnOpen: "never" } });
+    // The one-time question about update checks (after the first account) would cover the notices.
+    const consent = testId("update-consent-no");
+    if (await consent.isExisting()) await consent.click();
     junk = (await coreCall("list_mailboxes", { accountId: account.id })).find((m) => m.role === "junk");
     assert.ok(junk, "the test server has a junk folder");
     report.steps.junkFolder = junk.path;
@@ -152,6 +162,7 @@ describe("stage 22: the learning spam filter", () => {
     await coreCall("forget_spam_filter").catch(() => undefined);
     await coreCall("set_spam_filter", { settings: { enabled: false, excludedAccounts: [] } }).catch(() => undefined);
     if (preferencesBefore) await coreCall("set_preferences", { preferences: preferencesBefore }).catch(() => undefined);
+    if (inboxBefore) await coreCall("set_inbox_settings", { settings: inboxBefore }).catch(() => undefined);
     const left = await coreCall("list_accounts").catch(() => []);
     for (const a of left) await coreCall("remove_account", { accountId: a.id }).catch((e) => console.log(`cleanup failed: ${e}`));
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -159,10 +170,12 @@ describe("stage 22: the learning spam filter", () => {
     console.log(`\nE2E REPORT ${JSON.stringify(report, null, 2)}\n`);
   });
 
-  it("1: turns on, learns from the junk folder and read inbox mail, with progress", async () => {
+  it("1: turns on, learns from the junk folder and read inbox mail, with progress", async function () {
+    // 280 appends and learning about a thousand mails, some fetched from the server.
+    this.timeout(600000);
     await openSettings("inbox");
     const toggle = testId("spam-enabled");
-    await toggle.scrollIntoView();
+    await scrollTo("spam-settings");
     assert.equal(await toggle.getAttribute("aria-checked"), "false", "off by default");
     await toggle.click();
     await browser.waitUntil(async () => (await status()).settings.enabled, { timeoutMsg: "the filter did not turn on" });
@@ -197,7 +210,7 @@ describe("stage 22: the learning spam filter", () => {
     await browser.waitUntil(async () => (await testId("spam-learning-state").getAttribute("data-state")) === "done", {
       timeoutMsg: "the settings did not show the end",
     });
-    await testId("spam-settings").scrollIntoView();
+    await scrollTo("spam-settings");
     await shots("settings");
     assert.deepEqual(await cspViolations(), []);
   });
@@ -243,6 +256,10 @@ describe("stage 22: the learning spam filter", () => {
 
   it("3: with writes off it only marks; Not spam removes the mark", async () => {
     await coreCall("set_writes_enabled", { accountId: account.id, enabled: false });
+    // The offers look like newsletters; the sorted inbox would bundle them. Purely by date here.
+    inboxBefore = await coreCall("get_inbox_settings");
+    await coreCall("set_inbox_settings", { settings: { ...inboxBefore, categories: false } });
+    await openView("junk");
     await openView("inbox");
     const junkBefore = await inServer(junk.path);
     const fresh = writeEmls("ro-offer", [offer(200, 0)]);

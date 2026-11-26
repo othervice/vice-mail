@@ -537,7 +537,9 @@ async fn learning_from_existing_mail_takes_junk_and_read_inbox_mail() {
         ErrorCode::InvalidArgument
     );
     enable(&h).await;
-    h.core.learn_spam_from_mail().await.expect("learn");
+    let started = h.core.learn_spam_from_mail().await.expect("learn");
+    // The first answer already knows how many mails it learns from.
+    assert_eq!(started.learning.map(|l| l.total), Some(8));
     let done = h
         .event(|e| {
             matches!(e, CoreEvent::SpamFilterChanged { status }

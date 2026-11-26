@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use mail_model::{
-    AccountId, CoreError, IpcError, MIN_LEARNED_SPAM, SpamLearning, SpamLearningState,
+    AccountId, CoreError, IpcError, MIN_LEARNED_SPAM, MessageId, SpamLearning, SpamLearningState,
 };
 use mail_store::SpamClass;
 
@@ -87,23 +87,32 @@ impl<C: Connector> AppCore<C> {
             *slot = Some(Arc::clone(&run));
             run
         };
-        let accounts: Vec<AccountId> = self
-            .store_ref()?
-            .accounts()
-            .await?
-            .into_iter()
-            .map(|a| a.id)
-            .filter(|a| settings.applies_to(*a))
-            .collect();
+        // The mails to learn from are chosen now, so the first progress already has its total.
+        let chosen = self
+            .learning_candidates(&settings, spam_limit, ham_limit)
+            .await;
+        let (spam, ham) = match chosen {
+            Ok(chosen) => chosen,
+            Err(err) => {
+                run.update(|info| {
+                    info.state = SpamLearningState::Failed;
+                    info.error = Some(IpcError::from(err.clone()));
+                });
+                self.spam_status_changed().await;
+                return Err(err);
+            }
+        };
+        run.update(|info| {
+            info.total = u32::try_from(spam.len() + ham.len()).unwrap_or(u32::MAX);
+        });
         tracing::info!(
-            spam_limit,
-            ham_limit,
-            accounts = accounts.len(),
+            spam = spam.len(),
+            ham = ham.len(),
             "spam filter: learning from existing mail"
         );
         let weak = self.downgrade();
         let task = tokio::spawn(async move {
-            let result = learn(&weak, &run, accounts, spam_limit, ham_limit).await;
+            let result = learn(&weak, &run, spam, ham).await;
             run.update(|info| {
                 info.state = match &result {
                     Ok(()) if run.cancelled() => SpamLearningState::Cancelled,
@@ -137,34 +146,51 @@ impl<C: Connector> AppCore<C> {
     }
 }
 
+impl<C: Connector> AppCore<C> {
+    /// The newest junk mail and read inbox mail (replied first) of the accounts the setting
+    /// covers, not learned yet.
+    async fn learning_candidates(
+        &self,
+        settings: &mail_model::SpamFilterSettings,
+        spam_limit: u32,
+        ham_limit: u32,
+    ) -> Result<(Vec<MessageId>, Vec<MessageId>), CoreError> {
+        let store = self.store_ref()?;
+        let accounts: Vec<AccountId> = store
+            .accounts()
+            .await?
+            .into_iter()
+            .map(|a| a.id)
+            .filter(|a| settings.applies_to(*a))
+            .collect();
+        let spam = if spam_limit > 0 {
+            store
+                .spam_learning_candidates(accounts.clone(), SpamClass::Spam, spam_limit)
+                .await?
+        } else {
+            Vec::new()
+        };
+        let ham = if ham_limit > 0 {
+            store
+                .spam_learning_candidates(accounts, SpamClass::Ham, ham_limit)
+                .await?
+        } else {
+            Vec::new()
+        };
+        Ok((spam, ham))
+    }
+}
+
 async fn learn<C: Connector>(
     weak: &WeakCore<C>,
     run: &Run,
-    accounts: Vec<AccountId>,
-    spam_limit: u32,
-    ham_limit: u32,
+    spam: Vec<MessageId>,
+    ham: Vec<MessageId>,
 ) -> Result<(), CoreError> {
     let Some(core) = weak.upgrade() else {
         return Ok(());
     };
     let store = core.store_ref()?.clone();
-    let spam = if spam_limit > 0 {
-        store
-            .spam_learning_candidates(accounts.clone(), SpamClass::Spam, spam_limit)
-            .await?
-    } else {
-        Vec::new()
-    };
-    let ham = if ham_limit > 0 {
-        store
-            .spam_learning_candidates(accounts, SpamClass::Ham, ham_limit)
-            .await?
-    } else {
-        Vec::new()
-    };
-    run.update(|info| {
-        info.total = u32::try_from(spam.len() + ham.len()).unwrap_or(u32::MAX);
-    });
     drop(core);
     let mut last_event = Instant::now();
     for (class, ids) in [(SpamClass::Spam, spam), (SpamClass::Ham, ham)] {
