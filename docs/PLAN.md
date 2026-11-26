@@ -40,6 +40,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
 | 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | fertig (0.1.2), Punkt 1 wartet auf den Menschen | Rückmeldungen aus dem Test von 0.1.1; ergibt 0.1.2 |
 | 22 | [Rückmeldungen zu 0.1.2](stages/22-rueckmeldungen-0-1-2.md) | fertig (0.1.3) | Konten verschieben und umbenennen, keine Bilder/Initialen, ein Schlüsselbund-Eintrag, Kontakte in der Suche, Spamfilter, Suche im Wort, Einstellungen durchsuchen, Windows-11-Optik, Passwörter übernehmen; ergibt 0.1.3 |
+| 23 | [Rückmeldungen zu 0.1.3 und Feinschliff](stages/23-rueckmeldungen-0-1-3.md) | sammelt | Ziehen unter Windows, Konten in der schmalen Leiste ziehen, Feinschliff der Oberfläche |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
