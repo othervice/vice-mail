@@ -164,6 +164,30 @@ Personen melden“, „Ziehen in Finder/Explorer“).
     (`SHChangeNotify`), damit angeheftete Verknüpfungen das neue Symbol zeigen.
 - Wartet auf: welche Version auf dem PC läuft (Einstellungen → Über).
 
+### 12 — Mails per Ziehen in Ordner verschieben, auch aus „Alle Posteingänge“ in andere Konten
+
+- Gewünscht (26.11.): Mails per Drag-and-drop in einen Ordner verschieben, z. B. aus „Alle
+  Posteingänge“ in einen Ordner eines anderen Postfachs.
+- Stand im Code:
+  - Ziehen geht nur in der Liste eines einzelnen Ordners (`MailView.tsx`, `onDragRows`). Die
+    Sitzung in `app/src/stores/drag.ts` kennt genau ein Konto und einen Quellordner.
+  - In gemischten Listen gibt es kein Ziehen: „Alle Posteingänge“, Ansichten und Suchergebnisse.
+  - Beim Ablegen in einem anderen Konto fragt die App nach „Verschieben oder Kopieren“
+    (`moveOrAsk`, Entscheidung 0033). Das Verschieben selbst läuft über `append` im Zielkonto
+    und danach über `expunge` in der Quelle.
+- Plan:
+  - Ziehen aus jeder Liste, auch mit Mails aus mehreren Konten und Ordnern, auf jeden Ordner
+    links: Favoriten, Ordner aller Konten, schmale Leiste.
+  - Ablegen verschiebt, mit Rückgängig und sichtbarem Zustand. Mit gedrückter Wahltaste (Mac)
+    bzw. Strg (Windows) wird kopiert. Die Frage aus 0033 entfällt beim Ziehen, das Ziehen ist
+    die Antwort. Im Menü „Verschieben nach“ bleibt sie.
+  - Mails, die schon im Zielordner liegen, bleiben unberührt. Nur lesende Konten sind als Quelle
+    zum Verschieben gesperrt, ebenso als Ziel. Der Zielordner zeigt beim Überfahren, warum.
+  - Ordner klappen beim Darüberhalten auf. Die Liste scrollt am Rand mit.
+  - Zieh-Bild mit der Anzahl.
+- Gehört zum Strang „Konten“ (Punkte 1 und 2), der die linke Spalte ebenfalls zum Ziehen
+  umbaut.
+
 ## Ergebnis
 
 Noch offen; die Liste wird gesammelt.
