@@ -172,6 +172,13 @@ async fn every_registered_kind_is_captured_when_it_changes() {
     core.set_window_layout("main", WindowLayout::default())
         .await
         .expect("layout");
+    // Stage 22 (decision 0077): the spam filter's switch is synced; what it learns is not.
+    core.set_spam_filter(mail_model::SpamFilterSettings {
+        enabled: true,
+        excluded_accounts: Vec::new(),
+    })
+    .await
+    .expect("spam filter");
 
     // Identities with a signature, sender rules, local rules, marks, groups, remote content.
     let identity = core
