@@ -1728,14 +1728,54 @@ impl<C: Connector> AppCore<C> {
         self.compose()?.open_from_message(message).await
     }
 
-    /// Copies files into the draft. The shell passes only paths from the system file dialog or
-    /// from a drag-and-drop event of the window.
+    /// Copies files into the draft. The shell passes only paths from the system file dialog.
     pub async fn add_draft_attachments(
         &self,
         id: mail_model::DraftId,
         paths: Vec<PathBuf>,
     ) -> Result<mail_model::Draft, CoreError> {
-        self.compose()?.add_attachments(id, paths).await
+        let files = paths
+            .into_iter()
+            .map(crate::compose::SourceFile::from_path)
+            .collect();
+        self.compose()?.add_attachments(id, files).await
+    }
+
+    /// Stage 23 (decision 0082): announces a file the page hands over as bytes (dragged onto a
+    /// window): its name and size. Answers the id its pieces go to (`append_file_upload`).
+    /// Refused above `MAX_UPLOAD_BYTES` (`attachment_too_large`).
+    pub async fn begin_file_upload(
+        &self,
+        name: String,
+        size: u64,
+    ) -> Result<mail_model::UploadId, CoreError> {
+        self.compose()?.begin_upload(name, size).await
+    }
+
+    /// Stage 23: the next piece of an upload (at most `MAX_UPLOAD_CHUNK_BYTES`), at `offset` =
+    /// the bytes written so far. Answers the bytes written now.
+    pub async fn append_file_upload(
+        &self,
+        upload: mail_model::UploadId,
+        offset: u64,
+        bytes: Vec<u8>,
+    ) -> Result<u64, CoreError> {
+        self.compose()?.append_upload(upload, offset, bytes).await
+    }
+
+    /// Stage 23: drops an upload the page gave up.
+    pub async fn discard_file_upload(&self, upload: mail_model::UploadId) -> Result<(), CoreError> {
+        self.compose()?.discard_upload(upload).await
+    }
+
+    /// Stage 23: complete uploads attached like files from the system dialog, with the same
+    /// limits; they are used up either way.
+    pub async fn add_uploaded_attachments(
+        &self,
+        id: mail_model::DraftId,
+        uploads: Vec<mail_model::UploadId>,
+    ) -> Result<mail_model::Draft, CoreError> {
+        self.compose()?.add_uploaded_attachments(id, uploads).await
     }
 
     pub async fn remove_draft_attachment(

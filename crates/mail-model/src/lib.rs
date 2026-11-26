@@ -115,11 +115,11 @@ pub use compose::{
     DraftSizeCheck, DraftState, DraftSummary, DraftUpdate, InlineImagesAdded,
     LARGE_ATTACHMENT_WARNING_BYTES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_CONTACT_SUGGESTIONS,
     MAX_DRAFT_BODY_BYTES, MAX_INLINE_IMAGE_BYTES, MAX_RECIPIENTS, MAX_SCHEDULE_AHEAD_MS,
-    MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS, MAX_TEXT_SIGNATURE_BYTES, MISSED_SEND_GRACE_MS,
-    MissedSendDecision, NewDraft, OriginalRef, OutgoingMail, QuoteLanguage, QuotePosition,
-    ReadReceiptAnswer, ReadReceiptInfo, ReadReceiptPolicy, ReadReceiptRequest, ReceiptDisposition,
-    ReceivedReadReceipt, SendJob, SendLater, SendPhase, SendState, SentCopyMode, ServerCopy,
-    UnclearDecision,
+    MAX_SEND_DELAY_SECS, MAX_SUBJECT_CHARS, MAX_TEXT_SIGNATURE_BYTES, MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_CHUNK_BYTES, MISSED_SEND_GRACE_MS, MissedSendDecision, NewDraft, OriginalRef,
+    OutgoingMail, QuoteLanguage, QuotePosition, ReadReceiptAnswer, ReadReceiptInfo,
+    ReadReceiptPolicy, ReadReceiptRequest, ReceiptDisposition, ReceivedReadReceipt, SendJob,
+    SendLater, SendPhase, SendState, SentCopyMode, ServerCopy, UnclearDecision, UploadId,
 };
 pub use contact_lists::{
     ContactExport, ContactList, ContactListId, ContactListMember, ContactListSummary,
