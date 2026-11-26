@@ -206,6 +206,108 @@ pub struct SettingsSyncStatus {
     /// the account keeps its servers (and the password stays with them) until the user
     /// confirms or dismisses the change (`resolveServerChange`, decision 0040).
     pub server_changes: Vec<SyncServerChange>,
+    /// Stage 22 (decision 0076): this device's request for passwords from another device
+    /// (`startPasswordTransfer`), or how the last one ended; null if there is none.
+    pub password_transfer: Option<PasswordTransfer>,
+    /// Stage 22: requests of other devices for passwords this device may have
+    /// (`openPasswordRequest`, `givePasswords`, `declinePasswordRequest`).
+    pub password_requests: Vec<PasswordRequest>,
+}
+
+/// Stage 22 (decision 0076): where this device's request for passwords stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PasswordTransferState {
+    /// The request is in the sync folder; no device answered yet.
+    Waiting,
+    /// A device answered: compare `code` with the one it shows and confirm there.
+    Confirm,
+    /// The passwords arrived (`stored`; `skipped` came without one).
+    Done,
+    /// The other device declined.
+    Declined,
+    /// Nobody answered within 15 minutes.
+    Expired,
+    /// The answer could not be read (not sealed to this request) or the request vanished.
+    Failed,
+}
+
+/// Stage 22: this device's request for passwords from another device.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordTransfer {
+    pub state: PasswordTransferState,
+    /// The code both devices show, `123 456`; null until a device answered.
+    pub code: Option<String>,
+    /// The name of the device that answered.
+    pub other_device: Option<String>,
+    /// Unix ms when the request runs out.
+    #[specta(type = Number)]
+    pub expires_at: i64,
+    /// The accounts asked for.
+    pub accounts: Vec<AccountId>,
+    /// Accounts whose password arrived and is stored.
+    pub stored: Vec<AccountId>,
+    /// Accounts that came back without a password here (servers differ, none on the other
+    /// device, or no longer waiting).
+    pub skipped: Vec<AccountId>,
+}
+
+/// Stage 22: where a request of another device stands on this device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PasswordRequestState {
+    /// Seen in the folder; not answered here.
+    Open,
+    /// Answered here; waiting for the new device to send its key.
+    Connecting,
+    /// Compare `code` with the one the new device shows, then choose the accounts.
+    Confirm,
+    /// The new device answered another device.
+    OtherDevice,
+    /// The key the new device sent does not fit its request (tampered with): nothing is sent.
+    Failed,
+    /// The passwords were sent.
+    Given,
+    /// Declined here.
+    Declined,
+}
+
+/// Stage 22: whether this device can give the password of an account a request asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PasswordRequestAccountState {
+    /// The account has a password here and the same servers on both devices.
+    Ready,
+    /// Host, port, security or user name of IMAP or SMTP differ (decision 0040): never sent.
+    ServersDiffer,
+    /// No password here (it signs in with its provider, or waits for its password too).
+    NoPassword,
+    /// The account does not exist here.
+    Unknown,
+}
+
+/// Stage 22: an account a request asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordRequestAccount {
+    pub account_id: AccountId,
+    pub state: PasswordRequestAccountState,
+}
+
+/// Stage 22: another device asks for passwords.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordRequest {
+    pub request_id: String,
+    /// The name the new device gave itself (not proof of anything; the code is).
+    pub device_name: String,
+    #[specta(type = Number)]
+    pub expires_at: i64,
+    pub state: PasswordRequestState,
+    /// The code to compare (`confirm`).
+    pub code: Option<String>,
+    pub accounts: Vec<PasswordRequestAccount>,
 }
 
 /// Server settings that arrived through the settings sync for an existing account and differ
@@ -346,11 +448,23 @@ mod tests {
             accounts_needing_password: vec![],
             detected_accounts: vec![],
             server_changes: vec![],
+            password_transfer: Some(PasswordTransfer {
+                state: PasswordTransferState::Confirm,
+                code: Some("123 456".into()),
+                other_device: Some("Mac".into()),
+                expires_at: 1_764_000_900_000,
+                accounts: vec![],
+                stored: vec![],
+                skipped: vec![],
+            }),
+            password_requests: vec![],
         };
         let json = serde_json::to_value(&status).expect("serialize");
         assert_eq!(json["state"], "needsPassphrase");
         assert_eq!(json["lastSyncAt"], 1_764_000_000_000_i64);
         assert_eq!(json["questions"][0]["type"], "accountRemoved");
+        assert_eq!(json["passwordTransfer"]["state"], "confirm");
+        assert_eq!(json["passwordTransfer"]["otherDevice"], "Mac");
         assert_eq!(
             json["questions"][0]["accountId"],
             "6f9619ff-8b86-4d11-b42d-00c04fc964ff"

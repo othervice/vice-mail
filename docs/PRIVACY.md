@@ -68,8 +68,12 @@ computer can read your stored mail, as they can with Apple Mail or Outlook.
 
 ## What is in the keychain
 
-All entries are under the service name `org.vicemail.desktop`, in the macOS login keychain or in
-Windows Credential Manager (generic credentials):
+All entries are under the service name `org.vicemail.desktop`. On **Windows** each is a generic
+credential of its own in Credential Manager. On **macOS** (since 0.1.3, decision 0075) they are all
+inside **one** item of the login keychain, an application password named `vault` (or `vault.2`,
+`vault.3`, … after changes): its content is a list of the entries below with their secrets, so an
+update of the app makes macOS ask once instead of once per entry. Older versions kept one item
+per entry; the first start of 0.1.3 moves them into the vault and deletes them where macOS allows.
 
 | Entry | Holds |
 |---|---|
@@ -79,7 +83,9 @@ Windows Credential Manager (generic credentials):
 | `mcp-client:<id>` | the key an AI client uses to prove itself to the app's MCP server |
 | `settings-sync:key` | the settings sync key (the passphrase itself is never stored) |
 
-Keychain entries are not part of the settings sync: every device keeps its own.
+Keychain entries are not part of the settings sync: every device keeps its own. Since 0.1.3 a
+new device can ask for passwords on purpose ("Take over passwords from another device", see
+"Settings sync" below); nothing goes along on its own.
 
 ## Settings sync
 
@@ -88,6 +94,14 @@ If you turn on the settings sync, the app writes encrypted entries to a hidden f
 [age](https://age-encryption.org) using a key protected by your passphrase. Passwords, API keys and
 other secrets are never part of them. Your mail server can see how many entries there are, their
 size and when they change, but not what they contain. Details: [SYNC.md](SYNC.md).
+
+**Passwords from another device** (since 0.1.3): a device that joined the sync can ask another one
+for the passwords of accounts it took over. Both show the same six-digit code; only after you
+confirm on the device that has the passwords does it send them, encrypted a second time to a key
+that exists only in the new device's memory, and only for accounts whose servers are the same on
+both devices. Accounts that sign in with Microsoft or Google sign in on each device. The exchange
+lies in the sync folder for at most 15 minutes (usually seconds) and is deleted afterwards; your
+mail server sees four more encrypted entries and their times, not what they hold.
 
 ## The MCP server for AI clients
 

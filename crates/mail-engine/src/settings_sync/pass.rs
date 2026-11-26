@@ -270,6 +270,9 @@ impl PassReport {
 #[derive(Debug, Clone)]
 pub struct PreparedPass {
     pub plan: SyncPlan,
+    /// Stage 22: the entries of password transfers in the listing (not records; the
+    /// integration handles them, `super::transfer`).
+    pub transfers: Vec<RemoteEntry>,
     /// Older copies of this key's key record (an interrupted passphrase change).
     old_key_records: Vec<EntryHandle>,
     listed_at_ms: i64,
@@ -321,6 +324,7 @@ pub async fn prepare_pass<T: SettingsTransport>(
 pub struct FetchedPass<'a> {
     planner: Planner<'a>,
     opened: Vec<(EntryHandle, Result<SyncRecord, super::crypto::OpenError>)>,
+    transfers: Vec<RemoteEntry>,
     old_key_records: Vec<EntryHandle>,
     listed_at_ms: i64,
 }
@@ -332,6 +336,7 @@ impl FetchedPass<'_> {
         let plan = self.planner.finish(self.opened, hlc)?;
         Ok(PreparedPass {
             plan,
+            transfers: self.transfers,
             old_key_records: self.old_key_records,
             listed_at_ms: self.listed_at_ms,
         })
@@ -390,9 +395,19 @@ pub async fn fetch_pass<'a, T: SettingsTransport>(
             })
             .collect()
     };
+    let transfers = listing
+        .iter()
+        .filter(|e| {
+            e.header
+                .opaque_id
+                .starts_with(super::crypto::TRANSFER_PREFIX)
+        })
+        .cloned()
+        .collect();
     Ok(FetchedPass {
         planner,
         opened,
+        transfers,
         old_key_records,
         listed_at_ms,
     })
@@ -410,6 +425,7 @@ pub async fn execute_pass<T: SettingsTransport>(
         plan,
         old_key_records,
         listed_at_ms,
+        ..
     } = prepared;
     // Postponed records were listed but not looked at: the folder was not seen completely.
     let complete = !plan

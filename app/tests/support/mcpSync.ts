@@ -17,6 +17,7 @@ import {
   type McpSettingsInfo,
   type McpSetup,
   type McpStatus,
+  type PasswordRequest,
   type SettingsSyncPreview,
   type SettingsSyncStatus,
   type SyncDevice,
@@ -92,6 +93,8 @@ export const SYNC_OFF: SettingsSyncStatus = {
   accountsNeedingPassword: [],
   detectedAccounts: [],
   serverChanges: [],
+  passwordTransfer: null,
+  passwordRequests: [],
 };
 
 export function makeDevice(overrides: Partial<SyncDevice> = {}): SyncDevice {
@@ -104,6 +107,22 @@ export function makeDevice(overrides: Partial<SyncDevice> = {}): SyncDevice {
     ...overrides,
   };
 }
+
+/** Stage 22: the request of another device as a pass shows it. */
+export function makePasswordRequest(overrides: Partial<PasswordRequest> = {}): PasswordRequest {
+  return {
+    requestId: "0123456789abcdef0123456789abcdef",
+    deviceName: "New Mac",
+    expiresAt: Date.UTC(2026, 10, 26, 10, 15),
+    state: "open",
+    code: null,
+    accounts: [],
+    ...overrides,
+  };
+}
+
+/** Stage 22: how long a request runs. */
+export const TRANSFER_LIFETIME_MS = 15 * 60 * 1000;
 
 export function syncStatus(overrides: Partial<SettingsSyncStatus> = {}): SettingsSyncStatus {
   return { ...SYNC_OFF, ...overrides };
@@ -347,6 +366,51 @@ export function createMcpSyncFake(options: McpSyncFakeOptions, deps: Deps) {
       case "disable_settings_sync":
         sync = { ...SYNC_OFF, detectedAccounts: sync.accountId ? [sync.accountId] : [] };
         return syncNow();
+      // ---- Stage 22 (decision 0076): passwords from another device ----
+      case "start_password_transfer": {
+        if (sync.state === "off") return reject("sync_off");
+        const waiting = syncNow().accountsNeedingPassword;
+        if (waiting.length === 0) return reject("invalid_argument", "no account waits for its password");
+        sync = {
+          ...sync,
+          passwordTransfer: {
+            state: "waiting",
+            code: null,
+            otherDevice: null,
+            expiresAt: Date.now() + TRANSFER_LIFETIME_MS,
+            accounts: waiting,
+            stored: [],
+            skipped: [],
+          },
+        };
+        return syncNow();
+      }
+      case "cancel_password_transfer":
+        sync = { ...sync, passwordTransfer: null };
+        return syncNow();
+      case "open_password_request":
+      case "give_passwords":
+      case "decline_password_request": {
+        const requestId = args["requestId"] as string;
+        const request = sync.passwordRequests.find((r) => r.requestId === requestId);
+        if (!request) return reject("not_found");
+        let state = request.state;
+        if (cmd === "open_password_request") state = request.state === "open" ? "connecting" : request.state;
+        if (cmd === "decline_password_request") state = "declined";
+        if (cmd === "give_passwords") {
+          if (request.state !== "confirm") return reject("invalid_argument", "compare the codes first");
+          const ids = args["accountIds"] as string[];
+          if (!ids.some((id) => request.accounts.some((a) => a.accountId === id && a.state === "ready"))) {
+            return reject("invalid_argument", "nothing to give");
+          }
+          state = "given";
+        }
+        sync = {
+          ...sync,
+          passwordRequests: sync.passwordRequests.map((r) => (r === request ? { ...r, state, code: state === "confirm" ? r.code : null } : r)),
+        };
+        return syncNow();
+      }
       case "set_sync_device_name": {
         const name = args["name"] as string;
         if ([...name].length < 1 || [...name].length > 64) return reject("invalid_argument", "name");

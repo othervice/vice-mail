@@ -4,6 +4,7 @@
 mod capture;
 mod convergence;
 mod limits;
+mod password_transfer;
 mod perf;
 mod scenarios;
 mod server_change;

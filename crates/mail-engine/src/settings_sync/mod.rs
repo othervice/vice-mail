@@ -15,6 +15,7 @@
 
 pub mod crypto;
 pub mod error;
+mod handover;
 pub mod hlc;
 mod imap;
 pub(crate) mod local;
@@ -23,6 +24,7 @@ pub mod pass;
 pub mod plan;
 pub mod record;
 pub(crate) mod service;
+pub mod transfer;
 pub mod transport;
 
 #[cfg(test)]

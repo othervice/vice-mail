@@ -378,6 +378,10 @@ impl<C: Connector> AppCore<C> {
         if let Some(reading) = &core.inner.reading {
             reading.clear_open_dir().await;
         }
+        // Stage 22 (decision 0075): secrets kept one keychain item each (before 0.1.3) move into
+        // the vault on macOS. In the background: macOS may ask once per old item. Reads that come
+        // first find an old item themselves and move it.
+        core.migrate_secrets().await;
         // Stage 9 before the sync starts, so no arrival is missed.
         let categories_pending = crate::comfort::start(&core).await;
         // Stage 10: scheduled sends missed while the app was off are asked about, not sent;
@@ -406,6 +410,49 @@ impl<C: Connector> AppCore<C> {
             core.inner.comfort.kick_categories();
         }
         core
+    }
+
+    /// Every keychain entry the database knows of: the accounts' (with the pieces of long
+    /// sign-in tokens), the AI clients', the AI profiles' with a key, and the sync key.
+    async fn known_secret_names(&self) -> Result<Vec<CredentialRef>, CoreError> {
+        let store = self.store()?;
+        let mut names = vec![CredentialRef::for_settings_sync()];
+        for account in store.accounts().await? {
+            let key = CredentialRef::parse(&account.credential_ref)?;
+            if key.oauth_provider().is_some() {
+                names.extend((1..crate::oauth::store::MAX_PIECES).map(|n| key.piece(n)));
+            }
+            names.push(key);
+        }
+        for client in store.mcp_clients().await? {
+            if let Ok(key) = CredentialRef::parse(&client.credential_ref) {
+                names.push(key);
+            }
+        }
+        let ai = crate::ai::settings::load(store).await?;
+        names.extend(
+            ai.profiles
+                .iter()
+                .filter(|p| p.has_key)
+                .map(|p| CredentialRef::for_ai_profile(&p.id)),
+        );
+        Ok(names)
+    }
+
+    /// Starts moving the old keychain entries into the store's own form (see above).
+    async fn migrate_secrets(&self) {
+        let names = match self.known_secret_names().await {
+            Ok(names) => names,
+            Err(err) => {
+                tracing::warn!(error = %err, "keychain entries to move unknown; moved when read");
+                return;
+            }
+        };
+        let credentials = self.inner.credentials.clone();
+        tokio::spawn(async move {
+            // Logged by `Credentials::migrate`; what failed is moved when it is read.
+            let _ = credentials.migrate(names).await;
+        });
     }
 
     async fn start_stored_accounts(&self) {
@@ -738,6 +785,21 @@ impl<C: Connector> AppCore<C> {
         } else {
             self.check_login(&account.imap, password.clone()).await?;
         }
+        self.install_password(account, password).await?;
+        tracing::info!(account = %id, "password replaced");
+        Ok(())
+    }
+
+    /// Stores `password` for `account` and reconnects with it; clears the "taken over, needs
+    /// its password" mark. The end of [`AppCore::update_password`]; stage 22 (decision 0076):
+    /// also a password another device gave this one.
+    pub(crate) async fn install_password(
+        &self,
+        account: mail_store::StoredAccount,
+        password: Secret<String>,
+    ) -> Result<(), CoreError> {
+        let store = self.store()?;
+        let id = account.id;
         let _admin = self.inner.admin.lock().await;
         let key = CredentialRef::parse(&account.credential_ref)?;
         self.inner.credentials.set(&key, password.clone()).await?;
@@ -759,7 +821,6 @@ impl<C: Connector> AppCore<C> {
         if let Err(err) = store.clear_sync_adopted(id).await {
             tracing::warn!(account = %id, error = %err, "adopted mark not cleared");
         }
-        tracing::info!(account = %id, "password replaced");
         Ok(())
     }
 

@@ -230,9 +230,11 @@ pub use send::{
     SmtpReply, SmtpStep,
 };
 pub use settings_sync::{
-    MIN_SYNC_PASSPHRASE_CHARS, SETTINGS_SYNC_FOLDER, SYNC_ID_HEADER, SYNC_VERSION_HEADER,
-    SettingsSyncFailure, SettingsSyncPreview, SettingsSyncState, SettingsSyncStatus, SyncDevice,
-    SyncFolder, SyncFolderConnector, SyncFolderEntry, SyncFolderState, SyncKindCount, SyncQuestion,
+    MIN_SYNC_PASSPHRASE_CHARS, PasswordRequest, PasswordRequestAccount,
+    PasswordRequestAccountState, PasswordRequestState, PasswordTransfer, PasswordTransferState,
+    SETTINGS_SYNC_FOLDER, SYNC_ID_HEADER, SYNC_VERSION_HEADER, SettingsSyncFailure,
+    SettingsSyncPreview, SettingsSyncState, SettingsSyncStatus, SyncDevice, SyncFolder,
+    SyncFolderConnector, SyncFolderEntry, SyncFolderState, SyncKindCount, SyncQuestion,
     SyncServerChange, is_settings_sync_folder,
 };
 pub use snippets::{

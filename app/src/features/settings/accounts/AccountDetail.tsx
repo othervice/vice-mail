@@ -19,6 +19,7 @@ import { OAuthSignInAgain } from "./OAuthSignIn";
 import { IdentitiesBlock } from "../../identities/IdentitiesBlock";
 import { HiddenAccountBlock } from "../../unified/HiddenAccountBlock";
 import { useResolveServerChange, useSettingsSyncStatus } from "../../settings-sync/queries";
+import { PasswordFromOtherDevice } from "../../settings-sync/PasswordTransfer";
 
 function Block({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -392,6 +393,8 @@ export function AccountDetail({ accountId }: { accountId: string }) {
         </dl>
       </Block>
       <GmailNote account={account} />
+      {/* Stage 22: an account the settings sync brought can take its password from another device. */}
+      <PasswordFromOtherDevice account={account} />
       {/* Stage 14: an account that signs in with its provider has no password. */}
       {account.oauth ? <OAuthSignInAgain account={account} /> : <PasswordChange account={account} />}
       {/* Stage 7: sender addresses, and whether the account shows in the unified inbox. */}

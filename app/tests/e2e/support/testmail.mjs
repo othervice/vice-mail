@@ -120,6 +120,36 @@ export function keychainHasEntry() {
   }
 }
 
+/**
+ * Stage 22 (decision 0075): the test build keeps every secret in one keychain item, `vault` or
+ * `vault.<n>`. One that an aborted run left behind belongs to an older build, and the next build
+ * would wait for a keychain dialog nobody answers. Removes such items of the test service only
+ * (other items stay: account-sync.e2e.mjs reports them). Reads attributes only, so macOS shows no
+ * dialog. Returns the names removed.
+ */
+export function removeLeftoverVault() {
+  let listing;
+  try {
+    listing = execFileSync("security", ["dump-keychain"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
+  } catch {
+    return [];
+  }
+  const names = [];
+  for (const block of listing.split(/^keychain: /m)) {
+    if (!block.includes(`"svce"<blob>="${KEYCHAIN_SERVICE}"`)) continue;
+    const account = /"acct"<blob>="([^"]*)"/.exec(block)?.[1];
+    if (account && /^vault(\.\d+)?$/.test(account)) names.push(account);
+  }
+  for (const name of names) {
+    try {
+      execFileSync("security", ["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", name], { stdio: "ignore" });
+    } catch {
+      // Gone meanwhile.
+    }
+  }
+  return names;
+}
+
 /** PID of the running test server, checked against the process list. */
 export function serverPid() {
   const pid = Number(fs.readFileSync(PID_FILE, "utf8").trim());

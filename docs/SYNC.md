@@ -1,13 +1,14 @@
 # Settings sync format
 
-Status 23.11.2026. The logic (records, versions, merge rules, encryption, planning, the pass
+Status 26.11.2026 (stage 22: passwords from another device). The logic (records, versions, merge rules, encryption, planning, the pass
 over a transport) is in `crates/mail-engine/src/settings_sync/`; the integration (change
 capture in the store, the IMAP folder, the flows in the core) is described in decision 0022.
 The settings page itself (UI) follows.
 
 The settings sync merges what only the app knows between devices. The mail server already
 syncs mails, folders, flags and drafts; they are not part of this. Passwords, tokens and keys
-never leave the device.
+are never records; a password leaves a device only when the user gives it to a new device on
+purpose (see "Passwords from another device", decision 0076).
 
 ## Folder
 
@@ -38,7 +39,8 @@ never leave the device.
   between leaves two versions; the next pass of any device removes the loser.
 - **Header fields** are the only plaintext besides size and time:
   - `X-Settings-Sync-Id`, the *opaque id*: 32 lowercase hex digits for a record, `key-` plus 32
-    hex digits for the key record;
+    hex digits for the key record, `xfer-` plus 32 hex digits for an entry of a password transfer
+    (stage 22);
   - `X-Settings-Sync-Version`, the *version*: the hybrid logical clock value,
     `TTTTTTTTTTTTT-CCCCCCCC-<device uuid>` (13 decimal digits of Unix milliseconds, 8 hex
     digits of counter, the writing device's random id), for example
@@ -212,7 +214,54 @@ Content is only accepted through a validating type:
   taken over from another device starts read-only. Other servers for an existing account wait
   for the user (see "Accounts taken over" below).
 
-## Versions
+The entries of a password transfer (below) are not records and do not go through this check: the
+passwords in them are sealed a second time to a key only the new device holds, under neutral
+object keys (`sealed`, `value`).
+
+## Passwords from another device
+
+Stage 22 (decision 0076). An account taken over from another device has no password here. The
+new device can ask a device that has it, in four short-lived entries of the sync folder. Each is
+an age file encrypted to the sync key like a record, with the same two header fields; the opaque
+id is `xfer-` + the first 16 bytes (hex) of `HMAC-SHA-256(id_key, "vice-mail settings-sync v1
+transfer id" 0 kind 0 request id 0 device id)`. The plaintext is JSON (padded to 256 bytes),
+`{"format": 1, "opaqueId", "version", "requestId", "device", "expiresMs", "message": {...}}`,
+checked against the header like a record (opaque id recomputed, version equal), strict shapes.
+
+| Kind | Written by | `message` |
+|---|---|---|
+| `request` | the new device | `{deviceName, commitment, accounts: [{account, signIn, imap, smtp}]}`: the accounts that wait for their password here (passwords and API tokens, never sign-ins) with this device's servers; `commitment` = hex `SHA-256("vice-mail password transfer v1 commitment" 0 requestId 0 publicKey)` of a fresh age X25519 key |
+| `challenge` | a device the user opened "Give passwords" on | `{deviceName, nonce}`, 64 random hex digits |
+| `reveal` | the new device, for the first challenge only | `{publicKey, challengeDevice, challengeNonce}` |
+| `response` | the device that challenged, after the user confirmed | `{deviceName, declined, sealed?}`: `sealed` is an age file (ASCII armor) to `publicKey` with `{"format": 1, "requestId", "items": [{account, signIn, imap, smtp, value}]}`; absent when declined |
+
+- **Request id:** 32 random hex digits. **Expiry:** 15 minutes after the request, copied into
+  every answer.
+- **Code:** both devices show six digits, `SHA-256("vice-mail password transfer v1 code" 0
+  requestId 0 publicKey 0 nonce)`, the first four bytes as a number modulo 1,000,000, written
+  `123 456`. The key is committed before the nonce exists, and the nonce is chosen after the
+  commitment is known, so nobody in the folder can pick a key or nonce that gives the same code
+  on both sides. A revealed key that does not fit the commitment stops the giving device.
+- **The new device** keeps the private key in memory only (a restart ends the request), answers
+  only the first challenge (by version, then UID), and accepts a response only from that device.
+  It stores a password only for an account it asked for that still waits for its password, with
+  the same kind of secret and exactly the servers sent along; writing stays off. Then it deletes
+  every entry of the request.
+- **The giving device** shows the request's device name, the code and the accounts; one is
+  offered only if it has a password here and the same IMAP and SMTP servers (host, port,
+  security, user name) on both devices (decision 0040). Sign-in tokens are never sent.
+- **Polling:** while a request of this device runs, or a challenge waits for its reveal, the
+  device checks the folder every 2 seconds; the "Give passwords" page runs a pass at once and every
+  3 seconds until a request shows. Transfer entries in the folder keep passes from being skipped.
+- **Cleanup:** the new device deletes its entries when the exchange ends (or at once after a
+  restart: a request or reveal of this device it has no key for). Any device deletes answers
+  whose request is gone, entries whose expiry plus five minutes (the clock bound) has passed,
+  and, without reading them, entries whose header version is older than 20 minutes. Damaged or
+  mismatching ones are deleted at once; at most 64 entries of at most 512 KiB are read per pass.
+- **Merging:** passes leave `xfer-` entries out like key records; they never count as a record,
+  version or rejected entry. A device of 0.1.2 cannot parse the id and counts them as entries
+  left out ("ignored") while they exist.
+
 
 A hybrid logical clock (Kulkarni et al. 2014): (wall time in ms, counter, device id), ordered in
 this sequence. A local change takes `max(last, wall clock)` and increments the counter on
@@ -295,7 +344,8 @@ in the folder, that was never synced takes the folder's id (the keychain entry, 
 mail and the local data stay); its local records are replaced by the folder's.
 
 **Accounts taken over** start read-only and without a password ("password missing"), and
-without a default identity of their own (their identities come from the folder). Their keychain
+without a default identity of their own (their identities come from the folder). The password can
+be typed in, or taken over from a device that has it (see "Passwords from another device"). Their keychain
 entry gets a fresh random name (`synced:` and 32 hex digits) instead of the account UUID, so a
 password this device already holds under that UUID is never used for servers named only by the
 folder (decision 0040).
@@ -356,6 +406,9 @@ account that takes the folder's id when a device joins.
   record changes, and how many records there are.
 - **The writing device's random id** in every version: how many devices take part and which
   device wrote what when. The id is random and not tied to the hardware.
+
+During a password transfer it sees four more entries (`xfer-` ids, the writing devices' random
+ids in the versions) appear and go within minutes; not which accounts or passwords.
 
 It does not see kinds, ids, contents, account addresses or which kind a record is. It can
 delete, withhold or replay entries; deletions heal from the devices' local copies, replays are

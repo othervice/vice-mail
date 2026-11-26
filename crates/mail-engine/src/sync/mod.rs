@@ -88,6 +88,9 @@ pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 /// Stage 11: pause between a change and the settings pass that uploads it.
 pub const SETTINGS_SYNC_DEBOUNCE: Duration = Duration::from_secs(2);
 
+/// Stage 22: interval of settings passes while a password transfer runs.
+pub const PASSWORD_TRANSFER_POLL: Duration = Duration::from_secs(2);
+
 /// Tunables of the sync engine. The defaults are the product values; tests shorten them.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
@@ -115,6 +118,9 @@ pub struct SyncConfig {
     /// Stage 11: scrypt work factor (log2 N) for new key records; the product uses 18
     /// (`docs/SYNC.md`), tests 10.
     pub settings_sync_work_factor: u8,
+    /// Stage 22: how often the settings sync checks its folder while a password transfer runs
+    /// (decision 0076).
+    pub password_transfer_poll: Duration,
 }
 
 impl Default for SyncConfig {
@@ -135,6 +141,7 @@ impl Default for SyncConfig {
             settings_sync_auto: true,
             settings_sync_debounce: SETTINGS_SYNC_DEBOUNCE,
             settings_sync_work_factor: 18,
+            password_transfer_poll: PASSWORD_TRANSFER_POLL,
         }
     }
 }

@@ -34,18 +34,18 @@ const EVIL_SMTP: &str = "smtp.attacker.example";
 // The sync folder in memory
 
 #[derive(Debug, Default)]
-struct FolderState {
-    exists: bool,
-    next_uid: Uid,
-    modseq: u64,
-    messages: BTreeMap<Uid, Vec<u8>>,
+pub(super) struct FolderState {
+    pub(super) exists: bool,
+    pub(super) next_uid: Uid,
+    pub(super) modseq: u64,
+    pub(super) messages: BTreeMap<Uid, Vec<u8>>,
     /// Every UID whose body was read (finding F2).
     reads: Vec<Uid>,
 }
 
 /// One connection to the shared in-memory folder.
 #[derive(Debug, Clone)]
-struct MemFolder(Arc<Mutex<FolderState>>);
+pub(super) struct MemFolder(pub(super) Arc<Mutex<FolderState>>);
 
 impl MemFolder {
     fn lock(&self) -> std::sync::MutexGuard<'_, FolderState> {
@@ -144,13 +144,13 @@ impl SyncFolder for MemFolder {
 // A connector that records every login
 
 /// Every login attempt: the host it went to and the password it carried.
-type Logins = Arc<Mutex<Vec<(String, String)>>>;
+pub(super) type Logins = Arc<Mutex<Vec<(String, String)>>>;
 
 #[derive(Debug, Clone)]
-struct Recording {
-    fake: FakeConnector,
-    folder: Arc<Mutex<FolderState>>,
-    logins: Logins,
+pub(super) struct Recording {
+    pub(super) fake: FakeConnector,
+    pub(super) folder: Arc<Mutex<FolderState>>,
+    pub(super) logins: Logins,
 }
 
 impl Recording {
@@ -207,7 +207,7 @@ struct Victim {
     account: AccountId,
 }
 
-fn server(host: &str, port: u16) -> ServerSettings {
+pub(super) fn server(host: &str, port: u16) -> ServerSettings {
     ServerSettings {
         host: host.into(),
         port,
@@ -216,7 +216,7 @@ fn server(host: &str, port: u16) -> ServerSettings {
     }
 }
 
-async fn start_core(
+pub(super) async fn start_core(
     server: &Arc<FakeServer>,
     folder: &Arc<Mutex<FolderState>>,
 ) -> (TempDir, AppCore<Recording>, Arc<MemorySecretStore>, Logins) {
@@ -317,7 +317,7 @@ impl Victim {
 }
 
 /// Holds the sync key and writes into the same folder.
-struct Attacker {
+pub(super) struct Attacker {
     key: SyncKey,
     state: LocalState,
     hlc: HlcClock,
@@ -326,8 +326,16 @@ struct Attacker {
 
 impl Attacker {
     async fn with_key_of(victim: &Victim, folder: &Arc<Mutex<FolderState>>) -> Self {
-        let text = victim
-            .keychain
+        Self::with_key_of_core(&victim.core, &victim.keychain, folder).await
+    }
+
+    /// With the key a device holds (stage 22 uses it too).
+    pub(super) async fn with_key_of_core(
+        _core: &AppCore<Recording>,
+        keychain: &MemorySecretStore,
+        folder: &Arc<Mutex<FolderState>>,
+    ) -> Self {
+        let text = keychain
             .get(&CredentialRef::for_settings_sync())
             .expect("keychain")
             .expect("sync key");
@@ -360,7 +368,7 @@ impl Attacker {
     }
 
     /// Writes new fields of the account record `id`.
-    async fn write_account(&mut self, id: AccountId, fields: Value) {
+    pub(super) async fn write_account(&mut self, id: AccountId, fields: Value) {
         let values: BTreeMap<String, Value> = fields
             .as_object()
             .expect("object")
@@ -379,7 +387,7 @@ fn wire(host: &str, port: u16) -> Value {
 }
 
 /// Lets the account tasks that a pass started try to connect.
-async fn settle() {
+pub(super) async fn settle() {
     tokio::time::sleep(Duration::from_millis(300)).await;
 }
 

@@ -1655,3 +1655,101 @@ async fn reading_list_favourites_colours_and_blocked_senders_reach_the_other_dev
     }
     admin.logout().await.ok();
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stage 22 (decision 0076): passwords from another device, through the real folder.
+
+/// Bodies of every entry whose opaque id starts with `xfer-`.
+async fn transfer_bodies(env: &TestEnv) -> Vec<String> {
+    let uids: Vec<u32> = entries(env)
+        .await
+        .into_iter()
+        .filter(|(_, (id, _))| id.starts_with("xfer-"))
+        .map(|(uid, _)| uid)
+        .collect();
+    if uids.is_empty() {
+        return Vec::new();
+    }
+    let mut folder = admin_folder(env).await;
+    let bodies = folder
+        .read(&UidSet::from_uids(uids))
+        .await
+        .expect("read transfer entries");
+    folder.logout().await.ok();
+    bodies
+        .into_iter()
+        .map(|(_, body)| String::from_utf8_lossy(&body).into_owned())
+        .collect()
+}
+
+#[tokio::test]
+#[ignore = "needs the test server"]
+async fn a_password_goes_to_the_new_device_through_the_folder() {
+    let _serial = SERVER.lock().await;
+    let env = TestEnv::require();
+    clean(&env).await;
+    let mut a = Device::first(&env).await;
+    let bob = a.add(&env, "bob").await;
+    a.core
+        .set_sync_device_name("Old Mac".into())
+        .await
+        .expect("name");
+    a.pass().await;
+    let mut b = Device::second(&env).await;
+    let status = b.pass().await;
+    assert_eq!(status.accounts_needing_password, [bob], "{status:?}");
+
+    let status = b.core.start_password_transfer().await.expect("start");
+    assert_eq!(
+        status.password_transfer.expect("own").state,
+        mail_model::PasswordTransferState::Waiting
+    );
+    let status = a.pass().await;
+    let request = status.password_requests.first().expect("request").clone();
+    assert_eq!(
+        request.accounts[0].state,
+        mail_model::PasswordRequestAccountState::Ready
+    );
+    a.core
+        .open_password_request(request.request_id.clone())
+        .await
+        .expect("open");
+    let own = b.pass().await.password_transfer.expect("own");
+    assert_eq!(own.state, mail_model::PasswordTransferState::Confirm);
+    assert_eq!(own.other_device.as_deref(), Some("Old Mac"));
+    let status = a.pass().await;
+    assert_eq!(status.password_requests[0].code, own.code, "the same code");
+    a.core
+        .give_passwords(request.request_id, vec![bob])
+        .await
+        .expect("give");
+
+    // Four entries in the folder: request, challenge, reveal, response; none in plain text.
+    let bodies = transfer_bodies(&env).await;
+    assert_eq!(bodies.len(), 4);
+    let (_, password) = account_settings(&env, "bob");
+    for body in &bodies {
+        assert!(body.contains("-----BEGIN AGE ENCRYPTED FILE-----"));
+        assert!(!body.contains(password.expose_secret().as_str()));
+        assert!(!body.contains("Old Mac") && !body.contains(&env.bob.address));
+    }
+
+    let status = b.pass().await;
+    let own = status.password_transfer.expect("outcome");
+    assert_eq!(own.state, mail_model::PasswordTransferState::Done);
+    assert_eq!(own.stored, [bob]);
+    assert!(status.accounts_needing_password.is_empty());
+    // Bob logs in on B with the password from A.
+    b.idle(bob).await;
+    assert!(
+        transfer_bodies(&env).await.is_empty(),
+        "the exchange left nothing"
+    );
+    assert!(
+        a.pass().await.password_requests.is_empty(),
+        "A forgets the request"
+    );
+    a.shutdown().await;
+    b.shutdown().await;
+    clean(&env).await;
+}

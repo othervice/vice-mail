@@ -100,3 +100,30 @@ export function useDisableSettingsSync() {
 export function useSetSyncDeviceName() {
   return useStatusMutation((name: string) => settingsSyncIpc.setDeviceName(name));
 }
+
+// ---- Stage 22 (decision 0076): passwords from another device ----
+
+/** The new device asks; the code to compare comes with a later status (`settingsSyncChanged`). */
+export function useStartPasswordTransfer() {
+  return useStatusMutation(() => settingsSyncIpc.startPasswordTransfer());
+}
+
+/** Ends the request, or closes how it ended. */
+export function useCancelPasswordTransfer() {
+  return useStatusMutation(() => settingsSyncIpc.cancelPasswordTransfer());
+}
+
+/** The giving device answers a request; the code follows with a later status. */
+export function useOpenPasswordRequest() {
+  return useStatusMutation((requestId: string) => settingsSyncIpc.openPasswordRequest(requestId));
+}
+
+export function useGivePasswords() {
+  return useStatusMutation(({ requestId, accountIds }: { requestId: string; accountIds: AccountId[] }) =>
+    settingsSyncIpc.givePasswords(requestId, accountIds),
+  );
+}
+
+export function useDeclinePasswordRequest() {
+  return useStatusMutation((requestId: string) => settingsSyncIpc.declinePasswordRequest(requestId));
+}

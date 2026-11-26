@@ -147,11 +147,18 @@ replace the old one. Your accounts and mail stay.
 
 **Keychain question after an update:** macOS ties the passwords in your keychain to the app's
 signature. Unsigned builds have no lasting signature identity, so after every update to an unsigned
-version, and once more on the move to the first signed version, macOS asks once per stored entry
-(one per account, plus the settings sync key and AI tokens if you use them) whether "Vice Mail" may
-use it. Enter your Mac's password and choose **Always Allow**. **Allow** lets only this one access
-through, and the app asks again at its next connection. Signed versions keep the same signature
-identity, so later updates should not ask again.
+version, and once more on the move to the first signed version, macOS asks whether "Vice Mail" may
+use its keychain entry. Since 0.1.3 all of the app's passwords and keys are in **one** entry, so it
+asks **once** per update (decision 0075). Enter your Mac's password and choose **Always Allow**.
+**Allow** lets only this one access through, and the app asks again at its next start.
+
+The update to 0.1.3 itself asks one last time per old entry (one per account, plus the settings
+sync key and AI tokens if you use them): the app moves them into the new entry and then deletes
+them. Where macOS does not let the new version delete an entry an older version created, the old
+entry stays in the keychain unused; you can delete entries whose account name is an account ID or
+starts with `oauth:`, `token:`, `synced:`, `ai-profile:`, `mcp-client:` or `settings-sync:` in
+Keychain Access once the app works. Signed versions keep the same signature identity, so later
+updates should not ask at all.
 
 Do not go back to an older version: once a newer version has upgraded the local database, an
 older one refuses to open it.
@@ -283,7 +290,7 @@ The folders are named after the app's identifier, `org.vicemail.desktop`.
 | Logs | `~/Library/Logs/org.vicemail.desktop` | `%LOCALAPPDATA%\org.vicemail.desktop\logs` |
 | Caches (copies of opened attachments, web view cache) | `~/Library/Caches/org.vicemail.desktop` | `%LOCALAPPDATA%\org.vicemail.desktop\attachments`, web view cache under `EBWebView` |
 | Web view data | `~/Library/WebKit/org.vicemail.desktop` | `%LOCALAPPDATA%\org.vicemail.desktop\EBWebView` |
-| Passwords | login keychain: one *application password* per account, service `org.vicemail.desktop`, account name = the account's ID | Credential Manager → Windows Credentials → Generic Credentials: one entry `<account ID>.org.vicemail.desktop` per account |
+| Passwords | login keychain: one *application password* for all of them, service `org.vicemail.desktop`, account name `vault` (or `vault.2`, …; before 0.1.3 one entry per account, account name = the account's ID) | Credential Manager → Windows Credentials → Generic Credentials: one entry `<account ID>.org.vicemail.desktop` per account |
 
 Passwords are never written to the database, the logs or any file of the app; they live only in
 the system's keychain or Credential Manager.
@@ -308,11 +315,12 @@ passwords behind.
    ```
 
 4. Passwords of accounts you did not remove in the app: open **Keychain Access**, search for
-   `org.vicemail.desktop` and delete the entries. Or in Terminal, once per entry:
+   `org.vicemail.desktop` and delete the entries (since 0.1.3 usually one, `vault`). Or in
+   Terminal, once per entry:
 
    ```sh
    security find-generic-password -s org.vicemail.desktop        # shows one entry and its "acct"
-   security delete-generic-password -s org.vicemail.desktop -a <account ID>
+   security delete-generic-password -s org.vicemail.desktop -a <acct of that entry>
    ```
 
 ### Windows

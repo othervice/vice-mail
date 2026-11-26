@@ -270,7 +270,8 @@ impl<'a> Planner<'a> {
                 });
                 continue;
             };
-            if header.opaque_id.is_key_record() {
+            // Key records, and the entries of a password transfer (stage 22), are not records.
+            if header.opaque_id.is_key_record() || header.opaque_id.is_transfer() {
                 continue;
             }
             let ahead_ms = header.version.millis() - ctx.now_ms;
