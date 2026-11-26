@@ -81,10 +81,15 @@ Die Seitenspalte wie im freigegebenen Entwurf; Code `app/src/app/SidebarColumn.t
   Abgeglichen um 18:04     ⟳  ⚙
 ```
 
-**Was „Alle Konten“ zeigt.** Der Posteingang ist der vereinte Posteingang. Später, Markiert und
-Gesendet zeigen wie bisher (und wie die schmale Leiste) das gewählte Konto; vereinte Listen dafür
-fehlen noch (Entscheidung 0085). Gesendet im Abschnitt eines Kontos öffnet bei mehreren Konten den
-Ordner selbst, damit nie zwei Zeilen zugleich als gezeigt gelten.
+**Was „Alle Konten“ zeigt** (Entscheidung 0087). Ab zwei Konten zeigt jede Zeile dort alle
+sichtbaren Konten: der Posteingang den vereinten Posteingang, Später, Markiert, Gesendet und die
+Ansichten unter „Mehr“ eine gemischte Liste wie der vereinte Posteingang (Kontostreifen, jede Zeile
+handelt mit ihrem eigenen Konto, Nur-lesend je Konto); der Kopf der Liste sagt „Alle Konten“.
+Gesendet im Abschnitt eines Kontos öffnet den Ordner dieses Kontos. Eine Zeile von „Alle Konten“
+gilt nur als gezeigt, solange der Bereich „alle Konten“ ist; mit einem gewählten Konto (Punkt der
+schmalen Leiste, Befehlspalette) zeigen die Ansichten dieses Konto, und der Kopf nennt es. Gesendet
+aller Konten hat kein Sortieren, keinen Schnellfilter und keine Tabelle (der Ordner jedes Kontos
+schon), den Umschalter „Gespräche“ aber immer in der Leiste.
 
 **Maße.** Zeilen 28 px (`--ui-sidebar-row`), Text 13 px in `text-primary`, Symbol 16 px davor
 (8 px Abstand), Zähler am Ende 12 px mit Tabellenziffern: leise in `text-tertiary`, nur
@@ -137,7 +142,9 @@ Abschnitte: über der Seitenleiste (so breit wie sie) Seitenleiste ein/aus und N
 dem Lesebereich die Aktionen der offenen Mail als verbundene Gruppen, dann das Suchfeld (öffnet die
 Suche über der Liste, zeigt ihr Kürzel), KI-Panel und Kontaktspalte. Bedienelemente 28 px, Symbole
 16 px. Schmaler: Suche 180 px unter 1440 px, nur ihr Symbol unter 1120 px; „n ungelesen“ entfällt
-unter 1120 px, „Gespräche“ unter 1600 px; Aktionen wandern ins Menü „Weitere Aktionen“. Die
+unter 1120 px und wo der Abschnitt über der Liste schmaler als 360 px ist (mit der schmalen Leiste
+beginnt er erst nach den Ampeln und dem ersten Abschnitt), „Gespräche“ unter 1600 px; Aktionen
+wandern ins Menü „Weitere Aktionen“. Die
 Ansichten zeichnen ihren Kopf und die Aktionen in die Leiste (`ToolbarPortal`); in der
 Tab-Reihenfolge kommt die Leiste zuerst.
 
@@ -157,7 +164,8 @@ Lesebereichs.
 „Alle Mails“ (Suche `kontakt:`), Notiz, neueste Mails, Gruppen, alles aus dem Kontaktverzeichnis
 dieses Rechners. Ein- und ausblenden in der Leiste, gespeichert mit dem Layout des Fensters; nur in
 Mailansichten und wo Seitenleiste, Liste (in ihrer Breite), Lesebereich (360 px), Spalte und
-offenes KI-Panel Platz haben.
+offenes KI-Panel Platz haben. Solange die neue Mail als Karte über dem Lesebereich liegt, tritt sie
+mit ihrem Knopf zur Seite (Nachtrag zu 0086).
 
 ## Aufbau
 
@@ -724,7 +732,9 @@ Fensters im Kern (`WindowLayout.sidebarWidth`, nur auf diesem Gerät), sobald si
 Ziehen ist eine Speicherung. Die Spalte ist im Kern standardmäßig sichtbar
 (`WindowLayout.sidebarExpanded`).
 
-**Ein- und ausklappen.** Knopf in der Kopfzeile, Cmd/Strg+Umschalt+S (Befehl „Seitenleiste ein- oder
+**Ein- und ausklappen.** Knopf in der Kopfzeile (seit Stufe 23, 0084: in der Werkzeugleiste über
+der Spalte, links von „Neue Mail“; er bleibt dort stehen, wenn die Spalte einklappt, und heißt
+dann „Seitenleiste einblenden“), Cmd/Strg+Umschalt+S (Befehl „Seitenleiste ein- oder
 ausblenden“ im Aktionsverzeichnis, änderbar, wirkt mit Modifier auch in Textfeldern; im Editor des
 Verfassens bleibt es „Durchgestrichen“, der Editor behandelt es zuerst), Eintrag in der
 Befehlspalette (Gruppe Layout) und in der Leiste der Eintrag „Ordner“. Gespeichert wird der Zustand
@@ -742,7 +752,9 @@ Nie eine waagrechte Bildlaufleiste; bei 900 × 600 bleibt alles erreichbar.
 **Tastatur.** Jeder Baum ist ein Tab-Stopp (siehe unten); Kopfknopf und Griff sind je einer. Mit
 einem Konto kostet die Spalte 5 Stopps (Seitenleiste ausblenden, Griff, Ansichten, Konto mit
 Ordnern, Fuß). Mit zwei Konten, Favoriten, Gruppen und gespeicherten Suchen sind es seit Stufe 23
-7 (vorher 8): Gruppen und gespeicherte Suchen stehen unter „Mehr“ im Baum „Alle Konten“.
+7 (vorher 8): Gruppen und gespeicherte Suchen stehen unter „Mehr“ im Baum „Alle Konten“. Seit dem
+Zusammenführen der Schritte (0084) steht „Seitenleiste ausblenden“ in der Werkzeugleiste, die in der
+Tab-Reihenfolge zuerst kommt; die Spalte selbst hat dann 4 bzw. 6 Stopps.
 
 ## Ansichten bearbeiten (Stufe 17)
 
@@ -1454,8 +1466,9 @@ Schritt 4 des neuen Erscheinungsbilds, nach dem freigegebenen Entwurf (Teil `rol
 **Karte.** Im Hauptfenster liegt der Composer als schwebende Karte über dem Lesebereich:
 `surface-raised`, Haarlinie `border-subtle`, Rundung 14 (`rounded-panel`), `shadow-panel`; 20 px
 von oben und unten, 24 px von den Seiten. Steht der Lesebereich rechts der Liste, beginnt die
-Karte, wo die Liste endet, und unter der Werkzeugleiste des Lesebereichs; sie folgt dem Ziehen der
-Grenze, dem Layout und der Ansicht. Nie schmaler als 22,5 rem, ab 60 rem mittig im Bereich. Ohne
+Karte, wo die Liste endet, direkt unter der Werkzeugleiste über die ganze Breite (dort bleiben die
+Aktionen der offenen Mail bedienbar); sie folgt dem Ziehen der Grenze, dem Layout und der Ansicht.
+Die Kontaktspalte tritt währenddessen zur Seite, wie im Entwurf (Nachtrag zu 0086). Nie schmaler als 22,5 rem, ab 60 rem mittig im Bereich. Ohne
 Lesebereich neben der Liste (unten, an ihrer Stelle, andere Ansichten) steht sie am Ende des
 Fensters, höchstens 46 rem breit. Liste, Seitenleiste und Werkzeugleiste bleiben bedienbar. Ein
 Dialog ohne `aria-modal`: Tab geht an den Enden im Kreis, Escape schließt (der Entwurf bleibt), der

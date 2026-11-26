@@ -182,3 +182,20 @@ und ohne „In eigenem Fenster öffnen“.
 Siehe den Bericht der Sitzung (Tests mit Zahlen, Bildschirmfotos deutsch 1280×800 und 1440×900,
 hell und dunkel: neue Mail, Antwort mit eingeklapptem Zitat, „…“-Menü offen, „Später senden“
 offen, „Weitere Formatierung“ offen, verkleinert, eigenes Fenster).
+
+## Nachtrag 26.11.2026 (Zusammenführung der vier Schritte)
+
+- **Platz:** Die Symbolleiste des Lesebereichs gibt es im Hauptfenster nicht mehr (0084); die
+  Aktionen der offenen Mail stehen in der Werkzeugleiste über die ganze Breite. Die Karte beginnt
+  deshalb direkt unter dieser Leiste: 20 px darunter und über dem unteren Rand, 24 px neben dem Ende
+  der Liste und dem rechten Rand, wie im Entwurf (gemessen bei 1.440 × 900: 648 bis 1.416 px, oben
+  72 px, unten 880 px; bei 1.280 × 800 entsprechend). Die Suche nach einer Leiste oben im Lesebereich
+  (`placeCard`) entfällt.
+- **Kontaktspalte:** Solange die Karte offen ist (nicht verkleinert), tritt die Kontaktspalte zur
+  Seite, ihr Knopf in der Werkzeugleiste mit ihr, wie wenn das Fenster zu schmal ist; die Wahl bleibt
+  gespeichert. So hat die Karte den Platz des Entwurfs (dort fehlt die Spalte beim Schreiben),
+  statt zwischen Liste und Spalte auf rund 500 px zu schrumpfen. Verkleinert oder geschlossen ist die
+  Spalte wieder da. „Mail schreiben“ in der Spalte öffnet die Karte, die Spalte geht dabei zur Seite.
+  Code: `stores/composer.ts` (`cardOpen`), `Composer.tsx` (`ComposerFrame`),
+  `contacts/ContactPanel.tsx` (`useContactPanelFits`); Test
+  `new-look-reading.test.tsx` („steps aside while the composer card covers the reading area“).

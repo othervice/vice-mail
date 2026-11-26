@@ -201,3 +201,21 @@ Inhalt“ entfällt (der Titel steht in der Leiste).
 - Windows: die Leiste unter Mica, die Tab-Reihenfolge mit Bildschirmleser (Narrator), Ziehen des
   Fensters an der Leiste (dort zieht die native Titelleiste).
 - macOS: Doppelklick auf die Leiste zum Zoomen nur von Hand.
+
+## Nachtrag 26.11.2026 (Zusammenführung der vier Schritte)
+
+- **Seitenleiste:** Der Kopf der Spalte mit „Seitenleiste ausblenden“ entfällt wie hier vorgesehen;
+  die Spalte aus Schritt 2 (0085: „Alle Konten“, „Mehr“, Abschnitte der Konten, Fuß) beginnt direkt
+  unter der Werkzeugleiste. Über ihr stehen Umschalter und Neue Mail, so breit wie die Spalte
+  (gemessen bei 900, 1.200, 1.280, 1.440 und 1.600 px Fensterbreite: Abschnitt und Spalte enden auf
+  demselben Pixel). Tab-Reihenfolge: Leiste, Rand der Spalte, „Alle Konten“, je Baum ein Stopp,
+  Fuß, Liste.
+- **Kurzer Abschnitt über der Liste:** Mit der schmalen Leiste beginnt der Abschnitt nach den
+  Ampeln und dem ersten Abschnitt (176 px), endet aber mit der Liste; bei 384 px Liste bleiben
+  264 px. Dort wurde der Titel zu „A…“ gekürzt und „98 ungelesen“ lief in den Pfeil des Menüs. Jetzt
+  entfällt „n ungelesen“, sobald der Abschnitt schmaler als 360 px ist (`data-narrow`, gemessen mit
+  der Breite des Abschnitts), zusätzlich zur Regel unter 1.120 px Fensterbreite.
+- **Neue Mail (0086):** Die Karte liegt direkt unter der Werkzeugleiste über dem Lesebereich; die
+  Kontaktspalte tritt zur Seite, solange die Karte offen ist (Nachtrag in 0086).
+- **„Alle Konten“** zeigt jetzt in jeder Ansicht alle Konten (0087); der Kopf der Liste nennt dann
+  den Bereich („Alle Konten“) statt eines Kontos.

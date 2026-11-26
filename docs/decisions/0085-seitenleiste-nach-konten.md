@@ -184,3 +184,16 @@ rückt dafür an den oberen Rand. Der Name sagt die Zahl mit („…, 3 ungelese
   24.1 und 24.2.
 - Echte Konten mit vielen Ordnern; geprüft mit dem Testserver (drei Konten) und den Vitest-Fakes.
 - Die Zieh-Geste des Betriebssystems (wie 0082, Punkt 6).
+
+## Nachtrag 26.11.2026 (Zusammenführung der vier Schritte)
+
+- **Was „Alle Konten“ zeigt** gilt so nicht mehr: Später, Markiert, Gesendet und die übrigen
+  Ansichten dort (auch unter „Mehr“) zeigen ab zwei Konten alle sichtbaren Konten in einer
+  gemischten Liste wie der vereinte Posteingang; der Kern hat dafür ein vereintes Gesendet
+  (Entscheidung 0087). Gesendet im Abschnitt eines Kontos bleibt der Ordner dieses Kontos. Die Zeile
+  in „Alle Konten“ gilt nur als gezeigt, solange der Bereich „alle Konten“ ist; Gesendet eines
+  Kontos ist sonst die Zeile seines Abschnitts.
+- **Kopfzeile:** Der Kopf mit „Seitenleiste ausblenden“ ist mit Schritt 3 (0084) in die
+  Werkzeugleiste über die ganze Breite gewandert; die Spalte beginnt mit „Alle Konten“. Mit zwei
+  Konten, Favoriten, Gruppen und gespeicherten Suchen hat die Spalte jetzt 5 Tab-Stopps (Rand, vier
+  Bäume) plus den Fuß.

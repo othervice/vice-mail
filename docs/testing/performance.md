@@ -3,6 +3,17 @@
 Ziele aus `docs/SPEC.md` (Leistungsziele). Gemessen in Stufe 7; danach bei jeder Stufe mit Listen- oder
 Suchänderung erneut.
 
+## Stufe 23 – 26.11.2026 (Gesendet aller Konten, Entscheidung 0087)
+
+Neue Zeilen in `crates/mail-engine/src/search/bench.rs`: „Gesendet aller Konten (5 Konten, 100)“
+und „Thread-Liste Gesendet aller Konten (100)“, dieselbe Abfrage wie der vereinte Posteingang über
+die Gesendet-Ordner. Gemessen nur im **Debug-Build** (`cargo test -p mail-engine --lib
+search::bench::bench_100k -- --ignored --nocapture`; ein Release-Build hätte alle Abhängigkeiten
+neu gebaut, dafür reichte der Platz auf der Platte nicht sicher), 100.000 Mails, Median / p95 / max
+in ms: vereinter Posteingang 2,12 / 2,41 / 3,70, Gesendet aller Konten 2,17 / 2,45 / 3,23;
+Thread-Listen 7,86 / 9,35 / 10,17 bzw. 8,12 / 9,40 / 10,87. Gesendet aller Konten ist so schnell
+wie der vereinte Posteingang; im Release-Build ungeprüft.
+
 ## Stufe 7 – 23.11.2026
 
 **Umgebung:** Mac mini, Apple M4 (10 Kerne), 16 GB RAM, macOS 27.2.1, Rust 1.100.0, SQLite 3.54.1

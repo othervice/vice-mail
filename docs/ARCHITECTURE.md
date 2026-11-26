@@ -219,8 +219,9 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   both indexes as a `UNION` merged in rowid order) and checks the others per row with
   `IN (… MATCH ?)`. Cost: about 3.7 bytes of index per byte of text (100,000 mails with 17,935
   local bodies: database 119 → 272 MB), first hits at most 29 ms in a debug build.
-- Lists only via keyset, never via `OFFSET`. Views across several mailboxes (unified inbox)
-  via `UNION ALL` per mailbox, never via `IN (…)` (measured 0.14 ms versus 393 ms). Fixed
+- Lists only via keyset, never via `OFFSET`. Views across several mailboxes (unified inbox; since
+  stage 23, 0087, Sent of "All accounts") via `UNION ALL` per mailbox, never via `IN (…)`
+  (measured 0.14 ms versus 393 ms). Fixed
   join order via `CROSS JOIN`. For every list and search query a test checks the query plan.
 - First search hits by `rowid DESC`; `bm25` at most as an option.
 - From stage 2: after `ANALYZE` with only one account, the query planner chooses a scan for a join on
@@ -1197,6 +1198,9 @@ Until the UI has been switched over, these values are still kept in the marked f
 
 | Decision | Reason | Way back |
 |---|---|---|
+| "All accounts" covers every visible account in all its views (0087): the unified scope (`unifiedInbox`: all accounts or a group) applies to Later, Flagged, Sent and the other views of that section, shown as one mixed list like the unified inbox; the core lists Sent of all accounts (`listUnifiedSent`, `listUnifiedSentThreads`, `UNION ALL` over each account's Sent folder) | the section's name promised it; each account's Sent and an account chosen in the rail still show that account | the views follow the selected account again (`coversScope` returns false for all but the inbox) |
+| The composer card sits right under the toolbar across the window, the contact panel steps aside while it is open (0086, addendum) | the reading pane has no toolbar of its own since 0084; the draft shows the card without the panel | keep the panel (`cardOpen` ignored); the card then shrinks to the room between list and panel |
+| Sidebar by accounts (0085): "All accounts" with "More", favourites, one section per account with "More folders", a foot with the sync state; what is open is remembered on the device (`ui.sidebar_folds`) | the approved draft; the column had grown long and flat | the stage 22 column (one tree per kind of entry) |
 | Step 3 of that look (0084): one 52 px toolbar across the window (the macOS title bar; below the native bar on Windows) into which views render their head and the open message's actions (`ToolbarPortal`), joined action groups, the quick filter behind a button, list rows with hairlines, a filled selection and an account stripe in mixed lists, the reading pane without a card (attachments as cards, quick reply at the bottom, adapted dark mail on the surface), a contact panel from the local contacts | the approved draft; one bar instead of a header per view and a toolbar per pane; the panel shows the data the app already has, no network | the view headers and the pane toolbar of 0071, `DARK_CANVAS` on the card, `contactPanel` ignored |
 | The look approved on 2026-11-26 (0083): Inter shipped as the UI font, the draft's light and dark palettes, a type scale with 11 and 26 px, flat cards, shadows only for floating things, list rows across the whole width | the human found the app looked generic and approved a draft mixing Mailbird and Canary Mail; one font looks the same on macOS and Windows; mail content keeps the system font, so what is written looks as sent | the system font in `--ui-font-family` and the values of 0053 in `tokens.css` |
 | Logo in blue (0068), approved by the human on 2026-11-25; icons from one script (`scripts/icons.sh`) | the GitHub blues of the colour scheme (0053); every size from its own source, so a new artwork is one command | swap the colours back in `make_svgs.py` and `Brand.tsx`, run the script |
