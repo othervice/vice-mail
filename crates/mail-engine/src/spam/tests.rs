@@ -614,3 +614,39 @@ async fn the_setting_is_off_by_default_synchronised_and_per_account() {
         ErrorCode::InvalidArgument
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn learning_more_spam_than_half_the_ham_tops_up_ham_from_read_inbox_mail() {
+    let server = FakeServer::new();
+    add_junk(&server);
+    // Ten read letters in the inbox, older than anything the test delivers.
+    for n in 100..110 {
+        let uid = server.deliver_raw("INBOX", &ham_mail(n));
+        server.with(|s| {
+            if let Some(m) = s
+                .mailboxes
+                .get_mut("INBOX")
+                .and_then(|b| b.messages.get_mut(&uid))
+            {
+                m.flags.seen = true;
+            }
+        });
+    }
+    let mut h = Harness::new(server).await;
+    h.writes(true).await;
+    enable(&h).await;
+    // Three offers as spam, nothing as ham yet: the filter learns twice as many read letters.
+    teach(&mut h, 1..4, 0..0).await;
+    let done = h
+        .event(|e| {
+            matches!(e, CoreEvent::SpamFilterChanged { status }
+                if status.learning.as_ref().is_some_and(|l| l.state == SpamLearningState::Done))
+        })
+        .await;
+    let CoreEvent::SpamFilterChanged { status: done } = done else {
+        unreachable!()
+    };
+    assert_eq!((done.learned_spam, done.learned_ham), (3, 6));
+    let learning = done.learning.expect("learning");
+    assert_eq!((learning.spam, learning.ham), (0, 6));
+}

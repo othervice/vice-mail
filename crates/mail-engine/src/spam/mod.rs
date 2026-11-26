@@ -63,6 +63,8 @@ const HAM_DOUBT: f64 = 0.9;
 const HAM_PER_SPAM: u32 = 2;
 /// At most this many ham mails per top-up.
 const MAX_TOP_UP: u32 = 200;
+/// Messages of one user action learned per transaction.
+const LEARN_PART: usize = 100;
 
 /// Why a new message is never spam.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -409,23 +411,30 @@ impl<C: Connector> AppCore<C> {
         if !settings.enabled {
             return Ok(());
         }
-        let mut items = Vec::with_capacity(messages.len());
-        for message in messages {
-            let Some(summary) = store.message_summary(message).await? else {
-                continue;
-            };
-            if !settings.applies_to(summary.account_id) {
+        // In parts, so a large selection does not hold the writer for long.
+        let mut count = 0usize;
+        for part in messages.chunks(LEARN_PART) {
+            let mut items = Vec::with_capacity(part.len());
+            for message in part {
+                let Some(summary) = store.message_summary(*message).await? else {
+                    continue;
+                };
+                if !settings.applies_to(summary.account_id) {
+                    continue;
+                }
+                if let Some(tokens) = self.spam_tokens_of(*message, SpamFetch::No).await? {
+                    items.push((*message, tokens.hashes().to_vec()));
+                }
+            }
+            if items.is_empty() {
                 continue;
             }
-            if let Some(tokens) = self.spam_tokens_of(message, SpamFetch::No).await? {
-                items.push((message, tokens.hashes().to_vec()));
-            }
+            count += items.len();
+            store.learn_spam(items, class, batch, self.now_ms()).await?;
         }
-        if items.is_empty() {
+        if count == 0 {
             return Ok(());
         }
-        let count = items.len();
-        store.learn_spam(items, class, batch, self.now_ms()).await?;
         tracing::info!(count, ?class, "spam filter learned from the user");
         self.spam_status_changed().await;
         if class == SpamClass::Spam {
