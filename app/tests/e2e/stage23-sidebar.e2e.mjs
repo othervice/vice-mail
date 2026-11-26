@@ -259,6 +259,9 @@ describe("stage 23: the sidebar of the approved draft", () => {
   it("Gesendet of Alle Konten and of an account are each current only for themselves", async () => {
     await testId("sidebar-view-sent").click();
     await browser.waitUntil(async () => (await testId("sidebar-view-sent").getAttribute("aria-current")) === "page", { timeoutMsg: "Gesendet did not open" });
+    // Decision 0087: Gesendet of Alle Konten is every account's Sent, as one mixed list.
+    await testId("all-accounts-sent").waitForExist({ timeout: 20000 });
+    assert.equal(await testId("view-scope").getText(), "Alle Konten");
     const sent = (await coreCall("list_mailboxes", { accountId: bob.id })).find((m) => m.role === "sent");
     assert.ok(sent, "bob has no Sent folder");
     assert.equal(await testId(`mailbox-${String(sent.id)}`).getAttribute("aria-current"), null);
