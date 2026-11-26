@@ -312,7 +312,7 @@ function AccountDot({ account, accounts, current, roving, line, dimmed, dropItem
           // Which account the views show, not which view is open: a fill, no active bar.
           // With a single account there is nothing to tell apart.
           className={cx(
-            "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-[background-color,opacity]",
+            "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
             current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
             dimmed && "opacity-50",
           )}

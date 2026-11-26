@@ -201,7 +201,7 @@ function AccountFolders({ account, selected, line, dimmed, dropItem }: AccountFo
       data-account-drop={line ?? undefined}
       data-account-dragged={dimmed || undefined}
       className={cx(
-        "relative flex flex-col transition-opacity",
+        "relative flex flex-col",
         // The account being dragged stays in its place, dimmed, until it is let go.
         dimmed && "opacity-50",
         // The place it goes: a line in the gap above or below the account.
