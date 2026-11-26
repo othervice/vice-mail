@@ -23,6 +23,37 @@ Seit 23.11.2026 gibt es eine zweite Vorlage für die Qualität der Ausführung,
 `design-reference/polish-reference.png` (ebenfalls fremd, nicht eingecheckt). Was daraus folgt,
 steht im Abschnitt „Feinschliff 23.11.2026“ und in `docs/decisions/0031-feinschliff-der-oberflaeche.md`.
 
+## Neues Erscheinungsbild (Stufe 23, Entscheidung 0083)
+
+Richtung seit dem 26.11.2026: ein Mix aus Mailbird (helle, ruhige Flächen, eine eigene
+einheitliche Schrift, dichte saubere Liste, großer Betreff, Anhänge als Karten, neue Mail als
+schwebende Karte) und Canary Mail (Werkzeugleiste über die ganze Breite, Seitenleiste nach Konten
+mit Symbolen in der Kontofarbe, Kontostreifen an der Zeile, kräftig gefüllte Auswahl, Bänder
+„Heute/Gestern“, Kontaktspalte rechts, das dunkle Design). Übernommen werden Prinzipien, kein
+Nachbau. Vorlage für Maße und Farben ist der freigegebene Entwurf
+https://claude.ai/artifact/BuSPYpDvmSDm4s1JJoSZFX („ja das dunkle design finde ich super. das
+nehmen wir.“). Umgesetzt in vier Schritten (Stufendatei 23, Punkt 2); Schritt 1, die Grundlage:
+
+- **Schrift Inter**, mitgeliefert (`app/src/assets/fonts`, OFL 1.1, nie aus dem Netz), auf macOS
+  und Windows gleich; die Systemschrift dahinter als Ersatz. Zeichenvarianten des Entwurfs:
+  einstöckiges a, offene Ziffern. Gleich breite Ziffern für Zeiten und Zähler. Inhalt von Mails
+  bleibt in der Systemschrift (`font-mail`): HTML-Mails ohne eigene Schrift, die Schreibfläche des
+  Composers mit Zitat und Signatur. Reine Textmails folgen der Oberfläche.
+- **Größen:** Zeilen 13 px (Absender ungelesen fett, gelesen halbfett), Vorschau 12 px, Zeit 11 px,
+  Bänder und Abschnittsköpfe 11 px halbfett, Betreff im Lesebereich 26 px fett, Mailtext 14 px mit
+  Zeilenhöhe 1,65.
+- **Farben** wie im Entwurf (Tabelle unter „Tokens“): eine Fläche für Liste und Lesebereich,
+  Seitenleiste und Werkzeugleiste eine Stufe daneben (hell dunkler, dunkel heller), Bänder, Karten,
+  Chips und Knöpfe darüber, die Kontaktspalte dazwischen.
+- **Formen:** Bedienelemente 7 px, Zeilen der Liste eckig und über die ganze Breite ausgewählt,
+  Kacheln 8 px, Karten 10 px, schwebende Karten 14 px. Schatten nur für Schwebendes; Karten und
+  Knöpfe liegen flach mit Haarlinie.
+
+Was Schritt 1 schon anwendet: Kopf jeder Ansicht im Ton der Werkzeugleiste, Monatsabschnitte der
+Liste als Bänder, aktiver Eintrag der Seitenleiste auf neutraler Fläche (Symbol im Akzent),
+Zweitknöpfe auf `button`, KI-Panel auf `panel`. Was die Schritte 2 bis 4 umbauen, steht in
+Entscheidung 0083.
+
 ## Aufbau
 
 ```
@@ -121,21 +152,22 @@ feste Farben oder Abstände.
 
 | Gruppe | Tokens |
 |---|---|
-| Flächen | `canvas`, `rail` (dunkelste Stufe), `rail-hover`, `surface-list` (Listenspalte), `surface` (Lesebereich), `surface-raised` (Karten), `priority-tint`, `selected`, `hover`, `badge` (Pillen) |
+| Flächen | `canvas` (Rahmen, Mulden in Karten), `rail` (Seitenleiste), `rail-hover`, `rail-selected` (aktiver Eintrag), `toolbar`, `band` (Bänder der Liste), `panel` (Spalte rechts), `button` (Zweitknöpfe), `surface-list` (Listenspalte), `surface` (Lesebereich), `surface-raised` (Karten), `priority-tint`, `selected`, `hover`, `badge` (Pillen, Chips) |
 | Linien | `border`, `border-subtle` (Haarlinien zwischen Bereichen), `border-strong`, `priority-border`, `focus-ring` |
 | Text | `text-primary`, `text-secondary`, `text-tertiary`, `text-on-accent` |
 | Akzent | `accent` (Text, Symbole, Schalter), `accent-fill` (Füllung des Hauptknopfs und kleiner Marken, dazu `text-on-accent`), `accent-soft`, `danger` (mit `text-on-danger`), `success`, `warning` |
 | Bedienelemente | `track` (Spur von Segmentschaltern und Schaltern), `brand-ink` („Vice“ in der Wortmarke) |
 | Konten | acht unterscheidbare Kontofarben, in beiden Modi geprüft |
-| Schrift | Systemschrift (SF Pro, Segoe UI Variable); Größen 12, 13, 14, 16, 20, 28; Gewichte 400, 500, 600 |
+| Dateitypen | `file-pdf`, `file-doc`, `file-sheet`, `file-image`, `file-archive` (Plakette, mit `text-on-file`) und je `-tint` (Karte), Stufe 23 |
+| Schrift | Inter, mitgeliefert (Stufe 23), dahinter die Systemschrift (SF Pro, Segoe UI Variable); Mailinhalt in der Systemschrift (`font-mail`); Größen 11, 12, 13, 14, 16, 20, 26, 28; Gewichte 400, 500, 600, 700 |
 | Abstand | Raster aus 4 px: 4, 8, 12, 16, 20, 24, 32, 40, 48; andere Stufen erzeugen kein CSS und sind per Test verboten (Stufe 21, siehe „Abstände“) |
-| Rundung | 6 (Bedienelemente), 8 (Zeilen, Kacheln), 10 (Karten), 16 (Panels, Fenster in der App); Pillen rund |
-| Schatten | vier Stufen: Zeile (Haarbreite), Karte (Priorität, leere Zustände), schwebend (Menüs, Schnellaktionen), Panel |
+| Rundung | 7 (Bedienelemente, Einträge der Seitenleiste), 0 (Zeilen der Liste), 8 (`tile`: Kacheln, Einträge der schmalen Leiste und schwebender Listen), 10 (Karten), 14 (schwebende Karten, Panels, Fenster in der App); Pillen rund (Stufe 23) |
+| Schatten | nur Schwebendes: schwebend (Menüs, Schnellaktionen), Panel; `shadow-row` und `shadow-card` zeichnen seit Stufe 23 nichts (Karten und Knöpfe flach mit Haarlinie) |
 | Bewegung | 120, 180, 240 ms, weich auslaufend; bei „Bewegung reduzieren“ keine |
 
-Startwerte (seit Entscheidung 0053): kühle Grautöne, hell Weiß und helles Blaugrau, dunkel
-neutrale, leicht bläuliche Grautöne in der Art des dunklen GitHub-Themas (Grund `#0d1117`); ein
-einzelner Akzent, Blau (Blaugrün, Violett, Rosé, Orange und Grün bleiben wählbar,
+Startwerte (seit Entscheidung 0083, Stufe 23; vorher 0053): die Farben des freigegebenen
+Entwurfs, kühle Grautöne, hell Weiß und helles Blaugrau, dunkel bläuliche Grautöne (Fläche
+`#14181e`); ein einzelner Akzent, Blau (Blaugrün, Violett, Rosé, Orange und Grün bleiben wählbar,
 eine gespeicherte Wahl bleibt). Die Prioritätskarte ist in beiden Modi eine erhabene, kühle Karte;
 die Farbe trägt ihr Symbol. Der Akzent ist ein Token und in einer Zeile änderbar. Der dunkle Modus
 ist kein invertierter heller: eigene Flächenstufen, eigener Akzentton, Kontrast nach `docs/SPEC.md`.
@@ -143,22 +175,27 @@ Hell, Dunkel und System lassen sich auch aus der Befehlspalette umschalten (Grup
 
 | Stufe | Hell | Dunkel |
 |---|---|---|
-| `rail` (dunkelste Stufe) | `#e5eaf0` | `#090c11` |
-| `canvas` | `#eef2f6` | `#0d1117` |
-| `surface-list` | `#f6f8fb` | `#12171e` |
-| `surface` (Lesebereich, hellste Stufe) | `#fdfeff` | `#161c24` |
-| `surface-raised` (Karten, Menüs) | `#ffffff` | `#212830` |
-| `border` / `border-subtle` | `#d8dfe7` / `#e3e8ee` | `#30363d` / `#21262d` |
-| Text primär / sekundär / tertiär | `#19212c` / `#444e5c` / `#566171` | `#e6edf3` / `#b7c0ca` / `#9198a1` |
-| `accent` / `accent-fill` (Blau) | `#0b5cc2` / `#1665d8` | `#4493f8` / `#1f6feb` |
+| `surface`, `surface-list` (Liste und Lesebereich) | `#ffffff` | `#14181e` |
+| `canvas` | `#f6f7f9` | `#14181e` |
+| `rail` (Seitenleiste) / `rail-selected` | `#f2f4f7` / `#e2e8f1` | `#1a1f27` / `#2a3341` |
+| `toolbar` / `band` / `panel` | `#f7f8fa` / `#f6f7f9` / `#f8f9fb` | `#1a1f27` / `#1b2129` / `#171c23` |
+| `surface-raised` (Karten, Menüs) | `#ffffff` | `#1b2129` |
+| `button` / `border` | `#ffffff` / `#dde1e7` | `#232a34` / `#333b48` |
+| `badge` (Chips) / `border-subtle` (Linien) | `#eef1f5` / `#e5e8ec` | `#252c37` / `#29303b` |
+| Text primär / sekundär / tertiär | `#131a24` / `#455061` / `#5b6676` | `#e8edf3` / `#bcc5d0` / `#98a3b0` |
+| `accent` / `accent-fill` (Blau) | `#1360d3` / `#1463d8` | `#6aa8ff` / `#2563eb` |
+| `selected` (Blau) | `#e3ecfa` | `#172747` |
 
-Alle Werte und die übrigen Tokens: `tokens.css` und Entscheidung 0053.
+Alle Werte und die übrigen Tokens: `tokens.css` und Entscheidung 0083 (vorher 0053).
 
 HTML-Mails werden auf ihrem eigenen Hintergrund gezeigt und im dunklen Modus nicht umgefärbt.
 Nennt eine HTML-Mail keine Schrift, steht sie in der Systemschrift der App statt in Times (siehe
 „Nach den README-Bildern“). Reine Textmails folgen dem Thema.
 
 ## Feinschliff 23.11.2026
+
+(Seit Stufe 23, Entscheidung 0083, gelten für Flächen, Schatten, Schrift und Größen der Zeile die
+Werte aus „Neues Erscheinungsbild“; die Struktur unten bleibt.)
 
 Ziel: die Qualität der zweiten Vorlage erreichen, ohne ihr Aussehen zu übernehmen (Entscheidung 0031).
 
@@ -212,9 +249,9 @@ Zeile: Antworten, Allen antworten, Weiterleiten.
 **HTML-Mails im dunklen Design (Stufe 21, Entscheidung 0066).** Standard ist „angepasst“: Der Kern
 macht helle Hintergründe dunkel und dunkle Schrift hell (Farbton bleibt, Bilder bleiben, der
 Kontrast jedes Paars bleibt mindestens 4,5 : 1, wo er es war). Eine weiße Mail liegt dann genau auf
-der Karte (`surface-raised`, `#212830`), ihre Standardschrift ist `text-primary`, Links `accent`;
-Mail und Karte sind eine Fläche, wie bei Textmails. Mails mit eigenen dunklen Farben
-(`color-scheme: light dark`) behalten diese, Mails mit `only light` und die Einstellung „Immer auf
+der Karte (`surface-raised`, seit Stufe 23 `#1b2129`), ihre Standardschrift ist `text-primary`,
+Links `accent`; Mail und Karte sind eine Fläche, wie bei Textmails. Mails mit eigenen dunklen
+Farben (`color-scheme: light dark`) behalten diese, Mails mit `only light` und die Einstellung „Immer auf
 weißem Grund“ (Einstellungen → Lesen) bekommen das weiße Blatt wie bisher. Über der Mail neben
 „HTML/Text“ der Umschalter „Originalfarben“ (Symbol Palette, gedrückt = weißes Blatt), nur im
 dunklen Design; er gehört zur Mail. Gedruckt wird eine angepasste Mail in Originalfarben. Die
@@ -278,7 +315,7 @@ vom Thema abhängt. `app/tests/contrast.test.ts` prüft alle neuen Paare in jede
 | Element | Gestaltung |
 |---|---|
 | Hauptknopf | `accent-fill`, Schrift `text-on-accent`, Schatten `shadow-row`, 32 px hoch |
-| Zweitknopf | erhabene Fläche (`surface-raised`), Haarlinie `border`, `shadow-row` |
+| Zweitknopf | Fläche `button` (Stufe 23), Haarlinie `border`, ohne Schatten |
 | Leiser Knopf | Text im Akzent, Fläche nur beim Überfahren |
 | Gefahr | `danger` mit `text-on-danger` |
 | Segmentschalter | eingelassene Spur (`track`) ohne Rand; die gewählte Option ist ein erhabener Knopf mit Haarlinie im Akzent (≥ 3:1 zur Spur), Beschriftung in Primärfarbe. Ersetzt die volle Akzentfläche, die in jedem Einstellungsabschnitt zu laut war |
@@ -382,7 +419,8 @@ Die Bildschirmfotos für die README (`docs/images/`, `app/tests/e2e/readme-shots
 Mängel gezeigt, die so behoben sind:
 
 - **Schrift in HTML-Mails.** Jedes `srcdoc` bekommt nach der CSP einen Grundstil
-  (`mail_content::MAIL_DEFAULT_STYLE`): `font-family` wie `--ui-font-family`, als `:where(html)`
+  (`mail_content::MAIL_DEFAULT_STYLE`): `font-family` wie `--ui-font-family-mail` (die
+  Systemschrift; seit Stufe 23 nicht die Schrift der Oberfläche), als `:where(html)`
   ohne Spezifität und vor dem Stil der Mail, die ihn so immer überschreibt. Sonst nichts (Größen,
   Farben und Abstände bleiben die der WebView, mit denen Mail-Layouts rechnen).
 - **Zeilen ohne Vorschau.** Ältere Mails als die vorab geladenen haben keine Vorschau. In der
@@ -988,7 +1026,7 @@ jedes App-Fensters (hell oder dunkel wie die App, mit ihr wechselnd). Im Hauptfe
 Material ohne Naht links herunter: Rahmen, schmale Leiste und angedockte Spalte der Konten und
 Ordner sind durchsichtig (`data-chrome`), ihre Texte, Symbole, Zähler und Fokusringe stehen auf
 Mica (geprüft gegen das dunkelste helle und das hellste dunkle Mica, 4,5:1 und 3:1). Überfahren und
-Auswahl in der Spalte behalten ihre Flächen (`rail-hover`, `selected`).
+Auswahl in der Spalte behalten ihre Flächen (`rail-hover`, seit Stufe 23 `rail-selected`).
 
 **Undurchsichtig** bleiben Liste, Lesebereich, Composer, Einstellungen, KI-Seitenleiste, Menüs,
 Dialoge, Hinweise und die Spalte, wenn sie in einem schmalen Fenster über dem Inhalt liegt. Fenster

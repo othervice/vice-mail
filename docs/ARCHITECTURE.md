@@ -1179,6 +1179,7 @@ Until the UI has been switched over, these values are still kept in the marked f
 
 | Decision | Reason | Way back |
 |---|---|---|
+| The look approved on 2026-11-26 (0083): Inter shipped as the UI font, the draft's light and dark palettes, a type scale with 11 and 26 px, flat cards, shadows only for floating things, list rows across the whole width | the human found the app looked generic and approved a draft mixing Mailbird and Canary Mail; one font looks the same on macOS and Windows; mail content keeps the system font, so what is written looks as sent | the system font in `--ui-font-family` and the values of 0053 in `tokens.css` |
 | Logo in blue (0068), approved by the human on 2026-11-25; icons from one script (`scripts/icons.sh`) | the GitHub blues of the colour scheme (0053); every size from its own source, so a new artwork is one command | swap the colours back in `make_svgs.py` and `Brand.tsx`, run the script |
 | The counter drawn for the display scale, window icon from the icon's own entry (0068) | Windows shows the overlay at 16 logical pixels; a 32 px image shrunk to 16 blurs the digits | the stage 9 overlay (32 px, one size) |
 | The counter's digits from an embedded font (Selawik subset, OFL), auto-hinted at the exact pixel size; installer refreshes the shell's icons (0080) | the bitmap fonts of 0068 were sharp but blocky ("pixelated"); pinned shortcuts kept the cached orange icon after the update | the bitmap fonts of 0068 (`badge.rs` of stage 21) |
