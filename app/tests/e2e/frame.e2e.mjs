@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { $, $$, browser } from "@wdio/globals";
 import {
   attach,
+  openSidebarParts,
   clearMarks,
   controlBoxes,
   coreCall,
@@ -30,8 +31,12 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
 // The rail by default: the inbox, the column's views (COLUMN_VIEW_IDS), Sent to Folders, then
 // activity, the outbox (stage 5) and settings.
 const RAIL = [
+  // Stage 23 (decision 0085): grouped like the column: the inbox, the views of "All accounts"
+  // (Later and the server's flag across folders by default), Sent; then the views under "More".
   "inbox",
   "later",
+  "flagged",
+  "sent",
   // Stage 20: the sent messages waiting for a reply.
   "waiting",
   "tasks",
@@ -40,14 +45,11 @@ const RAIL = [
   "pinnedAttachments",
   // Stage 20: the attachments of every stored message.
   "attachments",
-  // SPEC "Markiert": the server's flag across folders.
-  "flagged",
   "pinned",
-  // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent;
-  // the contacts are one of them (decision 0050).
+  // Stage 17: the views of the column's "Views" section, as the user chose them; the contacts
+  // are one of them (decision 0050).
   "savedViews",
   "contacts",
-  "sent",
   "drafts",
   "archive",
   "trash",
@@ -120,7 +122,8 @@ describe("app frame (stage 1)", () => {
     // Folded: the narrow rail with every view.
     const was = await setSidebar(false);
     await showInbox();
-    const ids = await $$("nav [data-testid^='rail-']").map((el) => el.getAttribute("data-testid"));
+    // The rail's buttons (the account list and its announcement are no entries).
+    const ids = await $$("nav button[data-testid^='rail-']").map((el) => el.getAttribute("data-testid"));
     assert.deepEqual(ids, RAIL.map((id) => `rail-${id}`));
     for (const id of RAIL) assert.ok(await testId(`rail-${id}`).isDisplayed(), `rail-${id} visible`);
     assert.equal(await testId("rail-inbox").getAttribute("aria-label"), "Inbox");
@@ -133,14 +136,20 @@ describe("app frame (stage 1)", () => {
     // toggle, the views across folders, then activity, outbox and settings; without an account no
     // folders and no unified inbox, a note instead.
     await setSidebar(true);
-    report.column = await $$('[data-testid="sidebar-column"] [data-testid^="rail-"], [data-testid="sidebar-column"] [data-testid^="sidebar-view-"]').map((el) =>
-      el.getAttribute("data-testid"),
-    );
+    // Stage 23 (decision 0085): "Views" (one account or none: no inbox or Sent there) with Later
+    // and Flagged, the rest, Activity and the outbox under "More"; Settings at the foot.
+    await openSidebarParts();
+    report.column = await $$(
+      '[data-testid="sidebar-column"] :is([data-testid^="rail-"], [data-testid^="sidebar-view-"], [data-testid="sidebar-more"], [data-testid="sidebar-activity"], [data-testid="sidebar-outbox"])',
+    ).map((el) => el.getAttribute("data-testid"));
     assert.deepEqual(report.column, [
       "rail-folders",
-      ...["later", "waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "flagged", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
-      "rail-activity",
-      "rail-outbox",
+      "sidebar-view-later",
+      "sidebar-view-flagged",
+      "sidebar-more",
+      ...["waiting", "tasks", "readingList", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"].map((id) => `sidebar-view-${id}`),
+      "sidebar-activity",
+      "sidebar-outbox",
       "rail-settings",
     ]);
     assert.equal(await testId("icon-rail").isExisting(), false, "the rail is gone while the column shows");
@@ -260,6 +269,8 @@ describe("app frame (stage 1)", () => {
 
   it("edits the column's views (stage 17): hides one, moves one with the keyboard, the core keeps the choice", async () => {
     const was = await setSidebar(true);
+    // Stage 23 (decision 0085): every view of the column, the ones under "More" too.
+    await openSidebarParts();
     const columnViews = () =>
       $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map(async (el) => (await el.getAttribute("data-testid")).replace("sidebar-view-", ""));
     // From the palette, by keyboard; the focus starts on the first view.
@@ -274,19 +285,21 @@ describe("app frame (stage 1)", () => {
     // checkbox is clicked; Vitest covers Space); the column behind the dialog follows at once.
     await testId("edit-views-check-later").click();
     await browser.waitUntil(async () => !(await columnViews()).includes("later"), { timeoutMsg: "Later is still in the column" });
-    // Six views on: Alt+Up twice moves "Flagged" above "Pinned attachments"; the focus stays on it.
-    for (let i = 0; i < 6; i += 1) await pressTab();
+    // The next view: Alt+Down twice moves "Flagged" across the line of "More" (stage 23) and
+    // below "Waiting for reply"; the focus stays on it.
+    await pressTab();
     assert.equal(await focused(), "edit-views-check-flagged");
-    await browser.keys(["Alt", "ArrowUp"]);
-    await browser.keys(["Alt", "ArrowUp"]);
+    await browser.keys(["Alt", "ArrowDown"]);
+    await browser.keys(["Alt", "ArrowDown"]);
     assert.equal(await focused(), "edit-views-check-flagged");
-    const shown = ["waiting", "tasks", "readingList", "flagged", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"];
+    const shown = ["waiting", "flagged", "tasks", "readingList", "pinnedAttachments", "attachments", "pinned", "savedViews", "contacts"];
     await browser.waitUntil(async () => JSON.stringify(await columnViews()) === JSON.stringify(shown), {
       timeoutMsg: "the column does not show the chosen order",
     });
     await screenshot("edit-views-light");
     const expected = [
       { id: "later", shown: false },
+      { id: "more", shown: true },
       ...shown.map((id) => ({ id, shown: true })),
     ];
     await browser.waitUntil(async () => JSON.stringify((await coreCall("get_ui_preferences")).columnViews) === JSON.stringify(expected), {
@@ -296,11 +309,12 @@ describe("app frame (stage 1)", () => {
     await browser.keys("Escape");
     await testId("edit-views").waitForExist({ reverse: true });
 
-    // Folded: the rail shows the same choice between the inbox and Sent.
+    // Folded: the rail shows the same choice, grouped like the column (nothing before the line
+    // of "More" is shown now, so Sent follows the inbox).
     await setSidebar(false);
-    const rail = await $$('[data-testid="icon-rail"] [role="toolbar"] [data-testid^="rail-"]').map((el) => el.getAttribute("data-testid"));
+    const rail = await $$('[data-testid="icon-rail"] [role="toolbar"] button[data-testid^="rail-"]').map((el) => el.getAttribute("data-testid"));
     // Then the bottom group as before (no accounts here, so no account switcher).
-    assert.deepEqual(rail, ["inbox", ...shown, "sent", "drafts", "archive", "trash", "folders", "activity", "outbox", "settings"].map((id) => `rail-${id}`));
+    assert.deepEqual(rail, ["inbox", "sent", ...shown, "drafts", "archive", "trash", "folders", "activity", "outbox", "settings"].map((id) => `rail-${id}`));
     await setSidebar(was);
   });
 

@@ -114,6 +114,11 @@ const TEXT_PAIRS: [string, string][] = [
   ["text-primary", "track"],
   ["text-secondary", "track"],
   ["text-primary", "surface-raised"],
+  // Stage 23 (decision 0085). The sidebar's danger text (an account that does not sync, at its
+  // foot) on its surface; its quiet text on the selected fill. (Counts of failed actions and sends
+  // are pills: `text-on-danger` on `danger`.)
+  ["danger", "rail"],
+  ...["text-primary", "text-secondary", "text-tertiary"].map((fg): [string, string] => [fg, "rail-selected"]),
   // Stage 23 (decision 0083). Counts and labels on the chips (`badge`); accent text on the
   // toolbar, bands, panel, buttons and the sidebar's hover ("Cc", links, quiet buttons).
   // Attachment cards: name and size on the type's tint, the badge's label on its fill.

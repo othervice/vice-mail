@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openStatusView, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -148,8 +148,8 @@ describe("stage 5: writing and sending", () => {
   });
 
   it("the outbox lists the send, the rich text editor causes no CSP violation", async () => {
-    await testId("rail-outbox").click();
-    await testId("outbox-view").waitForExist();
+    // Stage 23 (decision 0085): from the rail, or under the column's "More".
+    await openStatusView("outbox");
     const states = await browser.execute(() =>
       [...document.querySelectorAll('[data-testid="outgoing-row"]')].map((r) => r.getAttribute("data-send-state")),
     );

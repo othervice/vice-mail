@@ -166,6 +166,11 @@ async fn every_registered_kind_is_captured_when_it_changes() {
             id: "later".into(),
             shown: false,
         }],
+        // Stage 23 (decision 0085): device only, like the AI panel's state.
+        sidebar_folds: vec![mail_model::SidebarFold {
+            key: "more".into(),
+            open: true,
+        }],
     })
     .await
     .expect("ui preferences");

@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
 });
 
-const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "blue", conversations: false, columnViews: [] };
+const NONE: UiPreferences = { shortcuts: { macos: [], windows: [] }, textSize: 100, recentCommands: [], aiPanel: "open", accentTheme: "blue", conversations: false, columnViews: [], sidebarFolds: [] };
 
 function setup(options: { preferences?: UiPreferences; layout?: CoreWindowLayout; failures?: Record<string, Failure> } = {}) {
   const items = makeMessages(4);
@@ -25,7 +25,8 @@ function setup(options: { preferences?: UiPreferences; layout?: CoreWindowLayout
     views: Object.fromEntries(items.map((item) => [item.id, makeView(item)])),
     readingPreferences: { markReadOnOpen: "never" },
     ...(options.failures && { failures: options.failures }),
-    ui: { ...(options.preferences && { preferences: options.preferences }), ...(options.layout && { layout: options.layout }) },
+    // The core's own default (stage 23: no part of the sidebar opened or closed), unless given.
+    ui: { preferences: options.preferences ?? NONE, ...(options.layout && { layout: options.layout }) },
   });
   return { core, items, ...renderApp() };
 }
@@ -73,6 +74,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         accentTheme: "orange",
         conversations: false,
         columnViews: [],
+        sidebarFolds: [],
       },
       layout: { readingPane: "bottom", density: "compact", sidebarExpanded: true, sidebarWidth: 240, listWidth: 384, listHeight: 320 },
     });
@@ -121,6 +123,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         accentTheme: "blue",
         conversations: false,
         columnViews: [],
+        sidebarFolds: [],
       },
     });
   });
@@ -138,6 +141,7 @@ describe("UI preferences in the core (stage 8, decision 0025)", () => {
         accentTheme: "orange",
         conversations: false,
         columnViews: [],
+        sidebarFolds: [],
       },
     });
     await waitFor(() => {
@@ -212,6 +216,7 @@ describe("moving the old local fallback to the core, once", () => {
       accentTheme: "blue",
       conversations: false,
       columnViews: [],
+      sidebarFolds: [],
     });
     expect(core.ui.layout).toEqual({ readingPane: "bottom", density: "compact", sidebarExpanded: true, sidebarWidth: 240, listWidth: 384, listHeight: 320 });
     expect(stored("paletteRecent")).toBeNull();

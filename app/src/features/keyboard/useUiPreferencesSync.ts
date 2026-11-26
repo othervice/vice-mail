@@ -6,6 +6,7 @@ import { useLayoutStore } from "../../stores/layout";
 import { usePaletteStore } from "../../stores/palette";
 import { useShortcutStore } from "../../stores/shortcuts";
 import { useColumnViewsStore } from "../layout/columnViews";
+import { useSidebarFoldStore } from "../layout/sidebarFolds";
 import { useAccentStore } from "../preferences/accent";
 import { useConversationStore } from "../threads/preference";
 import { migrateLocalAccent, migrateLocalFallback } from "./migrateLocal";
@@ -23,6 +24,8 @@ function applyUiPreferences(preferences: UiPreferences): void {
   useConversationStore.getState().applyStored(preferences.conversations);
   // Stage 17: the views the column and the rail show, in the user's order.
   useColumnViewsStore.getState().applyStored(preferences.columnViews);
+  // Stage 23 (decision 0085): the sidebar's parts opened or closed on this device.
+  useSidebarFoldStore.getState().applyStored(preferences.sidebarFolds);
 }
 
 /** `uiPreferencesChanged`: another window or (via the settings sync) another device saved them. */

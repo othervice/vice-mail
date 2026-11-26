@@ -24,6 +24,7 @@ import { resetSaveAllRequestForTests } from "../src/features/reading/saveAllRequ
 import { useBlockedFocusStore } from "../src/features/blocked/focus";
 import { useConversationStore } from "../src/features/threads/preference";
 import { useColumnViewsStore } from "../src/features/layout/columnViews";
+import { useSidebarFoldStore } from "../src/features/layout/sidebarFolds";
 // Stage 19: the redirect dialog of this window.
 import { useRedirectStore } from "../src/stores/redirect";
 
@@ -71,6 +72,8 @@ afterEach(() => {
   useConversationStore.setState(useConversationStore.getInitialState(), true);
   // Stage 17: the column's views, a UI preference of the core, and its editor.
   useColumnViewsStore.setState(useColumnViewsStore.getInitialState(), true);
+  // Stage 23 (decision 0085): the sidebar's parts opened or closed, a UI preference of the core.
+  useSidebarFoldStore.setState(useSidebarFoldStore.getInitialState(), true);
   delete document.documentElement.dataset["accent"];
   delete document.documentElement.dataset["density"];
   delete document.documentElement.dataset["textSize"];

@@ -62,7 +62,9 @@ export type NoticeContent =
         | "mbox"
         | "export"
         | "drop"
-        | "accounts";
+        | "accounts"
+        // Stage 23 (decision 0085): "Sync now" at the foot of the column.
+        | "sync";
       error: IpcError;
     }
   /** Operations of one of the user's own batches failed on the server or met a conflict. */

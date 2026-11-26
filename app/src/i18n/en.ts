@@ -37,6 +37,11 @@ export const en = {
     hideSidebar: "Hide sidebar",
     resizeSidebar: "Sidebar width",
     sidebarWidth: "{{width}} pixels",
+    // Stage 23 (decision 0085): the column's sections and its foot.
+    allAccounts: "All accounts",
+    more: "More",
+    moreFolders: "More folders",
+    moreFoldersOf: "More folders of {{account}}",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "connecting",
@@ -55,7 +60,7 @@ export const en = {
     hidden: "{{name}} hidden. “Edit views…” shows it again.",
     empty: "No views shown.",
     title: "Edit views",
-    intro: "Choose the views the sidebar shows and their order. Hidden views stay in the command palette and keep their shortcuts.",
+    intro: "Choose the views the sidebar shows and their order. Views below the line “Under ‘More’” show under “More”. Hidden views stay in the command palette and keep their shortcuts.",
     hint: "Drag a view by its handle, or press {{up}} or {{down}} to move the view that has the focus.",
     list: "Views",
     moveUp: "Move “{{name}}” up",
@@ -66,6 +71,9 @@ export const en = {
     done: "Done",
     close: "Close",
     saveFailed: "The views could not be saved.",
+    // Stage 23 (decision 0085): the line between "All accounts" and "More" in the editor.
+    moreLine: "Under “More”",
+    movedMore: "{{name}}, under “More”, position {{position}} of {{count}}",
   },
   sidebar: {
     folders: "Folders of {{account}}",
@@ -80,6 +88,16 @@ export const en = {
     // Stage 20 (decision 0060): the account's mailbox is at least 90 % full.
     quotaFull: "{{label}}, mailbox {{percent}} % full",
     statusWithReason: "{{status}}: {{reason}}",
+    // Stage 23 (decision 0085): the column's foot.
+    footer: {
+      label: "Sync and settings",
+      syncedAt: "Synced at {{time}}",
+      syncedOn: "Synced on {{date}} at {{time}}",
+      account: "{{name}}: {{state}}",
+      accounts_one: "{{count}} account: {{state}}",
+      accounts_other: "{{count}} accounts: {{state}}",
+      syncNow: "Sync now",
+    },
   },
   roles: {
     inbox: "Inbox",
@@ -949,6 +967,8 @@ export const en = {
       markFolderRead: "The messages could not be marked as read.",
       // Stage 22
       drop: "The messages could not be moved or copied there.",
+      // Stage 23 (decision 0085): "Sync now" at the foot of the column.
+      sync: "Syncing could not be started.",
       accounts: "The account could not be changed.",
     },
     operationFailed_one: "A change could not be made on the server: {{action}}",

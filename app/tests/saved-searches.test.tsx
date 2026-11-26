@@ -161,7 +161,8 @@ describe("saving a search", () => {
     expect(recorded(core)).toEqual([]);
 
     await user.click(screen.getByTestId("rail-folders"));
-    const nav = await screen.findByRole("region", { name: "Saved searches" });
+    // Stage 23 (decision 0085): the saved searches are under "More" of the first section.
+    const nav = await screen.findByTestId("sidebar-views");
     expect(within(nav).getByRole("treeitem", { name: "Invoices" })).toBeTruthy();
   });
 
@@ -206,14 +207,16 @@ describe("saved searches as views", () => {
     await user.click(screen.getByRole("button", { name: /^Saved views/ }));
     expect(await screen.findByRole("heading", { name: "No saved searches yet" })).toBeTruthy();
     await user.click(screen.getByTestId("rail-folders"));
-    expect(screen.queryByRole("region", { name: "Saved searches" })).toBeNull();
+    await screen.findByTestId("sidebar-views");
+    expect(screen.queryByTestId("saved-search-nav-entry")).toBeNull();
   });
 
   it("opens a saved search from the sidebar with its results over all accounts", async () => {
     const { core, user } = setup({ savedSearches: [makeSavedSearch({ name: "Invoices", query: "rechnung" })] });
     await screen.findByRole("listbox", { name: "Messages in Inbox" });
     await user.click(screen.getByTestId("rail-folders"));
-    const nav = await screen.findByRole("region", { name: "Saved searches" });
+    // Stage 23 (decision 0085): the saved searches are under "More" of the first section.
+    const nav = await screen.findByTestId("sidebar-views");
     await user.click(within(nav).getByRole("treeitem", { name: "Invoices" }));
 
     expect(await screen.findByRole("heading", { name: "Invoices" })).toBeTruthy();

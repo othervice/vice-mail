@@ -139,7 +139,9 @@
   --spacing-10: var(--ui-space-10);
   --spacing-12: var(--ui-space-12);
 
-  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel` */
+  /* Radius: `rounded-control`, `rounded-row`, `rounded-tile`, `rounded-card`, `rounded-panel`,
+     (stage 23) `rounded-mark` */
+  --radius-mark: var(--ui-radius-mark);
   --radius-control: var(--ui-radius-control);
   --radius-row: var(--ui-radius-row);
   --radius-tile: var(--ui-radius-tile);

@@ -115,7 +115,8 @@ describe("creating folders", () => {
     core.completeMailboxCreations();
     await emitCore({ type: "mailboxesChanged", accountId: WRITER.id });
     const created = await screen.findByRole("treeitem", { name: "2027" });
-    expect(created.getAttribute("aria-level")).toBe("3");
+    // Stage 23 (decision 0085): Projekte is under "More folders" (level 3), its subfolder below it.
+    expect(created.getAttribute("aria-level")).toBe("4");
     expect(created.getAttribute("title")).toBe("Projekte/2027");
   });
 

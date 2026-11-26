@@ -176,6 +176,8 @@
   --ui-radius-tile: 8px;
   --ui-radius-card: 10px;
   --ui-radius-panel: 14px;
+  /* Stage 23 (decision 0085): the small square in an account's colour beside its name. */
+  --ui-radius-mark: 2px;
 
   /* Elevation. Stage 23 (decision 0083): a shadow only for what floats (menus, tooltips, the
      quick actions, dialogs and panels over the content); cards, buttons and rows lie flat with a
@@ -210,6 +212,9 @@
      rows is as wide as the column's rows, at most this (stage 21: `OverflowMenu narrow`). */
   --ui-sidebar-width: 15rem;
   --ui-sidebar-menu-width: 16rem;
+  /* Stage 23 (decision 0085), the approved draft: the column's rows are 28 px (13 px text, 6 px
+     above and below), its section labels 11 px. */
+  --ui-sidebar-row: 1.75rem;
   /* Stage 17 (decision 0050): the contacts view's list is 22 rem wide. */
   --ui-contacts-list-width: 22rem;
   --ui-dot: 0.5rem;

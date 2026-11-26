@@ -82,3 +82,31 @@ export function buildMailboxTree(mailboxes: readonly Mailbox[]): MailboxNode[] {
 export function mailboxWithRole(mailboxes: readonly Mailbox[], role: MailboxRole): Mailbox | undefined {
   return mailboxes.find((m) => m.role === role);
 }
+
+/** Stage 23 (decision 0085): an account's section: its inbox and Sent, and "More folders". */
+export interface AccountTree {
+  inbox: Mailbox | undefined;
+  sent: Mailbox | undefined;
+  /** Every other folder as a tree: roles first, then the own folders by name. */
+  more: MailboxNode[];
+}
+
+/**
+ * Splits an account's tree for its section in the column: the inbox and Sent stand on their own,
+ * everything else goes under "More folders". Own folders below the inbox or Sent (servers that
+ * keep every folder under `INBOX.`) move up there, among the other own folders by name; their
+ * path stays in the row's tooltip.
+ */
+export function splitAccountTree(tree: readonly MailboxNode[]): AccountTree {
+  const inbox = tree.find((node) => node.mailbox.role === "inbox");
+  const sent = tree.find((node) => node.mailbox.role === "sent");
+  const others = tree.filter((node) => node !== inbox && node !== sent);
+  const own = [...others.filter((node) => node.mailbox.role === "custom"), ...(inbox?.children ?? []), ...(sent?.children ?? [])].sort((a, b) =>
+    collator.compare(a.mailbox.name, b.mailbox.name),
+  );
+  return {
+    inbox: inbox?.mailbox,
+    sent: sent?.mailbox,
+    more: [...others.filter((node) => node.mailbox.role !== "custom"), ...own],
+  };
+}

@@ -757,7 +757,9 @@ fn ui_preference_commands_store_validate_and_emit() {
             // Decision 0039: one row per conversation by default.
             "conversations": true,
             // Stage 17: no choice of the column's views, every view in the UI's order.
-            "columnViews": []
+            "columnViews": [],
+            // Stage 23 (decision 0085): every part of the sidebar as the UI shows it first.
+            "sidebarFolds": []
         })
     );
 
@@ -774,9 +776,15 @@ fn ui_preference_commands_store_validate_and_emit() {
         "aiPanel": "folded",
         "accentTheme": "violet",
         "conversations": false,
-        "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }]
+        "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }],
+        "sidebarFolds": [{ "key": "more", "open": true }]
     });
     let stored = invoke(&h, "set_ui_preferences", json!({ "preferences": prefs })).expect("set");
+    // Stage 23 (decision 0085): the sidebar's parts as given.
+    assert_eq!(
+        stored["sidebarFolds"],
+        json!([{ "key": "more", "open": true }])
+    );
     assert_eq!(stored["accentTheme"], "violet");
     assert_eq!(stored["conversations"], false);
     // Stage 17: in the user's order, not sorted.

@@ -31,6 +31,11 @@ pub const MAX_RECENT_COMMAND_CHARS: usize = 200;
 pub const MAX_COLUMN_VIEWS: usize = 32;
 /// Stage 17: longest view id of the column (`later`, `pinnedAttachments`, `contacts`).
 pub const MAX_COLUMN_VIEW_ID_CHARS: usize = 64;
+/// Stage 23 (decision 0085): most entries of [`UiPreferences::sidebar_folds`].
+pub const MAX_SIDEBAR_FOLDS: usize = 128;
+/// Stage 23 (decision 0085): longest key of a part of the sidebar (`more`,
+/// `account:<account uuid>`, `folders:<account uuid>`).
+pub const MAX_SIDEBAR_FOLD_KEY_CHARS: usize = 64;
 
 /// One key combination. `mod` is Cmd on macOS and Ctrl on Windows; Option/Alt combinations do
 /// not exist (`docs/ARCHITECTURE.md`, "Keyboard shortcuts").
@@ -121,10 +126,21 @@ pub struct ColumnView {
     pub shown: bool,
 }
 
+/// Stage 23 (decision 0085): a part of the sidebar the user opened or closed ("More", a section,
+/// an account, an account's "More folders"), by the UI's key for it. Which parts exist and what
+/// they show by default is the UI's business; the core checks the form of the key only.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SidebarFold {
+    /// 1 to 64 ASCII letters, digits, `_`, `-` or `:`.
+    pub key: String,
+    pub open: bool,
+}
+
 /// The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
 /// 16) the accent theme, (decision 0039) the conversation view and (stage 17) the column's views
-/// are synchronised between devices; the recent commands and the AI panel's state stay on this
-/// device.
+/// are synchronised between devices; the recent commands, the AI panel's state and (stage 23) the
+/// sidebar's opened and closed parts stay on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
@@ -146,6 +162,10 @@ pub struct UiPreferences {
     /// UI's order. A view the list does not name (one added by a later version) keeps its default
     /// place and visibility. At most 32 entries, no id twice.
     pub column_views: Vec<ColumnView>,
+    /// Stage 23 (decision 0085): the parts of the sidebar the user opened or closed, on this
+    /// device (like the window's layout). Empty is the default: every part as the UI shows it
+    /// first. At most 128 entries, no key twice.
+    pub sidebar_folds: Vec<SidebarFold>,
 }
 
 impl Default for UiPreferences {
@@ -158,6 +178,7 @@ impl Default for UiPreferences {
             accent_theme: AccentTheme::Blue,
             conversations: true,
             column_views: Vec::new(),
+            sidebar_folds: Vec::new(),
         }
     }
 }
@@ -214,6 +235,12 @@ pub enum UiPreferencesError {
     InvalidColumnView { index: usize, reason: &'static str },
     #[error("column view {id:?} appears twice")]
     DuplicateColumnView { id: String },
+    #[error("{0} parts of the sidebar, at most 128")]
+    TooManySidebarFolds(usize),
+    #[error("part of the sidebar {index}: {reason}")]
+    InvalidSidebarFold { index: usize, reason: &'static str },
+    #[error("part of the sidebar {key:?} appears twice")]
+    DuplicateSidebarFold { key: String },
     /// The stored list would not fit into one settings sync record.
     #[error("{platform}: the shortcut changes take {bytes} bytes, at most {max}")]
     TooLarge {
@@ -231,6 +258,7 @@ impl UiPreferences {
         }
         validate_recent_commands(&self.recent_commands)?;
         validate_column_views(&self.column_views)?;
+        validate_sidebar_folds(&self.sidebar_folds)?;
         validate_overrides(ShortcutPlatform::Macos, &self.shortcuts.macos)?;
         validate_overrides(ShortcutPlatform::Windows, &self.shortcuts.windows)
     }
@@ -258,6 +286,34 @@ pub fn validate_column_views(views: &[ColumnView]) -> Result<(), UiPreferencesEr
         if !seen.insert(view.id.as_str()) {
             return Err(UiPreferencesError::DuplicateColumnView {
                 id: view.id.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Stage 23 (decision 0085): the sidebar's parts opened or closed: at most 128, each key 1 to 64
+/// ASCII letters, digits, `_`, `-` or `:`, no key twice.
+pub fn validate_sidebar_folds(folds: &[SidebarFold]) -> Result<(), UiPreferencesError> {
+    if folds.len() > MAX_SIDEBAR_FOLDS {
+        return Err(UiPreferencesError::TooManySidebarFolds(folds.len()));
+    }
+    let mut seen = BTreeSet::new();
+    for (index, fold) in folds.iter().enumerate() {
+        let invalid = |reason| UiPreferencesError::InvalidSidebarFold { index, reason };
+        if fold.key.is_empty() {
+            return Err(invalid("empty key"));
+        }
+        if fold.key.len() > MAX_SIDEBAR_FOLD_KEY_CHARS {
+            return Err(invalid("key longer than 64 characters"));
+        }
+        let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':');
+        if !fold.key.chars().all(allowed) {
+            return Err(invalid("only ASCII letters, digits, '_', '-' and ':'"));
+        }
+        if !seen.insert(fold.key.as_str()) {
+            return Err(UiPreferencesError::DuplicateSidebarFold {
+                key: fold.key.clone(),
             });
         }
     }
@@ -585,6 +641,10 @@ mod tests {
                     shown: false,
                 },
             ],
+            sidebar_folds: vec![SidebarFold {
+                key: "more".into(),
+                open: true,
+            }],
         };
         let wire = json!({
             "shortcuts": {
@@ -596,7 +656,8 @@ mod tests {
             "aiPanel": "folded",
             "accentTheme": "rose",
             "conversations": false,
-            "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }]
+            "columnViews": [{ "id": "flagged", "shown": true }, { "id": "later", "shown": false }],
+            "sidebarFolds": [{ "key": "more", "open": true }]
         });
         assert_eq!(serde_json::to_value(&prefs).expect("json"), wire);
         assert_eq!(
@@ -749,7 +810,8 @@ mod tests {
                 "aiPanel": panel,
                 "accentTheme": "orange",
                 "conversations": true,
-                "columnViews": []
+                "columnViews": [],
+                "sidebarFolds": []
             })
         };
         for (text, state) in [
@@ -768,6 +830,63 @@ mod tests {
         let mut missing = wire(json!("open"));
         missing.as_object_mut().expect("object").remove("aiPanel");
         assert!(serde_json::from_value::<UiPreferences>(missing).is_err());
+    }
+
+    /// Stage 23 (decision 0085): nothing opened or closed by default; the keys are simple names
+    /// (an account's parts carry its id), bounded, none twice; the field is required on the wire.
+    #[test]
+    fn sidebar_folds_default_to_empty_and_are_checked() {
+        assert!(UiPreferences::default().sidebar_folds.is_empty());
+        let fold = |key: &str, open: bool| SidebarFold {
+            key: key.into(),
+            open,
+        };
+        let chosen = UiPreferences {
+            sidebar_folds: vec![
+                fold("more", true),
+                fold("favorites", false),
+                fold("account:0b6f6c1e-5d1a-4a4b-9f0e-2d7c3a1b9e44", false),
+                fold("folders:0b6f6c1e-5d1a-4a4b-9f0e-2d7c3a1b9e44", true),
+            ],
+            ..UiPreferences::default()
+        };
+        assert!(chosen.validate().is_ok());
+        let at_most: Vec<SidebarFold> = (0..MAX_SIDEBAR_FOLDS)
+            .map(|i| fold(&format!("account:{i}"), false))
+            .collect();
+        assert!(validate_sidebar_folds(&at_most).is_ok());
+        let too_many: Vec<SidebarFold> = (0..=MAX_SIDEBAR_FOLDS)
+            .map(|i| fold(&format!("account:{i}"), false))
+            .collect();
+        assert_eq!(
+            validate_sidebar_folds(&too_many),
+            Err(UiPreferencesError::TooManySidebarFolds(129))
+        );
+        assert_eq!(
+            validate_sidebar_folds(&[fold("more", true), fold("more", false)]),
+            Err(UiPreferencesError::DuplicateSidebarFold { key: "more".into() })
+        );
+        assert!(validate_sidebar_folds(&[fold(&"a".repeat(64), true)]).is_ok());
+        for bad in ["", "a b", "mehr…", "a/b", "a.b", &"a".repeat(65)] {
+            assert!(
+                matches!(
+                    validate_sidebar_folds(&[fold(bad, true)]),
+                    Err(UiPreferencesError::InvalidSidebarFold { index: 0, .. })
+                ),
+                "{bad:?}"
+            );
+        }
+        let refused = UiPreferences {
+            sidebar_folds: vec![fold("", true)],
+            ..UiPreferences::default()
+        };
+        assert!(refused.validate().is_err());
+        let mut wire = serde_json::to_value(UiPreferences::default()).expect("json");
+        assert_eq!(wire["sidebarFolds"], json!([]));
+        wire["sidebarFolds"] = json!([{ "key": "more", "open": "yes" }]);
+        assert!(serde_json::from_value::<UiPreferences>(wire.clone()).is_err());
+        wire.as_object_mut().expect("object").remove("sidebarFolds");
+        assert!(serde_json::from_value::<UiPreferences>(wire).is_err());
     }
 
     /// Stage 17: no choice of the column's views by default (the UI's default order, all

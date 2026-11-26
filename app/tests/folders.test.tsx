@@ -93,7 +93,8 @@ describe("folder tree", () => {
     const names = within(ada)
       .getAllByTestId(/^mailbox-/)
       .map((button) => button.querySelector(".truncate")?.textContent);
-    expect(names).toEqual(["Inbox", "Drafts", "Sent", "Trash", "Projekte", "2026"]);
+    // Stage 23 (decision 0085): the inbox and Sent first, the rest under "More folders".
+    expect(names).toEqual(["Inbox", "Sent", "Drafts", "Trash", "Projekte", "2026"]);
     // The counter is read as "3 unread", not as a bare number.
     expect(within(ada).getByRole("treeitem", { name: "Inbox, 3 unread" })).toBeTruthy();
     expect(within(ada).getByRole("treeitem", { name: "Projekte, 2 unread" })).toBeTruthy();

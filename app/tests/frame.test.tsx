@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { mockCore } from "./support/core";
 import { renderApp } from "./support/render";
@@ -29,8 +29,13 @@ describe("app frame without an account", () => {
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
     expect(names).toEqual([
+      // Stage 23 (decision 0085): grouped like the column: the inbox, the views of "All
+      // accounts" (Later and Flagged by default), Sent; then the views under "More".
       "Inbox",
       "Later",
+      // SPEC "Markiert"
+      "Flagged",
+      "Sent",
       // Stage 20 (decisions 0059, 0060)
       "Waiting for reply",
       "Tasks",
@@ -38,14 +43,11 @@ describe("app frame without an account", () => {
       "Reading list",
       "Pinned attachments",
       "Attachments",
-      // SPEC "Markiert"
-      "Flagged",
       "Pinned",
-      // Stage 17: the views of the column's "Views" section, as the user chose them, before Sent.
+      // Stage 17: the views of the column's "Views" section, as the user chose them.
       "Saved views",
       // Stage 17 (decision 0050).
       "Contacts",
-      "Sent",
       "Drafts",
       "Archive",
       "Trash",
@@ -191,14 +193,17 @@ describe("app frame without an account", () => {
     mockCore();
     const { user } = renderApp();
     await user.click(await screen.findByRole("button", { name: "Folders" }));
-    // Unfolded, the column replaces the rail; its rows show their labels and no tooltips.
+    // Unfolded, the column replaces the rail. Stage 23 (decision 0085): Settings is an icon at its
+    // foot, named by its tooltip like the rail's icons.
     const settings = screen.getByRole("button", { name: "Settings" });
     act(() => {
       settings.focus();
     });
-    expect(screen.queryByRole("tooltip")).toBeNull();
     act(() => {
       settings.blur();
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("tooltip")).toBeNull();
     });
 
     await user.click(screen.getByRole("button", { name: "Hide sidebar" }));

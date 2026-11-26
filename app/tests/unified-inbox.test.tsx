@@ -182,12 +182,13 @@ describe("unified inbox", () => {
       expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Inbox");
     });
 
-    // The column lists the unified inbox (with its unread count in the name) and the groups.
+    // The column lists the unified inbox (with its unread count in the name) as "Inbox" of "All
+    // accounts", the groups under "More" (stage 23, decision 0085).
     await user.click(screen.getByTestId("rail-folders"));
-    const tree = await screen.findByRole("region", { name: "Inboxes" });
-    await user.click(within(tree).getByRole("treeitem", { name: /^All inboxes/ }));
+    const tree = await screen.findByRole("tree", { name: "All accounts" });
+    await user.click(within(tree).getByRole("treeitem", { name: /^Inbox/ }));
     expect(await screen.findByRole("listbox", { name: "Messages in All inboxes" })).toBeTruthy();
-    expect(within(tree).getByRole("treeitem", { name: /^All inboxes/ }).getAttribute("aria-current")).toBe("page");
+    expect(within(tree).getByRole("treeitem", { name: /^Inbox/ }).getAttribute("aria-current")).toBe("page");
   });
 
   it("stays a sorted inbox in the conversation view (decision 0039): the sorted inbox as conversations", async () => {

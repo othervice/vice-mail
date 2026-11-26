@@ -371,7 +371,8 @@ pub const RETIRED_KINDS: &[&str] = &["contactPicture"];
 /// and the text size. Every other key of
 /// the `setting` table is a device setting: `prefetch.*` (what this machine keeps offline),
 /// `inbox.settings` (categories and bundles on this screen, decision 0020),
-/// `ui.recent_commands` and `ui.layout.*` (this device's palette history and window layouts).
+/// `ui.recent_commands`, `ui.layout.*` and (stage 23) `ui.sidebar_folds` (this device's palette
+/// history, window layouts and the sidebar's opened and closed parts).
 pub const SYNCED_SETTINGS: &[&str] = &[
     "ui.theme",
     "ui.language",

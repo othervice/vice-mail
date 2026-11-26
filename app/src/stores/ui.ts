@@ -149,12 +149,12 @@ interface UiState {
   listHeight: number;
   /** The column should take the focus once it shows (`openSidebar`); it clears this then. */
   sidebarFocusRequested: boolean;
-  /** Folders of the tree whose subfolders are hidden. Everything is unfolded by default. */
+  /**
+   * Folders of the tree whose subfolders are hidden. Everything is unfolded by default. Stage 23
+   * (decision 0085): the column's sections, accounts and "More" are remembered on the device
+   * instead (`features/layout/sidebarFolds.ts`).
+   */
   collapsedMailboxes: ReadonlySet<MailboxId>;
-  /** Accounts of the column whose folders are hidden. */
-  collapsedAccounts: ReadonlySet<AccountId>;
-  /** Labelled sections of the column ("views", "savedSearches", "favorites") folded to their label. */
-  collapsedSections: ReadonlySet<string>;
   accountsPage: AccountsPage;
   linkRequest: LinkRequest | null;
   showMailView: (mailView: ShownMailViewId) => void;
@@ -178,8 +178,6 @@ interface UiState {
   setListWidth: (width: number) => void;
   setListHeight: (height: number) => void;
   toggleMailbox: (mailboxId: MailboxId) => void;
-  toggleAccount: (accountId: AccountId) => void;
-  toggleSection: (section: string) => void;
   requestLink: (renderToken: RenderToken, index: number) => void;
   dismissLink: () => void;
 }
@@ -197,8 +195,6 @@ export const useUiStore = create<UiState>()((set) => ({
   listHeight: LIST_HEIGHT.default,
   sidebarFocusRequested: false,
   collapsedMailboxes: new Set<MailboxId>(),
-  collapsedAccounts: new Set<AccountId>(),
-  collapsedSections: new Set<string>(),
   accountsPage: { kind: "list" },
   linkRequest: null,
   showMailView: (mailView) => {
@@ -262,20 +258,6 @@ export const useUiStore = create<UiState>()((set) => ({
       const next = new Set(state.collapsedMailboxes);
       if (!next.delete(mailboxId)) next.add(mailboxId);
       return { collapsedMailboxes: next };
-    });
-  },
-  toggleAccount: (accountId) => {
-    set((state) => {
-      const next = new Set(state.collapsedAccounts);
-      if (!next.delete(accountId)) next.add(accountId);
-      return { collapsedAccounts: next };
-    });
-  },
-  toggleSection: (section) => {
-    set((state) => {
-      const next = new Set(state.collapsedSections);
-      if (!next.delete(section)) next.add(section);
-      return { collapsedSections: next };
     });
   },
   requestLink: (renderToken, index) => {

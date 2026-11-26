@@ -1066,6 +1066,8 @@ export const MAX_SHORTCUT_KEY_CHARS = 20 as const;
 
 export const MAX_SHORTCUT_OVERRIDES = 100 as const;
 
+export const MAX_SIDEBAR_FOLDS = 128 as const;
+
 export const MAX_SIDEBAR_WIDTH = 320 as const;
 
 export const MAX_SIGNATURE_IMAGES = 8 as const;
@@ -5530,6 +5532,17 @@ export type ShortcutOverride = {
 };
 
 /**
+ *  Stage 23 (decision 0085): a part of the sidebar the user opened or closed ("More", a section,
+ *  an account, an account's "More folders"), by the UI's key for it. Which parts exist and what
+ *  they show by default is the UI's business; the core checks the form of the key only.
+ */
+export type SidebarFold = {
+	/**  1 to 64 ASCII letters, digits, `_`, `-` or `:`. */
+	key: string,
+	open: boolean,
+};
+
+/**
  *  Id of a signature: a UUID, the same on every device (the sync record id). A signature
  *  taken over from a stage 5 text signature has the UUID of its identity.
  */
@@ -6128,8 +6141,8 @@ export type TransferMode =
 /**
  *  The UI settings of `getUiPreferences` / `setUiPreferences`. Shortcuts, text size, (stage
  *  16) the accent theme, (decision 0039) the conversation view and (stage 17) the column's views
- *  are synchronised between devices; the recent commands and the AI panel's state stay on this
- *  device.
+ *  are synchronised between devices; the recent commands, the AI panel's state and (stage 23) the
+ *  sidebar's opened and closed parts stay on this device.
  */
 export type UiPreferences = {
 	shortcuts: PlatformShortcuts,
@@ -6156,6 +6169,12 @@ export type UiPreferences = {
 	 *  place and visibility. At most 32 entries, no id twice.
 	 */
 	columnViews: ColumnView[],
+	/**
+	 *  Stage 23 (decision 0085): the parts of the sidebar the user opened or closed, on this
+	 *  device (like the window's layout). Empty is the default: every part as the UI shows it
+	 *  first. At most 128 entries, no key twice.
+	 */
+	sidebarFolds: SidebarFold[],
 };
 
 /**  The user's answer to an unclear send. */

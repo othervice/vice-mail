@@ -17,7 +17,22 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   conversations: false,
   // Stage 17: no choice, every view of the column in its default order.
   columnViews: [],
+  // Stage 23 (decision 0085): every part of the sidebar as it shows at first.
+  sidebarFolds: [],
 };
+
+/**
+ * Stage 23 (decision 0085): "More" and every account's "More folders" open. The fake core starts
+ * so when a test gives no preferences of its own: the earlier tests are written for the whole
+ * column (every view, the whole folder tree). The tests of the new sidebar give
+ * `DEFAULT_UI_PREFERENCES` (the core's default: both closed).
+ */
+export function withWholeColumn(preferences: UiPreferences, accountIds: readonly string[]): UiPreferences {
+  return {
+    ...preferences,
+    sidebarFolds: [{ key: "more", open: true }, ...accountIds.map((id) => ({ key: `folders:${id}`, open: true }))],
+  };
+}
 
 /** Decision 0039: the core's own default, the conversation view on. */
 export const CONVERSATION_PREFERENCES: UiPreferences = { ...DEFAULT_UI_PREFERENCES, conversations: true };
@@ -58,6 +73,8 @@ export interface UiFakeState {
 }
 
 interface Deps {
+  /** The accounts the fake core starts with (stage 23: their "More folders" open, see `withWholeColumn`). */
+  accountIds: readonly string[];
   /** The account of a stored message, if the fake core has it. */
   accountOfMessage: (messageId: number) => string | null;
   hasDraft: (draftId: string) => boolean;
@@ -92,6 +109,16 @@ function problemOf(preferences: UiPreferences): string | null {
     if (viewIds.has(view.id)) return `column view "${view.id}" appears twice`;
     viewIds.add(view.id);
   }
+  // Stage 23 (decision 0085): `validate_sidebar_folds`: at most 128, simple keys, none twice.
+  const folds = preferences.sidebarFolds as unknown;
+  if (!Array.isArray(folds)) return "sidebarFolds is not a list";
+  if (preferences.sidebarFolds.length > 128) return `${String(preferences.sidebarFolds.length)} parts of the sidebar, at most 128`;
+  const foldKeys = new Set<string>();
+  for (const [index, fold] of preferences.sidebarFolds.entries()) {
+    if (!/^[A-Za-z0-9_:-]{1,64}$/.test(fold.key) || typeof (fold.open as unknown) !== "boolean") return `part of the sidebar ${String(index)}: not valid`;
+    if (foldKeys.has(fold.key)) return `part of the sidebar "${fold.key}" appears twice`;
+    foldKeys.add(fold.key);
+  }
   const recent = preferences.recentCommands;
   if (recent.length > 5) return "at most 5 recent commands";
   if (new Set(recent).size !== recent.length) return "a recent command appears twice";
@@ -117,7 +144,7 @@ function problemOf(preferences: UiPreferences): string | null {
 const sorted = (list: readonly ShortcutOverride[]) => [...list].sort((a, b) => a.command.localeCompare(b.command));
 
 export function createUiFake(options: UiFakeOptions, deps: Deps) {
-  let preferences: UiPreferences = options.preferences ?? DEFAULT_UI_PREFERENCES;
+  let preferences: UiPreferences = options.preferences ?? withWholeColumn(DEFAULT_UI_PREFERENCES, deps.accountIds);
   let layout: CoreWindowLayout = options.layout ?? DEFAULT_WINDOW_LAYOUT;
   const messageWindows: string[] = [];
   const composerWindows: string[] = [];

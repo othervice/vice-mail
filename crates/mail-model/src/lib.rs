@@ -265,10 +265,11 @@ pub use ui::{
     DEFAULT_SIDEBAR_WIDTH, DEFAULT_TEXT_SIZE, Density, MAX_COLUMN_VIEW_ID_CHARS, MAX_COLUMN_VIEWS,
     MAX_COMMAND_ID_CHARS, MAX_LAYOUT_SLOT_CHARS, MAX_LIST_HEIGHT, MAX_LIST_WIDTH,
     MAX_RECENT_COMMAND_CHARS, MAX_RECENT_COMMANDS, MAX_SHORTCUT_KEY_CHARS, MAX_SHORTCUT_OVERRIDES,
-    MAX_SHORTCUTS_PER_COMMAND, MAX_SIDEBAR_WIDTH, MAX_TEXT_SIZE, MIN_LIST_HEIGHT, MIN_LIST_WIDTH,
-    MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE, PlatformShortcuts, ReadingPanePosition, Shortcut,
-    ShortcutOverride, ShortcutPlatform, UiPreferences, UiPreferencesError, WindowLayout,
-    validate_column_views, validate_layout_slot, validate_overrides, validate_recent_commands,
+    MAX_SHORTCUTS_PER_COMMAND, MAX_SIDEBAR_FOLD_KEY_CHARS, MAX_SIDEBAR_FOLDS, MAX_SIDEBAR_WIDTH,
+    MAX_TEXT_SIZE, MIN_LIST_HEIGHT, MIN_LIST_WIDTH, MIN_SIDEBAR_WIDTH, MIN_TEXT_SIZE,
+    PlatformShortcuts, ReadingPanePosition, Shortcut, ShortcutOverride, ShortcutPlatform,
+    SidebarFold, UiPreferences, UiPreferencesError, WindowLayout, validate_column_views,
+    validate_layout_slot, validate_overrides, validate_recent_commands, validate_sidebar_folds,
 };
 pub use uid_map::{
     UidMapChanges, UidMapEntry, UidMapFuture, UidMapMailbox, UidMapSnapshot, UidMapStore,

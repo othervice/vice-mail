@@ -1525,6 +1525,8 @@ import {
 import type { AiPanelState } from "../generated/bindings";
 // Stage 17: the column's views (order, shown or hidden), synced like the text size.
 import { MAX_COLUMN_VIEWS, type ColumnView } from "../generated/bindings";
+// Stage 23 (decision 0085): the sidebar's opened and closed parts, on this device.
+import { MAX_SIDEBAR_FOLDS, type SidebarFold } from "../generated/bindings";
 
 export {
   DEFAULT_LIST_HEIGHT,
@@ -1532,6 +1534,7 @@ export {
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TEXT_SIZE,
   MAX_COLUMN_VIEWS,
+  MAX_SIDEBAR_FOLDS,
   MAX_LIST_HEIGHT,
   MAX_LIST_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -1551,6 +1554,7 @@ export {
 export type {
   AiPanelState,
   ColumnView,
+  SidebarFold,
   CoreDensity,
   CoreReadingPanePosition,
   CoreShortcut,

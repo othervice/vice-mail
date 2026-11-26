@@ -5,10 +5,10 @@ import type { ShownMailViewId } from "../../stores/ui";
 import { saveUiPreferences } from "../keyboard/uiPreferences";
 
 /**
- * Stage 17: the views of the column's "Views" section, in their default order (docs/DESIGN.md,
- * "Seitenspalte"). The one list of them: the column, the rail, the editor ("Edit views…") and the
- * core's preference (`UiPreferences.columnViews`) all go by it. Inbox, Sent, Drafts, Archive and
- * Trash are in every account's tree and are not part of it.
+ * Stage 17: the views of the column (docs/DESIGN.md, "Seitenspalte"). The one list of them: the
+ * column, the rail, the editor ("Edit views…") and the core's preference
+ * (`UiPreferences.columnViews`) all go by it. Inbox and Sent of every account and of all accounts
+ * are fixed rows of the column and are not part of it.
  */
 export const COLUMN_VIEW_IDS = [
   "later",
@@ -28,35 +28,68 @@ export const COLUMN_VIEW_IDS = [
 
 export type ColumnViewId = (typeof COLUMN_VIEW_IDS)[number];
 
+/**
+ * Stage 23 (decision 0085): the line between the views of "All accounts" and those under "More",
+ * an entry of the same list (the core stores it like a view, older versions keep it as one they do
+ * not know). The views before it show in "All accounts", the ones after it under "More".
+ */
+export const MORE_ENTRY = "more";
+
+export type ColumnEntryId = ColumnViewId | typeof MORE_ENTRY;
+
 export function isColumnViewId(id: string): id is ColumnViewId {
   return (COLUMN_VIEW_IDS as readonly string[]).includes(id);
 }
 
-/** One view of the editor and the column: its id and whether it shows. */
+function isColumnEntryId(id: string): id is ColumnEntryId {
+  return id === MORE_ENTRY || isColumnViewId(id);
+}
+
+/**
+ * Stage 23 (decision 0085), the approved draft: Later and Flagged in "All accounts" (between the
+ * inbox and Sent), every other view under "More", in the order of stage 17.
+ */
+const DEFAULT_MAIN: readonly ColumnViewId[] = ["later", "flagged"];
+
+/** Every entry in its default place: the main views, the line of "More", the other views. */
+export const DEFAULT_COLUMN_ORDER: readonly ColumnEntryId[] = [
+  ...DEFAULT_MAIN,
+  MORE_ENTRY,
+  ...COLUMN_VIEW_IDS.filter((id) => !DEFAULT_MAIN.includes(id)),
+];
+
+/** One entry of the editor and the column: a view and whether it shows, or the line of "More". */
 export interface ColumnViewChoice {
-  id: ColumnViewId;
+  id: ColumnEntryId;
   shown: boolean;
 }
 
 /** Every view shown, in the default order. */
-export const DEFAULT_COLUMN_VIEWS: readonly ColumnViewChoice[] = COLUMN_VIEW_IDS.map((id) => ({ id, shown: true }));
+export const DEFAULT_COLUMN_VIEWS: readonly ColumnViewChoice[] = DEFAULT_COLUMN_ORDER.map((id) => ({ id, shown: true }));
 
 /**
- * The core's list as the full choice: its known views in its order, then every view it does not
- * name at its default place (after the view it follows by default) and shown. Entries of views
- * this version does not know (a newer device) are left out here and kept by `columnViewsToCore`.
+ * The core's list as the full choice: its known entries in its order, then every entry it does
+ * not name at its default place (after the entry it follows by default) and shown. Entries of
+ * views this version does not know (a newer device) are left out here and kept by
+ * `columnViewsToCore`. A list saved before stage 23 has no line of "More": Later and Flagged then
+ * go to "All accounts" (in the user's order), every other view under "More", each keeping its
+ * place and visibility.
  */
 export function resolveColumnViews(stored: readonly ColumnView[]): ColumnViewChoice[] {
-  const result: ColumnViewChoice[] = [];
+  let result: ColumnViewChoice[] = [];
   for (const entry of stored) {
-    if (isColumnViewId(entry.id) && !result.some((choice) => choice.id === entry.id)) {
-      result.push({ id: entry.id, shown: entry.shown });
+    if (isColumnEntryId(entry.id) && !result.some((choice) => choice.id === entry.id)) {
+      result.push({ id: entry.id, shown: entry.id === MORE_ENTRY || entry.shown });
     }
   }
-  COLUMN_VIEW_IDS.forEach((id, index) => {
+  if (result.length > 0 && !result.some((choice) => choice.id === MORE_ENTRY)) {
+    const main = (choice: ColumnViewChoice) => (DEFAULT_MAIN as readonly string[]).includes(choice.id);
+    result = [...result.filter(main), { id: MORE_ENTRY, shown: true }, ...result.filter((choice) => !main(choice))];
+  }
+  DEFAULT_COLUMN_ORDER.forEach((id, index) => {
     if (result.some((choice) => choice.id === id)) return;
-    // After the nearest view that comes before it by default, else at the top.
-    const before = COLUMN_VIEW_IDS.slice(0, index)
+    // After the nearest entry that comes before it by default, else at the top.
+    const before = DEFAULT_COLUMN_ORDER.slice(0, index)
       .reverse()
       .find((earlier) => result.some((choice) => choice.id === earlier));
     const at = before === undefined ? 0 : result.findIndex((choice) => choice.id === before) + 1;
@@ -75,11 +108,11 @@ export function isDefaultColumnViews(choice: readonly ColumnViewChoice[]): boole
 
 /**
  * A choice as the core stores it: empty for the default (so a view a later version adds shows at
- * its place), else every view in order, followed by the entries of views this version does not
+ * its place), else every entry in order, followed by the entries of views this version does not
  * know (`previous`), within the core's limit.
  */
 export function columnViewsToCore(choice: readonly ColumnViewChoice[], previous: readonly ColumnView[]): ColumnView[] {
-  const foreign = previous.filter((entry) => !isColumnViewId(entry.id));
+  const foreign = previous.filter((entry) => !isColumnEntryId(entry.id));
   if (foreign.length === 0 && isDefaultColumnViews(choice)) return [];
   const own = choice.map(({ id, shown }) => ({ id, shown }));
   const seen = new Set<string>(own.map((entry) => entry.id));
@@ -175,8 +208,22 @@ export function useColumnViews(): readonly ColumnViewChoice[] {
   return preview ?? resolved;
 }
 
-/** The views the column and the rail show, in the user's order. */
-export function useShownColumnViews(): ColumnViewId[] {
+/** The views shown in "All accounts" and under "More", each in the user's order. */
+export interface ColumnGroups {
+  main: ColumnViewId[];
+  more: ColumnViewId[];
+}
+
+/** The shown views on either side of the line of "More" (stage 23, decision 0085). */
+export function columnGroups(views: readonly ColumnViewChoice[]): ColumnGroups {
+  const line = views.findIndex((view) => view.id === MORE_ENTRY);
+  const shown = (part: readonly ColumnViewChoice[]) =>
+    part.flatMap((view) => (view.shown && view.id !== MORE_ENTRY ? [view.id] : []));
+  return line < 0 ? { main: shown(views), more: [] } : { main: shown(views.slice(0, line)), more: shown(views.slice(line + 1)) };
+}
+
+/** The views the column and the rail show, in "All accounts" and under "More". */
+export function useColumnGroups(): ColumnGroups {
   const views = useColumnViews();
-  return useMemo(() => views.filter((view) => view.shown).map((view) => view.id), [views]);
+  return useMemo(() => columnGroups(views), [views]);
 }

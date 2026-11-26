@@ -182,7 +182,7 @@ describe("layouts", () => {
   });
 
   it("shows a text size the UI does not offer at the nearest one it does", async () => {
-    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open", accentTheme: "orange", conversations: false, columnViews: [] } });
+    setup({ preferences: { shortcuts: { macos: [], windows: [] }, textSize: 120, recentCommands: [], aiPanel: "open", accentTheme: "orange", conversations: false, columnViews: [], sidebarFolds: [] } });
     await screen.findByRole("navigation", { name: "Views" });
     expect(document.documentElement.dataset["textSize"]).toBe("115");
   });

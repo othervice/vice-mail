@@ -71,6 +71,10 @@ fn sample() -> UiPreferences {
                 shown: false,
             },
         ],
+        sidebar_folds: vec![mail_model::SidebarFold {
+            key: "more".into(),
+            open: true,
+        }],
     }
 }
 
@@ -368,6 +372,87 @@ async fn the_column_views_default_round_trip_and_sync() {
     assert_eq!(stored(&core, "ui.column_views").await, Some(json!([])));
     assert!(RecordKey::setting(SettingScope::Global, "ui.column_views").is_ok());
     assert!(crate::settings_sync::SYNCED_SETTINGS.contains(&"ui.column_views"));
+}
+
+/// Stage 23 (decision 0085): the sidebar's opened and closed parts are a UI preference of this
+/// device: empty by default, stored and announced, back after a restart, a refused list changes
+/// nothing, an unreadable one counts as the default, never synchronised.
+#[tokio::test]
+async fn the_sidebar_folds_stay_on_this_device() {
+    let dir = TempDir::new().expect("dir");
+    let core = core(&dir).await;
+    assert!(
+        core.get_ui_preferences()
+            .await
+            .expect("read")
+            .sidebar_folds
+            .is_empty()
+    );
+    let fold = |key: &str, open: bool| mail_model::SidebarFold {
+        key: key.into(),
+        open,
+    };
+    let mut events = core.subscribe();
+    let chosen = UiPreferences {
+        sidebar_folds: vec![
+            fold("more", true),
+            fold("account:7d3f0c2a-1b2c-4d5e-8f90-a1b2c3d4e5f6", false),
+        ],
+        ..UiPreferences::default()
+    };
+    assert_eq!(
+        core.set_ui_preferences(chosen.clone())
+            .await
+            .expect("store")
+            .sidebar_folds,
+        chosen.sidebar_folds
+    );
+    assert_eq!(
+        stored(&core, "ui.sidebar_folds").await,
+        Some(json!([
+            { "key": "more", "open": true },
+            { "key": "account:7d3f0c2a-1b2c-4d5e-8f90-a1b2c3d4e5f6", "open": false }
+        ]))
+    );
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("event in time")
+        .expect("event");
+    assert!(
+        matches!(&event, CoreEvent::UiPreferencesChanged { preferences } if preferences.sidebar_folds == chosen.sidebar_folds),
+        "{event:?}"
+    );
+    // A key the core does not accept: refused, nothing changes.
+    let err = core
+        .set_ui_preferences(UiPreferences {
+            sidebar_folds: vec![fold("a b", true)],
+            ..UiPreferences::default()
+        })
+        .await
+        .expect_err("refused");
+    assert_eq!(err.code(), mail_model::ErrorCode::InvalidArgument);
+    drop(core);
+    let core = self::core(&dir).await;
+    assert_eq!(core.get_ui_preferences().await.expect("read"), chosen);
+    assert!(RecordKey::setting(SettingScope::Global, "ui.sidebar_folds").is_err());
+    assert!(!crate::settings_sync::SYNCED_SETTINGS.contains(&"ui.sidebar_folds"));
+    core.store_for_tests()
+        .put_settings(
+            GLOBAL_SCOPE,
+            vec![(
+                "ui.sidebar_folds".into(),
+                "[{\"key\":\"\",\"open\":true}]".into(),
+            )],
+        )
+        .await
+        .expect("seed");
+    assert!(
+        core.get_ui_preferences()
+            .await
+            .expect("read")
+            .sidebar_folds
+            .is_empty()
+    );
 }
 
 /// Decision 0028: the AI panel's state is a UI preference of this device: stored, announced,

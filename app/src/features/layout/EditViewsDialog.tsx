@@ -9,7 +9,7 @@ import { shortcutPlatform } from "../actions/shortcuts";
 import { useAppInfo } from "../app-info/queries";
 import { trapTab } from "../keyboard/ShortcutOverview";
 import { MAIL_VIEW_ICONS } from "../mail/views";
-import { isDefaultColumnViews, moveColumnView, useColumnViews, useColumnViewsStore, type ColumnViewChoice, type ColumnViewId } from "./columnViews";
+import { isDefaultColumnViews, MORE_ENTRY, moveColumnView, useColumnViews, useColumnViewsStore, type ColumnEntryId, type ColumnViewChoice } from "./columnViews";
 
 /** Stage 17: "Edit views…", mounted once in the frame; open from the column or the palette. */
 export function EditViewsHost() {
@@ -19,7 +19,7 @@ export function EditViewsHost() {
 
 /** A view being dragged by its handle: the order shown meanwhile and the one it started from. */
 interface Drag {
-  id: ColumnViewId;
+  id: ColumnEntryId;
   order: readonly ColumnViewChoice[];
   start: readonly ColumnViewChoice[];
   stop: () => void;
@@ -65,14 +65,15 @@ function EditViewsDialog() {
   const saveError = useColumnViewsStore((state) => state.saveError);
   const platform = shortcutPlatform(useAppInfo().data?.platform);
   const [announcement, setAnnouncement] = useState("");
-  const [dragging, setDragging] = useState<ColumnViewId | null>(null);
+  const [dragging, setDragging] = useState<ColumnEntryId | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const doneRef = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
   // The view whose checkbox keeps the focus while it moves to another place.
-  const keepFocus = useRef<ColumnViewId | null>(null);
-  const name = (id: ColumnViewId) => t(`nav.${id}`);
+  const keepFocus = useRef<ColumnEntryId | null>(null);
+  // Stage 23 (decision 0085): the line of "More" is an entry of the list too.
+  const name = (id: ColumnEntryId) => (id === MORE_ENTRY ? t("nav.more") : t(`nav.${id}`));
 
   // The focus starts on the first view and goes back where it was (else to the column's "Views",
   // else to the main area); a click beside the dialog closes it, like Escape.
@@ -114,9 +115,14 @@ function EditViewsDialog() {
     if (box && document.activeElement !== box) box.focus();
   }, [views]);
 
-  const announceMove = (order: readonly ColumnViewChoice[], id: ColumnViewId) => {
-    const position = order.findIndex((view) => view.id === id) + 1;
-    setAnnouncement(t("columnViews.moved", { name: name(id), position, count: order.length }));
+  // The place among the views of "All accounts" or of "More", and which of the two.
+  const announceMove = (order: readonly ColumnViewChoice[], id: ColumnEntryId) => {
+    const line = order.findIndex((view) => view.id === MORE_ENTRY);
+    const index = order.findIndex((view) => view.id === id);
+    const under = line >= 0 && index > line;
+    const group = order.filter((view, at) => view.id !== MORE_ENTRY && (line < 0 || (at > line) === under));
+    const position = group.findIndex((view) => view.id === id) + 1;
+    setAnnouncement(t(under ? "columnViews.movedMore" : "columnViews.moved", { name: name(id), position, count: group.length }));
   };
 
   const move = (from: number, to: number) => {
@@ -128,7 +134,7 @@ function EditViewsDialog() {
     announceMove(next, moved.id);
   };
 
-  const toggle = (id: ColumnViewId, shown: boolean) => {
+  const toggle = (id: ColumnEntryId, shown: boolean) => {
     choose(views.map((view) => (view.id === id ? { ...view, shown } : view)));
   };
 
@@ -142,7 +148,7 @@ function EditViewsDialog() {
   // Dragging by the handle: the row under the pointer (above the first: the first, below the last:
   // the last) is where the view goes. Window listeners, not pointer capture: the row moves in the
   // DOM while it is dragged, which would end a capture.
-  const startDrag = (id: ColumnViewId) => (event: ReactPointerEvent<HTMLElement>) => {
+  const startDrag = (id: ColumnEntryId) => (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 || drag.current) return;
     event.preventDefault();
     const onMove = (pointer: PointerEvent) => {
@@ -249,9 +255,65 @@ function EditViewsDialog() {
         {saveError && <ErrorNotice context={t("columnViews.saveFailed")} error={saveError} data-testid="edit-views-error" />}
         <ul ref={listRef} aria-label={t("columnViews.list")} className="-mx-2 flex min-h-0 flex-col gap-px overflow-y-auto" data-testid="edit-views-list">
           {views.map((view, index) => {
-            const Icon = MAIL_VIEW_ICONS[view.id];
             const label = name(view.id);
             const dragged = dragging === view.id;
+            const moveButtons = (
+              <>
+                <MoveButton
+                  icon={ArrowUp}
+                  label={t("columnViews.moveUp", { name: label })}
+                  disabled={index === 0}
+                  onClick={() => {
+                    move(index, index - 1);
+                  }}
+                  data-testid={`edit-views-up-${view.id}`}
+                />
+                <MoveButton
+                  icon={ArrowDown}
+                  label={t("columnViews.moveDown", { name: label })}
+                  disabled={index === views.length - 1}
+                  onClick={() => {
+                    move(index, index + 1);
+                  }}
+                  data-testid={`edit-views-down-${view.id}`}
+                />
+              </>
+            );
+            if (view.id === MORE_ENTRY) {
+              // Stage 23 (decision 0085): the line of "More": the views below it show under "More"
+              // in the column. For the mouse it moves like a view; with the keyboard the views move
+              // across it.
+              return (
+                <li
+                  key={view.id}
+                  data-view-row={view.id}
+                  data-dragging={dragged || undefined}
+                  data-testid="edit-views-row-more"
+                  className={cx(
+                    "flex h-10 shrink-0 items-center gap-1 rounded-tile ps-1 pe-1 transition-colors",
+                    dragged ? "bg-selected shadow-floating" : dragging === null && "hover:bg-hover",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    onPointerDown={startDrag(view.id)}
+                    data-testid="edit-views-handle-more"
+                    className={cx(
+                      "flex size-8 shrink-0 touch-none items-center justify-center rounded-control text-tertiary",
+                      dragging === null ? "cursor-grab hover:text-secondary" : "cursor-grabbing",
+                    )}
+                  >
+                    <GripVertical className="size-(--ui-icon-small)" strokeWidth={1.75} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-center gap-2 text-11 font-semibold text-tertiary">
+                    <span className="truncate">{t("columnViews.moreLine")}</span>
+                    <span aria-hidden className="h-px flex-1 bg-border-subtle" />
+                  </span>
+                  {moveButtons}
+                </li>
+              );
+            }
+            const Icon = MAIL_VIEW_ICONS[view.id];
             return (
               <li
                 key={view.id}
@@ -291,24 +353,7 @@ function EditViewsDialog() {
                   <Icon aria-hidden className={cx("size-(--ui-icon-small) shrink-0", view.shown ? "text-secondary" : "text-tertiary")} strokeWidth={1.75} />
                   <span className={cx("truncate text-13", view.shown ? "text-primary" : "text-secondary")}>{label}</span>
                 </label>
-                <MoveButton
-                  icon={ArrowUp}
-                  label={t("columnViews.moveUp", { name: label })}
-                  disabled={index === 0}
-                  onClick={() => {
-                    move(index, index - 1);
-                  }}
-                  data-testid={`edit-views-up-${view.id}`}
-                />
-                <MoveButton
-                  icon={ArrowDown}
-                  label={t("columnViews.moveDown", { name: label })}
-                  disabled={index === views.length - 1}
-                  onClick={() => {
-                    move(index, index + 1);
-                  }}
-                  data-testid={`edit-views-down-${view.id}`}
-                />
+                {moveButtons}
               </li>
             );
           })}
