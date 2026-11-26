@@ -8,7 +8,6 @@ import { EmptyState } from "../../../components/EmptyState";
 import { ErrorNotice } from "../../../components/ErrorNotice";
 import { IconButton } from "../../../components/IconButton";
 import { MAX_CONTACT_LIST_NAME_CHARS, type Address, type ContactListId, type ContactListSummary } from "../../../services/ipc";
-import { Avatar } from "../../accounts/Avatar";
 import { RecipientField } from "../../composer/RecipientField";
 import {
   useAddContactListMembers,
@@ -278,7 +277,6 @@ export function GroupDetail({ id, onDeleted }: { id: ContactListId; onDeleted: (
           <ul aria-label={t("contactGroups.memberList")} className="flex flex-col" data-testid="contact-group-members">
             {group.members.map((member) => (
               <li key={member.email} className="flex items-center gap-3 rounded-row px-2 py-1 hover:bg-hover" data-testid="contact-group-member">
-                <Avatar name={member.name} email={member.email} accountColor={0} ring={false} size="mini" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-13 text-primary">{member.name ?? member.email}</span>
                   {member.name && <span className="truncate text-12 text-secondary">{member.email}</span>}

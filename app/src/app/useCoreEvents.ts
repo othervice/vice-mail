@@ -52,7 +52,7 @@ export function handleCoreEvent(queryClient: QueryClient, event: CoreEvent): voi
   handleUpdateEvent(queryClient, event);
   // Stage 21 (decision 0069): the tray menu paused or resumed notifications.
   handleDesktopEvent(queryClient, event);
-  // Stage 17 (decision 0050): contacts, their pictures and spam marks.
+  // Stage 17 (decision 0050): contacts and their spam marks.
   handleContactsEvent(queryClient, event);
   handleMboxEvent(event);
   switch (event.type) {

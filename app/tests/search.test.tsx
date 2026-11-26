@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { accountRing } from "../src/features/accounts/accountColor";
+import { accountFill } from "../src/features/accounts/accountColor";
 import { monthFirstFor } from "../src/features/search/terms";
 import type { MessageListItem, SearchRequest, SearchTermInfo } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
@@ -104,7 +104,7 @@ describe("search field", () => {
       expect.stringContaining("Rechnung März"),
       expect.stringContaining("Rechnung Firma"),
     ]);
-    expect(options[1]?.querySelector(`.${accountRing(WORK.color)}`)).toBeTruthy();
+    expect(within(options[1] as HTMLElement).getByTestId("row-account-dot").querySelector(`.${accountFill(WORK.color)}`)).toBeTruthy();
     const marks = within(options[0] as HTMLElement).getAllByTestId("highlight").map((m) => m.textContent);
     expect(marks).toEqual(["Rechnung", "Rechnung"]);
     // One list: no date headings between hits (a folder's list has them).

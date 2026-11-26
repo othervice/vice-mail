@@ -225,10 +225,6 @@ export const ERROR_CODES = [
   "diagnostics_write_failed",
   // Stage 14 (decision 0041): JMAP.
   "jmap_unavailable",
-  // Stage 17 (decision 0050): contact pictures.
-  "picture_too_large",
-  "picture_unsupported",
-  "picture_damaged",
   // Stage 20 (decision 0060): the mailbox on the server is full.
   "over_quota",
 ] as const satisfies readonly ErrorCode[];
@@ -1196,17 +1192,6 @@ export const contactsIpc = {
   /** `null` or empty text removes the note. */
   setContactNote: (email: string, note: string | null): Promise<ContactEntry> =>
     call(() => stage17Commands.setContactNote(email, note)),
-  /** The system dialog (in Rust); `null` when cancelled. The core reads the file, the helper encodes it. */
-  pickContactPicture: (): Promise<ContactPictureSource | null> => call(() => stage17Commands.pickContactPicture()),
-  /** Only a path of a drop the shell saw itself (`onFileDrop`). */
-  loadDroppedContactPicture: (path: string): Promise<ContactPictureSource> =>
-    call(() => stage17Commands.loadDroppedContactPicture(path)),
-  /** The square in pixels of the source; the token expires after a few minutes (`not_found`). */
-  setContactPicture: (email: string, token: string, crop: PictureCrop): Promise<ContactEntry> =>
-    call(() => stage17Commands.setContactPicture(email, token, crop)),
-  removeContactPicture: (email: string): Promise<ContactEntry> => call(() => stage17Commands.removeContactPicture(email)),
-  getContactPicture: (email: string): Promise<ContactPicture | null> => call(() => stage17Commands.getContactPicture(email)),
-  listContactPictures: (): Promise<ContactPictureRef[]> => call(() => stage17Commands.listContactPictures()),
   /** Newest first; `limit` 1..50. */
   listContactMessages: (email: string, limit: number): Promise<ContactMessages> =>
     call(() => stage17Commands.listContactMessages(email, limit)),
@@ -1221,10 +1206,6 @@ import {
   type ContactFilter,
   type ContactKind,
   type ContactMessages,
-  type ContactPicture,
-  type ContactPictureRef,
-  type ContactPictureSource,
-  type PictureCrop,
   type SpamMailCount,
   type SpamMark,
   type SpamMove,
@@ -1236,10 +1217,6 @@ export type {
   ContactFilter,
   ContactKind,
   ContactMessages,
-  ContactPicture,
-  ContactPictureRef,
-  ContactPictureSource,
-  PictureCrop,
   SpamMailCount,
   SpamMark,
   SpamMove,

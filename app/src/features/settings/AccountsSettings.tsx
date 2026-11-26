@@ -1,12 +1,13 @@
 import { ChevronRight, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
+import { cx } from "../../components/cx";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { SettingsSection } from "../../components/SettingsSection";
 import type { Account } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
-import { Avatar } from "../accounts/Avatar";
+import { accountFill } from "../accounts/accountColor";
 import { useAccounts } from "../accounts/queries";
 import { SyncDetectedHint } from "../settings-sync/SyncDetectedHint";
 import { AccountDetail } from "./accounts/AccountDetail";
@@ -28,7 +29,10 @@ function AccountRow({ account }: { account: Account }) {
         data-testid={`account-row-${account.id}`}
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover focus-visible:-outline-offset-2"
       >
-        <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
+        {/* Stage 22 (decision 0072): the account's colour as a dot at its name, no initials. */}
+        <span className="flex h-(--ui-line-height-14) shrink-0 items-center self-start">
+          <span aria-hidden className={cx("size-(--ui-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
+        </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-14 font-medium text-primary">{account.displayName || account.email}</span>
           <span className="truncate text-12 text-secondary">

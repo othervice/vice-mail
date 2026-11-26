@@ -49,8 +49,6 @@ const themes: Record<string, Tokens> = { light, dark, ...accentThemes };
 // Decision 0031: `surface-list` is the list column's own tinted surface.
 const SURFACES = ["canvas", "surface", "surface-list", "surface-raised", "rail", "priority-tint", "selected", "hover"];
 const ACCOUNTS = Array.from({ length: 8 }, (_, i) => `account-${i + 1}`);
-/** Decision 0031: avatar tints, initials (`-text`) on their fill (`-bg`). */
-const AVATAR_TINTS = Array.from({ length: 8 }, (_, i): [string, string] => [`avatar-${i + 1}-text`, `avatar-${i + 1}-bg`]);
 
 const TEXT_PAIRS: [string, string][] = [
   ...["text-primary", "text-secondary", "text-tertiary"].flatMap((fg) => SURFACES.map((bg): [string, string] => [fg, bg])),
@@ -80,10 +78,9 @@ const TEXT_PAIRS: [string, string][] = [
   ["text-on-danger", "danger"],
   ["text-secondary", "rail"],
   ["danger", "canvas"],
-  // Decision 0031 (Feinschliff). Initials on every avatar tint; the conversation size on its pill;
-  // hovered entries of the sidebar on the rail's hover tone; "Show all" and the way back in the
-  // accent on the priority card.
-  ...AVATAR_TINTS,
+  // Decision 0031 (Feinschliff). The conversation size on its pill; hovered entries of the
+  // sidebar on the rail's hover tone; "Show all" and the way back in the accent on the priority
+  // card. (The avatar tints went with the avatars, stage 22, decision 0072.)
   ["text-secondary", "badge"],
   ["text-primary", "badge"],
   ["text-primary", "rail-hover"],
@@ -111,7 +108,8 @@ const CONTROL_PAIRS: [string, string][] = [
   ["accent", "rail"],
   ["accent", "selected"],
   ["danger", "surface"],
-  // Stage 2. Account rings on avatars in list rows (plain, selected, hovered) and in the rail.
+  // Stage 2. Account colours in list rows (plain, selected, hovered) and in the rail; since stage 22
+  // (decision 0072) as dots, before the avatars' rings.
   ...ACCOUNTS.flatMap((account) =>
     ["canvas", "surface", "surface-raised", "rail", "selected", "hover"].map((bg): [string, string] => [account, bg]),
   ),
@@ -135,17 +133,14 @@ const CONTROL_PAIRS: [string, string][] = [
   ),
   ["text-secondary", "surface-raised"],
   ["border-strong", "rail"],
-  // Decision 0031. Account rings, unread dot and flag on the tinted list column; the priority
-  // symbol on the card; icons and the active bar on the rail's hover tone; the tile icons of the
-  // bundles on their tint.
+  // Decision 0031. Account dots, unread dot and flag on the tinted list column; the priority
+  // symbol on the card; icons and the active bar on the rail's hover tone.
   ...ACCOUNTS.map((account): [string, string] => [account, "surface-list"]),
   ...["accent", "warning", "danger", "text-tertiary"].map((fg): [string, string] => [fg, "surface-list"]),
   ["warning", "priority-tint"],
   ["text-secondary", "rail-hover"],
   ["accent", "rail-hover"],
   ["focus-ring", "rail-hover"],
-  ["avatar-1-text", "avatar-1-bg"],
-  ["avatar-5-text", "avatar-5-bg"],
   ["accent", "accent-soft"],
   ["accent", "surface"],
   ["surface-raised", "accent"],
@@ -189,7 +184,6 @@ describe.each(Object.entries(themes))("%s theme", (_name, tokens) => {
       "badge",
       "border-subtle",
       "priority-border",
-      ...AVATAR_TINTS.flat(),
     ];
     for (const name of expected) expect(tokens, name).toHaveProperty(name);
   });
@@ -218,7 +212,7 @@ it("HTML mail keeps its own white canvas in the dark theme (DESIGN.md: never rec
 });
 
 it("dark theme has its own surface steps instead of reusing light ones", () => {
-  for (const name of [...SURFACES, "rail-hover", "badge", ...AVATAR_TINTS.flat()]) expect(dark[name], name).not.toBe(light[name]);
+  for (const name of [...SURFACES, "rail-hover", "badge"]) expect(dark[name], name).not.toBe(light[name]);
 });
 
 it("orders the surfaces as decision 0031 says: rail darkest, list column tinted, reading pane brightest", () => {
@@ -253,16 +247,6 @@ it("keeps the neutrals cool in both themes, never warm (decision 0053)", () => {
     for (const name of NEUTRALS) {
       const [red, , blue] = parseHex(tokens[name] ?? "");
       expect(blue, `${mode} ${name}`).toBeGreaterThanOrEqual(red);
-    }
-  }
-});
-
-it("keeps the eight avatar tints apart from each other in both themes", () => {
-  for (const tokens of [light, dark]) {
-    for (const [i, [, a]] of AVATAR_TINTS.entries()) {
-      for (const [, b] of AVATAR_TINTS.slice(i + 1)) {
-        expect(deltaE(tokens[a] ?? "", tokens[b] ?? ""), `${a} vs ${b}`).toBeGreaterThan(5);
-      }
     }
   }
 });

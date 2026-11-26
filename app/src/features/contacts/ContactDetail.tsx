@@ -1,40 +1,21 @@
-import { useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { ImagePlus, Search, ShieldAlert, ShieldCheck, SquarePen, Trash2, UserPen } from "lucide-react";
-import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
+import { Search, ShieldAlert, ShieldCheck, SquarePen, UserPen } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
-import {
-  composeIpc,
-  contactsIpc,
-  toCoreError,
-  type ContactEntry,
-  type ContactPictureSource,
-  type CoreError,
-  type MessageListItem,
-} from "../../services/ipc";
-import { openComposer, useComposerStore } from "../../stores/composer";
+import type { ContactEntry, MessageListItem } from "../../services/ipc";
+import { openComposer } from "../../stores/composer";
 import { useSearchStore } from "../../stores/search";
 import { useUiStore } from "../../stores/ui";
-import { Avatar } from "../accounts/Avatar";
 import { useSelectedAccount } from "../accounts/selection";
 import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
 import { openMessageInWindow } from "../windows/open";
 import { NameEditor } from "./NameEditor";
 import { contactName } from "./names";
-import { PictureEditor } from "./PictureEditor";
-import {
-  refreshContacts,
-  useContact,
-  useContactMessages,
-  useRemoveContactPicture,
-  useSeparateContact,
-  useSetContactNote,
-  useSetContactPicture,
-} from "./queries";
+import { useContact, useContactMessages, useSeparateContact, useSetContactNote } from "./queries";
 import { useContactSpam } from "./spam";
 
 function Section({ title, children, ...rest }: { title: string; children: ReactNode; "data-testid": string }) {
@@ -75,152 +56,6 @@ function usage(t: TFunction, sent: number, received: number, seen: number, lastU
     ...(seen > 0 ? [t("contacts.view.seen", { count: seen })] : []),
     ...(lastUsed !== null ? [t("contacts.lastUsed", { date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(lastUsed) })] : []),
   ].join(" · ");
-}
-
-/** The picture (or the initials) with its buttons, or the cropper while the user cuts one. */
-function PictureArea({ contact, name }: { contact: ContactEntry; name: string }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [source, setSource] = useState<ContactPictureSource | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [dropping, setDropping] = useState(false);
-  const [error, setError] = useState<{ context: "choose" | "save" | "remove"; error: CoreError } | null>(null);
-  const setPicture = useSetContactPicture();
-  const removePicture = useRemoveContactPicture();
-  const chooseButton = useRef<HTMLButtonElement>(null);
-
-  const load = async (read: () => Promise<ContactPictureSource | null>) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const chosen = await read();
-      if (chosen) setSource(chosen);
-    } catch (e) {
-      setError({ context: "choose", error: toCoreError(e) });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // An image dropped on the window while this contact is open becomes its picture (the path comes
-  // from the shell's own drop event; the core reads the file, the page never does).
-  const onDrop = useEffectEvent((paths: string[]) => {
-    const path = paths[0];
-    // A composer open over the view takes the drop as an attachment.
-    if (path === undefined || useComposerStore.getState().session !== null) return;
-    void load(() => contactsIpc.loadDroppedContactPicture(path));
-  });
-  useEffect(() => {
-    let active = true;
-    let stop: (() => void) | undefined;
-    void composeIpc
-      .onFileDrop((event) => {
-        if (event.type === "enter") setDropping(true);
-        else if (event.type === "leave") setDropping(false);
-        else if (event.type === "drop") {
-          setDropping(false);
-          if (event.paths.length > 0) onDrop(event.paths);
-        }
-      })
-      .then((unsubscribe) => {
-        if (active) stop = unsubscribe;
-        else unsubscribe();
-      });
-    return () => {
-      active = false;
-      stop?.();
-    };
-  }, []);
-
-  if (source) {
-    return (
-      <div className="flex flex-col gap-3">
-        <PictureEditor
-          source={source}
-          name={name}
-          saving={setPicture.isPending}
-          onCancel={() => {
-            setSource(null);
-            setError(null);
-          }}
-          onSave={(crop) => {
-            setError(null);
-            setPicture.mutate(
-              { email: contact.email, token: source.token, crop },
-              {
-                onSuccess: () => {
-                  setSource(null);
-                  refreshContacts(queryClient);
-                },
-                onError: (e) => {
-                  setError({ context: "save", error: toCoreError(e) });
-                },
-              },
-            );
-          }}
-        />
-        {error && <ErrorNotice context={t("contacts.view.cropper.failed")} error={error.error} data-testid="picture-error" />}
-      </div>
-    );
-  }
-  return (
-    <div className="flex shrink-0 flex-col items-center gap-2" data-testid="contact-picture-area">
-      <div
-        className={cx(
-          "rounded-full p-1 transition-colors",
-          dropping ? "bg-accent-soft outline-2 outline-focus-ring" : "bg-transparent",
-        )}
-      >
-        <Avatar name={contact.name} email={contact.email} accountColor={0} ring={false} size="large" />
-      </div>
-      <div className="flex flex-col items-center gap-1">
-        <button
-          ref={chooseButton}
-          type="button"
-          disabled={loading}
-          onClick={() => void load(() => contactsIpc.pickContactPicture())}
-          className="inline-flex h-8 items-center gap-1 rounded-control px-2 text-12 font-medium text-accent hover:bg-hover disabled:opacity-50"
-          data-testid="contact-picture-choose"
-        >
-          <ImagePlus aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-          {loading
-            ? t("contacts.view.picture.loading")
-            : contact.picture !== null
-              ? t("contacts.view.picture.change")
-              : t("contacts.view.picture.choose")}
-        </button>
-        {contact.picture !== null && (
-          <button
-            type="button"
-            disabled={removePicture.isPending}
-            onClick={() => {
-              setError(null);
-              removePicture.mutate(contact.email, {
-                onError: (e) => {
-                  setError({ context: "remove", error: toCoreError(e) });
-                },
-              });
-            }}
-            className="inline-flex h-8 items-center gap-1 rounded-control px-2 text-12 text-secondary hover:bg-hover hover:text-primary disabled:opacity-50"
-            data-testid="contact-picture-remove"
-          >
-            <Trash2 aria-hidden className="size-(--ui-icon-small)" strokeWidth={1.75} />
-            {t("contacts.view.picture.remove")}
-          </button>
-        )}
-        <p className="max-w-(--ui-avatar-large) text-center text-12 text-tertiary">
-          {dropping ? t("contacts.view.picture.dropping") : t("contacts.view.picture.dropHint")}
-        </p>
-      </div>
-      {error && (
-        <ErrorNotice
-          context={error.context === "remove" ? t("contacts.view.picture.removeFailed") : t("contacts.view.picture.failed")}
-          error={error.error}
-          data-testid="picture-error"
-        />
-      )}
-    </div>
-  );
 }
 
 function NoteEditor({ contact }: { contact: ContactEntry }) {
@@ -337,9 +172,9 @@ interface ContactDetailProps {
 }
 
 /**
- * Stage 17 (decision 0050): one contact. Picture (chosen from a file or dropped, cut to a square,
- * or the initials), name, every address with its use, the user's note, the newest mail with it,
- * and "Write mail", "Show all mail" and "Mark as spam".
+ * Stage 17 (decision 0050): one contact. Name, every address with its use, the user's note, the
+ * newest mail with it, and "Write mail", "Show all mail" and "Mark as spam". No picture (stage
+ * 22, decision 0072).
  */
 export function ContactDetail({ entry, focusRequest }: ContactDetailProps) {
   const { t, i18n } = useTranslation();
@@ -372,9 +207,8 @@ export function ContactDetail({ entry, focusRequest }: ContactDetailProps) {
 
   return (
     <article aria-labelledby={headingId} className="mx-auto flex w-full max-w-(--ui-content-max-width) flex-col gap-8 px-8 py-8" data-testid="contact-detail">
-      <header className="flex flex-wrap items-start gap-6">
-        <PictureArea key={contact.key} contact={contact} name={name} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
+      <header className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h2 id={headingId} ref={heading} tabIndex={-1} className="min-w-0 truncate text-20 font-semibold text-primary" data-testid="contact-detail-name">
               {name}

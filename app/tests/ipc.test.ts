@@ -230,10 +230,6 @@ describe("error codes", () => {
     "diagnostics_write_failed",
     // Stage 14 (decision 0041): JMAP.
     "jmap_unavailable",
-    // Stage 17 (decision 0050): contact pictures.
-    "picture_too_large",
-    "picture_unsupported",
-    "picture_damaged",
     // Stage 20 (decision 0060).
     "over_quota",
   ];

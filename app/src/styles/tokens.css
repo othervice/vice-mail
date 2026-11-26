@@ -70,26 +70,6 @@
   --ui-account-7: #0b7a80;
   --ui-account-8: #7a5f45;
 
-  /* Avatar tints (decision 0031): initials of a sender on a soft fill, the hue chosen by a stable
-     hash of the address (features/accounts/senderTint.ts). Text on fill >= 4.5:1. Decision 0053:
-     the eighth tint is slate instead of sand. */
-  --ui-avatar-1-bg: #dce8fb;
-  --ui-avatar-1-text: #1f4e9a;
-  --ui-avatar-2-bg: #e8e0fa;
-  --ui-avatar-2-text: #5b3aa6;
-  --ui-avatar-3-bg: #f8dff0;
-  --ui-avatar-3-text: #962f6c;
-  --ui-avatar-4-bg: #fbe2dc;
-  --ui-avatar-4-text: #a0331f;
-  --ui-avatar-5-bg: #f8e7cf;
-  --ui-avatar-5-text: #8a4a00;
-  --ui-avatar-6-bg: #e0eed3;
-  --ui-avatar-6-text: #3e6a14;
-  --ui-avatar-7-bg: #d5eeee;
-  --ui-avatar-7-text: #0b6669;
-  --ui-avatar-8-bg: #e2e7ee;
-  --ui-avatar-8-text: #435166;
-
   /* Mail content. HTML mail shown as written lies on its own white canvas, in the dark theme too
      (setting "always on a white page", "Original colours", mails asking for light only). Adapted
      to the dark theme the core paints it on the dark card instead (decision 0066; its colours are
@@ -113,9 +93,6 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI Variable", system-ui,
     "Segoe UI", sans-serif;
   --ui-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
-  /* 9 px only for the decorative initial of the 16 px mini avatar (aria-hidden, the name stands next to it). */
-  --ui-font-size-9: 0.5625rem;
-  --ui-line-height-9: 0.75rem;
   --ui-font-size-12: 0.75rem;
   --ui-line-height-12: 1rem;
   --ui-font-size-13: 0.8125rem;
@@ -176,17 +153,12 @@
      rows is as wide as the column's rows, at most this (stage 21: `OverflowMenu narrow`). */
   --ui-sidebar-width: 15rem;
   --ui-sidebar-menu-width: 16rem;
-  /* Avatars: 32 px in rows and the rail, 16 px in the sender chips of bundles. */
-  --ui-avatar: 2rem;
-  --ui-avatar-mini: 1rem;
-  /* Stage 17 (decision 0050): the contact's page. Its list is 22 rem wide; the picture there is
-     96 px, the cropper's square 18 rem. */
-  --ui-avatar-large: 6rem;
+  /* Stage 17 (decision 0050): the contacts view's list is 22 rem wide. */
   --ui-contacts-list-width: 22rem;
-  --ui-cropper-size: 18rem;
-  /* Outside the cropper's circle the image is dimmed this much, in both themes. */
-  --ui-cropper-mask: rgb(0 0 0 / 0.5);
   --ui-dot: 0.5rem;
+  /* Stage 22 (decision 0072): accounts in the narrow rail are dots in their colour (no initials),
+     larger than the 8 px dots beside names, in the rail's 40 px entries. */
+  --ui-rail-account-dot: 0.75rem;
   /* Message list (docs/DESIGN.md, "Zeile"): comfortable rows are 44 px. Below 720 px of list
      width rows get more lines: three comfortable (sender and time, subject, preview), two compact
      (no preview). The list reads these values for its virtualizer. */
@@ -199,14 +171,17 @@
      (labelled chips and the field need about 800 px for one row, in English and German), so
      beside the reading pane the bar stays one row, level with the pane's toolbar. */
   --ui-filter-compact-below: 50rem;
-  /* Stage 21 (decision 0065): the row's start, before the avatar, holds the unread dot; there is
-     no column of its own for the dot and the selection box (the box takes the avatar's place). */
+  /* Stage 22 (decision 0072): rows have no avatar. Every message row (list, table, conversation)
+     starts after its lead with the mark column, as wide as the selection box: the unread dot,
+     which turns into the box on hover and in a multiple selection. The lead puts the column on
+     the line of the list's title and section labels; the sender follows 8 px after it. */
   --ui-row-lead: var(--ui-space-4);
+  --ui-row-mark: var(--ui-icon-small);
   /* Stage 17 (decision 0049): the messages of an unfolded conversation are one line each (36 px,
-     compact 28 px) in every list width. The conversation's dotted line runs under the avatar
-     column: past the row's lead, half an avatar in. */
+     compact 28 px) in every list width. The conversation's dotted line runs under the mark
+     column: past the row's lead, half a mark in. */
   --ui-child-row-height: 2.25rem;
-  --ui-tree-line-start: calc(var(--ui-row-lead) + var(--ui-avatar) / 2);
+  --ui-tree-line-start: calc(var(--ui-row-lead) + var(--ui-row-mark) / 2);
   /* Stage 8: the account's name in rows of lists that mix accounts (unified inbox, search). */
   --ui-row-account-width: 8rem;
   /* Design pass 23.11.2026: distance of the command palette from the top of the window; the
@@ -320,25 +295,6 @@
   --ui-account-6: #98c565;
   --ui-account-7: #55c3c9;
   --ui-account-8: #c4a98c;
-
-  /* Avatar tints: deep fills with light initials, the same hues as in light, each mixed into the
-     cool base so none reads brown. */
-  --ui-avatar-1-bg: #1f3454;
-  --ui-avatar-1-text: #a9c8f8;
-  --ui-avatar-2-bg: #332e54;
-  --ui-avatar-2-text: #c9b6f6;
-  --ui-avatar-3-bg: #46273f;
-  --ui-avatar-3-text: #f0b0d8;
-  --ui-avatar-4-bg: #492b2e;
-  --ui-avatar-4-text: #f6b4a6;
-  --ui-avatar-5-bg: #46391f;
-  --ui-avatar-5-text: #f0c98a;
-  --ui-avatar-6-bg: #1f4030;
-  --ui-avatar-6-text: #b4dd98;
-  --ui-avatar-7-bg: #184048;
-  --ui-avatar-7-text: #90dcde;
-  --ui-avatar-8-bg: #303946;
-  --ui-avatar-8-text: #c3cedd;
 
   /* Shadows need more weight on dark surfaces */
   --ui-shadow-card: 0 1px 2px rgb(1 4 9 / 0.5), 0 2px 8px rgb(1 4 9 / 0.3);

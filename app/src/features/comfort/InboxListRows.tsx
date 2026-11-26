@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import type { Address, MessageCategory } from "../../services/ipc";
 import { useLayoutStore } from "../../stores/layout";
-import { Avatar } from "../accounts/Avatar";
 import { useNarrowList, useTreeList } from "../messages/listLayout";
 import type { InboxBlock, InboxBundle } from "./inboxRows";
 
@@ -66,17 +65,12 @@ interface BundleRowProps {
   expanded: boolean;
 }
 
-/** Icon tiles of the bundles: a hue of their own each, from the avatar tints (decision 0031). */
-const BUNDLE_TILES: Record<Exclude<MessageCategory, "person">, string> = {
-  notification: "bg-avatar-1 text-avatar-1-text",
-  newsletter: "bg-avatar-5 text-avatar-5-text",
-};
-
 /**
- * Notifications or newsletters of one date section as one row: icon tile, name, counter and chips
- * of the most frequent senders with mini avatars; Enter, Space or a click on the option around it
- * unfold the members in place below it. In a narrow list the chips go on the lines below the name
- * (decision 0031). Like a message row it is named by one visually hidden text that holds what
+ * Notifications or newsletters of one date section as one row: the mark column (unread dot), icon,
+ * name, counter and chips of the most frequent senders (stage 22: without mini avatars and icon
+ * tile, decision 0072; the icon and name stand where a message row's sender does); Enter, Space or
+ * a click on the option around it unfold the members in place below it. In a narrow list the chips
+ * go on the lines below the name (decision 0031). Like a message row it is named by one visually hidden text that holds what
  * it shows, in reading order, plus the folded state: "Notifications, 6 · 2 new, Calendar 2, Bank,
  * +3, collapsed" (WCAG 2.5.3); the drawn row is hidden from screen readers.
  */
@@ -108,6 +102,7 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
     .join(", ");
   const title = (
     <>
+      <Icon aria-hidden className="size-(--ui-icon-small) shrink-0 text-secondary" strokeWidth={1.75} data-testid="bundle-icon" />
       <span className={cx("shrink-0 truncate text-14 text-primary", unread > 0 ? "font-semibold" : "font-medium")}>{name}</span>
       <span className="shrink-0 text-12 text-tertiary tabular-nums" data-testid="bundle-count">
         {counter}
@@ -126,7 +121,6 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
             chip.unread > 0 ? "font-medium text-primary" : "text-secondary",
           )}
         >
-          <Avatar name={chip.sender.name} email={chip.sender.email} accountColor={0} ring={false} size="mini" />
           <span className="truncate" data-testid="bundle-chip-name">
             {senderName(chip.sender)}
           </span>
@@ -145,18 +139,13 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
       <div
         aria-hidden
         className={cx(
-          "flex h-full w-full gap-3 overflow-hidden rounded-row px-3 text-start transition-colors group-hover/row:bg-hover",
+          "flex h-full w-full gap-2 overflow-hidden rounded-row ps-(--ui-row-lead) pe-3 text-start transition-colors group-hover/row:bg-hover",
           narrow ? "items-start py-2" : "items-center",
         )}
       >
-        <span aria-hidden className={cx("flex w-(--ui-icon-small) shrink-0 items-center justify-center", narrow && "h-5")}>
-          {unread > 0 && <span className="size-(--ui-dot) rounded-full bg-accent" />}
-        </span>
-        <span
-          aria-hidden
-          className={cx("flex size-(--ui-avatar) shrink-0 items-center justify-center rounded-row", BUNDLE_TILES[category])}
-        >
-          <Icon className="size-(--ui-icon-small)" strokeWidth={1.75} />
+        {/* The mark column of a message row: the unread dot (a bundle is not selected itself). */}
+        <span aria-hidden className={cx("flex w-(--ui-row-mark) shrink-0 items-center justify-center", narrow && "h-5")}>
+          {unread > 0 && <span className="size-(--ui-dot) rounded-full bg-accent" data-testid="bundle-unread-dot" />}
         </span>
         {narrow ? (
           <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -168,11 +157,11 @@ export function BundleRow({ bundle, expanded }: BundleRowProps) {
             {chips}
           </span>
         ) : (
-          <>
-            {title}
+          <span className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="flex min-w-(--ui-list-sender-width) shrink-0 items-center gap-2">{title}</span>
             {chips}
             {chevron}
-          </>
+          </span>
         )}
       </div>
     </div>

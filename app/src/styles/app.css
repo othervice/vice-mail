@@ -57,24 +57,6 @@
   --color-account-7: var(--ui-account-7);
   --color-account-8: var(--ui-account-8);
 
-  /* Avatar tints (decision 0031): `bg-avatar-n` with `text-avatar-n-text` */
-  --color-avatar-1: var(--ui-avatar-1-bg);
-  --color-avatar-1-text: var(--ui-avatar-1-text);
-  --color-avatar-2: var(--ui-avatar-2-bg);
-  --color-avatar-2-text: var(--ui-avatar-2-text);
-  --color-avatar-3: var(--ui-avatar-3-bg);
-  --color-avatar-3-text: var(--ui-avatar-3-text);
-  --color-avatar-4: var(--ui-avatar-4-bg);
-  --color-avatar-4-text: var(--ui-avatar-4-text);
-  --color-avatar-5: var(--ui-avatar-5-bg);
-  --color-avatar-5-text: var(--ui-avatar-5-text);
-  --color-avatar-6: var(--ui-avatar-6-bg);
-  --color-avatar-6-text: var(--ui-avatar-6-text);
-  --color-avatar-7: var(--ui-avatar-7-bg);
-  --color-avatar-7-text: var(--ui-avatar-7-text);
-  --color-avatar-8: var(--ui-avatar-8-bg);
-  --color-avatar-8-text: var(--ui-avatar-8-text);
-
   /* Mail content: `bg-mail-canvas` behind HTML mail, in both themes */
   --color-mail-canvas: var(--ui-mail-canvas);
 
@@ -83,8 +65,6 @@
   --default-font-family: var(--ui-font-family);
   --font-mono: var(--ui-font-family-mono);
   --default-mono-font-family: var(--ui-font-family-mono);
-  --text-9: var(--ui-font-size-9);
-  --text-9--line-height: var(--ui-line-height-9);
   --text-12: var(--ui-font-size-12);
   --text-12--line-height: var(--ui-line-height-12);
   --text-13: var(--ui-font-size-13);

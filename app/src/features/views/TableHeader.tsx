@@ -155,9 +155,9 @@ export function TableHeader({ config, listLabel, ref }: TableHeaderProps) {
       data-testid="table-header"
     >
       <div role="table" aria-label={t("views.table.label", { list: listLabel })} className="min-w-0 flex-1">
-        <div role="row" className="flex h-8 items-center gap-3 px-3">
-          {/* The selection box's column. */}
-          <span aria-hidden className="size-(--ui-icon-small) shrink-0" />
+        <div role="row" className="flex h-8 items-center gap-3 ps-(--ui-row-lead) pe-3">
+          {/* The mark column of the rows (unread dot, selection box), on the line of the title. */}
+          <span aria-hidden className="w-(--ui-row-mark) shrink-0" />
           <div ref={ref} className="grid min-w-0 flex-1 grid-cols-(--table-columns) items-center">
             {config.columns.map((column) => {
               const key = columnSortKey(column.id, config.showRecipients);

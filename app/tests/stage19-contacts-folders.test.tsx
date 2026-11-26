@@ -139,7 +139,7 @@ describe("vCard import and export", () => {
       stage19: {
         vcardImport: {
           kind: "imported",
-          report: { cards: 3, created: 2, updated: 1, merged: 1, lists: 1, pictures: 1, problems: [{ card: 2, kind: "picture_skipped" }] },
+          report: { cards: 3, created: 2, updated: 1, merged: 1, lists: 1, problems: [{ card: 2, kind: "no_address" }] },
         },
       },
     });
@@ -149,7 +149,7 @@ describe("vCard import and export", () => {
     await user.click(within(view).getByTestId("contacts-import"));
     const report = await screen.findByTestId("contacts-import-report");
     expect(report.textContent).toContain("3 cards read");
-    expect(report.textContent).toContain("New contacts: 2, updated: 1, groups: 1, pictures: 1.");
+    expect(report.textContent).toContain("New contacts: 2, updated: 1, groups: 1.");
     expect(report.textContent).toContain("1 card or line could not be taken over completely.");
     await user.click(within(view).getByRole("button", { name: "Export as vCard" }));
     await user.click(await screen.findByRole("menuitem", { name: "Export all contacts (vCard 4.0)…" }));
