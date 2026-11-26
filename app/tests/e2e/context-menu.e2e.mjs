@@ -308,7 +308,8 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     assert.ok(Math.abs(toSender - (severalLines ? 4 : 8) * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
     assert.ok(facts.dot, "no unread dot on an unread row");
     assert.ok(facts.dot.left >= facts.mark.left && facts.dot.right <= facts.mark.right, `the dot is not in the mark column: ${JSON.stringify(facts)}`);
-    assert.equal(facts.sender, "600", "unread rows are not bold");
+    // Stage 23 (decision 0083): unread senders bold (700), read ones semibold.
+    assert.equal(facts.sender, "700", "unread rows are not bold");
     assert.equal(facts.checkShown, false, "the box shows at rest");
     report.screenshots.push(await screenshot("s22-rows"));
     // Hovered: the box takes the dot's place in the column; unread stays bold.
