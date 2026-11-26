@@ -1,10 +1,12 @@
 import { CircleExclamationPoint, CloudOff, History, SendHorizontal, Settings, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { useRovingFocus } from "../components/useRovingFocus";
 import { accountFill } from "../features/accounts/accountColor";
+import { useAccountDragSource, useAccountMoveByDrag } from "../features/accounts/accountDrag";
+import { movedOrder, useAccountArrange } from "../features/accounts/arrange";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
 import { useOutgoing } from "../features/composer/queries";
@@ -262,47 +264,108 @@ function useAccountLabel() {
     });
 }
 
+/** One account's dot in the rail: picks the account, and (stage 23) is dragged to put it elsewhere. */
+function AccountDot({ account, accounts, current, roving, line, dimmed, dropItem, onMove }: {
+  account: Account;
+  accounts: readonly Account[];
+  current: boolean;
+  roving: Roving;
+  line: "before" | "after" | null;
+  dimmed: boolean;
+  dropItem: Record<string, string>;
+  onMove: (step: -1 | 1) => void;
+}) {
+  const { t } = useTranslation();
+  const selectAccount = useUiStore((state) => state.selectAccount);
+  const label = useAccountLabel()(account);
+  const dragSource = useAccountDragSource(account, accounts.length > 1);
+  return (
+    <li
+      {...dropItem}
+      data-account-drop={line ?? undefined}
+      className={cx(
+        "relative",
+        // The place it goes: a line in the gap above or below the dot.
+        line === "before" && "before:absolute before:inset-x-1 before:-top-1 before:h-1 before:rounded-full before:bg-accent-fill",
+        line === "after" && "after:absolute after:inset-x-1 after:-bottom-1 after:h-1 after:rounded-full after:bg-accent-fill",
+      )}
+    >
+      <Tooltip label={label} side="right">
+        <button
+          type="button"
+          aria-label={label}
+          aria-pressed={current}
+          aria-description={accounts.length > 1 ? t("accountEdit.railDragHint") : undefined}
+          aria-keyshortcuts={accounts.length > 1 ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
+          onClick={() => {
+            selectAccount(account.id);
+          }}
+          onKeyDown={(event) => {
+            if (!event.altKey || event.ctrlKey || event.metaKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+            event.preventDefault();
+            onMove(event.key === "ArrowUp" ? -1 : 1);
+          }}
+          {...roving}
+          {...dragSource}
+          data-testid={`account-switch-${account.id}`}
+          data-account-dragged={dimmed || undefined}
+          // Which account the views show, not which view is open: a fill, no active bar.
+          // With a single account there is nothing to tell apart.
+          className={cx(
+            "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-[background-color,opacity]",
+            current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
+            dimmed && "opacity-50",
+          )}
+        >
+          <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
+          <StateBadge account={account} />
+        </button>
+      </Tooltip>
+    </li>
+  );
+}
+
 /**
  * One entry per account: a dot in its colour (stage 22, decision 0072: no initials), its name as
  * tooltip and accessible name, which always say what the colour alone cannot (two accounts may
- * share a colour).
+ * share a colour). Stage 23: a dot dragged up or down puts the account there (a line shows where),
+ * as in the column; Alt+Up and Alt+Down do the same from the keyboard.
  */
 function AccountSwitcher({ accounts, selected, roving }: { accounts: readonly Account[]; selected: Account | null; roving: (key: string) => Roving }) {
   const { t } = useTranslation();
-  const selectAccount = useUiStore((state) => state.selectAccount);
-  const accountLabel = useAccountLabel();
+  const arrange = useAccountArrange();
+  const drop = useAccountMoveByDrag(accounts);
+  const [moved, setMoved] = useState("");
+  const move = (account: Account, step: -1 | 1) => {
+    const order = movedOrder(accounts, account.id, step);
+    if (!order) return;
+    void arrange.reorder(order).then((ok) => {
+      if (ok) setMoved(t("accountEdit.moved", { name: account.displayName || account.email, position: order.indexOf(account.id) + 1, count: order.length }));
+    });
+  };
   return (
-    <ul aria-label={t("nav.accounts")} className="flex flex-col items-center gap-1">
-      {accounts.map((account) => {
-        const label = accountLabel(account);
-        const current = account.id === selected?.id;
-        return (
-          <li key={account.id}>
-            <Tooltip label={label} side="right">
-              <button
-                type="button"
-                aria-label={label}
-                aria-pressed={current}
-                onClick={() => {
-                  selectAccount(account.id);
-                }}
-                {...roving(accountKey(account.id))}
-                data-testid={`account-switch-${account.id}`}
-                // Which account the views show, not which view is open: a fill, no active bar.
-                // With a single account there is nothing to tell apart.
-                className={cx(
-                  "relative flex size-(--ui-rail-item) items-center justify-center rounded-row transition-colors",
-                  current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
-                )}
-              >
-                <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
-                <StateBadge account={account} />
-              </button>
-            </Tooltip>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <ul aria-label={t("nav.accounts")} {...drop.zoneProps} className="flex flex-col items-center gap-1" data-testid="rail-accounts">
+        {accounts.map((account) => (
+          <AccountDot
+            key={account.id}
+            account={account}
+            accounts={accounts}
+            current={account.id === selected?.id}
+            roving={roving(accountKey(account.id))}
+            line={drop.lineOf(account.id)}
+            dimmed={drop.dragged === account.id}
+            dropItem={drop.itemProps(account.id)}
+            onMove={(step) => {
+              move(account, step);
+            }}
+          />
+        ))}
+      </ul>
+      <span aria-live="polite" className="sr-only" data-testid="rail-accounts-announce">
+        {drop.announcement || moved}
+      </span>
+    </>
   );
 }
 

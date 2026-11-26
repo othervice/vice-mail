@@ -262,4 +262,30 @@ describe("dragging mail from any list", () => {
     expect(trash.dataset["dropTarget"]).toBe("refused");
     expect(screen.getByTestId("drop-hint").textContent).toBe("Not here: Work has no Trash folder.");
   });
+
+  it("stage 23: works where the engine hides the drag's own type until the drop (WebKit); Option copies on macOS; files never count", async () => {
+    const { core, user } = setup();
+    const list = await allInboxes(user);
+    await openColumn(user);
+    // A transfer that lists no type while the drag runs, as WebKit may for a page's own types.
+    const hidden = { ...dataTransfer(), types: [] as string[], setData: vi.fn() };
+    fireEvent.dragStart(row(list, "Privat"), { dataTransfer: hidden });
+    const target = await screen.findByTestId("mailbox-22");
+    fireEvent.dragEnter(target, { dataTransfer: hidden });
+    const over = createEvent.dragOver(target, { dataTransfer: hidden });
+    fireEvent(target, withKeys(over, { altKey: true }));
+    expect(over.defaultPrevented).toBe(true);
+    expect(hidden.dropEffect).toBe("copy");
+    expect(target.dataset["dropTarget"]).toBe("over");
+    // Files from outside over the same folder: not rows, not taken.
+    const files = { ...dataTransfer(), types: ["Files"] };
+    const fileOver = createEvent.dragOver(target, { dataTransfer: files });
+    fireEvent(target, fileOver);
+    expect(fileOver.defaultPrevented).toBe(false);
+    fireEvent(target, withKeys(createEvent.drop(target, { dataTransfer: hidden }), { altKey: true }));
+    await waitFor(() => {
+      expect(core.callsOf("drop_messages")).toHaveLength(1);
+    });
+    expect(core.callsOf("drop_messages")[0]).toMatchObject({ targetMailboxId: 22, mode: "copy" });
+  });
 });

@@ -6,8 +6,7 @@ import { cx } from "../components/cx";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { Tooltip } from "../components/Tooltip";
 import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
-import { useAccountDropTarget } from "../features/accounts/accountDrag";
-import { useAccountArrange } from "../features/accounts/arrange";
+import { useAccountMoveByDrag } from "../features/accounts/accountDrag";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { OverflowMenu, type OverflowItem } from "../features/actions/OverflowMenu";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
@@ -173,20 +172,19 @@ function ViewsTree() {
   );
 }
 
+interface AccountFoldersProps {
+  account: Account;
+  selected: boolean;
+  /** Stage 23: the line of a dragged account in the gap before or after this one. */
+  line: "before" | "after" | null;
+  /** This account is the one being dragged. */
+  dimmed: boolean;
+  /** Marks it as an entry of the list that takes dragged accounts. */
+  dropItem: Record<string, string>;
+}
+
 /** The folder tree of one account, with the folder the view shows marked as current. */
-function AccountFolders({ account, accounts, selected }: { account: Account; accounts: readonly Account[]; selected: boolean }) {
-  const { t } = useTranslation();
-  const arrange = useAccountArrange();
-  const [moved, setMoved] = useState("");
-  // Stage 22 (decision 0078): a dragged account heading goes before or after this account.
-  const drop = useAccountDropTarget(account, accounts, (order, movedId) => {
-    const dragged = accounts.find((a) => a.id === movedId);
-    void arrange.reorder(order).then((ok) => {
-      if (ok && dragged) {
-        setMoved(t("accountEdit.moved", { name: dragged.displayName || dragged.email, position: order.indexOf(dragged.id) + 1, count: order.length }));
-      }
-    });
-  });
+function AccountFolders({ account, selected, line, dimmed, dropItem }: AccountFoldersProps) {
   const view = useUiStore((state) => state.view);
   const unified = useUiStore((state) => state.unifiedInbox !== null);
   const mailboxes = useMailboxes(account.id);
@@ -199,20 +197,20 @@ function AccountFolders({ account, accounts, selected }: { account: Account; acc
   return (
     <section
       aria-label={account.displayName || account.email}
-      {...drop.handlers}
-      data-account-drop={drop.position ?? undefined}
+      {...dropItem}
+      data-account-drop={line ?? undefined}
+      data-account-dragged={dimmed || undefined}
       className={cx(
-        "relative flex flex-col",
+        "relative flex flex-col transition-opacity",
+        // The account being dragged stays in its place, dimmed, until it is let go.
+        dimmed && "opacity-50",
         // The place it goes: a line in the gap above or below the account.
-        drop.position === "before" && "before:absolute before:inset-x-1 before:-top-2 before:h-1 before:rounded-full before:bg-accent-fill",
-        drop.position === "after" && "after:absolute after:inset-x-1 after:-bottom-2 after:h-1 after:rounded-full after:bg-accent-fill",
+        line === "before" && "before:absolute before:inset-x-1 before:-top-2 before:h-1 before:rounded-full before:bg-accent-fill",
+        line === "after" && "after:absolute after:inset-x-1 after:-bottom-2 after:h-1 after:rounded-full after:bg-accent-fill",
       )}
       data-testid={`sidebar-account-section-${account.id}`}
     >
       <MailboxTree account={account} currentMailboxId={current} />
-      <span aria-live="polite" className="sr-only">
-        {moved}
-      </span>
     </section>
   );
 }
@@ -317,6 +315,8 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const label = t("nav.hideSidebar");
   const onKeyDown = useOverlayDismiss(column, overlay);
   const autoScroll = useDragAutoScroll();
+  const accountDrop = useAccountMoveByDrag(accountList);
+  const movedAccount = accountDrop.announcement;
   // "Go to Folders" (palette): the entry shown right now takes the focus, else the first tree's.
   const focusRequested = useUiStore((state) => state.sidebarFocusRequested);
   const sidebarFocused = useUiStore((state) => state.sidebarFocused);
@@ -393,7 +393,8 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
         <SavedSearchNav />
         {/* Stage 16: favourite folders of every account. */}
         <FavoriteFolders accounts={accountList} />
-        <section aria-labelledby={accountsHeading} className="flex flex-col gap-3">
+        {/* Stage 23: a dragged account heading goes where the line shows (decision 0078). */}
+        <section aria-labelledby={accountsHeading} {...accountDrop.zoneProps} className="flex flex-col gap-3" data-testid="sidebar-accounts">
           <h2 id={accountsHeading} className="sr-only">
             {t("nav.accounts")}
           </h2>
@@ -404,8 +405,18 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
             </p>
           )}
           {accountList.map((account) => (
-            <AccountFolders key={account.id} account={account} accounts={accountList} selected={account.id === selected?.id} />
+            <AccountFolders
+              key={account.id}
+              account={account}
+              selected={account.id === selected?.id}
+              line={accountDrop.lineOf(account.id)}
+              dimmed={accountDrop.dragged === account.id}
+              dropItem={accountDrop.itemProps(account.id)}
+            />
           ))}
+          <span aria-live="polite" className="sr-only">
+            {movedAccount}
+          </span>
         </section>
         </div>
       </div>

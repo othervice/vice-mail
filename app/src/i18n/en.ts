@@ -4668,6 +4668,7 @@ export const en = {
     tooLong: "At most {{max}} characters.",
     failed: "The account could not be changed.",
     dragHint: "Drag to put the account elsewhere, or use Move up and Move down in its menu (Alt+Up, Alt+Down).",
+    railDragHint: "Drag to put the account elsewhere, or press Alt+Up or Alt+Down.",
     moveUpNamed: "Move {{name}} up",
     moveDownNamed: "Move {{name}} down",
     listName: "Name in the list",

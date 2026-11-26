@@ -4,7 +4,7 @@ import { ipc, type AccountId, type Mailbox } from "../../services/ipc";
 import {
   dropModeOf,
   dropVerdict,
-  MESSAGE_DRAG_TYPE,
+  isOwnDrag,
   useDragStore,
   type DragSession,
   type DropMode,
@@ -62,7 +62,8 @@ export function useDropTarget(target: DropTarget | undefined, { id, folder, onEx
 
   const verdictFor = (mode: DropMode) => dropVerdict(session, target, mode, context);
   const ready = verdictFor("move").kind === "accept" || verdictFor("copy").kind === "accept";
-  const carriesRows = (event: DragEvent) => event.dataTransfer.types.includes(MESSAGE_DRAG_TYPE);
+  // Stage 23: the store knows the rows; WebKit may hide the drag's own type until the drop.
+  const carriesRows = (event: DragEvent) => isOwnDrag(event, "rows");
 
   const stopTimer = () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
