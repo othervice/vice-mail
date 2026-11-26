@@ -300,9 +300,12 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     const toSender = facts.senderBox.left - facts.mark.right;
     report.steps.rows = { lead, toSender, scale, facts };
     assert.equal(facts.avatar, false, "a row still has an avatar");
-    assert.ok(lead >= 15 * scale && lead <= 17 * scale, `the mark column starts ${String(lead)} px into the row`);
+    // Stage 23 (decision 0084): an 8 px lead, as in the draft (the dot 16 px from the list's edge);
+    // in narrow (several-line) rows the text follows 4 px after the column, in wide ones 8 px.
+    const severalLines = facts.row.height > 60 * scale;
+    assert.ok(lead >= 7 * scale && lead <= 9 * scale, `the mark column starts ${String(lead)} px into the row`);
     assert.ok(Math.abs(facts.mark.width - 16 * scale) < 1, `the mark column is ${String(facts.mark.width)} px wide`);
-    assert.ok(Math.abs(toSender - 8 * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
+    assert.ok(Math.abs(toSender - (severalLines ? 4 : 8) * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
     assert.ok(facts.dot, "no unread dot on an unread row");
     assert.ok(facts.dot.left >= facts.mark.left && facts.dot.right <= facts.mark.right, `the dot is not in the mark column: ${JSON.stringify(facts)}`);
     assert.equal(facts.sender, "600", "unread rows are not bold");

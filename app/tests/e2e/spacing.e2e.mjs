@@ -238,7 +238,8 @@ const PROBE = () => {
       ? "menu"
       : role === "option"
         ? "option"
-        : radius >= h.height / 2 - 0.5
+        : // Stage 23 (decision 0084): the replies count is a small framed chip, no longer round.
+          radius >= h.height / 2 - 0.5 || host.matches('[data-testid="row-replies"]')
           ? "chip"
           : role === "tab" || role === "treeitem" || host.closest('[role="tree"], [role="tablist"]')
             ? "nav"

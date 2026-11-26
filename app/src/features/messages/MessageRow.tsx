@@ -234,7 +234,7 @@ function RepliesToggle({ replies, expanded }: { replies: number; expanded: boole
       data-expanded={foldable ? expanded : undefined}
     >
       {foldable ? (
-        <ChevronRight className={cx("size-3", expanded && "rotate-90")} strokeWidth={2.25} />
+        <ChevronRight className={cx("me-1 size-3", expanded && "rotate-90")} strokeWidth={2.25} />
       ) : (
         <span />
       )}
