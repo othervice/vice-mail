@@ -21,7 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, invoke, openSettings, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, invoke, openSettings, openView, screenshot, SCREENSHOT_DIR, setComposerFormat, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages, replyTo, setQuota } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -44,9 +44,8 @@ function writeEml(name, lines) {
 async function openComposer() {
   await $('button[aria-label="New message"]').click();
   await testId("composer-subject").waitForExist({ timeout: 20000 });
-  // Plain text, so the test types into a text field.
-  const text = testId("composer-format-text");
-  if (await text.isExisting()) await text.click();
+  // Plain text, so the test types into a text field (stage 23: a choice of the "…" menu).
+  await setComposerFormat("text");
   await testId("composer-text-body").waitForExist({ timeout: 10000 });
 }
 
@@ -142,17 +141,17 @@ describe("stage 20: reminders, attachments view, trackers, quota", () => {
     const subject = `Proposal ${RUN}`;
     await openComposer();
     await fill(subject, "Can you tell me by Friday?");
-    const choice = await testId("composer-follow-up-choice");
-    await browser.waitUntil(async () => (await choice.$$("option")).length >= 4, { timeoutMsg: "no reminder times" });
-    // WebKit's WebDriver fires no change event for a click on an <option>: set the value as the
-    // browser does on a user's choice, so React sees it.
-    await browser.execute((value) => {
-      const select = document.querySelector('[data-testid="composer-follow-up-choice"]');
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, value);
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    }, "tomorrow");
-    await browser.waitUntil(async () => (await choice.getValue()) === "tomorrow", { timeoutMsg: "the choice did not stay" });
+    // Stage 23 (decision 0086): the reminder is an icon of the send row with a menu of choices.
+    const reminder = await testId("composer-follow-up");
+    await reminder.click();
+    await testId("composer-follow-up-tomorrow").waitForExist({ timeout: 10000, timeoutMsg: "no reminder times" });
+    await testId("composer-follow-up-tomorrow").click();
+    await browser.waitUntil(async () => (await reminder.getAttribute("data-active")) === "true", { timeoutMsg: "the choice did not stay" });
+    await reminder.click();
+    await testId("composer-follow-up-menu").waitForExist();
+    assert.equal(await testId("composer-follow-up-tomorrow").getAttribute("aria-checked"), "true");
     report.screenshots.push(await screenshot("stage20-follow-up-choice"));
+    await browser.keys("Escape");
     await testId("composer-send").click();
     await waitSent(subject);
     const waiting = await browser.waitUntil(
