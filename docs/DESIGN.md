@@ -142,11 +142,13 @@ Gerät), sobald es 400 ms ruht. Vorher nahm die Liste neben dem Lesebereich fest
 Eingabefeld unten, Ergebnisse als Karten. Bei schmalem Fenster liegt es über dem Lesebereich.
 Ohne eingerichtete KI ist das Panel nicht sichtbar.
 
-**Verfassen.** Eigener Bereich über dem Lesebereich oder eigenes Fenster. Empfänger als Chips,
-schmale Formatierungsleiste, Anhänge als Leiste unten. Dateien, die auf das Fenster gezogen werden,
-werden angehängt (Rich Text: Bilder in den Text); solange Dateien über dem Fenster sind, zeigt ein
-Streifen unter dem Kopf „Lass die Dateien los, um sie anzuhängen.“ Wo nichts Dateien nimmt, zeigt
-der Zeiger „nicht erlaubt“ und Loslassen tut nichts (Stufe 23, 0082).
+**Verfassen.** Seit Stufe 23 (Entscheidung 0086) eine schwebende Karte über dem Lesebereich, die
+Liste bleibt sichtbar und bedienbar; oder eigenes Fenster. Betreff als Titel, Empfänger und
+Absender als Chips, kompakte Formatierungsleiste und Sendezeile unten, alles Weitere im „…“-Menü
+(Abschnitt „Neue Mail als Karte“). Dateien, die auf das Fenster gezogen werden, werden angehängt
+(Rich Text: Bilder in den Text); solange Dateien über dem Fenster sind, zeigt ein gestrichelter
+Streifen über den Anhängen „Lass die Dateien los, um sie anzuhängen.“ Wo nichts Dateien nimmt,
+zeigt der Zeiger „nicht erlaubt“ und Loslassen tut nichts (Stufe 23, 0082).
 
 ## Tokens
 
@@ -284,9 +286,11 @@ Enter klappt das Panel auf, das die Frage über seinen eigenen Ablauf stellt (Zu
 ersten Anfrage an einen Cloud-Anbieter, Anzeige der Übertragung). Ohne KI oder ohne Freigabe des
 Kontos gibt es weder Chips noch Leiste.
 
-**Verfassen.** Felder mit Haarlinien und gedämpften Beschriftungen, Empfänger als runde Chips,
-Rich Text/Text als kleiner Segmentschalter, Editor mindestens einige Absätze hoch (in niedrigen
-Fenstern scrollt der Bereich als Ganzes), Senden als Akzentbutton mit leisem Kürzel daneben.
+**Verfassen.** (Seit Stufe 23, Entscheidung 0086, gilt der Abschnitt „Neue Mail als Karte“: kein
+Segmentschalter mehr, das Kürzel steht im Tooltip von „Senden“.) Felder mit Haarlinien und
+gedämpften Beschriftungen, Empfänger als runde Chips, Rich Text/Text als kleiner Segmentschalter,
+Editor mindestens einige Absätze hoch (in niedrigen Fenstern scrollt der Bereich als Ganzes),
+Senden als Akzentbutton mit leisem Kürzel daneben.
 Gesendete Mails tragen keine Text- oder Hintergrundfarbe und sagen `color-scheme: light dark`
 (0067): Sie lesen sich beim Empfänger hell wie dunkel; Codeblöcke haben eine graue Linie statt
 eines hellgrauen Grunds.
@@ -383,7 +387,8 @@ liegt auf dieser Zeile, solange das Feld den Fokus hat, statt als Rahmen am abge
 des Panels.
 
 **Schreibbereich.** Der Editor des Verfassens (Rich Text und Text) ist 8 px von den Rändern
-eingerückt, gerundet wie eine Karte und reicht bis zur Anhangsleiste (mindestens 12 rem). Der
+eingerückt (seit Stufe 23, 0086, im Composer 16 px, der Text steht damit auf den 24 px der Karte),
+gerundet wie eine Karte und reicht bis zur Anhangsleiste (mindestens 12 rem). Der
 Fokusring (2 px, `focus-ring`, ≥ 3:1) umrahmt damit die ganze Schreibfläche wie ein Textfeld statt
 als eckiger Kasten an den Rändern des Fensters; ein Klick irgendwo in die Fläche erreicht den Text.
 
@@ -1287,6 +1292,70 @@ den Bereich auf „Allen Konten“.
 
 Treffer mitten im Wort markiert die Liste an der Stelle, an der der Begriff steht („M**uster**“),
 nicht das ganze Wort.
+
+## Neue Mail als Karte (Stufe 23, Entscheidung 0086)
+
+Schritt 4 des neuen Erscheinungsbilds, nach dem freigegebenen Entwurf (Teil `role="dialog"`).
+
+**Karte.** Im Hauptfenster liegt der Composer als schwebende Karte über dem Lesebereich:
+`surface-raised`, Haarlinie `border-subtle`, Rundung 14 (`rounded-panel`), `shadow-panel`; 20 px
+von oben und unten, 24 px von den Seiten. Steht der Lesebereich rechts der Liste, beginnt die
+Karte, wo die Liste endet, und unter der Werkzeugleiste des Lesebereichs; sie folgt dem Ziehen der
+Grenze, dem Layout und der Ansicht. Nie schmaler als 22,5 rem, ab 60 rem mittig im Bereich. Ohne
+Lesebereich neben der Liste (unten, an ihrer Stelle, andere Ansichten) steht sie am Ende des
+Fensters, höchstens 46 rem breit. Liste, Seitenleiste und Werkzeugleiste bleiben bedienbar. Ein
+Dialog ohne `aria-modal`: Tab geht an den Enden im Kreis, Escape schließt (der Entwurf bleibt), der
+Fokus geht zurück; die Kürzel der App (⌘K) wirken weiter, die Einzeltasten der Liste nicht.
+
+**Verkleinern.** Zur schmalen Leiste (20 rem, 48 px hoch) unten rechts, oben gerundet, mit dem
+Titel als Knopf „Vergrößern: …“ und Schließen. Der Entwurf, der Editor und sein Verlauf bleiben;
+zurück geht der Fokus dorthin, wo zuletzt gearbeitet wurde. Dateien über dem Fenster holen die
+Karte zurück. Im eigenen Fenster füllt dieselbe Karte das Fenster, ohne Verkleinern.
+
+**Kopf.** Betreff als Titel: Feld ohne Rahmen, 20 px fett, Platzhalter „Betreff“; daneben der
+Speicherstand in 11 px `text-tertiary` (höchstens 11 rem, sonst „…“ mit dem ganzen Text als
+Tooltip), „In eigenem Fenster öffnen“, „Verkleinern“, „Schließen“ (32 px, `text-tertiary`).
+Innenabstand 16 px oben, 8 px unten, 24 px links, 16 px rechts; Haarlinie darunter.
+
+**Felder.** An, Cc, Bcc und Von je eine Zeile: Etikett 12 px `text-tertiary` (48 px breit), Chips
+13 px auf `badge`, rund, ohne Haarlinie, 24 px hoch; Haarlinie unter jeder Zeile, 24 px Einzug.
+„Cc“ und „Bcc“ als kleine Textlinks (12 px, `accent`) am Ende der An-Zeile. „Von“ unter „An“: Chip
+mit einem Quadrat in der Kontofarbe (8 px, Ecken 2 px) und „Name · Adresse“, bei mehreren
+Identitäten mit ▾ und Menü.
+
+**Text.** Systemschrift (`font-mail`), 14 px, Zeilenhöhe 1,65, 24 px Einzug. Signatur direkt
+darunter wie bisher. Das Zitat eingeklappt hinter einem Chip „··· Zitat anzeigen“ (12 px,
+`text-secondary` auf `badge`, Rundung 7, 24 px hoch, `aria-expanded`); aufgeklappt wie bisher als
+Karte auf `canvas`.
+
+**Fuß.** Von oben: Fehler und Hinweise, das Feld „Später senden“ (wenn gewählt), der Streifen zum
+Ziehen (nur solange Dateien über dem Fenster sind: gestrichelt in `accent` auf `accent-soft`),
+Anhänge als Chips (32 px, `badge`, Rundung 8, Name, Größe, Entfernen), die Formatleiste, die
+Sendezeile. 12 px Abstand dazwischen, 24 px Einzug, 16 px unten.
+
+**Formatleiste.** Eine Gruppe auf `badge` (Rundung 8, 4 px innen, 32 px hoch): Absatzformat als
+Menü mit dem aktuellen Namen und ▾ (12 px), Trennstrich, Fett, Kursiv, Unterstrichen, Trennstrich,
+Liste, Link, Zitat, (bei gewähltem Bild: Bildgröße), Trennstrich, „Weitere Formatierung“ (⋮).
+Knöpfe 32 × 24 px, `text-secondary`, Überfahren `surface-raised`, gedrückt `surface-raised` mit
+`accent`. Im Menü: Durchgestrichen, Code, Nummerierte Liste (Häkchen, wenn aktiv), Ausrichtung
+(Gruppe), Einzug vergrößern/verkleinern, Bild einfügen, Formatierung entfernen, Rückgängig,
+Wiederholen, Format (Formatiert/Reiner Text). In reinem Text keine Leiste.
+
+**Sendezeile.** „Senden“ als geteilter Knopf in `accent-fill` (Rundung 7, 32 px, 13 px halbfett,
+16 px innen; Pfeil 32 px mit Trennlinie `on-accent` 30 %), das Kürzel nur im Tooltip und im
+Namen. 8 px Abstand, dann Symbole (32 px, Symbol 20 px, `text-secondary`): Dateien anhängen, Bild
+einfügen (nur formatiert), Vorlage einfügen, Erinnern (gesetzt: `accent` mit einem Punkt in
+`accent-fill`), „…“. Ganz rechts Verwerfen in `text-tertiary`.
+
+**Menüs.** Wie die übrigen Menüs (`surface-raised`, `border`, Rundung 10, `shadow-floating`),
+mindestens 15 rem, höchstens 22 rem breit, lange Namen brechen um; Gruppen mit Etikett (12 px
+halbfett `text-tertiary`) und Haarlinie dazwischen; Häkchen in `accent` für gewählte Auswahlen und
+eingeschaltete Optionen, Symbole in `text-secondary` für Befehle, Zeit oder Kürzel am Ende in
+`text-tertiary`. Eine Regel unter den Einträgen (12 px `text-secondary`, z. B. „Wird nur gesendet,
+wenn …“). Am Fuß der Karte öffnen sie nach oben. Das Feld der Vorlagen und das Feld für eine eigene
+Erinnerungszeit stehen als kleine Karten über ihrem Symbol.
+
+Wo jede frühere Bedienung jetzt steht, listet Entscheidung 0086 (Punkt 10).
 
 ## Regeln für Interaktion
 
