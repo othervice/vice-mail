@@ -14,7 +14,9 @@
 //! **Looking at new mail** ([`AppCore::handle_spam_arrivals`]): new mail in an inbox (never the
 //! first sync), after blocked senders and before the local rules and notifications, while the
 //! app runs, for accounts the setting covers and once the filter learned
-//! [`MIN_LEARNED_SPAM`] and [`MIN_LEARNED_HAM`] mails. Never spam: the user's own addresses,
+//! [`MIN_LEARNED_SPAM`] and [`MIN_LEARNED_HAM`] mails. A mail it learned already is not judged
+//! again: "Not spam" or an undone move brings it back into the inbox as new mail, and the
+//! learning queued before is done first. Never spam: the user's own addresses,
 //! contacts the user wrote to (or named, noted, merged, grouped), replies to the user's mail,
 //! senders whose images the user allowed, senders marked important. The body is fetched for it
 //! as for opening when not stored (read-only); if it cannot be read, the stored header data
@@ -593,10 +595,18 @@ impl<C: Connector> AppCore<C> {
             return Ok(HashSet::new());
         }
         let own = store.own_addresses().await?;
+        // What the user taught before (a "Not spam" or an undone move brings the mail back into
+        // the inbox as new mail) is learned before anything is judged.
+        self.spam_flush().await;
         let started = Instant::now();
         let mut spam: Vec<(MessageId, f64, mail_model::MailboxId)> = Vec::new();
         let mut looked = 0usize;
         for message in messages {
+            // Judged by the user (or learned from existing mail): never judged again.
+            if store.spam_learned_class(message.id).await?.is_some() {
+                tracing::debug!(message = message.id.0, "spam filter: learned already");
+                continue;
+            }
             if let Some(reason) = self.spam_exempt(message.id, &own).await? {
                 tracing::debug!(message = message.id.0, ?reason, "spam filter: never spam");
                 continue;
@@ -633,8 +643,8 @@ impl<C: Connector> AppCore<C> {
                     message_id: *id,
                 })
                 .collect();
-            let first = spam.first().map_or(0, |(id, _, _)| id.0);
-            let request = format!("spam-filter-{}-{first}", account.id.as_uuid().simple());
+            // A fresh id: the same mail can come back (moved back by hand) and go again.
+            let request = format!("spam-filter-{}", uuid::Uuid::new_v4().simple());
             match self
                 .apply_action_quietly(MailAction::Spam, refs, request)
                 .await

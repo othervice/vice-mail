@@ -75,7 +75,8 @@ async fn enable(h: &Harness) {
         .expect("on");
 }
 
-/// Teaches `spam` and `ham` messages (delivered to the inbox) with the user's verbs.
+/// Teaches `spam` and `ham` messages (delivered to the inbox, their bodies stored as after
+/// opening or prefetching) with the user's verbs.
 async fn teach(h: &mut Harness, spam: std::ops::Range<u32>, ham: std::ops::Range<u32>) {
     let inbox = h.mailbox(MailboxRole::Inbox).await;
     let mut refs = Vec::new();
@@ -85,6 +86,16 @@ async fn teach(h: &mut Harness, spam: std::ops::Range<u32>, ham: std::ops::Range
     let mut hams = Vec::new();
     for n in ham {
         hams.push(h.deliver(&ham_mail(n)).await.id);
+    }
+    for id in refs
+        .iter()
+        .map(|r| r.message_id)
+        .chain(hams.iter().copied())
+    {
+        h.core
+            .spam_tokens_of(id, crate::reading::SpamFetch::Notify)
+            .await
+            .expect("body");
     }
     if !refs.is_empty() {
         h.core
@@ -202,7 +213,8 @@ async fn new_spam_goes_to_junk_unannounced_and_undo_learns_it_as_ham() {
         .expect("system notifications");
     enable(&h).await;
     h.core.spam().set_minimums(3, 3);
-    teach(&mut h, 1..4, 1..4).await;
+    // More ham than spam, as the filter keeps it: one more ham mail then weighs little.
+    teach(&mut h, 1..4, 10..22).await;
     let ready = status(&h).await;
     assert!(ready.ready, "{ready:?}");
 
@@ -292,6 +304,45 @@ async fn new_spam_goes_to_junk_unannounced_and_undo_learns_it_as_ham() {
         })
     })
     .await;
+    // Back in the inbox it arrives as new mail again: learned as ham, it is not judged again.
+    eventually("listed in the inbox again", || async {
+        h.inbox_items().await.iter().any(|i| i.id == offer.id)
+    })
+    .await;
+    h.deliver(&ham_mail(5)).await;
+    eventually("the next letter announced", || async {
+        h.sink.shown().iter().any(|n| n.body == "Hiking trip 5")
+    })
+    .await;
+    assert!(
+        !h.sink
+            .shown()
+            .iter()
+            .any(|n| n.body.contains("CHEAP PILLS 4")),
+        "a mail coming back is not announced either way"
+    );
+    assert!(
+        h.by_subject("CHEAP PILLS 4 - ORDER NOW!!!")
+            .await
+            .spam
+            .is_none()
+    );
+    assert!(
+        h.core
+            .get_spam_verdict(offer.id)
+            .await
+            .expect("verdict")
+            .is_none(),
+        "not judged again"
+    );
+    assert!(
+        h.server.read(|s| s.mailboxes["Junk"]
+            .messages
+            .values()
+            .filter_map(|m| m.raw.as_deref())
+            .all(|raw| !String::from_utf8_lossy(raw).contains("PILLS 4"))),
+        "not moved again"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -370,6 +421,12 @@ async fn read_only_accounts_get_a_local_mark_and_not_spam_removes_it() {
     let mut spam = vec![first.id];
     for n in 2..4 {
         spam.push(h.deliver(&spam_mail(n)).await.id);
+    }
+    for id in &spam {
+        h.core
+            .spam_tokens_of(*id, crate::reading::SpamFetch::Notify)
+            .await
+            .expect("body");
     }
     h.core
         .mark_spam_locally(spam, true)

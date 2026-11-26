@@ -485,3 +485,120 @@ async fn a_large_model_drops_tokens_seen_once() {
     let lookup = f.store.spam_counts(vec![1]).await.expect("counts");
     assert_eq!((lookup.totals, lookup.tokens), ((1, 0), vec![(1, 0)]));
 }
+
+/// Benchmark (ignored): a model of 1,500 learned mails with 200 tokens each out of a
+/// vocabulary of 300,000, then the lookups of one new mail (200 tokens) and the learning of one
+/// mail, as the engine does them.
+///
+/// ```text
+/// cargo test -p mail-store --lib spam_tests::bench_spam -- --ignored --nocapture
+/// ```
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "benchmark: see the doc comment"]
+async fn bench_spam_lookups_and_learning() {
+    use std::time::{Duration, Instant};
+    const MAILS: u32 = 1_500;
+    const TOKENS: usize = 200;
+    let f = fixture().await;
+    let headers: Vec<_> = (1..=MAILS)
+        .map(|uid| header(uid, D + i64::from(uid), None))
+        .collect();
+    f.store
+        .store_headers(f.inbox, UV, headers, None)
+        .await
+        .expect("store");
+    // A fixed pseudo-random vocabulary (xorshift), a few common tokens in every mail.
+    let mut seed = 0x2026_1126_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let mut token = move |common: bool| {
+        if common {
+            next() % 50
+        } else {
+            1_000 + next() % 300_000
+        }
+    };
+    let started = Instant::now();
+    for chunk in (0..MAILS).collect::<Vec<_>>().chunks(25) {
+        let items = chunk
+            .iter()
+            .map(|i| {
+                let hashes = (0..TOKENS).map(|t| token(t < 20)).collect();
+                (MessageId(D + 1 + i64::from(*i)), hashes)
+            })
+            .collect();
+        let class = if chunk[0] % 3 == 0 {
+            SpamClass::Spam
+        } else {
+            SpamClass::Ham
+        };
+        f.store
+            .learn_spam(items, class, None, 1)
+            .await
+            .expect("learn");
+    }
+    let learning = started.elapsed();
+    let size = size(&f).await;
+    println!(
+        "learned {} spam + {} ham mails, {} tokens, in {:.0} ms ({:.2} ms per mail)",
+        size.spam,
+        size.ham,
+        size.tokens,
+        learning.as_secs_f64() * 1000.0,
+        learning.as_secs_f64() * 1000.0 / f64::from(MAILS)
+    );
+    let mut times: Vec<Duration> = Vec::new();
+    for _ in 0..200 {
+        let hashes: Vec<u64> = (0..TOKENS).map(|t| token(t < 20)).collect();
+        let started = Instant::now();
+        let lookup = f.store.spam_counts(hashes).await.expect("counts");
+        times.push(started.elapsed());
+        assert_eq!(lookup.tokens.len(), TOKENS);
+    }
+    times.sort();
+    println!(
+        "lookup of {TOKENS} tokens: median {:?}, p95 {:?}, max {:?}",
+        times[times.len() / 2],
+        times[times.len() * 95 / 100],
+        times[times.len() - 1]
+    );
+    let started = Instant::now();
+    f.store
+        .learn_spam(
+            vec![(
+                MessageId(D + 1),
+                (0..TOKENS).map(|t| token(t < 20)).collect(),
+            )],
+            SpamClass::Spam,
+            None,
+            2,
+        )
+        .await
+        .expect("relearn");
+    println!(
+        "learning one mail again (unlearn + learn): {:?}",
+        started.elapsed()
+    );
+    // List pages carry the filter's mark (one lookup per row).
+    let mut pages: Vec<Duration> = Vec::new();
+    for _ in 0..100 {
+        let started = Instant::now();
+        let page = f
+            .store
+            .list_messages(f.inbox, None, 100)
+            .await
+            .expect("page");
+        pages.push(started.elapsed());
+        assert_eq!(page.items.len(), 100);
+    }
+    pages.sort();
+    println!(
+        "list page of 100 rows with marks: median {:?}, p95 {:?}",
+        pages[pages.len() / 2],
+        pages[pages.len() * 95 / 100]
+    );
+}

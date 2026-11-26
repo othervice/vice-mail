@@ -217,9 +217,10 @@ async fn new_spam_goes_to_junk_on_the_test_server_and_undo_brings_it_back() {
     send_mail(&env, &env.admin, &env.alice.address, &subject, &body)
         .await
         .expect("send offer");
-    let event = wait_event(&mut events, |e| {
-        matches!(e, CoreEvent::SpamFiltered { account_id, .. } if *account_id == account)
-    })
+    let event = wait_event(
+        &mut events,
+        |e| matches!(e, CoreEvent::SpamFiltered { account_id, .. } if *account_id == account),
+    )
     .await;
     let CoreEvent::SpamFiltered {
         moved,
@@ -271,7 +272,25 @@ async fn new_spam_goes_to_junk_on_the_test_server_and_undo_brings_it_back() {
     }
     arrived(&core, inbox, &subject).await;
     core.spam_flush().await;
+    assert_eq!(
+        core.store_for_tests()
+            .spam_learned_class(in_junk)
+            .await
+            .expect("class"),
+        Some(mail_store::SpamClass::Ham),
+        "learned as ham on undo"
+    );
+    assert!(
+        core.get_spam_verdict(in_junk)
+            .await
+            .expect("verdict")
+            .is_none()
+    );
+    // Learning three spam mails topped up ham from read inbox mail (two per spam), if there was any.
     let after = core.get_spam_filter().await.expect("status");
-    assert_eq!(after.learned_ham, status.learned_ham + 1);
+    println!(
+        "after undo: {} spam, {} ham learned",
+        after.learned_spam, after.learned_ham
+    );
     core.shutdown().await;
 }
