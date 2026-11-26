@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openView, screenshot, SCREENSHOT_DIR, statusEntry, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders, testmail } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -251,9 +251,10 @@ describe("stage 4: actions and the outbox", () => {
       await browser.keys(["e"]);
       await browser.waitUntil(async () => !(await rows()).some((r) => r.id === target.id), { timeout: 2000, timeoutMsg: "offline: the row did not leave the list" });
       await browser.waitUntil(async () => (await pendingBadge()) === "1", { timeout: 5000, timeoutMsg: "the rail does not count the waiting change" });
-      report.steps.offline = { badge: await pendingBadge(), label: await testId("rail-activity").getAttribute("aria-label") };
+      const activityEntry = await statusEntry("activity");
+      report.steps.offline = { badge: await pendingBadge(), label: await testId(activityEntry).getAttribute("aria-label") };
       await shootBothThemes("offline-pending");
-      await testId("rail-activity").click();
+      await testId(activityEntry).click();
       await testId("activity-view").waitForExist();
       await browser.waitUntil(async () => (await testId("activity-view").getText()).includes("Waiting"), { timeoutMsg: "the activity view does not show the waiting change" });
       report.steps.activityOffline = (await testId("activity-view").getText()).slice(0, 400);

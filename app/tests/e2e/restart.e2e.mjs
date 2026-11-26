@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, $$, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, dataDir, documentState, readState, screenshot, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, dataDir, documentState, openSidebarParts, readState, screenshot, setSidebar, testId } from "./support/app.mjs";
 
 describe("app restart (stage 1)", () => {
   let previous;
@@ -39,13 +39,15 @@ describe("app restart (stage 1)", () => {
     const prefs = await coreCall("get_ui_preferences");
     assert.deepEqual(prefs.columnViews, previous.columnViews);
     const was = await setSidebar(true);
+    // Stage 23 (decision 0085): the views under "More" too; the line of "More" is no view.
+    await openSidebarParts();
     const columnViews = () =>
       $$('[data-testid="sidebar-views"] [role="treeitem"][data-testid^="sidebar-view-"]').map(async (el) => (await el.getAttribute("data-testid")).replace("sidebar-view-", ""));
-    const shown = previous.columnViews.filter((view) => view.shown).map((view) => view.id);
+    const shown = previous.columnViews.filter((view) => view.shown && view.id !== "more").map((view) => view.id);
     assert.deepEqual(await columnViews(), shown);
     // The specs after this one expect every view: back to the default (what "Reset to default" stores).
     await coreCall("set_ui_preferences", { preferences: { ...prefs, columnViews: [] } });
-    await browser.waitUntil(async () => (await columnViews()).length === shown.length + previous.columnViews.filter((view) => !view.shown).length, {
+    await browser.waitUntil(async () => (await columnViews()).length === shown.length + previous.columnViews.filter((view) => !view.shown && view.id !== "more").length, {
       timeoutMsg: "the column did not go back to every view",
     });
     await setSidebar(was);

@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openSidebarParts, screenshot, SCREENSHOT_DIR, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, appendMessages, deleteServerFolders, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -208,6 +208,8 @@ describe("stage 21: mark a folder as read from its menu; the column's menus fit"
     await coreCall("reload_folders", { accountId: account.id });
     await browser.waitUntil(async () => (await localFolder())?.unread === COUNT, { timeout: 60000, interval: 500, timeoutMsg: "the new folder was not synced" });
     folder = await localFolder();
+    // Stage 23 (decision 0085): the own folders are under the account's "More folders".
+    await openSidebarParts();
     await testId(`mailbox-${String(folder.id)}`).waitForExist({ timeout: 10000 });
   });
 

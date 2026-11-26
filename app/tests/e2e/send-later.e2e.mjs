@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, openStatusView, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
 import { ALICE, SERVER, serverFolders } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -48,8 +48,8 @@ async function plannedDraft(subject, sendAt) {
 }
 
 async function outboxRow(subject) {
-  await testId("rail-outbox").click();
-  await testId("outbox-view").waitForExist();
+  // Stage 23 (decision 0085): from the rail, or under the column's "More".
+  await openStatusView("outbox");
   return browser.waitUntil(
     async () =>
       browser.execute((wanted) => {

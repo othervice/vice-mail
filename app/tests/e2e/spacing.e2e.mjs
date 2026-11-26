@@ -34,7 +34,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { $, browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, openView, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, openStatusView, openView, SCREENSHOT_DIR, setConversations, setSidebar, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages, appendToBob } from "./support/testmail.mjs";
 
 const BOB = { email: "bob@vicemail.test", password: "bob-test-pw" };
@@ -210,7 +210,9 @@ const PROBE = () => {
     // are colour, not icons.
     if (host.closest('[data-testid="message-list"]') && !host.matches('[data-testid="row-replies"]')) continue;
     if (host.closest('[data-testid^="accent-"]')) continue;
-    const icon = [...host.querySelectorAll("svg")].find((svg) => !usedIcons.has(svg) && shown(svg));
+    // Stage 23 (decision 0085): a folder's arrow sits in the indent before its icon; the rule is
+    // about the icon and its label, so the arrow is no icon here.
+    const icon = [...host.querySelectorAll("svg")].find((svg) => !usedIcons.has(svg) && shown(svg) && !svg.closest('[data-testid^="folder-toggle-"]'));
     if (!icon) continue;
     const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
     let text = null;
@@ -334,7 +336,8 @@ const PROBE = () => {
       : null,
     rowAvatars: list ? list.querySelectorAll('[data-testid="avatar"]').length : 0,
     columnSection: column ? textLeftOf('[data-testid^="sidebar-section-"] > span', column) : null,
-    columnRowIcon: column ? leftOf('[role="treeitem"] svg', column) : null,
+    // Stage 23 (decision 0085): a row's icon, not the arrow or "…" at the end of a section label.
+    columnRowIcon: column ? leftOf('[role="treeitem"]:not([data-testid^="sidebar-section-"]) svg', column) : null,
     paletteGroup: textLeftOf('[data-testid="command-palette"] [role="group"] > [role="presentation"]'),
     paletteIcon: leftOf('[data-testid="command-palette"] [role="option"] svg'),
   };
@@ -787,12 +790,13 @@ async function scenes() {
     await openView("contacts");
     await browser.pause(800);
   });
+  // Stage 23 (decision 0085): from the rail, or under the column's "More".
   await add("activity", async () => {
-    await testId("rail-activity").click();
+    await openStatusView("activity");
     await browser.pause(500);
   });
   await add("outbox", async () => {
-    await testId("rail-outbox").click();
+    await openStatusView("outbox");
     await browser.pause(500);
   });
   return failures;

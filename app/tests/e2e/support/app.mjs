@@ -155,11 +155,52 @@ export async function setSidebar(expanded) {
 }
 
 /**
+ * Stage 23 (decision 0085): opens the column's "More" (the views after the line, groups, saved
+ * searches, Activity, Outbox) and every account's "More folders" unless they are open. Remembered
+ * on the device, so a spec cannot assume either.
+ */
+export async function openSidebarParts() {
+  await browser.execute(() => {
+    for (const row of document.querySelectorAll('[data-testid="sidebar-more"][aria-expanded="false"], [data-testid^="sidebar-more-folders-"][aria-expanded="false"]')) {
+      row.click();
+    }
+  });
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () => document.querySelector('[data-testid="sidebar-more"][aria-expanded="false"], [data-testid^="sidebar-more-folders-"][aria-expanded="false"]') === null,
+      ),
+    { timeout: 5000, timeoutMsg: "the sidebar's More did not open" },
+  );
+}
+
+/**
+ * Stage 23 (decision 0085): the entry of Activity or the outbox that is on screen: the rail's, or
+ * in the column the row under "More" (opened first). Returns its test id.
+ */
+export async function statusEntry(which) {
+  if (await $(`[data-testid="rail-${which}"]`).isExisting()) return `rail-${which}`;
+  await openSidebarParts();
+  await $(`[data-testid="sidebar-${which}"]`).waitForExist({ timeout: 5000 });
+  return `sidebar-${which}`;
+}
+
+/** Opens Activity or the outbox from the rail or the column and waits for the view. */
+export async function openStatusView(which) {
+  await $(`[data-testid="${await statusEntry(which)}"]`).click();
+  await $(`[data-testid="${which}-view"]`).waitForExist({ timeout: 10000 });
+}
+
+/**
  * Opens a mail view whether the rail or the column shows, and waits until it is the current one:
  * the rail's entry, else the column's row of that view, else (inbox, sent, drafts, archive,
- * trash) the folder with that role of the first account in the column.
+ * trash) the folder with that role of the first account in the column. Stage 23: views under
+ * "More" and folders under "More folders" are opened first.
  */
 export async function openView(view) {
+  if ((await $('[data-testid="sidebar-column"]').isExisting()) && !(await $(`[data-testid="sidebar-view-${view}"]`).isExisting())) {
+    await openSidebarParts();
+  }
   const selectors = [
     `[data-testid="rail-${view}"]`,
     `[data-testid="sidebar-view-${view}"]`,
