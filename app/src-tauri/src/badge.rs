@@ -12,7 +12,7 @@
 //! Segoe UI (`fonts/badge-digits.ttf`, a subset under the SIL Open Font License written by
 //! `scripts/badge-font.py`). skrifa's auto-hinter fits every glyph to the pixel grid of exactly
 //! the size it is shown at (the top and the bottom of the digits and their stems, edges and
-//! widths, on whole pixels), ab_glyph_rasterizer computes the exact share of each pixel the
+//! widths, on whole pixels), a small scanline rasteriser computes the share of each pixel the
 //! outline covers, and glyphs are only ever moved by whole pixels, so the fitting holds. The
 //! "+" of "99+" is two bars on the pixel grid. All counts with as many glyphs get the same
 //! digit size (no jumping from 41 to 42), the largest at which every one of them stands on
@@ -20,7 +20,6 @@
 //! White is mixed into the red in linear light, as the screen adds light, so the soft edge
 //! pixels keep the weight of the stroke instead of turning it thin and dark.
 
-use ab_glyph_rasterizer::{Point, Rasterizer, point};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{
     DrawSettings, Engine, HintingInstance, HintingOptions, OutlineGlyphCollection, OutlinePen,
@@ -144,6 +143,20 @@ impl Mask {
     }
 }
 
+/// A point in pixel space.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Point {
+    x: f32,
+    y: f32,
+}
+
+fn point(x: f32, y: f32) -> Point {
+    Point { x, y }
+}
+
+/// Sample lines per pixel row of the rasteriser; across each line coverage is exact.
+const SUBROWS: usize = 32;
+
 #[derive(Clone, Copy, Debug)]
 enum Segment {
     Line(Point, Point),
@@ -168,29 +181,98 @@ impl Path {
         })
     }
 
-    /// The coverage of the outline on a `width`×`height` grid. Drawn with a margin and cut out,
-    /// because the rasteriser lets what lies right of its canvas run into the next row.
-    fn rasterise(&self, width: usize, height: usize) -> Mask {
-        const MARGIN: usize = 2;
-        let (w, h) = (width + 2 * MARGIN, height + 2 * MARGIN);
-        let mut raster = Rasterizer::new(w, h);
-        let shift = MARGIN as f32;
-        let at = |p: Point| point(p.x + shift, p.y + shift);
+    /// The outline as straight edges: curves cut into pieces of at most about half a pixel.
+    fn edges(&self) -> Vec<(Point, Point)> {
+        fn pieces(control: &[Point]) -> usize {
+            let length: f32 = control
+                .windows(2)
+                .map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y))
+                .sum();
+            ((length * 2.0).ceil() as usize).clamp(1, 64)
+        }
+        let mut edges = Vec::new();
         for segment in &self.segments {
             match *segment {
-                Segment::Line(a, b) => raster.draw_line(at(a), at(b)),
-                Segment::Quad(a, b, c) => raster.draw_quad(at(a), at(b), at(c)),
-                Segment::Cubic(a, b, c, d) => raster.draw_cubic(at(a), at(b), at(c), at(d)),
+                Segment::Line(a, b) => edges.push((a, b)),
+                Segment::Quad(a, b, c) => {
+                    let n = pieces(&[a, b, c]);
+                    let at = |t: f32| {
+                        let u = 1.0 - t;
+                        point(
+                            u * u * a.x + 2.0 * u * t * b.x + t * t * c.x,
+                            u * u * a.y + 2.0 * u * t * b.y + t * t * c.y,
+                        )
+                    };
+                    let mut last = a;
+                    for i in 1..=n {
+                        let next = if i == n { c } else { at(i as f32 / n as f32) };
+                        edges.push((last, next));
+                        last = next;
+                    }
+                }
+                Segment::Cubic(a, b, c, d) => {
+                    let n = pieces(&[a, b, c, d]);
+                    let at = |t: f32| {
+                        let u = 1.0 - t;
+                        let (w0, w1, w2, w3) =
+                            (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                        point(
+                            w0 * a.x + w1 * b.x + w2 * c.x + w3 * d.x,
+                            w0 * a.y + w1 * b.y + w2 * c.y + w3 * d.y,
+                        )
+                    };
+                    let mut last = a;
+                    for i in 1..=n {
+                        let next = if i == n { d } else { at(i as f32 / n as f32) };
+                        edges.push((last, next));
+                        last = next;
+                    }
+                }
             }
         }
-        let mut coverage = vec![0.0; w * h];
-        raster.for_each_pixel(|i, alpha| coverage[i] = alpha.clamp(0.0, 1.0));
+        edges
+    }
+
+    /// The coverage of the closed outline on a `width`×`height` grid (non-zero winding):
+    /// [`SUBROWS`] sample lines per pixel row, and on each line the spans inside the outline
+    /// added to every pixel with the exact share of it they cross. Edges on whole pixels (the
+    /// hinted glyphs, the shapes' straight sides) give exactly full or empty pixels.
+    fn rasterise(&self, width: usize, height: usize) -> Mask {
+        let edges = self.edges();
+        let mut coverage = vec![0.0f32; width * height];
+        let weight = 1.0 / SUBROWS as f32;
+        let mut crossings: Vec<(f32, i32)> = Vec::new();
+        for row in 0..height {
+            let cells = &mut coverage[row * width..(row + 1) * width];
+            for sub in 0..SUBROWS {
+                let y = row as f32 + (sub as f32 + 0.5) * weight;
+                crossings.clear();
+                for &(a, b) in &edges {
+                    // Half-open in y, so a vertex shared by two edges counts once.
+                    let (upward, low, high) = if a.y < b.y { (1, a, b) } else { (-1, b, a) };
+                    if low.y <= y && y < high.y {
+                        let t = (y - low.y) / (high.y - low.y);
+                        crossings.push((low.x + t * (high.x - low.x), upward));
+                    }
+                }
+                crossings.sort_by(|p, q| p.0.total_cmp(&q.0));
+                let mut winding = 0;
+                for pair in crossings.windows(2) {
+                    winding += pair[0].1;
+                    if winding != 0 {
+                        add_span(cells, pair[0].0, pair[1].0, weight);
+                    }
+                }
+            }
+        }
+        for c in &mut coverage {
+            *c = c.clamp(0.0, 1.0);
+        }
         Mask {
-            width: w,
-            height: h,
+            width,
+            height,
             coverage,
         }
-        .crop(MARGIN, MARGIN, width, height)
     }
 
     fn shifted(&self, dx: f32, dy: f32) -> Self {
@@ -207,6 +289,25 @@ impl Path {
                 .collect(),
             start: None,
             current: Point::default(),
+        }
+    }
+}
+
+/// Adds the span `x0..x1` of one sample line to the pixels of a row, each with the share of it
+/// the span covers, times `weight`.
+fn add_span(cells: &mut [f32], x0: f32, x1: f32, weight: f32) {
+    let x0 = x0.max(0.0);
+    let x1 = x1.min(cells.len() as f32);
+    if x1 <= x0 {
+        return;
+    }
+    let first = x0.floor() as usize;
+    let last = (x1.ceil() as usize).min(cells.len());
+    for (i, cell) in cells.iter_mut().enumerate().take(last).skip(first) {
+        let left = (i as f32).max(x0);
+        let right = ((i + 1) as f32).min(x1);
+        if right > left {
+            *cell += (right - left) * weight;
         }
     }
 }

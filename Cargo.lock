@@ -3492,7 +3492,6 @@ dependencies = [
 name = "mail-app"
 version = "0.1.2"
 dependencies = [
- "ab_glyph_rasterizer",
  "mail-engine",
  "mail-model",
  "mail-store",
