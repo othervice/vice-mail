@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { browser } from "@wdio/globals";
-import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, testId } from "./support/app.mjs";
+import { attach, coreCall, cspViolations, screenshot, SCREENSHOT_DIR, setConversations, testId } from "./support/app.mjs";
 import { ALICE, SERVER, appendMessages } from "./support/testmail.mjs";
 
 const report = { screenshots: [], steps: {} };
@@ -159,6 +159,8 @@ describe("stage 16: attachment preview", () => {
       { timeout: 240000, interval: 500, timeoutMsg: "the first sync did not finish" },
     );
     await coreCall("set_reading_preferences", { preferences: { markReadOnOpen: "never" } });
+    // Message rows (as after account-sync.e2e.mjs), also when this spec runs on its own.
+    await setConversations(false);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vicemail-preview-"));
     const file = path.join(dir, "preview.eml");
     fs.writeFileSync(file, eml());
