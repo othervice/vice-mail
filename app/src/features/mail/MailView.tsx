@@ -791,7 +791,10 @@ export function MailView({ view }: MailViewProps) {
         </span>
       )}
       {unread !== null && unread > 0 && (
-        <span className="shrink-0 text-12 whitespace-nowrap text-tertiary tabular-nums @max-[70rem]/toolbar:hidden" data-testid="view-unread">
+        <span
+          className="shrink-0 text-12 whitespace-nowrap text-tertiary tabular-nums @max-[70rem]/toolbar:hidden group-data-[narrow]/toolbarlist:hidden"
+          data-testid="view-unread"
+        >
           {t("toolbar.unread", { count: unread })}
         </span>
       )}
@@ -814,7 +817,7 @@ export function MailView({ view }: MailViewProps) {
             />
           )}
           {account && unreadScope && <UnreadControls viewKey={unreadViewKey(unreadScope)} />}
-          {account && conversationsApply && <ConversationToggle />}
+          {account && conversationsApply && <ConversationToggle always={!unreadScope} />}
         </div>
       </ViewHeader>
       {body}

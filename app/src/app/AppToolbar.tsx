@@ -37,12 +37,17 @@ function useListSegment(segment: RefObject<HTMLDivElement | null>, frame: RefObj
     if (!element) return undefined;
     if (!column) {
       element.style.removeProperty("width");
+      element.removeAttribute("data-narrow");
       return undefined;
     }
     const update = () => {
       const width = column.getBoundingClientRect().right - element.getBoundingClientRect().left;
       if (width > 0) element.style.setProperty("width", `${String(width)}px`);
       else element.style.removeProperty("width");
+      // Stage 23 integration: with the rail and the window buttons before it (or a narrow list),
+      // the segment is too short for the title and the unread count: the count gives way.
+      const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      element.toggleAttribute("data-narrow", width > 0 && width < NARROW_LIST_SEGMENT * rem);
     };
     update();
     if (typeof ResizeObserver === "undefined") return undefined;
@@ -54,9 +59,13 @@ function useListSegment(segment: RefObject<HTMLDivElement | null>, frame: RefObj
       observer.disconnect();
       window.removeEventListener("resize", update);
       element.style.removeProperty("width");
+      element.removeAttribute("data-narrow");
     };
   }, [column, segment, frame]);
 }
+
+/** Below this width (rem) the list segment drops the unread count beside the title. */
+const NARROW_LIST_SEGMENT = 22.5;
 
 /** The search of the mail view, drawn as a field: a click or its shortcut opens it above the list. */
 function SearchField() {
@@ -196,7 +205,7 @@ export function AppToolbar() {
           data-testid="toolbar-compose"
         />
       </div>
-      <div ref={listSlot} className="flex h-full min-w-0 shrink-0 items-center overflow-hidden ps-4 pe-2" data-testid="toolbar-list" />
+      <div ref={listSlot} className="group/toolbarlist flex h-full min-w-0 shrink-0 items-center overflow-hidden ps-4 pe-2" data-testid="toolbar-list" />
       <div className="flex h-full min-w-0 flex-1 items-center gap-2 ps-3 pe-3">
         <div ref={readingSlot} className="flex h-full min-w-0 flex-1 items-center overflow-hidden" data-testid="toolbar-reading" />
         {mailView && <SearchField />}
