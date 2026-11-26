@@ -83,7 +83,9 @@ per entry; the first start of 0.1.3 moves them into the vault and deletes them w
 | `mcp-client:<id>` | the key an AI client uses to prove itself to the app's MCP server |
 | `settings-sync:key` | the settings sync key (the passphrase itself is never stored) |
 
-Keychain entries are not part of the settings sync: every device keeps its own.
+Keychain entries are not part of the settings sync: every device keeps its own. Since 0.1.3 a
+new device can ask for passwords on purpose ("Take over passwords from another device", see
+"Settings sync" below); nothing goes along on its own.
 
 ## Settings sync
 
@@ -92,6 +94,14 @@ If you turn on the settings sync, the app writes encrypted entries to a hidden f
 [age](https://age-encryption.org) using a key protected by your passphrase. Passwords, API keys and
 other secrets are never part of them. Your mail server can see how many entries there are, their
 size and when they change, but not what they contain. Details: [SYNC.md](SYNC.md).
+
+**Passwords from another device** (since 0.1.3): a device that joined the sync can ask another one
+for the passwords of accounts it took over. Both show the same six-digit code; only after you
+confirm on the device that has the passwords does it send them, encrypted a second time to a key
+that exists only in the new device's memory, and only for accounts whose servers are the same on
+both devices. Accounts that sign in with Microsoft or Google sign in on each device. The exchange
+lies in the sync folder for at most 15 minutes (usually seconds) and is deleted afterwards; your
+mail server sees four more encrypted entries and their times, not what they hold.
 
 ## The MCP server for AI clients
 

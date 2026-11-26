@@ -979,6 +979,15 @@ what only the app knows, and uses the mailbox itself as storage for it.
     then asks for the password. "Keep the current servers" leaves everything as it is.
   - Account removed elsewhere: the user is asked; until the answer, the deletions of its
     identities, snoozes etc. wait too; "keep" renews the account and these records.
+  - Passwords from another device (stage 22, 0076; `settings_sync/transfer.rs` for the protocol
+    and what a device decides from a listing, `settings_sync/handover.rs` for the state and the
+    commands): request (commitment to an ephemeral X25519 key), challenge (nonce), reveal (the
+    key), response (an age file sealed to the key, each password with the account's IMAP and SMTP
+    servers). Entries under `xfer-` ids, encrypted to the sync key, skipped by the planner and
+    handled after every pass; the state lives only in memory. While a request runs or a
+    challenge waits for its reveal the worker checks every 2 s (`password_transfer_poll`).
+    Passwords are stored through `install_password` (the end of `update_password`) only for
+    adopted accounts with exactly the servers sent along; writing stays off.
 
 ## AI
 

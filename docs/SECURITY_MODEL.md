@@ -242,6 +242,20 @@ party, which is advisable before wide distribution.
   account does not change them: this device keeps its servers and password until the user
   confirms (password removed first, writing off) or dismisses the change (F1, decision 0040).
   The passphrase is never stored.
+- Passwords from another device (stage 22, decision 0076): only on request of the new device and
+  after the user compared a six-digit code on both devices and chose the accounts. The new device
+  commits to a fresh X25519 key (`SHA-256` of request id and public key) before the giving device
+  sends its random nonce; the code is `SHA-256(request id, key, nonce)`. Whoever writes into the
+  folder with the sync key therefore cannot search for a key that yields the same code on both
+  sides: a substituted key shows another code (one in a million chance per attempt), and a
+  revealed key that does not fit the commitment stops the giving device. The passwords travel in an
+  age file sealed to that key (inside the entry, itself encrypted to the sync key); the private key
+  exists only in the new device's memory, so a restart ends the request. A password goes only with
+  the account's IMAP and SMTP servers, is offered only where both devices have the same ones, and
+  is stored only for an account that waits for its password and has exactly those servers here
+  (the boundary of decision 0040). Never sign-in tokens; writing stays off. The entries live under
+  `xfer-` ids for at most 15 minutes (plus five of grace for clocks), are deleted by the new device
+  after the exchange and by any device once expired.
 
 ### 4.5 AI and MCP (A5 → B6)
 
@@ -363,7 +377,12 @@ party, which is advisable before wide distribution.
   passphrase) can change names, identities, signatures, rules and other synced settings on every
   device. Server changes wait for the user, and the stored password never goes to servers named
   only by the folder (F1, fixed). A new device takes over accounts with the folder's servers; the
-  user sees them on the account's page before entering the password there.
+  user sees them on the account's page before entering the password there. Since stage 22 a
+  holder can also ask for passwords as a "new device" (decision 0076); it gets them only if the
+  user on a device that has them confirms a code the holder cannot predict, and only for the
+  servers that device already uses. A device name in a request is what the requester claims; the
+  code is the proof. Someone who sits in the folder can delay or break a transfer (delete or
+  replace entries), not redirect it.
 - **Image decoders in Rust instead of the system's.** The images of mails (and the images the
   composer shows) are decoded by the `image` crate in the helper process and encoded again
   (C-4); the WebView's decoders (WebKit/ImageIO, WebView2) see only PNG, JPEG and GIF the helper
