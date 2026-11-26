@@ -670,6 +670,12 @@ export const searchIpc = {
   /** The inboxes of every visible account (or of a group), mixed by date. */
   listUnifiedInbox: (view: UnifiedView, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
     call(() => searchCommands.listUnifiedInbox(view, cursor, limit)),
+  /** Stage 23 (decision 0087): the Sent folders of every visible account (or of a group), mixed by date. */
+  listUnifiedSent: (view: UnifiedView, cursor: ListCursor | null, limit: number): Promise<MessagePage> =>
+    call(() => searchCommands.listUnifiedSent(view, cursor, limit)),
+  /** Stage 23 (decision 0087): their conversations, newest first. */
+  listUnifiedSentThreads: (view: UnifiedView, cursor: ListCursor | null, limit: number): Promise<ThreadPage> =>
+    call(() => searchCommands.listUnifiedSentThreads(view, cursor, limit)),
 
   listAccountGroups: (): Promise<AccountGroup[]> => call(() => searchCommands.listAccountGroups()),
   createAccountGroup: (name: string, accountIds: AccountId[]): Promise<AccountGroup> =>

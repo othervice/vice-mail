@@ -770,6 +770,15 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
     .await;
     row("Vereinter Posteingang (5 Konten, 100)", &t);
     worst.insert("unified", t.median);
+    // Stage 23 (decision 0087): "Sent" of "All accounts", the same plan over the Sent folders.
+    let t = time(runs, || async {
+        core.list_unified_sent(UnifiedView::All, None, 100)
+            .await
+            .expect("unified sent");
+    })
+    .await;
+    row("Gesendet aller Konten (5 Konten, 100)", &t);
+    worst.insert("unified sent", t.median);
     let t = time(runs, || async {
         core.list_threads(inbox, None, 100).await.expect("threads");
     })
@@ -790,6 +799,14 @@ async fn measure(data: &Dataset, runs: usize) -> HashMap<&'static str, Duration>
     })
     .await;
     row("Thread-Liste vereinter Posteingang (100)", &t);
+    let t = time(runs, || async {
+        core.list_unified_sent_threads(UnifiedView::All, None, 100)
+            .await
+            .expect("sent threads");
+    })
+    .await;
+    row("Thread-Liste Gesendet aller Konten (100)", &t);
+    worst.insert("unified sent threads", t.median);
     let newsletter = data.accounts[0].2[3].0;
     let t = time(runs, || async {
         core.list_threads(newsletter, None, 100)
@@ -1411,6 +1428,9 @@ async fn small_data_meets_generous_thresholds() {
     };
     limit("list", 50);
     limit("unified", 100);
+    // Stage 23 (decision 0087).
+    limit("unified sent", 100);
+    limit("unified sent threads", 300);
     limit("threads", 200);
     limit("conversations", 200);
     limit("unified conversations", 300);

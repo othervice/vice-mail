@@ -324,6 +324,16 @@ export const commands = {
 	/**  The unified inbox (or a group's), newest first. `limit` 1..500. */
 	listUnifiedInbox: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_unified_inbox", { view, cursor, limit }, options)),
 	/**
+	 *  Stage 23 (decision 0087): "Sent" over all visible accounts (or a group's), newest first.
+	 *  `limit` 1..500.
+	 */
+	listUnifiedSent: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<MessagePage, IpcError>(__TAURI_INVOKE("list_unified_sent", { view, cursor, limit }, options)),
+	/**
+	 *  Stage 23 (decision 0087): the threads of the Sent folders of all visible accounts (or a
+	 *  group's). `limit` 1..500.
+	 */
+	listUnifiedSentThreads: (view: UnifiedView, cursor: ListCursor | null, limit: number, options?: InvokeOptions) => typedError<ThreadPage, IpcError>(__TAURI_INVOKE("list_unified_sent_threads", { view, cursor, limit }, options)),
+	/**
 	 *  Decision 0039: the sorted inbox as conversations (one row per conversation at its newest
 	 *  message, summaries in `conversations`). `limit` 1..500 counts conversations.
 	 */

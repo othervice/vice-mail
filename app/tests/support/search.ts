@@ -159,13 +159,14 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
       .accounts()
       .filter((a) => !hidden.includes(a.id) && (view.kind === "all" || (members ?? []).includes(a.id)));
   };
-  const inboxMessages = (view: UnifiedView): MessageListItem[] =>
+  const roleMessages = (view: UnifiedView, role: "inbox" | "sent"): MessageListItem[] =>
     visibleAccounts(view)
       .flatMap((account) => {
-        const inbox = core.mailboxes().find((m) => m.accountId === account.id && m.role === "inbox");
-        return inbox ? core.messages(inbox.id) : [];
+        const mailbox = core.mailboxes().find((m) => m.accountId === account.id && m.role === role);
+        return mailbox ? core.messages(mailbox.id) : [];
       })
       .sort((a, b) => b.id - a.id);
+  const inboxMessages = (view: UnifiedView): MessageListItem[] => roleMessages(view, "inbox");
 
   const scopeMessages = (request: SearchRequest): MessageListItem[] => {
     const { scope } = request;
@@ -327,6 +328,18 @@ export function createSearchFake(options: SearchFakeOptions, core: CoreData) {
         const view = args["view"] as UnifiedView;
         if (view.kind === "group" && !groups.some((g) => g.id === view.groupId)) return error("not_found");
         return page(inboxMessages(view), args["cursor"] as number | null, args["limit"] as number);
+      }
+      // Stage 23 (decision 0087): "Sent" of "All accounts".
+      case "list_unified_sent": {
+        const view = args["view"] as UnifiedView;
+        if (view.kind === "group" && !groups.some((g) => g.id === view.groupId)) return error("not_found");
+        return page(roleMessages(view, "sent"), args["cursor"] as number | null, args["limit"] as number);
+      }
+      case "list_unified_sent_threads": {
+        const view = args["view"] as UnifiedView;
+        if (view.kind === "group" && !groups.some((g) => g.id === view.groupId)) return error("not_found");
+        const paged = page(roleMessages(view, "sent"), args["cursor"] as number | null, args["limit"] as number);
+        return { items: paged.items.map((message) => singleThread(message)), nextCursor: paged.nextCursor };
       }
       case "list_account_groups":
         return groups.map((g) => ({ ...g, accountIds: [...g.accountIds] }));

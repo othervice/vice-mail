@@ -513,6 +513,34 @@ impl<C: Connector> AppCore<C> {
             .await?)
     }
 
+    /// Stage 23 (decision 0087): one page of "Sent" over all visible accounts (or a group's):
+    /// their Sent folders mixed by time, newest first; every item carries its account.
+    /// `limit` 1..=500.
+    pub async fn list_unified_sent(
+        &self,
+        view: UnifiedView,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<MessagePage, CoreError> {
+        Ok(self
+            .store_ref()?
+            .list_unified_sent(group_of(view), cursor, limit)
+            .await?)
+    }
+
+    /// Stage 23 (decision 0087): the threads of those Sent folders. `limit` 1..=500.
+    pub async fn list_unified_sent_threads(
+        &self,
+        view: UnifiedView,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ThreadPage, CoreError> {
+        Ok(self
+            .store_ref()?
+            .list_unified_sent_threads(group_of(view), cursor, limit)
+            .await?)
+    }
+
     // -----------------------------------------------------------------------------------------
     // Account groups and hidden accounts
     // -----------------------------------------------------------------------------------------

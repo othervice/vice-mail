@@ -502,6 +502,108 @@ async fn unified_inbox_groups_and_hidden_accounts_through_the_core() {
     f.core.delete_account_group(group.id).await.expect("delete");
 }
 
+/// Stage 23 (decision 0087): "Sent" of "All accounts" through the core: the Sent folders of the
+/// visible accounts (or a group's), each row with its own account; the page size is checked.
+#[tokio::test]
+async fn unified_sent_through_the_core() {
+    let f = fixture().await;
+    let store = f.core.store_for_tests();
+    let mut sent = Vec::new();
+    for (k, (account, _, _)) in f.accounts.iter().enumerate() {
+        let remote = |name: &str, attrs: &[&str]| RemoteMailbox {
+            name: name.into(),
+            path: name.into(),
+            delimiter: Some('/'),
+            attributes: attrs.iter().map(|a| (*a).to_owned()).collect(),
+            status: None,
+        };
+        store
+            .sync_mailboxes(
+                *account,
+                vec![
+                    remote("INBOX", &[]),
+                    remote("Archiv", &["\\Archive"]),
+                    remote("Projekte", &[]),
+                    remote("Sent", &["\\Sent"]),
+                ],
+            )
+            .await
+            .expect("mailboxes");
+        let mailbox = store
+            .mailboxes(*account)
+            .await
+            .expect("mailboxes")
+            .into_iter()
+            .find(|m| m.role == MailboxRole::Sent)
+            .expect("sent")
+            .id;
+        store
+            .reset_mailbox(
+                mailbox,
+                MailboxBaseline {
+                    uid_validity: UV,
+                    uid_next: 1,
+                    highest_modseq: None,
+                },
+            )
+            .await
+            .expect("reset");
+        let k = i64::try_from(k).expect("small");
+        let headers: Vec<_> = (1..=4)
+            .map(|uid| {
+                header(
+                    uid,
+                    D + i64::from(uid) * 100 + k,
+                    "Angebot",
+                    ("Ich", "me@example.org"),
+                    "x@example.org",
+                )
+            })
+            .collect();
+        store
+            .store_headers(mailbox, UV, headers, None)
+            .await
+            .expect("headers");
+        sent.push((*account, mailbox));
+    }
+    let page = f
+        .core
+        .list_unified_sent(UnifiedView::All, None, 100)
+        .await
+        .expect("unified sent");
+    assert_eq!(page.items.len(), 8);
+    assert!(page.items.windows(2).all(|w| w[0].date >= w[1].date));
+    for item in &page.items {
+        assert!(
+            sent.contains(&(item.account_id, item.mailbox_id)),
+            "{item:?}"
+        );
+    }
+    let (bob, bob_sent) = sent[1];
+    let group = f
+        .core
+        .create_account_group("Arbeit".into(), vec![bob])
+        .await
+        .expect("group");
+    let page = f
+        .core
+        .list_unified_sent_threads(
+            UnifiedView::Group {
+                group_id: group.id.clone(),
+            },
+            None,
+            100,
+        )
+        .await
+        .expect("group threads");
+    assert_eq!(page.items.len(), 4);
+    assert!(page.items.iter().all(|t| t.message.mailbox_id == bob_sent));
+    assert!(matches!(
+        f.core.list_unified_sent(UnifiedView::All, None, 0).await,
+        Err(CoreError::InvalidArgument(_))
+    ));
+}
+
 #[tokio::test]
 async fn identities_and_the_reply_identity() {
     let f = fixture().await;

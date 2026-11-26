@@ -1008,6 +1008,140 @@ async fn unified_inbox_assigns_every_mail_to_its_account_and_leaves_hidden_ones_
     );
 }
 
+/// Stage 23 (decision 0087): "Sent" of "All accounts" mixes the Sent folders of the visible
+/// accounts (or of a group's) like the unified inbox; an account without one is left out.
+#[tokio::test]
+async fn unified_sent_mixes_the_sent_folders_of_the_visible_accounts() {
+    let f = with_text().await;
+    let accounts = more_accounts(&f).await;
+    let (bob, bob_inbox) = accounts[1];
+    let (carol, _) = accounts[2];
+    // Bob gets a Sent folder; Carol has none.
+    f.store
+        .sync_mailboxes(
+            bob,
+            vec![
+                remote("INBOX", &[]),
+                remote("Archiv", &["\\Archive"]),
+                remote("Gesendet", &["\\Sent"]),
+            ],
+        )
+        .await
+        .expect("mailboxes");
+    let bob_sent = f
+        .store
+        .mailboxes(bob)
+        .await
+        .expect("mailboxes")
+        .into_iter()
+        .find(|m| m.role == MailboxRole::Sent)
+        .expect("sent")
+        .id;
+    f.store
+        .reset_mailbox(
+            bob_sent,
+            MailboxBaseline {
+                uid_validity: UV,
+                uid_next: 1,
+                highest_modseq: None,
+            },
+        )
+        .await
+        .expect("reset");
+    for (k, mailbox) in [f.sent, bob_sent, f.inbox, bob_inbox]
+        .into_iter()
+        .enumerate()
+    {
+        let k = i64::try_from(k).expect("small");
+        let headers: Vec<_> = (1..=25)
+            .map(|uid| {
+                header(
+                    uid,
+                    D + i64::from(uid) * 40 + k * 9,
+                    Some(&format!("s{k}-{uid}@u")),
+                )
+            })
+            .collect();
+        f.store
+            .store_headers(mailbox, UV, headers, None)
+            .await
+            .expect("headers");
+    }
+    let sent = |group: Option<mail_model::AccountGroupId>| {
+        let store = f.store.clone();
+        async move {
+            let mut items = Vec::new();
+            let mut cursor = None;
+            loop {
+                let page = store
+                    .list_unified_sent(group.clone(), cursor, 7)
+                    .await
+                    .expect("sent page");
+                items.extend(page.items);
+                match page.next_cursor {
+                    Some(c) => cursor = Some(c),
+                    None => return items,
+                }
+            }
+        }
+    };
+    let all = sent(None).await;
+    assert_eq!(all.len(), 50, "both Sent folders, no inbox");
+    assert!(
+        all.windows(2).all(|w| w[0].id > w[1].id),
+        "newest first, no repeats"
+    );
+    for (account, mailbox) in [(f.account, f.sent), (bob, bob_sent)] {
+        let own: Vec<i64> = all
+            .iter()
+            .filter(|i| i.account_id == account)
+            .map(|i| i.id.0)
+            .collect();
+        assert_eq!(own, ids_of(&f.store, mailbox).await, "{account:?}");
+        assert!(
+            all.iter()
+                .filter(|i| i.account_id == account)
+                .all(|i| i.mailbox_id == mailbox)
+        );
+    }
+    assert!(all.iter().all(|i| i.account_id != carol));
+    let threads = f
+        .store
+        .list_unified_sent_threads(None, None, 200)
+        .await
+        .expect("threads");
+    assert_eq!(threads.items.len(), 50);
+    assert!(
+        threads
+            .items
+            .iter()
+            .all(|t| t.message.mailbox_id == f.sent || t.message.mailbox_id == bob_sent)
+    );
+
+    // Hidden accounts and groups as in the unified inbox.
+    assert!(f.store.set_account_hidden(bob, true).await.expect("hide"));
+    let without = sent(None).await;
+    assert_eq!(without.len(), 25);
+    assert!(without.iter().all(|i| i.account_id == f.account));
+    let group = f
+        .store
+        .create_account_group("Verein".into(), vec![carol])
+        .await
+        .expect("group");
+    assert!(
+        sent(Some(group.id.clone())).await.is_empty(),
+        "no Sent folder in the group"
+    );
+    assert!(
+        f.store
+            .list_unified_sent_threads(Some(group.id), None, 50)
+            .await
+            .expect("group threads")
+            .items
+            .is_empty()
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Search filters
 // ---------------------------------------------------------------------------------------------

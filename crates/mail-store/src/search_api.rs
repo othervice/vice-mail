@@ -344,6 +344,37 @@ impl Store {
         .await
     }
 
+    /// Stage 23 (decision 0087): one page of "Sent" over all visible accounts (or the group's
+    /// visible accounts): their Sent folders mixed by time, newest first, like
+    /// [`Store::list_unified`]. Each item carries its own account and mailbox.
+    pub async fn list_unified_sent(
+        &self,
+        group: Option<AccountGroupId>,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<MessagePage, StoreError> {
+        self.read(move |c| {
+            let sent = groups::unified_sent(c, group.as_ref())?;
+            lists::unified(c, &sent, cursor, limit)
+        })
+        .await
+    }
+
+    /// Stage 23 (decision 0087): the threads of those Sent folders, like
+    /// [`Store::list_unified_threads`].
+    pub async fn list_unified_sent_threads(
+        &self,
+        group: Option<AccountGroupId>,
+        cursor: Option<ListCursor>,
+        limit: u32,
+    ) -> Result<ThreadPage, StoreError> {
+        self.read(move |c| {
+            let sent = groups::unified_sent(c, group.as_ref())?;
+            lists::threads(c, &sent, cursor, limit)
+        })
+        .await
+    }
+
     /// Names and roles of the account's mailboxes, without counters (for `in:`).
     pub async fn mailbox_names(
         &self,

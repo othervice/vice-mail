@@ -68,6 +68,36 @@ pub async fn list_unified_inbox(
         .map_err(to_ipc("list_unified_inbox"))
 }
 
+/// Stage 23 (decision 0087): "Sent" over all visible accounts (or a group's), newest first.
+/// `limit` 1..500.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_unified_sent(
+    core: State<'_, AppCore>,
+    view: UnifiedView,
+    cursor: Option<ListCursor>,
+    limit: u32,
+) -> Result<MessagePage, IpcError> {
+    core.list_unified_sent(view, cursor, limit)
+        .await
+        .map_err(to_ipc("list_unified_sent"))
+}
+
+/// Stage 23 (decision 0087): the threads of the Sent folders of all visible accounts (or a
+/// group's). `limit` 1..500.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_unified_sent_threads(
+    core: State<'_, AppCore>,
+    view: UnifiedView,
+    cursor: Option<ListCursor>,
+    limit: u32,
+) -> Result<ThreadPage, IpcError> {
+    core.list_unified_sent_threads(view, cursor, limit)
+        .await
+        .map_err(to_ipc("list_unified_sent_threads"))
+}
+
 /// Decision 0039: the sorted inbox as conversations (one row per conversation at its newest
 /// message, summaries in `conversations`). `limit` 1..500 counts conversations.
 #[tauri::command]

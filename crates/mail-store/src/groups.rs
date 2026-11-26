@@ -68,6 +68,9 @@ pub(crate) fn mailbox_names(
 
 pub(crate) const INBOX_OF: &str =
     "SELECT id FROM mailbox WHERE account_id = ?1 AND role = 'inbox' AND selectable = 1";
+/// Stage 23 (decision 0087): an account's Sent folder (one per account: `mailbox_role`).
+const SENT_OF: &str =
+    "SELECT id FROM mailbox WHERE account_id = ?1 AND role = 'sent' AND selectable = 1";
 
 pub(crate) fn new_uuid(conn: &Connection) -> Result<String, StoreError> {
     Ok(conn.prepare_cached(NEW_UUID)?.query_row([], |r| r.get(0))?)
@@ -257,14 +260,32 @@ pub(crate) fn unified_inboxes(
     conn: &Connection,
     group: Option<&AccountGroupId>,
 ) -> Result<Vec<(MailboxId, AccountId)>, StoreError> {
+    role_mailboxes(conn, group, INBOX_OF)
+}
+
+/// Stage 23 (decision 0087): the Sent folders of the visible accounts (or of the group's), in
+/// account order; an account without one is left out.
+pub(crate) fn unified_sent(
+    conn: &Connection,
+    group: Option<&AccountGroupId>,
+) -> Result<Vec<(MailboxId, AccountId)>, StoreError> {
+    role_mailboxes(conn, group, SENT_OF)
+}
+
+/// The mailbox `sql` finds (by the account's row id) for each visible account, in account order.
+fn role_mailboxes(
+    conn: &Connection,
+    group: Option<&AccountGroupId>,
+    sql: &str,
+) -> Result<Vec<(MailboxId, AccountId)>, StoreError> {
     let mut out = Vec::new();
     for (row, account) in visible_accounts(conn, group)? {
-        if let Some(inbox) = conn
-            .prepare_cached(INBOX_OF)?
+        if let Some(mailbox) = conn
+            .prepare_cached(sql)?
             .query_row([row], |r| r.get::<_, i64>(0))
             .optional()?
         {
-            out.push((MailboxId(inbox), account));
+            out.push((MailboxId(mailbox), account));
         }
     }
     Ok(out)
