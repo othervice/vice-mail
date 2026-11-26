@@ -201,7 +201,8 @@ rückt dafür an den oberen Rand. Der Name sagt die Zahl mit („…, 3 ungelese
   sagte aber die genaue Zahl („1.296 ungelesen“); axe in der echten WebView meldete das als
   `label-content-name-mismatch` (WCAG 2.5.3). Jetzt sagt der Name „999+ ungelesen“ wie der Punkt
   (`IconRail.tsx`, Text `sidebar.unreadOver`; Vitest `sidebar-sections.test.tsx`, Desktop
-  `a11y.e2e.mjs`, `stage22-ui.e2e.mjs`). Die genaue Zahl steht am Kopf des Kontos in der Spalte.
+  `a11y.e2e.mjs`, `stage22-ui.e2e.mjs`). Die genauen Zahlen stehen in der Spalte (Posteingang, Ordner,
+  zugeklappter Kopf des Kontos).
 - **Desktop-Tests:** Specs, die Ordner unter „Weitere Ordner“ anklicken (`account-sync`,
   `reading`, `folders`, `stage19-contacts-folders`), öffnen es vorher (`openSidebarParts`);
   „Alle Posteingänge“ ist in den Specs die Zeile `unified-all`.
