@@ -785,6 +785,21 @@ impl<C: Connector> AppCore<C> {
         } else {
             self.check_login(&account.imap, password.clone()).await?;
         }
+        self.install_password(account, password).await?;
+        tracing::info!(account = %id, "password replaced");
+        Ok(())
+    }
+
+    /// Stores `password` for `account` and reconnects with it; clears the "taken over, needs
+    /// its password" mark. The end of [`AppCore::update_password`]; stage 22 (decision 0076):
+    /// also a password another device gave this one.
+    pub(crate) async fn install_password(
+        &self,
+        account: mail_store::StoredAccount,
+        password: Secret<String>,
+    ) -> Result<(), CoreError> {
+        let store = self.store()?;
+        let id = account.id;
         let _admin = self.inner.admin.lock().await;
         let key = CredentialRef::parse(&account.credential_ref)?;
         self.inner.credentials.set(&key, password.clone()).await?;
@@ -806,7 +821,6 @@ impl<C: Connector> AppCore<C> {
         if let Err(err) = store.clear_sync_adopted(id).await {
             tracing::warn!(account = %id, error = %err, "adopted mark not cleared");
         }
-        tracing::info!(account = %id, "password replaced");
         Ok(())
     }
 

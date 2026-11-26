@@ -38,25 +38,33 @@ pub const FORMAT_VERSION: u32 = 1;
 /// Prefix of key record ids; record ids are plain hex and never start with it.
 pub const KEY_RECORD_PREFIX: &str = "key-";
 
+/// Stage 22 (decision 0076): prefix of the entries of a password transfer between devices
+/// (`super::transfer`). Passes leave them out like key records.
+pub const TRANSFER_PREFIX: &str = "xfer-";
+
 /// Plaintexts are padded to a multiple of this many bytes.
-const PAD_BLOCK: usize = 256;
+pub(super) const PAD_BLOCK: usize = 256;
 
 /// Largest ciphertext that is decrypted at all (the largest content is 256 KiB).
-const MAX_CIPHERTEXT_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_CIPHERTEXT_BYTES: usize = 1024 * 1024;
 
 const LABEL_ID_KEY: &[u8] = b"vice-mail settings-sync v1 opaque-id key";
 const LABEL_KEY_RECORD: &[u8] = b"vice-mail settings-sync v1 key-record id";
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Opaque id of a record (32 lowercase hex digits) or of a key record (`key-` + 32 hex).
+/// Opaque id of a record (32 lowercase hex digits), of a key record (`key-` + 32 hex) or of a
+/// password transfer entry (`xfer-` + 32 hex, stage 22).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct OpaqueId(String);
+pub struct OpaqueId(pub(super) String);
 
 impl OpaqueId {
     /// Validates the text form.
     pub fn parse(s: &str) -> Option<Self> {
-        let hex = s.strip_prefix(KEY_RECORD_PREFIX).unwrap_or(s);
+        let hex = s
+            .strip_prefix(KEY_RECORD_PREFIX)
+            .or_else(|| s.strip_prefix(TRANSFER_PREFIX))
+            .unwrap_or(s);
         let ok = hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
         ok.then(|| Self(s.to_owned()))
     }
@@ -67,6 +75,11 @@ impl OpaqueId {
 
     pub fn is_key_record(&self) -> bool {
         self.0.starts_with(KEY_RECORD_PREFIX)
+    }
+
+    /// Stage 22: an entry of a password transfer, not a record.
+    pub fn is_transfer(&self) -> bool {
+        self.0.starts_with(TRANSFER_PREFIX)
     }
 }
 
@@ -186,9 +199,9 @@ struct KeyEnvelope {
 
 /// The settings sync key of one sync folder. Its `Debug` output is redacted.
 pub struct SyncKey {
-    identity: age::x25519::Identity,
-    recipient: age::x25519::Recipient,
-    id_key: [u8; 32],
+    pub(super) identity: age::x25519::Identity,
+    pub(super) recipient: age::x25519::Recipient,
+    pub(super) id_key: [u8; 32],
 }
 
 impl fmt::Debug for SyncKey {
@@ -402,7 +415,7 @@ impl SyncKey {
     }
 }
 
-fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
+pub(super) fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     let mut mac = match HmacSha256::new_from_slice(key) {
         Ok(mac) => mac,
         // HMAC takes keys of any length (longer ones are hashed first).
@@ -414,7 +427,7 @@ fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     mac.finalize().into_bytes().into()
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(super) fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -425,7 +438,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// JSON, padded with spaces (valid trailing JSON whitespace) to a multiple of [`PAD_BLOCK`].
-fn padded_json<T: Serialize>(value: &T) -> Result<Vec<u8>, SettingsSyncError> {
+pub(super) fn padded_json<T: Serialize>(value: &T) -> Result<Vec<u8>, SettingsSyncError> {
     let mut bytes =
         serde_json::to_vec(value).map_err(|err| SettingsSyncError::Encrypt(err.to_string()))?;
     let padded = bytes.len().div_ceil(PAD_BLOCK).max(1) * PAD_BLOCK;

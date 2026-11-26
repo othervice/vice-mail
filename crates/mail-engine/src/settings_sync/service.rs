@@ -62,9 +62,12 @@ pub(crate) struct SyncSignals {
     sync_account: Mutex<Option<AccountId>>,
     /// The detection changed: the worker emits a new status.
     detection_changed: AtomicBool,
+    /// Stage 22: a password transfer runs; the worker checks the folder every
+    /// `password_transfer_poll`.
+    pub(super) transfer_active: AtomicBool,
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(super) fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -133,14 +136,16 @@ struct PendingJoin {
 /// The settings sync's part of the core.
 pub(crate) struct SettingsSync<C: Connector> {
     pub(crate) signals: Arc<SyncSignals>,
-    clock: SharedClock,
-    device: DeviceId,
+    pub(super) clock: SharedClock,
+    pub(super) device: DeviceId,
     key: Mutex<Option<Arc<SyncKey>>>,
     live: Mutex<Live>,
     pending: Mutex<Option<PendingJoin>>,
     /// Held for every pass and folder operation; keeps the folder connection between passes.
-    runner: tokio::sync::Mutex<Option<<C as SyncFolderConnector>::Folder>>,
+    pub(super) runner: tokio::sync::Mutex<Option<<C as SyncFolderConnector>::Folder>>,
     worker: Mutex<Option<JoinHandle<()>>>,
+    /// Stage 22 (decision 0076): password transfers, in memory only.
+    pub(super) transfer: Mutex<super::handover::TransferState>,
 }
 
 impl<C: Connector> SettingsSync<C> {
@@ -182,6 +187,7 @@ impl<C: Connector> SettingsSync<C> {
             pending: Mutex::new(None),
             runner: tokio::sync::Mutex::new(None),
             worker: Mutex::new(None),
+            transfer: Mutex::new(super::handover::TransferState::default()),
         }
     }
 
@@ -238,12 +244,20 @@ async fn worker<C: Connector>(
     config: Arc<crate::sync::SyncConfig>,
 ) {
     loop {
-        tokio::select! {
-            () = signals.wake.notified() => {}
-            () = tokio::time::sleep(config.poll_interval) => {}
-        }
+        // Stage 22: while a password transfer runs, the folder is checked every two seconds.
+        let interval = if signals.transfer_active.load(Ordering::SeqCst) {
+            config.password_transfer_poll.min(config.poll_interval)
+        } else {
+            config.poll_interval
+        };
+        let woken = tokio::select! {
+            () = signals.wake.notified() => true,
+            () = tokio::time::sleep(interval) => false,
+        };
         // Changes come in bursts (a rule reorder, a snooze of ten messages): one pass for all.
-        tokio::time::sleep(config.settings_sync_debounce).await;
+        if woken {
+            tokio::time::sleep(config.settings_sync_debounce).await;
+        }
         let Some(core) = core.upgrade() else {
             return;
         };
@@ -301,7 +315,7 @@ fn encode_state(state: &SyncFolderState) -> String {
     )
 }
 
-fn default_device_name() -> String {
+pub(super) fn default_device_name() -> String {
     match std::env::consts::OS {
         "macos" => "Mac".to_owned(),
         "windows" => "Windows PC".to_owned(),
@@ -598,7 +612,7 @@ impl<C: Connector> AppCore<C> {
     }
 
     /// The sync key: in memory, or from the keychain.
-    async fn sync_key(&self) -> Result<Option<Arc<SyncKey>>, CoreError> {
+    pub(super) async fn sync_key(&self) -> Result<Option<Arc<SyncKey>>, CoreError> {
         let state = self.settings_sync();
         if let Some(key) = lock(&state.key).clone() {
             return Ok(Some(key));
@@ -678,7 +692,7 @@ impl<C: Connector> AppCore<C> {
 
     /// The cached connection, or a new one, with the folder open. `create` creates a missing
     /// folder; otherwise a missing one is `NotSetUp`.
-    async fn open_sync_folder(
+    pub(super) async fn open_sync_folder(
         &self,
         runner: &mut Option<<C as SyncFolderConnector>::Folder>,
         account: AccountId,
@@ -795,10 +809,14 @@ impl<C: Connector> AppCore<C> {
         let encoded = encode_state(&opened);
         let pending = store.sync_pending().await?;
         let live = self.settings_sync().live();
+        // Stage 22: transfer entries in the folder are looked at again (and deleted once
+        // expired) even when nothing else changed.
+        let transfers = lock(&self.settings_sync().transfer).pending;
         if !force
             && !full
             && live.ran
             && !live.deferred
+            && !transfers
             && pending == 0
             && row.folder_state.as_deref() == Some(encoded.as_str())
         {
@@ -832,7 +850,7 @@ impl<C: Connector> AppCore<C> {
         let mut transport = ImapTransport::new(folder, now);
         let mut local = load_state(&store.sync_records().await?, row.last_complete_sync_ms);
         let mut rounds = 0;
-        let prepared = loop {
+        let mut prepared = loop {
             rounds += 1;
             let fetched = fetch_pass(&mut transport, key, &local, now, mode)
                 .await
@@ -854,8 +872,12 @@ impl<C: Connector> AppCore<C> {
             local = load_state(&store.sync_records().await?, row.last_complete_sync_ms);
         };
         let questions = prepared.plan.questions.clone();
+        let transfers = std::mem::take(&mut prepared.transfers);
         let before = local.clone();
         let report: PassReport = execute_pass(&mut transport, key, &mut local, prepared).await;
+        // Stage 22 (decision 0076): requests, answers and the cleanup of password transfers.
+        self.handle_transfers(&mut transport, key, &transfers, now)
+            .await;
         drop(transport);
         let items = diff_items(&before, &local, &questions);
         let hlc_last = lock_clock(&state.clock).last().map(|v| v.to_string());
@@ -1048,6 +1070,12 @@ impl<C: Connector> AppCore<C> {
         } else {
             Vec::new()
         };
+        let adopted = store.sync_adopted_accounts().await?;
+        let (password_transfer, password_requests) = if on {
+            self.transfer_views(&accounts, &adopted)
+        } else {
+            (None, Vec::new())
+        };
         let (status, last_error) = match (&live.problem, on) {
             (_, false) => (SettingsSyncState::Off, None),
             (Some((kind, error)), true) => (*kind, Some(error.clone())),
@@ -1063,7 +1091,7 @@ impl<C: Connector> AppCore<C> {
             rejected_entries: if on { live.rejected } else { 0 },
             devices,
             questions,
-            accounts_needing_password: store.sync_adopted_accounts().await?,
+            accounts_needing_password: adopted,
             detected_accounts: if on {
                 Vec::new()
             } else {
@@ -1080,6 +1108,8 @@ impl<C: Connector> AppCore<C> {
                     smtp: change.smtp,
                 })
                 .collect(),
+            password_transfer,
+            password_requests,
         })
     }
 
@@ -1308,6 +1338,9 @@ impl<C: Connector> AppCore<C> {
                 .await?;
             *lock(&state.signals.sync_account) = Some(account);
             *lock(&state.live) = Live::default();
+            // The folder is empty now; running transfers are gone with it.
+            lock(&state.transfer).clear();
+            state.signals.transfer_active.store(false, Ordering::SeqCst);
         }
         tracing::info!("settings sync reset");
         self.settings_pass(true).await?;
@@ -1323,6 +1356,8 @@ impl<C: Connector> AppCore<C> {
         *lock(&state.live) = Live::default();
         *lock(&state.signals.sync_account) = None;
         *lock(&state.pending) = None;
+        lock(&state.transfer).clear();
+        state.signals.transfer_active.store(false, Ordering::SeqCst);
         if let Some(folder) = state.runner.lock().await.take() {
             folder.logout().await.ok();
         }

@@ -693,10 +693,18 @@ fn allowing_once_asks_once_per_run_until_the_first_write() {
     drop(store);
     let store = VaultStore::new(keychain.clone());
     assert_eq!(read(&store, SECRETS[0].0).as_deref(), Some(SECRETS[0].1));
-    assert_eq!(keychain.prompts().len(), 2, "not trusted: the next run asks again");
+    assert_eq!(
+        keychain.prompts().len(),
+        2,
+        "not trusted: the next run asks again"
+    );
     store.set(&key("new"), &secret("v")).expect("set");
     drop(store);
     let store = VaultStore::new(keychain.clone());
     assert_eq!(read(&store, "new").as_deref(), Some("v"));
-    assert_eq!(keychain.prompts().len(), 2, "the newest item is this build's own");
+    assert_eq!(
+        keychain.prompts().len(),
+        2,
+        "the newest item is this build's own"
+    );
 }
