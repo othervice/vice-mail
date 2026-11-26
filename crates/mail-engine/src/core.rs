@@ -35,6 +35,8 @@ const MARK_READ_KEY: &str = "reading.mark_read_on_open";
 
 /// Longest request id of an action (the UI sends a UUID).
 const MAX_REQUEST_ID: usize = 64;
+/// Stage 22: more ids than this in one account order is a mistake of the caller.
+const MAX_REORDER_ACCOUNTS: usize = 1_000;
 
 /// A request id of a user action: 1 to 64 letters, digits, `-` or `_` (the UI sends a UUID).
 pub(crate) fn check_request_id(request_id: &str) -> Result<(), CoreError> {
@@ -605,7 +607,7 @@ impl<C: Connector> AppCore<C> {
     // Accounts
     // -----------------------------------------------------------------------------------------
 
-    /// All accounts, oldest first, with their live sync status.
+    /// All accounts in the user's order (stage 22, decision 0078), with their live sync status.
     pub async fn list_accounts(&self) -> Result<Vec<Account>, CoreError> {
         let stored = self.store()?.accounts().await?;
         Ok(stored
@@ -849,6 +851,38 @@ impl<C: Connector> AppCore<C> {
             .ok_or_else(|| CoreError::NotFound(format!("account {id}")))?;
         self.emit(CoreEvent::AccountsChanged);
         Ok(account.into_account(self.status_of(id)))
+    }
+
+    /// Stage 22 (decision 0078): puts the accounts in the order of `ids` for every list of
+    /// accounts (left out ones follow in their order; an unknown one is `not_found`, nothing
+    /// changes). Synchronised with the settings sync. Emits `accountsChanged` and returns the
+    /// accounts in their new order.
+    pub async fn reorder_accounts(&self, ids: Vec<AccountId>) -> Result<Vec<Account>, CoreError> {
+        if ids.len() > MAX_REORDER_ACCOUNTS {
+            return Err(CoreError::InvalidArgument(format!(
+                "{} accounts in one order; at most {MAX_REORDER_ACCOUNTS}",
+                ids.len()
+            )));
+        }
+        let stored = self.store()?.reorder_accounts(ids).await?;
+        self.emit(CoreEvent::AccountsChanged);
+        Ok(stored
+            .into_iter()
+            .map(|account| {
+                let status = self.status_of(account.id);
+                account.into_account(status)
+            })
+            .collect())
+    }
+
+    /// Stage 22 (decision 0078): the account's name in the lists (trimmed, at most 100
+    /// characters, no control characters); empty shows its address. The sender names of its
+    /// identities stay as they are, so the name never reaches sent mail. Synchronised with the
+    /// settings sync. Emits `accountsChanged` and returns the account.
+    pub async fn rename_account(&self, id: AccountId, name: String) -> Result<Account, CoreError> {
+        let stored = self.store()?.rename_account(id, name).await?;
+        self.emit(CoreEvent::AccountsChanged);
+        Ok(stored.into_account(self.status_of(id)))
     }
 
     // -----------------------------------------------------------------------------------------

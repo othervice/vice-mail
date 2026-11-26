@@ -14,6 +14,7 @@ import { MailtoHost } from "../features/extras/MailtoHost";
 import { MailView } from "../features/mail/MailView";
 import { ContactsView } from "../features/contacts/ContactsView";
 import { FolderEditHost } from "../features/mailboxes/FolderEdit";
+import { DropHint } from "../features/mailboxes/DropHint";
 import { KeyboardLayer } from "../features/palette/KeyboardLayer";
 import { EditViewsHost } from "../features/layout/EditViewsDialog";
 // Stage 19 (decision 0055): redirecting a message.
@@ -115,6 +116,8 @@ export function AppShell({ eventsError }: AppShellProps) {
       {/* Stage 13: the AI panel on the right; absent while no AI function is usable. */}
       <AiPanel />
       <Notices />
+      {/* Stage 22 (decision 0081): what a drop on the folder under the dragged rows does. */}
+      <DropHint />
       <SendNotices />
       {/* Stage 15 (decision 0037): the one-time update question, a quiet note when one is out. */}
       <UpdateNotices />

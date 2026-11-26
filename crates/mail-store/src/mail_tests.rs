@@ -209,7 +209,9 @@ async fn accounts_get_a_color_an_identity_and_a_unique_email() {
     let identities = store.identities(alice.id).await.expect("identities");
     assert_eq!(identities.len(), 1);
     assert_eq!(identities[0].email, "alice@example.org");
-    assert_eq!(identities[0].name, alice.display_name);
+    // Stage 22 (decision 0078): the typed name is the sender name; the list shows the address.
+    assert_eq!(identities[0].name, "User 1");
+    assert_eq!(alice.display_name, "");
     assert_eq!(identities[0].account_id, alice.id);
     assert!(identities[0].is_default);
     assert!(matches!(

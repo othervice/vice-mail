@@ -122,6 +122,11 @@ export const config = {
     // Stage 22, items 3 and 8 (decisions 0072, 0073): rows without avatars, account dots, the rail,
     // contacts, the settings search; German, light and dark. Sets up alice and bob itself.
     "./tests/e2e/stage22-ui.e2e.mjs",
+    // Stage 22, items 1, 2 and 12 (decisions 0078, 0081): account order and names, mail dragged
+    // across accounts. Sets up alice and bob itself; the restart spec checks order and names after
+    // the app started again and removes them.
+    "./tests/e2e/stage22-accounts.e2e.mjs",
+    "./tests/e2e/stage22-accounts-restart.e2e.mjs",
     // Stage 21, item 4 (decision 0071): the spacing pass, every main view light and dark at
     // 1280×800 and 900×600, measured. Sets up alice and bob itself, appends `Spacing <run>`
     // messages, and leaves theme, density and the column as it found them.

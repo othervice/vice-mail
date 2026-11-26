@@ -825,6 +825,9 @@ describe("stage 21: the spacing pass over every view", () => {
     });
     alice = await coreCall("add_account", { settings: accountSettings(ALICE, "Alice Archer"), password: ALICE.password });
     bob = await coreCall("add_account", { settings: accountSettings(BOB, "Bob Baker"), password: BOB.password });
+    // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+    await coreCall("rename_account", { accountId: alice.id, name: "Alice Archer" });
+    await coreCall("rename_account", { accountId: bob.id, name: "Bob Baker" });
     await browser.waitUntil(
       async () => {
         const accounts = await coreCall("list_accounts");

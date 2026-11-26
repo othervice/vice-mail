@@ -15,7 +15,7 @@ import { useFolderCreateItem, useFolderEditItems } from "../mailboxes/FolderEdit
 import { useMarkReadItem } from "../mailboxes/markRead";
 import { useMboxItems } from "../mbox/MboxJobs";
 import { isRoleView } from "../mailboxes/tree";
-import { useDropTarget } from "../mailboxes/useDropTarget";
+import { DROP_REFUSED_CLASS, dropTargetState, useDropTarget } from "../mailboxes/useDropTarget";
 import { SECTION_KEY, SectionRow, useSection } from "../layout/SectionRow";
 import { sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
 import { isFavorite, useChangeFolder, useFavoriteMailboxes } from "./queries";
@@ -259,7 +259,8 @@ function FavoriteRow({ item, mailbox, order, account, accountName, current, nav,
   const colorName = useColorName();
   const showMailbox = useUiStore((state) => state.showMailbox);
   const change = useChangeFolder();
-  const drop = useDropTarget(mailbox);
+  // Stage 22 (decision 0081): rows of any list, also of other accounts, move here.
+  const drop = useDropTarget(mailbox.selectable ? { kind: "folder", mailbox } : undefined, { id: `favorite-${String(mailbox.id)}`, folder: name });
   const index = order.indexOf(mailbox.id);
   const shown = accountName ? t("organize.favorites.inAccount", { name, account: accountName }) : name;
   const named = mailbox.color === undefined || mailbox.color === null ? shown : t("organize.favorites.withColor", { name: shown, color: colorName(mailbox.color) });
@@ -296,10 +297,14 @@ function FavoriteRow({ item, mailbox, order, account, accountName, current, nav,
       onKeyDown={onKeyDown}
       {...drop.handlers}
       data-testid={`favorite-${String(mailbox.id)}`}
-      data-drop-target={drop.over ? "over" : drop.accepts ? "ready" : undefined}
+      data-drop-target={dropTargetState(drop)}
       className={sidebarRowClass(
         current,
-        cx("group/folder gap-1 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent"),
+        cx(
+          "group/folder gap-1 ps-3 pe-2",
+          drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+          drop.refused && DROP_REFUSED_CLASS,
+        ),
       )}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">

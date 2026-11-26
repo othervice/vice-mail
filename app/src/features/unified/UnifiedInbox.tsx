@@ -23,6 +23,7 @@ import { unreadViewKey, useUnreadMode, useUnreadSource } from "../organize/unrea
 import { useConversationsOn } from "../threads/preference";
 import { useListView } from "../views/useListView";
 import { useMixedActions } from "./MixedActions";
+import { unionIds, useDropRows } from "../organize/useDropRows";
 
 /** The accounts a unified view mixes: visible ones, of the group if it is a group view. */
 export function visibleAccounts(
@@ -80,6 +81,9 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
   // Stage 21 (decision 0065): quick actions and the context menu with each row's own account.
   const loaded = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
   const mixed = useMixedActions({ accounts, list, conversations, items: loaded, listKey: ["unified"], platform });
+  // Stage 22 (decision 0081): rows of several accounts dragged onto any folder.
+  const drops = useDropRows({ list, conversations, listKey: ["unified"] });
+  const hiddenIds = useMemo(() => unionIds(mixed.hiddenIds, drops.hiddenIds), [mixed.hiddenIds, drops.hiddenIds]);
   const single = selection.items.length === 1 ? (selection.items[0] ?? null) : null;
   const rowKey = selection.keys[0] ?? "";
   const account = single ? accounts.find((a) => a.id === single.accountId) : undefined;
@@ -141,9 +145,11 @@ function UnifiedPanes({ view, accounts, name, platform }: PanesProps) {
           // Stage 18 (task F): opening the unified inbox shows its top message.
           autoSelectFirst={layout.autoSelectFirst}
           table={listView.table}
-          hiddenIds={mixed.hiddenIds}
+          hiddenIds={hiddenIds}
           renderQuickActions={mixed.renderQuickActions}
           onRowMenu={mixed.onRowMenu}
+          onDragRows={drops.onDragRows}
+          onDragEnd={drops.onDragEnd}
         />
       </div>
       {/* Stage 18: the border between list and pane can be dragged. */}

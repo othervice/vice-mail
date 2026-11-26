@@ -135,7 +135,7 @@ server cannot do is not faked but hidden or given a clear notice.
 
 | Table | Content | Class |
 |---|---|---|
-| `account` | UUID, type, address, name, colour, server settings, reference to the keychain, `writes_enabled`; from stage 14 (0042), for accounts that sign in with the provider, the reference is `oauth:<microsoft\|google>:<id>` and the entry holds the refresh token; for JMAP accounts with an API token (0041, addendum 1) `token:<id>`, the entry holds the token | sync (without secrets) |
+| `account` | UUID, type, address, name in the lists (`display_name`; empty shows the address, never a sender name, stage 22, 0078), colour, server settings, reference to the keychain, `writes_enabled`; from stage 22 (0078, migration 0032) `position`, the user's order of every list of accounts (NULL until the user moves one; those follow by creation); from stage 14 (0042), for accounts that sign in with the provider, the reference is `oauth:<microsoft\|google>:<id>` and the entry holds the refresh token; for JMAP accounts with an API token (0041, addendum 1) `token:<id>`, the entry holds the token | sync (without secrets) |
 | `identity` | sender address, name, Reply-To, default; from stage 10 default signature for new mails and for replies (UUIDs, 0023) | sync |
 | `mailbox` | server name, delimiter, parent, role (Inbox, Sent, Drafts, Archive, Trash, Junk, All, Custom), UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ | Cache |
 | `message` | internal ID, account, Message-ID header, thread, subject, sender, recipients, dates, size, preview, category (according to the user's rules; plus the automatic result with its reason, important marker, normalised sender address, domain and List-Id, stage 9), reference to the body; from stage 17 (0050) Reply-To where the header block was fetched (`reply_to_addrs`) and `contacts_seen` 2 (read by the contact rules of stage 17) | Cache |
@@ -365,6 +365,20 @@ every view with the way back to a copy and to "Export diagnostics…" (2026-11-2
   above the mark does the same transaction record an `expunge` in the source account;
   after a crash the `append` is checked, not repeated (never two copies, never
   lost). Server test with fault injection in `crates/mail-engine/src/outbox/transfer_server_tests.rs`.
+- Stage 22 (0081), **drops from any list:** `dropMessages(refs, target, mode, request)` takes the
+  rows of one drop on a folder, from any number of folders and accounts (`Store::plan_drop`):
+  rows already there stay, rows of the target's account are moved with `applyAction` (`move`, with
+  undo), rows of other accounts are transferred as above; `copy` transfers everything. Read-only
+  accounts (the target; moving, every source) refuse before anything is recorded, naming the
+  account; the transfer is recorded first, since fetching its bytes can fail. The UI drops with
+  no question (Option or Ctrl copies) and undoes each batch on its own: a transfer only while its
+  `append` still waits. Server test in `crates/mail-engine/tests/drop.rs`.
+- Stage 22 (0078), **accounts:** `reorderAccounts(ids)` gives every account a fresh `position`
+  above all earlier ones (so the account records carry the newer order as a whole);
+  `renameAccount(id, name)` sets the list name (trimmed, at most 100 characters, no control
+  characters). The AI writes replies from the default identity's sender name, never from the
+  list name; new accounts start with an empty list name, the setup's name becomes the first
+  identity's sender name only.
 - Stage 18 (task D), **creating folders:** `createFolder(account, parent | null, name)` checks the
   name in the store (not empty, at most 200 characters, no control character, not the server's
   delimiter, not taken at that place, a parent of the account that has a delimiter and no
@@ -1000,7 +1014,7 @@ what only the app knows, and uses the mailbox itself as storage for it.
 | Sender rules, image approvals, contact names and notes, devices | per key the newer version wins. The kind `contactPicture` of stage 17 (0050) is retired since stage 22 (0072): entries of it from older versions are ignored without a notice and left on the server |
 | Contact groups (stage 19, 0056) | per group the newer version wins; editing beats simultaneous deletion; the receiving device checks name, search words and member keys before applying |
 | Identities, signatures (separate record per identity), account groups | like signatures |
-| Account list | per field the newer version wins; a removed account is not silently deleted on other devices, instead the user is asked; other servers (host, port, security, user name) for an existing account are not taken over but wait for the user (0040); the protocol (field `protocol`, only for JMAP accounts) and the kind of sign-in (field `signIn`, only with an API token) apply only when an account is adopted, never to an existing one (0041) |
+| Account list | per field the newer version wins; a removed account is not silently deleted on other devices, instead the user is asked; other servers (host, port, security, user name) for an existing account are not taken over but wait for the user (0040); the protocol (field `protocol`, only for JMAP accounts) and the kind of sign-in (field `signIn`, only with an API token) apply only when an account is adopted, never to an existing one (0041); the position in the lists (field `position`, only once the user placed the account, stage 22, 0078): every move writes fresh positions for all accounts, so the newest order wins as a whole |
 
 - **New device:** set up the sync account, enter the passphrase, preview of the data to be taken over,
   merge. Adopted accounts ask for their password one by one.
@@ -1188,6 +1202,8 @@ Until the UI has been switched over, these values are still kept in the marked f
 | New mail in an app-owned popup window instead of a system notification (0051) | Read and Delete as real buttons, Undo, a disabled Delete with its reason and two lines of snippet; desktop notification actions only show as an "Options" menu on macOS and cannot be updated or removed | `newMailStyle: system` per user; remove `NewMailStyle` and the popup window |
 | Every address a contact, with a kind; "mark as spam" is the stage 16 block (0050) | the user asked for every address and spam marks; ranks stay as they were (only own and personal mail rank), one block list | `ContactFilter::People` hides lists and system addresses |
 | No pictures or initials anywhere; rows start with a narrow mark column, mixed lists keep the account's colour dot and name, also while the quick actions show (0072) | the user found the initials useless and their space wasted; nobody set pictures. The unread dot, the selection box and the account colour keep a place of their own | restore `Avatar` and the stage 17 picture code from history; the dropped pictures do not come back |
+| The account's `display_name` is its name in the lists, with a `position` of the user's order (0078) | nothing outgoing reads it once the AI takes the identity's sender name; one field instead of a second, dead name; positions written fresh on each move make the per-field sync keep one order | a separate list-name column with its own sync field |
+| Drag from any list onto any folder; dropping moves without a question, Option/Ctrl copies; the rail's Inbox/Archive/Trash mean each row's own account (0081) | the drop is the answer, as in every mail program; rows of "All inboxes" never cross accounts by accident on the rail; one core command sorts mixed rows | open the 0033 dialog again for other accounts' rows |
 | Settings search over a static index of i18n keys, rows found by their rendered title (0073) | no second copy of the texts, searchable in the UI's language without rendering every section; a test renders every section and fails for a row missing from the index | drop the field; the anchors are plain data attributes |
 | "Mark folder as read" as one outbox operation per folder on the stored unread UIDs (0063) | thousands of unread mails would be thousands of `set_flag` rows and (with CONDSTORE) one STORE per MODSEQ; `1:*` would also mark mail the user never saw; undo stays exact | per-message `markRead` on all unread locations (capped at 10,000 per action) |
 | Gmail via IMAP with its extensions instead of the Gmail API (0034) | labels, one mail via `X-GM-MSGID` and archiving work with the existing adapter, without a Google project | Gmail API in block C |

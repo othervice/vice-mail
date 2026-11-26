@@ -68,6 +68,46 @@ function NoticeItem({ notice }: { notice: Notice }) {
     case "undone":
       text = t("actions.undone");
       break;
+    case "undonePartly":
+      text = t("drop.notice.undonePartly");
+      break;
+    case "dropped": {
+      // Stage 22 (decision 0081): one notice for the whole drop.
+      const { folder, account } = content;
+      const count = content.moved + content.transferred;
+      if (count === 0) text = t("drop.notice.nothing", { folder });
+      else if (content.mode === "copy") text = t("drop.notice.copying", { count, folder, account });
+      else if (content.transferred > 0) {
+        text = t("drop.notice.moving", { count, folder, account });
+        detail = t("drop.notice.movingDetail");
+      } else text = t("actions.done.move", { count, detail: folder });
+      if (count > 0 && content.skipped > 0) {
+        const skipped = t("drop.notice.skipped", { count: content.skipped });
+        detail = detail ? `${detail} ${skipped}` : skipped;
+      }
+      const undo = content.undo;
+      const shortcut = boundShortcuts("undo", platform)[0];
+      if (undo) {
+        action = {
+          label: t("actions.undo"),
+          ...(shortcut && { hint: formatShortcut(shortcut, platform), keys: ariaShortcut(shortcut, platform) }),
+          run: () => {
+            void undoAction(queryClient, undo);
+          },
+          testId: "notice-undo",
+        };
+      } else if (content.transferred > 0) {
+        action = {
+          label: t("actions.showActivity"),
+          run: () => {
+            dismiss(notice.id);
+            showActivity();
+          },
+          testId: "notice-show-activity",
+        };
+      }
+      break;
+    }
     case "notUndoable":
       text = t("errors.codes.not_undoable.title");
       detail = t("errors.codes.not_undoable.hint");
@@ -154,7 +194,8 @@ function NoticeItem({ notice }: { notice: Notice }) {
     }
   }
 
-  const Icon = error ? CircleExclamationPoint : content.kind === "done" || content.kind === "undone" ? CircleCheck : Info;
+  const done = content.kind === "done" || content.kind === "undone" || content.kind === "dropped" || content.kind === "undonePartly";
+  const Icon = error ? CircleExclamationPoint : done ? CircleCheck : Info;
   return (
     <div
       role={error ? "alert" : undefined}
@@ -179,7 +220,10 @@ function NoticeItem({ notice }: { notice: Notice }) {
     >
       <Icon
         aria-hidden
-        className={cx("size-(--ui-icon-small) shrink-0", error ? "text-danger" : content.kind === "done" ? "text-success" : "text-accent")}
+        className={cx(
+          "size-(--ui-icon-small) shrink-0",
+          error ? "text-danger" : content.kind === "done" || content.kind === "dropped" ? "text-success" : "text-accent",
+        )}
         strokeWidth={1.75}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">

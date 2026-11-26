@@ -285,6 +285,13 @@ async fn records_of_unknown_accounts_are_skipped_and_accounts_rekeyed() {
     );
 }
 
+/// Stage 22: [`account_apply`] for the other test modules, each call a newer version.
+pub(crate) async fn account_apply_for_tests(store: &Store, id: &str, value: Value) -> SyncApply {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000);
+    let mut n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    account_apply(store, id, &mut n, value).await
+}
+
 /// A new version of the account record `id` from the folder, planned against the stored row.
 async fn account_apply(store: &Store, id: &str, n: &mut u64, value: Value) -> SyncApply {
     let expected = store

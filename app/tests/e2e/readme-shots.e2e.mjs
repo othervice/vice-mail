@@ -444,6 +444,9 @@ describe("README screenshots (docs/images)", function () {
     await appendConversation();
     alice = await coreCall("add_account", { settings: accountSettings(ALICE.email, "Alice Archer"), password: ALICE.password });
     const bob = await coreCall("add_account", { settings: accountSettings(BOB.email, "Bob Baker"), password: BOB.password });
+    // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+    await coreCall("rename_account", { accountId: alice.id, name: "Alice Archer" });
+    await coreCall("rename_account", { accountId: bob.id, name: "Bob Baker" });
     await browser.waitUntil(
       async () => {
         const accounts = await coreCall("list_accounts");

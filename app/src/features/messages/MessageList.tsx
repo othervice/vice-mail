@@ -1244,11 +1244,13 @@ export function MessageList({
     const dragged = fromSelection ? selectedItems : [row.item];
     const childIds = fromSelection ? selection.childIds : new Set(row.kind === "child" ? [row.item.id] : []);
     const refs = dragged.map((item) => ({ mailboxId: item.mailboxId, messageId: item.id }));
-    event.dataTransfer.effectAllowed = "move";
+    // Stage 22 (decision 0081): dropping moves; Option (macOS) or Ctrl (Windows) copies.
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(MESSAGE_DRAG_TYPE, JSON.stringify(refs));
     const image = dragImageRef.current;
-    if (dragged.length > 1 && image) {
-      // The drag image is a snapshot taken right now; the text is set before it is taken.
+    if (image) {
+      // The drag image is a snapshot taken right now; the text is set before it is taken. Stage
+      // 22: always the count, also for one row.
       image.textContent = t("list.dragCount", { count: dragged.length });
       event.dataTransfer.setDragImage(image, 0, 0);
     }

@@ -25,9 +25,10 @@ interface FolderActionsOptions {
 
 /**
  * The actions of one folder's messages, whichever surface starts them (quick actions, toolbar,
- * selection bar, shortcuts, drag and drop, stage 21's context menu): the action controller, and
- * moving or copying to a folder of this or another account (decision 0033: another account asks
- * first for a move; stage 21: a copy runs at once, the user chose it).
+ * selection bar, shortcuts, stage 21's context menu): the action controller, and moving or copying
+ * to a folder of this or another account (decision 0033: another account asks first for a move;
+ * stage 21: a copy runs at once, the user chose it). Stage 22 (decision 0081): drag and drop goes
+ * its own way (`useDropRows`): the drop is the answer, so it never asks.
  */
 export function useFolderActions({ account, mailbox, list, conversations, listKey }: FolderActionsOptions) {
   const controller = useActionController({ account, mailbox, list, conversations, listKey });

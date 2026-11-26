@@ -565,7 +565,7 @@ describe("reading mail (stage 3)", function () {
     report.brokenSeed = copied.copied.map((c) => `${c.key} (${c.folder})`);
     assert.equal(copied.copied.length, 26, "the seed has 26 broken/* messages");
 
-    await coreCall("add_account", {
+    const addedALICE = await coreCall("add_account", {
       settings: {
         email: ALICE.email,
         displayName: "Alice Archer",
@@ -574,6 +574,10 @@ describe("reading mail (stage 3)", function () {
       },
       password: ALICE.password,
     });
+
+    // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+
+    await coreCall("rename_account", { accountId: addedALICE.id, name: "Alice Archer" });
     await browser.waitUntil(
       async () => {
         const a = await onlyAccount();

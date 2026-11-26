@@ -56,6 +56,8 @@ describe("creating folders", () => {
       "Mark all as read",
       "New folder…",
       "Reload folders from server",
+      // Stage 22 (decision 0078); one account: nothing to move.
+      "Rename",
     ]);
     await user.click(within(menu).getByRole("menuitem", { name: "New folder…" }));
     const panel = await screen.findByRole("dialog", { name: "New folder in “Ada”" });

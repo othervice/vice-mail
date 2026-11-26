@@ -756,11 +756,13 @@ describe("drag and drop", () => {
     // The dragged rows leave the list at once; the drop itself ends the drag.
     fireEvent.drop(target, { dataTransfer: transfer });
 
+    // Stage 22 (decision 0081): every drop goes through `dropMessages`, which moves rows of the
+    // folder's own account like any move.
     await waitFor(() => {
-      expect(actionCalls(core)).toHaveLength(1);
+      expect(core.callsOf("drop_messages")).toHaveLength(1);
     });
-    expect(actionCalls(core)[0]?.action).toEqual({ type: "move", target: 5 });
-    expect(actionCalls(core)[0]?.messages.map((m) => m.messageId)).toEqual([items[0]?.id, items[1]?.id]);
+    expect(core.callsOf("drop_messages")[0]).toMatchObject({ targetMailboxId: 5, mode: "move" });
+    expect((core.callsOf("drop_messages")[0]?.["messages"] as { messageId: number }[]).map((m) => m.messageId)).toEqual([items[0]?.id, items[1]?.id]);
     expect(transfer.setDragImage).toHaveBeenCalled();
     expect((await screen.findByTestId("notice")).textContent).toContain("2 messages moved to Projekte");
     expect(target.dataset["dropTarget"]).toBeUndefined();
@@ -777,10 +779,14 @@ describe("drag and drop", () => {
     fireEvent.dragOver(archive, { dataTransfer: transfer });
     fireEvent.drop(archive, { dataTransfer: transfer });
 
+    // Stage 22: the rail's Archive is the archive of the row's own account.
     await waitFor(() => {
-      expect(actionCalls(core)).toHaveLength(1);
+      expect(core.callsOf("drop_messages")).toHaveLength(1);
     });
-    expect(actionCalls(core)[0]).toMatchObject({ action: { type: "move", target: 7 }, messages: [{ mailboxId: 1, messageId: items[3]?.id }] });
+    expect(core.callsOf("drop_messages")[0]).toMatchObject({ targetMailboxId: 7, mode: "move", messages: [{ mailboxId: 1, messageId: items[3]?.id }] });
+    await waitFor(() => {
+      expect(actionCalls(core)).toHaveLength(0);
+    });
   });
 });
 

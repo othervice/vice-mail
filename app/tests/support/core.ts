@@ -708,6 +708,9 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
     return result;
   }
 
+  /** Stage 22: transfers of drops, on the server already (not undoable). */
+  const sentTransfers = new Set<number>();
+
   function undoAction(batch: number): ActionResult | Promise<never> {
     const ops = operations.filter((o) => o.info.batch === batch);
     if (ops.length === 0) return reject("not_found");
@@ -749,6 +752,7 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         return { batch: nextBatch++, queued: 1, cancelled: 0 };
       }
       case "undo_action":
+        if (sentTransfers.has(args["batch"] as number)) return reject("not_undoable");
         return undoAction(args["batch"] as number);
       case "create_mailbox": {
         const account = accountOf(args["accountId"] as string);
@@ -865,6 +869,68 @@ export function mockCore(options: FakeCoreOptions = {}): FakeCore {
         const next = { ...account, writesEnabled: args["enabled"] as boolean };
         accounts[index] = next;
         return { ...next };
+      }
+      // Stage 22 (decision 0078): the user's order and list names of the accounts.
+      case "reorder_accounts": {
+        const ids = args["accountIds"] as string[];
+        if (ids.some((id) => !accountOf(id))) return reject("not_found");
+        const placed = [...new Set(ids)].flatMap((id) => accounts.filter((a) => a.id === id));
+        const rest = accounts.filter((a) => !ids.includes(a.id));
+        accounts.splice(0, accounts.length, ...placed, ...rest);
+        return accounts.map((a) => ({ ...a }));
+      }
+      case "rename_account": {
+        const index = accounts.findIndex((a) => a.id === args["accountId"]);
+        const account = accounts[index];
+        if (!account) return reject("not_found");
+        const name = (args["name"] as string).trim();
+        // eslint-disable-next-line no-control-regex
+        if (/[\u0000-\u001f\u007f]/.test(name) || [...name].length > 100) return reject("invalid_argument", "name");
+        const next = { ...account, displayName: name };
+        accounts[index] = next;
+        return { ...next };
+      }
+      // Stage 22 (decision 0081): rows of any list dropped on a folder.
+      case "drop_messages": {
+        const refs = args["messages"] as MessageRef[];
+        const targetMailboxId = args["targetMailboxId"] as number;
+        const mode = args["mode"] as "move" | "copy";
+        const requestId = args["requestId"] as string;
+        const target = mailboxOf(targetMailboxId);
+        if (!target?.selectable) return reject("invalid_argument", "target");
+        if (refs.length === 0 || refs.length > 500) return reject("invalid_argument", "messages");
+        if (!accountOf(target.accountId)?.writesEnabled) return reject("read_only");
+        const there = refs.filter((ref) => ref.mailboxId === targetMailboxId);
+        const rest = refs.filter((ref) => ref.mailboxId !== targetMailboxId);
+        const same = rest.filter((ref) => mailboxOf(ref.mailboxId)?.accountId === target.accountId);
+        const other = rest.filter((ref) => mailboxOf(ref.mailboxId)?.accountId !== target.accountId);
+        if (mode === "move" && rest.some((ref) => !accountOf(mailboxOf(ref.mailboxId)?.accountId ?? "")?.writesEnabled)) {
+          return reject("read_only");
+        }
+        const batches: number[] = [];
+        const transfer = mode === "copy" ? rest : other;
+        if (transfer.length > 0) {
+          const answer = parityFake.handle("transfer_messages", { messages: transfer, targetMailboxId, mode, requestId: `${requestId}-t` });
+          if (answer instanceof Promise) return answer;
+          const result = answer as ActionResult;
+          if (result.batch !== null) {
+            batches.push(result.batch);
+            // The copy reaches the server at once here: no undo any more (as the core says then).
+            sentTransfers.add(result.batch);
+          }
+        }
+        if (mode === "move" && same.length > 0) {
+          const answer = applyAction({ type: "move", target: targetMailboxId }, same, `${requestId}-m`);
+          if (answer instanceof Promise) return answer;
+          if (answer.batch !== null) batches.push(answer.batch);
+        }
+        return {
+          accountId: target.accountId,
+          moved: mode === "move" ? same.length : 0,
+          transferred: transfer.length,
+          skipped: there.length,
+          batches,
+        };
       }
       default:
         return undefined;

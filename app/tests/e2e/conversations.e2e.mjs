@@ -288,7 +288,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
     await browser.waitUntil(async () => (await browser.execute(() => document.documentElement.lang)) === "en", {
       timeoutMsg: "the app did not switch to English",
     });
-    await coreCall("add_account", {
+    const addedALICE = await coreCall("add_account", {
       settings: {
         email: ALICE.email,
         displayName: "Alice Archer",
@@ -297,6 +297,8 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       },
       password: ALICE.password,
     });
+    // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+    await coreCall("rename_account", { accountId: addedALICE.id, name: "Alice Archer" });
     await browser.waitUntil(
       async () => {
         const a = await onlyAccount();
@@ -494,7 +496,7 @@ describe("stage 17: conversations unfold in the list, one message on the right",
   });
 
   it("puts the names before the account label in the unified inbox, down to its colour dot", async () => {
-    await coreCall("add_account", {
+    const addedBOB = await coreCall("add_account", {
       settings: {
         email: BOB.email,
         displayName: "Bob Baker",
@@ -503,6 +505,8 @@ describe("stage 17: conversations unfold in the list, one message on the right",
       },
       password: BOB.password,
     });
+    // Stage 22 (decision 0078): a new account shows its address until it is named in the lists.
+    await coreCall("rename_account", { accountId: addedBOB.id, name: "Bob Baker" });
     await browser.waitUntil(
       async () => (await coreCall("list_accounts")).every((a) => a.status.state === "idle" && a.status.lastSyncAt !== null),
       { timeout: 240000, interval: 500, timeoutMsg: "bob's first sync did not finish" },

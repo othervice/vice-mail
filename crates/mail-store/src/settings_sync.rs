@@ -288,7 +288,8 @@ pub(crate) fn content_of(
             .prepare_cached(
                 "SELECT a.email, a.display_name, a.color, a.imap_host, a.imap_port,
                         a.imap_security, a.imap_username, a.smtp_host, a.smtp_port,
-                        a.smtp_security, a.smtp_username, c.imap, c.smtp, a.protocol
+                        a.smtp_security, a.smtp_username, c.imap, c.smtp, a.protocol,
+                        a.position
                  FROM account a LEFT JOIN account_server_change c ON c.account_uuid = a.uuid
                  WHERE a.uuid = ?1",
             )?
@@ -315,6 +316,12 @@ pub(crate) fn content_of(
                     && let Some(map) = value.as_object_mut()
                 {
                     map.insert("protocol".into(), Value::String(protocol));
+                }
+                // Stage 22 (decision 0078): only accounts the user placed carry their position,
+                // so the records of the others stay as older versions wrote and read them.
+                let position: Option<i64> = r.get(14)?;
+                if let (Some(position), Some(map)) = (position, value.as_object_mut()) {
+                    map.insert("position".into(), Value::from(position));
                 }
                 Ok(value)
             })
@@ -678,6 +685,9 @@ fn put_table(
             let email = text(value, "email")?;
             let name = text(value, "displayName")?;
             let color = int(value, "color")?;
+            // Stage 22 (decision 0078): left out while no device placed the account; a record
+            // without it keeps this device's position.
+            let position = value.get("position").and_then(Value::as_i64);
             let account: AccountId = id.parse().map_err(|_| refused("account id"))?;
             if let Some(local) = local_servers(conn, id)? {
                 let incoming = (
@@ -685,9 +695,11 @@ fn put_table(
                     server_json(sh.to_owned(), sp, ss.to_owned(), su.to_owned()),
                 );
                 conn.prepare_cached(
-                    "UPDATE account SET email = ?2, display_name = ?3, color = ?4 WHERE uuid = ?1",
+                    "UPDATE account SET email = ?2, display_name = ?3, color = ?4,
+                                        position = coalesce(?5, position)
+                     WHERE uuid = ?1",
                 )?
-                .execute(params![id, email, name, color])?;
+                .execute(params![id, email, name, color, position])?;
                 if incoming == local {
                     // The folder agrees with this device (again): nothing waits any more.
                     conn.prepare_cached(
@@ -752,12 +764,13 @@ fn put_table(
                     "INSERT INTO account (uuid, email, display_name, color,
                                           imap_host, imap_port, imap_security, imap_username,
                                           smtp_host, smtp_port, smtp_security, smtp_username,
-                                          credential_ref, writes_enabled, created_at, protocol)
+                                          credential_ref, writes_enabled, created_at, protocol,
+                                          position)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                             'synced:' || lower(hex(randomblob(16))), 0, ?13, ?14)",
+                             'synced:' || lower(hex(randomblob(16))), 0, ?13, ?14, ?15)",
                 )?
                 .execute(params![
-                    id, email, name, color, ih, ip, is, iu, sh, sp, ss, su, now, protocol
+                    id, email, name, color, ih, ip, is, iu, sh, sp, ss, su, now, protocol, position
                 ])?;
                 conn.prepare_cached(
                     "INSERT OR REPLACE INTO sync_adopted (account_uuid, adopted_at) VALUES (?1, ?2)",

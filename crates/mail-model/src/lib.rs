@@ -204,7 +204,7 @@ pub use outbox::{
     plan_action,
 };
 pub use parity::{
-    BlockedSender, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
+    BlockedSender, DropResult, MAX_BLOCKED_SENDERS, MAX_FAVORITE_MAILBOXES, MAX_READING_LIST_VIEW,
     MAX_UNREAD_FIRST_VIEWS, MAX_VIEW_KEY_CHARS, TransferMode, UnreadFirstCursor, UnreadFirstPage,
     UnreadFirstThreadPage, UnreadPhase,
 };

@@ -17,6 +17,10 @@ interface TextFieldProps {
   min?: number;
   max?: number;
   onBlur?: () => void;
+  /** Stage 22: the longest value, in characters. */
+  maxLength?: number;
+  /** Stage 22: what an empty field stands for (an account's address for its list name). */
+  placeholder?: string;
   "data-testid"?: string;
 }
 
@@ -35,6 +39,8 @@ export function TextField({
   min,
   max,
   onBlur,
+  maxLength,
+  placeholder,
   ...rest
 }: TextFieldProps) {
   const id = useId();
@@ -62,6 +68,8 @@ export function TextField({
         disabled={disabled}
         min={min}
         max={max}
+        maxLength={maxLength}
+        placeholder={placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
         data-testid={rest["data-testid"]}

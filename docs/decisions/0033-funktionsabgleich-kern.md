@@ -220,3 +220,9 @@ Vorlagen (0023) und Benachrichtigungen (0020). Alle Schemaänderungen stehen in 
 Jede Tabelle ist eigenständig; eine Datenart lässt sich aus dem Register nehmen (ihre Datensätze
 bleiben dann im Sync-Zustand liegen). „Ungelesene oben“ bekäme bei Bedarf einen Teilindex auf
 gelesene Orte per Migration.
+
+## Nachtrag 26.11.2026 (Stufe 22)
+
+Beim Ziehen fragt die App nicht mehr „Verschieben oder Kopieren“: Ablegen verschiebt, mit Wahltaste
+bzw. Strg wird kopiert; Zeilen aus mehreren Konten in einem Zug (`dropMessages`). „Verschieben nach
+…“ im Menü fragt weiter. Siehe 0081.

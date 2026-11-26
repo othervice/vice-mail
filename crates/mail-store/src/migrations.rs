@@ -67,6 +67,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0029_search_substrings.sql")),
     // Stage 22, item 6: the learning spam filter, class Device (decision 0077).
     M::up(include_str!("../migrations/0031_spam_filter.sql")),
+    // Stage 22: the user's order of the accounts (decision 0078).
+    M::up(include_str!("../migrations/0032_account_order.sql")),
 ];
 
 /// All migrations this build knows.
