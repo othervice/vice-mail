@@ -122,6 +122,12 @@ Umsetzung vom Plan abweicht oder ihn genauer festlegt.
   die so gesehen wurden, jeden einmal (`app/src-tauri/src/drops.rs`). Begründung: Eine Seite, in
   der fremder Code läuft (Fehler, kompromittierte Abhängigkeit), könnte sonst `~/.ssh/…` anhängen
   und versenden. Keine Dateisystem- oder Dialog-Capability für das Frontend.
+- **Nachtrag 26.11.2026 (Stufe 23, Entscheidung 0082):** Der Drop-Handler der Shell ist für alle
+  Fenster aus, weil er jedes Ziehen in der Seite verschluckte (macOS: kein `dragover`/`drop`,
+  Windows: kein HTML-Drag-and-drop). Gezogene Dateien kommen jetzt als Bytes in Stücken
+  (`beginFileUpload`, `appendFileUpload`, `addUploadedAttachments`); die Seite nennt nie einen
+  Pfad, `DropRegistry` und `addDroppedAttachments` sind entfernt. Begründung, Grenzen und warum das
+  mindestens so sicher ist: 0082.
 
 ## Weitere Festlegungen
 

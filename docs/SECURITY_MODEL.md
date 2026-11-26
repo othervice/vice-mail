@@ -152,9 +152,13 @@ party, which is advisable before wide distribution.
   or "Sign in again", the provider's fixed sign-in address in the **system browser**, through the
   same opener as links (decision 0042). The answer comes back to a loopback listener in the core,
   not to the WebView.
-- No command takes a file path from the UI. Files are read only from paths the OS hands over
-  (`.eml` open events and arguments; drag and drop onto the window, accepted only when the OS
-  reported the drop, within 120 seconds and once) or the user picks in a core-owned dialog.
+- No command takes a file path from the UI (a test walks every command of the bindings). Files
+  are read only from paths the OS hands over (`.eml` open events and arguments) or the user picks
+  in a core-owned dialog. A file dragged onto a window (stage 23, decision 0082) reaches the page
+  as an HTML `File` and the core as bytes in pieces of at most 2 MiB, under an upload id the core
+  drew, staged in `compose/uploads/<id>`; the page can hand over only bytes it already has, never
+  name a file, and the same limits as for picked files apply (one upload at most 100 MiB, at most
+  100 open and 200 MiB announced at a time, idle ones removed after 10 minutes, all at start).
   Draft files go through an allowlist of the draft's own directory.
 - App CSP: `script-src 'self'`, no remote sources, `object-src 'none'`, `base-uri 'none'`,
   `frame-ancestors 'none'`. `style-src 'unsafe-inline'` and `frame-src 'self' http: https:` are

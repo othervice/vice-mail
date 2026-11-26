@@ -112,7 +112,10 @@ Eingabefeld unten, Ergebnisse als Karten. Bei schmalem Fenster liegt es über de
 Ohne eingerichtete KI ist das Panel nicht sichtbar.
 
 **Verfassen.** Eigener Bereich über dem Lesebereich oder eigenes Fenster. Empfänger als Chips,
-schmale Formatierungsleiste, Anhänge als Leiste unten.
+schmale Formatierungsleiste, Anhänge als Leiste unten. Dateien, die auf das Fenster gezogen werden,
+werden angehängt (Rich Text: Bilder in den Text); solange Dateien über dem Fenster sind, zeigt ein
+Streifen unter dem Kopf „Lass die Dateien los, um sie anzuhängen.“ Wo nichts Dateien nimmt, zeigt
+der Zeiger „nicht erlaubt“ und Loslassen tut nichts (Stufe 23, 0082).
 
 ## Tokens
 
@@ -454,7 +457,13 @@ Reihenfolge, die der Mensch wählt, überall gleich (Spalte, schmale Leiste, Ein
 jede Kontoauswahl); neue Konten hinten. Verschieben: die Kontozeile ziehen (eine Linie in
 `accent-fill`, 4 px, in der Lücke vor oder hinter einem Konto zeigt den Platz; Ordner nehmen ein
 Konto nie), „Nach oben“/„Nach unten“ im „…“ der Kontozeile (am Ende nicht verfügbar), Alt+↑/↓ auf
-der Zeile, in Einstellungen → Konten zwei kleine Pfeilknöpfe je Konto. Der Fokus bleibt am Konto bzw.
+der Zeile, in Einstellungen → Konten zwei kleine Pfeilknöpfe je Konto. Stufe 23 (0082), wie in
+Thunderbird: Die Linie steht vor dem ersten Konto, dessen Mitte unter dem Zeiger liegt, sonst hinter
+dem letzten; wo sich nichts ändern würde (über dem gezogenen Konto, direkt daneben), zeigt sich keine
+Linie und Loslassen tut nichts, ebenso außerhalb der Liste. Das gezogene Konto bleibt mit 50 %
+Deckkraft an seinem Platz, bis es losgelassen wird; Escape bricht ab. In der schmalen Leiste lassen
+sich die Farbpunkte der Konten genauso ziehen (Linie 4 px in der Lücke zwischen den Punkten),
+Alt+↑/↓ auf dem Punkt verschiebt ebenso. Der Fokus bleibt am Konto bzw.
 am Knopf, eine Statuszeile sagt „Club steht jetzt an Stelle 2 von 3.“. Der Name in der Liste:
 Doppelklick auf die Kontozeile, F2 oder „Umbenennen“ im „…“ machen den Namen zum Feld an seiner
 Stelle (halbfett wie der Name, 2 px Rahmen in `accent`, die Adresse als Platzhalter); Enter oder
