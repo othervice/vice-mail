@@ -14,7 +14,7 @@ party, which is advisable before wide distribution.
 
 | Asset | Where it lives | Why it matters |
 |---|---|---|
-| Mail account passwords (IMAP/SMTP) | System keychain (macOS login keychain, Windows Credential Manager), service = bundle id, account = account UUID | Full control of the mailbox |
+| Mail account passwords (IMAP/SMTP) | System keychain (macOS login keychain, Windows Credential Manager), service = bundle id, entry name = account UUID; on macOS since stage 22 every entry of this table is a key inside one item, the vault (decision 0075) | Full control of the mailbox |
 | OAuth refresh tokens of accounts that sign in with Microsoft or Google (stage 14, decision 0042) | System keychain (`oauth:<provider>:<account>`, split into pieces of at most 1,000 characters); access tokens only in memory | Mailbox access until revoked or expired, without the password |
 | AI provider API keys | System keychain (`ai-profile:<id>`) | Billing, access to the provider account |
 | MCP client keys | System keychain (app side); the AI client's own config file (client side, as `MAIL_MCP_TOKEN`), or a file only the user may read that the config names (`MAIL_MCP_TOKEN_FILE`) | Read access to the shared accounts, draft creation |
@@ -200,7 +200,16 @@ party, which is advisable before wide distribution.
 
 - Passwords and keys only in the system keychain (`<account uuid>`, `mcp-client:<id>`,
   `ai-profile:<id>`, `settings-sync:key`); the database holds only references (`credential_ref`,
-  `has_key`). Secrets are wrapped in `Secret<T>` right at the IPC boundary; it formats as
+  `has_key`). On macOS (stage 22, decision 0075) these names are keys of one keychain item, the
+  vault (`vault`, `vault.<n>`): one item means one macOS question per update of the ad-hoc signed
+  app instead of one per secret. It is read once per run and kept in the app's memory (where the
+  passwords of open connections are anyway); every change is written as a new generation, read
+  back and compared, and only then are older generations deleted, so a failed write never
+  replaces readable content. Only the app's process writes it, under one lock. Old per-secret
+  items are moved at start and deleted only after the vault write was verified; one that macOS
+  does not let the new build delete stays unused, and a name deleted through the vault is marked
+  `retired` so such a leftover is never read again. Windows keeps one Credential Manager entry per
+  secret (no dialogs there, and an entry holds at most 2,560 bytes). Secrets are wrapped in `Secret<T>` right at the IPC boundary; it formats as
   `[redacted]` in `Debug`/`Display` and has no `Serialize`; keychain error texts are stripped of
   stored data; tests prove that secrets do not appear in logs or errors. The UI never gets a
   stored secret back (an MCP client token is shown once, at creation). Removing an account

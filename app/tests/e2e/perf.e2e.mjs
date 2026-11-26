@@ -522,13 +522,13 @@ describe(`performance with ${SEED} messages (PERF=1)`, function () {
       for (const a of await coreCall("list_accounts").catch(() => [])) {
         await coreCall("remove_account", { accountId: a.id }).catch((e) => report.notes.push(`cleanup failed: ${e}`));
       }
-      for (const id of [alice?.id, bob?.id].filter(Boolean)) {
-        try {
-          execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", id], { stdio: "ignore" });
-          report.notes.push(`the keychain still holds the password of account ${id}`);
-        } catch {
-          // Not found: removed with the account.
-        }
+      // Stage 22 (decision 0075): on macOS every secret is in one item (the vault), which goes
+      // when the last secret goes.
+      try {
+        execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE], { stdio: "ignore" });
+        report.notes.push(`the keychain still holds an item of ${KEYCHAIN_SERVICE}`);
+      } catch {
+        // Not found: removed with the accounts.
       }
     } catch (e) {
       report.notes.push(`cleanup failed: ${String(e.message).slice(0, 300)}`);

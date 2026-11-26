@@ -68,8 +68,12 @@ computer can read your stored mail, as they can with Apple Mail or Outlook.
 
 ## What is in the keychain
 
-All entries are under the service name `org.vicemail.desktop`, in the macOS login keychain or in
-Windows Credential Manager (generic credentials):
+All entries are under the service name `org.vicemail.desktop`. On **Windows** each is a generic
+credential of its own in Credential Manager. On **macOS** (since 0.1.3, decision 0075) they are all
+inside **one** item of the login keychain, an application password named `vault` (or `vault.2`,
+`vault.3`, … after changes): its content is a list of the entries below with their secrets, so an
+update of the app makes macOS ask once instead of once per entry. Older versions kept one item
+per entry; the first start of 0.1.3 moves them into the vault and deletes them where macOS allows.
 
 | Entry | Holds |
 |---|---|

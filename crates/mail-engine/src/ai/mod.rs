@@ -29,7 +29,7 @@
 //! - **Open-reply hints** ([`open_replies`]) are rules over stored headers, without AI.
 
 mod open_replies;
-mod settings;
+pub(crate) mod settings;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};

@@ -219,12 +219,15 @@ to build unsigned on purpose, set `VICEMAIL_SIGNING_IDENTITY=-`.
 
 ### Keychain prompts after the switch
 
-The app's account passwords live in the login keychain, and macOS lets the app that stored an item
+The app's passwords and keys live in the login keychain, and macOS lets the app that stored an item
 read it without asking. An ad-hoc signature changes with every build, a Developer ID signature
-stays the same across versions (identifier and team ID). So on the first start of the first signed
-version, macOS is expected to ask once per account whether "Vice Mail" may use its stored password
-(answer with the Mac's password and **Always Allow**); later signed updates should not ask again.
-Not yet observed; check it with the first signed build.
+stays the same across versions (identifier and team ID). Since 0.1.3 they are all in one item (the
+vault, decision 0075), so every ad-hoc signed update asks once, not once per account. On the first
+start of the first signed version, macOS is expected to ask once more (answer with the Mac's
+password and **Always Allow**); later signed updates should not ask again. Not yet observed; check
+it with the first signed build. An item an older ad-hoc build created may not be deletable by a
+newer one ("Invalid attempt to change the owner of this item"); the vault then writes a new
+generation (`vault.<n>`) and the old item stays unused.
 
 ### Renewal
 

@@ -12,6 +12,11 @@
 //! keychain, which can show system dialogs). The engine uses the [`Credentials`] handle, which
 //! runs every call on a blocking thread.
 //!
+//! Stage 22 (decision 0075): on macOS [`SystemKeychain`] keeps every secret in one keychain item
+//! (the vault, [`vault`]), so an update of the ad-hoc signed app asks once instead of once per
+//! secret; the names above are keys inside it. Windows keeps one Credential Manager entry per
+//! secret ([`KeychainItems`]): it shows no dialogs, and an entry holds at most 2,560 bytes.
+//!
 //! Stage 14 (decision 0042): accounts that sign in with Microsoft or Google have a reference
 //! `oauth:<provider>:<id>`; their entry holds the refresh token (in pieces if it is long, see
 //! `oauth::store`), never a password. [`Credentials::get`] refuses such entries, so a token can
@@ -35,6 +40,10 @@ use mail_model::{
 };
 
 use crate::oauth::OAuthService;
+
+pub mod vault;
+
+pub use vault::{ItemStore, MigrationReport, VAULT_ITEM, VaultStore};
 
 /// Longest accepted [`CredentialRef`]. Windows allows 32767 characters for a generic target
 /// name and 513 for the user name; an account UUID has 36.
@@ -142,6 +151,14 @@ pub trait SecretStore: Send + Sync + 'static {
 
     /// Removes the entry. Returns `false` if there was none (not an error).
     fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError>;
+
+    /// Stage 22: moves secrets kept the old way (one keychain item each) into the store's own
+    /// form; `names` are every entry the database knows of. Nothing to do for stores without
+    /// another form (the default).
+    fn migrate(&self, names: &[CredentialRef]) -> Result<MigrationReport, CoreError> {
+        let _ = names;
+        Ok(MigrationReport::default())
+    }
 }
 
 /// The engine's handle to the secret store: cheap to clone, async, runs each call on a
@@ -367,6 +384,28 @@ impl Credentials {
         result
     }
 
+    /// Stage 22 (decision 0075): moves the entries of `names` into the store's own form (the
+    /// vault on macOS); see [`SecretStore::migrate`]. Logs the outcome, never a secret.
+    pub async fn migrate(&self, names: Vec<CredentialRef>) -> Result<MigrationReport, CoreError> {
+        let store = Arc::clone(&self.store);
+        let result = tokio::task::spawn_blocking(move || store.migrate(&names))
+            .await
+            .map_err(|err| CoreError::Internal(format!("keychain task failed: {err}")))?;
+        match &result {
+            Ok(report) if *report == MigrationReport::default() => {}
+            Ok(report) => tracing::info!(
+                moved = report.moved,
+                kept_old = report.kept_old,
+                failed = report.failed,
+                "old keychain entries moved into one"
+            ),
+            Err(err) => {
+                tracing::warn!(error = %err, "moving old keychain entries failed; they stay")
+            }
+        }
+        result
+    }
+
     async fn run<T, F>(&self, key: &CredentialRef, op: F) -> Result<T, CoreError>
     where
         T: Send + 'static,
@@ -390,24 +429,25 @@ pub(crate) fn secret_auth(credential_ref: &str) -> LoginAuth {
     }
 }
 
-/// The operating system's credential store: macOS keychain (login keychain, generic password)
-/// or Windows Credential Manager (generic credential, persisted on this computer only).
-pub struct SystemKeychain {
+/// The operating system's credential store as it is, one item per secret: macOS keychain
+/// (login keychain, generic password) or Windows Credential Manager (generic credential,
+/// persisted on this computer only). Service is the app's bundle id, account the entry's name.
+pub struct KeychainItems {
     service: String,
     store: Arc<keyring_core::CredentialStore>,
     /// Store-specific options for every entry (Windows: persistence).
     modifiers: HashMap<&'static str, &'static str>,
 }
 
-impl fmt::Debug for SystemKeychain {
+impl fmt::Debug for KeychainItems {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SystemKeychain")
+        f.debug_struct("KeychainItems")
             .field("service", &self.service)
             .finish_non_exhaustive()
     }
 }
 
-impl SystemKeychain {
+impl KeychainItems {
     /// Opens the platform's store for `service` (the app's bundle id). Does not touch the
     /// keychain yet, so it never shows a dialog.
     pub fn new(service: &str) -> Result<Self, CoreError> {
@@ -438,14 +478,14 @@ impl SystemKeychain {
         &self.service
     }
 
-    fn entry(&self, key: &CredentialRef) -> Result<keyring_core::Entry, CoreError> {
+    fn entry(&self, name: &str) -> Result<keyring_core::Entry, CoreError> {
         let entry = if self.modifiers.is_empty() {
-            keyring_core::Entry::new_in_store(&self.store, &self.service, key.as_str())
+            keyring_core::Entry::new_in_store(&self.store, &self.service, name)
         } else {
             keyring_core::Entry::new_in_store_with_modifiers(
                 &self.store,
                 &self.service,
-                key.as_str(),
+                name,
                 &self.modifiers,
             )
         };
@@ -453,31 +493,110 @@ impl SystemKeychain {
     }
 }
 
-impl SecretStore for SystemKeychain {
-    fn set(&self, key: &CredentialRef, secret: &Secret<String>) -> Result<(), CoreError> {
-        if secret.expose_secret().is_empty() {
-            // macOS rejects empty passwords; a server login with one makes no sense either.
-            return Err(CoreError::InvalidArgument("the password is empty".into()));
-        }
-        self.entry(key)?
-            .set_password(secret.expose_secret())
-            .map_err(keychain_error)
-    }
-
-    fn get(&self, key: &CredentialRef) -> Result<Option<Secret<String>>, CoreError> {
-        match self.entry(key)?.get_password() {
+impl ItemStore for KeychainItems {
+    fn read(&self, name: &str) -> Result<Option<Secret<String>>, CoreError> {
+        match self.entry(name)?.get_password() {
             Ok(password) => Ok(Some(Secret::new(password))),
             Err(keyring_core::Error::NoEntry) => Ok(None),
             Err(err) => Err(keychain_error(err)),
         }
     }
 
-    fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError> {
-        match self.entry(key)?.delete_credential() {
+    fn write(&self, name: &str, value: &Secret<String>) -> Result<(), CoreError> {
+        if value.expose_secret().is_empty() {
+            // macOS rejects empty passwords; a server login with one makes no sense either.
+            return Err(CoreError::InvalidArgument("the password is empty".into()));
+        }
+        self.entry(name)?
+            .set_password(value.expose_secret())
+            .map_err(keychain_error)
+    }
+
+    fn remove(&self, name: &str) -> Result<bool, CoreError> {
+        match self.entry(name)?.delete_credential() {
             Ok(()) => Ok(true),
             Err(keyring_core::Error::NoEntry) => Ok(false),
             Err(err) => Err(keychain_error(err)),
         }
+    }
+
+    /// The accounts of every item under the service (macOS: attributes only, no dialog).
+    fn names(&self) -> Result<Vec<String>, CoreError> {
+        let spec = HashMap::from([("service", self.service.as_str())]);
+        let entries =
+            keyring_core::Entry::search_in_store(&self.store, &spec).map_err(keychain_error)?;
+        Ok(entries
+            .iter()
+            .filter_map(keyring_core::Entry::get_specifiers)
+            .filter(|(service, _)| *service == self.service)
+            .map(|(_, name)| name)
+            .collect())
+    }
+}
+
+impl SecretStore for KeychainItems {
+    fn set(&self, key: &CredentialRef, secret: &Secret<String>) -> Result<(), CoreError> {
+        self.write(key.as_str(), secret)
+    }
+
+    fn get(&self, key: &CredentialRef) -> Result<Option<Secret<String>>, CoreError> {
+        self.read(key.as_str())
+    }
+
+    fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError> {
+        self.remove(key.as_str())
+    }
+}
+
+/// The app's secret store: on macOS the vault in one keychain item (stage 22, decision 0075),
+/// elsewhere one entry per secret ([`KeychainItems`]).
+pub struct SystemKeychain {
+    service: String,
+    store: Box<dyn SecretStore>,
+}
+
+impl fmt::Debug for SystemKeychain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SystemKeychain")
+            .field("service", &self.service)
+            .finish_non_exhaustive()
+    }
+}
+
+impl SystemKeychain {
+    /// Opens the platform's store for `service` (the app's bundle id). Does not touch the
+    /// keychain yet, so it never shows a dialog.
+    pub fn new(service: &str) -> Result<Self, CoreError> {
+        let items = KeychainItems::new(service)?;
+        let service = items.service().to_owned();
+        let store: Box<dyn SecretStore> = if cfg!(target_os = "macos") {
+            Box::new(VaultStore::new(items))
+        } else {
+            Box::new(items)
+        };
+        Ok(Self { service, store })
+    }
+
+    pub fn service(&self) -> &str {
+        &self.service
+    }
+}
+
+impl SecretStore for SystemKeychain {
+    fn set(&self, key: &CredentialRef, secret: &Secret<String>) -> Result<(), CoreError> {
+        self.store.set(key, secret)
+    }
+
+    fn get(&self, key: &CredentialRef) -> Result<Option<Secret<String>>, CoreError> {
+        self.store.get(key)
+    }
+
+    fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError> {
+        self.store.delete(key)
+    }
+
+    fn migrate(&self, names: &[CredentialRef]) -> Result<MigrationReport, CoreError> {
+        self.store.migrate(names)
     }
 }
 
@@ -633,6 +752,10 @@ impl<S: SecretStore + ?Sized> SecretStore for Arc<S> {
     fn delete(&self, key: &CredentialRef) -> Result<bool, CoreError> {
         (**self).delete(key)
     }
+
+    fn migrate(&self, names: &[CredentialRef]) -> Result<MigrationReport, CoreError> {
+        (**self).migrate(names)
+    }
 }
 
 #[cfg(test)]
@@ -730,7 +853,7 @@ mod tests {
         let mock: Arc<keyring_core::CredentialStore> =
             keyring_core::mock::Store::new().expect("mock store");
         let keychain =
-            SystemKeychain::with_store(SERVICE, mock.clone(), HashMap::new()).expect("keychain");
+            KeychainItems::with_store(SERVICE, mock.clone(), HashMap::new()).expect("keychain");
         let key = account_ref();
 
         assert!(keychain.get(&key).expect("get").is_none());
@@ -760,7 +883,17 @@ mod tests {
             .expect_err("empty");
         assert_eq!(err.code(), ErrorCode::InvalidArgument);
 
-        let err = SystemKeychain::with_store(" ", mock, HashMap::new()).expect_err("no service");
+        // The names under the service, from the store's search (the vault's listing; the
+        // mock lists every entry it was asked for, the platform stores only existing ones).
+        keychain.set(&key, &secret()).expect("set again");
+        let other = KeychainItems::with_store("org.vicemail.other", mock.clone(), HashMap::new())
+            .expect("other");
+        other
+            .set(&CredentialRef::for_settings_sync(), &secret())
+            .expect("other service");
+        assert_eq!(keychain.names().expect("names"), [key.as_str()]);
+
+        let err = KeychainItems::with_store(" ", mock, HashMap::new()).expect_err("no service");
         assert_eq!(err.code(), ErrorCode::InvalidArgument);
     }
 
@@ -859,6 +992,69 @@ mod tests {
             "{log}"
         );
         assert!(!log.contains(PLAIN), "secret leaked into the log: {log}");
+    }
+
+    /// Stage 22 (decision 0075): the vault in the real keychain, under the desktop tests'
+    /// service only. Ignored, and a no-op without `VICEMAIL_REAL_KEYCHAIN=1`. On the Mac mini
+    /// run it in the GUI session (as `scripts/e2e-gui.sh` does; SSH sessions have the login
+    /// keychain locked) with the test-server lock held. One build creates and reads every
+    /// item, so macOS shows no dialog. Refuses to start while the service holds anything and
+    /// leaves nothing behind: items as 0.1.2 stored them are moved into the vault, the old ones
+    /// deleted, a change writes the next generation, and emptying it removes the item.
+    #[test]
+    #[ignore = "touches the real system keychain"]
+    fn real_keychain_vault_round_trip() {
+        if std::env::var("VICEMAIL_REAL_KEYCHAIN").as_deref() != Ok("1") {
+            println!("skipped: set VICEMAIL_REAL_KEYCHAIN=1 to use the real keychain");
+            return;
+        }
+        const E2E_SERVICE: &str = "org.vicemail.desktop.e2e";
+        struct Cleanup(KeychainItems);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                for name in self.0.names().unwrap_or_default() {
+                    let _ = self.0.remove(&name);
+                }
+            }
+        }
+        let items = KeychainItems::new(E2E_SERVICE).expect("keychain");
+        assert!(
+            items.names().expect("names").is_empty(),
+            "{E2E_SERVICE} holds items already; not touching them"
+        );
+        let _cleanup = Cleanup(KeychainItems::new(E2E_SERVICE).expect("keychain"));
+        let old = [
+            ("00000000-0000-4000-8000-00000000c0de", PLAIN),
+            ("mcp-client:selftest", "token \"quoted\" ünïcödé"),
+            ("settings-sync:key", "AGE-SECRET-KEY-1SELFTESTNOTAREALKEY"),
+        ];
+        for (name, value) in old {
+            items
+                .write(name, &Secret::new(value.to_owned()))
+                .expect("old item");
+        }
+        let names: Vec<CredentialRef> = old
+            .iter()
+            .map(|(n, _)| CredentialRef::parse(n).expect("ref"))
+            .collect();
+        let vault = VaultStore::new(KeychainItems::new(E2E_SERVICE).expect("keychain"));
+        let report = vault.migrate(&names).expect("migrate");
+        assert_eq!((report.moved, report.kept_old, report.failed), (3, 0, 0));
+        assert_eq!(items.names().expect("names"), [VAULT_ITEM]);
+        for (key, (_, value)) in names.iter().zip(old) {
+            let read = vault.get(key).expect("get").expect("present");
+            assert_eq!(read.expose_secret(), value);
+        }
+        let new = CredentialRef::parse("ai-profile:selftest").expect("ref");
+        vault.set(&new, &secret()).expect("set");
+        assert_eq!(items.names().expect("names"), ["vault.2"]);
+        let restarted = VaultStore::new(KeychainItems::new(E2E_SERVICE).expect("keychain"));
+        let read = restarted.get(&new).expect("get").expect("present");
+        assert_eq!(read.expose_secret(), PLAIN);
+        for key in names.iter().chain([&new]) {
+            assert!(restarted.delete(key).expect("delete"));
+        }
+        assert!(items.names().expect("names").is_empty(), "nothing left");
     }
 
     /// Real keychain round trip (macOS keychain or Windows Credential Manager). Ignored, and a
