@@ -82,6 +82,8 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
   { section: "inbox", title: "organize.unread.settings.title", description: "organize.unread.settings.hint" },
   { section: "inbox", title: "comfort.senderRules.title", description: "comfort.senderRules.description" },
   { section: "inbox", title: "blocked.title", description: "blocked.description" },
+  { section: "inbox", title: "spam.settings.title" },
+  { section: "inbox", title: "spam.settings.enabled.label", description: "spam.settings.enabled.description" },
   { section: "inbox", title: "comfort.rules.title", description: "comfort.rules.local" },
   // Notifications
   { section: "notifications", title: "comfort.notifications.enabled.label", description: "comfort.notifications.enabled.description", byKey: true },
