@@ -106,7 +106,8 @@ pub struct CompileOptions {
 }
 
 /// Messages that match `words` in the word index (`message_fts MATCH words`) or `trigrams` in
-/// the trigram index (`message_fts_tri MATCH trigrams`). Neither set: no messages.
+/// the trigram index (`message_fts_tri MATCH trigrams`). Neither set: no condition (as
+/// [`TextMatch::none`], nothing excluded; compiling never puts such a clause into `all`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TextClause {
     pub words: Option<String>,
