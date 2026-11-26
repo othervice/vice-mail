@@ -7,6 +7,66 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-26
+
+### Added
+
+- Put your accounts in any order: drag an account in the folder column, use Move up/Move down in
+  its menu or Alt+Up/Down, or the arrows in Settings → Accounts. The order is the same everywhere
+  and syncs.
+- Rename an account in the lists: double-click it, press F2 or choose Rename, or use "Name in the
+  list" on its settings page. Empty shows the address, and the name never appears in mail you
+  send. New accounts show their address until you name them.
+- Drag mail from any list (folders, views, All inboxes, search results), also from several
+  accounts at once, onto any folder of any account, the favourites or the narrow rail. Dropping
+  moves; hold Option (macOS) or Ctrl (Windows) to copy. While dragging, a folder that can't take
+  the mail (read-only account) says why; closed folders open and the folder column scrolls at its
+  edges.
+- Search finds text inside words from three characters on: "uster" finds "Muster", "1234" finds
+  an order number inside a word. Put a term in quotes to find whole words only. After the update
+  the search index is extended once in the background; until it is done, matches inside words may
+  be missing for older mail.
+- While you type a search, up to three matching contacts appear on top (name, address or
+  domain). Choosing one shows all mail from, to and in copy of that person in every account. New
+  filter `contact:` (`kontakt:`).
+- Search in Settings finds any option by title or description (Cmd/Ctrl+F in Settings), jumps to
+  it and highlights it briefly.
+- A learning spam filter (Settings → Inbox, off by default). It learns on your computer from "Mark
+  as junk" and "Not junk", and on request from your Junk folders and read inbox mail. New mail
+  that looks like spam goes to Junk with Undo, or is only marked as suspected spam where changes
+  are off. Mail from yourself, from contacts you wrote to, replies to your mail and senders whose
+  images you allow never count as spam. It runs only while the app runs; what it learns stays on
+  this device, and only the switch is synced.
+- Settings sync: a new device can take over the passwords of its accounts from another device
+  ("Take over passwords from another device"). Both devices show the same six-digit code, and only
+  accounts with the same servers on both devices are sent. Accounts that sign in with Microsoft or
+  Google still sign in on each device.
+- Windows 11: the title bar and the side of the main window use Mica, the material of Windows 11
+  apps, and follow the app's light or dark theme. Text areas stay solid. Without transparency
+  effects or with a contrast theme, the window looks as before.
+
+### Changed
+
+- macOS: Vice Mail now keeps all its passwords and keys in one keychain entry, so after an update
+  macOS asks once instead of once per account. The first start of 0.1.3 moves the old entries
+  over, and macOS asks one last time for each.
+- Message rows start with a narrow column for the unread dot, which becomes the selection box on
+  hover; in lists that mix accounts the account's colour dot and name stay visible next to the
+  quick actions.
+- The narrow sidebar shows each account as a dot in its colour, with its name as tooltip.
+- Windows: the unread count on the taskbar button and the notification-area icon uses real,
+  smooth digits in the style of Windows' own font, drawn for the exact display scale.
+- Windows: after installing or updating, Windows is told to refresh the app icon, so pinned
+  taskbar shortcuts show the new blue icon.
+- AI reply suggestions are written from the identity's sender name, never from the account's list
+  name.
+
+### Removed
+
+- Pictures and initials for senders, contacts and accounts are gone everywhere; contacts keep
+  names, notes and spam marks. Stored contact pictures are deleted on update; vCard import skips
+  photos and export writes none.
+
 ## [0.1.2] - 2026-11-25
 
 ### Added
@@ -301,7 +361,8 @@ were never published. How each part was built and tested is recorded per stage i
 - Not planned for version 1: PGP and S/MIME, calendar and contact sync, POP3, encryption of the
   local database (use FileVault or BitLocker).
 
-[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/othervice/vice-mail/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/othervice/vice-mail/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/othervice/vice-mail/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/othervice/vice-mail/releases/tag/v0.1.0
