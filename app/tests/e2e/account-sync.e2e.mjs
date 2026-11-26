@@ -866,8 +866,8 @@ describe("account and read-only sync (stage 2)", function () {
     // The folded rail: the account button names the state.
     await setSidebar(false);
     report.offline.railLabel = await testId(`account-switch-${account.id}`).getAttribute("aria-label");
-    // Stage 23 (decision 0085): the dot also says the account's unread mail.
-    assert.match(report.offline.railLabel, /, offline(, [\d,]+ unread)?$/);
+    // Stage 23 (decision 0085): the dot also says the account's unread mail ("999+" from 1,000 on).
+    assert.match(report.offline.railLabel, /, offline(, [\d,]+\+? unread)?$/);
     await shootBothThemes("offline-rail");
     await setSidebar(true);
     assert.deepEqual(await newCspViolations(), [], "CSP violations in the mail views");
