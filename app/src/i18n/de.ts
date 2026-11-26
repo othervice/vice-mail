@@ -35,6 +35,11 @@ export const de: Translation = {
     hideSidebar: "Seitenleiste ausblenden",
     resizeSidebar: "Breite der Seitenleiste",
     sidebarWidth: "{{width}} Pixel",
+    // Stufe 23 (Entscheidung 0085): die Abschnitte der Spalte und ihr Fuß.
+    allAccounts: "Alle Konten",
+    more: "Mehr",
+    moreFolders: "Weitere Ordner",
+    moreFoldersOf: "Weitere Ordner von {{account}}",
     accountWithState: "{{name}} ({{email}}), {{state}}",
     accountState: {
       connecting: "verbindet",
@@ -52,7 +57,7 @@ export const de: Translation = {
     hidden: "{{name}} ausgeblendet. „Ansichten bearbeiten\u00a0…“ blendet sie wieder ein.",
     empty: "Keine Ansicht eingeblendet.",
     title: "Ansichten bearbeiten",
-    intro: "Wähle, welche Ansichten die Seitenleiste zeigt und in welcher Reihenfolge. Ausgeblendete Ansichten bleiben in der Befehlspalette und behalten ihre Tastenkürzel.",
+    intro: "Wähle, welche Ansichten die Seitenleiste zeigt und in welcher Reihenfolge. Ansichten unter der Linie „Unter ‚Mehr‘“ stehen in der Seitenleiste unter „Mehr“. Ausgeblendete Ansichten bleiben in der Befehlspalette und behalten ihre Tastenkürzel.",
     hint: "Zieh eine Ansicht am Griff oder drück {{up}} bzw. {{down}}, um die Ansicht mit dem Fokus zu verschieben.",
     list: "Ansichten",
     moveUp: "„{{name}}“ nach oben",
@@ -63,6 +68,9 @@ export const de: Translation = {
     done: "Fertig",
     close: "Schließen",
     saveFailed: "Die Ansichten ließen sich nicht speichern.",
+    // Stufe 23 (Entscheidung 0085): die Linie zwischen „Alle Konten“ und „Mehr“ im Dialog.
+    moreLine: "Unter „Mehr“",
+    movedMore: "{{name}}, unter „Mehr“, Platz {{position}} von {{count}}",
   },
   sidebar: {
     folders: "Ordner von {{account}}",
@@ -76,6 +84,16 @@ export const de: Translation = {
     // Stufe 20 (Entscheidung 0060): das Postfach ist zu mindestens 90 % voll.
     quotaFull: "{{label}}, Postfach zu {{percent}} % voll",
     statusWithReason: "{{status}}: {{reason}}",
+    // Stufe 23 (Entscheidung 0085): der Fuß der Spalte.
+    footer: {
+      label: "Abgleich und Einstellungen",
+      syncedAt: "Abgeglichen um {{time}}",
+      syncedOn: "Abgeglichen am {{date}} um {{time}}",
+      account: "{{name}}: {{state}}",
+      accounts_one: "{{count}} Konto: {{state}}",
+      accounts_other: "{{count}} Konten: {{state}}",
+      syncNow: "Jetzt abgleichen",
+    },
   },
   roles: {
     inbox: "Posteingang",
@@ -916,6 +934,8 @@ export const de: Translation = {
       markFolderRead: "Die Mails konnten nicht als gelesen markiert werden.",
       // Stufe 22
       drop: "Die Mails konnten nicht dorthin verschoben oder kopiert werden.",
+      // Stufe 23 (Entscheidung 0085): „Jetzt abgleichen“ unten in der Spalte.
+      sync: "Der Abgleich ließ sich nicht starten.",
       accounts: "Das Konto konnte nicht geändert werden.",
     },
     operationFailed_one: "Eine Änderung ließ sich auf dem Server nicht ausführen: {{action}}",

@@ -7,12 +7,16 @@ import type { OperationInfo } from "../src/services/ipc";
 import { makeAccount, makeMailbox, mockCore, standardMailboxes } from "./support/core";
 import { makeSavedSearch } from "./support/search";
 import { renderApp } from "./support/render";
+import { DEFAULT_UI_PREFERENCES } from "./support/uiPrefs";
 
 /*
  * docs/DESIGN.md, "Seitenspalte": the accounts-and-folders column replaces the icon rail while
  * it is open; a toggle, Cmd/Ctrl+Shift+S and the palette fold it. Its edge is a window splitter
  * (drag or arrow keys). Each account is the root of its folder tree, with its unread total and,
  * when something is wrong, the reason in its name. In a narrow window it opens over the content.
+ * Stage 23 (decision 0085): "All accounts" (the unified inbox, Later, Flagged, Sent, "More"),
+ * favourites, one section per account (inbox, Sent, "More folders"), a foot with the sync state.
+ * The fake core starts with "More" and "More folders" open unless a test gives the core's default.
  */
 
 const ADA = makeAccount({ writesEnabled: true });
@@ -24,7 +28,7 @@ const CLUB = makeAccount({
   status: { state: "offline", progress: null, error: { code: "connection_lost", message: "reset", detail: null }, retryAt: null, lastSyncAt: null },
 });
 
-function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true }, operations: OperationInfo[] = []) {
+function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true }, operations: OperationInfo[] = [], coreDefault = false) {
   const core = mockCore({
     accounts: [ADA, CLUB],
     operations,
@@ -33,7 +37,10 @@ function setup(layout: { sidebarExpanded: boolean } = { sidebarExpanded: true },
       makeMailbox({ id: 40, accountId: CLUB.id, path: "INBOX", role: "inbox", roleSource: "server", unread: 4 }),
       makeMailbox({ id: 41, accountId: CLUB.id, path: "Turniere", unread: 1 }),
     ],
-    ui: { layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, ...layout } },
+    ui: {
+      layout: { readingPane: "right", density: "comfortable", sidebarWidth: 240, listWidth: 384, listHeight: 320, ...layout },
+      ...(coreDefault && { preferences: DEFAULT_UI_PREFERENCES }),
+    },
     search: { savedSearches: [makeSavedSearch({ name: "Invoices" })] },
   });
   return { core, ...renderApp() };
@@ -88,7 +95,8 @@ describe("accounts-and-folders column", () => {
     };
     setup({ sidebarExpanded: true }, [waiting]);
     const nav = await column();
-    const activity = within(nav).getByTestId("rail-activity");
+    // Stage 23 (decision 0085): Activity is a row under "More".
+    const activity = within(nav).getByTestId("sidebar-activity");
     await waitFor(() => {
       expect(activity.getAttribute("aria-label")).toBe("Activity, 1 waiting, 0 need attention");
     });
@@ -97,48 +105,161 @@ describe("accounts-and-folders column", () => {
     expect(words(activity.getAttribute("aria-label"))).toContain(words(activity.textContent));
   });
 
-  it("replaces the rail: views, unified inbox with its count, every account's tree, the bottom group", async () => {
+  it("replaces the rail: All accounts with the unified inbox and its count, More, every account's section, the foot", async () => {
     setup();
     const nav = await column();
     expect(screen.queryByTestId("icon-rail")).toBeNull();
-    expect(await within(nav).findByRole("treeitem", { name: "All inboxes, 7 unread" })).toBeTruthy();
-    const views = within(nav).getByRole("tree", { name: "Views" });
-    expect(within(views).getAllByRole("treeitem").map((row) => row.textContent)).toEqual([
-      "Views",
+    const all = await within(nav).findByRole("tree", { name: "All accounts" });
+    expect(await within(all).findByRole("treeitem", { name: "Inbox, 7 unread" })).toBeTruthy();
+    expect(within(all).getAllByRole("treeitem").map((row) => row.getAttribute("aria-label"))).toEqual([
+      "All accounts",
+      "Inbox, 7 unread",
       "Later",
+      "Flagged",
+      "Sent",
+      "More",
       "Waiting for reply",
       "Tasks",
       "Reading list",
       "Pinned attachments",
       "Attachments",
-      "Flagged",
       "Pinned",
       "Saved views",
       // Stage 17 (decision 0050).
       "Contacts",
+      "Invoices",
+      "Activity",
+      "Outbox",
     ]);
+    const levels = within(all)
+      .getAllByRole("treeitem")
+      .map((row) => row.getAttribute("aria-level"))
+      .join("");
+    expect(levels).toBe("12222233333333333");
     // Each account is the root of its own tree, named with address and unread total.
     const club = await within(nav).findByRole("tree", { name: "Folders of Club" });
     const root = within(club).getAllByRole("treeitem")[0];
     expect(root?.getAttribute("aria-level")).toBe("1");
     // Offline: a quiet mark, the state and its reason in the name (never the colour alone).
     expect(root?.getAttribute("aria-label")).toBe("Club, 5 unread (board@club.example), offline: The connection to the server was lost.");
-    // Label in name (WCAG 2.5.3): the row shows "Club 5"; the name starts with it.
-    expect(words(root?.textContent)).toBe("club 5");
+    // Label in name (WCAG 2.5.3): the heading shows "Club" while open; the name starts with it.
+    expect(words(root?.textContent)).toBe("club");
     expect(words(root?.getAttribute("aria-label"))).toContain(words(root?.textContent));
     expect(screen.getByTestId(`account-status-${CLUB.id}`)).toBeTruthy();
-    expect(within(nav).getByRole("toolbar", { name: "Activity and settings" })).toBeTruthy();
+    expect(within(club).getAllByRole("treeitem").map((row) => row.getAttribute("aria-label"))).toEqual([
+      root?.getAttribute("aria-label"),
+      "Inbox, 4 unread",
+      "More folders",
+      "Turniere, 1 unread",
+    ]);
+    // The foot: what syncs (Club is offline), Sync now and Settings, one toolbar.
+    expect(within(nav).getByTestId("sidebar-sync-status").textContent).toBe("Club: Offline");
+    const foot = within(nav).getByRole("toolbar", { name: "Sync and settings" });
+    expect(within(foot).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sync now", "Settings"]);
     expect(within(nav).getByTestId("rail-settings")).toBeTruthy();
+  });
+
+  it("starts with More and More folders closed; both open and stay open on this device", async () => {
+    const { core, user } = setup({ sidebarExpanded: true }, [], true);
+    const nav = await column();
+    const all = await within(nav).findByRole("tree", { name: "All accounts" });
+    const more = within(all).getByRole("treeitem", { name: "More" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(within(all).queryByRole("treeitem", { name: "Tasks" })).toBeNull();
+    const ada = await within(nav).findByRole("tree", { name: "Folders of Ada Lovelace" });
+    // Closed, "More folders" names the unread mail of the own folders it hides (Projekte 2, 2026 1).
+    const folders = within(ada).getByRole("treeitem", { name: "More folders, 3 unread" });
+    expect(folders.getAttribute("aria-expanded")).toBe("false");
+    expect(words(folders.textContent)).toBe("more folders 3");
+    expect(within(ada).getAllByRole("treeitem").map((row) => row.getAttribute("aria-label"))).toEqual([
+      "Ada Lovelace, 6 unread (ada@vicemail.test)",
+      "Inbox, 3 unread",
+      "Sent",
+      "More folders, 3 unread",
+    ]);
+    await user.click(more);
+    expect(within(all).getByRole("treeitem", { name: "Tasks" })).toBeTruthy();
+    await user.click(folders);
+    expect(within(ada).getByRole("treeitem", { name: "Projekte, 2 unread" }).getAttribute("aria-level")).toBe("3");
+    // The core keeps both on this device (UiPreferences.sidebarFolds).
+    await waitFor(() => {
+      expect(core.ui.preferences.sidebarFolds).toEqual([
+        { key: "more", open: true },
+        { key: `folders:${ADA.id}`, open: true },
+      ]);
+    });
+    // Closing an account is kept too; opening it again leaves no entry (the default).
+    await user.click(screen.getByTestId(`sidebar-account-${CLUB.id}`));
+    await waitFor(() => {
+      expect(core.ui.preferences.sidebarFolds).toContainEqual({ key: `account:${CLUB.id}`, open: false });
+    });
+    await user.click(screen.getByTestId(`sidebar-account-${CLUB.id}`));
+    await waitFor(() => {
+      expect(core.ui.preferences.sidebarFolds.map((fold) => fold.key)).toEqual(["more", `folders:${ADA.id}`]);
+    });
+  });
+
+  it("marks the shown view under a closed More or More folders on that row, and Tab comes in there", async () => {
+    const { user } = setup({ sidebarExpanded: true }, [], true);
+    const nav = await column();
+    act(() => {
+      useUiStore.getState().showMailView("tasks");
+    });
+    const all = await within(nav).findByRole("tree", { name: "All accounts" });
+    const more = within(all).getByRole("treeitem", { name: "More" });
+    expect(more.className).toContain("bg-rail-selected");
+    expect(more.tabIndex).toBe(0);
+    expect(more.hasAttribute("aria-current")).toBe(false);
+    act(() => {
+      useUiStore.getState().showMailbox(ADA.id, 6);
+    });
+    const folders = screen.getByTestId(`sidebar-more-folders-${ADA.id}`);
+    expect(folders.className).toContain("bg-rail-selected");
+    expect(folders.tabIndex).toBe(0);
+    await user.click(folders);
+    expect(screen.getByTestId("mailbox-6").getAttribute("aria-current")).toBe("page");
+    expect(screen.getByTestId(`sidebar-more-folders-${ADA.id}`).className).not.toContain("bg-rail-selected");
+  });
+
+  it("Sent of All accounts and an account's Sent are two rows: each is current only for itself", async () => {
+    const { user } = setup();
+    const nav = await column();
+    const all = await within(nav).findByRole("tree", { name: "All accounts" });
+    await user.click(within(all).getByRole("treeitem", { name: "Sent" }));
+    expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });
+    expect(within(all).getByRole("treeitem", { name: "Sent" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByTestId("mailbox-2").hasAttribute("aria-current")).toBe(false);
+    // The account's Sent opens as its folder.
+    await user.click(screen.getByTestId("mailbox-2"));
+    expect(useUiStore.getState().view).toEqual({ kind: "mailbox", accountId: ADA.id, mailboxId: 2 });
+    expect(screen.getByTestId("mailbox-2").getAttribute("aria-current")).toBe("page");
+    expect(within(all).getByRole("treeitem", { name: "Sent" }).hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("the foot says when the accounts last synced, or which one does not; Sync now asks every account for a pass", async () => {
+    const { core, user } = setup();
+    const nav = await column();
+    const status = within(nav).getByTestId("sidebar-sync-status");
+    await waitFor(() => {
+      expect(status.getAttribute("data-tone")).toBe("offline");
+    });
+    await user.click(within(nav).getByRole("button", { name: "Sync now" }));
+    await waitFor(() => {
+      expect(core.callsOf("reload_folders")).toEqual([{ accountId: ADA.id }, { accountId: CLUB.id }]);
+    });
   });
 
   it("finds nothing serious with every section, an offline account, folded parts and over the content", async () => {
     const { user } = setup();
     await column();
     await screen.findByRole("tree", { name: "Favourites" });
-    await screen.findByRole("tree", { name: "Saved searches" });
+    await screen.findByRole("treeitem", { name: "Invoices" });
     await screen.findByRole("treeitem", { name: "Turniere, 1 unread" });
     expect(await seriousFindings()).toEqual([]);
     await user.click(screen.getByTestId(`sidebar-account-${CLUB.id}`));
+    await user.click(screen.getByTestId("sidebar-more"));
+    await user.click(screen.getByTestId(`sidebar-more-folders-${ADA.id}`));
+    expect(await seriousFindings()).toEqual([]);
     await user.click(screen.getByTestId("sidebar-section-views"));
     expect(await seriousFindings()).toEqual([]);
   });
@@ -215,16 +336,19 @@ describe("accounts-and-folders column", () => {
     await within(club).findByRole("treeitem", { name: "Turniere, 1 unread" });
     await user.click(screen.getByTestId(`sidebar-account-${CLUB.id}`));
     expect(within(club).getAllByRole("treeitem")).toHaveLength(1);
-    expect(screen.getByTestId(`sidebar-account-${CLUB.id}`).getAttribute("aria-expanded")).toBe("false");
-    await user.click(screen.getByTestId(`sidebar-account-${CLUB.id}`));
-    expect(within(club).getAllByRole("treeitem")).toHaveLength(3);
+    const heading = screen.getByTestId(`sidebar-account-${CLUB.id}`);
+    expect(heading.getAttribute("aria-expanded")).toBe("false");
+    // Closed, the heading shows the account's unread total.
+    expect(words(heading.textContent)).toBe("club 5");
+    await user.click(heading);
+    expect(within(club).getAllByRole("treeitem")).toHaveLength(4);
   });
 
   it("a section folds to its label with a click, Left or Enter, and opens with Right", async () => {
     const { user } = setup();
     await column();
-    const views = screen.getByRole("tree", { name: "Views" });
-    const label = within(views).getByRole("treeitem", { name: "Views" });
+    const views = await screen.findByRole("tree", { name: "All accounts" });
+    const label = within(views).getByRole("treeitem", { name: "All accounts" });
     expect(label.getAttribute("aria-expanded")).toBe("true");
     await user.click(label);
     expect(within(views).getAllByRole("treeitem")).toHaveLength(1);
@@ -233,8 +357,8 @@ describe("accounts-and-folders column", () => {
       label.focus();
     });
     await user.keyboard("{ArrowRight}");
-    expect(within(views).getAllByRole("treeitem")).toHaveLength(11);
-    await user.keyboard("{ArrowDown}");
+    expect(within(views).getAllByRole("treeitem")).toHaveLength(17);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(document.activeElement?.textContent).toBe("Later");
     await user.keyboard("{ArrowLeft}{ArrowLeft}");
     expect(document.activeElement).toBe(label);

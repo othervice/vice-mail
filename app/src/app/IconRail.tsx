@@ -5,6 +5,8 @@ import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { useRovingFocus } from "../components/useRovingFocus";
 import { accountFill } from "../features/accounts/accountColor";
+import { accountUnread } from "../features/mailboxes/MailboxTree";
+import { useMailboxes } from "../features/mailboxes/queries";
 import { useAccountDragSource, useAccountMoveByDrag } from "../features/accounts/accountDrag";
 import { movedOrder, useAccountArrange } from "../features/accounts/arrange";
 import { useSelectedAccount } from "../features/accounts/selection";
@@ -13,11 +15,10 @@ import { useOutgoing } from "../features/composer/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
 import { DROP_REFUSED_CLASS, dropTargetState, useDropTarget } from "../features/mailboxes/useDropTarget";
 import { MAIL_VIEW_ICONS } from "../features/mail/views";
-import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
 import { VIEW_COMMANDS, type ViewCommandId } from "../features/actions/registry";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
 import { useAppInfo } from "../features/app-info/queries";
-import { useShownColumnViews } from "../features/layout/columnViews";
+import { useColumnGroups } from "../features/layout/columnViews";
 import { useBoundShortcuts } from "../stores/shortcuts";
 import type { Account } from "../services/ipc";
 import { useUiStore, type MailViewId } from "../stores/ui";
@@ -34,30 +35,23 @@ const SETTINGS_KEY = "settings";
 const STATUS_KEYS = [ACTIVITY_KEY, OUTBOX_KEY, SETTINGS_KEY];
 
 /**
- * Stage 17: the rail's fixed views around the ones the user chose for the column ("Edit views…"),
- * which stand between the inbox and Sent in the user's order.
+ * Stage 17: the rail's fixed views around the ones the user chose for the column ("Edit views…").
+ * Stage 23 (decision 0085): grouped as in the column: the inbox, the views of "All accounts" and
+ * Sent; a hairline; the views under "More", then Drafts, Archive, Trash and "Folders".
  */
 const RAIL_TOP = ["inbox"] as const satisfies readonly MailViewId[];
-const RAIL_BOTTOM = ["sent", "drafts", "archive", "trash", "folders"] as const satisfies readonly MailViewId[];
+const RAIL_MAIN_END = ["sent"] as const satisfies readonly MailViewId[];
+const RAIL_BOTTOM = ["drafts", "archive", "trash", "folders"] as const satisfies readonly MailViewId[];
 
 interface RailButtonProps {
   icon: LucideIcon;
   label: string;
-  /** Labelled sidebar: the name stands next to the icon instead of in a tooltip only. */
-  expanded: boolean;
   active?: boolean;
   onClick: () => void;
   /** For the Folders entry, which unfolds the sidebar instead of opening a view. */
   disclosure?: { expanded: boolean; controls?: string };
   /** Small count or mark on the icon (activity). */
   badge?: ReactNode;
-  /**
-   * Visible name in the labelled sidebar when `label` (the accessible name) says more, e.g. a
-   * count. `label` must start with this text (WCAG 2.5.3, label in name).
-   */
-  text?: string;
-  /** In the labelled sidebar: shown at the end of the row instead of `badge` on the icon. */
-  trailing?: ReactNode;
   /**
    * Rows dragged out of any list can be dropped here (stage 22, decision 0081): each goes to the
    * folder with this role in its own account.
@@ -71,7 +65,7 @@ interface RailButtonProps {
   "data-testid": string;
 }
 
-function RailButton({ icon: Icon, label, expanded, active = false, onClick, disclosure, badge, text, trailing, dropRole, shortcut, roving, ...rest }: RailButtonProps) {
+function RailButton({ icon: Icon, label, active = false, onClick, disclosure, badge, dropRole, shortcut, roving, ...rest }: RailButtonProps) {
   const { t } = useTranslation();
   const drop = useDropTarget(dropRole && { kind: "role", role: dropRole }, { id: `rail-${rest["data-testid"]}`, folder: label });
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -86,76 +80,50 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
     if (item.top < area.top) scroller.scrollTop -= area.top - item.top;
     else if (item.bottom > area.bottom) scroller.scrollTop += item.bottom - area.bottom;
   }, [active]);
-  // Active: accent icon on a soft fill plus a bar at the rail edge, so it is not colour alone. In
-  // the column the rows look like the rows of its trees.
-  const className = expanded
-    ? sidebarRowClass(
-        active,
-        cx("w-full gap-2 ps-3 pe-2", drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent", drop.refused && DROP_REFUSED_CLASS),
-      )
-    : cx(
-        "relative flex size-(--ui-rail-item) items-center justify-center rounded-tile transition-colors",
-        active
-          ? "bg-rail-selected font-medium text-accent before:absolute before:inset-y-2 before:-left-2 before:w-1 before:rounded-control before:bg-accent-fill"
-          : "text-secondary hover:bg-rail-hover hover:text-primary",
-        drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
-        drop.refused && DROP_REFUSED_CLASS,
-      );
-  const button = (
-    <button
-      ref={buttonRef}
-      type="button"
-      aria-label={label}
-      aria-keyshortcuts={shortcut?.aria}
-      aria-current={active ? "page" : undefined}
-      aria-expanded={disclosure?.expanded}
-      aria-controls={disclosure?.controls}
-      onClick={onClick}
-      {...roving}
-      {...(dropRole && drop.handlers)}
-      className={className}
-      data-testid={rest["data-testid"]}
-      data-drop-target={dropTargetState(drop)}
-    >
-      <span className="relative flex shrink-0">
-        <Icon aria-hidden className={expanded ? sidebarIconClass(active) : "size-(--ui-icon) shrink-0"} strokeWidth={1.75} />
-        {(!expanded || trailing === undefined) && badge}
-      </span>
-      {expanded && (
-        <span aria-hidden className="truncate">
-          {text ?? label}
-        </span>
-      )}
-      {/* A space before the trailing count: name and number are two words, as in the name. */}
-      {expanded && trailing !== undefined && (
-        <>
-          {" "}
-          {trailing}
-        </>
-      )}
-    </button>
+  // Stage 23 (decision 0085): the active view on the column's selected fill with its icon in the
+  // accent, as in the column; no bar at the rail's edge.
+  const className = cx(
+    "relative flex size-(--ui-rail-item) items-center justify-center rounded-tile transition-colors",
+    active ? "bg-rail-selected text-accent" : "text-secondary hover:bg-rail-hover hover:text-primary",
+    drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+    drop.refused && DROP_REFUSED_CLASS,
   );
   return (
-    <Tooltip
-      label={shortcut ? t("actions.withShortcut", { label, shortcut: shortcut.hint }) : label}
-      side="right"
-      disabled={expanded}
-    >
-      {button}
+    <Tooltip label={shortcut ? t("actions.withShortcut", { label, shortcut: shortcut.hint }) : label} side="right">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={label}
+        aria-keyshortcuts={shortcut?.aria}
+        aria-current={active ? "page" : undefined}
+        aria-expanded={disclosure?.expanded}
+        aria-controls={disclosure?.controls}
+        onClick={onClick}
+        {...roving}
+        {...(dropRole && drop.handlers)}
+        className={className}
+        data-testid={rest["data-testid"]}
+        data-drop-target={dropTargetState(drop)}
+      >
+        <span className="relative flex shrink-0">
+          <Icon aria-hidden className="size-(--ui-icon) shrink-0" strokeWidth={1.75} />
+          {badge}
+        </span>
+      </button>
     </Tooltip>
   );
 }
 
 /**
  * Small mark on an account that is offline or stopped, so the rail shows trouble at a glance: at
- * the end of the entry's lower edge, clear of the account's dot.
+ * the end of the entry's upper edge, clear of the account's dot and (stage 23) its count below it.
  */
 function StateBadge({ account }: { account: Account }) {
   const state = account.status.state;
   if (state !== "offline" && state !== "error") return null;
   const Icon = state === "error" ? CircleExclamationPoint : CloudOff;
   return (
-    <span className="absolute end-1 bottom-1 flex rounded-full bg-rail p-px" data-testid="account-state-badge">
+    <span className="absolute end-1 top-1 flex rounded-full bg-rail p-px" data-testid="account-state-badge">
       <Icon
         aria-hidden
         className={cx("size-3", state === "error" ? "text-danger" : "text-secondary")}
@@ -167,16 +135,17 @@ function StateBadge({ account }: { account: Account }) {
 
 /**
  * The count of the activity and outbox entries: on the icon in the narrow rail, at the end of the
- * row in the labelled sidebar (so name and number read in the order they are shown).
+ * row in the column (so name and number read in the order they are shown), in the danger colour
+ * once something needs the user.
  */
-function RailCount({ value, attention, trailing = false, ...rest }: { value: string; attention: boolean; trailing?: boolean; "data-testid": string }) {
+export function RailCount({ value, attention, trailing = false, ...rest }: { value: string; attention: boolean; trailing?: boolean; "data-testid": string }) {
   return (
     <span
       aria-hidden
       data-testid={rest["data-testid"]}
       data-attention={attention || undefined}
       className={cx(
-        "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-12 leading-none font-semibold tabular-nums",
+        "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-11 leading-none font-semibold tabular-nums",
         trailing ? "ms-auto shrink-0" : "absolute -top-2 -right-2",
         attention ? "bg-danger text-on-danger" : "bg-rail text-secondary ring-1 ring-border-strong",
       )}
@@ -186,18 +155,27 @@ function RailCount({ value, attention, trailing = false, ...rest }: { value: str
   );
 }
 
+/** What the activity entry shows and says: its count and name (`attention` in the danger colour). */
+export interface StatusEntry {
+  pending: number;
+  attention: number;
+  /** The accessible name: the view's name, then the number on the badge. */
+  label: string;
+  /** The view's name alone. */
+  text: string;
+  /** The number shown (what needs the user, else what waits), null for none. */
+  count: string | null;
+}
+
 /**
  * The collected state of the outbox (docs/DESIGN.md: pending and failed actions visible but
  * quiet): a count on the activity icon, in the danger colour once something needs the user.
  */
-function ActivityButton({ accounts, expanded, active, roving }: { accounts: readonly Account[]; expanded: boolean; active: boolean; roving: Roving }) {
+export function useActivityEntry(accounts: readonly Account[]): StatusEntry {
   const { t, i18n } = useTranslation();
-  const showActivity = useUiStore((state) => state.showActivity);
   const counts = useOutboxCounts(accounts);
   const pending = counts.reduce((sum, c) => sum + c.pending, 0);
   const attention = counts.reduce((sum, c) => sum + c.failed + c.conflict, 0);
-  const numbers = new Intl.NumberFormat(i18n.language);
-  // The name starts with what is visible: the view's name, then the number on the badge.
   const label =
     attention > 0
       ? t("activity.badgeAttention", { pending, attention })
@@ -205,50 +183,52 @@ function ActivityButton({ accounts, expanded, active, roving }: { accounts: read
         ? t("activity.badgeWaiting", { pending, attention })
         : t("activity.nav");
   const shown = attention > 0 ? attention : pending;
-  const count = shown > 0 ? numbers.format(shown) : null;
-  return (
-    <RailButton
-      icon={History}
-      label={label}
-      text={t("activity.nav")}
-      expanded={expanded}
-      active={active}
-      onClick={showActivity}
-      roving={roving}
-      badge={count && <RailCount value={count} attention={attention > 0} data-testid="activity-badge" />}
-      trailing={count ? <RailCount value={count} attention={attention > 0} data-testid="activity-badge" trailing /> : undefined}
-      data-testid="rail-activity"
-    />
-  );
+  return { pending, attention, label, text: t("activity.nav"), count: shown > 0 ? new Intl.NumberFormat(i18n.language).format(shown) : null };
 }
 
 /** Stage 5: the outbox ("Ausgang"); red count while sends failed or need an answer. */
-function OutboxButton({ accounts, expanded, active, roving }: { accounts: readonly Account[]; expanded: boolean; active: boolean; roving: Roving }) {
+export function useOutboxEntry(accounts: readonly Account[]): StatusEntry {
   const { t, i18n } = useTranslation();
-  const showOutbox = useUiStore((state) => state.showOutbox);
   const mails = useOutgoing(accounts).flatMap((result) => result.data ?? []);
   const attention = mails.filter((m) => m.state === "failed" || m.state === "unclear").length;
   const pending = mails.filter((m) => m.state !== "sent" && m.state !== "failed" && m.state !== "unclear").length;
   const shown = attention > 0 ? attention : pending;
-  const count = shown > 0 ? new Intl.NumberFormat(i18n.language).format(shown) : null;
-  // The name starts with what is visible: the view's name, then the number on the badge.
   const label =
     attention > 0
       ? t("composer.outbox.badgeAttention", { attention, pending })
       : pending > 0
         ? t("composer.outbox.badgeWaiting", { attention, pending })
         : t("composer.outbox.nav");
+  return { pending, attention, label, text: t("composer.outbox.nav"), count: shown > 0 ? new Intl.NumberFormat(i18n.language).format(shown) : null };
+}
+
+function ActivityButton({ accounts, active, roving }: { accounts: readonly Account[]; active: boolean; roving: Roving }) {
+  const showActivity = useUiStore((state) => state.showActivity);
+  const entry = useActivityEntry(accounts);
+  return (
+    <RailButton
+      icon={History}
+      label={entry.label}
+      active={active}
+      onClick={showActivity}
+      roving={roving}
+      badge={entry.count && <RailCount value={entry.count} attention={entry.attention > 0} data-testid="activity-badge" />}
+      data-testid="rail-activity"
+    />
+  );
+}
+
+function OutboxButton({ accounts, active, roving }: { accounts: readonly Account[]; active: boolean; roving: Roving }) {
+  const showOutbox = useUiStore((state) => state.showOutbox);
+  const entry = useOutboxEntry(accounts);
   return (
     <RailButton
       icon={SendHorizontal}
-      label={label}
-      text={t("composer.outbox.nav")}
-      expanded={expanded}
+      label={entry.label}
       active={active}
       onClick={showOutbox}
       roving={roving}
-      badge={count && <RailCount value={count} attention={attention > 0} data-testid="outbox-badge" />}
-      trailing={count ? <RailCount value={count} attention={attention > 0} data-testid="outbox-badge" trailing /> : undefined}
+      badge={entry.count && <RailCount value={entry.count} attention={entry.attention > 0} data-testid="outbox-badge" />}
       data-testid="rail-outbox"
     />
   );
@@ -256,12 +236,14 @@ function OutboxButton({ accounts, expanded, active, roving }: { accounts: readon
 
 function useAccountLabel() {
   const { t } = useTranslation();
-  return (account: Account) =>
-    t("nav.accountWithState", {
+  return (account: Account, unread: number) => {
+    const label = t("nav.accountWithState", {
       name: account.displayName || account.email,
       email: account.email,
       state: t(`nav.accountState.${account.status.state}`),
     });
+    return unread > 0 ? t("sidebar.folderUnread", { name: label, count: unread }) : label;
+  };
 }
 
 /** One account's dot in the rail: picks the account, and (stage 23) is dragged to put it elsewhere. */
@@ -275,9 +257,12 @@ function AccountDot({ account, accounts, current, roving, line, dimmed, dropItem
   dropItem: Record<string, string>;
   onMove: (step: -1 | 1) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const selectAccount = useUiStore((state) => state.selectAccount);
-  const label = useAccountLabel()(account);
+  // Stage 23 (decision 0085): the account's unread mail (inbox and own folders, as its section in
+  // the column counts it) on its dot.
+  const unread = accountUnread(useMailboxes(account.id).data ?? []);
+  const label = useAccountLabel()(account, unread);
   const dragSource = useAccountDragSource(account, accounts.length > 1);
   return (
     <li
@@ -313,11 +298,19 @@ function AccountDot({ account, accounts, current, roving, line, dimmed, dropItem
           // With a single account there is nothing to tell apart.
           className={cx(
             "relative flex size-(--ui-rail-item) items-center justify-center rounded-tile transition-colors",
-            current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
+            current && accounts.length > 1 ? "bg-rail-selected" : "hover:bg-rail-hover",
             dimmed && "opacity-50",
           )}
         >
-          <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
+          {/* Stage 23 (decision 0085): the count under the dot, so it never covers the colour. */}
+          <span className="flex flex-col items-center gap-1">
+            <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
+            {unread > 0 && (
+              <span aria-hidden className="text-11 leading-none font-medium text-secondary tabular-nums" data-testid={`account-count-${account.id}`}>
+                {unread > 999 ? `${new Intl.NumberFormat(i18n.language).format(999)}+` : new Intl.NumberFormat(i18n.language).format(unread)}
+              </span>
+            )}
+          </span>
           <StateBadge account={account} />
         </button>
       </Tooltip>
@@ -370,43 +363,39 @@ function AccountSwitcher({ accounts, selected, roving }: { accounts: readonly Ac
 }
 
 /**
- * The bottom group of the rail and of the column: activity, outbox and settings with their counts
- * (in the narrow rail also the account switcher). One Tab stop, arrow keys inside.
+ * The bottom group of the narrow rail: the account switcher, activity, outbox and settings with
+ * their counts. One Tab stop, arrow keys inside. (The column has its own foot, `SidebarFooter`.)
  */
-export function StatusGroup({ accounts, expanded }: { accounts: readonly Account[]; expanded: boolean }) {
+function StatusGroup({ accounts }: { accounts: readonly Account[] }) {
   const { t } = useTranslation();
   const view = useUiStore((state) => state.view);
   const showSettings = useUiStore((state) => state.showSettings);
   const { account: selected } = useSelectedAccount();
   const bottomActive = view.kind === "activity" || view.kind === "outbox" || view.kind === "settings" ? view.kind : null;
   const bottom = useRovingFocus({
-    keys: [...(expanded ? [] : accounts.map((account) => accountKey(account.id))), ...STATUS_KEYS],
-    activeKey: bottomActive ?? (!expanded && selected ? accountKey(selected.id) : null),
+    keys: [...accounts.map((account) => accountKey(account.id)), ...STATUS_KEYS],
+    activeKey: bottomActive ?? (selected ? accountKey(selected.id) : null),
   });
-  const activityRoving = bottom.itemProps(ACTIVITY_KEY);
-  const outboxRoving = bottom.itemProps(OUTBOX_KEY);
-  const settingsRoving = bottom.itemProps(SETTINGS_KEY);
   // A hairline above the group: where the views scroll under it in a low window.
   return (
     <div
       role="toolbar"
       aria-label={t("nav.statusGroup")}
       {...bottom.groupProps}
-      className={cx("flex shrink-0 flex-col border-t border-border-subtle py-3", expanded ? "gap-1 px-2" : "items-center gap-2")}
+      className="flex shrink-0 flex-col items-center gap-2 border-t border-border-subtle py-3"
     >
       {/* Account switcher: one entry per account with its colour and name. Empty without accounts. */}
-      {expanded ? null : <AccountSwitcher accounts={accounts} selected={selected} roving={bottom.itemProps} />}
-      <ActivityButton accounts={accounts} expanded={expanded} active={view.kind === "activity"} roving={activityRoving} />
-      <OutboxButton accounts={accounts} expanded={expanded} active={view.kind === "outbox"} roving={outboxRoving} />
+      <AccountSwitcher accounts={accounts} selected={selected} roving={bottom.itemProps} />
+      <ActivityButton accounts={accounts} active={view.kind === "activity"} roving={bottom.itemProps(ACTIVITY_KEY)} />
+      <OutboxButton accounts={accounts} active={view.kind === "outbox"} roving={bottom.itemProps(OUTBOX_KEY)} />
       <RailButton
         icon={Settings}
         label={t("nav.settings")}
-        expanded={expanded}
         active={view.kind === "settings"}
         onClick={() => {
           showSettings();
         }}
-        roving={settingsRoving}
+        roving={bottom.itemProps(SETTINGS_KEY)}
         data-testid="rail-settings"
       />
     </div>
@@ -418,6 +407,8 @@ export function StatusGroup({ accounts, expanded }: { accounts: readonly Account
  * mail views on top, account switcher, activity, outbox and settings at the bottom. "Folders"
  * opens the column (in a narrow window over the content, `SidebarColumn`). Stage 17: the views
  * of the column's "Views" section show here as the user chose them, between the inbox and Sent.
+ * Stage 23 (decision 0085): grouped like the column (inbox, the views of "All accounts", Sent; the
+ * views under "More", Drafts, Archive, Trash, Folders), the accounts with their unread counts.
  */
 export function IconRail() {
   const { t } = useTranslation();
@@ -428,8 +419,10 @@ export function IconRail() {
   const dragRegion = useWindowDragRegion();
   const { accounts } = useSelectedAccount();
   const accountList = accounts.data ?? [];
-  const chosen = useShownColumnViews();
-  const viewIds: MailViewId[] = [...RAIL_TOP, ...chosen, ...RAIL_BOTTOM];
+  const groups = useColumnGroups();
+  const mainIds: MailViewId[] = [...RAIL_TOP, ...groups.main, ...RAIL_MAIN_END];
+  const restIds: MailViewId[] = [...groups.more, ...RAIL_BOTTOM];
+  const viewIds: MailViewId[] = [...mainIds, ...restIds];
   /**
    * Rail views that take dragged rows (stage 22, decision 0081): each row goes to the folder with
    * that role in its own account, so rows of "All inboxes" never cross accounts here.
@@ -476,41 +469,46 @@ export function IconRail() {
       >
         {/* Stage 8, keyboard: one Tab stop for the views, Up and Down move between them. */}
         <div role="toolbar" aria-label={t("nav.viewGroup")} {...views.groupProps} className="flex w-full flex-col">
-          <ul className="flex w-full flex-col items-center gap-1">
-            {viewIds.map((id) => (
-              <li key={id}>
-                {id === "folders" ? (
-                  <RailButton
-                    icon={MAIL_VIEW_ICONS[id]}
-                    label={t("nav.folders")}
-                    expanded={false}
-                    disclosure={{ expanded: overlay }}
-                    onClick={toggleSidebar}
-                    shortcut={commandShortcut("toggleSidebar")}
-                    roving={views.itemProps(id)}
-                    data-testid={`rail-${id}`}
-                  />
-                ) : (
-                  <RailButton
-                    icon={MAIL_VIEW_ICONS[id]}
-                    label={t(`nav.${id}`)}
-                    expanded={false}
-                    active={view.kind === "mail" && view.mailView === id}
-                    onClick={() => {
-                      showMailView(id);
-                    }}
-                    dropRole={dropRole(id)}
-                    shortcut={viewShortcut(id)}
-                    roving={views.itemProps(id)}
-                    data-testid={`rail-${id}`}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
+          {[mainIds, restIds].map((ids, group) => (
+            <ul
+              key={group}
+              // Stage 23 (decision 0085): a hairline between the views of "All accounts" and the rest.
+              className={cx("flex w-full flex-col items-center gap-1", group > 0 && "mt-2 border-t border-border-subtle pt-2")}
+              data-testid={group === 0 ? "rail-views-main" : "rail-views-more"}
+            >
+              {ids.map((id) => (
+                <li key={id}>
+                  {id === "folders" ? (
+                    <RailButton
+                      icon={MAIL_VIEW_ICONS[id]}
+                      label={t("nav.folders")}
+                      disclosure={{ expanded: overlay }}
+                      onClick={toggleSidebar}
+                      shortcut={commandShortcut("toggleSidebar")}
+                      roving={views.itemProps(id)}
+                      data-testid={`rail-${id}`}
+                    />
+                  ) : (
+                    <RailButton
+                      icon={MAIL_VIEW_ICONS[id]}
+                      label={t(`nav.${id}`)}
+                      active={view.kind === "mail" && view.mailView === id}
+                      onClick={() => {
+                        showMailView(id);
+                      }}
+                      dropRole={dropRole(id)}
+                      shortcut={viewShortcut(id)}
+                      roving={views.itemProps(id)}
+                      data-testid={`rail-${id}`}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          ))}
         </div>
       </div>
-      <StatusGroup accounts={accountList} expanded={false} />
+      <StatusGroup accounts={accountList} />
     </nav>
   );
 }

@@ -6,7 +6,7 @@ import { ErrorNotice } from "../../components/ErrorNotice";
 import { treeItemAria, useTreeNavigation, type TreeNavItem } from "../../components/useTreeNavigation";
 import type { Account, AccountColor, Mailbox, MailboxId } from "../../services/ipc";
 import { useUiStore } from "../../stores/ui";
-import { accountFill } from "../accounts/accountColor";
+import { accountFill, accountText } from "../accounts/accountColor";
 import { accountShortNames } from "../accounts/accountName";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
 import { FloatingPanel } from "../actions/Pickers";
@@ -235,8 +235,8 @@ function folderIcon(mailbox: Mailbox): LucideIcon {
   return isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder;
 }
 
-function FolderGlyph({ icon: Icon, current }: { icon: LucideIcon; current: boolean }) {
-  return <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />;
+function FolderGlyph({ icon: Icon, current, tone }: { icon: LucideIcon; current: boolean; tone: string | undefined }) {
+  return <Icon aria-hidden className={sidebarIconClass(current, tone)} strokeWidth={1.75} />;
 }
 
 interface FavoriteRowProps {
@@ -246,6 +246,11 @@ interface FavoriteRowProps {
   /** Stage 21: the folder's account ("Mark folder as read"). */
   account: Account | undefined;
   accountName: string | undefined;
+  /**
+   * Stage 23 (decision 0085): the account's short name shows only where another favourite has the
+   * same name (the icon's colour tells the accounts apart otherwise, the name says it always).
+   */
+  showAccount: boolean;
   current: boolean;
   nav: ReturnType<typeof useTreeNavigation>;
   onColor: (mailbox: Mailbox) => void;
@@ -253,7 +258,7 @@ interface FavoriteRowProps {
   onMoved: (text: string) => void;
 }
 
-function FavoriteRow({ item, mailbox, order, account, accountName, current, nav, onColor, onMoved }: FavoriteRowProps) {
+function FavoriteRow({ item, mailbox, order, account, accountName, showAccount, current, nav, onColor, onMoved }: FavoriteRowProps) {
   const { t, i18n } = useTranslation();
   const name = useFolderName()(mailbox);
   const colorName = useColorName();
@@ -301,22 +306,26 @@ function FavoriteRow({ item, mailbox, order, account, accountName, current, nav,
       className={sidebarRowClass(
         current,
         cx(
-          "group/folder gap-1 ps-3 pe-2",
-          drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+          "group/folder px-2",
+          drop.over && "bg-accent-soft outline-2 -outline-offset-2 outline-accent",
           drop.refused && DROP_REFUSED_CLASS,
         ),
       )}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <FolderGlyph icon={folderIcon(mailbox)} current={current} />
-        <span className={cx("truncate", mailbox.unread > 0 && "text-primary")}>{name}</span>
+        {/* Stage 23 (decision 0085): the icon in its account's colour. */}
+        <FolderGlyph icon={folderIcon(mailbox)} current={current} tone={account && accountText(account.color)} />
+        <span className="truncate">{name}</span>
         <FolderColorDot color={mailbox.color} />
         {/* The folder's name keeps its room; the account's short name gives way first. */}
-        {accountName && <span className="shrink-[4] truncate text-12 text-tertiary">{accountName}</span>}
+        {showAccount && accountName && <span className="shrink-[4] truncate text-12 text-tertiary">{accountName}</span>}
         {mailbox.unread > 0 && (
           <span
             aria-hidden
-            className="ms-auto shrink-0 ps-2 text-12 font-medium text-secondary tabular-nums group-hover/folder:invisible group-focus-visible/folder:invisible group-has-[[aria-expanded=true]]/folder:invisible"
+            className={cx(
+              "ms-auto shrink-0 ps-2 text-12 tabular-nums group-hover/folder:invisible group-focus-visible/folder:invisible group-has-[[aria-expanded=true]]/folder:invisible",
+              mailbox.role === "inbox" ? "font-semibold text-secondary" : "text-tertiary",
+            )}
           >
             {new Intl.NumberFormat(i18n.language).format(mailbox.unread)}
           </span>
@@ -397,6 +406,7 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
         {(section.open ? list : []).map((mailbox, index) => {
           const item = items[index];
           if (!item) return null;
+          const shownName = folderName(mailbox);
           return (
             <FavoriteRow
               key={mailbox.id}
@@ -405,6 +415,7 @@ export function FavoriteFolders({ accounts }: { accounts: readonly Account[] }) 
               order={order}
               account={accounts.find((candidate) => candidate.id === mailbox.accountId)}
               accountName={names?.get(mailbox.accountId)}
+              showAccount={list.some((other) => other.id !== mailbox.id && folderName(other) === shownName)}
               current={mailbox.id === currentId}
               nav={nav}
               onColor={setColoring}

@@ -192,7 +192,8 @@ describe("accounts without initials", () => {
     await screen.findByRole("listbox", { name: /^Messages in/ });
     for (const account of [ADA, WORK]) {
       const entry = screen.getByTestId(`account-switch-${account.id}`);
-      expect(entry.textContent).toBe("");
+      // No initials: at most the account's unread count next to the dot (stage 23, decision 0085).
+      expect(entry.textContent).toMatch(/^\d*$/);
       expect(within(entry).queryByTestId("avatar")).toBeNull();
       const dot = within(entry).getByTestId("account-dot");
       expect(dot.getAttribute("aria-hidden")).toBe("true");

@@ -1,180 +1,32 @@
-import { EyeOff, PanelLeftClose, SlidersHorizontal } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { PanelLeftClose } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { Tooltip } from "../components/Tooltip";
-import { treeItemAria, useTreeNavigation } from "../components/useTreeNavigation";
 import { useAccountMoveByDrag } from "../features/accounts/accountDrag";
 import { useSelectedAccount } from "../features/accounts/selection";
-import { OverflowMenu, type OverflowItem } from "../features/actions/OverflowMenu";
 import { ariaShortcut, formatShortcut, shortcutPlatform } from "../features/actions/shortcuts";
 import { useAppInfo } from "../features/app-info/queries";
 import { useWindowDragRegion } from "../features/app-info/useWindowDragRegion";
-import { useColumnViews, useColumnViewsStore, useShownColumnViews, type ColumnViewId } from "../features/layout/columnViews";
-import { SECTION_KEY, SectionRow, useSection } from "../features/layout/SectionRow";
-import { sidebarIconClass, sidebarRowClass } from "../features/layout/sidebarStyles";
-import { MAIL_VIEW_ICONS } from "../features/mail/views";
+import { useSidebarFoldStore } from "../features/layout/sidebarFolds";
 import { MailboxTree } from "../features/mailboxes/MailboxTree";
 import { useDragAutoScroll } from "../features/mailboxes/useDragAutoScroll";
 import { useMailboxes } from "../features/mailboxes/queries";
 import { isRoleView, mailboxWithRole } from "../features/mailboxes/tree";
-import { FavoriteFolders, RowMenuSlot } from "../features/organize/folders";
-import { SavedSearchNav } from "../features/search/SavedSearchNav";
-import { UnifiedTree } from "../features/unified/UnifiedTree";
+import { FavoriteFolders } from "../features/organize/folders";
 import type { Account, MailboxId } from "../services/ipc";
 import { useBoundShortcuts } from "../stores/shortcuts";
 import { clampSidebarWidth, SIDEBAR_WIDTH, useUiStore } from "../stores/ui";
-import { StatusGroup } from "./IconRail";
-
-/** A view row's "…": hide it from the column and the rail, or "Edit views…". */
-function ViewRowMenu({ id, onHide, returnFocus }: { id: ColumnViewId; onHide: () => void; returnFocus: () => void }) {
-  const { t } = useTranslation();
-  const openEditor = useColumnViewsStore((state) => state.openEditor);
-  const items: OverflowItem[] = [
-    { id: "hide", label: t("columnViews.hide"), icon: EyeOff, onSelect: onHide, "data-testid": `views-row-hide-${id}` },
-    { id: "edit", label: t("columnViews.edit"), icon: SlidersHorizontal, onSelect: openEditor, "data-testid": `views-row-edit-${id}` },
-  ];
-  return (
-    <OverflowMenu
-      label={t("columnViews.rowMenu", { name: t(`nav.${id}`) })}
-      items={items}
-      tabIndex={-1}
-      returnFocus={returnFocus}
-      narrow
-      data-testid={`views-row-menu-${id}`}
-    />
-  );
-}
-
-/**
- * "Views": the views across folders, one tree (one Tab stop) under its label, which folds it. The
- * folders with a role (inbox, sent, ...) are not repeated here: each account's tree has them.
- * Stage 17: only the views the user chose, in the user's order ("Edit views…" on the label's
- * "…", on each view's "…" and in the palette); none chosen, a quiet hint instead of an empty band.
- */
-function ViewsTree() {
-  const { t } = useTranslation();
-  const view = useUiStore((state) => state.view);
-  const showMailView = useUiStore((state) => state.showMailView);
-  const views = useColumnViews();
-  const shown = useShownColumnViews();
-  const choose = useColumnViewsStore((state) => state.choose);
-  const openEditor = useColumnViewsStore((state) => state.openEditor);
-  const [hidden, setHidden] = useState<string | null>(null);
-  const headingId = useId();
-  const section = useSection("views", t("nav.viewsSection"));
-  const currentId = view.kind === "mail" && !(view.mailView === "savedViews" && view.savedSearchId) ? view.mailView : null;
-  const items = section.open
-    ? shown.map((id, index) => ({ key: id, level: 2, posinset: index + 1, setsize: shown.length, text: t(`nav.${id}`) }))
-    : [];
-  const nav = useTreeNavigation({
-    items: [section.item, ...items],
-    currentKey: currentId,
-    onOpen: (key) => {
-      if (key === SECTION_KEY) section.toggle();
-      const id = shown.find((candidate) => candidate === key);
-      if (id) showMailView(id);
-    },
-    onExpand: section.onExpand,
-  });
-  const hide = (id: ColumnViewId) => {
-    const index = shown.indexOf(id);
-    // The focus goes to the view after it, else the one before, else the label.
-    const next = shown[index + 1] ?? shown[index - 1] ?? SECTION_KEY;
-    flushSync(() => {
-      choose(views.map((entry) => (entry.id === id ? { ...entry, shown: false } : entry)));
-    });
-    nav.focus(next);
-    setHidden(t("columnViews.hidden", { name: t(`nav.${id}`) }));
-  };
-  const labelMenu: OverflowItem[] = [
-    { id: "edit", label: t("columnViews.edit"), icon: SlidersHorizontal, onSelect: openEditor, "data-testid": "sidebar-views-edit" },
-  ];
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col">
-      <h2 id={headingId} className="sr-only">
-        {t("nav.viewsSection")}
-      </h2>
-      <ul {...nav.treeProps} aria-labelledby={headingId} className="flex flex-col" data-testid="sidebar-views">
-        <SectionRow
-          section={section}
-          nav={nav}
-          menu={
-            <OverflowMenu
-              label={t("columnViews.menu")}
-              items={labelMenu}
-              tabIndex={-1}
-              returnFocus={() => {
-                nav.focus(SECTION_KEY);
-              }}
-              narrow
-              small
-              data-testid="sidebar-views-menu"
-            />
-          }
-          data-testid="sidebar-section-views"
-        />
-        {items.map((item) => {
-          const id = item.key;
-          const Icon = MAIL_VIEW_ICONS[id];
-          const current = currentId === id;
-          return (
-            <li
-              key={id}
-              {...treeItemAria(item)}
-              {...nav.itemProps(id)}
-              aria-current={current ? "page" : undefined}
-              // The view's name, not the name of its "…" button too.
-              aria-label={item.text}
-              onClick={() => {
-                showMailView(id);
-              }}
-              className={sidebarRowClass(current, "group/folder gap-2 ps-3 pe-2")}
-              data-testid={`sidebar-view-${id}`}
-            >
-              <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />
-              <span className="truncate">{item.text}</span>
-              <RowMenuSlot>
-                <ViewRowMenu
-                  id={id}
-                  onHide={() => {
-                    hide(id);
-                  }}
-                  returnFocus={() => {
-                    nav.focus(id);
-                  }}
-                />
-              </RowMenuSlot>
-            </li>
-          );
-        })}
-      </ul>
-      {/* Stage 17: every view hidden: a quiet hint, not an empty band. */}
-      {section.open && shown.length === 0 && (
-        <div className="flex flex-col items-start gap-1 ps-3 pe-2 pt-1" data-testid="sidebar-views-empty">
-          <p className="text-12 text-tertiary">{t("columnViews.empty")}</p>
-          <button
-            type="button"
-            onClick={openEditor}
-            data-testid="sidebar-views-empty-edit"
-            className="-ms-1 rounded-control px-1 text-12 font-medium text-accent transition-colors hover:bg-rail-hover"
-          >
-            {t("columnViews.edit")}
-          </button>
-        </div>
-      )}
-      <span aria-live="polite" className="sr-only">
-        {hidden}
-      </span>
-    </section>
-  );
-}
+import { AllAccountsTree } from "./AllAccountsTree";
+import { SidebarFooter } from "./SidebarFooter";
 
 interface AccountFoldersProps {
   account: Account;
   selected: boolean;
+  /** Stage 23 (decision 0085): "All accounts" has its own Sent (several accounts). */
+  sentAbove: boolean;
   /** Stage 23: the line of a dragged account in the gap before or after this one. */
   line: "before" | "after" | null;
   /** This account is the one being dragged. */
@@ -184,14 +36,21 @@ interface AccountFoldersProps {
 }
 
 /** The folder tree of one account, with the folder the view shows marked as current. */
-function AccountFolders({ account, selected, line, dimmed, dropItem }: AccountFoldersProps) {
+function AccountFolders({ account, selected, sentAbove, line, dimmed, dropItem }: AccountFoldersProps) {
   const view = useUiStore((state) => state.view);
   const unified = useUiStore((state) => state.unifiedInbox !== null);
   const mailboxes = useMailboxes(account.id);
   let current: MailboxId | null = null;
   if (view.kind === "mailbox" && view.accountId === account.id) current = view.mailboxId;
   // Stage 7: while the unified inbox is shown, no account's own inbox is the current folder.
-  if (view.kind === "mail" && selected && isRoleView(view.mailView) && !(unified && view.mailView === "inbox")) {
+  // Stage 23: Sent of "All accounts" is the current row of the Sent view, not the account's.
+  if (
+    view.kind === "mail" &&
+    selected &&
+    isRoleView(view.mailView) &&
+    !(unified && view.mailView === "inbox") &&
+    !(sentAbove && view.mailView === "sent")
+  ) {
     current = mailboxWithRole(mailboxes.data ?? [], view.mailView)?.id ?? null;
   }
   return (
@@ -204,13 +63,15 @@ function AccountFolders({ account, selected, line, dimmed, dropItem }: AccountFo
         "relative flex flex-col",
         // The account being dragged stays in its place, dimmed, until it is let go.
         dimmed && "opacity-50",
-        // The place it goes: a line in the gap above or below the account.
-        line === "before" && "before:absolute before:inset-x-1 before:-top-2 before:h-1 before:rounded-full before:bg-accent-fill",
-        line === "after" && "after:absolute after:inset-x-1 after:-bottom-2 after:h-1 after:rounded-full after:bg-accent-fill",
+        // The place it goes: a line in the middle of the 8 px gap above or below the account.
+        line === "before" &&
+          "before:absolute before:inset-x-1 before:-top-[calc(var(--ui-space-1)*1.5)] before:h-1 before:rounded-full before:bg-accent-fill",
+        line === "after" &&
+          "after:absolute after:inset-x-1 after:-bottom-[calc(var(--ui-space-1)*1.5)] after:h-1 after:rounded-full after:bg-accent-fill",
       )}
       data-testid={`sidebar-account-section-${account.id}`}
     >
-      <MailboxTree account={account} currentMailboxId={current} />
+      <MailboxTree account={account} currentMailboxId={current} sentAsFolder={sentAbove} />
     </section>
   );
 }
@@ -293,11 +154,13 @@ function useOverlayDismiss(column: RefObject<HTMLElement | null>, overlay: boole
 }
 
 /**
- * The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"), open by default: the unified
- * inbox, the views across folders, saved searches, favourites, then every account with its
- * folders, and at the bottom activity, outbox and settings. It replaces the icon rail while it
- * is open. Its width (200 to 320 px) follows the drag handle at its edge. In a window too narrow
- * for it next to the list and the reading pane it folds to the rail and opens over the content
+ * The accounts-and-folders column (docs/DESIGN.md, "Seitenspalte"), open by default. Stage 23
+ * (decision 0085), the approved draft: "All accounts" (the unified inbox, Later, Flagged, Sent and
+ * "More" with every other view, the groups, saved searches, Activity and the outbox), the
+ * favourites, one section per account (its inbox and Sent, "More folders"), and at the foot when
+ * the accounts last synced, "Sync now" and Settings. It replaces the icon rail while it is open.
+ * Its width (200 to 320 px) follows the drag handle at its edge. In a window too narrow for it
+ * next to the list and the reading pane it folds to the rail and opens over the content
  * (`overlay`) instead.
  */
 export function SidebarColumn({ overlay }: { overlay: boolean }) {
@@ -317,6 +180,13 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
   const autoScroll = useDragAutoScroll();
   const accountDrop = useAccountMoveByDrag(accountList);
   const movedAccount = accountDrop.announcement;
+  // Stage 23 (decision 0085): what is opened or closed of a removed account is dropped on the next save.
+  const setFoldAccounts = useSidebarFoldStore((state) => state.setAccounts);
+  const loaded = accounts.isSuccess;
+  const accountIds = accountList.map((account) => account.id).join(",");
+  useEffect(() => {
+    if (loaded) setFoldAccounts(accountIds === "" ? [] : accountIds.split(","));
+  }, [loaded, accountIds, setFoldAccounts]);
   // "Go to Folders" (palette): the entry shown right now takes the focus, else the first tree's.
   const focusRequested = useUiStore((state) => state.sidebarFocusRequested);
   const sidebarFocused = useUiStore((state) => state.sidebarFocused);
@@ -386,41 +256,40 @@ export function SidebarColumn({ overlay }: { overlay: boolean }) {
         )}
         data-testid="sidebar-scroll"
       >
-        <div className="flex shrink-0 flex-col gap-5 overflow-x-clip px-2">
-        <UnifiedTree accounts={accountList} />
-        <ViewsTree />
-        {/* Stage 7: saved searches, right below the views. */}
-        <SavedSearchNav />
-        {/* Stage 16: favourite folders of every account. */}
-        <FavoriteFolders accounts={accountList} />
-        {/* Stage 23: a dragged account heading goes where the line shows (decision 0078). */}
-        <section aria-labelledby={accountsHeading} {...accountDrop.zoneProps} className="flex flex-col gap-3" data-testid="sidebar-accounts">
-          <h2 id={accountsHeading} className="sr-only">
-            {t("nav.accounts")}
-          </h2>
-          {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
-          {accounts.isSuccess && accountList.length === 0 && (
-            <p className="px-2 text-12 text-tertiary" data-testid="sidebar-no-accounts">
-              {t("presentation.sidebar.noAccounts")}
-            </p>
-          )}
-          {accountList.map((account) => (
-            <AccountFolders
-              key={account.id}
-              account={account}
-              selected={account.id === selected?.id}
-              line={accountDrop.lineOf(account.id)}
-              dimmed={accountDrop.dragged === account.id}
-              dropItem={accountDrop.itemProps(account.id)}
-            />
-          ))}
-          <span aria-live="polite" className="sr-only">
-            {movedAccount}
-          </span>
-        </section>
+        {/* Stage 23 (decision 0085): 8 px between the sections, as in the draft. */}
+        <div className="flex shrink-0 flex-col gap-2 overflow-x-clip px-2">
+          <AllAccountsTree accounts={accountList} />
+          {/* Stage 16: favourite folders of every account. */}
+          <FavoriteFolders accounts={accountList} />
+          {/* Stage 23: a dragged account heading goes where the line shows (decision 0078). */}
+          <section aria-labelledby={accountsHeading} {...accountDrop.zoneProps} className="flex flex-col gap-2" data-testid="sidebar-accounts">
+            <h2 id={accountsHeading} className="sr-only">
+              {t("nav.accounts")}
+            </h2>
+            {/* Stage 8: no empty band without accounts; the view next to it offers to add one. */}
+            {accounts.isSuccess && accountList.length === 0 && (
+              <p className="px-2 text-12 text-tertiary" data-testid="sidebar-no-accounts">
+                {t("presentation.sidebar.noAccounts")}
+              </p>
+            )}
+            {accountList.map((account) => (
+              <AccountFolders
+                key={account.id}
+                account={account}
+                selected={account.id === selected?.id}
+                sentAbove={accountList.length > 1}
+                line={accountDrop.lineOf(account.id)}
+                dimmed={accountDrop.dragged === account.id}
+                dropItem={accountDrop.itemProps(account.id)}
+              />
+            ))}
+            <span aria-live="polite" className="sr-only">
+              {movedAccount}
+            </span>
+          </section>
         </div>
       </div>
-      <StatusGroup accounts={accountList} expanded />
+      <SidebarFooter accounts={accountList} />
     </nav>
   );
 }

@@ -12,8 +12,10 @@ import { movedOrder, useAccountArrange } from "../accounts/arrange";
 import { useAccounts } from "../accounts/queries";
 // Stage 16: folder colours and favourites.
 import { FolderColorDot, FolderColorPicker, FolderMenu, RowMenuSlot, useColorName, useFolderName } from "../organize/folders";
-import { accountFill } from "../accounts/accountColor";
-import { indentClass, sidebarIconClass, sidebarRowClass } from "../layout/sidebarStyles";
+import { accountFill, accountText } from "../accounts/accountColor";
+import { SectionChevron } from "../layout/SectionRow";
+import { accountFold, foldersFold, useFold } from "../layout/sidebarFolds";
+import { indentClass, SECTION_HEAD_CLASS, sidebarIconClass, sidebarRowClass, toggleStartClass } from "../layout/sidebarStyles";
 import { useUiStore } from "../../stores/ui";
 import { MAIL_VIEW_ICONS } from "../mail/views";
 import { OverflowMenu, type OverflowItem } from "../actions/OverflowMenu";
@@ -21,17 +23,24 @@ import { useOperations } from "../actions/queries";
 import { useFolderCreateItem, useReloadFoldersItem } from "./FolderEdit";
 import { accountReadScope, useMarkReadItem } from "./markRead";
 import { useMailboxes } from "./queries";
-import { buildMailboxTree, isRoleView, type MailboxNode } from "./tree";
+import { buildMailboxTree, isRoleView, splitAccountTree, type MailboxNode } from "./tree";
 import { DROP_REFUSED_CLASS, dropTargetState, useDropTarget } from "./useDropTarget";
 
 interface MailboxTreeProps {
   account: Account;
   /** The folder the mail view shows right now, marked as current. */
   currentMailboxId: MailboxId | null;
+  /**
+   * Stage 23 (decision 0085): Sent of "All accounts" is in the column, so this account's Sent
+   * opens as its own folder (and only that row shows as current).
+   */
+  sentAsFolder: boolean;
 }
 
 /** Key of the account's own row, the root of its tree. Folder keys are their ids (digits only). */
 const ACCOUNT_KEY = "account";
+/** Key of the account's "More folders". */
+const FOLDERS_KEY = "folders";
 
 /**
  * The account's unread total in the column: its inbox and its own folders, where new mail lands.
@@ -57,7 +66,8 @@ export function UnreadCount({ count, emphasis = false }: { count: number; emphas
         aria-hidden
         className={cx(
           "ms-auto shrink-0 ps-2 text-12 tabular-nums group-hover/folder:invisible group-focus-visible/folder:invisible group-has-[[aria-expanded=true]]/folder:invisible",
-          emphasis ? "font-semibold text-primary" : "font-medium text-secondary",
+          // Stage 23 (decision 0085): quiet, except the unread mail of an inbox.
+          emphasis ? "font-semibold text-secondary" : "text-tertiary",
         )}
       >
         {new Intl.NumberFormat(i18n.language).format(count)}
@@ -66,8 +76,8 @@ export function UnreadCount({ count, emphasis = false }: { count: number; emphas
   );
 }
 
-function FolderIcon({ icon: Icon, current }: { icon: LucideIcon; current: boolean }) {
-  return <Icon aria-hidden className={sidebarIconClass(current)} strokeWidth={1.75} />;
+function FolderIcon({ icon: Icon, current, tone }: { icon: LucideIcon; current: boolean; tone: string }) {
+  return <Icon aria-hidden className={sidebarIconClass(current, tone)} strokeWidth={1.75} />;
 }
 
 /** A visible row of the tree: the folder with its place, for the keyboard model and the aria tree. */
@@ -151,18 +161,17 @@ function MailboxItem({ row, current, nav, onActivate, onColor, account, pending 
       className={sidebarRowClass(
         current,
         cx(
-          "group/folder gap-1 pe-2",
-          // Folders start one level below their account's row, without indentation of their own.
+          "group/folder pe-2",
+          // Stage 23 (decision 0085): the inbox and Sent at the section's level, the folders under
+          // "More folders" one level in, 16 px a level, the arrow in the 16 px before the icon.
           indentClass(row.level - 1),
           !mailbox.selectable && !current && "text-tertiary",
-          drop.over && "bg-accent-soft text-primary outline-2 -outline-offset-2 outline-accent",
+          drop.over && "bg-accent-soft outline-2 -outline-offset-2 outline-accent",
           drop.refused && DROP_REFUSED_CLASS,
         ),
       )}
     >
-      {row.expanded === undefined ? (
-        <span aria-hidden className="w-5 shrink-0" />
-      ) : (
+      {row.expanded !== undefined && (
         // For the mouse; the keyboard opens and closes with Right and Left (aria-expanded).
         <span
           aria-hidden
@@ -172,7 +181,10 @@ function MailboxItem({ row, current, nav, onActivate, onColor, account, pending 
             toggleMailbox(mailbox.id);
           }}
           data-testid={`folder-toggle-${String(mailbox.id)}`}
-          className="flex h-6 w-5 shrink-0 items-center justify-center rounded-control text-tertiary hover:text-primary"
+          className={cx(
+            "absolute inset-y-0 flex w-4 items-center justify-center rounded-control text-tertiary hover:text-primary",
+            toggleStartClass(row.level - 1),
+          )}
         >
           {row.expanded ? (
             <ChevronDown className="size-(--ui-icon-small)" strokeWidth={1.75} />
@@ -182,8 +194,8 @@ function MailboxItem({ row, current, nav, onActivate, onColor, account, pending 
         </span>
       )}
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <FolderIcon icon={isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder} current={current} />
-        <span className={cx("truncate", mailbox.unread > 0 && "text-primary")}>{name}</span>
+        <FolderIcon icon={isRoleView(mailbox.role) ? MAIL_VIEW_ICONS[mailbox.role] : Folder} current={current} tone={accountText(account.color)} />
+        <span className="truncate">{name}</span>
         <FolderColorDot color={mailbox.color} />
         {pendingText && (
           <span aria-hidden className="shrink-0 text-12 text-tertiary" data-testid={`folder-pending-${String(mailbox.id)}`}>
@@ -397,29 +409,28 @@ function AccountMenu({ account, mailboxes, returnFocus, onRename, onMove }: Acco
       tabIndex={-1}
       returnFocus={returnFocus}
       narrow
+      small
       data-testid={`account-menu-${account.id}`}
     />
   );
 }
 
-/** The account at the root of its tree: colour and name, its trouble, unread total; opens and closes. */
+/**
+ * The account's heading at the root of its tree (stage 23, decision 0085: like a section's label,
+ * 11 px semibold): a square in its colour and its name, its trouble, its unread total while it is
+ * closed; opens and closes (remembered on this device), is dragged to put the account elsewhere.
+ */
 function AccountRow({ account, mailboxes, item, unread, nav, onToggle, editing, onRename, onRenamed, onMove }: AccountRowProps) {
   const { t } = useTranslation();
   const full = nearlyFullPercent(useAccountQuota(account.id).data);
   const label = useAccountRowLabel()(account, unread, full);
-  const Chevron = item.expanded ? ChevronDown : ChevronRight;
-  const toggleAccount = useUiStore((state) => state.toggleAccount);
   // Stage 22 (decision 0078): the heading is dragged to put the account elsewhere.
   const dragSource = useAccountDragSource(account, !editing);
   // Stage 22 (decision 0081): a closed account opens while dragged mail rests on its heading.
   const expandOnDrag = useDropTarget(undefined, {
     id: `account-${account.id}`,
     folder: label,
-    onExpand: item.expanded
-      ? undefined
-      : () => {
-          toggleAccount(account.id);
-        },
+    onExpand: item.expanded ? undefined : onToggle,
   });
   return (
     <li
@@ -449,14 +460,11 @@ function AccountRow({ account, mailboxes, item, unread, nav, onToggle, editing, 
       {...expandOnDrag.handlers}
       data-testid={`sidebar-account-${account.id}`}
       data-account-state={account.status.state}
-      // `group/folder`: the "…" shows on hover and focus as on a folder's row (`RowMenuSlot`).
-      className="group/account group/folder relative flex h-8 min-w-0 items-center gap-2 rounded-control ps-1 pe-2 text-13 font-semibold text-primary transition-colors hover:bg-rail-hover"
+      // `group/folder`: the counter gives its place to the "…" on hover and focus, as on a folder's row.
+      className={cx(SECTION_HEAD_CLASS, "group/folder")}
     >
-      <span aria-hidden className="flex w-5 shrink-0 justify-center text-tertiary group-hover/account:text-primary">
-        <Chevron className="size-(--ui-icon-small)" strokeWidth={1.75} />
-      </span>
       {/* The colour never stands alone: the name is next to it. */}
-      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-full", accountFill(account.color))} />
+      <span aria-hidden className={cx("size-(--ui-dot) shrink-0 rounded-mark", accountFill(account.color))} />
       {editing ? (
         <AccountNameField account={account} onDone={onRenamed} />
       ) : (
@@ -465,56 +473,137 @@ function AccountRow({ account, mailboxes, item, unread, nav, onToggle, editing, 
         </span>
       )}
       <AccountStatusMark account={account} />
-      {/* A space before the counter: name and number are two words of the text, as in the name.
-          Stage 18: it gives its place to the "…" like a folder's counter. */}
-      {!editing && <UnreadCount count={unread} />}
       {!editing && (
-        <RowMenuSlot>
-          <AccountMenu
-            account={account}
-            mailboxes={mailboxes}
-            returnFocus={() => {
-              nav.focus(ACCOUNT_KEY);
+        <span className="ms-auto flex shrink-0 items-center gap-1">
+          {/* A space before the counter: name and number are two words of the text, as in the
+              name. Shown while the account is closed (its inbox row has it otherwise). */}
+          {item.expanded === false && <UnreadCount count={unread} />}
+          {/* Stage 23: the "…" in the row like a section's, before the arrow (its clicks stay here). */}
+          <div
+            onClick={(event) => {
+              event.stopPropagation();
             }}
-            onRename={onRename}
-            onMove={onMove}
-          />
-        </RowMenuSlot>
+            className="flex opacity-0 group-hover/section:opacity-100 group-focus-visible/section:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100"
+          >
+            <AccountMenu
+              account={account}
+              mailboxes={mailboxes}
+              returnFocus={() => {
+                nav.focus(ACCOUNT_KEY);
+              }}
+              onRename={onRename}
+              onMove={onMove}
+            />
+          </div>
+          <SectionChevron open={item.expanded === true} end={false} />
+        </span>
       )}
     </li>
   );
 }
 
 /**
- * The folders of one account under its own row (docs/DESIGN.md, "Seitenspalte"): role folders
- * first in a fixed order, then the account's own folders as a tree, each with its unread counter.
- * The account's row opens and closes the whole account (remembered while the app runs). Kept
- * current by `mailboxesChanged`. One tree, one Tab stop.
+ * "More folders" of an account (stage 23, decision 0085): every folder but the inbox and Sent,
+ * closed at first (remembered on this device). Closed, it shows the unread mail of the own folders
+ * it hides, and the fill of the entry shown while that folder is inside; dragged mail opens it.
  */
-export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
+function MoreFoldersRow({ account, item, nav, unread, filled, onToggle }: {
+  account: Account;
+  item: TreeNavItem;
+  nav: ReturnType<typeof useTreeNavigation>;
+  unread: number;
+  filled: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const name = account.displayName || account.email;
+  const expandOnDrag = useDropTarget(undefined, {
+    id: `folders-${account.id}`,
+    folder: t("nav.moreFoldersOf", { account: name }),
+    onExpand: item.expanded ? undefined : onToggle,
+  });
+  const Chevron = item.expanded ? ChevronDown : ChevronRight;
+  const shownUnread = item.expanded ? 0 : unread;
+  return (
+    <li
+      {...treeItemAria(item)}
+      {...nav.itemProps(FOLDERS_KEY)}
+      aria-label={shownUnread > 0 ? t("sidebar.folderUnread", { name: item.text, count: shownUnread }) : item.text}
+      onClick={onToggle}
+      {...expandOnDrag.handlers}
+      data-testid={`sidebar-more-folders-${account.id}`}
+      className={sidebarRowClass(filled, cx("gap-2 pe-2 ps-2", !filled && "text-secondary"))}
+    >
+      <Chevron aria-hidden className="size-(--ui-icon-small) shrink-0 text-tertiary" strokeWidth={1.75} />
+      <span className="truncate">{item.text}</span>
+      <UnreadCount count={shownUnread} />
+    </li>
+  );
+}
+
+/** Whether a folder sits in a tree (to find the shown one under a closed "More folders"). */
+function contains(nodes: readonly MailboxNode[], id: MailboxId): boolean {
+  return nodes.some((node) => node.mailbox.id === id || contains(node.children, id));
+}
+
+/**
+ * One account's section of the column (docs/DESIGN.md, "Seitenspalte"; stage 23, decision 0085):
+ * its heading, the inbox and Sent with their icons in the account's colour, then "More folders"
+ * with every other folder as a tree (roles first, then the own folders), each with its unread
+ * counter. The heading opens and closes the whole account, "More folders" the rest (both
+ * remembered on this device). Kept current by `mailboxesChanged`. One tree, one Tab stop.
+ */
+export function MailboxTree({ account, currentMailboxId, sentAsFolder }: MailboxTreeProps) {
   const { t } = useTranslation();
   const mailboxes = useMailboxes(account.id);
   const folderName = useFolderName();
   const collapsed = useUiStore((state) => state.collapsedMailboxes);
   const toggleMailbox = useUiStore((state) => state.toggleMailbox);
-  const accountOpen = useUiStore((state) => !state.collapsedAccounts.has(account.id));
-  const toggleAccount = useUiStore((state) => state.toggleAccount);
+  const accountFolds = useFold(accountFold(account.id));
+  const moreFolders = useFold(foldersFold(account.id));
+  const accountOpen = accountFolds.open;
   const push = useNoticeStore((state) => state.push);
-  const open = useOpenMailbox(account);
+  const open = useOpenMailbox(account, sentAsFolder);
   // A placeholder that holds no mail only opens and closes.
   const activate = (mailbox: Mailbox) => {
     if (mailbox.selectable) open(mailbox);
     else toggleMailbox(mailbox.id);
   };
-  const tree = useMemo(() => buildMailboxTree(mailboxes.data ?? []), [mailboxes.data]);
-  const rows = accountOpen ? visibleRows(tree, collapsed, folderName) : [];
+  const split = useMemo(() => splitAccountTree(buildMailboxTree(mailboxes.data ?? [])), [mailboxes.data]);
+  const name = account.displayName || account.email;
+  // The inbox and Sent, then "More folders" (when there is anything else).
+  const fixed = [split.inbox, split.sent].filter((mailbox): mailbox is Mailbox => mailbox !== undefined);
+  const levelTwo = fixed.length + (split.more.length > 0 ? 1 : 0);
+  const fixedRows: Row[] = fixed.map((mailbox, index) => ({
+    key: String(mailbox.id),
+    level: 2,
+    posinset: index + 1,
+    setsize: levelTwo,
+    text: folderName(mailbox),
+    node: { mailbox, children: [] },
+  }));
+  const foldersItem: TreeNavItem = {
+    key: FOLDERS_KEY,
+    level: 2,
+    posinset: levelTwo,
+    setsize: levelTwo,
+    expanded: moreFolders.open,
+    text: t("nav.moreFolders"),
+  };
+  const moreRows = moreFolders.open ? visibleRows(split.more, collapsed, folderName, 3) : [];
+  const rows = accountOpen ? [...fixedRows, ...moreRows] : [];
+  // The own folders' unread mail that "More folders" hides while it is closed.
+  const hiddenUnread = accountReadScope(mailboxes.data ?? [])
+    .filter((mailbox) => mailbox.role !== "inbox")
+    .reduce((sum, mailbox) => sum + mailbox.unread, 0);
+  const currentHidden = !moreFolders.open && currentMailboxId !== null && contains(split.more, currentMailboxId);
   const accountItem: TreeNavItem = {
     key: ACCOUNT_KEY,
     level: 1,
     posinset: 1,
     setsize: 1,
     expanded: accountOpen,
-    text: account.displayName || account.email,
+    text: name,
   };
   const [coloring, setColoring] = useState<MailboxId | null>(null);
   // Stage 22 (decision 0078): renaming in place and moving the account, with what happened said.
@@ -533,21 +622,21 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
     if (!order) return;
     void arrange.reorder(order).then((ok) => {
       if (!ok) return;
-      setAnnouncement(t("accountEdit.moved", { name: account.displayName || account.email, position: order.indexOf(account.id) + 1, count: order.length }));
+      setAnnouncement(t("accountEdit.moved", { name, position: order.indexOf(account.id) + 1, count: order.length }));
       focusHeading();
     });
     focusHeading();
   };
-  const renamed = (name: string | null) => {
+  const renamed = (next: string | null) => {
     setEditing(false);
     nav.focus(ACCOUNT_KEY);
-    if (name === null || name.trim() === account.displayName) return;
-    void arrange.rename(account.id, name).then((error) => {
+    if (next === null || next.trim() === account.displayName) return;
+    void arrange.rename(account.id, next).then((error) => {
       if (error) {
         push({ kind: "error", context: "accounts", error });
         return;
       }
-      const shown = name.trim();
+      const shown = next.trim();
       setAnnouncement(shown ? t("accountEdit.renamed", { email: account.email, name: shown }) : t("accountEdit.renamedToAddress", { email: account.email }));
     });
   };
@@ -564,12 +653,18 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
     return null;
   };
   const colored = coloring === null ? undefined : mailboxes.data?.find((mailbox) => mailbox.id === coloring);
+  const showFolders = accountOpen && split.more.length > 0;
+  const items = [accountItem, ...fixedRows, ...(showFolders ? [foldersItem, ...moreRows] : [])];
   const nav = useTreeNavigation({
-    items: [accountItem, ...rows],
-    currentKey: currentMailboxId === null ? null : String(currentMailboxId),
+    items: accountOpen ? items : [accountItem],
+    currentKey: currentHidden ? FOLDERS_KEY : currentMailboxId === null ? null : String(currentMailboxId),
     onOpen: (key) => {
       if (key === ACCOUNT_KEY) {
-        toggleAccount(account.id);
+        accountFolds.toggle();
+        return;
+      }
+      if (key === FOLDERS_KEY) {
+        moreFolders.toggle();
         return;
       }
       const mailbox = rows.find((row) => row.key === key)?.node.mailbox;
@@ -577,26 +672,42 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
     },
     onExpand: (key, expanded) => {
       if (key === ACCOUNT_KEY) {
-        if (accountOpen !== expanded) toggleAccount(account.id);
+        accountFolds.setOpen(expanded);
+        return;
+      }
+      if (key === FOLDERS_KEY) {
+        moreFolders.setOpen(expanded);
         return;
       }
       const id = Number(key);
       if (collapsed.has(id) === expanded) toggleMailbox(id);
     },
   });
+  const item = (row: Row) => (
+    <MailboxItem
+      key={row.key}
+      row={row}
+      current={row.node.mailbox.id === currentMailboxId}
+      nav={nav}
+      onActivate={activate}
+      onColor={(mailbox) => {
+        setColoring(mailbox.id);
+      }}
+      account={account}
+      pending={pendingOf(row.node.mailbox)}
+    />
+  );
 
   return (
     <>
-      <ul {...nav.treeProps} aria-label={t("sidebar.folders", { account: account.displayName || account.email })} className="flex flex-col">
+      <ul {...nav.treeProps} aria-label={t("sidebar.folders", { account: name })} className="flex flex-col">
         <AccountRow
           account={account}
           mailboxes={mailboxes.data ?? []}
           item={accountItem}
           unread={accountUnread(mailboxes.data ?? [])}
           nav={nav}
-          onToggle={() => {
-            toggleAccount(account.id);
-          }}
+          onToggle={accountFolds.toggle}
           editing={editing}
           onRename={() => {
             setEditing(true);
@@ -604,20 +715,11 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
           onRenamed={renamed}
           onMove={move}
         />
-        {rows.map((row) => (
-          <MailboxItem
-            key={row.key}
-            row={row}
-            current={row.node.mailbox.id === currentMailboxId}
-            nav={nav}
-            onActivate={activate}
-            onColor={(mailbox) => {
-              setColoring(mailbox.id);
-            }}
-            account={account}
-            pending={pendingOf(row.node.mailbox)}
-          />
-        ))}
+        {accountOpen && fixedRows.map(item)}
+        {showFolders && (
+          <MoreFoldersRow account={account} item={foldersItem} nav={nav} unread={hiddenUnread} filled={currentHidden} onToggle={moreFolders.toggle} />
+        )}
+        {showFolders && moreRows.map(item)}
       </ul>
       {accountOpen && mailboxes.isError && (
         <ErrorNotice
@@ -628,7 +730,9 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
           }}
         />
       )}
-      {accountOpen && mailboxes.isSuccess && tree.length === 0 && <p className="ps-8 pe-2 text-12 text-tertiary">{t("sidebar.noFolders")}</p>}
+      {accountOpen && mailboxes.isSuccess && fixed.length === 0 && split.more.length === 0 && (
+        <p className="px-2 text-12 text-tertiary">{t("sidebar.noFolders")}</p>
+      )}
       <span aria-live="polite" className="sr-only" data-testid={`account-announce-${account.id}`}>
         {announcement}
       </span>
@@ -647,13 +751,17 @@ export function MailboxTree({ account, currentMailboxId }: MailboxTreeProps) {
   );
 }
 
-/** Opens a folder: one with a view in the rail opens that view, so rail and tree agree. */
-function useOpenMailbox(account: Account) {
+/**
+ * Opens a folder: one with a view in the rail opens that view, so rail and tree agree. Stage 23
+ * (decision 0085): with Sent of "All accounts" in the column, an account's Sent opens as its own
+ * folder, so only its row shows as current.
+ */
+function useOpenMailbox(account: Account, sentAsFolder: boolean) {
   const showMailView = useUiStore((state) => state.showMailView);
   const showMailbox = useUiStore((state) => state.showMailbox);
   const selectAccount = useUiStore((state) => state.selectAccount);
   return (mailbox: Mailbox) => {
-    if (isRoleView(mailbox.role)) {
+    if (isRoleView(mailbox.role) && !(sentAsFolder && mailbox.role === "sent")) {
       selectAccount(account.id);
       showMailView(mailbox.role);
     } else {

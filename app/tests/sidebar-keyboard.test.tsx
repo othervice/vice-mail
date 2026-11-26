@@ -6,10 +6,11 @@ import { makeSavedSearch } from "./support/search";
 import { renderApp } from "./support/render";
 
 /*
- * Stage 8, keyboard: every tree of the accounts-and-folders column (inboxes, views, saved
- * searches, favourites, each account with its folders) is one Tab stop with the WAI-ARIA tree
- * view keys inside, and the rail's two groups are one Tab stop each. Tab goes column, list in a
- * handful of presses.
+ * Stage 8, keyboard: every tree of the accounts-and-folders column ("All accounts" with "More",
+ * favourites, each account with its folders) is one Tab stop with the WAI-ARIA tree view keys
+ * inside, and the rail's two groups are one Tab stop each. Tab goes column, list in a handful of
+ * presses. Stage 23 (decision 0085): an account's tree is its heading, Inbox, Sent and "More
+ * folders" with the other folders below it (the fake core starts with it open).
  */
 
 const ADA = makeAccount({ writesEnabled: true });
@@ -20,7 +21,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
 });
 
-/** Ada's row, then Inbox, Drafts, Sent, Trash, Dokumente, Projekte (with 2026 below it). */
+/** Ada's row, then Inbox, Sent, "More folders" with Drafts, Trash, Dokumente, Projekte (2026 below it). */
 function setup(options: Parameters<typeof mockCore>[0] = {}) {
   const core = mockCore({
     accounts: [ADA],
@@ -38,6 +39,7 @@ async function unfold(user: ReturnType<typeof renderApp>["user"]) {
 }
 
 const ADA_ROW = `sidebar-account-${ADA.id}`;
+const ADA_MORE = `sidebar-more-folders-${ADA.id}`;
 
 const focused = () => document.activeElement;
 const nameOf = (element: Element | null) => element?.getAttribute("aria-label") ?? element?.textContent ?? null;
@@ -74,8 +76,9 @@ describe("folder tree: keyboard model", () => {
     expect(rows.map(nameOf)).toEqual([
       "Ada Lovelace, 6 unread (ada@vicemail.test)",
       "Inbox, 3 unread",
-      "Drafts",
       "Sent",
+      "More folders",
+      "Drafts",
       "Trash",
       "Dokumente",
       "Projekte, 2 unread",
@@ -85,13 +88,20 @@ describe("folder tree: keyboard model", () => {
     const account = screen.getByTestId(ADA_ROW);
     expect([account.getAttribute("aria-level"), account.getAttribute("aria-posinset"), account.getAttribute("aria-expanded")]).toEqual(["1", "1", "true"]);
     const inbox = screen.getByTestId("mailbox-1");
-    expect([inbox.getAttribute("aria-level"), inbox.getAttribute("aria-posinset"), inbox.getAttribute("aria-setsize")]).toEqual(["2", "1", "6"]);
+    expect([inbox.getAttribute("aria-level"), inbox.getAttribute("aria-posinset"), inbox.getAttribute("aria-setsize")]).toEqual(["2", "1", "3"]);
     expect(inbox.getAttribute("aria-current")).toBe("page");
     expect(inbox.hasAttribute("aria-expanded")).toBe(false);
+    const more = screen.getByTestId(ADA_MORE);
+    expect([more.getAttribute("aria-level"), more.getAttribute("aria-posinset"), more.getAttribute("aria-expanded")]).toEqual(["2", "3", "true"]);
     const projekte = screen.getByTestId("mailbox-5");
-    expect([projekte.getAttribute("aria-level"), projekte.getAttribute("aria-posinset"), projekte.getAttribute("aria-expanded")]).toEqual(["2", "6", "true"]);
+    expect([projekte.getAttribute("aria-level"), projekte.getAttribute("aria-posinset"), projekte.getAttribute("aria-setsize"), projekte.getAttribute("aria-expanded")]).toEqual([
+      "3",
+      "4",
+      "4",
+      "true",
+    ]);
     const child = screen.getByTestId("mailbox-6");
-    expect([child.getAttribute("aria-level"), child.getAttribute("aria-posinset"), child.getAttribute("aria-setsize")]).toEqual(["3", "1", "1"]);
+    expect([child.getAttribute("aria-level"), child.getAttribute("aria-posinset"), child.getAttribute("aria-setsize")]).toEqual(["4", "1", "1"]);
     // Only the current folder is in the Tab order; the "…" of each row is not.
     expect(tabStops(tree)).toEqual(["Inbox, 3 unread"]);
     expect(screen.getByTestId("folder-menu-5").tabIndex).toBe(-1);
@@ -108,7 +118,7 @@ describe("folder tree: keyboard model", () => {
     // No wrap at the top.
     await user.keyboard("{ArrowUp}");
     expect(focused()).toBe(screen.getByTestId(ADA_ROW));
-    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(focused()).toBe(screen.getByTestId("mailbox-2"));
     expect(tabStops(tree)).toEqual(["Sent"]);
     // Moving opens nothing: the list still shows the inbox.
@@ -137,8 +147,14 @@ describe("folder tree: keyboard model", () => {
     expect(screen.getByTestId("mailbox-5").getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByTestId("mailbox-6")).toBeNull();
     expect(focused()).toBe(screen.getByTestId("mailbox-5"));
-    // Left on a closed folder of the account's first level goes to the account's row; Left there
-    // closes the account, Right opens it again.
+    // Left on a closed folder under "More folders" goes to that row; Left there closes it (the
+    // folders below it go), Left again goes to the account's row, which closes the account; Right
+    // opens it again.
+    await user.keyboard("{ArrowLeft}");
+    expect(focused()).toBe(screen.getByTestId(ADA_MORE));
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByTestId(ADA_MORE).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("mailbox-7")).toBeNull();
     await user.keyboard("{ArrowLeft}");
     expect(focused()).toBe(screen.getByTestId(ADA_ROW));
     await user.keyboard("{ArrowLeft}");
@@ -148,6 +164,12 @@ describe("folder tree: keyboard model", () => {
     await user.keyboard("{ArrowRight}");
     expect(screen.getByTestId(ADA_ROW).getAttribute("aria-expanded")).toBe("true");
     expect(focused()).toBe(screen.getByTestId(ADA_ROW));
+    await user.keyboard("{End}");
+    expect(focused()).toBe(screen.getByTestId(ADA_MORE));
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByTestId(ADA_MORE).getAttribute("aria-expanded")).toBe("true");
+    await user.keyboard("{ArrowRight}");
+    expect(focused()).toBe(screen.getByTestId("mailbox-3"));
     await user.keyboard("{End}");
     expect(focused()).toBe(screen.getByTestId("mailbox-5"));
     await user.keyboard("{ArrowRight}");
@@ -171,11 +193,11 @@ describe("folder tree: keyboard model", () => {
     await user.keyboard("s");
     expect(focused()).toBe(screen.getByTestId("mailbox-2"));
     // Typed right after: "sd" starts nothing, so "d" is a new search. The same letter again goes
-    // on to the next folder with it (Dokumente, then over the top to Drafts).
-    await user.keyboard("d");
-    expect(focused()).toBe(screen.getByTestId("mailbox-7"));
+    // on to the next folder with it (Drafts, then Dokumente).
     await user.keyboard("d");
     expect(focused()).toBe(screen.getByTestId("mailbox-3"));
+    await user.keyboard("d");
+    expect(focused()).toBe(screen.getByTestId("mailbox-7"));
     await user.keyboard("2");
     expect(focused()).toBe(screen.getByTestId("mailbox-6"));
     // From the end it starts over at the top; case and accents do not matter.
@@ -207,7 +229,7 @@ describe("folder tree: keyboard model", () => {
     expect(heading()).toBe("2026");
     expect(await screen.findByRole("listbox", { name: "Messages in 2026" })).toBeTruthy();
     expect(tabStops(tree)).toEqual(["2026, 1 unread"]);
-    await user.keyboard("{Home}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+    await user.keyboard("{Home}{ArrowDown}{ArrowDown}{Enter}");
     expect(heading()).toBe("Sent");
     expect(useUiStore.getState().view).toEqual({ kind: "mail", mailView: "sent" });
     await user.tab();
@@ -268,16 +290,14 @@ describe("the other sidebar trees", () => {
     });
   }
 
-  it("favourites, inboxes and saved searches are trees of their own, one Tab stop each", async () => {
+  it("“All accounts” (with the groups and saved searches under “More”), the favourites and each account are trees of their own, one Tab stop each", async () => {
     const { user } = many();
     await unfold(user);
     await screen.findByRole("tree", { name: "Favourites" });
-    await screen.findByRole("tree", { name: "Saved searches" });
+    await screen.findByRole("treeitem", { name: "Invoices" });
     const trees = screen.getAllByRole("tree");
     expect(trees.map((tree) => tree.getAttribute("aria-label") ?? document.getElementById(tree.getAttribute("aria-labelledby") ?? "")?.textContent)).toEqual([
-      "Inboxes",
-      "Views",
-      "Saved searches",
+      "All accounts",
       "Favourites",
       "Folders of Ada Lovelace",
       "Folders of Work",
@@ -307,17 +327,19 @@ describe("the other sidebar trees", () => {
     expect(heading()).toBe("Projekte");
     expect(tabStops(favorites)).toEqual(["Projekte in Ada Lovelace, 2 unread"]);
 
-    const inboxes = screen.getByRole("tree", { name: "Inboxes" });
+    const inboxes = screen.getByRole("tree", { name: "All accounts" });
     act(() => {
-      within(inboxes).getByRole("treeitem", { name: "All inboxes, 3 unread" }).focus();
+      within(inboxes).getByRole("treeitem", { name: "Freizeit, 3 unread" }).focus();
     });
     await user.keyboard("{End}");
-    expect(nameOf(focused())).toBe("Freizeit, 3 unread");
-    await user.keyboard("{Home}{Enter}");
+    expect(nameOf(focused())).toBe("Outbox");
+    await user.keyboard("{Home}");
+    expect(nameOf(focused())).toBe("All accounts");
+    await user.keyboard("{ArrowDown}{Enter}");
     expect(await screen.findByRole("listbox", { name: "Messages in All inboxes" })).toBeTruthy();
-    expect(within(inboxes).getByRole("treeitem", { name: "All inboxes, 3 unread" }).getAttribute("aria-current")).toBe("page");
+    expect(within(inboxes).getByRole("treeitem", { name: "Inbox, 3 unread" }).getAttribute("aria-current")).toBe("page");
 
-    const saved = screen.getByRole("tree", { name: "Saved searches" });
+    const saved = inboxes;
     act(() => {
       within(saved).getByRole("treeitem", { name: "Invoices" }).focus();
     });
@@ -371,17 +393,17 @@ describe("the Tab path to the message list", () => {
     await unfold(user);
     const stops = await tabToList(user);
     // The column: its toggle and its edge (the splitter), the views, the account with its
-    // folders (one tree), the bottom group. Then the list header.
-    expect(stops.slice(0, stops.indexOf("button: Activity") + 1)).toEqual([
+    // folders (one tree), the foot's buttons. Then the list header.
+    expect(stops.slice(0, stops.indexOf("button: Sync now") + 1)).toEqual([
       "button: Hide sidebar",
       "separator: Sidebar width",
       "treeitem: Views",
       "treeitem: Inbox, 3 unread",
-      "button: Activity",
+      "button: Sync now",
     ]);
     // Stage 19: the view menu, the options; the header's last button, then the quick filter (its
     // switches are one toolbar, the text field another stop).
-    expect(stops.slice(stops.indexOf("button: Activity") + 1, stops.indexOf("button: Activity") + 3)).toEqual([
+    expect(stops.slice(stops.indexOf("button: Sync now") + 1, stops.indexOf("button: Sync now") + 3)).toEqual([
       "button: Sorted by Date, Newest first",
       "button: List options",
     ]);
@@ -400,13 +422,13 @@ describe("the Tab path to the message list", () => {
       search: { groups: [GROUP], savedSearches: [makeSavedSearch({ name: "Invoices" })] },
     });
     await unfold(user);
-    await screen.findByRole("tree", { name: "Saved searches" });
+    await screen.findByRole("treeitem", { name: "Invoices" });
     await screen.findByRole("tree", { name: "Folders of Work" });
     const stops = await tabToList(user);
-    const sidebar = stops.slice(0, stops.indexOf("button: Activity"));
-    // One stop per tree (inboxes, views, saved searches, favourites, each account with its
-    // folders), plus the column's toggle and edge: no more than before with the account buttons.
-    expect(sidebar.filter((stop) => stop.startsWith("treeitem"))).toHaveLength(6);
-    expect(sidebar).toHaveLength(8);
+    const sidebar = stops.slice(0, stops.indexOf("button: Sync now"));
+    // One stop per tree ("All accounts" with the groups and saved searches, favourites, each
+    // account with its folders), plus the column's toggle and edge (stage 23: two fewer trees).
+    expect(sidebar.filter((stop) => stop.startsWith("treeitem"))).toHaveLength(4);
+    expect(sidebar).toHaveLength(6);
   });
 });

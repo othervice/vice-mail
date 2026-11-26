@@ -357,12 +357,12 @@ describe.each(["light", "dark"] as const)("axe, %s theme", (theme) => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Close search" }));
     await user.click(screen.getByTestId("rail-folders"));
-    await screen.findByRole("region", { name: "Saved searches" });
+    await screen.findByTestId("saved-search-nav-entry");
     await user.click(screen.getByRole("treeitem", { name: "Saved views" }));
     await user.click(await screen.findByRole("button", { name: "Rename “Invoices”" }));
     expect(await seriousFindings()).toEqual([]);
     await user.keyboard("{Escape}");
-    await user.click(within(screen.getByRole("region", { name: "Saved searches" })).getByRole("treeitem", { name: "Invoices" }));
+    await user.click(within(screen.getByTestId("sidebar-views")).getByRole("treeitem", { name: "Invoices" }));
     await screen.findByRole("heading", { name: "Invoices" });
     expect(await seriousFindings()).toEqual([]);
   });
