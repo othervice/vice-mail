@@ -85,8 +85,8 @@ Lesebereichs.
 **Kontaktspalte.** 264 px auf `panel` rechts vom Lesebereich: Name, Adresse, „Mail schreiben“,
 „Alle Mails“ (Suche `kontakt:`), Notiz, neueste Mails, Gruppen, alles aus dem Kontaktverzeichnis
 dieses Rechners. Ein- und ausblenden in der Leiste, gespeichert mit dem Layout des Fensters; nur in
-Mailansichten und wo Seitenleiste, Liste (320 px), Lesebereich (360 px), Spalte und offenes
-KI-Panel Platz haben.
+Mailansichten und wo Seitenleiste, Liste (in ihrer Breite), Lesebereich (360 px), Spalte und
+offenes KI-Panel Platz haben.
 
 ## Aufbau
 

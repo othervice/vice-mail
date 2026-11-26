@@ -162,8 +162,10 @@ Tabelle, Spalten) zeigt in der Leiste nur sein Symbol; sein Name sagt die Reihen
   gespeichert mit dem Layout des Fensters auf diesem Gerät (`WindowLayout.contactPanel`, Standard:
   sichtbar; ältere gespeicherte Layouts lesen sich als sichtbar). Nicht synchronisiert.
 - Sie erscheint nur in Mailansichten und nur, wo Platz ist: Seitenleiste (oder schmale Leiste),
-  Liste mindestens 320 px, Lesebereich mindestens 360 px, die Spalte und, ab 1100 px, das offene
-  KI-Panel. Sonst verschwinden Spalte und Knopf; die Wahl bleibt gespeichert.
+  die Liste in ihrer eingestellten Breite (die Spalte drückt sie nie), Lesebereich mindestens
+  360 px, die Spalte und, ab 1100 px, das offene KI-Panel; beim Standardfenster (1200 px, Spalte
+  240 px, Liste 384 px) also nicht, ab 1248 px schon. Sonst verschwinden Spalte und Knopf; die Wahl
+  bleibt gespeichert.
 
 ## Bewusst anders als der Entwurf
 

@@ -23,20 +23,21 @@ const PANEL_MAILS = 4;
 
 /** Widths the window needs besides the panel, in px at 100 % text size (docs/DESIGN.md). */
 const RAIL = 56;
-const LIST_MIN = 320;
 const READING_MIN = 360;
 const PANEL = 264;
 const AI_PANEL = 380;
 const AI_PANEL_OVERLAY_BELOW = 1100;
 
 /**
- * Whether the window has room for the contact panel next to the sidebar (or the rail), the
- * list's and the reading pane's smallest widths and the AI panel when it is open. Not on narrow
- * windows: the panel hides and its toggle with it; the stored choice stays.
+ * Whether the window has room for the contact panel next to the sidebar (or the rail), the list
+ * in its width (the panel never squeezes it), the reading pane's smallest width and the AI panel
+ * when it is open. Not on narrow windows: the panel hides and its toggle with it; the stored
+ * choice stays.
  */
 export function useContactPanelFits(): boolean {
   const docked = useUiStore((state) => state.sidebarExpanded && !state.sidebarNarrow);
   const sidebarWidth = useUiStore((state) => state.sidebarWidth);
+  const listWidth = useUiStore((state) => state.listWidth);
   const aiShown = useAiPanelShown();
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
@@ -51,7 +52,7 @@ export function useContactPanelFits(): boolean {
   const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   // Below 1100 px the AI panel lies over the content (AiPanel) and takes no room of its own.
   const aiRoom = aiShown && width > AI_PANEL_OVERLAY_BELOW ? AI_PANEL : 0;
-  const needed = ((docked ? sidebarWidth : RAIL) + LIST_MIN + READING_MIN + PANEL + aiRoom) * (rem / 16);
+  const needed = ((docked ? sidebarWidth : RAIL) + listWidth + READING_MIN + PANEL + aiRoom) * (rem / 16);
   return width >= needed;
 }
 
