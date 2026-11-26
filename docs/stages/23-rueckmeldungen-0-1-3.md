@@ -24,14 +24,23 @@ sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist
   Punkt 12). Die Desktop-Tests laufen auf dem Mac und lösen die Ereignisse in der Seite aus,
   deshalb fiel das nicht auf.
 - Plan:
-  - Den Drop-Handler von Tauri für die Fenster abschalten (`dragDropEnabled: false`).
+  - Den Drop-Handler von Tauri für alle Fenster abschalten (auf beiden Plattformen).
     Dateien, die auf den Composer gezogen werden, kommen dann als HTML-`File` mit ihrem Inhalt
     statt mit ihrem Pfad. Das ist sicherer als heute: Die Seite kann nur Dateien liefern, die der
     Mensch gezogen hat, und nie einen Pfad nennen (Entscheidung 0018 anpassen).
   - Konten zusätzlich in der schmalen Leiste per Ziehen umsortieren.
-  - Ein Test, der auf Windows echtes Ziehen auslöst (CI-Runner), wenn sich das machen lässt;
-    sonst steht es auf der Windows-Prüfliste.
-- Frage an den Menschen: Auf welchem Gerät und mit welcher Version wurde es probiert?
+  - Umsortieren wie bei Thunderbird: Linie an der Einfügestelle, Loslassen ordnet ein, bleibt
+    nach einem Neustart.
+  - Prüfung mit echtem Ziehen über das Betriebssystem (auf dem Mac per CGEvent, falls macOS das
+    erlaubt); Windows auf der Prüfliste.
+- Antwort des Menschen (26.11.): auf beiden Geräten mit 0.1.3 probiert. Unter Windows geht es gar
+  nicht. Auf dem Mac lässt sich ein Postfach aufnehmen und ziehen, bleibt aber nicht dort, wo
+  man es loslässt. Gewünscht wie bei Thunderbird: Postfach nehmen, ziehen, eine Linie zeigt, wo
+  es eingeordnet wird, loslassen, neue Reihenfolge.
+- Ursache auf dem Mac: `tauri-runtime-wry` 2.12.5 (`lib.rs`, `with_drag_drop_handler`) meldet jedes
+  Zieh-Ereignis als erledigt (`true`). wry 0.57.3 (`wkwebview/drag_drop.rs`) reicht es dann nicht
+  an WKWebView weiter: Die Seite bekommt `dragstart`, aber kein `dragover` und kein `drop`. Auch
+  Mails auf einen Ordner ziehen geht deshalb auf dem Mac nicht.
 
 ### 2 — Feinschliff: hochwertiger, professioneller, „weniger nach KI“
 
